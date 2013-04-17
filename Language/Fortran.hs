@@ -201,7 +201,6 @@ data Fortran  = Assg Expr Expr
               | Exit String
               | Forall ([(String,Expr,Expr,Expr)],Expr) Fortran
               | Goto String
-              | IfStmt Expr Fortran
               | Nullify [Expr]
               | Inquire [Spec] [Expr]
               | Rewind [Spec]
@@ -664,7 +663,6 @@ instance (OutputG VarName v,
     outputIndF i (Forall (is, NullExpr) f)    = (ind i)++"forall ("++showForall is++") "++outputG f
     outputIndF i (Forall (is,e)            f) = (ind i)++"forall ("++showForall is++","++outputG e++") "++outputG f
     outputIndF i (Goto s)                     = (ind i)++"goto "++outputG s
-    outputIndF i (IfStmt e f)                 = (ind i)++"if ("++outputG e++") "++outputG f
     outputIndF i (Nullify es)                 = (ind i)++"nullify "++asTuple outputG es++"\n"
     outputIndF i (Inquire ss es)              = (ind i)++"inquire "++asTuple outputG ss++" "++(concat (intersperse "," (map outputG es)))++"\n"
     outputIndF i (Rewind ss)                  = (ind i)++"rewind "++asTuple outputG ss++"\n"

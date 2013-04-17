@@ -42,8 +42,11 @@
 - collect all constants (#1) 
 - identify all loop 'variables' (#2) 
    - identify all variables indexed by the loop variables
- loopBody :: Fortran t -> Fortran ([String], [String], [String]) 
- loopBody = do 
+ loopBody :: Fortran t -> State (TypeEnvStack t) (Fortran ([String], [String], [String]))
+ loopBody (For _ v@(VarName _ s) e1 e2 e3 body) = 
+     let
+         anno = (
+     in For anno v e1 e2 e3 body
   
 
 > type TypeEnv t = [(VarName t, Type t)]
@@ -53,10 +56,30 @@
 > popVar (((v,t):g):gs) = (g:gs)
 > popFrame (g:gs) = (g, gs)
 
-> State (TypeEnvStack t)
+> kill :: forall a t . (Data (t a), Typeable (t a), Typeable a, Data a)
+>                   => t a -> [String]
+> kill t =    [v | (AssgExpr _ v _) <- (universeBi t)::[Expr a]] 
+>          ++ [v | (For _ (VarName _ v) _ _ _ _) <- (universeBi t)::[Fortran a]] 
+>          ++ [v | (Assg _ (Var _ [(VarName _ v, _)]) _) <- (universeBi t)::[Fortran a]] 
 
-> typeEnvironment p = ((universeBi p)::[Decl a]))
- 
+> gen :: forall a t . (Data (t a), Typeable (t a), Typeable a, Data a)
+>                   => t a -> [String]
+> gen t = variables t
+
+> successors :: Fortran t -> [Fortran t]
+> successors (FSeq _ f1 f2) = f2 : successors f1
+> successors (For _ _ _ _ _ f)        = [f]
+> successors (If _ _ f efs Nothing)   = f : map snd efs
+> successors (If _ _ f efs (Just f')) = [f, f'] ++ map snd efs
+> successors (Forall _ _ f)             = [f]
+> successors (Where _ _ f)              = [f]
+> successors (Label _ _ f)              = [f]
+> successors _                        = []       
+
+
+ liveVariableAnalysis :: Fortran t -> Fortran [String]
+ liveVariableAnalysis x = 
+     
 
 > variables :: forall a t . (Data (t a), Typeable (t a), Data a, Typeable a) => t a -> [String]
 > variables f = nub $
@@ -96,6 +119,8 @@
 >           writeFile (s ++ ".html") (concatMap outputHTML f'')
 >           -- putStrLn (show $ variables f'')
 >           -- putStrLn (show $ binders f'')
->           (show (declsWithBounds f'')) `trace` return ()
+>           (show ((map (fmap (const ())) f')::([Program ()]))) `trace`
+>             (show (declsWithBounds f'')) `trace` return ()
 >           -- (show [ d | d@(Decl _ p t) <- (universeBi (map (fmap (const ())) f''))::[Decl ()]]) `trace` return ()
 
+ 

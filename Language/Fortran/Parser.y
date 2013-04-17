@@ -1011,14 +1011,8 @@ do_block
 
 block :: { Fortran }
 block
---  : execution_part_construct_list                                  { $1 }
   : executable_construct_list                                  { $1 }
  
-execution_part_construct_list :: { Fortran }
-execution_part_construct_list 
-  : execution_part_construct execution_part_construct_list      { (FSeq $1 $2) }
-  | execution_part_construct                                    { $1 }
-
 execution_part :: { Fortran }
 execution_part 
   : executable_construct_list                       { $1 }
@@ -1296,7 +1290,7 @@ goto_stmt
 
 if_stmt :: { Fortran }
 if_stmt
-  : IF '(' logical_expr ')' action_stmt           { (IfStmt $3 $5) }
+  : IF '(' logical_expr ')' action_stmt           { (If $3 $5 [] Nothing) }
 
 
 
