@@ -64,21 +64,27 @@
 
 > gen :: forall a t . (Data (t a), Typeable (t a), Typeable a, Data a)
 >                   => t a -> [String]
-> gen t = variables t
+> gen t = (variables t) \\ (kill t)
 
 > successors :: Fortran t -> [Fortran t]
-> successors (FSeq _ f1 f2) = f2 : successors f1
+> successors (FSeq _ f1 f2)           = f2 : successors f1
 > successors (For _ _ _ _ _ f)        = [f]
 > successors (If _ _ f efs Nothing)   = f : map snd efs
 > successors (If _ _ f efs (Just f')) = [f, f'] ++ map snd efs
-> successors (Forall _ _ f)             = [f]
-> successors (Where _ _ f)              = [f]
-> successors (Label _ _ f)              = [f]
+> successors (Forall _ _ f)           = [f]
+> successors (Where _ _ f)            = [f]
+> successors (Label _ _ f)            = [f]
 > successors _                        = []       
 
+ liveVariableAnalysis :: Fortran [String] -> [String]
+ liveVariableAnalysis x = (universeBi (foldl union [] (successors x)))::[String]
 
- liveVariableAnalysis :: Fortran t -> Fortran [String]
- liveVariableAnalysis x = 
+> liveVariableAnalysis x = 
+>               let liveOut = foldl union [] ((universeBi (successors x))::[String])
+>                   killV   = kill x
+>                   genV    = gen x
+>                   livein  = union genV (liveOut \\ killV)
+
      
 
 > variables :: forall a t . (Data (t a), Typeable (t a), Data a, Typeable a) => t a -> [String]
