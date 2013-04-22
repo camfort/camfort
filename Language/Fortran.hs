@@ -28,6 +28,8 @@ import Data.Maybe
 import Data.List
 
 import Data.Generics.Annotate
+import Generics.Deriving.Base
+import GHC.Generics
 
 ---------------------------------------------------------------------------
 -- Language definition for parametric Fortran
@@ -95,24 +97,24 @@ type ProgName  = String           -- Fortran program names
 
 data  SubName  = SubName String   -- Fortran subroutine names
                | NullSubName
-                 deriving (Show, Functor,Typeable,Data,Eq)
+                 deriving (Show, Functor, Typeable, Data, Eq)
  
 data VarName   = VarName String 
-                 deriving (Show, Functor,Typeable,Data,Eq,Read)
+                 deriving (Show, Functor, Typeable, Data, Eq, Read)
 
 data ArgName   = ArgName String
                | ASeq ArgName ArgName
                | NullArg
-                 deriving (Show, Functor,Typeable,Data)
+                 deriving (Show, Functor, Typeable, Data, Eq)
 
 -- Syntax defintions
 --
 
 data Arg      = Arg ArgName
-                deriving (Show, Functor,Typeable,Data)
+                deriving (Show, Functor,Typeable,Data, Eq)
 
 data ArgList  = ArgList Expr
-                deriving (Show, Functor,Typeable,Data)
+                deriving (Show, Functor,Typeable,Data, Eq)
 
              -- Prog type   (type of result)   name      args  body    use's  
 data Program  = Main                           SubName  Arg  Block
@@ -124,15 +126,15 @@ data Program  = Main                           SubName  Arg  Block
               | PSeq Program Program   -- sequence of programs
               | Prog Program            -- useful for {#p: #q : program ... }
               | NullProg                 -- null
-                deriving (Show, Functor,Typeable,Data)
+                deriving (Show, Functor,Typeable,Data, Eq)
 
              -- implicit none or no implicit 
 data Implicit = ImplicitNone | ImplicitNull
-                deriving (Show, Functor,Typeable,Data)
+                deriving (Show, Functor,Typeable,Data, Eq)
 				
              --       use's     implicit  decls  stmts
 data Block    = Block [String]  Implicit  Decl  Fortran
-                deriving (Show, Functor,Typeable,Data)
+                deriving (Show, Functor,Typeable,Data, Eq)
 
 data Decl     = Decl [(Expr,Expr)] Type                     -- declaration stmt
               | Namelist [(Expr,[Expr])]                     -- namelist declaration
@@ -145,16 +147,16 @@ data Decl     = Decl [(Expr,Expr)] Type                     -- declaration stmt
               | DSeq Decl Decl                               -- list of decls
               | TextDecl String                                -- cpp switches to carry over
               | NullDecl                                       -- null
-                deriving (Show, Functor,Typeable,Data)
+                deriving (Show, Functor,Typeable,Data, Eq)
 
              -- BaseType  dimensions     type        Attributes   kind   len 
 data Type     = BaseType                 BaseType   [Attr]       Expr  Expr 
               | ArrayT   [(Expr,Expr)] BaseType   [Attr]       Expr  Expr
-                deriving (Show, Functor,Typeable,Data)
+                deriving (Show, Functor,Typeable,Data, Eq)
 
 data BaseType = Integer | Real | Character | SomeType | DerivedType SubName
               | Recursive | Pure | Elemental | Logical | Complex
-                deriving (Show, Functor,Typeable,Data)
+                deriving (Show, Functor,Typeable,Data, Eq)
 
 data Attr     = Parameter
               | Allocatable
@@ -173,12 +175,12 @@ data Attr     = Parameter
               deriving (Show, Functor,Typeable,Data, Eq)
 			  
 data GSpec    = GName Expr | GOper BinOp | GAssg
-              deriving (Show, Functor,Typeable,Data)
+              deriving (Show, Functor,Typeable,Data, Eq)
 			  
 data InterfaceSpec = FunctionInterface SubName Arg [String] Implicit Decl
                    | SubroutineInterface SubName Arg [String] Implicit Decl
                    | ModuleProcedure [SubName]
-                   deriving (Show, Functor,Typeable, Data)
+                   deriving (Show, Functor,Typeable, Data, Eq)
 				   
 data IntentAttr = In
                 | Out
@@ -214,7 +216,7 @@ data Fortran  = Assg Expr Expr
               | ReadS [Spec] [Expr]
               | TextStmt String                                -- cpp switches to carry over
               | NullStmt
-                deriving (Show, Functor,Typeable,Data)
+                deriving (Show, Functor,Typeable,Data, Eq)
 
 -- type Bound    = (Expr,Expr)
 
@@ -231,7 +233,7 @@ data Expr     = Con String
               | Sqrt Expr
               | ArrayCon [Expr]
               | AssgExpr String Expr
-                deriving (Show, Functor,Typeable,Data)
+                deriving (Show, Functor,Typeable,Data, Eq)
 
 data BinOp    = Plus   | Minus | Mul | Div
               | Or     | And  
@@ -240,7 +242,7 @@ data BinOp    = Plus   | Minus | Mul | Div
                 deriving (Show, Functor,Typeable,Data,Eq)
 
 data UnaryOp  = UMinus | Not 
-                deriving (Show, Functor,Typeable,Data)
+                deriving (Show, Functor,Typeable,Data, Eq)
 
 data Spec     = Access Expr
               | Action Expr
@@ -278,7 +280,7 @@ data Spec     = Access Expr
               | Status Expr
               | Unit Expr
               | WriteSp Expr
-                deriving (Show, Functor,Typeable,Data)
+                deriving (Show, Functor,Typeable,Data, Eq)
 
 -- Fortran pretty printer 
 

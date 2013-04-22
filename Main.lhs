@@ -16,7 +16,12 @@
 
 > import Data.Generics.Uniplate.Operations
 
+> import Control.Comonad
+
 > import Output
+> import Syntax
+> import Traverse
+> import Types
 
 > import Debug.Trace
 
@@ -24,7 +29,6 @@
 > import Data.Typeable
 > import Data.List
 
-> import Control.Monad.State.Lazy
 
 > main :: IO ()
 > main = do return ()
@@ -42,6 +46,7 @@
 - collect all constants (#1) 
 - identify all loop 'variables' (#2) 
    - identify all variables indexed by the loop variables
+
  loopBody :: Fortran t -> State (TypeEnvStack t) (Fortran ([String], [String], [String]))
  loopBody (For _ v@(VarName _ s) e1 e2 e3 body) = 
      let
@@ -49,8 +54,7 @@
      in For anno v e1 e2 e3 body
   
 
-> type TypeEnv t = [(VarName t, Type t)]
-> type TypeEnvStack t = [TypeEnv t] -- stack of environments
+
 > newFrame gammas = []:gammas
 > pushVar v t (g:gs) = ((v, t):g):gs
 > popVar (((v,t):g):gs) = (g:gs)
@@ -76,28 +80,52 @@
 > successors (Label _ _ f)            = [f]
 > successors _                        = []       
 
- liveVariableAnalysis :: Fortran [String] -> [String]
- liveVariableAnalysis x = (universeBi (foldl union [] (successors x)))::[String]
+ type Annotation = ([String], ([String], [String]))
+ unitAnnotation = ([], ([], []))
 
-> liveVariableAnalysis x = 
->               let liveOut = foldl union [] ((universeBi (successors x))::[String])
->                   killV   = kill x
->                   genV    = gen x
->                   livein  = union genV (liveOut \\ killV)
+> type Annotation = ([String], [String])
+> unitAnnotation = ([], [])
 
+Single iteration of live-variable analysis
+
+> lva0 :: Fortran Annotation -> Annotation
+> -- lva0 x = (universeBi (foldl union [] (successors x)))::[String]
+> lva0 x = let liveOut = concat $ map (fst . rextract) (successors x)
+>              killV   = kill x
+>              genV    = gen x
+>              liveIn  = union genV (liveOut \\ killV)
+>          in (liveIn,  indexVariables x) -- ) (killV, genV))
+
+> indexVariables2 :: forall a t . (Data (t Annotation), Typeable (t Annotation)) => t Annotation -> [String]
+> indexVariables2 f = nub $ [ v |  (VarName _ v) <- (universeBi f')::[VarName Annotation] ]
+>                        where f' = [ exprs | (ArrayCon _ exprs) <- ((universeBi f)::[Expr Annotation]) ]
+
+                
+Iterate the comonadic application of lva0 over a block, till a fixed-point is reached
+
+> lvaN :: Program Annotation -> Program Annotation
+> lvaN x = let y = extendBi lva0 x
+>          in if (y == x) then x
+>             else lvaN y
+
+Apply live-variable analysis over all blocks
+
+> lva :: [Program Annotation] -> [Program Annotation]
+> lva = map lvaN
      
 
-> variables :: forall a t . (Data (t a), Typeable (t a), Data a, Typeable a) => t a -> [String]
-> variables f = nub $
->                  [v | (AssgExpr _ v _) <- (universeBi f)::[Expr a]]
->               ++ [v | (VarName _ v) <- (universeBi f)::[VarName a]] 
-               
              ++ (concat [map fst es | Var es <- universeBi f])
+
+> indexVariables :: forall a t . (Data (t a), Typeable (t a), Data a, Typeable a) => t a -> [String]
+> indexVariables x = let is = [e | (Var _ [(VarName _ _, e)]) <- (universeBi x)::[Expr a], length e > 0]
+>                    in nub [v | (VarName _ v) <- (universeBi is)::[VarName a]]
 
  indexVariables :: forall a t . (Data (t a), Typeable (t a), Data a, Typeable a) => t a -> [String]
  indexVariables f = nub $ [ v |  (VarName _ v) <- (universeBi f')::[VarName a] ]
                         where f' = [ exprs | (ArrayCon _ exprs) <- ((universeBi f)::[Expr a]) ]
+
                               transformBiM
+
                                  (\(Decl  -> do xs <- get 
 
 > predBounds [] = False
@@ -108,24 +136,18 @@
 > declsWithBounds :: forall a .  (Data a, Typeable a) => [Program a] -> [String]
 > declsWithBounds x = [v | (VarName _ v, b) <- (universeBi ((universeBi x)::[Decl a]))::[(VarName a, [Expr a])], predBounds b]
 
-> binders :: forall a t . (Data (t a), Typeable (t a), Data a, Typeable a) => t a -> [String]
-> binders f = nub $
->                [v | (ArgName _ v) <- (universeBi f)::[ArgName a]] 
->             ++ [v | (VarName _ v) <- (universeBi ((universeBi f)::[Decl a]))::[VarName a]]
->             ++ [v | (For _ (VarName _ v) _ _ _ _) <- (universeBi f)::[Fortran a]]
-
-> freeVariables :: (Data (t a), Data a) => t a -> [String]
-> freeVariables f = (variables f) \\ (binders f)
 
 > go :: String -> IO ()
 > go s = do f <- readFile s
 >           let f' = parse f
 >           --let f'' = map ((transformBi quickAnnotateDo) . (fmap (const ""))) f'
->           let f'' = map ((transformBi annotateFVDo) . (fmap (const ([""],[""])))) f'
+>           --let f'' = map ((transformBi annotateFVDo) . (fmap (const ([""],[""])))) f'
+>           let f'' = lva (map (fmap (const unitAnnotation)) f')
 >           writeFile (s ++ ".html") (concatMap outputHTML f'')
 >           -- putStrLn (show $ variables f'')
 >           -- putStrLn (show $ binders f'')
->           (show ((map (fmap (const ())) f')::([Program ()]))) `trace`
+>           --(show ((map (fmap (const ())) f')::([Program ()]))) `trace`
+>           (show (map gtypes f'')) `trace`
 >             (show (declsWithBounds f'')) `trace` return ()
 >           -- (show [ d | d@(Decl _ p t) <- (universeBi (map (fmap (const ())) f''))::[Decl ()]]) `trace` return ()
 
