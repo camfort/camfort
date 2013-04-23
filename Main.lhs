@@ -5,6 +5,8 @@
 > {-# LANGUAGE ScopedTypeVariables #-}
 > {-# LANGUAGE OverlappingInstances #-}
 
+> {-# LANGUAGE TupleSections #-}
+
 > {-# LANGUAGE ImplicitParams #-}
 
 > module Main where
@@ -18,6 +20,7 @@
 
 > import Control.Comonad
 
+> import LVA
 > import Output
 > import Syntax
 > import Traverse
@@ -53,70 +56,24 @@
          anno = (
      in For anno v e1 e2 e3 body
   
-
-
 > newFrame gammas = []:gammas
 > pushVar v t (g:gs) = ((v, t):g):gs
 > popVar (((v,t):g):gs) = (g:gs)
 > popFrame (g:gs) = (g, gs)
 
-> kill :: forall a t . (Data (t a), Typeable (t a), Typeable a, Data a)
->                   => t a -> [String]
-> kill t =    [v | (AssgExpr _ v _) <- (universeBi t)::[Expr a]] 
->          ++ [v | (For _ (VarName _ v) _ _ _ _) <- (universeBi t)::[Fortran a]] 
->          ++ [v | (Assg _ (Var _ [(VarName _ v, _)]) _) <- (universeBi t)::[Fortran a]] 
-
-> gen :: forall a t . (Data (t a), Typeable (t a), Typeable a, Data a)
->                   => t a -> [String]
-> gen t = (variables t) \\ (kill t)
-
-> successors :: Fortran t -> [Fortran t]
-> successors (FSeq _ f1 f2)           = f2 : successors f1
-> successors (For _ _ _ _ _ f)        = [f]
-> successors (If _ _ f efs Nothing)   = f : map snd efs
-> successors (If _ _ f efs (Just f')) = [f, f'] ++ map snd efs
-> successors (Forall _ _ f)           = [f]
-> successors (Where _ _ f)            = [f]
-> successors (Label _ _ f)            = [f]
-> successors _                        = []       
-
- type Annotation = ([String], ([String], [String]))
- unitAnnotation = ([], ([], []))
-
-> type Annotation = ([String], [String])
+    
+> type Annotation = ([Variable], [Variable])
 > unitAnnotation = ([], [])
 
-Single iteration of live-variable analysis
+> indices :: [Program [Variable]] -> [Program Annotation] -- State (TypeEnv a) 
+> indices = let indexVariablesF = indexVariables :: Fortran Annotation -> [Variable] 
+>           in map (extendBi ((fst . rextract) `fanout` indexVariablesF)) . (map (fmap (,[""])))
 
-> lva0 :: Fortran Annotation -> Annotation
-> -- lva0 x = (universeBi (foldl union [] (successors x)))::[String]
-> lva0 x = let liveOut = concat $ map (fst . rextract) (successors x)
->              killV   = kill x
->              genV    = gen x
->              liveIn  = union genV (liveOut \\ killV)
->          in (liveIn,  indexVariables x) -- ) (killV, genV))
+> analyse :: [Program ()] -> [Program Annotation]
+> analyse p = indices . lva $ p
 
-> indexVariables2 :: forall a t . (Data (t Annotation), Typeable (t Annotation)) => t Annotation -> [String]
-> indexVariables2 f = nub $ [ v |  (VarName _ v) <- (universeBi f')::[VarName Annotation] ]
->                        where f' = [ exprs | (ArrayCon _ exprs) <- ((universeBi f)::[Expr Annotation]) ]
 
-                
-Iterate the comonadic application of lva0 over a block, till a fixed-point is reached
-
-> lvaN :: Program Annotation -> Program Annotation
-> lvaN x = let y = extendBi lva0 x
->          in if (y == x) then x
->             else lvaN y
-
-Apply live-variable analysis over all blocks
-
-> lva :: [Program Annotation] -> [Program Annotation]
-> lva = map lvaN
-     
-
-             ++ (concat [map fst es | Var es <- universeBi f])
-
-> indexVariables :: forall a t . (Data (t a), Typeable (t a), Data a, Typeable a) => t a -> [String]
+> indexVariables :: forall a t . (Data (t a), Typeable (t a), Data a, Typeable a) => t a -> [Variable]
 > indexVariables x = let is = [e | (Var _ [(VarName _ _, e)]) <- (universeBi x)::[Expr a], length e > 0]
 >                    in nub [v | (VarName _ v) <- (universeBi is)::[VarName a]]
 
@@ -142,12 +99,12 @@ Apply live-variable analysis over all blocks
 >           let f' = parse f
 >           --let f'' = map ((transformBi quickAnnotateDo) . (fmap (const ""))) f'
 >           --let f'' = map ((transformBi annotateFVDo) . (fmap (const ([""],[""])))) f'
->           let f'' = lva (map (fmap (const unitAnnotation)) f')
+>           let f'' = analyse f'
 >           writeFile (s ++ ".html") (concatMap outputHTML f'')
 >           -- putStrLn (show $ variables f'')
 >           -- putStrLn (show $ binders f'')
->           --(show ((map (fmap (const ())) f')::([Program ()]))) `trace`
->           (show (map gtypes f'')) `trace`
+>           (show ((map (fmap (const ())) f')::([Program ()]))) `trace`
+>           --(show (map gtypes f'')) `trace`
 >             (show (declsWithBounds f'')) `trace` return ()
 >           -- (show [ d | d@(Decl _ p t) <- (universeBi (map (fmap (const ())) f''))::[Decl ()]]) `trace` return ()
 

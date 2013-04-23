@@ -4,6 +4,7 @@ module Language.Fortran.Parser  where
 
 import Language.Fortran
 
+
 import Language.Haskell.Syntax (SrcLoc,srcLine,srcColumn)
 import Language.Haskell.ParseMonad
 import Language.Fortran.Lexer
@@ -11,6 +12,10 @@ import Data.Char (toLower)
 -- import GHC.Exts
 
 import Data.Generics.Annotate
+
+-- isArrayDecl (Var _ 
+
+
 
 [annotateFrom| {Language.Fortran}
 }
@@ -164,7 +169,6 @@ import Data.Generics.Annotate
  ID                     { ID $$ }
  NUM                    { Num $$ }
  TEXT                   { Text $$ }
- NULLSTMT		{ NullStmtT }
 %%
 
 executable_program :: { [Program] }
@@ -195,23 +199,24 @@ plist
 
 main_program :: { Program }
 main_program
-  : program_stmt use_stmt_list implicit_part specification_part execution_part end_program_stmt
-  {% (cmpNames (fst $1) $6 "program") >>= (\name -> return ((Main name (snd $1) (Block $2 $3 $4 $5)))) }
+  : program_stmt use_stmt_list implicit_part specification_part_top execution_part module_subprogram_part end_program_stmt
+		{% (cmpNames (fst $1) $7 "program") >>= (\name -> return ((Main name (snd $1) (Block $2 $3 $4 $5) $6))) }
 
 program_stmt :: { (SubName,Arg) }
 program_stmt
-  : PROGRAM subname args_p	         { ($2,$3) }				
+  : PROGRAM subname args_p	     { ($2,$3) }				
   | PROGRAM subname                  { ($2, (Arg NullArg)) } 
 
 end_program_stmt :: { String }
 end_program_stmt
-  : END PROGRAM id2                             { $3 }
+  : END PROGRAM id2                            { $3 }
   | END PROGRAM                                { "" }
   | END                                        { "" }
 
 implicit_part :: { Implicit }
 implicit_part : IMPLICIT NONE { ImplicitNone }
               | {- empty -}   { ImplicitNull }
+
 --args
 --  : args ',' id2                                   { }
 --  | args                                          { }
@@ -228,7 +233,7 @@ external_subprogram
 
 subroutine_subprogram :: { Program }
 subroutine_subprogram 
-  : subroutine_stmt use_stmt_list implicit_part specification_part execution_part end_subroutine_stmt
+  : subroutine_stmt use_stmt_list implicit_part specification_part_top execution_part end_subroutine_stmt
   {% (cmpNames (fst3 $1) $6 "subroutine") >>= (\name -> return ((Sub (trd3 $1) name (snd3 $1) (Block $2 $3 $4 $5)))) }
 
 end_subroutine_stmt :: { String }
@@ -245,13 +250,13 @@ end_function_stmt
 
 function_subprogram :: { Program }
 function_subprogram
-  : function_stmt use_stmt_list implicit_part specification_part execution_part end_function_stmt
+  : function_stmt use_stmt_list implicit_part specification_part_top execution_part end_function_stmt
                 {% cmpNames (fst3 $1) $6 "function" >>= \name -> return ((Function (trd3 $1) name (snd3 $1)
 										      (Block $2 $3 $4 $5))) }
 
 block_data :: { Program }
 block_data
-  : block_data_stmt use_stmt_list implicit_part specification_part end_block_data_stmt      {% cmpNames $1 $5 "block data" >>= \name -> return ((BlockData name $2 $3 $4)) }
+  : block_data_stmt use_stmt_list implicit_part specification_part_top end_block_data_stmt      {% cmpNames $1 $5 "block data" >>= \name -> return ((BlockData name $2 $3 $4)) }
   
 block_data_stmt :: { SubName }
 block_data_stmt
@@ -266,7 +271,7 @@ end_block_data_stmt
   
 module :: { Program }
 module
-  : module_stmt use_stmt_list implicit_part specification_part_top module_subprogram_part end_module_stmt      { % cmpNames $1 $6  "module" >>= \name -> return (Module name $2 $3 $4 $5) }
+  : module_stmt use_stmt_list implicit_part specification_part_top module_subprogram_part end_module_stmt { % cmpNames $1 $6  "module" >>= \name -> return (Module name $2 $3 $4 $5) }
 
 module_stmt :: { SubName }
 module_stmt
@@ -285,12 +290,12 @@ end_module_stmt
 module_subprogram_part :: { [Program] }
 module_subprogram_part
   : CONTAINS internal_subprogram_list          { $2 }
-  -- | {- empty -}                                { [] } 
+| {- empty -}                                { [] } 
   
 internal_subprogram_list :: { [Program] }
 internal_subprogram_list
-  : internal_subprogram_list internal_subprogram    { $1++[$2] }
-  | internal_subprogram                             { [$1] }
+  : internal_subprogram_list internal_subprogram    { $1++[$2] } 
+  | {- empty -}                                     { [] }
   
 internal_subprogram :: { Program }
 internal_subprogram
@@ -300,7 +305,7 @@ internal_subprogram
 use_stmt_list :: { [String] }
 use_stmt_list
   : use_stmt_list use_stmt 							{ $1++[$2] }
-  | {- empty -}										{ [] }
+  | {- empty -}									{ [] }
   
 use_stmt :: { String }
 use_stmt
@@ -333,11 +338,11 @@ declaration_construct :: { Decl }
 declaration_construct
   : type_spec_p attr_spec_list '::' entity_decl_list  { if isEmpty (fst $2) 
                                                         then Decl $4 ((BaseType (fst3 $1) (snd $2) (snd3 $1) (trd3 $1)))
-							                            else Decl $4 ((ArrayT   (fst $2) (fst3 $1) (snd $2) (snd3 $1) (trd3 $1))) }
+							else Decl $4 ((ArrayT   (fst $2) (fst3 $1) (snd $2) (snd3 $1) (trd3 $1))) }
   | type_spec_p attr_spec_list      entity_decl_list  { if isEmpty (fst $2) 
                                                         then Decl $3 ((BaseType (fst3 $1) (snd $2) (snd3 $1) (trd3 $1)))
-							                            else Decl $3 ((ArrayT   (fst $2) (fst3 $1) (snd $2) (snd3 $1) (trd3 $1))) }
-  | interface_block									   { $1 }
+							else Decl $3 ((ArrayT   (fst $2) (fst3 $1) (snd $2) (snd3 $1) (trd3 $1))) }
+  | interface_block				      { $1 }
   | include_stmt { $1 }
 
 attr_spec_list :: {([(Expr,Expr)],[Attr])}
@@ -1020,11 +1025,12 @@ execution_part
 executable_construct_list :: { Fortran }
 executable_construct_list
 : executable_construct_list executable_construct_list  { (FSeq $1 $2) }
-|                   executable_construct               { $1 }
+| executable_construct               { $1 }
+-- | {- empty -}                        { NullStmt }
 
-execution_part_construct :: { Fortran }
-execution_part_construct
-  : executable_construct_p                       { $1 }
+-- execution_part_construct :: { Fortran }
+-- execution_part_construct
+--   : executable_construct_p                       { $1 }
 --  | format_stmt
 --  | data_stmt
 --  | entry_stmt
@@ -1073,7 +1079,6 @@ action_stmt
   | where_stmt                                    { $1 }
   | write_stmt                                    { $1 }
   | LABEL action_stmt                             { (Label $1 $2) }
-  | NULLSTMT					  { NullStmt }
   | TEXT				          { (TextStmt $1) }
 
 call_stmt :: { Fortran }

@@ -90,6 +90,7 @@ class OutputIndG t v where
 instance (OutputIndF t Alt1) => OutputIndG t Alt1 where
     outputIndG = outputIndF
 
+type Variable = String
 
 [annotate|
 
@@ -117,7 +118,7 @@ data ArgList  = ArgList Expr
                 deriving (Show, Functor,Typeable,Data, Eq)
 
              -- Prog type   (type of result)   name      args  body    use's  
-data Program  = Main                           SubName  Arg  Block
+data Program  = Main                           SubName  Arg  Block [Program]
               | Sub        (Maybe BaseType)    SubName  Arg  Block
               | Function   (Maybe BaseType)    SubName  Arg  Block
               | Module                         SubName              [String] Implicit Decl [Program]
@@ -214,7 +215,7 @@ data Fortran  = Assg Expr Expr
               | Label String Fortran
               | Print Expr [Expr]
               | ReadS [Spec] [Expr]
-              | TextStmt String                                -- cpp switches to carry over
+              | TextStmt String     -- cpp switches to carry over
               | NullStmt
                 deriving (Show, Functor,Typeable,Data, Eq)
 
@@ -323,9 +324,17 @@ instance (OutputG Arg v,
   outputF (Function Nothing n a b) = "function "++(outputG n)++outputG a++"\n"++
                              outputG b++
                           "\nend function "++(outputG n)++"\n"
-  outputF (Main n a b)     = "program "++(outputG n)++if not (isEmptyArg a) then (outputG a) else ""++"\n"++
-                             outputG b++
-                          "\nend program "++(outputG n)++"\n"
+  outputF (Main n a b [])     = "program "++(outputG n) ++ 
+                                (if not (isEmptyArg a) then (outputG a) else ""++"\n") ++
+                                outputG b ++
+                                "\nend program "++ (outputG n) ++"\n"
+  outputF (Main n a b ps)     = "program "++(outputG n) ++ 
+                                (if not (isEmptyArg a) then (outputG a) else ""++"\n") ++
+                                outputG b ++
+                                "contains\n" ++
+                                (concatMap outputG ps) ++
+                                "\nend program "++(outputG n)++"\n"
+
   outputF (Module n us i ds []) = "module "++(outputG n)++"\n" ++
                              showUse us ++
                              outputG i ++
@@ -335,7 +344,7 @@ instance (OutputG Arg v,
                              showUse us ++
                              outputG i ++
                              outputG ds ++
-							 "contains\n" ++
+			     "\ncontains\n" ++
                              concatMap outputG ps ++
                           "end module " ++ (outputG n)++"\n"
   outputF (BlockData n us i ds) = "block data " ++ (outputG n) ++ "\n" ++

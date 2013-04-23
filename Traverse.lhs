@@ -3,7 +3,8 @@
 
  {-# LANGUAGE MultiParamTypeClasses #-}
 
- {-# LANGUAGE ScopedTypeVariables #-}
+> {-# LANGUAGE ScopedTypeVariables #-}
+
  {-# LANGUAGE OverlappingInstances #-}
 
  {-# LANGUAGE ImplicitParams #-}
@@ -21,6 +22,14 @@
 > import Data.Generics.Uniplate.Operations
 
 > import Control.Comonad
+
+Other helpers
+
+> fanout :: (a -> b) -> (a -> c) -> a -> (b, c)
+> fanout f g x = (f x, g x)
+
+> prod :: (a -> c) -> (b -> d) -> (a, b) -> (c, d)
+> prod f g (x, y) = (f x, g y)
 
 Data-type generic comonad-style traversal
 
@@ -96,3 +105,72 @@ Data-type generic comonad-style traversal
 >     rextend k y@(ReadS _ s e)           = ReadS (k y) s e
 >     rextend k y@(TextStmt _ s)          = TextStmt (k y) s
 >     rextend k y@(NullStmt _)            = NullStmt (k y)
+
+
+> instance Comonad Fortran where
+>     extract x = rextract x
+
+>     extend k y@(Assg _ e1 e2)        = Assg (k y) (fmap (k . NullStmt) e1) 
+>                                                     (fmap (k . NullStmt) e2)
+
+>     extend k y@(For _ v e1 e2 e3 fs) = For (k y) (fmap (k . NullStmt) v)
+>                                                   (fmap (k . NullStmt) e1)
+>                                                    (fmap (k . NullStmt) e2)
+>                                                     (fmap (k . NullStmt) e3)
+>                                                      (extend k fs)
+
+>     extend k y@(FSeq _ f1 f2)        = FSeq (k y) (extend k f1) (extend k f2)
+>     extend k y@(If _ e f1 fes f3)    = let fes' = map (\(e, f) -> (fmap (k . NullStmt) e, extend k f)) fes
+>                                            f3' = case f3 of 
+>                                                     Nothing -> Nothing
+>                                                     Just f3a -> Just (extend k f3a)
+>                                         in If (k y) (fmap (k . NullStmt) e) (extend k f1) fes' f3'
+
+>     extend k y@(Allocate _ e1 e2)      = Allocate (k y) (fmap (k . NullStmt) e1)
+>                                                           (fmap (k . NullStmt) e2)
+>     extend k y@(Backspace _ sp)        = Backspace (k y) (map (fmap (k . NullStmt)) sp)
+>     extend k y@(Call _ e as)           = Call (k y) (fmap (k . NullStmt) e)
+>                                                       (fmap (k . NullStmt) as)
+>     extend k y@(Open _ s)              = Open (k y) (map (fmap (k . NullStmt)) s)
+>     extend k y@(Close _ s)             = Close (k y) (map (fmap (k . NullStmt)) s)
+>     extend k y@(Continue _)            = Continue (k y)
+>     extend k y@(Cycle _ s)             = Cycle (k y) s
+>     extend k y@(Deallocate _ es e)     = Deallocate (k y) (map (fmap (k . NullStmt)) es) (fmap (k . NullStmt) e)
+>     extend k y@(Endfile _ s)           = Endfile (k y) (map (fmap (k . NullStmt)) s)
+>     extend k y@(Exit _ s)              = Exit (k y) s
+>     extend k y@(Forall _ (es, e) f)    = let g (s, e1, e2, e3) = (s, fmap (k . NullStmt) e1, 
+>                                                                        fmap (k . NullStmt) e2,
+>                                                                          fmap (k . NullStmt) e3)
+>                                          in Forall (k y) (map g es, fmap (k . NullStmt) e) (extend k f)
+>     extend k y@(Goto _ s)              = Goto (k y) s
+>     extend k y@(Nullify _ es)          = Nullify (k y) (map (fmap (k . NullStmt)) es)
+>     extend k y@(Inquire _ ss es)       = Inquire (k y) (map (fmap (k . NullStmt)) ss) (map (fmap (k . NullStmt)) es)
+>     extend k y@(Rewind _ ss)           = Rewind (k y) (map (fmap (k . NullStmt)) ss)
+>     extend k y@(Stop _ e)              = Stop (k y) (fmap (k . NullStmt) e)
+>     extend k y@(Where _ e f)           = Where (k y) (fmap (k . NullStmt) e) (extend k f)
+>     extend k y@(Write _ ss es)         = Write (k y) (map (fmap (k . NullStmt)) ss) (map (fmap (k . NullStmt)) es)
+>     extend k y@(PointerAssg _ e1 e2)   = PointerAssg (k y) (fmap (k . NullStmt) e1) (fmap (k . NullStmt) e2)
+>     extend k y@(Return _ e)            = Return (k y) (fmap (k . NullStmt) e)
+>     extend k y@(Label _ s f)           = Label (k y) s (extend k f)
+>     extend k y@(Print _ e es)          = Print (k y) (fmap (k . NullStmt) e) (map (fmap (k . NullStmt)) es)
+>     extend k y@(ReadS _ ss es)         = ReadS (k y) (map (fmap (k . NullStmt)) ss) (map (fmap (k . NullStmt)) es)
+>     extend k y@(TextStmt _ s)          = TextStmt (k y) s
+>     extend k y@(NullStmt _)            = NullStmt (k y)
+
+
+
+Accessors
+
+
+> class Successors t where
+>     successors :: t -> [t]
+
+> instance Successors (Fortran t) where
+>     successors (FSeq _ f1 f2)           = f2 : successors f1
+>     successors (For _ _ _ _ _ f)        = [f]
+>     successors (If _ _ f efs Nothing)   = f : map snd efs
+>     successors (If _ _ f efs (Just f')) = [f, f'] ++ map snd efs
+>     successors (Forall _ _ f)           = [f]
+>     successors (Where _ _ f)            = [f]
+>     successors (Label _ _ f)            = [f]
+>     successors _                        = []
