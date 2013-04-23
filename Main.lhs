@@ -19,6 +19,8 @@
 > import Data.Generics.Uniplate.Operations
 
 > import Control.Comonad
+> import Control.Monad
+> import Control.Monad.State.Lazy
 
 > import LVA
 > import Output
@@ -65,17 +67,20 @@
 > type Annotation = ([Variable], [Variable])
 > unitAnnotation = ([], [])
 
-> indices :: [Program [Variable]] -> [Program Annotation] -- State (TypeEnv a) 
-> indices = let indexVariablesF = indexVariables :: Fortran Annotation -> [Variable] 
->           in map (extendBi ((fst . rextract) `fanout` indexVariablesF)) . (map (fmap (,[""])))
+> indices :: [Program [Variable]] ->  [Program Annotation] -- State (TypeEnv a) 
+> indices x = let indexVariablesF x = (snd $ runState (indexVariables x) []) :: Fortran Annotation -> [Variable] 
+>             in map (extendBi ((fst . rextract) `fanout` indexVariablesF)) . (map (fmap (,[""])))
 
 > analyse :: [Program ()] -> [Program Annotation]
 > analyse p = indices . lva $ p
 
 
-> indexVariables :: forall a t . (Data (t a), Typeable (t a), Data a, Typeable a) => t a -> [Variable]
+> indexVariables :: forall a t . (Data (t a), Typeable (t a), Data a, Typeable a) => t a -> State (TypeEnv a) [Variable]
 > indexVariables x = let is = [e | (Var _ [(VarName _ _, e)]) <- (universeBi x)::[Expr a], length e > 0]
->                    in nub [v | (VarName _ v) <- (universeBi is)::[VarName a]]
+>                    in do gtypes x
+>                          ivs <- return $ [v | (VarName _ v) <- (universeBi is)::[VarName a]]
+>                          ivs' <- filterM isArrayTypeP ivs
+>                          return $ nub ivs
 
  indexVariables :: forall a t . (Data (t a), Typeable (t a), Data a, Typeable a) => t a -> [String]
  indexVariables f = nub $ [ v |  (VarName _ v) <- (universeBi f')::[VarName a] ]

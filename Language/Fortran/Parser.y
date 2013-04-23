@@ -13,10 +13,6 @@ import Data.Char (toLower)
 
 import Data.Generics.Annotate
 
--- isArrayDecl (Var _ 
-
-
-
 [annotateFrom| {Language.Fortran}
 }
 
