@@ -67,36 +67,24 @@
 > type Annotation = ([Variable], [Variable])
 > unitAnnotation = ([], [])
 
-> indices :: [Program [Variable]] ->  [Program Annotation] -- State (TypeEnv a) 
-> indices x = let indexVariablesF x = (snd $ runState (indexVariables x) []) :: Fortran Annotation -> [Variable] 
->             in map (extendBi ((fst . rextract) `fanout` indexVariablesF)) . (map (fmap (,[""])))
+ type Annotation = (((), [Variable]), [Variable])
+ unitAnnotation = (((), []), [])
+
+map (fmap ((,[""]),[""]))
 
 > analyse :: [Program ()] -> [Program Annotation]
-> analyse p = indices . lva $ p
+> analyse p = (map (descendBi indexVariables)) . (map (fmap (,[""]))) . lva $ p
 
+> indexVariables :: Block Annotation -> Block Annotation
+> indexVariables x = 
+>     let typeEnv = snd $ runState (buildTypeEnv x) []
 
-> indexVariables :: forall a t . (Data (t a), Typeable (t a), Data a, Typeable a) => t a -> State (TypeEnv a) [Variable]
-> indexVariables x = let is = [e | (Var _ [(VarName _ _, e)]) <- (universeBi x)::[Expr a], length e > 0]
->                    in do gtypes x
->                          ivs <- return $ [v | (VarName _ v) <- (universeBi is)::[VarName a]]
->                          ivs' <- filterM isArrayTypeP ivs
->                          return $ nub ivs
+>         indexVars :: Fortran Annotation -> Annotation
+>         indexVars y = let is = [e | (Var _ [(VarName _ v, e)]) <- (universeBi y)::[Expr Annotation], length e > 0, isArrayTypeP' typeEnv v]
+>                           indices = [v | (VarName _ v) <- (universeBi is)::[VarName Annotation]]
+>                       in (fst $ extract y, nub indices)
+>     in extendBi indexVars x
 
- indexVariables :: forall a t . (Data (t a), Typeable (t a), Data a, Typeable a) => t a -> [String]
- indexVariables f = nub $ [ v |  (VarName _ v) <- (universeBi f')::[VarName a] ]
-                        where f' = [ exprs | (ArrayCon _ exprs) <- ((universeBi f)::[Expr a]) ]
-
-                              transformBiM
-
-                                 (\(Decl  -> do xs <- get 
-
-> predBounds [] = False
-> predBounds [(Bound _ _ _)] = True
-> predBounds ((Bound _ _ _):bs) = True || predBounds bs
-> predBounds _ = False
-
-> declsWithBounds :: forall a .  (Data a, Typeable a) => [Program a] -> [String]
-> declsWithBounds x = [v | (VarName _ v, b) <- (universeBi ((universeBi x)::[Decl a]))::[(VarName a, [Expr a])], predBounds b]
 
 
 > go :: String -> IO ()
@@ -108,9 +96,7 @@
 >           writeFile (s ++ ".html") (concatMap outputHTML f'')
 >           -- putStrLn (show $ variables f'')
 >           -- putStrLn (show $ binders f'')
->           (show ((map (fmap (const ())) f')::([Program ()]))) `trace`
->           --(show (map gtypes f'')) `trace`
->             (show (declsWithBounds f'')) `trace` return ()
->           -- (show [ d | d@(Decl _ p t) <- (universeBi (map (fmap (const ())) f''))::[Decl ()]]) `trace` return ()
+>           (show ((map (fmap (const ())) f')::([Program ()]))) `trace` return ()
+
 
  
