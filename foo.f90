@@ -17,8 +17,8 @@ program foo
       c = c + 0.1
       j = j + 1
       a(i) = j 
-      b(i) = a(i)
-      print '(f0.7)', a(i)
+      b(i) = a(i+1)
+      print '(f0.7)', a(i+2)
       
     end do
 

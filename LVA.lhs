@@ -8,6 +8,8 @@
 > import Data.Generics.Uniplate.Operations
 
 > import Language.Fortran
+
+> import Annotations
 > import Syntax
 > import Traverse
 
@@ -25,22 +27,22 @@ Kill/gen functions
 
 Single iteration of live-variable analysis
 
-> lva0 :: Fortran [Variable] -> [Variable]
+> lva0 :: Fortran Annotation -> Annotation
 > -- lva0 x = (universeBi (foldl union [] (successors x)))::[String]
-> lva0 x = let liveOut = concat $ map rextract (successors x)
+> lva0 x = let liveOut = concat $ map (lives . rextract) (successors x)
 >              killV   = kill x
 >              genV    = gen x
 >              liveIn  = union genV (liveOut \\ killV)
->          in liveIn 
+>          in (setLives liveIn (rextract x))
                
 Iterate the comonadic application of lva0 over a block, till a fixed-point is reached
 
-> lvaN :: Program [Variable] -> Program [Variable]
-> lvaN x = let y = extendBi lva0 x
->          in if (y == x) then x
->             else lvaN y
+> lva :: Program Annotation -> Program Annotation
+> lva x = let y = extendBi lva0 x
+>         in if (y == x) then x
+>            else lva y
 
 Apply live-variable analysis over all blocks
 
-> lva :: [Program a] -> [Program [Variable]]
-> lva = map lvaN . (map (fmap (const [""])))
+ lva :: [Program Annotation] -> [Program Annotation]
+ lva = map lvaN . (map (fmap (const [""])))
