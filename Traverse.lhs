@@ -31,6 +31,10 @@ Other helpers
 > prod :: (a -> c) -> (b -> d) -> (a, b) -> (c, d)
 > prod f g (x, y) = (f x, g y)
 
+> mfmap :: Functor f => (a -> b) -> [f a] -> [f b]
+> mfmap f = map (fmap f)
+
+
 Data-type generic comonad-style traversal
 
 > extendBi :: (Biplate (from a) (to a), RComonad to) => (to a -> a) -> (from a) -> (from a)
@@ -160,7 +164,6 @@ Data-type generic comonad-style traversal
 
 
 Accessors
-
 
 > class Successors t where
 >     successors :: t -> [t]

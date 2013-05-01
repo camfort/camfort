@@ -11,13 +11,14 @@
 
 > module Output where
 
+> import Annotations
+> import Traverse
 > import Language.Fortran as Fortran
 
-> import Data.Text hiding (foldl,map)
-> import qualified Data.Text as Text
-
+> import Data.Text hiding (foldl,map, concatMap)
+> import qualified Data.Text as Text 
+> import Data.Map.Lazy hiding (map, foldl)
 > import Data.Generics.Annotate
-
 > import Data.Generics
 > import Data.Generics.Uniplate.Data
 
@@ -43,7 +44,7 @@
 
 > pre l = Text.concat [pack "<pre>", l, pack "</pre>"]
 
-> outputHTML :: forall p . (Data p, Typeable p, OutputG p Alt2) => Fortran.Program p -> String
+> outputHTML :: forall p . (Data p, Typeable p, OutputG p Alt2, OutputIndG (Fortran p) Alt2) => Fortran.Program p -> String
 > outputHTML prog = unpack html
 >                 where
 >                   t :: SubName p -> SubName p
@@ -53,7 +54,7 @@
 
 >                   html = let ?variant = Alt2
 >                          in 
->                            (Text.append (pack "<style>pre {margin:1px;}</style>"))
+>                            (Text.append (pack "<head><script type='text/javascript' src='source.js'></script><link href='source.css' type='text/css' rel='stylesheet' /></head>"))
 >                          . (Text.concat . (map pre) . Text.lines)
 >                          . (\t -> foldl (toColor green) t types)
 >                          . (\t -> foldl (toColor purple) t keyword)
@@ -67,7 +68,7 @@ Output routines specialised to the analysis.
                    
 
 
-> instance OutputG p Alt2 => OutputG (Program p) Alt2 where
+> instance (OutputIndG (Fortran p) Alt2, OutputG p Alt2) => OutputG (Program p) Alt2 where
 >     outputG = outputF
 
 > instance OutputG (SubName p) Alt2 where
@@ -115,10 +116,10 @@ Output routines specialised to the analysis.
 > instance OutputG (Attr p) Alt2 where
 >     outputG = outputF
 
-> instance OutputG p Alt2 => OutputG (Block p) Alt2 where
+> instance (OutputIndG (Fortran p) Alt2, OutputG p Alt2) => OutputG (Block p) Alt2 where
 >     outputG = outputF
 
-> instance OutputG p Alt2 => OutputG (Fortran p) Alt2 where
+> instance (OutputIndG (Fortran p) Alt2, OutputG p Alt2) => OutputG (Fortran p) Alt2 where
 >     outputG (For p v e e' e'' f) = "do"++" "++outputG v++" = "++outputG e++", "++
 >                                    outputG e'++", "++outputG e''++"\n"++
 >                                    "<span style='color:#707d8f'>"++"{"++outputG p++"}</span>\n" ++ 
@@ -128,10 +129,44 @@ Output routines specialised to the analysis.
 > instance OutputG (Spec p) Alt2 where
 >     outputG = outputF
 
-> instance OutputG p Alt2 => OutputIndG (Fortran p) Alt2 where
->     outputIndG i (For p v e e' e'' f) = (ind i) ++ "do"++" "++outputG v++" = "++outputG e++", "++
+> instance OutputIndG (Fortran Annotation) Alt2 where
+>     outputIndG i t@(For p v e e' e'' f) = annotationMark t
+>                                           ((ind i) ++ "do"++" "++outputG v++" = "++outputG e++", "++
 >                                         outputG e'++", "++outputG e''++"\n"++
 >                                         "<span style='color:#707d8f'>"++(ind i)++"{"++outputG p++"}</span>\n" ++ 
->                                         (outputIndG (i+1) f)++"\n"++(ind i)++"end do"
->     outputIndG i t = outputIndF i t
+>                                         (outputIndG (i+1) f)++"\n"++(ind i)++"end do")
+>                                         
+>                                         
+>     outputIndG i t = annotationMark t (outputIndF i t)
+
+> annotationMark t x = "<div class='clickable' onClick='toggle(" ++ 
+>                       (show $ number (rextract t)) ++
+>                     ");'>" ++ x ++ "</div>"
+
+
+> row xs = "<tr>" ++ (concatMap (\x -> "<td>" ++ x ++ "</td>") xs) ++ "</tr>"
+
+> instance OutputG Annotation Alt2 where
+>     outputG t = "<div id='a" ++ (show $ number t) ++ "' class='annotation'>" ++ 
+>                 "<div class='number'>" ++ (show $ number t) ++ 
+>                 "</div><p><table>" ++
+>                  row ["lives:",    showList $ lives t] ++ 
+>                  row ["indices:",  showList $ indices t] ++ 
+>                  row ["arrays R:", showExps (assocs $ arrsRead t)] ++ 
+>                  row ["arrays W:", showExps (assocs $ arrsWrite t)] ++
+>                 "</table></p></div>" 
+>                   where
+>                     listToPair x       = "(" ++ listToPair' x ++ ")"
+>                     listToPair' []     = ""
+>                     listToPair' [x]    = outputF x
+>                     listToPair' (x:xs) = outputF x ++ ", " ++ listToPair' xs
+
+>                     showList x    = "" ++ showList' x ++ ""
+>                     showList' []  = ""
+>                     showList' [x] = x
+>                     showList' (x:xs) = x ++ ", " ++ showList' xs
+
+>                     showExps []           = ""
+>                     showExps [(v, es)]    = "[" ++ v ++ ": " ++ (showList $ map listToPair es) ++ "]"
+>                     showExps ((v, es):ys) = (showExps [(v, es)]) ++ ", " ++ (showExps ys)
 

@@ -1,0 +1,41 @@
+pre { 
+  margin:1px;
+}
+
+div.annotation { 
+  border:solid 1px #ccc;
+  background:#eee;
+  width:240px;
+  padding:0px;
+  font-size:9pt;
+}
+
+table {
+  margin: 0px;
+  padding: 0px;
+}
+
+p {
+  margin:0px;
+}
+
+div.clickable {
+  cursor:pointer;
+}
+
+div.clickable:hover {
+  background-color:#fee;
+}
+
+div.annotation td { 
+  font-family:sans;
+  font-size:9pt;
+  padding:1px;
+  margin:0px;
+}
+
+div.number {
+  margin:0px;
+  left:0px;
+  top:0px;
+}

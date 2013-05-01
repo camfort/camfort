@@ -331,7 +331,7 @@ instance (OutputG Arg v,
   outputF (Main n a b ps)     = "program "++(outputG n) ++ 
                                 (if not (isEmptyArg a) then (outputG a) else ""++"\n") ++
                                 outputG b ++
-                                "contains\n" ++
+                                "\ncontains\n" ++
                                 (concatMap outputG ps) ++
                                 "\nend program "++(outputG n)++"\n"
 

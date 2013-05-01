@@ -4,11 +4,26 @@
 
 > import Data.Data
 > import Data.List
+> import Data.Generics.Uniplate.Operations
+> import Control.Monad.State.Lazy
 
 > import Annotations
-
 > import Language.Fortran
-> import Data.Generics.Uniplate.Operations
+
+
+Number
+
+> numberStmts :: Program Annotation -> Program Annotation
+> numberStmts x = let 
+>                   numberF :: Fortran Annotation -> State Int (Fortran Annotation)
+>                   numberF = descendBiM number'
+
+>                   number' :: Annotation -> State Int Annotation
+>                   number' x = do n <- get 
+>                                  put (n + 1)
+>                                  return $ setNumber n x 
+>          
+>                 in fst $ runState (descendBiM numberF x) 0
 
 All variables from a Fortran syntax tree
 
@@ -90,3 +105,24 @@ All variables from binders
  rhsExpr (Where x e f)         = rhsExpr f
  rhsExpr (Label x s f)         = rhsExpr f
  rhsExpr t                     = [] -- concatMap rhsExpr ((universeBi t)::[Fortran Annotation])
+
+> affineMatch (Bin _ (Plus _) (Var _ [(VarName _ v, _)]) (Con _ n))   = Just (v, read n)
+> affineMatch (Bin _ (Plus _) (Con _ n) (Var _ [(VarName _ v, _)]))   = Just (v, read n)
+> affineMatch (Bin _ (Minus _) (Var _ [(VarName _ v, _)]) (Con _ n))  = Just (v, - read n)
+> affineMatch (Bin _ (Minus _) (Con _ n) (Var _  [(VarName _ v, _)])) = Just (v, - read n)
+> affineMatch (Var _  [(VarName _ v, _)])                             = Just (v, 0)
+> affineMatch _                                                       = Nothing
+
+
+ indexVariables :: Program Annotation -> Program Annotation
+ indexVariables = descendBi indexVariables'
+
+ indexVariables' :: Block Annotation -> Block Annotation
+ indexVariables' x = 
+     let typeEnv = snd $ runState (buildTypeEnv x) []
+
+         indexVars :: Fortran Annotation -> Annotation
+         indexVars y = let is = [e | (Var _ [(VarName _ v, e)]) <- (universeBi y)::[Expr Annotation], length e > 0, isArrayTypeP' typeEnv v]
+                           indices = [v | (VarName _ v) <- (universeBi is)::[VarName Annotation]]
+                       in setIndices (nub indices) (extract y) 
+     in extendBi indexVars x
