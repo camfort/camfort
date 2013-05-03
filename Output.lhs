@@ -130,43 +130,49 @@ Output routines specialised to the analysis.
 >     outputG = outputF
 
 > instance OutputIndG (Fortran Annotation) Alt2 where
->     outputIndG i t@(For p v e e' e'' f) = annotationMark t
->                                           ((ind i) ++ "do"++" "++outputG v++" = "++outputG e++", "++
->                                         outputG e'++", "++outputG e''++"\n"++
->                                         "<span style='color:#707d8f'>"++(ind i)++"{"++outputG p++"}</span>\n" ++ 
->                                         (outputIndG (i+1) f)++"\n"++(ind i)++"end do")
+>     outputIndG i t@(For p v e e' e'' f) = (outputAnn p True i) ++ 
+>                                           annotationMark i t
+>                                           ((ind i) ++ "do"++" "++outputG v++" = "++
+>                                            outputG e++", "++
+>                                            outputG e'++", "++outputG e''++"\n"++
+>                                            (outputIndG (i+1) f)++"\n"++(ind i)++"end do")
 >                                         
->                                         
->     outputIndG i t = annotationMark t (outputIndF i t)
+>     outputIndG i t@(FSeq p f1 f2) = outputIndG i f1 ++ outputIndG i f2
+>     outputIndG i t =  (annotationMark i t (outputIndF i t)) ++ (outputAnn (rextract t) False i)
 
-> annotationMark t x = "<div class='clickable' onClick='toggle(" ++ 
->                       (show $ number (rextract t)) ++
->                     ");'>" ++ x ++ "</div>"
+> annotationMark i t x = "<div class='clickable' onClick='toggle(" ++  
+>                        (show $ number (rextract t)) ++ ");'>" ++
+>                        x ++ "</div>"
 
 
 > row xs = "<tr>" ++ (concatMap (\x -> "<td>" ++ x ++ "</td>") xs) ++ "</tr>"
 
 > instance OutputG Annotation Alt2 where
->     outputG t = "<div id='a" ++ (show $ number t) ++ "' class='annotation'>" ++ 
->                 "<div class='number'>" ++ (show $ number t) ++ 
->                 "</div><p><table>" ++
->                  row ["lives:",    showList $ lives t] ++ 
->                  row ["indices:",  showList $ indices t] ++ 
->                  row ["arrays R:", showExps (assocs $ arrsRead t)] ++ 
->                  row ["arrays W:", showExps (assocs $ arrsWrite t)] ++
->                 "</table></p></div>" 
->                   where
->                     listToPair x       = "(" ++ listToPair' x ++ ")"
->                     listToPair' []     = ""
->                     listToPair' [x]    = outputF x
->                     listToPair' (x:xs) = outputF x ++ ", " ++ listToPair' xs
+>     outputG t = outputAnn t False 0
 
->                     showList x    = "" ++ showList' x ++ ""
->                     showList' []  = ""
->                     showList' [x] = x
->                     showList' (x:xs) = x ++ ", " ++ showList' xs
+> outputAnn t visible i =
+>      "<div id='a" ++ (show $ number t) ++ "' style='" ++
+>      (if visible then "" else "display:none;") ++
+>      "' class'outer'><div class='spacer'><pre>" ++ (indent 3 i) ++ "</pre></div>" ++ 
+>      "<div class='annotation'><div class='number'>" ++ (show $ number t) ++ 
+>      "</div><p><table>" ++
+>      row ["lives:",    showList $ lives t] ++ 
+>      row ["indices:",  showList $ indices t] ++ 
+>      row ["arrays R:", showExps (assocs $ arrsRead t)] ++ 
+>      row ["arrays W:", showExps (assocs $ arrsWrite t)] ++
+>      "</table></p></div><br />\n\r\n" 
+>          where
+>            listToPair x       = "(" ++ listToPair' x ++ ")"
+>            listToPair' []     = ""
+>            listToPair' [x]    = outputF x
+>            listToPair' (x:xs) = outputF x ++ ", " ++ listToPair' xs
 
->                     showExps []           = ""
->                     showExps [(v, es)]    = "[" ++ v ++ ": " ++ (showList $ map listToPair es) ++ "]"
->                     showExps ((v, es):ys) = (showExps [(v, es)]) ++ ", " ++ (showExps ys)
+>            showList x    = "" ++ showList' x ++ ""
+>            showList' []  = ""
+>            showList' [x] = x
+>            showList' (x:xs) = x ++ ", " ++ showList' xs
+
+>            showExps []           = ""
+>            showExps [(v, es)]    = "[" ++ v ++ ": " ++ (showList $ map listToPair es) ++ "]"
+>            showExps ((v, es):ys) = (showExps [(v, es)]) ++ ", " ++ (showExps ys)
 

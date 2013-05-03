@@ -1,11 +1,22 @@
 pre { 
   margin:1px;
+  clear:both;
+}
+
+div.outer {
+ clear:both;
+}
+
+div.spacer {
+ float:left;
+ clear:left;
 }
 
 div.annotation { 
+  float:left;
+  clear:right;
   border:solid 1px #ccc;
   background:#eee;
-  width:240px;
   padding:0px;
   font-size:9pt;
 }
@@ -29,7 +40,7 @@ div.clickable:hover {
 
 div.annotation td { 
   font-family:sans;
-  font-size:9pt;
+  font-size:10pt;
   padding:1px;
   margin:0px;
 }
