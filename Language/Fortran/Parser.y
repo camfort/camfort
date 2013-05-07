@@ -11,6 +11,8 @@ import Language.Fortran.Lexer
 import Data.Char (toLower)
 -- import GHC.Exts
 
+import Debug.Trace
+
 import Data.Generics.Annotate
 
 [annotateFrom| {Language.Fortran}
@@ -73,10 +75,10 @@ import Data.Generics.Annotate
  BACKSPACE 		{ Key "backspace" }
  BLOCK 			{ Key "block" }
  CALL 			{ Key "call" }
--- CASE 			{ Key "case" }
+ -- CASE 			{ Key "case" }
  CHARACTER 		{ Key "character" }
  CLOSE 			{ Key "close" }
--- COMMON 		{ Key "common" }
+ COMMON 		{ Key "common" }
  COMPLEX 		{ Key "complex" }
  CONTAINS 		{ Key "contains" }
  CONTINUE 		{ Key "continue" }
@@ -94,7 +96,7 @@ import Data.Generics.Annotate
  END 			{ Key "end" }
  ENDFILE                { Key "endfile" }
 -- ENTRY 			{ Key "entry" }
--- EQUIVALENCE 		{ Key "equivalence" }
+ EQUIVALENCE 		{ Key "equivalence" }
  EXIT 			{ Key "exit" }
  EXTERNAL 		{ Key "external" }
  FORALL 		{ Key "forall" }
@@ -114,7 +116,6 @@ import Data.Generics.Annotate
  INTRINSIC 		{ Key "intrinsic" }
  INQUIRE 		{ Key "inquire" }
  KIND 			{ Key "kind" }
- LABEL                  { LabelT $$ } 
  LEN 			{ Key "len" }
  LOGICAL 		{ Key "logical" }
  MODULE 		{ Key "module" }
@@ -151,7 +152,7 @@ import Data.Generics.Annotate
  SQRT			{ Key "sqrt" }
  STAT 			{ Key "stat" }
  STOP			{ Key "stop" }
- STR            { StrConst $$ }
+ STR                    { StrConst $$ }
  SUBROUTINE 		{ Key "subroutine" }
  TARGET 		{ Key "target" }
 -- TO 			{ Key "to" }
@@ -188,10 +189,10 @@ plist
   : plist ',' id2                                  { $1++[$3] }
   | id2                                            { [$1] }
 
---vlist :: { [Expr] }
---vlist 
---  : variable ',' vlist                            { [$1]++$3 }
---  | variable                                      { [$1] }
+vlist :: { [Expr] }
+vlist 
+  : variable ',' vlist                            { [$1]++$3 }
+  | variable                                      { [$1] }
 
 main_program :: { Program }
 main_program
@@ -310,8 +311,8 @@ use_stmt
 -- [DO: Allows the specification part of a module to be empty]
 specification_part_top :: { Decl }
 specification_part_top
-   : specification_part           { $1 }
-   |  {- empty -}                 { NullDecl }
+   : specification_part   { $1 }
+   |  {- empty -}         { NullDecl }
 
 specification_part :: { Decl }
 specification_part
@@ -472,10 +473,9 @@ specification_stmt :: { Decl }
 specification_stmt
   : access_stmt            { $1 }
 --  | allocatable_stmt       { $1 }
---  | common_stmt            { $1 }
+  | common_stmt            { $1 }
   | data_stmt              { $1 }
 --  | dimension_stmt         { $1 }
---  | equivalence_stmt       { $1 }
   | external_stmt          { $1 }
 --  | intent_stmt            { $1 }
 --  | intrinsic_stmt         { $1 }
@@ -484,6 +484,11 @@ specification_stmt
 --  | pointer_stmt           { $1 }
 --  | save_stmt              { $1 }
 --  | target_stmt            { $1 }
+
+common_stmt :: { Decl }
+ : COMMON '/' id2 '/' vlist  { Common (Just $3) $5 }
+ | COMMON vlist              { Common Nothing $2 }
+
 
 interface_block :: { Decl }
 interface_block
@@ -1012,11 +1017,13 @@ do_block
 
 block :: { Fortran }
 block
-  : executable_construct_list                                  { $1 }
+  : executable_construct_list                       { $1 }
+  | {- empty -}                                     { NullStmt }
  
 execution_part :: { Fortran }
 execution_part 
-  : executable_construct_list                       { $1 }
+  : executable_construct_list        { $1 }
+| {- empty -}                        { NullStmt }
 
 executable_construct_list :: { Fortran }
 executable_construct_list
@@ -1037,13 +1044,18 @@ executable_construct_p
 
 executable_construct :: { Fortran }
 executable_construct
-  : action_stmt                                   { $1 }
+  : NUM executable_construct                      { Label $1 $2 }
 --  | case_construct
   | do_construct                                  { $1 }
   | if_construct                                  { $1 }
+  | action_stmt                                   { $1 }
 --  | forall_construct
 --  | where_construct
+ 
 
+equivalence_stmt :: { Fortran }
+equivalence_stmt 
+  : EQUIVALENCE '(' vlist ')'                     { Equivalence $3 }
 
 action_stmt :: { Fortran }
 action_stmt
@@ -1056,6 +1068,7 @@ action_stmt
   | cycle_stmt                                    { $1 }
   | deallocate_stmt                               { $1 }
   | endfile_stmt                                  { $1 }
+  | equivalence_stmt                              { $1 }
 --  | end_function_stmt
 --  | end_program_stmt
 --  | end_subroutine_stmt
@@ -1074,7 +1087,6 @@ action_stmt
   | stop_stmt                                     { $1 }
   | where_stmt                                    { $1 }
   | write_stmt                                    { $1 }
-  | LABEL action_stmt                             { (Label $1 $2) }
   | TEXT				          { (TextStmt $1) }
 
 call_stmt :: { Fortran }
@@ -1107,11 +1119,11 @@ actual_arg
 else_if_list :: { [(Expr,Fortran)]  }
 else_if_list
   : else_if_list else_if_then_stmt block               { $1++[($2,$3)] }
-  | {- empty -}                                   { [] }
+ -- | {- empty -}                                   { [] }
 
---else_if_stmt :: { Expr }
---else_if_stmt
---  : ELSE if_then_stmt             { $2 }
+else_if_stmt :: { Expr }
+else_if_stmt
+  : ELSE if_then_stmt             { $2 }
 
 if_then_stmt :: { Expr }
 if_then_stmt 
@@ -1129,10 +1141,11 @@ else_if_then_stmt
 
 if_construct :: { Fortran }
 if_construct
---: if_then_stmt block END IF                         { (If $1 $2 [] Nothing) }
+ : if_then_stmt end_if_stmt                         { (If $1 NullStmt [] Nothing) }
 --| if_then_stmt block ELSE block END IF              { (If $1 $2 [] (Just $4)) }
-: if_then_stmt block else_if_list END IF                { (If $1 $2 $3 Nothing) }
-| if_then_stmt block else_if_list ELSE block END IF     { (If $1 $2 $3 (Just $5)) }
+
+| if_then_stmt block else_if_list end_if_stmt                { (If $1 $2 $3 Nothing) }
+| if_then_stmt block else_if_list ELSE block end_if_stmt     { (If $1 $2 $3 (Just $5)) }
 
 
 --: if_then_stmt block if_rest							  { (If $1 $2 (fst $3) (snd $3)) }
@@ -1147,14 +1160,15 @@ if_construct
 --    END IF                                        { (If $1 $2 $3) }
 
 
-----else_stmt :: {}
-----else_stmt
-----  : ELSE
---
-----end_if_stmt
-----end_if_stmt
-----  : END IF
---
+---else_stmt :: {}
+--else_stmt
+--  : ELSE
+
+end_if_stmt
+end_if_stmt
+  : END IF 
+  | ENDIF 
+
 
 logical_expr :: { Expr }
 logical_expr
@@ -1472,6 +1486,7 @@ input_item
 --  : expr                                          { $1 }
 --  | '*'                                           { (Var [(VarName "*",[])]) }
 --  | internal_file_unit                            { $1 }
+
 label :: { Expr }
 label
   : NUM                                           { (Con $1) }

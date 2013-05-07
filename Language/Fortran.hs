@@ -143,6 +143,7 @@ data Decl     = Decl [(Expr,Expr)] Type                     -- declaration stmt
               | AccessStmt Attr [GSpec]                        -- access stmt
               | ExternalStmt [String]                          -- external stmt
               | Interface (Maybe GSpec) [InterfaceSpec]        -- interface declaration
+              | Common (Maybe String) [Expr]
               | DerivedTypeDef SubName [Attr] [Attr] [Decl]  -- derivified
               | Include Expr                                  -- include stmt
               | DSeq Decl Decl                               -- list of decls
@@ -188,13 +189,14 @@ data IntentAttr = In
                 | InOut
                 deriving (Show, Functor,Typeable,Data, Eq)
 				
-data Fortran  = Assg Expr Expr
+data Fortran  = Assg Expr Expr 
               | For  VarName Expr Expr Expr Fortran
               | FSeq  Fortran Fortran
               | If Expr Fortran [(Expr,Fortran)] (Maybe Fortran)
               | Allocate Expr Expr
               | Backspace [Spec]
               | Call Expr ArgList
+              | Equivalence [Expr]
               | Open [Spec]
               | Close [Spec]
               | Continue
@@ -378,6 +380,9 @@ instance (OutputG ArgList v,
   outputF (AccessStmt p gs) = ind 1++outputG p ++ " :: " ++ (concat . intersperse ", " . map outputG) gs++"\n"
   outputF (ExternalStmt xs)  = ind 1++"external :: " ++ (concat (intersperse "," xs)) ++ "\n"
   outputF (Interface (Just g) is) = ind 1 ++ "interface " ++ outputG g ++ outputG is ++ ind 1 ++ "end interface" ++ outputG g ++ "\n"
+  outputF (Common name exps) = ind 1++"common " ++ (case name of 
+                                                     Just n -> "/" ++ n ++ "/ "
+                                                     Nothing -> "") ++ (concat (intersperse "," (map outputF exps))) ++ "\n"
   outputF (Interface Nothing  is) = ind 1 ++ "interface " ++ outputG is ++ ind 1 ++ "end interface\n"
   outputF (DerivedTypeDef n as ps ds) = ind 1 ++ "type " ++ showAttrs as ++  " :: " ++ outputG n ++ "\n" ++ ind 2 ++ (concat (intersperse "\n" (map (outputG) ps))) ++ "\n" ++ outputG ds ++ "end type " ++ outputG n ++ "\n"
   outputF (Include i)  = "include "++outputG i
@@ -447,6 +452,7 @@ instance (OutputG SubName v, Alts v) => OutputF BaseType v where
   outputF Integer   = "integer"
   outputF Real      = "real"
   outputF Character = "character"
+  outputF Logical   = "logical"
   outputF (DerivedType s) = "type ("++outputG s++")"
   outputF SomeType  = error "sometype not valid in output source file"
 
@@ -634,6 +640,8 @@ opPrec Power  = 6
 
 instance (OutputG VarName v,
           OutputG Expr v,
+          OutputG UnaryOp v,
+          OutputG BinOp v, 
           OutputG ArgList v,
           OutputIndG Fortran v,
           OutputG Fortran v, OutputG Spec v, Alts v) => OutputIndF Fortran v where
@@ -665,6 +673,7 @@ instance (OutputG VarName v,
     outputIndF i (Backspace ss)               = (ind i)++"backspace "++asTuple outputG ss++"\n"
     outputIndF i (Call sub al)                = ind i++"call "++outputG sub++outputG al
     outputIndF i (Open s)                     = (ind i)++"open "++asTuple outputG s++"\n"
+    outputIndF i (Equivalence vs)             = ind i++"equivlance ("++(concat (intersperse "," (map outputF vs))) ++ ")\n"
     outputIndF i (Close ss)                   = (ind i)++"close "++asTuple outputG ss++"\n"
     outputIndF i (Continue)                   = (ind i)++"continue"++"\n"
     outputIndF i (Cycle s)                    = (ind i)++"cycle "++outputG s++"\n"

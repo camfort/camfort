@@ -1,7 +1,7 @@
 program foo
   implicit none
 
-  call bar(10)
+  CALL bar(10)
 
   contains
 
