@@ -19,8 +19,8 @@ module simulation
                
                 du2dx = ((u(i,j)+u(i+1,j))*(u(i,j)+u(i+1,j))+ & 
 			   gamma*abs(u(i,j)+u(i+1,j))*(u(i,j)-u(i+1,j))- &
-                        (u(i-1,j)+u(i,j))*(u(i-1,j)+u(i,j))- &
-			   gamma*abs(u(i-1,j)+u(i,j))*(u(i-1,j)-u(i,j))) &
+                        (u(i-1,j)+u(i,j))*(u(i-1,j)+u(i,j))- & ! insert bug #1 here u(i-1,j) to u(i, j)
+			   gamma*abs(u(i-1,j)+u(i,j))*(u(i-1,j)-u(i,j))) & ! insert bug #2 here delete last term *(u(i-1,j)-u(i,j))
                          /(4.0*delx)
                 duvdy = ((v(i,j)+v(i+1,j))*(u(i,j)+u(i,j+1))+ &
                            gamma*abs(v(i,j)+v(i+1,j))*(u(i,j)-u(i,j+1))- &

@@ -74,7 +74,7 @@
 map (fmap ((,[""]),[""]))
 
 > analyse :: [Program ()] -> [Program Annotation]
-> analyse p = map ((descendBi arrayIndices) . ix . lva . numberStmts . (fmap (const unitAnnotation))) p
+> analyse p = map ((descendBi arrayIndices) . ix . lva . numberStmts . (fmap (const unitAnnotation)) . (descendBi reassociate)) p
 
 
 > collect :: (Eq a, Ord k) => [(k, a)] -> Map k [a]
@@ -118,7 +118,7 @@ map (fmap ((,[""]),[""]))
 >           writeFile (s ++ ".html") (concatMap outputHTML f'')
 >           -- putStrLn (show $ variables f'')
 >           -- putStrLn (show $ binders f'')
->           (show ((map (fmap (const ())) f')::([Program ()]))) `trace` return ()
+>           (show ((map (fmap (const ())) (descendBi reassociate f'))::([Program ()]))) `trace` return ()
 
 
  

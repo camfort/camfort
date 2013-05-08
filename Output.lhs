@@ -130,15 +130,17 @@ Output routines specialised to the analysis.
 >     outputG = outputF
 
 > instance OutputIndG (Fortran Annotation) Alt2 where
->     outputIndG i t@(For p v e e' e'' f) = (outputAnn p True i) ++ 
+
+>     outputIndG i t@(For p v e e' e'' f) = (outputAnn p False i) ++ 
 >                                           annotationMark i t
 >                                           ((ind i) ++ "do"++" "++outputG v++" = "++
 >                                            outputG e++", "++
 >                                            outputG e'++", "++outputG e''++"\n"++
 >                                            (outputIndG (i+1) f)++"\n"++(ind i)++"end do")
->                                         
->     outputIndG i t@(FSeq p f1 f2) = outputIndG i f1 ++ outputIndG i f2
->     outputIndG i t =  (annotationMark i t (outputIndF i t)) ++ (outputAnn (rextract t) False i)
+
+                                         
+>     -- outputIndG i t@(FSeq p f1 f2) =  (outputAnn p False i) ++ outputIndG i f1 ++ outputIndG i f2
+>     outputIndG i t = "<div style=''>" ++ (annotationMark i t (outputIndF i t)) ++ (outputAnn (rextract t) False i) ++ "</div>"
 
 > annotationMark i t x = "<div class='clickable' onClick='toggle(" ++  
 >                        (show $ number (rextract t)) ++ ");'>" ++

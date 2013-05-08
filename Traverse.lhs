@@ -177,3 +177,8 @@ Accessors
 >     successors (Where _ _ f)            = [f]
 >     successors (Label _ _ f)            = [f]
 >     successors _                        = []
+
+
+> reassociate :: Fortran () -> Fortran ()
+> reassociate (FSeq () (FSeq () a b) c) = FSeq () (reassociate a) (FSeq () (reassociate b) (reassociate c))
+> reassociate t = t

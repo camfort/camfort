@@ -94,6 +94,7 @@ import Data.Generics.Annotate
  ELSEIF 		{ Key "elseif" }
 -- ELSEWHERE 		{ Key "elsewhere" }
  END 			{ Key "end" }
+ ENDIF			{ Key "endif" }
  ENDFILE                { Key "endfile" }
 -- ENTRY 			{ Key "entry" }
  EQUIVALENCE 		{ Key "equivalence" }
@@ -1119,7 +1120,7 @@ actual_arg
 else_if_list :: { [(Expr,Fortran)]  }
 else_if_list
   : else_if_list else_if_then_stmt block               { $1++[($2,$3)] }
- -- | {- empty -}                                   { [] }
+  | {- empty -}                                   { [] }
 
 else_if_stmt :: { Expr }
 else_if_stmt
@@ -1141,8 +1142,8 @@ else_if_then_stmt
 
 if_construct :: { Fortran }
 if_construct
- : if_then_stmt end_if_stmt                         { (If $1 NullStmt [] Nothing) }
---| if_then_stmt block ELSE block END IF              { (If $1 $2 [] (Just $4)) }
+ : if_then_stmt block end_if_stmt                         { (If $1 $2 [] Nothing) }
+--| if_then_stmt block ELSE block end_if_stmt              { (If $1 $2 [] (Just $4)) }
 
 | if_then_stmt block else_if_list end_if_stmt                { (If $1 $2 $3 Nothing) }
 | if_then_stmt block else_if_list ELSE block end_if_stmt     { (If $1 $2 $3 (Just $5)) }
@@ -1164,10 +1165,9 @@ if_construct
 --else_stmt
 --  : ELSE
 
-end_if_stmt
-end_if_stmt
-  : END IF 
-  | ENDIF 
+end_if_stmt  :: {}
+end_if_stmt  : END IF  { }
+             | ENDIF   { } 
 
 
 logical_expr :: { Expr }
