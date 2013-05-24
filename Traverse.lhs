@@ -41,6 +41,12 @@ Data-type generic comonad-style traversal
 > extendBi f x = case biplate x of
 >                      (current, generate) -> generate $ strMap (rextend f) current
 
+This one is less useful as the definitions for comonads are then very annoying
+
+> extendBi' :: (Biplate (from a) (to a), Comonad to) => (to a -> a) -> (from a) -> (from a)
+> extendBi' f x = case biplate x of
+>                      (current, generate) -> generate $ strMap (extend f) current
+
 > class RComonad t where
 >     rextract :: t a -> a
 >     rextend :: (t a -> a) -> t a -> t a
@@ -180,5 +186,5 @@ Accessors
 
 
 > reassociate :: Fortran () -> Fortran ()
-> reassociate (FSeq () (FSeq () a b) c) = FSeq () (reassociate a) (FSeq () (reassociate b) (reassociate c))
+> reassociate (FSeq () (FSeq () a b) c) = FSeq () (reassociate a) (FSeq ()(reassociate b) (reassociate c))
 > reassociate t = t

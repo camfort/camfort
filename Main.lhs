@@ -74,7 +74,7 @@
 map (fmap ((,[""]),[""]))
 
 > analyse :: [Program ()] -> [Program Annotation]
-> analyse p = map ((descendBi arrayIndices) . ix . lva . numberStmts . (fmap (const unitAnnotation)) . (descendBi reassociate)) p
+> analyse p = map ((descendBi arrayIndices) . ix . lva . numberStmts . (fmap (const unitAnnotation))) p
 
 
 > collect :: (Eq a, Ord k) => [(k, a)] -> Map k [a]

@@ -92,7 +92,8 @@ tokens :-
   ";"                           { \s -> SemiColon }
   "$"				{ \s -> Dollar }
   "NULL()"			{ \s -> Key "null" }
-  "&"				;
+  "&"				; -- ignore & anywhere
+  "&"$white*\n        		; -- ignore & and spaces followed by '\n' (i.e. line sep)
   "!".*$			;
   "%"				{ \s -> Percent }
   "{"				{ \s -> LBrace }
@@ -133,7 +134,7 @@ keywords = ["allocate", "allocatable","assign",
 	"assignment","automatic","backspace","block","call", "case",
 	"character","close","common","complex","contains","continue","cycle",
 	"data","deallocate","default","dimension","do",
-	"double","elemental","else","elseif","elsewhere","end", "endif", "endfile","entry",
+	"double","elemental","else","elseif","elsewhere","end", "enddo", "endif", "endfile","entry",
 	"equivalence","exit","external",
 	"forall","format","function","goto","iolength",
 	"if","implicit","in","include","inout","integer","intent","interface",
@@ -152,7 +153,7 @@ keywords = ["access","action","advance","allocate","allocatable","assign",
 	"assignment","automatic","backspace","blank","block","call","case",
 	"character","close","common","complex","contains","continue","cycle",
 	"data","deallocate","default","delim","dimension","direct","do",
-	"double","elemental","else","elseif","elsewhere","end", "endif", "endfile","entry",
+	"double","elemental","else","elseif","elsewhere","end", "enddo", "endif", "endfile","entry",
 	"eor","err","equivalence","exist","exit","external","file","fmt",
 	"forall","form","format","formatted","function","goto","iostat","iolength",
 	"if","implicit","in","inout","integer","intent","interface",
@@ -176,7 +177,7 @@ lexer' = do s <- getInput
               AlexError (c,s')    -> fail ("unrecognizable token: " ++ show c)
               AlexSkip (_,s') len -> (discard len) >> lexer'
               AlexToken (_,s') len act -> let tok = act (take len s)
-                                          in if tok == NewLine
-                                             then (discard 1) >> lexer'
-                                             else (discard len) >> return tok              
+                                          --in if tok == NewLine
+                                          --   then (discard 1) >> lexer'
+                                          in (discard len) >> return tok              
 }

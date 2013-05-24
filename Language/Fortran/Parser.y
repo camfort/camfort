@@ -66,7 +66,7 @@ import Data.Generics.Annotate
  '%'			{ Percent }
  '$'			{ Dollar }
 -- OBSOLETE '!{'			{ StopParamStart }
--- '\n'                   { NewLine }
+'\n'                    { NewLine }
  ALLOCATE 		{ Key "allocate" }
  ALLOCATABLE 		{ Key "allocatable" }
 -- ASSIGN 		{ Key "Assign" }
@@ -95,6 +95,7 @@ import Data.Generics.Annotate
 -- ELSEWHERE 		{ Key "elsewhere" }
  END 			{ Key "end" }
  ENDIF			{ Key "endif" }
+ ENDDO			{ Key "enddo" }
  ENDFILE                { Key "endfile" }
 -- ENTRY 			{ Key "entry" }
  EQUIVALENCE 		{ Key "equivalence" }
@@ -175,7 +176,7 @@ executable_program
     
 program_unit_list :: { [Program] }
 program_unit_list
-  : program_unit_list program_unit                { $1++[$2] }
+  : program_unit_list newline0 program_unit                { $1++[$3] }
   | {- empty -}                                   { [] }
 
 program_unit :: { Program }
@@ -192,18 +193,26 @@ plist
 
 vlist :: { [Expr] }
 vlist 
-  : variable ',' vlist                            { [$1]++$3 }
+  : variable ',' vlist                            { $1:$3 }
   | variable                                      { [$1] }
+
+newline :: {}
+newline : '\n' newline {}
+        | '\n'         {}
+
+newline0 :: {}
+newline0 : newline    {} 
+        | {- empty -} {}
 
 main_program :: { Program }
 main_program
-  : program_stmt use_stmt_list implicit_part specification_part_top execution_part module_subprogram_part end_program_stmt
+  : program_stmt use_stmt_list implicit_part specification_part_top execution_part module_subprogram_part end_program_stmt newline0
 		{% (cmpNames (fst $1) $7 "program") >>= (\name -> return ((Main name (snd $1) (Block $2 $3 $4 $5) $6))) }
 
 program_stmt :: { (SubName,Arg) }
 program_stmt
-  : PROGRAM subname args_p	     { ($2,$3) }				
-  | PROGRAM subname                  { ($2, (Arg NullArg)) } 
+  : PROGRAM subname args_p newline   { ($2,$3) }				
+  | PROGRAM subname        newline   { ($2, (Arg NullArg)) } 
 
 end_program_stmt :: { String }
 end_program_stmt
@@ -212,8 +221,8 @@ end_program_stmt
   | END                                        { "" }
 
 implicit_part :: { Implicit }
-implicit_part : IMPLICIT NONE { ImplicitNone }
-              | {- empty -}   { ImplicitNull }
+implicit_part : IMPLICIT NONE newline { ImplicitNone }
+              | {- empty -}           { ImplicitNull }
 
 --args
 --  : args ',' id2                                   { }
@@ -231,24 +240,24 @@ external_subprogram
 
 subroutine_subprogram :: { Program }
 subroutine_subprogram 
-  : subroutine_stmt use_stmt_list implicit_part specification_part_top execution_part end_subroutine_stmt
+  : subroutine_stmt use_stmt_list implicit_part specification_part_top execution_part end_subroutine_stmt newline0
   {% (cmpNames (fst3 $1) $6 "subroutine") >>= (\name -> return ((Sub (trd3 $1) name (snd3 $1) (Block $2 $3 $4 $5)))) }
 
 end_subroutine_stmt :: { String }
 end_subroutine_stmt
-  : END SUBROUTINE id2                            { $3 }
-  | END SUBROUTINE                                { "" }
-  | END                                           { "" }
+  : END SUBROUTINE id2            { $3 }
+  | END SUBROUTINE                { "" }
+  | END                           { "" }
 
 end_function_stmt :: { String }
 end_function_stmt
-  : END FUNCTION id2                             { $3 }
-  | END FUNCTION                                { "" }
-  | END                                         { "" }
+  : END FUNCTION id2                     { $3 }
+  | END FUNCTION                         { "" }
+  | END                                  { "" }
 
 function_subprogram :: { Program }
 function_subprogram
-  : function_stmt use_stmt_list implicit_part specification_part_top execution_part end_function_stmt
+  : function_stmt use_stmt_list implicit_part specification_part_top execution_part end_function_stmt newline0
                 {% cmpNames (fst3 $1) $6 "function" >>= \name -> return ((Function (trd3 $1) name (snd3 $1)
 										      (Block $2 $3 $4 $5))) }
 
@@ -273,27 +282,23 @@ module
 
 module_stmt :: { SubName }
 module_stmt
-  : MODULE subname                          { $2 } 
+  : MODULE subname newline                    { $2 } 
 
 end_module_stmt :: { String }
 end_module_stmt
-  : END MODULE id2                             { $3 }
+  : END MODULE id2                            { $3 }
   | END MODULE                                { "" }
   | END                                       { "" }
 
---internal_subprogram_part :: { [Program] }
---internal_subprogram_part
---  : module_subprogram_part  { $1 }
-
 module_subprogram_part :: { [Program] }
 module_subprogram_part
-  : CONTAINS internal_subprogram_list          { $2 }
-| {- empty -}                                { [] } 
+  : CONTAINS newline internal_subprogram_list { $3 }
+| {- empty -}                                 { [] } 
   
 internal_subprogram_list :: { [Program] }
 internal_subprogram_list
-  : internal_subprogram_list internal_subprogram    { $1++[$2] } 
-  | {- empty -}                                     { [] }
+  : internal_subprogram_list internal_subprogram newline0 { $1++[$2] } 
+  | {- empty -}                                           { [] }
   
 internal_subprogram :: { Program }
 internal_subprogram
@@ -302,12 +307,12 @@ internal_subprogram
   
 use_stmt_list :: { [String] }
 use_stmt_list
-  : use_stmt_list use_stmt 							{ $1++[$2] }
-  | {- empty -}									{ [] }
-  
+  : use_stmt_list use_stmt  { $2:$1 }
+ | {- empty -}  	    { [] }
+
 use_stmt :: { String }
 use_stmt
-  : USE id2											{ $2 }
+  : USE id2 newline { $2 }
   
 -- [DO: Allows the specification part of a module to be empty]
 specification_part_top :: { Decl }
@@ -317,20 +322,20 @@ specification_part_top
 
 specification_part :: { Decl }
 specification_part
-  : specification_part declaration_construct_list         { (DSeq $1 $2) }
-  | declaration_construct_list                  { $1 }
+  : declaration_construct_l specification_part { (DSeq $1 $2) }
+  | declaration_construct_l                    { $1 }
   
 
-declaration_construct_list :: { Decl }
-declaration_construct_list
-  : declaration_construct_p { $1 }
+declaration_construct_l :: { Decl }
+declaration_construct_l
+  : declaration_construct_p newline { $1 }
 
 declaration_construct_p :: { Decl }
 declaration_construct_p
   : declaration_construct                         { $1 }
   | specification_stmt                            { $1 }
   | derived_type_def                              { $1 }
-| TEXT						  { TextDecl $1 }
+  | TEXT					  { TextDecl $1 }
 
 declaration_construct :: { Decl }
 declaration_construct
@@ -712,15 +717,15 @@ namelist_group_object_list
   
 subroutine_stmt :: { (SubName,Arg,Maybe BaseType) }
 subroutine_stmt
-  : SUBROUTINE subname args_p    { ($2,$3,Nothing) }
-  | prefix SUBROUTINE subname args_p    { ($3,$4,Just (fst3 $1)) }
+  : SUBROUTINE subname args_p        newline { ($2,$3,Nothing) }
+  | prefix SUBROUTINE subname args_p newline { ($3,$4,Just (fst3 $1)) }
   
 function_stmt :: { (SubName,Arg,Maybe BaseType) }
 function_stmt
-  : prefix FUNCTION subname args_p RESULT '(' id2 ')' { ($3,$4,Just (fst3 $1)) }
-  | prefix FUNCTION subname args_p                   { ($3,$4,Just (fst3 $1)) }
-  | FUNCTION subname args_p RESULT '(' id2 ')' { ($2,$3,Nothing) }
-  | FUNCTION subname args_p                   { ($2,$3,Nothing) }
+  : prefix FUNCTION subname args_p RESULT '(' id2 ')' newline { ($3,$4,Just (fst3 $1)) }
+  | prefix FUNCTION subname args_p                    newline { ($3,$4,Just (fst3 $1)) }
+  | FUNCTION subname args_p RESULT '(' id2 ')'        newline { ($2,$3,Nothing) }
+  | FUNCTION subname args_p                           newline { ($2,$3,Nothing) }
   
 subname :: { SubName }
 subname
@@ -756,19 +761,13 @@ dummy_arg_name :: { String }
 dummy_arg_name 
    : id2                                          { $1 }
 
- 
-
---stmt :: { FStmt }
---stmt : assignment_stmt { $1 }
---     | do_construct    { $1 }
-
 --end_subroutine_stmt
 --  : END SUBROUTINE
 
 assignment_stmt :: { Fortran }
 assignment_stmt
-  : variable '=' expr                     { (Assg $1 $3) }
---  | ID '(' section_subscript_list ')' '=' expr        { (Assg (VarName $1) $3 $6) }
+  : variable '=' expr                                 { (Assg $1 $3) }
+ | ID '(' section_subscript_list ')' '=' expr         { (Assg (Var [(VarName $1, $3)]) $6) }
 
 
 -- moved up to assignment_stmt
@@ -965,18 +964,15 @@ do_construct
 
 block_do_construct :: { Fortran } 
 block_do_construct                         -- For  VarName Expr Expr Fortran
-  : do_stmt do_block END DO                       { for (fst4 $1) (snd4 $1) (trd4 $1) (frh4 $1) $2 }
+  : do_stmt do_block end_do  { for (fst4 $1) (snd4 $1) (trd4 $1) (frh4 $1) $2 }
 
 do_stmt :: { (VarName,Expr,Expr,Expr) }
 do_stmt
-  : nonlabel_do_stmt                             { $1 }
+  : nonlabel_do_stmt newline        { $1 }
 
 nonlabel_do_stmt :: { (VarName,Expr,Expr,Expr) }
 nonlabel_do_stmt
---  : ID ':' DO loop_control         { $4 }
---  | ID ':' DO                      { ("",FCon "1", FCon "1") }
-  : DO loop_control                               { $2 }
---  | DO                                            { ("i",FCon "1", FCon "1") }
+  : DO loop_control                  { $2 }
 
 loop_control :: { (VarName,Expr,Expr,Expr) }
 loop_control
@@ -1002,19 +998,10 @@ do_block :: { Fortran }
 do_block
   : block                                         { $1 }
 
---end_do :: { FStmt }
---end_do
---  : end_do_stmt                                   { $1 }
---  | continue_stmt                                 { $1 }
-
---end_do_stmt :: { FStmt }
---end_do_stmt
---  : END DO                                        { FEndDo }
-----  | END DO ID                                     { FEndDo }
-
---continue_stmt :: { FStmt }
---continue_stmt
---  : CONTINUE                                      { FContinue }
+end_do :: { }
+end_do
+  : END DO {} 
+  | ENDDO  {} 
 
 block :: { Fortran }
 block
@@ -1029,19 +1016,7 @@ execution_part
 executable_construct_list :: { Fortran }
 executable_construct_list
 : executable_construct_list executable_construct_list  { (FSeq $1 $2) }
-| executable_construct               { $1 }
--- | {- empty -}                        { NullStmt }
-
--- execution_part_construct :: { Fortran }
--- execution_part_construct
---   : executable_construct_p                       { $1 }
---  | format_stmt
---  | data_stmt
---  | entry_stmt
-
-executable_construct_p :: { Fortran }
-executable_construct_p
-  : executable_construct                          { $1 }
+| executable_construct  newline                        { $1 }
 
 executable_construct :: { Fortran }
 executable_construct
@@ -1119,8 +1094,8 @@ actual_arg
 
 else_if_list :: { [(Expr,Fortran)]  }
 else_if_list
-  : else_if_list else_if_then_stmt block               { $1++[($2,$3)] }
-  | {- empty -}                                   { [] }
+  : else_if_list else_if_then_stmt block   { $1++[($2,$3)] }
+  | {- empty -}                            { [] }
 
 else_if_stmt :: { Expr }
 else_if_stmt
@@ -1128,11 +1103,11 @@ else_if_stmt
 
 if_then_stmt :: { Expr }
 if_then_stmt 
-  : IF '(' logical_expr ')' THEN                  { $3 }
+  : IF '(' logical_expr ')' THEN newline              { $3 }
 
 else_if_then_stmt :: { Expr }
 else_if_then_stmt 
-  : ELSEIF '(' logical_expr ')' THEN                  { $3 }
+  : ELSEIF '(' logical_expr ')' THEN newline          { $3 }
 
 
 --if_rest :: { ([(Expr,Fortran)],Maybe Fortran) }
@@ -1142,14 +1117,14 @@ else_if_then_stmt
 
 if_construct :: { Fortran }
 if_construct
- : if_then_stmt block end_if_stmt                         { (If $1 $2 [] Nothing) }
---| if_then_stmt block ELSE block end_if_stmt              { (If $1 $2 [] (Just $4)) }
+ : if_then_stmt block end_if_stmt                            { (If $1 $2 [] Nothing) }
+--| if_then_stmt block ELSE block end_if_stmt                { (If $1 $2 [] (Just $4)) }
 
 | if_then_stmt block else_if_list end_if_stmt                { (If $1 $2 $3 Nothing) }
-| if_then_stmt block else_if_list ELSE block end_if_stmt     { (If $1 $2 $3 (Just $5)) }
+| if_then_stmt block else_if_list ELSE newline block end_if_stmt     { (If $1 $2 $3 (Just $6)) }
 
 
---: if_then_stmt block if_rest							  { (If $1 $2 (fst $3) (snd $3)) }
+--: if_then_stmt block if_rest				  { (If $1 $2 (fst $3) (snd $3)) }
 --: if_then_stmt block else_if_list END IF                { (If $1 $2 $3 Nothing) }
 --| if_then_stmt block else_if_list ELSE block END IF     { (If $1 $2 $3 (Just $5)) }
 --| if_then_stmt block END IF                             { (If $1 $2 [] Nothing) }
@@ -1159,11 +1134,6 @@ if_construct
 ----    else_if_list 
 --    else_opt 
 --    END IF                                        { (If $1 $2 $3) }
-
-
----else_stmt :: {}
---else_stmt
---  : ELSE
 
 end_if_stmt  :: {}
 end_if_stmt  : END IF  { }
@@ -1277,8 +1247,16 @@ exit_stmt
   | EXIT                                          { (Exit "") }
 
 forall_stmt :: { Fortran }
-forall_stmt
-  : FORALL forall_header forall_assignment_stmt   { (Forall $2 $3) }
+forall_stmt 
+  : FORALL forall_header forall_assignment_stmt               { (Forall $2 $3) }
+  | FORALL forall_header newline forall_assignment_stmt_list
+                                forall_stmt_end               { (Forall $2 $4) }
+
+forall_stmt_end :: {}
+forall_stmt_end 
+  : END FORALL       {}
+ | {- empty -}       {}
+
 forall_header :: { ([(String,Expr,Expr,Expr)],Expr) }
 forall_header
   : '(' forall_triplet_spec_list ',' expr ')'     { ($2,$4) }
@@ -1291,23 +1269,29 @@ forall_triplet_spec :: { (String,Expr,Expr,Expr) }
 forall_triplet_spec
   : id2 '=' int_expr ':' int_expr ';' int_expr { ($1,$3,$5,$7) }
   | id2 '=' int_expr ':' int_expr              { ($1,$3,$5,ne) }
+
 forall_assignment_stmt :: { Fortran }
 forall_assignment_stmt
   : assignment_stmt                               { $1 }
   | pointer_assignment_stmt                       { $1 }
+
+forall_assignment_stmt_l :: { Fortran }
+forall_assignment_stmt_l
+  : forall_assignment_stmt newline { $1 }
+
+forall_assignment_stmt_list :: { Fortran }
+forall_assignment_stmt_list 
+  : forall_assignment_stmt_l forall_assignment_stmt_list { FSeq $1 $2 }
+  | forall_assignment_stmt_l                             { $1 }
 
 
 goto_stmt :: { Fortran }
 goto_stmt
   : GOTO NUM                                      { (Goto $2) }
 
-
-
 if_stmt :: { Fortran }
 if_stmt
   : IF '(' logical_expr ')' action_stmt           { (If $3 $5 [] Nothing) }
-
-
 
 inquire_stmt :: { Fortran }
 inquire_stmt
@@ -1377,8 +1361,6 @@ pointer_object
 structure_component :: { Expr }
 structure_component
   : part_ref                                      { $1 }
-
-
 
 open_stmt :: { Fortran }
 open_stmt
