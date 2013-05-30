@@ -16,6 +16,9 @@
 > import System.Environment
 > import System.IO
 
+> -- import Language.Haskell.Parser
+> import Language.Haskell.ParseMonad
+
 > import Data.Generics.Str
 > import Data.Generics.Uniplate.Operations
 
@@ -108,10 +111,17 @@ map (fmap ((,[""]),[""]))
 >      in extendBi ixF
 
 
+> pr  :: String -> IO [Program ()]
+> pr f = let mode = ParseMode { parseFilename = f }
+>        in do inp <- readFile f
+>              case (runParserWithMode mode parser inp) of
+>                (ParseOk p)       -> return $ p
+>                (ParseFailed l e) -> error e
 
 > go :: String -> IO ()
-> go s = do f <- readFile s
->           let f' = parse f
+> go s = do -- f <- readFile s
+>           -- let f' = parse f
+>           f' <- pr s
 >           --let f'' = map ((transformBi quickAnnotateDo) . (fmap (const ""))) f'
 >           --let f'' = map ((transformBi annotateFVDo) . (fmap (const ([""],[""])))) f'
 >           let f'' = analyse f'

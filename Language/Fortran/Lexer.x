@@ -1,9 +1,16 @@
 {
+
+{-# LANGUAGE DeriveGeneric #-}
+
 module Language.Fortran.Lexer where
 
 import Data.Char
 import Debug.Trace
+import Language.Haskell.Syntax (SrcLoc)
 import Language.Haskell.ParseMonad
+
+import Generics.Deriving.Base hiding (P)
+import Generics.Deriving.Copoint
 
 }
 
@@ -116,16 +123,16 @@ tokens :-
 -- Each action has type :: String -> Token
 
 -- The token type:
-data Token = Key String | OpPower | OpMul | OpDiv | OpAdd | OpSub | OpConcat 
-	   | OpEQ | OpNE | OpLT | OpLE | OpGT | OpGE | OpLG
-	   | OpNOT | OpAND | OpOR | OpXOR | OpEQV | OpNEQV
-	   | BinConst String | OctConst String | HexConst String
-	   | ID String | Num String | Comma | Bang | Percent
-	   | LParen | RParen | LArrCon | RArrCon | OpEquals | RealConst String | StopParamStart
-	   | SingleQuote | StrConst String | Period | Colon | ColonColon | SemiColon
-	   | DataEditDest String | Arrow | MArrow | TrueConst | FalseConst | Dollar
-	   | Hash | LBrace | RBrace | NewLine | TokEOF | Text String
-	   deriving (Eq,Show)
+data Token l = Key String l | OpPower l | OpMul l | OpDiv l | OpAdd l | OpSub l | OpConcat l
+	   | OpEQ l | OpNE l | OpLT l | OpLE l | OpGT l | OpGE l | OpLG l
+	   | OpNOT l | OpAND l | OpOR l | OpXOR l | OpEQV l | OpNEQV l
+	   | BinConst String l | OctConst String l | HexConst String l
+	   | ID String l | Num String l | Comma l | Bang l | Percent l
+	   | LParen l | RParen l | LArrCon l | RArrCon l | OpEquals l | RealConst String l | StopParamStart l
+	   | SingleQuote l | StrConst String l | Period l | Colon l | ColonColon l | SemiColon l
+	   | DataEditDest String l | Arrow l | MArrow l | TrueConst l | FalseConst l | Dollar l
+	   | Hash l | LBrace l | RBrace l | NewLine l | TokEOF l | Text String l
+	   deriving (Eq,Show,Generic1)
 
 -- all reserved keywords, names are matched against these to see
 -- if they are keywords or IDs
@@ -167,17 +174,19 @@ keywords = ["access","action","advance","allocate","allocatable","assign",
 	"unit","use","volatile","where","write"]
 -}
 
-lexer :: (Token -> P a) -> P a
+lexer :: (Token SrcLoc -> P a) -> P a
 lexer = runL lexer'
 
-lexer' :: Lex a Token
+lexer' :: Lex a (Token SrcLoc)
 lexer' = do s <- getInput 
+       	    startToken
+	    l <- getSrcLocLex
             case alexScan ('\0',s) 0 of
-              AlexEOF             -> return TokEOF
+              AlexEOF             -> return $ TokEOF l 
               AlexError (c,s')    -> fail ("unrecognizable token: " ++ show c)
               AlexSkip (_,s') len -> (discard len) >> lexer'
-              AlexToken (_,s') len act -> let tok = act (take len s)
-                                          --in if tok == NewLine
-                                          --   then (discard 1) >> lexer'
-                                          in (discard len) >> return tok              
+              AlexToken (_,s') len act -> do let tok = act (take len s)
+                                             if (tok l) == (NewLine l)
+                                               then lexNewline >> (return $ tok l)
+                                               else (discard len) >> (return $ tok l)
 }

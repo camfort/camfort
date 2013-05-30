@@ -16,6 +16,8 @@
 {-# LANGUAGE ImplicitParams #-}
 {-# LANGUAGE OverlappingInstances #-}
 
+{-# LANGUAGE DeriveGeneric #-}
+
 module Language.Fortran where
 
 ---------------------------------------------------------------------------
@@ -98,21 +100,21 @@ type ProgName  = String           -- Fortran program names
 
 data  SubName  = SubName String   -- Fortran subroutine names
                | NullSubName
-                 deriving (Show, Functor, Typeable, Data, Eq)
+                 deriving (Show, Functor, Typeable, Data, Eq, Generic1)
  
 data VarName   = VarName String 
-                 deriving (Show, Functor, Typeable, Data, Eq, Read)
+                 deriving (Show, Functor, Typeable, Data, Eq, Read, Generic1)
 
 data ArgName   = ArgName String
                | ASeq ArgName ArgName
                | NullArg
-                 deriving (Show, Functor, Typeable, Data, Eq)
+                 deriving (Show, Functor, Typeable, Data, Eq, Generic1)
 
 -- Syntax defintions
 --
 
 data Arg      = Arg ArgName
-                deriving (Show, Functor,Typeable,Data, Eq)
+                deriving (Show, Functor,Typeable,Data, Eq, Generic1)
 
 data ArgList  = ArgList Expr
                 deriving (Show, Functor,Typeable,Data, Eq)
@@ -131,7 +133,7 @@ data Program  = Main                           SubName  Arg  Block [Program]
 
              -- implicit none or no implicit 
 data Implicit = ImplicitNone | ImplicitNull
-                deriving (Show, Functor,Typeable,Data, Eq)
+                deriving (Show, Functor,Typeable,Data, Eq, Generic1)
 				
              --       use's     implicit  decls  stmts
 data Block    = Block [String]  Implicit  Decl  Fortran
@@ -174,7 +176,7 @@ data Attr     = Parameter
               | Private
               | Sequence
 --              | Dimension [(Expr,Expr)] -- in Type: ArrayT
-              deriving (Show, Functor,Typeable,Data, Eq)
+              deriving (Show, Functor,Typeable,Data, Eq, Generic1)
 			  
 data GSpec    = GName Expr | GOper BinOp | GAssg
               deriving (Show, Functor,Typeable,Data, Eq)
@@ -187,7 +189,7 @@ data InterfaceSpec = FunctionInterface SubName Arg [String] Implicit Decl
 data IntentAttr = In
                 | Out
                 | InOut
-                deriving (Show, Functor,Typeable,Data, Eq)
+                deriving (Show, Functor,Typeable,Data, Eq, Generic1)
 				
 data Fortran  = Assg Expr Expr 
               | For  VarName Expr Expr Expr Fortran
@@ -242,10 +244,10 @@ data BinOp    = Plus   | Minus | Mul | Div
               | Or     | And  
               | Concat | Power
               | RelEQ | RelNE | RelLT | RelLE | RelGT | RelGE
-                deriving (Show, Functor,Typeable,Data,Eq)
+                deriving (Show, Functor,Typeable,Data,Eq, Generic1)
 
 data UnaryOp  = UMinus | Not 
-                deriving (Show, Functor,Typeable,Data, Eq)
+                deriving (Show, Functor,Typeable,Data, Eq, Generic1)
 
 data Spec     = Access Expr
               | Action Expr

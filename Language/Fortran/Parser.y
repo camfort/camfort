@@ -1,12 +1,13 @@
 {
-  {-# LANGUAGE QuasiQuotes #-}
+ {-# LANGUAGE QuasiQuotes #-}
 module Language.Fortran.Parser  where
 
 import Language.Fortran
 
+import Traverse
 
 import Language.Haskell.Syntax (SrcLoc,srcLine,srcColumn)
-import Language.Haskell.ParseMonad
+import Language.Haskell.ParseMonad 
 import Language.Fortran.Lexer
 import Data.Char (toLower)
 -- import GHC.Exts
@@ -14,172 +15,189 @@ import Data.Char (toLower)
 import Debug.Trace
 
 import Data.Generics.Annotate
+import Generics.Deriving.Copoint
 
-[annotateFrom| {Language.Fortran}
+-- Type of annotations
+
+type Annotation0 = (SrcLoc, SrcLoc) 
+
+-- Given a source location (usually token start),
+-- get the current src loc from the parser monad (usually token end), 
+-- return as pair giving bounds on the syntax span
+
+srcSpan :: SrcLoc -> P Annotation0
+srcSpan l = do l' <- getSrcLoc
+               return $ (l, l')
+
+srcSpanNull :: P Annotation0
+srcSpanNull = do l <- getSrcLoc
+                 return $ (l, l)
+
+srcSpan' :: GCopoint d => d Annotation0 -> P Annotation0
+srcSpan' x = do l' <- getSrcLoc
+                return $ (fst $ gcopoint x, l')
 }
 
-
-
 %name parser
-%tokentype { Token }
+%tokentype { Token SrcLoc }
 
 %monad { P } { >>= } { return }
-%lexer { lexer } { TokEOF }
+%lexer { lexer } { TokEOF l }
 
 %token
- '=>'			{ Arrow }
- '**'			{ OpPower }
- '//' 			{ OpConcat }
- '=='		        { OpEQ }
- '/='       		{ OpNE }
- '<='		        { OpLE }
- '>='		        { OpGE }
- '.NOT.'		{ OpNOT }
- '.AND.'		{ OpAND }
- '.OR.'		        { OpOR }
- '.TRUE.'		{ TrueConst }
- '.FALSE.'		{ FalseConst }
--- '.EQV.'		{ OpEQV }
--- '.NEGV.' 	       	{ OpNEQV }
- '<'		        { OpLT }
- '>'		        { OpGT }
- '*'		       	{ OpMul }
- '/'		       	{ OpDiv }
- '+'		       	{ OpAdd }
- '-'		       	{ OpSub }
- ','		       	{ Comma }
- '('		       	{ LParen }
- ')'		       	{ RParen }
- '='		       	{ OpEquals }
--- '\''		      	{ SingleQuote }
--- '\"'			{ DoubleQuote }
- '.'		        { Period }
- '::'				{ ColonColon }
- ':'			{ Colon }
- ';'                    { SemiColon }
- '#'                    { Hash }
- '{'                    { LBrace }
- '}'                    { RBrace }
- '(/'                    { LArrCon }
- '/)'                    { RArrCon }
--- OBSOLETE '!'                    { Bang } 
- '%'			{ Percent }
- '$'			{ Dollar }
--- OBSOLETE '!{'			{ StopParamStart }
-'\n'                    { NewLine }
- ALLOCATE 		{ Key "allocate" }
- ALLOCATABLE 		{ Key "allocatable" }
--- ASSIGN 		{ Key "Assign" }
- ASSIGNMENT 		{ Key "assignment" }
--- AUTOMATIC 		{ Key "automatic" }
- BACKSPACE 		{ Key "backspace" }
- BLOCK 			{ Key "block" }
- CALL 			{ Key "call" }
- -- CASE 			{ Key "case" }
- CHARACTER 		{ Key "character" }
- CLOSE 			{ Key "close" }
- COMMON 		{ Key "common" }
- COMPLEX 		{ Key "complex" }
- CONTAINS 		{ Key "contains" }
- CONTINUE 		{ Key "continue" }
- CYCLE 			{ Key "cycle" }
- DATA 			{ Key "data" }
- DEALLOCATE 		{ Key "deallocate" }
--- DEFAULT 		{ Key "default" }
- DIMENSION 		{ Key "dimension" }
- DO 			{ Key "do" }
--- DOUBLE 		{ Key "double" }
- ELEMENTAL 		{ Key "elemental" }
- ELSE 			{ Key "else" }
- ELSEIF 		{ Key "elseif" }
--- ELSEWHERE 		{ Key "elsewhere" }
- END 			{ Key "end" }
- ENDIF			{ Key "endif" }
- ENDDO			{ Key "enddo" }
- ENDFILE                { Key "endfile" }
--- ENTRY 			{ Key "entry" }
- EQUIVALENCE 		{ Key "equivalence" }
- EXIT 			{ Key "exit" }
- EXTERNAL 		{ Key "external" }
- FORALL 		{ Key "forall" }
- FOREACH		{ Key "foreach" }
--- FORMAT 		{ Key "format" }
- FUNCTION 		{ Key "function" }
- GOTO 			{ Key "goto" }
- IOLENGTH               { Key "iolength" }
- IF 			{ Key "if" }
- IMPLICIT 		{ Key "implicit" }
- IN 			{ Key "in" }
- INCLUDE		{ Key "include" }
- INOUT 			{ Key "inout" }
- INTEGER 		{ Key "integer" }
- INTENT 		{ Key "intent" }
- INTERFACE 		{ Key "interface" }
- INTRINSIC 		{ Key "intrinsic" }
- INQUIRE 		{ Key "inquire" }
- KIND 			{ Key "kind" }
- LEN 			{ Key "len" }
- LOGICAL 		{ Key "logical" }
- MODULE 		{ Key "module" }
- NAMELIST 		{ Key "namelist" }
- NONE 			{ Key "none" }
- NULLIFY 		{ Key "nullify" }
- NULL 			{ Key "null" }
--- ONLY 			{ Key "only" }
- OPEN 			{ Key "open" }
- OPERATOR 		{ Key "operator" }
- OPTIONAL 		{ Key "optional" }
- OUT 			{ Key "out" }
- PARAMETER 		{ Key "parameter" }
--- PAUSE 			{ Key "pause" }
- POINTER 		{ Key "pointer" }
--- PRECISION 		{ Key "precision" }
- PRINT 			{ Key "print" }
- PRIVATE 		{ Key "private" }
- PROCEDURE 		{ Key "procedure" }
- PROGRAM 		{ Key "program" }
- PURE 			{ Key "pure" }
- PUBLIC 		{ Key "public" }
- REAL 			{ Key "real" }
- READ 			{ Key "read" }
- RECURSIVE 		{ Key "recursive" }
- RESULT 		{ Key "result" }
- RETURN 		{ Key "return" }
- REWIND 		{ Key "rewind" }
- SAVE 			{ Key "save" }
--- SELECT 		{ Key "select" }
- SEQUENCE 		{ Key "sequence" }
--- SIZE 			{ Key "size" }
- SOMETYPE               { Key "sometype" }
- SQRT			{ Key "sqrt" }
- STAT 			{ Key "stat" }
- STOP			{ Key "stop" }
- STR                    { StrConst $$ }
- SUBROUTINE 		{ Key "subroutine" }
- TARGET 		{ Key "target" }
--- TO 			{ Key "to" }
- THEN 			{ Key "then" }
- TYPE 			{ Key "type" }
--- UNFORMATED 		{ Key "unformatted" }
- USE 			{ Key "use" }
- VOLATILE 		{ Key "volatile" }
- WHERE 			{ Key "where" }
- WRITE 			{ Key "write" }
- ID                     { ID $$ }
- NUM                    { Num $$ }
- TEXT                   { Text $$ }
+ '=>'			{ Arrow l }
+ '**'			{ OpPower l }
+ '//' 			{ OpConcat l }
+ '=='		        { OpEQ l }
+ '/='       		{ OpNE l }
+ '<='		        { OpLE l }
+ '>='		        { OpGE l }
+ '.NOT.'		{ OpNOT l }
+ '.AND.'		{ OpAND l }
+ '.OR.'		        { OpOR l }
+ '.TRUE.'		{ TrueConst l }
+ '.FALSE.'		{ FalseConst l }
+-- '.EQV.'		{ OpEQV l }
+-- '.NEGV.' 	       	{ OpNEQV l }
+ '<'		        { OpLT l }
+ '>'		        { OpGT l }
+ '*'		       	{ OpMul l }
+ '/'		       	{ OpDiv l }
+ '+'		       	{ OpAdd l }
+ '-'		       	{ OpSub l }
+ ','		       	{ Comma l }
+ '('		       	{ LParen l }
+ ')'		       	{ RParen l }
+ '='		       	{ OpEquals l }
+-- '\''		      	{ SingleQuote l }
+-- '\"'			{ DoubleQuote l }
+ '.'		        { Period l }
+ '::'			{ ColonColon l }
+ ':'			{ Colon l }
+ ';'                    { SemiColon l }
+ '#'                    { Hash l }
+ '{'                    { LBrace l }
+ '}'                    { RBrace l }
+ '(/'                   { LArrCon l }
+ '/)'                   { RArrCon l }
+-- OBSOLETE '!'         { Bang l } 
+ '%'			{ Percent l }
+ '$'			{ Dollar l }
+ -- OBSOLETE '!{'	{ StopParamStart l }
+'\n'                    { NewLine l }
+ ALLOCATE 		{ Key "allocate" l }
+ ALLOCATABLE 		{ Key "allocatable" l }
+-- ASSIGN 		{ Key "Assign" l }
+ ASSIGNMENT 		{ Key "assignment" l }
+-- AUTOMATIC 		{ Key "automatic" l }
+ BACKSPACE 		{ Key "backspace" l }
+ BLOCK 			{ Key "block" l }
+ CALL 			{ Key "call" l }
+-- CASE 		{ Key "case" l }
+ CHARACTER 		{ Key "character" l }
+ CLOSE 			{ Key "close" l }
+ COMMON 		{ Key "common" l }
+ COMPLEX 		{ Key "complex" l }
+ CONTAINS 		{ Key "contains" l }
+ CONTINUE 		{ Key "continue" l }
+ CYCLE 			{ Key "cycle" l }
+ DATA 			{ Key "data" l }
+ DEALLOCATE 		{ Key "deallocate" l }
+-- DEFAULT 		{ Key "default" l }
+ DIMENSION 		{ Key "dimension" l }
+ DO 			{ Key "do" l }
+-- DOUBLE 		{ Key "double" l }
+ ELEMENTAL 		{ Key "elemental" l }
+ ELSE 			{ Key "else" l }
+ ELSEIF 		{ Key "elseif" l }
+-- ELSEWHERE 		{ Key "elsewhere" l }
+ END 			{ Key "end" l }
+ ENDIF			{ Key "endif" l }
+ ENDDO			{ Key "enddo" l }
+ ENDFILE                { Key "endfile" l }
+-- ENTRY 		{ Key "entry" l }
+ EQUIVALENCE 		{ Key "equivalence" l }
+ EXIT 			{ Key "exit" l }
+ EXTERNAL 		{ Key "external" l }
+ FORALL 		{ Key "forall" l }
+ FOREACH		{ Key "foreach" l }
+-- FORMAT 		{ Key "format" l }
+ FUNCTION 		{ Key "function" l }
+ GOTO 			{ Key "goto" l }
+ IOLENGTH               { Key "iolength" l }
+ IF 			{ Key "if" l }
+ IMPLICIT 		{ Key "implicit" l }
+ IN 			{ Key "in" l }
+ INCLUDE		{ Key "include" l }
+ INOUT 			{ Key "inout" l }
+ INTEGER 		{ Key "integer" l }
+ INTENT 		{ Key "intent" l }
+ INTERFACE 		{ Key "interface" l }
+ INTRINSIC 		{ Key "intrinsic" l }
+ INQUIRE 		{ Key "inquire" l }
+ KIND 			{ Key "kind" l }
+ LEN 			{ Key "len" l }
+ LOGICAL 		{ Key "logical" l }
+ MODULE 		{ Key "module" l }
+ NAMELIST 		{ Key "namelist" l }
+ NONE 			{ Key "none" l }
+ NULLIFY 		{ Key "nullify" l }
+ NULL 			{ Key "null" l }
+-- ONLY 		{ Key "only" l }
+ OPEN 			{ Key "open" l }
+ OPERATOR 		{ Key "operator" l }
+ OPTIONAL 		{ Key "optional" l }
+ OUT 			{ Key "out" l }
+ PARAMETER 		{ Key "parameter" l }
+-- PAUSE 		{ Key "pause" l }
+ POINTER 		{ Key "pointer" l }
+-- PRECISION 		{ Key "precision" l }
+ PRINT 			{ Key "print" l }
+ PRIVATE 		{ Key "private" l }
+ PROCEDURE 		{ Key "procedure" l }
+ PROGRAM 		{ Key "program" l }
+ PURE 			{ Key "pure" l }
+ PUBLIC 		{ Key "public" l }
+ REAL 			{ Key "real" l }
+ READ 			{ Key "read" l }
+ RECURSIVE 		{ Key "recursive" l }
+ RESULT 		{ Key "result" l }
+ RETURN 		{ Key "return" l }
+ REWIND 		{ Key "rewind" l }
+ SAVE 			{ Key "save" l }
+-- SELECT 		{ Key "select" l }
+ SEQUENCE 		{ Key "sequence" l }
+-- SIZE 		{ Key "size" l }
+ SOMETYPE               { Key "sometype" l }
+ SQRT			{ Key "sqrt" l }
+ STAT 			{ Key "stat" l }
+ STOP			{ Key "stop" l }
+ STR                    { StrConst $$ l }
+ SUBROUTINE 		{ Key "subroutine" l }
+ TARGET 		{ Key "target" l }
+-- TO 			{ Key "to" l }
+ THEN 			{ Key "then" l }
+ TYPE 			{ Key "type" l }
+-- UNFORMATED 		{ Key "unformatted" l }
+ USE 			{ Key "use" l }
+ VOLATILE 		{ Key "volatile" l }
+ WHERE 			{ Key "where" l }
+ WRITE 			{ Key "write" l }
+ ID                     { ID $$ l }
+ NUM                    { Num $$ l }
+ TEXT                   { Text $$ l }
 %%
 
-executable_program :: { [Program] }
+executable_program :: { [Program Annotation0] }
 executable_program
   : program_unit_list                             { $1 }
     
-program_unit_list :: { [Program] }
+program_unit_list :: { [Program Annotation0] }
 program_unit_list
-  : program_unit_list newline0 program_unit                { $1++[$3] }
+  : program_unit_list newline0 program_unit       { $1++[$3] }
   | {- empty -}                                   { [] }
 
-program_unit :: { Program }
+program_unit :: { Program Annotation0 }
 program_unit
   : main_program                                  { $1 }
   | external_subprogram                           { $1 }
@@ -191,10 +209,10 @@ plist
   : plist ',' id2                                  { $1++[$3] }
   | id2                                            { [$1] }
 
-vlist :: { [Expr] }
+vlist :: { [Expr Annotation0] }
 vlist 
-  : variable ',' vlist                            { $1:$3 }
-  | variable                                      { [$1] }
+  : variable ',' vlist                             { $1:$3 }
+  | variable                                       { [$1] }
 
 newline :: {}
 newline : '\n' newline {}
@@ -204,25 +222,27 @@ newline0 :: {}
 newline0 : newline    {} 
         | {- empty -} {}
 
-main_program :: { Program }
+main_program :: { Program Annotation0 }
 main_program
   : program_stmt use_stmt_list implicit_part specification_part_top execution_part module_subprogram_part end_program_stmt newline0
-		{% (cmpNames (fst $1) $7 "program") >>= (\name -> return ((Main name (snd $1) (Block $2 $3 $4 $5) $6))) }
+		{% do { s <- srcSpan (fst $ gcopoint $1);
+		        name <- cmpNames (fst $1) $7 "program";
+		        return (Main s name (snd $1) (Block s $2 $3 $4 $5) $6); } }
 
-program_stmt :: { (SubName,Arg) }
+program_stmt :: { (SubName Annotation0, Arg Annotation0) }
 program_stmt
-  : PROGRAM subname args_p newline   { ($2,$3) }				
-  | PROGRAM subname        newline   { ($2, (Arg NullArg)) } 
+  : PROGRAM subname args_p newline   { ($2, $3) }
+  | PROGRAM subname        newline   {% srcSpan' $1 >>= (\l -> ($2, (Arg l (NullArg l)))) } 
 
 end_program_stmt :: { String }
 end_program_stmt
-  : END PROGRAM id2                            { $3 }
-  | END PROGRAM                                { "" }
-  | END                                        { "" }
+  : END PROGRAM id2   { $3 }
+  | END PROGRAM       { "" }
+  | END               { "" }
 
-implicit_part :: { Implicit }
-implicit_part : IMPLICIT NONE newline { ImplicitNone }
-              | {- empty -}           { ImplicitNull }
+implicit_part :: { Implicit Annotation0 }
+implicit_part : IMPLICIT NONE newline {% srcSpan' $1 >>= ImplicitNone }
+              | {- empty -}           {% srcSpanNull >>= ImplicitNull }
 
 --args
 --  : args ',' id2                                   { }
@@ -233,15 +253,17 @@ implicit_part : IMPLICIT NONE newline { ImplicitNone }
 --  | END PROGRAM id2                                { $3 }
 
 
-external_subprogram :: { Program }
+external_subprogram :: { Program Annotation0}
 external_subprogram
   : function_subprogram                         { $1 }
   | subroutine_subprogram                       { $1 } 
 
-subroutine_subprogram :: { Program }
+subroutine_subprogram :: { Program Annotation0 }
 subroutine_subprogram 
   : subroutine_stmt use_stmt_list implicit_part specification_part_top execution_part end_subroutine_stmt newline0
-  {% (cmpNames (fst3 $1) $6 "subroutine") >>= (\name -> return ((Sub (trd3 $1) name (snd3 $1) (Block $2 $3 $4 $5)))) }
+  {% do { s <- srcSpan (fst $ gcopoint $1);
+          name <- cmpNames (fst3 $1) $6 "subroutine";
+          return (Sub s (trd3 $1) name (snd3 $1) (Block s $2 $3 $4 $5)); } }
 
 end_subroutine_stmt :: { String }
 end_subroutine_stmt
@@ -451,9 +473,8 @@ access_spec
 array_spec :: { [(Expr,Expr)] }
 array_spec
   : explicit_shape_spec_list                      { map expr2array_spec $1 }
-----  | assumed_shape_spec_list
---  | deferred_shape_spec_list			  { $1 }
-----  | assumed_size_spec
+
+
 explicit_shape_spec_list :: { [Expr] }
 explicit_shape_spec_list
   : explicit_shape_spec_list ','  explicit_shape_spec {$1++[$3]}
@@ -589,29 +610,6 @@ component_attr_spec :: { ([(Expr,Expr)],[Attr]) }
 component_attr_spec
   :  POINTER                                        { ([],[Pointer]) }
   | dim_spec                                       { ($1,[]) }
-
---component_array_spec :: { [(Expr,Expr)] }
---component_array_spec
---  : explicit_shape_spec_list         { $1 }
---  | deferred_shape_spec_list         { $1 }
-
---component_decl :: { (String,[(Expr,Expr)],Expr,Expr) }
---component_decl
---  : ID '(' component_array_spec ')' '*' char_length component_initialization   { ($1,$3,$6,$7) }
---  : ID '(' component_array_spec ')'                 component_initialization   { ($1,$3,  ,$5) }
---  : ID                              '*' char_length component_initialization   { ($1,[],$3,$4) }
---  : ID                                              component_initialization   { ($1,[],  ,$2) }
-
---char_length :: { Expr }
---char_length
---  : '(' char_len_param_value ')'                 { $1 }
---  | NUM                                          { (Con  $1) }
-
-
---component_initialization :: { Expr }
---component_initialization
---  : '='  expr
---  | '=>' NULL
 
 access_stmt :: { Decl }
 access_stmt
@@ -932,7 +930,7 @@ constant
 
 literal_constant :: { Expr }
 literal_constant 
-  : NUM                                          { (Con  $1) }
+  : NUM                                          { Con $1 } -- {% (srcSpan l) >>= (\b -> Con b $1) }
   | STR						 { (ConS $1) }
   | logical_literal_constant			 { $1 }
 
@@ -1036,7 +1034,7 @@ equivalence_stmt
 action_stmt :: { Fortran }
 action_stmt
   : allocate_stmt                                 { $1 }
-  | assignment_stmt                               { $1 }
+ | assignment_stmt                               {% getSrcLoc >>= (\p -> getCurrentPos >>= (\p' -> (show (p, p')) `trace` return $1)) }
   | backspace_stmt                                { $1 }
   | call_stmt                                     { $1 }
   | close_stmt                                    { $1 }
@@ -1534,6 +1532,9 @@ write_stmt
 
 
 {
+
+[annotateFrom| {Language.Fortran}
+
 happyError :: P a
 happyError = parseError "syntax error"
 

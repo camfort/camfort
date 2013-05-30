@@ -12,7 +12,6 @@
 
 > module Traverse where
 
-> import Language.Fortran.Parser
 > import Language.Fortran
 
 > import Generics.Deriving.Base
@@ -22,6 +21,53 @@
 > import Data.Generics.Uniplate.Operations
 
 > import Control.Comonad
+
+> class Copoint d where
+>     copoint :: d a -> a
+
+> instance Copoint SubName where
+>     copoint (SubName x _) = x
+>     copoint (NullSubName x) = x
+
+> instance Copoint VarName where
+>     copoint (VarName x _) = x
+
+> instance Copoint ArgName where
+>     copoint (ArgName x _) = x
+>     copoint (ASeq x _ _) = x
+>     copoint (NullArg x) = x
+
+> instance Copoint Fortran where
+>     copoint (Assg x e1 e2)        = x
+>     copoint (For x v e1 e2 e3 fs) = x
+>     copoint (FSeq x f1 f2)        = x
+>     copoint (If x e f1 fes f3)    = x
+>     copoint (Allocate x e1 e2)    = x
+>     copoint (Backspace x sp)      = x
+>     copoint (Call x e as)         = x
+>     copoint (Open x s)            = x
+>     copoint (Close x s)           = x 
+>     copoint (Continue x)          = x
+>     copoint (Cycle x s)           = x
+>     copoint (Deallocate x es e)   = x
+>     copoint (Equivalence x _)     = x
+>     copoint (Endfile x s)         = x
+>     copoint (Exit x s)            = x
+>     copoint (Forall x es f)       = x
+>     copoint (Goto x s)            = x
+>     copoint (Nullify x e)         = x
+>     copoint (Inquire x s e)       = x
+>     copoint (Rewind x s)          = x 
+>     copoint (Stop x e)            = x
+>     copoint (Where x e f)         = x 
+>     copoint (Write x s e)         = x
+>     copoint (PointerAssg x e1 e2) = x
+>     copoint (Return x e)          = x
+>     copoint (Label x s f)         = x
+>     copoint (Print x e es)        = x
+>     copoint (ReadS x s e)         = x
+>     copoint (TextStmt x s)        = x
+>     copoint (NullStmt x)          = x
 
 Other helpers
 
@@ -52,35 +98,7 @@ This one is less useful as the definitions for comonads are then very annoying
 >     rextend :: (t a -> a) -> t a -> t a
 
 > instance RComonad Fortran where
->     rextract (Assg x e1 e2)        = x
->     rextract (For x v e1 e2 e3 fs) = x
->     rextract (FSeq x f1 f2)        = x
->     rextract (If x e f1 fes f3)    = x
->     rextract (Allocate x e1 e2)    = x
->     rextract (Backspace x sp)      = x
->     rextract (Call x e as)         = x
->     rextract (Open x s)            = x
->     rextract (Close x s)           = x 
->     rextract (Continue x)          = x
->     rextract (Cycle x s)           = x
->     rextract (Deallocate x es e)   = x
->     rextract (Endfile x s)         = x
->     rextract (Exit x s)            = x
->     rextract (Forall x es f)       = x
->     rextract (Goto x s)            = x
->     rextract (Nullify x e)         = x
->     rextract (Inquire x s e)       = x
->     rextract (Rewind x s)          = x 
->     rextract (Stop x e)            = x
->     rextract (Where x e f)         = x 
->     rextract (Write x s e)         = x
->     rextract (PointerAssg x e1 e2) = x
->     rextract (Return x e)          = x
->     rextract (Label x s f)         = x
->     rextract (Print x e es)        = x
->     rextract (ReadS x s e)         = x
->     rextract (TextStmt x s)        = x
->     rextract (NullStmt x)          = x
+>     rextract x = copoint x
 
 >     rextend k y@(Assg _ e1 e2)        = Assg (k y) e1 e2
 >     rextend k y@(For _ v e1 e2 e3 fs) = For (k y) v e1 e2 e3 (rextend k fs)
@@ -93,6 +111,7 @@ This one is less useful as the definitions for comonads are then very annoying
 >     rextend k y@(Allocate _ e1 e2)      = Allocate (k y) e1 e2
 >     rextend k y@(Backspace _ sp)        = Backspace (k y) sp
 >     rextend k y@(Call _ e as)           = Call (k y) e as
+>     rextend k y@(Equivalence _ es)      = Equivalence (k y) es
 >     rextend k y@(Open _ s)              = Open (k y) s
 >     rextend k y@(Close _ s)             = Close (k y) s
 >     rextend k y@(Continue _)            = Continue (k y)

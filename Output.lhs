@@ -120,6 +120,8 @@ Output routines specialised to the analysis.
 >     outputG = outputF
 
 > instance (OutputIndG (Fortran p) Alt2, OutputG p Alt2) => OutputG (Fortran p) Alt2 where
+>                               
+
 >     outputG (For p v e e' e'' f) = "do"++" "++outputG v++" = "++outputG e++", "++
 >                                    outputG e'++", "++outputG e''++"\n"++
 >                                    "<span style='color:#707d8f'>"++"{"++outputG p++"}</span>\n" ++ 
@@ -140,7 +142,7 @@ Output routines specialised to the analysis.
 
                                          
 >     -- outputIndG i t@(FSeq p f1 f2) =  (outputAnn p False i) ++ outputIndG i f1 ++ outputIndG i f2
->     outputIndG i t = "<div style=''>" ++ (annotationMark i t (outputIndF i t)) ++ (outputAnn (rextract t) False i) ++ "</div>"
+>     outputIndG i t = "<div style=''>" ++ (outputAnn (rextract t) False i) ++  (annotationMark i t (outputIndF i t)) ++ "</div>"
 
 > annotationMark i t x = "<div class='clickable' onClick='toggle(" ++  
 >                        (show $ number (rextract t)) ++ ");'>" ++
