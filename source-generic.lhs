@@ -1,7 +1,6 @@
 > {-# LANGUAGE TypeSynonymInstances #-}
 > {-# LANGUAGE FlexibleInstances #-}
 > {-# LANGUAGE DeriveDataTypeable #-}
-> {-# LANGUAGE ScopedTypeVariables #-}
 
 > import Text.ParserCombinators.Parsec
 > import Text.ParserCombinators.Parsec.Expr
@@ -30,16 +29,12 @@
 >     fmap f (Plus x e1 e2) = Plus (f x) (fmap f e1) (fmap f e2)
 >     fmap f (Num x n) = Num (f x) n
 
+> flipFlag (ps, flag) = (ps, not flag)
 
-> insertP :: forall a . (Typeable a, FlipFlag a) => Zipper (Expr a) -> (Expr a) -> Zipper (Expr a)
-> insertP z e' = let e = ((fromJust . getHole $ z) :: Expr a)
+
+> insertP :: Zipper (Expr Annotation) -> (Expr Annotation) -> Zipper (Expr Annotation)
+> insertP z e' = let e = ((fromJust . getHole $ z) :: Expr Annotation)
 >                in setHole (tagRoot e' (flipFlag $ extract e)) z
-
-> class FlipFlag t where
->     flipFlag :: t -> t
-
-> instance FlipFlag Annotation where
->     flipFlag (ps, flag) = (ps, not flag)
 
 > type Annotation =  (((Line, Column), (Line, Column)), Bool)
 
@@ -92,8 +87,13 @@
 >                            Just x' -> x'
 
 > upF    = maybeC up
-> leftF  = maybeC left
-> rightF = maybeC right
+
+> leftNode x = fromJust $ down' x >>= right
+> rightNode x = fromJust $ down x
+
+
+> getExpr z = (fromJust $ getHole $ z)::(Expr Annotation)
+> getBounds z = fst $ extract $ ((fromJust $ getHole $ z)::(Expr Annotation))
 
 > pprint input z = pprint' (1, 1) (lines input) z
 
@@ -102,37 +102,31 @@
 > pprint' (l, c) ([]:[]) z = ""
 > pprint' (l, c) ([]:xs) z = pprint' (l+1, 0) xs z ++ "\n"
 > pprint' (l, c) inp z 
->      | (inBounds (l, c) (fst $ extract $ ((fromJust $ getHole z)::(Expr Annotation)))) = 
+>      | inBounds (l, c) (getBounds z) = 
 >             let e = fromJust $ getHole z
 >             in     if (snd $ extract e) then ppr e
 >                    else 
 >                         case e of 
->                           Num ((lb, ub), _) _ -> let (tk, rest) = takeBounds (lb, ub) inp
->                                                  in tk
+>                           Num ((lb, ub), _) _ -> fst $ takeBounds (lb, ub) inp
 >                           Plus ((lb, ub), _) _ _ ->
->                                                   let lfb = fst $ extract $ ((fromJust $ getHole $ leftF z)::(Expr Annotation))
->                                                       rfb = fst $ extract $ ((fromJust $ getHole $ rightF z)::(Expr Annotation))
+>                                                   let lfb = getBounds (leftNode z)
+>                                                       rfb = getBounds (rightNode z)
 >                                                       (p1, rest1) = takeBounds (lb, fst $ lfb) inp
->                                                       p2 = pprint' (fst $ lfb) rest1 (leftF z)
+>                                                       p2 = pprint' (fst $ lfb) rest1 (leftNode z)
 >                                                       (_, inp') = takeBounds (fst $ lfb, snd $ lfb) rest1
 >                                                       (p3, rest2) = takeBounds (snd $ lfb, fst $ rfb) inp'
->                                                       p4 = pprint' (fst $ rfb) rest2 (rightF z)
+>                                                       p4 = pprint' (fst $ rfb) rest2 (rightNode z)
 >                                                       (_, inp'') = takeBounds (fst $ rfb, snd $ rfb) rest2
 >                                                       (p5, rest3) = takeBounds (snd $ rfb, ub) inp''
 >                                                   in p1 ++ p2 ++ p3 ++ p4 ++ p5
->      | otherwise = pprint' (l, c) inp (upF z)
+>      | otherwise = pprint' (l, c) inp (upF z) -- go up the tree if current position is not within the root node 
 
 > foo = let input = "((1 +   2) +  3  )"
->           x = toZipper (doParse input)
->           x' = rightF x
+>           x = (toZipper (doParse input))::(Zipper (Expr Annotation))
+>           x' = rightNode x
 >           y = doParse "(3 + 4)"
 >           z = insertP x' y 
 >           w = doParse "(9 + (4 + 3))"
->           z' = insertP (leftF $ upF $ z) w
->           z'' = upF $ z'
->       in pprint input z''
-
- instance (Num a, Num b) => Num (a, b) where
-     (a, b) + (x, y) = (a + x, b + y)
-     (a, b) * (x, y) = (a * x, b * y)
-     (a, b) - (x, y) = (a - x, b - y)
+>           z' = insertP (rightNode $ leftNode $ upF $ z) w
+>           z'' = upF $ upF $ z'
+>       in pprint input z'
