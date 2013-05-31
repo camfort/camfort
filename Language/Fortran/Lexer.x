@@ -12,6 +12,7 @@ import Language.Haskell.ParseMonad
 import Generics.Deriving.Base hiding (P)
 import Generics.Deriving.Copoint
 
+
 }
 
 %wrapper "basic"
@@ -121,6 +122,8 @@ tokens :-
 
 {
 -- Each action has type :: String -> Token
+
+			
 
 -- The token type:
 data Token l = Key String l | OpPower l | OpMul l | OpDiv l | OpAdd l | OpSub l | OpConcat l

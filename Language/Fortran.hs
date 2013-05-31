@@ -160,7 +160,7 @@ data Type     = BaseType                 BaseType   [Attr]       Expr  Expr
 
 data BaseType = Integer | Real | Character | SomeType | DerivedType SubName
               | Recursive | Pure | Elemental | Logical | Complex
-                deriving (Show, Functor,Typeable,Data, Eq)
+                deriving (Show, Functor,Typeable,Data, Eq, Generic1)
 
 data Attr     = Parameter
               | Allocatable
