@@ -1,7 +1,6 @@
 > {-# LANGUAGE TypeSynonymInstances #-}
 > {-# LANGUAGE FlexibleInstances #-}
 > {-# LANGUAGE DeriveDataTypeable #-}
-
 > import Text.ParserCombinators.Parsec
 > import Text.ParserCombinators.Parsec.Expr
 > import Text.Parsec.Char
@@ -73,7 +72,8 @@
 
 > inBounds x (l, u) = x >= l && x < u
 
-> takeBounds ((ll, lc), (ul, uc)) inp = takeBounds' ((ll, lc), (ul, uc)) [] inp
+> takeBounds ((ll, lc), (ul, uc)) inp = let x = takeBounds' ((ll, lc), (ul, uc)) [] inp
+>                                       in x -- show (((ll, lc), (ul, uc)), inp, x) `trace` x
 
 > takeBounds' ((ll, lc), (ul, uc)) tk inp =
 >     if (ll == ul && lc == uc) then (reverse tk, inp)
@@ -90,6 +90,8 @@
 
 > leftNode x = fromJust $ down' x >>= right
 > rightNode x = fromJust $ down x
+
+> rightNode' x = fromJust $ down' x >>= right >>= right
 
 
 > getExpr z = (fromJust $ getHole $ z)::(Expr Annotation)
@@ -121,7 +123,55 @@
 >                                                   in p1 ++ p2 ++ p3 ++ p4 ++ p5
 >      | otherwise = pprint' (l, c) inp (upF z) -- go up the tree if current position is not within the root node 
 
-> foo = let input = "((1 +   2) +  3  )"
+> chop input z = chopP (1, 1) (lines input) z 
+
+> chopP cursor inp z = case (getHole z)::(Maybe (Expr Annotation)) of
+>                         Just e -> let ((lb, ub), flag) = extract e
+>                                   in  if inBounds cursor (lb, ub) then 
+>                                         if flag then ppr e
+>                                         else  case down' z of
+>                                                 Just cz -> chopR cursor inp cz ub
+>                                                 Nothing -> ""
+>                                       else maybe "" (chopP cursor inp) (up z)
+>                         Nothing -> ""
+
+> chopR cursor inp z parentUb = case (getHole z)::(Maybe (Expr Annotation)) of
+>                                  Just e -> let ((lb, ub), _) = extract e
+>                                                (p1, rest1) = takeBounds (cursor, lb) inp
+>                                                p2 = chopP lb rest1 z
+>                                                (_, inp') = takeBounds (lb, ub) rest1
+>                                            in  p1 ++ p2 ++ case right z of
+>                                                             Just rz -> chopR ub inp' rz parentUb
+>                                                             Nothing -> fst $ takeBounds (ub, parentUb) inp' 
+>                                  Nothing -> case right z of
+>                                                Just rz -> chopR cursor inp rz parentUb
+>                                                Nothing -> fst $ takeBounds (cursor, parentUb) inp
+>                                         
+
+> getBounds' cursor z = case (getHole z)::(Maybe (Expr Annotation)) of
+>                         Nothing -> (cursor, cursor)
+>                         Just e  -> fst $ extract e
+
+> getChildBounds lb z = getChildBounds' lb z False
+
+> getChildBounds' lb z f = case ((getHole z)::(Maybe (Expr Annotation))) of
+>                                  Nothing -> case (right z) of
+>                                               Nothing -> (lb, lb)
+>                                               Just rz -> getChildBounds' lb rz f
+>                                  Just e  -> let ((right_lb, right_ub), _) = extract e
+>                                             in case (right z) of
+>                                                  Nothing -> if f then (lb, right_ub)
+>                                                                  else (right_lb, right_ub)
+>                                                  Just rz -> if f then getChildBounds' lb rz True
+>                                                                  else getChildBounds' right_lb rz True
+
+> x = let input = "((1 +   2) +  3  )" in (toZipper (doParse input))::(Zipper (Expr Annotation))
+
+> fooN = let input = "(1 + 2)"
+>            z = toZipper (doParse input)
+>        in ((getHole z)::(Maybe (Expr Annotation)), chop input z)
+
+> foo = let input = "((   1 +   2) +  3  )"
 >           x = (toZipper (doParse input))::(Zipper (Expr Annotation))
 >           x' = rightNode x
 >           y = doParse "(3 + 4)"
@@ -129,4 +179,8 @@
 >           w = doParse "(9 + (4 + 3))"
 >           z' = insertP (rightNode $ leftNode $ upF $ z) w
 >           z'' = upF $ upF $ z'
->       in pprint input z'
+>       in (chop input z'', pprint input z')
+
+      case ((down' z'') >>= right) of
+            Nothing -> "nothing"
+            Just a -> show $ getExpr a -- chop' input z'' -- pprint input z'
