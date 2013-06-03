@@ -1,5 +1,8 @@
 > {-# LANGUAGE DeriveDataTypeable #-}
 > {-# LANGUAGE MultiParamTypeClasses #-}
+> {-# LANGUAGE TypeSynonymInstances #-}
+> {-# LANGUAGE FlexibleInstances #-}
+
 > module Annotations where
 
 > import Data.Data
@@ -8,6 +11,10 @@
 > import Data.Map.Lazy hiding (map)
 
 > import Language.Fortran
+> import Traverse
+
+> import Language.Haskell.ParseMonad 
+> import Language.Haskell.Syntax (SrcLoc,srcLine,srcColumn)
 
 Loop classigications 
 
@@ -43,3 +50,42 @@ Loop classigications
 > setArrsWrite x a = A (indices a) (lives a) (arrsRead a) x (number a)
 
 > unitAnnotation = A [] [] empty empty 0
+
+Initial annotations from parser
+
+Type of annotations
+
+> type A0 = (SrcLoc, SrcLoc) 
+
+Given a source location (usually token start),
+get the current src loc from the parser monad (usually token end), 
+return as pair giving bounds on the syntax span
+
+> srcSpan :: SrcLoc -> P A0
+> srcSpan l = do l' <- getSrcLoc
+>                return $ (l, l')
+
+0-length span at current position
+
+> srcSpanNull :: P A0
+> srcSpanNull = do l <- getSrcLoc
+>                  return $ (l, l)
+
+Combinators to generate spans anchored at existing elements
+
+> class SrcSpanFromAnnotation t where
+>    srcSpanFrom :: Copointed d => d t -> P A0
+
+>    srcSpanFromL :: Copointed d => d t -> (A0 -> b) -> P b
+>    srcSpanFromL x f = do a <- srcSpanFrom x
+>                          return $ f a
+
+> instance SrcSpanFromAnnotation A0 where
+>    srcSpanFrom x = do let l = fst $ copoint x
+>                       l' <- getSrcLoc
+>                       return $ (l, l')
+
+> instance SrcSpanFromAnnotation SrcLoc where
+>    srcSpanFrom x = do let l = copoint x
+>                       l' <- getSrcLoc
+>                       return $ (l, l')

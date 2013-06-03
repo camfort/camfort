@@ -1,10 +1,14 @@
 {
  {-# LANGUAGE QuasiQuotes #-}
+ {-# LANGUAGE TypeSynonymInstances #-}
+ {-# LANGUAGE FlexibleInstances #-}
+
 module Language.Fortran.Parser  where
 
 import Language.Fortran
 
 import Traverse
+import Annotations
 
 import Language.Haskell.Syntax (SrcLoc,srcLine,srcColumn)
 import Language.Haskell.ParseMonad 
@@ -14,31 +18,7 @@ import Data.Char (toLower)
 
 import Debug.Trace
 
--- Type of annotations
 
-type A0 = (SrcLoc, SrcLoc) 
-
--- Given a source location (usually token start),
--- get the current src loc from the parser monad (usually token end), 
--- return as pair giving bounds on the syntax span
-
-srcSpan :: SrcLoc -> P A0
-srcSpan l = do l' <- getSrcLoc
-               return $ (l, l')
-
-srcSpanA :: Copointed d => d A0 -> (A0 -> b) -> P b
-srcSpanA x f = do let l = fst $ copoint x
-                  l' <- getSrcLoc
-                  return $ f (l, l')
-
-srcSpanF :: Copointed d => d A0 -> P A0
-srcSpanF x = do let l = fst $ copoint x
-                l' <- getSrcLoc
-                return $ (l, l')
-
-srcSpanNull :: P A0
-srcSpanNull = do l <- getSrcLoc
-                 return $ (l, l)
 
 }
 
@@ -229,14 +209,14 @@ newline0 : newline    {}
 main_program :: { Program A0 }
 main_program
   : program_stmt use_stmt_list implicit_part specification_part_top execution_part module_subprogram_part end_program_stmt newline0
-		{% do { s <- srcSpanF (fst $1);
+		{% do { s <- srcSpanFrom (fst $1);
 		        name <- cmpNames (fst $1) $7 "program";
 		        return (Main s name (snd $1) (Block s $2 $3 $4 $5) $6); } }
 
 program_stmt :: { (SubName A0, Arg A0) }
 program_stmt
   : PROGRAM subname args_p newline   { ($2, $3) }
-  | PROGRAM subname        newline   {% (srcSpanF $1) >>= (\l -> return $ ($2, (Arg l (NullArg l)))) } 
+  | PROGRAM subname        newline   {% (srcSpanFrom $1) >>= (\l -> return $ ($2, (Arg l (NullArg l)))) } 
 
 end_program_stmt :: { String }
 end_program_stmt
@@ -245,7 +225,7 @@ end_program_stmt
   | END               { "" }
 
 implicit_part :: { Implicit A0 }
-implicit_part : IMPLICIT NONE newline {% (srcSpanF $1) >>= (return . ImplicitNone) }
+implicit_part : IMPLICIT NONE newline {% (srcSpanFrom $1) >>= (return . ImplicitNone) }
               | {- empty -}           {% srcSpanNull >>= (return . ImplicitNull) }
 
 --args
@@ -265,7 +245,7 @@ external_subprogram
 subroutine_subprogram :: { Program A0 }
 subroutine_subprogram 
   : subroutine_stmt use_stmt_list implicit_part specification_part_top execution_part end_subroutine_stmt newline0
-  {% do { s <- srcSpanF (fst3 $1);
+  {% do { s <- srcSpanFrom (fst3 $1);
           name <- cmpNames (fst3 $1) $6 "subroutine";
           return (Sub s (trd3 $1) name (snd3 $1) (Block s $2 $3 $4 $5)); } }
 
@@ -283,21 +263,21 @@ end_function_stmt
 
 function_subprogram :: { Program A0 }
 function_subprogram
-  : function_stmt use_stmt_list implicit_part specification_part_top execution_part end_function_stmt newline0  {% do { s <- srcSpanF (fst3 $1);
+  : function_stmt use_stmt_list implicit_part specification_part_top execution_part end_function_stmt newline0  {% do { s <- srcSpanFrom (fst3 $1);
                         name <- cmpNames (fst3 $1) $6 "function";
                         return (Function s (trd3 $1) name (snd3 $1) (Block s $2 $3 $4 $5)); } }
 
 block_data :: { Program A0 }
 block_data
   : block_data_stmt use_stmt_list implicit_part specification_part_top end_block_data_stmt     
-                  {% do { s <- srcSpanF $1;
+                  {% do { s <- srcSpanFrom $1;
                           name <- cmpNames $1 $5 "block data";
                           return (BlockData s name $2 $3 $4); } }
   
 block_data_stmt :: { SubName A0 }
 block_data_stmt
   : BLOCK DATA subname                     { $3 } 
-  | BLOCK DATA                             {% do { s <- srcSpanF $1; 
+  | BLOCK DATA                             {% do { s <- srcSpanFrom $1; 
                                                    return $ NullSubName s; } } 
 
 end_block_data_stmt :: { String }
@@ -308,7 +288,7 @@ end_block_data_stmt
   
 module :: { Program A0 }
 module
-  : module_stmt use_stmt_list implicit_part specification_part_top module_subprogram_part end_module_stmt {% do { s <- srcSpanF $1;
+  : module_stmt use_stmt_list implicit_part specification_part_top module_subprogram_part end_module_stmt {% do { s <- srcSpanFrom $1;
                    name <- cmpNames $1 $6  "module";
                    return (Module s name $2 $3 $4 $5); } }
 
@@ -354,7 +334,7 @@ specification_part_top
 
 specification_part :: { Decl A0 }
 specification_part
-  : declaration_construct_l specification_part {% srcSpanA $1 (\s -> DSeq s $1 $2) }
+  : declaration_construct_l specification_part {% srcSpanFromL $1 (\s -> DSeq s $1 $2) }
   | declaration_construct_l                    { $1 }
   
 
@@ -371,11 +351,11 @@ declaration_construct_p
 
 declaration_construct :: { Decl A0 }
 declaration_construct
-  : type_spec_p attr_spec_list '::' entity_decl_list  {% srcSpanA (fst3 $1) (\s ->
+  : type_spec_p attr_spec_list '::' entity_decl_list  {% srcSpanFromL (fst3 $1) (\s ->
                                                           if isEmpty (fst $2) 
                                                           then Decl s $4 ((BaseType s (fst3 $1) (snd $2) (snd3 $1) (trd3 $1)))
 							  else Decl s $4 ((ArrayT s  (fst $2) (fst3 $1) (snd $2) (snd3 $1) (trd3 $1)))) }
-  | type_spec_p attr_spec_list      entity_decl_list  {% srcSpanA (fst3 $1) (\s ->
+  | type_spec_p attr_spec_list      entity_decl_list  {% srcSpanFromL (fst3 $1) (\s ->
                                                           if isEmpty (fst $2) 
                                                           then Decl s $3 ((BaseType s (fst3 $1) (snd $2) (snd3 $1) (trd3 $1)))
 							  else Decl s $3 ((ArrayT   s (fst $2) (fst3 $1) (snd $2) (snd3 $1) (trd3 $1)))) }
@@ -408,25 +388,25 @@ type_spec_p
 
 type_spec :: { (BaseType A0, Expr A0, Expr A0) }
 type_spec
-  : INTEGER kind_selector                         {% srcSpanA $1 (\s -> (Integer s,$2,ne)) }
-  | INTEGER '*' length_value                      {% srcSpanA $1 (\s -> (Integer s,$3,ne)) }
-  | INTEGER                                       {% srcSpanA $1 (\l ->(Integer l,(ne),ne)) }
-  | REAL kind_selector                            {% srcSpanA $1 (\l -> (Real l,$2,ne)) }
-  | REAL '*' length_value                         {% srcSpanA $1 (\l -> (Real l,$3,ne)) }
-  | REAL                                          {% srcSpanA $1 (\l -> (Real l,(ne),ne)) }
-  | SOMETYPE                                      {% srcSpanA $1 (\l -> (SomeType l,(ne),ne)) }
+  : INTEGER kind_selector                         {% srcSpanFromL $1 (\s -> (Integer s,$2,ne)) }
+  | INTEGER '*' length_value                      {% srcSpanFromL $1 (\s -> (Integer s,$3,ne)) }
+  | INTEGER                                       {% srcSpanFromL $1 (\l ->(Integer l,(ne),ne)) }
+  | REAL kind_selector                            {% srcSpanFromL $1 (\l -> (Real l,$2,ne)) }
+  | REAL '*' length_value                         {% srcSpanFromL $1 (\l -> (Real l,$3,ne)) }
+  | REAL                                          {% srcSpanFromL $1 (\l -> (Real l,(ne),ne)) }
+  | SOMETYPE                                      {% srcSpanFromL $1 (\l -> (SomeType l,(ne),ne)) }
 --  | DOUBLE PRECISION kind_selector                { (Double,$3,ne) }
 --  | DOUBLE PRECISION '*' length_value             { (Double,$4,ne) }
 --  | DOUBLE PRECISION                              { (Double,ne,ne) }
-  | COMPLEX kind_selector                         {% srcSpanA $1 (\l -> (Complex l,$2,ne)) }
-  | COMPLEX '*' length_value                      {% srcSpanA $1 (\l -> (Complex l,$3,ne)) }
-  | COMPLEX                                       {% srcSpanA $1 (\l -> (Complex l,ne,ne)) }
-  | CHARACTER char_selector                       {% srcSpanA $1 (\l -> (Character l,snd $2, fst $2)) }
-  | CHARACTER                                     {% srcSpanA $1 (\l -> (Character l,ne,ne)) }
-  | LOGICAL kind_selector                         {% srcSpanA $1 (\l -> (Logical l,$2,ne)) }
-  | LOGICAL '*' length_value                      {% srcSpanA $1 (\l -> (Logical l,$3,ne)) }
-  | LOGICAL                                       {% srcSpanA $1 (\l -> (Logical l,ne,ne)) }
-  | TYPE '(' type_name ')'                        {% srcSpanA $1 (\l -> (DerivedType l $3,ne,ne)) }
+  | COMPLEX kind_selector                         {% srcSpanFromL $1 (\l -> (Complex l,$2,ne)) }
+  | COMPLEX '*' length_value                      {% srcSpanFromL $1 (\l -> (Complex l,$3,ne)) }
+  | COMPLEX                                       {% srcSpanFromL $1 (\l -> (Complex l,ne,ne)) }
+  | CHARACTER char_selector                       {% srcSpanFromL $1 (\l -> (Character l,snd $2, fst $2)) }
+  | CHARACTER                                     {% srcSpanFromL $1 (\l -> (Character l,ne,ne)) }
+  | LOGICAL kind_selector                         {% srcSpanFromL $1 (\l -> (Logical l,$2,ne)) }
+  | LOGICAL '*' length_value                      {% srcSpanFromL $1 (\l -> (Logical l,$3,ne)) }
+  | LOGICAL                                       {% srcSpanFromL $1 (\l -> (Logical l,ne,ne)) }
+  | TYPE '(' type_name ')'                        {% srcSpanFromL $1 (\l -> (DerivedType l $3,ne,ne)) }
 --  | POINTER '(' pointer_name ',' pointee_name ['(' array_spec ')' ] ')'
 --[',' '(' pointer_name ',' pointee_name ['(' array_spec ')' ] ')' ] ...
 
@@ -451,7 +431,7 @@ length_selector
 char_len_param_value :: { Expr A0 }
 char_len_param_value
   : specification_expr                                     { $1 }
-  | '*'                                                    {% srcSpanA $1 (\s -> Con s "*") }
+  | '*'                                                    {% srcSpanFromL $1 (\s -> Con s "*") }
 
 length_value :: { Expr A0 }
 length_value
@@ -465,22 +445,22 @@ dim_spec
 attr_spec :: { ([(Expr A0, Expr A0)],[Attr A0]) }
 attr_spec
   : dim_spec                                       { ($1,[]) }
-  | PARAMETER                                      {% srcSpanA $1 (\s -> ([],[Parameter s])) }
+  | PARAMETER                                      {% srcSpanFromL $1 (\s -> ([],[Parameter s])) }
   | access_spec                                    { ([],[$1]) }
-  | ALLOCATABLE                                    {% srcSpanA $1 (\s -> ([],[Allocatable s ])) }
-  | EXTERNAL                                       {% srcSpanA $1 (\s -> ([],[External s])) }
-  | INTENT '(' intent_spec ')'                     {% srcSpanA $1 (\s -> ([],[Intent s $3])) }
-  | INTRINSIC                                      {% srcSpanA $1 (\s -> ([],[Intrinsic s])) }
-  | OPTIONAL                                       {% srcSpanA $1 (\s -> ([],[Optional s])) }
-  | POINTER                                        {% srcSpanA $1 (\s -> ([],[Pointer s])) }
-  | SAVE                                           {% srcSpanA $1 (\s -> ([],[Save s])) }
-  | TARGET                                         {% srcSpanA $1 (\s -> ([],[Target s])) }
-  | VOLATILE                                       {% srcSpanA $1 (\s -> ([],[Volatile s])) }
+  | ALLOCATABLE                                    {% srcSpanFromL $1 (\s -> ([],[Allocatable s ])) }
+  | EXTERNAL                                       {% srcSpanFromL $1 (\s -> ([],[External s])) }
+  | INTENT '(' intent_spec ')'                     {% srcSpanFromL $1 (\s -> ([],[Intent s $3])) }
+  | INTRINSIC                                      {% srcSpanFromL $1 (\s -> ([],[Intrinsic s])) }
+  | OPTIONAL                                       {% srcSpanFromL $1 (\s -> ([],[Optional s])) }
+  | POINTER                                        {% srcSpanFromL $1 (\s -> ([],[Pointer s])) }
+  | SAVE                                           {% srcSpanFromL $1 (\s -> ([],[Save s])) }
+  | TARGET                                         {% srcSpanFromL $1 (\s -> ([],[Target s])) }
+  | VOLATILE                                       {% srcSpanFromL $1 (\s -> ([],[Volatile s])) }
 
 access_spec :: { Attr A0 }
 access_spec
-  : PUBLIC            {% srcSpanA $1 (\s -> Public s) }
-  | PRIVATE           {% srcSpanA $1 (\s -> Private s) }
+  : PUBLIC            {% srcSpanFromL $1 (\s -> Public s) }
+  | PRIVATE           {% srcSpanFromL $1 (\s -> Private s) }
 
 array_spec :: { [(Expr A0, Expr A0)] }
 array_spec
@@ -497,7 +477,7 @@ explicit_shape_spec
   | bound { $1 }
 
 include_stmt :: { Decl A0 }
-  : INCLUDE STR               {% do { s1 <- srcSpanF $1;
+  : INCLUDE STR               {% do { s1 <- srcSpanFrom $1;
                                       s2 <- srcSpan l;
                                       return $ Include s1 (Con s2 $2); } }
 
@@ -506,9 +486,9 @@ specification_expr
   : expr { $1 } 
 intent_spec :: { IntentAttr A0 }
 intent_spec
-  : IN            {% srcSpanA $1 (\s -> In s) }
-  | OUT           {% srcSpanA $1 (\s -> Out s) }
-  | INOUT         {% srcSpanA $1 (\s -> InOut s) }
+  : IN            {% srcSpanFromL $1 (\s -> In s) }
+  | OUT           {% srcSpanFromL $1 (\s -> Out s) }
+  | INOUT         {% srcSpanFromL $1 (\s -> InOut s) }
 
 specification_stmt :: { Decl A0 }
 specification_stmt
@@ -527,15 +507,15 @@ specification_stmt
 --  | target_stmt            { $1 }
 
 common_stmt :: { Decl A0 }
- : COMMON '/' id2 '/' vlist  {% srcSpanA $1 (\s -> Common s (Just $3) $5) }
- | COMMON vlist              {% srcSpanA $1 (\s -> Common s Nothing $2) }
+ : COMMON '/' id2 '/' vlist  {% srcSpanFromL $1 (\s -> Common s (Just $3) $5) }
+ | COMMON vlist              {% srcSpanFromL $1 (\s -> Common s Nothing $2) }
 
 
 interface_block :: { Decl A0 }
 interface_block
   : interface_stmt interface_spec_list end_interface_stmt  {% case $1 of 
                                                                 Nothing -> srcSpanNull >>= (\s -> return $ Interface s $1 $2)
-                                                                Just y -> srcSpanA y (\s -> Interface s $1 $2) }
+                                                                Just y -> srcSpanFromL y (\s -> Interface s $1 $2) }
 
 interface_stmt :: { Maybe (GSpec A0) }
 interface_stmt
@@ -560,27 +540,27 @@ end_interface_stmt
 interface_body :: { InterfaceSpec A0 } 
 interface_body
   : function_stmt  use_stmt_list implicit_part specification_part end_function_stmt 
-        {% do { s <- srcSpanF (fst3 $1);
+        {% do { s <- srcSpanFrom (fst3 $1);
                 name <- cmpNames (fst3 $1) $5 "interface declaration";
                 return (FunctionInterface s  name (snd3 $1) $2 $3 $4); }}
 
   | function_stmt end_function_stmt  
-        {% do { s <- srcSpanF (fst3 $1);
+        {% do { s <- srcSpanFrom (fst3 $1);
                 name <- cmpNames (fst3 $1) $2 "interface declaration";
                 return (FunctionInterface s name (snd3 $1) [] (ImplicitNull s) (NullDecl s)); } }       
 
   | subroutine_stmt use_stmt_list implicit_part specification_part end_subroutine_stmt
-        {% do { s <- srcSpanF (fst3 $1);
+        {% do { s <- srcSpanFrom (fst3 $1);
                 name <- cmpNames (fst3 $1) $5 "interface declaration";
                 return (SubroutineInterface s name (snd3 $1) $2 $3 $4); } }
   | subroutine_stmt end_subroutine_stmt 
-        {% do { s <- srcSpanF (fst3 $1);
+        {% do { s <- srcSpanFrom (fst3 $1);
                 name <- cmpNames (fst3 $1) $2 "interface declaration";
                 return (SubroutineInterface s name (snd3 $1) [] (ImplicitNull s) (NullDecl s)); }}
   
 module_procedure_stmt :: { InterfaceSpec A0 }
 module_procedure_stmt
-  : MODULE PROCEDURE sub_name_list    {% srcSpanA $1 (\s -> ModuleProcedure s $3 ) }
+  : MODULE PROCEDURE sub_name_list    {% srcSpanFromL $1 (\s -> ModuleProcedure s $3 ) }
 
 sub_name_list :: { [SubName A0 ] }
 sub_name_list
@@ -594,7 +574,7 @@ sub_name
 derived_type_def :: { Decl A0 }
 derived_type_def
   : derived_type_stmt private_sequence_stmt component_def_stmt_list end_type_stmt
-  {% do { s <- srcSpanF (fst $1);
+  {% do { s <- srcSpanFrom (fst $1);
           name <- cmpNames (fst $1) $4 "derived type name";
           return (DerivedTypeDef s name (snd $1) $2 $3);  } }
 
@@ -616,14 +596,14 @@ type_name
 
 private_sequence_stmt :: { [Attr A0] }
 private_sequence_stmt
-  : PRIVATE SEQUENCE     {% do { s1 <- srcSpanF $1; 
-                                 s2 <- srcSpanF $2;
+  : PRIVATE SEQUENCE     {% do { s1 <- srcSpanFrom $1; 
+                                 s2 <- srcSpanFrom $2;
                                  return [Private s1, Sequence s2]; } }
-  | SEQUENCE PRIVATE     {% do { s1 <- srcSpanF $1; 
-                                 s2 <- srcSpanF $2;
+  | SEQUENCE PRIVATE     {% do { s1 <- srcSpanFrom $1; 
+                                 s2 <- srcSpanFrom $2;
                                  return [Sequence s1, Private s2]; } }
-  | PRIVATE              {% srcSpanA $1 (\s -> [Private s]) }
-  | SEQUENCE             {% srcSpanA $1 (\s -> [Sequence s]) }
+  | PRIVATE              {% srcSpanFromL $1 (\s -> [Private s]) }
+  | SEQUENCE             {% srcSpanFromL $1 (\s -> [Sequence s]) }
   | {- empty -}          { [] }
   
 component_def_stmt_list :: { [Decl A0 ] }
@@ -634,7 +614,7 @@ component_def_stmt_list
 component_def_stmt :: { Decl A0 }
 component_def_stmt
   : type_spec_p component_attr_spec_list '::' entity_decl_list  
-        {% srcSpanA (fst3 $1) (\s -> if isEmpty (fst $2) 
+        {% srcSpanFromL (fst3 $1) (\s -> if isEmpty (fst $2) 
                               then Decl s $4 ((BaseType s (fst3 $1) (snd $2) (snd3 $1) (trd3 $1)))
 			      else Decl s $4 ((ArrayT s (fst $2) (fst3 $1) (snd $2) (snd3 $1) (trd3 $1)))) }
 
@@ -645,14 +625,14 @@ component_attr_spec_list
 
 component_attr_spec :: { ([(Expr A0, Expr A0)],[Attr A0]) }
 component_attr_spec
-  :  POINTER              {% srcSpanA $1 (\s -> ([],[Pointer s])) }
+  :  POINTER              {% srcSpanFromL $1 (\s -> ([],[Pointer s])) }
   | dim_spec              { ($1,[]) }
 
 access_stmt :: { Decl A0 }
 access_stmt
-  : access_spec '::' access_id_list  {% srcSpanA $1 (\s -> AccessStmt s $1 $3) }
-  | access_spec access_id_list       {% srcSpanA $1 (\s -> AccessStmt s $1 $2) }
-  | access_spec                      {% srcSpanA $1 (\s -> AccessStmt s $1 []) }
+  : access_spec '::' access_id_list  {% srcSpanFromL $1 (\s -> AccessStmt s $1 $3) }
+  | access_spec access_id_list       {% srcSpanFromL $1 (\s -> AccessStmt s $1 $2) }
+  | access_spec                      {% srcSpanFromL $1 (\s -> AccessStmt s $1 []) }
    
 access_id_list :: { [GSpec A0] }
 access_id_list
@@ -666,12 +646,12 @@ access_id
 generic_spec :: { GSpec A0 }
 generic_spec
 : ID					{% srcSpan l >>= (\s -> return $ GName s (Var s [(VarName s $1,[])])) } 
-  | OPERATOR '(' defined_operator ')'   {% srcSpanA $1 (\s -> GOper s $3) }
-  | ASSIGNMENT '(' '=' ')'              {% srcSpanA $1 (\s -> GAssg s) }
+  | OPERATOR '(' defined_operator ')'   {% srcSpanFromL $1 (\s -> GOper s $3) }
+  | ASSIGNMENT '(' '=' ')'              {% srcSpanFromL $1 (\s -> GAssg s) }
   
 data_stmt :: { Decl A0 }
 data_stmt
-  : DATA data_stmt_set_list				{% srcSpanA $1 (\s ->(Data s $2)) }
+  : DATA data_stmt_set_list				{% srcSpanFromL $1 (\s ->(Data s $2)) }
   
 data_stmt_set_list :: { [(Expr A0, Expr A0)] }
 data_stmt_set_list
@@ -684,7 +664,7 @@ data_stmt_set
 
 data_stmt_object_list :: { Expr A0 }
 data_stmt_object_list
-  : data_stmt_object_list ',' data_stmt_object   {% srcSpanA $1 (\s ->ESeq s $1 $3) }
+  : data_stmt_object_list ',' data_stmt_object   {% srcSpanFromL $1 (\s ->ESeq s $1 $3) }
   | data_stmt_object			         { $1 }
 
 data_stmt_object :: { Expr A0 }
@@ -694,7 +674,7 @@ data_stmt_object
 
 data_stmt_value_list :: { Expr A0 }
 data_stmt_value_list
-  : data_stmt_value_list ',' data_stmt_value	{% srcSpanA $1 (\s -> ESeq s $1 $3) }
+  : data_stmt_value_list ',' data_stmt_value	{% srcSpanFromL $1 (\s -> ESeq s $1 $3) }
   | data_stmt_value				{ $1 }
 
 data_stmt_value :: { Expr A0 }
@@ -704,8 +684,8 @@ data_stmt_value
   
 external_stmt :: { Decl A0 }
 external_stmt
-  : EXTERNAL '::' name_list  {% srcSpanA $1 (\s -> ExternalStmt s $3) }
-  | EXTERNAL      name_list  {% srcSpanA $1 (\s -> ExternalStmt s $2) }
+  : EXTERNAL '::' name_list  {% srcSpanFromL $1 (\s -> ExternalStmt s $3) }
+  | EXTERNAL      name_list  {% srcSpanFromL $1 (\s -> ExternalStmt s $2) }
   
 name_list :: { [String] }
 name_list
@@ -724,21 +704,21 @@ defined_operator
 
 intrinsic_operator :: { BinOp A0 }
 intrinsic_operator
-  : '**'        {% srcSpanA $1 Power }
-  | '*'         {% srcSpanA $1 Mul }
-  | '+'         {% srcSpanA $1 Plus }
-  | '//'        {% srcSpanA $1 Concat }
+  : '**'        {% srcSpanFromL $1 Power }
+  | '*'         {% srcSpanFromL $1 Mul }
+  | '+'         {% srcSpanFromL $1 Plus }
+  | '//'        {% srcSpanFromL $1 Concat }
   | rel_op      { $1 }
 --  | '.NOT.'     { Not }
-  | '.AND.'     {% srcSpanA $1 And }
-  | '.OR.'      {% srcSpanA $1 Or } 
+  | '.AND.'     {% srcSpanFromL $1 And }
+  | '.OR.'      {% srcSpanFromL $1 Or } 
 --  | equiv_op    { 
 
 
 
 namelist_stmt :: { Decl A0 }
 namelist_stmt
-  : NAMELIST namelist_list   {% srcSpanA $1 (\s -> Namelist s $2) }
+  : NAMELIST namelist_list   {% srcSpanFromL $1 (\s -> Namelist s $2) }
   
 namelist_list :: { [(Expr A0, [Expr A0])] }
 namelist_list
@@ -769,9 +749,9 @@ subname
 prefix :: { (BaseType A0, Expr A0, Expr A0) }
 prefix
   : type_spec  { $1 }
-  | RECURSIVE  {% srcSpanA $1 (\s -> (Recursive s,ne,ne)) }
-  | PURE       {% srcSpanA $1 (\s -> (Pure s,ne,ne)) }
-  | ELEMENTAL  {% srcSpanA $1 (\s -> (Elemental s,ne,ne)) }
+  | RECURSIVE  {% srcSpanFromL $1 (\s -> (Recursive s,ne,ne)) }
+  | PURE       {% srcSpanFromL $1 (\s -> (Pure s,ne,ne)) }
+  | ELEMENTAL  {% srcSpanFromL $1 (\s -> (Elemental s,ne,ne)) }
 
 args_p :: { Arg A0 }
 args_p
@@ -779,25 +759,25 @@ args_p
 
 dummy_arg_list :: { Arg A0 }
 dummy_arg_list
-  : dummy_arg_list2        {% srcSpanA $1 (\s -> Arg s $1) }
+  : dummy_arg_list2        {% srcSpanFromL $1 (\s -> Arg s $1) }
   | {- empty -}            {% srcSpanNull >>= (\s -> return $ Arg s (NullArg s)) }
 
 dummy_arg_list2 :: { ArgName A0 } 
 dummy_arg_list2
-  : dummy_arg_list2 ',' dummy_arg                 {% srcSpanA $1 (\s -> ASeq s $1 $3) }
+  : dummy_arg_list2 ',' dummy_arg                 {% srcSpanFromL $1 (\s -> ASeq s $1 $3) }
   | dummy_arg                                     { $1 }
 
 dummy_arg :: { ArgName A0 }
 dummy_arg
   : ID                              {% srcSpan l >>= (\s -> return $ ArgName s $1) }
-  | '*'                             {% srcSpanA $1 (\s ->  ArgName s "*") }
+  | '*'                             {% srcSpanFromL $1 (\s ->  ArgName s "*") }
   
 --end_subroutine_stmt
 --  : END SUBROUTINE
 
 assignment_stmt :: { Fortran A0 }
 assignment_stmt
-  : variable '=' expr                                 {% srcSpanA $1 (\s -> Assg s $1 $3) }
+  : variable '=' expr                                 {% srcSpanFromL $1 (\s -> Assg s $1 $3) }
  | ID '(' section_subscript_list ')' '=' expr         {% srcSpan l >>= (\s -> return $ Assg s (Var s [(VarName s $1, $3)]) $6) }
 
 
@@ -812,7 +792,7 @@ subobject
 
 part_ref :: { Expr A0 }
 part_ref
-  : scalar_variable_name_list                  {% srcSpanA (fst . head $ $1) (\s -> Var s $1) }
+  : scalar_variable_name_list                  {% srcSpanFromL (fst . head $ $1) (\s -> Var s $1) }
 
 scalar_variable_name :: { (VarName A0, [Expr A0]) }
 scalar_variable_name
@@ -835,9 +815,9 @@ subscript
   | bound                                         { $1 }
 bound :: { Expr A0 }
 bound
-  : expr ':' expr                               {% srcSpanA $1 (\s -> Bound s $1 $3) }
-  | expr ':'                                    {% srcSpanA $1 (\s -> Bound s $1 ne)}
-  | ':' expr                                    {% srcSpanA $1 (\s -> Bound s ne $2) }
+  : expr ':' expr                               {% srcSpanFromL $1 (\s -> Bound s $1 $3) }
+  | expr ':'                                    {% srcSpanFromL $1 (\s -> Bound s $1 ne)}
+  | ':' expr                                    {% srcSpanFromL $1 (\s -> Bound s ne $2) }
 --  | ':'                                         { (Bound ne ne) }
 
 section_subscript_list :: { [Expr A0] }
@@ -877,15 +857,15 @@ level_5_expr
 
 equiv_operand :: { Expr A0 }
 equiv_operand
-  : equiv_operand '.OR.' or_operand                    {% do { s1 <- srcSpanF $1;
-                                                               s2 <- srcSpanF $2;
+  : equiv_operand '.OR.' or_operand                    {% do { s1 <- srcSpanFrom $1;
+                                                               s2 <- srcSpanFrom $2;
                                                                return $ Bin s1 (Or s2) $1 $3; } }
   | or_operand                                         { $1 }
 
 or_operand :: { Expr A0 }
 or_operand
-  : or_operand '.AND.' and_operand                     {% do { s1 <- srcSpanF $1;
-                                                               s2 <- srcSpanF $2;
+  : or_operand '.AND.' and_operand                     {% do { s1 <- srcSpanFrom $1;
+                                                               s2 <- srcSpanFrom $2;
                                                                return $ Bin s1 (And s2) $1 $3; } }
   | and_operand                                        { $1 }
 
@@ -896,49 +876,49 @@ and_operand
 
 level_4_expr :: { Expr A0 }
 level_4_expr 
-  : level_4_expr rel_op level_3_expr                   {% srcSpanA $1 (\s -> Bin s $2 $1 $3) }
+  : level_4_expr rel_op level_3_expr                   {% srcSpanFromL $1 (\s -> Bin s $2 $1 $3) }
   | level_3_expr                                       { $1 }
 
 
 level_3_expr :: { Expr A0 }
 level_3_expr 
-  : level_3_expr '//' level_2_expr                     {% do { s1 <- srcSpanF $1;
-                                                               s2 <- srcSpanF $2;
+  : level_3_expr '//' level_2_expr                     {% do { s1 <- srcSpanFrom $1;
+                                                               s2 <- srcSpanFrom $2;
                                                                return $ Bin s1 (Concat s2) $1 $3; } }
   | level_2_expr                                       { $1 }
 
 level_2_expr :: { Expr A0 }
 level_2_expr 
-  : level_2_expr '+' add_operand                       {% do { s1 <- srcSpanF $1;
-                                                               s2 <- srcSpanF $2;
+  : level_2_expr '+' add_operand                       {% do { s1 <- srcSpanFrom $1;
+                                                               s2 <- srcSpanFrom $2;
                                                                return $ Bin s1 (Plus s2) $1 $3; } }
-  | level_2_expr '-' add_operand                       {% do { s1 <- srcSpanF $1;
-                                                               s2 <- srcSpanF $2;
+  | level_2_expr '-' add_operand                       {% do { s1 <- srcSpanFrom $1;
+                                                               s2 <- srcSpanFrom $2;
                                                                return $ Bin s1 (Minus s2) $1 $3; } }
   | add_operand                                        { $1 }
 
 add_operand :: { Expr A0 }
 add_operand 
-  : add_operand '*' mult_operand                       {% do { s1 <- srcSpanF $1;
-                                                               s2 <- srcSpanF $2;
+  : add_operand '*' mult_operand                       {% do { s1 <- srcSpanFrom $1;
+                                                               s2 <- srcSpanFrom $2;
                                                                return $ Bin s1 (Mul s2) $1 $3; } }
-  | add_operand '/' mult_operand                       {% do { s1 <- srcSpanF $1;
-                                                               s2 <- srcSpanF $2;
+  | add_operand '/' mult_operand                       {% do { s1 <- srcSpanFrom $1;
+                                                               s2 <- srcSpanFrom $2;
                                                                return $ Bin s1 (Div s2) $1 $3; } }
   | mult_operand                                       { $1 }
 
 mult_operand :: { Expr A0 }
 mult_operand 
-  : level_1_expr '**' mult_operand                     {% do { s1 <- srcSpanF $1;
-                                                               s2 <- srcSpanF $2;
+  : level_1_expr '**' mult_operand                     {% do { s1 <- srcSpanFrom $1;
+                                                               s2 <- srcSpanFrom $2;
                                                                return $ Bin s1 (Power s2) $1 $3; } }
   | level_1_expr                                       { $1 }
 
 level_1_expr :: { Expr A0 }
 level_1_expr 
-  : '-' primary                                        {% do { s1 <- srcSpanF $1;
+  : '-' primary                                        {% do { s1 <- srcSpanFrom $1;
                                                                return $ Unary s1 (UMinus s1) $2; } }
-  | '.NOT.' primary                                    {% do { s1 <- srcSpanF $1;
+  | '.NOT.' primary                                    {% do { s1 <- srcSpanFrom $1;
                                                                return $ Unary s1 (Not s1) $2; } }
   | primary                                            { $1 }
 
@@ -948,8 +928,8 @@ primary
   | variable                                    { $1 }
   | array_constructor                           { $1 }
   | '(' expr ')'                                { $2 }
-  | SQRT '(' expr ')'				{% srcSpanA $1 (\s -> Sqrt s $3) }
-  | ':'                                         {% srcSpanA $1 (\s -> Bound s ne ne) }
+  | SQRT '(' expr ')'				{% srcSpanFromL $1 (\s -> Sqrt s $3) }
+  | ':'                                         {% srcSpanFromL $1 (\s -> Bound s ne ne) }
 -- causes problems
 --  |  function_reference                          { $1 }
 
@@ -960,7 +940,7 @@ fields
   
 array_constructor :: { Expr A0 }
 array_constructor
-  : '(/' expr_list '/)'           {% srcSpanA $1 (\s -> ArrayCon s $2) } 
+  : '(/' expr_list '/)'           {% srcSpanFromL $1 (\s -> ArrayCon s $2) } 
 
 expr_list :: { [Expr A0] }
 expr_list
@@ -987,17 +967,17 @@ literal_constant
 
 logical_literal_constant :: { Expr A0 }
 logical_literal_constant 
-  : '.TRUE.'                          {% srcSpanA $1 (\s -> Con s  ".TRUE.") }
-  | '.FALSE.'                         {% srcSpanA $1 (\s -> Con s ".FALSE.") }
+  : '.TRUE.'                          {% srcSpanFromL $1 (\s -> Con s  ".TRUE.") }
+  | '.FALSE.'                         {% srcSpanFromL $1 (\s -> Con s ".FALSE.") }
 
 
 rel_op :: { BinOp A0 }
-  : '=='                           {% srcSpanA $1 RelEQ }
-  | '/='                           {% srcSpanA $1 RelNE }
-  | '<'                            {% srcSpanA $1 RelLT }
-  | '<='                           {% srcSpanA $1 RelLE }
-  | '>'                            {% srcSpanA $1 RelGT }
-  | '>='                           {% srcSpanA $1 RelGE }
+  : '=='                           {% srcSpanFromL $1 RelEQ }
+  | '/='                           {% srcSpanFromL $1 RelNE }
+  | '<'                            {% srcSpanFromL $1 RelLT }
+  | '<='                           {% srcSpanFromL $1 RelLE }
+  | '>'                            {% srcSpanFromL $1 RelGT }
+  | '>='                           {% srcSpanFromL $1 RelGE }
 
 int_expr :: { Expr A0 }
 int_expr
@@ -1064,7 +1044,7 @@ execution_part
 
 executable_construct_list :: { Fortran A0 }
 executable_construct_list
-: executable_construct_list executable_construct_list  {% srcSpanA $1 (\s -> FSeq s $1 $2) }
+: executable_construct_list executable_construct_list  {% srcSpanFromL $1 (\s -> FSeq s $1 $2) }
 | executable_construct  newline                        { $1 }
 
 executable_construct :: { Fortran A0 }
@@ -1080,7 +1060,7 @@ executable_construct
 
 equivalence_stmt :: { Fortran A0 }
 equivalence_stmt 
-  : EQUIVALENCE '(' vlist ')'                     {% srcSpanA $1 (\s -> Equivalence s $3) }
+  : EQUIVALENCE '(' vlist ')'                     {% srcSpanFromL $1 (\s -> Equivalence s $3) }
 
 action_stmt :: { Fortran A0 }
 action_stmt
@@ -1116,13 +1096,13 @@ action_stmt
 
 call_stmt :: { Fortran A0 }
 call_stmt
-  : CALL call_name '(' actual_arg_spec_list ')'   {% do { s1 <- srcSpanF $1;
-                                                          s2 <- srcSpanF $4;
+  : CALL call_name '(' actual_arg_spec_list ')'   {% do { s1 <- srcSpanFrom $1;
+                                                          s2 <- srcSpanFrom $4;
                                                           return $ Call s1 $2 (ArgList s2 $4); } }
-  | CALL call_name '(' ')'                        {% do { s1 <- srcSpanF $1;
-                                                          s2 <- srcSpanF $4;
+  | CALL call_name '(' ')'                        {% do { s1 <- srcSpanFrom $1;
+                                                          s2 <- srcSpanFrom $4;
                                                           return $ Call s1 $2 (ArgList s2 ne); } }
-  | CALL call_name                                {% do { s1 <- srcSpanF $1;
+  | CALL call_name                                {% do { s1 <- srcSpanFrom $1;
                                                           s2 <- srcSpanNull;
                                                           return $ Call s1 $2 (ArgList s2 ne); } }
 
@@ -1132,7 +1112,7 @@ call_name
 
 actual_arg_spec_list :: { Expr A0 }
 actual_arg_spec_list
-  : actual_arg_spec_list ',' actual_arg_spec      {% srcSpanA $1 (\s -> ESeq s $1 $3) }
+  : actual_arg_spec_list ',' actual_arg_spec      {% srcSpanFromL $1 (\s -> ESeq s $1 $3) }
   | actual_arg_spec                               { $1 }
 
 actual_arg_spec :: { Expr A0 }
@@ -1172,13 +1152,13 @@ else_if_then_stmt
 
 if_construct :: { Fortran A0 }
 if_construct
- : if_then_stmt block end_if_stmt                  {% srcSpanA $1 (\s -> If s $1 $2 [] Nothing) }
+ : if_then_stmt block end_if_stmt                  {% srcSpanFromL $1 (\s -> If s $1 $2 [] Nothing) }
 
---| if_then_stmt block ELSE block end_if_stmt      {% srcSpanA $1 (\s -> If s $1 $2 [] (Just $4)) }
+--| if_then_stmt block ELSE block end_if_stmt      {% srcSpanFromL $1 (\s -> If s $1 $2 [] (Just $4)) }
 
-| if_then_stmt block else_if_list end_if_stmt      {% srcSpanA $1 (\s -> If s $1 $2 $3 Nothing) }
+| if_then_stmt block else_if_list end_if_stmt      {% srcSpanFromL $1 (\s -> If s $1 $2 $3 Nothing) }
 | if_then_stmt block else_if_list ELSE newline block end_if_stmt    
-                                                   {% srcSpanA $1 (\s -> If s $1 $2 $3 (Just $6)) }
+                                                   {% srcSpanFromL $1 (\s -> If s $1 $2 $3 (Just $6)) }
 
 
 --: if_then_stmt block if_rest				  { (If $1 $2 (fst $3) (snd $3)) }
@@ -1203,11 +1183,11 @@ logical_expr
 
 allocate_stmt :: { Fortran A0 }
 allocate_stmt
-  : ALLOCATE '(' allocation_list ',' STAT '=' variable ')'    {% srcSpanA $1 (\s -> Allocate s $3 $7) }
-      | ALLOCATE '(' allocation_list ')'                      {% srcSpanA $1 (\s -> Allocate s $3 ne) }
+  : ALLOCATE '(' allocation_list ',' STAT '=' variable ')'    {% srcSpanFromL $1 (\s -> Allocate s $3 $7) }
+      | ALLOCATE '(' allocation_list ')'                      {% srcSpanFromL $1 (\s -> Allocate s $3 ne) }
 allocation_list :: { Expr A0 }
 allocation_list
-  : allocation_list ',' allocation                    {% srcSpanA $1 (\s -> ESeq s $1 $3) }
+  : allocation_list ',' allocation                    {% srcSpanFromL $1 (\s -> ESeq s $1 $3) }
   | allocation                                        { $1 }
   | {- empty -}                                       {% srcSpanNull >>= (return . NullExpr) }
 
@@ -1217,7 +1197,7 @@ allocate_object_list
   | allocate_object                               { [$1] }
 allocate_object :: { Expr A0 }
 allocate_object
-  : scalar_variable_name_list                           {% srcSpanA (fst . head $ $1) (\s -> Var s $1) }
+  : scalar_variable_name_list                           {% srcSpanFromL (fst . head $ $1) (\s -> Var s $1) }
 
 allocate_shape_spec_list :: { [Expr A0] }
 allocate_shape_spec_list
@@ -1233,7 +1213,7 @@ allocation
 
 allocation_var_list2 :: { Expr A0 }
 allocation_var_list2
-  : allocation_var_list                          {% srcSpanA (fst . head $ $1) (\s -> Var s $1) }
+  : allocation_var_list                          {% srcSpanFromL (fst . head $ $1) (\s -> Var s $1) }
 
 allocation_var_list :: { [(VarName A0,[Expr A0])] }
 allocation_var_list
@@ -1247,15 +1227,15 @@ allocation_var
 
 backspace_stmt :: { Fortran A0 }
 backspace_stmt
-  : BACKSPACE expr                                {% srcSpanA $1 (\s -> Backspace s [NoSpec s $2]) }
-  | BACKSPACE '(' position_spec_list ')'          {% srcSpanA $1 (\s -> Backspace s $3) }
+  : BACKSPACE expr                                {% srcSpanFromL $1 (\s -> Backspace s [NoSpec s $2]) }
+  | BACKSPACE '(' position_spec_list ')'          {% srcSpanFromL $1 (\s -> Backspace s $3) }
 position_spec_list :: { [Spec A0] }
 position_spec_list
   : position_spec_list ',' position_spec          { $1++[$3] }
   | position_spec                                 { [$1] }
 position_spec :: { Spec A0 }
 position_spec
-  : expr                                          {% srcSpanA $1 (\s -> NoSpec s $1) }
+  : expr                                          {% srcSpanFromL $1 (\s -> NoSpec s $1) }
   | ID '=' expr                                   {% (srcSpan l) >>= (\s -> 
                                                       case (map (toLower) $1) of
                                                         "unit"   -> return (Unit   s $3)
@@ -1263,14 +1243,14 @@ position_spec
                                                         s        ->  parseError ("incorrect name in spec list: " ++ s)) }
 close_stmt :: { Fortran A0 }
 close_stmt
-  : CLOSE '(' close_spec_list ')'                 {% srcSpanA $1 (\s -> Close s $3) }
+  : CLOSE '(' close_spec_list ')'                 {% srcSpanFromL $1 (\s -> Close s $3) }
 close_spec_list :: { [Spec A0] }
 close_spec_list
   : close_spec_list ',' close_spec                { $1++[$3] }
   | close_spec                                    { [$1] }
 close_spec :: { Spec A0 }
 close_spec
-  : expr                                          {% srcSpanA $1 (\s -> NoSpec s $1) }
+  : expr                                          {% srcSpanFromL $1 (\s -> NoSpec s $1) }
   | ID '=' expr                                   {% (srcSpan l) >>= (\s ->
                                                       case (map (toLower) $1) of
                                                         "unit"   -> return (Unit   s $3)
@@ -1283,36 +1263,36 @@ close_spec
 
 continue_stmt :: { Fortran A0 }
 continue_stmt
-  : CONTINUE                                      {% srcSpanA $1 Continue }
+  : CONTINUE                                      {% srcSpanFromL $1 Continue }
 
 cycle_stmt :: { Fortran A0 }
 cycle_stmt
-  : CYCLE id2                                      {% srcSpanA $1 (\s -> Cycle s $2) }
-  | CYCLE                                          {% srcSpanA $1 (\s -> Cycle s "") }
+  : CYCLE id2                                      {% srcSpanFromL $1 (\s -> Cycle s $2) }
+  | CYCLE                                          {% srcSpanFromL $1 (\s -> Cycle s "") }
 
 deallocate_stmt :: { Fortran A0 }
 deallocate_stmt
 : DEALLOCATE '(' allocate_object_list ',' STAT '=' variable ')' 
-                                                   {% srcSpanA $1 (\s -> Deallocate s $3 $7) }
-| DEALLOCATE '(' allocate_object_list ')'          {% srcSpanA $1 (\s -> Deallocate s $3 (ne)) }
+                                                   {% srcSpanFromL $1 (\s -> Deallocate s $3 $7) }
+| DEALLOCATE '(' allocate_object_list ')'          {% srcSpanFromL $1 (\s -> Deallocate s $3 (ne)) }
 
 endfile_stmt :: { Fortran A0 }
 endfile_stmt
-  : ENDFILE expr                                  {% do { s1 <- srcSpanF $1;
-                                                          s2 <- srcSpanF $2;
+  : ENDFILE expr                                  {% do { s1 <- srcSpanFrom $1;
+                                                          s2 <- srcSpanFrom $2;
                                                           return $ Endfile s1 [NoSpec s2 $2]; } }
-  | ENDFILE '(' position_spec_list ')'            {% srcSpanA $1 (\s -> Endfile s $3) }
+  | ENDFILE '(' position_spec_list ')'            {% srcSpanFromL $1 (\s -> Endfile s $3) }
 
 exit_stmt :: { Fortran A0 }
 exit_stmt
-  : EXIT id2                                      {% srcSpanA $1 (\s -> Exit s $2) }
-  | EXIT                                          {% srcSpanA $1 (\s -> Exit s "") }
+  : EXIT id2                                      {% srcSpanFromL $1 (\s -> Exit s $2) }
+  | EXIT                                          {% srcSpanFromL $1 (\s -> Exit s "") }
 
 forall_stmt :: { Fortran A0 }
 forall_stmt 
-  : FORALL forall_header forall_assignment_stmt      {% srcSpanA $1 (\s -> Forall s $2 $3) }
+  : FORALL forall_header forall_assignment_stmt      {% srcSpanFromL $1 (\s -> Forall s $2 $3) }
   | FORALL forall_header newline forall_assignment_stmt_list
-                                forall_stmt_end      {% srcSpanA $1 (\s -> Forall s $2 $4) }
+                                forall_stmt_end      {% srcSpanFromL $1 (\s -> Forall s $2 $4) }
 
 forall_stmt_end :: {}
 forall_stmt_end 
@@ -1343,23 +1323,23 @@ forall_assignment_stmt_l
 
 forall_assignment_stmt_list :: { Fortran A0 }
 forall_assignment_stmt_list 
-  : forall_assignment_stmt_l forall_assignment_stmt_list {% srcSpanA $1 (\s -> FSeq s $1 $2) }
+  : forall_assignment_stmt_l forall_assignment_stmt_list {% srcSpanFromL $1 (\s -> FSeq s $1 $2) }
   | forall_assignment_stmt_l                             { $1 }
 
 
 goto_stmt :: { Fortran A0 }
 goto_stmt
-  : GOTO NUM                                      {% srcSpanA $1 (\s -> Goto s $2) }
+  : GOTO NUM                                      {% srcSpanFromL $1 (\s -> Goto s $2) }
 
 if_stmt :: { Fortran A0 }
 if_stmt
-  : IF '(' logical_expr ')' action_stmt           {% srcSpanA $1 (\s -> If s $3 $5 [] Nothing) }
+  : IF '(' logical_expr ')' action_stmt           {% srcSpanFromL $1 (\s -> If s $3 $5 [] Nothing) }
 
 inquire_stmt :: { Fortran A0 }
 inquire_stmt
-  : INQUIRE '(' inquire_spec_list ')'                       {% srcSpanA $1 (\s -> Inquire s $3 []) } 
-  | INQUIRE '(' IOLENGTH '=' variable ')' output_item_list  {% do { s1 <- srcSpanF $1;
-                                                                    s2 <- srcSpanF $5;
+  : INQUIRE '(' inquire_spec_list ')'                       {% srcSpanFromL $1 (\s -> Inquire s $3 []) } 
+  | INQUIRE '(' IOLENGTH '=' variable ')' output_item_list  {% do { s1 <- srcSpanFrom $1;
+                                                                    s2 <- srcSpanFrom $5;
                                                                     return $ Inquire s1 [IOLength s2 $5] $7; } }
 inquire_spec_list :: { [Spec A0] }
 inquire_spec_list
@@ -1368,9 +1348,9 @@ inquire_spec_list
 
 inquire_spec :: { Spec A0 }
 inquire_spec
-  : expr                             {% srcSpanA $1 (\s -> NoSpec s $1) }
-  | READ '=' variable                {% srcSpanA $1 (\s -> Read s $3) }
-  | WRITE '=' variable               {% srcSpanA $1 (\s -> WriteSp s $3) }
+  : expr                             {% srcSpanFromL $1 (\s -> NoSpec s $1) }
+  | READ '=' variable                {% srcSpanFromL $1 (\s -> Read s $3) }
+  | WRITE '=' variable               {% srcSpanFromL $1 (\s -> WriteSp s $3) }
   | ID '=' expr                      {% (srcSpan l) >>= (\s -> 
                                           case (map (toLower) $1) of
                                             "unit"        -> return (Unit s	  $3)
@@ -1415,7 +1395,7 @@ inquire_spec
 
 nullify_stmt :: { Fortran A0 }
 nullify_stmt
-  : NULLIFY '(' pointer_object_list ')'           {% srcSpanA $1 (\s -> Nullify s $3) }
+  : NULLIFY '(' pointer_object_list ')'           {% srcSpanFromL $1 (\s -> Nullify s $3) }
 
 pointer_object_list :: { [Expr A0] }
 pointer_object_list
@@ -1433,7 +1413,7 @@ structure_component
 
 open_stmt :: { Fortran A0 }
 open_stmt
-  : OPEN '(' connect_spec_list ')'                {% srcSpanA $1 (\s -> Open s $3) }
+  : OPEN '(' connect_spec_list ')'                {% srcSpanFromL $1 (\s -> Open s $3) }
 
 connect_spec_list :: { [Spec A0] }
 connect_spec_list
@@ -1442,7 +1422,7 @@ connect_spec_list
 
 connect_spec :: { Spec A0 }
 connect_spec
-  : expr                           {% srcSpanA $1 (\s -> NoSpec s $1) }
+  : expr                           {% srcSpanFromL $1 (\s -> NoSpec s $1) }
   | ID '=' expr                    {% (srcSpan l) >>= (\s ->
                                         case (map (toLower) $1) of
                                           "unit"     -> return (Unit s $3)  
@@ -1472,7 +1452,7 @@ scalar_int_expr
 
 pointer_assignment_stmt :: { Fortran A0 }
 pointer_assignment_stmt
-  : pointer_object '=>' target                    {% srcSpanA $1 (\s -> PointerAssg s $1 $3) }
+  : pointer_object '=>' target                    {% srcSpanFromL $1 (\s -> PointerAssg s $1 $3) }
 
 target :: { Expr A0 }
 target
@@ -1482,15 +1462,15 @@ target
 
 print_stmt :: { Fortran A0 }
 print_stmt
-  : PRINT format ',' output_item_list           {% srcSpanA $1 (\s -> Print s $2 $4) }
-  | PRINT format                                {% srcSpanA $1 (\s -> Print s $2 []) }
+  : PRINT format ',' output_item_list           {% srcSpanFromL $1 (\s -> Print s $2 $4) }
+  | PRINT format                                {% srcSpanFromL $1 (\s -> Print s $2 []) }
 
 -- also replaces io_unit
 format :: { Expr A0 }
 format
   : expr                                          { $1 }
 --  | literal_constant                              { (Con $1) } -- label
-  | '*'                                           {% srcSpanA $1 (\s -> Var s [(VarName s "*",[])]) }
+  | '*'                                           {% srcSpanFromL $1 (\s -> Var s [(VarName s "*",[])]) }
 
 output_item_list :: { [Expr A0] }
 output_item_list
@@ -1505,8 +1485,8 @@ output_item
 
 read_stmt :: { Fortran A0 }
 read_stmt
-  : READ '(' io_control_spec_list ')' input_item_list {% srcSpanA $1 (\s -> ReadS s $3 $5) }
-  | READ '(' io_control_spec_list ')'                 {% srcSpanA $1 (\s -> ReadS s $3 []) }
+  : READ '(' io_control_spec_list ')' input_item_list {% srcSpanFromL $1 (\s -> ReadS s $3 $5) }
+  | READ '(' io_control_spec_list ')'                 {% srcSpanFromL $1 (\s -> ReadS s $3 []) }
 --  | READ format ',' output_item_list                  { (ReadS [NoSpec $2] $4) }
 --  | READ format                                       { (ReadS [NoSpec $2] []) }
 
@@ -1517,8 +1497,8 @@ io_control_spec_list
 -- (unit, fmt = format), (rec, advance = expr), (nml, iostat, id = var), (err, end, eor = label)
 io_control_spec :: { Spec A0 } 
 io_control_spec
-  : format                                        {% srcSpanA $1 (\s -> NoSpec s $1) }
-  | END '=' label                                 {% srcSpanA $1 (\s -> End s $3) }
+  : format                                        {% srcSpanFromL $1 (\s -> NoSpec s $1) }
+  | END '=' label                                 {% srcSpanFromL $1 (\s -> End s $3) }
   | ID '=' format                                 {% (srcSpan l) >>= (\s ->
                                                      case (map (toLower) $1) of
                                                      "unit"    -> return (Unit s $3)
@@ -1563,8 +1543,8 @@ namelist_group_name
 
 return_stmt :: { Fortran A0 }
 return_stmt
-  : RETURN                                        {% srcSpanA $1 (\s -> Return s ne) }
-  | RETURN int_expr                               {% srcSpanA $1 (\s -> Return s $2) }
+  : RETURN                                        {% srcSpanFromL $1 (\s -> Return s ne) }
+  | RETURN int_expr                               {% srcSpanFromL $1 (\s -> Return s $2) }
 
 scalar_default_int_variable :: { Expr A0 }
 scalar_default_int_variable
@@ -1576,17 +1556,17 @@ scalar_default_char_expr
 
 rewind_stmt :: { Fortran A0 }
 rewind_stmt
-  : REWIND expr                                  {% do { s1 <- srcSpanF $1;
+  : REWIND expr                                  {% do { s1 <- srcSpanFrom $1;
                                                          s2 <- srcSpanNull;
                                                          return $ Rewind s1 [NoSpec s2 $2]; } }
-  | REWIND '(' position_spec_list ')'            {% srcSpanA $1 (\s ->Rewind s $3) }
+  | REWIND '(' position_spec_list ')'            {% srcSpanFromL $1 (\s ->Rewind s $3) }
 
 
 
 stop_stmt :: { Fortran A0 }
 stop_stmt
-  : STOP stop_code                               {% srcSpanA $1 (\s -> Stop s $2) }
-  | STOP                                         {% srcSpanA $1 (\s -> Stop s (ne)) }
+  : STOP stop_code                               {% srcSpanFromL $1 (\s -> Stop s $2) }
+  | STOP                                         {% srcSpanFromL $1 (\s -> Stop s (ne)) }
 
 stop_code :: { Expr A0 }
 stop_code
@@ -1596,7 +1576,7 @@ stop_code
 
 where_stmt :: { Fortran A0 }
 where_stmt
-  : WHERE '(' mask_expr ')' where_assignment_stmt {% srcSpanA $1 (\s -> Where s $3 $5) }
+  : WHERE '(' mask_expr ')' where_assignment_stmt {% srcSpanFromL $1 (\s -> Where s $3 $5) }
 
 where_assignment_stmt :: { Fortran A0 }
 where_assignment_stmt
@@ -1609,8 +1589,8 @@ mask_expr
 
 write_stmt :: { Fortran A0 }
 write_stmt
-  : WRITE '(' io_control_spec_list ')' output_item_list  {% srcSpanA $1 (\s -> Write s $3 $5) }
-  | WRITE '(' io_control_spec_list ')'                   {% srcSpanA $1 (\s -> Write s $3 []) }
+  : WRITE '(' io_control_spec_list ')' output_item_list  {% srcSpanFromL $1 (\s -> Write s $3 $5) }
+  | WRITE '(' io_control_spec_list ')'                   {% srcSpanFromL $1 (\s -> Write s $3 []) }
 
 
 {

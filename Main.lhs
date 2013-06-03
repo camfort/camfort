@@ -76,7 +76,7 @@
 
 map (fmap ((,[""]),[""]))
 
-> analyse :: [Program ()] -> [Program Annotation]
+> analyse :: [Program A0] -> [Program Annotation]
 > analyse p = map ((descendBi arrayIndices) . ix . lva . numberStmts . (fmap (const unitAnnotation))) p
 
 
@@ -111,7 +111,7 @@ map (fmap ((,[""]),[""]))
 >      in extendBi ixF
 
 
-> pr  :: String -> IO [Program ()]
+> pr  :: String -> IO [Program A0]
 > pr f = let mode = ParseMode { parseFilename = f }
 >        in do inp <- readFile f
 >              case (runParserWithMode mode parser inp) of
