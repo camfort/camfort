@@ -6,6 +6,7 @@
 > {-# LANGUAGE MultiParamTypeClasses #-}
 
 > {-# LANGUAGE OverlappingInstances #-}
+> {-# LANGUAGE KindSignatures #-}
 
 > {-# LANGUAGE ScopedTypeVariables #-}
 
@@ -21,6 +22,9 @@
 > import Data.Generics.Annotate
 > import Data.Generics
 > import Data.Generics.Uniplate.Data
+
+> import Language.Haskell.Syntax (SrcLoc(..), srcLine, srcColumn)
+> import Data.Generics.Zipper
 
 > purple = "#800080"
 > green = "#008000"
@@ -180,3 +184,57 @@ Output routines specialised to the analysis.
 >            showExps [(v, es)]    = "[" ++ v ++ ": " ++ (showList $ map listToPair es) ++ "]"
 >            showExps ((v, es):ys) = (showExps [(v, es)]) ++ ", " ++ (showExps ys)
 
+
+> type A1 =  ((SrcLoc, SrcLoc), Bool)
+
+> lineCol :: SrcLoc -> (Int, Int)
+> lineCol x = (srcLine x, srcColumn x)
+
+> inBounds :: SrcLoc -> (SrcLoc, SrcLoc) -> Bool
+> inBounds x (l,u) = (lineCol x) >= (lineCol l) && (lineCol x) < (lineCol u)
+
+> takeBounds (l, u) inp = takeBounds' (lineCol l, lineCol u) [] inp
+
+> takeBounds' ((ll, lc), (ul, uc)) tk inp =
+>     if (ll == ul && lc == uc) then (Prelude.reverse tk, inp)
+>     else case inp of []             -> (Prelude.reverse tk, inp)
+>                      ([]:ys)        -> takeBounds' ((ll+1, 0), (ul, uc)) ('\n':tk) ys
+>                      ((x:xs):ys)    -> takeBounds' ((ll, lc+1), (ul, uc)) (x:tk) (xs:ys)
+
+> getHole' :: (Typeable (d A1), Typeable1 e, Typeable1 d, Fort d, Fort e) => Zipper (d A1) -> Maybe (e A1)
+> getHole' = getHole
+
+> class Copointed t => Fort (t :: * -> *) where
+> instance (Copointed Fortran, Fort Expr, Fort VarName, Fort Spec, Fort ArgList) => Fort Fortran
+> instance (Copointed Expr, Fort VarName, Fort UnaryOp, Fort ArgList) => Fort Expr
+> instance (Copointed BinOp) => Fort BinOp
+
+
+> reprint :: (Typeable1 d, Fort d) => String -> String -> Zipper (d A1) -> String
+> reprint input fname z = let ?variant = Alt2
+>                         in reprintP (SrcLoc "" 1 1) (Prelude.lines input) z 
+
+> reprintP :: forall v d e .(?variant :: v, Typeable1 d, Copointed e, Typeable1 e) => SrcLoc -> [String] -> Zipper (d A1) -> String
+> reprintP cursor inp z = case (getHole z)::((Copointed e, Typeable (e A1)) => Maybe (e A1)) of
+>                           Just e -> let ((lb, ub), flag) = copoint e
+>                                     in  if inBounds cursor (lb, ub) then 
+>                                           if flag then outputF e
+>                                           else  case down' z of
+>                                                   Just cz -> reprintR cursor ub inp cz 
+>                                                   Nothing -> ""
+>                                         else maybe "" (reprintP cursor inp) (up z)
+>                           Nothing -> ""
+
+> reprintR :: forall v d e . (?variant :: v, Typeable1 d, Copointed e, Typeable1 e) => SrcLoc -> SrcLoc -> [String] -> Zipper (d A1) -> String
+> reprintR cursor parentUb inp z = case (getHole z)::((Copointed e, Typeable (e A1)) => Maybe (e A1)) of
+>                                    Just e -> 
+>                                        let ((lb, ub), _) = copoint e
+>                                            (p1, rest1)   = takeBounds (cursor, lb) inp
+>                                            p2            = reprintP lb rest1 z
+>                                            inp'          = snd $ takeBounds (lb, ub) rest1
+>                                        in p1 ++ p2 ++ case right z of
+>                                                                    Just rz -> reprintR ub parentUb inp' rz 
+>                                                                    Nothing -> fst $ takeBounds (ub, parentUb) inp'
+>                                    Nothing -> case right z of 
+>                                                  Just rz -> reprintR cursor parentUb inp rz
+>                                                  Nothing -> fst $ takeBounds (cursor, parentUb) inp
