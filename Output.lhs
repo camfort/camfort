@@ -15,6 +15,7 @@
 > import Annotations
 > import Traverse
 > import Language.Fortran as Fortran
+> import Language.Fortran.Pretty
 
 > import Data.Text hiding (foldl,map, concatMap)
 > import qualified Data.Text as Text 
