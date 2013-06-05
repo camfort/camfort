@@ -29,7 +29,6 @@ import Data.Generics -- Typeable class and boilerplate generic functions
 import Data.Maybe
 import Data.List
 
-import Data.Generics.Annotate
 import Generics.Deriving.Base
 import GHC.Generics
 
@@ -94,197 +93,204 @@ instance (OutputIndF t Alt1) => OutputIndG t Alt1 where
 
 type Variable = String
 
-[annotate|
+type ProgName = String               -- Fortran program names
 
-type ProgName  = String           -- Fortran program names
-
-data  SubName  = SubName String   -- Fortran subroutine names
-               | NullSubName
+data SubName p  = SubName p String   -- Fortran subroutine names
+                 | NullSubName p
                  deriving (Show, Functor, Typeable, Data, Eq, Generic1)
  
-data VarName   = VarName String 
-                 deriving (Show, Functor, Typeable, Data, Eq, Read, Generic1)
+data VarName  p = VarName p String 
+                  deriving (Show, Functor, Typeable, Data, Eq, Read, Generic1)
 
-data ArgName   = ArgName String
-               | ASeq ArgName ArgName
-               | NullArg
+data ArgName  p = ArgName p String
+                | ASeq p (ArgName p) (ArgName p)
+                | NullArg p
                  deriving (Show, Functor, Typeable, Data, Eq, Generic1)
 
 -- Syntax defintions
 --
 
-data Arg      = Arg ArgName
-                deriving (Show, Functor,Typeable,Data, Eq, Generic1)
+data Arg      p = Arg p (ArgName p)
+                  deriving (Show, Functor, Typeable, Data, Eq, Generic1)
 
-data ArgList  = ArgList Expr
-                deriving (Show, Functor,Typeable,Data, Eq)
+data ArgList  p = ArgList p (Expr p)
+                  deriving (Show, Functor, Typeable, Data, Eq)
 
              -- Prog type   (type of result)   name      args  body    use's  
-data Program  = Main                           SubName  Arg  Block [Program]
-              | Sub        (Maybe BaseType)    SubName  Arg  Block
-              | Function   (Maybe BaseType)    SubName  Arg  Block
-              | Module                         SubName              [String] Implicit Decl [Program]
-              | BlockData                      SubName              [String] Implicit Decl
-             -- 
-              | PSeq Program Program   -- sequence of programs
-              | Prog Program            -- useful for {#p: #q : program ... }
-              | NullProg                 -- null
-                deriving (Show, Functor,Typeable,Data, Eq)
+data Program  p = Main       p                      (SubName p)  (Arg p)  (Block p) [Program p]
+                | Sub        p (Maybe (BaseType p)) (SubName p)  (Arg p)  (Block p)
+                | Function   p (Maybe (BaseType p)) (SubName p)  (Arg p)  (Block p)
+                | Module     p                      (SubName p)  [String] (Implicit p) (Decl p) [Program p]
+                | BlockData  p                      (SubName p)  [String] (Implicit p) (Decl p)
+                | PSeq       p (Program p) (Program p)   -- sequence of programs
+                | Prog       p (Program p)               -- useful for {#p: #q : program ... }
+                | NullProg   p                           -- null
+                deriving (Show, Functor, Typeable, Data, Eq)
 
              -- implicit none or no implicit 
-data Implicit = ImplicitNone | ImplicitNull
-                deriving (Show, Functor,Typeable,Data, Eq, Generic1)
+data Implicit p = ImplicitNone p | ImplicitNull p
+                deriving (Show, Functor, Typeable, Data, Eq, Generic1)
 				
              --       use's     implicit  decls  stmts
-data Block    = Block [String]  Implicit  Decl  Fortran
-                deriving (Show, Functor,Typeable,Data, Eq)
+data Block    p = Block p [String]  (Implicit p)  (Decl p) (Fortran p)
+                deriving (Show, Functor, Typeable, Data, Eq)
 
-data Decl     = Decl [(Expr,Expr)] Type                     -- declaration stmt
-              | Namelist [(Expr,[Expr])]                     -- namelist declaration
-              | Data [(Expr,Expr)]                           -- data declaration
-              | AccessStmt Attr [GSpec]                        -- access stmt
-              | ExternalStmt [String]                          -- external stmt
-              | Interface (Maybe GSpec) [InterfaceSpec]        -- interface declaration
-              | Common (Maybe String) [Expr]
-              | DerivedTypeDef SubName [Attr] [Attr] [Decl]  -- derivified
-              | Include Expr                                  -- include stmt
-              | DSeq Decl Decl                               -- list of decls
-              | TextDecl String                                -- cpp switches to carry over
-              | NullDecl                                       -- null
-                deriving (Show, Functor,Typeable,Data, Eq)
+data Decl     p = Decl           p [(Expr p, Expr p)] (Type p)              -- declaration stmt
+                | Namelist       p [(Expr p, [Expr p])]                     -- namelist declaration
+                | Data           p [(Expr p, Expr p)]                       -- data declaration
+                | AccessStmt     p (Attr p) [GSpec p]                       -- access stmt
+                | ExternalStmt   p [String]                                 -- external stmt
+                | Interface      p (Maybe (GSpec p)) [InterfaceSpec p]      -- interface declaration
+                | Common         p (Maybe String) [Expr p]
+                | DerivedTypeDef p (SubName p) [Attr p] [Attr p] [Decl p]  -- derivified
+                | Include        p (Expr p)                                -- include stmt
+                | DSeq           p (Decl p) (Decl p)                       -- list of decls
+                | TextDecl       p String                                  -- cpp switches to carry over
+                | NullDecl       p                                         -- null
+                  deriving (Show, Functor, Typeable, Data, Eq)
 
              -- BaseType  dimensions     type        Attributes   kind   len 
-data Type     = BaseType                 BaseType   [Attr]       Expr  Expr 
-              | ArrayT   [(Expr,Expr)] BaseType   [Attr]       Expr  Expr
-                deriving (Show, Functor,Typeable,Data, Eq)
+data Type     p = BaseType p                    (BaseType p) [Attr p] (Expr p) (Expr p)
+                | ArrayT   p [(Expr p, Expr p)] (BaseType p) [Attr p] (Expr p) (Expr p)
+                  deriving (Show, Functor, Typeable, Data, Eq)
 
-data BaseType = Integer | Real | Character | SomeType | DerivedType SubName
-              | Recursive | Pure | Elemental | Logical | Complex
-                deriving (Show, Functor,Typeable,Data, Eq, Generic1)
+data BaseType p = Integer p | Real p | Character p | SomeType p | DerivedType p (SubName p)
+                | Recursive p | Pure p | Elemental p | Logical p | Complex p
+                  deriving (Show, Functor, Typeable, Data, Eq, Generic1)
 
-data Attr     = Parameter
-              | Allocatable
-              | External
-              | Intent IntentAttr
-              | Intrinsic
-              | Optional
-              | Pointer
-              | Save
-              | Target
-              | Volatile
-              | Public
-              | Private
-              | Sequence
+data Attr     p = Parameter p
+                | Allocatable p
+                | External p
+                | Intent p (IntentAttr p) 
+                | Intrinsic p
+                | Optional p
+                | Pointer p
+                | Save p
+                | Target p
+                | Volatile p
+                | Public p
+                | Private p
+                | Sequence p
 --              | Dimension [(Expr,Expr)] -- in Type: ArrayT
-              deriving (Show, Functor,Typeable,Data, Eq, Generic1)
+              deriving (Show, Functor, Typeable, Data, Eq, Generic1)
 			  
-data GSpec    = GName Expr | GOper BinOp | GAssg
-              deriving (Show, Functor,Typeable,Data, Eq)
+data GSpec   p = GName p (Expr p) | GOper p (BinOp p) | GAssg p
+                 deriving (Show, Functor, Typeable, Data, Eq)
 			  
-data InterfaceSpec = FunctionInterface SubName Arg [String] Implicit Decl
-                   | SubroutineInterface SubName Arg [String] Implicit Decl
-                   | ModuleProcedure [SubName]
-                   deriving (Show, Functor,Typeable, Data, Eq)
+data InterfaceSpec p = FunctionInterface   p (SubName p) (Arg p) [String] (Implicit p) (Decl p)
+                     | SubroutineInterface p (SubName p) (Arg p) [String] (Implicit p) (Decl p)
+                     | ModuleProcedure     p [(SubName p)]
+                       deriving (Show, Functor, Typeable, Data, Eq)
 				   
-data IntentAttr = In
-                | Out
-                | InOut
-                deriving (Show, Functor,Typeable,Data, Eq, Generic1)
+data IntentAttr p = In p
+                  | Out p
+                  | InOut p
+                    deriving (Show, Functor, Typeable, Data, Eq, Generic1)
 				
-data Fortran  = Assg Expr Expr 
-              | For  VarName Expr Expr Expr Fortran
-              | FSeq  Fortran Fortran
-              | If Expr Fortran [(Expr,Fortran)] (Maybe Fortran)
-              | Allocate Expr Expr
-              | Backspace [Spec]
-              | Call Expr ArgList
-              | Equivalence [Expr]
-              | Open [Spec]
-              | Close [Spec]
-              | Continue
-              | Cycle String
-              | Deallocate [Expr] Expr
-              | Endfile [Spec]
-              | Exit String
-              | Forall ([(String,Expr,Expr,Expr)],Expr) Fortran
-              | Goto String
-              | Nullify [Expr]
-              | Inquire [Spec] [Expr]
-              | Rewind [Spec]
-              | Stop Expr
-              | Where Expr Fortran
-              | Write [Spec] [Expr]
-              | PointerAssg Expr Expr
-              | Return Expr
-              | Label String Fortran
-              | Print Expr [Expr]
-              | ReadS [Spec] [Expr]
-              | TextStmt String     -- cpp switches to carry over
-              | NullStmt
-                deriving (Show, Functor,Typeable,Data, Eq)
+data Fortran  p = Assg p (Expr p) (Expr p) 
+                | For  p (VarName p) (Expr p) (Expr p) (Expr p) (Fortran p)
+                | FSeq p (Fortran p) (Fortran p)
+                | If   p (Expr p) (Fortran p) [((Expr p),(Fortran p))] (Maybe (Fortran p))
+                | Allocate p (Expr p) (Expr p)
+                | Backspace p [Spec p]
+                | Call p (Expr p) (ArgList p)
+                | Equivalence p [(Expr p)]
+                | Open p [Spec p]
+                | Close p [Spec p]
+                | Continue p
+                | Cycle p String
+                | Deallocate p [(Expr p)] (Expr p)
+                | Endfile p [Spec p]
+                | Exit p String
+                | Forall p ([(String,(Expr p),(Expr p),(Expr p))],(Expr p)) (Fortran p)
+                | Goto p String
+                | Nullify p [(Expr p)]
+                | Inquire p [Spec p] [(Expr p)]
+                | Rewind p [Spec p]
+                | Stop p (Expr p)
+                | Where p (Expr p) (Fortran p)
+                | Write p [Spec p] [(Expr p)]
+                | PointerAssg p (Expr p) (Expr p)
+                | Return p (Expr p)
+                | Label p String (Fortran p)
+                | Print p (Expr p) [(Expr p)]
+                | ReadS p [Spec p] [(Expr p)]
+                | TextStmt p String     -- cpp switches to carry over
+                | NullStmt p
+                  deriving (Show, Functor, Typeable, Data, Eq)
 
--- type Bound    = (Expr,Expr)
+-- type Bound    = ((Expr p),(Expr p))
 
-data Expr     = Con String
-              | ConS String  -- String constant
-              | Var [(VarName,[Expr])]
-              | Bin BinOp Expr Expr
-              | Unary UnaryOp Expr
-              | CallExpr Expr ArgList
-              | NullExpr
-              | Null
-              | ESeq Expr Expr
-              | Bound Expr Expr
-              | Sqrt Expr
-              | ArrayCon [Expr]
-              | AssgExpr String Expr
-                deriving (Show, Functor,Typeable,Data, Eq)
+data Expr  p = Con p String
+             | ConS p String  -- String constant
+             | Var p [((VarName p),[(Expr p)])]
+             | Bin p (BinOp p) (Expr p) (Expr p)
+             | Unary p (UnaryOp p) (Expr p)
+             | CallExpr p (Expr p) (ArgList p)
+             | NullExpr p
+             | Null p
+             | ESeq p (Expr p) (Expr p)
+             | Bound p (Expr p) (Expr p)
+             | Sqrt p (Expr p)
+             | ArrayCon p [(Expr p)]
+             | AssgExpr p String (Expr p)
+               deriving (Show, Functor, Typeable ,Data, Eq)
 
-data BinOp    = Plus   | Minus | Mul | Div
-              | Or     | And  
-              | Concat | Power
-              | RelEQ | RelNE | RelLT | RelLE | RelGT | RelGE
-                deriving (Show, Functor,Typeable,Data,Eq, Generic1)
+data BinOp   p = Plus p
+               | Minus p
+               | Mul p
+               | Div p
+               | Or p
+               | And p
+               | Concat p
+               | Power p
+               | RelEQ p
+               | RelNE p
+               | RelLT p
+               | RelLE p
+               | RelGT p
+               | RelGE p
+                deriving (Show, Functor, Typeable, Data, Eq, Generic1)
 
-data UnaryOp  = UMinus | Not 
+data UnaryOp  p = UMinus p | Not p
                 deriving (Show, Functor,Typeable,Data, Eq, Generic1)
 
-data Spec     = Access Expr
-              | Action Expr
-              | Advance Expr
-              | Blank Expr
-              | Delim Expr
-              | Direct Expr
-              | End Expr
-              | Err Expr
-              | ExFile Expr
-              | Exist Expr
-              | Eor Expr
-              | File Expr  
-              | FMT Expr
-              | Form Expr
-              | Formatted Expr
-              | Unformatted Expr
-              | IOLength Expr
-              | IOStat Expr
-              | Name Expr
-              | Named Expr
-              | NoSpec Expr
-              | Number Expr
-              | NextRec Expr
-              | NML Expr
-              | Opened Expr 
-              | Pad Expr
-              | Position Expr
-              | Read Expr
-              | ReadWrite Expr
-              | Rec Expr 
-              | Recl Expr 
-              | Sequential Expr
-              | Size Expr
-              | Status Expr
-              | Unit Expr
-              | WriteSp Expr
+data Spec     p = Access   p (Expr p)
+              | Action     p (Expr p)
+              | Advance    p (Expr p)
+              | Blank      p (Expr p)
+              | Delim      p (Expr p)
+              | Direct     p (Expr p)
+              | End        p (Expr p)
+              | Err        p (Expr p)
+              | ExFile     p (Expr p)
+              | Exist      p (Expr p)
+              | Eor        p (Expr p)
+              | File       p (Expr p)  
+              | FMT        p (Expr p)
+              | Form       p (Expr p)
+              | Formatted  p (Expr p)
+              | Unformatted  p (Expr p)
+              | IOLength   p (Expr p)
+              | IOStat     p (Expr p)
+              | Name       p (Expr p)
+              | Named      p (Expr p)
+              | NoSpec     p (Expr p)
+              | Number     p (Expr p)
+              | NextRec    p (Expr p)
+              | NML        p (Expr p)
+              | Opened     p (Expr p) 
+              | Pad        p (Expr p)
+              | Position   p (Expr p)
+              | Read       p (Expr p)
+              | ReadWrite  p (Expr p)
+              | Rec        p (Expr p) 
+              | Recl       p (Expr p) 
+              | Sequential p (Expr p)
+              | Size       p (Expr p)
+              | Status     p (Expr p)
+              | Unit       p (Expr p)
+              | WriteSp    p (Expr p)
                 deriving (Show, Functor,Typeable,Data, Eq)
 
 -- Fortran pretty printer 
@@ -298,9 +304,9 @@ data Spec     = Access Expr
 showElseIf i (e,f) = (ind i)++"else if ("++outputG e++") then\n"++(ind (i+1))++outputG f++"\n"
 
 showForall [] = "error"
-showForall ((s,e,e',NullExpr):[]) = s++"="++outputG e++":"++outputG e'
+showForall ((s,e,e',NullExpr _):[]) = s++"="++outputG e++":"++outputG e'
 showForall ((s,e,e',e''):[]) = s++"="++outputG e++":"++outputG e'++"; "++outputG e''
-showForall ((s,e,e',NullExpr):is) = s++"="++outputG e++":"++outputG e'++", "++showForall is
+showForall ((s,e,e',NullExpr _):is) = s++"="++outputG e++":"++outputG e'++", "++showForall is
 showForall ((s,e,e',e''):is) = s++"="++outputG e++":"++outputG e'++"; "++outputG e''++", "++showForall is
 
 showUse :: [String] -> String
@@ -308,88 +314,89 @@ showUse ss = concat ( map (\s -> ((ind 1)++"use "++s++"\n")) ss)
 
 -- Printing declarations
 -- 
-instance (OutputG Arg v, 
-          OutputG BaseType v,
-          OutputG Block v,
-          OutputG Decl v,
-          OutputG Implicit v,
-          OutputG SubName v,
-          OutputG Program v,
-          Alts v) => OutputF Program v where
-  outputF (Sub (Just p) n a b)  = outputG p ++ " subroutine "++(outputG n)++outputG a++"\n"++
+instance (OutputG (Arg p) v, 
+          OutputG (BaseType p) v,
+          OutputG (Block p) v,
+          OutputG (Decl p) v,
+          OutputG (Implicit p) v,
+          OutputG (SubName p) v,
+          OutputG (Program p) v,
+          Alts v) => OutputF (Program p) v where
+  outputF (Sub _ (Just p) n a b)  = outputG p ++ " subroutine "++(outputG n)++outputG a++"\n"++
                              outputG b++
                           "\nend subroutine "++(outputG n)++"\n"
-  outputF (Sub Nothing n a b)  = "subroutine "++(outputG n)++outputG a++"\n"++
+  outputF (Sub _ Nothing n a b)  = "subroutine "++(outputG n)++outputG a++"\n"++
                              outputG b++
                           "\nend subroutine "++(outputG n)++"\n"
-  outputF (Function (Just p) n a b)  = outputG p ++ " function "++(outputG n)++outputG a++"\n"++
+  outputF (Function _ (Just p) n a b)  = outputG p ++ " function "++(outputG n)++outputG a++"\n"++
                              outputG b++
                           "\nend function "++(outputG n)++"\n"
-  outputF (Function Nothing n a b) = "function "++(outputG n)++outputG a++"\n"++
+  outputF (Function _ Nothing n a b) = "function "++(outputG n)++outputG a++"\n"++
                              outputG b++
                           "\nend function "++(outputG n)++"\n"
-  outputF (Main n a b [])     = "program "++(outputG n) ++ 
+  outputF (Main _ n a b [])     = "program "++(outputG n) ++ 
                                 (if not (isEmptyArg a) then (outputG a) else ""++"\n") ++
                                 outputG b ++
                                 "\nend program "++ (outputG n) ++"\n"
-  outputF (Main n a b ps)     = "program "++(outputG n) ++ 
+  outputF (Main _ n a b ps)     = "program "++(outputG n) ++ 
                                 (if not (isEmptyArg a) then (outputG a) else ""++"\n") ++
                                 outputG b ++
                                 "\ncontains\n" ++
                                 (concatMap outputG ps) ++
                                 "\nend program "++(outputG n)++"\n"
 
-  outputF (Module n us i ds []) = "module "++(outputG n)++"\n" ++
+  outputF (Module _ n us i ds []) = "module "++(outputG n)++"\n" ++
                              showUse us ++
                              outputG i ++
                              outputG ds ++
                           "end module " ++ (outputG n)++"\n"
-  outputF (Module n us i ds ps) = "module "++(outputG n)++"\n" ++
+  outputF (Module _ n us i ds ps) = "module "++(outputG n)++"\n" ++
                              showUse us ++
                              outputG i ++
                              outputG ds ++
 			     "\ncontains\n" ++
                              concatMap outputG ps ++
                           "end module " ++ (outputG n)++"\n"
-  outputF (BlockData n us i ds) = "block data " ++ (outputG n) ++ "\n" ++
+  outputF (BlockData _ n us i ds) = "block data " ++ (outputG n) ++ "\n" ++
                              showUse us ++
                              outputG i ++
                              outputG ds ++
                           "end block data " ++ (outputG n)++"\n"
-  outputF (PSeq p p')  = outputG p++outputG p'
-  outputF (Prog p)     = outputG p
-  outputF NullProg     = ""
+  outputF (PSeq _ p p')  = outputG p++outputG p'
+  outputF (Prog _ p)     = outputG p
+  outputF (NullProg _)    = ""
 
-instance (OutputG Fortran v, OutputG Decl v, OutputG Implicit v, Alts v) => OutputF Block v where
-  outputF (Block us i ds f) = showUse us++outputG i++(outputG ds)++outputG f
+instance (OutputG (Fortran p) v, OutputG (Decl p) v, OutputG (Implicit p) v, Alts v) =>
+            OutputF (Block p) v where
+  outputF (Block _ us i ds f) = showUse us++outputG i++(outputG ds)++outputG f
 
-instance (OutputG ArgList v,
-          OutputG Attr v,
-          OutputG BinOp v,
-          OutputG Decl v,
-          OutputG Expr v, 
-          OutputG GSpec v, 
-          OutputG InterfaceSpec v, 
-          OutputG (SubName) v,
-          OutputG UnaryOp v, 
-          OutputG VarName v,
-          OutputG Type v,
-           Alts v) => OutputF Decl v where
-  outputF (Decl vs t)  = ind 1++outputG t++" :: "++asSeq id (map showDV vs)++"\n"
-  outputF (Namelist ns) = ind 1++"namelist "++show_namelist ns++"\n"
-  outputF (Data ds) = ind 1++"data "++(concat (intersperse "\n" (map show_data ds)))  ++"\n"
-  outputF (AccessStmt p []) = ind 1++outputG p ++ "\n"
-  outputF (AccessStmt p gs) = ind 1++outputG p ++ " :: " ++ (concat . intersperse ", " . map outputG) gs++"\n"
-  outputF (ExternalStmt xs)  = ind 1++"external :: " ++ (concat (intersperse "," xs)) ++ "\n"
-  outputF (Interface (Just g) is) = ind 1 ++ "interface " ++ outputG g ++ outputG is ++ ind 1 ++ "end interface" ++ outputG g ++ "\n"
-  outputF (Common name exps) = ind 1++"common " ++ (case name of 
+instance (OutputG (ArgList p) v,
+          OutputG (Attr p) v,
+          OutputG (BinOp p) v,
+          OutputG (Decl p) v,
+          OutputG (Expr p) v, 
+          OutputG (GSpec p) v, 
+          OutputG (InterfaceSpec p) v, 
+          OutputG (SubName p) v,
+          OutputG (UnaryOp p) v, 
+          OutputG (VarName p) v,
+          OutputG (Type p) v,
+           Alts v) => OutputF (Decl p) v where
+  outputF (Decl _ vs t)  = ind 1++outputG t++" :: "++asSeq id (map showDV vs)++"\n"
+  outputF (Namelist _ ns) = ind 1++"namelist "++show_namelist ns++"\n"
+  outputF (Data _ ds) = ind 1++"data "++(concat (intersperse "\n" (map show_data ds)))  ++"\n"
+  outputF (AccessStmt _ p []) = ind 1++outputG p ++ "\n"
+  outputF (AccessStmt _ p gs) = ind 1++outputG p ++ " :: " ++ (concat . intersperse ", " . map outputG) gs++"\n"
+  outputF (ExternalStmt _ xs)  = ind 1++"external :: " ++ (concat (intersperse "," xs)) ++ "\n"
+  outputF (Interface _ (Just g) is) = ind 1 ++ "interface " ++ outputG g ++ outputG is ++ ind 1 ++ "end interface" ++ outputG g ++ "\n"
+  outputF (Common _ name exps) = ind 1++"common " ++ (case name of 
                                                      Just n -> "/" ++ n ++ "/ "
                                                      Nothing -> "") ++ (concat (intersperse "," (map outputF exps))) ++ "\n"
-  outputF (Interface Nothing  is) = ind 1 ++ "interface " ++ outputG is ++ ind 1 ++ "end interface\n"
-  outputF (DerivedTypeDef n as ps ds) = ind 1 ++ "type " ++ showAttrs as ++  " :: " ++ outputG n ++ "\n" ++ ind 2 ++ (concat (intersperse "\n" (map (outputG) ps))) ++ "\n" ++ outputG ds ++ "end type " ++ outputG n ++ "\n"
-  outputF (Include i)  = "include "++outputG i
-  outputF (DSeq d d')  = outputG d++outputG d'
-  outputF NullDecl     = ""
+  outputF (Interface _ Nothing  is) = ind 1 ++ "interface " ++ outputG is ++ ind 1 ++ "end interface\n"
+  outputF (DerivedTypeDef _ n as ps ds) = ind 1 ++ "type " ++ showAttrs as ++  " :: " ++ outputG n ++ "\n" ++ ind 2 ++ (concat (intersperse "\n" (map (outputG) ps))) ++ "\n" ++ outputG ds ++ "end type " ++ outputG n ++ "\n"
+  outputF (Include _ i)  = "include "++outputG i
+  outputF (DSeq _ d d')  = outputG d++outputG d'
+  outputF (NullDecl _)    = ""
   
 show_namelist ((x,xs):[]) = "/" ++ outputG x ++ "/" ++ (concat (intersperse ", " (map outputG xs)))
 show_namelist ((x,xs):ys) = "/" ++ outputG x ++ "/" ++ (concat (intersperse ", " (map outputG xs))) ++ "," ++ show_namelist ys
@@ -397,186 +404,186 @@ show_data     ((xs,ys)) = "/" ++  outputG xs ++ "/" ++ outputG ys
 
 -- showDV :: (Expr,Expr) -> String
 
-showDV (v, NullExpr) = outputF v
+showDV (v, NullExpr _) = outputF v
 showDV (v,e) = outputF v++" = "++outputF e
 
-instance (OutputG ArgList v, 
-          OutputG BinOp v, 
-          OutputG UnaryOp v,
-          OutputG BaseType v,
-          OutputG Expr v,
-          OutputG VarName v,
-          Alts v) => OutputF Type v where
-  outputF (BaseType bt as NullExpr  NullExpr)   = outputG bt++showAttrs as
-  outputF (BaseType bt as NullExpr e')          = outputG bt++" (len="++outputG e'++")"++showAttrs as
-  outputF (BaseType bt as e NullExpr)           = outputG bt++" (kind="++outputG e++")"++showAttrs as
-  outputF (BaseType bt as e               e')                = outputG bt++" (len="++outputG e'++"kind="++outputG e++")"++showAttrs as
-  outputF (ArrayT [] bt as NullExpr NullExpr)   = outputG bt++showAttrs as
-  outputF (ArrayT [] bt as NullExpr e')         = outputG bt++" (len="++outputG e'++")"++showAttrs as
-  outputF (ArrayT [] bt as e NullExpr)          = outputG bt++" (kind="++outputG e++")"++showAttrs as
-  outputF (ArrayT [] bt as e                e')              = outputG bt++" (len="++outputG e'++"kind="++outputG e++")"++showAttrs as
-  outputF (ArrayT rs bt as NullExpr  NullExpr)  = outputG bt++" , dimension ("++showRanges rs++")"++showAttrs as
-  outputF (ArrayT rs bt as NullExpr e')         = outputG bt++" (len="++outputG e'++")"++" , dimension ("++showRanges rs++")"++showAttrs as
-  outputF (ArrayT rs bt as e NullExpr)          = outputG bt++" (kind="++outputG e++")"++" , dimension ("++showRanges rs++")"++showAttrs as
-  outputF (ArrayT rs bt as e               e')               = outputG bt++" (len="++outputG e'++"kind="++outputG e++")"++" , dimension ("++showRanges rs++")"++showAttrs as
+instance (OutputG (ArgList p) v, 
+          OutputG (BinOp p) v, 
+          OutputG (UnaryOp p) v,
+          OutputG (BaseType p) v,
+          OutputG (Expr p) v,
+          OutputG (VarName p) v,
+          Alts v) => OutputF (Type p) v where
+  outputF (BaseType _ bt as (NullExpr _)  (NullExpr _))   = outputG bt++showAttrs as
+  outputF (BaseType _ bt as (NullExpr _) e')          = outputG bt++" (len="++outputG e'++")"++showAttrs as
+  outputF (BaseType _ bt as e (NullExpr _))           = outputG bt++" (kind="++outputG e++")"++showAttrs as
+  outputF (BaseType _ bt as e               e')                = outputG bt++" (len="++outputG e'++"kind="++outputG e++")"++showAttrs as
+  outputF (ArrayT _ [] bt as (NullExpr _) (NullExpr _))   = outputG bt++showAttrs as
+  outputF (ArrayT _ [] bt as (NullExpr _) e')         = outputG bt++" (len="++outputG e'++")"++showAttrs as
+  outputF (ArrayT _ [] bt as e (NullExpr _))          = outputG bt++" (kind="++outputG e++")"++showAttrs as
+  outputF (ArrayT _ [] bt as e                e')              = outputG bt++" (len="++outputG e'++"kind="++outputG e++")"++showAttrs as
+  outputF (ArrayT _ rs bt as (NullExpr _)  (NullExpr _))  = outputG bt++" , dimension ("++showRanges rs++")"++showAttrs as
+  outputF (ArrayT _ rs bt as (NullExpr _) e')         = outputG bt++" (len="++outputG e'++")"++" , dimension ("++showRanges rs++")"++showAttrs as
+  outputF (ArrayT _ rs bt as e (NullExpr _))          = outputG bt++" (kind="++outputG e++")"++" , dimension ("++showRanges rs++")"++showAttrs as
+  outputF (ArrayT _ rs bt as e               e')               = outputG bt++" (len="++outputG e'++"kind="++outputG e++")"++" , dimension ("++showRanges rs++")"++showAttrs as
 
 
-instance Alts v => OutputF Attr v where --new
-  outputF Allocatable    = "allocatable "
-  outputF Parameter      = "parameter "
-  outputF External       = "external "
-  outputF (Intent In)    = "intent(in) "
-  outputF (Intent Out)   = "intent(out) "
-  outputF (Intent InOut) = "intent(inout) "
-  outputF Intrinsic      = "intrinsic "
-  outputF Optional       = "optional "
-  outputF Pointer        = "pointer "
-  outputF Save           = "save "
-  outputF Target         = "target "
-  outputF Volatile       = "volatile "
-  outputF Public         = "public "
-  outputF Private        = "private "
-  outputF Sequence       = "sequence "
+instance Alts v => OutputF (Attr p) v where --new
+    outputF (Allocatable _)      = "allocatable "
+    outputF (Parameter _)        = "parameter "
+    outputF (External _)         = "external "
+    outputF (Intent _  (In _))   = "intent(in) "
+    outputF (Intent _ (Out _))   = "intent(out) "
+    outputF (Intent _ (InOut _)) = "intent(inout) "
+    outputF (Intrinsic _)        = "intrinsic "
+    outputF (Optional _)         = "optional "
+    outputF (Pointer _)          = "pointer "
+    outputF (Save _)             = "save "
+    outputF (Target _)           = "target "
+    outputF (Volatile _)         = "volatile "
+    outputF (Public _)           = "public "
+    outputF (Private _)          = "private "
+    outputF (Sequence _)         = "sequence "
 
-instance (OutputG Arg v, OutputG BinOp v, OutputG Expr v, Alts v) => OutputF GSpec v where
-  outputF (GName s)  = outputG s
-  outputF (GOper op) = "operator("++outputG op++")"
-  outputF (GAssg)    = "assignment(=)"
+instance (OutputG (Arg p) v, OutputG (BinOp p) v, OutputG (Expr p) v, Alts v) => OutputF (GSpec p) v where
+  outputF (GName _ s)  = outputG s
+  outputF (GOper _ op) = "operator("++outputG op++")"
+  outputF (GAssg _)    = "assignment(=)"
 
-instance (OutputG Arg v, OutputG Decl v, OutputG Implicit v,
-          OutputG SubName v, Alts v) => OutputF InterfaceSpec v where
-  outputF (FunctionInterface s as us i ds)   = (ind 1)++ "function " ++ outputG s ++ outputG as ++ showUse us ++ outputG i ++ outputG ds ++ "\nend function " ++ outputG s
-  outputF (SubroutineInterface s as us i ds) = (ind 1)++ "subroutine " ++ outputG s ++ outputG as ++ showUse us ++ outputG i ++ outputG ds ++ "\nend subroutine " ++ outputG s
-  outputF (ModuleProcedure ss) = (ind 2) ++ "module procedure " ++ concat (intersperse ", " (map (outputG) ss))
+instance (OutputG (Arg p) v, OutputG (Decl p) v, OutputG (Implicit p) v,
+          OutputG (SubName p) v, Alts v) => OutputF (InterfaceSpec p) v where
+  outputF (FunctionInterface _ s as us i ds)   = (ind 1)++ "function " ++ outputG s ++ outputG as ++ showUse us ++ outputG i ++ outputG ds ++ "\nend function " ++ outputG s
+  outputF (SubroutineInterface _ s as us i ds) = (ind 1)++ "subroutine " ++ outputG s ++ outputG as ++ showUse us ++ outputG i ++ outputG ds ++ "\nend subroutine " ++ outputG s
+  outputF (ModuleProcedure _ ss) = (ind 2) ++ "module procedure " ++ concat (intersperse ", " (map (outputG) ss))
 
 
-instance (OutputG SubName v, Alts v) => OutputF BaseType v where
-  outputF Integer   = "integer"
-  outputF Real      = "real"
-  outputF Character = "character"
-  outputF Logical   = "logical"
-  outputF (DerivedType s) = "type ("++outputG s++")"
-  outputF SomeType  = error "sometype not valid in output source file"
+instance (OutputG (SubName p) v, Alts v) => OutputF (BaseType p) v where
+  outputF (Integer _)       = "integer"
+  outputF (Real    _)       = "real"
+  outputF (Character  _)    = "character"
+  outputF (Logical   _)     = "logical"
+  outputF (DerivedType _ s) = "type ("++outputG s++")"
+  outputF (SomeType _)      = error "sometype not valid in output source file"
 
 -- Printing statements and expressions
 -- 
-instance (OutputG ArgList v,
-          OutputG BinOp v,
-          OutputG Expr v,
-          OutputG UnaryOp v,
-          OutputG VarName v,
-          Alts v) => OutputF Expr v where
-  outputF (Con i)         = i
-  outputF (ConS s)        = s
-  outputF (Var vs)        = showPartRefList vs
-  outputF (Bin bop e@(Bin op _ _) e'@(Bin op' _ _)) = checkPrec bop op (paren) (outputG e)++outputG bop++ checkPrec bop op' (paren) (outputG e')
-  outputF (Bin bop e@(Bin op _ _) e')                      = checkPrec bop op (paren) (outputG e)++outputG bop++outputG e'
-  outputF (Bin bop e                    e'@(Bin op' _ _))  = outputG e++outputG bop++checkPrec bop op' (paren) (outputG e')
-  outputF (Bin bop e                    e')                      = outputG e++outputG bop++outputG e'
-  outputF (Unary uop e)   = "("++outputG uop++outputG e++")"
-  outputF (CallExpr s as) = outputG s ++ outputG as
-  outputF (Null)          = "NULL()"
-  outputF (NullExpr)      = ""
-  outputF (ESeq e e')     = outputG e++","++outputG e'
-  outputF (Bound e e')    = outputG e++":"++outputG e'
-  outputF (Sqrt e)        = "sqrt("++outputG e++")"
-  outputF (ArrayCon es)   = "(\\" ++ concat (intersperse ", " (map (outputG) es)) ++ "\\)"
-  outputF (AssgExpr v e)  = v ++ "=" ++ outputG e
+instance (OutputG (ArgList p) v,
+          OutputG (BinOp p) v,
+          OutputG (Expr p) v,
+          OutputG (UnaryOp p) v,
+          OutputG (VarName p) v,
+          Alts v) => OutputF (Expr p) v where
+  outputF (Con _ i)         = i
+  outputF (ConS _ s)        = s
+  outputF (Var _ vs)        = showPartRefList vs
+  outputF (Bin _ bop e@(Bin _ op _ _) e'@(Bin _ op' _ _)) = checkPrec bop op (paren) (outputG e)++outputG bop++ checkPrec bop op' (paren) (outputG e')
+  outputF (Bin _ bop e@(Bin _ op _ _) e')                      = checkPrec bop op (paren) (outputG e)++outputG bop++outputG e'
+  outputF (Bin _ bop e                    e'@(Bin _ op' _ _))  = outputG e++outputG bop++checkPrec bop op' (paren) (outputG e')
+  outputF (Bin _ bop e                    e')                      = outputG e++outputG bop++outputG e'
+  outputF (Unary _ uop e)   = "("++outputG uop++outputG e++")"
+  outputF (CallExpr _ s as) = outputG s ++ outputG as
+  outputF (Null _)          = "NULL()"
+  outputF (NullExpr _)      = ""
+  outputF (ESeq _ e e')     = outputG e++","++outputG e'
+  outputF (Bound _ e e')    = outputG e++":"++outputG e'
+  outputF (Sqrt _ e)        = "sqrt("++outputG e++")"
+  outputF (ArrayCon _ es)   = "(\\" ++ concat (intersperse ", " (map (outputG) es)) ++ "\\)"
+  outputF (AssgExpr _ v e)  = v ++ "=" ++ outputG e
 
-instance (OutputIndF Fortran v, Alts v) => OutputF Fortran v where
+instance (OutputIndF (Fortran p) v, Alts v) => OutputF (Fortran p) v where
   outputF = outputIndF 1
 
-instance (OutputG ArgName v, Alts v) => OutputF Arg v where
-  outputF (Arg vs) = "("++ outputG vs ++")"
+instance (OutputG (ArgName p) v, Alts v) => OutputF (Arg p) v where
+  outputF (Arg _ vs) = "("++ outputG vs ++")"
   
-instance (OutputG Expr v, Alts v) => OutputF ArgList v where
-  outputF (ArgList es) = "("++outputG es++")" -- asTuple outputG es
+instance (OutputG (Expr p) v, Alts v) => OutputF (ArgList p) v where
+  outputF (ArgList _ es) = "("++outputG es++")" -- asTuple outputG es
   
-instance Alts v => OutputF BinOp v where
-  outputF Plus   = "+"
-  outputF Minus  = "-" 
-  outputF Mul    = "*"
-  outputF Div    = "/"
-  outputF Or     = ".or."
-  outputF And    = ".and."
-  outputF Concat = "//"
-  outputF Power  = "**"
-  outputF RelEQ  = "=="
-  outputF RelNE  = "/="
-  outputF RelLT  = "<"
-  outputF RelLE  = "<="
-  outputF RelGT  = ">"
-  outputF RelGE  = ">="
+instance Alts v => OutputF (BinOp p) v where
+  outputF (Plus  _) ="+"
+  outputF (Minus _) ="-" 
+  outputF (Mul   _) ="*"
+  outputF (Div   _) ="/"
+  outputF (Or    _) =".or."
+  outputF (And   _) =".and."
+  outputF (Concat _) ="//"
+  outputF (Power _) ="**"
+  outputF (RelEQ _) ="=="
+  outputF (RelNE _) ="/="
+  outputF (RelLT _) ="<"
+  outputF (RelLE _) ="<="
+  outputF (RelGT _) =">"
+  outputF (RelGE _) =">="
 
-instance Alts v => OutputF UnaryOp v where
-  outputF UMinus = "-"
-  outputF Not    = ".not."
+instance Alts v => OutputF (UnaryOp p) v where
+  outputF (UMinus _) = "-"
+  outputF (Not    _) = ".not."
   
-instance Alts v => OutputF VarName v where
-  outputF (VarName v) = v  
+instance Alts v => OutputF (VarName p) v where
+  outputF (VarName _ v) = v  
 
-instance (OutputG VarName v, OutputG ArgName v, Alts v) => OutputF ArgName v where
-  outputF (ArgName a)            = a  
-  outputF (ASeq NullArg NullArg) = ""
-  outputF (ASeq NullArg  a')     = outputG a'
-  outputF (ASeq a NullArg)       = outputG a
-  outputF (ASeq a a')            = outputG a++","++outputG a'
-  outputF NullArg                            = ""
+instance (OutputG (VarName p) v, OutputG (ArgName p) v, Alts v) => OutputF (ArgName p) v where
+    outputF (ArgName _ a)                    = a  
+    outputF (ASeq _ (NullArg _) (NullArg _)) = ""
+    outputF (ASeq _ (NullArg _)  a')         = outputG a'
+    outputF (ASeq _ a (NullArg _))           = outputG a
+    outputF (ASeq _ a a')                    = outputG a++","++outputG a'
+    outputF (NullArg _)                            = ""
 
-instance Alts v => OutputF SubName v where
-  outputF (SubName n) = n
-  outputF (NullSubName) = error "subroutine needs a name"
+instance Alts v => OutputF (SubName p) v where
+  outputF (SubName _ n)   = n
+  outputF (NullSubName _) = error "subroutine needs a name"
 
-instance Alts v => OutputF Implicit v where
-  outputF ImplicitNone = "   implicit none\n"
-  outputF ImplicitNull = ""
+instance Alts v => OutputF ( Implicit p) v where
+  outputF (ImplicitNone _) = "   implicit none\n"
+  outputF (ImplicitNull _) = ""
   
-instance (OutputG Expr v, Alts v) => OutputF Spec v where
-  outputF (Access        s) = "access = " ++ outputG s
-  outputF (Action        s) = "action = "++outputG s
-  outputF (Advance       s) = "advance = "++outputG s
-  outputF (Blank         s) = "blank = "++outputG s
-  outputF (Delim         s) = "delim = "++outputG s
-  outputF (Direct        s) = "direct = "++outputG s
-  outputF (End           s) = "end = "++outputG s
-  outputF (Eor           s) = "eor = "++outputG s
-  outputF (Err           s) = "err = "++outputG s
-  outputF (Exist         s) = "exist = "++outputG s
-  outputF (File          s) = "file = "++outputG s
-  outputF (FMT           s) = "fmt = "++outputG s
-  outputF (Form          s) = "form = "++outputG s
-  outputF (Formatted     s) = "formatted = "++outputG s
-  outputF (Unformatted   s) = "unformatted = "++outputG s
-  outputF (IOLength      s) = "iolength = "++outputG s
-  outputF (IOStat        s) = "iostat = "++outputG s
-  outputF (Opened        s) = "opened = "++outputG s
-  outputF (Name          s) = "name = "++outputG s
-  outputF (Named         s) = "named = "++outputG s
-  outputF (NextRec       s) = "nextrec = "++outputG s
-  outputF (NML           s) = "nml = "++outputG s
-  outputF (NoSpec        s) = outputG s
-  outputF (Number        s) = "number = "++outputG s
-  outputF (Pad           s) = "pad = "++outputG s
-  outputF (Position      s) = "position = "++outputG s
-  outputF (Read          s) = "read = "++outputG s
-  outputF (ReadWrite     s) = "readwrite = "++outputG s
-  outputF (WriteSp       s) = "write = "++outputG s
-  outputF (Rec           s) = "rec = "++outputG s
-  outputF (Recl          s) = "recl = "++outputG s
-  outputF (Sequential    s) = "sequential = "++outputG s
-  outputF (Size          s) = "size = "++outputG s
-  outputF (Status        s) = "status = "++outputG s
-  outputF (Unit s)          = "unit = "++outputG s
+instance (OutputG (Expr p) v, Alts v) => OutputF (Spec p) v where
+  outputF (Access        _ s) = "access = " ++ outputG s
+  outputF (Action        _ s) = "action = "++outputG s
+  outputF (Advance       _ s) = "advance = "++outputG s
+  outputF (Blank         _ s) = "blank = "++outputG s
+  outputF (Delim         _ s) = "delim = "++outputG s
+  outputF (Direct        _ s) = "direct = "++outputG s
+  outputF (End           _ s) = "end = "++outputG s
+  outputF (Eor           _ s) = "eor = "++outputG s
+  outputF (Err           _ s) = "err = "++outputG s
+  outputF (Exist         _ s) = "exist = "++outputG s
+  outputF (File          _ s) = "file = "++outputG s
+  outputF (FMT           _ s) = "fmt = "++outputG s
+  outputF (Form          _ s) = "form = "++outputG s
+  outputF (Formatted     _ s) = "formatted = "++outputG s
+  outputF (Unformatted   _ s) = "unformatted = "++outputG s
+  outputF (IOLength      _ s) = "iolength = "++outputG s
+  outputF (IOStat        _ s) = "iostat = "++outputG s
+  outputF (Opened        _ s) = "opened = "++outputG s
+  outputF (Name          _ s) = "name = "++outputG s
+  outputF (Named         _ s) = "named = "++outputG s
+  outputF (NextRec       _ s) = "nextrec = "++outputG s
+  outputF (NML           _ s) = "nml = "++outputG s
+  outputF (NoSpec        _ s) = outputG s
+  outputF (Number        _ s) = "number = "++outputG s
+  outputF (Pad           _ s) = "pad = "++outputG s
+  outputF (Position      _ s) = "position = "++outputG s
+  outputF (Read          _ s) = "read = "++outputG s
+  outputF (ReadWrite     _ s) = "readwrite = "++outputG s
+  outputF (WriteSp       _ s) = "write = "++outputG s
+  outputF (Rec           _ s) = "rec = "++outputG s
+  outputF (Recl          _ s) = "recl = "++outputG s
+  outputF (Sequential    _ s) = "sequential = "++outputG s
+  outputF (Size          _ s) = "size = "++outputG s
+  outputF (Status        _ s) = "status = "++outputG s
+  outputF (Unit _ s)          = "unit = "++outputG s
 
 
 
 -- smart constructors for language 'constants', that is, expressions
 -- 
 
-con  = Con
+{- con  = Con p
 arr v es = Var [(v,es)]
 
-var :: String -> Expr
+var :: String -> Expr ()
 var s = Var [(VarName s,[])]
 
 v :: String -> Expr
@@ -607,106 +614,102 @@ for  v  e1 e2 e3 f = For  v  e1 e2 e3 f
 fseq f1 f2         = FSeq f1 f2
 call s  es         = Call s  es
 
-block us p ds f = Block us ImplicitNull ds f
+block us p ds f = Block us ImplicitNull ds f -}
 
-ne = NullExpr
+ne = NullExpr 
 
-isEmptyArg (Arg as) = and (isEmptyArgName as)
-isEmptyArgName (ASeq a a') = isEmptyArgName a ++ isEmptyArgName a'
-isEmptyArgName (ArgName a) = [False]
-isEmptyArgName (NullArg)   = [True]
+isEmptyArg (Arg _ as) = and (isEmptyArgName as)
+isEmptyArgName (ASeq _ a a') = isEmptyArgName a ++ isEmptyArgName a'
+isEmptyArgName (ArgName _ a) = [False]
+isEmptyArgName (NullArg _)   = [True]
 
 paren :: String -> String
 paren s = "(" ++ s ++ ")"
 
-checkPrec :: BinOp -> BinOp -> (a -> a) -> a -> a
+checkPrec :: BinOp p -> BinOp p -> (a -> a) -> a -> a
 checkPrec pop cop f s = if opPrec pop >= opPrec cop then f s else s
 
-opPrec :: BinOp -> Int
-opPrec Or     = 0
-opPrec And    = 1
-opPrec RelEQ  = 2
-opPrec RelNE  = 2
-opPrec RelLT  = 2
-opPrec RelLE  = 2 
-opPrec RelGT  = 2
-opPrec RelGE  = 2
-opPrec Concat = 3
-opPrec Plus   = 4
-opPrec Minus  = 4
-opPrec Mul    = 5
-opPrec Div    = 5
-opPrec Power  = 6
+opPrec :: BinOp p -> Int
+opPrec (Or    _) = 0
+opPrec (And   _) = 1
+opPrec (RelEQ _) = 2
+opPrec (RelNE _) = 2
+opPrec (RelLT _) = 2
+opPrec (RelLE _) = 2 
+opPrec (RelGT _) = 2
+opPrec (RelGE _) = 2
+opPrec (Concat _) = 3
+opPrec (Plus  _) = 4
+opPrec (Minus _) = 4
+opPrec (Mul   _) = 5
+opPrec (Div   _) = 5
+opPrec (Power _) = 6
 
 
 
-instance (OutputG VarName v,
-          OutputG Expr v,
-          OutputG UnaryOp v,
-          OutputG BinOp v, 
-          OutputG ArgList v,
-          OutputIndG Fortran v,
-          OutputG Fortran v, OutputG Spec v, Alts v) => OutputIndF Fortran v where
-    outputIndF i (Assg v e)               = (ind i)++outputG v++" = "++outputG e
-    outputIndF i (For v e e' e'' f)       = (ind i)++"do"++" "++outputG v++" = "++outputG e++", "++
+instance (OutputG (VarName p) v,
+          OutputG (Expr p) v,
+          OutputG (UnaryOp p) v,
+          OutputG (BinOp p) v, 
+          OutputG (ArgList p) v,
+          OutputIndG (Fortran p) v,
+          OutputG (Fortran p) v, OutputG (Spec p) v, Alts v) => OutputIndF (Fortran p) v where
+    outputIndF i (Assg _ v e)               = (ind i)++outputG v++" = "++outputG e
+    outputIndF i (For _  v e e' e'' f)       = (ind i)++"do"++" "++outputG v++" = "++outputG e++", "++
                                          outputG e'++", "++outputG e''++"\n"++
                                          (outputIndG (i+1) f)++"\n"++(ind i)++"end do"
-    outputIndF i (FSeq f f')              = outputIndG i f++"\n"++outputIndG i f'
-    outputIndF i (If e f [] Nothing)      = (ind i)++"if ("++outputG e++") then\n"
+    outputIndF i (FSeq _  f f')              = outputIndG i f++"\n"++outputIndG i f'
+    outputIndF i (If _  e f [] Nothing)      = (ind i)++"if ("++outputG e++") then\n"
                                          ++(outputIndG (i+1) f)++"\n"
                                          ++(ind i)++"end if"
-    outputIndF i (If e f [] (Just f'))    = (ind i)++"if ("++outputG e++") then\n"
+    outputIndF i (If _  e f [] (Just f'))    = (ind i)++"if ("++outputG e++") then\n"
                                          ++(outputIndG (i+1) f)++"\n"
                                          ++(ind i)++"else\n"
                                          ++(outputIndG (i+1) f')++"\n"
                                          ++(ind i)++"end if"
-    outputIndF i (If e f elsif Nothing)    = (ind i)++"if ("++outputG e++") then\n"
+    outputIndF i (If _  e f elsif Nothing)    = (ind i)++"if ("++outputG e++") then\n"
                                           ++(outputIndG (i+1) f)++"\n"
                                           ++concat (map (showElseIf i) elsif)
                                           ++(ind i)++"end if"
-    outputIndF i (If e f elsif (Just f')) = (ind i)++"if ("++outputG e++") then\n"
+    outputIndF i (If _  e f elsif (Just f')) = (ind i)++"if ("++outputG e++") then\n"
                                           ++(outputIndG (i+1) f)++"\n"
                                           ++concat (map (showElseIf i) elsif)
                                           ++(ind i)++"else\n"
                                           ++(outputIndG (i+1) f')++"\n"
                                           ++(ind i)++"end if"
-    outputIndF i (Allocate a NullExpr)    = (ind i)++"allocate (" ++ outputG a ++ ")"
-    outputIndF i (Allocate a s)              = (ind i)++"allocate ("++ outputG a ++ ", STAT = "++outputG s++ ")"
-    outputIndF i (Backspace ss)               = (ind i)++"backspace "++asTuple outputG ss++"\n"
-    outputIndF i (Call sub al)                = ind i++"call "++outputG sub++outputG al
-    outputIndF i (Open s)                     = (ind i)++"open "++asTuple outputG s++"\n"
-    outputIndF i (Equivalence vs)             = ind i++"equivlance ("++(concat (intersperse "," (map outputF vs))) ++ ")\n"
-    outputIndF i (Close ss)                   = (ind i)++"close "++asTuple outputG ss++"\n"
-    outputIndF i (Continue)                   = (ind i)++"continue"++"\n"
-    outputIndF i (Cycle s)                    = (ind i)++"cycle "++outputG s++"\n"
-    outputIndF i (Deallocate es e)            = (ind i)++"deallocate "++asTuple outputG es++outputG e++"\n"
-    outputIndF i (Endfile ss)                 = (ind i)++"endfile "++asTuple outputG ss++"\n"
-    outputIndF i (Exit s)                     = (ind i)++"exit "++outputG s
-    outputIndF i (Forall (is, NullExpr) f)    = (ind i)++"forall ("++showForall is++") "++outputG f
-    outputIndF i (Forall (is,e)            f) = (ind i)++"forall ("++showForall is++","++outputG e++") "++outputG f
-    outputIndF i (Goto s)                     = (ind i)++"goto "++outputG s
-    outputIndF i (Nullify es)                 = (ind i)++"nullify "++asTuple outputG es++"\n"
-    outputIndF i (Inquire ss es)              = (ind i)++"inquire "++asTuple outputG ss++" "++(concat (intersperse "," (map outputG es)))++"\n"
-    outputIndF i (Rewind ss)                  = (ind i)++"rewind "++asTuple outputG ss++"\n"
-    outputIndF i (Stop e)                     = (ind i)++"stop "++outputG e++"\n"
-    outputIndF i (Where e f)                  = (ind i)++"where ("++outputG e++") "++outputG f
-    outputIndF i (Write ss es)                = (ind i)++"write "++asTuple outputG ss++" "++(concat (intersperse "," (map outputG es)))++"\n"
-    outputIndF i (PointerAssg e e')           = (ind i)++outputG e++" => "++outputG e'++"\n"
-    outputIndF i (Return e)                   = (ind i)++"return "++outputG e++"\n"
-    outputIndF i (Label s f)                  = s++" "++outputG f
-    outputIndF i (Print e [])                 = (ind i)++("print ")++outputG e++("\n")
-    outputIndF i (Print e es)                 = (ind i)++("print ")++outputG e++", "++(concat (intersperse "," (map outputG es)))++("\n")
-    outputIndF i (ReadS ss es)                = (ind i)++("read ")++(asTuple outputG ss)++" "++(concat (intersperse "," (map outputG es)))++("\n")
-    outputIndF i (NullStmt)		       = ""
+    outputIndF i (Allocate _  a (NullExpr _))    = (ind i)++"allocate (" ++ outputG a ++ ")"
+    outputIndF i (Allocate _  a s)              = (ind i)++"allocate ("++ outputG a ++ ", STAT = "++outputG s++ ")"
+    outputIndF i (Backspace _  ss)               = (ind i)++"backspace "++asTuple outputG ss++"\n"
+    outputIndF i (Call  _ sub al)                = ind i++"call "++outputG sub++outputG al
+    outputIndF i (Open  _ s)                     = (ind i)++"open "++asTuple outputG s++"\n"
+    outputIndF i (Equivalence  _ vs)             = ind i++"equivlance ("++(concat (intersperse "," (map outputF vs))) ++ ")\n"
+    outputIndF i (Close  _ ss)                   = (ind i)++"close "++asTuple outputG ss++"\n"
+    outputIndF i (Continue _)                   = (ind i)++"continue"++"\n"
+    outputIndF i (Cycle _ s)                    = (ind i)++"cycle "++outputG s++"\n"
+    outputIndF i (Deallocate _ es e)            = (ind i)++"deallocate "++asTuple outputG es++outputG e++"\n"
+    outputIndF i (Endfile _ ss)                 = (ind i)++"endfile "++asTuple outputG ss++"\n"
+    outputIndF i (Exit _ s)                     = (ind i)++"exit "++outputG s
+    outputIndF i (Forall _ (is, (NullExpr _)) f)    = (ind i)++"forall ("++showForall is++") "++outputG f
+    outputIndF i (Forall _ (is,e)            f) = (ind i)++"forall ("++showForall is++","++outputG e++") "++outputG f
+    outputIndF i (Goto _ s)                     = (ind i)++"goto "++outputG s
+    outputIndF i (Nullify _ es)                 = (ind i)++"nullify "++asTuple outputG es++"\n"
+    outputIndF i (Inquire _ ss es)              = (ind i)++"inquire "++asTuple outputG ss++" "++(concat (intersperse "," (map outputG es)))++"\n"
+    outputIndF i (Rewind _  ss)                  = (ind i)++"rewind "++asTuple outputG ss++"\n"
+    outputIndF i (Stop _ e)                     = (ind i)++"stop "++outputG e++"\n"
+    outputIndF i (Where _ e f)                  = (ind i)++"where ("++outputG e++") "++outputG f
+    outputIndF i (Write _ ss es)                = (ind i)++"write "++asTuple outputG ss++" "++(concat (intersperse "," (map outputG es)))++"\n"
+    outputIndF i (PointerAssg _ e e')           = (ind i)++outputG e++" => "++outputG e'++"\n"
+    outputIndF i (Return _ e)                   = (ind i)++"return "++outputG e++"\n"
+    outputIndF i (Label _ s f)                  = s++" "++outputG f
+    outputIndF i (Print _ e [])                 = (ind i)++("print ")++outputG e++("\n")
+    outputIndF i (Print _ e es)                 = (ind i)++("print ")++outputG e++", "++(concat (intersperse "," (map outputG es)))++("\n")
+    outputIndF i (ReadS _ ss es)                = (ind i)++("read ")++(asTuple outputG ss)++" "++(concat (intersperse "," (map outputG es)))++("\n")
+    outputIndF i (NullStmt _)		       = ""
 
-
-
-|]
-
-infix 7 $+
-infix 7 $-
-infix 8 $*
-infix 9 $/
+-- infix 7 $+
+-- infix 7 $-
+-- infix 8 $*
+-- infix 9 $/
 
 ----------------------------------------------------------------------
 -- PRINT UTILITIES

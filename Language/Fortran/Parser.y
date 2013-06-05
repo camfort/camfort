@@ -1,7 +1,5 @@
 {
  {-# LANGUAGE QuasiQuotes #-}
- {-# LANGUAGE TypeSynonymInstances #-}
- {-# LANGUAGE FlexibleInstances #-}
 
 module Language.Fortran.Parser  where
 
@@ -375,7 +373,7 @@ entity_decl_list
 entity_decl :: { (Expr A0, Expr A0) }
 entity_decl
   : ID '=' expr      {% srcSpan l >>= (\s -> return $ (Var s [(VarName s $1,[])], $3)) }
-  | variable          { ($1, ne) }   -- TODO too general need to eleminate ability to parse v%u type vars
+  | variable         {% srcSpanNull >>= (\s -> return ($1, NullExpr s)) }   -- TODO too general need to eleminate ability to parse v%u type vars
 --  | function_name [ '*' char_length ]
 
 object_name :: { String }
@@ -388,25 +386,25 @@ type_spec_p
 
 type_spec :: { (BaseType A0, Expr A0, Expr A0) }
 type_spec
-  : INTEGER kind_selector                         {% srcSpanFromL $1 (\s -> (Integer s,$2,ne)) }
-  | INTEGER '*' length_value                      {% srcSpanFromL $1 (\s -> (Integer s,$3,ne)) }
-  | INTEGER                                       {% srcSpanFromL $1 (\l ->(Integer l,(ne),ne)) }
-  | REAL kind_selector                            {% srcSpanFromL $1 (\l -> (Real l,$2,ne)) }
-  | REAL '*' length_value                         {% srcSpanFromL $1 (\l -> (Real l,$3,ne)) }
-  | REAL                                          {% srcSpanFromL $1 (\l -> (Real l,(ne),ne)) }
-  | SOMETYPE                                      {% srcSpanFromL $1 (\l -> (SomeType l,(ne),ne)) }
---  | DOUBLE PRECISION kind_selector                { (Double,$3,ne) }
---  | DOUBLE PRECISION '*' length_value             { (Double,$4,ne) }
---  | DOUBLE PRECISION                              { (Double,ne,ne) }
-  | COMPLEX kind_selector                         {% srcSpanFromL $1 (\l -> (Complex l,$2,ne)) }
-  | COMPLEX '*' length_value                      {% srcSpanFromL $1 (\l -> (Complex l,$3,ne)) }
-  | COMPLEX                                       {% srcSpanFromL $1 (\l -> (Complex l,ne,ne)) }
+  : INTEGER kind_selector                         {% srcSpanFromL $1 (\s -> (Integer s, $2, ne s)) }
+  | INTEGER '*' length_value                      {% srcSpanFromL $1 (\s -> (Integer s, $3,ne s)) }
+  | INTEGER                                       {% srcSpanFromL $1 (\l ->(Integer l,(ne l),ne l)) }
+  | REAL kind_selector                            {% srcSpanFromL $1 (\l -> (Real l, $2, ne l)) }
+  | REAL '*' length_value                         {% srcSpanFromL $1 (\l -> (Real l,$3,ne l)) }
+  | REAL                                          {% srcSpanFromL $1 (\l -> (Real l,(ne l),ne l)) }
+  | SOMETYPE                                      {% srcSpanFromL $1 (\l -> (SomeType l,(ne l),ne l)) }
+--  | DOUBLE PRECISION kind_selector                { (Double,$3,ne l) }
+--  | DOUBLE PRECISION '*' length_value             { (Double,$4,ne l) }
+--  | DOUBLE PRECISION                              { (Double,ne l,ne l) }
+  | COMPLEX kind_selector                         {% srcSpanFromL $1 (\l -> (Complex l,$2,ne l)) }
+  | COMPLEX '*' length_value                      {% srcSpanFromL $1 (\l -> (Complex l,$3,ne l)) }
+  | COMPLEX                                       {% srcSpanFromL $1 (\l -> (Complex l,ne l,ne l)) }
   | CHARACTER char_selector                       {% srcSpanFromL $1 (\l -> (Character l,snd $2, fst $2)) }
-  | CHARACTER                                     {% srcSpanFromL $1 (\l -> (Character l,ne,ne)) }
-  | LOGICAL kind_selector                         {% srcSpanFromL $1 (\l -> (Logical l,$2,ne)) }
-  | LOGICAL '*' length_value                      {% srcSpanFromL $1 (\l -> (Logical l,$3,ne)) }
-  | LOGICAL                                       {% srcSpanFromL $1 (\l -> (Logical l,ne,ne)) }
-  | TYPE '(' type_name ')'                        {% srcSpanFromL $1 (\l -> (DerivedType l $3,ne,ne)) }
+  | CHARACTER                                     {% srcSpanFromL $1 (\l -> (Character l,ne l,ne l)) }
+  | LOGICAL kind_selector                         {% srcSpanFromL $1 (\l -> (Logical l,$2,ne l)) }
+  | LOGICAL '*' length_value                      {% srcSpanFromL $1 (\l -> (Logical l,$3,ne l)) }
+  | LOGICAL                                       {% srcSpanFromL $1 (\l -> (Logical l,ne l,ne l)) }
+  | TYPE '(' type_name ')'                        {% srcSpanFromL $1 (\l -> (DerivedType l $3,ne l,ne l)) }
 --  | POINTER '(' pointer_name ',' pointee_name ['(' array_spec ')' ] ')'
 --[',' '(' pointer_name ',' pointee_name ['(' array_spec ')' ] ')' ] ...
 
@@ -416,12 +414,12 @@ kind_selector :: { Expr A0}
 
 char_selector :: { (Expr A0, Expr A0) }  -- (LEN, KIND)
 char_selector 
-: length_selector                                         { ($1,ne) }
+: length_selector                                         {% srcSpanNull >>= (\s -> return $ ($1, ne s)) }
 | '(' LEN '=' char_len_param_value ',' KIND '=' expr ')'  { ($4,$8) }
 | '(' char_len_param_value ',' KIND '=' expr ')'          { ($2,$6) }
-| '(' char_len_param_value ',' expr ')'                   { ($2,ne) }
+| '(' char_len_param_value ',' expr ')'                   {% srcSpanNull >>= (\s -> return ($2, ne s)) }
 | '(' KIND '=' expr ',' LEN '=' char_len_param_value ')'  { ($8,$4) }
-| '(' KIND '=' expr ')'                                   { (ne,$4) }
+| '(' KIND '=' expr ')'                                   {% srcSpanNull >>= (\s -> return (ne s, $4)) }
 
 length_selector :: { Expr A0 }
 length_selector 
@@ -749,9 +747,9 @@ subname
 prefix :: { (BaseType A0, Expr A0, Expr A0) }
 prefix
   : type_spec  { $1 }
-  | RECURSIVE  {% srcSpanFromL $1 (\s -> (Recursive s,ne,ne)) }
-  | PURE       {% srcSpanFromL $1 (\s -> (Pure s,ne,ne)) }
-  | ELEMENTAL  {% srcSpanFromL $1 (\s -> (Elemental s,ne,ne)) }
+  | RECURSIVE  {% srcSpanFromL $1 (\s -> (Recursive s, ne s, ne s)) }
+  | PURE       {% srcSpanFromL $1 (\s -> (Pure s, ne s, ne s)) }
+  | ELEMENTAL  {% srcSpanFromL $1 (\s -> (Elemental s, ne s, ne s)) }
 
 args_p :: { Arg A0 }
 args_p
@@ -797,7 +795,7 @@ part_ref
 scalar_variable_name :: { (VarName A0, [Expr A0]) }
 scalar_variable_name
   : ID	'(' section_subscript_list ')'   {% srcSpan l >>= (\s -> return $ (VarName s $1,$3)) }
-  | ID '(' ')'                           {% srcSpan l >>= (\s -> return $ (VarName s $1,[ne])) }
+  | ID '(' ')'                           {% srcSpan l >>= (\s -> return $ (VarName s $1,[ne s])) }
   | ID                                   {% srcSpan l >>= (\s -> return $ (VarName s $1,[])) }
   
 scalar_variable_name_list :: { [(VarName A0, [Expr A0])] }
@@ -816,8 +814,8 @@ subscript
 bound :: { Expr A0 }
 bound
   : expr ':' expr                               {% srcSpanFromL $1 (\s -> Bound s $1 $3) }
-  | expr ':'                                    {% srcSpanFromL $1 (\s -> Bound s $1 ne)}
-  | ':' expr                                    {% srcSpanFromL $1 (\s -> Bound s ne $2) }
+  | expr ':'                                    {% srcSpanFromL $1 (\s -> Bound s $1 (ne s))}
+  | ':' expr                                    {% srcSpanFromL $1 (\s -> Bound s (NullExpr s) $2) }
 --  | ':'                                         { (Bound ne ne) }
 
 section_subscript_list :: { [Expr A0] }
@@ -929,7 +927,7 @@ primary
   | array_constructor                           { $1 }
   | '(' expr ')'                                { $2 }
   | SQRT '(' expr ')'				{% srcSpanFromL $1 (\s -> Sqrt s $3) }
-  | ':'                                         {% srcSpanFromL $1 (\s -> Bound s ne ne) }
+  | ':'                                         {% srcSpanFromL $1 (\s -> Bound s (NullExpr s) (NullExpr s)) }
 -- causes problems
 --  |  function_reference                          { $1 }
 
@@ -993,7 +991,7 @@ do_construct
 
 block_do_construct :: { Fortran A0 } 
 block_do_construct                         -- For  VarName Expr A0 Expr A0 Fortran
-  : do_stmt do_block end_do  { for (fst4 $1) (snd4 $1) (trd4 $1) (frh4 $1) $2 }
+  : do_stmt do_block end_do  {% srcSpanFromL ((\(x, _, _, _) -> x) $1) (\s -> For s (fst4 $1) (snd4 $1) (trd4 $1) (frh4 $1) $2) }
 
 do_stmt :: { (VarName A0, Expr A0, Expr A0, Expr A0) }
 do_stmt
@@ -1101,10 +1099,10 @@ call_stmt
                                                           return $ Call s1 $2 (ArgList s2 $4); } }
   | CALL call_name '(' ')'                        {% do { s1 <- srcSpanFrom $1;
                                                           s2 <- srcSpanFrom $4;
-                                                          return $ Call s1 $2 (ArgList s2 ne); } }
+                                                          return $ Call s1 $2 (ArgList s2 (NullExpr s2)); } }
   | CALL call_name                                {% do { s1 <- srcSpanFrom $1;
                                                           s2 <- srcSpanNull;
-                                                          return $ Call s1 $2 (ArgList s2 ne); } }
+                                                          return $ Call s1 $2 (ArgList s2 (NullExpr s2)); } }
 
 call_name :: { Expr A0 }
 call_name
@@ -1184,7 +1182,7 @@ logical_expr
 allocate_stmt :: { Fortran A0 }
 allocate_stmt
   : ALLOCATE '(' allocation_list ',' STAT '=' variable ')'    {% srcSpanFromL $1 (\s -> Allocate s $3 $7) }
-      | ALLOCATE '(' allocation_list ')'                      {% srcSpanFromL $1 (\s -> Allocate s $3 ne) }
+      | ALLOCATE '(' allocation_list ')'                      {% srcSpanFromL $1 (\s -> Allocate s $3 (NullExpr s)) }
 allocation_list :: { Expr A0 }
 allocation_list
   : allocation_list ',' allocation                    {% srcSpanFromL $1 (\s -> ESeq s $1 $3) }
@@ -1274,7 +1272,7 @@ deallocate_stmt :: { Fortran A0 }
 deallocate_stmt
 : DEALLOCATE '(' allocate_object_list ',' STAT '=' variable ')' 
                                                    {% srcSpanFromL $1 (\s -> Deallocate s $3 $7) }
-| DEALLOCATE '(' allocate_object_list ')'          {% srcSpanFromL $1 (\s -> Deallocate s $3 (ne)) }
+| DEALLOCATE '(' allocate_object_list ')'          {% srcSpanFromL $1 (\s -> Deallocate s $3 (NullExpr s)) }
 
 endfile_stmt :: { Fortran A0 }
 endfile_stmt
@@ -1302,15 +1300,17 @@ forall_stmt_end
 forall_header :: { ([(String,Expr A0,Expr A0,Expr A0)],Expr A0) }
 forall_header
   : '(' forall_triplet_spec_list ',' expr ')'     { ($2,$4) }
-  | '(' forall_triplet_spec_list ')'              { ($2,ne) }
+  | '(' forall_triplet_spec_list ')'              {% srcSpanNull >>= (\s -> return ($2, NullExpr s)) }
+
 forall_triplet_spec_list :: { [(String,Expr A0,Expr A0,Expr A0)] }
 forall_triplet_spec_list
   : forall_triplet_spec_list ',' forall_triplet_spec  { $1++[$3]}
   | forall_triplet_spec                               { [$1] }
+
 forall_triplet_spec :: { (String,Expr A0,Expr A0,Expr A0) }
 forall_triplet_spec
   : id2 '=' int_expr ':' int_expr ';' int_expr { ($1,$3,$5,$7) }
-  | id2 '=' int_expr ':' int_expr              { ($1,$3,$5,ne) }
+  | id2 '=' int_expr ':' int_expr              {% srcSpanNull >>= (\s -> return ($1,$3,$5,NullExpr s)) }
 
 forall_assignment_stmt :: { Fortran A0 }
 forall_assignment_stmt
@@ -1543,7 +1543,7 @@ namelist_group_name
 
 return_stmt :: { Fortran A0 }
 return_stmt
-  : RETURN                                        {% srcSpanFromL $1 (\s -> Return s ne) }
+  : RETURN                                        {% srcSpanFromL $1 (\s -> Return s (NullExpr s)) }
   | RETURN int_expr                               {% srcSpanFromL $1 (\s -> Return s $2) }
 
 scalar_default_int_variable :: { Expr A0 }
@@ -1566,7 +1566,7 @@ rewind_stmt
 stop_stmt :: { Fortran A0 }
 stop_stmt
   : STOP stop_code                               {% srcSpanFromL $1 (\s -> Stop s $2) }
-  | STOP                                         {% srcSpanFromL $1 (\s -> Stop s (ne)) }
+  | STOP                                         {% srcSpanFromL $1 (\s -> Stop s (NullExpr s)) }
 
 stop_code :: { Expr A0 }
 stop_code
@@ -1643,7 +1643,7 @@ isEmpty :: [a] -> Bool
 isEmpty [] = True
 isEmpty _  = False
 
-expr2array_spec (Bound a e e') = (e, e')
-expr2array_spec e = (ne,e)
+expr2array_spec (Bound a e e') = (e, e') -- possibly a bit dodgy- uses undefined
+expr2array_spec e = (NullExpr undefined, e)
 
 }
