@@ -130,5 +130,10 @@ map (fmap ((,[""]),[""]))
 >           -- putStrLn (show $ binders f'')
 >           (show ((map (fmap (const ())) (descendBi reassociate f'))::([Program ()]))) `trace` return ()
 
+ go2 :: String -> IO String
 
- 
+> go2 f = do inp <- readFile f
+>            p <- pr f
+>            let out = reprint inp f (fmap (\x -> (x, False)) (head p))
+>            writeFile (f ++ ".out") out
+>            return $ (p, out)

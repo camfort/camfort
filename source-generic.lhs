@@ -129,7 +129,8 @@
 
 > reprintP :: (Line, Column) -> [String] -> Zipper (Expr Annotation) -> String
 > reprintP cursor inp z = case getHole z of
->                           Just e -> let ((lb, ub), flag) = extract e
+>                           Just e -> 
+>                                     let ((lb, ub), flag) = extract e
 >                                     in  if inBounds cursor (lb, ub) then 
 >                                           if flag then ppr e
 >                                           else  case down' z of
@@ -137,6 +138,7 @@
 >                                                   Nothing -> ""
 >                                         else maybe "" (reprintP cursor inp) (up z)
 >                           Nothing -> ""
+
 
 > reprintR :: (Line, Column) -> (Line, Column) -> [String] -> Zipper (Expr Annotation) -> String
 > reprintR cursor parentUb inp z = case (getHole z)::(Maybe (Expr Annotation)) of
@@ -152,6 +154,34 @@
 >                                               Just rz -> reprintR cursor parentUb inp rz 
 >                                               Nothing -> fst $ takeBounds (cursor, parentUb) inp
 
+> type SrcLoc = (Line, Column)
+
+> reprintD :: String -> Zipper (Expr Annotation) -> String
+> reprintD input z = let input' = lines input
+>                    in reprintA (1, 1) (length input', 1 + (length $ last input')) input' z
+
+> doHole :: SrcLoc -> [String] -> Zipper (d Annotation) -> (String, SrcLoc)
+> doHole cursor inp z = case (getHole z)::(Maybe (Expr Annotation)) of
+>                           Just e  -> let ((lb, ub), flag) = extract e
+>                                          (p1, rest1) = takeBounds (cursor, lb) inp
+>                                      in  if flag then (p1 ++ ppr e, ub)
+>                                          else case (down' z) of
+>                                                    Just cz -> (p1 ++ reprintA lb ub rest1 cz, ub)
+>                                                    Nothing -> let (p2, _) = takeBounds (lb, ub) rest1
+>                                                               in (p1, ub)
+>                           Nothing -> case (down' z) of 
+>                                        Just cz -> (reprintA cursor cursor inp cz, cursor)
+>                                        Nothing -> ("", cursor)
+
+> reprintA :: SrcLoc -> SrcLoc -> [String] -> Zipper (d Annotation) -> String
+> reprintA cursor end inp z = let (p1, cursor') = doHole cursor inp z
+>                                 (p2, inp')    = takeBounds (cursor, cursor') inp
+>                             in p1 ++ case (right z) of 
+>                                         Just rz -> reprintA cursor' end inp' rz
+>                                         Nothing -> fst $ takeBounds (cursor', end) inp'
+>                                                    
+>                                               
+
 > x = let input = "((1 +   2) +  3  )" in (toZipper (doParse input))::(Zipper (Expr Annotation))
 
 > fooN = let input = "(1 + 2)"
@@ -166,7 +196,7 @@
 >           w = doParse "(9 + (4 + 3))"
 >           z' = insertP (rightNode $ leftNode $ upF $ z) w
 >           z'' = upF $ upF $ z'
->       in (reprint input z'', pprint input z')
+>       in (reprint input z', reprintD input z'', pprint input z') -- , maybe False (const True) (down' x >>= down' >>= down' >>= down' >>= down'))
 
       case ((down' z'') >>= right) of
             Nothing -> "nothing"

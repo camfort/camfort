@@ -26,6 +26,10 @@
 > import Language.Haskell.Syntax (SrcLoc(..), srcLine, srcColumn)
 > import Data.Generics.Zipper
 
+> import Data.Maybe
+
+> import Debug.Trace
+
 > purple = "#800080"
 > green = "#008000"
 > blue = "#000080"
@@ -70,7 +74,11 @@
 
 Output routines specialised to the analysis.
                    
+> instance OutputG Bool Alt2 where
+>     outputG = show
 
+> instance OutputG SrcLoc Alt2 where
+>     outputG _ = "" -- not sure if I want this to shown
 
 > instance (OutputIndG (Fortran p) Alt2, OutputG p Alt2) => OutputG (Program p) Alt2 where
 >     outputG = outputF
@@ -134,6 +142,9 @@ Output routines specialised to the analysis.
 
 > instance OutputG (Spec p) Alt2 where
 >     outputG = outputF
+
+> instance OutputIndG (Fortran A1) Alt2 where
+>     outputIndG = outputIndF
 
 > instance OutputIndG (Fortran Annotation) Alt2 where
 
@@ -201,32 +212,73 @@ Output routines specialised to the analysis.
 >                      ([]:ys)        -> takeBounds' ((ll+1, 0), (ul, uc)) ('\n':tk) ys
 >                      ((x:xs):ys)    -> takeBounds' ((ll, lc+1), (ul, uc)) (x:tk) (xs:ys)
 
-> getHole' :: (Typeable (d A1), Typeable1 e, Typeable1 d, Fort d, Fort e) => Zipper (d A1) -> Maybe (e A1)
-> getHole' = getHole
+ getHole' :: (Typeable (d A1), Typeable1 e, Typeable1 d, Fort d, Fort e) => Zipper (d A1) -> Maybe (e A1)
+ getHole' = getHole
 
 > class Copointed t => Fort (t :: * -> *) where
 > instance (Copointed Fortran, Fort Expr, Fort VarName, Fort Spec, Fort ArgList) => Fort Fortran
 > instance (Copointed Expr, Fort VarName, Fort UnaryOp, Fort ArgList) => Fort Expr
 > instance (Copointed BinOp) => Fort BinOp
 
+> reprint :: String -> String -> Program A1 -> String
+> reprint input f z = let input' = Prelude.lines input
+>                    in reprintA (SrcLoc f 1 1) (SrcLoc f (Prelude.length input') (1 + (Prelude.length $ Prelude.last input'))) input' (toZipper z)
 
-> reprint :: (Typeable1 d, Fort d) => String -> String -> Zipper (d A1) -> String
-> reprint input fname z = let ?variant = Alt2
->                         in reprintP (SrcLoc "" 1 1) (Prelude.lines input) z 
+> doHole :: SrcLoc -> [String] -> Zipper (d A1) -> (String, SrcLoc)
+> doHole cursor inp z = case (getHole z)::(Maybe (Fortran A1)) of
+>                           Just e  -> let ((lb, ub), flag) = copoint e
+>                                          (p1, rest1) = takeBounds (cursor, lb) inp
+>                                      in  if flag then let ?variant = Alt2 in (p1 ++ outputF e, ub)
+>                                          else case (down' z) of
+>                                                    Just cz -> (p1 ++ reprintA lb ub rest1 cz, ub)
+>                                                    Nothing -> let (p2, _) = takeBounds (lb, ub) rest1
+>                                                               in (p1, ub)
+>                           Nothing -> case (down' z) of 
+>                                        Just cz -> (reprintA cursor cursor inp cz, cursor)
+>                                        Nothing -> ("", cursor)
 
-> reprintP :: forall v d e .(?variant :: v, Typeable1 d, Copointed e, Typeable1 e) => SrcLoc -> [String] -> Zipper (d A1) -> String
-> reprintP cursor inp z = case (getHole z)::((Copointed e, Typeable (e A1)) => Maybe (e A1)) of
->                           Just e -> let ((lb, ub), flag) = copoint e
+> reprintA :: SrcLoc -> SrcLoc -> [String] -> Zipper (d A1) -> String
+> reprintA cursor end inp z = let (p1, cursor') = doHole cursor inp z
+>                                 (p2, inp')    = takeBounds (cursor, cursor') inp
+>                             in p1 ++ case (right z) of 
+>                                         Just rz -> reprintA cursor' end inp' rz
+>                                         Nothing -> fst $ takeBounds (cursor', end) inp'
+
+ reprint2 :: SrcLoc -> [String] -> Zipper (d A1) -> String
+ reprint2 cursor inp z = case (getHole z)::(Maybe (Fortran A1)) of
+                           Just e  -> let ((lb, ub), flag) = copoint e
+                                      in if inBounds cursor (lb, ub) then
+                                             if flag then let ?variant = Alt2 in outputF e
+                                             else let (p1, rest1) = takeBounds (cursor, lb) inp
+                                                      p2          = reprint
+                                                 
+                                                 case down' z of 
+                                                    Just cz -> reprintR2 cursor inp cz
+                                                    Nothing -> ""
+                                         else maybe "" (reprintP cursor inp) (up z)
+                           Nothing -> 
+
+ reprintR2 :: SrcLoc -> [String] -> Zipper (d A1) -> (SrcLoc, String)
+ reprintR2 cursor inp z = (case down' z of
+                             Just cz -> reprint2 cursor inp cz
+                             Nothing -> "") ++
+                          (case right z of
+                             Just cr -> 
+  
+
+> reprintP :: SrcLoc -> [String] -> Zipper (d A1) -> String
+> reprintP cursor inp z = case (getHole z)::(Maybe (Fortran A1)) of
+>                           Just e -> show e `trace` let ((lb, ub), flag) = copoint e
 >                                     in  if inBounds cursor (lb, ub) then 
->                                           if flag then outputF e
+>                                           if flag then let ?variant = Alt2 in outputF e
 >                                           else  case down' z of
 >                                                   Just cz -> reprintR cursor ub inp cz 
 >                                                   Nothing -> ""
 >                                         else maybe "" (reprintP cursor inp) (up z)
->                           Nothing -> ""
+>                           Nothing -> maybe "" (reprintR cursor cursor inp) (down' z)
 
-> reprintR :: forall v d e . (?variant :: v, Typeable1 d, Copointed e, Typeable1 e) => SrcLoc -> SrcLoc -> [String] -> Zipper (d A1) -> String
-> reprintR cursor parentUb inp z = case (getHole z)::((Copointed e, Typeable (e A1)) => Maybe (e A1)) of
+> reprintR :: SrcLoc -> SrcLoc -> [String] -> Zipper (d A1) -> String
+> reprintR cursor parentUb inp z = case (getHole z)::(Maybe (Fortran A1)) of
 >                                    Just e -> 
 >                                        let ((lb, ub), _) = copoint e
 >                                            (p1, rest1)   = takeBounds (cursor, lb) inp
