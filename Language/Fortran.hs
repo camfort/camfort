@@ -30,6 +30,7 @@ import Data.Maybe
 import Data.List
 
 import Generics.Deriving.Base
+import Generics.Deriving.Copoint
 import GHC.Generics
 
 ---------------------------------------------------------------------------
@@ -251,3 +252,93 @@ data Spec     p = Access   p (Expr p)
 -- 
 
 ne = NullExpr 
+
+class Copointed d where
+    copoint :: d a -> a 
+
+instance Copointed Attr where copoint = gcopoint
+instance Copointed BaseType where copoint = gcopoint
+instance Copointed SubName where copoint = gcopoint
+instance Copointed VarName where copoint = gcopoint
+instance Copointed ArgName where copoint = gcopoint
+instance Copointed Arg     where copoint = gcopoint
+instance Copointed Implicit where copoint = gcopoint
+
+instance Copointed ArgList where 
+    copoint (ArgList x _) = x
+
+instance Copointed Program where
+    copoint (Main x _ _ _ _)      = x
+    copoint (Sub x _ _ _ _)       = x
+    copoint (Function x _ _ _ _)  = x
+    copoint (Module x _ _ _ _ _ ) = x
+    copoint (BlockData x _ _ _ _) = x
+    copoint (PSeq x _ _)          = x
+    copoint (Prog x _)            = x
+    copoint (NullProg x)          = x
+
+instance Copointed Decl where
+    copoint (Decl x _ _)          = x
+    copoint (Namelist x _)        = x
+    copoint (Data x _)            = x
+    copoint (AccessStmt x _ _)    = x
+    copoint (ExternalStmt x _)    = x
+    copoint (Interface x _ _)     = x
+    copoint (Common x _ _)        = x
+    copoint (DerivedTypeDef x _ _ _ _) = x
+    copoint (Include x _)         = x
+    copoint (DSeq x _ _)          = x
+    copoint (TextDecl x _)        = x
+    copoint (NullDecl x)        = x
+
+instance Copointed Fortran where
+    copoint (Assg x e1 e2)        = x
+    copoint (For x v e1 e2 e3 fs) = x
+    copoint (FSeq x f1 f2)        = x
+    copoint (If x e f1 fes f3)    = x
+    copoint (Allocate x e1 e2)    = x
+    copoint (Backspace x sp)      = x
+    copoint (Call x e as)         = x
+    copoint (Open x s)            = x
+    copoint (Close x s)           = x 
+    copoint (Continue x)          = x
+    copoint (Cycle x s)           = x
+    copoint (Deallocate x es e)   = x
+    copoint (Equivalence x _)     = x
+    copoint (Endfile x s)         = x
+    copoint (Exit x s)            = x
+    copoint (Forall x es f)       = x
+    copoint (Goto x s)            = x
+    copoint (Nullify x e)         = x
+    copoint (Inquire x s e)       = x
+    copoint (Rewind x s)          = x 
+    copoint (Stop x e)            = x
+    copoint (Where x e f)         = x 
+    copoint (Write x s e)         = x
+    copoint (PointerAssg x e1 e2) = x
+    copoint (Return x e)          = x
+    copoint (Label x s f)         = x
+    copoint (Print x e es)        = x
+    copoint (ReadS x s e)         = x
+    copoint (TextStmt x s)        = x
+    copoint (NullStmt x)          = x
+
+instance Copointed Expr where
+    copoint (Con x _) = x
+    copoint (ConS x _) = x
+    copoint (Var x _ ) = x
+    copoint (Bin x _ _ _) = x
+    copoint (Unary x _ _) = x
+    copoint (CallExpr x _ _) = x
+    copoint (NullExpr x) = x
+    copoint (Null x) = x
+    copoint (ESeq x _ _) = x
+    copoint (Bound x _ _) = x
+    copoint (Sqrt x _) = x
+    copoint (ArrayCon x _) = x
+    copoint (AssgExpr x _ _) = x
+
+instance Copointed GSpec where
+    copoint (GName x _) = x
+    copoint (GOper x _) = x
+    copoint (GAssg x)   = x

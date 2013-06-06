@@ -213,13 +213,6 @@ Output routines specialised to the analysis.
 >                      ([]:ys)        -> takeBounds' ((ll+1, 0), (ul, uc)) ('\n':tk) ys
 >                      ((x:xs):ys)    -> takeBounds' ((ll, lc+1), (ul, uc)) (x:tk) (xs:ys)
 
- getHole' :: (Typeable (d A1), Typeable1 e, Typeable1 d, Fort d, Fort e) => Zipper (d A1) -> Maybe (e A1)
- getHole' = getHole
-
-> class Copointed t => Fort (t :: * -> *) where
-> instance (Copointed Fortran, Fort Expr, Fort VarName, Fort Spec, Fort ArgList) => Fort Fortran
-> instance (Copointed Expr, Fort VarName, Fort UnaryOp, Fort ArgList) => Fort Expr
-> instance (Copointed BinOp) => Fort BinOp
 
 > reprint :: String -> String -> Program A1 -> String
 > reprint input f z = let input' = Prelude.lines input

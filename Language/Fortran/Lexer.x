@@ -6,6 +6,9 @@ module Language.Fortran.Lexer where
 
 import Data.Char
 import Debug.Trace
+
+import Language.Fortran
+
 import Language.Haskell.Syntax (SrcLoc)
 import Language.Haskell.ParseMonad
 
@@ -123,7 +126,8 @@ tokens :-
 {
 -- Each action has type :: String -> Token
 
-			
+
+instance Copointed Token where copoint = gcopoint			
 
 -- The token type:
 data Token l = Key String l | OpPower l | OpMul l | OpDiv l | OpAdd l | OpSub l | OpConcat l

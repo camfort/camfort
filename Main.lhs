@@ -136,4 +136,4 @@ map (fmap ((,[""]),[""]))
 >            p <- pr f
 >            let out = reprint inp f (fmap (\x -> (x, False)) (head p))
 >            writeFile (f ++ ".out") out
->            return $ (p, out)
+>            
