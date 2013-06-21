@@ -30,8 +30,9 @@ import Data.Maybe
 import Data.List
 
 import Generics.Deriving.Base
-import Generics.Deriving.Copoint
 import GHC.Generics
+
+import Language.Haskell.Syntax (SrcLoc)
 
 ---------------------------------------------------------------------------
 -- Language definition for parametric Fortran
@@ -44,6 +45,7 @@ import GHC.Generics
 -- All kinds of names ...
 -- 
 
+type SrcSpan = (SrcLoc, SrcLoc)
 
 type Variable = String
 
@@ -71,14 +73,14 @@ data ArgList  p = ArgList p (Expr p)
                   deriving (Show, Functor, Typeable, Data, Eq)
 
              -- Prog type   (type of result)   name      args  body    use's  
-data Program  p = Main       p                      (SubName p)  (Arg p)  (Block p) [Program p]
-                | Sub        p (Maybe (BaseType p)) (SubName p)  (Arg p)  (Block p)
-                | Function   p (Maybe (BaseType p)) (SubName p)  (Arg p)  (Block p)
-                | Module     p                      (SubName p)  [String] (Implicit p) (Decl p) [Program p]
-                | BlockData  p                      (SubName p)  [String] (Implicit p) (Decl p)
-                | PSeq       p (Program p) (Program p)   -- sequence of programs
-                | Prog       p (Program p)               -- useful for {#p: #q : program ... }
-                | NullProg   p                           -- null
+data Program  p = Main       p SrcSpan                      (SubName p)  (Arg p)  (Block p) [Program p]
+                | Sub        p SrcSpan (Maybe (BaseType p)) (SubName p)  (Arg p)  (Block p)
+                | Function   p SrcSpan (Maybe (BaseType p)) (SubName p)  (Arg p)  (Block p)
+                | Module     p SrcSpan                      (SubName p)  [String] (Implicit p) (Decl p) [Program p]
+                | BlockData  p SrcSpan                      (SubName p)  [String] (Implicit p) (Decl p)
+                | PSeq       p SrcSpan (Program p) (Program p)   -- sequence of programs
+                | Prog       p SrcSpan (Program p)               -- useful for {#p: #q : program ... }
+                | NullProg   p SrcSpan                           -- null
                 deriving (Show, Functor, Typeable, Data, Eq)
 
              -- implicit none or no implicit 
@@ -141,53 +143,53 @@ data IntentAttr p = In p
                   | InOut p
                     deriving (Show, Functor, Typeable, Data, Eq, Generic1)
 				
-data Fortran  p = Assg p (Expr p) (Expr p) 
-                | For  p (VarName p) (Expr p) (Expr p) (Expr p) (Fortran p)
-                | FSeq p (Fortran p) (Fortran p)
-                | If   p (Expr p) (Fortran p) [((Expr p),(Fortran p))] (Maybe (Fortran p))
-                | Allocate p (Expr p) (Expr p)
-                | Backspace p [Spec p]
-                | Call p (Expr p) (ArgList p)
-                | Equivalence p [(Expr p)]
-                | Open p [Spec p]
-                | Close p [Spec p]
-                | Continue p
-                | Cycle p String
-                | Deallocate p [(Expr p)] (Expr p)
-                | Endfile p [Spec p]
-                | Exit p String
-                | Forall p ([(String,(Expr p),(Expr p),(Expr p))],(Expr p)) (Fortran p)
-                | Goto p String
-                | Nullify p [(Expr p)]
-                | Inquire p [Spec p] [(Expr p)]
-                | Rewind p [Spec p]
-                | Stop p (Expr p)
-                | Where p (Expr p) (Fortran p)
-                | Write p [Spec p] [(Expr p)]
-                | PointerAssg p (Expr p) (Expr p)
-                | Return p (Expr p)
-                | Label p String (Fortran p)
-                | Print p (Expr p) [(Expr p)]
-                | ReadS p [Spec p] [(Expr p)]
-                | TextStmt p String     -- cpp switches to carry over
-                | NullStmt p
+data Fortran  p = Assg p SrcSpan (Expr p) (Expr p) 
+                | For  p SrcSpan (VarName p) (Expr p) (Expr p) (Expr p) (Fortran p)
+                | FSeq p SrcSpan (Fortran p) (Fortran p)
+                | If   p SrcSpan (Expr p) (Fortran p) [((Expr p),(Fortran p))] (Maybe (Fortran p))
+                | Allocate p SrcSpan (Expr p) (Expr p)
+                | Backspace p SrcSpan [Spec p]
+                | Call p SrcSpan (Expr p) (ArgList p)
+                | Equivalence p SrcSpan  [(Expr p)]
+                | Open p SrcSpan [Spec p]
+                | Close p SrcSpan [Spec p]
+                | Continue p SrcSpan 
+                | Cycle p SrcSpan String
+                | Deallocate p SrcSpan [(Expr p)] (Expr p)
+                | Endfile p SrcSpan [Spec p]
+                | Exit p SrcSpan String
+                | Forall p SrcSpan ([(String,(Expr p),(Expr p),(Expr p))],(Expr p)) (Fortran p)
+                | Goto p SrcSpan String
+                | Nullify p SrcSpan [(Expr p)]
+                | Inquire p SrcSpan [Spec p] [(Expr p)]
+                | Rewind p SrcSpan [Spec p]
+                | Stop p SrcSpan (Expr p)
+                | Where p SrcSpan (Expr p) (Fortran p)
+                | Write p SrcSpan [Spec p] [(Expr p)]
+                | PointerAssg p SrcSpan  (Expr p) (Expr p)
+                | Return p SrcSpan  (Expr p)
+                | Label p SrcSpan String (Fortran p)
+                | Print p SrcSpan (Expr p) [(Expr p)]
+                | ReadS p SrcSpan [Spec p] [(Expr p)]
+                | TextStmt p SrcSpan String     -- cpp switches to carry over
+                | NullStmt p SrcSpan
                   deriving (Show, Functor, Typeable, Data, Eq)
 
 -- type Bound    = ((Expr p),(Expr p))
 
-data Expr  p = Con p String
-             | ConS p String  -- String constant
-             | Var p [((VarName p),[(Expr p)])]
-             | Bin p (BinOp p) (Expr p) (Expr p)
-             | Unary p (UnaryOp p) (Expr p)
-             | CallExpr p (Expr p) (ArgList p)
-             | NullExpr p
-             | Null p
-             | ESeq p (Expr p) (Expr p)
-             | Bound p (Expr p) (Expr p)
-             | Sqrt p (Expr p)
-             | ArrayCon p [(Expr p)]
-             | AssgExpr p String (Expr p)
+data Expr  p = Con p SrcSpan String
+             | ConS p SrcSpan String  -- String constant
+             | Var p SrcSpan  [((VarName p),[(Expr p)])]
+             | Bin p SrcSpan  (BinOp p) (Expr p) (Expr p)
+             | Unary p SrcSpan (UnaryOp p) (Expr p)
+             | CallExpr p SrcSpan (Expr p) (ArgList p)
+             | NullExpr p SrcSpan
+             | Null p SrcSpan 
+             | ESeq p SrcSpan (Expr p) (Expr p)
+             | Bound p SrcSpan (Expr p) (Expr p)
+             | Sqrt p SrcSpan (Expr p)
+             | ArrayCon p SrcSpan [(Expr p)]
+             | AssgExpr p SrcSpan String (Expr p)
                deriving (Show, Functor, Typeable ,Data, Eq)
 
 data BinOp   p = Plus p
@@ -247,98 +249,62 @@ data Spec     p = Access   p (Expr p)
               | WriteSp    p (Expr p)
                 deriving (Show, Functor,Typeable,Data, Eq)
 
+class GetSpan t where
+    getSpan :: t -> (SrcLoc, SrcLoc)
 
--- smart constructors for language 'constants', that is, expressions
--- 
+instance GetSpan (Program a) where
+    getSpan (Main x sp _ _ _ _)      = sp
+    getSpan (Sub x sp _ _ _ _)       = sp
+    getSpan (Function x sp _ _ _ _)  = sp
+    getSpan (Module x sp _ _ _ _ _ ) = sp
+    getSpan (BlockData x sp _ _ _ _) = sp
+    getSpan (PSeq x sp _ _)          = sp
+    getSpan (Prog x sp _)            = sp
+    getSpan (NullProg x sp)          = sp
 
-ne = NullExpr 
+instance GetSpan (Expr a) where
+    getSpan (Con x sp _)        = sp
+    getSpan (ConS x sp _)       = sp
+    getSpan (Var x sp _ )       = sp
+    getSpan (Bin x sp _ _ _)    = sp
+    getSpan (Unary x sp _ _)    = sp
+    getSpan (CallExpr x sp _ _) = sp
+    getSpan (NullExpr x sp)     = sp
+    getSpan (Null x sp)         = sp
+    getSpan (ESeq x sp _ _)     = sp
+    getSpan (Bound x sp _ _)    = sp
+    getSpan (Sqrt x sp _)       = sp
+    getSpan (ArrayCon x sp _)   = sp
+    getSpan (AssgExpr x sp _ _) = sp
 
-class Copointed d where
-    copoint :: d a -> a 
-
-instance Copointed Attr where copoint = gcopoint
-instance Copointed BaseType where copoint = gcopoint
-instance Copointed SubName where copoint = gcopoint
-instance Copointed VarName where copoint = gcopoint
-instance Copointed ArgName where copoint = gcopoint
-instance Copointed Arg     where copoint = gcopoint
-instance Copointed Implicit where copoint = gcopoint
-
-instance Copointed ArgList where 
-    copoint (ArgList x _) = x
-
-instance Copointed Program where
-    copoint (Main x _ _ _ _)      = x
-    copoint (Sub x _ _ _ _)       = x
-    copoint (Function x _ _ _ _)  = x
-    copoint (Module x _ _ _ _ _ ) = x
-    copoint (BlockData x _ _ _ _) = x
-    copoint (PSeq x _ _)          = x
-    copoint (Prog x _)            = x
-    copoint (NullProg x)          = x
-
-instance Copointed Decl where
-    copoint (Decl x _ _)          = x
-    copoint (Namelist x _)        = x
-    copoint (Data x _)            = x
-    copoint (AccessStmt x _ _)    = x
-    copoint (ExternalStmt x _)    = x
-    copoint (Interface x _ _)     = x
-    copoint (Common x _ _)        = x
-    copoint (DerivedTypeDef x _ _ _ _) = x
-    copoint (Include x _)         = x
-    copoint (DSeq x _ _)          = x
-    copoint (TextDecl x _)        = x
-    copoint (NullDecl x)        = x
-
-instance Copointed Fortran where
-    copoint (Assg x e1 e2)        = x
-    copoint (For x v e1 e2 e3 fs) = x
-    copoint (FSeq x f1 f2)        = x
-    copoint (If x e f1 fes f3)    = x
-    copoint (Allocate x e1 e2)    = x
-    copoint (Backspace x sp)      = x
-    copoint (Call x e as)         = x
-    copoint (Open x s)            = x
-    copoint (Close x s)           = x 
-    copoint (Continue x)          = x
-    copoint (Cycle x s)           = x
-    copoint (Deallocate x es e)   = x
-    copoint (Equivalence x _)     = x
-    copoint (Endfile x s)         = x
-    copoint (Exit x s)            = x
-    copoint (Forall x es f)       = x
-    copoint (Goto x s)            = x
-    copoint (Nullify x e)         = x
-    copoint (Inquire x s e)       = x
-    copoint (Rewind x s)          = x 
-    copoint (Stop x e)            = x
-    copoint (Where x e f)         = x 
-    copoint (Write x s e)         = x
-    copoint (PointerAssg x e1 e2) = x
-    copoint (Return x e)          = x
-    copoint (Label x s f)         = x
-    copoint (Print x e es)        = x
-    copoint (ReadS x s e)         = x
-    copoint (TextStmt x s)        = x
-    copoint (NullStmt x)          = x
-
-instance Copointed Expr where
-    copoint (Con x _) = x
-    copoint (ConS x _) = x
-    copoint (Var x _ ) = x
-    copoint (Bin x _ _ _) = x
-    copoint (Unary x _ _) = x
-    copoint (CallExpr x _ _) = x
-    copoint (NullExpr x) = x
-    copoint (Null x) = x
-    copoint (ESeq x _ _) = x
-    copoint (Bound x _ _) = x
-    copoint (Sqrt x _) = x
-    copoint (ArrayCon x _) = x
-    copoint (AssgExpr x _ _) = x
-
-instance Copointed GSpec where
-    copoint (GName x _) = x
-    copoint (GOper x _) = x
-    copoint (GAssg x)   = x
+instance GetSpan (Fortran a) where
+    getSpan (Assg x sp e1 e2)        = sp
+    getSpan (For x sp v e1 e2 e3 fs) = sp
+    getSpan (FSeq x sp f1 f2)        = sp
+    getSpan (If x sp e f1 fes f3)    = sp
+    getSpan (Allocate x sp e1 e2)    = sp
+    getSpan (Backspace x sp _)       = sp
+    getSpan (Call x sp e as)         = sp
+    getSpan (Open x sp s)            = sp
+    getSpan (Close x sp s)           = sp 
+    getSpan (Continue x sp)          = sp
+    getSpan (Cycle x sp s)           = sp
+    getSpan (Deallocate x sp es e)   = sp
+    getSpan (Equivalence x sp _)     = sp
+    getSpan (Endfile x sp s)         = sp
+    getSpan (Exit x sp s)            = sp
+    getSpan (Forall x sp es f)       = sp
+    getSpan (Goto x sp s)            = sp
+    getSpan (Nullify x sp e)         = sp
+    getSpan (Inquire x sp s e)       = sp
+    getSpan (Rewind x sp s)          = sp 
+    getSpan (Stop x sp e)            = sp
+    getSpan (Where x sp e f)         = sp 
+    getSpan (Write x sp s e)         = sp
+    getSpan (PointerAssg x sp e1 e2) = sp
+    getSpan (Return x sp e)          = sp
+    getSpan (Label x sp s f)         = sp
+    getSpan (Print x sp e es)        = sp
+    getSpan (ReadS x sp s e)         = sp
+    getSpan (TextStmt x sp s)        = sp
+    getSpan (NullStmt x sp)          = sp

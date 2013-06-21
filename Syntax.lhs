@@ -29,7 +29,7 @@ All variables from a Fortran syntax tree
 
 > variables :: forall a t . (Data (t a), Typeable (t a), Data a, Typeable a) => t a -> [String]
 > variables f = nub $
->                  [v | (AssgExpr _ v _) <- (universeBi f)::[Expr a]]
+>                  [v | (AssgExpr _ _ v _) <- (universeBi f)::[Expr a]]
 >               ++ [v | (VarName _ v) <- (universeBi f)::[VarName a]] 
                
 Free-variables in a piece of Fortran syntax
@@ -43,7 +43,7 @@ All variables from binders
 > binders f = nub $
 >                [v | (ArgName _ v) <- (universeBi f)::[ArgName a]] 
 >             ++ [v | (VarName _ v) <- (universeBi ((universeBi f)::[Decl a]))::[VarName a]]
->             ++ [v | (For _ (VarName _ v) _ _ _ _) <- (universeBi f)::[Fortran a]]
+>             ++ [v | (For _ _ (VarName _ v) _ _ _ _) <- (universeBi f)::[Fortran a]]
 
 
  fi :: Fortran Annotation -> [Expr Annotation]
@@ -51,46 +51,46 @@ All variables from binders
  fi t = (concatMap fi ((children t)::[Fortran Annotation])) ++ ((childrenBi t) :: [Expr Annotation])
 
 > lhsExpr :: Fortran Annotation -> [Expr Annotation]
-> lhsExpr (Assg x e1 e2)        = (universeBi e2)::[Expr Annotation]
-> lhsExpr (For x v e1 e2 e3 fs) = ((universeBi e1)::[Expr Annotation]) ++
+> lhsExpr (Assg x sp e1 e2)        = (universeBi e2)::[Expr Annotation]
+> lhsExpr (For x sp v e1 e2 e3 fs) = ((universeBi e1)::[Expr Annotation]) ++
 >                              ((universeBi e2)::[Expr Annotation]) ++
 >                              ((universeBi e3)::[Expr Annotation]) ++ 
 >                             lhsExpr fs
-> lhsExpr (FSeq x f1 f2)        = lhsExpr f1 ++ lhsExpr f2
-> lhsExpr (If x e f1 fes f3)    = ((universeBi e)::[Expr Annotation]) ++
+> lhsExpr (FSeq x sp f1 f2)        = lhsExpr f1 ++ lhsExpr f2
+> lhsExpr (If x sp e f1 fes f3)    = ((universeBi e)::[Expr Annotation]) ++
 >                              (lhsExpr f1) ++ 
 >                              (concatMap (\(e, f) -> ((universeBi e)::[Expr Annotation]) ++ lhsExpr f) fes) ++
 >                               (case f3 of 
 >                                  Nothing -> []
->                                  Just x -> lhsExpr x)
+>                                  Just x' -> lhsExpr x')
 >                             
-> lhsExpr (Allocate x e1 e2)    = ((universeBi e1)::[Expr Annotation]) ++
+> lhsExpr (Allocate x sp e1 e2)    = ((universeBi e1)::[Expr Annotation]) ++
 >                              ((universeBi e2)::[Expr Annotation])
-> lhsExpr (Call x e as)         = (universeBi e)::[Expr Annotation] 
-> lhsExpr (Deallocate x es e)   = (concatMap (\e -> (universeBi e)::[Expr Annotation]) es) ++
+> lhsExpr (Call x sp e as)         = (universeBi e)::[Expr Annotation] 
+> lhsExpr (Deallocate x sp es e)   = (concatMap (\e -> (universeBi e)::[Expr Annotation]) es) ++
 >                              ((universeBi e)::[Expr Annotation])
-> lhsExpr (Forall x (es, e) f)  = concatMap (\(_, e1, e2, e3) -> -- TODO: maybe different here
+> lhsExpr (Forall x sp (es, e) f)  = concatMap (\(_, e1, e2, e3) -> -- TODO: maybe different here
 >                                            ((universeBi e1)::[Expr Annotation]) ++
 >                                             ((universeBi e2)::[Expr Annotation]) ++
 >                                             ((universeBi e3)::[Expr Annotation])) es ++
 >                             ((universeBi e)::[Expr Annotation]) ++
 >                             lhsExpr f 
-> lhsExpr (Nullify x es)        = concatMap (\e -> (universeBi e)::[Expr Annotation]) es
-> lhsExpr (Inquire x s es)      = concatMap (\e -> (universeBi e)::[Expr Annotation]) es
-> lhsExpr (Stop x e)            = (universeBi e)::[Expr Annotation]
-> lhsExpr (Where x e f)         = ((universeBi e)::[Expr Annotation]) ++ lhsExpr f
-> lhsExpr (Write x s es)        = concatMap (\e -> (universeBi e)::[Expr Annotation]) es
-> lhsExpr (PointerAssg x e1 e2) = ((universeBi e1)::[Expr Annotation]) ++
+> lhsExpr (Nullify x sp es)        = concatMap (\e -> (universeBi e)::[Expr Annotation]) es
+> lhsExpr (Inquire x sp s es)      = concatMap (\e -> (universeBi e)::[Expr Annotation]) es
+> lhsExpr (Stop x sp e)            = (universeBi e)::[Expr Annotation]
+> lhsExpr (Where x sp e f)         = ((universeBi e)::[Expr Annotation]) ++ lhsExpr f
+> lhsExpr (Write x sp s es)        = concatMap (\e -> (universeBi e)::[Expr Annotation]) es
+> lhsExpr (PointerAssg x sp e1 e2) = ((universeBi e1)::[Expr Annotation]) ++
 >                             ((universeBi e2)::[Expr Annotation])
-> lhsExpr (Return x e)          = (universeBi e)::[Expr Annotation]
-> lhsExpr (Label x s f)         = lhsExpr f
-> lhsExpr (Print x e es)        = ((universeBi e)::[Expr Annotation]) ++ 
+> lhsExpr (Return x sp e)          = (universeBi e)::[Expr Annotation]
+> lhsExpr (Label x sp s f)         = lhsExpr f
+> lhsExpr (Print x sp e es)        = ((universeBi e)::[Expr Annotation]) ++ 
 >                              (concatMap (\e -> (universeBi e)::[Expr Annotation]) es)
-> lhsExpr (ReadS x s es)        = concatMap (\e -> (universeBi e)::[Expr Annotation]) es
+> lhsExpr (ReadS x sp s es)        = concatMap (\e -> (universeBi e)::[Expr Annotation]) es
 > lhsExpr _                     = []
 
 > rhsExpr :: Fortran Annotation -> [Expr Annotation]
-> rhsExpr (Assg x e1 e2)        = (universeBi e1)::[Expr Annotation]
+> rhsExpr (Assg x sp e1 e2)        = (universeBi e1)::[Expr Annotation]
 > rhsExpr t                     = concatMap rhsExpr ((children t)::[Fortran Annotation])
 
  rhsExpr (For x v e1 e2 e3 fs) = rhsExpr fs
@@ -106,12 +106,12 @@ All variables from binders
  rhsExpr (Label x s f)         = rhsExpr f
  rhsExpr t                     = [] -- concatMap rhsExpr ((universeBi t)::[Fortran Annotation])
 
-> affineMatch (Bin _ (Plus _) (Var _ [(VarName _ v, _)]) (Con _ n))   = Just (v, read n)
-> affineMatch (Bin _ (Plus _) (Con _ n) (Var _ [(VarName _ v, _)]))   = Just (v, read n)
-> affineMatch (Bin _ (Minus _) (Var _ [(VarName _ v, _)]) (Con _ n))  = Just (v, - read n)
-> affineMatch (Bin _ (Minus _) (Con _ n) (Var _  [(VarName _ v, _)])) = Just (v, - read n)
-> affineMatch (Var _  [(VarName _ v, _)])                             = Just (v, 0)
-> affineMatch _                                                       = Nothing
+> affineMatch (Bin _ _ (Plus _) (Var _ _ [(VarName _ v, _)]) (Con _ _ n)) = Just (v, read n)
+> affineMatch (Bin _ _ (Plus _) (Con _ _ n) (Var _ _ [(VarName _ v, _)]))   = Just (v, read n)
+> affineMatch (Bin _ _ (Minus _) (Var _ _ [(VarName _ v, _)]) (Con _ _ n))    = Just (v, - read n)
+> affineMatch (Bin _ _ (Minus _) (Con _ _ n) (Var _  _ [(VarName _ v, _)])) = Just (v, - read n)
+> affineMatch (Var _ _  [(VarName _ v, _)])                               = Just (v, 0)
+> affineMatch _                                                           = Nothing
 
 
  indexVariables :: Program Annotation -> Program Annotation

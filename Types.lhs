@@ -20,7 +20,7 @@
 > gtypes x = let decAndTypes :: [([(Expr a, Expr a)], Type a)]
 >                decAndTypes = [(d, t) | (Decl _ d t) <- (universeBi x)::[Decl a]]
 >            in concatMap (\(d, t) -> 
->                              [(v, toArrayType t es) | (Var _ [(VarName _ v, es)], _) <- d]) decAndTypes
+>                              [(v, toArrayType t es) | (Var _ _ [(VarName _ v, es)], _) <- d]) decAndTypes
 
 > typeAnnotations :: (Typeable a, Data a) => [Program a] -> State (TypeEnv a) [Program a]
 > typeAnnotations = mapM (descendBiM buildTypeEnv)
@@ -53,11 +53,11 @@
 >  
 
 > boundsP [] = True
-> boundsP ((Bound _ _ _):es) = True && (boundsP es)
+> boundsP ((Bound _ _ _ _):es) = True && (boundsP es)
 > boundsP _ = False
 
 > bounds [] = []                
-> bounds ((Bound _ e1 e2):es) = (e1, e2) : (bounds es)
+> bounds ((Bound _ _ e1 e2):es) = (e1, e2) : (bounds es)
 > bounds _ = error "Bound expression is of the wrong form"
                   
  predBounds [] = False

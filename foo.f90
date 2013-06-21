@@ -6,9 +6,9 @@ program foo
   contains
 
   subroutine bar(x)
-    integer :: x
     integer :: i
-    integer ::  j
+    integer :: x
+    integer :: j
     real a(0:x), b(0:x), c
 
     c = 0.1

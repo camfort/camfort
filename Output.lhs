@@ -135,7 +135,7 @@ Output routines specialised to the analysis.
 > instance (OutputIndG (Fortran p) Alt2, OutputG p Alt2) => OutputG (Fortran p) Alt2 where
 >                               
 
->     outputG (For p v e e' e'' f) = "do"++" "++outputG v++" = "++outputG e++", "++
+>     outputG (For p _ v e e' e'' f) = "do"++" "++outputG v++" = "++outputG e++", "++
 >                                    outputG e'++", "++outputG e''++"\n"++
 >                                    "<span style='color:#707d8f'>"++"{"++outputG p++"}</span>\n" ++ 
 >                                    (outputIndG 1 f)++"\n"++(ind 1)++"end do"
@@ -149,7 +149,7 @@ Output routines specialised to the analysis.
 
 > instance OutputIndG (Fortran Annotation) Alt2 where
 
->     outputIndG i t@(For p v e e' e'' f) = (outputAnn p False i) ++ 
+>     outputIndG i t@(For p _ v e e' e'' f) = (outputAnn p False i) ++ 
 >                                           annotationMark i t
 >                                           ((ind i) ++ "do"++" "++outputG v++" = "++
 >                                            outputG e++", "++
@@ -197,7 +197,7 @@ Output routines specialised to the analysis.
 >            showExps ((v, es):ys) = (showExps [(v, es)]) ++ ", " ++ (showExps ys)
 
 
-> type A1 =  ((SrcLoc, SrcLoc), Bool)
+> type A1 =  Bool
 
 > lineCol :: SrcLoc -> (Int, Int)
 > lineCol x = (srcLine x, srcColumn x)
@@ -216,11 +216,12 @@ Output routines specialised to the analysis.
 
 > reprint :: String -> String -> Program A1 -> String
 > reprint input f z = let input' = Prelude.lines input
->                    in reprintA (SrcLoc f 1 1) (SrcLoc f (Prelude.length input') (1 + (Prelude.length $ Prelude.last input'))) input' (toZipper z)
+>                     in reprintA (SrcLoc f 1 1) (SrcLoc f (Prelude.length input') (1 + (Prelude.length $ Prelude.last input'))) input' (toZipper z)
 
 > doHole :: SrcLoc -> [String] -> Zipper (d A1) -> (String, SrcLoc)
 > doHole cursor inp z = case (getHole z)::(Maybe (Fortran A1)) of
->                           Just e  -> let ((lb, ub), flag) = copoint e
+>                           Just e  -> let flag = copoint e
+>                                          (lb, ub) = getSpan e
 >                                          (p1, rest1) = takeBounds (cursor, lb) inp
 >                                      in  if flag then let ?variant = Alt2 in (p1 ++ outputF e, ub)
 >                                          else case (down' z) of

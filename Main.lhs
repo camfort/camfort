@@ -47,11 +47,11 @@
 > main = do return ()
 
 > quickAnnotateDo :: Fortran String -> Fortran String
-> quickAnnotateDo (For _ v@(VarName _ s) e1 e2 e3 body) = For s v e1 e2 e3 body
+> quickAnnotateDo (For _ sp v@(VarName _ s) e1 e2 e3 body) = For s sp v e1 e2 e3 body
 > quickAnnotateDo t = t
 
 > annotateFVDo :: Fortran ([String], [String]) -> Fortran ([String], [String])
-> annotateFVDo (For _ v@(VarName _ s) e1 e2 e3 body) = For anno v e1 e2 e3 body
+> annotateFVDo (For _ sp v@(VarName _ s) e1 e2 e3 body) = For anno sp v e1 e2 e3 body
 >   where anno = ([""], freeVariables body) -- \\ [s] -- indexVariables body
 > annotateFVDo t = t
 
@@ -92,22 +92,22 @@ map (fmap ((,[""]),[""]))
 >         
 >         arrIxsF :: Fortran Annotation -> Annotation
 >         arrIxsF y = let readIxs = [(v, mfmap (const ()) e) | 
->                                      (Var _ [(VarName _ v, e)]) <- lhsExpr y,
+>                                      (Var _ _ [(VarName _ v, e)]) <- lhsExpr y,
 >                                      length e > 0,
 >                                      isArrayTypeP' typeEnv v]
 
 >                         writeIxs = [(v, mfmap (const ()) e) |
->                                      (Var _ [(VarName _ v, e)]) <- rhsExpr y,
+>                                      (Var _ _ [(VarName _ v, e)]) <- rhsExpr y,
 >                                      length e > 0,
 >                                      isArrayTypeP' typeEnv v]
 
 >                     in setArrsRead (collect readIxs) 
->                            (setArrsWrite (collect writeIxs) (extract y))
+>                            (setArrsWrite (collect writeIxs) (copoint y))
 >     in extendBi arrIxsF x               
 
 > ix :: Program Annotation -> Program Annotation
 > ix = let ixF :: Fortran Annotation -> Annotation
->          ixF f = setIndices (nub [v | (For _ (VarName _ v) _ _ _ _) <- ((universeBi f)::[Fortran Annotation])]) (extract f)
+>          ixF f = setIndices (nub [v | (For _ _ (VarName _ v) _ _ _ _) <- ((universeBi f)::[Fortran Annotation])]) (copoint f)
 >      in extendBi ixF
 
 
@@ -134,6 +134,6 @@ map (fmap ((,[""]),[""]))
 
 > go2 f = do inp <- readFile f
 >            p <- pr f
->            let out = reprint inp f (fmap (\x -> (x, False)) (head p))
+>            let out = reprint inp f (fmap (\x -> False) (head p))
 >            writeFile (f ++ ".out") out
->            
+>            return $ (p, out)

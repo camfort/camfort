@@ -17,9 +17,9 @@ Kill/gen functions
 
 > kill :: forall a t . (Data (t a), Typeable (t a), Typeable a, Data a)
 >                   => t a -> [Variable]
-> kill t =    [v | (AssgExpr _ v _) <- (universeBi t)::[Expr a]] 
->          ++ [v | (For _ (VarName _ v) _ _ _ _) <- (universeBi t)::[Fortran a]] 
->          ++ [v | (Assg _ (Var _ [(VarName _ v, _)]) _) <- (universeBi t)::[Fortran a]] 
+> kill t =    [v | (AssgExpr _ _ v _) <- (universeBi t)::[Expr a]] 
+>          ++ [v | (For _ _ (VarName _ v) _ _ _ _) <- (universeBi t)::[Fortran a]] 
+>          ++ [v | (Assg _ _ (Var _ _ [(VarName _ v, _)]) _) <- (universeBi t)::[Fortran a]] 
 
 > gen :: forall a t . (Data (t a), Typeable (t a), Typeable a, Data a)
 >                   => t a -> [Variable]
