@@ -16,11 +16,6 @@
 > type TypeEnv t = [(Variable, Type t)]
 > type TypeEnvStack t = [TypeEnv t] -- stack of environments     
 
-> gtypes :: forall a t . (Data (t a), Typeable (t a), Data a, Typeable a) => t a -> [(String, Type a)] 
-> gtypes x = let decAndTypes :: [([(Expr a, Expr a)], Type a)]
->                decAndTypes = [(d, t) | (Decl _ d t) <- (universeBi x)::[Decl a]]
->            in concatMap (\(d, t) -> 
->                              [(v, toArrayType t es) | (Var _ _ [(VarName _ v, es)], _) <- d]) decAndTypes
 
 > typeAnnotations :: (Typeable a, Data a) => [Program a] -> State (TypeEnv a) [Program a]
 > typeAnnotations = mapM (descendBiM buildTypeEnv)
@@ -30,6 +25,13 @@
 >                     tenv' <- return $ gtypes x
 >                     put (tenv ++ tenv')
 >                     return x
+
+
+> gtypes :: forall a t . (Data (t a), Typeable (t a), Data a, Typeable a) => t a -> [(String, Type a)] 
+> gtypes x = let decAndTypes :: [([(Expr a, Expr a)], Type a)]
+>                decAndTypes = [(d, t) | (Decl _ d t) <- (universeBi x)::[Decl a]]
+>            in concatMap (\(d, t) -> 
+>                              [(v, toArrayType t es) | (Var _ _ [(VarName _ v, es)], _) <- d]) decAndTypes
 
 > isArrayTypeP :: Variable -> State (TypeEnv t) Bool
 > isArrayTypeP v = do tenv <- get

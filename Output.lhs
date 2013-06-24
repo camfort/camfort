@@ -223,7 +223,7 @@ Output routines specialised to the analysis.
 >                      ([]:ys)        -> takeBounds' ((ll+1, 0), (ul, uc)) ('\n':tk) ys
 >                      ((x:xs):ys)    -> takeBounds' ((ll, lc+1), (ul, uc)) (x:tk) (xs:ys)
 
-> reprint :: String -> String -> Program A1 -> String
+> reprint :: String -> String -> Program Annotation -> String
 > reprint input f z = let input' = Prelude.lines input
 >                         start = SrcLoc f 1 0
 >                         end = SrcLoc f (Prelude.length input') (1 + (Prelude.length $ Prelude.last input'))
@@ -233,8 +233,8 @@ Output routines specialised to the analysis.
 >                      in pn ++ pe
 
 > reprintC cursor inp z = let ?variant = Alt2 in
->                         let (p1, cursor') = case (getHole z)::(Maybe (Fortran A1)) of
->                                               Just e -> let flag = copoint e
+>                         let (p1, cursor') = case (getHole z)::(Maybe (Fortran Annotation)) of
+>                                               Just e -> let flag = pRefactored $ copoint e
 >                                                             (lb, ub) = getSpan e
 >                                                             (p0, _) = takeBounds (cursor, lb) inp
 >                                                         in if flag then (p0 ++ outputF e, ub)

@@ -27,6 +27,7 @@
 > import Control.Monad.State.Lazy
 
 > import Annotations
+> import Equivalences
 > import LVA
 > import Output
 > import Syntax
@@ -143,8 +144,15 @@ A sample transformation
 
 > go2 f = do inp <- readFile f
 >            p <- pr f
->            let p' = fooTrans $ (fmap (\x -> False) (head p))
+>            let p' = fooTrans $ (fmap (const unitAnnotation) (head p))
 >            let out = reprint inp f p'
+>            writeFile (f ++ ".out") out
+>            return $ (out, p')
+
+> go3 f = do inp <- readFile f
+>            p <- pr f
+>            let p' = refactorEquivalences (map (fmap (const unitAnnotation)) p)
+>            let out = reprint inp f (head p')
 >            writeFile (f ++ ".out") out
 >            return $ (out, p')
 

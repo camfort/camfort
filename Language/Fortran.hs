@@ -150,7 +150,7 @@ data Fortran  p = Assg p SrcSpan (Expr p) (Expr p)
                 | Allocate p SrcSpan (Expr p) (Expr p)
                 | Backspace p SrcSpan [Spec p]
                 | Call p SrcSpan (Expr p) (ArgList p)
-                | Equivalence p SrcSpan  [(Expr p)]
+                | Equivalence p SrcSpan [(Expr p)]
                 | Open p SrcSpan [Spec p]
                 | Close p SrcSpan [Spec p]
                 | Continue p SrcSpan 

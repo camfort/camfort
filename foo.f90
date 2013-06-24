@@ -11,6 +11,8 @@ program foo
     integer :: j
     real a(0:x), b(0:x), c
 
+    equivalence (c, j)
+
     c = 0.1
 
     forall(I = 0:X) &
