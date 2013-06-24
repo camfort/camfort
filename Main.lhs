@@ -132,8 +132,19 @@ map (fmap ((,[""]),[""]))
 
  go2 :: String -> IO String
 
+A sample transformation
+
+> fooTrans p = transformBi f p
+>                 where f :: Fortran A1 -> Fortran A1
+>                       f p@(Call x sp e as) = Label True sp "10" p
+>                       f p@(Assg x sp e1 e2) = Label True sp "5" p
+>                       f p = p
+
+
 > go2 f = do inp <- readFile f
 >            p <- pr f
->            let out = reprint inp f (fmap (\x -> False) (head p))
+>            let p' = fooTrans $ (fmap (\x -> False) (head p))
+>            let out = reprint inp f p'
 >            writeFile (f ++ ".out") out
->            return $ (p, out)
+>            return $ (out, p')
+

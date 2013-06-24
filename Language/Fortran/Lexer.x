@@ -101,7 +101,7 @@ tokens :-
   "$"				{ \s -> Dollar }
   "NULL()"			{ \s -> Key "null" }
   "&"				; -- ignore & anywhere
-  "&"$white*\n        		; -- ignore & and spaces followed by '\n' (i.e. line sep)
+  "&"$white*\n        		{ \s -> NewLineAmp } -- ; -- ignore & and spaces followed by '\n' (i.e. line sep)
   "!".*$			;
   "%"				{ \s -> Percent }
   "{"				{ \s -> LBrace }
@@ -133,7 +133,7 @@ data Token = Key String | OpPower | OpMul | OpDiv | OpAdd | OpSub | OpConcat
 	   | LParen | RParen | LArrCon | RArrCon | OpEquals | RealConst String | StopParamStart
 	   | SingleQuote | StrConst String | Period | Colon | ColonColon | SemiColon
 	   | DataEditDest String | Arrow | MArrow | TrueConst | FalseConst | Dollar
-	   | Hash | LBrace | RBrace | NewLine | TokEOF | Text String
+	   | Hash | LBrace | RBrace | NewLine | TokEOF | Text String | NewLineAmp
 	   deriving (Eq,Show)
 
 -- all reserved keywords, names are matched against these to see
@@ -189,7 +189,8 @@ lexer' = do s <- getInput
               AlexError (c,s')    -> fail ("unrecognizable token: " ++ show c)
               AlexSkip (_,s') len -> (discard len) >> lexer'
               AlexToken (_,s') len act -> do let tok = act (take len s)
-                                             if tok == NewLine
-                                               then lexNewline >> (return tok)
-                                               else (discard len) >> (return tok)
+                                             case tok of
+					       NewLine    -> lexNewline >> (return tok)
+					       NewLineAmp -> (discard len) >> lexNewline >> lexer'
+                                               _          -> (discard len) >> (return tok)
 }

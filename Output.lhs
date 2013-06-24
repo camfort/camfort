@@ -10,6 +10,10 @@
 
 > {-# LANGUAGE ScopedTypeVariables #-}
 
+
+> {-# LANGUAGE DeriveGeneric #-}
+> {-# LANGUAGE DeriveDataTypeable #-}
+
 > module Output where
 
 > import Annotations
@@ -22,7 +26,12 @@
 > import Data.Map.Lazy hiding (map, foldl)
 > import Data.Generics.Annotate
 > import Data.Generics
+> import GHC.Generics
 > import Data.Generics.Uniplate.Data
+
+> import Generics.Deriving.Copoint
+
+> import Data.Char
 
 > import Language.Haskell.Syntax (SrcLoc(..), srcLine, srcColumn)
 > import Data.Generics.Zipper
@@ -202,39 +211,78 @@ Output routines specialised to the analysis.
 > lineCol :: SrcLoc -> (Int, Int)
 > lineCol x = (srcLine x, srcColumn x)
 
-> inBounds :: SrcLoc -> (SrcLoc, SrcLoc) -> Bool
-> inBounds x (l,u) = (lineCol x) >= (lineCol l) && (lineCol x) < (lineCol u)
+ inBounds :: SrcLoc -> (SrcLoc, SrcLoc) -> Bool
+ inBounds x (l,u) = (lineCol x) >= (lineCol l) && (lineCol x) < (lineCol u)
 
 > takeBounds (l, u) inp = takeBounds' (lineCol l, lineCol u) [] inp
 
 > takeBounds' ((ll, lc), (ul, uc)) tk inp =
 >     if (ll == ul && lc == uc) then (Prelude.reverse tk, inp)
 >     else case inp of []             -> (Prelude.reverse tk, inp)
+>                      ([]:[])        -> (Prelude.reverse tk, inp)
 >                      ([]:ys)        -> takeBounds' ((ll+1, 0), (ul, uc)) ('\n':tk) ys
 >                      ((x:xs):ys)    -> takeBounds' ((ll, lc+1), (ul, uc)) (x:tk) (xs:ys)
 
-
 > reprint :: String -> String -> Program A1 -> String
 > reprint input f z = let input' = Prelude.lines input
->                     in reprintA (SrcLoc f 1 1) (SrcLoc f (Prelude.length input') (1 + (Prelude.length $ Prelude.last input'))) input' (toZipper z)
+>                         start = SrcLoc f 1 0
+>                         end = SrcLoc f (Prelude.length input') (1 + (Prelude.length $ Prelude.last input'))
+>                         (pn, cursorn) = reprintC start input' (toZipper z)
+>                         (_, inpn) = takeBounds (start, cursorn) input'
+>                         (pe, _) = takeBounds (cursorn, end) inpn
+>                      in pn ++ pe
 
-> doHole :: SrcLoc -> [String] -> Zipper (d A1) -> (String, SrcLoc)
-> doHole cursor inp z = case (getHole z)::(Maybe (Fortran A1)) of
->                           Just e  -> let flag = copoint e
->                                          (lb, ub) = getSpan e
->                                          (p1, rest1) = takeBounds (cursor, lb) inp
->                                      in  if flag then let ?variant = Alt2 in (p1 ++ outputF e, ub)
->                                          else case (down' z) of
->                                                    Just cz -> (p1 ++ reprintA lb ub rest1 cz, ub)
->                                                    Nothing -> let (p2, _) = takeBounds (lb, ub) rest1
->                                                               in (p1, ub)
->                           Nothing -> case (down' z) of 
->                                        Just cz -> (reprintA cursor cursor inp cz, cursor)
->                                        Nothing -> ("", cursor)
+> reprintC cursor inp z = let ?variant = Alt2 in
+>                         let (p1, cursor') = case (getHole z)::(Maybe (Fortran A1)) of
+>                                               Just e -> let flag = copoint e
+>                                                             (lb, ub) = getSpan e
+>                                                             (p0, _) = takeBounds (cursor, lb) inp
+>                                                         in if flag then (p0 ++ outputF e, ub)
+>                                                            else ("", cursor)
+>                                               Nothing -> ("", cursor)
+>                             (_, inp') = takeBounds (cursor, cursor') inp
+>                             (p2, cursor'') = enterDown cursor' inp' z
 
-> reprintA :: SrcLoc -> SrcLoc -> [String] -> Zipper (d A1) -> String
-> reprintA cursor end inp z = let (p1, cursor') = doHole cursor inp z
->                                 (p2, inp')    = takeBounds (cursor, cursor') inp
->                             in p1 ++ case (right z) of 
->                                         Just rz -> reprintA cursor' end inp' rz
->                                         Nothing -> fst $ takeBounds (cursor', end) inp'
+>                             (_, inp'') = takeBounds (cursor', cursor'') inp'
+>                             (p3, cursor''') = enterRight cursor'' inp'' z
+
+>                         in  (p1 ++ p2 ++ p3, cursor''')
+
+> enterDown cursor inp z = case (down' z) of
+>                              Just dz -> reprintC cursor inp dz
+>                              Nothing -> ("", cursor)
+> enterRight cursor inp z = case (right z) of
+>                              Just rz -> reprintC cursor inp rz
+>                              Nothing -> ("", cursor)
+
+
+OLD (FLAKEY) ALGORITHM
+
+ reprint :: String -> String -> Program A1 -> String
+ reprint input f z = let input' = Prelude.lines input
+                     in reprintA (SrcLoc f 1 0) (SrcLoc f (Prelude.length input') (1 + (Prelude.length $ Prelude.last input'))) input' (toZipper z)
+
+
+ doHole :: (Show (d A1)) => SrcLoc -> SrcLoc -> [String] -> Zipper (d A1) -> (String, SrcLoc)
+ doHole cursor end inp z = let ?variant = Alt2 in
+                             case (getHole z)::(Maybe (Fortran A1)) of
+                           Just e  -> let flag = copoint e
+                                          (lb, ub) = getSpan e
+                                          (p1, rest1) = takeBounds (cursor, lb) inp
+                                      in  if flag then let ?variant = Alt2
+                                                       in (p1 ++ outputF e, ub)
+                                          else case (down' z) of
+                                                    Just cz -> (p1 ++ reprintA lb ub rest1 cz, ub)
+                                                    Nothing -> let (p2, _) = takeBounds (lb, ub) rest1
+                                                               in (p1 ++ p2, ub)
+                           Nothing -> case (down' z) of 
+                                        Just cz -> "no - down\n" `trace` (reprintA cursor end inp cz, cursor)
+                                        Nothing -> ("", cursor)
+
+ reprintA :: (Show (d A1)) =>  SrcLoc -> SrcLoc -> [String] -> Zipper (d A1) -> String
+ reprintA cursor end inp z = let (p1, cursor') = doHole cursor end inp z
+                                 (p2, inp')    = takeBounds (cursor, cursor') inp
+                             in p1 ++ case (right z) of 
+                                         Just rz -> reprintA cursor' end inp' rz
+                                         Nothing -> fst $ takeBounds (cursor', end) inp'
+                                                    

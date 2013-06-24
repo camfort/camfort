@@ -1518,9 +1518,12 @@ write_stmt
 : srcloc WRITE '(' io_control_spec_list ')' output_item_list  {% srcSpan $1 >>= (\s -> return $ Write () s $4 $6) }
 | srcloc WRITE '(' io_control_spec_list ')'                   {% srcSpan $1 >>= (\s -> return $ Write () s $4 []) }
 
-srcloc :: { SrcLoc }  :    {% getSrcLoc }
+srcloc :: { SrcLoc }  :    {% getSrcLoc' }
 
 {
+
+getSrcLoc' = do (SrcLoc f l c) <- getSrcLoc
+                return (SrcLoc f l (c - 1))
 
 -- Initial annotations from parser
 
@@ -1529,13 +1532,13 @@ srcloc :: { SrcLoc }  :    {% getSrcLoc }
 type A0 = () 
 
 srcSpan :: SrcLoc -> P (SrcLoc, SrcLoc)
-srcSpan l = do l' <- getSrcLoc
+srcSpan l = do l' <- getSrcLoc'
                return $ (l, l')
 
 -- 0-length span at current position
 
 srcSpanNull :: P (SrcLoc, SrcLoc)
-srcSpanNull = do l <- getSrcLoc
+srcSpanNull = do l <- getSrcLoc'
                  return $ (l, l)
 
 spanTrans x y = let (l, _) = getSpan x
@@ -1555,7 +1558,7 @@ happyError :: P a
 happyError = parseError "syntax error"
 
 parseError :: String -> P a
-parseError m = do srcloc <- getSrcLoc 
+parseError m = do srcloc <- getSrcLoc'
 		  fail ("line " ++ show (srcLine srcloc) ++ " column " ++ show (srcColumn srcloc) ++ ": " ++ m ++ "\n")
 
 tokenFollows s = case alexScan ('\0',s) 0 of
