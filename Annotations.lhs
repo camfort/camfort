@@ -29,8 +29,8 @@ Loop classifications
  classify :: Fortran Annotation -> Fortran Annotation
  classify x = 
 
-> data Annotation = A {lives ::[Variable],
->                      indices :: [Variable],
+> data Annotation = A {indices :: [Variable],
+>                      lives ::([Variable],[Variable]),
 >                      arrsRead :: Map Variable [[Expr ()]], 
 >                      arrsWrite :: Map Variable [[Expr ()]],
 >                      number :: Int,
@@ -53,11 +53,11 @@ Loop classifications
 > setNumber :: Int -> Annotation -> Annotation
 > setNumber x a = A (indices a) (lives a) (arrsRead a) (arrsWrite a) x (refactored a)
 
-> setLives :: [Variable] -> Annotation -> Annotation
-> setLives x a = A x (indices a) (arrsRead a) (arrsWrite a) (number a) (refactored a)
+> setLives :: ([Variable], [Variable]) -> Annotation -> Annotation
+> setLives x a = A (indices a) x (arrsRead a) (arrsWrite a) (number a) (refactored a)
 
 > setIndices :: [Variable] -> Annotation -> Annotation
-> setIndices x a = A (lives a) x (arrsRead a) (arrsWrite a) (number a) (refactored a)
+> setIndices x a = A x (lives a) (arrsRead a) (arrsWrite a) (number a) (refactored a)
 
 > setArrsRead :: Map Variable [[Expr ()]] -> Annotation -> Annotation
 > setArrsRead x a = A (indices a) (lives a) x (arrsWrite a) (number a) (refactored a)
@@ -65,7 +65,7 @@ Loop classifications
 > setArrsWrite :: Map Variable [[Expr ()]] -> Annotation -> Annotation
 > setArrsWrite x a = A (indices a) (lives a) (arrsRead a) x (number a) (refactored a)
 
-> unitAnnotation = A [] [] empty empty 0 Nothing
+> unitAnnotation = A [] ([], []) empty empty 0 Nothing
 
 -- Indenting for refactored code
 

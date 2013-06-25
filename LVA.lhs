@@ -21,6 +21,7 @@ Kill/gen functions
 >          ++ [v | (For _ _ (VarName _ v) _ _ _ _) <- (universeBi t)::[Fortran a]] 
 >          ++ [v | (Assg _ _ (Var _ _ [(VarName _ v, _)]) _) <- (universeBi t)::[Fortran a]] 
 
+
 > gen :: forall a t . (Data (t a), Typeable (t a), Typeable a, Data a)
 >                   => t a -> [Variable]
 > gen t = (variables t) \\ (kill t)
@@ -29,11 +30,11 @@ Single iteration of live-variable analysis
 
 > lva0 :: Fortran Annotation -> Annotation
 > -- lva0 x = (universeBi (foldl union [] (successors x)))::[String]
-> lva0 x = let liveOut = concat $ map (lives . rextract) (successors x)
+> lva0 x = let liveOut = concat $ map (fst . lives . rextract) (successors x)
 >              killV   = kill x
 >              genV    = gen x
 >              liveIn  = union genV (liveOut \\ killV)
->          in (setLives liveIn (rextract x))
+>          in (setLives (liveIn, liveOut) (rextract x))
                
 Iterate the comonadic application of lva0 over a block, till a fixed-point is reached
 

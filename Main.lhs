@@ -27,6 +27,7 @@
 > import Control.Monad.State.Lazy
 
 > import Annotations
+> import DeadCode 
 > import Equivalences
 > import LVA
 > import Output

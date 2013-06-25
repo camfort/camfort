@@ -191,7 +191,7 @@ Output routines specialised to the analysis.
 >      "' class'outer'><div class='spacer'><pre>" ++ (indent 3 i) ++ "</pre></div>" ++ 
 >      "<div class='annotation'><div class='number'>" ++ (show $ number t) ++ 
 >      "</div><p><table>" ++
->      row ["lives:",    showList $ lives t] ++ 
+>      row ["lives: (in) ",    showList $ fst $ lives t, "(out)", showList $ snd $ lives t] ++ 
 >      row ["indices:",  showList $ indices t] ++ 
 >      row ["arrays R:", showExps (assocs $ arrsRead t)] ++ 
 >      row ["arrays W:", showExps (assocs $ arrsWrite t)] ++

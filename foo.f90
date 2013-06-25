@@ -15,10 +15,12 @@ program foo
 
     c = 0.1
 
+    c = 6
+
     forall(I = 0:X) &
        &  A(I) = I   
 
-
+    i = c 
     do i = 1, x
       c = c + 0.1
       j = j + 1
