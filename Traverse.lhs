@@ -25,6 +25,13 @@
 
 > import Control.Comonad
 
+> import Data.Monoid     
+
+> instance Monoid x => Monad ((,) x) where
+>     return a = (mempty, a)
+>     (x, a) >>= k = let (x', b) = k a
+>                    in (mappend x x', b)
+
 Other helpers
 
 > fanout :: (a -> b) -> (a -> c) -> a -> (b, c)
@@ -33,13 +40,14 @@ Other helpers
 > prod :: (a -> c) -> (b -> d) -> (a, b) -> (c, d)
 > prod f g (x, y) = (f x, g y)
 
+> (><) :: (a -> c) -> (b -> d) -> (a, b) -> (c, d)
+> f >< g = prod f g
+
 > mfmap :: Functor f => (a -> b) -> [f a] -> [f b]
 > mfmap f = map (fmap f)
 
 > data Test0 a = Test0 a deriving Generic1 
 > data Test a = Test (Test0 a) deriving Generic1
-
-
 
 
 Data-type generic comonad-style traversal

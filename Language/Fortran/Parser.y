@@ -636,7 +636,7 @@ data_stmt_set
 
 data_stmt_object_list :: { Expr A0 }
 data_stmt_object_list
-: data_stmt_object_list ',' data_stmt_object   { ESeq ()  (getSpan $1) $1 $3 }
+: data_stmt_object_list ',' data_stmt_object   { ESeq ()  (spanTrans $1 $3) $1 $3 }
   | data_stmt_object			       { $1 }
 
 data_stmt_object :: { Expr A0 }
@@ -646,7 +646,7 @@ data_stmt_object
 
 data_stmt_value_list :: { Expr A0 }
 data_stmt_value_list
-: data_stmt_value_list ',' data_stmt_value	{ ESeq () (getSpan $1) $1 $3 }
+: data_stmt_value_list ',' data_stmt_value	{ ESeq () (spanTrans $1 $3) $1 $3 }
   | data_stmt_value				{ $1 }
 
 data_stmt_value :: { Expr A0 }
@@ -799,12 +799,12 @@ level_5_expr
 
 equiv_operand :: { Expr A0 }
 equiv_operand
-: equiv_operand '.OR.' or_operand                   { Bin () (getSpan $1) (Or ()) $1 $3 }
+: equiv_operand '.OR.' or_operand                   { Bin () (spanTrans $1 $3) (Or ()) $1 $3 }
   | or_operand                                      { $1 }
 
 or_operand :: { Expr A0 }
 or_operand
-: or_operand '.AND.' and_operand                    { Bin () (getSpan $1) (And ()) $1 $3 }
+: or_operand '.AND.' and_operand                    { Bin () (spanTrans $1 $3) (And ()) $1 $3 }
 | and_operand                                       { $1 }
 
 
@@ -814,30 +814,30 @@ and_operand
 
 level_4_expr :: { Expr A0 }
 level_4_expr 
-: level_4_expr rel_op level_3_expr                   { Bin () (getSpan $1) $2 $1 $3 }
+: level_4_expr rel_op level_3_expr                   { Bin () (spanTrans $1 $3) $2 $1 $3 }
 | level_3_expr                                       { $1 }
 
 
 level_3_expr :: { Expr A0 }
 level_3_expr 
-: level_3_expr '//' level_2_expr                     { Bin () (getSpan $1) (Concat ()) $1 $3 }
+: level_3_expr '//' level_2_expr                     { Bin () (spanTrans $1 $3) (Concat ()) $1 $3 }
 | level_2_expr                                       { $1 }
 
 level_2_expr :: { Expr A0 }
 level_2_expr 
-: level_2_expr '+' add_operand                       { Bin () (getSpan $1) (Plus ()) $1 $3  }
-| level_2_expr '-' add_operand                       { Bin () (getSpan $1) (Minus ()) $1 $3 }
+: level_2_expr '+' add_operand                       { Bin () (spanTrans $1 $3) (Plus ()) $1 $3  }
+| level_2_expr '-' add_operand                       { Bin () (spanTrans $1 $3) (Minus ()) $1 $3 }
 | add_operand                                        { $1 }
 
 add_operand :: { Expr A0 }
 add_operand 
-: add_operand '*' mult_operand                       { Bin () (getSpan $1) (Mul ()) $1 $3 }
-| add_operand '/' mult_operand                       { Bin () (getSpan $1) (Div ()) $1 $3 }
+: add_operand '*' mult_operand                       { Bin () (spanTrans $1 $3) (Mul ()) $1 $3 }
+| add_operand '/' mult_operand                       { Bin () (spanTrans $1 $3) (Div ()) $1 $3 }
 | mult_operand                                       { $1 }
 
 mult_operand :: { Expr A0 }
 mult_operand 
-: level_1_expr '**' mult_operand                     { Bin () (getSpan $1) (Power ()) $1 $3 }
+: level_1_expr '**' mult_operand                     { Bin () (spanTrans $1 $3) (Power ()) $1 $3 }
 | level_1_expr                                       { $1 }
 
 level_1_expr :: { Expr A0 }
@@ -957,7 +957,7 @@ execution_part
 
 executable_construct_list :: { Fortran A0 }
 executable_construct_list
-: executable_construct newline executable_construct_list { FSeq () (getSpan $1) $1 $3 }
+: executable_construct newline executable_construct_list { FSeq () (spanTrans $1 $3) $1 $3 }
 | executable_construct newline                           { $1 }
 
 
@@ -1020,7 +1020,7 @@ call_name
 
 actual_arg_spec_list :: { Expr A0 }
 actual_arg_spec_list
-: actual_arg_spec_list ',' actual_arg_spec      { ESeq () (getSpan $1) $1 $3 }
+: actual_arg_spec_list ',' actual_arg_spec      { ESeq () (spanTrans $1 $3) $1 $3 }
 | actual_arg_spec                               { $1 }
 
 actual_arg_spec :: { Expr A0 }
@@ -1102,7 +1102,7 @@ allocate_stmt
 
 allocation_list :: { Expr A0 }
 allocation_list
-: allocation_list ',' allocation                  { ESeq () (getSpan $1) $1 $3 }
+: allocation_list ',' allocation                  { ESeq () (spanTrans $1 $3) $1 $3 }
 | allocation                                      { $1 }
 | {- empty -}                                     {% srcSpanNull >>= (return . (NullExpr ())) }
 
@@ -1248,7 +1248,7 @@ forall_assignment_stmt
 
 forall_assignment_stmt_list :: { Fortran A0 }
 forall_assignment_stmt_list 
-: forall_assignment_stmt newline forall_assignment_stmt_list { FSeq () (getSpan $1) $1 $3 }
+: forall_assignment_stmt newline forall_assignment_stmt_list { FSeq () (spanTrans $1 $3) $1 $3 }
 | forall_assignment_stmt newline                             { $1 }
 
 

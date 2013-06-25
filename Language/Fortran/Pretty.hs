@@ -1,6 +1,6 @@
 -- 
 -- Pretty.hs  - 
--- Based on code by Martin Erwid from Parameterized Fortran
+-- Based on code by Martin Erwig from Parameterized Fortran
 --
 
 {-# LANGUAGE ExistentialQuantification #-}
@@ -381,8 +381,11 @@ opPrec (Mul   _) = 5
 opPrec (Div   _) = 5
 opPrec (Power _) = 6
 
+class Indentor p where
+    indR :: Fortran p -> Int -> String
 
-instance (OutputG (VarName p) v,
+instance (Indentor p, 
+          OutputG (VarName p) v,
           OutputG (Expr p) v,
           OutputG (UnaryOp p) v,
           OutputG (BinOp p) v, 
@@ -390,57 +393,57 @@ instance (OutputG (VarName p) v,
           OutputIndG (Fortran p) v,
           OutputG (Fortran p) v, OutputG (Spec p) v, Alts v) => OutputIndF (Fortran p) v where
 
-    outputIndF i (Assg _ _ v e)               = (ind i)++outputG v++" = "++outputG e
-    outputIndF i (For _ _  v e e' e'' f)       = (ind i)++"do"++" "++outputG v++" = "++outputG e++", "++
+    outputIndF i t@(Assg _ _ v e)            = (indR t i)++outputG v++" = "++outputG e
+    outputIndF i t@(For _ _  v e e' e'' f)   = (indR t i)++"do"++" "++outputG v++" = "++outputG e++", "++
                                          outputG e'++", "++outputG e''++"\n"++
-                                         (outputIndG (i+1) f)++"\n"++(ind i)++"end do"
-    outputIndF i (FSeq _ _  f f')              = outputIndG i f++"\n"++outputIndG i f'
-    outputIndF i (If _ _  e f [] Nothing)      = (ind i)++"if ("++outputG e++") then\n"
+                                         (outputIndG (i+1) f)++"\n"++(indR t i)++"end do"
+    outputIndF i t@(FSeq _ _  f f')              = outputIndG i f++"\n"++outputIndG i f'
+    outputIndF i t@(If _ _  e f [] Nothing)      = (indR t i)++"if ("++outputG e++") then\n"
                                          ++(outputIndG (i+1) f)++"\n"
-                                         ++(ind i)++"end if"
-    outputIndF i (If _ _  e f [] (Just f'))    = (ind i)++"if ("++outputG e++") then\n"
+                                         ++(indR t i)++"end if"
+    outputIndF i t@(If _ _  e f [] (Just f'))    = (indR t i)++"if ("++outputG e++") then\n"
                                          ++(outputIndG (i+1) f)++"\n"
-                                         ++(ind i)++"else\n"
+                                         ++(indR t i)++"else\n"
                                          ++(outputIndG (i+1) f')++"\n"
-                                         ++(ind i)++"end if"
-    outputIndF i (If _ _  e f elsif Nothing)    = (ind i)++"if ("++outputG e++") then\n"
+                                         ++(indR t i)++"end if"
+    outputIndF i t@(If _ _  e f elsif Nothing)    = (indR t i)++"if ("++outputG e++") then\n"
                                           ++(outputIndG (i+1) f)++"\n"
                                           ++concat (map (showElseIf i) elsif)
-                                          ++(ind i)++"end if"
-    outputIndF i (If _ _  e f elsif (Just f')) = (ind i)++"if ("++outputG e++") then\n"
+                                          ++(indR t i)++"end if"
+    outputIndF i t@(If _ _  e f elsif (Just f')) = (indR t i)++"if ("++outputG e++") then\n"
                                           ++(outputIndG (i+1) f)++"\n"
                                           ++concat (map (showElseIf i) elsif)
-                                          ++(ind i)++"else\n"
+                                          ++(indR t i)++"else\n"
                                           ++(outputIndG (i+1) f')++"\n"
-                                          ++(ind i)++"end if"
-    outputIndF i (Allocate _ _  a (NullExpr _ _))    = (ind i)++"allocate (" ++ outputG a ++ ")"
-    outputIndF i (Allocate _ _  a s)              = (ind i)++"allocate ("++ outputG a ++ ", STAT = "++outputG s++ ")"
-    outputIndF i (Backspace _ _  ss)               = (ind i)++"backspace "++asTuple outputG ss++"\n"
-    outputIndF i (Call  _ _ sub al)                = ind i++"call "++outputG sub++outputG al
-    outputIndF i (Open  _ _ s)                     = (ind i)++"open "++asTuple outputG s++"\n"
-    outputIndF i (Equivalence  _ _ vs)             = ind i++"equivlance ("++(concat (intersperse "," (map outputF vs))) ++ ")\n"
-    outputIndF i (Close  _ _ ss)                   = (ind i)++"close "++asTuple outputG ss++"\n"
-    outputIndF i (Continue _ _)                   = (ind i)++"continue"++"\n"
-    outputIndF i (Cycle _ _ s)                    = (ind i)++"cycle "++outputG s++"\n"
-    outputIndF i (Deallocate _ _ es e)            = (ind i)++"deallocate "++asTuple outputG es++outputG e++"\n"
-    outputIndF i (Endfile _ _ ss)                 = (ind i)++"endfile "++asTuple outputG ss++"\n"
-    outputIndF i (Exit _ _ s)                     = (ind i)++"exit "++outputG s
-    outputIndF i (Forall _ _ (is, (NullExpr _ _)) f)    = (ind i)++"forall ("++showForall is++") "++outputG f
-    outputIndF i (Forall _ _ (is,e)            f) = (ind i)++"forall ("++showForall is++","++outputG e++") "++outputG f
-    outputIndF i (Goto _ _ s)                     = (ind i)++"goto "++outputG s
-    outputIndF i (Nullify _ _ es)                 = (ind i)++"nullify "++asTuple outputG es++"\n"
-    outputIndF i (Inquire _ _ ss es)              = (ind i)++"inquire "++asTuple outputG ss++" "++(concat (intersperse "," (map outputG es)))++"\n"
-    outputIndF i (Rewind _ _  ss)                  = (ind i)++"rewind "++asTuple outputG ss++"\n"
-    outputIndF i (Stop _ _ e)                     = (ind i)++"stop "++outputG e++"\n"
-    outputIndF i (Where _ _ e f)                  = (ind i)++"where ("++outputG e++") "++outputG f
-    outputIndF i (Write _ _ ss es)                = (ind i)++"write "++asTuple outputG ss++" "++(concat (intersperse "," (map outputG es)))++"\n"
-    outputIndF i (PointerAssg _ _ e e')           = (ind i)++outputG e++" => "++outputG e'++"\n"
-    outputIndF i (Return _ _ e)                   = (ind i)++"return "++outputG e++"\n"
-    outputIndF i (Label _ _ s f)                  = s++" "++outputG f
-    outputIndF i (Print _ _ e [])                 = (ind i)++("print ")++outputG e++("\n")
-    outputIndF i (Print _ _ e es)                 = (ind i)++("print ")++outputG e++", "++(concat (intersperse "," (map outputG es)))++("\n")
-    outputIndF i (ReadS _ _ ss es)                = (ind i)++("read ")++(asTuple outputG ss)++" "++(concat (intersperse "," (map outputG es)))++("\n")
-    outputIndF i (NullStmt _ _)		       = ""
+                                          ++(indR t i)++"end if"
+    outputIndF i t@(Allocate _ _  a (NullExpr _ _))    = (indR t i)++"allocate (" ++ outputG a ++ ")"
+    outputIndF i t@(Allocate _ _  a s)              = (indR t i)++"allocate ("++ outputG a ++ ", STAT = "++outputG s++ ")"
+    outputIndF i t@(Backspace _ _  ss)               = (indR t i)++"backspace "++asTuple outputG ss++"\n"
+    outputIndF i t@(Call  _ _ sub al)                = indR t i++"call "++outputG sub++outputG al
+    outputIndF i t@(Open  _ _ s)                     = (indR t i)++"open "++asTuple outputG s++"\n"
+    outputIndF i t@(Equivalence  _ _ vs)             = indR t i++"equivlance ("++(concat (intersperse "," (map outputF vs))) ++ ")\n"
+    outputIndF i t@(Close  _ _ ss)                   = (indR t i)++"close "++asTuple outputG ss++"\n"
+    outputIndF i t@(Continue _ _)                   = (indR t i)++"continue"++"\n"
+    outputIndF i t@(Cycle _ _ s)                    = (indR t i)++"cycle "++outputG s++"\n"
+    outputIndF i t@(Deallocate _ _ es e)            = (indR t i)++"deallocate "++asTuple outputG es++outputG e++"\n"
+    outputIndF i t@(Endfile _ _ ss)                 = (indR t i)++"endfile "++asTuple outputG ss++"\n"
+    outputIndF i t@(Exit _ _ s)                     = (indR t i)++"exit "++outputG s
+    outputIndF i t@(Forall _ _ (is, (NullExpr _ _)) f)    = (indR t i)++"forall ("++showForall is++") "++outputG f
+    outputIndF i t@(Forall _ _ (is,e)            f) = (indR t i)++"forall ("++showForall is++","++outputG e++") "++outputG f
+    outputIndF i t@(Goto _ _ s)                     = (indR t i)++"goto "++outputG s
+    outputIndF i t@(Nullify _ _ es)                 = (indR t i)++"nullify "++asTuple outputG es++"\n"
+    outputIndF i t@(Inquire _ _ ss es)              = (indR t i)++"inquire "++asTuple outputG ss++" "++(concat (intersperse "," (map outputG es)))++"\n"
+    outputIndF i t@(Rewind _ _  ss)                  = (indR t i)++"rewind "++asTuple outputG ss++"\n"
+    outputIndF i t@(Stop _ _ e)                     = (indR t i)++"stop "++outputG e++"\n"
+    outputIndF i t@(Where _ _ e f)                  = (indR t i)++"where ("++outputG e++") "++outputG f
+    outputIndF i t@(Write _ _ ss es)                = (indR t i)++"write "++asTuple outputG ss++" "++(concat (intersperse "," (map outputG es)))++"\n"
+    outputIndF i t@(PointerAssg _ _ e e')           = (indR t i)++outputG e++" => "++outputG e'++"\n"
+    outputIndF i t@(Return _ _ e)                   = (indR t i)++"return "++outputG e++"\n"
+    outputIndF i t@(Label _ _ s f)                  = s++" "++outputG f
+    outputIndF i t@(Print _ _ e [])                 = (indR t i)++("print ")++outputG e++("\n")
+    outputIndF i t@(Print _ _ e es)                 = (indR t i)++("print ")++outputG e++", "++(concat (intersperse "," (map outputG es)))++("\n")
+    outputIndF i t@(ReadS _ _ ss es)                = (indR t i)++("read ")++(asTuple outputG ss)++" "++(concat (intersperse "," (map outputG es)))++("\n")
+    outputIndF i t@(NullStmt _ _)		       = ""
 
 -- infix 7 $+
 -- infix 7 $-
@@ -454,7 +457,11 @@ instance (OutputG (VarName p) v,
 showNQ :: Show a => a -> String
 showNQ = filter ('"'/=) . show
 
+-- Indenting
+
+ind = indent 3 
 indent i l = take (i*l) (repeat ' ')
+
 
 printList sep f xs = sep!!0++concat (intersperse (sep!!1) (map f xs))++sep!!2
 
@@ -477,7 +484,6 @@ optTuple xs = asTuple outputF xs
 -- *optTuple xs = ""
 -- indent and showInd enable indented printing
 -- 
-ind = indent 3 
 
 showAttrs :: (Alts v, ?variant :: v, OutputF (Attr p) v) => [Attr p] -> String
 showAttrs  = concat . map (", "++) . map (outputF)

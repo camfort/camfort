@@ -62,7 +62,7 @@
 
 > pre l = Text.concat [pack "<pre>", l, pack "</pre>"]
 
-> outputHTML :: forall p . (Data p, Typeable p, OutputG p Alt2, OutputIndG (Fortran p) Alt2) => Fortran.Program p -> String
+> outputHTML :: forall p . (Data p, Typeable p, OutputG p Alt2, OutputIndG (Fortran p) Alt2, Indentor p) => Fortran.Program p -> String
 > outputHTML prog = unpack html
 >                 where
 >                   t :: SubName p -> SubName p
@@ -90,7 +90,7 @@ Output routines specialised to the analysis.
 > instance OutputG SrcLoc Alt2 where
 >     outputG _ = "" -- not sure if I want this to shown
 
-> instance (OutputIndG (Fortran p) Alt2, OutputG p Alt2) => OutputG (Program p) Alt2 where
+> instance (OutputIndG (Fortran p) Alt2, OutputG p Alt2, Indentor p) => OutputG (Program p) Alt2 where
 >     outputG = outputF
 
 > instance OutputG (SubName p) Alt2 where
@@ -138,10 +138,10 @@ Output routines specialised to the analysis.
 > instance OutputG (Attr p) Alt2 where
 >     outputG = outputF
 
-> instance (OutputIndG (Fortran p) Alt2, OutputG p Alt2) => OutputG (Block p) Alt2 where
+> instance (OutputIndG (Fortran p) Alt2, OutputG p Alt2, Indentor p) => OutputG (Block p) Alt2 where
 >     outputG = outputF
 
-> instance (OutputIndG (Fortran p) Alt2, OutputG p Alt2) => OutputG (Fortran p) Alt2 where
+> instance (OutputIndG (Fortran p) Alt2, OutputG p Alt2, Indentor p) => OutputG (Fortran p) Alt2 where
 >                               
 
 >     outputG (For p _ v e e' e'' f) = "do"++" "++outputG v++" = "++outputG e++", "++
@@ -152,6 +152,12 @@ Output routines specialised to the analysis.
 
 > instance OutputG (Spec p) Alt2 where
 >     outputG = outputF
+
+> instance Indentor Bool where
+>     indR t i = if (copoint t) then
+>                    let (s, SrcLoc f l c) = getSpan t
+>                    in Prelude.take c (repeat ' ')
+>                else ind i
 
 > instance OutputIndG (Fortran A1) Alt2 where
 >     outputIndG = outputIndF
@@ -217,7 +223,7 @@ Output routines specialised to the analysis.
 > takeBounds (l, u) inp = takeBounds' (lineCol l, lineCol u) [] inp
 
 > takeBounds' ((ll, lc), (ul, uc)) tk inp =
->     if (ll == ul && lc == uc) then (Prelude.reverse tk, inp)
+>     if (ll == ul && lc == uc) || (ll > ul) then (Prelude.reverse tk, inp)
 >     else case inp of []             -> (Prelude.reverse tk, inp)
 >                      ([]:[])        -> (Prelude.reverse tk, inp)
 >                      ([]:ys)        -> takeBounds' ((ll+1, 0), (ul, uc)) ('\n':tk) ys
@@ -232,16 +238,17 @@ Output routines specialised to the analysis.
 >                         (pe, _) = takeBounds (cursorn, end) inpn
 >                      in pn ++ pe
 
-> reprintC cursor inp z = let ?variant = Alt2 in
->                         let (p1, cursor') = case (getHole z)::(Maybe (Fortran Annotation)) of
->                                               Just e -> let flag = pRefactored $ copoint e
->                                                             (lb, ub) = getSpan e
->                                                             (p0, _) = takeBounds (cursor, lb) inp
->                                                         in if flag then (p0 ++ outputF e, ub)
->                                                            else ("", cursor)
->                                               Nothing -> ("", cursor)
+> reprintC cursor inp z = let ?variant = Alt1 in
+>                         let (p1, cursor', flag) = case (getHole z)::(Maybe (Fortran Annotation)) of
+>                                                     Just e -> let flag = pRefactored $ copoint e
+>                                                                   (lb, ub) = getSpan e
+>                                                                   (p0, _) = takeBounds (cursor, lb) inp
+>                                                               in if flag then  (p0 ++ outputF e, ub, True)
+>                                                                  else ("", cursor, False)
+>                                                     Nothing -> ("", cursor, False)
+
 >                             (_, inp') = takeBounds (cursor, cursor') inp
->                             (p2, cursor'') = enterDown cursor' inp' z
+>                             (p2, cursor'') = if flag then ("", cursor') else enterDown cursor' inp' z
 
 >                             (_, inp'') = takeBounds (cursor', cursor'') inp'
 >                             (p3, cursor''') = enterRight cursor'' inp'' z
@@ -251,6 +258,7 @@ Output routines specialised to the analysis.
 > enterDown cursor inp z = case (down' z) of
 >                              Just dz -> reprintC cursor inp dz
 >                              Nothing -> ("", cursor)
+
 > enterRight cursor inp z = case (right z) of
 >                              Just rz -> reprintC cursor inp rz
 >                              Nothing -> ("", cursor)

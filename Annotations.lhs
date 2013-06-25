@@ -13,10 +13,14 @@
 > import Language.Fortran
 > import Traverse
 
-> import Language.Haskell.ParseMonad 
-> import Language.Haskell.Syntax (SrcLoc,srcLine,srcColumn)
+> import Debug.Trace
 
-Loop classigications 
+> import Language.Fortran.Pretty
+
+> import Language.Haskell.ParseMonad 
+> import Language.Haskell.Syntax (SrcLoc(..))
+
+Loop classifications 
 
 > data ReduceType = Reduce | NoReduce
 > data AccessPatternType = Regular | RegularAndConstants | Irregular | Undecidable 
@@ -30,31 +34,42 @@ Loop classigications
 >                      arrsRead :: Map Variable [[Expr ()]], 
 >                      arrsWrite :: Map Variable [[Expr ()]],
 >                      number :: Int,
->                      pRefactored :: Bool}
+>                      refactored :: Maybe SrcLoc}
 >                    deriving (Eq, Show, Typeable, Data)
 
  -- Map Variable [[(Variable,Int)]],
 
-> setRefactored :: Annotation -> Annotation
-> setRefactored a = A (indices a) (lives a) (arrsRead a) (arrsWrite a) (number a) True
+> pRefactored :: Annotation -> Bool
+> pRefactored x = case (refactored x) of
+>                   Nothing -> False
+>                   Just _  -> True
+
+> setRefactored :: SrcLoc -> Annotation -> Annotation
+> setRefactored x a = A (indices a) (lives a) (arrsRead a) (arrsWrite a) (number a) (Just x)
 
 > setUnfactored :: Annotation -> Annotation
-> setUnfactored a = A (indices a) (lives a) (arrsRead a) (arrsWrite a) (number a) False
+> setUnfactored a = A (indices a) (lives a) (arrsRead a) (arrsWrite a) (number a) Nothing
 
 > setNumber :: Int -> Annotation -> Annotation
-> setNumber x a = A (indices a) (lives a) (arrsRead a) (arrsWrite a) x (pRefactored a)
+> setNumber x a = A (indices a) (lives a) (arrsRead a) (arrsWrite a) x (refactored a)
 
 > setLives :: [Variable] -> Annotation -> Annotation
-> setLives x a = A x (indices a) (arrsRead a) (arrsWrite a) (number a) (pRefactored a)
+> setLives x a = A x (indices a) (arrsRead a) (arrsWrite a) (number a) (refactored a)
 
 > setIndices :: [Variable] -> Annotation -> Annotation
-> setIndices x a = A (lives a) x (arrsRead a) (arrsWrite a) (number a) (pRefactored a)
+> setIndices x a = A (lives a) x (arrsRead a) (arrsWrite a) (number a) (refactored a)
 
 > setArrsRead :: Map Variable [[Expr ()]] -> Annotation -> Annotation
-> setArrsRead x a = A (indices a) (lives a) x (arrsWrite a) (number a) (pRefactored a)
+> setArrsRead x a = A (indices a) (lives a) x (arrsWrite a) (number a) (refactored a)
 
 > setArrsWrite :: Map Variable [[Expr ()]] -> Annotation -> Annotation
-> setArrsWrite x a = A (indices a) (lives a) (arrsRead a) x (number a) (pRefactored a)
+> setArrsWrite x a = A (indices a) (lives a) (arrsRead a) x (number a) (refactored a)
 
-> unitAnnotation = A [] [] empty empty 0 False
+> unitAnnotation = A [] [] empty empty 0 Nothing
 
+-- Indenting for refactored code
+
+> instance Indentor Annotation where
+>     indR t i = case (refactored . copoint $ t) of
+>                  Just (SrcLoc f _ c) -> take c (repeat ' ')
+>                  Nothing             -> ind i

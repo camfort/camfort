@@ -11,7 +11,7 @@ program foo
     integer :: j
     real a(0:x), b(0:x), c
 
-    equivalence (c, j)
+    equivalence (c, j, k)
 
     c = 0.1
 

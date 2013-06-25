@@ -151,8 +151,10 @@ A sample transformation
 
 > go3 f = do inp <- readFile f
 >            p <- pr f
->            let p' = refactorEquivalences (map (fmap (const unitAnnotation)) p)
+>            let (r, p') = refactorEquivalences (map (fmap (const unitAnnotation)) p)
 >            let out = reprint inp f (head p')
 >            writeFile (f ++ ".out") out
->            return $ (out, p')
+>            putStrLn r
+>            
+>            
 

@@ -1,4 +1,5 @@
 > {-# LANGUAGE ScopedTypeVariables #-}
+> {-# LANGUAGE FlexibleInstances #-}
 
 > module Syntax where
 
@@ -10,8 +11,40 @@
 > import Annotations
 > import Language.Fortran
 
+> import Language.Haskell.Syntax (SrcLoc(..))
 
-Number
+Denotes terms which should be treated "annotation free", for example, for annotation
+free equality
+
+> data AnnotationFree t = AnnotationFree { annotationBound :: t }
+> af = AnnotationFree
+
+> instance Eq (AnnotationFree (Expr a)) where
+>     -- Compute variable equality modulo annotations and spans
+>     (AnnotationFree (Var _ _ vs)) == (AnnotationFree (Var _ _ vs'))
+>           = cmp vs vs' where cmp [] [] = True
+>                              cmp ((v,es):vs) ((v',es'):vs') =
+>                                   if (fmap (const ()) v) == (fmap (const ()) v') then
+>                                          (and (map (\(e, e') -> (af e) == (af e')) (zip es es'))) && (cmp vs vs')
+>                                   else False
+>                              cmp _ _ = False
+>     e == e' = error "Annotation free equality not implemented" --  False
+
+Helpers to do with source locations
+
+> refactorSpan :: SrcSpan -> SrcSpan
+> refactorSpan (SrcLoc f ll cl, SrcLoc _ lu cu) = (SrcLoc f (lu+1) 0, SrcLoc f lu cu)
+
+dropLine extends a span to the start of the next line
+This is particularly useful if a whole line is being redacted from a source file
+
+> dropLine :: SrcSpan -> SrcSpan
+> dropLine (s1, SrcLoc f l c) = (s1, SrcLoc f (l+1) 0)
+
+> srcLineCol :: SrcLoc -> (Int, Int)
+> srcLineCol (SrcLoc _ l c) = (l, c)
+
+Number statements (for analysis output)
 
 > numberStmts :: Program Annotation -> Program Annotation
 > numberStmts x = let 
