@@ -2,6 +2,7 @@
 > {-# LANGUAGE FlexibleContexts #-}
 > {-# LANGUAGE ScopedTypeVariables #-}
 > {-# LANGUAGE DeriveGeneric #-}
+> {-# LANGUAGE RankNTypes #-}
 
  {-# LANGUAGE MultiParamTypeClasses #-}
 
@@ -12,12 +13,16 @@
 
 > module Traverse where
 
+> import Annotations
 > import Language.Fortran
 
 > import Generics.Deriving.Base
 > import Generics.Deriving.Copoint
 > import GHC.Generics
 
+
+> import Data.Generics.Zipper
+> import Data.Generics.Aliases
 > import Data.Generics.Str
 > import Data.Generics.Uniplate.Operations
 
@@ -25,6 +30,8 @@
 
 > import Control.Comonad
 
+> import Data.Data
+> import Data.Maybe
 > import Data.Monoid     
 
 > instance Monoid x => Monad ((,) x) where
@@ -49,12 +56,17 @@ Other helpers
 > data Test0 a = Test0 a deriving Generic1 
 > data Test a = Test (Test0 a) deriving Generic1
 
-
 Data-type generic comonad-style traversal
 
 > extendBi :: (Biplate (from a) (to a), RComonad to) => (to a -> a) -> (from a) -> (from a)
 > extendBi f x = case biplate x of
 >                      (current, generate) -> generate $ strMap (rextend f) current
+
+Data-type generic comonad-style traversal with zipper on the inside
+
+> extendBiZ :: (Biplate (from a) (to a), RComonad to, Data (to a)) => (forall b . Zipper (to a) -> b) -> (from a) -> (from a)
+> extendBiZ f x = case biplate x of
+>                      (current, generate) -> (generate) $ strMap (fromZipper . (zextend f) . toZipper) current
 
 This one is less useful as the definitions for comonads are then very annoying
 
@@ -65,6 +77,35 @@ This one is less useful as the definitions for comonads are then very annoying
 > class RComonad t where
 >     rextract :: t a -> a
 >     rextend :: (t a -> a) -> t a -> t a
+
+> class RFunctor t where
+>     rfmap :: (a -> a) -> t a -> t a
+
+ instance RFunctor (PZipper d) where
+     rfmap f (PZipper x) = PZipper (zfmap f x)
+     
+> zfmap :: Data a => (a -> a) -> Zipper (d a) -> Zipper (d a)
+> zfmap f x = zeverywhere (mkT f) x
+
+ zextend :: Data a => (Zipper (d a) -> a) -> Zipper (d a) -> Zipper (d a)
+ zextend k = 
+
+map f [] = []
+map f (x:xs) = (f x) : (map f xs)
+
+ext f [] = []
+ext f (x:xs) = (f (x:xs)) : (map f xs)
+
+
+ instance RComonad (Zipper (d a)) where
+     rextract x = fromJust . getHole $ x --case (getHole x) of 
+                  --  Nothing -> 
+                  --  Just a -> a
+     rextend k y 
+
+> newtype PZipper d a = PZipper (Zipper (d a))
+
+
 
 > instance RComonad Fortran where
 >     rextract x = copoint x
@@ -157,20 +198,6 @@ This one is less useful as the definitions for comonads are then very annoying
 
 
 
-Accessors
-
-> class Successors t where
->     successors :: t -> [t]
-
-> instance Successors (Fortran t) where
->     successors (FSeq _ _ f1 f2)         = f2 : successors f1
->     successors (For _ _ _ _ _ _ f)        = [f]
->     successors (If _ _ _ f efs Nothing)   = f : map snd efs
->     successors (If _ _ _ f efs (Just f')) = [f, f'] ++ map snd efs
->     successors (Forall _ _ _ f)           = [f]
->     successors (Where _ _ _ f)            = [f]
->     successors (Label _ _ _ f)            = [f]
->     successors _                        = []
 
 
 TODO: Needs fixing with the spans - need to pull apart and put back together

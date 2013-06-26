@@ -35,7 +35,7 @@
 >    do eqs <- equivalents e1
 >       if (length eqs > 1) then 
 
->          let a' = setRefactored s1 a
+>          let a' = a { refactored = Just s1 }
 >              sp' = refactorSpan sp
 >              eqs' = deleteBy (\x -> \y -> (af x) == (af y)) e1 eqs -- remove self from list
 >              
@@ -62,7 +62,7 @@
 >                          rmEquiv' f@(Equivalence a sp equivs) = 
 >                                      do (ess, n, r) <- get
 >                                         put (equivs:ess, n - 1, r ++ "i" ++ (show . srcLineCol . fst $ sp) ++ ": removed equivalence \n")
->                                         return (NullStmt (setRefactored (fst sp) a) (dropLine sp))
+>                                         return (NullStmt (a { refactored = (Just $ fst sp) }) (dropLine sp))
 >                          rmEquiv' f = return f
                                      
 > equivalents :: Expr Annotation -> State RfEqState [Expr Annotation]

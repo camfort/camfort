@@ -193,6 +193,7 @@ Output routines specialised to the analysis.
 >      "</div><p><table>" ++
 >      row ["lives: (in) ",    showList $ fst $ lives t, "(out)", showList $ snd $ lives t] ++ 
 >      row ["indices:",  showList $ indices t] ++ 
+>      row ["successors:", showList $ (map show) (successorStmts t)] ++ 
 >      row ["arrays R:", showExps (assocs $ arrsRead t)] ++ 
 >      row ["arrays W:", showExps (assocs $ arrsWrite t)] ++
 >      "</table></p></div><br />\n\r\n" 
@@ -228,6 +229,13 @@ Output routines specialised to the analysis.
 >                      ([]:[])        -> (Prelude.reverse tk, inp)
 >                      ([]:ys)        -> takeBounds' ((ll+1, 0), (ul, uc)) ('\n':tk) ys
 >                      ((x:xs):ys)    -> takeBounds' ((ll, lc+1), (ul, uc)) (x:tk) (xs:ys)
+
+-- Indenting for refactored code
+
+> instance Indentor Annotation where
+>     indR t i = case (refactored . copoint $ t) of
+>                  Just (SrcLoc f _ c) -> Prelude.take c (repeat ' ')
+>                  Nothing             -> ind i
 
 > reprint :: String -> String -> Program Annotation -> String
 > reprint input f z = let input' = Prelude.lines input

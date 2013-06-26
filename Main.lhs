@@ -103,13 +103,12 @@ map (fmap ((,[""]),[""]))
 >                                      length e > 0,
 >                                      isArrayTypeP' typeEnv v]
 
->                     in setArrsRead (collect readIxs) 
->                            (setArrsWrite (collect writeIxs) (copoint y))
+>                     in (copoint y) { arrsRead = (collect readIxs), arrsWrite = (collect writeIxs) } 
 >     in extendBi arrIxsF x               
 
 > ix :: Program Annotation -> Program Annotation
 > ix = let ixF :: Fortran Annotation -> Annotation
->          ixF f = setIndices (nub [v | (For _ _ (VarName _ v) _ _ _ _) <- ((universeBi f)::[Fortran Annotation])]) (copoint f)
+>          ixF f = (copoint f) { indices = (nub [v | (For _ _ (VarName _ v) _ _ _ _) <- ((universeBi f)::[Fortran Annotation])])}
 >      in extendBi ixF
 
 

@@ -3,6 +3,8 @@
 
 > module Syntax where
 
+> import Traverse
+
 > import Data.Data
 > import Data.List
 > import Data.Generics.Uniplate.Operations
@@ -44,6 +46,22 @@ This is particularly useful if a whole line is being redacted from a source file
 > srcLineCol :: SrcLoc -> (Int, Int)
 > srcLineCol (SrcLoc _ l c) = (l, c)
 
+Accessors
+
+> class Successors t where
+>     successors :: t -> [t]
+
+> instance Successors (Fortran t) where
+>     successors (FSeq _ _ f1 f2)         = f2 : successors f1
+>     successors (For _ _ _ _ _ _ f)        = [f]
+>     successors (If _ _ _ f efs Nothing)   = f : map snd efs
+>     successors (If _ _ _ f efs (Just f')) = [f, f'] ++ map snd efs
+>     successors (Forall _ _ _ f)           = [f]
+>     successors (Where _ _ _ f)            = [f]
+>     successors (Label _ _ _ f)            = [f]
+>     successors _                        = []
+
+
 Number statements (for analysis output)
 
 > numberStmts :: Program Annotation -> Program Annotation
@@ -54,7 +72,7 @@ Number statements (for analysis output)
 >                   number' :: Annotation -> State Int Annotation
 >                   number' x = do n <- get 
 >                                  put (n + 1)
->                                  return $ setNumber n x 
+>                                  return $ x { number = n }
 >          
 >                 in fst $ runState (descendBiM numberF x) 0
 
