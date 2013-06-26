@@ -1,0 +1,16 @@
+This package contains the generic zipper system described in:
+
+ Scrap Your Zippers: A Generic Zipper for Heterogeneous Types.
+ Michael D. Adams.  WGP '10: Proceedings of the 2010 ACM SIGPLAN
+ workshop on Generic programming, 2010.
+
+It defines the Zipper type permitting zipper traversals over arbitrary
+instances of Data.  See the paper for an introduction on using it.
+
+The paper is available at:
+ http://www.cs.indiana.edu/~adamsmd/papers/scrap_your_zippers/
+
+While the core zipper data structures are quite solid, the surrounding
+library design is likely to change based on feedback from the
+community.  So if you find any bugs or would like to see something
+changed, please let me know.
