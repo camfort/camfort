@@ -62,11 +62,26 @@ Data-type generic comonad-style traversal
 > extendBi f x = case biplate x of
 >                      (current, generate) -> generate $ strMap (rextend f) current
 
-Data-type generic comonad-style traversal with zipper on the inside
+Data-type generic comonad-style traversal with zipper (contextual traversal)
+                         
+> everywhere :: (Zipper a -> Zipper a) -> Zipper a -> Zipper a
+> everywhere k z = let everywhere' = enterRight . enterDown . k
+>            
+>                      enterDown z = case (down' z) of
+>                                      Just dz -> let dz' = everywhere' dz
+>                                                 in case (up $ dz') of
+>                                                      Just uz -> uz
+>                                                      Nothing -> dz'
+>                                      Nothing -> z
 
-> extendBiZ :: (Biplate (from a) (to a), RComonad to, Data (to a)) => (forall b . Zipper (to a) -> b) -> (from a) -> (from a)
-> extendBiZ f x = case biplate x of
->                      (current, generate) -> (generate) $ strMap (fromZipper . (zextend f) . toZipper) current
+>                      enterRight z = case (right z) of
+>                                       Just rz -> let rz' = everywhere' rz
+>                                                  in case (left $ rz') of
+>                                                      Just lz -> lz 
+>                                                      Nothing -> rz'
+>                                       Nothing -> z
+>                   in everywhere' z
+>                               
 
 This one is less useful as the definitions for comonads are then very annoying
 
@@ -144,6 +159,41 @@ ext f (x:xs) = (f (x:xs)) : (map f xs)
 >     rextend k y@(ReadS _ sp s e)           = ReadS (k y) sp s e
 >     rextend k y@(TextStmt _ sp s)          = TextStmt (k y) sp s
 >     rextend k y@(NullStmt _ sp)            = NullStmt (k y) sp
+
+> class Refill d where
+>     refill :: d a -> a -> d a
+
+> instance Refill Fortran where
+>     refill y@(Assg _ sp e1 e2)         a = Assg a sp e1 e2
+>     refill y@(For _ sp v e1 e2 e3 fs)  a = For a sp v e1 e2 e3 fs
+>     refill y@(FSeq _ sp f1 f2)         a = FSeq a sp f1 f2
+>     refill y@(If _ sp e f1 fes f3)     a = If a sp e f1 fes f3
+>     refill y@(Allocate _ sp e1 e2)     a = Allocate a sp e1 e2
+>     refill y@(Backspace _ sp sp')      a = Backspace a sp sp'
+>     refill y@(Call _ sp e as)          a = Call a sp e as
+>     refill y@(Equivalence _ sp es)     a = Equivalence a sp es
+>     refill y@(Open _ sp s)             a = Open a sp s
+>     refill y@(Close _ sp s)            a = Close a sp s
+>     refill y@(Continue _ sp)           a = Continue a sp
+>     refill y@(Cycle _ sp s)            a = Cycle a sp s
+>     refill y@(Deallocate _ sp es e)    a = Deallocate a sp es e
+>     refill y@(Endfile _ sp s)          a = Endfile a sp s
+>     refill y@(Exit _ sp s)             a = Exit a sp s
+>     refill y@(Forall _ sp es f)        a = Forall a sp es f
+>     refill y@(Goto _ sp s)             a = Goto a sp s
+>     refill y@(Nullify _ sp e)          a = Nullify a sp e
+>     refill y@(Inquire _ sp s e)        a = Inquire a sp s e
+>     refill y@(Rewind _ sp s)           a = Rewind a sp s
+>     refill y@(Stop _ sp e)             a = Stop a sp e
+>     refill y@(Where _ sp e f)          a = Where a sp e f
+>     refill y@(Write _ sp s e)          a = Write a sp s e
+>     refill y@(PointerAssg _ sp e1 e2)  a = PointerAssg a sp e1 e2
+>     refill y@(Return _ sp e)           a = Return a sp e
+>     refill y@(Label _ sp s f)          a = Label a sp s f
+>     refill y@(Print _ sp e es)         a = Print a sp e es
+>     refill y@(ReadS _ sp s e)          a = ReadS a sp s e
+>     refill y@(TextStmt _ sp s)         a = TextStmt a sp s
+>     refill y@(NullStmt _ sp)           a = NullStmt a sp
 
 
 -- > instance Comonad Fortran where

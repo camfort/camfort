@@ -56,7 +56,7 @@ module Data.Generics.Zipper (
   zeverywhere, zeverywhere', zsomewhere, zreduce,
 
   -- ** Contextual/comonadic operation
-  transC, zextend
+  transC, zextend, transCR, zextendR
 
 ) where
 
@@ -175,10 +175,29 @@ transM f (Zipper hole ctxt) = do
   hole' <- f hole
   return (Zipper hole' ctxt)
 
+type GenericCT d = forall a . Data a => Zipper (d a) -> a
+
+newtype CT d x = CT { unCT :: d x -> x }
+
+--mkCT :: (Typeable a, Typeable b) => (Zipper (d b) -> b) -> (Zipper (d a) -> a)
+--mkCT f = extCT 
+
+--extCT :: (Typeable a, Typeable b) => (Zipper (d a) -> a) -> (Zipper (d b) -> b) -> (Zipper (d a) -> a)
+--extCT def ext = unCT ((CT def) `ext0` (CT ext))
+
 -- | Apply a generic contextual transformation at the current context
 transC :: (forall b . Zipper (d a) -> b) -> Zipper (d a) -> Zipper (d a)
 transC f (Zipper hole ctxt) = Zipper (f (Zipper hole ctxt)) ctxt
 
+-- | Apply a generic contextual transformation at the current context
+transCR :: (forall b . (Zipper (d a), b) -> b) -> Zipper (d a) -> Zipper (d a)
+transCR f (Zipper hole ctxt) = Zipper (f (Zipper hole ctxt, hole)) ctxt
+
+transC' :: (Data a, Typeable a) => GenericCT d -> Zipper (d a) -> Zipper (d a)
+transC' f z = setHole (f z) z
+
+--transC' :: Data (d a) => (forall b . (Data b, Typeable b) => Zipper (d a) -> b) -> Zipper (d a) -> Zipper (d a)
+--transC' f z = setHole (f z) z
 
 -- Convenience hole manipulation interface
 

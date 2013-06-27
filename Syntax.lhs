@@ -1,10 +1,12 @@
 > {-# LANGUAGE ScopedTypeVariables #-}
 > {-# LANGUAGE FlexibleInstances #-}
+> {-# LANGUAGE MultiParamTypeClasses #-}
 
 > module Syntax where
 
 > import Traverse
 
+> import Data.Char
 > import Data.Data
 > import Data.List
 > import Data.Generics.Uniplate.Operations
@@ -12,6 +14,9 @@
 
 > import Annotations
 > import Language.Fortran
+
+
+> import Data.Generics.Zipper
 
 > import Language.Haskell.Syntax (SrcLoc(..))
 
@@ -49,18 +54,34 @@ This is particularly useful if a whole line is being redacted from a source file
 Accessors
 
 > class Successors t where
->     successors :: t -> [t]
+>     successorsRoot :: t a -> [t a]
+>     successors :: (Eq a, Typeable a) => Zipper (Program a) -> [t a]  
 
-> instance Successors (Fortran t) where
->     successors (FSeq _ _ f1 f2)         = f2 : successors f1
->     successors (For _ _ _ _ _ _ f)        = [f]
->     successors (If _ _ _ f efs Nothing)   = f : map snd efs
->     successors (If _ _ _ f efs (Just f')) = [f, f'] ++ map snd efs
->     successors (Forall _ _ _ f)           = [f]
->     successors (Where _ _ _ f)            = [f]
->     successors (Label _ _ _ f)            = [f]
->     successors _                        = []
+> instance Successors Fortran where
+>     successorsRoot (FSeq _ _ f1 f2)          = [f1]
+>     successorsRoot (For _ _ _ _ _ _ f)       = [f]
+>     successorsRoot (If _ _ _ f efs f')       = [f]
+>     successorsRoot (Forall _ _ _ f)          = [f]
+>     successorsRoot (Where _ _ _ f)           = [f]
+>     successorsRoot (Label _ _ _ f)           = [f]
+>     successorsRoot _                         = []
 
+>     successors = successorsF
+
+> successorsF :: forall a . (Eq a, Typeable a) => Zipper (Program a) -> [Fortran a]
+> successorsF z = maybe [] id 
+>                 (do f <- (getHole z)::(Maybe (Fortran a))
+>                     ss <- return $ successorsRoot f
+>                     uz <- up z
+>                     uf <- (getHole uz)::(Maybe (Fortran a))
+>                     return $ ss ++ case uf of
+>                       (FSeq _ _ f1 f2)    -> if (f == f1) then [f2] else []
+>                       (For _ _ _ _ _ _ f) -> [f]
+>                       (If _ _ _ gf efs f')   -> if (f == gf) then (maybe [] (:[]) f') ++ (map snd efs) else []
+>                       (Forall _ _ _ f)    -> [f]
+>                       (Where _ _ _ f)     -> [f]
+>                       (Label _ _ _ f)     -> []
+>                       _                   -> []) 
 
 Number statements (for analysis output)
 
@@ -70,6 +91,7 @@ Number statements (for analysis output)
 >                   numberF = descendBiM number'
 
 >                   number' :: Annotation -> State Int Annotation
+>                   -- actually numbers more than just statements, but this doesn't matter 
 >                   number' x = do n <- get 
 >                                  put (n + 1)
 >                                  return $ x { number = n }
@@ -78,10 +100,8 @@ Number statements (for analysis output)
 
 All variables from a Fortran syntax tree
 
-> variables :: forall a t . (Data (t a), Typeable (t a), Data a, Typeable a) => t a -> [String]
-> variables f = nub $
->                  [v | (AssgExpr _ _ v _) <- (universeBi f)::[Expr a]]
->               ++ [v | (VarName _ v) <- (universeBi f)::[VarName a]] 
+> variables f = nub $ map (map toLower) $ [v | (AssgExpr _ _ v _) <- (universeBi f)::[Expr Annotation]]
+>                  ++ [v | (VarName _ v) <- (universeBi f)::[VarName Annotation]] 
                
 Free-variables in a piece of Fortran syntax
 
@@ -97,65 +117,58 @@ All variables from binders
 >             ++ [v | (For _ _ (VarName _ v) _ _ _ _) <- (universeBi f)::[Fortran a]]
 
 
- fi :: Fortran Annotation -> [Expr Annotation]
- fi t@(Assg _ e1 e2) = (universeBi e2)::[Expr Annotation]
- fi t = (concatMap fi ((children t)::[Fortran Annotation])) ++ ((childrenBi t) :: [Expr Annotation])
-
-> lhsExpr :: Fortran Annotation -> [Expr Annotation]
-> lhsExpr (Assg x sp e1 e2)        = (universeBi e2)::[Expr Annotation]
-> lhsExpr (For x sp v e1 e2 e3 fs) = ((universeBi e1)::[Expr Annotation]) ++
->                              ((universeBi e2)::[Expr Annotation]) ++
->                              ((universeBi e3)::[Expr Annotation]) ++ 
->                             lhsExpr fs
-> lhsExpr (FSeq x sp f1 f2)        = lhsExpr f1 ++ lhsExpr f2
-> lhsExpr (If x sp e f1 fes f3)    = ((universeBi e)::[Expr Annotation]) ++
->                              (lhsExpr f1) ++ 
->                              (concatMap (\(e, f) -> ((universeBi e)::[Expr Annotation]) ++ lhsExpr f) fes) ++
->                               (case f3 of 
->                                  Nothing -> []
->                                  Just x' -> lhsExpr x')
->                             
-> lhsExpr (Allocate x sp e1 e2)    = ((universeBi e1)::[Expr Annotation]) ++
->                              ((universeBi e2)::[Expr Annotation])
-> lhsExpr (Call x sp e as)         = (universeBi e)::[Expr Annotation] 
-> lhsExpr (Deallocate x sp es e)   = (concatMap (\e -> (universeBi e)::[Expr Annotation]) es) ++
->                              ((universeBi e)::[Expr Annotation])
-> lhsExpr (Forall x sp (es, e) f)  = concatMap (\(_, e1, e2, e3) -> -- TODO: maybe different here
->                                            ((universeBi e1)::[Expr Annotation]) ++
->                                             ((universeBi e2)::[Expr Annotation]) ++
->                                             ((universeBi e3)::[Expr Annotation])) es ++
->                             ((universeBi e)::[Expr Annotation]) ++
->                             lhsExpr f 
-> lhsExpr (Nullify x sp es)        = concatMap (\e -> (universeBi e)::[Expr Annotation]) es
-> lhsExpr (Inquire x sp s es)      = concatMap (\e -> (universeBi e)::[Expr Annotation]) es
-> lhsExpr (Stop x sp e)            = (universeBi e)::[Expr Annotation]
-> lhsExpr (Where x sp e f)         = ((universeBi e)::[Expr Annotation]) ++ lhsExpr f
-> lhsExpr (Write x sp s es)        = concatMap (\e -> (universeBi e)::[Expr Annotation]) es
-> lhsExpr (PointerAssg x sp e1 e2) = ((universeBi e1)::[Expr Annotation]) ++
->                             ((universeBi e2)::[Expr Annotation])
-> lhsExpr (Return x sp e)          = (universeBi e)::[Expr Annotation]
-> lhsExpr (Label x sp s f)         = lhsExpr f
-> lhsExpr (Print x sp e es)        = ((universeBi e)::[Expr Annotation]) ++ 
->                              (concatMap (\e -> (universeBi e)::[Expr Annotation]) es)
-> lhsExpr (ReadS x sp s es)        = concatMap (\e -> (universeBi e)::[Expr Annotation]) es
-> lhsExpr _                     = []
 
 > rhsExpr :: Fortran Annotation -> [Expr Annotation]
-> rhsExpr (Assg x sp e1 e2)        = (universeBi e1)::[Expr Annotation]
-> rhsExpr t                     = concatMap rhsExpr ((children t)::[Fortran Annotation])
+> rhsExpr (Assg _ _ _ e2)        = (universeBi e2)::[Expr Annotation]
 
- rhsExpr (For x v e1 e2 e3 fs) = rhsExpr fs
- rhsExpr (FSeq x f1 f2)        = rhsExpr f1 ++ rhsExpr f2
- rhsExpr (If x e f1 fes f3)    = (rhsExpr f1) ++ 
-                              (concatMap (\(e, f) -> rhsExpr f) fes) ++
-                               (case f3 of 
-                                  Nothing -> []
-                                  Just x -> rhsExpr x)
-                             
- rhsExpr (Forall x (es, e) f)  = rhsExpr f -- TODO: maybe different here
- rhsExpr (Where x e f)         = rhsExpr f
- rhsExpr (Label x s f)         = rhsExpr f
- rhsExpr t                     = [] -- concatMap rhsExpr ((universeBi t)::[Fortran Annotation])
+> rhsExpr (For _ _ v e1 e2 e3 _) = ((universeBi e1)::[Expr Annotation]) ++
+>                                   ((universeBi e2)::[Expr Annotation]) ++
+>                                   ((universeBi e3)::[Expr Annotation])
+
+> rhsExpr (If _ _ e f1 fes f3)    = ((universeBi e)::[Expr Annotation])
+>                             
+> rhsExpr (Allocate x sp e1 e2)   = ((universeBi e1)::[Expr Annotation]) ++
+>                                    ((universeBi e2)::[Expr Annotation])
+
+> rhsExpr (Call _ _ e as)         = ((universeBi e)::[Expr Annotation]) ++ 
+>                                    ((universeBi as)::[Expr Annotation])
+
+> rhsExpr (Deallocate _ _ es e)   = (concatMap (\e -> (universeBi e)::[Expr Annotation]) es) ++
+>                                     ((universeBi e)::[Expr Annotation])
+
+> rhsExpr (Forall _ _ (es, e) f)  = concatMap (\(_, e1, e2, e3) -> -- TODO: maybe different here
+>                                                ((universeBi e1)::[Expr Annotation]) ++
+>                                                ((universeBi e2)::[Expr Annotation]) ++
+>                                                ((universeBi e3)::[Expr Annotation])) es ++
+>                                     ((universeBi e)::[Expr Annotation])
+
+> rhsExpr (Nullify _ _ es)        = concatMap (\e -> (universeBi e)::[Expr Annotation]) es
+
+> rhsExpr (Inquire _ _ s es)      = concatMap (\e -> (universeBi e)::[Expr Annotation]) es
+> rhsExpr (Stop _ _ e)            = (universeBi e)::[Expr Annotation]
+> rhsExpr (Where _ _ e f)         = (universeBi e)::[Expr Annotation]
+
+> rhsExpr (Write _ _ s es)        = concatMap (\e -> (universeBi e)::[Expr Annotation]) es
+
+> rhsExpr (PointerAssg _ _ _ e2)  = (universeBi e2)::[Expr Annotation]
+
+> rhsExpr (Return _ _ e)          = (universeBi e)::[Expr Annotation]
+> rhsExpr (Print _ _ e es)        = ((universeBi e)::[Expr Annotation]) ++ 
+>                                    (concatMap (\e -> (universeBi e)::[Expr Annotation]) es)
+> rhsExpr (ReadS _ _ s es)        = concatMap (\e -> (universeBi e)::[Expr Annotation]) es
+> -- rhsExpr (Label x sp s f)        = rhsExpr f
+> rhsExpr _                     = []
+
+
+
+> lhsExpr :: Fortran Annotation -> [Expr Annotation]
+> lhsExpr (Assg _ _ e1 e2)        = ((universeBi e1)::[Expr Annotation])
+> lhsExpr (For x sp v e1 e2 e3 fs) = [Var x sp [(v, [])]]
+> lhsExpr (PointerAssg _ _ e1 e2) = ((universeBi e1)::[Expr Annotation])
+> lhsExpr t                        = [] --  concatMap lhsExpr ((children t)::[Fortran Annotation])
+
+
+
 
 > affineMatch (Bin _ _ (Plus _) (Var _ _ [(VarName _ v, _)]) (Con _ _ n)) = Just (v, read n)
 > affineMatch (Bin _ _ (Plus _) (Con _ _ n) (Var _ _ [(VarName _ v, _)]))   = Just (v, read n)

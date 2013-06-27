@@ -79,7 +79,7 @@
 map (fmap ((,[""]),[""]))
 
 > analyse :: [Program A0] -> [Program Annotation]
-> analyse p = map ((descendBi arrayIndices) . ix . lva . numberStmts . (fmap (const unitAnnotation))) p
+> analyse p = map ((descendBi arrayIndices) . ix . lva . numberStmts . (descendBi reassociate) . (fmap (const unitAnnotation))) p
 
 
 > collect :: (Eq a, Ord k) => [(k, a)] -> Map k [a]
@@ -94,12 +94,12 @@ map (fmap ((,[""]),[""]))
 >         
 >         arrIxsF :: Fortran Annotation -> Annotation
 >         arrIxsF y = let readIxs = [(v, mfmap (const ()) e) | 
->                                      (Var _ _ [(VarName _ v, e)]) <- lhsExpr y,
+>                                      (Var _ _ [(VarName _ v, e)]) <- rhsExpr y,
 >                                      length e > 0,
 >                                      isArrayTypeP' typeEnv v]
 
 >                         writeIxs = [(v, mfmap (const ()) e) |
->                                      (Var _ _ [(VarName _ v, e)]) <- rhsExpr y,
+>                                      (Var _ _ [(VarName _ v, e)]) <- lhsExpr y,
 >                                      length e > 0,
 >                                      isArrayTypeP' typeEnv v]
 
@@ -119,6 +119,10 @@ map (fmap ((,[""]),[""]))
 >                (ParseOk p)       -> return $ p
 >                (ParseFailed l e) -> error e
 
+> goR :: String -> IO ()
+> goR s = do f' <- pr s
+>            putStrLn $ show f' -- show (transformBi reassociate f')
+
 > go :: String -> IO ()
 > go s = do -- f <- readFile s
 >           -- let f' = parse f
@@ -129,7 +133,8 @@ map (fmap ((,[""]),[""]))
 >           writeFile (s ++ ".html") (concatMap outputHTML f'')
 >           -- putStrLn (show $ variables f'')
 >           -- putStrLn (show $ binders f'')
->           (show ((map (fmap (const ())) (descendBi reassociate f'))::([Program ()]))) `trace` return ()
+>           -- putStrLn $ show f''
+>           -- (show ((map (fmap (const ())) (descendBi reassociate f'))::([Program ()]))) `trace` return ()
 
  go2 :: String -> IO String
 
