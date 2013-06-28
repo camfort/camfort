@@ -6,6 +6,7 @@
 > module DeadCode where
 
 > import Annotations
+> import LVA
 > import Syntax
 > import Traverse
 > import Language.Fortran
@@ -18,7 +19,9 @@
 > import Data.Generics.Uniplate.Operations
 
 > deadCode :: [Program Annotation] -> (Report, [Program Annotation])
-> deadCode = mapM (transformBiM elimDead)
+> deadCode p = let (r, p') = mapM (transformBiM elimDead) p
+>              in if r == "" then (r, p')
+>                            else (r, p') >>= (deadCode . (map lva))
 
 > elimDead :: Fortran Annotation -> (Report, Fortran Annotation)
 > elimDead x@(Assg a sp@(s1, s2) e1 e2) = 

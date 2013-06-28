@@ -224,20 +224,19 @@ Output routines specialised to the analysis.
 
 
 
-> takeBounds (l, u) inp = takeBounds' (lineCol l, lineCol u) [] inp False
+> takeBounds (l, u) inp = takeBounds' (lineCol l, lineCol u) [] inp 
 
-> takeBoundsDropNs (l, u) inp = takeBounds' (lineCol l, lineCol u) [] inp True
 
 > -- dropNs is a flag to toggle dropping multiple '\n's
-> takeBounds' ((ll, lc), (ul, uc)) tk inp dropNs = takeBounds'' ((ll, lc), (ul, uc)) tk inp dropNs True
+
 > 
-> takeBounds'' ((ll, lc), (ul, uc)) tk inp dropNs t =
+> takeBounds' ((ll, lc), (ul, uc)) tk inp  =
 >     if (ll == ul && lc == uc) || (ll > ul) then (Prelude.reverse tk, inp)
 >     else case inp of []             -> (Prelude.reverse tk, inp)
 >                      ([]:[])        -> (Prelude.reverse tk, inp)
->                      ([]:([]:ys)) | t && dropNs -> takeBounds'' ((ll+2, 0), (ul, uc)) ('\n':tk) ys dropNs True
->                      ([]:ys)        -> takeBounds'' ((ll+1, 0), (ul, uc)) ('\n':tk) ys dropNs dropNs
->                      ((x:xs):ys)    -> takeBounds'' ((ll, lc+1), (ul, uc)) (x:tk) (xs:ys) dropNs False
+>                      --([]:([]:ys)) | t && dropNs -> takeBounds'' ((ll+2, 0), (ul, uc)) ('\n':tk) ys 
+>                      ([]:ys)        -> takeBounds' ((ll+1, 0), (ul, uc)) ('\n':tk) ys
+>                      ((x:xs):ys)    -> takeBounds' ((ll, lc+1), (ul, uc)) (x:tk) (xs:ys) 
 
 -- Indenting for refactored code
 
