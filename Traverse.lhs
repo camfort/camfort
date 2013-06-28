@@ -34,6 +34,8 @@
 > import Data.Maybe
 > import Data.Monoid     
 
+> import Debug.Trace
+
 > instance Monoid x => Monad ((,) x) where
 >     return a = (mempty, a)
 >     (x, a) >>= k = let (x', b) = k a
@@ -252,8 +254,8 @@ ext f (x:xs) = (f (x:xs)) : (map f xs)
 
 TODO: Needs fixing with the spans - need to pull apart and put back together
 
-> reassociate :: Fortran () -> Fortran ()
-> reassociate (FSeq () sp1 (FSeq () sp2 a b) c) = FSeq () sp1 (reassociate a) (FSeq () sp2  (reassociate b) (reassociate c))
+> reassociate :: Fortran Annotation -> Fortran Annotation
+> reassociate (FSeq a1 sp1 (FSeq a2 sp2 a b) c) = FSeq a1 sp1 (reassociate a) (FSeq a2 sp2  (reassociate b) (reassociate c))
 > reassociate t = t
 
  reassociate :: Fortran Annotation -> Fortran Annotation

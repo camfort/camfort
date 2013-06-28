@@ -79,10 +79,10 @@
 map (fmap ((,[""]),[""]))
 
 > analyse :: [Program a] -> [Program Annotation]
-> analyse p = map ((descendBi arrayIndices) . ix . lva . numberStmts . (descendBi reassociate) . (fmap (const unitAnnotation))) p
+> analyse p = map ((descendBi arrayIndices) . ix . lva . numberStmts . (transformBi reassociate) . (fmap (const unitAnnotation))) p
 
- analyse' :: [Program Annotation] -> [Program Annotation]
- analyse' p = map ((descendBi arrayIndices) . ix . lva . numberStmts . (descendBi reassociate))  p
+> analyse' :: [Program Annotation] -> [Program Annotation]
+> analyse' p = map ((descendBi arrayIndices) . ix . lva . numberStmts . (transformBi reassociate))  p
 
 
 
@@ -163,7 +163,7 @@ A sample transformation
 >            p <- pr f
 >            let (r, p') = (refactorEquivalences (map (fmap (const unitAnnotation)) p)) 
 >            let out = reprint inp f (head p')            
->            let pa' = analyse p'
+>            let pa' = analyse' p'
 >            writeFile (f ++ ".out.html") (concatMap outputHTML pa')
 >            writeFile (f ++ ".out") out
 >            let (r2, p'') = deadCode pa'

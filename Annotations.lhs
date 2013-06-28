@@ -52,6 +52,9 @@ Loop classifications
 >                      successorStmts :: [Int]}
 >                    deriving (Eq, Show, Typeable, Data)
 
+> liveOut = snd . lives
+> liveIn = fst . lives
+
  -- Map Variable [[(Variable,Int)]],
 
 > pRefactored :: Annotation -> Bool

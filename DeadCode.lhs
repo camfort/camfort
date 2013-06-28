@@ -22,12 +22,11 @@
 
 > elimDead :: Fortran Annotation -> (Report, Fortran Annotation)
 > elimDead x@(Assg a sp@(s1, s2) e1 e2) = 
->        let (liveOut, _) = lives a
+>        let lOut = liveOut a
 >           -- currently assumes an assign defines only one access (which is usual)
->        in if ((varExprToAccesses e1) == []) || ((head $ varExprToAccesses e1) `elem` liveOut) then 
+>        in if ((varExprToAccesses e1) == []) || ((head $ varExprToAccesses e1) `elem` lOut) then 
 >               return x
->           else
->               let report = "o" ++ (show . srcLineCol $ s1) ++ ": removed dead code\n"
->               in (report, NullStmt (a { refactored = (Just s1) }) (dropLine sp))
+>           else let report = "o" ++ (show . srcLineCol $ s1) ++ ": removed dead code\n"
+>                in (report, NullStmt (a { refactored = (Just s1) }) (dropLine sp))
 > elimDead x = return x
 >               
