@@ -256,6 +256,10 @@ TODO: Needs fixing with the spans - need to pull apart and put back together
 > reassociate (FSeq () sp1 (FSeq () sp2 a b) c) = FSeq () sp1 (reassociate a) (FSeq () sp2  (reassociate b) (reassociate c))
 > reassociate t = t
 
+ reassociate :: Fortran Annotation -> Fortran Annotation
+ reassociate (FSeq a1 sp1 (FSeq a2 sp2 a b) c) = FSeq a1 sp1 (reassociate a) (FSeq a2 sp2  (reassociate b) (reassociate c))
+ reassociate t = t
+
 > class Copointed d where
 >    copoint :: d a -> a 
 

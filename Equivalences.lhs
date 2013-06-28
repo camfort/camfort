@@ -20,7 +20,6 @@
 
 > import Debug.Trace
 
-> type Report = String
 
 > type RfEqState = ([[Expr Annotation]], Int, Report)
 

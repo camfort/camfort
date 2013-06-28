@@ -16,20 +16,20 @@
 
 Kill/gen functions
 
-> genForLhsVar, killForLhsVar :: Expr Annotation -> [Variable]
-> killForLhsVar (Var a p xes) = map (\((VarName _ v), _) -> v) xes
+> genForLhsVar, killForLhsVar :: Expr Annotation -> [Access]
+> killForLhsVar (Var a p xes) = map (\((VarName _ v), _) -> VarA v) xes
 > killForLhsVar _            = []
 >                                  
-> genForLhsVar t@ (Var _ _  xes) = concatMap (\(_, es) -> variables es) xes
+> genForLhsVar t@ (Var _ _  xes) = concatMap (\(_, es) -> accesses es) xes
 > genForLhsVar _            = []
 
-> kill :: Fortran Annotation -> [Variable]
+> kill :: Fortran Annotation -> [Access]
 > kill (Assg _ _ e1 _) = killForLhsVar e1 
-> kill t = concatMap variables (lhsExpr t)
+> kill t = concatMap accesses (lhsExpr t)
 
-> gen :: Fortran Annotation -> [Variable]
-> gen t@(Assg _ _ e1 e2) = (concatMap variables (rhsExpr t)) ++ (genForLhsVar e1)
-> gen t = concatMap variables (rhsExpr t)            
+> gen :: Fortran Annotation -> [Access]
+> gen t@(Assg _ _ e1 e2) = (concatMap accesses (rhsExpr t)) ++ (genForLhsVar e1)
+> gen t = concatMap accesses (rhsExpr t)            
 
 Single iteration of live-variable analysis
 

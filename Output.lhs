@@ -40,6 +40,7 @@
 
 > import Debug.Trace
 
+
 > purple = "#800080"
 > green = "#008000"
 > blue = "#000080"
@@ -191,7 +192,7 @@ Output routines specialised to the analysis.
 >      "' class'outer'><div class='spacer'><pre>" ++ (indent 3 i) ++ "</pre></div>" ++ 
 >      "<div class='annotation'><div class='number'>" ++ (show $ number t) ++ 
 >      "</div><p><table>" ++
->      row ["lives: (in) ",    showList $ fst $ lives t, "(out)", showList $ snd $ lives t] ++ 
+>      row ["lives: (in) ",    showList $ (map show) $ fst $ lives t, "(out)", showList $ (map show) $ snd $ lives t] ++ 
 >      row ["indices:",  showList $ indices t] ++ 
 >      row ["successors:", showList $ (map show) (successorStmts t)] ++ 
 >      row ["arrays R:", showExps (assocs $ arrsRead t)] ++ 
@@ -203,14 +204,14 @@ Output routines specialised to the analysis.
 >            listToPair' [x]    = outputF x
 >            listToPair' (x:xs) = outputF x ++ ", " ++ listToPair' xs
 
->            showList x    = "" ++ showList' x ++ ""
->            showList' []  = ""
->            showList' [x] = x
->            showList' (x:xs) = x ++ ", " ++ showList' xs
-
 >            showExps []           = ""
 >            showExps [(v, es)]    = "[" ++ v ++ ": " ++ (showList $ map listToPair es) ++ "]"
 >            showExps ((v, es):ys) = (showExps [(v, es)]) ++ ", " ++ (showExps ys)
+
+
+>            showList []  = ""
+>            showList [x] = x
+>            showList (x:xs) = x ++ ", " ++ showList xs
 
 
 > type A1 =  Bool
@@ -221,14 +222,22 @@ Output routines specialised to the analysis.
  inBounds :: SrcLoc -> (SrcLoc, SrcLoc) -> Bool
  inBounds x (l,u) = (lineCol x) >= (lineCol l) && (lineCol x) < (lineCol u)
 
-> takeBounds (l, u) inp = takeBounds' (lineCol l, lineCol u) [] inp
 
-> takeBounds' ((ll, lc), (ul, uc)) tk inp =
+
+> takeBounds (l, u) inp = takeBounds' (lineCol l, lineCol u) [] inp False
+
+> takeBoundsDropNs (l, u) inp = takeBounds' (lineCol l, lineCol u) [] inp True
+
+> -- dropNs is a flag to toggle dropping multiple '\n's
+> takeBounds' ((ll, lc), (ul, uc)) tk inp dropNs = takeBounds'' ((ll, lc), (ul, uc)) tk inp dropNs True
+> 
+> takeBounds'' ((ll, lc), (ul, uc)) tk inp dropNs t =
 >     if (ll == ul && lc == uc) || (ll > ul) then (Prelude.reverse tk, inp)
 >     else case inp of []             -> (Prelude.reverse tk, inp)
 >                      ([]:[])        -> (Prelude.reverse tk, inp)
->                      ([]:ys)        -> takeBounds' ((ll+1, 0), (ul, uc)) ('\n':tk) ys
->                      ((x:xs):ys)    -> takeBounds' ((ll, lc+1), (ul, uc)) (x:tk) (xs:ys)
+>                      ([]:([]:ys)) | t && dropNs -> takeBounds'' ((ll+2, 0), (ul, uc)) ('\n':tk) ys dropNs True
+>                      ([]:ys)        -> takeBounds'' ((ll+1, 0), (ul, uc)) ('\n':tk) ys dropNs dropNs
+>                      ((x:xs):ys)    -> takeBounds'' ((ll, lc+1), (ul, uc)) (x:tk) (xs:ys) dropNs False
 
 -- Indenting for refactored code
 
@@ -248,10 +257,13 @@ Output routines specialised to the analysis.
 
 > reprintC cursor inp z = let ?variant = Alt1 in
 >                         let (p1, cursor', flag) = case (getHole z)::(Maybe (Fortran Annotation)) of
->                                                     Just e -> let flag = pRefactored $ copoint e
->                                                                   (lb, ub) = getSpan e
->                                                                   (p0, _) = takeBounds (cursor, lb) inp
->                                                               in if flag then  (p0 ++ outputF e, ub, True)
+>                                                     Just e -> if (pRefactored $ copoint e) then 
+>                                                                   let (lb, ub) = getSpan e
+>                                                                       (p0, _) = takeBounds (cursor, lb) inp 
+>                                                                       outE = outputF e
+>                                                                       lnl = case e of (NullStmt _ _) -> (if ((p0 /= []) && Prelude.last p0 /= '\n') then "\n" else "")
+>                                                                                       _               -> ""
+>                                                                   in (p0 ++ outE ++ lnl, ub, True)
 >                                                                  else ("", cursor, False)
 >                                                     Nothing -> ("", cursor, False)
 

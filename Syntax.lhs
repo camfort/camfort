@@ -4,40 +4,26 @@
 
 > module Syntax where
 
-> import Traverse
+Standard imports 
 
 > import Data.Char
-> import Data.Data
 > import Data.List
-> import Data.Generics.Uniplate.Operations
 > import Control.Monad.State.Lazy
 
-> import Annotations
-> import Language.Fortran
+Data-type generics imports
 
-
+> import Data.Data
+> import Data.Generics.Uniplate.Operations
 > import Data.Generics.Zipper
 
+CamFort specific functionality
+
+> import Annotations
+> import Traverse
+> import Language.Fortran
 > import Language.Haskell.Syntax (SrcLoc(..))
 
-Denotes terms which should be treated "annotation free", for example, for annotation
-free equality
-
-> data AnnotationFree t = AnnotationFree { annotationBound :: t }
-> af = AnnotationFree
-
-> instance Eq (AnnotationFree (Expr a)) where
->     -- Compute variable equality modulo annotations and spans
->     (AnnotationFree (Var _ _ vs)) == (AnnotationFree (Var _ _ vs'))
->           = cmp vs vs' where cmp [] [] = True
->                              cmp ((v,es):vs) ((v',es'):vs') =
->                                   if (fmap (const ()) v) == (fmap (const ()) v') then
->                                          (and (map (\(e, e') -> (af e) == (af e')) (zip es es'))) && (cmp vs vs')
->                                   else False
->                              cmp _ _ = False
->     e == e' = error "Annotation free equality not implemented" --  False
-
-Helpers to do with source locations
+Helpers to do with source locations and parsing
 
 > refactorSpan :: SrcSpan -> SrcSpan
 > refactorSpan (SrcLoc f ll cl, SrcLoc _ lu cu) = (SrcLoc f (lu+1) 0, SrcLoc f lu cu)
@@ -48,10 +34,36 @@ This is particularly useful if a whole line is being redacted from a source file
 > dropLine :: SrcSpan -> SrcSpan
 > dropLine (s1, SrcLoc f l c) = (s1, SrcLoc f (l+1) 0)
 
+
 > srcLineCol :: SrcLoc -> (Int, Int)
 > srcLineCol (SrcLoc _ l c) = (l, c)
 
+
+Comparisons
+
+"AnnotationFree" Denotes terms which should be compared for equality modulo
+their annotaitons (and source span information)
+
+> data AnnotationFree t = AnnotationFree { annotationBound :: t }
+> af = AnnotationFree -- short constructor
+
+> instance Eq (AnnotationFree (Expr a)) where
+>     -- Compute variable equality modulo annotations and spans
+>     (AnnotationFree (Var _ _ vs)) == (AnnotationFree (Var _ _ vs'))
+>           = cmp vs vs' where cmp [] [] = True
+>                              cmp ((v,es):vs) ((v',es'):vs') =
+>                                   if (fmap (const ()) v) == (fmap (const ()) v') then
+>                                          (and (map (\(e, e') -> (af e) == (af e'))
+>                                                  (zip es es'))) && (cmp vs vs')
+>                                   else False
+>                              cmp _ _ = False
+>     e == e' = error "Annotation free equality not implemented" --  False
+
+
 Accessors
+
+
+Compute successors for certain node types
 
 > class Successors t where
 >     successorsRoot :: t a -> [t a]
@@ -97,6 +109,26 @@ Number statements (for analysis output)
 >                                  return $ x { number = n }
 >          
 >                 in fst $ runState (descendBiM numberF x) 0
+
+
+> lower = map toLower
+
+All accessors (variables and array indexing)
+
+> accesses f = nub $  [VarA (lower v) | (AssgExpr _ _ v _) <- (universeBi f)::[Expr Annotation]]
+>                      ++ concat [varExprToAccesses ve | ve@(Var _ _ _) <- (universeBi f)::[Expr Annotation]]
+>                
+
+> varExprToAccesses :: Expr a -> [Access]
+> varExprToAccesses (Var _ _ ves) = [mkAccess v es | (VarName _ v, es) <- ves, all isConstant es] 
+>                                      where mkAccess v [] = VarA v
+>                                            mkAccess v es = ArrayA v (map (fmap (const ())) es)
+> varExprToAccesses _             = [] 
+
+> isConstant :: Expr p -> Bool
+> isConstant (Con _ _ _)  = True
+> isConstant (ConS _ _ _) = True
+> isConstant _            = False
 
 All variables from a Fortran syntax tree
 

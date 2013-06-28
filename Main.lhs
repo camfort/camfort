@@ -78,8 +78,13 @@
 
 map (fmap ((,[""]),[""]))
 
-> analyse :: [Program A0] -> [Program Annotation]
+> analyse :: [Program a] -> [Program Annotation]
 > analyse p = map ((descendBi arrayIndices) . ix . lva . numberStmts . (descendBi reassociate) . (fmap (const unitAnnotation))) p
+
+ analyse' :: [Program Annotation] -> [Program Annotation]
+ analyse' p = map ((descendBi arrayIndices) . ix . lva . numberStmts . (descendBi reassociate))  p
+
+
 
 
 > collect :: (Eq a, Ord k) => [(k, a)] -> Map k [a]
@@ -156,10 +161,15 @@ A sample transformation
 
 > go3 f = do inp <- readFile f
 >            p <- pr f
->            let (r, p') = refactorEquivalences (map (fmap (const unitAnnotation)) p)
->            let out = reprint inp f (head p')
+>            let (r, p') = (refactorEquivalences (map (fmap (const unitAnnotation)) p)) 
+>            let out = reprint inp f (head p')            
+>            let pa' = analyse p'
+>            writeFile (f ++ ".out.html") (concatMap outputHTML pa')
 >            writeFile (f ++ ".out") out
->            putStrLn r
+>            let (r2, p'') = deadCode pa'
+>            let out' = reprint inp f (head p'')
+>            writeFile (f ++ ".2.out") out'
+>            putStrLn $ r ++ r2
 >            
 >            
 
