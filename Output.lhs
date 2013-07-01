@@ -245,7 +245,7 @@ Output routines specialised to the analysis.
 >                  Just (SrcLoc f _ c) -> Prelude.take c (repeat ' ')
 >                  Nothing             -> ind i
 
-> reprint :: String -> String -> Program Annotation -> String
+> reprint :: String -> String -> [Program Annotation] -> String
 > reprint input f z = let input' = Prelude.lines input
 >                         start = SrcLoc f 1 0
 >                         end = SrcLoc f (Prelude.length input') (1 + (Prelude.length $ Prelude.last input'))

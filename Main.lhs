@@ -157,7 +157,7 @@ A sample transformation
 
 > go2 f = do inp <- readFile f
 >            p <- pr f
->            let p' = fooTrans $ (fmap (const unitAnnotation) (head p))
+>            let p' = fooTrans $ (map (fmap (const unitAnnotation)) p)
 >            let out = reprint inp f p'
 >            writeFile (f ++ ".out") out
 >            return $ (out, p')
@@ -165,12 +165,12 @@ A sample transformation
 > go3 f = do inp <- readFile f
 >            p <- pr f
 >            let (r, p') = (refactorEquivalences (map (fmap (const unitAnnotation)) p)) 
->            let out = reprint inp f (head p')            
+>            let out = reprint inp f p'
 >            let pa' = analyse' p'
 >            writeFile (f ++ ".out.html") (concatMap outputHTML pa')
 >            writeFile (f ++ ".out") out
 >            let (r2, p'') = (deadCode True pa')
->            let out' = reprint inp f (head p'')
+>            let out' = reprint inp f p''
 >            writeFile (f ++ ".2.out") out'
 >            putStrLn $ r ++ r2
 
@@ -204,7 +204,7 @@ A sample transformation
 > readParseSrc f = do putStrLn f 
 >                     inp <- readFile f
 >                     ast <- pr f
->                     return $ (f, inp, ast)
+>                     return $ (f, inp, map (fmap (const unitAnnotation)) ast)
 
          
 > common d = do putStrLn $ "Refactoring common blocks for source in directory " ++ show d ++ "\n"
@@ -214,7 +214,7 @@ A sample transformation
 >               files <- return $ dirF \\ ((map unpack (split (==',') (pack excludes))))
 >               files' <- return $ map (\y -> d ++ "/" ++ y) files
 >               ps <- mapM readParseSrc files'
->               asts' <- commonElim (map (\(f, inp, ast) -> ast) ps)
+>               asts' <- return $ commonElim (map (\(f, inp, ast) -> (f, ast)) ps)
 >               mapM (\(ast', (f, inp, _)) -> writeFile f (reprint inp f ast')) (Prelude.zip asts' ps)
 >               return ()
 

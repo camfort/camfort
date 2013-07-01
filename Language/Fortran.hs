@@ -97,7 +97,7 @@ data Decl     p = Decl           p [(Expr p, Expr p)] (Type p)              -- d
                 | AccessStmt     p (Attr p) [GSpec p]                       -- access stmt
                 | ExternalStmt   p [String]                                 -- external stmt
                 | Interface      p (Maybe (GSpec p)) [InterfaceSpec p]      -- interface declaration
-                | Common         p (Maybe String) [Expr p]
+                | Common         p SrcSpan (Maybe String) [Expr p]
                 | DerivedTypeDef p (SubName p) [Attr p] [Attr p] [Decl p]  -- derivified
                 | Include        p (Expr p)                                -- include stmt
                 | DSeq           p (Decl p) (Decl p)                       -- list of decls

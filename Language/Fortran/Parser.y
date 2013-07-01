@@ -489,8 +489,8 @@ specification_stmt
 --  | target_stmt            { $1 }
 
 common_stmt :: { Decl A0 }
-: COMMON '/' id2 '/' vlist  { Common () (Just $3) $5 }
-| COMMON vlist              { Common () Nothing $2 }
+: srcloc COMMON '/' id2 '/' vlist  {% getSpan $1 >>= (\s -> return $ Common () s (Just $4) $6) }
+| srcloc COMMON vlist              {% getSpan $1 >>= (\s -> return $ Common () sp Nothing $3) }
 
 
 interface_block :: { Decl A0 }
