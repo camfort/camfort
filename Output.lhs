@@ -261,7 +261,7 @@ Output routines specialised to the analysis.
 >                                                                       (p0, _) = takeBounds (cursor, lb) inp 
 >                                                                       outE = outputF e
 >                                                                       lnl = case e of (NullStmt _ _) -> (if ((p0 /= []) && Prelude.last p0 /= '\n') then "\n" else "")
->                                                                                       _               -> ""
+>                                                                                       _              -> ""
 >                                                                   in (p0 ++ outE ++ lnl, ub, True)
 >                                                                  else ("", cursor, False)
 >                                                     Nothing -> ("", cursor, False)

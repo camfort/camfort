@@ -13,8 +13,12 @@
 
 > import Language.Fortran.Parser
 > import Language.Fortran
+
+> import System.Directory
 > import System.Environment
 > import System.IO
+
+
 
 > -- import Language.Haskell.Parser
 > import Language.Haskell.ParseMonad
@@ -27,6 +31,7 @@
 > import Control.Monad.State.Lazy
 
 > import Annotations
+> import CommonBlocks
 > import DeadCode 
 > import Equivalences
 > import LVA
@@ -41,12 +46,10 @@
 > import qualified Data.Maybe as MaybeList
 > import Data.Typeable
 
-> import Data.List (nub)
+> import Data.List (nub, (\\), elemIndices)
+> import qualified Data.Map.Lazy as Map hiding (map, (\\))
+> import Data.Text hiding (length, head, concatMap, map)
 
-> import Data.Map.Lazy hiding (map)
-
-> main :: IO ()
-> main = do return ()
 
 > quickAnnotateDo :: Fortran String -> Fortran String
 > quickAnnotateDo (For _ sp v@(VarName _ s) e1 e2 e3 body) = For s sp v e1 e2 e3 body
@@ -87,11 +90,11 @@ map (fmap ((,[""]),[""]))
 
 
 
-> collect :: (Eq a, Ord k) => [(k, a)] -> Map k [a]
-> collect = collect' empty 
+> collect :: (Eq a, Ord k) => [(k, a)] -> Map.Map k [a]
+> collect = collect' Map.empty 
 >           where collect' as []                         = as
->                 collect' as ((v, n):es) | member v as = collect' (insert v (nub $ n : as!v) as) es
->                                         | otherwise   = collect' (insert v [n] as) es
+>                 collect' as ((v, n):es) | Map.member v as = collect' (Map.insert v (nub $ n : ((Map.!) as v)) as) es
+>                                         | otherwise   = collect' (Map.insert v [n] as) es
 
 > arrayIndices :: Block Annotation -> Block Annotation
 > arrayIndices x = 
@@ -166,10 +169,76 @@ A sample transformation
 >            let pa' = analyse' p'
 >            writeFile (f ++ ".out.html") (concatMap outputHTML pa')
 >            writeFile (f ++ ".out") out
->            let (r2, p'') = deadCode pa'
+>            let (r2, p'') = (deadCode True pa')
 >            let out' = reprint inp f (head p'')
 >            writeFile (f ++ ".2.out") out'
 >            putStrLn $ r ++ r2
->            
+
+> data ArgType = Named String | NamedList String 
+
+ ensureArgs [] _        = return []
+ ensureArgs ((Named n :ns) args = 
+
+> introMessage = "CamFort 0.1 - Cambridge Fortran Infrastructure."
+> usage = "Usage: camfort <function> <directory> \n\n"
+> menu = "Refactor functions: \n \t common \t [refactor common blocks] \n " ++
+>                " \t equivalence \t [refactor equivalences] \n" ++
+>                " \t dead \t\t [dead-code eliminate] \n" ++ "\n" ++
+>        "Analysis functions: \n \t lva \t\t [live-variable analysis] \n " ++
+>                           "\t loops \t\t [analyse loops] \n\n"
+
+> main = do putStrLn $ introMessage 
+>           d <- getArgs 
+>           if (length d == 2) then
+>              let (func:(dir:_)) = d
+>              in case func of
+>                    "common" -> common dir
+>                    "equivalence" -> return ()
+>                    "dead" -> return ()
+>                    "lva" -> return ()
+>                    "loops" -> return ()
+>                    _ -> putStrLn $ usage ++ menu
+>           else
+>              putStrLn $ usage ++ menu
+
+> readParseSrc f = do putStrLn f 
+>                     inp <- readFile f
+>                     ast <- pr f
+>                     return $ (f, inp, ast)
+
+         
+> common d = do putStrLn $ "Refactoring common blocks for source in directory " ++ show d ++ "\n"
+>               putStrLn $ "Exclude any files from " ++ d ++ "/? (comma-separate list)\n"
+>               excludes <- getLine
+>               dirF <- rGetDirectoryContents d
+>               files <- return $ dirF \\ ((map unpack (split (==',') (pack excludes))))
+>               files' <- return $ map (\y -> d ++ "/" ++ y) files
+>               ps <- mapM readParseSrc files'
+>               asts' <- commonElim (map (\(f, inp, ast) -> ast) ps)
+>               mapM (\(ast', (f, inp, _)) -> writeFile f (reprint inp f ast')) (Prelude.zip asts' ps)
+>               return ()
+
+> rGetDirectoryContents d = do ds <- getDirectoryContents d
+>                              ds' <- return $ ds \\ [".", ".."] -- remove '.' and '..' entries
+>                              rec ds'
+>                              where 
+>                                rec []     = return $ []
+>                                rec (x:xs) = do xs' <- rec xs
+>                                                g <- doesDirectoryExist (d ++ "/" ++ x)
+>                                                if g then 
+>                                                   do x' <- rGetDirectoryContents (d ++ "/" ++ x)
+>                                                      return $ (map (\y -> x ++ "/" ++ y) x') ++ xs'
+>                                                else if (isFortran x) then
+>                                                         return $ x : xs'
+>                                                     else return $ xs'
+>                                                   
+> isFortran x = let ix = elemIndices '.' x
+>               in if (length ix == 0) then False
+>                  else case (Prelude.drop (Prelude.last ix) x) of 
+>                         ".f" -> True
+>                         ".f90" -> True
+>                         ".f77" -> True
+>                         _     -> False
+>               
 >            
 

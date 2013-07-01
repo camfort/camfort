@@ -19,6 +19,7 @@ Data-type generics imports
 CamFort specific functionality
 
 > import Annotations
+> import IntermediateReps
 > import Traverse
 > import Language.Fortran
 > import Language.Haskell.Syntax (SrcLoc(..))

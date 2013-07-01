@@ -12,6 +12,7 @@
 
 > import Annotations
 > import Syntax
+> import IntermediateReps
 > import Traverse
 
 Kill/gen functions

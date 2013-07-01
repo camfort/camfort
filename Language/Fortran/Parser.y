@@ -495,7 +495,7 @@ common_stmt :: { Decl A0 }
 
 interface_block :: { Decl A0 }
 interface_block
-: interface_stmt interface_spec_list end_interface_stmt  { Interface () $1 $2 }
+: interface_stmt newline interface_spec_list newline end_interface_stmt  { Interface () $1 $3 }
 
 interface_stmt :: { Maybe (GSpec A0) }
 interface_stmt
@@ -1559,7 +1559,7 @@ happyError = parseError "syntax error"
 
 parseError :: String -> P a
 parseError m = do srcloc <- getSrcLoc'
-		  fail ("line " ++ show (srcLine srcloc) ++ " column " ++ show (srcColumn srcloc) ++ ": " ++ m ++ "\n")
+		  fail (srcFilename srcloc ++ ": line " ++ show (srcLine srcloc) ++ " column " ++ show (srcColumn srcloc) ++ ": " ++ m ++ "\n")
 
 tokenFollows s = case alexScan ('\0',s) 0 of
                     AlexEOF               -> "end of file"
