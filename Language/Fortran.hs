@@ -53,21 +53,21 @@ type ProgName = String               -- Fortran program names
 
 data SubName p  = SubName p String   -- Fortran subroutine names
                  | NullSubName p
-                 deriving (Show, Functor, Typeable, Data, Eq, Generic1)
+                 deriving (Show, Functor, Typeable, Data, Eq)
  
-data VarName  p = VarName p String 
-                  deriving (Show, Functor, Typeable, Data, Eq, Read, Generic1)
+data VarName  p = VarName p Variable 
+                  deriving (Show, Functor, Typeable, Data, Eq, Read)
 
 data ArgName  p = ArgName p String
                 | ASeq p (ArgName p) (ArgName p)
                 | NullArg p
-                 deriving (Show, Functor, Typeable, Data, Eq, Generic1)
+                 deriving (Show, Functor, Typeable, Data, Eq)
 
 -- Syntax defintions
 --
 
-data Arg      p = Arg p (ArgName p)
-                  deriving (Show, Functor, Typeable, Data, Eq, Generic1)
+data Arg      p = Arg p (ArgName p) SrcSpan -- the src span denotes the end of the arg list before ')'
+                  deriving (Show, Functor, Typeable, Data, Eq)
 
 data ArgList  p = ArgList p (Expr p)
                   deriving (Show, Functor, Typeable, Data, Eq)
@@ -85,10 +85,10 @@ data Program  p = Main       p SrcSpan                      (SubName p)  (Arg p)
 
              -- implicit none or no implicit 
 data Implicit p = ImplicitNone p | ImplicitNull p
-                deriving (Show, Functor, Typeable, Data, Eq, Generic1)
+                deriving (Show, Functor, Typeable, Data, Eq)
 				
              --       use's     implicit  decls  stmts
-data Block    p = Block p [String]  (Implicit p)  (Decl p) (Fortran p)
+data Block    p = Block p  [String]  (Implicit p) SrcSpan (Decl p) (Fortran p)
                 deriving (Show, Functor, Typeable, Data, Eq)
 
 data Decl     p = Decl           p [(Expr p, Expr p)] (Type p)              -- declaration stmt
@@ -102,7 +102,7 @@ data Decl     p = Decl           p [(Expr p, Expr p)] (Type p)              -- d
                 | Include        p (Expr p)                                -- include stmt
                 | DSeq           p (Decl p) (Decl p)                       -- list of decls
                 | TextDecl       p String                                  -- cpp switches to carry over
-                | NullDecl       p                                         -- null
+                | NullDecl       p SrcSpan                                       -- null
                   deriving (Show, Functor, Typeable, Data, Eq)
 
              -- BaseType  dimensions     type        Attributes   kind   len 
@@ -112,7 +112,7 @@ data Type     p = BaseType p                    (BaseType p) [Attr p] (Expr p) (
 
 data BaseType p = Integer p | Real p | Character p | SomeType p | DerivedType p (SubName p)
                 | Recursive p | Pure p | Elemental p | Logical p | Complex p
-                  deriving (Show, Functor, Typeable, Data, Eq, Generic1)
+                  deriving (Show, Functor, Typeable, Data, Eq)
 
 data Attr     p = Parameter p
                 | Allocatable p
@@ -128,7 +128,7 @@ data Attr     p = Parameter p
                 | Private p
                 | Sequence p
 --              | Dimension [(Expr,Expr)] -- in Type: ArrayT
-              deriving (Show, Functor, Typeable, Data, Eq, Generic1)
+              deriving (Show, Functor, Typeable, Data, Eq)
 			  
 data GSpec   p = GName p (Expr p) | GOper p (BinOp p) | GAssg p
                  deriving (Show, Functor, Typeable, Data, Eq)
@@ -141,7 +141,7 @@ data InterfaceSpec p = FunctionInterface   p (SubName p) (Arg p) [String] (Impli
 data IntentAttr p = In p
                   | Out p
                   | InOut p
-                    deriving (Show, Functor, Typeable, Data, Eq, Generic1)
+                    deriving (Show, Functor, Typeable, Data, Eq)
 				
 data Fortran  p = Assg p SrcSpan (Expr p) (Expr p) 
                 | For  p SrcSpan (VarName p) (Expr p) (Expr p) (Expr p) (Fortran p)
@@ -206,10 +206,10 @@ data BinOp   p = Plus p
                | RelLE p
                | RelGT p
                | RelGE p
-                deriving (Show, Functor, Typeable, Data, Eq, Generic1)
+                deriving (Show, Functor, Typeable, Data, Eq)
 
 data UnaryOp  p = UMinus p | Not p
-                deriving (Show, Functor,Typeable,Data, Eq, Generic1)
+                deriving (Show, Functor,Typeable,Data, Eq)
 
 data Spec     p = Access   p (Expr p)
               | Action     p (Expr p)
@@ -251,6 +251,14 @@ data Spec     p = Access   p (Expr p)
 
 class GetSpan t where
     getSpan :: t -> (SrcLoc, SrcLoc)
+
+instance GetSpan (Block a) where
+    getSpan (Block _ _ _ sp _ _) = sp
+
+instance GetSpan (Decl a) where
+    getSpan (NullDecl _ sp) = sp
+    getSpan (Common _ sp _ _) = sp
+    getSpan _ = error "No span for non common or null declarations"
 
 instance GetSpan (Program a) where
     getSpan (Main x sp _ _ _ _)      = sp

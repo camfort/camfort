@@ -24,10 +24,21 @@ CamFort specific functionality
 > import Language.Fortran
 > import Language.Haskell.Syntax (SrcLoc(..))
 
+
+
+General helpers
+
+> lookups :: Eq a => a -> [(a, b)] -> [b]
+> lookups _ [] = []
+> lookups x ((a, b):xs) = if (x == a) then b : lookups x xs
+>                                     else lookups x xs
+
 Helpers to do with source locations and parsing
 
 > refactorSpan :: SrcSpan -> SrcSpan
 > refactorSpan (SrcLoc f ll cl, SrcLoc _ lu cu) = (SrcLoc f (lu+1) 0, SrcLoc f lu cu)
+
+> toCol0 (SrcLoc f l c) = SrcLoc f l 0
 
 dropLine extends a span to the start of the next line
 This is particularly useful if a whole line is being redacted from a source file
@@ -62,6 +73,14 @@ their annotaitons (and source span information)
 
 
 Accessors
+
+> getSubName :: Program p -> Maybe String
+> getSubName (Main _ _ (SubName _ s) _ _ _) = Just s
+> getSubName (Sub _ _ _ (SubName _ s) _ _) = Just s
+> getSubName (Function _ _ _ (SubName _ s) _ _) = Just s
+> getSubName (Module _ _ (SubName _ s) _ _ _ _) = Just s
+> getSubName (BlockData _ _ (SubName _ s) _ _ _) = Just s
+> getSubName _ = Nothing
 
 
 Compute successors for certain node types

@@ -55,9 +55,6 @@ Other helpers
 > mfmap :: Functor f => (a -> b) -> [f a] -> [f b]
 > mfmap f = map (fmap f)
 
-> data Test0 a = Test0 a deriving Generic1 
-> data Test a = Test (Test0 a) deriving Generic1
-
 Data-type generic comonad-style traversal
 
 > extendBi :: (Biplate (from a) (to a), RComonad to) => (to a -> a) -> (from a) -> (from a)
@@ -265,16 +262,24 @@ TODO: Needs fixing with the spans - need to pull apart and put back together
 > class Copointed d where
 >    copoint :: d a -> a 
 
-> instance Copointed Attr where copoint = gcopoint
-> instance Copointed BaseType where copoint = gcopoint
-> instance Copointed SubName where copoint = gcopoint
-> instance Copointed VarName where copoint = gcopoint
-> instance Copointed ArgName where copoint = gcopoint
-> instance Copointed Arg     where copoint = gcopoint
-> instance Copointed Implicit where copoint = gcopoint
+ instance Copointed Attr where copoint = gcopoint
+ instance Copointed BaseType where copoint = gcopoint
+ instance Copointed SubName where copoint = gcopoint
+ instance Copointed VarName where copoint = gcopoint
+ instance Copointed ArgName where copoint = gcopoint
+ instance Copointed Arg     where copoint = gcopoint
+ instance Copointed Implicit where copoint = gcopoint
+
+> instance Copointed Arg where
+>     copoint (Arg x _ _) = x
 
 > instance Copointed ArgList where 
 >     copoint (ArgList x _) = x
+
+> instance Copointed ArgName where
+>     copoint (ASeq x _ _) = x
+>     copoint (NullArg x) = x
+>     copoint (ArgName x _) = x
 
 > instance Copointed Program where
 >     copoint (Main x sp _ _ _ _)      = x
@@ -293,12 +298,12 @@ TODO: Needs fixing with the spans - need to pull apart and put back together
 >     copoint (AccessStmt x _ _)    = x
 >     copoint (ExternalStmt x _)    = x
 >     copoint (Interface x _ _)     = x
->     copoint (Common x _ _)        = x
+>     copoint (Common x _ _ _)        = x
 >     copoint (DerivedTypeDef x _ _ _ _) = x
 >     copoint (Include x _)         = x
 >     copoint (DSeq x _ _)          = x
 >     copoint (TextDecl x _)        = x
->     copoint (NullDecl x)        = x
+>     copoint (NullDecl x _)        = x
 
 > instance Copointed Fortran where
 >     copoint (Assg x s e1 e2)        = x

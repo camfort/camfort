@@ -16,7 +16,6 @@
 > type TypeEnv t = [(Variable, Type t)]
 > type TypeEnvStack t = [TypeEnv t] -- stack of environments     
 
-
 > typeAnnotations :: (Typeable a, Data a) => [Program a] -> State (TypeEnv a) [Program a]
 > typeAnnotations = mapM (descendBiM buildTypeEnv)
 
@@ -54,7 +53,7 @@
 > toArrayType t es = t
 >  
 
-> boundsP [] = True
+> boundsP [] = False
 > boundsP ((Bound _ _ _ _):es) = True && (boundsP es)
 > boundsP _ = False
 

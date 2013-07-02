@@ -34,6 +34,8 @@ Loop classifications
  classify :: Fortran Annotation -> Fortran Annotation
  classify x = 
 
+> type A = Annotation
+
 > data Annotation = A {indices :: [Variable],
 >                      lives ::([Access],[Access]),
 >                      arrsRead :: Map Variable [[Expr ()]], 

@@ -18,8 +18,6 @@
 > import System.Environment
 > import System.IO
 
-
-
 > -- import Language.Haskell.Parser
 > import Language.Haskell.ParseMonad
 
@@ -86,8 +84,6 @@ map (fmap ((,[""]),[""]))
 
 > analyse' :: [Program Annotation] -> [Program Annotation]
 > analyse' p = map ((descendBi arrayIndices) . ix . lva . numberStmts . (transformBi reassociate))  p
-
-
 
 
 > collect :: (Eq a, Ord k) => [(k, a)] -> Map.Map k [a]
@@ -214,8 +210,9 @@ A sample transformation
 >               files <- return $ dirF \\ ((map unpack (split (==',') (pack excludes))))
 >               files' <- return $ map (\y -> d ++ "/" ++ y) files
 >               ps <- mapM readParseSrc files'
->               asts' <- return $ commonElim (map (\(f, inp, ast) -> (f, ast)) ps)
->               mapM (\(ast', (f, inp, _)) -> writeFile f (reprint inp f ast')) (Prelude.zip asts' ps)
+>               let (report, asts') = commonElim (map (\(f, inp, ast) -> (f, ast)) ps)
+>               putStrLn report
+>               mapM (\(ast', (f, inp, _)) -> writeFile (f ++ ".out") (reprint inp f ast')) (Prelude.zip asts' ps)
 >               return ()
 
 > rGetDirectoryContents d = do ds <- getDirectoryContents d

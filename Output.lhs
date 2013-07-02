@@ -8,6 +8,7 @@
 > {-# LANGUAGE OverlappingInstances #-}
 > {-# LANGUAGE KindSignatures #-}
 
+> {-# LANGUAGE FlexibleContexts #-}
 > {-# LANGUAGE ScopedTypeVariables #-}
 
 
@@ -24,7 +25,6 @@
 > import Data.Text hiding (foldl,map, concatMap)
 > import qualified Data.Text as Text 
 > import Data.Map.Lazy hiding (map, foldl)
-> import Data.Generics.Annotate
 > import Data.Generics
 > import GHC.Generics
 > import Data.Generics.Uniplate.Data
@@ -63,7 +63,7 @@
 
 > pre l = Text.concat [pack "<pre>", l, pack "</pre>"]
 
-> outputHTML :: forall p . (Data p, Typeable p, OutputG p Alt2, OutputIndG (Fortran p) Alt2, Indentor p) => Fortran.Program p -> String
+> outputHTML :: forall p . (Data p, Typeable p, OutputG p Alt2, OutputIndG (Fortran p) Alt2, Indentor (Decl p), Indentor (Fortran p)) => Fortran.Program p -> String
 > outputHTML prog = unpack html
 >                 where
 >                   t :: SubName p -> SubName p
@@ -91,7 +91,7 @@ Output routines specialised to the analysis.
 > instance OutputG SrcLoc Alt2 where
 >     outputG _ = "" -- not sure if I want this to shown
 
-> instance (OutputIndG (Fortran p) Alt2, OutputG p Alt2, Indentor p) => OutputG (Program p) Alt2 where
+> instance (OutputIndG (Fortran p) Alt2, OutputG p Alt2, Indentor (Decl p), Indentor (Fortran p)) => OutputG (Program p) Alt2 where
 >     outputG = outputF
 
 > instance OutputG (SubName p) Alt2 where
@@ -100,7 +100,7 @@ Output routines specialised to the analysis.
 > instance OutputG (Implicit p) Alt2 where
 >     outputG = outputF
 
-> instance OutputG (Decl p) Alt2 where
+> instance (Indentor (Decl p)) => OutputG (Decl p) Alt2 where
 >     outputG = outputF
 
 > instance OutputG (Type p) Alt2 where
@@ -124,7 +124,7 @@ Output routines specialised to the analysis.
 > instance OutputG (BaseType p) Alt2 where
 >     outputG = outputF
 
-> instance OutputG (InterfaceSpec p) Alt2 where
+> instance Indentor (Decl p) => OutputG (InterfaceSpec p) Alt2 where
 >     outputG = outputF
 
 > instance OutputG (Arg p) Alt2 where
@@ -139,10 +139,10 @@ Output routines specialised to the analysis.
 > instance OutputG (Attr p) Alt2 where
 >     outputG = outputF
 
-> instance (OutputIndG (Fortran p) Alt2, OutputG p Alt2, Indentor p) => OutputG (Block p) Alt2 where
+> instance (OutputIndG (Fortran p) Alt2, OutputG p Alt2, Indentor (Fortran p), Indentor (Decl p)) => OutputG (Block p) Alt2 where
 >     outputG = outputF
 
-> instance (OutputIndG (Fortran p) Alt2, OutputG p Alt2, Indentor p) => OutputG (Fortran p) Alt2 where
+> instance (OutputIndG (Fortran p) Alt2, OutputG p Alt2, Indentor (Fortran p)) => OutputG (Fortran p) Alt2 where
 >                               
 
 >     outputG (For p _ v e e' e'' f) = "do"++" "++outputG v++" = "++outputG e++", "++
@@ -154,7 +154,7 @@ Output routines specialised to the analysis.
 > instance OutputG (Spec p) Alt2 where
 >     outputG = outputF
 
-> instance Indentor Bool where
+> instance Indentor (Fortran Bool) where
 >     indR t i = if (copoint t) then
 >                    let (s, SrcLoc f l c) = getSpan t
 >                    in Prelude.take c (repeat ' ')
@@ -240,7 +240,7 @@ Output routines specialised to the analysis.
 
 -- Indenting for refactored code
 
-> instance Indentor Annotation where
+> instance Copointed p => Indentor (p Annotation) where
 >     indR t i = case (refactored . copoint $ t) of
 >                  Just (SrcLoc f _ c) -> Prelude.take c (repeat ' ')
 >                  Nothing             -> ind i
@@ -264,7 +264,22 @@ Output routines specialised to the analysis.
 >                                                                                       _              -> ""
 >                                                                   in (p0 ++ outE ++ lnl, ub, True)
 >                                                                  else ("", cursor, False)
->                                                     Nothing -> ("", cursor, False)
+>                                                     Nothing -> 
+>                                                       case (getHole z)::(Maybe (Decl Annotation)) of
+>                                                         Just d ->
+>                                                            if (pRefactored $ copoint d) then
+>                                                                let (lb, ub) = getSpan d
+>                                                                    (p0, _) = takeBounds (cursor, lb) inp
+>                                                                 in (p0 ++ outputF d, ub, True)
+>                                                             else ("", cursor, False)
+>                                                         Nothing -> 
+>                                                          case (getHole z)::(Maybe (ArgName Annotation)) of
+>                                                           Just a -> 
+>                                                               case (refactored $ copoint a) of
+>                                                                 Just lb -> let (p0, _) = takeBounds (cursor, lb) inp
+>                                                                            in (p0 ++ ", " ++ outputF a, lb, True)
+>                                                                 Nothing -> ("", cursor, False)
+>                                                           Nothing -> ("", cursor, False)
 
 >                             (_, inp') = takeBounds (cursor, cursor') inp
 >                             (p2, cursor'') = if flag then ("", cursor') else enterDown cursor' inp' z
