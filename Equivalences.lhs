@@ -23,13 +23,14 @@
 
 > type RfEqState = ([[Expr Annotation]], Int, Report)
 
-> refactorEquivalences :: [Program Annotation] -> (Report, [Program Annotation])
-> refactorEquivalences = mapM (transformBiM equivalences)
->                         where equivalences :: Block Annotation -> (Report, Block Annotation)
+> refactorEquivalences :: (String, [Program Annotation]) -> (Report, [Program Annotation])
+> refactorEquivalences (fname, p) = 
+>                         let ?fname = fname in mapM (transformBiM equivalences) p
+>                         where equivalences :: (?fname :: String) => Block Annotation -> (Report, Block Annotation)
 >                               equivalences b = let (b', (_, _, r)) = runState ((rmEquivalences b) >>= (transformBiM rfAssgn)) ([], 0, "")
 >                                                in (r, b')
 
-> rfAssgn :: Fortran Annotation -> State RfEqState (Fortran Annotation)
+> rfAssgn :: (?fname :: String) => Fortran Annotation -> State RfEqState (Fortran Annotation)
 > rfAssgn x@(Assg a sp@(s1, s2) e1 e2) | not (pRefactored a) =
 >    do eqs <- equivalents e1
 >       if (length eqs > 1) then 
@@ -40,7 +41,7 @@
 >              
 >              -- Reporting
 >              (l, c) = srcLineCol s1
->              reportF (e', i) = "o" ++ show (l + i + 1, c) ++ ": added assignment: " ++ (outputF e') ++ " = " ++ outputF e1
+>              reportF (e', i) = ?fname ++ show (l + i + 1, c) ++ ": added assignment: " ++ (outputF e') ++ " = " ++ outputF e1
 >                                                ++ " due to refactored equivalence\n"
 >              report n = let ?variant = Alt1 in concatMap reportF (zip eqs' [n..(n + length eqs')])
 
@@ -55,16 +56,16 @@
 > rfAssgn x = return x 
 
 
-> rmEquivalences :: (Block Annotation) -> State RfEqState (Block Annotation)
+> rmEquivalences :: (?fname :: String) =>  (Block Annotation) -> State RfEqState (Block Annotation)
 > rmEquivalences = transformBiM rmEquiv'
 >                    where rmEquiv' ::  Fortran Annotation -> State RfEqState (Fortran Annotation)
 >                          rmEquiv' f@(Equivalence a sp equivs) = 
 >                                      do (ess, n, r) <- get
->                                         put (equivs:ess, n - 1, r ++ "i" ++ (show . srcLineCol . fst $ sp) ++ ": removed equivalence \n")
+>                                         put (equivs:ess, n - 1, r ++ ?fname ++ (show . srcLineCol . fst $ sp) ++ ": removed equivalence \n")
 >                                         return (NullStmt (a { refactored = (Just $ fst sp) }) (dropLine sp))
 >                          rmEquiv' f = return f
                                      
-> equivalents :: Expr Annotation -> State RfEqState [Expr Annotation]
+> equivalents :: (?fname :: String) => Expr Annotation -> State RfEqState [Expr Annotation]
 > equivalents x = let inGroup x [] = []
 >                     inGroup x (xs:xss) = if (AnnotationFree x `elem` (map AnnotationFree xs)) then xs
 >                                          else inGroup x xss

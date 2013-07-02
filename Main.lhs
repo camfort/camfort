@@ -46,7 +46,7 @@
 
 > import Data.List (nub, (\\), elemIndices)
 > import qualified Data.Map.Lazy as Map hiding (map, (\\))
-> import Data.Text hiding (length, head, concatMap, map)
+> import Data.Text hiding (length, head, concatMap, map, filter, take)
 
 
 > quickAnnotateDo :: Fortran String -> Fortran String
@@ -178,7 +178,7 @@ A sample transformation
 >              let (func:(dir:_)) = d
 >              in case func of
 >                    "common" -> common dir
->                    "equivalence" -> return ()
+>                    "equivalence" -> equivalences dir
 >                    "dead" -> return ()
 >                    "lva" -> return ()
 >                    "loops" -> return ()
@@ -186,45 +186,55 @@ A sample transformation
 >           else
 >              putStrLn $ usage ++ menu
 
-> readParseSrc f = do putStrLn f 
->                     inp <- readFile f
->                     ast <- pr f
->                     return $ (f, inp, map (fmap (const unitAnnotation)) ast)
-
-         
 > common d = do putStrLn $ "Refactoring common blocks for source in directory " ++ show d ++ "\n"
 >               putStrLn $ "Exclude any files from " ++ d ++ "/? (comma-separate list)\n"
 >               excludes <- getLine
->               dirF <- rGetDirectoryContents d
->               files <- return $ dirF \\ ((map unpack (split (==',') (pack excludes))))
->               files' <- return $ map (\y -> d ++ "/" ++ y) files
->               ps <- mapM readParseSrc files'
+>               
+>               (ps, fileNames) <- readParseSrc d excludes
+
 >               let (report, asts') = commonElim (map (\(f, inp, ast) -> (f, ast)) ps)
 >               putStrLn report
->               mapM (\(ast', (f, inp, _)) -> writeFile (f ++ ".out") (reprint inp f ast')) (Prelude.zip asts' ps)
->               return ()
+>               
+>               outputFiles d asts' (map snd3 ps) fileNames
 
-> go3 f = do putStrLn $ "Refactoring common blocks for source in directory " ++ show d ++ "\n"
+> equivalences d =
+>            do putStrLn $ "Refactoring common blocks for source in directory " ++ show d ++ "\n"
 >               putStrLn $ "Exclude any files from " ++ d ++ "/? (comma-separate list)\n"
 >               excludes <- getLine
->               dirF <- rGetDirectoryContents d
->               files <- return $ dirF \\ ((map unpack (split (==',') (pack excludes))))
->               files' <- return $ map (\y -> d ++ "/" ++ y) files
->               ps <- mapM readParseSrc files'
->               let ( refactorEquivalences (map (fmap (const unitAnnotation)))
 
- do inp <- readFile f
->            p <- pr f
->            let (r, p') = (refactorEquivalences (map (fmap (const unitAnnotation)) p)) 
->            let out = reprint inp f p'
->            let pa' = analyse' p'
->            writeFile (f ++ ".out.html") (concatMap outputHTML pa')
->            writeFile (f ++ ".out") out
->            let (r2, p'') = (deadCode True pa')
->            let out' = reprint inp f p''
->            writeFile (f ++ ".2.out") out'
->            putStrLn $ r ++ r2
+>               (ps, fileNames) <- readParseSrc d excludes
 
+>               let (report, asts') = mapM refactorEquivalences (map (\(f, inp, ast) -> (f, ast)) ps)
+>               putStrLn report
+
+>               outputFiles d asts' (map snd3 ps) fileNames
+
+> readParseSrc d excludes = do dirF <- rGetDirectoryContents d
+>                              let files = dirF \\ ((map unpack (split (==',') (pack excludes))))
+>                              let files' = filter (\f -> not ((take (length $ d ++ "out") f) == (d ++ "out"))) files
+>                              let files'' = map (\y -> d ++ "/" ++ y) files'
+>                              ps <- mapM readParseSrc' files''
+>                              return (ps, files')
+
+> readParseSrc' f = do putStrLn f 
+>                      inp <- readFile f
+>                      ast <- pr f
+>                      return $ (f, inp, map (fmap (const unitAnnotation)) ast)                                        
+
+> setupOut d = if ((Prelude.drop (length d - 3) d) == "out") then 
+>                  return d
+>              else if d == "." then 
+>                   do createDirectoryIfMissing True ("out")
+>                      return $ "out"    
+>              else do createDirectoryIfMissing True (d ++ "out")
+>                      return $ d ++ "out"
+
+
+> outputFiles d asts inps files =
+>            do d' <- setupOut d
+>               putStrLn $ "Writing refactored files to directory: " ++ d' ++ "/"
+>               mapM (\(ast', (inp, f)) -> writeFile (d' ++ "/" ++ f) (reprint inp f ast')) (Prelude.zip asts (Prelude.zip inps files))
+>               return ()
 
 > rGetDirectoryContents d = do ds <- getDirectoryContents d
 >                              ds' <- return $ ds \\ [".", ".."] -- remove '.' and '..' entries
@@ -250,3 +260,17 @@ A sample transformation
 >               
 >            
 
+OLD FUNS FOR PURPOSE OF TESTING
+
+> go3 f = 
+>     do inp <- readFile f
+>        p <- pr f
+>        let (r, p') = (refactorEquivalences (f, map (fmap (const unitAnnotation)) p))
+>        let out = reprint inp f p'
+>        let pa' = analyse' p'
+>        writeFile (f ++ ".out.html") (concatMap outputHTML pa')
+>        writeFile (f ++ ".out") out
+>        let (r2, p'') = (deadCode True pa')
+>        let out' = reprint inp f p''
+>        writeFile (f ++ ".2.out") out'
+>        putStrLn $ r ++ r2
