@@ -144,9 +144,10 @@ instance (OutputG (Arg p) v,
 
 instance (OutputG (Fortran p) v, OutputG (Decl p) v, OutputG (Implicit p) v, Alts v) =>
             OutputF (Block p) v where
-  outputF (Block _ us i ds f) = showUse us++outputG i++(outputG ds)++outputG f
+  outputF (Block _ us i sp ds f) = showUse us++outputG i++(outputG ds)++outputG f
 
-instance (OutputG (ArgList p) v,
+instance (Indentor (Decl p), 
+          OutputG (ArgList p) v,
           OutputG (Attr p) v,
           OutputG (BinOp p) v,
           OutputG (Decl p) v,
@@ -158,21 +159,21 @@ instance (OutputG (ArgList p) v,
           OutputG (VarName p) v,
           OutputG (Type p) v,
            Alts v) => OutputF (Decl p) v where
-  outputF (Decl _ vs t)  = ind 1++outputG t++" :: "++asSeq id (map showDV vs)++"\n"
+  outputF x@(Decl _ vs t)  = (indR x 1)++outputG t++" :: "++asSeq id (map showDV vs)++"\n"
   outputF (Namelist _ ns) = ind 1++"namelist "++show_namelist ns++"\n"
   outputF (Data _ ds) = ind 1++"data "++(concat (intersperse "\n" (map show_data ds)))  ++"\n"
   outputF (AccessStmt _ p []) = ind 1++outputG p ++ "\n"
   outputF (AccessStmt _ p gs) = ind 1++outputG p ++ " :: " ++ (concat . intersperse ", " . map outputG) gs++"\n"
   outputF (ExternalStmt _ xs)  = ind 1++"external :: " ++ (concat (intersperse "," xs)) ++ "\n"
   outputF (Interface _ (Just g) is) = ind 1 ++ "interface " ++ outputG g ++ outputG is ++ ind 1 ++ "end interface" ++ outputG g ++ "\n"
-  outputF (Common _ name exps) = ind 1++"common " ++ (case name of 
+  outputF (Common _ _ name exps) = ind 1++"common " ++ (case name of 
                                                      Just n -> "/" ++ n ++ "/ "
                                                      Nothing -> "") ++ (concat (intersperse "," (map outputF exps))) ++ "\n"
   outputF (Interface _ Nothing  is) = ind 1 ++ "interface " ++ outputG is ++ ind 1 ++ "end interface\n"
   outputF (DerivedTypeDef _ n as ps ds) = ind 1 ++ "type " ++ showAttrs as ++  " :: " ++ outputG n ++ "\n" ++ ind 2 ++ (concat (intersperse "\n" (map (outputG) ps))) ++ "\n" ++ outputG ds ++ "end type " ++ outputG n ++ "\n"
   outputF (Include _ i)  = "include "++outputG i
   outputF (DSeq _ d d')  = outputG d++outputG d'
-  outputF (NullDecl _)    = ""
+  outputF (NullDecl _ _)    = ""
   
 show_namelist ((x,xs):[]) = "/" ++ outputG x ++ "/" ++ (concat (intersperse ", " (map outputG xs)))
 show_namelist ((x,xs):ys) = "/" ++ outputG x ++ "/" ++ (concat (intersperse ", " (map outputG xs))) ++ "," ++ show_namelist ys
@@ -260,6 +261,7 @@ instance (OutputG (ArgList p) v,
   outputF (CallExpr  _ _ s as) = outputG s ++ outputG as
   outputF (Null _ _)          = "NULL()"
   outputF (NullExpr _ _)      = ""
+  outputF (ESeq _ _ e (NullExpr _ _))     = outputG e
   outputF (ESeq _ _ e e')     = outputG e++","++outputG e'
   outputF (Bound _ _ e e')    = outputG e++":"++outputG e'
   outputF (Sqrt _ _ e)        = "sqrt("++outputG e++")"
@@ -270,7 +272,7 @@ instance (OutputIndF (Fortran p) v, Alts v) => OutputF (Fortran p) v where
   outputF = outputIndF 1
 
 instance (OutputG (ArgName p) v, Alts v) => OutputF (Arg p) v where
-  outputF (Arg _ vs) = "("++ outputG vs ++")"
+  outputF (Arg _ vs _) = "("++ outputG vs ++")"
   
 instance (OutputG (Expr p) v, Alts v) => OutputF (ArgList p) v where
   outputF (ArgList _ es) = "("++outputG es++")" -- asTuple outputG es
@@ -354,7 +356,7 @@ instance (OutputG (Expr p) v, Alts v) => OutputF (Spec p) v where
 
 
 
-isEmptyArg (Arg _ as) = and (isEmptyArgName as)
+isEmptyArg (Arg _ as _) = and (isEmptyArgName as)
 isEmptyArgName (ASeq _ a a') = isEmptyArgName a ++ isEmptyArgName a'
 isEmptyArgName (ArgName _ a) = [False]
 isEmptyArgName (NullArg _)   = [True]
@@ -381,10 +383,10 @@ opPrec (Mul   _) = 5
 opPrec (Div   _) = 5
 opPrec (Power _) = 6
 
-class Indentor p where
-    indR :: Fortran p -> Int -> String
+class Indentor t where
+    indR :: t -> Int -> String
 
-instance (Indentor p, 
+instance (Indentor (Fortran p), 
           OutputG (VarName p) v,
           OutputG (Expr p) v,
           OutputG (UnaryOp p) v,

@@ -199,15 +199,16 @@ newline0 : newline  {}
 
 main_program :: { Program A0 }
 main_program
-  : srcloc program_stmt use_stmt_list implicit_part specification_part_top execution_part module_subprogram_part end_program_stmt newline0
+  : srcloc program_stmt use_stmt_list implicit_part srcloc specification_part_top execution_part module_subprogram_part end_program_stmt newline0
                 {% do { s <- srcSpan $1;
-		        name <- cmpNames (fst $2) $8 "program";
-		        return (Main () s name (snd $2) (Block () $3 $4 $5 $6) $7); } }
+		        s' <- srcSpan $5;
+		        name <- cmpNames (fst $2) $9 "program";
+		        return (Main () s name (snd $2) (Block () $3 $4 s' $6 $7) $8); } }
 
 program_stmt :: { (SubName A0, Arg A0) }
 program_stmt
   : PROGRAM subname args_p newline   { ($2, $3) }
-  | PROGRAM subname newline   { ($2, (Arg () (NullArg ()))) } 
+  | PROGRAM subname srcloc newline   { ($2, (Arg () (NullArg ())) ($3, $3)) } 
 
 end_program_stmt :: { String }
 end_program_stmt
@@ -227,10 +228,11 @@ external_subprogram
 
 subroutine_subprogram :: { Program A0 }
 subroutine_subprogram 
-  : srcloc subroutine_stmt use_stmt_list implicit_part specification_part_top execution_part end_subroutine_stmt newline0
+  : srcloc subroutine_stmt use_stmt_list implicit_part srcloc specification_part_top execution_part end_subroutine_stmt newline0
   {% do { s <- srcSpan $1;
-          name <- cmpNames (fst3 $2) $7 "subroutine";
-          return (Sub () s (trd3 $2) name (snd3 $2) (Block () $3 $4 $5 $6)); } }
+          s' <- srcSpan $5;
+          name <- cmpNames (fst3 $2) $8 "subroutine";
+          return (Sub () s (trd3 $2) name (snd3 $2) (Block () $3 $4 s' $6 $7)); } }
 
 end_subroutine_stmt :: { String }
 end_subroutine_stmt
@@ -246,9 +248,10 @@ end_function_stmt
 
 function_subprogram :: { Program A0 }
 function_subprogram
-: srcloc function_stmt use_stmt_list implicit_part specification_part_top execution_part end_function_stmt newline0  {% do { s <- srcSpan $1;
-                   name <- cmpNames (fst3 $2) $7 "function";
-		   return (Function () s (trd3 $2) name (snd3 $2) (Block () $3 $4 $5 $6)); } }
+: srcloc function_stmt use_stmt_list implicit_part srcloc specification_part_top execution_part end_function_stmt newline0  {% do { s <- srcSpan $1;
+                       s' <- srcSpan $5;
+                       name <- cmpNames (fst3 $2) $8 "function";
+		       return (Function () s (trd3 $2) name (snd3 $2) (Block () $3 $4 s' $6 $7)); } }
 
 block_data :: { Program A0 }
 block_data
@@ -313,7 +316,7 @@ use_stmt
 specification_part_top :: { Decl A0 }
 specification_part_top
    : specification_part   { $1 }
-   | {- empty -}           { NullDecl  ()}
+| {- empty -}           {% srcSpanNull >>= (\s -> return $ NullDecl  () s)}
 
 specification_part :: { Decl A0 }
 specification_part
@@ -489,8 +492,8 @@ specification_stmt
 --  | target_stmt            { $1 }
 
 common_stmt :: { Decl A0 }
-: srcloc COMMON '/' id2 '/' vlist  {% getSpan $1 >>= (\s -> return $ Common () s (Just $4) $6) }
-| srcloc COMMON vlist              {% getSpan $1 >>= (\s -> return $ Common () sp Nothing $3) }
+: srcloc COMMON '/' id2 '/' vlist  {% srcSpan $1 >>= (\s -> return $ Common () s (Just $4) $6) }
+| srcloc COMMON vlist              {% srcSpan $1 >>= (\s -> return $ Common () s Nothing $3) }
 
 
 interface_block :: { Decl A0 }
@@ -525,7 +528,8 @@ interface_body
 
   | function_stmt end_function_stmt  
         {% do { name <- cmpNames (fst3 $1) $2 "interface declaration";
-	        return (FunctionInterface () name (snd3 $1) [] (ImplicitNull ()) (NullDecl ())); } }       
+	        s <- srcSpanNull;
+	        return (FunctionInterface () name (snd3 $1) [] (ImplicitNull ()) (NullDecl () s)); } }       
 
   | subroutine_stmt use_stmt_list implicit_part specification_part end_subroutine_stmt
         {% do { name <- cmpNames (fst3 $1) $5 "interface declaration";
@@ -533,7 +537,8 @@ interface_body
 
   | subroutine_stmt end_subroutine_stmt 
         {% do { name <- cmpNames (fst3 $1) $2 "interface declaration";
-	        return (SubroutineInterface () name (snd3 $1) [] (ImplicitNull ()) (NullDecl ())); }}
+	        s <- srcSpanNull;
+	        return (SubroutineInterface () name (snd3 $1) [] (ImplicitNull ()) (NullDecl () s)); }}
   
 module_procedure_stmt :: { InterfaceSpec A0 }
 module_procedure_stmt
@@ -725,9 +730,9 @@ prefix
 
 args_p :: { Arg A0 }
 args_p
-  : '(' dummy_arg_list ')' { $2 }
+: '(' dummy_arg_list srcloc ')' { $2 (spanExtR ($3, $3) 1) }
 
-dummy_arg_list :: { Arg A0 }
+dummy_arg_list :: { SrcSpan -> Arg A0 }
 dummy_arg_list
 : dummy_arg_list2        { Arg () $1 }
 | {- empty -}            { Arg () (NullArg ()) }
@@ -1550,6 +1555,8 @@ spanTrans' x (_, l') = let (l, _) = getSpan x
 
 spanExtendR t x = let (l, l') = getSpan t
                   in (l, SrcLoc (srcFilename l') (srcLine l') (srcColumn l' + x))
+
+spanExtR (l, l') x = (l, SrcLoc (srcFilename l') (srcLine l') (srcColumn l' + x))
 
 spanExtendL t x = let (l, l') = getSpan t
                   in (SrcLoc (srcFilename l) (srcLine l) (srcColumn l - x), l')
