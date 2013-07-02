@@ -63,8 +63,8 @@ their annotaitons (and source span information)
 >     -- Compute variable equality modulo annotations and spans
 >     (AnnotationFree (Var _ _ vs)) == (AnnotationFree (Var _ _ vs'))
 >           = cmp vs vs' where cmp [] [] = True
->                              cmp ((v,es):vs) ((v',es'):vs') =
->                                   if (fmap (const ()) v) == (fmap (const ()) v') then
+>                              cmp ((VarName _ v,es):vs) ((VarName _ v',es'):vs') =
+>                                   if (lower v) == (lower v') then
 >                                          (and (map (\(e, e') -> (af e) == (af e'))
 >                                                  (zip es es'))) && (cmp vs vs')
 >                                   else False
@@ -147,6 +147,7 @@ All accessors (variables and array indexing)
 
 > isConstant :: Expr p -> Bool
 > isConstant (Con _ _ _)  = True
+> isConstant (ConL _ _ _ _) = True
 > isConstant (ConS _ _ _) = True
 > isConstant _            = False
 

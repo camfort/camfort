@@ -56,6 +56,12 @@ import Data.Char (toLower)
  '}'                    { RBrace }
  '(/'                   { LArrCon }
  '/)'                   { RArrCon }
+--'b'                    { LitMark $$ }
+--'B'                    { LitMark $$ }
+--'z'                    { LitMark $$ }
+--'Z'                    { LitMark $$ }
+--'o'                    { LitMark $$ }
+--'O'                    { LitMark $$ }
 -- OBSOLETE '!'         { Bang } 
  '%'			{ Percent }
  '$'			{ Dollar }
@@ -63,7 +69,7 @@ import Data.Char (toLower)
 '\n'                    { NewLine }
  ALLOCATE 		{ Key "allocate" }
  ALLOCATABLE 		{ Key "allocatable" }
--- ASSIGN 		{ Key "Assign" }
+ ASSIGN 		{ Key "Assign" }
  ASSIGNMENT 		{ Key "assignment" }
 -- AUTOMATIC 		{ Key "automatic" }
  BACKSPACE 		{ Key "backspace" }
@@ -149,6 +155,7 @@ import Data.Char (toLower)
  STAT 			{ Key "stat" }
  STOP			{ Key "stop" }
  STR                    { StrConst $$ }
+ ZLIT                   { LitConst 'z' $$ }
  SUBROUTINE 		{ Key "subroutine" }
  TARGET 		{ Key "target" }
 -- TO 			{ Key "to" }
@@ -481,6 +488,7 @@ specification_stmt
 --  | allocatable_stmt       { $1 }
   | common_stmt            { $1 }
   | data_stmt              { $1 }
+  | equivalence_stmt              { $1 }
 --  | dimension_stmt         { $1 }
   | external_stmt          { $1 }
 --  | intent_stmt            { $1 }
@@ -708,6 +716,7 @@ namelist_group_object_list
 subroutine_stmt :: { (SubName A0, Arg A0, Maybe (BaseType A0)) }
 subroutine_stmt
   : SUBROUTINE subname args_p        newline { ($2,$3,Nothing) }
+| SUBROUTINE subname srcloc        newline {% (srcSpan $3) >>= (\s -> return $ ($2,Arg () (NullArg ()) s,Nothing)) }
   | prefix SUBROUTINE subname args_p newline { ($3,$4,Just (fst3 $1)) }
   
 function_stmt :: { (SubName A0, Arg A0, Maybe (BaseType A0)) }
@@ -763,7 +772,8 @@ scalar_variable_name :: { (VarName A0, [Expr A0]) }
 scalar_variable_name
 : ID '(' section_subscript_list ')' { (VarName () $1, $3) }
 | ID '(' ')'                           {% srcSpanNull >>= (\s -> return $ (VarName () $1, [NullExpr () s])) }
-| ID                                   { (VarName () $1, []) }
+| ID                                { (VarName () $1, []) }
+| TYPE                              { (VarName () "type", []) } -- a bit of a hack but 'type' allowed as var name
   
 scalar_variable_name_list :: { [(VarName A0, [Expr A0])] }
 scalar_variable_name_list
@@ -891,8 +901,18 @@ constant
 literal_constant :: { Expr A0 }
 literal_constant 
 : srcloc NUM                      {% (srcSpan $1) >>= (\s -> return $ Con () s $2) }
+| srcloc ZLIT                     {% (srcSpan $1) >>= (\s -> return $ ConL () s 'z' $2) }
 | srcloc STR			  {% (srcSpan $1) >>= (\s -> return $ ConS () s $2) }
 | logical_literal_constant	  { $1 }
+
+--lit_mark :: { Char }
+--lit_mark 
+--: 'z' { $1 }
+--| 'Z' { $1 }
+--| 'b' { $1 }
+--| 'B' { $1 }
+--| 'o' { $1 }
+--| 'O'  { $1 }
 
 logical_literal_constant :: { Expr A0 }
 logical_literal_constant 
@@ -930,6 +950,7 @@ do_stmt
 nonlabel_do_stmt :: { (VarName A0, Expr A0, Expr A0, Expr A0) }
 nonlabel_do_stmt
   : DO loop_control                  { $2 }
+  | DO                                 {% srcSpanNull >>= (\s -> return $ (VarName () "", NullExpr () s, NullExpr () s, NullExpr () s)) }
 
 loop_control :: { (VarName A0, Expr A0, Expr A0, Expr A0) }
 loop_control
@@ -977,7 +998,7 @@ executable_construct
 --  | where_construct
  
 
-equivalence_stmt :: { Fortran A0 }
+equivalence_stmt :: { Decl A0 }
 equivalence_stmt 
 : srcloc EQUIVALENCE '(' vlist ')'              {% srcSpan $1 >>= (\s -> return $ Equivalence () s $4) }
 
@@ -992,7 +1013,6 @@ action_stmt
   | cycle_stmt                                    { $1 }
   | deallocate_stmt                               { $1 }
   | endfile_stmt                                  { $1 }
-  | equivalence_stmt                              { $1 }
 --  | end_function_stmt
 --  | end_program_stmt
 --  | end_subroutine_stmt
@@ -1398,9 +1418,9 @@ print_stmt
 -- also replaces io_unit
 format :: { Expr A0 }
 format
-  : expr                                          { $1 }
---  | literal_constant                           { (Con $1) } -- label
-| srcloc '*'                                   {% srcSpan $1 >>= (\s -> return $ Var () s [(VarName () "*",[])]) }
+: expr                                  { $1 }
+--  | literal_constant                  { (Con $1) } -- label
+| '*'                                   {% srcSpanNull >>= (\s -> return $ Var () s [(VarName () "*",[])]) }
 
 output_item_list :: { [Expr A0] }
 output_item_list
@@ -1421,23 +1441,31 @@ read_stmt
 
 io_control_spec_list :: { [Spec A0] }
 io_control_spec_list
-  : io_control_spec_list ',' io_control_spec      { $1++[$3] }
-  | io_control_spec                               { [$1] }
+: io_control_spec ',' io_control_spec_list      { $1 : $3 }
+| io_control_spec                               { [$1] }
+
 -- (unit, fmt = format), (rec, advance = expr), (nml, iostat, id = var), (err, end, eor = label)
+
+
 io_control_spec :: { Spec A0 } 
 io_control_spec
-: format                                 { NoSpec () $1 }
+: --format                              { NoSpec () $1 }
+'*'                                    {% srcSpanNull >>= (\s -> return $ NoSpec () (Var () s [(VarName () "*", [])])) }
 | END '=' label                          { End () $3 }
-| ID '=' format                          {% case (map (toLower) $1) of
-                                                     "unit"    -> return (Unit () $3)
-                                                     "fmt"     -> return (FMT () $3)
-                                                     "rec"     -> return (Rec () $3)
-                                                     "advance" -> return (Advance () $3)
-                                                     "nml"     -> return (NML () $3)
-                                                     "iostat"  -> return (IOStat () $3)
-                                                     "size"    -> return (Size () $3)
-                                                     "eor"     -> return (Eor () $3)
-                                                     s         -> parseError ("incorrect name in spec list: " ++ s) }
+| io_control_spec_id                     { $1 }
+
+io_control_spec_id :: { Spec A0 }
+: variable                               { NoSpec () $1 }
+--| ID '=' format                          {% case (map (toLower) $1) of
+--                                                     "unit"    -> return (Unit () $3)
+--                                                     "fmt"     -> return (FMT () $3)
+--                                                     "rec"     -> return (Rec () $3)
+--                                                     "advance" -> return (Advance () $3)
+--                                                     "nml"     -> return (NML () $3)
+--                                                     "iostat"  -> return (IOStat () $3)
+--                                                     "size"    -> return (Size () $3)
+--                                                     "eor"     -> return (Eor () $3)
+--                                                     s         -> parseError ("incorrect name in spec list: " ++ s) }
 
 --  | namelist_group_name                           { NoSpec $1 }
 
@@ -1520,8 +1548,8 @@ mask_expr
 
 write_stmt :: { Fortran A0 }
 write_stmt
-: srcloc WRITE '(' io_control_spec_list ')' output_item_list  {% srcSpan $1 >>= (\s -> return $ Write () s $4 $6) }
-| srcloc WRITE '(' io_control_spec_list ')'                   {% srcSpan $1 >>= (\s -> return $ Write () s $4 []) }
+: WRITE '(' io_control_spec_list ')' output_item_list  {% srcSpanNull >>= (\s -> return $ Write () s $3 $5) }
+| WRITE '(' io_control_spec_list ')'                   {% srcSpanNull >>= (\s -> return $ Write () s $3 []) }
 
 srcloc :: { SrcLoc }  :    {% getSrcLoc' }
 

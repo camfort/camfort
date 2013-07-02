@@ -14,6 +14,7 @@
 > import Output
 > import Language.Fortran.Pretty
 
+> import DeadCode
 > import Annotations
 > import Syntax
 > import Traverse
@@ -25,7 +26,9 @@
 
 > refactorEquivalences :: (String, [Program Annotation]) -> (Report, [Program Annotation])
 > refactorEquivalences (fname, p) = 
->                         let ?fname = fname in mapM (transformBiM equivalences) p
+>                         let ?fname = fname in do p' <- mapM (\p -> (transformBiM equivalences p)) p
+>                                                  deadCode True p'
+>                             
 >                         where equivalences :: (?fname :: String) => Block Annotation -> (Report, Block Annotation)
 >                               equivalences b = let (b', (_, _, r)) = runState ((rmEquivalences b) >>= (transformBiM rfAssgn)) ([], 0, "")
 >                                                in (r, b')
@@ -35,6 +38,7 @@
 >    do eqs <- equivalents e1
 >       if (length eqs > 1) then 
 
+>        
 >          let a' = a { refactored = Just s1 }
 >              sp' = refactorSpan sp
 >              eqs' = deleteBy (\x -> \y -> (af x) == (af y)) e1 eqs -- remove self from list
@@ -58,11 +62,11 @@
 
 > rmEquivalences :: (?fname :: String) =>  (Block Annotation) -> State RfEqState (Block Annotation)
 > rmEquivalences = transformBiM rmEquiv'
->                    where rmEquiv' ::  Fortran Annotation -> State RfEqState (Fortran Annotation)
+>                    where rmEquiv' ::  Decl Annotation -> State RfEqState (Decl Annotation)
 >                          rmEquiv' f@(Equivalence a sp equivs) = 
 >                                      do (ess, n, r) <- get
 >                                         put (equivs:ess, n - 1, r ++ ?fname ++ (show . srcLineCol . fst $ sp) ++ ": removed equivalence \n")
->                                         return (NullStmt (a { refactored = (Just $ fst sp) }) (dropLine sp))
+>                                         return (NullDecl (a { refactored = (Just $ fst sp) }) (dropLine sp))
 >                          rmEquiv' f = return f
                                      
 > equivalents :: (?fname :: String) => Expr Annotation -> State RfEqState [Expr Annotation]

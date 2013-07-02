@@ -93,6 +93,8 @@ tokens :-
   "="				{ \s -> OpEquals }
   \"(. # \")*\"			{ \s -> StrConst s }
   \'(. # \')*\'			{ \s -> StrConst s }
+  "Z"\'(. # \')*\'		{ \s -> LitConst 'z' s }
+  "z"\'(. # \')*\'		{ \s -> LitConst 'z' s }
   \'				{ \s -> SingleQuote }
   \.				{ \s -> Period }
   "::"				{ \s -> ColonColon }
@@ -125,7 +127,7 @@ tokens :-
 		
 
 -- The token type:
-data Token = Key String | OpPower | OpMul | OpDiv | OpAdd | OpSub | OpConcat
+data Token = Key String | LitConst Char String | OpPower | OpMul | OpDiv | OpAdd | OpSub | OpConcat
 	   | OpEQ | OpNE | OpLT | OpLE | OpGT | OpGE | OpLG
 	   | OpNOT | OpAND | OpOR | OpXOR | OpEQV | OpNEQV
 	   | BinConst String | OctConst String | HexConst String

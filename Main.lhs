@@ -32,6 +32,7 @@
 > import CommonBlocks
 > import DeadCode 
 > import Equivalences
+> import Loops
 > import LVA
 > import Output
 > import Syntax
@@ -45,8 +46,7 @@
 > import Data.Typeable
 
 > import Data.List (nub, (\\), elemIndices)
-> import qualified Data.Map.Lazy as Map hiding (map, (\\))
-> import Data.Text hiding (length, head, concatMap, map, filter, take)
+> import Data.Text hiding (length, head, concatMap, map, filter, take, last)
 
 
 > quickAnnotateDo :: Fortran String -> Fortran String
@@ -58,105 +58,7 @@
 >   where anno = ([""], freeVariables body) -- \\ [s] -- indexVariables body
 > annotateFVDo t = t
 
-- when travesing whole program collect all declarations with bounds 
-- collect all constants (#1) 
-- identify all loop 'variables' (#2) 
-   - identify all variables indexed by the loop variables
 
- loopBody :: Fortran t -> State (TypeEnvStack t) (Fortran ([String], [String], [String]))
- loopBody (For _ v@(VarName _ s) e1 e2 e3 body) = 
-     let
-         anno = (
-     in For anno v e1 e2 e3 body
-  
-> newFrame gammas = []:gammas
-> pushVar v t (g:gs) = ((v, t):g):gs
-> popVar (((v,t):g):gs) = (g:gs)
-> popFrame (g:gs) = (g, gs)
-
- type Annotation = (((), [Variable]), [Variable])
- unitAnnotation = (((), []), [])
-
-map (fmap ((,[""]),[""]))
-
-> analyse :: [Program a] -> [Program Annotation]
-> analyse p = map ((descendBi arrayIndices) . ix . lva . numberStmts . (transformBi reassociate) . (fmap (const unitAnnotation))) p
-
-> analyse' :: [Program Annotation] -> [Program Annotation]
-> analyse' p = map ((descendBi arrayIndices) . ix . lva . numberStmts . (transformBi reassociate))  p
-
-
-> collect :: (Eq a, Ord k) => [(k, a)] -> Map.Map k [a]
-> collect = collect' Map.empty 
->           where collect' as []                         = as
->                 collect' as ((v, n):es) | Map.member v as = collect' (Map.insert v (nub $ n : ((Map.!) as v)) as) es
->                                         | otherwise   = collect' (Map.insert v [n] as) es
-
-> arrayIndices :: Block Annotation -> Block Annotation
-> arrayIndices x = 
->     let typeEnv = snd $ runState (buildTypeEnv x) []
->         
->         arrIxsF :: Fortran Annotation -> Annotation
->         arrIxsF y = let readIxs = [(v, mfmap (const ()) e) | 
->                                      (Var _ _ [(VarName _ v, e)]) <- rhsExpr y,
->                                      length e > 0,
->                                      isArrayTypeP' typeEnv v]
-
->                         writeIxs = [(v, mfmap (const ()) e) |
->                                      (Var _ _ [(VarName _ v, e)]) <- lhsExpr y,
->                                      length e > 0,
->                                      isArrayTypeP' typeEnv v]
-
->                     in (copoint y) { arrsRead = (collect readIxs), arrsWrite = (collect writeIxs) } 
->     in extendBi arrIxsF x               
-
-> ix :: Program Annotation -> Program Annotation
-> ix = let ixF :: Fortran Annotation -> Annotation
->          ixF f = (copoint f) { indices = (nub [v | (For _ _ (VarName _ v) _ _ _ _) <- ((universeBi f)::[Fortran Annotation])])}
->      in extendBi ixF
-
-
-> pr  :: String -> IO [Program A0]
-> pr f = let mode = ParseMode { parseFilename = f }
->        in do inp <- readFile f
->              case (runParserWithMode mode parser inp) of
->                (ParseOk p)       -> return $ p
->                (ParseFailed l e) -> error e
-
-> goR :: String -> IO ()
-> goR s = do f' <- pr s
->            putStrLn $ show f' -- show (transformBi reassociate f')
-
-> go :: String -> IO ()
-> go s = do -- f <- readFile s
->           -- let f' = parse f
->           f' <- pr s
->           --let f'' = map ((transformBi quickAnnotateDo) . (fmap (const ""))) f'
->           --let f'' = map ((transformBi annotateFVDo) . (fmap (const ([""],[""])))) f'
->           let f'' = analyse f'
->           writeFile (s ++ ".html") (concatMap outputHTML f'')
->           -- putStrLn (show $ variables f'')
->           -- putStrLn (show $ binders f'')
->           -- putStrLn $ show f''
->           -- (show ((map (fmap (const ())) (descendBi reassociate f'))::([Program ()]))) `trace` return ()
-
- go2 :: String -> IO String
-
-A sample transformation
-
-> fooTrans p = transformBi f p
->                 where f :: Fortran A1 -> Fortran A1
->                       f p@(Call x sp e as) = Label True sp "10" p
->                       f p@(Assg x sp e1 e2) = Label True sp "5" p
->                       f p = p
-
-
-> go2 f = do inp <- readFile f
->            p <- pr f
->            let p' = fooTrans $ (map (fmap (const unitAnnotation)) p)
->            let out = reprint inp f p'
->            writeFile (f ++ ".out") out
->            return $ (out, p')
 
 
 > data ArgType = Named String | NamedList String 
@@ -179,35 +81,50 @@ A sample transformation
 >              in case func of
 >                    "common" -> common dir
 >                    "equivalence" -> equivalences dir
->                    "dead" -> return ()
->                    "lva" -> return ()
->                    "loops" -> return ()
+>                    "dead" -> dead dir
+>                    "lva" -> lvaA dir
+>                    "loops" -> loops dir
 >                    _ -> putStrLn $ usage ++ menu
 >           else
 >              putStrLn $ usage ++ menu
 
-> common d = do putStrLn $ "Refactoring common blocks for source in directory " ++ show d ++ "\n"
->               putStrLn $ "Exclude any files from " ++ d ++ "/? (comma-separate list)\n"
->               excludes <- getLine
->               
->               (ps, fileNames) <- readParseSrc d excludes
+> loops d =  do putStrLn $ "Analysing loops for source in directory " ++ show d ++ "\n"
+>               doAnalysis loopAnalyse d
 
->               let (report, asts') = commonElim (map (\(f, inp, ast) -> (f, ast)) ps)
->               putStrLn report
->               
->               outputFiles d asts' (map snd3 ps) fileNames
+> lvaA d =  do putStrLn $ "Analysing loops for source in directory " ++ show d ++ "\n"
+>              doAnalysis (map lva) d
+
+
+> dead d = do putStrLn $ "Eliminating dead code for source in directory " ++ show d ++ "\n"
+>             doRefactor ((mapM (deadCode False)) . (map snd)) d
+
+> common d = do putStrLn $ "Refactoring common blocks for source in directory " ++ show d ++ "\n"
+>               doRefactor commonElim d
 
 > equivalences d =
->            do putStrLn $ "Refactoring common blocks for source in directory " ++ show d ++ "\n"
->               putStrLn $ "Exclude any files from " ++ d ++ "/? (comma-separate list)\n"
->               excludes <- getLine
+>            do putStrLn $ "Refactoring equivalences blocks for source in directory " ++ show d ++ "\n"
+>               doRefactor (mapM refactorEquivalences) d
 
->               (ps, fileNames) <- readParseSrc d excludes
+General analysis/refactor builders
 
->               let (report, asts') = mapM refactorEquivalences (map (\(f, inp, ast) -> (f, ast)) ps)
->               putStrLn report
+> doAnalysis aFun d = do putStrLn $ "Exclude any files from " ++ d ++ "/? (comma-separate list)\n"
+>                        excludes <- getLine
+>                           
+>                        (pss, fileNames) <- readParseSrc d excludes
+>                        let asts' = map (\(f, _, ps) -> aFun ps) pss
 
->               outputFiles d asts' (map snd3 ps) fileNames
+>                        outputAnalysisFiles d asts' fileNames
+> doRefactor rFun d = do putStrLn $ "Exclude any files from " ++ d ++ "/? (comma-separate list)\n"
+>                        excludes <- getLine
+>               
+>                        (ps, fileNames) <- readParseSrc d excludes
+>                        let (report, asts') = rFun (map (\(f, inp, ast) -> (f, ast)) ps)
+>                        putStrLn report
+>               
+>                        outputFiles d asts' (map snd3 ps) fileNames
+
+General source file handling stuff
+
 
 > readParseSrc d excludes = do dirF <- rGetDirectoryContents d
 >                              let files = dirF \\ ((map unpack (split (==',') (pack excludes))))
@@ -216,12 +133,13 @@ A sample transformation
 >                              ps <- mapM readParseSrc' files''
 >                              return (ps, files')
 
+
 > readParseSrc' f = do putStrLn f 
 >                      inp <- readFile f
 >                      ast <- pr f
 >                      return $ (f, inp, map (fmap (const unitAnnotation)) ast)                                        
 
-> setupOut d = if ((Prelude.drop (length d - 3) d) == "out") then 
+> setupOut d = if ((Prelude.drop (length d - 3) d) == "-out") then  -- don't do this (hence the '-' pref to stop this)
 >                  return d
 >              else if d == "." then 
 >                   do createDirectoryIfMissing True ("out")
@@ -229,11 +147,20 @@ A sample transformation
 >              else do createDirectoryIfMissing True (d ++ "out")
 >                      return $ d ++ "out"
 
+> checkDir f = let ix = elemIndices '/' f
+>                  d = take (last ix) f
+>              in createDirectoryIfMissing True d
 
 > outputFiles d asts inps files =
 >            do d' <- setupOut d
 >               putStrLn $ "Writing refactored files to directory: " ++ d' ++ "/"
->               mapM (\(ast', (inp, f)) -> writeFile (d' ++ "/" ++ f) (reprint inp f ast')) (Prelude.zip asts (Prelude.zip inps files))
+>               mapM (\(ast', (inp, f)) -> do checkDir (d' ++ "/" ++ f) 
+>                                             writeFile (d' ++ "/" ++ f) (reprint inp f ast')) (Prelude.zip asts (Prelude.zip inps files))
+>               return ()
+
+> outputAnalysisFiles d asts files =
+>            do putStrLn $ "Writing analysis files to directory: " ++ d ++ "/"
+>               mapM (\(ast', f) -> writeFile (d ++ "/" ++ f ++ ".html") ((concatMap outputHTML) ast')) (Prelude.zip asts files)
 >               return ()
 
 > rGetDirectoryContents d = do ds <- getDirectoryContents d
@@ -260,6 +187,16 @@ A sample transformation
 >               
 >            
 
+> pr  :: String -> IO [Program A0]
+> pr f = let mode = ParseMode { parseFilename = f }
+>        in do inp <- readFile f
+>              case (runParserWithMode mode parser inp) of
+>                (ParseOk p)       -> return $ p
+>                (ParseFailed l e) -> error e
+
+
+
+
 OLD FUNS FOR PURPOSE OF TESTING
 
 > go3 f = 
@@ -274,3 +211,38 @@ OLD FUNS FOR PURPOSE OF TESTING
 >        let out' = reprint inp f p''
 >        writeFile (f ++ ".2.out") out'
 >        putStrLn $ r ++ r2
+
+> goR :: String -> IO ()
+> goR s = do f' <- pr s
+>            putStrLn $ show f'
+
+> go :: String -> IO ()
+> go s = do -- f <- readFile s
+>           -- let f' = parse f
+>           f' <- pr s
+>           --let f'' = map ((transformBi quickAnnotateDo) . (fmap (const ""))) f'
+>           --let f'' = map ((transformBi annotateFVDo) . (fmap (const ([""],[""])))) f'
+>           let f'' = loopAnalyse f'
+>           writeFile (s ++ ".html") (concatMap outputHTML f'')
+>           -- putStrLn (show $ variables f'')
+>           -- putStrLn (show $ binders f'')
+>           -- putStrLn $ show f''
+>           -- (show ((map (fmap (const ())) (descendBi reassociate f'))::([Program ()]))) `trace` return ()
+
+ go2 :: String -> IO String
+
+A sample transformation
+
+> fooTrans p = transformBi f p
+>                 where f :: Fortran A1 -> Fortran A1
+>                       f p@(Call x sp e as) = Label True sp "10" p
+>                       f p@(Assg x sp e1 e2) = Label True sp "5" p
+>                       f p = p
+
+
+> go2 f = do inp <- readFile f
+>            p <- pr f
+>            let p' = fooTrans $ (map (fmap (const unitAnnotation)) p)
+>            let out = reprint inp f p'
+>            writeFile (f ++ ".out") out
+>            return $ (out, p')

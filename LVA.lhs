@@ -51,9 +51,12 @@ Single iteration of live-variable analysis
 
 Iterate the contextual computation of lva0 over a block, till a fixed-point is reached
 
-> lva:: Program Annotation -> Program Annotation
-> lva x = let y = fromZipper . (everywhere lva0) . toZipper $ x
->          in if (y == x) then y else lva y
+> lva :: Program Annotation -> Program Annotation
+> lva x = lva' (numberStmts . (transformBi reassociate) $ x)
+
+> lva':: Program Annotation -> Program Annotation
+> lva' x = let y = fromZipper . (everywhere lva0) . toZipper $ x
+>          in if (y == x) then y else lva' y
 
 
  successorAnnotations :: Zipper (Program Annotation) -> [Annotation]

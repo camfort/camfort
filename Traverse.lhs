@@ -135,7 +135,6 @@ ext f (x:xs) = (f (x:xs)) : (map f xs)
 >     rextend k y@(Allocate _ sp e1 e2)      = Allocate (k y) sp e1 e2
 >     rextend k y@(Backspace _ sp sp')        = Backspace (k y) sp sp'
 >     rextend k y@(Call _ sp e as)           = Call (k y) sp e as
->     rextend k y@(Equivalence _ sp es)      = Equivalence (k y) sp es
 >     rextend k y@(Open _ sp s)              = Open (k y) sp s
 >     rextend k y@(Close _ sp s)             = Close (k y) sp s
 >     rextend k y@(Continue _ sp)            = Continue (k y) sp
@@ -170,7 +169,6 @@ ext f (x:xs) = (f (x:xs)) : (map f xs)
 >     refill y@(Allocate _ sp e1 e2)     a = Allocate a sp e1 e2
 >     refill y@(Backspace _ sp sp')      a = Backspace a sp sp'
 >     refill y@(Call _ sp e as)          a = Call a sp e as
->     refill y@(Equivalence _ sp es)     a = Equivalence a sp es
 >     refill y@(Open _ sp s)             a = Open a sp s
 >     refill y@(Close _ sp s)            a = Close a sp s
 >     refill y@(Continue _ sp)           a = Continue a sp
@@ -299,6 +297,7 @@ TODO: Needs fixing with the spans - need to pull apart and put back together
 >     copoint (ExternalStmt x _)    = x
 >     copoint (Interface x _ _)     = x
 >     copoint (Common x _ _ _)        = x
+>     copoint (Equivalence x sp _)    = x
 >     copoint (DerivedTypeDef x _ _ _ _) = x
 >     copoint (Include x _)         = x
 >     copoint (DSeq x _ _)          = x
@@ -318,7 +317,6 @@ TODO: Needs fixing with the spans - need to pull apart and put back together
 >     copoint (Continue x sp)         = x
 >     copoint (Cycle x sp s)          = x
 >     copoint (Deallocate x sp es e)  = x
->     copoint (Equivalence x sp _)    = x
 >     copoint (Endfile x sp s)        = x
 >     copoint (Exit x sp s)           = x
 >     copoint (Forall x sp es f)      = x
@@ -339,6 +337,7 @@ TODO: Needs fixing with the spans - need to pull apart and put back together
 
 > instance Copointed Expr where
 >    copoint (Con x sp _) = x
+>    copoint (ConL x sp _ _) = x
 >    copoint (ConS x sp _) = x
 >    copoint (Var x sp _ ) = x
 >    copoint (Bin x sp _ _ _) = x

@@ -1,0 +1,53 @@
+PROGRAM FOO2
+  IMPLICIT NONE
+
+  CALL BAR(10)
+
+  CONTAINS
+
+  SUBROUTINE BAR(X)
+    INTEGER :: X
+    INTEGER :: I
+    INTEGER ::  J
+    REAL A(0:X), B(0:X), C
+
+    11 C = 0.1
+
+    forall(I = 0:X) &
+       & A(I) = I   
+
+    forall(I = 0:X) 
+       A(I) = I
+       A(I-1) = I
+    end forall
+
+    IF (I .EQ. 0) THEN
+      I = 0
+    ELSE
+      I = 1
+    END IF
+    
+    do I = 1, x
+       print '(i8, A, f0.7)', I, " ", A(I)
+    enddo
+
+    DO I = 1, X
+      C = C + 0.1
+      J = J + 1
+      A(I) = J 
+      B(I) = A(I+1)
+      PRINT '(f0.7)', A(I+2)
+      
+    END DO
+
+    J = J + 1
+    PRINT '(f0.7)', C
+
+  END SUBROUTINE
+
+  subroutine foo(x)
+    integer :: x
+    print '(f0.7)', x
+  end subroutine
+
+END PROGRAM FOO2

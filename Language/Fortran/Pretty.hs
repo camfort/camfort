@@ -162,6 +162,7 @@ instance (Indentor (Decl p),
   outputF x@(Decl _ vs t)  = (indR x 1)++outputG t++" :: "++asSeq id (map showDV vs)++"\n"
   outputF (Namelist _ ns) = ind 1++"namelist "++show_namelist ns++"\n"
   outputF (Data _ ds) = ind 1++"data "++(concat (intersperse "\n" (map show_data ds)))  ++"\n"
+  outputF t@(Equivalence  _ _ vs) = (indR t 1)++"equivlance ("++(concat (intersperse "," (map outputF vs))) ++ ")\n"
   outputF (AccessStmt _ p []) = ind 1++outputG p ++ "\n"
   outputF (AccessStmt _ p gs) = ind 1++outputG p ++ " :: " ++ (concat . intersperse ", " . map outputG) gs++"\n"
   outputF (ExternalStmt _ xs)  = ind 1++"external :: " ++ (concat (intersperse "," xs)) ++ "\n"
@@ -251,6 +252,7 @@ instance (OutputG (ArgList p) v,
           OutputG (VarName p) v,
           Alts v) => OutputF (Expr p) v where
   outputF (Con _ _ i)         = i
+  outputF (ConL _ _ m s)        = m:("\'" ++ s ++ "\'")
   outputF (ConS _ _ s)        = s
   outputF (Var _ _ vs)        = showPartRefList vs
   outputF (Bin _ _ bop e@(Bin _ _ op _ _ ) e'@(Bin _ _ op' _ _)) = checkPrec bop op (paren) (outputG e)++outputG bop++ checkPrec bop op' (paren) (outputG e')
@@ -396,6 +398,8 @@ instance (Indentor (Fortran p),
           OutputG (Fortran p) v, OutputG (Spec p) v, Alts v) => OutputIndF (Fortran p) v where
 
     outputIndF i t@(Assg _ _ v e)            = (indR t i)++outputG v++" = "++outputG e
+    outputIndF i t@(For _ _  (VarName _ "") e e' e'' f)   = (indR t i)++"do \n"++
+                                         (outputIndG (i+1) f)++"\n"++(indR t i)++"end do"
     outputIndF i t@(For _ _  v e e' e'' f)   = (indR t i)++"do"++" "++outputG v++" = "++outputG e++", "++
                                          outputG e'++", "++outputG e''++"\n"++
                                          (outputIndG (i+1) f)++"\n"++(indR t i)++"end do"
@@ -423,7 +427,7 @@ instance (Indentor (Fortran p),
     outputIndF i t@(Backspace _ _  ss)               = (indR t i)++"backspace "++asTuple outputG ss++"\n"
     outputIndF i t@(Call  _ _ sub al)                = indR t i++"call "++outputG sub++outputG al
     outputIndF i t@(Open  _ _ s)                     = (indR t i)++"open "++asTuple outputG s++"\n"
-    outputIndF i t@(Equivalence  _ _ vs)             = indR t i++"equivlance ("++(concat (intersperse "," (map outputF vs))) ++ ")\n"
+
     outputIndF i t@(Close  _ _ ss)                   = (indR t i)++"close "++asTuple outputG ss++"\n"
     outputIndF i t@(Continue _ _)                   = (indR t i)++"continue"++"\n"
     outputIndF i t@(Cycle _ _ s)                    = (indR t i)++"cycle "++outputG s++"\n"

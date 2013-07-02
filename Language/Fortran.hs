@@ -94,6 +94,7 @@ data Block    p = Block p  [String]  (Implicit p) SrcSpan (Decl p) (Fortran p)
 data Decl     p = Decl           p [(Expr p, Expr p)] (Type p)              -- declaration stmt
                 | Namelist       p [(Expr p, [Expr p])]                     -- namelist declaration
                 | Data           p [(Expr p, Expr p)]                       -- data declaration
+                | Equivalence    p SrcSpan [(Expr p)]
                 | AccessStmt     p (Attr p) [GSpec p]                       -- access stmt
                 | ExternalStmt   p [String]                                 -- external stmt
                 | Interface      p (Maybe (GSpec p)) [InterfaceSpec p]      -- interface declaration
@@ -150,7 +151,6 @@ data Fortran  p = Assg p SrcSpan (Expr p) (Expr p)
                 | Allocate p SrcSpan (Expr p) (Expr p)
                 | Backspace p SrcSpan [Spec p]
                 | Call p SrcSpan (Expr p) (ArgList p)
-                | Equivalence p SrcSpan [(Expr p)]
                 | Open p SrcSpan [Spec p]
                 | Close p SrcSpan [Spec p]
                 | Continue p SrcSpan 
@@ -178,6 +178,7 @@ data Fortran  p = Assg p SrcSpan (Expr p) (Expr p)
 -- type Bound    = ((Expr p),(Expr p))
 
 data Expr  p = Con p SrcSpan String
+             | ConL p SrcSpan Char String
              | ConS p SrcSpan String  -- String constant
              | Var p SrcSpan  [((VarName p),[(Expr p)])]
              | Bin p SrcSpan  (BinOp p) (Expr p) (Expr p)
@@ -258,6 +259,7 @@ instance GetSpan (Block a) where
 instance GetSpan (Decl a) where
     getSpan (NullDecl _ sp) = sp
     getSpan (Common _ sp _ _) = sp
+    getSpan (Equivalence x sp _)     = sp
     getSpan _ = error "No span for non common or null declarations"
 
 instance GetSpan (Program a) where
@@ -298,7 +300,6 @@ instance GetSpan (Fortran a) where
     getSpan (Continue x sp)          = sp
     getSpan (Cycle x sp s)           = sp
     getSpan (Deallocate x sp es e)   = sp
-    getSpan (Equivalence x sp _)     = sp
     getSpan (Endfile x sp s)         = sp
     getSpan (Exit x sp s)            = sp
     getSpan (Forall x sp es f)       = sp
