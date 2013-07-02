@@ -158,17 +158,6 @@ A sample transformation
 >            writeFile (f ++ ".out") out
 >            return $ (out, p')
 
-> go3 f = do inp <- readFile f
->            p <- pr f
->            let (r, p') = (refactorEquivalences (map (fmap (const unitAnnotation)) p)) 
->            let out = reprint inp f p'
->            let pa' = analyse' p'
->            writeFile (f ++ ".out.html") (concatMap outputHTML pa')
->            writeFile (f ++ ".out") out
->            let (r2, p'') = (deadCode True pa')
->            let out' = reprint inp f p''
->            writeFile (f ++ ".2.out") out'
->            putStrLn $ r ++ r2
 
 > data ArgType = Named String | NamedList String 
 
@@ -214,6 +203,28 @@ A sample transformation
 >               putStrLn report
 >               mapM (\(ast', (f, inp, _)) -> writeFile (f ++ ".out") (reprint inp f ast')) (Prelude.zip asts' ps)
 >               return ()
+
+> go3 f = do putStrLn $ "Refactoring common blocks for source in directory " ++ show d ++ "\n"
+>               putStrLn $ "Exclude any files from " ++ d ++ "/? (comma-separate list)\n"
+>               excludes <- getLine
+>               dirF <- rGetDirectoryContents d
+>               files <- return $ dirF \\ ((map unpack (split (==',') (pack excludes))))
+>               files' <- return $ map (\y -> d ++ "/" ++ y) files
+>               ps <- mapM readParseSrc files'
+>               let ( refactorEquivalences (map (fmap (const unitAnnotation)))
+
+ do inp <- readFile f
+>            p <- pr f
+>            let (r, p') = (refactorEquivalences (map (fmap (const unitAnnotation)) p)) 
+>            let out = reprint inp f p'
+>            let pa' = analyse' p'
+>            writeFile (f ++ ".out.html") (concatMap outputHTML pa')
+>            writeFile (f ++ ".out") out
+>            let (r2, p'') = (deadCode True pa')
+>            let out' = reprint inp f p''
+>            writeFile (f ++ ".2.out") out'
+>            putStrLn $ r ++ r2
+
 
 > rGetDirectoryContents d = do ds <- getDirectoryContents d
 >                              ds' <- return $ ds \\ [".", ".."] -- remove '.' and '..' entries
