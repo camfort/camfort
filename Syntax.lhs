@@ -1,6 +1,9 @@
 > {-# LANGUAGE ScopedTypeVariables #-}
 > {-# LANGUAGE FlexibleInstances #-}
 > {-# LANGUAGE MultiParamTypeClasses #-}
+> {-# LANGUAGE KindSignatures #-}
+> {-# LANGUAGE FlexibleContexts #-}
+> {-# LANGUAGE GADTs #-}
 
 > module Syntax where
 
@@ -58,6 +61,18 @@ their annotaitons (and source span information)
 
 > data AnnotationFree t = AnnotationFree { annotationBound :: t }
 > af = AnnotationFree -- short constructor
+> unaf = annotationBound
+
+-- Used for testing 
+
+> instance Eq (AnnotationFree Int) where
+>     x == y = (unaf x) == (unaf y)
+
+> instance Eq (AnnotationFree (AccessP ())) where
+>     x == y = (unaf x) == (unaf y)
+
+> instance (Eq (AnnotationFree a), Eq (AnnotationFree b)) => Eq (AnnotationFree (a, b)) where
+>     (AnnotationFree (x, y)) == (AnnotationFree (x', y')) = ((af x) == (af x')) && ((af y) == (af y'))
 
 > instance Eq (AnnotationFree (Expr a)) where
 >     -- Compute variable equality modulo annotations and spans
@@ -133,11 +148,27 @@ Number statements (for analysis output)
 
 > lower = map toLower
 
+
 All accessors (variables and array indexing)
 
 > accesses f = nub $  [VarA (lower v) | (AssgExpr _ _ v _) <- (universeBi f)::[Expr Annotation]]
 >                      ++ concat [varExprToAccesses ve | ve@(Var _ _ _) <- (universeBi f)::[Expr Annotation]]
 >                
+
+EDSL for describing syntax tree queries
+
+> data Tag t where
+>     Exprs :: Tag (Expr Annotation)
+>     Blocks :: Tag (Block Annotation)
+>     Locs :: Tag Access
+
+> from :: forall t synTyp . (Data t, Data synTyp) => Tag synTyp -> t -> [synTyp]
+> from Locs x = accesses x
+> from _ x = (universeBi x)::[synTyp]
+
+
+
+
 
 > varExprToAccesses :: Expr a -> [Access]
 > varExprToAccesses (Var _ _ ves) = [mkAccess v es | (VarName _ v, es) <- ves, all isConstant es] 
@@ -243,3 +274,20 @@ All variables from binders
                            indices = [v | (VarName _ v) <- (universeBi is)::[VarName Annotation]]
                        in setIndices (nub indices) (extract y) 
      in extendBi indexVars x
+
+
+Orderings
+
+
+
+> instance Ord (AccessP ()) where
+>     (VarA s1) <= (VarA s2)           = s1 <= s2
+>     (ArrayA s1 e1) <= (ArrayA s2 e2) = if (s1 == s2) then e1 <= e2 else s1 <= s2 
+>     (VarA s1) <= (ArrayA s2 e1)      = True
+>     _ <= _                           = False
+
+
+Partial-ordering for expressions, ignores annotations
+
+> instance Eq p => Ord (Expr p) where
+>     (Con _ _ c) <= (Con  _ _ c') = c <= c'

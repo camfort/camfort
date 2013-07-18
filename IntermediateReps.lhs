@@ -8,9 +8,12 @@
 > import Language.Fortran
 > import Language.Fortran.Pretty
 
-> data Access = VarA String | ArrayA String [Expr ()] deriving (Eq, Typeable, Data)
+> data AccessP p = VarA String | ArrayA String [Expr p] deriving (Eq, Typeable, Data)
 
-> instance Show Access where
+> type Access = AccessP ()
+
+
+> instance Show (AccessP ()) where
 >     show (VarA s) = s
 >     show (ArrayA v es) = let ?variant = Alt1 in v ++ "(" ++ (showList (map outputF es)) ++ ")"
 >                            where showList []  = ""

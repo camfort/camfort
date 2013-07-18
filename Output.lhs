@@ -22,7 +22,7 @@
 > import Language.Fortran as Fortran
 > import Language.Fortran.Pretty
 
-> import Data.Text hiding (foldl,map, concatMap)
+> import Data.Text hiding (foldl,map, concatMap,take,drop)
 > import qualified Data.Text as Text 
 > import Data.Map.Lazy hiding (map, foldl)
 > import Data.Generics
@@ -73,7 +73,8 @@
 
 >                   html = let ?variant = Alt2
 >                          in 
->                            (Text.append (pack "<head><script type='text/javascript' src='source.js'></script><link href='source.css' type='text/css' rel='stylesheet' /></head>"))
+>                            (Text.append (pack "<head><script type='text/javascript' src='../source.js'></script><link href='../source.css' type='text/css' rel='stylesheet' /></head>"))
+>                          . (\t -> replace (pack "newline") (pack "\n") t)
 >                          . (Text.concat . (map pre) . Text.lines)
 >                          . (\t -> foldl (toColor green) t types)
 >                          . (\t -> foldl (toColor purple) t keyword)
@@ -165,7 +166,7 @@ Output routines specialised to the analysis.
 
 > instance OutputIndG (Fortran Annotation) Alt2 where
 
->     outputIndG i t@(For p _ v e e' e'' f) = (outputAnn p False i) ++ 
+>     outputIndG i t@(For p _ v e e' e'' f) = (outputAnn p False i (show t)) ++ 
 >                                           annotationMark i t
 >                                           ((ind i) ++ "do"++" "++outputG v++" = "++
 >                                            outputG e++", "++
@@ -174,7 +175,7 @@ Output routines specialised to the analysis.
 
                                          
 >     -- outputIndG i t@(FSeq p f1 f2) =  (outputAnn p False i) ++ outputIndG i f1 ++ outputIndG i f2
->     outputIndG i t = "<div style=''>" ++ (outputAnn (rextract t) False i) ++  (annotationMark i t (outputIndF i t)) ++ "</div>"
+>     outputIndG i t = "<div style=''>" ++ (outputAnn (rextract t) False i (show t)) ++  (annotationMark i t (outputIndF i t)) ++ "</div>"
 
 > annotationMark i t x = "<div class='clickable' onClick='toggle(" ++  
 >                        (show $ number (rextract t)) ++ ");'>" ++
@@ -184,14 +185,18 @@ Output routines specialised to the analysis.
 > row xs = "<tr>" ++ (concatMap (\x -> "<td>" ++ x ++ "</td>") xs) ++ "</tr>"
 
 > instance OutputG Annotation Alt2 where
->     outputG t = outputAnn t False 0
+>     outputG t = outputAnn t False 0 (show t)
 
-> outputAnn t visible i =
+> breakUp xs = (take 80 xs) ++ "newline" ++ (if (drop 80 xs) == [] then [] else breakUp (drop 80 xs))
+
+> outputAnn t visible i astString = 
 >      "<div id='a" ++ (show $ number t) ++ "' style='" ++
 >      (if visible then "" else "display:none;") ++
 >      "' class'outer'><div class='spacer'><pre>" ++ (indent 3 i) ++ "</pre></div>" ++ 
->      "<div class='annotation'><div class='number'>" ++ (show $ number t) ++ 
->      "</div><p><table>" ++
+>      "<div class='annotation'><div class='number'>" ++ (show $ number t) ++ "</div>" ++ 
+>      "<div><div class='clickable' onClick=\"toggle('" ++ (show $ number t) ++  "src');\">" ++
+>      "<u>show ast</u></div><div id='a" ++ (show $ number t) ++ "src' " ++
+>      "style='background:#fff;display:none;width:600px;overflow:auto;'>" ++ (breakUp astString) ++ "</div></div>" ++ "<p><table>" ++
 >      row ["lives: (in) ",    showList $ (map show) $ fst $ lives t, "(out)", showList $ (map show) $ snd $ lives t] ++ 
 >      row ["indices:",  showList $ indices t] ++ 
 >      row ["successors:", showList $ (map show) (successorStmts t)] ++ 

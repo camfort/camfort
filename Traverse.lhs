@@ -55,6 +55,8 @@ Other helpers
 > mfmap :: Functor f => (a -> b) -> [f a] -> [f b]
 > mfmap f = map (fmap f)
 
+> each = flip (map)
+
 Data-type generic comonad-style traversal
 
 > extendBi :: (Biplate (from a) (to a), RComonad to) => (to a -> a) -> (from a) -> (from a)

@@ -38,6 +38,7 @@
 > import Syntax
 > import Traverse
 > import Types
+> import TypeStructuring
 
 > import Debug.Trace
 
@@ -59,12 +60,8 @@
 > annotateFVDo t = t
 
 
-
-
 > data ArgType = Named String | NamedList String 
 
- ensureArgs [] _        = return []
- ensureArgs ((Named n :ns) args = 
 
 > introMessage = "CamFort 0.1 - Cambridge Fortran Infrastructure."
 > usage = "Usage: camfort <function> <directory> \n\n"
@@ -87,6 +84,8 @@
 >                    _ -> putStrLn $ usage ++ menu
 >           else
 >              putStrLn $ usage ++ menu
+
+> typeStructuring d = doAnalysis typeStruct d
 
 > loops d =  do putStrLn $ "Analysing loops for source in directory " ++ show d ++ "\n"
 >               doAnalysis loopAnalyse d
