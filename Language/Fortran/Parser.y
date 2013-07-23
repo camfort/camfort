@@ -342,6 +342,8 @@ declaration_construct_p
   | derived_type_def                              { $1 }
   | TEXT					  { TextDecl () $1 }
 
+-- Not sure about the ArrayT outputs here, think this may be a bug
+
 declaration_construct :: { Decl A0 }
 declaration_construct
   : type_spec_p attr_spec_list '::' entity_decl_list  { if isEmpty (fst $2) 

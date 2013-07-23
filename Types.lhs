@@ -54,7 +54,7 @@
 >  
 
 > boundsP [] = False
-> boundsP ((Bound _ _ _ _):es) = True && (boundsP es)
+> boundsP ((Bound _ _ _ _):es) = True || (boundsP es)
 > boundsP _ = False
 
 > bounds [] = []                

@@ -1,231 +1,250 @@
-<head><script type='text/javascript' src='../source.js'></script><link href='../source.css' type='text/css' rel='stylesheet' /></head><pre><span style='color:#800080'>program</span> <span style='color:#000080'>Mem</span></pre><pre>   <span style='color:#008000'>integer</span> :: la,lb,lc,ld,le,lf</pre><pre>   <span style='color:#008000'>integer</span> :: c(0:5)</pre><pre><div style=''><div id='a0' style='display:none;' class'outer'><div class='spacer'><pre>   </pre></div><div class='annotation'><div class='number'>0</div><div><div class='clickable' onClick="toggle('0src');"><u>show ast</u></div><div id='a0src' style='background:#fff;display:none;width:600px;overflow:auto;'>Call (A {indices = [], lives = ([],[]), arrsRead = fromList [], arrsWrite = from
-List [], number = 0, refactored = Nothing, successorStmts = []}) (SrcLoc {srcFil
-ename = "mem/sample.f90", srcLine = 6, srcColumn = 0},SrcLoc {srcFi<span style='color:#800080'>len</span>ame = "mem
-/sample.f90", srcLine = 6, srcColumn = 25}) (Var (A {indices = [], lives = ([],[
-]), arrsRead = fromList [], arrsWrite = fromList [], number = 0, refactored = No
-thing, successorStmts = []}) (SrcLoc {srcFi<span style='color:#800080'>len</span>ame = "mem/sample.f90", srcLine = 
-6, srcColumn = 5},SrcLoc {srcFi<span style='color:#800080'>len</span>ame = "mem/sample.f90", srcLine = 6, srcColumn
- = 8}) [(VarName (A {indices = [], lives = ([],[]), arrsRead = fromList [], arrs
-Write = fromList [], number = 0, refactored = Nothing, successorStmts = []}) "fo
-o",[])]) (ArgList (A {indices = [], lives = ([],[]), arrsRead = fromList [], arr
-sWrite = fromList [], number = 0, refactored = Nothing, successorStmts = []}) (E
-Seq (A {indices = [], lives = ([],[]), arrsRead = fromList [], arrsWrite = fromL
-ist [], number = 0, refactored = Nothing, successorStmts = []}) (SrcLoc {srcFi<span style='color:#800080'>len</span>ewlinename = "mem/sample.f90", srcLine = 6, srcColumn = 9},SrcLoc {srcFi<span style='color:#800080'>len</span>ame = "mem/
-sample.f90", srcLine = 6, srcColumn = 24}) (ESeq (A {indices = [], lives = ([],[
-]), arrsRead = fromList [], arrsWrite = fromList [], number = 0, refactored = No
-thing, successorStmts = []}) (SrcLoc {srcFi<span style='color:#800080'>len</span>ame = "mem/sample.f90", srcLine = 
-6, srcColumn = 9},SrcLoc {srcFi<span style='color:#800080'>len</span>ame = "mem/sample.f90", srcLine = 6, srcColumn
- = 21}) (Var (A {indices = [], lives = ([],[]), arrsRead = fromList [], arrsWrit
-e = fromList [], number = 0, refactored = Nothing, successorStmts = []}) (SrcLoc
- {srcFi<span style='color:#800080'>len</span>ame = "mem/sample.f90", srcLine = 6, srcColumn = 9},SrcLoc {srcFi<span style='color:#800080'>len</span>am
-e = "mem/sample.f90", srcLine = 6, srcColumn = 14}) [(VarName (A {indices = [], 
-lives = ([],[]), arrsRead = fromList [], arrsWrite = fromList [], number = 0, re
-factored = Nothing, successorStmts = []}) "c",[Var (A {indices = [], lives = ([]
-,[]), arrsRead = fromList [], arrsWrite = fromList [], number = 0, refactored = 
-Nothing, successorStmts = []}) (SrcLoc {srcFi<span style='color:#800080'>len</span>ame = "mem/sample.f90", srcLine 
-= 6, srcColumn = 11},SrcLoc {srcFi<span style='color:#800080'>len</span>ame = "mem/sample.f90", srcLine = 6, srcCol
-umn = 13}) [(VarName (A {indices = [], lives = ([],[]), arrsRead = fromList [], 
-arrsWrite = fromList [], number = 0, refactored = Nothing, successorStmts = []})
- "la",[])]])]) (Var (A {indices = [], lives = ([],[]), arrsRead = fromList [], a
-rrsWrite = fromList [], number = 0, refactored = Nothing, successorStmts = []}) 
-(SrcLoc {srcFi<span style='color:#800080'>len</span>ame = "mem/sample.f90", srcLine = 6, srcColumn = 16},SrcLoc {sr
-cFi<span style='color:#800080'>len</span>ame = "mem/sample.f90", srcLine = 6, srcColumn = 21}) [(VarName (A {indice
-s = [], lives = ([],[]), arrsRead = fromList [], arrsWrite = fromList [], number
- = 0, refactored = Nothing, successorStmts = []}) "c",[Var (A {indices = [], liv
-es = ([],[]), arrsRead = fromList [], arrsWrite = fromList [], number = 0, refac
+<head><script type='text/javascript' src='../source.js'></script><link href='../source.css' type='text/css' rel='stylesheet' /></head><pre><span style='color:#800080'>program</span> <span style='color:#000080'>Mem</span></pre><pre>   <span style='color:#008000'>integer</span> :: la,lb,lc,ld,le,lf</pre><pre>   <span style='color:#008000'>integer</span> :: c(0:5)</pre><pre><div style=''><div id='a1' style='display:none;' class'outer'><div class='spacer'><pre>   </pre></div><div class='annotation'><div class='number'>1</div><div><div class='clickable' onClick="toggle('1src');"><u>show ast</u></div><div id='a1src' style='background:#fff;display:none;width:600px;overflow:auto;'>Call (A {indices = [], lives = ([foo,la,lb,foo2,ld,lf,foo3,lc,le],[foo2,ld,lf,lb
+,la,foo3,lc,le]), arrsRead = fromList [("c",[[Var () (SrcLoc {srcFi<span style='color:#800080'>len</span>ame = "mem
+/sample.f90", srcLine = 6, srcColumn = 18},SrcLoc {srcFi<span style='color:#800080'>len</span>ame = "mem/sample.f90
+", srcLine = 6, srcColumn = 20}) [(VarName () "lb",[])]],[Var () (SrcLoc {srcFil
+ename = "mem/sample.f90", srcLine = 6, srcColumn = 11},SrcLoc {srcFi<span style='color:#800080'>len</span>ame = "me
+m/sample.f90", srcLine = 6, srcColumn = 13}) [(VarName () "la",[])]]])], arrsWri
+te = fromList [], number = 1, refactored = Nothing, successorStmts = [14]}) (Src
+Loc {srcFi<span style='color:#800080'>len</span>ame = "mem/sample.f90", srcLine = 6, srcColumn = 0},SrcLoc {srcFi<span style='color:#800080'>len</span>ewlinename = "mem/sample.f90", srcLine = 6, srcColumn = 22}) (Var (A {indices = [], li
+ves = ([],[]), arrsRead = fromList [], arrsWrite = fromList [], number = 2, refa
+ctored = Nothing, successorStmts = []}) (SrcLoc {srcFi<span style='color:#800080'>len</span>ame = "mem/sample.f90",
+ srcLine = 6, srcColumn = 5},SrcLoc {srcFi<span style='color:#800080'>len</span>ame = "mem/sample.f90", srcLine = 6
+, srcColumn = 8}) [(VarName (A {indices = [], lives = ([],[]), arrsRead = fromLi
+st [], arrsWrite = fromList [], number = 3, refactored = Nothing, successorStmts
+ = []}) "foo",[])]) (ArgList (A {indices = [], lives = ([],[]), arrsRead = fromL
+ist [], arrsWrite = fromList [], number = 4, refactored = Nothing, successorStmt
+s = []}) (ESeq (A {indices = [], lives = ([],[]), arrsRead = fromList [], arrsWr
+ite = fromList [], number = 5, refactored = Nothing, successorStmts = []}) (SrcL
+oc {srcFi<span style='color:#800080'>len</span>ame = "mem/sample.f90", srcLine = 6, srcColumn = 9},SrcLoc {srcFi<span style='color:#800080'>len</span>
+ame = "mem/sample.f90", srcLine = 6, srcColumn = 21}) (Var (A {indices = [], liv
+es = ([],[]), arrsRead = fromList [], arrsWrite = fromList [], number = 6, refac
 tored = Nothing, successorStmts = []}) (SrcLoc {srcFi<span style='color:#800080'>len</span>ame = "mem/sample.f90", 
-srcLine = 6, srcColumn = 18},SrcLoc {srcFi<span style='color:#800080'>len</span>ame = "mem/sample.f90", srcLine = 6
-, srcColumn = 20}) [(VarName (A {indices = [], lives = ([],[]), arrsRead = fromL
-ist [], arrsWrite = fromList [], number = 0, refactored = Nothing, successorStmt
-s = []}) "lb",[])]])])) (Con (A {indices = [], lives = ([],[]), arrsRead = fromL
-ist [], arrsWrite = fromList [], number = 0, refactored = Nothing, successorStmt
-s = []}) (SrcLoc {srcFi<span style='color:#800080'>len</span>ame = "mem/sample.f90", srcLine = 6, srcColumn = 23},S
-rcLoc {srcFi<span style='color:#800080'>len</span>ame = "mem/sample.f90", srcLine = 6, srcColumn = 24}) "0")))
-</div></div><p><table><tr><td>lives: (in) </td><td></td><td>(out)</td><td></td></tr><tr><td>indices:</td><td></td></tr><tr><td>successors:</td><td></td></tr><tr><td>arrays R:</td><td></td></tr><tr><td>arrays W:</td><td></td></tr></table></p></div><br /></pre><pre></pre><pre><div class='clickable' onClick='toggle(0);'>   <span style='color:#800080'>call</span> foo(c(la),c(lb),0)</div></div></pre><pre><div style=''><div id='a0' style='display:none;' class'outer'><div class='spacer'><pre>   </pre></div><div class='annotation'><div class='number'>0</div><div><div class='clickable' onClick="toggle('0src');"><u>show ast</u></div><div id='a0src' style='background:#fff;display:none;width:600px;overflow:auto;'>FSeq (A {indices = [], lives = ([],[]), arrsRead = fromList [], arrsWrite = from
-List [], number = 0, refactored = Nothing, successorStmts = []}) (SrcLoc {srcFil
-ename = "mem/sample.f90", srcLine = 7, srcColumn = 0},SrcLoc {srcFi<span style='color:#800080'>len</span>ame = "mem
-/sample.f90", srcLine = 8, srcColumn = 23}) (Call (A {indices = [], lives = ([],
-[]), arrsRead = fromList [], arrsWrite = fromList [], number = 0, refactored = N
-othing, successorStmts = []}) (SrcLoc {srcFi<span style='color:#800080'>len</span>ame = "mem/sample.f90", srcLine =
- 7, srcColumn = 0},SrcLoc {srcFi<span style='color:#800080'>len</span>ame = "mem/sample.f90", srcLine = 7, srcColum
-n = 31}) (Var (A {indices = [], lives = ([],[]), arrsRead = fromList [], arrsWri
-te = fromList [], number = 0, refactored = Nothing, successorStmts = []}) (SrcLo
-c {srcFi<span style='color:#800080'>len</span>ame = "mem/sample.f90", srcLine = 7, srcColumn = 5},SrcLoc {srcFi<span style='color:#800080'>len</span>a
-me = "mem/sample.f90", srcLine = 7, srcColumn = 9}) [(VarName (A {indices = [], 
-lives = ([],[]), arrsRead = fromList [], arrsWrite = fromList [], number = 0, re
-factored = Nothing, successorStmts = []}) "foo2",[])]) (ArgList (A {indices = []
-, lives = ([],[]), arrsRead = fromList [], arrsWrite = fromList [], number = 0, 
-refactored = Nothing, successorStmts = []}) (ESeq (A {indices = [], lives = ([],
-[]), arrsRead = fromList [], arrsWrite = fromList [], number = 0, refactored = N
-othing, successorStmts = []}) (SrcLoc {srcFi<span style='color:#800080'>len</span>ame = "mem/sample.f90", srcLine =
- 7, srcColumn = 10},SrcLoc {srcFi<span style='color:#800080'>len</span>ame = "mem/sample.f90", srcLine = 7, srcColu
-mn = 30}) (ESeq (A {indices = [], lives = ([],[]), arrsRead = fromList [], arrsW
-rite = fromList [], number = 0, refactored = Nothing, successorStmts = []}) (Src
-Loc {srcFi<span style='color:#800080'>len</span>ame = "mem/sample.f90", srcLine = 7, srcColumn = 10},SrcLoc {srcFil
-ename = "mem/sample.f90", srcLine = 7, srcColumn = 26}) (ESeq (A {indices = [], 
-lives = ([],[]), arrsRead = fromList [], arrsWrite = fromList [], number = 0, re
-factored = Nothing, successorStmts = []}) (SrcLoc {srcFi<span style='color:#800080'>len</span>ame = "mem/sample.f90
-", srcLine = 7, srcColumn = 10},SrcLoc {srcFi<span style='color:#800080'>len</span>ame = "mem/sample.f90", srcLine 
-= 7, srcColumn = 22}) (Var (A {indices = [], lives = ([],[]), arrsRead = fromLis
-t [], arrsWrite = fromList [], number = 0, refactored = Nothing, successorStmts 
-= []}) (SrcLoc {srcFi<span style='color:#800080'>len</span>ame = "mem/sample.f90", srcLine = 7, srcColumn = 10},Src
-Loc {srcFi<span style='color:#800080'>len</span>ame = "mem/sample.f90", srcLine = 7, srcColumn = 15}) [(VarName (A 
-{indices = [], lives = ([],[]), arrsRead = fromList [], arrsWrite = fromList [],
- number = 0, refactored = Nothing, successorStmts = []}) "c",[Var (A {indices = 
-[], lives = ([],[]), arrsRead = fromList [], arrsWrite = fromList [], number = 0
-, refactored = Nothing, successorStmts = []}) (SrcLoc {srcFi<span style='color:#800080'>len</span>ame = "mem/samp<span style='color:#800080'>len</span>ewline.f90", srcLine = 7, srcColumn = 12},SrcLoc {srcFi<span style='color:#800080'>len</span>ame = "mem/sample.f90", srcL
-ine = 7, srcColumn = 14}) [(VarName (A {indices = [], lives = ([],[]), arrsRead 
-= fromList [], arrsWrite = fromList [], number = 0, refactored = Nothing, succes
-sorStmts = []}) "ld",[])]])]) (Var (A {indices = [], lives = ([],[]), arrsRead =
- fromList [], arrsWrite = fromList [], number = 0, refactored = Nothing, success
-orStmts = []}) (SrcLoc {srcFi<span style='color:#800080'>len</span>ame = "mem/sample.f90", srcLine = 7, srcColumn =
- 17},SrcLoc {srcFi<span style='color:#800080'>len</span>ame = "mem/sample.f90", srcLine = 7, srcColumn = 22}) [(Var
-Name (A {indices = [], lives = ([],[]), arrsRead = fromList [], arrsWrite = from
-List [], number = 0, refactored = Nothing, successorStmts = []}) "c",[Var (A {in
-dices = [], lives = ([],[]), arrsRead = fromList [], arrsWrite = fromList [], nu
-mber = 0, refactored = Nothing, successorStmts = []}) (SrcLoc {srcFi<span style='color:#800080'>len</span>ame = "me
+srcLine = 6, srcColumn = 9},SrcLoc {srcFi<span style='color:#800080'>len</span>ame = "mem/sample.f90", srcLine = 6,
+ srcColumn = 14}) [(VarName (A {indices = [], lives = ([],[]), arrsRead = fromLi
+st [], arrsWrite = fromList [], number = 7, refactored = Nothing, successorStmts
+ = []}) "c",[Var (A {indices = [], lives = ([],[]), arrsRead = fromList [], arrs
+Write = fromList [], number = 8, refactored = Nothing, successorStmts = []}) (Sr
+cLoc {srcFi<span style='color:#800080'>len</span>ame = "mem/sample.f90", srcLine = 6, srcColumn = 11},SrcLoc {srcFi
+<span style='color:#800080'>len</span>ame = "mem/sample.f90", srcLine = 6, srcColumn = 13}) [(VarName (A {indices =
+ [], lives = ([],[]), arrsRead = fromList [], arrsWrite = fromList [], number = 
+9, refactored = Nothing, successorStmts = []}) "la",[])]])]) (Var (A {indices = 
+[], lives = ([],[]), arrsRead = fromList [], arrsWrite = fromList [], number = 1
+0, refactored = Nothing, successorStmts = []}) (SrcLoc {srcFi<span style='color:#800080'>len</span>ame = "mem/sampl
+e.f90", srcLine = 6, srcColumn = 16},SrcLoc {srcFi<span style='color:#800080'>len</span>ame = "mem/sample.f90", src
+Line = 6, srcColumn = 21}) [(VarName (A {indices = [], lives = ([],[]), arrsRead
+ = fromList [], arrsWrite = fromList [], number = 11, refactored = Nothing, succ
+essorStmts = []}) "c",[Var (A {indices = [], lives = ([],[]), arrsRead = fromLis
+t [], arrsWrite = fromList [], number = 12, refactored = Nothing, successorStmts
+ = []}) (SrcLoc {srcFi<span style='color:#800080'>len</span>ame = "mem/sample.f90", srcLine = 6, srcColumn = 18},Sr
+cLoc {srcFi<span style='color:#800080'>len</span>ame = "mem/sample.f90", srcLine = 6, srcColumn = 20}) [(VarName (A
+ {indices = [], lives = ([],[]), arrsRead = fromList [], arrsWrite = fromList []
+, number = 13, refactored = Nothing, successorStmts = []}) "lb",[])]])])))
+</div></div><p><table><tr><td>lives: (in) </td><td>foo, la, lb, foo2, ld, lf, foo3, lc, le</td><td>(out)</td><td>foo2, ld, lf, lb, la, foo3, lc, le</td></tr><tr><td>indices:</td><td></td></tr><tr><td>successors:</td><td>14</td></tr><tr><td>arrays R:</td><td>[c: (lb), (la)]</td></tr><tr><td>arrays W:</td><td></td></tr></table></p></div><br /></pre><pre></pre><pre><div class='clickable' onClick='toggle(1);'>   <span style='color:#800080'>call</span> foo(c(la),c(lb))</div></div></pre><pre><div style=''><div id='a14' style='display:none;' class'outer'><div class='spacer'><pre>   </pre></div><div class='annotation'><div class='number'>14</div><div><div class='clickable' onClick="toggle('14src');"><u>show ast</u></div><div id='a14src' style='background:#fff;display:none;width:600px;overflow:auto;'>FSeq (A {indices = [], lives = ([foo2,ld,lf,lb,la,foo3,lc,le],[foo2,ld,lf,lb,la,
+foo3,lc,le]), arrsRead = fromList [], arrsWrite = fromList [], number = 14, refa
+ctored = Nothing, successorStmts = [15]}) (SrcLoc {srcFi<span style='color:#800080'>len</span>ame = "mem/sample.f90
+", srcLine = 7, srcColumn = 0},SrcLoc {srcFi<span style='color:#800080'>len</span>ame = "mem/sample.f90", srcLine =
+ 8, srcColumn = 23}) (Call (A {indices = [], lives = ([foo2,ld,lf,lb,la,foo3,lc,
+le],[foo3,lc,le]), arrsRead = fromList [("c",[[Var () (SrcLoc {srcFi<span style='color:#800080'>len</span>ame = "me
 m/sample.f90", srcLine = 7, srcColumn = 19},SrcLoc {srcFi<span style='color:#800080'>len</span>ame = "mem/sample.f9
-0", srcLine = 7, srcColumn = 21}) [(VarName (A {indices = [], lives = ([],[]), a
-rrsRead = fromList [], arrsWrite = fromList [], number = 0, refactored = Nothing
-, successorStmts = []}) "lf",[])]])])) (Var (A {indices = [], lives = ([],[]), a
-rrsRead = fromList [], arrsWrite = fromList [], number = 0, refactored = Nothing
-, successorStmts = []}) (SrcLoc {srcFi<span style='color:#800080'>len</span>ame = "mem/sample.f90", srcLine = 7, sr
-cColumn = 24},SrcLoc {srcFi<span style='color:#800080'>len</span>ame = "mem/sample.f90", srcLine = 7, srcColumn = 2
-6}) [(VarName (A {indices = [], lives = ([],[]), arrsRead = fromList [], arrsWri
-te = fromList [], number = 0, refactored = Nothing, successorStmts = []}) "lb",[
-])])) (Var (A {indices = [], lives = ([],[]), arrsRead = fromList [], arrsWrite 
-= fromList [], number = 0, refactored = Nothing, successorStmts = []}) (SrcLoc {
-srcFi<span style='color:#800080'>len</span>ame = "mem/sample.f90", srcLine = 7, srcColumn = 28},SrcLoc {srcFi<span style='color:#800080'>len</span>ame
- = "mem/sample.f90", srcLine = 7, srcColumn = 30}) [(VarName (A {indices = [], l
-ives = ([],[]), arrsRead = fromList [], arrsWrite = fromList [], number = 0, ref
-actored = Nothing, successorStmts = []}) "la",[])])))) (Call (A {indices = [], l
-ives = ([],[]), arrsRead = fromList [], arrsWrite = fromList [], number = 0, ref
-actored = Nothing, successorStmts = []}) (SrcLoc {srcFi<span style='color:#800080'>len</span>ame = "mem/sample.f90"
-, srcLine = 8, srcColumn = 0},SrcLoc {srcFi<span style='color:#800080'>len</span>ame = "mem/sample.f90", srcLine = 
-8, srcColumn = 23}) (Var (A {indices = [], lives = ([],[]), arrsRead = fromList 
-[], arrsWrite = fromList [], number = 0, refactored = Nothing, successorStmts = 
-[]}) (SrcLoc {srcFi<span style='color:#800080'>len</span>ame = "mem/sample.f90", srcLine = 8, srcColumn = 5},SrcLoc
- {srcFi<span style='color:#800080'>len</span>ame = "mem/sample.f90", srcLine = 8, srcColumn = 9}) [(VarName (A {ind
-ices = [], lives = ([],[]), arrsRead = fromList [], arrsWrite = fromList [], num
-ber = 0, refactored = Nothing, successorStmts = []}) "foo3",[])]) (ArgList (A {inewlin<span style='color:#800080'>end</span>ices = [], lives = ([],[]), arrsRead = fromList [], arrsWrite = fromList [], n
-umber = 0, refactored = Nothing, successorStmts = []}) (ESeq (A {indices = [], l
-ives = ([],[]), arrsRead = fromList [], arrsWrite = fromList [], number = 0, ref
-actored = Nothing, successorStmts = []}) (SrcLoc {srcFi<span style='color:#800080'>len</span>ame = "mem/sample.f90"
-, srcLine = 8, srcColumn = 10},SrcLoc {srcFi<span style='color:#800080'>len</span>ame = "mem/sample.f90", srcLine =
- 8, srcColumn = 22}) (Var (A {indices = [], lives = ([],[]), arrsRead = fromList
- [], arrsWrite = fromList [], number = 0, refactored = Nothing, successorStmts =
- []}) (SrcLoc {srcFi<span style='color:#800080'>len</span>ame = "mem/sample.f90", srcLine = 8, srcColumn = 10},SrcL
-oc {srcFi<span style='color:#800080'>len</span>ame = "mem/sample.f90", srcLine = 8, srcColumn = 15}) [(VarName (A {
-indices = [], lives = ([],[]), arrsRead = fromList [], arrsWrite = fromList [], 
-number = 0, refactored = Nothing, successorStmts = []}) "c",[Var (A {indices = [
-], lives = ([],[]), arrsRead = fromList [], arrsWrite = fromList [], number = 0,
- refactored = Nothing, successorStmts = []}) (SrcLoc {srcFi<span style='color:#800080'>len</span>ame = "mem/sample.
-f90", srcLine = 8, srcColumn = 12},SrcLoc {srcFi<span style='color:#800080'>len</span>ame = "mem/sample.f90", srcLi
-ne = 8, srcColumn = 14}) [(VarName (A {indices = [], lives = ([],[]), arrsRead =
- fromList [], arrsWrite = fromList [], number = 0, refactored = Nothing, success
-orStmts = []}) "lc",[])]])]) (Var (A {indices = [], lives = ([],[]), arrsRead = 
-fromList [], arrsWrite = fromList [], number = 0, refactored = Nothing, successo
-rStmts = []}) (SrcLoc {srcFi<span style='color:#800080'>len</span>ame = "mem/sample.f90", srcLine = 8, srcColumn = 
-17},SrcLoc {srcFi<span style='color:#800080'>len</span>ame = "mem/sample.f90", srcLine = 8, srcColumn = 22}) [(VarN
-ame (A {indices = [], lives = ([],[]), arrsRead = fromList [], arrsWrite = fromL
-ist [], number = 0, refactored = Nothing, successorStmts = []}) "c",[Var (A {ind
-ices = [], lives = ([],[]), arrsRead = fromList [], arrsWrite = fromList [], num
-ber = 0, refactored = Nothing, successorStmts = []}) (SrcLoc {srcFi<span style='color:#800080'>len</span>ame = "mem
-/sample.f90", srcLine = 8, srcColumn = 19},SrcLoc {srcFi<span style='color:#800080'>len</span>ame = "mem/sample.f90
-", srcLine = 8, srcColumn = 21}) [(VarName (A {indices = [], lives = ([],[]), ar
-rsRead = fromList [], arrsWrite = fromList [], number = 0, refactored = Nothing,
- successorStmts = []}) "le",[])]])]))))
-</div></div><p><table><tr><td>lives: (in) </td><td></td><td>(out)</td><td></td></tr><tr><td>indices:</td><td></td></tr><tr><td>successors:</td><td></td></tr><tr><td>arrays R:</td><td></td></tr><tr><td>arrays W:</td><td></td></tr></table></p></div><br /></pre><pre></pre><pre><div class='clickable' onClick='toggle(0);'><div style=''><div id='a0' style='display:none;' class'outer'><div class='spacer'><pre>   </pre></div><div class='annotation'><div class='number'>0</div><div><div class='clickable' onClick="toggle('0src');"><u>show ast</u></div><div id='a0src' style='background:#fff;display:none;width:600px;overflow:auto;'>Call (A {indices = [], lives = ([],[]), arrsRead = fromList [], arrsWrite = from
-List [], number = 0, refactored = Nothing, successorStmts = []}) (SrcLoc {srcFil
-ename = "mem/sample.f90", srcLine = 7, srcColumn = 0},SrcLoc {srcFi<span style='color:#800080'>len</span>ame = "mem
-/sample.f90", srcLine = 7, srcColumn = 31}) (Var (A {indices = [], lives = ([],[
-]), arrsRead = fromList [], arrsWrite = fromList [], number = 0, refactored = No
-thing, successorStmts = []}) (SrcLoc {srcFi<span style='color:#800080'>len</span>ame = "mem/sample.f90", srcLine = 
-7, srcColumn = 5},SrcLoc {srcFi<span style='color:#800080'>len</span>ame = "mem/sample.f90", srcLine = 7, srcColumn
- = 9}) [(VarName (A {indices = [], lives = ([],[]), arrsRead = fromList [], arrs
-Write = fromList [], number = 0, refactored = Nothing, successorStmts = []}) "fo
-o2",[])]) (ArgList (A {indices = [], lives = ([],[]), arrsRead = fromList [], ar
-rsWrite = fromList [], number = 0, refactored = Nothing, successorStmts = []}) (
-ESeq (A {indices = [], lives = ([],[]), arrsRead = fromList [], arrsWrite = from
-List [], number = 0, refactored = Nothing, successorStmts = []}) (SrcLoc {srcFil
-ename = "mem/sample.f90", srcLine = 7, srcColumn = 10},SrcLoc {srcFi<span style='color:#800080'>len</span>ame = "me
-m/sample.f90", srcLine = 7, srcColumn = 30}) (ESeq (A {indices = [], lives = ([]
-,[]), arrsRead = fromList [], arrsWrite = fromList [], number = 0, refactored = 
-Nothing, successorStmts = []}) (SrcLoc {srcFi<span style='color:#800080'>len</span>ame = "mem/sample.f90", srcLine 
-= 7, srcColumn = 10},SrcLoc {srcFi<span style='color:#800080'>len</span>ame = "mem/sample.f90", srcLine = 7, srcCol
-umn = 26}) (ESeq (A {indices = [], lives = ([],[]), arrsRead = fromList [], arrs
-Write = fromList [], number = 0, refactored = Nothing, successorStmts = []}) (Sr
-cLoc {srcFi<span style='color:#800080'>len</span>ame = "mem/sample.f90", srcLine = 7, srcColumn = 10},SrcLoc {srcFi
-<span style='color:#800080'>len</span>ame = "mem/sample.f90", srcLine = 7, srcColumn = 22}) (Var (A {indices = [], 
-lives = ([],[]), arrsRead = fromList [], arrsWrite = fromList [], number = 0, re
-factored = Nothing, successorStmts = []}) (SrcLoc {srcFi<span style='color:#800080'>len</span>ame = "mem/sample.f90
-", srcLine = 7, srcColumn = 10},SrcLoc {srcFi<span style='color:#800080'>len</span>ame = "mem/sample.f90", srcLine 
-= 7, srcColumn = 15}) [(VarName (A {indices = [], lives = ([],[]), arrsRead = fr
-omList [], arrsWrite = fromList [], number = 0, refactored = Nothing, successorS
-tmts = []}) "c",[Var (A {indices = [], lives = ([],[]), arrsRead = fromList [], 
-arrsWrite = fromList [], number = 0, refactored = Nothing, successorStmts = []})
+0", srcLine = 7, srcColumn = 21}) [(VarName () "lf",[])]],[Var () (SrcLoc {srcFi
+<span style='color:#800080'>len</span>ame = "mem/sample.f90", srcLine = 7, srcColumn = 12},SrcLoc {srcFi<span style='color:#800080'>len</span>ame = "m
+em/sample.f90", srcLine = 7, srcColumn = 14}) [(VarName () "ld",[])]]])], arrsWr
+ite = fromList [], number = 15, refactored = Nothing, successorStmts = [34]}) (S
+rcLoc {srcFi<span style='color:#800080'>len</span>ame = "mem/sample.f90", srcLine = 7, srcColumn = 0},SrcLoc {srcFi
+<span style='color:#800080'>len</span>ame = "mem/sample.f90", srcLine = 7, srcColumn = 31}) (Var (A {indices = [], 
+lives = ([],[]), arrsRead = fromList [], arrsWrite = fromList [], number = 16, r
+efactored = Nothing, successorStmts = []}) (SrcLoc {srcFi<span style='color:#800080'>len</span>ame = "mem/sample.f9
+0", srcLine = 7, srcColumn = 5},SrcLoc {srcFi<span style='color:#800080'>len</span>ame = "mem/sample.f90", srcLine 
+= 7, srcColumn = 9}) [(VarName (A {indices = [], lives = ([],[]), arrsRead = fro
+mList [], arrsWrite = fromList [], number = 17, refactored = Nothing, successorS
+tmts = []}) "foo2",[])]) (ArgList (A {indices = [], lives = ([],[]), arrsRead = 
+fromList [], arrsWrite = fromList [], number = 18, refactored = Nothing, success
+orStmts = []}) (ESeq (A {indices = [], lives = ([],[]), arrsRead = fromList [], 
+arrsWrite = fromList [], number = 19, refactored = Nothing, successorStmts = []}
+) (SrcLoc {srcFi<span style='color:#800080'>len</span>ame = "mem/sample.f90", srcLine = 7, srcColumn = 10},SrcLoc {
+srcFi<span style='color:#800080'>len</span>ame = "mem/sample.f90", srcLine = 7, srcColumn = 30}) (ESeq (A {indices 
+= [], lives = ([],[]), arrsRead = fromList [], arrsWrite = fromList [], number =
+ 20, refactored = Nothing, successorStmts = []}) (SrcLoc {srcFi<span style='color:#800080'>len</span>ame = "mem/sam
+ple.f90", srcLine = 7, srcColumn = 10},SrcLoc {srcFi<span style='color:#800080'>len</span>ame = "mem/sample.f90", s
+rcLine = 7, srcColumn = 26}) (ESeq (A {indices = [], lives = ([],[]), arrsRead =
+ fromList [], arrsWrite = fromList [], number = 21, refactored = Nothing, succes
+sorStmts = []}) (SrcLoc {srcFi<span style='color:#800080'>len</span>ame = "mem/sample.f90", srcLine = 7, srcColumn 
+= 10},SrcLoc {srcFi<span style='color:#800080'>len</span>ame = "mem/sample.f90", srcLine = 7, srcColumn = 22}) (Var
+ (A {indices = [], lives = ([],[]), arrsRead = fromList [], arrsWrite = fromList
+ [], number = 22, refactored = Nothing, successorStmts = []}) (SrcLoc {srcFi<span style='color:#800080'>len</span>a
+me = "mem/sample.f90", srcLine = 7, srcColumn = 10},SrcLoc {srcFi<span style='color:#800080'>len</span>ame = "mem/s
+ample.f90", srcLine = 7, srcColumn = 15}) [(VarName (A {indices = [], lives = ([
+],[]), arrsRead = fromList [], arrsWrite = fromList [], number = 23, refactored 
+= Nothing, successorStmts = []}) "c",[Var (A {indices = [], lives = ([],[]), arr
+sRead = fromList [], arrsWrite = fromList [], number = 24, refactored = Nothing,
+ successorStmts = []}) (SrcLoc {srcFi<span style='color:#800080'>len</span>ame = "mem/sample.f90", srcLine = 7, src
+Column = 12},SrcLoc {srcFi<span style='color:#800080'>len</span>ame = "mem/sample.f90", srcLine = 7, srcColumn = 14
+}) [(VarName (A {indices = [], lives = ([],[]), arrsRead = fromList [], arrsWrit
+e = fromList [], number = 25, refactored = Nothing, successorStmts = []}) "ld",[
+])]])]) (Var (A {indices = [], lives = ([],[]), arrsRead = fromList [], arrsWrit
+e = fromList [], number = 26, refactored = Nothing, successorStmts = []}) (SrcLo
+c {srcFi<span style='color:#800080'>len</span>ame = "mem/sample.f90", srcLine = 7, srcColumn = 17},SrcLoc {srcFi<span style='color:#800080'>len</span>
+ame = "mem/sample.f90", srcLine = 7, srcColumn = 22}) [(VarName (A {indices = []
+, lives = ([],[]), arrsRead = fromList [], arrsWrite = fromList [], number = 27,
+ refactored = Nothing, successorStmts = []}) "c",[Var (A {indices = [], lives = 
+([],[]), arrsRead = fromList [], arrsWrite = fromList [], number = 28, refactore
+d = Nothing, successorStmts = []}) (SrcLoc {srcFi<span style='color:#800080'>len</span>ame = "mem/sample.f90", srcL
+ine = 7, srcColumn = 19},SrcLoc {srcFi<span style='color:#800080'>len</span>ame = "mem/sample.f90", srcLine = 7, sr
+cColumn = 21}) [(VarName (A {indices = [], lives = ([],[]), arrsRead = fromList 
+[], arrsWrite = fromList [], number = 29, refactored = Nothing, successorStmts =
+ []}) "lf",[])]])])) (Var (A {indices = [], lives = ([],[]), arrsRead = fromList
+ [], arrsWrite = fromList [], number = 30, refactored = Nothing, successorStmts 
+= []}) (SrcLoc {srcFi<span style='color:#800080'>len</span>ame = "mem/sample.f90", srcLine = 7, srcColumn = 24},Src
+Loc {srcFi<span style='color:#800080'>len</span>ame = "mem/sample.f90", srcLine = 7, srcColumn = 26}) [(VarName (A 
+{indices = [], lives = ([],[]), arrsRead = fromList [], arrsWrite = fromList [],
+ number = 31, refactored = Nothing, successorStmts = []}) "lb",[])])) (Var (A {inewlin<span style='color:#800080'>end</span>ices = [], lives = ([],[]), arrsRead = fromList [], arrsWrite = fromList [], n
+umber = 32, refactored = Nothing, successorStmts = []}) (SrcLoc {srcFi<span style='color:#800080'>len</span>ame = "
+mem/sample.f90", srcLine = 7, srcColumn = 28},SrcLoc {srcFi<span style='color:#800080'>len</span>ame = "mem/sample.
+f90", srcLine = 7, srcColumn = 30}) [(VarName (A {indices = [], lives = ([],[]),
+ arrsRead = fromList [], arrsWrite = fromList [], number = 33, refactored = Noth
+ing, successorStmts = []}) "la",[])])))) (Call (A {indices = [], lives = ([foo3,
+lc,le],[]), arrsRead = fromList [("c",[[Var () (SrcLoc {srcFi<span style='color:#800080'>len</span>ame = "mem/sampl
+e.f90", srcLine = 8, srcColumn = 19},SrcLoc {srcFi<span style='color:#800080'>len</span>ame = "mem/sample.f90", src
+Line = 8, srcColumn = 21}) [(VarName () "le",[])]],[Var () (SrcLoc {srcFi<span style='color:#800080'>len</span>ame 
+= "mem/sample.f90", srcLine = 8, srcColumn = 12},SrcLoc {srcFi<span style='color:#800080'>len</span>ame = "mem/samp
+le.f90", srcLine = 8, srcColumn = 14}) [(VarName () "lc",[])]]])], arrsWrite = f
+romList [], number = 34, refactored = Nothing, successorStmts = []}) (SrcLoc {sr
+cFi<span style='color:#800080'>len</span>ame = "mem/sample.f90", srcLine = 8, srcColumn = 0},SrcLoc {srcFi<span style='color:#800080'>len</span>ame = 
+"mem/sample.f90", srcLine = 8, srcColumn = 23}) (Var (A {indices = [], lives = (
+[],[]), arrsRead = fromList [], arrsWrite = fromList [], number = 35, refactored
+ = Nothing, successorStmts = []}) (SrcLoc {srcFi<span style='color:#800080'>len</span>ame = "mem/sample.f90", srcLi
+ne = 8, srcColumn = 5},SrcLoc {srcFi<span style='color:#800080'>len</span>ame = "mem/sample.f90", srcLine = 8, srcC
+olumn = 9}) [(VarName (A {indices = [], lives = ([],[]), arrsRead = fromList [],
+ arrsWrite = fromList [], number = 36, refactored = Nothing, successorStmts = []
+}) "foo3",[])]) (ArgList (A {indices = [], lives = ([],[]), arrsRead = fromList 
+[], arrsWrite = fromList [], number = 37, refactored = Nothing, successorStmts =
+ []}) (ESeq (A {indices = [], lives = ([],[]), arrsRead = fromList [], arrsWrite
+ = fromList [], number = 38, refactored = Nothing, successorStmts = []}) (SrcLoc
+ {srcFi<span style='color:#800080'>len</span>ame = "mem/sample.f90", srcLine = 8, srcColumn = 10},SrcLoc {srcFi<span style='color:#800080'>len</span>a
+me = "mem/sample.f90", srcLine = 8, srcColumn = 22}) (Var (A {indices = [], live
+s = ([],[]), arrsRead = fromList [], arrsWrite = fromList [], number = 39, refac
+tored = Nothing, successorStmts = []}) (SrcLoc {srcFi<span style='color:#800080'>len</span>ame = "mem/sample.f90", 
+srcLine = 8, srcColumn = 10},SrcLoc {srcFi<span style='color:#800080'>len</span>ame = "mem/sample.f90", srcLine = 8
+, srcColumn = 15}) [(VarName (A {indices = [], lives = ([],[]), arrsRead = fromL
+ist [], arrsWrite = fromList [], number = 40, refactored = Nothing, successorStm
+ts = []}) "c",[Var (A {indices = [], lives = ([],[]), arrsRead = fromList [], ar
+rsWrite = fromList [], number = 41, refactored = Nothing, successorStmts = []}) 
+(SrcLoc {srcFi<span style='color:#800080'>len</span>ame = "mem/sample.f90", srcLine = 8, srcColumn = 12},SrcLoc {sr
+cFi<span style='color:#800080'>len</span>ame = "mem/sample.f90", srcLine = 8, srcColumn = 14}) [(VarName (A {indice
+s = [], lives = ([],[]), arrsRead = fromList [], arrsWrite = fromList [], number
+ = 42, refactored = Nothing, successorStmts = []}) "lc",[])]])]) (Var (A {indice
+s = [], lives = ([],[]), arrsRead = fromList [], arrsWrite = fromList [], number
+ = 43, refactored = Nothing, successorStmts = []}) (SrcLoc {srcFi<span style='color:#800080'>len</span>ame = "mem/s
+ample.f90", srcLine = 8, srcColumn = 17},SrcLoc {srcFi<span style='color:#800080'>len</span>ame = "mem/sample.f90",
+ srcLine = 8, srcColumn = 22}) [(VarName (A {indices = [], lives = ([],[]), arrs
+Read = fromList [], arrsWrite = fromList [], number = 44, refactored = Nothing, 
+successorStmts = []}) "c",[Var (A {indices = [], lives = ([],[]), arrsRead = fro
+mList [], arrsWrite = fromList [], number = 45, refactored = Nothing, successorS
+tmts = []}) (SrcLoc {srcFi<span style='color:#800080'>len</span>ame = "mem/sample.f90", srcLine = 8, srcColumn = 19
+},SrcLoc {srcFi<span style='color:#800080'>len</span>ame = "mem/sample.f90", srcLine = 8, srcColumn = 21}) [(VarNam
+e (A {indices = [], lives = ([],[]), arrsRead = fromList [], arrsWrite = fromLis
+t [], number = 46, refactored = Nothing, successorStmts = []}) "le",[])]])]))))
+</div></div><p><table><tr><td>lives: (in) </td><td>foo2, ld, lf, lb, la, foo3, lc, le</td><td>(out)</td><td>foo2, ld, lf, lb, la, foo3, lc, le</td></tr><tr><td>indices:</td><td></td></tr><tr><td>successors:</td><td>15</td></tr><tr><td>arrays R:</td><td></td></tr><tr><td>arrays W:</td><td></td></tr></table></p></div><br /></pre><pre></pre><pre><div class='clickable' onClick='toggle(14);'><div style=''><div id='a15' style='display:none;' class'outer'><div class='spacer'><pre>   </pre></div><div class='annotation'><div class='number'>15</div><div><div class='clickable' onClick="toggle('15src');"><u>show ast</u></div><div id='a15src' style='background:#fff;display:none;width:600px;overflow:auto;'>Call (A {indices = [], lives = ([foo2,ld,lf,lb,la,foo3,lc,le],[foo3,lc,le]), arr
+sRead = fromList [("c",[[Var () (SrcLoc {srcFi<span style='color:#800080'>len</span>ame = "mem/sample.f90", srcLine
+ = 7, srcColumn = 19},SrcLoc {srcFi<span style='color:#800080'>len</span>ame = "mem/sample.f90", srcLine = 7, srcCo
+lumn = 21}) [(VarName () "lf",[])]],[Var () (SrcLoc {srcFi<span style='color:#800080'>len</span>ame = "mem/sample.f
+90", srcLine = 7, srcColumn = 12},SrcLoc {srcFi<span style='color:#800080'>len</span>ame = "mem/sample.f90", srcLin
+e = 7, srcColumn = 14}) [(VarName () "ld",[])]]])], arrsWrite = fromList [], num
+ber = 15, refactored = Nothing, successorStmts = [34]}) (SrcLoc {srcFi<span style='color:#800080'>len</span>ame = "
+mem/sample.f90", srcLine = 7, srcColumn = 0},SrcLoc {srcFi<span style='color:#800080'>len</span>ame = "mem/sample.f
+90", srcLine = 7, srcColumn = 31}) (Var (A {indices = [], lives = ([],[]), arrsR
+ead = fromList [], arrsWrite = fromList [], number = 16, refactored = Nothing, s
+uccessorStmts = []}) (SrcLoc {srcFi<span style='color:#800080'>len</span>ame = "mem/sample.f90", srcLine = 7, srcCo
+lumn = 5},SrcLoc {srcFi<span style='color:#800080'>len</span>ame = "mem/sample.f90", srcLine = 7, srcColumn = 9}) [
+(VarName (A {indices = [], lives = ([],[]), arrsRead = fromList [], arrsWrite = 
+fromList [], number = 17, refactored = Nothing, successorStmts = []}) "foo2",[])
+]) (ArgList (A {indices = [], lives = ([],[]), arrsRead = fromList [], arrsWrite
+ = fromList [], number = 18, refactored = Nothing, successorStmts = []}) (ESeq (
+A {indices = [], lives = ([],[]), arrsRead = fromList [], arrsWrite = fromList [
+], number = 19, refactored = Nothing, successorStmts = []}) (SrcLoc {srcFi<span style='color:#800080'>len</span>ame
+ = "mem/sample.f90", srcLine = 7, srcColumn = 10},SrcLoc {srcFi<span style='color:#800080'>len</span>ame = "mem/sam
+ple.f90", srcLine = 7, srcColumn = 30}) (ESeq (A {indices = [], lives = ([],[]),
+ arrsRead = fromList [], arrsWrite = fromList [], number = 20, refactored = Noth
+ing, successorStmts = []}) (SrcLoc {srcFi<span style='color:#800080'>len</span>ame = "mem/sample.f90", srcLine = 7,
+ srcColumn = 10},SrcLoc {srcFi<span style='color:#800080'>len</span>ame = "mem/sample.f90", srcLine = 7, srcColumn 
+= 26}) (ESeq (A {indices = [], lives = ([],[]), arrsRead = fromList [], arrsWrit
+e = fromList [], number = 21, refactored = Nothing, successorStmts = []}) (SrcLo
+c {srcFi<span style='color:#800080'>len</span>ame = "mem/sample.f90", srcLine = 7, srcColumn = 10},SrcLoc {srcFi<span style='color:#800080'>len</span>
+ame = "mem/sample.f90", srcLine = 7, srcColumn = 22}) (Var (A {indices = [], liv
+es = ([],[]), arrsRead = fromList [], arrsWrite = fromList [], number = 22, refa
+ctored = Nothing, successorStmts = []}) (SrcLoc {srcFi<span style='color:#800080'>len</span>ame = "mem/sample.f90",
+ srcLine = 7, srcColumn = 10},SrcLoc {srcFi<span style='color:#800080'>len</span>ame = "mem/sample.f90", srcLine = 
+7, srcColumn = 15}) [(VarName (A {indices = [], lives = ([],[]), arrsRead = from
+List [], arrsWrite = fromList [], number = 23, refactored = Nothing, successorSt
+mts = []}) "c",[Var (A {indices = [], lives = ([],[]), arrsRead = fromList [], a
+rrsWrite = fromList [], number = 24, refactored = Nothing, successorStmts = []})
  (SrcLoc {srcFi<span style='color:#800080'>len</span>ame = "mem/sample.f90", srcLine = 7, srcColumn = 12},SrcLoc {s
 rcFi<span style='color:#800080'>len</span>ame = "mem/sample.f90", srcLine = 7, srcColumn = 14}) [(VarName (A {indic
 es = [], lives = ([],[]), arrsRead = fromList [], arrsWrite = fromList [], numbe
-r = 0, refactored = Nothing, successorStmts = []}) "ld",[])]])]) (Var (A {indice
-s = [], lives = ([],[]), arrsRead = fromList [], arrsWrite = fromList [], number
- = 0, refactored = Nothing, successorStmts = []}) (SrcLoc {srcFi<span style='color:#800080'>len</span>ame = "mem/sa
-mple.f90", srcLine = 7, srcColumn = 17},SrcLoc {srcFi<span style='color:#800080'>len</span>ame = "mem/sample.f90", 
-srcLine = 7, srcColumn = 22}) [(VarName (A {indices = [], lives = ([],[]), arrsR
-ead = fromList [], arrsWrite = fromList [], number = 0, refactored = Nothing, su
-ccessorStmts = []}) "c",[Var (A {indices = [], lives = ([],[]), arrsRead = fromL
-ist [], arrsWrite = fromList [], number = 0, refactored = Nothing, successorStmt
-s = []}) (SrcLoc {srcFi<span style='color:#800080'>len</span>ame = "mem/sample.f90", srcLine = 7, srcColumn = 19},S
-rcLoc {srcFi<span style='color:#800080'>len</span>ame = "mem/sample.f90", srcLine = 7, srcColumn = 21}) [(VarName (
-A {indices = [], lives = ([],[]), arrsRead = fromList [], arrsWrite = fromList [
-], number = 0, refactored = Nothing, successorStmts = []}) "lf",[])]])])) (Var (
-A {indices = [], lives = ([],[]), arrsRead = fromList [], arrsWrite = fromList [
-], number = 0, refactored = Nothing, successorStmts = []}) (SrcLoc {srcFi<span style='color:#800080'>len</span>ame 
-= "mem/sample.f90", srcLine = 7, srcColumn = 24},SrcLoc {srcFi<span style='color:#800080'>len</span>ame = "mem/samp
-le.f90", srcLine = 7, srcColumn = 26}) [(VarName (A {indices = [], lives = ([],[
-]), arrsRead = fromList [], arrsWrite = fromList [], number = 0, refactored = No
-thing, successorStmts = []}) "lb",[])])) (Var (A {indices = [], lives = ([],[]),
- arrsRead = fromList [], arrsWrite = fromList [], number = 0, refactored = Nothi
-ng, successorStmts = []}) (SrcLoc {srcFi<span style='color:#800080'>len</span>ame = "mem/sample.f90", srcLine = 7, 
-srcColumn = 28},SrcLoc {srcFi<span style='color:#800080'>len</span>ame = "mem/sample.f90", srcLine = 7, srcColumn =
- 30}) [(VarName (A {indices = [], lives = ([],[]), arrsRead = fromList [], arrsW
-rite = fromList [], number = 0, refactored = Nothing, successorStmts = []}) "la"
-,[])])))
-</div></div><p><table><tr><td>lives: (in) </td><td></td><td>(out)</td><td></td></tr><tr><td>indices:</td><td></td></tr><tr><td>successors:</td><td></td></tr><tr><td>arrays R:</td><td></td></tr><tr><td>arrays W:</td><td></td></tr></table></p></div><br /></pre><pre></pre><pre><div class='clickable' onClick='toggle(0);'>   <span style='color:#800080'>call</span> foo2(c(ld),c(lf),lb,la)</div></div></pre><pre><div style=''><div id='a0' style='display:none;' class'outer'><div class='spacer'><pre>   </pre></div><div class='annotation'><div class='number'>0</div><div><div class='clickable' onClick="toggle('0src');"><u>show ast</u></div><div id='a0src' style='background:#fff;display:none;width:600px;overflow:auto;'>Call (A {indices = [], lives = ([],[]), arrsRead = fromList [], arrsWrite = from
-List [], number = 0, refactored = Nothing, successorStmts = []}) (SrcLoc {srcFil
-ename = "mem/sample.f90", srcLine = 8, srcColumn = 0},SrcLoc {srcFi<span style='color:#800080'>len</span>ame = "mem
-/sample.f90", srcLine = 8, srcColumn = 23}) (Var (A {indices = [], lives = ([],[
-]), arrsRead = fromList [], arrsWrite = fromList [], number = 0, refactored = No
-thing, successorStmts = []}) (SrcLoc {srcFi<span style='color:#800080'>len</span>ame = "mem/sample.f90", srcLine = 
-8, srcColumn = 5},SrcLoc {srcFi<span style='color:#800080'>len</span>ame = "mem/sample.f90", srcLine = 8, srcColumn
- = 9}) [(VarName (A {indices = [], lives = ([],[]), arrsRead = fromList [], arrs
-Write = fromList [], number = 0, refactored = Nothing, successorStmts = []}) "fo
-o3",[])]) (ArgList (A {indices = [], lives = ([],[]), arrsRead = fromList [], ar
-rsWrite = fromList [], number = 0, refactored = Nothing, successorStmts = []}) (
-ESeq (A {indices = [], lives = ([],[]), arrsRead = fromList [], arrsWrite = from
-List [], number = 0, refactored = Nothing, successorStmts = []}) (SrcLoc {srcFil
-ename = "mem/sample.f90", srcLine = 8, srcColumn = 10},SrcLoc {srcFi<span style='color:#800080'>len</span>ame = "me
-m/sample.f90", srcLine = 8, srcColumn = 22}) (Var (A {indices = [], lives = ([],
-[]), arrsRead = fromList [], arrsWrite = fromList [], number = 0, refactored = N
-othing, successorStmts = []}) (SrcLoc {srcFi<span style='color:#800080'>len</span>ame = "mem/sample.f90", srcLine =
- 8, srcColumn = 10},SrcLoc {srcFi<span style='color:#800080'>len</span>ame = "mem/sample.f90", srcLine = 8, srcColu
-mn = 15}) [(VarName (A {indices = [], lives = ([],[]), arrsRead = fromList [], a
-rrsWrite = fromList [], number = 0, refactored = Nothing, successorStmts = []}) 
-"c",[Var (A {indices = [], lives = ([],[]), arrsRead = fromList [], arrsWrite = 
-fromList [], number = 0, refactored = Nothing, successorStmts = []}) (SrcLoc {sr
-cFi<span style='color:#800080'>len</span>ame = "mem/sample.f90", srcLine = 8, srcColumn = 12},SrcLoc {srcFi<span style='color:#800080'>len</span>ame =
- "mem/sample.f90", srcLine = 8, srcColumn = 14}) [(VarName (A {indices = [], liv
-es = ([],[]), arrsRead = fromList [], arrsWrite = fromList [], number = 0, refac
-tored = Nothing, successorStmts = []}) "lc",[])]])]) (Var (A {indices = [], live
-s = ([],[]), arrsRead = fromList [], arrsWrite = fromList [], number = 0, refact
-ored = Nothing, successorStmts = []}) (SrcLoc {srcFi<span style='color:#800080'>len</span>ame = "mem/sample.f90", s
-rcLine = 8, srcColumn = 17},SrcLoc {srcFi<span style='color:#800080'>len</span>ame = "mem/sample.f90", srcLine = 8,
- srcColumn = 22}) [(VarName (A {indices = [], lives = ([],[]), arrsRead = fromLi
-st [], arrsWrite = fromList [], number = 0, refactored = Nothing, successorStmts
- = []}) "c",[Var (A {indices = [], lives = ([],[]), arrsRead = fromList [], arrs
-Write = fromList [], number = 0, refactored = Nothing, successorStmts = []}) (Sr
-cLoc {srcFi<span style='color:#800080'>len</span>ame = "mem/sample.f90", srcLine = 8, srcColumn = 19},SrcLoc {srcFi
-<span style='color:#800080'>len</span>ame = "mem/sample.f90", srcLine = 8, srcColumn = 21}) [(VarName (A {indices =
+r = 25, refactored = Nothing, successorStmts = []}) "ld",[])]])]) (Var (A {indic
+es = [], lives = ([],[]), arrsRead = fromList [], arrsWrite = fromList [], numbe
+r = 26, refactored = Nothing, successorStmts = []}) (SrcLoc {srcFi<span style='color:#800080'>len</span>ame = "mem/
+sample.f90", srcLine = 7, srcColumn = 17},SrcLoc {srcFi<span style='color:#800080'>len</span>ame = "mem/sample.f90"
+, srcLine = 7, srcColumn = 22}) [(VarName (A {indices = [], lives = ([],[]), arr
+sRead = fromList [], arrsWrite = fromList [], number = 27, refactored = Nothing,
+ successorStmts = []}) "c",[Var (A {indices = [], lives = ([],[]), arrsRead = fr
+omList [], arrsWrite = fromList [], number = 28, refactored = Nothing, successor
+Stmts = []}) (SrcLoc {srcFi<span style='color:#800080'>len</span>ame = "mem/sample.f90", srcLine = 7, srcColumn = 1
+9},SrcLoc {srcFi<span style='color:#800080'>len</span>ame = "mem/sample.f90", srcLine = 7, srcColumn = 21}) [(VarNa
+me (A {indices = [], lives = ([],[]), arrsRead = fromList [], arrsWrite = fromLi
+st [], number = 29, refactored = Nothing, successorStmts = []}) "lf",[])]])])) (
+Var (A {indices = [], lives = ([],[]), arrsRead = fromList [], arrsWrite = fromL
+ist [], number = 30, refactored = Nothing, successorStmts = []}) (SrcLoc {srcFil
+ename = "mem/sample.f90", srcLine = 7, srcColumn = 24},SrcLoc {srcFi<span style='color:#800080'>len</span>ame = "me
+m/sample.f90", srcLine = 7, srcColumn = 26}) [(VarName (A {indices = [], lives =
+ ([],[]), arrsRead = fromList [], arrsWrite = fromList [], number = 31, refactor
+ed = Nothing, successorStmts = []}) "lb",[])])) (Var (A {indices = [], lives = (
+[],[]), arrsRead = fromList [], arrsWrite = fromList [], number = 32, refactored
+ = Nothing, successorStmts = []}) (SrcLoc {srcFi<span style='color:#800080'>len</span>ame = "mem/sample.f90", srcLi
+ne = 7, srcColumn = 28},SrcLoc {srcFi<span style='color:#800080'>len</span>ame = "mem/sample.f90", srcLine = 7, src
+Column = 30}) [(VarName (A {indices = [], lives = ([],[]), arrsRead = fromList [
+], arrsWrite = fromList [], number = 33, refactored = Nothing, successorStmts = 
+[]}) "la",[])])))
+</div></div><p><table><tr><td>lives: (in) </td><td>foo2, ld, lf, lb, la, foo3, lc, le</td><td>(out)</td><td>foo3, lc, le</td></tr><tr><td>indices:</td><td></td></tr><tr><td>successors:</td><td>34</td></tr><tr><td>arrays R:</td><td>[c: (lf), (ld)]</td></tr><tr><td>arrays W:</td><td></td></tr></table></p></div><br /></pre><pre></pre><pre><div class='clickable' onClick='toggle(15);'>   <span style='color:#800080'>call</span> foo2(c(ld),c(lf),lb,la)</div></div></pre><pre><div style=''><div id='a34' style='display:none;' class'outer'><div class='spacer'><pre>   </pre></div><div class='annotation'><div class='number'>34</div><div><div class='clickable' onClick="toggle('34src');"><u>show ast</u></div><div id='a34src' style='background:#fff;display:none;width:600px;overflow:auto;'>Call (A {indices = [], lives = ([foo3,lc,le],[]), arrsRead = fromList [("c",[[Va
+r () (SrcLoc {srcFi<span style='color:#800080'>len</span>ame = "mem/sample.f90", srcLine = 8, srcColumn = 19},SrcLo
+c {srcFi<span style='color:#800080'>len</span>ame = "mem/sample.f90", srcLine = 8, srcColumn = 21}) [(VarName () "l
+e",[])]],[Var () (SrcLoc {srcFi<span style='color:#800080'>len</span>ame = "mem/sample.f90", srcLine = 8, srcColumn
+ = 12},SrcLoc {srcFi<span style='color:#800080'>len</span>ame = "mem/sample.f90", srcLine = 8, srcColumn = 14}) [(V
+arName () "lc",[])]]])], arrsWrite = fromList [], number = 34, refactored = Noth
+ing, successorStmts = []}) (SrcLoc {srcFi<span style='color:#800080'>len</span>ame = "mem/sample.f90", srcLine = 8,
+ srcColumn = 0},SrcLoc {srcFi<span style='color:#800080'>len</span>ame = "mem/sample.f90", srcLine = 8, srcColumn =
+ 23}) (Var (A {indices = [], lives = ([],[]), arrsRead = fromList [], arrsWrite 
+= fromList [], number = 35, refactored = Nothing, successorStmts = []}) (SrcLoc 
+{srcFi<span style='color:#800080'>len</span>ame = "mem/sample.f90", srcLine = 8, srcColumn = 5},SrcLoc {srcFi<span style='color:#800080'>len</span>ame
+ = "mem/sample.f90", srcLine = 8, srcColumn = 9}) [(VarName (A {indices = [], li
+ves = ([],[]), arrsRead = fromList [], arrsWrite = fromList [], number = 36, ref
+actored = Nothing, successorStmts = []}) "foo3",[])]) (ArgList (A {indices = [],
+ lives = ([],[]), arrsRead = fromList [], arrsWrite = fromList [], number = 37, 
+refactored = Nothing, successorStmts = []}) (ESeq (A {indices = [], lives = ([],
+[]), arrsRead = fromList [], arrsWrite = fromList [], number = 38, refactored = 
+Nothing, successorStmts = []}) (SrcLoc {srcFi<span style='color:#800080'>len</span>ame = "mem/sample.f90", srcLine 
+= 8, srcColumn = 10},SrcLoc {srcFi<span style='color:#800080'>len</span>ame = "mem/sample.f90", srcLine = 8, srcCol
+umn = 22}) (Var (A {indices = [], lives = ([],[]), arrsRead = fromList [], arrsW
+rite = fromList [], number = 39, refactored = Nothing, successorStmts = []}) (Sr
+cLoc {srcFi<span style='color:#800080'>len</span>ame = "mem/sample.f90", srcLine = 8, srcColumn = 10},SrcLoc {srcFi
+<span style='color:#800080'>len</span>ame = "mem/sample.f90", srcLine = 8, srcColumn = 15}) [(VarName (A {indices =
  [], lives = ([],[]), arrsRead = fromList [], arrsWrite = fromList [], number = 
-0, refactored = Nothing, successorStmts = []}) "le",[])]])])))
-</div></div><p><table><tr><td>lives: (in) </td><td></td><td>(out)</td><td></td></tr><tr><td>indices:</td><td></td></tr><tr><td>successors:</td><td></td></tr><tr><td>arrays R:</td><td></td></tr><tr><td>arrays W:</td><td></td></tr></table></p></div><br /></pre><pre></pre><pre><div class='clickable' onClick='toggle(0);'>   <span style='color:#800080'>call</span> foo3(c(lc),c(le))</div></div></div></div></pre><pre>contains</pre><pre><span style='color:#800080'>subroutine</span> <span style='color:#000080'>foo</span>(a,b)</pre><pre>   <span style='color:#008000'>integer</span> :: a,b</pre><pre>   a = a+b</pre><pre><span style='color:#800080'>end</span> <span style='color:#800080'>subroutine</span> <span style='color:#000080'>foo</span></pre><pre><span style='color:#800080'>subroutine</span> <span style='color:#000080'>foo2</span>(d,f)</pre><pre>   <span style='color:#008000'>integer</span> :: d,f</pre><pre></pre><pre><span style='color:#800080'>end</span> <span style='color:#800080'>subroutine</span> <span style='color:#000080'>foo2</span></pre><pre><span style='color:#800080'>subroutine</span> <span style='color:#000080'>foo3</span>(c,e)</pre><pre>   <span style='color:#008000'>integer</span> :: c,e</pre><pre></pre><pre><span style='color:#800080'>end</span> <span style='color:#800080'>subroutine</span> <span style='color:#000080'>foo3</span></pre><pre></pre><pre><span style='color:#800080'>end</span> <span style='color:#800080'>program</span> <span style='color:#000080'>Mem</span></pre>
+40, refactored = Nothing, successorStmts = []}) "c",[Var (A {indices = [], lives
+ = ([],[]), arrsRead = fromList [], arrsWrite = fromList [], number = 41, refact
+ored = Nothing, successorStmts = []}) (SrcLoc {srcFi<span style='color:#800080'>len</span>ame = "mem/sample.f90", s
+rcLine = 8, srcColumn = 12},SrcLoc {srcFi<span style='color:#800080'>len</span>ame = "mem/sample.f90", srcLine = 8,
+ srcColumn = 14}) [(VarName (A {indices = [], lives = ([],[]), arrsRead = fromLi
+st [], arrsWrite = fromList [], number = 42, refactored = Nothing, successorStmt
+s = []}) "lc",[])]])]) (Var (A {indices = [], lives = ([],[]), arrsRead = fromLi
+st [], arrsWrite = fromList [], number = 43, refactored = Nothing, successorStmt
+s = []}) (SrcLoc {srcFi<span style='color:#800080'>len</span>ame = "mem/sample.f90", srcLine = 8, srcColumn = 17},S
+rcLoc {srcFi<span style='color:#800080'>len</span>ame = "mem/sample.f90", srcLine = 8, srcColumn = 22}) [(VarName (
+A {indices = [], lives = ([],[]), arrsRead = fromList [], arrsWrite = fromList [
+], number = 44, refactored = Nothing, successorStmts = []}) "c",[Var (A {indices
+ = [], lives = ([],[]), arrsRead = fromList [], arrsWrite = fromList [], number 
+= 45, refactored = Nothing, successorStmts = []}) (SrcLoc {srcFi<span style='color:#800080'>len</span>ame = "mem/sa
+mple.f90", srcLine = 8, srcColumn = 19},SrcLoc {srcFi<span style='color:#800080'>len</span>ame = "mem/sample.f90", 
+srcLine = 8, srcColumn = 21}) [(VarName (A {indices = [], lives = ([],[]), arrsR
+ead = fromList [], arrsWrite = fromList [], number = 46, refactored = Nothing, s
+uccessorStmts = []}) "le",[])]])])))
+</div></div><p><table><tr><td>lives: (in) </td><td>foo3, lc, le</td><td>(out)</td><td></td></tr><tr><td>indices:</td><td></td></tr><tr><td>successors:</td><td></td></tr><tr><td>arrays R:</td><td>[c: (le), (lc)]</td></tr><tr><td>arrays W:</td><td></td></tr></table></p></div><br /></pre><pre></pre><pre><div class='clickable' onClick='toggle(34);'>   <span style='color:#800080'>call</span> foo3(c(lc),c(le))</div></div></div></div></pre><pre>contains</pre><pre><span style='color:#800080'>subroutine</span> <span style='color:#000080'>foo</span>(a,b)</pre><pre>   <span style='color:#008000'>integer</span> :: a,b</pre><pre>   a = a+b</pre><pre><span style='color:#800080'>end</span> <span style='color:#800080'>subroutine</span> <span style='color:#000080'>foo</span></pre><pre><span style='color:#800080'>subroutine</span> <span style='color:#000080'>foo2</span>(d,f,b,a)</pre><pre>   <span style='color:#008000'>integer</span> :: d,f,b,a</pre><pre></pre><pre><span style='color:#800080'>end</span> <span style='color:#800080'>subroutine</span> <span style='color:#000080'>foo2</span></pre><pre><span style='color:#800080'>subroutine</span> <span style='color:#000080'>foo3</span>(c,e)</pre><pre>   <span style='color:#008000'>integer</span> :: c,e</pre><pre></pre><pre><span style='color:#800080'>end</span> <span style='color:#800080'>subroutine</span> <span style='color:#000080'>foo3</span></pre><pre></pre><pre><span style='color:#800080'>end</span> <span style='color:#800080'>program</span> <span style='color:#000080'>Mem</span></pre>

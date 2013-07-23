@@ -24,6 +24,13 @@
 
 Counts number of duplicate edges and makes this the "weight"
 
+
+Compute variable coincidences for those variables that are used for indexing.
+
+
+
+Non-interprocedural version first 
+
 > calculateWeights :: Eq (AnnotationFree a) => [(a, a)] -> [((a, a), Int)]
 > calculateWeights xs = calcWs xs 1
 >                       where calcWs [] _  = []
@@ -34,10 +41,12 @@ Counts number of duplicate edges and makes this the "weight"
 
 > swap (a, b) = (b, a)
 
-Non-interprocedural version first 
 
-> tS p = "1" `trace` each (Blocks `from` p) $
+
+> tS p = each (Blocks `from` p) $
 >          \b ->  let es = Exprs `topFrom` b
 >                     lss = concatMap (mkSCgraph . (Locs `from`)) es
 >                     lss' = calculateWeights $ sort lss
->                 in lss' -- lss' --  concatMap (Locs `from`) es
+>                 in lss' 
+
+

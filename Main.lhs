@@ -112,7 +112,7 @@ General analysis/refactor builders
 >                        (pss, fileNames) <- readParseSrc d excludes
 >                        let asts' = map (\(f, _, ps) -> aFun ps) pss
 
->                        outputAnalysisFiles d asts' fileNames
+>                        (show (map (map (fmap (const ()))) (map (\(_, _, f) -> f) pss))) `trace` outputAnalysisFiles d asts' fileNames
 > doRefactor rFun d = do putStrLn $ "Exclude any files from " ++ d ++ "/? (comma-separate list)\n"
 >                        excludes <- getLine
 >               

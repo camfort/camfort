@@ -3,7 +3,7 @@ program Mem
 integer :: la, lb, lc, ld, le, lf
 integer c(0:5)
 
-call foo(c(la), c(lb), 0)
+call foo(c(la), c(lb))
 call foo2(c(ld), c(lf), lb, la)
 call foo3(c(lc), c(le))
 
@@ -14,8 +14,8 @@ subroutine foo(a, b)
   a = a + b
 end subroutine
 
-subroutine foo2(d, f)
-  integer :: d, f
+subroutine foo2(d, f, b, a)
+  integer :: d, f, b, a
 end subroutine
 
 subroutine foo3(c, e)
