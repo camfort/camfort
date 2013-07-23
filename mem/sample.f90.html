@@ -92,13 +92,13 @@ rrsRead = fromList [], arrsWrite = fromList [], number = 0, refactored = Nothing
 , successorStmts = []}) (SrcLoc {srcFi<span style='color:#800080'>len</span>ame = "mem/sample.f90", srcLine = 7, sr
 cColumn = 24},SrcLoc {srcFi<span style='color:#800080'>len</span>ame = "mem/sample.f90", srcLine = 7, srcColumn = 2
 6}) [(VarName (A {indices = [], lives = ([],[]), arrsRead = fromList [], arrsWri
-te = fromList [], number = 0, refactored = Nothing, successorStmts = []}) "la",[
+te = fromList [], number = 0, refactored = Nothing, successorStmts = []}) "lb",[
 ])])) (Var (A {indices = [], lives = ([],[]), arrsRead = fromList [], arrsWrite 
 = fromList [], number = 0, refactored = Nothing, successorStmts = []}) (SrcLoc {
 srcFi<span style='color:#800080'>len</span>ame = "mem/sample.f90", srcLine = 7, srcColumn = 28},SrcLoc {srcFi<span style='color:#800080'>len</span>ame
  = "mem/sample.f90", srcLine = 7, srcColumn = 30}) [(VarName (A {indices = [], l
 ives = ([],[]), arrsRead = fromList [], arrsWrite = fromList [], number = 0, ref
-actored = Nothing, successorStmts = []}) "lb",[])])))) (Call (A {indices = [], l
+actored = Nothing, successorStmts = []}) "la",[])])))) (Call (A {indices = [], l
 ives = ([],[]), arrsRead = fromList [], arrsWrite = fromList [], number = 0, ref
 actored = Nothing, successorStmts = []}) (SrcLoc {srcFi<span style='color:#800080'>len</span>ame = "mem/sample.f90"
 , srcLine = 8, srcColumn = 0},SrcLoc {srcFi<span style='color:#800080'>len</span>ame = "mem/sample.f90", srcLine = 
@@ -184,14 +184,14 @@ A {indices = [], lives = ([],[]), arrsRead = fromList [], arrsWrite = fromList [
 = "mem/sample.f90", srcLine = 7, srcColumn = 24},SrcLoc {srcFi<span style='color:#800080'>len</span>ame = "mem/samp
 le.f90", srcLine = 7, srcColumn = 26}) [(VarName (A {indices = [], lives = ([],[
 ]), arrsRead = fromList [], arrsWrite = fromList [], number = 0, refactored = No
-thing, successorStmts = []}) "la",[])])) (Var (A {indices = [], lives = ([],[]),
+thing, successorStmts = []}) "lb",[])])) (Var (A {indices = [], lives = ([],[]),
  arrsRead = fromList [], arrsWrite = fromList [], number = 0, refactored = Nothi
 ng, successorStmts = []}) (SrcLoc {srcFi<span style='color:#800080'>len</span>ame = "mem/sample.f90", srcLine = 7, 
 srcColumn = 28},SrcLoc {srcFi<span style='color:#800080'>len</span>ame = "mem/sample.f90", srcLine = 7, srcColumn =
  30}) [(VarName (A {indices = [], lives = ([],[]), arrsRead = fromList [], arrsW
-rite = fromList [], number = 0, refactored = Nothing, successorStmts = []}) "lb"
+rite = fromList [], number = 0, refactored = Nothing, successorStmts = []}) "la"
 ,[])])))
-</div></div><p><table><tr><td>lives: (in) </td><td></td><td>(out)</td><td></td></tr><tr><td>indices:</td><td></td></tr><tr><td>successors:</td><td></td></tr><tr><td>arrays R:</td><td></td></tr><tr><td>arrays W:</td><td></td></tr></table></p></div><br /></pre><pre></pre><pre><div class='clickable' onClick='toggle(0);'>   <span style='color:#800080'>call</span> foo2(c(ld),c(lf),la,lb)</div></div></pre><pre><div style=''><div id='a0' style='display:none;' class'outer'><div class='spacer'><pre>   </pre></div><div class='annotation'><div class='number'>0</div><div><div class='clickable' onClick="toggle('0src');"><u>show ast</u></div><div id='a0src' style='background:#fff;display:none;width:600px;overflow:auto;'>Call (A {indices = [], lives = ([],[]), arrsRead = fromList [], arrsWrite = from
+</div></div><p><table><tr><td>lives: (in) </td><td></td><td>(out)</td><td></td></tr><tr><td>indices:</td><td></td></tr><tr><td>successors:</td><td></td></tr><tr><td>arrays R:</td><td></td></tr><tr><td>arrays W:</td><td></td></tr></table></p></div><br /></pre><pre></pre><pre><div class='clickable' onClick='toggle(0);'>   <span style='color:#800080'>call</span> foo2(c(ld),c(lf),lb,la)</div></div></pre><pre><div style=''><div id='a0' style='display:none;' class'outer'><div class='spacer'><pre>   </pre></div><div class='annotation'><div class='number'>0</div><div><div class='clickable' onClick="toggle('0src');"><u>show ast</u></div><div id='a0src' style='background:#fff;display:none;width:600px;overflow:auto;'>Call (A {indices = [], lives = ([],[]), arrsRead = fromList [], arrsWrite = from
 List [], number = 0, refactored = Nothing, successorStmts = []}) (SrcLoc {srcFil
 ename = "mem/sample.f90", srcLine = 8, srcColumn = 0},SrcLoc {srcFi<span style='color:#800080'>len</span>ame = "mem
 /sample.f90", srcLine = 8, srcColumn = 23}) (Var (A {indices = [], lives = ([],[
@@ -228,4 +228,4 @@ cLoc {srcFi<span style='color:#800080'>len</span>ame = "mem/sample.f90", srcLine
 <span style='color:#800080'>len</span>ame = "mem/sample.f90", srcLine = 8, srcColumn = 21}) [(VarName (A {indices =
  [], lives = ([],[]), arrsRead = fromList [], arrsWrite = fromList [], number = 
 0, refactored = Nothing, successorStmts = []}) "le",[])]])])))
-</div></div><p><table><tr><td>lives: (in) </td><td></td><td>(out)</td><td></td></tr><tr><td>indices:</td><td></td></tr><tr><td>successors:</td><td></td></tr><tr><td>arrays R:</td><td></td></tr><tr><td>arrays W:</td><td></td></tr></table></p></div><br /></pre><pre></pre><pre><div class='clickable' onClick='toggle(0);'>   <span style='color:#800080'>call</span> foo3(c(lc),c(le))</div></div></div></div></pre><pre>contains</pre><pre><span style='color:#800080'>subroutine</span> <span style='color:#000080'>foo</span>(a,b)</pre><pre>   <span style='color:#008000'>integer</span> :: a,b</pre><pre></pre><pre><span style='color:#800080'>end</span> <span style='color:#800080'>subroutine</span> <span style='color:#000080'>foo</span></pre><pre><span style='color:#800080'>subroutine</span> <span style='color:#000080'>foo2</span>(d,f)</pre><pre>   <span style='color:#008000'>integer</span> :: d,f</pre><pre></pre><pre><span style='color:#800080'>end</span> <span style='color:#800080'>subroutine</span> <span style='color:#000080'>foo2</span></pre><pre><span style='color:#800080'>subroutine</span> <span style='color:#000080'>foo3</span>(c,e)</pre><pre>   <span style='color:#008000'>integer</span> :: c,e</pre><pre></pre><pre><span style='color:#800080'>end</span> <span style='color:#800080'>subroutine</span> <span style='color:#000080'>foo3</span></pre><pre></pre><pre><span style='color:#800080'>end</span> <span style='color:#800080'>program</span> <span style='color:#000080'>Mem</span></pre>
+</div></div><p><table><tr><td>lives: (in) </td><td></td><td>(out)</td><td></td></tr><tr><td>indices:</td><td></td></tr><tr><td>successors:</td><td></td></tr><tr><td>arrays R:</td><td></td></tr><tr><td>arrays W:</td><td></td></tr></table></p></div><br /></pre><pre></pre><pre><div class='clickable' onClick='toggle(0);'>   <span style='color:#800080'>call</span> foo3(c(lc),c(le))</div></div></div></div></pre><pre>contains</pre><pre><span style='color:#800080'>subroutine</span> <span style='color:#000080'>foo</span>(a,b)</pre><pre>   <span style='color:#008000'>integer</span> :: a,b</pre><pre>   a = a+b</pre><pre><span style='color:#800080'>end</span> <span style='color:#800080'>subroutine</span> <span style='color:#000080'>foo</span></pre><pre><span style='color:#800080'>subroutine</span> <span style='color:#000080'>foo2</span>(d,f)</pre><pre>   <span style='color:#008000'>integer</span> :: d,f</pre><pre></pre><pre><span style='color:#800080'>end</span> <span style='color:#800080'>subroutine</span> <span style='color:#000080'>foo2</span></pre><pre><span style='color:#800080'>subroutine</span> <span style='color:#000080'>foo3</span>(c,e)</pre><pre>   <span style='color:#008000'>integer</span> :: c,e</pre><pre></pre><pre><span style='color:#800080'>end</span> <span style='color:#800080'>subroutine</span> <span style='color:#000080'>foo3</span></pre><pre></pre><pre><span style='color:#800080'>end</span> <span style='color:#800080'>program</span> <span style='color:#000080'>Mem</span></pre>

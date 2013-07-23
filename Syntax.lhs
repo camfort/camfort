@@ -166,6 +166,10 @@ EDSL for describing syntax tree queries
 > from Locs x = accesses x
 > from _ x = (universeBi x)::[synTyp]
 
+> topFrom :: forall t synTyp . (Data t, Data synTyp) => Tag synTyp -> t -> [synTyp]
+> topFrom Locs x = accesses x
+> topFrom _ x = (childrenBi x)::[synTyp]
+
 
 
 

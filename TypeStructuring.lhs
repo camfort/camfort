@@ -24,17 +24,20 @@
 
 Counts number of duplicate edges and makes this the "weight"
 
-> calculateWeights :: Eq (AnnotationFree (a, a)) => [(a, a)] -> [((a, a), Int)]
-> calculateWeights xs = calcWs xs 0
+> calculateWeights :: Eq (AnnotationFree a) => [(a, a)] -> [((a, a), Int)]
+> calculateWeights xs = calcWs xs 1
 >                       where calcWs [] _  = []
 >                             calcWs [e] n = [(e, n)]
->                             calcWs (e:(e':es)) n | (af e == af e') = calcWs (e':es) (n + 1)
->                                                  | otherwise       = (e, n) : (calcWs (e':es) 0)
+>                             calcWs (e:(e':es)) n | ((af e == af e') || (af e == (af (swap e'))))
+>                                                                    = calcWs (e':es) (n + 1)
+>                                                  | otherwise       = (e, n) : (calcWs (e':es) 1)
+
+> swap (a, b) = (b, a)
 
 Non-interprocedural version first 
 
 > tS p = "1" `trace` each (Blocks `from` p) $
->          \b ->  let es = Exprs `from` b
+>          \b ->  let es = Exprs `topFrom` b
 >                     lss = concatMap (mkSCgraph . (Locs `from`)) es
 >                     lss' = calculateWeights $ sort lss
->                 in lss' --  concatMap (Locs `from`) es
+>                 in lss' -- lss' --  concatMap (Locs `from`) es
