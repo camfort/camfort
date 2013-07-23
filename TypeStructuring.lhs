@@ -2,17 +2,22 @@
 
 > module TypeStructuring where
 
+> import Data.Data
 > import Data.List 
+> import Data.Maybe
 
 > import Debug.Trace
 
  import Data.Graph
 
 > import Language.Fortran
+
 > import Annotations
+> import IntermediateReps
 > import Loops
 > import Syntax
 > import Traverse
+> import Types
 
 > typeStruct :: [Program Annotation] -> [Program Annotation]
 > typeStruct x = let x' = loopAnalyse x
@@ -41,12 +46,23 @@ Non-interprocedural version first
 
 > swap (a, b) = (b, a)
 
-
+> locsFromIndirectReads :: Data t => t -> [(String, Access)]
+> locsFromIndirectReads x = 
+>        concat . concat $ 
+>              each (Vars `from` x)
+>                     (\(Var _ _ ves) -> 
+>                         each ves (\(VarName _ v, ixs) -> 
+>                            if (not $ all isConstant ixs) 
+>                                   then map (\x -> (v, x)) (Locs `from` ixs)
+>                                   else []))
+>                              
 
 > tS p = each (Blocks `from` p) $
->          \b ->  let es = Exprs `topFrom` b
->                     lss = concatMap (mkSCgraph . (Locs `from`)) es
->                     lss' = calculateWeights $ sort lss
->                 in lss' 
+>          \b ->  let tenv = typeEnv b
+>                     es = Exprs `topFrom` b
+>                     lss = concatMap (mkSCgraph . locsFromIndirectReads) es
+>                     lss' = filter (\((a, _), (b, _)) -> a == b) lss 
+>                     lss'' = calculateWeights $ sort (map (\((_, x), (_, y)) -> (x, y)) lss')
+>                 in lss''
 
 

@@ -57,21 +57,21 @@ map (fmap ((,[""]),[""]))
 
 > arrayIndices :: Block Annotation -> Block Annotation
 > arrayIndices x = 
->     let typeEnv = snd $ runState (buildTypeEnv x) []
+>     let tenv = typeEnv x
 >         
 >         arrIxsF :: Fortran Annotation -> Annotation
 >         arrIxsF y = let readIxs = [(v, mfmap (const ()) e) | 
 >                                      (Var _ _ [(VarName _ v, e)]) <- rhsExpr y,
 >                                      length e > 0,
->                                      isArrayTypeP' typeEnv v]
+>                                      isArrayTypeP' tenv v]
 
 >                         writeIxs = [(v, mfmap (const ()) e) |
 >                                      (Var _ _ [(VarName _ v, e)]) <- lhsExpr y,
 >                                      length e > 0,
->                                      isArrayTypeP' typeEnv v]
+>                                      isArrayTypeP' tenv v]
 
 >                     in (copoint y) { arrsRead = (collect readIxs), arrsWrite = (collect writeIxs) } 
->     in (show typeEnv) `trace` extendBi arrIxsF x               
+>     in (show tenv) `trace` extendBi arrIxsF x               
 
 > ix :: Program Annotation -> Program Annotation
 > ix = let ixF :: Fortran Annotation -> Annotation

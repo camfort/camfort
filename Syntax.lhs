@@ -148,22 +148,17 @@ Number statements (for analysis output)
 
 > lower = map toLower
 
-
-All accessors (variables and array indexing)
-
-> accesses f = nub $  [VarA (lower v) | (AssgExpr _ _ v _) <- (universeBi f)::[Expr Annotation]]
->                      ++ concat [varExprToAccesses ve | ve@(Var _ _ _) <- (universeBi f)::[Expr Annotation]]
->                
-
 EDSL for describing syntax tree queries
 
 > data Tag t where
 >     Exprs :: Tag (Expr Annotation)
 >     Blocks :: Tag (Block Annotation)
 >     Locs :: Tag Access
+>     Vars :: Tag (Expr Annotation)
 
 > from :: forall t synTyp . (Data t, Data synTyp) => Tag synTyp -> t -> [synTyp]
 > from Locs x = accesses x
+> from Vars x = [v | v@(Var _ _ _) <- (universeBi x)::[Expr Annotation]]
 > from _ x = (universeBi x)::[synTyp]
 
 > topFrom :: forall t synTyp . (Data t, Data synTyp) => Tag synTyp -> t -> [synTyp]
@@ -171,8 +166,11 @@ EDSL for describing syntax tree queries
 > topFrom _ x = (childrenBi x)::[synTyp]
 
 
+All accessors (variables and array indexing)
 
-
+> accesses f = nub $  [VarA (lower v) | (AssgExpr _ _ v _) <- (universeBi f)::[Expr Annotation]]
+>                      ++ concat [varExprToAccesses ve | ve@(Var _ _ _) <- (universeBi f)::[Expr Annotation]]
+>                
 
 > varExprToAccesses :: Expr a -> [Access]
 > varExprToAccesses (Var _ _ ves) = [mkAccess v es | (VarName _ v, es) <- ves, all isConstant es] 
@@ -247,15 +245,11 @@ All variables from binders
 > -- rhsExpr (Label x sp s f)        = rhsExpr f
 > rhsExpr _                     = []
 
-
-
 > lhsExpr :: Fortran Annotation -> [Expr Annotation]
 > lhsExpr (Assg _ _ e1 e2)        = ((universeBi e1)::[Expr Annotation])
 > lhsExpr (For x sp v e1 e2 e3 fs) = [Var x sp [(v, [])]]
 > lhsExpr (PointerAssg _ _ e1 e2) = ((universeBi e1)::[Expr Annotation])
 > lhsExpr t                        = [] --  concatMap lhsExpr ((children t)::[Fortran Annotation])
-
-
 
 
 > affineMatch (Bin _ _ (Plus _) (Var _ _ [(VarName _ v, _)]) (Con _ _ n)) = Just (v, read n)
@@ -282,14 +276,11 @@ All variables from binders
 
 Orderings
 
-
-
 > instance Ord (AccessP ()) where
 >     (VarA s1) <= (VarA s2)           = s1 <= s2
 >     (ArrayA s1 e1) <= (ArrayA s2 e2) = if (s1 == s2) then e1 <= e2 else s1 <= s2 
 >     (VarA s1) <= (ArrayA s2 e1)      = True
 >     _ <= _                           = False
-
 
 Partial-ordering for expressions, ignores annotations
 

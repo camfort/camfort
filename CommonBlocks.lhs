@@ -121,7 +121,7 @@ Todo: CallExpr, changing assignments
 
 > collectTCommons' :: String -> String -> (Block A) -> State (Report, TLCommons A) (Block A)
 > collectTCommons' fname n b = 
->                      let tenv = snd $ runState (buildTypeEnv b) []
+>                      let tenv = typeEnv b
 >                     
 >                          commons' :: Decl A -> State (Report, TLCommons A) (Decl A)
 >                          commons' f@(Common a sp name exprs) = do let r' = fname ++ (show $ srcLineCol $ fst sp) ++ ": removed common declaration\n"

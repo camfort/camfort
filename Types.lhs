@@ -19,6 +19,8 @@
 > typeAnnotations :: (Typeable a, Data a) => [Program a] -> State (TypeEnv a) [Program a]
 > typeAnnotations = mapM (descendBiM buildTypeEnv)
 
+> typeEnv x = snd $ runState (buildTypeEnv x) []
+
 > buildTypeEnv :: (Typeable a, Data a) => Block a -> State (TypeEnv a) (Block a)
 > buildTypeEnv x = do tenv <- get
 >                     tenv' <- return $ gtypes x
