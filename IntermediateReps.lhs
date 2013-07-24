@@ -12,6 +12,8 @@
 
 > type Access = AccessP ()
 
+> accessToVarName (VarA v) = v
+> accessToVarName (ArrayA v _) = v
 
 > instance Show (AccessP ()) where
 >     show (VarA s) = s

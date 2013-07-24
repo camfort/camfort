@@ -23,20 +23,24 @@
 > typeStruct x = let x' = loopAnalyse x
 >                in (show $ map tS x) `trace` x
 
-> mkSCgraph :: [a] -> [(a, a)] 
-> mkSCgraph []     = []
-> mkSCgraph (x:xs) = ((repeat x) `zip` xs) ++ (mkSCgraph xs)
+> listToSymmRelation :: [a] -> [(a, a)] 
+> listToSymmRelation []     = []
+> listToSymmRelation (x:xs) = ((repeat x) `zip` xs) ++ (listToSymmRelation xs)
 
 Counts number of duplicate edges and makes this the "weight"
 
 
 Compute variable coincidences for those variables that are used for indexing.
 
+> type Graph a = [(a, a)]
+> type WeightedGraph a = [((a, a), Int)]
 
+> vertices :: WeightedGraph a -> [a]
+> vertices = concatMap (\((x, y), _) -> [x, y])
 
 Non-interprocedural version first 
 
-> calculateWeights :: Eq (AnnotationFree a) => [(a, a)] -> [((a, a), Int)]
+> calculateWeights :: Eq (AnnotationFree a) => Graph a -> WeightedGraph a
 > calculateWeights xs = calcWs xs 1
 >                       where calcWs [] _  = []
 >                             calcWs [e] n = [(e, n)]
@@ -56,13 +60,26 @@ Non-interprocedural version first
 >                                   then map (\x -> (v, x)) (Locs `from` ixs)
 >                                   else []))
 >                              
+> matchingTargets r ((a, x), (b, y)) | a == b = (x, y) : r
+>                                    | otherwise = r
+
 
 > tS p = each (Blocks `from` p) $
 >          \b ->  let tenv = typeEnv b
 >                     es = Exprs `topFrom` b
->                     lss = concatMap (mkSCgraph . locsFromIndirectReads) es
->                     lss' = filter (\((a, _), (b, _)) -> a == b) lss 
->                     lss'' = calculateWeights $ sort (map (\((_, x), (_, y)) -> (x, y)) lss')
->                 in lss''
+>                     ls = map locsFromIndirectReads es 
+>                     lss = (foldl matchingTargets []) . (concatMap listToSymmRelation) $ ls
+>                     lss' = calculateWeights $ sort lss
+>                 in (lss', inventName lss')
 
+> inventName :: WeightedGraph Access -> String
+> inventName graph = let vs = vertices graph
+>                     in map mode (transpose (map accessToVarName vs))
+                        
+> mode :: (Ord a) => [a] -> a
+> mode x = fst . last . (sortBy (\x -> \y -> (snd x) `compare` (snd y))) . (map (\x -> (head x, length x))) . group . sort $ x 
 
+ sccToDType :: WeightedGraph Access -> TypeEnv Annotation ->  Decl Annotation
+ sccToDType graph tenv = let vs = vertices graph
+                             
+>               
