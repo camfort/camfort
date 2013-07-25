@@ -300,7 +300,7 @@ TODO: Needs fixing with the spans - need to pull apart and put back together
 >     copoint (Interface x _ _)     = x
 >     copoint (Common x _ _ _)        = x
 >     copoint (Equivalence x sp _)    = x
->     copoint (DerivedTypeDef x _ _ _ _) = x
+>     copoint (DerivedTypeDef x sp _ _ _ _) = x
 >     copoint (Include x _)         = x
 >     copoint (DSeq x _ _)          = x
 >     copoint (TextDecl x _)        = x

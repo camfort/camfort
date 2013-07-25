@@ -85,7 +85,7 @@
 >           else
 >              putStrLn $ usage ++ menu
 
-> typeStructuring d = doAnalysis typeStruct d
+> typeStructuring d = doRefactor typeStruct d
 
 > loops d =  do putStrLn $ "Analysing loops for source in directory " ++ show d ++ "\n"
 >               doAnalysis loopAnalyse d

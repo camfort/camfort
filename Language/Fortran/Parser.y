@@ -565,9 +565,10 @@ sub_name
 
 derived_type_def :: { Decl A0 }
 derived_type_def
-  : derived_type_stmt private_sequence_stmt component_def_stmt_list end_type_stmt
-  {% do { name <- cmpNames (fst $1) $4 "derived type name";
-         return (DerivedTypeDef () name (snd $1) $2 $3);  } }
+  : srcloc derived_type_stmt private_sequence_stmt component_def_stmt_list end_type_stmt
+  {% do { sp <- srcSpan $1;
+	  name <- cmpNames (fst $2) $5 "derived type name";
+          return (DerivedTypeDef () sp name (snd $2) $3 $4);  } }
 
 derived_type_stmt :: { (SubName A0, [Attr A0]) }
 derived_type_stmt

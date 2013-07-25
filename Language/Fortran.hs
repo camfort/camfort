@@ -99,7 +99,7 @@ data Decl     p = Decl           p [(Expr p, Expr p)] (Type p)              -- d
                 | ExternalStmt   p [String]                                 -- external stmt
                 | Interface      p (Maybe (GSpec p)) [InterfaceSpec p]      -- interface declaration
                 | Common         p SrcSpan (Maybe String) [Expr p]
-                | DerivedTypeDef p (SubName p) [Attr p] [Attr p] [Decl p]  -- derivified
+                | DerivedTypeDef p SrcSpan (SubName p) [Attr p] [Attr p] [Decl p]  -- derivified
                 | Include        p (Expr p)                                -- include stmt
                 | DSeq           p (Decl p) (Decl p)                       -- list of decls
                 | TextDecl       p String                                  -- cpp switches to carry over
@@ -257,10 +257,11 @@ instance GetSpan (Block a) where
     getSpan (Block _ _ _ sp _ _) = sp
 
 instance GetSpan (Decl a) where
-    getSpan (NullDecl _ sp) = sp
-    getSpan (Common _ sp _ _) = sp
-    getSpan (Equivalence x sp _)     = sp
-    getSpan _ = error "No span for non common or null declarations"
+    getSpan (NullDecl _ sp)               = sp
+    getSpan (Common _ sp _ _)             = sp
+    getSpan (Equivalence x sp _)          = sp
+    getSpan (DerivedTypeDef x sp _ _ _ _) = sp
+    getSpan _ = error "No span for non common/equiv/type/ null declarations"
 
 instance GetSpan (Program a) where
     getSpan (Main x sp _ _ _ _)      = sp
