@@ -276,7 +276,7 @@ Output routines specialised to the analysis.
 >                                                                let (lb, ub) = getSpan d
 >                                                                    (p0, _) = takeBounds (cursor, lb) inp
 >                                                                 in (p0 ++ outputF d, ub, True)
->                                                             else ("d refactor\n") `trace` ("", cursor, False)
+>                                                             else ("", cursor, False)
 >                                                         Nothing -> 
 >                                                          case (getHole z)::(Maybe (ArgName Annotation)) of
 >                                                           Just a -> 

@@ -12,6 +12,7 @@
 
 > type Access = AccessP ()
 
+> accessToVarName :: AccessP a -> Variable
 > accessToVarName (VarA v) = v
 > accessToVarName (ArrayA v _) = v
 

@@ -1,7 +1,14 @@
 program Mem
 
 integer :: la, lb, lc, ld, le, lf
-integer c(0:5)
+real c(0:5)
+
+c(la) = c(lb)
+c(lb) = 1
+c(ld) = 2
+c(lf) = 3
+c(lc) = 4
+c(le) = 5
 
 call foo(c(la), c(lb))
 call foo2(c(ld), c(lf), lb, la)

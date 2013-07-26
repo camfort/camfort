@@ -10,6 +10,8 @@
 
 > import Data.Generics.Uniplate.Operations
 
+> import Control.Monad.State.Lazy
+
 > import Debug.Trace
 
 > import Language.Fortran
@@ -33,27 +35,27 @@ Counts number of duplicate edges and makes this the "weight"
 
 Compute variable coincidences for those variables that are used for indexing.
 
-> type Graph a = [(a, a)]
+> type Graph v a = [((v, v), a)]
 
-> type WeightedEdge a = ((a, a), Int)
-> type WeightedGraph a = [WeightedEdge a]
+> type WeightedEdge v a = ((v, v), (a, Int))
+> type WeightedGraph v a = [WeightedEdge v a]
 
-> vertices :: WeightedGraph a -> [a]
+> vertices :: WeightedGraph v a -> [v]
 > vertices = concatMap (\((x, y), _) -> [x, y])
 
 Non-interprocedural version first 
 
-> calculateWeights :: Eq (AnnotationFree a) => Graph a -> WeightedGraph a
-> calculateWeights xs = calcWs xs 1
+> calculateWeights :: (Eq (AnnotationFree a), Eq (AnnotationFree v), Ord a) => Graph v a -> WeightedGraph v a
+> calculateWeights xs = calcWs (sort xs) 1
 >                       where calcWs [] _  = []
->                             calcWs [e] n = [(e, n)]
->                             calcWs (e:(e':es)) n | ((af e == af e') || (af e == (af (swap e'))))
+>                             calcWs [((v1, v2), a)] n = [((v1, v2), (a, n))]
+>                             calcWs (e@((v1, v2), a):(e':es)) n | ((af e == af e') || (af e == (af (swap e'))))
 >                                                                    = calcWs (e':es) (n + 1)
->                                                  | otherwise       = (e, n) : (calcWs (e':es) 1)
+>                                                  | otherwise       = ((v1, v2), (a, n)) : (calcWs (e':es) 1)
 
-> swap (a, b) = (b, a)
+> swap ((a, b), v) = ((b, a), v)
 
-> locsFromIndirectReads :: Data t => t -> [(String, Access)]
+> locsFromIndirectReads :: Data t => t -> [(Variable, Access)]
 > locsFromIndirectReads x = 
 >        concat . concat $ 
 >              each (Vars `from` x)
@@ -63,32 +65,53 @@ Non-interprocedural version first
 >                                   then map (\x -> (v, x)) (Locs `from` ixs)
 >                                   else []))
 >                              
-> matchingTargets r ((a, x), (b, y)) | a == b = (x, y) : r
+> matchingTargets r ((a, x), (b, y)) | a == b = ((x, y), a) : r
 >                                    | otherwise = r
 
 
 > tS :: Program Annotation -> (Report, Program Annotation)
 > tS p = descendBiM
 >          (\b@(Block a uses implicits span decs f) ->
->                 let tenv = typeEnv b
+>                 let 
+>                     tenv = typeEnv b
+>                            
+>                     -- Compute graph of semantically related variables used in indirect reads
 >                     es = Exprs `topFrom` b
 >                     ls = map locsFromIndirectReads es 
 >                     lss = (foldl matchingTargets []) . (concatMap listToSymmRelation) $ ls
->                     lss' = calculateWeights $ sort lss
+>                     lss' = calculateWeights lss
 >                     wgf = weightedGraphToForests lss'
->                     tDefs = map ((mkTypeDef (fst span, fst span)). inventName) wgf
->                     rAnnotation = if (length tDefs > 0) then unitAnnotation { refactored = Just (fst span) } else unitAnnotation
+
+>                     tDefs = evalState (mapM (mkTypeDef tenv (fst span, fst span)) wgf) 0
+
+>                     rAnnotation = if (length tDefs > 0)
+>                                   then unitAnnotation { refactored = Just (fst span) }
+>                                   else unitAnnotation
 >                     decs' = foldl (DSeq unitAnnotation) decs tDefs
 >                     a' = if (length tDefs > 0) then a { refactored = Just (fst span) } else a
 >                 in  -- Create outgoing block
->                     ((show $ length tDefs) ++ "\n", Block a' uses implicits span decs' f)) p
+>                     (show lss', Block a' uses implicits span decs' f)) p
 
-> mkTypeDef sp name = let ra = unitAnnotation { refactored = Just (fst sp) } 
->                     in DerivedTypeDef ra sp (SubName ra name) [] [] []
+> mkTyDecl :: SrcSpan -> Variable -> Type Annotation -> Decl Annotation
+> mkTyDecl sp v t = let ua = unitAnnotation
+>                   in Decl ua [(Var ua sp [(VarName ua v, [])], NullExpr ua sp)] t
 
-> inventName :: WeightedGraph Access -> String
-> inventName graph = let vs = vertices graph
->                     in map mode (transpose (map accessToVarName vs))
+> mkTypeDef :: TypeEnv Annotation -> SrcSpan -> WeightedGraph Access Variable -> State Int (Decl Annotation)
+> mkTypeDef tenv sp wg = (inventName wg) >>= (\name -> 
+>                           let ra = unitAnnotation { refactored = Just (fst sp) } 
+
+>                               decls = concatMap (\((vx, vy), (va, w)) -> case (lookup va tenv) of
+>                                                                            Just t -> [mkTyDecl sp (accessToVarName vx) (arrayElementType t),
+>                                                                                       mkTyDecl sp (accessToVarName vy) (arrayElementType t)]
+>                                                                            Nothing -> error $ "Can't find the type of " ++ show va ++ "\n") wg
+>                                       
+>                           in return $ DerivedTypeDef ra sp (SubName ra name) [] [] decls)
+
+> inventName :: WeightedGraph Access Variable -> State Int String
+> inventName graph = do n <- get
+>                       put (n + 1)
+>                       let vs = vertices graph
+>                       return $ map mode (transpose (map accessToVarName vs)) ++ (show n)
                         
 > mode :: String -> Char
 > mode x = let freqs = (map (\x -> (head x, length x))) . group . sort $ x
@@ -97,12 +120,12 @@ Non-interprocedural version first
 >          in -- mode or 'X' if mode is less than the majority
 >             if (snd max) > ((length x) `div` 2) then fst max else 'X'
 
-> weightedGraphToForests :: forall a . (Show a, Ord a) => WeightedGraph a -> [WeightedGraph a]
+> weightedGraphToForests :: forall v a . (Show v, Ord v) => WeightedGraph v a -> [WeightedGraph v a]
 > weightedGraphToForests g = map snd (foldl binEdge [] g)
 
 "bins" edges into a list of graphs with a set of their vertices
 
-> binEdge :: (Show a, Ord a) => [(Set a, WeightedGraph a)] -> WeightedEdge a -> [(Set a, WeightedGraph a)]
+> binEdge :: (Show v, Ord v) => [(Set v, WeightedGraph v a)] -> WeightedEdge v a -> [(Set v, WeightedGraph v a)]
 > binEdge bins e@((x, y), _) = 
 >     let findBin v [] = ((insert x empty, []), [])
 >         findBin v ((vs, es):bs) | member v vs = ((insert v vs, es), bs)

@@ -53,7 +53,10 @@
 >                   | boundsP es = ArrayT x (bounds es) b a e1 e2
 >                   | otherwise = BaseType x b a e1 e2
 > toArrayType t es = t
->  
+
+> arrayElementType :: Type p -> Type p
+> arrayElementType (ArrayT a dims t attrs kind len) = BaseType a t attrs kind len
+> arrayElementType t = t
 
 > boundsP [] = False
 > boundsP ((Bound _ _ _ _):es) = True || (boundsP es)

@@ -68,6 +68,9 @@ their annotaitons (and source span information)
 > instance Eq (AnnotationFree Int) where
 >     x == y = (unaf x) == (unaf y)
 
+> instance Eq (AnnotationFree String) where
+>     x == y = (unaf x) == (unaf y)
+
 > instance Eq (AnnotationFree (AccessP ())) where
 >     x == y = (unaf x) == (unaf y)
 
