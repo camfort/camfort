@@ -97,8 +97,13 @@ Non-interprocedural version first
 >                 in  -- Create outgoing block
 >                     (show lss' ++ "\n\n" ++ show wgf, Block a' uses implicits span decs' f)) p
 
-> replaceAccess :: [WeightedGraph Variable Access] -> Block Annotation -> Block Annotation
-> replaceAccess = undefined
+> findMatch v ix ((wg, n):wgns) = vertices 
+>                       
+
+> replaceAccess :: [(WeightedGraph Variable Access, Name)] -> Block Annotation -> Block Annotation
+> replaceAccess = transformBi (\(VarName _ v, ixs) -> 
+>                                  
+>                                  
 
 > mkTyDecl :: SrcSpan -> Variable -> Type Annotation -> Decl Annotation
 > mkTyDecl sp v t = let ua = unitAnnotation
