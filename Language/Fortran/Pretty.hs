@@ -159,7 +159,7 @@ instance (Indentor (Decl p),
           OutputG (VarName p) v,
           OutputG (Type p) v,
            Alts v) => OutputF (Decl p) v where
-  outputF x@(Decl _ vs t)  = (indR x 1)++outputG t++" :: "++asSeq id (map showDV vs)++"\n"
+  outputF x@(Decl _ _ vs t)  = (indR x 1)++outputG t++" :: "++asSeq id (map showDV vs)++"\n"
   outputF (Namelist _ ns) = ind 1++"namelist "++show_namelist ns++"\n"
   outputF (Data _ ds) = ind 1++"data "++(concat (intersperse "\n" (map show_data ds)))  ++"\n"
   outputF t@(Equivalence  _ _ vs) = (indR t 1)++"equivlance ("++(concat (intersperse "," (map outputF vs))) ++ ")\n"

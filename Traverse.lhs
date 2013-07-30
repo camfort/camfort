@@ -292,7 +292,7 @@ TODO: Needs fixing with the spans - need to pull apart and put back together
 >     copoint (NullProg x sp)          = x
 > 
 > instance Copointed Decl where
->     copoint (Decl x _ _)          = x
+>     copoint (Decl x _ _ _)          = x
 >     copoint (Namelist x _)        = x
 >     copoint (Data x _)            = x
 >     copoint (AccessStmt x _ _)    = x

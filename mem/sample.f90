@@ -2,6 +2,7 @@ program Mem
 
 integer :: la, lb, lc, ld, le, lf
 real c(0:5)
+real e(0:5)
 
 c(la) = c(lb)
 c(lb) = 1
@@ -11,7 +12,7 @@ c(lc) = 4
 c(le) = 5
 
 call foo(c(la), c(lb))
-call foo2(c(ld), c(lf), lb, la)
+call foo2(c(ld), c(lf), e(la), e(lb), lb, la)
 call foo3(c(lc), c(le))
 
 contains

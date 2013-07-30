@@ -91,7 +91,7 @@ data Implicit p = ImplicitNone p | ImplicitNull p
 data Block    p = Block p  [String]  (Implicit p) SrcSpan (Decl p) (Fortran p)
                 deriving (Show, Functor, Typeable, Data, Eq)
 
-data Decl     p = Decl           p [(Expr p, Expr p)] (Type p)              -- declaration stmt
+data Decl     p = Decl           p SrcSpan [(Expr p, Expr p)] (Type p)              -- declaration stmt
                 | Namelist       p [(Expr p, [Expr p])]                     -- namelist declaration
                 | Data           p [(Expr p, Expr p)]                       -- data declaration
                 | Equivalence    p SrcSpan [(Expr p)]
@@ -257,6 +257,7 @@ instance GetSpan (Block a) where
     getSpan (Block _ _ _ sp _ _) = sp
 
 instance GetSpan (Decl a) where
+    getSpan (Decl _ sp _ _)               = sp
     getSpan (NullDecl _ sp)               = sp
     getSpan (Common _ sp _ _)             = sp
     getSpan (Equivalence x sp _)          = sp

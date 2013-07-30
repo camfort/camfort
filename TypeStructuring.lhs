@@ -45,7 +45,7 @@ Compute variable coincidences for those variables that are used for indexing.
 
 Non-interprocedural version first 
 
-> calculateWeights :: (Eq (AnnotationFree a), Eq (AnnotationFree v), Ord a) => Graph v a -> WeightedGraph v a
+> calculateWeights :: (Eq (AnnotationFree a), Eq (AnnotationFree v), Ord a, Ord v) => Graph v a -> WeightedGraph v a
 > calculateWeights xs = calcWs (sort xs) 1
 >                       where calcWs [] _  = []
 >                             calcWs [((v1, v2), a)] n = [((v1, v2), (a, n))]
@@ -82,30 +82,46 @@ Non-interprocedural version first
 >                     lss' = calculateWeights lss
 >                     wgf = weightedGraphToForests lss'
 
->                     tDefs = evalState (mapM (mkTypeDef tenv (fst span, fst span)) wgf) 0
+>                     -- Generate definitions
+>                     tDefsAndNames = evalState (mapM (mkTypeDef tenv (fst span, fst span)) wgf) 0
 
->                     rAnnotation = if (length tDefs > 0)
+>                     nwgf = zip wgf (map snd tDefsAndNames)
+>                     
+
+>                     rAnnotation = if (length tDefsAndNames > 0)
 >                                   then unitAnnotation { refactored = Just (fst span) }
 >                                   else unitAnnotation
->                     decs' = foldl (DSeq unitAnnotation) decs tDefs
->                     a' = if (length tDefs > 0) then a { refactored = Just (fst span) } else a
+
+>                     decs' = foldl (DSeq unitAnnotation) decs (map fst tDefsAndNames)
+>                     a' = if (length tDefsAndNames > 0) then a { refactored = Just (fst span) } else a
 >                 in  -- Create outgoing block
->                     (show lss', Block a' uses implicits span decs' f)) p
+>                     (show lss' ++ "\n\n" ++ show wgf, Block a' uses implicits span decs' f)) p
+
+> replaceAccess :: [WeightedGraph Variable Access] -> Block Annotation -> Block Annotation
+> replaceAccess = undefined
 
 > mkTyDecl :: SrcSpan -> Variable -> Type Annotation -> Decl Annotation
 > mkTyDecl sp v t = let ua = unitAnnotation
->                   in Decl ua [(Var ua sp [(VarName ua v, [])], NullExpr ua sp)] t
+>                   in Decl ua sp [(Var ua sp [(VarName ua v, [])], NullExpr ua sp)] t
 
-> mkTypeDef :: TypeEnv Annotation -> SrcSpan -> WeightedGraph Access Variable -> State Int (Decl Annotation)
+> mkTypeDef :: TypeEnv Annotation -> SrcSpan -> WeightedGraph Access Variable -> State Int (Decl Annotation, String)
 > mkTypeDef tenv sp wg = (inventName wg) >>= (\name -> 
->                           let ra = unitAnnotation { refactored = Just (fst sp) } 
+>                           let edgeToDecls ((vx, vy), (va, w)) = 
+>                                  case (lookup va tenv) of
+>                                     Just t -> [mkTyDecl sp (accessToVarName vx) (arrayElementType t),
+>                                                mkTyDecl sp (accessToVarName vy) (arrayElementType t)]
+>                                     Nothing -> error $ "Can't find the type of " ++ show va ++ "\n"
 
->                               decls = concatMap (\((vx, vy), (va, w)) -> case (lookup va tenv) of
->                                                                            Just t -> [mkTyDecl sp (accessToVarName vx) (arrayElementType t),
->                                                                                       mkTyDecl sp (accessToVarName vy) (arrayElementType t)]
->                                                                            Nothing -> error $ "Can't find the type of " ++ show va ++ "\n") wg
->                                       
->                           in return $ DerivedTypeDef ra sp (SubName ra name) [] [] decls)
+>                               ra = unitAnnotation { refactored = Just (fst sp) } 
+
+>                               (_, (arrayVar, _)) = head wg
+
+>                               tdecls = concatMap edgeToDecls wg
+>                               typeDecl = DerivedTypeDef ra sp (SubName ra name) [] [] tdecls
+
+>                               typeCons = BaseType ra (DerivedType ra (SubName ra name)) [] (NullExpr ra sp) (NullExpr ra sp)
+>                               valDecl = Decl ra sp [(Var ra sp [(VarName ra (arrayVar ++ name), [])] , NullExpr ra sp)] typeCons
+>                           in return $ (DSeq unitAnnotation typeDecl valDecl, name))
 
 > inventName :: WeightedGraph Access Variable -> State Int String
 > inventName graph = do n <- get
@@ -120,17 +136,21 @@ Non-interprocedural version first
 >          in -- mode or 'X' if mode is less than the majority
 >             if (snd max) > ((length x) `div` 2) then fst max else 'X'
 
-> weightedGraphToForests :: forall v a . (Show v, Ord v) => WeightedGraph v a -> [WeightedGraph v a]
-> weightedGraphToForests g = map snd (foldl binEdge [] g)
+> weightedGraphToForests :: forall v a . (Show v, Ord v, Ord a) => WeightedGraph v a -> [WeightedGraph v a]
+> weightedGraphToForests g = map snd (concatMap (foldl binEdge []) (groupBy groupOnArrayVar (sortBy sortOnArrayVar g)))
+>                             where groupOnArrayVar (_, (av, _)) (_, (av', _)) = av == av'
+>                                   sortOnArrayVar (_, (av, _)) (_, (av', _)) = compare av av'
+
+map snd (foldl binEdge [] g)
 
 "bins" edges into a list of graphs with a set of their vertices
 
-> binEdge :: (Show v, Ord v) => [(Set v, WeightedGraph v a)] -> WeightedEdge v a -> [(Set v, WeightedGraph v a)]
+> binEdge :: (Show v, Ord v, Ord a) => [(Set v, WeightedGraph v a)] -> WeightedEdge v a -> [(Set v, WeightedGraph v a)]
 > binEdge bins e@((x, y), _) = 
 >     let findBin v [] = ((insert x empty, []), [])
 >         findBin v ((vs, es):bs) | member v vs = ((insert v vs, es), bs)
->                                       | otherwise = let (n, bs') = findBin v bs
->                                                     in (n, (vs, es) : bs')
+>                                 | otherwise = let (n, bs') = findBin v bs
+>                                               in (n, (vs, es) : bs')
 >         ((vs, es), bins') = findBin x bins
 >         ((vs', es'), bins'') = findBin y bins'
 >     in (vs `union` vs', e : (es ++ es')) : bins''

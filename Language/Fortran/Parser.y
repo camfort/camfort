@@ -346,12 +346,14 @@ declaration_construct_p
 
 declaration_construct :: { Decl A0 }
 declaration_construct
-  : type_spec_p attr_spec_list '::' entity_decl_list  { if isEmpty (fst $2) 
-							then Decl () $4 ((BaseType () (fst3 $1) (snd $2) (snd3 $1) (trd3 $1)))
-                                                        else Decl () $4 ((ArrayT ()  (fst $2) (fst3 $1) (snd $2) (snd3 $1) (trd3 $1))) }
-  | type_spec_p attr_spec_list      entity_decl_list  { if isEmpty (fst $2) 
-							then Decl () $3 ((BaseType () (fst3 $1) (snd $2) (snd3 $1) (trd3 $1)))
-                                                        else Decl () $3 ((ArrayT ()  (fst $2) (fst3 $1) (snd $2) (snd3 $1) (trd3 $1))) }
+  : srcloc type_spec_p attr_spec_list '::' entity_decl_list  
+  {% (srcSpan $1) >>= (\s -> return $ if isEmpty (fst $3) 
+					 then Decl () s $5 ((BaseType () (fst3 $2) (snd $3) (snd3 $2) (trd3 $2)))
+			                 else Decl () s $5 ((ArrayT ()  (fst $3) (fst3 $2) (snd $3) (snd3 $2) (trd3 $2)))) }
+  | srcloc type_spec_p attr_spec_list entity_decl_list  
+  {% (srcSpan $1) >>= (\s -> return $ if isEmpty (fst $3) 
+					     then Decl () s $4 ((BaseType () (fst3 $2) (snd $3) (snd3 $2) (trd3 $2)))
+			     	             else Decl () s $4 ((ArrayT () (fst $3) (fst3 $2) (snd $3) (snd3 $2) (trd3 $2)))) }
   | interface_block				      { $1 }
   | include_stmt { $1 }
 
@@ -601,10 +603,11 @@ component_def_stmt_list
 
 component_def_stmt :: { Decl A0 }
 component_def_stmt
-  : type_spec_p component_attr_spec_list '::' entity_decl_list  
-        { if isEmpty (fst $2) 
-	  then Decl () $4 ((BaseType () (fst3 $1) (snd $2) (snd3 $1) (trd3 $1)))
-	  else Decl () $4 ((ArrayT () (fst $2) (fst3 $1) (snd $2) (snd3 $1) (trd3 $1))) }
+  : srcloc type_spec_p component_attr_spec_list '::' entity_decl_list  
+  {% (srcSpan $1) >>= (\s -> return $ 
+		     if isEmpty (fst $3) 
+		     then Decl () s $5 ((BaseType () (fst3 $2) (snd $3) (snd3 $2) (trd3 $2)))
+		     else Decl () s $5 ((ArrayT () (fst $3) (fst3 $2) (snd $3) (snd3 $2) (trd3 $2)))) }
 
 component_attr_spec_list :: {([(Expr A0, Expr A0)],[Attr A0])}
 component_attr_spec_list
