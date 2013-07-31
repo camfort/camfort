@@ -34,13 +34,18 @@ Todo: CallExpr, changing assignments
 >                     (r', ps'') = mapM (commonElim' cg) ps'
 >                 in (r ++ r', ps'')
 
+> nonNullArgs (ASeq _ _ _) = True
+> nonNullArgs (ArgName _ _) = True
+> nonNullArgs (NullArg _) = False
+
 > commonElim' :: TLCommons A -> (String, [Program A]) -> (Report, [Program A])
 > commonElim' cenv (fname, ps) = mapM (transformBiM commonElim'') ps
 >               where commonElim'' s@(Sub a sp mbt (SubName a' n) (Arg p arg asp) b) = 
 >                         
 >                          let commons = lookups n (lookups fname cenv) 
 >                              sortedC = sortBy cmpTC commons
->                              tArgs = extendArgs asp (concatMap snd sortedC)
+>                              tArgs = extendArgs (nonNullArgs arg) asp (concatMap snd sortedC)
+>                              ra = p { refactored = Just (fst sp) }
 >                              arg' = Arg unitAnnotation (ASeq unitAnnotation arg tArgs) asp
 >                              a' = a -- { pRefactored = Just sp }
 >                              r = fname ++ (show $ srcLineCol $ fst sp) ++ ": changed common variables to parameters\n"
@@ -89,10 +94,16 @@ Todo: CallExpr, changing assignments
 >                            | otherwise = select xs yes
 > 
 
-> extendArgs _ [] = NullArg unitAnnotation
-> extendArgs sp' ((v, t):vts) = 
->     let p' = unitAnnotation { refactored = Just $ snd sp' }
->     in ASeq p' (ArgName p' v) (extendArgs sp' vts)
+> extendArgs nonNullArgs sp' args = if nonNullArgs then 
+>                                      let p' = unitAnnotation { refactored = Just $ fst sp' }
+>                                      in ASeq p' (ArgName p' "") (extendArgs' sp' args)
+>                                   else extendArgs' sp' args
+>                                  
+
+> extendArgs'  _ [] = NullArg unitAnnotation
+> extendArgs' sp' ((v, t):vts) = 
+>     let p' = unitAnnotation { refactored = Just $ fst sp' }
+>     in ASeq p' (ArgName p' v) (extendArgs' sp' vts)
 
  blockExtendDecls (Block a s i sp ds f) ds' = Block a s i sp (DSeq unitAnnotation ds ds') f
               

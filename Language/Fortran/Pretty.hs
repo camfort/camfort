@@ -263,6 +263,7 @@ instance (OutputG (ArgList p) v,
   outputF (CallExpr  _ _ s as) = outputG s ++ outputG as
   outputF (Null _ _)          = "NULL()"
   outputF (NullExpr _ _)      = ""
+  outputF (ESeq _ _ (NullExpr _ _) e)     = outputG e
   outputF (ESeq _ _ e (NullExpr _ _))     = outputG e
   outputF (ESeq _ _ e e')     = outputG e++","++outputG e'
   outputF (Bound _ _ e e')    = outputG e++":"++outputG e'

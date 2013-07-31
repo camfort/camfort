@@ -282,7 +282,7 @@ Output routines specialised to the analysis.
 >                                                           Just a -> 
 >                                                               case (refactored $ copoint a) of
 >                                                                 Just lb -> let (p0, _) = takeBounds (cursor, lb) inp
->                                                                            in (p0 ++ ", " ++ outputF a, lb, True)
+>                                                                            in (p0 ++ outputF a, lb, True)
 >                                                                 Nothing -> ("", cursor, False)
 >                                                           Nothing -> ("", cursor, False)
 

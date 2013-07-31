@@ -100,10 +100,10 @@ Non-interprocedural version first
 > findMatch v ix ((wg, n):wgns) = vertices 
 >                       
 
-> replaceAccess :: [(WeightedGraph Variable Access, Name)] -> Block Annotation -> Block Annotation
-> replaceAccess = transformBi (\(VarName _ v, ixs) -> 
->                                  
->                                  
+ replaceAccess :: [(WeightedGraph Variable Access, Variable)] -> Block Annotation -> Block Annotation
+ replaceAccess wgns x = transformBi (\t@(VarName _ v, ixs) -> t) x
+                                  
+                                  
 
 > mkTyDecl :: SrcSpan -> Variable -> Type Annotation -> Decl Annotation
 > mkTyDecl sp v t = let ua = unitAnnotation

@@ -61,9 +61,9 @@
 
 
 > rmEquivalences :: (?fname :: String) =>  (Block Annotation) -> State RfEqState (Block Annotation)
-> rmEquivalences = transformBiM rmEquiv'
+> rmEquivalences = "in rmEquiv" `trace` transformBiM rmEquiv'
 >                    where rmEquiv' ::  Decl Annotation -> State RfEqState (Decl Annotation)
->                          rmEquiv' f@(Equivalence a sp equivs) = 
+>                          rmEquiv' f@(Equivalence a sp equivs) = "got equiv\n" `trace`
 >                                      do (ess, n, r) <- get
 >                                         put (equivs:ess, n - 1, r ++ ?fname ++ (show . srcLineCol . fst $ sp) ++ ": removed equivalence \n")
 >                                         return (NullDecl (a { refactored = (Just $ fst sp) }) (dropLine sp))
