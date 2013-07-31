@@ -500,8 +500,11 @@ specification_stmt
   | namelist_stmt            { $1 }
 --  | optional_stmt          { $1 }
 --  | pointer_stmt           { $1 }
---  | save_stmt              { $1 }
+  | save_stmt              { $1 }
 --  | target_stmt            { $1 }
+
+save_stmt :: { Decl A0 }
+ : SAVE { AccessStmt () (Save ()) [] }
 
 common_stmt :: { Decl A0 }
 : srcloc COMMON '/' id2 '/' vlist  {% srcSpan $1 >>= (\s -> return $ Common () s (Just $4) $6) }
