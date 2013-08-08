@@ -71,7 +71,7 @@ map (fmap ((,[""]),[""]))
 >                                      isArrayTypeP' tenv v]
 
 >                     in (copoint y) { arrsRead = (collect readIxs), arrsWrite = (collect writeIxs) } 
->     in (show tenv) `trace` extendBi arrIxsF x               
+>     in extendBi arrIxsF x               
 
 > ix :: Program Annotation -> Program Annotation
 > ix = let ixF :: Fortran Annotation -> Annotation

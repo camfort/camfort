@@ -249,15 +249,6 @@ ext f (x:xs) = (f (x:xs)) : (map f xs)
 
 
 
-TODO: Needs fixing with the spans - need to pull apart and put back together
-
-> reassociate :: Fortran Annotation -> Fortran Annotation
-> reassociate (FSeq a1 sp1 (FSeq a2 sp2 a b) c) = FSeq a1 sp1 (reassociate a) (FSeq a2 sp2  (reassociate b) (reassociate c))
-> reassociate t = t
-
- reassociate :: Fortran Annotation -> Fortran Annotation
- reassociate (FSeq a1 sp1 (FSeq a2 sp2 a b) c) = FSeq a1 sp1 (reassociate a) (FSeq a2 sp2  (reassociate b) (reassociate c))
- reassociate t = t
 
 > class Copointed d where
 >    copoint :: d a -> a 

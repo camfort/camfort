@@ -28,6 +28,15 @@ CamFort specific functionality
 > import Language.Haskell.Syntax (SrcLoc(..))
 
 
+TODO: Needs fixing with the spans - need to pull apart and put back together
+
+> reassociate :: Fortran Annotation -> Fortran Annotation
+> reassociate (FSeq a1 sp1 (FSeq a2 sp2 a b) c) = FSeq a1 sp1 (reassociate a) (FSeq a2 sp2  (reassociate b) (reassociate c))
+> reassociate t = t
+
+ reassociate :: Fortran Annotation -> Fortran Annotation
+ reassociate (FSeq a1 sp1 (FSeq a2 sp2 a b) c) = FSeq a1 sp1 (reassociate a) (FSeq a2 sp2  (reassociate b) (reassociate c))
+ reassociate t = t
 
 General helpers
 
@@ -122,16 +131,22 @@ Compute successors for certain node types
 > successorsF z = maybe [] id 
 >                 (do f <- (getHole z)::(Maybe (Fortran a))
 >                     ss <- return $ successorsRoot f
->                     uz <- up z
->                     uf <- (getHole uz)::(Maybe (Fortran a))
->                     return $ ss ++ case uf of
->                       (FSeq _ _ f1 f2)    -> if (f == f1) then [f2] else []
->                       (For _ _ _ _ _ _ f) -> [f]
->                       (If _ _ _ gf efs f')   -> if (f == gf) then (maybe [] (:[]) f') ++ (map snd efs) else []
->                       (Forall _ _ _ f)    -> [f]
->                       (Where _ _ _ f)     -> [f]
->                       (Label _ _ _ f)     -> []
->                       _                   -> []) 
+>                     return $ ss ++ seekUp f (Just z))
+
+>                  where seekUp :: Fortran a -> Maybe (Zipper (Program a)) -> [Fortran a]
+>                        seekUp f z = case (z >>= up >>= getHole)::(Maybe (Fortran a)) of
+>                                  Just uf -> 
+>                                    case uf of
+>                                     (FSeq _ _ f1 f2)     -> if (f == f1) then [f2] else seekUp uf (z >>= up)
+>                                     (For _ _ _ _ _ _ f') -> seekUp uf (z >>= up)
+>                                     (If _ _ _ gf efs f') -> if (f == gf) then (maybe [] (:[]) f') ++ (map snd efs) else seekUp uf (z >>= up) 
+>                                     (Forall _ _ _ f')    -> seekUp uf (z >>= up)
+>                                     (Where _ _ _ f')     -> seekUp uf (z >>= up)
+>                                     (Label _ _ _ f')     -> seekUp uf (z >>= up)
+>                                     _                    -> []
+>                                  Nothing -> [] 
+ 
+
 
 Number statements (for analysis output)
 
