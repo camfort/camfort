@@ -18,6 +18,7 @@
 > import Annotations
 > import Syntax
 > import Traverse
+> import Types
 
 > import Debug.Trace
 
@@ -26,15 +27,19 @@
 
 > refactorEquivalences :: (String, [Program Annotation]) -> (Report, [Program Annotation])
 > refactorEquivalences (fname, p) = 
->                         let ?fname = fname in do p' <- mapM (\p -> (transformBiM equivalences p)) p
->                                                  deadCode True p'
+>                         let ?fname = fname
+>                         in do p' <- mapM (transformBiM equivalences) p
+>                               deadCode True p'
 >                             
 >                         where equivalences :: (?fname :: String) => Block Annotation -> (Report, Block Annotation)
->                               equivalences b = let (b', (_, _, r)) = runState ((rmEquivalences b) >>= (transformBiM rfAssgn)) ([], 0, "")
+>                               equivalences b = let equiv = do b' <- rmEquivalences b
+>                                                               transformBiM (addCopy (typeEnv b)) b'
+>                                                              
+>                                                    (b', (_, _, r)) = runState equiv ([], 0, "")
 >                                                in (r, b')
 
-> rfAssgn :: (?fname :: String) => Fortran Annotation -> State RfEqState (Fortran Annotation)
-> rfAssgn x@(Assg a sp@(s1, s2) e1 e2) | not (pRefactored a) =
+> addCopy :: (?fname :: String) => TypeEnv Annotation -> Fortran Annotation -> State RfEqState (Fortran Annotation)
+> addCopy tys x@(Assg a sp@(s1, s2) e1 e2) | not (pRefactored a) =
 >    do eqs <- equivalents e1
 >       if (length eqs > 1) then 
 
@@ -42,22 +47,30 @@
 >          let a' = a { refactored = Just s1 }
 >              sp' = refactorSpan sp
 >              eqs' = deleteBy (\x -> \y -> (af x) == (af y)) e1 eqs -- remove self from list
->              
+>
+>              -- Create copy statements
+>              mkCopy (n, e') = let sp' = refactorSpanN n sp
+>                               in 
+>                                 case ((varExprToVariable e1) >>= (\v1' -> varExprToVariable e' >>= (\v' -> return $ eqType v1' v' tys))) of
+>                                  Nothing    -> Assg a' sp' e' e1 -- could be an error
+>                                  Just False -> Assg a' sp' e' (Var a' sp' [(VarName a' "transfer", [e1, e'])])
+>                                  Just True  -> Assg a' sp' e' e1
+>              eqs'' = map mkCopy (zip [0..(length eqs')] eqs')
+
 >              -- Reporting
 >              (l, c) = srcLineCol s1
->              reportF (e', i) = ?fname ++ show (l + i + 1, c) ++ ": added assignment: " ++ (outputF e') ++ " = " ++ outputF e1
->                                                ++ " due to refactored equivalence\n"
->              report n = let ?variant = Alt1 in concatMap reportF (zip eqs' [n..(n + length eqs')])
+>              reportF (e', i) = ?fname ++ show (l + i, c) ++ ": addded copy: " ++ (outputF e') ++ " due to refactored equivalence\n"
+>              report n = let ?variant = Alt1 in concatMap reportF (zip eqs'' [n..(n + length eqs'')])
 
 >          in do -- Update refactoring state
 >                (equivs, n, r) <- get
 >                put (equivs, n + (length eqs'), r ++ (report n))
 
 >                -- Sequence original assignment with new assignments
->                return $ FSeq a sp x (foldl1 (FSeq a' sp') (map (\e' -> Assg a' sp' e' e1) eqs'))
+>                return $ FSeq a sp x (foldl1 (FSeq a' sp') eqs'')
 >       else
 >          return x
-> rfAssgn x = return x 
+> addCopy tys x = return x 
 
 
 > rmEquivalences :: (?fname :: String) =>  (Block Annotation) -> State RfEqState (Block Annotation)
@@ -68,6 +81,8 @@
 >                                         put (equivs:ess, n - 1, r ++ ?fname ++ (show . srcLineCol . fst $ sp) ++ ": removed equivalence \n")
 >                                         return (NullDecl (a { refactored = (Just $ fst sp) }) (dropLine sp))
 >                          rmEquiv' f = return f
+
+"equivalents e" returns a list of variables/memory cells that have been equivalenced with "e". 
                                      
 > equivalents :: (?fname :: String) => Expr Annotation -> State RfEqState [Expr Annotation]
 > equivalents x = let inGroup x [] = []

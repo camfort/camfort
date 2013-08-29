@@ -50,6 +50,9 @@ Helpers to do with source locations and parsing
 > refactorSpan :: SrcSpan -> SrcSpan
 > refactorSpan (SrcLoc f ll cl, SrcLoc _ lu cu) = (SrcLoc f (lu+1) 0, SrcLoc f lu cu)
 
+> refactorSpanN :: Int -> SrcSpan -> SrcSpan
+> refactorSpanN n (SrcLoc f ll cl, SrcLoc _ lu cu) = (SrcLoc f (lu+1+n) 0, SrcLoc f (lu+n) cu)
+
 > toCol0 (SrcLoc f l c) = SrcLoc f l 0
 
 dropLine extends a span to the start of the next line
@@ -57,7 +60,6 @@ This is particularly useful if a whole line is being redacted from a source file
 
 > dropLine :: SrcSpan -> SrcSpan
 > dropLine (s1, SrcLoc f l c) = (s1, SrcLoc f (l+1) 0)
-
 
 > srcLineCol :: SrcLoc -> (Int, Int)
 > srcLineCol (SrcLoc _ l c) = (l, c)
@@ -72,12 +74,17 @@ their annotaitons (and source span information)
 > af = AnnotationFree -- short constructor
 > unaf = annotationBound
 
--- Used for testing 
+
+> instance Eq (AnnotationFree a) => Eq (AnnotationFree [a]) where
+>     (AnnotationFree xs) == (AnnotationFree xs') =
+>                if (length xs == length xs')
+>                then foldl (\b -> \(x, x') -> ((af x) == (af x')) && b) True (zip xs xs')
+>                else False
 
 > instance Eq (AnnotationFree Int) where
 >     x == y = (unaf x) == (unaf y)
 
-> instance Eq (AnnotationFree String) where
+> instance Eq (AnnotationFree Char) where
 >     x == y = (unaf x) == (unaf y)
 
 > instance Eq (AnnotationFree (AccessP ())) where
@@ -96,8 +103,56 @@ their annotaitons (and source span information)
 >                                                  (zip es es'))) && (cmp vs vs')
 >                                   else False
 >                              cmp _ _ = False
->     e == e' = error "Annotation free equality not implemented" --  False
+>     (AnnotationFree e1) == (AnnotationFree e2) = (fmap (const ()) e1) == (fmap (const ()) e2)
 
+ error "Annotation free equality not implemented" --  False
+
+> instance Eq (AnnotationFree (Type a)) where
+>     (AnnotationFree (BaseType _ b attrs e1 e2)) == (AnnotationFree (BaseType _ b' attrs' e1' e2')) = 
+>        (af b == af b') && (af attrs == af attrs') && (af e1 == af e1') && (af e2 == af e2')
+
+>     (AnnotationFree (ArrayT _ eps b attrs e1 e2)) == (AnnotationFree (ArrayT _ eps' b' attrs' e1' e2')) =
+>        (af eps == af eps') && (af b == af b') && (af attrs == af attrs') && (af e1 == af e1') && (af e2 == af e2')
+
+> instance Eq (AnnotationFree (Attr p)) where
+>     (AnnotationFree (Parameter _)) == (AnnotationFree (Parameter _)) = True
+>     (AnnotationFree (Allocatable _)) == (AnnotationFree (Allocatable _)) = True
+>     (AnnotationFree (External _)) == (AnnotationFree (External _)) = True
+>     (AnnotationFree (Intent _ ia)) == (AnnotationFree (Intent _ ia')) = (af ia) == (af ia')
+>     (AnnotationFree (Intrinsic _)) == (AnnotationFree (Intrinsic _)) = True
+>     (AnnotationFree (Optional _)) == (AnnotationFree (Optional _)) = True
+>     (AnnotationFree (Pointer _)) == (AnnotationFree (Pointer _)) = True
+>     (AnnotationFree (Save _)) == (AnnotationFree (Save _)) = True
+>     (AnnotationFree (Target _)) == (AnnotationFree (Target _)) = True
+>     (AnnotationFree (Volatile _)) == (AnnotationFree (Volatile _)) = True
+>     (AnnotationFree (Public _)) == (AnnotationFree (Public _)) = True
+>     (AnnotationFree (Private _)) == (AnnotationFree (Private _)) = True
+>     (AnnotationFree (Sequence _)) == (AnnotationFree (Sequence _)) = True
+>     _ == _ = False
+
+> instance Eq (AnnotationFree (BaseType p)) where
+>     (AnnotationFree (Integer _)) == (AnnotationFree (Integer _)) = True
+>     (AnnotationFree (Real _)) == (AnnotationFree (Real _)) = True
+>     (AnnotationFree (Character _)) == (AnnotationFree (Character _)) = True
+>     (AnnotationFree (SomeType _)) == (AnnotationFree (SomeType _)) = True
+>     (AnnotationFree (DerivedType _ s)) == (AnnotationFree (DerivedType _ s')) = (af s) == (af s')
+>     (AnnotationFree (Recursive _)) == (AnnotationFree (Recursive _)) = True
+>     (AnnotationFree (Pure _)) == (AnnotationFree (Pure _)) = True
+>     (AnnotationFree (Elemental _)) == (AnnotationFree (Elemental _)) = True
+>     (AnnotationFree (Logical _)) == (AnnotationFree (Logical _)) = True
+>     (AnnotationFree (Complex _)) == (AnnotationFree (Complex _)) = True
+>     _ == _ = False
+
+> instance Eq (AnnotationFree (SubName p)) where
+>     (AnnotationFree (SubName _ s)) == (AnnotationFree (SubName _ s')) = s == s'
+>     (AnnotationFree (NullSubName _)) == (AnnotationFree (NullSubName _)) = True
+>     _ == _ = False
+
+> instance Eq (AnnotationFree (IntentAttr p)) where
+>     (AnnotationFree (In _)) == (AnnotationFree (In _)) = True
+>     (AnnotationFree (Out _)) == (AnnotationFree (Out _)) = True
+>     (AnnotationFree (InOut _)) == (AnnotationFree (InOut _)) = True
+>     _ == _ = False
 
 Accessors
 
@@ -189,6 +244,10 @@ All accessors (variables and array indexing)
 > accesses f = nub $  [VarA (lower v) | (AssgExpr _ _ v _) <- (universeBi f)::[Expr Annotation]]
 >                      ++ concat [varExprToAccesses ve | ve@(Var _ _ _) <- (universeBi f)::[Expr Annotation]]
 >                
+
+> varExprToVariable :: Expr a -> Maybe Variable
+> varExprToVariable (Var _ _ ((VarName _ v, es):_)) = Just v
+> varExprToVariable _                               = Nothing
 
 > varExprToAccesses :: Expr a -> [Access]
 > varExprToAccesses (Var _ _ ves) = [mkAccess v es | (VarName _ v, es) <- ves, all isConstant es] 

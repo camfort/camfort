@@ -19,9 +19,13 @@
 > import Data.Generics.Uniplate.Operations
 
 > deadCode :: Bool -> [Program Annotation] -> (Report, [Program Annotation])
-> deadCode flag p = let (r, p') = mapM (transformBiM (elimDead flag)) (map lva p)
+> deadCode flag p = let (r, p') = mapM ((transformBi elimEmptyFseq) . transformBiM (elimDead flag)) (map lva p)
 >                   in if r == "" then (r, p')
 >                                 else (r, p') >>= (deadCode flag)
+
+> elimEmptyFseq :: Fortran Annotation -> Fortran Annotation
+> elimEmptyFseq (FSeq _ _ (NullStmt _ _) n2@(NullStmt _ _)) = n2
+> elimEmptyFseq f = f
 
 > elimDead :: Bool -> Fortran Annotation -> (Report, Fortran Annotation)
 > elimDead flag x@(Assg a sp@(s1, s2) e1 e2) | (pRefactored a) == flag =

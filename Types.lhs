@@ -19,6 +19,7 @@
 > typeAnnotations :: (Typeable a, Data a) => [Program a] -> State (TypeEnv a) [Program a]
 > typeAnnotations = mapM (descendBiM buildTypeEnv)
 
+> typeEnv :: (Typeable a, Data a) => Block a -> TypeEnv a
 > typeEnv x = snd $ runState (buildTypeEnv x) []
 
 > buildTypeEnv :: (Typeable a, Data a) => Block a -> State (TypeEnv a) (Block a)
@@ -27,6 +28,13 @@
 >                     put (tenv ++ tenv')
 >                     return x
 
+> eqType :: Variable -> Variable -> TypeEnv t -> Bool
+> eqType v1 v2 vs = case lookup v1 vs of
+>                     Nothing -> False
+>                     Just t1 -> case lookup v2 vs of 
+>                                  Nothing -> False
+>                                  Just t2 -> (AnnotationFree t1 == AnnotationFree t2)
+>                       
 
 > gtypes :: forall a t . (Data (t a), Typeable (t a), Data a, Typeable a) => t a -> [(String, Type a)] 
 > gtypes x = let decAndTypes :: [([(Expr a, Expr a)], Type a)]
