@@ -10,6 +10,7 @@
 > import Language.Fortran
 > import Language.Fortran.Pretty
 
+> import Language.Haskell.Syntax (SrcLoc(..))
 
 > import Data.Generics.Uniplate.Operations
 > import Control.Monad.State.Lazy
@@ -37,6 +38,23 @@ Todo: CallExpr, changing assignments
 > nonNullArgs (ASeq _ _ _) = True
 > nonNullArgs (ArgName _ _) = True
 > nonNullArgs (NullArg _) = False
+
+
+> commonElimToModules :: TLCommons A -> (String, [Program A]) -> (Report, [Program A], [Program A]) -- last part is new modules
+> commonElimToModules = undefined
+
+
+> mkModule :: [(Variable, Type A)] -> String -> Program A
+> mkModule vtys fname = let a = unitAnnotation { refactored = Just loc }
+>                           loc = SrcLoc (fname ++ ".f") 0 0 
+>                           sp = (loc, loc)
+>                           toDecl (v, t) = Decl a sp [(Var a sp [(VarName a v, [])], NullExpr a sp)] -- note here could pull in initialising definition? What if conflicts- highlight as potential source of error?
+>                                                             t
+>                           decls = foldl1 (DSeq a) (map toDecl vtys)
+>                       in Module a (loc, loc) (SubName a fname) [] (ImplicitNone a) decls []
+
+Extending calls version
+
 
 > commonElim' :: TLCommons A -> (String, [Program A]) -> (Report, [Program A])
 > commonElim' cenv (fname, ps) = mapM (transformBiM commonElim'') ps
