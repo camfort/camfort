@@ -1,0 +1,11 @@
+To install:
+
+runhaskell Setup.hs configure
+runhaskell Setup.hs build
+runhaskell Setup.hs install
+
+OR, for local install (depending how your Haskell install is setup), try:
+
+runhaskell Setup.hs configure --user
+runhaskell Setup.hs build
+runhaskell Setup.hs install

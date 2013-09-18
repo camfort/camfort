@@ -1,0 +1,40 @@
+name:                   camfort
+version:                0.1
+synopsis:               CamFort - Cambridge Fortran infrastructure
+description:
+
+copyright:              2012-2013 University of Cambridge
+author:                 Dominic Orchard, Andrew Rice
+stability:              experimental
+build-type:             Simple
+cabal-version:          >= 1.6
+tested-with:            GHC >= 7.4
+
+source-repository head
+  type: git
+  location: https://github.com/dorchard/camfort
+
+library
+  hs-source-dirs:       .
+  exposed-modules:      Annotations
+                        CommonBlocks
+                        DeadCode
+                        Equivalences
+                        Loops
+                        LVA
+                        Output
+                        Syntax
+                        Traverse
+                        Types
+                        TypeStructuring
+                        Language.Fortran
+                        Language.Fortran.Parser
+                        
+  build-depends:        base < 5,
+                        template-haskell >=2.4 && <2.10, 
+                        generic-deriving >=1.5.5,
+                        uniplate >= 1.6,
+                        comonad >= 3,
+                        containers >= 0.5,
+                        haskell-src >= 1.0.1,
+                        syz >= 0.2

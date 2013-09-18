@@ -32,7 +32,7 @@ Todo: CallExpr, changing assignments
 > -- Eliminates common blocks in a program directory
 > commonElim :: [(String, [Program A])] -> (Report, [[Program A]])
 > commonElim ps = let (ps', (r, cg)) = runState (definitionSites ps) ("", [])
->                     (r', ps'') = mapM (commonElim' cg) ps'
+>                     (r', ps'') = mapM (commonElimToCalls cg) ps'
 >                 in (r ++ r', ps'')
 
 > nonNullArgs (ASeq _ _ _) = True
@@ -41,7 +41,10 @@ Todo: CallExpr, changing assignments
 
 
 > commonElimToModules :: TLCommons A -> (String, [Program A]) -> (Report, [Program A], [Program A]) -- last part is new modules
-> commonElimToModules = undefined
+> commonElimToModules cenv (fname, ps) =
+>      mapM (transformBiM commonElim) ps
+>        where commonElim s@(Sub a sp mbt (SubName a' n)(Arg parg asp) b) = undefined -- STUB                  
+
 
 
 > mkModule :: [(Variable, Type A)] -> String -> Program A
@@ -56,9 +59,9 @@ Todo: CallExpr, changing assignments
 Extending calls version
 
 
-> commonElim' :: TLCommons A -> (String, [Program A]) -> (Report, [Program A])
-> commonElim' cenv (fname, ps) = mapM (transformBiM commonElim'') ps
->               where commonElim'' s@(Sub a sp mbt (SubName a' n) (Arg p arg asp) b) = 
+> commonElimToCalls :: TLCommons A -> (String, [Program A]) -> (Report, [Program A])
+> commonElimToCalls cenv (fname, ps) = mapM (transformBiM commonElim) ps
+>               where commonElim s@(Sub a sp mbt (SubName a' n) (Arg p arg asp) b) = 
 >                         
 >                          let commons = lookups n (lookups fname cenv) 
 >                              sortedC = sortBy cmpTC commons
