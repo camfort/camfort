@@ -41,9 +41,10 @@ Todo: CallExpr, changing assignments
 
 
 > commonElimToModules :: TLCommons A -> (String, [Program A]) -> (Report, [Program A], [Program A]) -- last part is new modules
-> commonElimToModules cenv (fname, ps) =
->      mapM (transformBiM commonElim) ps
->        where commonElim s@(Sub a sp mbt (SubName a' n)(Arg parg asp) b) = undefined -- STUB                  
+> commonElimToModules cenv (fname, ps) = undefined
+
+      mapM (transformBiM commonElim) ps
+        where commonElim s@(Sub a sp mbt (SubName a' n)(Arg parg asp) b) = undefined -- STUB                  
 
 
 
