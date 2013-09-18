@@ -5,6 +5,8 @@
 > {-# LANGUAGE FlexibleContexts #-}
 > {-# LANGUAGE GADTs #-}
 
+> {-# LANGUAGE DeriveGeneric #-}
+
 > module Syntax where
 
 Standard imports 
