@@ -115,6 +115,7 @@ General analysis/refactor builders
 >                        excludes <- getLine
 >                           
 >                        ps <- readParseSrcDir d excludes
+
 >                        let inFiles = map fst3 ps
 >                        let outFiles = filter (\f -> not ((take (length $ d ++ "out") f) == (d ++ "out"))) inFiles
 >                        let asts' = map (\(f, _, ps) -> aFun ps) ps
@@ -138,15 +139,12 @@ General analysis/refactor builders
 General source file handling stuff
 ----------------------------------
 
-
-
-
-
 > readParseSrcDir :: Directory -> String -> IO [(Filename, SourceText, Program A)]
 > readParseSrcDir d excludes = do dirF <- rGetDirectoryContents d
 >                                 let files = dirF \\ ((map unpack (split (==',') (pack excludes))))
->                                 let files' = map (\y -> d ++ "/" ++ y) files'
+>                                 let files' = map (\y -> d ++ "/" ++ y) files
 >                                 mapM readParseSrcFile files'
+>                                
 
 > readParseSrcFile :: Filename -> IO (Filename, SourceText, Program A)
 > readParseSrcFile f = do putStrLn f 
@@ -175,14 +173,16 @@ their AST, write these to the director
 > outputFiles d pdata = 
 >            do d' <- setupOut d
 >               putStrLn $ "Writing refactored files to directory: " ++ d' ++ "/"
->               mapM_ (\(f, inp, ast') -> (checkDir (d' ++ "/" ++ f)) >>
->                                         (writeFile (d' ++ "/" ++ f) (reprint inp f ast'))) pdata
+>               mapM_ (\(f, inp, ast') -> (checkDir f) >>
+>                                         (writeFile (changeDir d' f) (reprint inp f ast'))) pdata
 
-
+> changeDir d' f = let ix = elemIndices '/' f
+>                      fWithoutDir = Prelude.drop (last ix) f
+>                  in d' ++ "/" ++ fWithoutDir
 
 > outputAnalysisFiles d asts files =
 >            do putStrLn $ "Writing analysis files to directory: " ++ d ++ "/"
->               mapM (\(ast', f) -> writeFile (d ++ "/" ++ f ++ ".html") ((concatMap outputHTML) ast')) (Prelude.zip asts files)
+>               mapM (\(ast', f) -> writeFile (f ++ ".html") ((concatMap outputHTML) ast')) (Prelude.zip asts files)
 >               return ()
 
 > rGetDirectoryContents d = do ds <- getDirectoryContents d

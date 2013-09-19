@@ -17,8 +17,10 @@
 
 > module Output where
 
-> import Analysis.Annotations
+> import Helpers
 > import Traverse
+
+> import Analysis.Annotations
 > import Language.Fortran as Fortran
 > import Language.Fortran.Pretty
 
@@ -252,7 +254,7 @@ Output routines specialised to the analysis.
 
 GLORIOUS REFACTORING ALGORITHM!
 
-> reprint :: String -> String -> Program Annotation -> String
+> reprint :: SourceText -> Filename -> Program Annotation -> String
 > reprint input f z = let input' = Prelude.lines input
 >                         start = SrcLoc f 1 0
 >                         end = SrcLoc f (Prelude.length input') (1 + (Prelude.length $ Prelude.last input'))

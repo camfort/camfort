@@ -80,8 +80,9 @@ Extending calls version
 >                              r = fname ++ (show $ srcLineCol $ fst sp) ++ ": changed common variables to parameters\n"
 >                          in do b' <- transformBiM (extendCalls fname moduleName cenv) b
 >                                (r, Sub a' sp mbt (SubName a' moduleName) arg' b')
-
-                                                 -- b' = blockExtendDecls b tDecls
+>
+>                                                 -- b' = blockExtendDecls b tDecls
+>                     commonElim s = return s
 
 >                             --  Nothing -> transformBi (extendCalls fname n cenv) s
 >                     commonElim'' s = case (getSubName s) of
