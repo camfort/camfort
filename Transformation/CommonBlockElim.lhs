@@ -1,7 +1,7 @@
 > {-# LANGUAGE ImplicitParams #-}
 > {-# LANGUAGE DeriveDataTypeable #-}
 
-> module CommonBlocks where
+> module Transformation.CommonBlockElim where
 
 > import Data.Data
 > import Data.List
@@ -16,10 +16,11 @@
 > import Control.Monad.State.Lazy
 > import Debug.Trace
 
-> import Annotations
-> import Syntax
+> import Analysis.Annotations
+> import Analysis.Syntax
+> import Analysis.Types
+> import Transformation.Syntax
 > import Traverse
-> import Types
 
 Todo: CallExpr, changing assignments 
 

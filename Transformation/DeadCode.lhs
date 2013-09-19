@@ -3,11 +3,12 @@
 > {-# LANGUAGE ScopedTypeVariables #-}
 > {-# LANGUAGE DeriveGeneric #-}
 
-> module DeadCode where
+> module Transformation.DeadCode where
 
-> import Annotations
-> import LVA
-> import Syntax
+> import Analysis.Annotations
+> import Analysis.LVA
+> import Analysis.Syntax
+> import Transformation.Syntax
 > import Traverse
 > import Language.Fortran
 

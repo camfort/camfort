@@ -1,7 +1,7 @@
 > {-# LANGUAGE ImplicitParams #-}
 > {-# LANGUAGE DeriveDataTypeable #-}
 
-> module CommonBlocks where
+> module Analysis.CallGraph where
 
 > import Data.Data
 
@@ -12,8 +12,8 @@
 > import Control.Monad.State.Lazy
 > import Debug.Trace
 
-> import Annotations
-> import Syntax
+> import Analysis.Annotations
+> import Analysis.Syntax
 > import Traverse
 
 Calculates inter-procedural information

@@ -1,9 +1,7 @@
 > {-# LANGUAGE TupleSections #-}
 > {-# LANGUAGE ScopedTypeVariables #-}
 
-> module Types where
-
-> import Syntax
+> module Analysis.Types where
 
 > import Data.List
 > import Data.Data
@@ -11,6 +9,7 @@
 
 > import Data.Generics.Uniplate.Operations
 
+> import Analysis.Syntax
 > import Language.Fortran
 
 > type TypeEnv t = [(Variable, Type t)]

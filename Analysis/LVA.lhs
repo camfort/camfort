@@ -1,6 +1,6 @@
 > {-# LANGUAGE ScopedTypeVariables #-}
 
-> module LVA where
+> module Analysis.LVA where
 >     
 > import Data.Data
 > import Data.List
@@ -10,9 +10,10 @@
 
 > import Language.Fortran
 
-> import Annotations
-> import Syntax
-> import IntermediateReps
+> import Analysis.Annotations
+> import Analysis.Syntax
+> import Transformation.Syntax
+> import Analysis.IntermediateReps
 > import Traverse
 
 Kill/gen functions

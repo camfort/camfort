@@ -1,7 +1,7 @@
 > {-# LANGUAGE ImplicitParams #-}
 > {-# LANGUAGE DeriveDataTypeable #-}
 
-> module IntermediateReps where
+> module Analysis.IntermediateReps where
 
 > import Data.Data
 

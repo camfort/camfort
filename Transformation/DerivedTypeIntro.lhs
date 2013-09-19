@@ -1,7 +1,7 @@
 > {-# LANGUAGE FlexibleContexts #-}
 > {-# LANGUAGE ScopedTypeVariables #-}
 
-> module TypeStructuring where
+> module Transformation.DerivedTypeIntro where
 
 > import Data.Data
 > import Data.List hiding (union, insert)
@@ -16,12 +16,14 @@
 
 > import Language.Fortran
 
-> import Annotations
-> import IntermediateReps
-> import Loops
-> import Syntax
+> import Analysis.Annotations
+> import Analysis.IntermediateReps
+> import Analysis.Loops
+> import Analysis.Syntax
+> import Transformation.Syntax
+> import Analysis.Types
+
 > import Traverse
-> import Types
 
 > typeStruct :: [(String, [Program Annotation])] -> (String, [[Program Annotation]])
 > typeStruct fps = mapM (\(_, ps) -> mapM tS ps) fps

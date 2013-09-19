@@ -7,7 +7,7 @@
 
 > {-# LANGUAGE DeriveGeneric #-}
 
-> module Syntax where
+> module Analysis.Syntax where
 
 Standard imports 
 
@@ -26,22 +26,12 @@ Data-type generics imports
 
 CamFort specific functionality
 
-> import Annotations
-> import IntermediateReps
+> import Analysis.Annotations
+> import Analysis.IntermediateReps
 > import Traverse
 > import Language.Fortran
 > import Language.Haskell.Syntax (SrcLoc(..))
 
-
-TODO: Needs fixing with the spans - need to pull apart and put back together
-
-> reassociate :: Fortran Annotation -> Fortran Annotation
-> reassociate (FSeq a1 sp1 (FSeq a2 sp2 a b) c) = FSeq a1 sp1 (reassociate a) (FSeq a2 sp2  (reassociate b) (reassociate c))
-> reassociate t = t
-
- reassociate :: Fortran Annotation -> Fortran Annotation
- reassociate (FSeq a1 sp1 (FSeq a2 sp2 a b) c) = FSeq a1 sp1 (reassociate a) (FSeq a2 sp2  (reassociate b) (reassociate c))
- reassociate t = t
 
 General helpers
 
@@ -49,26 +39,6 @@ General helpers
 > lookups _ [] = []
 > lookups x ((a, b):xs) = if (x == a) then b : lookups x xs
 >                                     else lookups x xs
-
-Helpers to do with source locations and parsing
-
-> refactorSpan :: SrcSpan -> SrcSpan
-> refactorSpan (SrcLoc f ll cl, SrcLoc _ lu cu) = (SrcLoc f (lu+1) 0, SrcLoc f lu cu)
-
-> refactorSpanN :: Int -> SrcSpan -> SrcSpan
-> refactorSpanN n (SrcLoc f ll cl, SrcLoc _ lu cu) = (SrcLoc f (lu+1+n) 0, SrcLoc f (lu+n) cu)
-
-> toCol0 (SrcLoc f l c) = SrcLoc f l 0
-
-dropLine extends a span to the start of the next line
-This is particularly useful if a whole line is being redacted from a source file
-
-> dropLine :: SrcSpan -> SrcSpan
-> dropLine (s1, SrcLoc f l c) = (s1, SrcLoc f (l+1) 0)
-
-> srcLineCol :: SrcLoc -> (Int, Int)
-> srcLineCol (SrcLoc _ l c) = (l, c)
-
 
 Comparisons
 

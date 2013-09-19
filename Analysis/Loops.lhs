@@ -1,7 +1,7 @@
 > {-# LANGUAGE ImplicitParams #-}
 > {-# LANGUAGE DeriveDataTypeable #-}
 
-> module Loops where
+> module Analysis.Loops where
 
 > import Data.Data
 > import Data.List
@@ -15,12 +15,13 @@
 > import Control.Monad.State.Lazy
 > import Debug.Trace
 
-> import LVA
-> import Annotations
-> import Syntax
+> import Analysis.LVA
+> import Analysis.Annotations
+> import Analysis.Syntax
+> import Analysis.Types
 > import Traverse
-> import Types
 
+> import Transformation.Syntax -- <- for doing reassociation
 > 
 > import qualified Data.Map.Lazy as Map hiding (map, (\\))
 

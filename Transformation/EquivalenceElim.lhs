@@ -1,7 +1,7 @@
 > {-# LANGUAGE ScopedTypeVariables #-}
 > {-# LANGUAGE ImplicitParams #-}
 
-> module Equivalences where
+> module Transformation.EquivalenceElim where
 
 > import Data.Data
 > import Data.List
@@ -14,11 +14,12 @@
 > import Output
 > import Language.Fortran.Pretty
 
-> import DeadCode
-> import Annotations
-> import Syntax
+> import Transformation.DeadCode
+> import Analysis.Annotations
+> import Analysis.Syntax
+> import Transformation.Syntax
 > import Traverse
-> import Types
+> import Analysis.Types
 
 > import Debug.Trace
 
