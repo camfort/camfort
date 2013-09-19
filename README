@@ -1,23 +1,28 @@
-To install:
+For development purpsoses, you probably want to load CamFort in interactive mode:
 
-runhaskell Setup.hs configure
-runhaskell Setup.hs build
-runhaskell Setup.hs install
+   ghci Main.lhs
 
-OR, for local install (depending how your Haskell install is setup), try:
+OR compile to the binary format locally:
 
-runhaskell Setup.hs configure --user
-runhaskell Setup.hs build
-runhaskell Setup.hs install
+  ghc Main.lhs -o camfort
 
-OR, run in interactive mode using ghci:
+Note, for both of these you may need to compile the lexer and parser first if not already done:
 
-ghci Main.lhs
+  alex Language/Fortran/Lexer.x
+  happy Language/Fortran/Parser.y
 
-! You may need to compile the lexer and parser first if not already done!:
 
-alex Language/Fortran/Lexer.x
-happy Language/Fortran/Parser.y
+Alternatively, to install as a library in your Haskell build 
+
+  runhaskell Setup.hs configure
+  runhaskell Setup.hs build
+  runhaskell Setup.hs install
+
+OR, for local install (depending how your Haskell install is setup), try to configure
+using --user.
+
+  runhaskell Setup.hs configure --user
+
 
 
 
