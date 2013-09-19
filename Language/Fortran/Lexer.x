@@ -178,21 +178,19 @@ keywords = ["access","action","advance","allocate","allocatable","assign",
 	"unit","use","volatile","where","write"]
 -}
 
-
-
 lexer :: (Token -> P a) -> P a
 lexer = runL lexer'
 
 lexer' :: Lex a Token
 lexer' = do s <- getInput 
        	    startToken
-            case alexScan ('\0',s) 0 of
+            case alexScan ('\0',[],s) 0 of
               AlexEOF             -> return TokEOF 
-              AlexError (c,s')    -> fail ("unrecognizable token: " ++ show c)
-              AlexSkip (_,s') len -> (discard len) >> lexer'
-              AlexToken (_,s') len act -> do let tok = act (take len s)
-                                             case tok of
-					       NewLine    -> lexNewline >> (return tok)
-					       NewLineAmp -> (discard len) >> lexNewline >> lexer'
-                                               _          -> (discard len) >> (return tok)
+              AlexError (c,b,s')  -> fail ("unrecognizable token: " ++ show c)
+              AlexSkip (_,b,s') len -> (discard len) >> lexer'
+              AlexToken (_,b,s') len act -> do let tok = act (take len s)
+                                               case tok of
+					         NewLine    -> lexNewline >> (return tok)
+					         NewLineAmp -> (discard len) >> lexNewline >> lexer'
+                                                 _          -> (discard len) >> (return tok)
 }
