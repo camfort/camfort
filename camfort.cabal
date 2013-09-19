@@ -23,20 +23,22 @@ library
                         Language.Fortran.Parser
                         Language.Fortran
                         Language.Fortran.Pretty
-                        Annotations
-                        CommonBlocks
-                        DeadCode
-                        Equivalences
-                        IntermediateReps
-                        Loops
-                        LVA
+                        Analysis.Annotations
+                        Analysis.CallGraph
+                        Analysis.IntermediateReps
+                        Analysis.Loops
+                        Analysis.LVA
+                        Analysis.Syntax
+                        Analysis.Types
+                        Transformation.CommonBlockElim
+                        Transformation.DeadCode
+                        Transformation.DerivedTypeIntro
+                        Transformation.EquivalenceElim
+                        Transformation.Syntax
+                        Helpers
                         Main
                         Output
-                        Traverse
-                        Syntax
-                        Types
-                        TypeStructuring
-                        
+                        Traverse                        
                         
   build-depends:        base < 5,
                         containers >= 0.5.0.0,

@@ -17,7 +17,7 @@
 
 > module Output where
 
-> import Annotations
+> import Analysis.Annotations
 > import Traverse
 > import Language.Fortran as Fortran
 > import Language.Fortran.Pretty

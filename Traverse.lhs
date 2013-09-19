@@ -13,7 +13,7 @@
 
 > module Traverse where
 
-> import Annotations
+> import Analysis.Annotations
 > import Language.Fortran
 
 > import Generics.Deriving.Base

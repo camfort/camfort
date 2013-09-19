@@ -29,17 +29,20 @@
 > import Control.Monad
 > import Control.Monad.State.Lazy
 
-> import Annotations
-> import CommonBlocks
-> import DeadCode 
-> import Equivalences
-> import Loops
-> import LVA
+> import Analysis.Annotations
+
+> import Transformation.DeadCode
+> import Transformation.CommonBlockElim
+> import Transformation.EquivalenceElim
+> import Transformation.DerivedTypeIntro
+
+> import Analysis.Types
+> import Analysis.Loops
+> import Analysis.LVA
+> import Analysis.Syntax
+
 > import Output
-> import Syntax
 > import Traverse
-> import Types
-> import TypeStructuring
 
 > import Debug.Trace
 

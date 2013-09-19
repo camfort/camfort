@@ -14,3 +14,10 @@ OR, run in interactive mode using ghci:
 
 ghci Main.lhs
 
+! You may need to compile the lexer and parser first if not already done!:
+
+alex Language/Fortran/Lexer.x
+happy Language/Fortran/Parser.y
+
+
+
