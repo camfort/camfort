@@ -171,16 +171,16 @@ import Data.Char (toLower)
  TEXT                   { Text $$ }
 %%
 
-executable_program :: { [Program A0] }
+executable_program :: { Program A0 }
 executable_program
   : program_unit_list                             { $1 }
     
-program_unit_list :: { [Program A0] }
+program_unit_list :: { Program A0 }
 program_unit_list
   : program_unit_list newline0 program_unit       { $1++[$3] }
   | {- empty -}                                   { [] }
 
-program_unit :: { Program A0 }
+program_unit :: { ProgUnit A0 }
 program_unit
   : main_program                                  { $1 }
   | external_subprogram                           { $1 }
@@ -204,7 +204,7 @@ newline0 :: {}
 newline0 : newline  {} 
         | {- empty -} {}
 
-main_program :: { Program A0 }
+main_program :: { ProgUnit A0 }
 main_program
   : srcloc program_stmt use_stmt_list implicit_part srcloc specification_part_top execution_part module_subprogram_part end_program_stmt newline0
                 {% do { s <- srcSpan $1;
@@ -228,12 +228,12 @@ implicit_part
   : IMPLICIT NONE newline   { ImplicitNone () }
   | {- empty -}             { ImplicitNull () }
 
-external_subprogram :: { Program A0}
+external_subprogram :: { ProgUnit A0}
 external_subprogram
   : function_subprogram           { $1 }
   | subroutine_subprogram         { $1 } 
 
-subroutine_subprogram :: { Program A0 }
+subroutine_subprogram :: { ProgUnit A0 }
 subroutine_subprogram 
   : srcloc subroutine_stmt use_stmt_list implicit_part srcloc specification_part_top execution_part end_subroutine_stmt newline0
   {% do { s <- srcSpan $1;
@@ -253,14 +253,14 @@ end_function_stmt
   | END FUNCTION                { "" }
   | END                         { "" }
 
-function_subprogram :: { Program A0 }
+function_subprogram :: { ProgUnit A0 }
 function_subprogram
 : srcloc function_stmt use_stmt_list implicit_part srcloc specification_part_top execution_part end_function_stmt newline0  {% do { s <- srcSpan $1;
                        s' <- srcSpan $5;
                        name <- cmpNames (fst3 $2) $8 "function";
 		       return (Function () s (trd3 $2) name (snd3 $2) (Block () $3 $4 s' $6 $7)); } }
 
-block_data :: { Program A0 }
+block_data :: { ProgUnit A0 }
 block_data
   : srcloc block_data_stmt use_stmt_list implicit_part specification_part_top end_block_data_stmt     
                   {% do { s <- srcSpan $1;
@@ -278,7 +278,7 @@ end_block_data_stmt
   | END BLOCK DATA                         { "" }
   | END                                    { "" }
   
-module :: { Program A0 }
+module :: { ProgUnit A0 }
 module
    : srcloc module_stmt use_stmt_list implicit_part specification_part_top module_subprogram_part end_module_stmt
          {%  do { s <- srcSpan $1;
@@ -295,17 +295,17 @@ end_module_stmt
   | END MODULE                                { "" }
   | END                                       { "" }
 
-module_subprogram_part :: { [Program A0] }
+module_subprogram_part :: { Program A0 }
 module_subprogram_part
   : CONTAINS newline internal_subprogram_list { $3 }
 | {- empty -}                                 { [] } 
   
-internal_subprogram_list :: { [Program A0] }
+internal_subprogram_list :: { Program A0 }
 internal_subprogram_list
   : internal_subprogram_list internal_subprogram newline0 { $1++[$2] } 
   | {- empty -}                                           { [] }
   
-internal_subprogram :: { Program A0 }
+internal_subprogram :: { ProgUnit A0 }
 internal_subprogram
   : subroutine_subprogram                           { $1 }
   | function_subprogram                             { $1 }
@@ -1611,7 +1611,7 @@ tokenFollows s = case alexScan ('\0',s) 0 of
                     AlexSkip  (_,t) len   -> tokenFollows t
                     AlexToken (_,t) len _ -> take len s
 
-parse :: String -> [Program A0]
+parse :: String -> Program A0
 parse p = case (runParser parser p) of 
 	    (ParseOk p)       -> p
             (ParseFailed l e) ->  error e

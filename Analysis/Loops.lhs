@@ -19,6 +19,8 @@
 > import Analysis.Annotations
 > import Analysis.Syntax
 > import Analysis.Types
+
+> import Helpers
 > import Traverse
 
 > import Transformation.Syntax -- <- for doing reassociation
@@ -43,11 +45,11 @@
 
 map (fmap ((,[""]),[""]))
 
-> loopAnalyse :: [Program a] -> [Program Annotation]
-> loopAnalyse p = map ((descendBi arrayIndices) . ix . lva . (transformBi reassociate) . (fmap (const unitAnnotation))) p
+> loopAnalyse :: Program a -> Program Annotation
+> loopAnalyse p = map ((descendBi arrayIndices) . ix . lva' . (transformBi reassociate) . (fmap (const unitAnnotation))) p
 
-> analyse' :: [Program Annotation] -> [Program Annotation]
-> analyse' p = map ((descendBi arrayIndices) . ix . lva . (transformBi reassociate))  p
+> analyse' :: Program Annotation -> Program Annotation
+> analyse' p = map ((descendBi arrayIndices) . ix . lva' . (transformBi reassociate))  p
 
 
 > collect :: (Eq a, Ord k) => [(k, a)] -> Map.Map k [a]
@@ -74,7 +76,7 @@ map (fmap ((,[""]),[""]))
 >                     in (copoint y) { arrsRead = (collect readIxs), arrsWrite = (collect writeIxs) } 
 >     in extendBi arrIxsF x               
 
-> ix :: Program Annotation -> Program Annotation
+> ix :: ProgUnit Annotation -> ProgUnit Annotation
 > ix = let ixF :: Fortran Annotation -> Annotation
 >          ixF f = (copoint f) { indices = (nub [v | (For _ _ (VarName _ v) _ _ _ _) <- ((universeBi f)::[Fortran Annotation])])}
 >      in extendBi ixF

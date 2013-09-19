@@ -12,6 +12,8 @@
 > import Traverse
 > import Language.Fortran
 
+> import Helpers
+
 > import Generics.Deriving.Copoint
 > import GHC.Generics
 
@@ -19,10 +21,11 @@
 
 > import Data.Generics.Uniplate.Operations
 
-> deadCode :: Bool -> [Program Annotation] -> (Report, [Program Annotation])
-> deadCode flag p = let (r, p') = mapM ((transformBi elimEmptyFseq) . transformBiM (elimDead flag)) (map lva p)
->                   in if r == "" then (r, p')
->                                 else (r, p') >>= (deadCode flag)
+> deadCode :: Bool -> (Filename, Program Annotation) -> (Report, (Filename, Program Annotation))
+> deadCode flag (fname, p) =
+>              let (r, p') = mapM ((transformBi elimEmptyFseq) . transformBiM (elimDead flag)) (lva p)
+>              in if r == "" then (r, (fname, p'))
+>                            else (r, (fname, p')) >>= (deadCode flag)
 
 > elimEmptyFseq :: Fortran Annotation -> Fortran Annotation
 > elimEmptyFseq (FSeq _ _ (NullStmt _ _) n2@(NullStmt _ _)) = n2

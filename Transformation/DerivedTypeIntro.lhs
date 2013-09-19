@@ -23,10 +23,11 @@
 > import Transformation.Syntax
 > import Analysis.Types
 
+> import Helpers
 > import Traverse
 
-> typeStruct :: [(String, [Program Annotation])] -> (String, [[Program Annotation]])
-> typeStruct fps = mapM (\(_, ps) -> mapM tS ps) fps
+> typeStruct :: [(Filename, Program Annotation)] -> (Report, [(Filename, Program Annotation)])
+> typeStruct fps = mapM (\(f, ps) -> mapM tS ps >>= (\ps' -> return (f, ps'))) fps
 
 > listToSymmRelation :: [a] -> [(a, a)] 
 > listToSymmRelation []     = []
@@ -71,7 +72,7 @@ Non-interprocedural version first
 >                                    | otherwise = r
 
 
-> tS :: Program Annotation -> (Report, Program Annotation)
+> tS :: ProgUnit Annotation -> (Report, ProgUnit Annotation)
 > tS p = descendBiM
 >          (\b@(Block a uses implicits span decs f) ->
 >                 let 

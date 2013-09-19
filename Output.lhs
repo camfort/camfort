@@ -63,7 +63,7 @@
 
 > pre l = Text.concat [pack "<pre>", l, pack "</pre>"]
 
-> outputHTML :: forall p . (Data p, Typeable p, OutputG p Alt2, OutputIndG (Fortran p) Alt2, Indentor (Decl p), Indentor (Fortran p)) => Fortran.Program p -> String
+> outputHTML :: forall p . (Data p, Typeable p, OutputG p Alt2, OutputIndG (Fortran p) Alt2, Indentor (Decl p), Indentor (Fortran p)) => Fortran.ProgUnit p -> String
 > outputHTML prog = unpack html
 >                 where
 >                   t :: SubName p -> SubName p
@@ -92,7 +92,7 @@ Output routines specialised to the analysis.
 > instance OutputG SrcLoc Alt2 where
 >     outputG _ = "" -- not sure if I want this to shown
 
-> instance (OutputIndG (Fortran p) Alt2, OutputG p Alt2, Indentor (Decl p), Indentor (Fortran p)) => OutputG (Program p) Alt2 where
+> instance (OutputIndG (Fortran p) Alt2, OutputG p Alt2, Indentor (Decl p), Indentor (Fortran p)) => OutputG (ProgUnit p) Alt2 where
 >     outputG = outputF
 
 > instance OutputG (SubName p) Alt2 where
@@ -250,7 +250,9 @@ Output routines specialised to the analysis.
 >                  Just (SrcLoc f _ c) -> Prelude.take c (repeat ' ')
 >                  Nothing             -> ind i
 
-> reprint :: String -> String -> [Program Annotation] -> String
+GLORIOUS REFACTORING ALGORITHM!
+
+> reprint :: String -> String -> Program Annotation -> String
 > reprint input f z = let input' = Prelude.lines input
 >                         start = SrcLoc f 1 0
 >                         end = SrcLoc f (Prelude.length input') (1 + (Prelude.length $ Prelude.last input'))
@@ -261,6 +263,7 @@ Output routines specialised to the analysis.
 
 > reprintC cursor inp z = let ?variant = Alt1 in
 >                         let (p1, cursor', flag) = case (getHole z)::(Maybe (Fortran Annotation)) of
+>                                                     -- Unfortunately a bit of messing around here with three cases (this could be extracted with `extQ`)
 >                                                     Just e -> if (pRefactored $ copoint e) then 
 >                                                                   let (lb, ub) = getSpan e
 >                                                                       (p0, _) = takeBounds (cursor, lb) inp 

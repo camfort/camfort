@@ -27,7 +27,7 @@ class Alts a
 instance Alts Alt1
 instance Alts Alt2
 
---instance (OutputF (Program p) Alt1) => Show (Program p) where
+--instance (OutputF (ProgUnit p) Alt1) => Show (ProgUnit p) where
 --    show p = let ?variant = Alt1 in outputF p
 
 class OutputF t v where
@@ -96,8 +96,8 @@ instance (OutputG (Arg p) v,
           OutputG (Decl p) v,
           OutputG (Implicit p) v,
           OutputG (SubName p) v,
-          OutputG (Program p) v,
-          Alts v) => OutputF (Program p) v where
+          OutputG (ProgUnit p) v,
+          Alts v) => OutputF (ProgUnit p) v where
   outputF (Sub _ _ (Just p) n a b)  = outputG p ++ " subroutine "++(outputG n)++outputG a++"\n"++
                              outputG b++
                           "\nend subroutine "++(outputG n)++"\n"

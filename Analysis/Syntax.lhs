@@ -131,7 +131,7 @@ their annotaitons (and source span information)
 
 Accessors
 
-> getSubName :: Program p -> Maybe String
+> getSubName :: ProgUnit p -> Maybe String
 > getSubName (Main _ _ (SubName _ s) _ _ _) = Just s
 > getSubName (Sub _ _ _ (SubName _ s) _ _) = Just s
 > getSubName (Function _ _ _ (SubName _ s) _ _) = Just s
@@ -144,7 +144,7 @@ Compute successors for certain node types
 
 > class Successors t where
 >     successorsRoot :: t a -> [t a]
->     successors :: (Eq a, Typeable a) => Zipper (Program a) -> [t a]  
+>     successors :: (Eq a, Typeable a) => Zipper (ProgUnit a) -> [t a]  
 
 > instance Successors Fortran where
 >     successorsRoot (FSeq _ _ f1 f2)          = [f1]
@@ -157,13 +157,13 @@ Compute successors for certain node types
 
 >     successors = successorsF
 
-> successorsF :: forall a . (Eq a, Typeable a) => Zipper (Program a) -> [Fortran a]
+> successorsF :: forall a . (Eq a, Typeable a) => Zipper (ProgUnit a) -> [Fortran a]
 > successorsF z = maybe [] id 
 >                 (do f <- (getHole z)::(Maybe (Fortran a))
 >                     ss <- return $ successorsRoot f
 >                     return $ ss ++ seekUp f (Just z))
 
->                  where seekUp :: Fortran a -> Maybe (Zipper (Program a)) -> [Fortran a]
+>                  where seekUp :: Fortran a -> Maybe (Zipper (ProgUnit a)) -> [Fortran a]
 >                        seekUp f z = case (z >>= up >>= getHole)::(Maybe (Fortran a)) of
 >                                  Just uf -> 
 >                                    case uf of
@@ -180,7 +180,7 @@ Compute successors for certain node types
 
 Number statements (for analysis output)
 
-> numberStmts :: Program Annotation -> Program Annotation
+> numberStmts :: ProgUnit Annotation -> ProgUnit Annotation
 > numberStmts x = let 
 >                   numberF :: Fortran Annotation -> State Int (Fortran Annotation)
 >                   numberF = descendBiM number'

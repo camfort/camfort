@@ -41,6 +41,7 @@
 > import Analysis.LVA
 > import Analysis.Syntax
 
+> import Helpers
 > import Output
 > import Traverse
 
@@ -95,11 +96,11 @@
 >               doAnalysis loopAnalyse d
 
 > lvaA d =  do putStrLn $ "Analysing loops for source in directory " ++ show d ++ "\n"
->              doAnalysis (map lva) d
+>              doAnalysis lva d
 
 
 > dead d = do putStrLn $ "Eliminating dead code for source in directory " ++ show d ++ "\n"
->             doRefactor ((mapM (deadCode False)) . (map snd)) d
+>             doRefactor ((mapM (deadCode False))) d
 
 > common d = do putStrLn $ "Refactoring common blocks for source in directory " ++ show d ++ "\n"
 >               doRefactor commonElim d
@@ -113,35 +114,45 @@ General analysis/refactor builders
 > doAnalysis aFun d = do putStrLn $ "Exclude any files from " ++ d ++ "/? (comma-separate list)\n"
 >                        excludes <- getLine
 >                           
->                        (pss, fileNames) <- readParseSrc d excludes
->                        let asts' = map (\(f, _, ps) -> aFun ps) pss
+>                        ps <- readParseSrcDir d excludes
+>                        let inFiles = map fst3 ps
+>                        let outFiles = filter (\f -> not ((take (length $ d ++ "out") f) == (d ++ "out"))) inFiles
+>                        let asts' = map (\(f, _, ps) -> aFun ps) ps
 >                        -- (show (map (map (fmap (const ()))) (map (\(_, _, f) -> f) pss))) `trace`
->                        outputAnalysisFiles d asts' fileNames
+>                        outputAnalysisFiles d asts' outFiles
+
 
 > doRefactor rFun d = do putStrLn $ "Exclude any files from " ++ d ++ "/? (comma-separate list)\n"
 >                        excludes <- getLine
 >               
->                        (ps, fileNames) <- readParseSrc d excludes
->                        let (report, asts') = rFun (map (\(f, inp, ast) -> (f, ast)) ps)
+>                        ps <- readParseSrcDir d excludes
+
+>                        let (report, ps') = rFun (map (\(f, inp, ast) -> (f, ast)) ps)
+
+>                        let outFiles = filter (\f -> not ((take (length $ d ++ "out") f) == (d ++ "out"))) (map fst ps')
+
 >                        putStrLn report
->               
->                        outputFiles d asts' (map snd3 ps) fileNames
+>                        outputFiles d (zip3 outFiles (map snd3 ps) (map snd ps'))
+
 
 General source file handling stuff
+----------------------------------
 
 
-> readParseSrc d excludes = do dirF <- rGetDirectoryContents d
->                              let files = dirF \\ ((map unpack (split (==',') (pack excludes))))
->                              let files' = filter (\f -> not ((take (length $ d ++ "out") f) == (d ++ "out"))) files
->                              let files'' = map (\y -> d ++ "/" ++ y) files'
->                              ps <- mapM readParseSrc' files''
->                              return (ps, files')
 
 
-> readParseSrc' f = do putStrLn f 
->                      inp <- readFile f
->                      ast <- pr f
->                      return $ (f, inp, map (fmap (const unitAnnotation)) ast)                                        
+
+> readParseSrcDir :: Directory -> String -> IO [(Filename, SourceText, Program A)]
+> readParseSrcDir d excludes = do dirF <- rGetDirectoryContents d
+>                                 let files = dirF \\ ((map unpack (split (==',') (pack excludes))))
+>                                 let files' = map (\y -> d ++ "/" ++ y) files'
+>                                 mapM readParseSrcFile files'
+
+> readParseSrcFile :: Filename -> IO (Filename, SourceText, Program A)
+> readParseSrcFile f = do putStrLn f 
+>                         inp <- readFile f
+>                         ast <- pr f
+>                         return $ (f, inp, map (fmap (const unitAnnotation)) ast)                                   
 
 > setupOut d = if ((Prelude.drop (length d - 3) d) == "-out") then  -- don't do this (hence the '-' pref to stop this)
 >                  return d
@@ -151,16 +162,23 @@ General source file handling stuff
 >              else do createDirectoryIfMissing True (d ++ "out")
 >                      return $ d ++ "out"
 
+Creates a directory if its missing
+
 > checkDir f = let ix = elemIndices '/' f
 >                  d = take (last ix) f
 >              in createDirectoryIfMissing True d
 
-> outputFiles d asts inps files =
+Given a directory and list of triples of filenames, with their source text (if it exists) and
+their AST, write these to the director
+
+> outputFiles :: Directory -> [(Filename, SourceText, Program Annotation)] -> IO ()
+> outputFiles d pdata = 
 >            do d' <- setupOut d
 >               putStrLn $ "Writing refactored files to directory: " ++ d' ++ "/"
->               mapM (\(ast', (inp, f)) -> do checkDir (d' ++ "/" ++ f) 
->                                             writeFile (d' ++ "/" ++ f) (reprint inp f ast')) (Prelude.zip asts (Prelude.zip inps files))
->               return ()
+>               mapM_ (\(f, inp, ast') -> (checkDir (d' ++ "/" ++ f)) >>
+>                                         (writeFile (d' ++ "/" ++ f) (reprint inp f ast'))) pdata
+
+
 
 > outputAnalysisFiles d asts files =
 >            do putStrLn $ "Writing analysis files to directory: " ++ d ++ "/"
@@ -191,7 +209,7 @@ General source file handling stuff
 >               
 >            
 
-> pr  :: String -> IO [Program A0]
+> pr  :: String -> IO (Program ())
 > pr f = let mode = ParseMode { parseFilename = f }
 >        in do inp <- readFile f
 >              case (runParserWithMode mode parser inp) of
@@ -203,18 +221,18 @@ General source file handling stuff
 
 OLD FUNS FOR PURPOSE OF TESTING
 
-> go3 f = 
->     do inp <- readFile f
->        p <- pr f
->        let (r, p') = (refactorEquivalences (f, map (fmap (const unitAnnotation)) p))
->        let out = reprint inp f p'
->        let pa' = analyse' p'
->        writeFile (f ++ ".out.html") (concatMap outputHTML pa')
->        writeFile (f ++ ".out") out
->        let (r2, p'') = (deadCode True pa')
->        let out' = reprint inp f p''
->        writeFile (f ++ ".2.out") out'
->        putStrLn $ r ++ r2
+ go3 f = 
+     do inp <- readFile f
+        p <- pr f
+        let (r, p') = (refactorEquivalences (f, map (fmap (const unitAnnotation)) p))
+        let out = reprint inp f p'
+        let pa' = analyse' p'
+        writeFile (f ++ ".out.html") (concatMap outputHTML pa')
+        writeFile (f ++ ".out") out
+        let (r2, p'') = (deadCode True pa')
+        let out' = reprint inp f p''
+        writeFile (f ++ ".2.out") out'
+        putStrLn $ r ++ r2
 
 > goR :: String -> IO ()
 > goR s = do f' <- pr s

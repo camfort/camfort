@@ -41,21 +41,7 @@
 >     (x, a) >>= k = let (x', b) = k a
 >                    in (mappend x x', b)
 
-Other helpers
 
-> fanout :: (a -> b) -> (a -> c) -> a -> (b, c)
-> fanout f g x = (f x, g x)
-
-> prod :: (a -> c) -> (b -> d) -> (a, b) -> (c, d)
-> prod f g (x, y) = (f x, g y)
-
-> (><) :: (a -> c) -> (b -> d) -> (a, b) -> (c, d)
-> f >< g = prod f g
-
-> mfmap :: Functor f => (a -> b) -> [f a] -> [f b]
-> mfmap f = map (fmap f)
-
-> each = flip (map)
 
 Data-type generic comonad-style traversal
 
@@ -272,7 +258,7 @@ ext f (x:xs) = (f (x:xs)) : (map f xs)
 >     copoint (NullArg x) = x
 >     copoint (ArgName x _) = x
 
-> instance Copointed Program where
+> instance Copointed ProgUnit where
 >     copoint (Main x sp _ _ _ _)      = x
 >     copoint (Sub x sp _ _ _ _)       = x
 >     copoint (Function x sp _ _ _ _)  = x

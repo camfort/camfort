@@ -16,6 +16,7 @@
 > import Control.Monad.State.Lazy
 > import Debug.Trace
 
+> import Common
 > import Analysis.Annotations
 > import Analysis.Syntax
 > import Analysis.Types
@@ -31,7 +32,7 @@ Todo: CallExpr, changing assignments
 > type TLCommons p = [(String, (String, TCommon p))]
 
 > -- Eliminates common blocks in a program directory
-> commonElim :: [(String, [Program A])] -> (Report, [[Program A]])
+> commonElim :: [(Filename, Program A)] -> (Report, [(Filename, Program A)])
 > commonElim ps = let (ps', (r, cg)) = runState (definitionSites ps) ("", [])
 >                     (r', ps'') = mapM (commonElimToCalls cg) ps'
 >                 in (r ++ r', ps'')
@@ -41,15 +42,18 @@ Todo: CallExpr, changing assignments
 > nonNullArgs (NullArg _) = False
 
 
-> commonElimToModules :: TLCommons A -> (String, [Program A]) -> (Report, [Program A], [Program A]) -- last part is new modules
+> commonElimToModules :: TLCommons A -> (Filename, Program A) -> (Report, (Filename, Program A)) -- last part is new modules
 > commonElimToModules cenv (fname, ps) = undefined
 
-      mapM (transformBiM commonElim) ps
-        where commonElim s@(Sub a sp mbt (SubName a' n)(Arg parg asp) b) = undefined -- STUB                  
+mapM (transformBiM commonElim) ps
+                                           
+        where commonElim s@(Sub a sp mbt (SubName a' moduleName)(Arg p parg asp) b) = 
+                  let commons = lookups moduleName (lookups fname cenv)
+                  in return (undefined, undefined)    
 
 
 
-> mkModule :: [(Variable, Type A)] -> String -> Program A
+> mkModule :: [(Variable, Type A)] -> String -> ProgUnit A
 > mkModule vtys fname = let a = unitAnnotation { refactored = Just loc }
 >                           loc = SrcLoc (fname ++ ".f") 0 0 
 >                           sp = (loc, loc)
@@ -61,19 +65,21 @@ Todo: CallExpr, changing assignments
 Extending calls version
 
 
-> commonElimToCalls :: TLCommons A -> (String, [Program A]) -> (Report, [Program A])
-> commonElimToCalls cenv (fname, ps) = mapM (transformBiM commonElim) ps
->               where commonElim s@(Sub a sp mbt (SubName a' n) (Arg p arg asp) b) = 
+> commonElimToCalls :: TLCommons A -> (Filename, Program A) -> (Report, (Filename, Program A))
+> commonElimToCalls cenv (fname, ps) = do ps' <- mapM (transformBiM commonElim) ps
+>                                         return (fname, ps')
+
+>               where commonElim s@(Sub a sp mbt (SubName a' moduleName) (Arg p arg asp) b) = 
 >                         
->                          let commons = lookups n (lookups fname cenv) 
+>                          let commons = lookups moduleName (lookups fname cenv) 
 >                              sortedC = sortBy cmpTC commons
 >                              tArgs = extendArgs (nonNullArgs arg) asp (concatMap snd sortedC)
 >                              ra = p { refactored = Just (fst sp) }
 >                              arg' = Arg unitAnnotation (ASeq unitAnnotation arg tArgs) asp
 >                              a' = a -- { pRefactored = Just sp }
 >                              r = fname ++ (show $ srcLineCol $ fst sp) ++ ": changed common variables to parameters\n"
->                          in do b' <- transformBiM (extendCalls fname n cenv) b
->                                (r, Sub a' sp mbt (SubName a' n) arg' b')
+>                          in do b' <- transformBiM (extendCalls fname moduleName cenv) b
+>                                (r, Sub a' sp mbt (SubName a' moduleName) arg' b')
 
                                                  -- b' = blockExtendDecls b tDecls
 
@@ -81,7 +87,7 @@ Extending calls version
 >                     commonElim'' s = case (getSubName s) of
 >                                        Just n -> transformBiM (extendCalls fname n cenv) s
 >                                        Nothing -> transformBiM r s 
->                                                    where r :: Program A -> (Report, Program A)
+>                                                    where r :: ProgUnit A -> (Report, ProgUnit A)
 >                                                          r p = case getSubName p of
 >                                                                Just n -> transformBiM (extendCalls fname n cenv) p
 >                                                                Nothing -> return p
@@ -176,9 +182,9 @@ Extending calls version
 >                                                    
 
 
-> definitionSites :: [(String, [Program A])] -> State (Report, TLCommons A) [(String, [Program A])] 
+> definitionSites :: [(String, Program A)] -> State (Report, TLCommons A) [(String, Program A)] 
 > definitionSites pss = let 
->                           defs' :: String -> Program A -> State (Report, TLCommons A) (Program A)
+>                           defs' :: String -> ProgUnit A -> State (Report, TLCommons A) (ProgUnit A)
 >                           defs' f p = case (getSubName p) of
 >                                            Just n -> transformBiM (collectTCommons' f n) p
 >                                            Nothing -> return $ p

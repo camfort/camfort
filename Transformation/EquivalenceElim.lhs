@@ -12,25 +12,31 @@
 > import Language.Fortran
 
 > import Output
+> import Traverse
+> import Helpers
+
 > import Language.Fortran.Pretty
 
-> import Transformation.DeadCode
+
 > import Analysis.Annotations
 > import Analysis.Syntax
-> import Transformation.Syntax
-> import Traverse
 > import Analysis.Types
+
+> import Transformation.DeadCode
+> import Transformation.Syntax
+
 
 > import Debug.Trace
 
 
 > type RfEqState = ([[Expr Annotation]], Int, Report)
 
-> refactorEquivalences :: (String, [Program Annotation]) -> (Report, [Program Annotation])
+> refactorEquivalences :: (Filename, Program Annotation) -> (Report, (Filename, Program Annotation))
 > refactorEquivalences (fname, p) = 
 >                         let ?fname = fname
 >                         in do p' <- mapM (transformBiM equivalences) p
->                               deadCode True p'
+>                               deadCode True (fname, p')
+
 >                             
 >                         where equivalences :: (?fname :: String) => Block Annotation -> (Report, Block Annotation)
 >                               equivalences b = let equiv = do b' <- rmEquivalences b
