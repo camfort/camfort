@@ -17,7 +17,7 @@ source-repository head
 library
   hs-source-dirs:       .
 
-  build-tools:           alex, happy
+  build-tools:          alex, happy
 
   exposed-modules:      Language.Fortran.Lexer
                         Language.Fortran.Parser
@@ -52,4 +52,4 @@ library
                         array >= 0.4,
                         directory >= 1.2
 
-  ghc-options:          -fglasgow-exts
+--  ghc-options:          -fglasgow-exts

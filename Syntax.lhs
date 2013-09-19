@@ -18,8 +18,11 @@ Standard imports
 Data-type generics imports
 
 > import Data.Data
+> import Data.Generics.Uniplate.Data
 > import Data.Generics.Uniplate.Operations
 > import Data.Generics.Zipper
+> import Data.Typeable
+
 
 CamFort specific functionality
 

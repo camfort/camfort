@@ -68,8 +68,8 @@
 
 >                -- Sequence original assignment with new assignments
 >                return $ FSeq a sp x (foldl1 (FSeq a' sp') eqs'')
->       else
->          return x
+>         else
+>            return x
 > addCopy tys x = return x 
 
 

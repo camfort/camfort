@@ -6,6 +6,7 @@
 > {-# LANGUAGE OverlappingInstances #-}
 
 > {-# LANGUAGE TupleSections #-}
+> {-# LANGUAGE DoAndIfThenElse #-}
 
 > {-# LANGUAGE ImplicitParams #-}
 
@@ -43,8 +44,8 @@
 > import Debug.Trace
 
 > import Data.Data
-> import qualified Data.Maybe as MaybeList
 > import Data.Typeable
+> import qualified Data.Maybe as MaybeList
 
 > import Data.List (nub, (\\), elemIndices)
 > import Data.Text hiding (length, head, concatMap, map, filter, take, last)
