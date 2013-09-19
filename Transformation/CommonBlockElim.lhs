@@ -16,7 +16,8 @@
 > import Control.Monad.State.Lazy
 > import Debug.Trace
 
-> import Common
+> import Helpers
+
 > import Analysis.Annotations
 > import Analysis.Syntax
 > import Analysis.Types
