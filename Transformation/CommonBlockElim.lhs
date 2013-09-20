@@ -43,10 +43,11 @@ Todo: CallExpr, changing assignments
 > nonNullArgs (NullArg _) = False
 
 
-> commonElimToModules :: TLCommons A -> (Filename, Program A) -> (Report, (Filename, Program A)) -- last part is new modules
-> commonElimToModules cenv (fname, ps) = undefined
+> commonElimToModules :: TLCommons A -> (Filename, Program A) -> (Report, [(Filename, Program A)]) -- last part is new modules
+> commonElimToModules cenv (fname, ps) =
 
-mapM (transformBiM commonElim) ps
+ mapM (transformBiM commonElim) ps
+ 
                                            
         where commonElim s@(Sub a sp mbt (SubName a' moduleName)(Arg p parg asp) b) = 
                   let commons = lookups moduleName (lookups fname cenv)
