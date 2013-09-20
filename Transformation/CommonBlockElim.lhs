@@ -44,14 +44,14 @@ Todo: CallExpr, changing assignments
 
 
 > commonElimToModules :: TLCommons A -> (Filename, Program A) -> (Report, [(Filename, Program A)]) -- last part is new modules
-> commonElimToModules cenv (fname, ps) =
-
- mapM (transformBiM commonElim) ps
- 
-                                           
-        where commonElim s@(Sub a sp mbt (SubName a' moduleName)(Arg p parg asp) b) = 
-                  let commons = lookups moduleName (lookups fname cenv)
-                  in return (undefined, undefined)    
+> commonElimToModules cenv (fname, ps) = let (r, ps') = mapM (transformBiM commonElim) ps
+>                                        in (r, [(fname, ps')])
+>       where commonElim s@(Sub a sp mbt (SubName a' moduleName)(Arg p parg asp) b) =  -- STUBS
+>                 let commons = lookups moduleName (lookups fname cenv)
+>                     sortedC = sortBy cmpTC commons
+>                     ra = p { refactored = Just (fst sp) }
+>                     r = fname ++ (show $ srcLineCol $ fst sp) ++ ": extracted common variables into module \n"
+>                 in (r, s)
 
 
 
