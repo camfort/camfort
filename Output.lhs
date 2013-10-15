@@ -255,10 +255,11 @@ Output routines specialised to the analysis.
 GLORIOUS REFACTORING ALGORITHM!
 
 > reprint :: SourceText -> Filename -> Program Annotation -> String
-> reprint input f z = let input' = Prelude.lines input
+> reprint ""    f p = let ?variant = Alt1 in foldl (\a b -> a ++ "\n" ++ outputF b) "" p 
+> reprint input f p = let input' = Prelude.lines input
 >                         start = SrcLoc f 1 0
 >                         end = SrcLoc f (Prelude.length input') (1 + (Prelude.length $ Prelude.last input'))
->                         (pn, cursorn) = reprintC start input' (toZipper z)
+>                         (pn, cursorn) = reprintC start input' (toZipper p)
 >                         (_, inpn) = takeBounds (start, cursorn) input'
 >                         (pe, _) = takeBounds (cursorn, end) inpn
 >                      in pn ++ pe

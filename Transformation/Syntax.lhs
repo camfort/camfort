@@ -14,6 +14,7 @@ Standard imports
 > import Data.Char
 > import Data.List
 > import Control.Monad.State.Lazy
+> import qualified Data.Map as Data.Map
 
 Data-type generics imports
 
@@ -60,3 +61,12 @@ This is particularly useful if a whole line is being redacted from a source file
 
 > srcLineCol :: SrcLoc -> (Int, Int)
 > srcLineCol (SrcLoc _ l c) = (l, c)
+
+Variable renaming
+
+> type Renamer = Data.Map.Map Variable Variable
+
+> applyRenaming :: (Typeable (t A), Data (t A)) => Renamer -> (t A) -> (t A)
+> applyRenaming r = transformBi ((\vn@(VarName p v) -> case Data.Map.lookup v r of
+>                                                         Nothing -> vn
+>                                                         Just v' -> VarName p v')::(VarName A -> VarName A))

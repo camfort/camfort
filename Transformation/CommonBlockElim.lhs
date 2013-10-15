@@ -6,6 +6,7 @@
 > import Data.Data
 > import Data.List
 > import Data.Ord
+> import qualified Data.Map as Data.Map
 
 > import Language.Fortran
 > import Language.Fortran.Pretty
@@ -30,30 +31,67 @@ Todo: CallExpr, changing assignments
 > type TCommon p = (Maybe String, [(Variable, Type p)])
 
 > -- Typed and "located" common block representation
-> type TLCommons p = [(String, (String, TCommon p))]
+> type TLCommon p = (String, (String, TCommon p))
 
-> -- Eliminates common blocks in a program directory
-> commonElim :: [(Filename, Program A)] -> (Report, [(Filename, Program A)])
-> commonElim ps = let (ps', (r, cg)) = runState (definitionSites ps) ("", [])
->                     (r', ps'') = mapM (commonElimToCalls cg) ps'
->                 in (r ++ r', ps'')
+> commonElimToCalls, commonElimToModules :: Directory -> [(Filename, Program A)] -> (Report, [(Filename, Program A)])
+
+> -- Eliminates common blocks in a program directory (and convert to calls)
+> commonElimToCalls d ps = let (ps', (r, cg)) = runState (definitionSites ps) ("", [])
+>                              (r', ps'') = mapM (introduceCalls cg) ps'
+>                          in (r ++ r', ps'')
+
+> -- Eliminates common blocks in a program directory (and convert to modules)
+> commonElimToModules d ps = let (ps', (r, cg)) = runState (definitionSites ps) ("", [])
+>                                (r', ps'') = introduceModules d (zip [0..] cg)
+>                            in (r ++ r', ps' ++ ps'') -- ++ [("testNew", snd $ head ps)])
 
 > nonNullArgs (ASeq _ _ _) = True
 > nonNullArgs (ArgName _ _) = True
 > nonNullArgs (NullArg _) = False
 
 
-> commonElimToModules :: TLCommons A -> (Filename, Program A) -> (Report, [(Filename, Program A)]) -- last part is new modules
-> commonElimToModules cenv (fname, ps) = let (r, ps') = mapM (transformBiM commonElim) ps
->                                        in (r, [(fname, ps')])
->       where commonElim s@(Sub a sp mbt (SubName a' moduleName)(Arg p parg asp) b) =  -- STUBS
->                 let commons = lookups moduleName (lookups fname cenv)
->                     sortedC = sortBy cmpTC commons
->                     ra = p { refactored = Just (fst sp) }
->                     r = fname ++ (show $ srcLineCol $ fst sp) ++ ": extracted common variables into module \n"
->                 in (r, s)
+-- Fold [TLCommon p] to get a list of ([(TLCommon p, Renamer p)], [(Filename, Program A)])
+-- How to decide which gets to be the "head" perhaps the one which triggers the *least* renaming (ooh!)
+--  (this is calculated by looking for the mode of the TLCommon (for a particular Common)
+--  (need to do gorouping, but sortBy is used already so... (IS THIS STABLE- does this matter?))
+
+> cmpTCfields (_, x) (_, y)
+>                 = let x' = sortBy (\(a, _) (b, _) -> a `compare` b) x
+>                       y' = sortBy (\(a, _) (b, _) -> a `compare` b) y
+>                   in x' == y'
+
+> fff commons = let gc = groupBy (\x y -> cmpEq $ cmpTC x y) commons -- groups by name the commons
+>                   ggc = map (groupBy cmpTCfields) gc
+>               in undefined
+>                   
 
 
+
+
+
+
+> introduceModules :: Directory -> [(Int, TLCommon A)] -> (Report, [(Filename, Program A)]) 
+> introduceModules d cenv = mapM (mkModuleFile d) cenv
+
+ introduceModules :: [TLCommon A] -> (Filename, Program A) -> (Report, [(Filename, Program A)]) -- last part is new modules
+ introduceModules cenv (fname, ps) = let (r, ps') = mapM (transformBiM commonElim) ps
+                                        in (r, [(fname, ps')])
+
+       where commonElim s@(Sub a sp mbt (SubName a' moduleName)(Arg p parg asp) b) =  -- 
+
+                 let commons = lookups moduleName (lookups fname cenv)
+                     sortedC = sortBy cmpTC commons
+                     ra = p { refactored = Just (fst sp) }
+                     r = fname ++ (show $ srcLineCol $ fst sp) ++ ": extracted common variables into module \n"
+                 in (r, s)
+
+> mkModuleFile :: Directory -> (Int, TLCommon A) -> (Report, (Filename, Program A))
+> mkModuleFile d (n, (_, (_, (name, varTys)))) =
+>         let modname = case name of Nothing -> "Common" ++ show n 
+>                                    Just x  -> x
+>             fullpath = d ++ "/" ++ modname ++ ".f"
+>             r = "Created module " ++ modname ++ " at " ++ fullpath ++ "\n"
+>         in (r, (fullpath, [mkModule varTys modname]))
 
 > mkModule :: [(Variable, Type A)] -> String -> ProgUnit A
 > mkModule vtys fname = let a = unitAnnotation { refactored = Just loc }
@@ -67,9 +105,9 @@ Todo: CallExpr, changing assignments
 Extending calls version
 
 
-> commonElimToCalls :: TLCommons A -> (Filename, Program A) -> (Report, (Filename, Program A))
-> commonElimToCalls cenv (fname, ps) = do ps' <- mapM (transformBiM commonElim) ps
->                                         return (fname, ps')
+> introduceCalls :: [TLCommon A] -> (Filename, Program A) -> (Report, (Filename, Program A))
+> introduceCalls cenv (fname, ps) = do ps' <- mapM (transformBiM commonElim) ps
+>                                      return (fname, ps')
 
 >               where commonElim s@(Sub a sp mbt (SubName a' moduleName) (Arg p arg asp) b) = 
 >                         
@@ -96,7 +134,7 @@ Extending calls version
 >                                                                Nothing -> return p
 
 
-> extendCalls :: String -> String -> TLCommons A -> Fortran A -> (Report, Fortran A)
+> extendCalls :: String -> String -> [TLCommon A] -> Fortran A -> (Report, Fortran A)
 > extendCalls fname localSub cenv f@(Call p sp v@(Var _ _ ((VarName _ n, _):_)) (ArgList ap arglist)) =
 >         let commons = lookups n (map snd cenv)
 >             targetCommonNames = map fst (sortBy cmpTC commons)
@@ -162,34 +200,33 @@ Extending calls version
 
 
 
-> collectTCommons' :: String -> String -> (Block A) -> State (Report, TLCommons A) (Block A)
-> collectTCommons' fname n b = 
->                      let tenv = typeEnv b
+> collectCommons :: String -> String -> (Block A) -> State (Report, [TLCommon A]) (Block A)
+> collectCommons fname n b = 
+>     let tenv = typeEnv b
 >                     
->                          commons' :: Decl A -> State (Report, TLCommons A) (Decl A)
->                          commons' f@(Common a sp name exprs) = do let r' = fname ++ (show $ srcLineCol $ fst sp) ++ ": removed common declaration\n"
->                                                                   (r, env) <- get
->                                                                   put (r ++ r', (fname, (n, (name, typeCommonExprs exprs))):env)
->                                                                   return $ (NullDecl (a { refactored = (Just $ fst sp) }) sp)
->                          commons' f = return f
+>         commons' :: Decl A -> State (Report, [TLCommon A]) (Decl A)
+>         commons' f@(Common a sp name exprs) = 
+>             do let r' = fname ++ (show $ srcLineCol $ fst sp) ++ ": removed common declaration\n"
+>                (r, env) <- get
+>                put (r ++ r', (fname, (n, (name, typeCommonExprs exprs))):env)
+>                return $ (NullDecl (a { refactored = (Just $ fst sp) }) sp)
+>         commons' f = return f
 
->                          typeCommonExprs :: [Expr Annotation] -> [(Variable, Type Annotation)]
->                          typeCommonExprs [] = []
->                          typeCommonExprs ((Var _ sp [(VarName _ v, _)]):es) = 
->                             case (lookup v tenv) of
->                               Just t -> (v, t) : (typeCommonExprs es)
->                               Nothing -> error $ "Variable is of an unknown type at: " ++ show sp
->                          typeCommonExprs (e:_) = error $ "Not expecting a non-variable expression in expression at: " ++ show (getSpan e)
+>         typeCommonExprs :: [Expr Annotation] -> [(Variable, Type Annotation)]
+>         typeCommonExprs [] = []
+>         typeCommonExprs ((Var _ sp [(VarName _ v, _)]):es) = 
+>             case (lookup v tenv) of
+>                  Just t -> (v, t) : (typeCommonExprs es)
+>                  Nothing -> error $ "Variable is of an unknown type at: " ++ show sp
+>         typeCommonExprs (e:_) = error $ "Not expecting a non-variable expression in expression at: " ++ show (getSpan e)
 
->                      in transformBiM commons' b                           
->                                                    
+>     in transformBiM commons' b                           
 
-
-> definitionSites :: [(String, Program A)] -> State (Report, TLCommons A) [(String, Program A)] 
+> definitionSites :: [(String, Program A)] -> State (Report, [TLCommon A]) [(String, Program A)] 
 > definitionSites pss = let 
->                           defs' :: String -> ProgUnit A -> State (Report, TLCommons A) (ProgUnit A)
+>                           defs' :: String -> ProgUnit A -> State (Report, [TLCommon A]) (ProgUnit A)
 >                           defs' f p = case (getSubName p) of
->                                            Just n -> transformBiM (collectTCommons' f n) p
+>                                            Just n -> transformBiM (collectCommons f n) p
 >                                            Nothing -> return $ p
 
 >                           -- defs' f (Sub _ _ _ (SubName _ n) _ b) rs = (concat rs) ++ [(f, (n, snd $ runState (collectTCommons' b) []))]

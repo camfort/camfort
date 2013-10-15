@@ -24,3 +24,6 @@ An infix `map` operation.
 
 > each = flip (map)
 
+> cmpEq :: Ordering -> Bool
+> cmpEq EQ = True
+> cmpEq _  = False

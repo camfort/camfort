@@ -82,6 +82,7 @@
 >              let (func:(dir:_)) = d
 >              in case func of
 >                    "common" -> common dir
+>                    "commonToCalls" -> commonToCalls dir
 >                    "equivalence" -> equivalences dir
 >                    "dead" -> dead dir
 >                    "lva" -> lvaA dir
@@ -102,8 +103,11 @@
 > dead d = do putStrLn $ "Eliminating dead code for source in directory " ++ show d ++ "\n"
 >             doRefactor ((mapM (deadCode False))) d
 
+> commonToCalls d = do putStrLn $ "Refactoring common blocks for source in directory " ++ show d ++ "\n"
+>                      doRefactor (commonElimToCalls d) d
+
 > common d = do putStrLn $ "Refactoring common blocks for source in directory " ++ show d ++ "\n"
->               doRefactor commonElim d
+>               doRefactor (commonElimToModules d) d
 
 > equivalences d =
 >            do putStrLn $ "Refactoring equivalences blocks for source in directory " ++ show d ++ "\n"
@@ -133,7 +137,7 @@ General analysis/refactor builders
 >                        let outFiles = filter (\f -> not ((take (length $ d ++ "out") f) == (d ++ "out"))) (map fst ps')
 
 >                        putStrLn report
->                        outputFiles d (zip3 outFiles (map snd3 ps) (map snd ps'))
+>                        outputFiles d (zip3 outFiles (map snd3 ps ++ (repeat "")) (map snd ps'))
 
 
 General source file handling stuff
@@ -160,11 +164,11 @@ General source file handling stuff
 >              else do createDirectoryIfMissing True (d ++ "out")
 >                      return $ d ++ "out"
 
-Creates a directory if its missing
-
-> checkDir f = let ix = elemIndices '/' f
->                  d = take (last ix) f
->              in createDirectoryIfMissing True d
+> -- checkDir creates a directory (from a filename string) if it doesn't exist
+> checkDir f = case (elemIndices '/' f) of 
+>                [] -> return ()
+>                ix -> let d = take (last ix) f
+>                      in createDirectoryIfMissing True d
 
 Given a directory and list of triples of filenames, with their source text (if it exists) and
 their AST, write these to the director
@@ -176,9 +180,13 @@ their AST, write these to the director
 >               mapM_ (\(f, inp, ast') -> (checkDir f) >>
 >                                         (writeFile (changeDir d' f) (reprint inp f ast'))) pdata
 
-> changeDir d' f = let ix = elemIndices '/' f
->                      fWithoutDir = Prelude.drop (last ix) f
->                  in d' ++ "/" ++ fWithoutDir
+
+> -- changeDir is used to change the directory of a filename string.
+> --  If the filename string has no directory then this is an identity 
+> changeDir d' f = case (elemIndices '/' f) of
+>                    []   -> f
+>                    ixs  -> let fWithoutDir = Prelude.drop (last ixs) f
+>                            in d' ++ "/" ++ fWithoutDir
 
 > outputAnalysisFiles d asts files =
 >            do putStrLn $ "Writing analysis files to directory: " ++ d ++ "/"
