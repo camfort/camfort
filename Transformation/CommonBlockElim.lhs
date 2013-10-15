@@ -31,7 +31,8 @@ Todo: CallExpr, changing assignments
 > type TCommon p = (Maybe String, [(Variable, Type p)])
 
 > -- Typed and "located" common block representation
-> type TLCommon p = (String, (String, TCommon p))
+> -- TODO: include column + line information 
+> type TLCommon p = (Filename, (String, TCommon p))
 
 > commonElimToCalls, commonElimToModules :: Directory -> [(Filename, Program A)] -> (Report, [(Filename, Program A)])
 
@@ -55,19 +56,30 @@ Todo: CallExpr, changing assignments
 --  (this is calculated by looking for the mode of the TLCommon (for a particular Common)
 --  (need to do gorouping, but sortBy is used already so... (IS THIS STABLE- does this matter?))
 
-> cmpTCfields (_, x) (_, y)
->                 = let x' = sortBy (\(a, _) (b, _) -> a `compare` b) x
->                       y' = sortBy (\(a, _) (b, _) -> a `compare` b) y
->                   in x' == y'
 
 > fff commons = let gc = groupBy (\x y -> cmpEq $ cmpTC x y) commons -- groups by name the commons
->                   ggc = map (groupBy cmpTCfields) gc
+>                   
 >               in undefined
 >                   
 
+> generatRenamer :: TCommon A -> TCommon A -> Renamer
+> generatRenamer = undefined -- ((n1, vtys1) : xs) ((n2, vtys2) : ys) = undefined
 
-
-
+> coherentlyTypedCommons :: TLCommon A -> TLCommon A -> (Report, Bool)
+> coherentlyTypedCommons (f1, (p1, (n1, vtys1))) (f2, (p2, (n2, vtys2))) =
+>     case (n1 == n2) of
+>       True -> coherent vtys1 vtys2 where
+>                   coherent ::  [(Variable, Type p)] -> [(Variable, Type p)] -> (Report, Bool)
+>                   coherent ((var1, ty1):xs) ((var2, ty2):ys) 
+>                       | af ty1 == af ty2 = let (r', c) = coherent xs ys
+>                                            in (r', c && True)
+>                       | otherwise = let ?variant = Alt1 in
+>                                     let r = (var1 ++ ":" ++ (outputF ty1) ++ " differs from " ++ 
+>                                              var2 ++ ":" ++ (outputF ty2))
+>                                         (r', _) = coherent xs ys
+>                                     in (r ++ r', False)
+>       False -> error "Trying to compare different common blocks\n"
+>                                                            
 
 
 > introduceModules :: Directory -> [(Int, TLCommon A)] -> (Report, [(Filename, Program A)]) 
@@ -224,7 +236,7 @@ Extending calls version
 
 > definitionSites :: [(String, Program A)] -> State (Report, [TLCommon A]) [(String, Program A)] 
 > definitionSites pss = let 
->                           defs' :: String -> ProgUnit A -> State (Report, [TLCommon A]) (ProgUnit A)
+>                           defs' :: Filename -> ProgUnit A -> State (Report, [TLCommon A]) (ProgUnit A)
 >                           defs' f p = case (getSubName p) of
 >                                            Just n -> transformBiM (collectCommons f n) p
 >                                            Nothing -> return $ p
