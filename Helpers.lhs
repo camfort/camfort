@@ -1,3 +1,5 @@
+> {-# LANGUAGE TypeOperators #-}
+
 > module Helpers where
 
 > type Filename = String
@@ -15,6 +17,12 @@ Other helpers
 > (><) :: (a -> c) -> (b -> d) -> (a, b) -> (c, d)
 > f >< g = \(x, y) -> (f x, g y)
 
+Computes all pairwise combinations
+
+> pairs :: [a] -> [(a, a)]
+> pairs []     = []
+> pairs (x:xs) = (zip (repeat x) xs) ++ (pairs xs)
+
 Functor composed with list functor
 
 > mfmap :: Functor f => (a -> b) -> [f a] -> [f b]
@@ -27,3 +35,7 @@ An infix `map` operation.
 > cmpEq :: Ordering -> Bool
 > cmpEq EQ = True
 > cmpEq _  = False
+
+Used for type-level annotations giving documentation
+
+> type (:?) a b = a

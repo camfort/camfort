@@ -4,7 +4,7 @@ subroutine bar(X)
     integer ::  j
     real A(0:x), B(0:x), c
 
-    equivalence (c, j, i)
+    equivalence (c, i)
 
     common i, j
 

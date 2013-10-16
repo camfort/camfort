@@ -1,7 +1,9 @@
 > {-# LANGUAGE ImplicitParams #-}
-> {-# LANGUAGE DeriveDataTypeable #-}
+> {-# LANGUAGE DeriveDataTypeable, TypeOperators #-}
 
 > module Transformation.CommonBlockElim where
+
+> import Control.Monad
 
 > import Data.Data
 > import Data.List
@@ -57,19 +59,39 @@ Todo: CallExpr, changing assignments
 --  (need to do gorouping, but sortBy is used already so... (IS THIS STABLE- does this matter?))
 
 
-> fff commons = let gc = groupBy (\x y -> cmpEq $ cmpTC x y) commons -- groups by name the commons
->                   
->               in undefined
->                   
+> fff commons = case allCoherentCommonsP commons of
+>                 (r, False) -> undefined -- (r, []) -- Incoherent commons
+>                 (_, True) -> let gcs = groupBy (\x y -> cmpEq $ cmpTLConBNames x y) commons -- groups by names of the commons
+>                                  gccs = map group gcs
+>                                  gcrcs = map (\grp -> 
+>                                                  map (\c -> (c, Nothing)) (head grp) ++ 
+>                                                  map (\(hc, c) -> (hc, mkRenamerCoercerTLC c hc)) (zip (repeat (head (head grp))) (concat $ tail grp))) gccs
+>                              in gcrcs
 
-> generatRenamer :: TCommon A -> TCommon A -> Renamer
-> generatRenamer = undefined -- ((n1, vtys1) : xs) ((n2, vtys2) : ys) = undefined
+> mkRenamerCoercerTLC :: TLCommon A :? source -> TLCommon A :? target -> RenamerCoercer
+> mkRenamerCoercerTLC x@(fname, (pname, common1)) (_, (_, common2)) = mkRenamerCoercer common1 common2
 
-> coherentlyTypedCommons :: TLCommon A -> TLCommon A -> (Report, Bool)
-> coherentlyTypedCommons (f1, (p1, (n1, vtys1))) (f2, (p2, (n2, vtys2))) =
+> mkRenamerCoercer :: TCommon A :? source -> TCommon A :? target -> RenamerCoercer
+> mkRenamerCoercer (name1, vtys1) (name2, vtys2)
+>      | name1 == name2 = if (vtys1 == vtys2) then Nothing else Just $ generate vtys1 vtys2 Data.Map.empty
+>      | otherwise      = error "Can't generate renamer between different common blocks\n"
+>                            where
+>                              generate [] [] theta = theta
+>                              generate ((var1, ty1):vtys1) ((var2, ty2):vtys2) theta = 
+>                                  let varR = if (var1 == var2) then Nothing else Just var2
+>                                      typR = if (ty1  ==  ty2) then Nothing else Just (ty1, ty2)
+>                                  in generate vtys1 vtys2 (Data.Map.insert var1 (varR, typR) theta)
+>                              generate _ _ _ = error "Common blocks of different field length\n"
+
+> allCoherentCommonsP :: [TLCommon A] -> (Report, Bool)
+> allCoherentCommonsP commons = foldM (\p (c1, c2) -> (coherentCommonsP c1 c2) >>= (\p' -> return $ p && p')) True (pairs commons)
+
+> coherentCommonsP :: TLCommon A -> TLCommon A -> (Report, Bool)
+> coherentCommonsP (f1, (p1, (n1, vtys1))) (f2, (p2, (n2, vtys2))) =
 >     case (n1 == n2) of
 >       True -> coherent vtys1 vtys2 where
 >                   coherent ::  [(Variable, Type p)] -> [(Variable, Type p)] -> (Report, Bool)
+>                   coherent []               []                = ("", True)
 >                   coherent ((var1, ty1):xs) ((var2, ty2):ys) 
 >                       | af ty1 == af ty2 = let (r', c) = coherent xs ys
 >                                            in (r', c && True)
@@ -78,7 +100,8 @@ Todo: CallExpr, changing assignments
 >                                              var2 ++ ":" ++ (outputF ty2))
 >                                         (r', _) = coherent xs ys
 >                                     in (r ++ r', False)
->       False -> error "Trying to compare different common blocks\n"
+>                   coherent _ _ = ("Common blocks of different field lengths", False) -- Doesn't say which is longer
+>       False -> error "Trying to compare differently named common blocks\n"
 >                                                            
 
 
@@ -124,7 +147,7 @@ Extending calls version
 >               where commonElim s@(Sub a sp mbt (SubName a' moduleName) (Arg p arg asp) b) = 
 >                         
 >                          let commons = lookups moduleName (lookups fname cenv) 
->                              sortedC = sortBy cmpTC commons
+>                              sortedC = sortBy cmpTConBNames commons
 >                              tArgs = extendArgs (nonNullArgs arg) asp (concatMap snd sortedC)
 >                              ra = p { refactored = Just (fst sp) }
 >                              arg' = Arg unitAnnotation (ASeq unitAnnotation arg tArgs) asp
@@ -149,10 +172,10 @@ Extending calls version
 > extendCalls :: String -> String -> [TLCommon A] -> Fortran A -> (Report, Fortran A)
 > extendCalls fname localSub cenv f@(Call p sp v@(Var _ _ ((VarName _ n, _):_)) (ArgList ap arglist)) =
 >         let commons = lookups n (map snd cenv)
->             targetCommonNames = map fst (sortBy cmpTC commons)
+>             targetCommonNames = map fst (sortBy cmpTConBNames commons)
 
 >             localCommons = lookups localSub (lookups fname cenv)
->             localCommons' = sortBy cmpTC localCommons
+>             localCommons' = sortBy cmpTConBNames localCommons
 
 >             p' = p { refactored = Just $ toCol0 $ fst sp }
 >             ap' = ap { refactored = Just $ fst sp } 
@@ -173,7 +196,7 @@ Extending calls version
 > select [] _ = []
 > select x [] = error $ "Source has less commons than the target!" ++ show x
 > select a@(x:xs) b@((y, e):yes) | x == y = e ++ select xs yes
->                            | otherwise = select xs yes
+>                                | otherwise = select xs yes
 > 
 
 > extendArgs nonNullArgs sp' args = if nonNullArgs then 
@@ -197,11 +220,14 @@ Extending calls version
          (decs, args) = extendArgs sp' vts
      in (DSeq p' dec decs, ASeq p' arg args)
 
-> cmpTC :: TCommon A -> TCommon A -> Ordering
-> cmpTC (Nothing, _) (Nothing, _) = EQ
-> cmpTC (Nothing, _) (Just _, _)  = LT
-> cmpTC (Just _, _) (Nothing, _)  = GT
-> cmpTC (Just n, _) (Just n', _) = if (n < n') then LT
+> cmpTLConBNames :: TLCommon A -> TLCommon A -> Ordering
+> cmpTLConBNames (_, (_, c1)) (_, (_, c2)) = cmpTConBNames c1 c2
+
+> cmpTConBNames :: TCommon A -> TCommon A -> Ordering
+> cmpTConBNames (Nothing, _) (Nothing, _) = EQ
+> cmpTConBNames (Nothing, _) (Just _, _)  = LT
+> cmpTConBNames (Just _, _) (Nothing, _)  = GT
+> cmpTConBNames (Just n, _) (Just n', _) = if (n < n') then LT
 >                                  else if (n > n') then GT else EQ
 
 

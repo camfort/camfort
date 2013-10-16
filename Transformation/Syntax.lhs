@@ -66,7 +66,10 @@ Variable renaming
 
 > type Renamer = Data.Map.Map Variable Variable
 
-> type RenamerCoercer = Data.Map.Map Variable (Variable, Type A, Type A)
+> type RenamerCoercer = Maybe (Data.Map.Map Variable (Maybe Variable, Maybe (Type A, Type A)))
+>                        -- Nothing represents an overall identity renamer/coercer for efficiency
+>                        -- a Nothing for a variable represent a variable-level (renamer) identity 
+>                        -- a Nothing for a type represents a type-level (coercer) identity
 
 > applyRenaming :: (Typeable (t A), Data (t A)) => Renamer -> (t A) -> (t A)
 > applyRenaming r = transformBi ((\vn@(VarName p v) -> case Data.Map.lookup v r of

@@ -5,7 +5,9 @@ program foo
   integer :: x
   integer :: y
 
-  common x, y 
+  real(kind=8) :: z
+
+  common x, y
   
   x = 3
   y = 10
