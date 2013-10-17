@@ -75,3 +75,6 @@ Variable renaming
 > applyRenaming r = transformBi ((\vn@(VarName p v) -> case Data.Map.lookup v r of
 >                                                         Nothing -> vn
 >                                                         Just v' -> VarName p v')::(VarName A -> VarName A))
+
+
+> 

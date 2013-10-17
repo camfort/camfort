@@ -135,7 +135,7 @@ Todo: CallExpr, changing assignments
 >                           toDecl (v, t) = Decl a sp [(Var a sp [(VarName a v, [])], NullExpr a sp)] -- note here could pull in initialising definition? What if conflicts- highlight as potential source of error?
 >                                                             t
 >                           decls = foldl1 (DSeq a) (map toDecl vtys)
->                       in Module a (loc, loc) (SubName a fname) [] (ImplicitNone a) decls []
+>                       in Module a (loc, loc) (SubName a fname) UseNil (ImplicitNone a) decls []
 
 Extending calls version
 

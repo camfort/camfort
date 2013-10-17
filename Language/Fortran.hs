@@ -75,11 +75,11 @@ data ArgList  p = ArgList p (Expr p)
 type Program p = [ProgUnit p]
 
              -- Prog type   (type of result)   name      args  body    use's  
-data ProgUnit  p = Main       p SrcSpan                      (SubName p)  (Arg p)  (Block p) [ProgUnit p]
+data ProgUnit  p = Main      p SrcSpan                      (SubName p)  (Arg p)  (Block p) [ProgUnit p]
                 | Sub        p SrcSpan (Maybe (BaseType p)) (SubName p)  (Arg p)  (Block p)
                 | Function   p SrcSpan (Maybe (BaseType p)) (SubName p)  (Arg p)  (Block p)
-                | Module     p SrcSpan                      (SubName p)  [String] (Implicit p) (Decl p) [ProgUnit p]
-                | BlockData  p SrcSpan                      (SubName p)  [String] (Implicit p) (Decl p)
+                | Module     p SrcSpan                      (SubName p)  (Uses p) (Implicit p) (Decl p) [ProgUnit p]
+                | BlockData  p SrcSpan                      (SubName p)  (Uses p) (Implicit p) (Decl p)
                 | PSeq       p SrcSpan (ProgUnit p) (ProgUnit p)   -- sequence of programs
                 | Prog       p SrcSpan (ProgUnit p)               -- useful for {#p: #q : program ... }
                 | NullProg   p SrcSpan                           -- null
@@ -88,9 +88,14 @@ data ProgUnit  p = Main       p SrcSpan                      (SubName p)  (Arg p
              -- implicit none or no implicit 
 data Implicit p = ImplicitNone p | ImplicitNull p
                 deriving (Show, Functor, Typeable, Data, Eq)
-				
+
+type Renames = [(Variable, Variable)] -- renames for "use"s 
+
+data Uses p     = Use p (String, Renames) (Uses p) p  -- (second 'p' let's you annotate the 'cons' part of the cell)
+                | UseNil deriving (Show, Functor, Typeable, Data, Eq)
+
              --       use's     implicit  decls  stmts
-data Block    p = Block p  [String]  (Implicit p) SrcSpan (Decl p) (Fortran p)
+data Block    p = Block p  (Uses p) (Implicit p) SrcSpan (Decl p) (Fortran p)
                 deriving (Show, Functor, Typeable, Data, Eq)
 
 data Decl     p = Decl           p SrcSpan [(Expr p, Expr p)] (Type p)              -- declaration stmt
@@ -136,8 +141,8 @@ data Attr     p = Parameter p
 data GSpec   p = GName p (Expr p) | GOper p (BinOp p) | GAssg p
                  deriving (Show, Functor, Typeable, Data, Eq)
 			  
-data InterfaceSpec p = FunctionInterface   p (SubName p) (Arg p) [String] (Implicit p) (Decl p)
-                     | SubroutineInterface p (SubName p) (Arg p) [String] (Implicit p) (Decl p)
+data InterfaceSpec p = FunctionInterface   p (SubName p) (Arg p) (Uses p) (Implicit p) (Decl p)
+                     | SubroutineInterface p (SubName p) (Arg p) (Uses p) (Implicit p) (Decl p)
                      | ModuleProcedure     p [(SubName p)]
                        deriving (Show, Functor, Typeable, Data, Eq)
 				   

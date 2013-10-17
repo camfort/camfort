@@ -85,8 +85,12 @@ showForall ((s,e,e',e''):[]) = s++"="++outputG e++":"++outputG e'++"; "++outputG
 showForall ((s,e,e',NullExpr _ _):is) = s++"="++outputG e++":"++outputG e'++", "++showForall is
 showForall ((s,e,e',e''):is) = s++"="++outputG e++":"++outputG e'++"; "++outputG e''++", "++showForall is
 
-showUse :: [String] -> String
-showUse ss = concat ( map (\s -> ((ind 1)++"use "++s++"\n")) ss)
+showUse :: Uses p -> String
+showUse (UseNil) = ""
+showUse (Use _ (n, []) us _) = ((ind 1)++"use "++n++"\n") ++ (showUse us)
+showUse (Use _ (n, renames) us _) = ((ind 1)++"use "++n++", " ++ 
+                                     (concat $ intersperse ", " (map (\(a, b) -> show a ++ " => " ++ show b) renames)) ++
+                                   "\n") ++ (showUse us)
 
 -- Printing declarations
 -- 

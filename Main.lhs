@@ -87,9 +87,13 @@
 >                    "dead" -> dead dir
 >                    "lva" -> lvaA dir
 >                    "loops" -> loops dir
+>                    "ast"   -> ast dir (d!!2)
 >                    _ -> putStrLn $ usage ++ menu
 >           else
 >              putStrLn $ usage ++ menu
+
+> ast d f = do (_, _, p) <- readParseSrcFile (d ++ "/" ++ f)
+>              putStrLn $ show p
 
 > typeStructuring d = doRefactor typeStruct d
 
