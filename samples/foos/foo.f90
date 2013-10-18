@@ -1,5 +1,4 @@
 program foo
-  use foobar, x => y
   implicit none
 
   integer :: i
