@@ -45,8 +45,9 @@ Todo: CallExpr, changing assignments
 
 > -- Eliminates common blocks in a program directory (and convert to modules)
 > commonElimToModules d ps = let (ps', (r, cg)) = runState (definitionSites ps) ("", [])
->                                (r', ps'') = introduceModules d (zip [0..] cg)
->                            in (r ++ r', ps' ++ ps'') -- ++ [("testNew", snd $ head ps)])
+>                                (r', ps'') = introduceModules d cg
+>                                psR = updateUseDecls ps' cg
+>                            in  (r ++ r', psR ++ ps'') 
 
 > nonNullArgs (ASeq _ _ _) = True
 > nonNullArgs (ArgName _ _) = True
@@ -58,15 +59,92 @@ Todo: CallExpr, changing assignments
 --  (this is calculated by looking for the mode of the TLCommon (for a particular Common)
 --  (need to do gorouping, but sortBy is used already so... (IS THIS STABLE- does this matter?))
 
+> onCommonBlock :: (TCommon A -> TCommon A) -> TLCommon A -> TLCommon A
+> onCommonBlock f (fname, (pname, tcommon)) = (fname, (pname, f tcommon))
 
-> fff commons = case allCoherentCommonsP commons of
->                 (r, False) -> undefined -- (r, []) -- Incoherent commons
->                 (_, True) -> let gcs = groupBy (\x y -> cmpEq $ cmpTLConBNames x y) commons -- groups by names of the commons
->                                  gccs = map group gcs
->                                  gcrcs = map (\grp -> 
->                                                  map (\c -> (c, Nothing)) (head grp) ++ 
->                                                  map (\(hc, c) -> (hc, mkRenamerCoercerTLC c hc)) (zip (repeat (head (head grp))) (concat $ tail grp))) gccs
->                              in gcrcs
+> commonName Nothing  = "Common"
+> commonName (Just x) = x
+
+
+> -- Freshen the names for a common block and generate a renamer from the old block to this
+> freshenCommonNames :: TLCommon A -> (TLCommon A, RenamerCoercer)
+> freshenCommonNames (fname, (pname, (cname, fields))) = 
+>         let mkRenamerAndCommon (r, tc) (v, t) =
+>                            let v' = (caml $ commonName cname) ++ "_" ++ v
+>                            in (Data.Map.insert v (Just v', Nothing) r, (v', t) : tc) 
+>             (r, fields') = foldl mkRenamerAndCommon (Data.Map.empty, []) fields
+>         in ((fname, (pname, (cname, fields'))), Just r)
+
+
+> -- From a list of typed and located common blocks 
+> -- group by the common block name, and then group/sort within such that the "mode" block is first
+> groupSortCommonBlock :: [TLCommon A] -> [[[TLCommon A]]]
+> groupSortCommonBlock commons = let -- Group by names of the common blocks
+>                                   gcs = groupBy (\x y -> cmpEq $ cmpTLConBNames x y) commons 
+>                                   -- Group within by the different common block variable-type fields
+>                                   gccs = map (sortBy (\y x -> length x `compare` length y) . group . sortBy cmpVarName) gcs
+>                               in gccs
+
+> cmpVarName :: TLCommon A -> TLCommon A -> Ordering
+> cmpVarName (fname1, (pname1, (name1, vtys1))) (fnam2, (pname2, (name2, vtys2))) = map fst vtys1 `compare` map fst vtys2
+
+> mkTLCommonRenamers :: [TLCommon A] -> [(TLCommon A, RenamerCoercer)]
+> mkTLCommonRenamers commons = case allCoherentCommonsP commons of
+>                 (r, False) -> error $ "Common blocks are incoherent!\n" ++ r -- (r, []) -- Incoherent commons
+>                 (_, True) -> let gccs = groupSortCommonBlock commons
+>                                  -- Find the "mode" common block and freshen the names for this, creating
+>                                  -- a renamer between this and every module
+>                                  gcrcs = map (\grp -> -- grp are block decls all for the same block
+>                                                  let (com, r) = freshenCommonNames (head (head grp))
+>                                                  in  map (\c -> (c, r)) (head grp) ++ 
+>                                                      map (\c -> (c, mkRenamerCoercerTLC c com)) (concat $ tail grp)) gccs
+>                                  -- Now re-sort based on the file and program unit
+>                                  gcrcs' = sortBy (cmpFst cmpTLConFName) (sortBy (cmpFst cmpTLConPName) (concat gcrcs))
+>                              in gcrcs'
+
+
+> updateUseDecls :: [(Filename, Program A)] -> [TLCommon A] -> [(Filename, Program A)]
+> updateUseDecls fps tcs = 
+>       let tcrs = mkTLCommonRenamers tcs 
+
+>           concatUses :: Uses A -> Uses A -> Uses A
+>           concatUses (UseNil p) y      = y
+>           concatUses (Use p x us p') y = Use p x (concatUses us y) p'
+>                    
+>           matchPUnit :: Filename -> ProgUnit A -> ProgUnit A
+>           matchPUnit f p = case getSubName p of
+>                              Nothing -> p
+>                              Just pname ->
+>                                   let tcrs' = (lookups' pname) (lookups' f tcrs)
+>                                       srcloc = useSrcLoc p
+>                                       uses = mkUseStatements srcloc tcrs' 
+>                                   in transformBi ((flip concatUses) uses) p
+
+>       in each fps (\(f, p) -> (f, transformBi (matchPUnit f) p))
+
+
+> useSrcLoc :: ProgUnit A -> SrcLoc
+> useSrcLoc (Main _ _ _ _ b _) = useSrcLocB b
+> useSrcLoc (Sub _ _ _ _ _ b) = useSrcLocB b
+> useSrcLoc (Function _ _ _ _ _ b) = useSrcLocB b
+> useSrcLoc (Module _ s _ _ _ _ _) = fst s -- TOOD: this isn't very accurate 
+> useSrcLoc (BlockData _ s _ _ _ _) = fst s
+> useSrcLocB (Block _ _ _ s _ _) = fst s
+
+
+
+> renamerToUse :: RenamerCoercer -> [(Variable, Variable)]
+> renamerToUse Nothing = []
+> renamerToUse (Just m) = let entryToPair v (Nothing, _) = []
+>                             entryToPair v (Just v', _) = [(v, v')]
+>                         in Data.Map.foldlWithKey (\xs v e -> (entryToPair v e) ++ xs) [] m
+
+> -- make the use statements for a particular program unit's common blocks
+> mkUseStatements :: SrcLoc -> [(TCommon A, RenamerCoercer)] -> Uses A
+> mkUseStatements s [] = UseNil (unitAnnotation)
+> mkUseStatements s (((name, _), r):trs) = 
+>                         let a = unitAnnotation { refactored = Just s }
+>                         in Use a (commonName name, renamerToUse r) (mkUseStatements s trs) a
 
 > mkRenamerCoercerTLC :: TLCommon A :? source -> TLCommon A :? target -> RenamerCoercer
 > mkRenamerCoercerTLC x@(fname, (pname, common1)) (_, (_, common2)) = mkRenamerCoercer common1 common2
@@ -90,52 +168,39 @@ Todo: CallExpr, changing assignments
 > coherentCommonsP (f1, (p1, (n1, vtys1))) (f2, (p2, (n2, vtys2))) =
 >     case (n1 == n2) of
 >       True -> coherent vtys1 vtys2 where
->                   coherent ::  [(Variable, Type p)] -> [(Variable, Type p)] -> (Report, Bool)
+>                   coherent ::  [(Variable, Type A)] -> [(Variable, Type A)] -> (Report, Bool)
 >                   coherent []               []                = ("", True)
 >                   coherent ((var1, ty1):xs) ((var2, ty2):ys) 
 >                       | af ty1 == af ty2 = let (r', c) = coherent xs ys
 >                                            in (r', c && True)
 >                       | otherwise = let ?variant = Alt1 in
->                                     let r = (var1 ++ ":" ++ (outputF ty1) ++ " differs from " ++ 
->                                              var2 ++ ":" ++ (outputF ty2))
+>                                     let r = (var1 ++ ":" ++ (outputF ty1) ++ "(" ++ (show $ af ty1) ++ ")" ++ " differs from " ++ 
+>                                              var2 ++ ":" ++ (outputF ty2) ++ "(" ++ (show $ af ty2) ++ ")" ++ "\n")
 >                                         (r', _) = coherent xs ys
 >                                     in (r ++ r', False)
 >                   coherent _ _ = ("Common blocks of different field lengths", False) -- Doesn't say which is longer
 >       False -> error "Trying to compare differently named common blocks\n"
->                                                            
+
+> introduceModules :: Directory -> [TLCommon A] -> (Report, [(Filename, Program A)]) 
+> introduceModules d cenv = mapM (mkModuleFile d) (map (head . head) (groupSortCommonBlock cenv))
 
 
-> introduceModules :: Directory -> [(Int, TLCommon A)] -> (Report, [(Filename, Program A)]) 
-> introduceModules d cenv = mapM (mkModuleFile d) cenv
-
- introduceModules :: [TLCommon A] -> (Filename, Program A) -> (Report, [(Filename, Program A)]) -- last part is new modules
- introduceModules cenv (fname, ps) = let (r, ps') = mapM (transformBiM commonElim) ps
-                                        in (r, [(fname, ps')])
-
-       where commonElim s@(Sub a sp mbt (SubName a' moduleName)(Arg p parg asp) b) =  -- 
-
-                 let commons = lookups moduleName (lookups fname cenv)
-                     sortedC = sortBy cmpTC commons
-                     ra = p { refactored = Just (fst sp) }
-                     r = fname ++ (show $ srcLineCol $ fst sp) ++ ": extracted common variables into module \n"
-                 in (r, s)
-
-> mkModuleFile :: Directory -> (Int, TLCommon A) -> (Report, (Filename, Program A))
-> mkModuleFile d (n, (_, (_, (name, varTys)))) =
->         let modname = case name of Nothing -> "Common" ++ show n 
->                                    Just x  -> x
->             fullpath = d ++ "/" ++ modname ++ ".f"
+> mkModuleFile :: Directory -> (TLCommon A) -> (Report, (Filename, Program A))
+> mkModuleFile d (_, (_, (name, varTys))) =
+>         let modname = commonName name
+>             fullpath = d ++ "/" ++ modname ++ ".f90"
 >             r = "Created module " ++ modname ++ " at " ++ fullpath ++ "\n"
->         in (r, (fullpath, [mkModule varTys modname]))
+>         in (r, (fullpath, [mkModule modname varTys modname]))
 
-> mkModule :: [(Variable, Type A)] -> String -> ProgUnit A
-> mkModule vtys fname = let a = unitAnnotation { refactored = Just loc }
->                           loc = SrcLoc (fname ++ ".f") 0 0 
+> mkModule :: String -> [(Variable, Type A)] -> String -> ProgUnit A
+> mkModule name vtys fname = 
+>                       let a = unitAnnotation { refactored = Just loc }
+>                           loc = SrcLoc (fname ++ ".f90") 0 0 
 >                           sp = (loc, loc)
->                           toDecl (v, t) = Decl a sp [(Var a sp [(VarName a v, [])], NullExpr a sp)] -- note here could pull in initialising definition? What if conflicts- highlight as potential source of error?
+>                           toDecl (v, t) = Decl a sp [(Var a sp [(VarName a (name ++ "_" ++ v), [])], NullExpr a sp)] -- note here could pull in initialising definition? What if conflicts- highlight as potential source of error?
 >                                                             t
 >                           decls = foldl1 (DSeq a) (map toDecl vtys)
->                       in Module a (loc, loc) (SubName a fname) UseNil (ImplicitNone a) decls []
+>                       in Module a (loc, loc) (SubName a fname) (UseNil a) (ImplicitNone a) decls []
 
 Extending calls version
 
@@ -220,6 +285,12 @@ Extending calls version
          (decs, args) = extendArgs sp' vts
      in (DSeq p' dec decs, ASeq p' arg args)
 
+> cmpTLConFName :: TLCommon A -> TLCommon A -> Ordering
+> cmpTLConFName (f1, (_, _)) (f2, (_, _)) = compare f1 f2
+
+> cmpTLConPName :: TLCommon A -> TLCommon A -> Ordering
+> cmpTLConPName (_, (p1, _)) (_, (p2, _)) = compare p1 p2
+
 > cmpTLConBNames :: TLCommon A -> TLCommon A -> Ordering
 > cmpTLConBNames (_, (_, c1)) (_, (_, c2)) = cmpTConBNames c1 c2
 
@@ -238,15 +309,15 @@ Extending calls version
 
 
 
-> collectCommons :: String -> String -> (Block A) -> State (Report, [TLCommon A]) (Block A)
-> collectCommons fname n b = 
+> collectCommons :: Filename -> String -> (Block A) -> State (Report, [TLCommon A]) (Block A)
+> collectCommons fname pname b = 
 >     let tenv = typeEnv b
 >                     
 >         commons' :: Decl A -> State (Report, [TLCommon A]) (Decl A)
->         commons' f@(Common a sp name exprs) = 
+>         commons' f@(Common a sp cname exprs) = 
 >             do let r' = fname ++ (show $ srcLineCol $ fst sp) ++ ": removed common declaration\n"
 >                (r, env) <- get
->                put (r ++ r', (fname, (n, (name, typeCommonExprs exprs))):env)
+>                put (r ++ r', (fname, (pname, (cname, typeCommonExprs exprs))):env)
 >                return $ (NullDecl (a { refactored = (Just $ fst sp) }) sp)
 >         commons' f = return f
 
@@ -260,12 +331,12 @@ Extending calls version
 
 >     in transformBiM commons' b                           
 
-> definitionSites :: [(String, Program A)] -> State (Report, [TLCommon A]) [(String, Program A)] 
+> definitionSites :: [(Filename, Program A)] -> State (Report, [TLCommon A]) [(Filename, Program A)] 
 > definitionSites pss = let 
 >                           defs' :: Filename -> ProgUnit A -> State (Report, [TLCommon A]) (ProgUnit A)
->                           defs' f p = case (getSubName p) of
->                                            Just n -> transformBiM (collectCommons f n) p
->                                            Nothing -> return $ p
+>                           defs' fname p = case (getSubName p) of
+>                                             Just pname -> transformBiM (collectCommons fname pname) p
+>                                             Nothing -> return $ p
 
 >                           -- defs' f (Sub _ _ _ (SubName _ n) _ b) rs = (concat rs) ++ [(f, (n, snd $ runState (collectTCommons' b) []))]
 >                           -- Don't support functions yet

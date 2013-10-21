@@ -313,7 +313,7 @@ internal_subprogram
 use_stmt_list :: { Uses A0 }
 use_stmt_list
 : use_stmt_list use_stmt  { Use () $2 $1 () }
-  | {- empty -}  	  { UseNil }
+| {- empty -}  	  { UseNil () }
 
 use_stmt :: { (String, Renames) }
 use_stmt
@@ -550,7 +550,7 @@ interface_body
   | function_stmt end_function_stmt  
         {% do { name <- cmpNames (fst3 $1) $2 "interface declaration";
 	        s <- srcSpanNull;
-	        return (FunctionInterface () name (snd3 $1) UseNil (ImplicitNull ()) (NullDecl () s)); } }       
+	        return (FunctionInterface () name (snd3 $1) (UseNil ()) (ImplicitNull ()) (NullDecl () s)); } }       
 
   | subroutine_stmt use_stmt_list implicit_part specification_part end_subroutine_stmt
         {% do { name <- cmpNames (fst3 $1) $5 "interface declaration";
@@ -559,7 +559,7 @@ interface_body
   | subroutine_stmt end_subroutine_stmt 
         {% do { name <- cmpNames (fst3 $1) $2 "interface declaration";
 	        s <- srcSpanNull;
-	        return (SubroutineInterface () name (snd3 $1) UseNil (ImplicitNull ()) (NullDecl () s)); }}
+	        return (SubroutineInterface () name (snd3 $1) (UseNil ()) (ImplicitNull ()) (NullDecl () s)); }}
   
 module_procedure_stmt :: { InterfaceSpec A0 }
 module_procedure_stmt

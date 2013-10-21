@@ -86,10 +86,10 @@ showForall ((s,e,e',NullExpr _ _):is) = s++"="++outputG e++":"++outputG e'++", "
 showForall ((s,e,e',e''):is) = s++"="++outputG e++":"++outputG e'++"; "++outputG e''++", "++showForall is
 
 showUse :: Uses p -> String
-showUse (UseNil) = ""
+showUse (UseNil _) = ""
 showUse (Use _ (n, []) us _) = ((ind 1)++"use "++n++"\n") ++ (showUse us)
 showUse (Use _ (n, renames) us _) = ((ind 1)++"use "++n++", " ++ 
-                                     (concat $ intersperse ", " (map (\(a, b) -> show a ++ " => " ++ show b) renames)) ++
+                                     (concat $ intersperse ", " (map (\(a, b) -> a ++ " => " ++ b) renames)) ++
                                    "\n") ++ (showUse us)
 
 -- Printing declarations
@@ -238,6 +238,8 @@ instance (OutputG (Arg p) v, OutputG (Decl p) v, OutputG (Implicit p) v,
   outputF (SubroutineInterface _ s as us i ds) = (ind 1)++ "subroutine " ++ outputG s ++ outputG as ++ showUse us ++ outputG i ++ outputG ds ++ "\nend subroutine " ++ outputG s
   outputF (ModuleProcedure _ ss) = (ind 2) ++ "module procedure " ++ concat (intersperse ", " (map (outputG) ss))
 
+instance (Alts v) => OutputF (Uses p) v where
+  outputF u = showUse u
 
 instance (OutputG (SubName p) v, Alts v) => OutputF (BaseType p) v where
   outputF (Integer _)       = "integer"

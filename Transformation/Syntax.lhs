@@ -64,6 +64,8 @@ This is particularly useful if a whole line is being redacted from a source file
 
 Variable renaming
 
+> caml (x:xs) = (toUpper x) : xs
+
 > type Renamer = Data.Map.Map Variable Variable
 
 > type RenamerCoercer = Maybe (Data.Map.Map Variable (Maybe Variable, Maybe (Type A, Type A)))

@@ -35,20 +35,21 @@ CamFort specific functionality
 
 General helpers
 
-> lookups :: Eq a => a -> [(a, b)] -> [b]
-> lookups _ [] = []
-> lookups x ((a, b):xs) = if (x == a) then b : lookups x xs
->                                     else lookups x xs
 
 Comparisons
 
 "AnnotationFree" Denotes terms which should be compared for equality modulo
 their annotaitons (and source span information)
 
-> data AnnotationFree t = AnnotationFree { annotationBound :: t }
+> data AnnotationFree t = AnnotationFree { annotationBound :: t } deriving Show
 > af = AnnotationFree -- short constructor
 > unaf = annotationBound
 
+
+> eraseSourceLocs :: (Typeable (t a), Data (t a)) => t a -> t a
+> eraseSourceLocs = transformBi erase' 
+>                     where erase' :: SrcLoc -> SrcLoc
+>                           erase' _ = SrcLoc { srcFilename = "", srcLine = 0, srcColumn = 0 }
 
 > instance Eq (AnnotationFree a) => Eq (AnnotationFree [a]) where
 >     (AnnotationFree xs) == (AnnotationFree xs') =
@@ -78,7 +79,10 @@ their annotaitons (and source span information)
 >                                                  (zip es es'))) && (cmp vs vs')
 >                                   else False
 >                              cmp _ _ = False
->     (AnnotationFree e1) == (AnnotationFree e2) = (fmap (const ()) e1) == (fmap (const ()) e2)
+
+                           
+>     (AnnotationFree e1) == (AnnotationFree e2) = (eraseSourceLocs $ fmap (const ()) e1) == 
+>                                                  (eraseSourceLocs $ fmap (const ()) e2)
 
  error "Annotation free equality not implemented" --  False
 

@@ -92,7 +92,7 @@ data Implicit p = ImplicitNone p | ImplicitNull p
 type Renames = [(Variable, Variable)] -- renames for "use"s 
 
 data Uses p     = Use p (String, Renames) (Uses p) p  -- (second 'p' let's you annotate the 'cons' part of the cell)
-                | UseNil deriving (Show, Functor, Typeable, Data, Eq)
+                | UseNil p deriving (Show, Functor, Typeable, Data, Eq)
 
              --       use's     implicit  decls  stmts
 data Block    p = Block p  (Uses p) (Implicit p) SrcSpan (Decl p) (Fortran p)

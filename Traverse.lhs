@@ -247,6 +247,10 @@ ext f (x:xs) = (f (x:xs)) : (map f xs)
  instance Copointed Arg     where copoint = gcopoint
  instance Copointed Implicit where copoint = gcopoint
 
+> instance Copointed Uses where 
+>     copoint (Use x _ _ _) = x
+>     copoint (UseNil x) = x
+
 > instance Copointed Arg where
 >     copoint (Arg x _ _) = x
 
