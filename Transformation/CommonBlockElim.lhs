@@ -118,7 +118,24 @@ Todo: CallExpr, changing assignments
 >                                   let tcrs' = (lookups' pname) (lookups' f tcrs)
 >                                       srcloc = useSrcLoc p
 >                                       uses = mkUseStatements srcloc tcrs' 
->                                   in transformBi ((flip concatUses) uses) p
+>                                       p' = transformBi ((flip concatUses) uses) p
+>                                   in removeDecls (map snd tcrs') p'
+
+>           removeDecls :: [RenamerCoercer] -> ProgUnit A -> ProgUnit A
+>           removeDecls rcs p = transformBi (remDecl rcs) p
+
+>           matchrc _ Nothing = False
+>           matchrc v (Just rc) =  Data.Map.member v rc
+
+>           remDecl :: [RenamerCoercer] -> Decl A -> Decl A
+>           remDecl rcs d@(Decl p srcP [(Var _ _ [(VarName _ v, [])], e)] _) =
+>                 if (or (map (matchrc v) rcs)) then 
+>                   case e of
+>                     NullExpr _ _ -> NullDecl ( p { refactored = Just (fst srcP) }) srcP
+>                     e            -> undefined -- TOOD: propagate out the value and make an assignment
+>                 else d
+>           remDecl _ d = d
+>                     
 
 >       in each fps (\(f, p) -> (f, transformBi (matchPUnit f) p))
 
@@ -143,7 +160,7 @@ Todo: CallExpr, changing assignments
 > mkUseStatements :: SrcLoc -> [(TCommon A, RenamerCoercer)] -> Uses A
 > mkUseStatements s [] = UseNil (unitAnnotation)
 > mkUseStatements s (((name, _), r):trs) = 
->                         let a = unitAnnotation { refactored = Just s }
+>                         let a = unitAnnotation { refactored = Just (toCol0 s) }
 >                         in Use a (commonName name, renamerToUse r) (mkUseStatements s trs) a
 
 > mkRenamerCoercerTLC :: TLCommon A :? source -> TLCommon A :? target -> RenamerCoercer
