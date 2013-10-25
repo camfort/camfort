@@ -224,11 +224,16 @@ All accessors (variables and array indexing)
 > varExprToVariable (Var _ _ ((VarName _ v, es):_)) = Just v
 > varExprToVariable _                               = Nothing
 
+> varExprToAccess :: Expr a -> Access
+> varExprToAccess v = varExprToVariable v >>= (\v' -> Just (VarA v))
+
 > varExprToAccesses :: Expr a -> [Access]
 > varExprToAccesses (Var _ _ ves) = [mkAccess v es | (VarName _ v, es) <- ves, all isConstant es] 
 >                                      where mkAccess v [] = VarA v
 >                                            mkAccess v es = ArrayA v (map (fmap (const ())) es)
 > varExprToAccesses _             = [] 
+
+
 
 > isConstant :: Expr p -> Bool
 > isConstant (Con _ _ _)  = True

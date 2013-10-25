@@ -25,27 +25,84 @@
 
 > import Traverse
 
-> typeStruct :: [(String, [Program Annotation])] -> (String, [[Program Annotation]])
-> typeStruct fps = mapM (\(_, ps) -> mapM tS ps) fps
+> typeStruct :: [(Filename, [Program Annotation])] -> (Report, [[Program Annotation]])
+> typeStruct fps = mapM (\(_, ps) -> mapM typeStructPerProgram ps) fps
+
+Graph data structures used to build interference graphs
+
+> type Graph v a = [((v, v), a)] -- Note, this is graphs with labelled edges
+
+> type WeightedEdge v a = ((v, v), (a, Int))
+> type WeightedGraph v a = [WeightedEdge v a]
+
+> -- vertices :: WeightedGraph v a -> [v] (also works for Graph v a)
+> vertices = concatMap (\((x, y), _) -> [x, y])
+
+> -- isVertex :: WeightedGraph v a -> v -> Bool (also works Graph v a)
+> isVertex wgs v = elem v (vertices wgs)
+
+Non-interprocedural version first 
+
+> typeStructPerProgram :: Program Annotation -> (Report, Program Annotation)
+> typeStructPerProgram p = descendBiM
+>          (\b@(Block a uses implicits span decs blockBody) ->
+>                 let    
+>                     tenv = typeEnv b
+>                            
+>                     -- Compute graph of semantically related projection variables
+>                     es = Exprs `topFrom` b
+>                     prjVarsWTarget = map locsFromArrayIndex es 
+>                     iGraph = toInteferenceGraph prjVarsWTarget
+>                     wiGraph = calculateWeights iGraph -- weighted inteference graph
+>                     wgf = decomposeWeightedGraph wiGraph
+
+>                     -- Generate definitions
+>                     tDefsAndNames = evalState (mapM (mkTypeDef tenv (fst span, fst span)) wgf) 0
+
+>                     nwgf = zip wgf (map snd tDefsAndNames)
+
+>                     rAnnotation = if (length tDefsAndNames > 0)
+>                                   then unitAnnotation { refactored = Just (fst span) }
+>                                   else unitAnnotation
+
+>                     blockBody' = elimProjectionDefs blockBody prjVarsWTarget
+
+>                     decs' = foldl (DSeq unitAnnotation) decs (map fst tDefsAndNames)
+>                     a' = if (length tDefsAndNames > 0) then a { refactored = Just (fst span) } else a
+>                 in  -- Create outgoing block
+>                     (show wiGraph ++ "\n\n" ++ show wgf, Block a' uses implicits span decs' blockBody)) p
+
+-- Graph Access Variable here is a graph with projection variables at nodes
+-- and the array target that they both index as the edge label
+
+> toInteferenceGraph :: [(Variable, Access)] -> Graph Access Variable 
+> toInteferenceGraph pvars =  let rel = concatMap listToSymmRelation pvars
+>                                 matchingArrayTargets r ((a, x), (b, y)) 
+>                                                        | a == b = ((x, y), a) : r
+>                                                        | otherwise = r
+>                             in foldl matchingTargets [] rel
+
 
 > listToSymmRelation :: [a] -> [(a, a)] 
 > listToSymmRelation []     = []
 > listToSymmRelation (x:xs) = ((repeat x) `zip` xs) ++ (listToSymmRelation xs)
 
+> elimProjectionDefs :: Fortran A -> Graph Access Variable -> Fortran A
+> elimProjectionDefs stmt graph = transformBi ef stmt
+>                                  where ef a@(Assg p sp e1 e2) = 
+>                                          case (varExprToVariable e1) of
+>                                              Just v -> if (isVertex (VarA v) graph) then
+>                                                            NullStmt (p { refactor = Just sp }) sp
+>                                                        else a
+>                                              Nothing -> a
+>                                        ef f = f
+>                                 
+
+> arrayAccessToProjection :: Fortran A -> Graph Access Variable -> Fortran A
+> arrayAccessToProjection = undefined
+
+
 Counts number of duplicate edges and makes this the "weight"
-
-
-Compute variable coincidences for those variables that are used for indexing.
-
-> type Graph v a = [((v, v), a)]
-
-> type WeightedEdge v a = ((v, v), (a, Int))
-> type WeightedGraph v a = [WeightedEdge v a]
-
-> vertices :: WeightedGraph v a -> [v]
-> vertices = concatMap (\((x, y), _) -> [x, y])
-
-Non-interprocedural version first 
 
 > calculateWeights :: (Eq (AnnotationFree a), Eq (AnnotationFree v), Ord a, Ord v) => Graph v a -> WeightedGraph v a
 > calculateWeights xs = calcWs (sort xs) 1
@@ -57,8 +114,10 @@ Non-interprocedural version first
 
 > swap ((a, b), v) = ((b, a), v)
 
-> locsFromIndirectReads :: Data t => t -> [(Variable, Access)]
-> locsFromIndirectReads x = 
+Finds the variables that are used to index arrays directly
+
+> locsFromArrayIndex :: Data t => t -> [(Variable, Access)]
+> locsFromArrayIndex x = 
 >        concat . concat $ 
 >              each (Vars `from` x)
 >                     (\(Var _ _ ves) -> 
@@ -67,37 +126,8 @@ Non-interprocedural version first
 >                                   then map (\x -> (v, x)) (Locs `from` ixs)
 >                                   else []))
 >                              
-> matchingTargets r ((a, x), (b, y)) | a == b = ((x, y), a) : r
->                                    | otherwise = r
 
 
-> tS :: Program Annotation -> (Report, Program Annotation)
-> tS p = descendBiM
->          (\b@(Block a uses implicits span decs f) ->
->                 let 
->                     tenv = typeEnv b
->                            
->                     -- Compute graph of semantically related variables used in indirect reads
->                     es = Exprs `topFrom` b
->                     ls = map locsFromIndirectReads es 
->                     lss = (foldl matchingTargets []) . (concatMap listToSymmRelation) $ ls
->                     lss' = calculateWeights lss
->                     wgf = weightedGraphToForests lss'
-
->                     -- Generate definitions
->                     tDefsAndNames = evalState (mapM (mkTypeDef tenv (fst span, fst span)) wgf) 0
-
->                     nwgf = zip wgf (map snd tDefsAndNames)
->                     
-
->                     rAnnotation = if (length tDefsAndNames > 0)
->                                   then unitAnnotation { refactored = Just (fst span) }
->                                   else unitAnnotation
-
->                     decs' = foldl (DSeq unitAnnotation) decs (map fst tDefsAndNames)
->                     a' = if (length tDefsAndNames > 0) then a { refactored = Just (fst span) } else a
->                 in  -- Create outgoing block
->                     (show lss' ++ "\n\n" ++ show wgf, Block a' uses implicits span decs' f)) p
 
 > findMatch v ix ((wg, n):wgns) = vertices 
 >                       
@@ -143,8 +173,8 @@ Non-interprocedural version first
 >          in -- mode or 'X' if mode is less than the majority
 >             if (snd max) > ((length x) `div` 2) then fst max else 'X'
 
-> weightedGraphToForests :: forall v a . (Show v, Ord v, Ord a) => WeightedGraph v a -> [WeightedGraph v a]
-> weightedGraphToForests g = map snd (concatMap (foldl binEdge []) (groupBy groupOnArrayVar (sortBy sortOnArrayVar g)))
+> decomposeWeightedGraph :: forall v a . (Show v, Ord v, Ord a) => WeightedGraph v a -> [WeightedGraph v a]
+> decomposeWeightedGraph g = map snd (concatMap (foldl binEdge []) (groupBy groupOnArrayVar (sortBy sortOnArrayVar g)))
 >                             where groupOnArrayVar (_, (av, _)) (_, (av', _)) = av == av'
 >                                   sortOnArrayVar (_, (av, _)) (_, (av', _)) = compare av av'
 

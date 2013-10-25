@@ -1,3 +1,9 @@
+---------------------------------------
+CamFort v0.615
+---------------------------------------
+1. Building
+---------------------------------------
+
 For development purpsoses, you probably want to load CamFort in interactive mode:
 
    ghci Main.lhs
@@ -24,5 +30,21 @@ using --user.
   runhaskell Setup.hs configure --user
 
 
+---------------------------------------
+2. Usage
+---------------------------------------
+
+Usage: camfort <function> <directory> 
+
+Refactor functions: 
+ 	 common 	 [common block elimination] 
+  	 commonArg 	 [common block elimination (to paramter passing)] 
+ 	 equivalence 	 [equivalence elimination] 
+ 	 dataType 	 [derived data type introduction] 
+ 	 dead 		 [dead-code eliminate] 
+
+Analysis functions: 
+ 	 lva 		 [live-variable analysis] 
+ 	 loops 		 [analyse loops] 
 
 

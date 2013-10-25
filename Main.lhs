@@ -53,24 +53,17 @@
 > import Data.List (nub, (\\), elemIndices)
 > import Data.Text hiding (length, head, concatMap, map, filter, take, last)
 
-
-> quickAnnotateDo :: Fortran String -> Fortran String
-> quickAnnotateDo (For _ sp v@(VarName _ s) e1 e2 e3 body) = For s sp v e1 e2 e3 body
-> quickAnnotateDo t = t
-
-> annotateFVDo :: Fortran ([String], [String]) -> Fortran ([String], [String])
-> annotateFVDo (For _ sp v@(VarName _ s) e1 e2 e3 body) = For anno sp v e1 e2 e3 body
->   where anno = ([""], freeVariables body) -- \\ [s] -- indexVariables body
-> annotateFVDo t = t
-
+> version = 0.615
 
 > data ArgType = Named String | NamedList String 
 
 
-> introMessage = "CamFort 0.1 - Cambridge Fortran Infrastructure."
+> introMessage = "CamFort " ++ (show version) ++ " - Cambridge Fortran Infrastructure."
 > usage = "Usage: camfort <function> <directory> \n\n"
-> menu = "Refactor functions: \n \t common \t [refactor common blocks] \n " ++
->                " \t equivalence \t [refactor equivalences] \n" ++
+> menu = "Refactor functions: \n \t common \t [common block elimination] \n " ++
+>                " \t commonArg \t [common block elimination (to paramter passing)] \n" ++
+>                " \t equivalence \t [equivalence elimination] \n" ++
+>                " \t dataType \t [derived data type introduction] \n" ++
 >                " \t dead \t\t [dead-code eliminate] \n" ++ "\n" ++
 >        "Analysis functions: \n \t lva \t\t [live-variable analysis] \n " ++
 >                           "\t loops \t\t [analyse loops] \n\n"
@@ -84,12 +77,15 @@
 >                    "equivalence" -> equivalences dir
 >                    "dead" -> dead dir
 >                    "lva" -> lvaA dir
+>                    "dataType" -> typeStructuring dir;
 >                    "loops" -> loops dir
 >                    _ -> putStrLn $ usage ++ menu
 >           else
 >              putStrLn $ usage ++ menu
 
-> typeStructuring d = doRefactor typeStruct d
+> typeStructuring d = 
+>      do putStrLn $ "Introducing derived data types for source in directory " ++ show d ++ "\n"
+>         doRefactor typeStruct d
 
 > loops d =  do putStrLn $ "Analysing loops for source in directory " ++ show d ++ "\n"
 >               doAnalysis loopAnalyse d
@@ -224,8 +220,6 @@ OLD FUNS FOR PURPOSE OF TESTING
 > go s = do -- f <- readFile s
 >           -- let f' = parse f
 >           f' <- pr s
->           --let f'' = map ((transformBi quickAnnotateDo) . (fmap (const ""))) f'
->           --let f'' = map ((transformBi annotateFVDo) . (fmap (const ([""],[""])))) f'
 >           let f'' = loopAnalyse f'
 >           writeFile (s ++ ".html") (concatMap outputHTML f'')
 >           -- putStrLn (show $ variables f'')

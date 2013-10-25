@@ -4,6 +4,13 @@ integer :: la, lb, lc, ld, le, lf
 real c(0:5)
 real e(0:5)
 
+la = 0
+lb = 1
+lc = 2
+ld = 3
+le = 4
+lf = 5
+
 c(la) = c(lb)
 c(lb) = 1
 c(ld) = 2
