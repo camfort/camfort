@@ -17,8 +17,10 @@
 
 > module Output where
 
-> import Analysis.Annotations
+> import Helpers
 > import Traverse
+
+> import Analysis.Annotations
 > import Language.Fortran as Fortran
 > import Language.Fortran.Pretty
 
@@ -63,7 +65,7 @@
 
 > pre l = Text.concat [pack "<pre>", l, pack "</pre>"]
 
-> outputHTML :: forall p . (Data p, Typeable p, OutputG p Alt2, OutputIndG (Fortran p) Alt2, Indentor (Decl p), Indentor (Fortran p)) => Fortran.Program p -> String
+> outputHTML :: forall p . (Data p, Typeable p, OutputG p Alt2, OutputIndG (Fortran p) Alt2, Indentor (Decl p), Indentor (Fortran p)) => Fortran.ProgUnit p -> String
 > outputHTML prog = unpack html
 >                 where
 >                   t :: SubName p -> SubName p
@@ -92,7 +94,7 @@ Output routines specialised to the analysis.
 > instance OutputG SrcLoc Alt2 where
 >     outputG _ = "" -- not sure if I want this to shown
 
-> instance (OutputIndG (Fortran p) Alt2, OutputG p Alt2, Indentor (Decl p), Indentor (Fortran p)) => OutputG (Program p) Alt2 where
+> instance (OutputIndG (Fortran p) Alt2, OutputG p Alt2, Indentor (Decl p), Indentor (Fortran p)) => OutputG (ProgUnit p) Alt2 where
 >     outputG = outputF
 
 > instance OutputG (SubName p) Alt2 where
@@ -250,44 +252,25 @@ Output routines specialised to the analysis.
 >                  Just (SrcLoc f _ c) -> Prelude.take c (repeat ' ')
 >                  Nothing             -> ind i
 
-> reprint :: String -> String -> [Program Annotation] -> String
-> reprint input f z = let input' = Prelude.lines input
+GLORIOUS REFACTORING ALGORITHM!
+
+> reprint :: SourceText -> Filename -> Program Annotation -> String
+> reprint ""    f p = let ?variant = Alt1 in foldl (\a b -> a ++ "\n" ++ outputF b) "" p 
+> reprint input f p = let input' = Prelude.lines input
 >                         start = SrcLoc f 1 0
 >                         end = SrcLoc f (Prelude.length input') (1 + (Prelude.length $ Prelude.last input'))
->                         (pn, cursorn) = reprintC start input' (toZipper z)
+>                         (pn, cursorn) = reprintC start input' (toZipper p)
 >                         (_, inpn) = takeBounds (start, cursorn) input'
 >                         (pe, _) = takeBounds (cursorn, end) inpn
 >                      in pn ++ pe
 
-> reprintC cursor inp z = let ?variant = Alt1 in
->                         let (p1, cursor', flag) = case (getHole z)::(Maybe (Fortran Annotation)) of
->                                                     Just e -> if (pRefactored $ copoint e) then 
->                                                                   let (lb, ub) = getSpan e
->                                                                       (p0, _) = takeBounds (cursor, lb) inp 
->                                                                       outE = outputF e
->                                                                       lnl = case e of (NullStmt _ _) -> (if ((p0 /= []) && Prelude.last p0 /= '\n') then "\n" else "")
->                                                                                       _              -> ""
->                                                                   in (p0 ++ outE ++ lnl, ub, True)
->                                                                  else ("", cursor, False)
->                                                     Nothing -> 
->                                                       case (getHole z)::(Maybe (Decl Annotation)) of
->                                                         Just d ->
->                                                            if (pRefactored $ copoint d) then
->                                                                let (lb, ub) = getSpan d
->                                                                    (p0, _) = takeBounds (cursor, lb) inp
->                                                                 in (p0 ++ outputF d, ub, True)
->                                                             else ("", cursor, False)
->                                                         Nothing -> 
->                                                          case (getHole z)::(Maybe (ArgName Annotation)) of
->                                                           Just a -> 
->                                                               case (refactored $ copoint a) of
->                                                                 Just lb -> let (p0, _) = takeBounds (cursor, lb) inp
->                                                                            in (p0 ++ outputF a, lb, True)
->                                                                 Nothing -> ("", cursor, False)
->                                                           Nothing -> ("", cursor, False)
+> reprintC :: SrcLoc -> [String] -> Zipper a -> (String, SrcLoc)
+> reprintC cursor inp z = 
+>                         let (p1, cursor', flag) = query (refactoring inp cursor) z 
 
 >                             (_, inp') = takeBounds (cursor, cursor') inp
 >                             (p2, cursor'') = if flag then ("", cursor') else enterDown cursor' inp' z
+>                                              -- for debugging: ("--_" ++ show p1 ++ "\n") `trace` 
 
 >                             (_, inp'') = takeBounds (cursor', cursor'') inp'
 >                             (p3, cursor''') = enterRight cursor'' inp'' z
@@ -301,6 +284,57 @@ Output routines specialised to the analysis.
 > enterRight cursor inp z = case (right z) of
 >                              Just rz -> reprintC cursor inp rz
 >                              Nothing -> ("", cursor)
+
+
+Specifies how to do specific refactorings
+(uses generic query extension - remember extQ is non-symmetric)
+
+> refactoring :: (Typeable a) => [String] -> SrcLoc -> a -> (String, SrcLoc, Bool)
+> refactoring inp cursor = ((((\_ -> ("", cursor, False)) 
+>                               `extQ` (refactorUses inp cursor))
+>                                  `extQ` (refactorDecl inp cursor))
+>                                     `extQ` (refactorArgName inp cursor))
+>                                        `extQ` (refactorFortran inp cursor)
+
+
+> refactorFortran :: [String] -> SrcLoc -> Fortran Annotation -> (String, SrcLoc, Bool)
+> refactorFortran inp cursor e =
+>        if (pRefactored $ copoint e) then 
+>           let (lb, ub) = getSpan e
+>               (p0, _) = takeBounds (cursor, lb) inp 
+>               outE = let ?variant = Alt1 in outputF e
+>               lnl = case e of (NullStmt _ _) -> (if ((p0 /= []) && Prelude.last p0 /= '\n') then "\n" else "")
+>                               _              -> ""
+>           in if p0 == "\n" then (outE, ub, True) else (p0 ++ outE ++ lnl, ub, True)
+>        else ("", cursor, False)
+
+
+> refactorDecl :: [String] -> SrcLoc -> Decl Annotation -> (String, SrcLoc, Bool)
+> refactorDecl inp cursor d = 
+>  let ?variant = Alt1 in
+>     if (pRefactored $ copoint d) then
+>        let (lb, ub) = getSpan d
+>            (p0, _) = takeBounds (cursor, lb) inp
+>        in (p0 ++ outputF d, ub, True)
+>     else ("", cursor, False)
+
+> refactorArgName :: [String] -> SrcLoc -> ArgName Annotation -> (String, SrcLoc, Bool)
+> refactorArgName inp cursor a =
+>     let ?variant = Alt1 in
+>         case (refactored $ copoint a) of
+>             Just lb -> let (p0, _) = takeBounds (cursor, lb) inp
+>                        in (p0 ++ outputF a, lb, True)
+>             Nothing -> ("", cursor, False)
+
+> refactorUses :: [String] -> SrcLoc -> Uses Annotation -> (String, SrcLoc, Bool)
+> refactorUses inp cursor u = 
+>     let ?variant = Alt1 in
+>         case (refactored $ copoint u) of
+>            Just lb -> let (p0, _) = takeBounds (cursor, lb) inp
+>                        in (p0 ++ outputF u, lb, True)
+>            Nothing -> ("", cursor, False) 
+> 
+
 
 
 OLD (FLAKEY) ALGORITHM

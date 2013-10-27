@@ -72,23 +72,30 @@ data Arg      p = Arg p (ArgName p) SrcSpan -- the src span denotes the end of t
 data ArgList  p = ArgList p (Expr p)
                   deriving (Show, Functor, Typeable, Data, Eq)
 
+type Program p = [ProgUnit p]
+
              -- Prog type   (type of result)   name      args  body    use's  
-data Program  p = Main       p SrcSpan                      (SubName p)  (Arg p)  (Block p) [Program p]
+data ProgUnit  p = Main      p SrcSpan                      (SubName p)  (Arg p)  (Block p) [ProgUnit p]
                 | Sub        p SrcSpan (Maybe (BaseType p)) (SubName p)  (Arg p)  (Block p)
                 | Function   p SrcSpan (Maybe (BaseType p)) (SubName p)  (Arg p)  (Block p)
-                | Module     p SrcSpan                      (SubName p)  [String] (Implicit p) (Decl p) [Program p]
-                | BlockData  p SrcSpan                      (SubName p)  [String] (Implicit p) (Decl p)
-                | PSeq       p SrcSpan (Program p) (Program p)   -- sequence of programs
-                | Prog       p SrcSpan (Program p)               -- useful for {#p: #q : program ... }
+                | Module     p SrcSpan                      (SubName p)  (Uses p) (Implicit p) (Decl p) [ProgUnit p]
+                | BlockData  p SrcSpan                      (SubName p)  (Uses p) (Implicit p) (Decl p)
+                | PSeq       p SrcSpan (ProgUnit p) (ProgUnit p)   -- sequence of programs
+                | Prog       p SrcSpan (ProgUnit p)               -- useful for {#p: #q : program ... }
                 | NullProg   p SrcSpan                           -- null
                 deriving (Show, Functor, Typeable, Data, Eq)
 
              -- implicit none or no implicit 
 data Implicit p = ImplicitNone p | ImplicitNull p
                 deriving (Show, Functor, Typeable, Data, Eq)
-				
+
+type Renames = [(Variable, Variable)] -- renames for "use"s 
+
+data Uses p     = Use p (String, Renames) (Uses p) p  -- (second 'p' let's you annotate the 'cons' part of the cell)
+                | UseNil p deriving (Show, Functor, Typeable, Data, Eq)
+
              --       use's     implicit  decls  stmts
-data Block    p = Block p  [String]  (Implicit p) SrcSpan (Decl p) (Fortran p)
+data Block    p = Block p  (Uses p) (Implicit p) SrcSpan (Decl p) (Fortran p)
                 deriving (Show, Functor, Typeable, Data, Eq)
 
 data Decl     p = Decl           p SrcSpan [(Expr p, Expr p)] (Type p)              -- declaration stmt
@@ -134,8 +141,8 @@ data Attr     p = Parameter p
 data GSpec   p = GName p (Expr p) | GOper p (BinOp p) | GAssg p
                  deriving (Show, Functor, Typeable, Data, Eq)
 			  
-data InterfaceSpec p = FunctionInterface   p (SubName p) (Arg p) [String] (Implicit p) (Decl p)
-                     | SubroutineInterface p (SubName p) (Arg p) [String] (Implicit p) (Decl p)
+data InterfaceSpec p = FunctionInterface   p (SubName p) (Arg p) (Uses p) (Implicit p) (Decl p)
+                     | SubroutineInterface p (SubName p) (Arg p) (Uses p) (Implicit p) (Decl p)
                      | ModuleProcedure     p [(SubName p)]
                        deriving (Show, Functor, Typeable, Data, Eq)
 				   
@@ -179,7 +186,7 @@ data Fortran  p = Assg p SrcSpan (Expr p) (Expr p)
 
 data Expr  p = Con p SrcSpan String
              | ConL p SrcSpan Char String
-             | ConS p SrcSpan String  -- String constant
+             | ConS p SrcSpan String  -- String representing a constant
              | Var p SrcSpan  [((VarName p),[(Expr p)])]
              | Bin p SrcSpan  (BinOp p) (Expr p) (Expr p)
              | Unary p SrcSpan (UnaryOp p) (Expr p)
@@ -264,7 +271,7 @@ instance GetSpan (Decl a) where
     getSpan (DerivedTypeDef x sp _ _ _ _) = sp
     getSpan _ = error "No span for non common/equiv/type/ null declarations"
 
-instance GetSpan (Program a) where
+instance GetSpan (ProgUnit a) where
     getSpan (Main x sp _ _ _ _)      = sp
     getSpan (Sub x sp _ _ _ _)       = sp
     getSpan (Function x sp _ _ _ _)  = sp

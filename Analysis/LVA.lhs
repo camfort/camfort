@@ -35,12 +35,12 @@ Kill/gen functions
 
 Single iteration of live-variable analysis
 
-> lva0 :: Zipper (Program Annotation) -> Zipper (Program Annotation)
+> lva0 :: Zipper (ProgUnit Annotation) -> Zipper (ProgUnit Annotation)
 > lva0 z = case (getHole z)::(Maybe (Fortran Annotation)) of
 >             Just f ->  setHole (refill f (lvaBody z f)) z
 >             Nothing -> z
 
-> lvaBody :: Zipper (Program Annotation) -> Fortran Annotation -> Annotation
+> lvaBody :: Zipper (ProgUnit Annotation) -> Fortran Annotation -> Annotation
 > lvaBody z e = 
 >               let anns =  map copoint ((successors z)::[Fortran Annotation])
 >                   liveOut = nub $ concat $ map (fst . lives) anns
@@ -53,20 +53,20 @@ Single iteration of live-variable analysis
 Iterate the contextual computation of lva0 over a block, till a fixed-point is reached
 
 > lva :: Program Annotation -> Program Annotation
-> lva x = lva' (numberStmts . (transformBi reassociate) $ x)
+> lva x = map (lva' . numberStmts . (transformBi reassociate)) x
 
-> lva':: Program Annotation -> Program Annotation
+> lva':: ProgUnit Annotation -> ProgUnit Annotation
 > lva' x = let y = fromZipper . (everywhere lva0) . toZipper $ x
 >          in if (y == x) then y else lva' y
 
 
- successorAnnotations :: Zipper (Program Annotation) -> [Annotation]
+ successorAnnotations :: Zipper (ProgUnit Annotation) -> [Annotation]
  successorAnnotations x = goRight x ++ (case (up x) of
                                           Just ux -> case (getHole ux)::(Maybe (Fortran Annotation)) of
                                                        Just f -> map copoint (successors f) ++ (goRight ux)
                                                        Nothing -> (goRight ux)
                                           Nothing -> []) 
-                           where goRight :: Zipper (Program Annotation) -> [Annotation]
+                           where goRight :: Zipper (ProgUnit Annotation) -> [Annotation]
                                  goRight z = (case (getHole z)::(Maybe (Fortran Annotation)) of 
                                                 Just f -> [copoint f]
                                                 Nothing -> []) ++

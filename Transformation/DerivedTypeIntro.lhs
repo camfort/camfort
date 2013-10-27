@@ -14,6 +14,8 @@
 
 > import Debug.Trace
 
+> import qualified Data.Map as Data.Map
+
 > import Language.Fortran
 
 > import Analysis.Annotations
@@ -23,10 +25,11 @@
 > import Transformation.Syntax
 > import Analysis.Types
 
+> import Helpers
 > import Traverse
 
-> typeStruct :: [(Filename, [Program Annotation])] -> (Report, [[Program Annotation]])
-> typeStruct fps = mapM (\(_, ps) -> mapM typeStructPerProgram ps) fps
+> typeStruct :: [(Filename, Program Annotation)] -> (Report, [(Filename, Program Annotation)])
+> typeStruct fps = mapM (\(f, ps) -> mapM typeStructPerProgram ps >>= (\ps' -> return (f, ps'))) fps
 
 Graph data structures used to build interference graphs
 
@@ -38,12 +41,17 @@ Graph data structures used to build interference graphs
 > -- vertices :: WeightedGraph v a -> [v] (also works for Graph v a)
 > vertices = concatMap (\((x, y), _) -> [x, y])
 
-> -- isVertex :: WeightedGraph v a -> v -> Bool (also works Graph v a)
-> isVertex wgs v = elem v (vertices wgs)
+> -- isVertex :: v -> WeightedGraph v a -> Bool (also works Graph v a)
+> isVertex v wgs = elem v (vertices wgs)
+
+> getVertex v [] = Nothing
+> getVertex v (((v1, v2), d):es) = if v == v1 || v == v2 then Just d
+>                                  else getVertex v es
+>                                      
 
 Non-interprocedural version first 
 
-> typeStructPerProgram :: Program Annotation -> (Report, Program Annotation)
+> typeStructPerProgram :: ProgUnit Annotation -> (Report, ProgUnit Annotation)
 > typeStructPerProgram p = descendBiM
 >          (\b@(Block a uses implicits span decs blockBody) ->
 >                 let    
@@ -52,7 +60,7 @@ Non-interprocedural version first
 >                     -- Compute graph of semantically related projection variables
 >                     es = Exprs `topFrom` b
 >                     prjVarsWTarget = map locsFromArrayIndex es 
->                     iGraph = toInteferenceGraph prjVarsWTarget
+>                     iGraph = toInterferenceGraph prjVarsWTarget
 >                     wiGraph = calculateWeights iGraph -- weighted inteference graph
 >                     wgf = decomposeWeightedGraph wiGraph
 
@@ -65,37 +73,65 @@ Non-interprocedural version first
 >                                   then unitAnnotation { refactored = Just (fst span) }
 >                                   else unitAnnotation
 
->                     blockBody' = elimProjectionDefs blockBody prjVarsWTarget
+>                     blockBody' = elimProjectionDefs blockBody iGraph
 
 >                     decs' = foldl (DSeq unitAnnotation) decs (map fst tDefsAndNames)
 >                     a' = if (length tDefsAndNames > 0) then a { refactored = Just (fst span) } else a
 >                 in  -- Create outgoing block
->                     (show wiGraph ++ "\n\n" ++ show wgf, Block a' uses implicits span decs' blockBody)) p
+>                     (show wiGraph ++ "\n\n" ++ show wgf, Block a' uses implicits span decs' blockBody')) p
 
 -- Graph Access Variable here is a graph with projection variables at nodes
 -- and the array target that they both index as the edge label
 
-> toInteferenceGraph :: [(Variable, Access)] -> Graph Access Variable 
-> toInteferenceGraph pvars =  let rel = concatMap listToSymmRelation pvars
+> toInterferenceGraph :: [[(Variable, Access)]] -> Graph Access Variable 
+> toInterferenceGraph pvars = let rel = concatMap listToSymmRelation pvars
 >                                 matchingArrayTargets r ((a, x), (b, y)) 
 >                                                        | a == b = ((x, y), a) : r
 >                                                        | otherwise = r
->                             in foldl matchingTargets [] rel
+>                             in foldl matchingArrayTargets [] rel
 
 
 > listToSymmRelation :: [a] -> [(a, a)] 
 > listToSymmRelation []     = []
 > listToSymmRelation (x:xs) = ((repeat x) `zip` xs) ++ (listToSymmRelation xs)
 
+
+Check coherence of original manual projection approach
+
+> correctManualImpl ranges stmt graph = 
+>     let (_, pvarmap) = runState (transformBiM collect stmt) Data.Map.empty
+>     in  Data.Map.foldWithKey
+>                (\arr vixs p -> case (lookup arr ranges) of
+>                          Just (l, u) -> (sort (map snd vixs) == [l..u]) && p) True pvarmap
+
+>        where 
+>          collect :: Fortran A -> State (Data.Map.Map Variable [(Variable, Integer)]) (Fortran A)
+>          collect a@(Assg p sp e1 e2) = 
+>            do indexMap <- get
+>               case (do v <- varExprToVariable e1
+>                        arr <- getVertex (VarA v) graph
+>                        case e2 of 
+>                           (ConS _ _ val) -> 
+>                              case (Data.Map.lookup arr indexMap) of
+>                                Just ixs -> 
+>                                   case (lookup v ixs) of
+>                                     Just val' -> Nothing -- error "Repeated definition of projection"
+>                                     Nothing -> Just $ Data.Map.update (\ixs ->  Just $ ((v, read $ val) : ixs)) arr indexMap
+>                                Nothing -> Just $ Data.Map.insert arr [(v, read $ val)] indexMap) of
+>                 Just indexMap' -> do put indexMap'; return a
+>                 Nothing -> return a
+>          collect f = return f
+
+
 > elimProjectionDefs :: Fortran A -> Graph Access Variable -> Fortran A
 > elimProjectionDefs stmt graph = transformBi ef stmt
->                                  where ef a@(Assg p sp e1 e2) = 
->                                          case (varExprToVariable e1) of
->                                              Just v -> if (isVertex (VarA v) graph) then
->                                                            NullStmt (p { refactor = Just sp }) sp
->                                                        else a
->                                              Nothing -> a
->                                        ef f = f
+>        where ef a@(Assg p sp e1 e2) = 
+>                  case (varExprToVariable e1) of
+>                     Just v -> if (isVertex (VarA v) graph) then
+>                                  NullStmt (p { refactored = Just $ dropLine' sp }) sp
+>                               else a
+>                     Nothing -> a
+>              ef f = f
 >                                 
 
 > arrayAccessToProjection :: Fortran A -> Graph Access Variable -> Fortran A

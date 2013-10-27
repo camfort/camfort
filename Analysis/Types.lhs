@@ -15,7 +15,7 @@
 > type TypeEnv t = [(Variable, Type t)]
 > type TypeEnvStack t = [TypeEnv t] -- stack of environments     
 
-> typeAnnotations :: (Typeable a, Data a) => [Program a] -> State (TypeEnv a) [Program a]
+> typeAnnotations :: (Typeable a, Data a) => Program a -> State (TypeEnv a) (Program a)
 > typeAnnotations = mapM (descendBiM buildTypeEnv)
 
 > typeEnv :: (Typeable a, Data a) => Block a -> TypeEnv a

@@ -35,20 +35,21 @@ CamFort specific functionality
 
 General helpers
 
-> lookups :: Eq a => a -> [(a, b)] -> [b]
-> lookups _ [] = []
-> lookups x ((a, b):xs) = if (x == a) then b : lookups x xs
->                                     else lookups x xs
 
 Comparisons
 
 "AnnotationFree" Denotes terms which should be compared for equality modulo
 their annotaitons (and source span information)
 
-> data AnnotationFree t = AnnotationFree { annotationBound :: t }
+> data AnnotationFree t = AnnotationFree { annotationBound :: t } deriving Show
 > af = AnnotationFree -- short constructor
 > unaf = annotationBound
 
+
+> eraseSourceLocs :: (Typeable (t a), Data (t a)) => t a -> t a
+> eraseSourceLocs = transformBi erase' 
+>                     where erase' :: SrcLoc -> SrcLoc
+>                           erase' _ = SrcLoc { srcFilename = "", srcLine = 0, srcColumn = 0 }
 
 > instance Eq (AnnotationFree a) => Eq (AnnotationFree [a]) where
 >     (AnnotationFree xs) == (AnnotationFree xs') =
@@ -78,7 +79,10 @@ their annotaitons (and source span information)
 >                                                  (zip es es'))) && (cmp vs vs')
 >                                   else False
 >                              cmp _ _ = False
->     (AnnotationFree e1) == (AnnotationFree e2) = (fmap (const ()) e1) == (fmap (const ()) e2)
+
+                           
+>     (AnnotationFree e1) == (AnnotationFree e2) = (eraseSourceLocs $ fmap (const ()) e1) == 
+>                                                  (eraseSourceLocs $ fmap (const ()) e2)
 
  error "Annotation free equality not implemented" --  False
 
@@ -131,7 +135,7 @@ their annotaitons (and source span information)
 
 Accessors
 
-> getSubName :: Program p -> Maybe String
+> getSubName :: ProgUnit p -> Maybe String
 > getSubName (Main _ _ (SubName _ s) _ _ _) = Just s
 > getSubName (Sub _ _ _ (SubName _ s) _ _) = Just s
 > getSubName (Function _ _ _ (SubName _ s) _ _) = Just s
@@ -144,7 +148,7 @@ Compute successors for certain node types
 
 > class Successors t where
 >     successorsRoot :: t a -> [t a]
->     successors :: (Eq a, Typeable a) => Zipper (Program a) -> [t a]  
+>     successors :: (Eq a, Typeable a) => Zipper (ProgUnit a) -> [t a]  
 
 > instance Successors Fortran where
 >     successorsRoot (FSeq _ _ f1 f2)          = [f1]
@@ -157,13 +161,13 @@ Compute successors for certain node types
 
 >     successors = successorsF
 
-> successorsF :: forall a . (Eq a, Typeable a) => Zipper (Program a) -> [Fortran a]
+> successorsF :: forall a . (Eq a, Typeable a) => Zipper (ProgUnit a) -> [Fortran a]
 > successorsF z = maybe [] id 
 >                 (do f <- (getHole z)::(Maybe (Fortran a))
 >                     ss <- return $ successorsRoot f
 >                     return $ ss ++ seekUp f (Just z))
 
->                  where seekUp :: Fortran a -> Maybe (Zipper (Program a)) -> [Fortran a]
+>                  where seekUp :: Fortran a -> Maybe (Zipper (ProgUnit a)) -> [Fortran a]
 >                        seekUp f z = case (z >>= up >>= getHole)::(Maybe (Fortran a)) of
 >                                  Just uf -> 
 >                                    case uf of
@@ -180,7 +184,7 @@ Compute successors for certain node types
 
 Number statements (for analysis output)
 
-> numberStmts :: Program Annotation -> Program Annotation
+> numberStmts :: ProgUnit Annotation -> ProgUnit Annotation
 > numberStmts x = let 
 >                   numberF :: Fortran Annotation -> State Int (Fortran Annotation)
 >                   numberF = descendBiM number'
@@ -224,8 +228,8 @@ All accessors (variables and array indexing)
 > varExprToVariable (Var _ _ ((VarName _ v, es):_)) = Just v
 > varExprToVariable _                               = Nothing
 
-> varExprToAccess :: Expr a -> Access
-> varExprToAccess v = varExprToVariable v >>= (\v' -> Just (VarA v))
+> varExprToAccess :: Expr a -> Maybe Access
+> varExprToAccess v = varExprToVariable v >>= (Just . VarA)
 
 > varExprToAccesses :: Expr a -> [Access]
 > varExprToAccesses (Var _ _ ves) = [mkAccess v es | (VarName _ v, es) <- ves, all isConstant es] 
