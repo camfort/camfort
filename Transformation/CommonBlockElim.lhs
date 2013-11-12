@@ -109,7 +109,7 @@ Todo: CallExpr, changing assignments
 
 >           concatUses :: Uses A -> Uses A -> Uses A
 >           concatUses (UseNil p) y      = y
->           concatUses (Use p x us p') y = Use p x (concatUses us y) p'
+>           concatUses (Use p x us p') y = Use p x (UseNil p) p'
 >                    
 >           matchPUnit :: Filename -> ProgUnit A -> ProgUnit A
 >           matchPUnit f p = case getSubName p of
@@ -117,7 +117,7 @@ Todo: CallExpr, changing assignments
 >                              Just pname ->
 >                                   let tcrs' = (lookups' pname) (lookups' f tcrs)
 >                                       srcloc = useSrcLoc p
->                                       uses = mkUseStatements srcloc tcrs' 
+>                                       uses = mkUseStatements srcloc tcrs'
 >                                       p' = transformBi ((flip concatUses) uses) p
 >                                   in removeDecls (map snd tcrs') p'
 
@@ -127,12 +127,12 @@ Todo: CallExpr, changing assignments
 >           matchrc _ Nothing = False
 >           matchrc v (Just rc) =  Data.Map.member v rc
 
->           remDecl :: [RenamerCoercer] -> Decl A -> Decl A
->           remDecl rcs d@(Decl p srcP [(Var _ _ [(VarName _ v, [])], e)] _) =
+>           remDecl :: [RenamerCoercer] -> Decl A -> (Decl A) --  [Fortran A])
+>           remDecl rcs d@(Decl p srcP [lvar@(Var _ _ [(VarName _ v, [])], e)] _) =
 >                 if (or (map (matchrc v) rcs)) then 
 >                   case e of
->                     NullExpr _ _ -> NullDecl ( p { refactored = Just (fst srcP) }) srcP
->                     e            -> undefined -- TOOD: propagate out the value and make an assignment
+>                     NullExpr _ _ -> (NullDecl ( p { refactored = Just (fst srcP) }) srcP) --  [])
+>                     e            -> (NullDecl ( p { refactored = Just (fst srcP) }) srcP) -- [Assg (p { refactored = Just (fst srcP) }) srcP lvar e])
 >                 else d
 >           remDecl _ d = d
 >                     
