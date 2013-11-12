@@ -305,7 +305,7 @@ Specifies how to do specific refactorings
 >               outE = let ?variant = Alt1 in outputF e
 >               lnl = case e of (NullStmt _ _) -> (if ((p0 /= []) && Prelude.last p0 /= '\n') then "\n" else "")
 >                               _              -> ""
->           in (p0 ++ outE ++ lnl, ub, True)
+>           in if p0 == "\n" then (outE, ub, True) else (p0 ++ outE ++ lnl, ub, True)
 >        else ("", cursor, False)
 
 

@@ -186,7 +186,7 @@ data Fortran  p = Assg p SrcSpan (Expr p) (Expr p)
 
 data Expr  p = Con p SrcSpan String
              | ConL p SrcSpan Char String
-             | ConS p SrcSpan String  -- String constant
+             | ConS p SrcSpan String  -- String representing a constant
              | Var p SrcSpan  [((VarName p),[(Expr p)])]
              | Bin p SrcSpan  (BinOp p) (Expr p) (Expr p)
              | Unary p SrcSpan (UnaryOp p) (Expr p)

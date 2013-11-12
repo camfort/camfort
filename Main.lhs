@@ -1,15 +1,3 @@
-> {-# LANGUAGE FlexibleInstances #-}
-> {-# LANGUAGE FlexibleContexts #-}
-> {-# LANGUAGE MultiParamTypeClasses #-}
-
-> {-# LANGUAGE ScopedTypeVariables #-}
-> {-# LANGUAGE OverlappingInstances #-}
-
-> {-# LANGUAGE TupleSections #-}
-> {-# LANGUAGE DoAndIfThenElse #-}
-
-> {-# LANGUAGE ImplicitParams #-}
-
 > module Main where
 
 > import Language.Fortran.Parser
@@ -19,15 +7,9 @@
 > import System.Environment
 > import System.IO
 
-> -- import Language.Haskell.Parser
 > import Language.Haskell.ParseMonad
 
-> import Data.Generics.Str
 > import Data.Generics.Uniplate.Operations
-
-> import Control.Comonad
-> import Control.Monad
-> import Control.Monad.State.Lazy
 
 > import Analysis.Annotations
 
@@ -47,55 +29,57 @@
 
 > import Debug.Trace
 
-> import Data.Data
-> import Data.Typeable
-> import qualified Data.Maybe as MaybeList
-
 > import Data.List (nub, (\\), elemIndices)
 > import Data.Text hiding (length, head, concatMap, map, filter, take, last)
 
+> version = 0.615
 
-> quickAnnotateDo :: Fortran String -> Fortran String
-> quickAnnotateDo (For _ sp v@(VarName _ s) e1 e2 e3 body) = For s sp v e1 e2 e3 body
-> quickAnnotateDo t = t
+Register all availble refactorings and analyses
+-----------------------------------------------
 
-> annotateFVDo :: Fortran ([String], [String]) -> Fortran ([String], [String])
-> annotateFVDo (For _ sp v@(VarName _ s) e1 e2 e3 body) = For anno sp v e1 e2 e3 body
->   where anno = ([""], freeVariables body) -- \\ [s] -- indexVariables body
-> annotateFVDo t = t
+> refactorings = 
+>     [("common", (common, "common block elimination")),
+>      ("commonArg", (commonToArgs, "common block elimination (to parameter passing)")),
+>      ("equivalence", (equivalences, "equivalence elimination")),
+>      ("dataType", (typeStructuring, "derived data type introduction")),
+>      ("dead", (dead, "dead-code elimination"))]
+>            
+> analyses = 
+>     [("lva", (lvaA, "live-variable analysis")),
+>      ("loops", (loops, "loop information"))]
 
-
-> data ArgType = Named String | NamedList String 
-
-
-> introMessage = "CamFort 0.1 - Cambridge Fortran Infrastructure."
-> usage = "Usage: camfort <function> <directory> \n\n"
-> menu = "Refactor functions: \n \t common \t [refactor common blocks] \n " ++
->                " \t equivalence \t [refactor equivalences] \n" ++
->                " \t dead \t\t [dead-code eliminate] \n" ++ "\n" ++
->        "Analysis functions: \n \t lva \t\t [live-variable analysis] \n " ++
->                           "\t loops \t\t [analyse loops] \n\n"
-
-> main = do putStrLn $ introMessage 
+> main = do putStrLn introMessage 
 >           d <- getArgs 
 >           if (length d == 2) then
 >              let (func:(dir:_)) = d
->              in case func of
->                    "common" -> common dir
->                    "commonToCalls" -> commonToCalls dir
->                    "equivalence" -> equivalences dir
->                    "dead" -> dead dir
->                    "lva" -> lvaA dir
->                    "loops" -> loops dir
->                    "ast"   -> ast dir (d!!2)
->                    _ -> putStrLn $ usage ++ menu
+>              in case (lookup func (analyses ++ refactorings)) of 
+>                   Just (func, _) -> func dir
+>                   Nothing ->
+>                       case func of 
+>                          "ast"   -> ast dir (d!!2)
+>                          _ -> putStrLn $ usage ++ menu
 >           else
 >              putStrLn $ usage ++ menu
+
+User information
+
+> introMessage = "CamFort " ++ (show version) ++ " - Cambridge Fortran Infrastructure."
+> usage = "Usage: camfort <function> <directory> \n\n"
+> menu = "Refactor functions:\n"
+>         ++ concatMap (\(k, (_, info)) -> "\t" ++ k ++ "\t [" ++ info ++ "] \n") refactorings
+>         ++ "Analysis functions:\n" 
+>         ++ concatMap (\(k, (_, info)) -> "\t" ++ k ++ "\t [" ++ info ++ "] \n") analyses
+
+Wrappers on all of the features
+--------------------------------
+
+> typeStructuring d = 
+>      do putStrLn $ "Introducing derived data types for source in directory " ++ show d ++ "\n"
+>         doRefactor typeStruct d
 
 > ast d f = do (_, _, p) <- readParseSrcFile (d ++ "/" ++ f)
 >              putStrLn $ show p
 
-> typeStructuring d = doRefactor typeStruct d
 
 > loops d =  do putStrLn $ "Analysing loops for source in directory " ++ show d ++ "\n"
 >               doAnalysis loopAnalyse d
@@ -107,8 +91,8 @@
 > dead d = do putStrLn $ "Eliminating dead code for source in directory " ++ show d ++ "\n"
 >             doRefactor ((mapM (deadCode False))) d
 
-> commonToCalls d = do putStrLn $ "Refactoring common blocks for source in directory " ++ show d ++ "\n"
->                      doRefactor (commonElimToCalls d) d
+> commonToArgs d = do putStrLn $ "Refactoring common blocks for source in directory " ++ show d ++ "\n"
+>                     doRefactor (commonElimToCalls d) d
 
 > common d = do putStrLn $ "Refactoring common blocks for source in directory " ++ show d ++ "\n"
 >               doRefactor (commonElimToModules d) d
@@ -117,7 +101,9 @@
 >            do putStrLn $ "Refactoring equivalences blocks for source in directory " ++ show d ++ "\n"
 >               doRefactor (mapM refactorEquivalences) d
 
+
 General analysis/refactor builders
+----------------------------------
 
 > doAnalysis aFun d = do putStrLn $ "Exclude any files from " ++ d ++ "/? (comma-separate list)\n"
 >                        excludes <- getLine
@@ -254,8 +240,6 @@ OLD FUNS FOR PURPOSE OF TESTING
 > go s = do -- f <- readFile s
 >           -- let f' = parse f
 >           f' <- pr s
->           --let f'' = map ((transformBi quickAnnotateDo) . (fmap (const ""))) f'
->           --let f'' = map ((transformBi annotateFVDo) . (fmap (const ([""],[""])))) f'
 >           let f'' = loopAnalyse f'
 >           writeFile (s ++ ".html") (concatMap outputHTML f'')
 >           -- putStrLn (show $ variables f'')

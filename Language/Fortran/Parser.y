@@ -1611,11 +1611,11 @@ parseError :: String -> P a
 parseError m = do srcloc <- getSrcLoc'
 		  fail (srcFilename srcloc ++ ": line " ++ show (srcLine srcloc) ++ " column " ++ show (srcColumn srcloc) ++ ": " ++ m ++ "\n")
 
-tokenFollows s = case alexScan ('\0',[], s) 0 of
+tokenFollows s = case alexScan ('\0', s) 0 of
                     AlexEOF               -> "end of file"
                     AlexError  _          -> ""
-                    AlexSkip  (_,b,t) len   -> tokenFollows t
-	            AlexToken (_,b,t) len _ -> take len s
+                    AlexSkip  (_,t) len   -> tokenFollows t
+	            AlexToken (_,t) len _ -> take len s
 
 parse :: String -> Program A0
 parse p = case (runParser parser p) of 

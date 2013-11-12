@@ -59,6 +59,9 @@ This is particularly useful if a whole line is being redacted from a source file
 > dropLine :: SrcSpan -> SrcSpan
 > dropLine (s1, SrcLoc f l c) = (s1, SrcLoc f (l+1) 0)
 
+> dropLine' :: SrcSpan -> SrcLoc
+> dropLine' (SrcLoc f l c, _) = SrcLoc f l 0
+
 > srcLineCol :: SrcLoc -> (Int, Int)
 > srcLineCol (SrcLoc _ l c) = (l, c)
 
