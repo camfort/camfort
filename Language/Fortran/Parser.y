@@ -603,7 +603,7 @@ private_sequence_stmt
 | SEQUENCE PRIVATE     { [Sequence (), Private ()] }
 | PRIVATE              { [Private ()] }
 | SEQUENCE             { [Sequence ()] }
-  | {- empty -}          { [] }
+| {- empty -}          { [] }
   
 component_def_stmt_list :: { [Decl A0 ] }
 component_def_stmt_list
@@ -786,9 +786,10 @@ variable
 scalar_variable_name :: { (VarName A0, [Expr A0]) }
 scalar_variable_name
 : ID '(' section_subscript_list ')' { (VarName () $1, $3) }
-| ID '(' ')'                           {% srcSpanNull >>= (\s -> return $ (VarName () $1, [NullExpr () s])) }
+| ID '(' ')'                        {% srcSpanNull >>= (\s -> return $ (VarName () $1, [NullExpr () s])) }
 | ID                                { (VarName () $1, []) }
-| TYPE                              { (VarName () "type", []) } -- a bit of a hack but 'type' allowed as var name
+| TYPE                           { (VarName () "type", []) } -- a bit of a hack but 'type' allowed as var name
+                             -- CAUSES REDUCE REDUCE CONFLICTS!
   
 scalar_variable_name_list :: { [(VarName A0, [Expr A0])] }
 scalar_variable_name_list
@@ -1020,7 +1021,7 @@ equivalence_stmt
 action_stmt :: { Fortran A0 }
 action_stmt
   : allocate_stmt                                 { $1 }
- | assignment_stmt                                { $1 }
+  | assignment_stmt                                { $1 }
   | backspace_stmt                                { $1 }
   | call_stmt                                     { $1 }
   | close_stmt                                    { $1 }
