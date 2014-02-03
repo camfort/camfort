@@ -122,6 +122,8 @@ data BaseType p = Integer p | Real p | Character p | SomeType p | DerivedType p 
                 | Recursive p | Pure p | Elemental p | Logical p | Complex p
                   deriving (Show, Functor, Typeable, Data, Eq)
 
+type MeasureUnit p = SubName p
+
 data Attr     p = Parameter p
                 | Allocatable p
                 | External p
