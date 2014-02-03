@@ -162,6 +162,7 @@ import Data.Char (toLower)
  THEN 			{ Key "then" }
  TYPE 			{ Key "type" }
 -- UNFORMATED 		{ Key "unformatted" }
+ UNIT 			{ Key "unit" }
  USE 			{ Key "use" }
  VOLATILE 		{ Key "volatile" }
  WHERE 			{ Key "where" }
@@ -457,6 +458,7 @@ attr_spec
 | POINTER                                        { ([],[Pointer ()]) }
 | SAVE                                           { ([],[Save ()]) }
 | TARGET                                         { ([],[Target ()]) }
+| UNIT '(' unit_spec ')'                         { ([],[MeasureUnit () $3]) }
 | VOLATILE                                       { ([],[Volatile ()]) }
 
 access_spec :: { Attr A0 }
@@ -491,6 +493,10 @@ intent_spec
 : IN            {  In () }
 | OUT           { Out () }
 | INOUT         { InOut () }
+
+unit_spec :: { SubName A0 }
+unit_spec
+: ID           { SubName () $1 } 
 
 specification_stmt :: { Decl A0 }
 specification_stmt
@@ -1197,8 +1203,8 @@ position_spec_list
 position_spec :: { Spec A0 }
 position_spec
 : expr                                          { NoSpec () $1 }
+ | srcloc UNIT '=' expr                         { Unit () $4 }
  | srcloc ID '=' expr                           {% case (map (toLower) $2) of
-                                                       "unit"   -> return (Unit   () $4)
                                                        "iostat" -> return (IOStat () $4)
                                                        s        ->  parseError ("incorrect name in spec list: " ++ s) }
 
@@ -1214,10 +1220,10 @@ close_spec_list
 close_spec :: { Spec A0 }
 close_spec
 : expr                                          { NoSpec () $1 }
+| UNIT '=' expr                                 { Unit () $3 }
 | ID '=' expr                          
 
 {% case (map (toLower) $1) of
-      "unit"   -> return (Unit   () $3)
       "iostat" -> return (IOStat () $3)
       "status" -> return (Status () $3)
       s        -> parseError ("incorrect name in spec list: " ++ s) }
@@ -1318,9 +1324,9 @@ inquire_spec :: { Spec A0 }
 inquire_spec
 : expr                             { NoSpec () $1 }
 | READ '=' variable                { Read () $3 }
+| UNIT '=' variable                { Unit () $3 }
 | WRITE '=' variable               { WriteSp () $3 }
 | ID '=' expr                      {% case (map (toLower) $1) of
-                                            "unit"        -> return (Unit ()	  $3)
                                             "file"        -> return (File ()	  $3)
                                             "iostat"      -> return (IOStat ()     $3)
                                             "exist"       -> return (Exist ()      $3)
@@ -1389,8 +1395,8 @@ connect_spec_list
 connect_spec :: { Spec A0 }
 connect_spec
 : expr                    { NoSpec () $1 }
+| UNIT '=' expr           { Unit () $3 }
 | ID '=' expr             {% case (map (toLower) $1) of
-                                          "unit"     -> return (Unit () $3)  
                                           "iostat"   -> return (IOStat () $3)
                                           "file"     -> return (File () $3)
                                           "status"   -> return (Status () $3)
@@ -1472,8 +1478,8 @@ io_control_spec
 
 io_control_spec_id :: { Spec A0 }
 : variable                               { NoSpec () $1 }
+--| UNIT '=' format                      { Unit () $3 }
 --| ID '=' format                          {% case (map (toLower) $1) of
---                                                     "unit"    -> return (Unit () $3)
 --                                                     "fmt"     -> return (FMT () $3)
 --                                                     "rec"     -> return (Rec () $3)
 --                                                     "advance" -> return (Advance () $3)

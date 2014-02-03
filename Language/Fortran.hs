@@ -135,6 +135,7 @@ data Attr     p = Parameter p
                 | Public p
                 | Private p
                 | Sequence p
+                | MeasureUnit p (SubName p)
 --              | Dimension [(Expr,Expr)] -- in Type: ArrayT
               deriving (Show, Functor, Typeable, Data, Eq)
 			  

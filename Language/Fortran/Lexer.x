@@ -156,7 +156,7 @@ keywords = ["allocate", "allocatable","assign",
 	"program","public","pure","real","read","recursive","result",
 	"return","rewind","save","select","sequence","sometype","sqrt","stat",
 	"stop","subroutine","target","to","then","type",
-	"use","volatile","where","write"]
+	"unit","use","volatile","where","write"]
 
 {- old keywords, many will be removed
 keywords :: [String]

@@ -195,6 +195,7 @@ instance (OutputG (ArgList p) v,
           OutputG (BaseType p) v,
           OutputG (Expr p) v,
           OutputG (VarName p) v,
+          OutputG (SubName p) v,
           Alts v) => OutputF (Type p) v where
   outputF (BaseType _ bt as (NullExpr _ _)  (NullExpr _ _))   = outputG bt++showAttrs as
   outputF (BaseType _ bt as (NullExpr _ _) e')          = outputG bt++" (len="++outputG e'++")"++showAttrs as
@@ -210,7 +211,7 @@ instance (OutputG (ArgList p) v,
   outputF (ArrayT _ rs bt as e               e')               = outputG bt++" (len="++outputG e'++"kind="++outputG e++")"++" , dimension ("++showRanges rs++")"++showAttrs as
 
 
-instance Alts v => OutputF (Attr p) v where --new
+instance (OutputG (SubName p) v, Alts v) => OutputF (Attr p) v where --new
     outputF (Allocatable _)      = "allocatable "
     outputF (Parameter _)        = "parameter "
     outputF (External _)         = "external "
@@ -226,6 +227,7 @@ instance Alts v => OutputF (Attr p) v where --new
     outputF (Public _)           = "public "
     outputF (Private _)          = "private "
     outputF (Sequence _)         = "sequence "
+    outputF (MeasureUnit _ s)    = "unit("++outputG s++") "
 
 instance (OutputG (Arg p) v, OutputG (BinOp p) v, OutputG (Expr p) v, Alts v) => OutputF (GSpec p) v where
   outputF (GName _ s)  = outputG s

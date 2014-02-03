@@ -107,6 +107,7 @@ their annotaitons (and source span information)
 >     (AnnotationFree (Public _)) == (AnnotationFree (Public _)) = True
 >     (AnnotationFree (Private _)) == (AnnotationFree (Private _)) = True
 >     (AnnotationFree (Sequence _)) == (AnnotationFree (Sequence _)) = True
+>     (AnnotationFree (MeasureUnit _ s)) == (AnnotationFree (MeasureUnit _ s')) = (af s) == (af s')
 >     _ == _ = False
 
 > instance Eq (AnnotationFree (BaseType p)) where
