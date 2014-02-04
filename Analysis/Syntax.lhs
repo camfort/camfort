@@ -202,18 +202,18 @@ Number statements (for analysis output)
 
 EDSL for describing syntax tree queries
 
-> data Tag t where
->     Exprs :: Tag (Expr Annotation)
->     Blocks :: Tag (Block Annotation)
->     Locs :: Tag Access
->     Vars :: Tag (Expr Annotation)
+> data ETag t where
+>     Exprs :: ETag (Expr Annotation)
+>     Blocks :: ETag (Block Annotation)
+>     Locs :: ETag Access
+>     Vars :: ETag (Expr Annotation)
 
-> from :: forall t synTyp . (Data t, Data synTyp) => Tag synTyp -> t -> [synTyp]
+> from :: forall t synTyp . (Data t, Data synTyp) => ETag synTyp -> t -> [synTyp]
 > from Locs x = accesses x
 > from Vars x = [v | v@(Var _ _ _) <- (universeBi x)::[Expr Annotation]]
 > from _ x = (universeBi x)::[synTyp]
 
-> topFrom :: forall t synTyp . (Data t, Data synTyp) => Tag synTyp -> t -> [synTyp]
+> topFrom :: forall t synTyp . (Data t, Data synTyp) => ETag synTyp -> t -> [synTyp]
 > topFrom Locs x = accesses x
 > topFrom _ x = (childrenBi x)::[synTyp]
 

@@ -344,7 +344,7 @@ Extending calls version
 >             case (lookup v tenv) of
 >                  Just t -> (v, t) : (typeCommonExprs es)
 >                  Nothing -> error $ "Variable is of an unknown type at: " ++ show sp
->         typeCommonExprs (e:_) = error $ "Not expecting a non-variable expression in expression at: " ++ show (getSpan e)
+>         typeCommonExprs (e:_) = error $ "Not expecting a non-variable expression in expression at: " ++ show (srcSpan e)
 
 >     in transformBiM commons' b                           
 

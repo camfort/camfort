@@ -19,11 +19,7 @@ library
 
   build-tools:          alex, happy
 
-  exposed-modules:      Language.Fortran.Lexer
-                        Language.Fortran.Parser
-                        Language.Fortran
-                        Language.Fortran.Pretty
-                        Analysis.Annotations
+  exposed-modules:      Analysis.Annotations
                         Analysis.CallGraph
                         Analysis.IntermediateReps
                         Analysis.Loops
@@ -52,6 +48,7 @@ library
                         mtl >= 2.1,
                         text >= 0.11.2.3,
                         array >= 0.4,
-                        directory >= 1.2
+                        directory >= 1.2, 
+                        language-fortran >= 0.2.0.0
 
 --  ghc-options:          -fglasgow-exts

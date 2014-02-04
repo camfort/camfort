@@ -158,8 +158,8 @@ Output routines specialised to the analysis.
 >     outputG = outputF
 
 > instance Indentor (Fortran Bool) where
->     indR t i = if (copoint t) then
->                    let (s, SrcLoc f l c) = getSpan t
+>     indR t i = if (tag t) then
+>                    let (s, SrcLoc f l c) = srcSpan t
 >                    in Prelude.take c (repeat ' ')
 >                else ind i
 
@@ -247,8 +247,8 @@ Output routines specialised to the analysis.
 
 -- Indenting for refactored code
 
-> instance Copointed p => Indentor (p Annotation) where
->     indR t i = case (refactored . copoint $ t) of
+> instance Tagged p => Indentor (p Annotation) where
+>     indR t i = case (refactored . tag $ t) of
 >                  Just (SrcLoc f _ c) -> Prelude.take c (repeat ' ')
 >                  Nothing             -> ind i
 
@@ -299,8 +299,8 @@ Specifies how to do specific refactorings
 
 > refactorFortran :: [String] -> SrcLoc -> Fortran Annotation -> (String, SrcLoc, Bool)
 > refactorFortran inp cursor e =
->        if (pRefactored $ copoint e) then 
->           let (lb, ub) = getSpan e
+>        if (pRefactored $ tag e) then 
+>           let (lb, ub) = srcSpan e
 >               (p0, _) = takeBounds (cursor, lb) inp 
 >               outE = let ?variant = Alt1 in outputF e
 >               lnl = case e of (NullStmt _ _) -> (if ((p0 /= []) && Prelude.last p0 /= '\n') then "\n" else "")
@@ -312,8 +312,8 @@ Specifies how to do specific refactorings
 > refactorDecl :: [String] -> SrcLoc -> Decl Annotation -> (String, SrcLoc, Bool)
 > refactorDecl inp cursor d = 
 >  let ?variant = Alt1 in
->     if (pRefactored $ copoint d) then
->        let (lb, ub) = getSpan d
+>     if (pRefactored $ tag d) then
+>        let (lb, ub) = srcSpan d
 >            (p0, _) = takeBounds (cursor, lb) inp
 >        in (p0 ++ outputF d, ub, True)
 >     else ("", cursor, False)
@@ -321,7 +321,7 @@ Specifies how to do specific refactorings
 > refactorArgName :: [String] -> SrcLoc -> ArgName Annotation -> (String, SrcLoc, Bool)
 > refactorArgName inp cursor a =
 >     let ?variant = Alt1 in
->         case (refactored $ copoint a) of
+>         case (refactored $ tag a) of
 >             Just lb -> let (p0, _) = takeBounds (cursor, lb) inp
 >                        in (p0 ++ outputF a, lb, True)
 >             Nothing -> ("", cursor, False)
@@ -329,7 +329,7 @@ Specifies how to do specific refactorings
 > refactorUses :: [String] -> SrcLoc -> Uses Annotation -> (String, SrcLoc, Bool)
 > refactorUses inp cursor u = 
 >     let ?variant = Alt1 in
->         case (refactored $ copoint u) of
+>         case (refactored $ tag u) of
 >            Just lb -> let (p0, _) = takeBounds (cursor, lb) inp
 >                        in (p0 ++ outputF u, lb, True)
 >            Nothing -> ("", cursor, False) 
@@ -347,8 +347,8 @@ OLD (FLAKEY) ALGORITHM
  doHole :: (Show (d A1)) => SrcLoc -> SrcLoc -> [String] -> Zipper (d A1) -> (String, SrcLoc)
  doHole cursor end inp z = let ?variant = Alt2 in
                              case (getHole z)::(Maybe (Fortran A1)) of
-                           Just e  -> let flag = copoint e
-                                          (lb, ub) = getSpan e
+                           Just e  -> let flag = tag e
+                                          (lb, ub) = srcSpan e
                                           (p1, rest1) = takeBounds (cursor, lb) inp
                                       in  if flag then let ?variant = Alt2
                                                        in (p1 ++ outputF e, ub)

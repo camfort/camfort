@@ -42,13 +42,13 @@ Single iteration of live-variable analysis
 
 > lvaBody :: Zipper (ProgUnit Annotation) -> Fortran Annotation -> Annotation
 > lvaBody z e = 
->               let anns =  map copoint ((successors z)::[Fortran Annotation])
+>               let anns =  map tag ((successors z)::[Fortran Annotation])
 >                   liveOut = nub $ concat $ map (fst . lives) anns
 >                   killV = kill e
 >                   genV  = gen e
 >                   liveIn = nub $ union genV (liveOut \\ killV)
 
->               in (copoint e) { lives = (liveIn, liveOut), successorStmts = map number anns }
+>               in (tag e) { lives = (liveIn, liveOut), successorStmts = map number anns }
 
 Iterate the contextual computation of lva0 over a block, till a fixed-point is reached
 
@@ -63,12 +63,12 @@ Iterate the contextual computation of lva0 over a block, till a fixed-point is r
  successorAnnotations :: Zipper (ProgUnit Annotation) -> [Annotation]
  successorAnnotations x = goRight x ++ (case (up x) of
                                           Just ux -> case (getHole ux)::(Maybe (Fortran Annotation)) of
-                                                       Just f -> map copoint (successors f) ++ (goRight ux)
+                                                       Just f -> map tag (successors f) ++ (goRight ux)
                                                        Nothing -> (goRight ux)
                                           Nothing -> []) 
                            where goRight :: Zipper (ProgUnit Annotation) -> [Annotation]
                                  goRight z = (case (getHole z)::(Maybe (Fortran Annotation)) of 
-                                                Just f -> [copoint f]
+                                                Just f -> [tag f]
                                                 Nothing -> []) ++
                                              (case (right z) of
                                                 Just rz -> goRight rz

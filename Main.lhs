@@ -58,8 +58,8 @@ Register all availble refactorings and analyses
 >                       case func of 
 >                          "ast"   -> ast dir (d!!2)
 >                          _ -> putStrLn $ usage ++ menu
->           else
->              putStrLn $ usage ++ menu
+>            else
+>               putStrLn $ usage ++ menu
 
 User information
 
@@ -193,9 +193,9 @@ their AST, write these to the director
 >                                                if g then 
 >                                                   do x' <- rGetDirectoryContents (d ++ "/" ++ x)
 >                                                      return $ (map (\y -> x ++ "/" ++ y) x') ++ xs'
->                                                else if (isFortran x) then
->                                                         return $ x : xs'
->                                                     else return $ xs'
+>                                                 else if (isFortran x) then
+>                                                          return $ x : xs'
+>                                                      else return $ xs'
 >                                                   
 > isFortran x = let ix = elemIndices '.' x
 >               in if (length ix == 0) then False
