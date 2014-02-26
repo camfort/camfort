@@ -21,6 +21,7 @@
 > import Analysis.Types
 > import Analysis.Loops
 > import Analysis.LVA
+> import Analysis.Units
 > import Analysis.Syntax
 
 > import Helpers
@@ -46,7 +47,8 @@ Register all availble refactorings and analyses
 >            
 > analyses = 
 >     [("lva", (lvaA, "live-variable analysis")),
->      ("loops", (loops, "loop information"))]
+>      ("loops", (loops, "loop information")),
+>      ("units", (units, "units of measure"))]
 
 > main = do putStrLn introMessage 
 >           d <- getArgs 
@@ -86,6 +88,9 @@ Wrappers on all of the features
 
 > lvaA d =  do putStrLn $ "Analysing loops for source in directory " ++ show d ++ "\n"
 >              doAnalysis lva d
+
+> units d = do putStrLn $ "Analysing units for source in directory " ++ show d ++ "\n"
+>              doAnalysis unitAnalyse d
 
 
 > dead d = do putStrLn $ "Eliminating dead code for source in directory " ++ show d ++ "\n"
