@@ -235,57 +235,66 @@ The indexing for switchScaleElems is 1-based, in line with Data.Matrix.
 > binOpKind (RelGT _) = RelOp
 > binOpKind (RelGE _) = RelOp
 
-> mustEqual :: UnitVariable -> UnitVariable -> State Lalala UnitVariable
-> mustEqual (UnitVariable uv1) (UnitVariable uv2) =
+> addCol :: State Lalala Int
+> addCol =
+>   do (uenv, (matrix, vector)) <- get
+>      let m = ncols matrix + 1
+>      put (uenv, (extendTo 0 m matrix, vector))
+>      return m
+
+> addRow :: State Lalala Int
+> addRow =
 >   do (uenv, (matrix, vector)) <- get
 >      let n = nrows matrix + 1
->          matrix' = setElem (-1) (n, uv1) $ setElem 1 (n, uv2) $ extendTo n 0 matrix
->          vector' = vector ++ [Unitful []]
->      put (uenv, (matrix', vector'))
+>      put (uenv, (extendTo n 0 matrix, vector ++ [Unitful []]))
+>      return n
+
+> liftLalala :: (Matrix Rational -> Matrix Rational) -> Lalala -> Lalala
+> liftLalala f (uenv, (matrix, vector)) = (uenv, (f matrix, vector))
+
+> mustEqual :: State Lalala UnitVariable -> State Lalala UnitVariable -> State Lalala UnitVariable
+> mustEqual uvm1 uvm2 =
+>   do UnitVariable uv1 <- uvm1
+>      UnitVariable uv2 <- uvm2
+>      n <- addRow
+>      modify $ liftLalala $ setElem (-1) (n, uv1) . setElem 1 (n, uv2)
 >      solveSystemM
 >      return $ UnitVariable uv1
 
-> mustAddUp :: UnitVariable -> UnitVariable -> Rational -> Rational -> State Lalala UnitVariable
-> mustAddUp (UnitVariable uv1) (UnitVariable uv2) k1 k2 =
->   do (uenv, (matrix, vector)) <- get
->      let n = nrows matrix + 1
->          m = ncols matrix + 1
->          matrix' = setElem (-1) (n, m) $ setElem k1 (n, uv1) $ setElem k2 (n, uv2) $ extendTo n m matrix
->          vector' = vector ++ [Unitful []]
->      put (uenv, (matrix', vector'))
+> mustAddUp :: State Lalala UnitVariable -> State Lalala UnitVariable -> Rational -> Rational -> State Lalala UnitVariable
+> mustAddUp uvm1 uvm2 k1 k2 =
+>   do m <- addCol
+>      UnitVariable uv1 <- uvm1
+>      UnitVariable uv2 <- uvm2
+>      n <- addRow
+>      modify $ liftLalala $ setElem (-1) (n, m) . setElem k1 (n, uv1) . setElem k2 (n, uv2)
 >      solveSystemM
 >      return $ UnitVariable m
 
 TODO: error handling in powerUnits
 
-> powerUnits :: UnitVariable -> Expr a -> State Lalala UnitVariable
-> powerUnits (UnitVariable uv) (Con _ _ powerString) =
->   do (uenv, (matrix, vector)) <- get
->      let power = fromInteger $ read powerString
->          n = nrows matrix + 1
->          m = ncols matrix + 1
->          matrix' = setElem (-1) (n, m) $ setElem power (n, uv) $ extendTo n m matrix
->          vector' = vector ++ [Unitful []]
->      put (uenv, (matrix', vector'))
+> powerUnits :: State Lalala UnitVariable -> Expr a -> State Lalala UnitVariable
+> powerUnits uvm (Con _ _ powerString) =
+>   do let power = fromInteger $ read powerString
+>      m <- addCol
+>      UnitVariable uv <- uvm
+>      n <- addRow
+>      modify $ liftLalala $ setElem (-1) (n, m) . setElem power (n, uv)
 >      solveSystemM
 >      return $ UnitVariable m
 
-> sqrtUnits :: UnitVariable -> State Lalala UnitVariable
-> sqrtUnits (UnitVariable uv) =
->   do (uenv, (matrix, vector)) <- get
->      let n = nrows matrix + 1
->          m = ncols matrix + 1
->          matrix' = setElem (-1) (n, m) $ setElem 0.5 (n, uv) $ extendTo n m matrix
->          vector' = vector ++ [Unitful []]
->      put (uenv, (matrix', vector'))
+> sqrtUnits :: State Lalala UnitVariable -> State Lalala UnitVariable
+> sqrtUnits uvm =
+>   do m <- addCol
+>      UnitVariable uv <- uvm
+>      n <- addRow
+>      modify $ liftLalala $ setElem (-1) (n, m) . setElem 0.5 (n, uv)
 >      solveSystemM
 >      return $ UnitVariable m
 
 > anyUnits :: State Lalala UnitVariable
 > anyUnits =
->   do (uenv, (matrix, vector)) <- get
->      let m = ncols matrix + 1
->      put (uenv, (extendTo 0 m matrix, vector))
+>   do m <- addCol
 >      return $ UnitVariable m
 
 > inferExprUnits :: Expr a -> State Lalala UnitVariable
@@ -295,8 +304,8 @@ TODO: error handling in powerUnits
 > inferExprUnits (Var _ _ [(VarName _ v, _)]) = do (uenv, _) <- get
 >                                                  let Just uv = lookup v uenv
 >                                                  return uv
-> inferExprUnits (Bin _ _ op e1 e2) = do uv1 <- inferExprUnits e1
->                                        uv2 <- inferExprUnits e2
+> inferExprUnits (Bin _ _ op e1 e2) = do let uv1 = inferExprUnits e1
+>                                            uv2 = inferExprUnits e2
 >                                        case binOpKind op of
 >                                          AddOp -> mustEqual uv1 uv2
 >                                          MulOp -> mustAddUp uv1 uv2 1 1
@@ -311,8 +320,7 @@ TODO: error handling in powerUnits
 > inferExprUnits (Null _ _) = return $ UnitVariable 1
 > inferExprUnits (ESeq _ _ _ _) = return $ UnitVariable 1
 > inferExprUnits (Bound _ _ _ _) = return $ UnitVariable 1
-> inferExprUnits (Sqrt _ _ e) = do uv <- inferExprUnits e
->                                  sqrtUnits uv
+> inferExprUnits (Sqrt _ _ e) = sqrtUnits $ inferExprUnits e
 > inferExprUnits (ArrayCon _ _ _) = return $ UnitVariable 1
 > inferExprUnits (AssgExpr _ _ _ _) = return $ UnitVariable 1
 
@@ -321,13 +329,9 @@ TODO: error handling in powerUnits
 >                    return x
 
 > inferStmtUnits :: Data a => Fortran a -> State Lalala ()
-> inferStmtUnits (Assg _ _ e1 e2) = do uv1 <- inferExprUnits e1
->                                      uv2 <- inferExprUnits e2
->                                      mustEqual uv1 uv2
+> inferStmtUnits (Assg _ _ e1 e2) = do mustEqual (inferExprUnits e1) (inferExprUnits e2)
 >                                      return ()
-> inferStmtUnits (PointerAssg _ _ e1 e2) = do uv1 <- inferExprUnits e1
->                                             uv2 <- inferExprUnits e2
->                                             mustEqual uv1 uv2
+> inferStmtUnits (PointerAssg _ _ e1 e2) = do mustEqual (inferExprUnits e1) (inferExprUnits e2)
 >                                             return ()
 > inferStmtUnits x = do descendBiM' handleExprs x
 >                       return ()
