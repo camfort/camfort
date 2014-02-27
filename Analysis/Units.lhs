@@ -103,18 +103,6 @@ The indexing for switchScaleElems is 1-based, in line with Data.Matrix.
 >         (a, _ : b) = splitAt (k - 1) vector''
 >         vector' = a ++ vector !! (k - 1) : b
 
-> unitAnnotations :: Data a => Program a -> State UnitEnv (Program a)
-> unitAnnotations = mapM (descendBiM' buildUnitEnv)
-
-> unitEnv :: Data a => Block a -> UnitEnv
-> unitEnv x = execState (buildUnitEnv x) []
-
-> buildUnitEnv :: Data a => Block a -> State UnitEnv (Block a)
-> buildUnitEnv x = do uenv <- get
->                     let uenv' = gunits x
->                     put (uenv ++ uenv')
->                     return x
-
 > unitAnalyse :: Program Annotation -> Program Annotation
 > unitAnalyse x = evalState (mapM (descendBiM' blockLalala) x) ([], (fromLists [[1]], [Unitful []]))
 
@@ -185,13 +173,6 @@ The indexing for switchScaleElems is 1-based, in line with Data.Matrix.
 > insertUnit' unit attrs [] = attrs ++ [MeasureUnit unitAnnotation (SubName unitAnnotation unit)]
 > insertUnit' unit attrs indices = left ++ (MeasureUnit a1 (SubName a2 unit)) : right
 >   where (left, (MeasureUnit a1 (SubName a2 _)) : right) = splitAt (last indices) attrs
-
-> gunits :: forall a t . (Data (t a), Data a) => t a -> [(String, MeasureUnit)]
-> gunits x = [(name, last $ concatMap extractUnit attrs) | (name, BaseType _ _ attrs _ _) <- gtypes x]
->   where extractUnit :: Attr a -> [MeasureUnit]
->         extractUnit attr = case attr of
->                              MeasureUnit _ (SubName _ unit) -> [unit]
->                              _ -> []
 
 > data BinOpKind = AddOp | MulOp | DivOp | PowerOp | LogicOp | RelOp
 > binOpKind :: BinOp a -> BinOpKind
