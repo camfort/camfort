@@ -142,6 +142,12 @@ Output routines specialised to the analysis.
 > instance OutputG (Attr p) Alt2 where
 >     outputG = outputF
 
+> instance OutputG (MeasureUnitSpec p) Alt2 where
+>     outputG = outputF
+
+> instance OutputG (Fraction p) Alt2 where
+>     outputG = outputF
+
 > instance (OutputIndG (Fortran p) Alt2, OutputG p Alt2, Indentor (Fortran p), Indentor (Decl p)) => OutputG (Block p) Alt2 where
 >     outputG = outputF
 

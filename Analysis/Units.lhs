@@ -69,6 +69,10 @@ The indexing for switchScaleElems is 1-based, in line with Data.Matrix.
 >   where (lj, b:rj) = splitAt (j - 1) list
 >         (a, _:c) = splitAt (i - 1) (lj ++ list !! (i - 1) : rj)
 
+> solveSystemM :: State Lalala ()
+> solveSystemM = do (uenv, system) <- get
+>                   put (uenv, solveSystem system)
+
 > solveSystem :: LinearSystem -> LinearSystem
 > solveSystem system = solveSystem' system 1 1
 
@@ -83,10 +87,6 @@ The indexing for switchScaleElems is 1-based, in line with Data.Matrix.
 >   | k > nrows matrix = (matrix, vector)
 >   | vector !! (k - 1) /= Unitful [] = error "Inconsistent units of measure!"
 >   | otherwise = checkSystem (matrix, vector) (k + 1)
-
-> solveSystemM :: State Lalala ()
-> solveSystemM = do (uenv, system) <- get
->                   put (uenv, solveSystem system)
 
 > elimRow :: LinearSystem -> Maybe Int -> Int -> Int -> LinearSystem
 > elimRow system Nothing m k = solveSystem' system (m + 1) k
@@ -103,6 +103,24 @@ The indexing for switchScaleElems is 1-based, in line with Data.Matrix.
 >         (a, _ : b) = splitAt (k - 1) vector''
 >         vector' = a ++ vector !! (k - 1) : b
 
+> fillUnderspecifiedM :: State Lalala ()
+> fillUnderspecifiedM = do (uenv, system) <- get
+>                          put (uenv, fillUnderspecified system)
+
+> fillUnderspecified :: LinearSystem -> LinearSystem
+> fillUnderspecified (matrix, vector) = (fillUnderspecified' matrix 1, vector)
+
+> fillUnderspecified' :: Matrix Rational -> Int -> Matrix Rational
+> fillUnderspecified' matrix m
+>   | m > ncols matrix = matrix
+>   | otherwise = cleanRow matrix n m
+>                 where n = find (\n -> matrix ! (n, m) /= 0) [1 .. nrows matrix]
+
+> cleanRow :: Matrix Rational -> Maybe Int -> Int -> Matrix Rational
+> cleanRow matrix Nothing m = fillUnderspecified' matrix (m + 1)
+> cleanRow matrix (Just n) m = fillUnderspecified' matrix' (m + 1)
+>   where matrix' = mapRow (\k x -> if k == m then x else 0) n matrix
+
 > unitAnalyse :: Program Annotation -> Program Annotation
 > unitAnalyse x = evalState (mapM (descendBiM' blockLalala) x) ([], (fromLists [[1]], [Unitful []]))
 
@@ -114,11 +132,25 @@ The indexing for switchScaleElems is 1-based, in line with Data.Matrix.
 >                    let n = length $ fst lalala
 >                    put $ enterDecls lalala x
 >                    transformBiM' handleStmts x
+>                    fillUnderspecifiedM
 >                    exitDecls x n
 
-> extractUnit :: Attr a -> [MeasureUnit]
+> convertUnit :: MeasureUnitSpec a -> UnitConstant
+> convertUnit (UnitProduct _ units) = convertUnits units
+> convertUnit (UnitQuotient _ units1 units2) = convertUnits units1 - convertUnits units2
+> convertUnit (UnitNone _) = Unitful []
+
+> convertUnits :: [(MeasureUnit, Fraction a)] -> UnitConstant
+> convertUnits units = foldl1 (+) [Unitful [(unit, fromFraction f)] | (unit, f) <- units]
+
+> fromFraction :: Fraction a -> Rational
+> fromFraction (IntegerConst _ n) = fromInteger $ read n
+> fromFraction (FractionConst _ p q) = fromInteger (read p) / fromInteger (read q)
+> fromFraction (NullFraction _) = 1
+
+> extractUnit :: Attr a -> [UnitConstant]
 > extractUnit attr = case attr of
->                      MeasureUnit _ (SubName _ unit) -> [unit]
+>                      MeasureUnit _ unit -> [convertUnit unit]
 >                      _ -> []
 
 > extendConstraints :: [UnitConstant] -> LinearSystem -> LinearSystem
@@ -129,12 +161,9 @@ The indexing for switchScaleElems is 1-based, in line with Data.Matrix.
 >   where n = nrows matrix + 1
 >         m = ncols matrix + 1
 
-> muToUC :: MeasureUnit -> UnitConstant
-> muToUC unit = Unitful [(unit, 1)]
-
-> addToLalala :: Lalala -> (Variable, [MeasureUnit]) -> Lalala
+> addToLalala :: Lalala -> (Variable, [UnitConstant]) -> Lalala
 > addToLalala (uenv, system) (name, units) =
->   (uenv ++ [(name, UnitVariable $ ncols (fst system) + 1)], extendConstraints (map muToUC units) system)
+>   (uenv ++ [(name, UnitVariable $ ncols (fst system) + 1)], extendConstraints units system)
 
 > enterDecls :: Data a => Lalala -> Block a -> Lalala
 > enterDecls lalala x = foldl addToLalala lalala [(name, concatMap extractUnit attrs) | (name, BaseType _ _ attrs _ _) <- gtypes x]
@@ -162,17 +191,32 @@ The indexing for switchScaleElems is 1-based, in line with Data.Matrix.
 > isUnit (MeasureUnit _ _) = True
 > isUnit _ = False
 
-> lookupUnit :: LinearSystem -> Int -> MeasureUnit
-> lookupUnit (matrix, vector) m = unit
->   where Just n = find (\n -> matrix ! (n, m) /= 0) [1 .. nrows matrix]
->         -- Unitful [(unit, r)] = vector !! (n - 1)
->         Unitful units = vector !! (n - 1)
->         unit = fst $ head units
+> lookupUnit :: LinearSystem -> Int -> UnitConstant
+> lookupUnit (matrix, vector) m = maybe (Unitful []) (\n -> vector !! (n - 1)) n
+>   where n = find (\n -> matrix ! (n, m) /= 0) [1 .. nrows matrix]
 
-> insertUnit' :: MeasureUnit -> [Attr Annotation] -> [Int] -> [Attr Annotation]
-> insertUnit' unit attrs [] = attrs ++ [MeasureUnit unitAnnotation (SubName unitAnnotation unit)]
-> insertUnit' unit attrs indices = left ++ (MeasureUnit a1 (SubName a2 unit)) : right
->   where (left, (MeasureUnit a1 (SubName a2 _)) : right) = splitAt (last indices) attrs
+> insertUnit' :: UnitConstant -> [Attr Annotation] -> [Int] -> [Attr Annotation]
+> insertUnit' unit attrs [] = attrs ++ [MeasureUnit unitAnnotation $ makeUnitSpec unit]
+> insertUnit' unit attrs indices = attrs
+
+> makeUnitSpec :: UnitConstant -> MeasureUnitSpec Annotation
+> makeUnitSpec (Unitful []) = UnitNone unitAnnotation
+> makeUnitSpec (Unitful units)
+>   | null neg = UnitProduct unitAnnotation $ formatUnits pos
+>   | otherwise = UnitQuotient unitAnnotation (formatUnits pos) (formatUnits neg)
+>   where pos = filter (\(unit, r) -> r > 0) units
+>         neg = [(unit, -r) | (unit, r) <- units, r < 0]
+
+> formatUnits :: [(MeasureUnit, Rational)] -> [(MeasureUnit, Fraction Annotation)]
+> formatUnits units = [(unit, toFraction r) | (unit, r) <- units]
+
+> toFraction :: Rational -> Fraction Annotation
+> toFraction 1 = NullFraction unitAnnotation
+> toFraction r
+>   | q == 1 = IntegerConst unitAnnotation $ show p
+>   | otherwise = FractionConst unitAnnotation (show p) (show q)
+>   where p = numerator r
+>         q = denominator r
 
 > data BinOpKind = AddOp | MulOp | DivOp | PowerOp | LogicOp | RelOp
 > binOpKind :: BinOp a -> BinOpKind

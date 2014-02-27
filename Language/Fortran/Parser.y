@@ -168,6 +168,7 @@ import Data.Char (toLower)
  WHERE 			{ Key "where" }
  WRITE 			{ Key "write" }
  ID                     { ID $$ }
+ '1'                    { Num "1" }
  NUM                    { Num $$ }
  TEXT                   { Text $$ }
 %%
@@ -438,7 +439,7 @@ char_len_param_value
 
 length_value :: { Expr A0 }
 length_value
-: srcloc NUM                                           {% srcSpan $1 >>= (\s -> return $ Con () s $2) }
+: srcloc num                                           {% srcSpan $1 >>= (\s -> return $ Con () s $2) }
 
 dim_spec :: { [(Expr A0, Expr A0)] }
 dim_spec
@@ -494,9 +495,28 @@ intent_spec
 | OUT           { Out () }
 | INOUT         { InOut () }
 
-unit_spec :: { SubName A0 }
+unit_spec :: { MeasureUnitSpec A0 }
 unit_spec
-: ID           { SubName () $1 } 
+: mult_unit_spec '/' mult_unit_spec { UnitQuotient () $1 $3 }
+| mult_unit_spec                    { UnitProduct () $1 }
+| {- empty -}                       { UnitNone () }
+
+mult_unit_spec :: { [(MeasureUnit, Fraction A0)] }
+mult_unit_spec
+: mult_unit_spec power_unit_spec {$1++[$2]}
+| power_unit_spec                {[$1]}
+| '1'                            {[]}
+
+power_unit_spec :: { (MeasureUnit, Fraction A0) }
+power_unit_spec
+: ID '**' power_spec { ($1, $3) }
+| ID                 { ($1, NullFraction ()) } 
+
+power_spec :: { Fraction A0 }
+power_spec
+: '(' num '/' num ')' { FractionConst () $2 $4 }
+| num                 { IntegerConst () $1 }
+| '(' power_spec ')'  { $2 }
 
 specification_stmt :: { Decl A0 }
 specification_stmt
@@ -922,7 +942,7 @@ constant
 
 literal_constant :: { Expr A0 }
 literal_constant 
-: srcloc NUM                      {% (srcSpan $1) >>= (\s -> return $ Con () s $2) }
+: srcloc num                      {% (srcSpan $1) >>= (\s -> return $ Con () s $2) }
 | srcloc ZLIT                     {% (srcSpan $1) >>= (\s -> return $ ConL () s 'z' $2) }
 | srcloc STR			  {% (srcSpan $1) >>= (\s -> return $ ConS () s $2) }
 | logical_literal_constant	  { $1 }
@@ -1011,7 +1031,7 @@ executable_construct_list
 
 executable_construct :: { Fortran A0 }
 executable_construct
-: srcloc NUM executable_construct                {% (srcSpan $1) >>= (\s -> return $ Label () s $2 $3) }
+: srcloc num executable_construct                {% (srcSpan $1) >>= (\s -> return $ Label () s $2 $3) }
 --  | case_construct
   | do_construct                                  { $1 }
   | if_construct                                  { $1 }
@@ -1301,7 +1321,7 @@ forall_assignment_stmt_list
 
 goto_stmt :: { Fortran A0 }
 goto_stmt
-: srcloc GOTO NUM                                    {% srcSpan $1 >>= (\s -> return $ Goto () s $3) }
+: srcloc GOTO num                                    {% srcSpan $1 >>= (\s -> return $ Goto () s $3) }
 
 if_stmt :: { Fortran A0 }
 if_stmt
@@ -1509,7 +1529,12 @@ input_item
 
 label :: { Expr A0 }
 label
-: srcloc NUM                       {% (srcSpan $1) >>= (\s -> return $ Con () s $2) }
+: srcloc num                       {% (srcSpan $1) >>= (\s -> return $ Con () s $2) }
+
+num :: { String }
+num
+: NUM { $1 }
+| '1' { "1" }
 
 --internal_file_unit :: { Expr A0 }
 --internal_file_unit

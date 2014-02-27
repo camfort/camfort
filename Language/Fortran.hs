@@ -137,7 +137,7 @@ data Attr     p = Parameter p
                 | Public p
                 | Private p
                 | Sequence p
-                | MeasureUnit p (SubName p)
+                | MeasureUnit p (MeasureUnitSpec p)
 --              | Dimension [(Expr,Expr)] -- in Type: ArrayT
               deriving (Show, Functor, Typeable, Data, Eq)
 			  
@@ -154,6 +154,16 @@ data IntentAttr p = In p
                   | InOut p
                     deriving (Show, Functor, Typeable, Data, Eq)
 				
+data MeasureUnitSpec p = UnitProduct p [(MeasureUnit, Fraction p)]
+                       | UnitQuotient p [(MeasureUnit, Fraction p)] [(MeasureUnit, Fraction p)]
+                       | UnitNone p
+                         deriving (Show, Functor, Typeable, Data, Eq)
+
+data Fraction p = IntegerConst p String
+                | FractionConst p String String
+                | NullFraction p
+                  deriving (Show, Functor, Typeable, Data, Eq)
+
 data Fortran  p = Assg p SrcSpan (Expr p) (Expr p) 
                 | For  p SrcSpan (VarName p) (Expr p) (Expr p) (Expr p) (Fortran p)
                 | FSeq p SrcSpan (Fortran p) (Fortran p)

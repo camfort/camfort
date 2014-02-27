@@ -158,6 +158,7 @@ instance (Indentor (Decl p),
           OutputG (Expr p) v, 
           OutputG (GSpec p) v, 
           OutputG (InterfaceSpec p) v, 
+          OutputG (MeasureUnitSpec p) v,
           OutputG (SubName p) v,
           OutputG (UnaryOp p) v, 
           OutputG (VarName p) v,
@@ -194,8 +195,8 @@ instance (OutputG (ArgList p) v,
           OutputG (UnaryOp p) v,
           OutputG (BaseType p) v,
           OutputG (Expr p) v,
+          OutputG (MeasureUnitSpec p) v,
           OutputG (VarName p) v,
-          OutputG (SubName p) v,
           Alts v) => OutputF (Type p) v where
   outputF (BaseType _ bt as (NullExpr _ _)  (NullExpr _ _))   = outputG bt++showAttrs as
   outputF (BaseType _ bt as (NullExpr _ _) e')          = outputG bt++" (len="++outputG e'++")"++showAttrs as
@@ -211,7 +212,7 @@ instance (OutputG (ArgList p) v,
   outputF (ArrayT _ rs bt as e               e')               = outputG bt++" (len="++outputG e'++"kind="++outputG e++")"++" , dimension ("++showRanges rs++")"++showAttrs as
 
 
-instance (OutputG (SubName p) v, Alts v) => OutputF (Attr p) v where --new
+instance (OutputG (MeasureUnitSpec p) v, Alts v) => OutputF (Attr p) v where --new
     outputF (Allocatable _)      = "allocatable "
     outputF (Parameter _)        = "parameter "
     outputF (External _)         = "external "
@@ -227,7 +228,17 @@ instance (OutputG (SubName p) v, Alts v) => OutputF (Attr p) v where --new
     outputF (Public _)           = "public "
     outputF (Private _)          = "private "
     outputF (Sequence _)         = "sequence "
-    outputF (MeasureUnit _ s)    = "unit("++outputG s++") "
+    outputF (MeasureUnit _ u)    = "unit("++outputG u++") "
+
+instance (Alts v) => OutputF (MeasureUnitSpec p) v where
+  outputF (UnitProduct _ units) = showUnits units
+  outputF (UnitQuotient _ units1 units2) = showUnits units1++" / "++showUnits units2
+  outputF (UnitNone _) = ""
+
+instance (Alts v) => OutputF (Fraction p) v where
+  outputF (IntegerConst _ s) = "**"++outputG s
+  outputF (FractionConst _ p q) = "**("++outputG p++"/"++outputG q++")"
+  outputF (NullFraction _) = ""
 
 instance (OutputG (Arg p) v, OutputG (BinOp p) v, OutputG (Expr p) v, Alts v) => OutputF (GSpec p) v where
   outputF (GName _ s)  = outputG s
@@ -502,6 +513,11 @@ optTuple xs = asTuple outputF xs
 
 showAttrs :: (Alts v, ?variant :: v, OutputF (Attr p) v) => [Attr p] -> String
 showAttrs  = concat . map (", "++) . map (outputF)
+
+showUnits :: (Alts v, ?variant :: v, OutputF (Fraction p) v) => [(MeasureUnit, Fraction p)] -> String
+showUnits units
+  | null units = "1"
+  | otherwise = printList [""," ",""] (\(unit, f) -> unit++outputF f) units
 
 
 
