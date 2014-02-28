@@ -131,7 +131,7 @@ The indexing for switchScaleElems is 1-based, in line with Data.Matrix.
 > blockLalala x = do lalala <- get
 >                    let n = length $ fst lalala
 >                    put $ enterDecls lalala x
->                    transformBiM' handleStmts x
+>                    descendBiM' handleStmt x
 >                    fillUnderspecifiedM
 >                    exitDecls x n
 
@@ -301,9 +301,12 @@ TODO: error handling in powerUnits
 > inferExprUnits (Con _ _ _) = anyUnits
 > inferExprUnits (ConL _ _ _ _) = anyUnits
 > inferExprUnits (ConS _ _ _) = anyUnits
-> inferExprUnits (Var _ _ [(VarName _ v, _)]) = do (uenv, _) <- get
->                                                  let Just uv = lookup v uenv
->                                                  return uv
+> inferExprUnits (Var _ _ names) =
+>   do (uenv, _) <- get
+>      let (VarName _ v, _) = head names
+>          Just uv = lookup v uenv
+>      sequence_ [mapM_ inferExprUnits exprs | (_, exprs) <- names]
+>      return uv
 > inferExprUnits (Bin _ _ op e1 e2) = do let uv1 = inferExprUnits e1
 >                                            uv2 = inferExprUnits e2
 >                                        case binOpKind op of
@@ -315,27 +318,94 @@ TODO: error handling in powerUnits
 >                                          RelOp -> do mustEqual uv1 uv2
 >                                                      return $ UnitVariable 1
 > inferExprUnits (Unary _ _ _ e) = inferExprUnits e
-> inferExprUnits (CallExpr _ _ _ _) = anyUnits
-> inferExprUnits (NullExpr _ _) = return $ UnitVariable 1
+> inferExprUnits (CallExpr _ _ e1 (ArgList _ e2)) = do inferExprUnits e1
+>                                                      inferExprUnits e2
+>                                                      anyUnits
+> inferExprUnits (NullExpr _ _) = anyUnits
 > inferExprUnits (Null _ _) = return $ UnitVariable 1
-> inferExprUnits (ESeq _ _ _ _) = return $ UnitVariable 1
-> inferExprUnits (Bound _ _ _ _) = return $ UnitVariable 1
+> inferExprUnits (ESeq _ _ e1 e2) = do inferExprUnits e1
+>                                      inferExprUnits e2
+>                                      return $ UnitVariable 1
+> inferExprUnits (Bound _ _ e1 e2) = mustEqual (inferExprUnits e1) (inferExprUnits e2)
 > inferExprUnits (Sqrt _ _ e) = sqrtUnits $ inferExprUnits e
-> inferExprUnits (ArrayCon _ _ _) = return $ UnitVariable 1
-> inferExprUnits (AssgExpr _ _ _ _) = return $ UnitVariable 1
+> inferExprUnits (ArrayCon _ _ (e:exprs)) =
+>   do uv <- inferExprUnits e
+>      mapM_ (mustEqual (return uv) . inferExprUnits) exprs
+>      return uv
+> inferExprUnits (AssgExpr _ _ _ e) = inferExprUnits e
 
-> handleExprs :: Expr a -> State Lalala (Expr a)
-> handleExprs x = do inferExprUnits x
->                    return x
+> handleExpr :: Expr a -> State Lalala (Expr a)
+> handleExpr x = do inferExprUnits x
+>                   return x
+
+> inferForHeaderUnits :: (Variable, Expr a, Expr a, Expr a) -> State Lalala ()
+> inferForHeaderUnits (v, e1, e2, e3) =
+>   do (uenv, _) <- get
+>      let Just uv = lookup v uenv
+>      mustEqual (return uv) (inferExprUnits e1)
+>      mustEqual (return uv) (inferExprUnits e2)
+>      mustEqual (return uv) (inferExprUnits e3)
+>      return ()
+
+> inferSpecUnits :: Data a => [Spec a] -> State Lalala ()
+> inferSpecUnits = mapM_ $ descendBiM' handleExpr
 
 > inferStmtUnits :: Data a => Fortran a -> State Lalala ()
-> inferStmtUnits (Assg _ _ e1 e2) = do mustEqual (inferExprUnits e1) (inferExprUnits e2)
->                                      return ()
-> inferStmtUnits (PointerAssg _ _ e1 e2) = do mustEqual (inferExprUnits e1) (inferExprUnits e2)
->                                             return ()
-> inferStmtUnits x = do descendBiM' handleExprs x
->                       return ()
+> inferStmtUnits (Assg _ _ e1 e2) =
+>   do mustEqual (inferExprUnits e1) (inferExprUnits e2)
+>      return ()
+> inferStmtUnits (For _ _ _ (NullExpr _ _) _ _ s) = inferStmtUnits s
+> inferStmtUnits (For _ _ (VarName _ v) e1 e2 e3 s) =
+>   do inferForHeaderUnits (v, e1, e2, e3)
+>      inferStmtUnits s
+> inferStmtUnits (FSeq _ _ s1 s2) = mapM_ inferStmtUnits [s1, s2]
+> inferStmtUnits (If _ _ e1 s1 elseifs ms2) =
+>   do inferExprUnits e1
+>      inferStmtUnits s1
+>      sequence_ [inferExprUnits e >> inferStmtUnits s | (e, s) <- elseifs]
+>      case ms2 of
+>        Just s2 -> inferStmtUnits s2
+>        Nothing -> return ()
+> inferStmtUnits (Allocate _ _ e1 e2) = mapM_ inferExprUnits [e1, e2]
+> inferStmtUnits (Backspace _ _ specs) = inferSpecUnits specs
+> inferStmtUnits (Call _ _ e1 (ArgList _ e2)) = mapM_ inferExprUnits [e1, e2]
+> inferStmtUnits (Open _ _ specs) = inferSpecUnits specs
+> inferStmtUnits (Close _ _ specs) = inferSpecUnits specs
+> inferStmtUnits (Deallocate _ _ exprs e) =
+>   do mapM_ inferExprUnits exprs
+>      inferExprUnits e
+>      return ()
+> inferStmtUnits (Endfile _ _ specs) = inferSpecUnits specs
+> inferStmtUnits (Forall _ _ (header, e) s) =
+>   do mapM_ inferForHeaderUnits header
+>      inferExprUnits e
+>      inferStmtUnits s
+> inferStmtUnits (Nullify _ _ exprs) = mapM_ inferExprUnits exprs
+> inferStmtUnits (Inquire _ _ specs exprs) =
+>   do inferSpecUnits specs
+>      mapM_ inferExprUnits exprs
+> inferStmtUnits (Rewind _ _ specs) = inferSpecUnits specs
+> inferStmtUnits (Stop _ _ e) =
+>   do inferExprUnits e
+>      return ()
+> inferStmtUnits (Where _ _ e s) =
+>   do inferExprUnits e
+>      inferStmtUnits s
+> inferStmtUnits (Write _ _ specs exprs) =
+>   do inferSpecUnits specs
+>      mapM_ inferExprUnits exprs
+> inferStmtUnits (PointerAssg _ _ e1 e2) =
+>   do mustEqual (inferExprUnits e1) (inferExprUnits e2)
+>      return ()
+> inferStmtUnits (Return _ _ e) =
+>   do inferExprUnits e
+>      return ()
+> inferStmtUnits (Label _ _ _ s) = inferStmtUnits s
+> inferStmtUnits (Print _ _ e exprs) = mapM_ inferExprUnits (e:exprs)
+> inferStmtUnits (ReadS _ _ specs exprs) =
+>   do inferSpecUnits specs
+>      mapM_ inferExprUnits exprs
 
-> handleStmts :: Data a => Fortran a -> State Lalala (Fortran a)
-> handleStmts x = do inferStmtUnits x
->                    return x
+> handleStmt :: Data a => Fortran a -> State Lalala (Fortran a)
+> handleStmt x = do inferStmtUnits x
+>                   return x
