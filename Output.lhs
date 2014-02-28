@@ -49,7 +49,7 @@
 
 > keyword = map pack
 >           ["end","subroutine","function","program","module","block","data", "common",
->            "namelist", "external", "interface", "type", "include",
+>            "equivalence", "namelist", "external", "interface", "type", "include",
 >            "len", "kind", "dimension", "allocatable", "parameter", "external",
 >            "intent", "intrinsic", "optional", "pointer", "save", "target",
 >            "volatile", "public", "private", "sequence", "operator", "assignment",
