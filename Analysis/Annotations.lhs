@@ -39,6 +39,7 @@ Loop classifications
 >                      lives ::([Access],[Access]),
 >                      arrsRead :: Map Variable [[Expr ()]], 
 >                      arrsWrite :: Map Variable [[Expr ()]],
+>                      unitVar :: Int,
 >                      number :: Int,
 >                      refactored :: Maybe SrcLoc, 
 >                      successorStmts :: [Int]}
@@ -54,5 +55,5 @@ Loop classifications
 >                   Nothing -> False
 >                   Just _  -> True
 
-> unitAnnotation = A [] ([], []) empty empty 0 Nothing []
+> unitAnnotation = A [] ([], []) empty empty 0 0 Nothing []
 

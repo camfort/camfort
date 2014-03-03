@@ -130,10 +130,10 @@ The indexing for switchScaleElems is 1-based, in line with Data.Matrix.
 > blockLalala :: Block Annotation -> State Lalala (Block Annotation)
 > blockLalala x = do lalala <- get
 >                    let n = length $ fst lalala
->                    put $ enterDecls lalala x
->                    descendBiM' handleStmt x
+>                    y <- enterDecls x
+>                    descendBiM' handleStmt y
 >                    fillUnderspecifiedM
->                    exitDecls x n
+>                    exitDecls y n
 
 > convertUnit :: MeasureUnitSpec a -> UnitConstant
 > convertUnit (UnitProduct _ units) = convertUnits units
@@ -161,24 +161,39 @@ The indexing for switchScaleElems is 1-based, in line with Data.Matrix.
 >   where n = nrows matrix + 1
 >         m = ncols matrix + 1
 
-> addToLalala :: Lalala -> (Variable, [UnitConstant]) -> Lalala
-> addToLalala (uenv, system) (name, units) =
->   (uenv ++ [(name, UnitVariable $ ncols (fst system) + 1)], extendConstraints units system)
-
-> enterDecls :: Data a => Lalala -> Block a -> Lalala
-> enterDecls lalala x = foldl addToLalala lalala [(name, concatMap extractUnit attrs) | (name, BaseType _ _ attrs _ _) <- gtypes x]
+> enterDecls :: Block Annotation -> State Lalala (Block Annotation)
+> enterDecls x =
+>   transformBiM f x
+>   where
+>     f (Decl a s d t) =
+>       do
+>         d' <- dm
+>         return $ Decl a s d' t
+>       where
+>         BaseType _ _ attrs _ _ = arrayElementType t
+>         units = concatMap extractUnit attrs
+>         dm = sequence $ do
+>           (Var a s names, e) <- d
+>           let (VarName _ v, _) = head names
+>           return $ do
+>             (uenv, system) <- get
+>             let m = ncols (fst system) + 1
+>                 uenv' = uenv ++ [(v, UnitVariable m)]
+>                 system' = extendConstraints units system
+>             put (uenv', system')
+>             return (Var a { unitVar = m } s names, e)
+>     f x = return x
 
 > exitDecls :: Block Annotation -> Int -> State Lalala (Block Annotation)
 > exitDecls x n = do (uenv, system) <- get
 >                    put (take n uenv, system)
->                    return $ transformBi' (insertUnits (uenv, system)) x
+>                    return $ transformBi' (insertUnits system) x
 
-> insertUnits :: Lalala -> Decl Annotation -> Decl Annotation
-> insertUnits (uenv, system) (Decl a s d t) = Decl a s d t2
->   where name = head [v | (Var _ _ [(VarName _ v, es)], _) <- d]
->         Just u = lookup name uenv
+> insertUnits :: LinearSystem -> Decl Annotation -> Decl Annotation
+> insertUnits system (Decl a s d t) = Decl a s d t2
+>   where (name, u) = head [(v, unitVar a') | (Var a' _ [(VarName _ v, es)], _) <- d]
 >         t2 = case t of
->                BaseType aa tt attrs kind len -> BaseType aa tt (insertUnit system u attrs) kind len
+>                BaseType aa tt attrs kind len -> BaseType aa tt (insertUnit system (UnitVariable u) attrs) kind len
 >                _ -> t
 > insertUnits _ decl = decl
 
