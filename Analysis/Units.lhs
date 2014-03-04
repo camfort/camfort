@@ -6,6 +6,7 @@
 > import Data.Ratio
 > import Data.Matrix
 > import Data.List
+> import Data.Function
 > import Data.Data
 > import Control.Monad.State.Strict
 
@@ -15,6 +16,8 @@
 > import Analysis.Syntax
 > import Analysis.Types
 > import Language.Fortran
+
+> import Transformation.Syntax
 
 > type UnitEnv = [(Variable, MeasureUnit)]
 > type UnitEnvStack = [UnitEnv] -- stack of environments
@@ -189,30 +192,37 @@ The indexing for switchScaleElems is 1-based, in line with Data.Matrix.
 >                    put (take n uenv, system)
 >                    return $ transformBi' (insertUnits system) x
 
+> lookupUnit :: LinearSystem -> Int -> UnitConstant
+> lookupUnit (matrix, vector) m = maybe (Unitful []) (\n -> vector !! (n - 1)) n
+>   where n = find (\n -> matrix ! (n, m) /= 0) [1 .. nrows matrix]
+
 > insertUnits :: LinearSystem -> Decl Annotation -> Decl Annotation
-> insertUnits system (Decl a s d t) = Decl a s d t2
->   where (name, u) = head [(v, unitVar a') | (Var a' _ [(VarName _ v, es)], _) <- d]
->         t2 = case t of
->                BaseType aa tt attrs kind len -> BaseType aa tt (insertUnit system (UnitVariable u) attrs) kind len
->                _ -> t
+> insertUnits system (Decl a sp@(s1, s2) d t) | not (pRefactored a || hasUnits t) =
+>   foldr1 (DSeq a') decls
+>   where unitVar' (Var a' _ _, _) = unitVar a'
+>         sameUnits = (==) `on` (lookupUnit system . unitVar')
+>         groups = groupBy sameUnits d
+>         types = map (insertUnit system t . unitVar' . head) groups
+>         a' = a { refactored = Just s1 }
+>         sp' = refactorSpan sp
+>         decls = [Decl a' sp' group t' | (group, t') <- zip groups types]
 > insertUnits _ decl = decl
 
-> insertUnit :: LinearSystem -> UnitVariable -> [Attr Annotation] -> [Attr Annotation]
-> insertUnit system (UnitVariable uv) attrs = insertUnit' unit attrs indices
->   where indices = findIndices isUnit attrs
->         unit = lookupUnit system uv
+> hasUnits :: Type a -> Bool
+> hasUnits (BaseType _ _ attrs _ _) = any isUnit attrs
+> hasUnits _ = False
 
 > isUnit :: Attr a -> Bool
 > isUnit (MeasureUnit _ _) = True
 > isUnit _ = False
 
-> lookupUnit :: LinearSystem -> Int -> UnitConstant
-> lookupUnit (matrix, vector) m = maybe (Unitful []) (\n -> vector !! (n - 1)) n
->   where n = find (\n -> matrix ! (n, m) /= 0) [1 .. nrows matrix]
+> insertUnit :: LinearSystem -> Type Annotation -> Int -> Type Annotation
+> insertUnit system (BaseType aa tt attrs kind len) uv =
+>   BaseType aa tt (insertUnit' unit attrs) kind len
+>   where unit = lookupUnit system uv
 
-> insertUnit' :: UnitConstant -> [Attr Annotation] -> [Int] -> [Attr Annotation]
-> insertUnit' unit attrs [] = attrs ++ [MeasureUnit unitAnnotation $ makeUnitSpec unit]
-> insertUnit' unit attrs indices = attrs
+> insertUnit' :: UnitConstant -> [Attr Annotation] -> [Attr Annotation]
+> insertUnit' unit attrs = attrs ++ [MeasureUnit unitAnnotation $ makeUnitSpec unit]
 
 > makeUnitSpec :: UnitConstant -> MeasureUnitSpec Annotation
 > makeUnitSpec (Unitful []) = UnitNone unitAnnotation
