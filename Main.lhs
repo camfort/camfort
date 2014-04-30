@@ -17,11 +17,11 @@
 > import Transformation.CommonBlockElim
 > import Transformation.EquivalenceElim
 > import Transformation.DerivedTypeIntro
+> import Transformation.Units
 
 > import Analysis.Types
 > import Analysis.Loops
 > import Analysis.LVA
-> import Analysis.Units
 > import Analysis.Syntax
 
 > import Helpers
@@ -43,12 +43,12 @@ Register all availble refactorings and analyses
 >      ("commonArg", (commonToArgs, "common block elimination (to parameter passing)")),
 >      ("equivalence", (equivalences, "equivalence elimination")),
 >      ("dataType", (typeStructuring, "derived data type introduction")),
->      ("dead", (dead, "dead-code elimination"))]
+>      ("dead", (dead, "dead-code elimination")),
+>      ("units", (units, "units of measure"))]
 >            
 > analyses = 
 >     [("lva", (lvaA, "live-variable analysis")),
->      ("loops", (loops, "loop information")),
->      ("units", (units, "units of measure"))]
+>      ("loops", (loops, "loop information"))]
 
 > main = do putStrLn introMessage 
 >           d <- getArgs 
@@ -89,9 +89,6 @@ Wrappers on all of the features
 > lvaA d =  do putStrLn $ "Analysing loops for source in directory " ++ show d ++ "\n"
 >              doAnalysis lva d
 
-> units d = do putStrLn $ "Analysing units for source in directory " ++ show d ++ "\n"
->              doAnalysis unitAnalyse d
-
 
 > dead d = do putStrLn $ "Eliminating dead code for source in directory " ++ show d ++ "\n"
 >             doRefactor ((mapM (deadCode False))) d
@@ -105,6 +102,9 @@ Wrappers on all of the features
 > equivalences d =
 >            do putStrLn $ "Refactoring equivalences blocks for source in directory " ++ show d ++ "\n"
 >               doRefactor (mapM refactorEquivalences) d
+
+> units d = do putStrLn $ "Inferring units for source in directory " ++ show d ++ "\n"
+>              doRefactor (mapM inferUnits) d
 
 
 General analysis/refactor builders

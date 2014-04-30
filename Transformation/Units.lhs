@@ -1,7 +1,7 @@
 > {-# LANGUAGE TupleSections #-}
 > {-# LANGUAGE ScopedTypeVariables #-}
 
-> module Analysis.Units where
+> module Transformation.Units where
 
 > import Data.Ratio
 > import Data.Matrix
@@ -15,9 +15,10 @@
 > import Analysis.Annotations
 > import Analysis.Syntax
 > import Analysis.Types
+> import Transformation.Syntax
 > import Language.Fortran
 
-> import Transformation.Syntax
+> import Helpers
 
 > type UnitEnv = [(Variable, MeasureUnit)]
 > type UnitEnvStack = [UnitEnv] -- stack of environments
@@ -124,8 +125,8 @@ The indexing for switchScaleElems is 1-based, in line with Data.Matrix.
 > cleanRow matrix (Just n) m = fillUnderspecified' matrix' (m + 1)
 >   where matrix' = mapRow (\k x -> if k == m then x else 0) n matrix
 
-> unitAnalyse :: Program Annotation -> Program Annotation
-> unitAnalyse x = evalState (mapM (descendBiM' blockLalala) x) ([], (fromLists [[1]], [Unitful []]))
+> inferUnits :: (Filename, Program Annotation) -> (Report, (Filename, Program Annotation))
+> inferUnits (fname, x) = ("", (fname, evalState (mapM (descendBiM' blockLalala) x) ([], (fromLists [[1]], [Unitful []]))))
 
 > lalala :: Program Annotation -> Lalala
 > lalala x = execState (mapM (descendBiM' blockLalala) x) ([], (fromLists [[1]], [Unitful []]))
@@ -198,13 +199,14 @@ The indexing for switchScaleElems is 1-based, in line with Data.Matrix.
 
 > insertUnits :: LinearSystem -> Decl Annotation -> Decl Annotation
 > insertUnits system (Decl a sp@(s1, s2) d t) | not (pRefactored a || hasUnits t) =
->   foldr1 (DSeq a') decls
+>   DSeq a (NullDecl a' sp'') (foldr1 (DSeq a) decls)
 >   where unitVar' (Var a' _ _, _) = unitVar a'
 >         sameUnits = (==) `on` (lookupUnit system . unitVar')
 >         groups = groupBy sameUnits d
 >         types = map (insertUnit system t . unitVar' . head) groups
 >         a' = a { refactored = Just s1 }
->         sp' = refactorSpan sp
+>         sp' = dropLine $ refactorSpan sp
+>         sp'' = (toCol0 s1, snd $ dropLine sp)
 >         decls = [Decl a' sp' group t' | (group, t') <- zip groups types]
 > insertUnits _ decl = decl
 
