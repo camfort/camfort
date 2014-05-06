@@ -534,6 +534,7 @@ specification_stmt
 --  | pointer_stmt           { $1 }
   | save_stmt              { $1 }
 --  | target_stmt            { $1 }
+  | unit_stmt              { $1 }
 
 save_stmt :: { Decl A0 }
  : SAVE { AccessStmt () (Save ()) [] }
@@ -599,6 +600,18 @@ sub_name_list
 sub_name :: { SubName A0 }
 sub_name
   :  ID     { SubName () $1 }
+
+unit_stmt :: { Decl A0 }
+  : srcloc UNIT '::' unit_decl_list  {% srcSpan $1 >>= (\s -> return $ MeasureUnitDef () s $4) }
+
+unit_decl_list :: { [(MeasureUnit, MeasureUnitSpec A0)] }
+unit_decl_list
+  : unit_decl ',' unit_decl_list  { $1:$3 }
+  | unit_decl                     { [$1] }
+
+unit_decl :: { (MeasureUnit, MeasureUnitSpec A0) }
+unit_decl
+  : srcloc ID '=' unit_spec  {% srcSpan $1 >>= (\s -> return ($2, $4)) }
 
 derived_type_def :: { Decl A0 }
 derived_type_def

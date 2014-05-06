@@ -177,6 +177,7 @@ instance (Indentor (Decl p),
                                                      Nothing -> "") ++ (concat (intersperse "," (map outputF exps))) ++ "\n"
   outputF (Interface _ Nothing  is) = ind 1 ++ "interface " ++ outputG is ++ ind 1 ++ "end interface\n"
   outputF (DerivedTypeDef _  _ n as ps ds) = ind 1 ++ "type " ++ showAttrs as ++  " :: " ++ outputG n ++ "\n" ++ (concat (intersperse "\n" (map (outputG) ps))) ++ (if (length ps > 0) then "\n" else "") ++ (concatMap (((ind 2) ++) . outputG) ds) ++ ind 1 ++ "end type " ++ outputG n ++ "\n\n"
+  outputF (MeasureUnitDef _ _ ds) = ind 1 ++ "unit :: " ++ (concat . intersperse ", " . map showDU) ds ++ "\n"
   outputF (Include _ i)  = "include "++outputG i
   outputF (DSeq _ d d')  = outputG d++outputG d'
   outputF (NullDecl _ _)    = ""
@@ -189,6 +190,8 @@ show_data     ((xs,ys)) = "/" ++  outputG xs ++ "/" ++ outputG ys
 
 showDV (v, NullExpr _ _) = outputF v
 showDV (v,e) = outputF v++" = "++outputF e
+
+showDU (name,spec) = outputF name++" = "++outputF spec
 
 instance (OutputG (ArgList p) v, 
           OutputG (BinOp p) v, 

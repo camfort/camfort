@@ -282,6 +282,7 @@ ext f (x:xs) = (f (x:xs)) : (map f xs)
 >     copoint (Common x _ _ _)        = x
 >     copoint (Equivalence x sp _)    = x
 >     copoint (DerivedTypeDef x sp _ _ _ _) = x
+>     copoint (MeasureUnitDef x sp _) = x
 >     copoint (Include x _)         = x
 >     copoint (DSeq x _ _)          = x
 >     copoint (TextDecl x _)        = x
