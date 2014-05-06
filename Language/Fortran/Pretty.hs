@@ -216,22 +216,22 @@ instance (OutputG (ArgList p) v,
 
 
 instance (OutputG (MeasureUnitSpec p) v, Alts v) => OutputF (Attr p) v where --new
-    outputF (Allocatable _)      = "allocatable "
-    outputF (Parameter _)        = "parameter "
-    outputF (External _)         = "external "
-    outputF (Intent _  (In _))   = "intent(in) "
-    outputF (Intent _ (Out _))   = "intent(out) "
-    outputF (Intent _ (InOut _)) = "intent(inout) "
-    outputF (Intrinsic _)        = "intrinsic "
-    outputF (Optional _)         = "optional "
-    outputF (Pointer _)          = "pointer "
-    outputF (Save _)             = "save "
-    outputF (Target _)           = "target "
-    outputF (Volatile _)         = "volatile "
-    outputF (Public _)           = "public "
-    outputF (Private _)          = "private "
-    outputF (Sequence _)         = "sequence "
-    outputF (MeasureUnit _ u)    = "unit("++outputG u++") "
+    outputF (Allocatable _)      = "allocatable"
+    outputF (Parameter _)        = "parameter"
+    outputF (External _)         = "external"
+    outputF (Intent _  (In _))   = "intent(in)"
+    outputF (Intent _ (Out _))   = "intent(out)"
+    outputF (Intent _ (InOut _)) = "intent(inout)"
+    outputF (Intrinsic _)        = "intrinsic"
+    outputF (Optional _)         = "optional"
+    outputF (Pointer _)          = "pointer"
+    outputF (Save _)             = "save"
+    outputF (Target _)           = "target"
+    outputF (Volatile _)         = "volatile"
+    outputF (Public _)           = "public"
+    outputF (Private _)          = "private"
+    outputF (Sequence _)         = "sequence"
+    outputF (MeasureUnit _ u)    = "unit("++outputG u++")"
 
 instance (Alts v) => OutputF (MeasureUnitSpec p) v where
   outputF (UnitProduct _ units) = showUnits units
