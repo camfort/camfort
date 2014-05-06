@@ -770,7 +770,7 @@ namelist_group_object_list
 subroutine_stmt :: { (SubName A0, Arg A0, Maybe (BaseType A0)) }
 subroutine_stmt
   : SUBROUTINE subname args_p        newline { ($2,$3,Nothing) }
-| SUBROUTINE subname srcloc        newline {% (srcSpan $3) >>= (\s -> return $ ($2,Arg () (NullArg ()) s,Nothing)) }
+  | SUBROUTINE subname srcloc        newline {% (srcSpan $3) >>= (\s -> return $ ($2,Arg () (NullArg ()) s,Nothing)) }
   | prefix SUBROUTINE subname args_p newline { ($3,$4,Just (fst3 $1)) }
   
 function_stmt :: { (SubName A0, Arg A0, Maybe (BaseType A0)) }
