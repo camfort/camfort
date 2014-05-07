@@ -1,14 +1,16 @@
-> {-# LANGUAGE TupleSections #-}
 > {-# LANGUAGE ScopedTypeVariables #-}
+> {-# LANGUAGE TemplateHaskell #-}
 
 > module Transformation.Units where
 
 > import Data.Ratio
 > import Data.Matrix
 > import Data.List
+> import Data.Label.Monadic hiding (modify)
+> import qualified Data.Label
 > import Data.Function
 > import Data.Data
-> import Control.Monad.State.Strict
+> import Control.Monad.State.Strict hiding (gets)
 
 > import Data.Generics.Uniplate.Operations
 
@@ -53,7 +55,12 @@
 > type UnitVarEnv = [(Variable, UnitVariable)]
 > type DerivedUnitEnv = [(MeasureUnit, UnitConstant)]
 > type LinearSystem = (Matrix Rational, [UnitConstant])
-> type Lalala = (UnitVarEnv, DerivedUnitEnv, LinearSystem)
+> data Lalala = Lalala {
+>   _unitVarEnv :: UnitVarEnv,
+>   _derivedUnitEnv :: DerivedUnitEnv,
+>   _linearSystem :: LinearSystem
+> }
+> Data.Label.mkLabels [''Lalala]
 
 > descendBi' :: (Data (from a), Data (to a)) => (to a -> to a) -> from a -> from a
 > descendBi' f x = descendBi f x
@@ -75,8 +82,7 @@ The indexing for switchScaleElems is 1-based, in line with Data.Matrix.
 >         (a, _:c) = splitAt (i - 1) (lj ++ list !! (i - 1) : rj)
 
 > solveSystemM :: State Lalala ()
-> solveSystemM = do (uenv, denv, system) <- get
->                   put (uenv, denv, solveSystem system)
+> solveSystemM = linearSystem =. solveSystem
 
 > solveSystem :: LinearSystem -> LinearSystem
 > solveSystem system = solveSystem' system 1 1
@@ -109,8 +115,7 @@ The indexing for switchScaleElems is 1-based, in line with Data.Matrix.
 >         vector' = a ++ vector !! (k - 1) : b
 
 > fillUnderspecifiedM :: State Lalala ()
-> fillUnderspecifiedM = do (uenv, denv, system) <- get
->                          put (uenv, denv, fillUnderspecified system)
+> fillUnderspecifiedM = linearSystem =. fillUnderspecified
 
 > fillUnderspecified :: LinearSystem -> LinearSystem
 > fillUnderspecified (matrix, vector) = (fillUnderspecified' matrix 1, vector)
@@ -127,13 +132,13 @@ The indexing for switchScaleElems is 1-based, in line with Data.Matrix.
 >   where matrix' = mapRow (\k x -> if k == m then x else 0) n matrix
 
 > inferUnits :: (Filename, Program Annotation) -> (Report, (Filename, Program Annotation))
-> inferUnits (fname, x) = ("", (fname, evalState (mapM (descendBiM' blockLalala) x) ([], [], (fromLists [[1]], [Unitful []]))))
+> inferUnits (fname, x) = ("", (fname, evalState (mapM (descendBiM' blockLalala) x) (Lalala [] [] (fromLists [[1]], [Unitful []]))))
 
 > lalala :: Program Annotation -> Lalala
-> lalala x = execState (mapM (descendBiM' blockLalala) x) ([], [], (fromLists [[1]], [Unitful []]))
+> lalala x = execState (mapM (descendBiM' blockLalala) x) (Lalala [] [] (fromLists [[1]], [Unitful []]))
 
 > blockLalala :: Block Annotation -> State Lalala (Block Annotation)
-> blockLalala x = do (uenv, _, _) <- get
+> blockLalala x = do uenv <- gets unitVarEnv
 >                    let n = length uenv
 >                    y <- enterDecls x
 >                    descendBiM' handleStmt y
@@ -150,12 +155,12 @@ The indexing for switchScaleElems is 1-based, in line with Data.Matrix.
 
 > convertSingleUnit :: MeasureUnit -> Rational -> State Lalala UnitConstant
 > convertSingleUnit unit f =
->   do (uenv, denv, system) <- get
+>   do denv <- gets derivedUnitEnv
 >      let uc = Unitful [(unit, f)]
 >          denv' = denv ++ [(unit, uc)]
 >      case lookup unit denv of
 >        Just uc' -> return $ uc' * (fromRational f)
->        Nothing  -> put (uenv, denv', system) >> return uc
+>        Nothing  -> derivedUnitEnv =: denv' >> return uc
 
 > fromFraction :: Fraction a -> Rational
 > fromFraction (IntegerConst _ n) = fromInteger $ read n
@@ -190,11 +195,13 @@ The indexing for switchScaleElems is 1-based, in line with Data.Matrix.
 >           (Var a s names, e) <- d
 >           let (VarName _ v, _) = head names
 >           return $ do
->             (uenv, denv, system) <- get
+>             uenv <- gets unitVarEnv
+>             system <- gets linearSystem
 >             let m = ncols (fst system) + 1
 >                 uenv' = uenv ++ [(v, UnitVariable m)]
 >                 system' = extendConstraints units system
->             put (uenv', denv, system')
+>             unitVarEnv =: uenv'
+>             linearSystem =: system'
 >             return (Var a { unitVar = m } s names, e)
 >     f x@(MeasureUnitDef a s d) =
 >       do
@@ -202,16 +209,16 @@ The indexing for switchScaleElems is 1-based, in line with Data.Matrix.
 >         return x
 >       where
 >         learnDerivedUnit (name, spec) =
->           do (uenv, denv, system) <- get
+>           do denv <- gets derivedUnitEnv
 >              let Nothing = lookup name denv -- FIXME: error handling
 >              unit <- convertUnit spec
 >              let denv' = denv ++ [(name, unit)]
->              put (uenv, denv', system)
+>              derivedUnitEnv =: denv'
 >     f x = return x
 
 > exitDecls :: Block Annotation -> Int -> State Lalala (Block Annotation)
-> exitDecls x n = do (uenv, denv, system) <- get
->                    put (take n uenv, denv, system)
+> exitDecls x n = do unitVarEnv =. take n
+>                    system <- gets linearSystem
 >                    return $ transformBi' (insertUnits system) x
 
 > lookupUnit :: LinearSystem -> Int -> UnitConstant
@@ -285,20 +292,20 @@ The indexing for switchScaleElems is 1-based, in line with Data.Matrix.
 
 > addCol :: State Lalala Int
 > addCol =
->   do (uenv, denv, (matrix, vector)) <- get
+>   do (matrix, vector) <- gets linearSystem
 >      let m = ncols matrix + 1
->      put (uenv, denv, (extendTo 0 m matrix, vector))
+>      linearSystem =: (extendTo 0 m matrix, vector)
 >      return m
 
 > addRow :: State Lalala Int
 > addRow =
->   do (uenv, denv, (matrix, vector)) <- get
+>   do (matrix, vector) <- gets linearSystem
 >      let n = nrows matrix + 1
->      put (uenv, denv, (extendTo n 0 matrix, vector ++ [Unitful []]))
+>      linearSystem =: (extendTo n 0 matrix, vector ++ [Unitful []])
 >      return n
 
 > liftLalala :: (Matrix Rational -> Matrix Rational) -> Lalala -> Lalala
-> liftLalala f (uenv, denv, (matrix, vector)) = (uenv, denv, (f matrix, vector))
+> liftLalala f = Data.Label.modify linearSystem $ \(matrix, vector) -> (f matrix, vector)
 
 > mustEqual :: State Lalala UnitVariable -> State Lalala UnitVariable -> State Lalala UnitVariable
 > mustEqual uvm1 uvm2 =
@@ -350,7 +357,7 @@ TODO: error handling in powerUnits
 > inferExprUnits (ConL _ _ _ _) = anyUnits
 > inferExprUnits (ConS _ _ _) = anyUnits
 > inferExprUnits (Var _ _ names) =
->   do (uenv, _, _) <- get
+>   do uenv <- gets unitVarEnv
 >      let (VarName _ v, _) = head names
 >          Just uv = lookup v uenv
 >      sequence_ [mapM_ inferExprUnits exprs | (_, exprs) <- names]
@@ -388,7 +395,7 @@ TODO: error handling in powerUnits
 
 > inferForHeaderUnits :: (Variable, Expr a, Expr a, Expr a) -> State Lalala ()
 > inferForHeaderUnits (v, e1, e2, e3) =
->   do (uenv, _, _) <- get
+>   do uenv <- gets unitVarEnv
 >      let Just uv = lookup v uenv
 >      mustEqual (return uv) (inferExprUnits e1)
 >      mustEqual (return uv) (inferExprUnits e2)

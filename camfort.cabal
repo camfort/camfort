@@ -47,6 +47,7 @@ library
                         generic-deriving >=1.5.5,
                         uniplate >= 1.6.10,
                         comonad >= 3,
+                        fclabels >= 2,
                         haskell-src >= 1.0.1,
                         syz >= 0.2,
                         syb >= 0.4,
