@@ -153,7 +153,8 @@ The indexing for switchScaleElems is 1-based, in line with Data.Matrix.
 > convertUnit (UnitNone _) = return $ Unitful []
 
 > convertUnits :: [(MeasureUnit, Fraction a)] -> State Lalala UnitConstant
-> convertUnits units = foldl1 (+) `liftM` sequence [convertSingleUnit unit (fromFraction f) | (unit, f) <- units]
+> convertUnits units =
+>   foldl (+) (Unitful []) `liftM` sequence [convertSingleUnit unit (fromFraction f) | (unit, f) <- units]
 
 > convertSingleUnit :: MeasureUnit -> Rational -> State Lalala UnitConstant
 > convertSingleUnit unit f =
