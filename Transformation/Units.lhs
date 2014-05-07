@@ -56,6 +56,7 @@
 >   _derivedUnitEnv :: DerivedUnitEnv,
 >   _linearSystem :: LinearSystem
 > }
+> emptyLalala = Lalala [] [] (fromLists [[1]], [Unitful []])
 > Data.Label.mkLabels [''Lalala]
 
 > descendBi' :: (Data (from a), Data (to a)) => (to a -> to a) -> from a -> from a
@@ -128,15 +129,19 @@ The indexing for switchScaleElems is 1-based, in line with Data.Matrix.
 >   where matrix' = mapRow (\k x -> if k == m then x else 0) n matrix
 
 > inferUnits :: (Filename, Program Annotation) -> (Report, (Filename, Program Annotation))
-> inferUnits (fname, x) = ("", (fname, evalState (mapM (descendBiM' blockLalala) x) (Lalala [] [] (fromLists [[1]], [Unitful []]))))
+> inferUnits (fname, x) = ("", (fname, evalState (doInferUnits x) emptyLalala))
+
+> doInferUnits :: Program Annotation -> State Lalala (Program Annotation)
+> doInferUnits x = do y <- mapM (descendBiM' blockLalala) x
+>                     mapM (descendBiM' insertUnitsInBlock) y
 
 > blockLalala :: Block Annotation -> State Lalala (Block Annotation)
 > blockLalala x = do uenv <- gets unitVarEnv
->                    let n = length uenv
 >                    y <- enterDecls x
 >                    descendBiM' handleStmt y
 >                    fillUnderspecifiedM
->                    exitDecls y n
+>                    unitVarEnv =: uenv
+>                    return y
 
 > convertUnit :: MeasureUnitSpec a -> State Lalala UnitConstant
 > convertUnit (UnitProduct _ units) = convertUnits units
@@ -209,10 +214,9 @@ The indexing for switchScaleElems is 1-based, in line with Data.Matrix.
 >              derivedUnitEnv =: denv'
 >     f x = return x
 
-> exitDecls :: Block Annotation -> Int -> State Lalala (Block Annotation)
-> exitDecls x n = do unitVarEnv =. take n
->                    system <- gets linearSystem
->                    return $ transformBi' (insertUnits system) x
+> insertUnitsInBlock :: Block Annotation -> State Lalala (Block Annotation)
+> insertUnitsInBlock x = do system <- gets linearSystem
+>                           return $ transformBi' (insertUnits system) x
 
 > lookupUnit :: LinearSystem -> Int -> UnitConstant
 > lookupUnit (matrix, vector) m = maybe (Unitful []) (\n -> vector !! (n - 1)) n
