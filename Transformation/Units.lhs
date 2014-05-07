@@ -15,15 +15,11 @@
 > import Data.Generics.Uniplate.Operations
 
 > import Analysis.Annotations
-> import Analysis.Syntax
 > import Analysis.Types
 > import Transformation.Syntax
 > import Language.Fortran
 
 > import Helpers
-
-> type UnitEnv = [(Variable, MeasureUnit)]
-> type UnitEnvStack = [UnitEnv] -- stack of environments
 
 > data UnitConstant = Unitful [(MeasureUnit, Rational)] | Unitless Rational deriving Eq
 > trim = filter $ \(unit, r) -> r /= 0
@@ -133,9 +129,6 @@ The indexing for switchScaleElems is 1-based, in line with Data.Matrix.
 
 > inferUnits :: (Filename, Program Annotation) -> (Report, (Filename, Program Annotation))
 > inferUnits (fname, x) = ("", (fname, evalState (mapM (descendBiM' blockLalala) x) (Lalala [] [] (fromLists [[1]], [Unitful []]))))
-
-> lalala :: Program Annotation -> Lalala
-> lalala x = execState (mapM (descendBiM' blockLalala) x) (Lalala [] [] (fromLists [[1]], [Unitful []]))
 
 > blockLalala :: Block Annotation -> State Lalala (Block Annotation)
 > blockLalala x = do uenv <- gets unitVarEnv
