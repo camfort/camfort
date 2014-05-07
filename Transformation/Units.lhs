@@ -48,15 +48,17 @@
 >   fromRational = Unitless . fromRational
 
 > data UnitVariable = UnitVariable Int
+> data UnitVarCategory = Literal | Temporary | Variable deriving Eq
 > type UnitVarEnv = [(Variable, UnitVariable)]
 > type DerivedUnitEnv = [(MeasureUnit, UnitConstant)]
 > type LinearSystem = (Matrix Rational, [UnitConstant])
 > data Lalala = Lalala {
 >   _unitVarEnv :: UnitVarEnv,
 >   _derivedUnitEnv :: DerivedUnitEnv,
+>   _unitVarCats :: [UnitVarCategory],
 >   _linearSystem :: LinearSystem
 > }
-> emptyLalala = Lalala [] [] (fromLists [[1]], [Unitful []])
+> emptyLalala = Lalala [] [] [Literal] (fromLists [[1]], [Unitful []])
 > Data.Label.mkLabels [''Lalala]
 
 > descendBi' :: (Data (from a), Data (to a)) => (to a -> to a) -> from a -> from a
@@ -111,22 +113,19 @@ The indexing for switchScaleElems is 1-based, in line with Data.Matrix.
 >         (a, _ : b) = splitAt (k - 1) vector''
 >         vector' = a ++ vector !! (k - 1) : b
 
-> fillUnderspecifiedM :: State Lalala ()
-> fillUnderspecifiedM = linearSystem =. fillUnderspecified
+> checkUnderdeterminedM :: State Lalala ()
+> checkUnderdeterminedM = do ucats <- gets unitVarCats
+>                            linearSystem =. checkUnderdetermined ucats
 
-> fillUnderspecified :: LinearSystem -> LinearSystem
-> fillUnderspecified (matrix, vector) = (fillUnderspecified' matrix 1, vector)
+> checkUnderdetermined :: [UnitVarCategory] -> LinearSystem -> LinearSystem
+> checkUnderdetermined ucats system = checkUnderdetermined' ucats system 1
 
-> fillUnderspecified' :: Matrix Rational -> Int -> Matrix Rational
-> fillUnderspecified' matrix m
->   | m > ncols matrix = matrix
->   | otherwise = cleanRow matrix n m
->                 where n = find (\n -> matrix ! (n, m) /= 0) [1 .. nrows matrix]
-
-> cleanRow :: Matrix Rational -> Maybe Int -> Int -> Matrix Rational
-> cleanRow matrix Nothing m = fillUnderspecified' matrix (m + 1)
-> cleanRow matrix (Just n) m = fillUnderspecified' matrix' (m + 1)
->   where matrix' = mapRow (\k x -> if k == m then x else 0) n matrix
+> checkUnderdetermined' :: [UnitVarCategory] -> LinearSystem -> Int -> LinearSystem
+> checkUnderdetermined' ucats system@(matrix, vector) n
+>   | n > nrows matrix = system
+>   | not (null $ drop 1 ms) && vector !! (n - 1) /= Unitful [] = error "Underdetermined units of measure!"
+>   | otherwise = checkUnderdetermined' ucats system (n + 1)
+>   where ms = filter (\m -> matrix ! (n, m) /= 0 && ucats !! (m - 1) /= Literal) [1 .. ncols matrix]
 
 > inferUnits :: (Filename, Program Annotation) -> (Report, (Filename, Program Annotation))
 > inferUnits (fname, x) = ("", (fname, evalState (doInferUnits x) emptyLalala))
@@ -139,7 +138,7 @@ The indexing for switchScaleElems is 1-based, in line with Data.Matrix.
 > blockLalala x = do uenv <- gets unitVarEnv
 >                    y <- enterDecls x
 >                    descendBiM' handleStmt y
->                    fillUnderspecifiedM
+>                    checkUnderdeterminedM
 >                    unitVarEnv =: uenv
 >                    return y
 
@@ -194,11 +193,14 @@ The indexing for switchScaleElems is 1-based, in line with Data.Matrix.
 >           let (VarName _ v, _) = head names
 >           return $ do
 >             uenv <- gets unitVarEnv
+>             ucats <- gets unitVarCats
 >             system <- gets linearSystem
 >             let m = ncols (fst system) + 1
 >                 uenv' = uenv ++ [(v, UnitVariable m)]
+>                 ucats' = ucats ++ [Variable]
 >                 system' = extendConstraints units system
 >             unitVarEnv =: uenv'
+>             unitVarCats =: ucats'
 >             linearSystem =: system'
 >             return (Var a { unitVar = m } s names, e)
 >     f x@(MeasureUnitDef a s d) =
@@ -287,11 +289,12 @@ The indexing for switchScaleElems is 1-based, in line with Data.Matrix.
 > binOpKind (RelGT _) = RelOp
 > binOpKind (RelGE _) = RelOp
 
-> addCol :: State Lalala Int
-> addCol =
+> addCol :: UnitVarCategory -> State Lalala Int
+> addCol category =
 >   do (matrix, vector) <- gets linearSystem
 >      let m = ncols matrix + 1
 >      linearSystem =: (extendTo 0 m matrix, vector)
+>      unitVarCats =. (++ [category])
 >      return m
 
 > addRow :: State Lalala Int
@@ -315,7 +318,7 @@ The indexing for switchScaleElems is 1-based, in line with Data.Matrix.
 
 > mustAddUp :: State Lalala UnitVariable -> State Lalala UnitVariable -> Rational -> Rational -> State Lalala UnitVariable
 > mustAddUp uvm1 uvm2 k1 k2 =
->   do m <- addCol
+>   do m <- addCol Temporary
 >      UnitVariable uv1 <- uvm1
 >      UnitVariable uv2 <- uvm2
 >      n <- addRow
@@ -328,7 +331,7 @@ TODO: error handling in powerUnits
 > powerUnits :: State Lalala UnitVariable -> Expr a -> State Lalala UnitVariable
 > powerUnits uvm (Con _ _ powerString) =
 >   do let power = fromInteger $ read powerString
->      m <- addCol
+>      m <- addCol Temporary
 >      UnitVariable uv <- uvm
 >      n <- addRow
 >      modify $ liftLalala $ setElem (-1) (n, m) . setElem power (n, uv)
@@ -337,22 +340,22 @@ TODO: error handling in powerUnits
 
 > sqrtUnits :: State Lalala UnitVariable -> State Lalala UnitVariable
 > sqrtUnits uvm =
->   do m <- addCol
+>   do m <- addCol Temporary
 >      UnitVariable uv <- uvm
 >      n <- addRow
 >      modify $ liftLalala $ setElem (-1) (n, m) . setElem 0.5 (n, uv)
 >      solveSystemM
 >      return $ UnitVariable m
 
-> anyUnits :: State Lalala UnitVariable
-> anyUnits =
->   do m <- addCol
+> anyUnits :: UnitVarCategory -> State Lalala UnitVariable
+> anyUnits category =
+>   do m <- addCol category
 >      return $ UnitVariable m
 
 > inferExprUnits :: Expr a -> State Lalala UnitVariable
-> inferExprUnits (Con _ _ _) = anyUnits
-> inferExprUnits (ConL _ _ _ _) = anyUnits
-> inferExprUnits (ConS _ _ _) = anyUnits
+> inferExprUnits (Con _ _ _) = anyUnits Literal
+> inferExprUnits (ConL _ _ _ _) = anyUnits Literal
+> inferExprUnits (ConS _ _ _) = anyUnits Literal
 > inferExprUnits (Var _ _ names) =
 >   do uenv <- gets unitVarEnv
 >      let (VarName _ v, _) = head names
@@ -372,8 +375,8 @@ TODO: error handling in powerUnits
 > inferExprUnits (Unary _ _ _ e) = inferExprUnits e
 > inferExprUnits (CallExpr _ _ e1 (ArgList _ e2)) = do inferExprUnits e1
 >                                                      inferExprUnits e2
->                                                      anyUnits
-> inferExprUnits (NullExpr _ _) = anyUnits
+>                                                      anyUnits Temporary
+> inferExprUnits (NullExpr _ _) = anyUnits Temporary
 > inferExprUnits (Null _ _) = return $ UnitVariable 1
 > inferExprUnits (ESeq _ _ e1 e2) = do inferExprUnits e1
 >                                      inferExprUnits e2
