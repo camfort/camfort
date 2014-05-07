@@ -6,6 +6,7 @@
 > import Data.Ratio
 > import Data.Matrix
 > import Data.List
+> import Data.Label.Mono (Lens)
 > import Data.Label.Monadic hiding (modify)
 > import qualified Data.Label
 > import Data.Function
@@ -60,6 +61,10 @@
 > }
 > emptyLalala = Lalala [] [] [Literal] (fromLists [[1]], [Unitful []])
 > Data.Label.mkLabels [''Lalala]
+
+> infix 2 <<
+> (<<) :: MonadState f m => Lens (->) f [o] -> o -> m ()
+> (<<) lens o = lens =. (++ [o])
 
 > descendBi' :: (Data (from a), Data (to a)) => (to a -> to a) -> from a -> from a
 > descendBi' f x = descendBi f x
@@ -154,10 +159,9 @@ The indexing for switchScaleElems is 1-based, in line with Data.Matrix.
 > convertSingleUnit unit f =
 >   do denv <- gets derivedUnitEnv
 >      let uc = Unitful [(unit, f)]
->          denv' = denv ++ [(unit, uc)]
 >      case lookup unit denv of
 >        Just uc' -> return $ uc' * (fromRational f)
->        Nothing  -> derivedUnitEnv =: denv' >> return uc
+>        Nothing  -> derivedUnitEnv << (unit, uc) >> return uc
 
 > fromFraction :: Fraction a -> Rational
 > fromFraction (IntegerConst _ n) = fromInteger $ read n
@@ -192,16 +196,11 @@ The indexing for switchScaleElems is 1-based, in line with Data.Matrix.
 >           (Var a s names, e) <- d
 >           let (VarName _ v, _) = head names
 >           return $ do
->             uenv <- gets unitVarEnv
->             ucats <- gets unitVarCats
 >             system <- gets linearSystem
 >             let m = ncols (fst system) + 1
->                 uenv' = uenv ++ [(v, UnitVariable m)]
->                 ucats' = ucats ++ [Variable]
->                 system' = extendConstraints units system
->             unitVarEnv =: uenv'
->             unitVarCats =: ucats'
->             linearSystem =: system'
+>             unitVarEnv << (v, UnitVariable m)
+>             unitVarCats << Variable
+>             linearSystem =. extendConstraints units
 >             return (Var a { unitVar = m } s names, e)
 >     f x@(MeasureUnitDef a s d) =
 >       do
@@ -212,8 +211,7 @@ The indexing for switchScaleElems is 1-based, in line with Data.Matrix.
 >           do denv <- gets derivedUnitEnv
 >              let Nothing = lookup name denv -- FIXME: error handling
 >              unit <- convertUnit spec
->              let denv' = denv ++ [(name, unit)]
->              derivedUnitEnv =: denv'
+>              derivedUnitEnv << (name, unit)
 >     f x = return x
 
 > insertUnitsInBlock :: Block Annotation -> State Lalala (Block Annotation)
@@ -294,7 +292,7 @@ The indexing for switchScaleElems is 1-based, in line with Data.Matrix.
 >   do (matrix, vector) <- gets linearSystem
 >      let m = ncols matrix + 1
 >      linearSystem =: (extendTo 0 m matrix, vector)
->      unitVarCats =. (++ [category])
+>      unitVarCats << category
 >      return m
 
 > addRow :: State Lalala Int
