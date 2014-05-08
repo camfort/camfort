@@ -66,6 +66,9 @@
 > (<<) :: MonadState f m => Lens (->) f [o] -> o -> m ()
 > (<<) lens o = lens =. (++ [o])
 
+> prepend :: MonadState f m => Lens (->) f [o] -> o -> m ()
+> prepend lens o = lens =. (o:)
+
 > descendBi' :: (Data (from a), Data (to a)) => (to a -> to a) -> from a -> from a
 > descendBi' f x = descendBi f x
 
@@ -136,15 +139,46 @@ The indexing for switchScaleElems is 1-based, in line with Data.Matrix.
 > inferUnits (fname, x) = ("", (fname, evalState (doInferUnits x) emptyLalala))
 
 > doInferUnits :: Program Annotation -> State Lalala (Program Annotation)
-> doInferUnits x = do y <- mapM (descendBiM' blockLalala) x
+> doInferUnits x = do y <- mapM inferUnitsInProgUnit x
 >                     mapM (descendBiM' insertUnitsInBlock) y
 
+> inferUnitsInProgUnit :: ProgUnit Annotation -> State Lalala (ProgUnit Annotation)
+> inferUnitsInProgUnit x = do uenv <- gets unitVarEnv
+>                             b <- maybe (return Nothing) (fmap Just . blockLalala) $ block x
+>                             ps <- mapM inferUnitsInProgUnit $ progUnits x
+>                             unitVarEnv =: uenv
+>                             return $ refillProgUnits (refillBlock x b) ps
+
+> block :: ProgUnit Annotation -> Maybe (Block Annotation)
+> block (Main x sp n a b ps)     = Just b
+> block (Sub x sp t n a b)       = Just b
+> block (Function x sp t n a b)  = Just b
+> block x                        = Nothing
+
+> progUnits :: ProgUnit Annotation -> [ProgUnit Annotation]
+> progUnits (Main x sp n a b ps)     = ps
+> progUnits (Module x sp n u i d ps) = ps
+> progUnits (PSeq x sp p1 p2)        = [p1, p2]
+> progUnits (Prog x sp p)            = [p]
+> progUnits x                        = []
+
+> refillBlock :: ProgUnit Annotation -> Maybe (Block Annotation) -> ProgUnit Annotation
+> refillBlock (Main x sp n a _ ps)    (Just b) = Main x sp n a b ps
+> refillBlock (Sub x sp t n a _)      (Just b) = Sub x sp t n a b
+> refillBlock (Function x sp t n a _) (Just b) = Function x sp t n a b
+> refillBlock x                        _       = x
+
+> refillProgUnits :: ProgUnit Annotation -> [ProgUnit Annotation] -> ProgUnit Annotation
+> refillProgUnits (Main x sp n a b _)     ps       = Main x sp n a b ps
+> refillProgUnits (Module x sp n u i d _) ps       = Module x sp n u i d ps
+> refillProgUnits (PSeq x sp _ _)         [p1, p2] = PSeq x sp p1 p2
+> refillProgUnits (Prog x sp _)           [p]      = Prog x sp p
+> refillProgUnits x                       _        = x
+
 > blockLalala :: Block Annotation -> State Lalala (Block Annotation)
-> blockLalala x = do uenv <- gets unitVarEnv
->                    y <- enterDecls x
+> blockLalala x = do y <- enterDecls x
 >                    descendBiM' handleStmt y
 >                    checkUnderdeterminedM
->                    unitVarEnv =: uenv
 >                    return y
 
 > convertUnit :: MeasureUnitSpec a -> State Lalala UnitConstant
@@ -199,7 +233,7 @@ The indexing for switchScaleElems is 1-based, in line with Data.Matrix.
 >           return $ do
 >             system <- gets linearSystem
 >             let m = ncols (fst system) + 1
->             unitVarEnv << (v, UnitVariable m)
+>             prepend unitVarEnv (v, UnitVariable m)
 >             unitVarCats << Variable
 >             linearSystem =. extendConstraints units
 >             return (Var a { unitVar = m } s names, e)
