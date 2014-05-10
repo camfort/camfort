@@ -514,9 +514,14 @@ power_unit_spec
 
 power_spec :: { Fraction A0 }
 power_spec
-: '(' num '/' num ')' { FractionConst () $2 $4 }
-| num                 { IntegerConst () $1 }
-| '(' power_spec ')'  { $2 }
+: '(' signed_num '/' signed_num ')' { FractionConst () $2 $4 }
+| signed_num                        { IntegerConst () $1 }
+| '(' power_spec ')'                { $2 }
+
+signed_num :: { String }
+signed_num
+: '-' num { "-" ++ $2 }
+| num     { $1 }
 
 specification_stmt :: { Decl A0 }
 specification_stmt
