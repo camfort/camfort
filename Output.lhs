@@ -24,11 +24,14 @@
 > import Language.Fortran as Fortran
 > import Language.Fortran.Pretty
 
-> import Data.Text hiding (foldl,map, concatMap,take,drop)
+> import Transformation.Syntax
+
+> import Data.Text hiding (foldl,map,concatMap,take,drop)
 > import qualified Data.Text as Text 
 > import Data.Map.Lazy hiding (map, foldl)
 > import Data.Generics
 > import GHC.Generics
+> import Data.List
 > import Data.Generics.Uniplate.Data
 
 > import Generics.Deriving.Copoint
@@ -144,6 +147,17 @@ Output routines specialised to the analysis.
 
 > instance (OutputIndG (Fortran p) Alt2, OutputG p Alt2, Indentor (Fortran p), Indentor (Decl p)) => OutputG (Block p) Alt2 where
 >     outputG = outputF
+
+> instance OutputG (Uses p) Alt2 where
+>     outputG u = showUse' u
+
+> showUse' :: Uses p -> String
+> showUse' (UseNil _) = ""
+> showUse' (Use _ (n, []) us _) = ("use "++n++"\n") ++ (showUse' us)
+> showUse' (Use _ (n, renames) us _) = ("use "++n++", " ++ 
+>                                      (Prelude.concat $ Data.List.intersperse ", " (map (\(a, b) -> a ++ " => " ++ b) renames)) ++
+>                                   "\n") ++ (showUse' us)
+
 
 > instance (OutputIndG (Fortran p) Alt2, OutputG p Alt2, Indentor (Fortran p)) => OutputG (Fortran p) Alt2 where
 >                               
@@ -268,7 +282,8 @@ GLORIOUS REFACTORING ALGORITHM!
 > reprintC cursor inp z = 
 >                         let (p1, cursor', flag) = query (refactoring inp cursor) z 
 
->                             (_, inp') = takeBounds (cursor, cursor') inp
+>                             (_, inp') = --(if p1 /= "" then "\np1 = " ++ (show p1) ++ "\n" else "") `trace`
+>                                          takeBounds (cursor, cursor') inp
 >                             (p2, cursor'') = if flag then ("", cursor') else enterDown cursor' inp' z
 >                                              -- for debugging: ("--_" ++ show p1 ++ "\n") `trace` 
 
@@ -305,7 +320,7 @@ Specifies how to do specific refactorings
 >               outE = let ?variant = Alt1 in outputF e
 >               lnl = case e of (NullStmt _ _) -> (if ((p0 /= []) && Prelude.last p0 /= '\n') then "\n" else "")
 >                               _              -> ""
->           in if p0 == "\n" then (outE, ub, True) else (p0 ++ outE ++ lnl, ub, True)
+>           in  if p0 == "\n" then (outE, ub, True) else (p0 ++ outE ++ lnl, ub, True)
 >        else ("", cursor, False)
 
 
@@ -315,7 +330,8 @@ Specifies how to do specific refactorings
 >     if (pRefactored $ tag d) then
 >        let (lb, ub) = srcSpan d
 >            (p0, _) = takeBounds (cursor, lb) inp
->        in (p0 ++ outputF d, ub, True)
+>        in --("\ncursor = " ++ show cursor ++ "\n lb = " ++ show lb ++ "p0 = " ++ show p0) `trace` 
+>             (p0 ++ outputF d, ub, True)
 >     else ("", cursor, False)
 
 > refactorArgName :: [String] -> SrcLoc -> ArgName Annotation -> (String, SrcLoc, Bool)
@@ -328,10 +344,11 @@ Specifies how to do specific refactorings
 
 > refactorUses :: [String] -> SrcLoc -> Uses Annotation -> (String, SrcLoc, Bool)
 > refactorUses inp cursor u = 
->     let ?variant = Alt1 in
+>     let ?variant = Alt2 in
 >         case (refactored $ tag u) of
 >            Just lb -> let (p0, _) = takeBounds (cursor, lb) inp
->                        in (p0 ++ outputF u, lb, True)
+>                        in --("\ncursor = " ++ show cursor ++ "\n lb = " ++ show lb ++ "p0 = " ++ show p0 ++ "\n output = " ++ (show $ outputF u)) `trace` 
+>                              (p0 ++ outputG u, toCol0 lb, True)
 >            Nothing -> ("", cursor, False) 
 > 
 
