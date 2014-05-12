@@ -85,10 +85,10 @@ showForall ((s,e,e',e''):[]) = s++"="++outputG e++":"++outputG e'++"; "++outputG
 showForall ((s,e,e',NullExpr _ _):is) = s++"="++outputG e++":"++outputG e'++", "++showForall is
 showForall ((s,e,e',e''):is) = s++"="++outputG e++":"++outputG e'++"; "++outputG e''++", "++showForall is
 
-showUse :: Int -> Uses p -> String
-showUse i (UseNil _) = ""
-showUse i (Use _ (n, []) us _) = ((ind 1)++"use "++n++"\n") ++ (showUse us)
-showUse i (Use _ (n, renames) us _) = ((ind 1)++"use "++n++", " ++ 
+showUse :: Uses p -> String
+showUse (UseNil _) = ""
+showUse (Use _ (n, []) us _) = ((ind 1)++"use "++n++"\n") ++ (showUse us)
+showUse (Use _ (n, renames) us _) = ((ind 1)++"use "++n++", " ++ 
                                      (concat $ intersperse ", " (map (\(a, b) -> a ++ " => " ++ b) renames)) ++
                                    "\n") ++ (showUse us)
 
