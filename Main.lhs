@@ -64,7 +64,7 @@ Register all availble refactorings and analyses
 User information
 
 > introMessage = "CamFort " ++ (show version) ++ " - Cambridge Fortran Infrastructure."
-> usage = "Usage: camfort <function> <directory> \n\n"
+> usage = "Usage: camfort <function> <input-dir> <\"excluded-file, ...\"> <output-dir>\n\n"
 > menu = "Refactor functions:\n"
 >         ++ concatMap (\(k, (_, info)) -> "\t" ++ k ++ "\t [" ++ info ++ "] \n") refactorings
 >         ++ "Analysis functions:\n" 
@@ -188,17 +188,10 @@ their AST, write these to the director
 > --  If the filename string has no directory then this is an identity 
 > changeDir newDir oldDir oldFilename = newDir ++ (listDiffL oldDir oldFilename)
 
-
-
 > listDiffL []     ys = ys
 > listDiffL xs     [] = []
 > listDiffL (x:xs) (y:ys) | x==y      = listDiffL xs ys
 >                         | otherwise = ys
-
-             case (elemIndices '/' oldFilename) of
-                    []   -> oldFilename
-                    ixs -> let fWithoutDir = Prelude.drop (last ixs) oldFilename
-                           in newDir ++ fWithoutDir
 
 > outputAnalysisFiles d asts files =
 >            do putStrLn $ "Writing analysis files to directory: " ++ d ++ "/"
