@@ -163,7 +163,7 @@ Todo: CallExpr, changing assignments
 > mkUseStatements :: SrcLoc -> [(TCommon A, RenamerCoercer)] -> Uses A
 > mkUseStatements s [] = UseNil (unitAnnotation)
 > mkUseStatements s (((name, _), r):trs) = 
->                         let a = unitAnnotation { refactored = Just s } -- previously-- Just (toCol0 s)
+>                         let a = unitAnnotation { refactored = Just s, newNode = True } -- previously-- Just (toCol0 s)
 >                         in Use a (commonName name, renamerToUse r) (mkUseStatements s trs) a
 
 > mkRenamerCoercerTLC :: TLCommon A :? source -> TLCommon A :? target -> RenamerCoercer

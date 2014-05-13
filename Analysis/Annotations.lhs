@@ -35,13 +35,15 @@ Loop classifications
 
 > type A = Annotation
 
-> data Annotation = A {indices :: [Variable],
->                      lives ::([Access],[Access]),
->                      arrsRead :: Map Variable [[Expr ()]], 
->                      arrsWrite :: Map Variable [[Expr ()]],
->                      number :: Int,
->                      refactored :: Maybe SrcLoc, 
->                      successorStmts :: [Int]}
+> data Annotation = A { indices        :: [Variable],
+>                       lives          :: ([Access],[Access]),
+>                       arrsRead       :: Map Variable [[Expr ()]], 
+>                       arrsWrite      :: Map Variable [[Expr ()]],
+>                       number         :: Int,
+>                       refactored     :: Maybe SrcLoc, 
+>                       successorStmts :: [Int], 
+>                       newNode        :: Bool      -- used to indicate when a node is newly introduced
+>                     }
 >                    deriving (Eq, Show, Typeable, Data)
 
 > liveOut = snd . lives
@@ -54,5 +56,5 @@ Loop classifications
 >                   Nothing -> False
 >                   Just _  -> True
 
-> unitAnnotation = A [] ([], []) empty empty 0 Nothing []
+> unitAnnotation = A [] ([], []) empty empty 0 Nothing [] False 
 
