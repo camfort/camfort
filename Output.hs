@@ -333,7 +333,8 @@ refactorDecl inp cursor d =
        let (lb, ub) = srcSpan d
            (p0, _) = takeBounds (cursor, lb) inp
            textOut = p0 ++ (outputF d)
-       in do textOut' <- case d of 
+       in do textOut' <- -- The following compensates new lines with removed lines
+                         case d of 
                            (NullDecl _ _) -> 
                               do added <- get 
                                  let diff = linesCovered ub lb
@@ -343,7 +344,7 @@ refactorDecl inp cursor d =
                                                          else removeNewLines textOut diff
                                  put (added - removed)
                                  return text
-                           otherwise -> return textOut
+                           otherwise -> return textOut 
              return (textOut', ub, True)
     else return ("", cursor, False)
 
@@ -370,6 +371,11 @@ refactorUses inp cursor u =
 countLines []        = 0
 countLines ('\n':xs) = 1 + countLines xs
 countLines (x:xs)    = countLines xs
+
+{- 'removeNewLines xs n' removes at most 'n' new lines characters from the input string 
+    xs, returning the new string and the number of new lines that were removed. Note 
+    that the number of new lines removed might actually be less than 'n'- but in principle
+    this should not happen with the usaage in 'refactorDecl' -}
 
 removeNewLines [] n = ([], 0)
 removeNewLines ('\n':xs) 0 = let (xs', n') = removeNewLines xs 0
