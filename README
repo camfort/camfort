@@ -1,6 +1,17 @@
 ---------------------------------------
 CamFort v0.615
 ---------------------------------------
+0. Prerequisites
+
+On a Debian/Ubuntu system
+
+   sudo apt-get install ghc alex happy libghc-text-dev libghc-comonad-dev libghc-mtl-dev
+
+   cabal update
+   cabal install syz generic-deriving uniplate
+
+Also required is the language-fortran package which needs to be built from source and installed.  This contains the lexer and the parser.
+
 1. Building
 ---------------------------------------
 
@@ -11,12 +22,6 @@ For development purpsoses, you probably want to load CamFort in interactive mode
 OR compile to the binary format locally:
 
   ghc Main.lhs -o camfort
-
-Note, for both of these you may need to compile the lexer and parser first if not already done:
-
-  alex Language/Fortran/Lexer.x
-  happy Language/Fortran/Parser.y
-
 
 Alternatively, to install as a library in your Haskell build 
 

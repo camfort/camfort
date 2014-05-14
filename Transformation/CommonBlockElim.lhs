@@ -119,7 +119,8 @@ Todo: CallExpr, changing assignments
 >                                       srcloc = useSrcLoc p
 >                                       uses = mkUseStatements srcloc tcrs'
 >                                       p' = transformBi ((flip concatUses) uses) p
->                                   in removeDecls (map snd tcrs') p'
+>                                   in --("use src loc = " ++ show srcloc) `trace` 
+>                                         removeDecls (map snd tcrs') p'
 
 >           removeDecls :: [RenamerCoercer] -> ProgUnit A -> ProgUnit A
 >           removeDecls rcs p = transformBi (remDecl rcs) p
@@ -131,8 +132,10 @@ Todo: CallExpr, changing assignments
 >           remDecl rcs d@(Decl p srcP [lvar@(Var _ _ [(VarName _ v, [])], e)] _) =
 >                 if (or (map (matchrc v) rcs)) then 
 >                   case e of
->                     NullExpr _ _ -> (NullDecl ( p { refactored = Just (fst srcP) }) srcP) --  [])
->                     e            -> (NullDecl ( p { refactored = Just (fst srcP) }) srcP) -- [Assg (p { refactored = Just (fst srcP) }) srcP lvar e])
+>                     NullExpr _ _ -> -- ("ne sp = " ++ show srcP) `trace` 
+>                                       (NullDecl ( p { refactored = Just (fst srcP) }) srcP) --  [])
+>                     e            -> -- ("e sp = " ++ show srcP) `trace`
+>                                       (NullDecl ( p { refactored = Just (fst srcP) }) srcP) -- [Assg (p { refactored = Just (fst srcP) }) srcP lvar e])
 >                 else d
 >           remDecl _ d = d
 >                     
@@ -160,7 +163,7 @@ Todo: CallExpr, changing assignments
 > mkUseStatements :: SrcLoc -> [(TCommon A, RenamerCoercer)] -> Uses A
 > mkUseStatements s [] = UseNil (unitAnnotation)
 > mkUseStatements s (((name, _), r):trs) = 
->                         let a = unitAnnotation { refactored = Just (toCol0 s) }
+>                         let a = unitAnnotation { refactored = Just s, newNode = True } -- previously-- Just (toCol0 s)
 >                         in Use a (commonName name, renamerToUse r) (mkUseStatements s trs) a
 
 > mkRenamerCoercerTLC :: TLCommon A :? source -> TLCommon A :? target -> RenamerCoercer
@@ -335,7 +338,8 @@ Extending calls version
 >             do let r' = fname ++ (show $ srcLineCol $ fst sp) ++ ": removed common declaration\n"
 >                (r, env) <- get
 >                put (r ++ r', (fname, (pname, (cname, typeCommonExprs exprs))):env)
->                return $ (NullDecl (a { refactored = (Just $ fst sp) }) sp)
+>                return $ --("sp = " ++ show sp) `trace` 
+>                          (NullDecl (a { refactored = (Just $ fst sp) }) sp)
 >         commons' f = return f
 
 >         typeCommonExprs :: [Expr Annotation] -> [(Variable, Type Annotation)]

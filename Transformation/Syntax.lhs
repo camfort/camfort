@@ -56,6 +56,9 @@ Helpers to do with source locations and parsing
 dropLine extends a span to the start of the next line
 This is particularly useful if a whole line is being redacted from a source file
 
+> linesCovered :: SrcLoc -> SrcLoc -> Int
+> linesCovered (SrcLoc _ l1 _) (SrcLoc _ l2 _) = l2 - l1 + 1
+
 > dropLine :: SrcSpan -> SrcSpan
 > dropLine (s1, SrcLoc f l c) = (s1, SrcLoc f (l+1) 0)
 

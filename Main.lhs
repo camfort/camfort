@@ -50,13 +50,13 @@ Register all availble refactorings and analyses
 
 > main = do putStrLn introMessage 
 >           d <- getArgs 
->           if (length d == 2) then
->              let (func:(dir:_)) = d
+>           if (length d == 4) then
+>              let (func:(dir:(excludes:(outdir:_)))) = d
 >              in case (lookup func (analyses ++ refactorings)) of 
->                   Just (func, _) -> func dir
+>                   Just (func, _) -> func dir excludes outdir
 >                   Nothing ->
 >                       case func of 
->                          "ast"   -> ast dir (d!!2)
+>                          "ast"   -> ast dir (d!!2) -- d!!2 is output file here
 >                          _ -> putStrLn $ usage ++ menu
 >            else
 >               putStrLn $ usage ++ menu
@@ -64,7 +64,7 @@ Register all availble refactorings and analyses
 User information
 
 > introMessage = "CamFort " ++ (show version) ++ " - Cambridge Fortran Infrastructure."
-> usage = "Usage: camfort <function> <directory> \n\n"
+> usage = "Usage: camfort <function> <input-dir> <\"excluded-file, ...\"> <output-dir>\n\n"
 > menu = "Refactor functions:\n"
 >         ++ concatMap (\(k, (_, info)) -> "\t" ++ k ++ "\t [" ++ info ++ "] \n") refactorings
 >         ++ "Analysis functions:\n" 
@@ -73,41 +73,47 @@ User information
 Wrappers on all of the features
 --------------------------------
 
-> typeStructuring d = 
->      do putStrLn $ "Introducing derived data types for source in directory " ++ show d ++ "\n"
->         doRefactor typeStruct d
+> typeStructuring inDir excludes outDir = 
+>      do putStrLn $ "Introducing derived data types for source in directory " ++ show inDir ++ "\n"
+>         doRefactor typeStruct inDir excludes outDir
 
 > ast d f = do (_, _, p) <- readParseSrcFile (d ++ "/" ++ f)
 >              putStrLn $ show p
 
 
-> loops d =  do putStrLn $ "Analysing loops for source in directory " ++ show d ++ "\n"
->               doAnalysis loopAnalyse d
+> loops inDir excludes _ =  
+>            do putStrLn $ "Analysing loops for source in directory " ++ show inDir ++ "\n"
+>               doAnalysis loopAnalyse inDir excludes 
 
-> lvaA d =  do putStrLn $ "Analysing loops for source in directory " ++ show d ++ "\n"
->              doAnalysis lva d
+> lvaA inDir excludes _ =  
+>           do putStrLn $ "Analysing loops for source in directory " ++ show inDir ++ "\n"
+>              doAnalysis lva inDir excludes 
 
+> dead inDir excludes outDir =
+>          do putStrLn $ "Eliminating dead code for source in directory " ++ show inDir ++ "\n"
+>             doRefactor ((mapM (deadCode False))) inDir excludes outDir
 
-> dead d = do putStrLn $ "Eliminating dead code for source in directory " ++ show d ++ "\n"
->             doRefactor ((mapM (deadCode False))) d
+> commonToArgs inDir excludes outDir = 
+>                  do putStrLn $ "Refactoring common blocks for source in directory " ++ show inDir ++ "\n"
+>                     doRefactor (commonElimToCalls inDir) inDir excludes outDir
 
-> commonToArgs d = do putStrLn $ "Refactoring common blocks for source in directory " ++ show d ++ "\n"
->                     doRefactor (commonElimToCalls d) d
+> common inDir excludes outDir =  
+>            do putStrLn $ "Refactoring common blocks for source in directory " ++ show inDir ++ "\n"
+>               doRefactor (commonElimToModules inDir) inDir excludes outDir
 
-> common d = do putStrLn $ "Refactoring common blocks for source in directory " ++ show d ++ "\n"
->               doRefactor (commonElimToModules d) d
-
-> equivalences d =
->            do putStrLn $ "Refactoring equivalences blocks for source in directory " ++ show d ++ "\n"
->               doRefactor (mapM refactorEquivalences) d
+> equivalences inDir excludes outDir =
+>            do putStrLn $ "Refactoring equivalences blocks for source in directory " ++ show inDir ++ "\n"
+>               doRefactor (mapM refactorEquivalences) inDir excludes outDir
 
 
 General analysis/refactor builders
 ----------------------------------
 
-> doAnalysis aFun d = do putStrLn $ "Exclude any files from " ++ d ++ "/? (comma-separate list)\n"
->                        excludes <- getLine
->                           
+> doAnalysis aFun d excludes = 
+>                     do if excludes /= "" 
+>                            then putStrLn $ "Excluding " ++ excludes ++ " from " ++ d ++ "/"
+>                            else return ()
+>                       
 >                        ps <- readParseSrcDir d excludes
 
 >                        let inFiles = map fst3 ps
@@ -117,17 +123,18 @@ General analysis/refactor builders
 >                        outputAnalysisFiles d asts' outFiles
 
 
-> doRefactor rFun d = do putStrLn $ "Exclude any files from " ++ d ++ "/? (comma-separate list)\n"
->                        excludes <- getLine
->               
->                        ps <- readParseSrcDir d excludes
-
+> doRefactor rFun inDir excludes outDir
+>                   = do if excludes /= "" 
+>                            then putStrLn $ "Excluding " ++ excludes ++ " from " ++ inDir ++ "/"
+>                            else return ()
+>
+>                        ps <- readParseSrcDir inDir excludes
 >                        let (report, ps') = rFun (map (\(f, inp, ast) -> (f, ast)) ps)
-
->                        let outFiles = filter (\f -> not ((take (length $ d ++ "out") f) == (d ++ "out"))) (map fst ps')
+>                        --let outFiles = filter (\f -> not ((take (length $ d ++ "out") f) == (d ++ "out"))) (map fst ps')
+>                        let outFiles = map fst ps'
 
 >                        putStrLn report
->                        outputFiles d (zip3 outFiles (map snd3 ps ++ (repeat "")) (map snd ps'))
+>                        outputFiles inDir outDir (zip3 outFiles (map snd3 ps ++ (repeat "")) (map snd ps'))
 
 
 General source file handling stuff
@@ -146,6 +153,10 @@ General source file handling stuff
 >                         ast <- pr f
 >                         return $ (f, inp, map (fmap (const unitAnnotation)) ast)                                   
 
+> {--
+
+OLD 
+
 > setupOut d = if ((Prelude.drop (length d - 3) d) == "-out") then  -- don't do this (hence the '-' pref to stop this)
 >                  return d
 >              else if d == "." then 
@@ -153,6 +164,7 @@ General source file handling stuff
 >                      return $ "out"    
 >              else do createDirectoryIfMissing True (d ++ "out")
 >                      return $ d ++ "out"
+> --}
 
 > -- checkDir creates a directory (from a filename string) if it doesn't exist
 > checkDir f = case (elemIndices '/' f) of 
@@ -163,20 +175,23 @@ General source file handling stuff
 Given a directory and list of triples of filenames, with their source text (if it exists) and
 their AST, write these to the director
 
-> outputFiles :: Directory -> [(Filename, SourceText, Program Annotation)] -> IO ()
-> outputFiles d pdata = 
->            do d' <- setupOut d
->               putStrLn $ "Writing refactored files to directory: " ++ d' ++ "/"
->               mapM_ (\(f, inp, ast') -> (checkDir f) >>
->                                         (writeFile (changeDir d' f) (reprint inp f ast'))) pdata
+> outputFiles :: Directory -> Directory -> [(Filename, SourceText, Program Annotation)] -> IO ()
+> outputFiles inDir outDir pdata = 
+>            do createDirectoryIfMissing True outDir
+>               putStrLn $ "Writing refactored files to directory: " ++ outDir ++ "/"
+>               mapM_ (\(f, inp, ast') -> let f' = changeDir outDir inDir f
+>                                         in do checkDir f'
+>                                               writeFile f' (reprint inp f' ast')) pdata
 
 
 > -- changeDir is used to change the directory of a filename string.
 > --  If the filename string has no directory then this is an identity 
-> changeDir d' f = case (elemIndices '/' f) of
->                    []   -> f
->                    ixs  -> let fWithoutDir = Prelude.drop (last ixs) f
->                            in d' ++ "/" ++ fWithoutDir
+> changeDir newDir oldDir oldFilename = newDir ++ (listDiffL oldDir oldFilename)
+
+> listDiffL []     ys = ys
+> listDiffL xs     [] = []
+> listDiffL (x:xs) (y:ys) | x==y      = listDiffL xs ys
+>                         | otherwise = ys
 
 > outputAnalysisFiles d asts files =
 >            do putStrLn $ "Writing analysis files to directory: " ++ d ++ "/"
