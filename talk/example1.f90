@@ -1,4 +1,5 @@
 program example1 
+
   implicit none
 
   real :: d
@@ -30,6 +31,7 @@ program example1
   contains
 
    subroutine intersect(s1, s2, x)
+
       real :: s1, s2
       real :: y1
       real :: y2

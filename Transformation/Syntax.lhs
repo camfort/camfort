@@ -65,6 +65,8 @@ This is particularly useful if a whole line is being redacted from a source file
 > srcLineCol :: SrcLoc -> (Int, Int)
 > srcLineCol (SrcLoc _ l c) = (l, c)
 
+> minaa (SrcLoc f l c) = (SrcLoc f (l-1) c)
+
 Variable renaming
 
 > caml (x:xs) = (toUpper x) : xs
