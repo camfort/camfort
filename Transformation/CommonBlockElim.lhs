@@ -144,14 +144,12 @@ Todo: CallExpr, changing assignments
 
 
 > useSrcLoc :: ProgUnit A -> SrcLoc
-> useSrcLoc (Main _ _ _ _ b _) = useSrcLocB b
+> useSrcLoc (Main _ _ _ _ b _) = (show (useSrcLocB b)) `trace` useSrcLocB b
 > useSrcLoc (Sub _ _ _ _ _ b) = useSrcLocB b
 > useSrcLoc (Function _ _ _ _ _ b) = useSrcLocB b
 > useSrcLoc (Module _ s _ _ _ _ _) = fst s -- TOOD: this isn't very accurate 
 > useSrcLoc (BlockData _ s _ _ _ _) = fst s
-> useSrcLocB (Block _ _ _ s _ _) = fst s
-
-
+> useSrcLocB (Block _ (UseBlock _ s) _ _ _ _) = s
 
 > renamerToUse :: RenamerCoercer -> [(Variable, Variable)]
 > renamerToUse Nothing = []

@@ -148,7 +148,7 @@ instance (OutputG (Arg p) v,
 
 instance (OutputG (Fortran p) v, OutputG (Decl p) v, OutputG (Implicit p) v, Alts v) =>
             OutputF (Block p) v where
-  outputF (Block _ us i sp ds f) = showUse us++outputG i++(outputG ds)++outputG f
+  outputF (Block _ (UseBlock us _) i sp ds f) = showUse us++outputG i++(outputG ds)++outputG f
 
 instance (Indentor (Decl p), 
           OutputG (ArgList p) v,
