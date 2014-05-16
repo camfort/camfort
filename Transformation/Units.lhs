@@ -138,9 +138,15 @@ The indexing for switchScaleElems is 1-based, in line with Data.Matrix.
 > inferUnits :: (Filename, Program Annotation) -> (Report, (Filename, Program Annotation))
 > inferUnits (fname, x) = ("", (fname, evalState (doInferUnits x) emptyLalala))
 
+> removeUnits :: (Filename, Program Annotation) -> (Report, (Filename, Program Annotation))
+> removeUnits (fname, x) = ("", (fname, doRemoveUnits x))
+
 > doInferUnits :: Program Annotation -> State Lalala (Program Annotation)
 > doInferUnits x = do y <- mapM inferUnitsInProgUnit x
 >                     mapM (descendBiM' insertUnitsInBlock) y
+
+> doRemoveUnits :: Program Annotation -> Program Annotation
+> doRemoveUnits = map (descendBi' removeUnitsInBlock)
 
 > inferUnitsInProgUnit :: ProgUnit Annotation -> State Lalala (ProgUnit Annotation)
 > inferUnitsInProgUnit x = do uenv <- gets unitVarEnv
@@ -253,6 +259,9 @@ The indexing for switchScaleElems is 1-based, in line with Data.Matrix.
 > insertUnitsInBlock x = do system <- gets linearSystem
 >                           return $ transformBi' (insertUnits system) x
 
+> removeUnitsInBlock :: Block Annotation -> Block Annotation
+> removeUnitsInBlock = transformBi' deleteUnits
+
 > lookupUnit :: LinearSystem -> Int -> UnitConstant
 > lookupUnit (matrix, vector) m = maybe (Unitful []) (\n -> vector !! (n - 1)) n
 >   where n = find (\n -> matrix ! (n, m) /= 0) [1 .. nrows matrix]
@@ -270,6 +279,17 @@ The indexing for switchScaleElems is 1-based, in line with Data.Matrix.
 >         decls = [Decl a' sp' group t' | (group, t') <- zip groups types]
 > insertUnits _ decl = decl
 
+> deleteUnits :: Decl Annotation -> Decl Annotation
+> deleteUnits (Decl a sp@(s1, s2) d t) | hasUnits t =
+>   Decl a' (dropLine sp) d t'
+>   where a' = a { refactored = Just $ toCol0 s1 }
+>         t' = deleteUnit t
+> deleteUnits (MeasureUnitDef a sp@(s1, s2) d) =
+>   NullDecl a' sp'
+>   where a' = a { refactored = Just s1 }
+>         sp' = (toCol0 s1, snd $ dropLine sp)
+> deleteUnits decl = decl
+
 > hasUnits :: Type a -> Bool
 > hasUnits (BaseType _ _ attrs _ _) = any isUnit attrs
 > hasUnits _ = False
@@ -282,6 +302,10 @@ The indexing for switchScaleElems is 1-based, in line with Data.Matrix.
 > insertUnit system (BaseType aa tt attrs kind len) uv =
 >   BaseType aa tt (insertUnit' unit attrs) kind len
 >   where unit = lookupUnit system uv
+
+> deleteUnit :: Type Annotation -> Type Annotation
+> deleteUnit (BaseType aa tt attrs kind len) =
+>   BaseType aa tt (filter (not . isUnit) attrs) kind len
 
 > insertUnit' :: UnitConstant -> [Attr Annotation] -> [Attr Annotation]
 > insertUnit' unit attrs = attrs ++ [MeasureUnit unitAnnotation $ makeUnitSpec unit]
