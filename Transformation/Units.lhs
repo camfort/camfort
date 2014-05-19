@@ -49,17 +49,21 @@
 >   fromRational = Unitless . fromRational
 
 > data UnitVariable = UnitVariable Int
-> data UnitVarCategory = Literal | Temporary | Variable deriving Eq
+> data UnitVarCategory = Literal | Temporary | Variable | Argument deriving Eq
 > type UnitVarEnv = [(Variable, UnitVariable)]
 > type DerivedUnitEnv = [(MeasureUnit, UnitConstant)]
+> type ProcedureNames = (String, Maybe Variable, [Variable])
+> type Procedure = (Maybe UnitVariable, [UnitVariable])
+> type ProcedureEnv = [(String, Procedure)]
 > type LinearSystem = (Matrix Rational, [UnitConstant])
 > data Lalala = Lalala {
 >   _unitVarEnv :: UnitVarEnv,
 >   _derivedUnitEnv :: DerivedUnitEnv,
+>   _procedureEnv :: ProcedureEnv,
 >   _unitVarCats :: [UnitVarCategory],
 >   _linearSystem :: LinearSystem
 > }
-> emptyLalala = Lalala [] [] [Literal] (fromLists [[1]], [Unitful []])
+> emptyLalala = Lalala [] [] [] [Literal] (fromLists [[1]], [Unitful []])
 > Data.Label.mkLabels [''Lalala]
 
 > infix 2 <<
@@ -133,7 +137,8 @@ The indexing for switchScaleElems is 1-based, in line with Data.Matrix.
 >   | n > nrows matrix = system
 >   | not (null $ drop 1 ms) && vector !! (n - 1) /= Unitful [] = error "Underdetermined units of measure!"
 >   | otherwise = checkUnderdetermined' ucats system (n + 1)
->   where ms = filter (\m -> matrix ! (n, m) /= 0 && ucats !! (m - 1) /= Literal) [1 .. ncols matrix]
+>   where ms = filter significant [1 .. ncols matrix]
+>         significant m = matrix ! (n, m) /= 0 && ucats !! (m - 1) `notElem` [Literal, Argument]
 
 > inferUnits :: (Filename, Program Annotation) -> (Report, (Filename, Program Annotation))
 > inferUnits (fname, x) = ("", (fname, evalState (doInferUnits x) emptyLalala))
@@ -149,17 +154,20 @@ The indexing for switchScaleElems is 1-based, in line with Data.Matrix.
 > doRemoveUnits = map (descendBi' removeUnitsInBlock)
 
 > inferUnitsInProgUnit :: ProgUnit Annotation -> State Lalala (ProgUnit Annotation)
-> inferUnitsInProgUnit x = do uenv <- gets unitVarEnv
->                             b <- maybe (return Nothing) (fmap Just . blockLalala) $ block x
->                             ps <- mapM inferUnitsInProgUnit $ progUnits x
->                             unitVarEnv =: uenv
->                             return $ refillProgUnits (refillBlock x b) ps
+> inferUnitsInProgUnit x =
+>   do uenv <- gets unitVarEnv
+>      b <- enterBlock $ block x
+>      ps <- mapM inferUnitsInProgUnit $ progUnits x
+>      unitVarEnv =: uenv
+>      return $ refillProgUnits (refillBlock x b) ps
+>   where enterBlock Nothing = return Nothing
+>         enterBlock (Just (block, proc)) = fmap Just $ blockLalala block proc
 
-> block :: ProgUnit Annotation -> Maybe (Block Annotation)
-> block (Main x sp n a b ps)      = Just b
-> block (Sub x sp t n a b)        = Just b
-> block (Function x sp t n a r b) = Just b
-> block x                         = Nothing
+> block :: ProgUnit Annotation -> Maybe (Block Annotation, Maybe ProcedureNames)
+> block (Main x sp n a b ps)                            = Just (b, Nothing)
+> block (Sub x sp t (SubName _ n) (Arg _ a _) b)        = Just (b, Just (n, Nothing, argNames a))
+> block (Function x sp t (SubName _ n) (Arg _ a _) r b) = Just (b, Just (n, Just (resultName n r), argNames a))
+> block x                                               = Nothing
 
 > progUnits :: ProgUnit Annotation -> [ProgUnit Annotation]
 > progUnits (Main x sp n a b ps)     = ps
@@ -181,11 +189,20 @@ The indexing for switchScaleElems is 1-based, in line with Data.Matrix.
 > refillProgUnits (Prog x sp _)           [p]      = Prog x sp p
 > refillProgUnits x                       _        = x
 
-> blockLalala :: Block Annotation -> State Lalala (Block Annotation)
-> blockLalala x = do y <- enterDecls x
->                    descendBiM' handleStmt y
->                    checkUnderdeterminedM
->                    return y
+> argNames :: ArgName a -> [Variable]
+> argNames (ArgName _ n) = [n]
+> argNames (ASeq _ n1 n2) = argNames n1 ++ argNames n2
+> argNames (NullArg _) = []
+
+> resultName :: Variable -> Maybe (VarName a) -> Variable
+> resultName n Nothing = n
+> resultName _ (Just (VarName _ r)) = r
+
+> blockLalala :: Block Annotation -> Maybe ProcedureNames -> State Lalala (Block Annotation)
+> blockLalala x proc = do y <- enterDecls x proc
+>                         descendBiM' handleStmt y
+>                         checkUnderdeterminedM
+>                         return y
 
 > convertUnit :: MeasureUnitSpec a -> State Lalala UnitConstant
 > convertUnit (UnitProduct _ units) = convertUnits units
@@ -222,10 +239,20 @@ The indexing for switchScaleElems is 1-based, in line with Data.Matrix.
 >   where n = nrows matrix + 1
 >         m = ncols matrix + 1
 
-> enterDecls :: Block Annotation -> State Lalala (Block Annotation)
-> enterDecls x =
->   transformBiM f x
+> enterDecls :: Block Annotation -> Maybe ProcedureNames -> State Lalala (Block Annotation)
+> enterDecls x proc =
+>   do
+>     y <- transformBiM f x
+>     addProcedure proc
+>     return y
 >   where
+>     addProcedure Nothing = return ()
+>     addProcedure (Just (name, resultName, argNames)) =
+>       do uenv <- gets unitVarEnv
+>          let resultVar = fmap (lookupUnitByName uenv) resultName
+>              argVars = fmap (lookupUnitByName uenv) argNames
+>          procedureEnv << (name, (resultVar, argVars))
+>     lookupUnitByName uenv v = maybe (UnitVariable 1) id $ lookup v uenv
 >     f (Decl a s d t) =
 >       do
 >         let BaseType _ _ attrs _ _ = arrayElementType t
@@ -240,9 +267,12 @@ The indexing for switchScaleElems is 1-based, in line with Data.Matrix.
 >             system <- gets linearSystem
 >             let m = ncols (fst system) + 1
 >             prepend unitVarEnv (v, UnitVariable m)
->             unitVarCats << Variable
+>             unitVarCats << unitVarCat v
 >             linearSystem =. extendConstraints units
 >             return (Var a { unitVar = m } s names, e)
+>         unitVarCat v
+>           | Just (n, r, args) <- proc, v `elem` args = Argument
+>           | otherwise = Variable
 >     f x@(MeasureUnitDef a s d) =
 >       do
 >         mapM_ learnDerivedUnit d
