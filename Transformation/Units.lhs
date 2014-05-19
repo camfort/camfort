@@ -100,9 +100,14 @@ The indexing for switchScaleElems is 1-based, in line with Data.Matrix.
 
 > solveSystem' :: LinearSystem -> Int -> Int -> LinearSystem
 > solveSystem' (matrix, vector) m k
->   | m > ncols matrix = checkSystem (matrix, vector) k
+>   | m > ncols matrix = cutSystem k $ checkSystem (matrix, vector) k
 >   | otherwise = elimRow (matrix, vector) n m k
 >                 where n = find (\n -> matrix ! (n, m) /= 0) [k .. nrows matrix]
+
+> cutSystem :: Int -> LinearSystem -> LinearSystem
+> cutSystem k (matrix, vector) = (matrix', vector')
+>   where matrix' = submatrix 1 (k - 1) 1 (ncols matrix) matrix
+>         vector' = take (k - 1) vector
 
 > checkSystem :: LinearSystem -> Int -> LinearSystem
 > checkSystem (matrix, vector) k
