@@ -76,10 +76,10 @@ data ArgList  p = ArgList p (Expr p)
 
 type Program p = [ProgUnit p]
 
-             -- Prog type   (type of result)   name      args  body    use's  
+             -- Prog type   (type of result)   name      args  (result)  body    use's
 data ProgUnit  p = Main      p SrcSpan                      (SubName p)  (Arg p)  (Block p) [ProgUnit p]
                 | Sub        p SrcSpan (Maybe (BaseType p)) (SubName p)  (Arg p)  (Block p)
-                | Function   p SrcSpan (Maybe (BaseType p)) (SubName p)  (Arg p)  (Block p)
+                | Function   p SrcSpan (Maybe (BaseType p)) (SubName p)  (Arg p)  (Maybe (VarName p)) (Block p)
                 | Module     p SrcSpan                      (SubName p)  (Uses p) (Implicit p) (Decl p) [ProgUnit p]
                 | BlockData  p SrcSpan                      (SubName p)  (Uses p) (Implicit p) (Decl p)
                 | PSeq       p SrcSpan (ProgUnit p) (ProgUnit p)   -- sequence of programs
@@ -287,14 +287,14 @@ instance GetSpan (Decl a) where
     getSpan _ = error "No span for non common/equiv/type/ null declarations"
 
 instance GetSpan (ProgUnit a) where
-    getSpan (Main x sp _ _ _ _)      = sp
-    getSpan (Sub x sp _ _ _ _)       = sp
-    getSpan (Function x sp _ _ _ _)  = sp
-    getSpan (Module x sp _ _ _ _ _ ) = sp
-    getSpan (BlockData x sp _ _ _ _) = sp
-    getSpan (PSeq x sp _ _)          = sp
-    getSpan (Prog x sp _)            = sp
-    getSpan (NullProg x sp)          = sp
+    getSpan (Main x sp _ _ _ _)       = sp
+    getSpan (Sub x sp _ _ _ _)        = sp
+    getSpan (Function x sp _ _ _ _ _) = sp
+    getSpan (Module x sp _ _ _ _ _ )  = sp
+    getSpan (BlockData x sp _ _ _ _)  = sp
+    getSpan (PSeq x sp _ _)           = sp
+    getSpan (Prog x sp _)             = sp
+    getSpan (NullProg x sp)           = sp
 
 instance GetSpan (Expr a) where
     getSpan (Con x sp _)        = sp

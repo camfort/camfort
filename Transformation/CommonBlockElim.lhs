@@ -143,7 +143,7 @@ Todo: CallExpr, changing assignments
 > useSrcLoc :: ProgUnit A -> SrcLoc
 > useSrcLoc (Main _ _ _ _ b _) = useSrcLocB b
 > useSrcLoc (Sub _ _ _ _ _ b) = useSrcLocB b
-> useSrcLoc (Function _ _ _ _ _ b) = useSrcLocB b
+> useSrcLoc (Function _ _ _ _ _ _ b) = useSrcLocB b
 > useSrcLoc (Module _ s _ _ _ _ _) = fst s -- TOOD: this isn't very accurate 
 > useSrcLoc (BlockData _ s _ _ _ _) = fst s
 > useSrcLocB (Block _ _ _ s _ _) = fst s
@@ -357,7 +357,7 @@ Extending calls version
 
 >                           -- defs' f (Sub _ _ _ (SubName _ n) _ b) rs = (concat rs) ++ [(f, (n, snd $ runState (collectTCommons' b) []))]
 >                           -- Don't support functions yet
->                           -- defs' f (Function _ _ _ (SubName _ n) _ b) rs = (concat rs) ++ [(f, (n, snd $ runState (collectTCommons b) []))]
+>                           -- defs' f (Function _ _ _ (SubName _ n) _ _ b) rs = (concat rs) ++ [(f, (n, snd $ runState (collectTCommons b) []))]
 >                           -- defs' _ _ rs = concat rs
 
 >                       in mapM (\(f, ps) -> do ps' <- mapM (transformBiM (defs' f)) ps

@@ -100,6 +100,7 @@ instance (OutputG (Arg p) v,
           OutputG (Decl p) v,
           OutputG (Implicit p) v,
           OutputG (SubName p) v,
+          OutputG (VarName p) v,
           OutputG (ProgUnit p) v,
           Alts v) => OutputF (ProgUnit p) v where
   outputF (Sub _ _ (Just p) n a b)  = outputG p ++ " subroutine "++(outputG n)++outputG a++"\n"++
@@ -108,10 +109,16 @@ instance (OutputG (Arg p) v,
   outputF (Sub _ _ Nothing n a b)  = "subroutine "++(outputG n)++outputG a++"\n"++
                              outputG b++
                           "\nend subroutine "++(outputG n)++"\n"
-  outputF (Function _ _ (Just p) n a b)  = outputG p ++ " function "++(outputG n)++outputG a++"\n"++
+  outputF (Function _ _ (Just p) n a (Just r) b)  = outputG p ++ " function "++(outputG n)++outputG a++" result("++outputG r++")\n"++
                              outputG b++
                           "\nend function "++(outputG n)++"\n"
-  outputF (Function _ _ Nothing n a b) = "function "++(outputG n)++outputG a++"\n"++
+  outputF (Function _ _ (Just p) n a Nothing b)  = outputG p ++ " function "++(outputG n)++outputG a++"\n"++
+                             outputG b++
+                          "\nend function "++(outputG n)++"\n"
+  outputF (Function _ _ Nothing n a (Just r) b) = "function "++(outputG n)++outputG a++" result("++outputG r++")\n"++
+                             outputG b++
+                          "\nend function "++(outputG n)++"\n"
+  outputF (Function _ _ Nothing n a Nothing b) = "function "++(outputG n)++outputG a++"\n"++
                              outputG b++
                           "\nend function "++(outputG n)++"\n"
   outputF (Main _ _ n a b [])     = "program "++(outputG n) ++ 

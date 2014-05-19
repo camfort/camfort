@@ -153,7 +153,7 @@ Accessors
 > getSubName :: ProgUnit p -> Maybe String
 > getSubName (Main _ _ (SubName _ s) _ _ _) = Just s
 > getSubName (Sub _ _ _ (SubName _ s) _ _) = Just s
-> getSubName (Function _ _ _ (SubName _ s) _ _) = Just s
+> getSubName (Function _ _ _ (SubName _ s) _ _ _) = Just s
 > getSubName (Module _ _ (SubName _ s) _ _ _ _) = Just s
 > getSubName (BlockData _ _ (SubName _ s) _ _ _) = Just s
 > getSubName _ = Nothing

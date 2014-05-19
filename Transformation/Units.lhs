@@ -156,10 +156,10 @@ The indexing for switchScaleElems is 1-based, in line with Data.Matrix.
 >                             return $ refillProgUnits (refillBlock x b) ps
 
 > block :: ProgUnit Annotation -> Maybe (Block Annotation)
-> block (Main x sp n a b ps)     = Just b
-> block (Sub x sp t n a b)       = Just b
-> block (Function x sp t n a b)  = Just b
-> block x                        = Nothing
+> block (Main x sp n a b ps)      = Just b
+> block (Sub x sp t n a b)        = Just b
+> block (Function x sp t n a r b) = Just b
+> block x                         = Nothing
 
 > progUnits :: ProgUnit Annotation -> [ProgUnit Annotation]
 > progUnits (Main x sp n a b ps)     = ps
@@ -169,10 +169,10 @@ The indexing for switchScaleElems is 1-based, in line with Data.Matrix.
 > progUnits x                        = []
 
 > refillBlock :: ProgUnit Annotation -> Maybe (Block Annotation) -> ProgUnit Annotation
-> refillBlock (Main x sp n a _ ps)    (Just b) = Main x sp n a b ps
-> refillBlock (Sub x sp t n a _)      (Just b) = Sub x sp t n a b
-> refillBlock (Function x sp t n a _) (Just b) = Function x sp t n a b
-> refillBlock x                        _       = x
+> refillBlock (Main x sp n a _ ps)      (Just b) = Main x sp n a b ps
+> refillBlock (Sub x sp t n a _)        (Just b) = Sub x sp t n a b
+> refillBlock (Function x sp t n a r _) (Just b) = Function x sp t n a r b
+> refillBlock x                          _       = x
 
 > refillProgUnits :: ProgUnit Annotation -> [ProgUnit Annotation] -> ProgUnit Annotation
 > refillProgUnits (Main x sp n a b _)     ps       = Main x sp n a b ps

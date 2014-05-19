@@ -263,14 +263,14 @@ ext f (x:xs) = (f (x:xs)) : (map f xs)
 >     copoint (ArgName x _) = x
 
 > instance Copointed ProgUnit where
->     copoint (Main x sp _ _ _ _)      = x
->     copoint (Sub x sp _ _ _ _)       = x
->     copoint (Function x sp _ _ _ _)  = x
->     copoint (Module x sp _ _ _ _ _ ) = x
->     copoint (BlockData x sp _ _ _ _) = x
->     copoint (PSeq x sp _ _)          = x
->     copoint (Prog x sp _)            = x
->     copoint (NullProg x sp)          = x
+>     copoint (Main x sp _ _ _ _)       = x
+>     copoint (Sub x sp _ _ _ _)        = x
+>     copoint (Function x sp _ _ _ _ _) = x
+>     copoint (Module x sp _ _ _ _ _ )  = x
+>     copoint (BlockData x sp _ _ _ _)  = x
+>     copoint (PSeq x sp _ _)           = x
+>     copoint (Prog x sp _)             = x
+>     copoint (NullProg x sp)           = x
 > 
 > instance Copointed Decl where
 >     copoint (Decl x _ _ _)          = x

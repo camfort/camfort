@@ -259,8 +259,8 @@ function_subprogram :: { ProgUnit A0 }
 function_subprogram
 : srcloc function_stmt use_stmt_list implicit_part srcloc specification_part_top execution_part end_function_stmt newline0  {% do { s <- srcSpan $1;
                        s' <- srcSpan $5;
-                       name <- cmpNames (fst3 $2) $8 "function";
-		       return (Function () s (trd3 $2) name (snd3 $2) (Block () $3 $4 s' $6 $7)); } }
+                       name <- cmpNames (fst4 $2) $8 "function";
+		       return (Function () s (trd4 $2) name (snd4 $2) (frh4 $2) (Block () $3 $4 s' $6 $7)); } }
 
 block_data :: { ProgUnit A0 }
 block_data
@@ -576,13 +576,13 @@ end_interface_stmt
 interface_body :: { InterfaceSpec A0 } 
 interface_body
   : function_stmt  use_stmt_list implicit_part specification_part end_function_stmt 
-        {% do { name <- cmpNames (fst3 $1) $5 "interface declaration";
-	        return (FunctionInterface ()  name (snd3 $1) $2 $3 $4); }}
+        {% do { name <- cmpNames (fst4 $1) $5 "interface declaration";
+	        return (FunctionInterface ()  name (snd4 $1) $2 $3 $4); }}
 
   | function_stmt end_function_stmt  
-        {% do { name <- cmpNames (fst3 $1) $2 "interface declaration";
+        {% do { name <- cmpNames (fst4 $1) $2 "interface declaration";
 	        s <- srcSpanNull;
-	        return (FunctionInterface () name (snd3 $1) (UseNil ()) (ImplicitNull ()) (NullDecl () s)); } }       
+	        return (FunctionInterface () name (snd4 $1) (UseNil ()) (ImplicitNull ()) (NullDecl () s)); } }
 
   | subroutine_stmt use_stmt_list implicit_part specification_part end_subroutine_stmt
         {% do { name <- cmpNames (fst3 $1) $5 "interface declaration";
@@ -778,12 +778,12 @@ subroutine_stmt
   | SUBROUTINE subname srcloc        newline {% (srcSpan $3) >>= (\s -> return $ ($2,Arg () (NullArg ()) s,Nothing)) }
   | prefix SUBROUTINE subname args_p newline { ($3,$4,Just (fst3 $1)) }
   
-function_stmt :: { (SubName A0, Arg A0, Maybe (BaseType A0)) }
+function_stmt :: { (SubName A0, Arg A0, Maybe (BaseType A0), Maybe (VarName A0)) }
 function_stmt
-  : prefix FUNCTION subname args_p RESULT '(' id2 ')' newline { ($3,$4,Just (fst3 $1)) }
-  | prefix FUNCTION subname args_p                    newline { ($3,$4,Just (fst3 $1)) }
-  | FUNCTION subname args_p RESULT '(' id2 ')'        newline { ($2,$3,Nothing) }
-  | FUNCTION subname args_p                           newline { ($2,$3,Nothing) }
+  : prefix FUNCTION subname args_p RESULT '(' id2 ')' newline { ($3,$4,Just (fst3 $1),Just (VarName () $7)) }
+  | prefix FUNCTION subname args_p                    newline { ($3,$4,Just (fst3 $1),Nothing) }
+  | FUNCTION subname args_p RESULT '(' id2 ')'        newline { ($2,$3,Nothing,Just (VarName () $6)) }
+  | FUNCTION subname args_p                           newline { ($2,$3,Nothing,Nothing) }
   
 subname :: { SubName A0 }
 subname
