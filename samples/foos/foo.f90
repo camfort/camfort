@@ -10,7 +10,7 @@ program foo
   common x, y
   
   x = 3
-  y = 10
+  y = 10 + x
 
   CALL bar(i)
 
