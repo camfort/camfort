@@ -132,7 +132,6 @@ General analysis/refactor builders
 >                        let (report, ps') = rFun (map (\(f, inp, ast) -> (f, ast)) ps)
 >                        --let outFiles = filter (\f -> not ((take (length $ d ++ "out") f) == (d ++ "out"))) (map fst ps')
 >                        let outFiles = map fst ps'
-
 >                        putStrLn report
 >                        outputFiles inDir outDir (zip3 outFiles (map snd3 ps ++ (repeat "")) (map snd ps'))
 

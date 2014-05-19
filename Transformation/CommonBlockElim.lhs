@@ -17,7 +17,6 @@
 
 > import Data.Generics.Uniplate.Operations
 > import Control.Monad.State.Lazy
-> import Debug.Trace
 
 > import Helpers
 
@@ -119,8 +118,7 @@ Todo: CallExpr, changing assignments
 >                                       srcloc = useSrcLoc p
 >                                       uses = mkUseStatements srcloc tcrs'
 >                                       p' = transformBi ((flip concatUses) uses) p
->                                   in --("use src loc = " ++ show srcloc) `trace` 
->                                         removeDecls (map snd tcrs') p'
+>                                   in removeDecls (map snd tcrs') p'
 
 >           removeDecls :: [RenamerCoercer] -> ProgUnit A -> ProgUnit A
 >           removeDecls rcs p = transformBi (remDecl rcs) p
@@ -132,10 +130,8 @@ Todo: CallExpr, changing assignments
 >           remDecl rcs d@(Decl p srcP [lvar@(Var _ _ [(VarName _ v, [])], e)] _) =
 >                 if (or (map (matchrc v) rcs)) then 
 >                   case e of
->                     NullExpr _ _ -> -- ("ne sp = " ++ show srcP) `trace` 
->                                       (NullDecl ( p { refactored = Just (fst srcP) }) srcP) --  [])
->                     e            -> -- ("e sp = " ++ show srcP) `trace`
->                                       (NullDecl ( p { refactored = Just (fst srcP) }) srcP) -- [Assg (p { refactored = Just (fst srcP) }) srcP lvar e])
+>                     NullExpr _ _ -> (NullDecl ( p { refactored = Just (fst srcP) }) srcP) --  [])
+>                     e            -> (NullDecl ( p { refactored = Just (fst srcP) }) srcP) -- [Assg (p { refactored = Just (fst srcP) }) srcP lvar e])
 >                 else d
 >           remDecl _ d = d
 >                     
@@ -225,6 +221,7 @@ Extending calls version
 
 > introduceCalls :: [TLCommon A] -> (Filename, Program A) -> (Report, (Filename, Program A))
 > introduceCalls cenv (fname, ps) = do ps' <- mapM (transformBiM commonElim) ps
+>                                      -- ps'' <- mapM (transformBiM commonElim'') ps'
 >                                      return (fname, ps')
 
 >               where commonElim s@(Sub a sp mbt (SubName a' moduleName) (Arg p arg asp) b) = 
@@ -235,17 +232,14 @@ Extending calls version
 >                              ra = p { refactored = Just (fst sp) }
 >                              arg' = Arg unitAnnotation (ASeq unitAnnotation arg tArgs) asp
 >                              a' = a -- { pRefactored = Just sp }
->                              r = fname ++ (show $ srcLineCol $ fst sp) ++ ": changed common variables to parameters\n"
+>                              r = fname ++ (show $ srcLineCol $ snd asp) ++ ": changed common variables to parameters\n"
 >                          in do b' <- transformBiM (extendCalls fname moduleName cenv) b
 >                                (r, Sub a' sp mbt (SubName a' moduleName) arg' b')
 >
->                                                 -- b' = blockExtendDecls b tDecls
->                     commonElim s = return s
-
->                             --  Nothing -> transformBi (extendCalls fname n cenv) s
->                     commonElim'' s = case (getSubName s) of
->                                        Just n -> transformBiM (extendCalls fname n cenv) s
->                                        Nothing -> transformBiM r s 
+>                     commonElim s = --case (getSubName s) of
+>                                    --    Just n -> transformBiM (extendCalls fname n cenv) s
+>                                    --    Nothing -> 
+>                                                   transformBiM r s 
 >                                                    where r :: ProgUnit A -> (Report, ProgUnit A)
 >                                                          r p = case getSubName p of
 >                                                                Just n -> transformBiM (extendCalls fname n cenv) p
@@ -283,7 +277,7 @@ Extending calls version
 > 
 
 > extendArgs nonNullArgs sp' args = if nonNullArgs then 
->                                      let p' = unitAnnotation { refactored = Just $ fst sp' }
+>                                      let p' = unitAnnotation { refactored = Just $ snd sp' }
 >                                      in ASeq p' (ArgName p' "") (extendArgs' sp' args)
 >                                   else extendArgs' sp' args
 >                                  
@@ -336,8 +330,7 @@ Extending calls version
 >             do let r' = fname ++ (show $ srcLineCol $ fst sp) ++ ": removed common declaration\n"
 >                (r, env) <- get
 >                put (r ++ r', (fname, (pname, (cname, typeCommonExprs exprs))):env)
->                return $ --("sp = " ++ show sp) `trace` 
->                          (NullDecl (a { refactored = (Just $ fst sp) }) sp)
+>                return $ (NullDecl (a { refactored = (Just $ fst sp) }) sp)
 >         commons' f = return f
 
 >         typeCommonExprs :: [Expr Annotation] -> [(Variable, Type Annotation)]
