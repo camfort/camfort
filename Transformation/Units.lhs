@@ -60,10 +60,11 @@
 >   _unitVarEnv :: UnitVarEnv,
 >   _derivedUnitEnv :: DerivedUnitEnv,
 >   _procedureEnv :: ProcedureEnv,
+>   _calls :: ProcedureEnv,
 >   _unitVarCats :: [UnitVarCategory],
 >   _linearSystem :: LinearSystem
 > }
-> emptyLalala = Lalala [] [] [] [Literal] (fromLists [[1]], [Unitful []])
+> emptyLalala = Lalala [] [] [] [] [Literal] (fromLists [[1]], [Unitful []])
 > Data.Label.mkLabels [''Lalala]
 
 > infix 2 <<
@@ -152,8 +153,9 @@ The indexing for switchScaleElems is 1-based, in line with Data.Matrix.
 > removeUnits (fname, x) = ("", (fname, doRemoveUnits x))
 
 > doInferUnits :: Program Annotation -> State Lalala (Program Annotation)
-> doInferUnits x = do y <- mapM inferUnitsInProgUnit x
->                     mapM (descendBiM' insertUnitsInBlock) y
+> doInferUnits x = do x <- mapM inferUnitsInProgUnit x
+>                     x <- inferInterproceduralUnits x
+>                     mapM (descendBiM' insertUnitsInBlock) x
 
 > doRemoveUnits :: Program Annotation -> Program Annotation
 > doRemoveUnits = map (descendBi' removeUnitsInBlock)
@@ -206,7 +208,6 @@ The indexing for switchScaleElems is 1-based, in line with Data.Matrix.
 > blockLalala :: Block Annotation -> Maybe ProcedureNames -> State Lalala (Block Annotation)
 > blockLalala x proc = do y <- enterDecls x proc
 >                         descendBiM' handleStmt y
->                         checkUnderdeterminedM
 >                         return y
 
 > convertUnit :: MeasureUnitSpec a -> State Lalala UnitConstant
@@ -364,6 +365,34 @@ The indexing for switchScaleElems is 1-based, in line with Data.Matrix.
 >   where p = numerator r
 >         q = denominator r
 
+> inferInterproceduralUnits :: Program Annotation -> State Lalala (Program Annotation)
+> inferInterproceduralUnits x =
+>   do system1 <- gets linearSystem
+>      addInterproceduralConstraints x
+>      solveSystemM
+>      system2 <- gets linearSystem
+>      if system1 == system2
+>        then checkUnderdeterminedM >> return x
+>        else inferInterproceduralUnits x
+
+> addInterproceduralConstraints :: Program Annotation -> State Lalala ()
+> addInterproceduralConstraints x =
+>   do
+>     cs <- gets calls
+>     mapM_ addCall cs
+>   where
+>     addCall (name, (result, args)) =
+>       do penv <- gets procedureEnv
+>          case lookup name penv of
+>            Just (r, as) -> handleArgs args as >> handleResult result r
+>            Nothing      -> return ()
+>     handleArgs as1 as2 =
+>       sequence_ [mustEqual (return uv1) (return uv2) | (uv1, uv2) <- zip as1 as2]
+>     handleResult (Just r1) (Just r2) = void $ mustEqual (return r1) (return r2)
+>     handleResult Nothing Nothing = return ()
+>     handleResult (Just _) Nothing = error "Subroutine used as a function!"
+>     handleResult Nothing (Just _) = error "Function used as a subroutine!"
+
 > data BinOpKind = AddOp | MulOp | DivOp | PowerOp | LogicOp | RelOp
 > binOpKind :: BinOp a -> BinOpKind
 > binOpKind (Plus _) = AddOp
@@ -450,10 +479,21 @@ TODO: error handling in powerUnits
 > inferExprUnits (ConS _ _ _) = anyUnits Literal
 > inferExprUnits (Var _ _ names) =
 >   do uenv <- gets unitVarEnv
->      let (VarName _ v, _) = head names
->          Just uv = lookup v uenv
->      sequence_ [mapM_ inferExprUnits exprs | (_, exprs) <- names]
->      return uv
+>      let (VarName _ v, args) = head names
+>      case lookup v uenv of
+>        -- variable (possibly array)?
+>        Just uv -> inferArgUnits >> return uv
+>        -- function call?
+>        Nothing | not (null args) -> do uv <- anyUnits Temporary
+>                                        uvs <- inferArgUnits
+>                                        let uvs' = justArgUnits args uvs
+>                                        calls << (v, (Just uv, uvs'))
+>                                        return uv
+>        -- just bad code
+>        _ -> error $ "Undefined variable " ++ show v
+>   where inferArgUnits = sequence [mapM inferExprUnits exprs | (_, exprs) <- names]
+>         justArgUnits [NullExpr _ _] _ = []  -- zero-argument function call
+>         justArgUnits _ uvs = head uvs
 > inferExprUnits (Bin _ _ op e1 e2) = do let uv1 = inferExprUnits e1
 >                                            uv2 = inferExprUnits e2
 >                                        case binOpKind op of
@@ -465,14 +505,16 @@ TODO: error handling in powerUnits
 >                                          RelOp -> do mustEqual uv1 uv2
 >                                                      return $ UnitVariable 1
 > inferExprUnits (Unary _ _ _ e) = inferExprUnits e
-> inferExprUnits (CallExpr _ _ e1 (ArgList _ e2)) = do inferExprUnits e1
+> inferExprUnits (CallExpr _ _ e1 (ArgList _ e2)) = do uv <- anyUnits Temporary
+>                                                      inferExprUnits e1
 >                                                      inferExprUnits e2
->                                                      anyUnits Temporary
+>                                                      error "CallExpr not implemented"
+>                                                      return uv
 > inferExprUnits (NullExpr _ _) = anyUnits Temporary
 > inferExprUnits (Null _ _) = return $ UnitVariable 1
 > inferExprUnits (ESeq _ _ e1 e2) = do inferExprUnits e1
 >                                      inferExprUnits e2
->                                      return $ UnitVariable 1
+>                                      return undefined
 > inferExprUnits (Bound _ _ e1 e2) = mustEqual (inferExprUnits e1) (inferExprUnits e2)
 > inferExprUnits (Sqrt _ _ e) = sqrtUnits $ inferExprUnits e
 > inferExprUnits (ArrayCon _ _ (e:exprs)) =
@@ -480,6 +522,10 @@ TODO: error handling in powerUnits
 >      mapM_ (mustEqual (return uv) . inferExprUnits) exprs
 >      return uv
 > inferExprUnits (AssgExpr _ _ _ e) = inferExprUnits e
+
+> inferExprSeqUnits :: Expr a -> State Lalala [UnitVariable]
+> inferExprSeqUnits (ESeq _ _ e1 e2) = liftM2 (++) (inferExprSeqUnits e1) (inferExprSeqUnits e2)
+> inferExprSeqUnits e = (:[]) `liftM` inferExprUnits e
 
 > handleExpr :: Expr a -> State Lalala (Expr a)
 > handleExpr x = do inferExprUnits x
@@ -515,6 +561,11 @@ TODO: error handling in powerUnits
 >        Nothing -> return ()
 > inferStmtUnits (Allocate _ _ e1 e2) = mapM_ inferExprUnits [e1, e2]
 > inferStmtUnits (Backspace _ _ specs) = inferSpecUnits specs
+> inferStmtUnits (Call _ _ (Var _ _ [(VarName _ v, [])]) (ArgList _ e2)) =
+>   do uvs <- case e2 of
+>               NullExpr _ _ -> return []
+>               _ -> inferExprSeqUnits e2
+>      calls << (v, (Nothing, uvs))
 > inferStmtUnits (Call _ _ e1 (ArgList _ e2)) = mapM_ inferExprUnits [e1, e2]
 > inferStmtUnits (Open _ _ specs) = inferSpecUnits specs
 > inferStmtUnits (Close _ _ specs) = inferSpecUnits specs
