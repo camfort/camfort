@@ -127,7 +127,7 @@ Todo: CallExpr, changing assignments
 >           matchrc v (Just rc) =  Data.Map.member v rc
 
 >           remDecl :: [RenamerCoercer] -> Decl A -> (Decl A) --  [Fortran A])
->           remDecl rcs d@(Decl p srcP [lvar@(Var _ _ [(VarName _ v, [])], e)] _) =
+>           remDecl rcs d@(Decl p srcP [lvar@(Var _ _ [(VarName _ v, [])], e, _)] _) =
 >                 if (or (map (matchrc v) rcs)) then 
 >                   case e of
 >                     NullExpr _ _ -> (NullDecl ( p { refactored = Just (fst srcP) }) srcP) --  [])
@@ -211,7 +211,7 @@ Todo: CallExpr, changing assignments
 >                       let a = unitAnnotation { refactored = Just loc }
 >                           loc = SrcLoc (fname ++ ".f90") 0 0 
 >                           sp = (loc, loc)
->                           toDecl (v, t) = Decl a sp [(Var a sp [(VarName a (name ++ "_" ++ v), [])], NullExpr a sp)] -- note here could pull in initialising definition? What if conflicts- highlight as potential source of error?
+>                           toDecl (v, t) = Decl a sp [(Var a sp [(VarName a (name ++ "_" ++ v), [])], NullExpr a sp, Nothing)] -- note here could pull in initialising definition? What if conflicts- highlight as potential source of error?
 >                                                             t
 >                           decls = foldl1 (DSeq a) (map toDecl vtys)
 >                       in Module a (loc, loc) (SubName a fname) (UseNil a) (ImplicitNone a) decls []

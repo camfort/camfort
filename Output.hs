@@ -102,13 +102,16 @@ instance OutputG SrcLoc Alt2 where
 instance (OutputIndG (Fortran p) Alt2, OutputG p Alt2, Indentor (Decl p), Indentor (Fortran p)) => OutputG (ProgUnit p) Alt2 where
     outputG = outputF
 
-instance OutputG (SubName p) Alt2 where
+instance OutputG (DataForm p) Alt2 where
+    outputG = outputF
+
+instance (OutputG (DataForm p) Alt2) => OutputG (SubName p) Alt2 where
     outputG = outputF
 
 instance OutputG (Implicit p) Alt2 where
     outputG = outputF
 
-instance (Indentor (Decl p)) => OutputG (Decl p) Alt2 where
+instance (Indentor (Decl p), OutputG (DataForm p) Alt2) => OutputG (Decl p) Alt2 where
     outputG = outputF
 
 instance OutputG (Type p) Alt2 where
@@ -117,7 +120,7 @@ instance OutputG (Type p) Alt2 where
 instance OutputG (VarName p) Alt2 where
     outputG = outputF
 
-instance OutputG (Expr p) Alt2 where
+instance (OutputG (DataForm p) Alt2) => OutputG (Expr p) Alt2 where
     outputG = outputF
 
 instance OutputG (UnaryOp p) Alt2 where
@@ -132,7 +135,7 @@ instance OutputG (ArgList p) Alt2 where
 instance OutputG (BaseType p) Alt2 where
     outputG = outputF
 
-instance Indentor (Decl p) => OutputG (InterfaceSpec p) Alt2 where
+instance (Indentor (Decl p)) => OutputG (InterfaceSpec p) Alt2 where
     outputG = outputF
 
 instance OutputG (Arg p) Alt2 where
@@ -147,7 +150,7 @@ instance OutputG (GSpec p) Alt2 where
 instance OutputG (Attr p) Alt2 where
     outputG = outputF
 
-instance (OutputIndG (Fortran p) Alt2, OutputG p Alt2, Indentor (Fortran p), Indentor (Decl p)) => OutputG (Block p) Alt2 where
+instance (OutputG (DataForm p) Alt2, OutputIndG (Fortran p) Alt2, OutputG p Alt2, Indentor (Fortran p), Indentor (Decl p)) => OutputG (Block p) Alt2 where
     outputG = outputF
 
 instance OutputG (Uses p) Alt2 where

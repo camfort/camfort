@@ -175,7 +175,7 @@ Finds the variables that are used to index arrays directly
 
 > mkTyDecl :: SrcSpan -> Variable -> Type Annotation -> Decl Annotation
 > mkTyDecl sp v t = let ua = unitAnnotation
->                   in Decl ua sp [(Var ua sp [(VarName ua v, [])], NullExpr ua sp)] t
+>                   in Decl ua sp [(Var ua sp [(VarName ua v, [])], NullExpr ua sp, Nothing)] t
 
 > mkTypeDef :: TypeEnv Annotation -> SrcSpan -> WeightedGraph Access Variable -> State Int (Decl Annotation, String)
 > mkTypeDef tenv sp wg = (inventName wg) >>= (\name -> 
@@ -193,7 +193,7 @@ Finds the variables that are used to index arrays directly
 >                               typeDecl = DerivedTypeDef ra sp (SubName ra name) [] [] tdecls
 
 >                               typeCons = BaseType ra (DerivedType ra (SubName ra name)) [] (NullExpr ra sp) (NullExpr ra sp)
->                               valDecl = Decl ra sp [(Var ra sp [(VarName ra (arrayVar ++ name), [])] , NullExpr ra sp)] typeCons
+>                               valDecl = Decl ra sp [(Var ra sp [(VarName ra (arrayVar ++ name), [])] , NullExpr ra sp, Nothing)] typeCons
 >                           in return $ (DSeq unitAnnotation typeDecl valDecl, name))
 
 > inventName :: WeightedGraph Access Variable -> State Int String

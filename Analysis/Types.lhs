@@ -36,10 +36,10 @@
 >                       
 
 > gtypes :: forall a t . (Data (t a), Typeable (t a), Data a, Typeable a) => t a -> [(String, Type a)] 
-> gtypes x = let decAndTypes :: [([(Expr a, Expr a)], Type a)]
+> gtypes x = let decAndTypes :: [([(Expr a, Expr a, Maybe Int)], Type a)]
 >                decAndTypes = [(d, t) | (Decl _ _ d t) <- (universeBi x)::[Decl a]]
 >            in concatMap (\(d, t) -> 
->                              [(v, toArrayType t es) | (Var _ _ [(VarName _ v, es)], _) <- d]) decAndTypes
+>                              [(v, toArrayType t es) | (Var _ _ [(VarName _ v, es)], _, _) <- d]) decAndTypes
 
 > isArrayTypeP :: Variable -> State (TypeEnv t) Bool
 > isArrayTypeP v = do tenv <- get
