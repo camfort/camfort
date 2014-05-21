@@ -180,6 +180,7 @@ their AST, write these to the director
 >               putStrLn $ "Writing refactored files to directory: " ++ outDir ++ "/"
 >               mapM_ (\(f, inp, ast') -> let f' = changeDir outDir inDir f
 >                                         in do checkDir f'
+>                                               putStrLn $ "Writing " ++ f'
 >                                               writeFile f' (reprint inp f' ast')) pdata
 
 

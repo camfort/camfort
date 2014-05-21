@@ -180,11 +180,10 @@ Todo: CallExpr, changing assignments
 
 > coherentCommonsP :: TLCommon A -> TLCommon A -> (Report, Bool)
 > coherentCommonsP (f1, (p1, (n1, vtys1))) (f2, (p2, (n2, vtys2))) =
->     case (n1 == n2) of
->       True -> coherent vtys1 vtys2 where
->                   coherent ::  [(Variable, Type A)] -> [(Variable, Type A)] -> (Report, Bool)
->                   coherent []               []                = ("", True)
->                   coherent ((var1, ty1):xs) ((var2, ty2):ys) 
+>     if (n1 == n2) then
+>          let  coherent ::  [(Variable, Type A)] -> [(Variable, Type A)] -> (Report, Bool)
+>               coherent []               []                = ("", True)
+>               coherent ((var1, ty1):xs) ((var2, ty2):ys) 
 >                       | af ty1 == af ty2 = let (r', c) = coherent xs ys
 >                                            in (r', c && True)
 >                       | otherwise = let ?variant = Alt1 in
@@ -192,8 +191,11 @@ Todo: CallExpr, changing assignments
 >                                              var2 ++ ":" ++ (outputF ty2) ++ "(" ++ (show $ af ty2) ++ ")" ++ "\n")
 >                                         (r', _) = coherent xs ys
 >                                     in (r ++ r', False)
->                   coherent _ _ = ("Common blocks of different field lengths", False) -- Doesn't say which is longer
->       False -> error "Trying to compare differently named common blocks\n"
+>               coherent _ _ = ("Common blocks of different field lengths", False) -- Doesn't say which is longer
+>          in coherent vtys1 vtys2 
+
+>     else ("", True) -- Not sure if this is supposed to fail here- in retrospect I think no
+>           -- False -> ("Trying to compare differently named common blocks: " ++ show n1 ++ " and " ++ show n2 ++ "\n", False)
 
 > introduceModules :: Directory -> [TLCommon A] -> (Report, [(Filename, Program A)]) 
 > introduceModules d cenv = mapM (mkModuleFile d) (map (head . head) (groupSortCommonBlock cenv))
@@ -336,9 +338,9 @@ Extending calls version
 >         typeCommonExprs :: [Expr Annotation] -> [(Variable, Type Annotation)]
 >         typeCommonExprs [] = []
 >         typeCommonExprs ((Var _ sp [(VarName _ v, _)]):es) = 
->             case (lookup v tenv) of
+>             case (tenvLookup v tenv) of
 >                  Just t -> (v, t) : (typeCommonExprs es)
->                  Nothing -> error $ "Variable is of an unknown type at: " ++ show sp
+>                  Nothing -> error $ "Variable " ++ (show v) ++ " is of an unknown type at: " ++ show sp
 >         typeCommonExprs (e:_) = error $ "Not expecting a non-variable expression in expression at: " ++ show (srcSpan e)
 
 >     in transformBiM commons' b                           
