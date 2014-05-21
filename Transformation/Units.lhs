@@ -62,9 +62,10 @@
 >   _procedureEnv :: ProcedureEnv,
 >   _calls :: ProcedureEnv,
 >   _unitVarCats :: [UnitVarCategory],
+>   _reorderedCols :: [Int],
 >   _linearSystem :: LinearSystem
 > }
-> emptyLalala = Lalala [] [] [] [] [Literal] (fromLists [[1]], [Unitful []])
+> emptyLalala = Lalala [] [] [] [] [Literal] [] (fromLists [[1]], [Unitful []])
 > Data.Label.mkLabels [''Lalala]
 
 > infix 2 <<
@@ -86,12 +87,32 @@
 > transformBiM' :: (Monad m, Data (from a), Data (to a)) => (to a -> m (to a)) -> from a -> m (from a)
 > transformBiM' f x = transformBiM f x
 
-The indexing for switchScaleElems is 1-based, in line with Data.Matrix.
+> inverse :: [Int] -> [Int]
+> inverse perm = [j + 1 | Just j <- map (flip elemIndex perm) [1 .. length perm]]
+
+The indexing for switchScaleElems and moveElem is 1-based, in line with Data.Matrix.
 
 > switchScaleElems :: Num a => Int -> Int -> a -> [a] -> [a]
 > switchScaleElems i j factor list = a ++ factor * b : c
 >   where (lj, b:rj) = splitAt (j - 1) list
 >         (a, _:c) = splitAt (i - 1) (lj ++ list !! (i - 1) : rj)
+
+> moveElem :: Int -> Int -> [a] -> [a]
+> moveElem i j list
+>   | i > j = moveElem j i list
+>   | otherwise = a ++ b
+>                 where (lj, rj) = splitAt j list
+>                       (a, _:b) = splitAt (i - 1) (lj ++ list !! (i - 1) : rj)
+
+> moveCol :: Int -> Int -> Matrix a -> Matrix a
+> moveCol i j matrix
+>   | i > j = moveCol j i matrix
+>   | otherwise = submatrix 1 n 1 (i - 1) matrix <|>
+>                 submatrix 1 n (i + 1) j matrix <|>
+>                 submatrix 1 n i i matrix <|>
+>                 submatrix 1 n (j + 1) m matrix
+>                 where n = nrows matrix
+>                       m = ncols matrix
 
 > solveSystemM :: State Lalala ()
 > solveSystemM = linearSystem =. solveSystem
@@ -292,23 +313,37 @@ The indexing for switchScaleElems is 1-based, in line with Data.Matrix.
 >     f x = return x
 
 > insertUnitsInBlock :: Block Annotation -> State Lalala (Block Annotation)
-> insertUnitsInBlock x = do system <- gets linearSystem
->                           return $ transformBi' (insertUnits system) x
+> insertUnitsInBlock x = do lalala <- get
+>                           return $ transformBi' (insertUnits lalala) x
 
 > removeUnitsInBlock :: Block Annotation -> Block Annotation
 > removeUnitsInBlock = transformBi' deleteUnits
 
-> lookupUnit :: LinearSystem -> Int -> UnitConstant
-> lookupUnit (matrix, vector) m = maybe (Unitful []) (\n -> vector !! (n - 1)) n
+> lookupUnit :: [UnitVarCategory] -> LinearSystem -> Int -> Maybe UnitConstant
+> lookupUnit ucats system@(matrix, vector) m = maybe defaultUnit (lookupUnit' ucats system m) n
 >   where n = find (\n -> matrix ! (n, m) /= 0) [1 .. nrows matrix]
+>         defaultUnit = if ucats !! (m - 1) == Argument then Nothing else Just (Unitful [])
 
-> insertUnits :: LinearSystem -> Decl Annotation -> Decl Annotation
-> insertUnits system (Decl a sp@(s1, s2) d t) | not (pRefactored a || hasUnits t) =
+> lookupUnit' :: [UnitVarCategory] -> LinearSystem -> Int -> Int -> Maybe UnitConstant
+> lookupUnit' ucats (matrix, vector) m n
+>   | not $ null ms = Nothing
+>   | ucats !! (m - 1) /= Argument = Just $ vector !! (n - 1)
+>   | ms' /= [m] = Nothing
+>   | otherwise = Just $ vector !! (n - 1)
+>   where ms = filter significant [1 .. ncols matrix]
+>         significant m' = m' /= m && matrix ! (n, m') /= 0 && ucats !! (m' - 1) == Argument
+>         ms' = filter (\m -> matrix ! (n, m) /= 0) [1 .. ncols matrix]
+
+> insertUnits :: Lalala -> Decl Annotation -> Decl Annotation
+> insertUnits lalala (Decl a sp@(s1, s2) d t) | not (pRefactored a || hasUnits t) =
 >   DSeq a (NullDecl a' sp'') (foldr1 (DSeq a) decls)
->   where unitVar' (Var a' _ _, _) = unitVar a'
->         sameUnits = (==) `on` (lookupUnit system . unitVar')
+>   where system = Data.Label.get linearSystem lalala
+>         order = Data.Label.get reorderedCols lalala
+>         ucats = Data.Label.get unitVarCats lalala
+>         unitVar' (Var a' _ _, _) = realColumn order $ UnitVariable $ unitVar a'
+>         sameUnits = (==) `on` (lookupUnit ucats system . unitVar')
 >         groups = groupBy sameUnits d
->         types = map (insertUnit system t . unitVar' . head) groups
+>         types = map (insertUnit ucats system t . unitVar' . head) groups
 >         a' = a { refactored = Just s1 }
 >         sp' = dropLine $ refactorSpan sp
 >         sp'' = (toCol0 s1, snd $ dropLine sp)
@@ -334,17 +369,18 @@ The indexing for switchScaleElems is 1-based, in line with Data.Matrix.
 > isUnit (MeasureUnit _ _) = True
 > isUnit _ = False
 
-> insertUnit :: LinearSystem -> Type Annotation -> Int -> Type Annotation
-> insertUnit system (BaseType aa tt attrs kind len) uv =
+> insertUnit :: [UnitVarCategory] -> LinearSystem -> Type Annotation -> Int -> Type Annotation
+> insertUnit ucats system (BaseType aa tt attrs kind len) uv =
 >   BaseType aa tt (insertUnit' unit attrs) kind len
->   where unit = lookupUnit system uv
+>   where unit = lookupUnit ucats system uv
 
 > deleteUnit :: Type Annotation -> Type Annotation
 > deleteUnit (BaseType aa tt attrs kind len) =
 >   BaseType aa tt (filter (not . isUnit) attrs) kind len
 
-> insertUnit' :: UnitConstant -> [Attr Annotation] -> [Attr Annotation]
-> insertUnit' unit attrs = attrs ++ [MeasureUnit unitAnnotation $ makeUnitSpec unit]
+> insertUnit' :: Maybe UnitConstant -> [Attr Annotation] -> [Attr Annotation]
+> insertUnit' (Just unit) attrs = attrs ++ [MeasureUnit unitAnnotation $ makeUnitSpec unit]
+> insertUnit' Nothing attrs = attrs
 
 > makeUnitSpec :: UnitConstant -> MeasureUnitSpec Annotation
 > makeUnitSpec (Unitful []) = UnitNone unitAnnotation
@@ -367,13 +403,19 @@ The indexing for switchScaleElems is 1-based, in line with Data.Matrix.
 
 > inferInterproceduralUnits :: Program Annotation -> State Lalala (Program Annotation)
 > inferInterproceduralUnits x =
->   do system1 <- gets linearSystem
->      addInterproceduralConstraints x
+>   do reorderColumns
+>      solveSystemM
+>      system <- gets linearSystem
+>      inferInterproceduralUnits' x system
+
+> inferInterproceduralUnits' :: Program Annotation -> LinearSystem -> State Lalala (Program Annotation)
+> inferInterproceduralUnits' x system1 =
+>   do addInterproceduralConstraints x
 >      solveSystemM
 >      system2 <- gets linearSystem
 >      if system1 == system2
 >        then checkUnderdeterminedM >> return x
->        else inferInterproceduralUnits x
+>        else inferInterproceduralUnits' x system2
 
 > addInterproceduralConstraints :: Program Annotation -> State Lalala ()
 > addInterproceduralConstraints x =
@@ -384,14 +426,50 @@ The indexing for switchScaleElems is 1-based, in line with Data.Matrix.
 >     addCall (name, (result, args)) =
 >       do penv <- gets procedureEnv
 >          case lookup name penv of
->            Just (r, as) -> handleArgs args as >> handleResult result r
+>            Just (r, as) -> let (r1, r2) = decodeResult result r in handleArgs (args ++ r1) (as ++ r2)
 >            Nothing      -> return ()
->     handleArgs as1 as2 =
->       sequence_ [mustEqual (return uv1) (return uv2) | (uv1, uv2) <- zip as1 as2]
->     handleResult (Just r1) (Just r2) = void $ mustEqual (return r1) (return r2)
->     handleResult Nothing Nothing = return ()
->     handleResult (Just _) Nothing = error "Subroutine used as a function!"
->     handleResult Nothing (Just _) = error "Function used as a subroutine!"
+>     handleArgs actualVars dummyVars =
+>       do order <- gets reorderedCols
+>          let actual = map (realColumn order) actualVars
+>              dummy = map (realColumn order) dummyVars
+>          mapM_ (handleArg $ zip dummy actual) dummy
+>     handleArg dummyToActual dummy =
+>       do (matrix, vector) <- gets linearSystem
+>          let n = maybe 1 id $ find (\n -> matrix ! (n, dummy) /= 0) [1 .. nrows matrix]
+>              Just m = find (\m -> matrix ! (n, m) /= 0) [1 .. ncols matrix]
+>          when (m == dummy) $ do
+>            n' <- addRow' $ vector !! (n - 1)
+>            let ms = filter (\m -> matrix ! (n, m) /= 0) [m .. ncols matrix]
+>                m's = map (maybe undefined id . flip lookup dummyToActual) ms
+>            mapM_ (handleArgPair matrix n n') (zip ms m's)
+>     handleArgPair matrix n n' (m, m') = modify $ liftLalala $ setElem (matrix ! (n, m)) (n', m')
+>     decodeResult (Just r1) (Just r2) = ([r1], [r2])
+>     decodeResult Nothing Nothing = ([], [])
+>     decodeResult (Just _) Nothing = error "Subroutine used as a function!"
+>     decodeResult Nothing (Just _) = error "Function used as a subroutine!"
+
+> realColumn :: [Int] -> UnitVariable -> Int
+> realColumn order (UnitVariable uv) = if null order then uv else order !! (uv - 1)
+
+> reorderColumns :: State Lalala ()
+> reorderColumns =
+>   do (matrix, vector) <- gets linearSystem
+>      reorderedCols =: [1 .. ncols matrix]
+>      reorderColumns' (ncols matrix) (ncols matrix)
+
+> reorderColumns' :: Int -> Int -> State Lalala ()
+> reorderColumns' m k
+>   | m < 1 = reorderedCols =. inverse
+>   | otherwise =
+>       do (matrix, vector) <- gets linearSystem
+>          ucats <- gets unitVarCats
+>          k' <- if ucats !! (m - 1) == Argument
+>                  then do modify $ liftLalala $ moveCol m k
+>                          unitVarCats =. moveElem m k
+>                          reorderedCols =. moveElem m k
+>                          return $ k - 1
+>                  else return k
+>          reorderColumns' (m - 1) k'
 
 > data BinOpKind = AddOp | MulOp | DivOp | PowerOp | LogicOp | RelOp
 > binOpKind :: BinOp a -> BinOpKind
@@ -419,10 +497,13 @@ The indexing for switchScaleElems is 1-based, in line with Data.Matrix.
 >      return m
 
 > addRow :: State Lalala Int
-> addRow =
+> addRow = addRow' (Unitful [])
+
+> addRow' :: UnitConstant -> State Lalala Int
+> addRow' uc =
 >   do (matrix, vector) <- gets linearSystem
 >      let n = nrows matrix + 1
->      linearSystem =: (extendTo n 0 matrix, vector ++ [Unitful []])
+>      linearSystem =: (extendTo n 0 matrix, vector ++ [uc])
 >      return n
 
 > liftLalala :: (Matrix Rational -> Matrix Rational) -> Lalala -> Lalala
