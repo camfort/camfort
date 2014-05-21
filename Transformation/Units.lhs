@@ -570,6 +570,8 @@ TODO: error handling in powerUnits
 >                                        let uvs' = justArgUnits args uvs
 >                                        calls << (v, (Just uv, uvs'))
 >                                        return uv
+>        -- default specifier
+>        _ | v == "*" -> anyUnits Literal
 >        -- just bad code
 >        _ -> error $ "Undefined variable " ++ show v
 >   where inferArgUnits = sequence [mapM inferExprUnits exprs | (_, exprs) <- names]
