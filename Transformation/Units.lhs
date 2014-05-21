@@ -652,15 +652,19 @@ TODO: error handling in powerUnits
 > inferStmtUnits (Call _ _ e1 (ArgList _ e2)) = mapM_ inferExprUnits [e1, e2]
 > inferStmtUnits (Open _ _ specs) = inferSpecUnits specs
 > inferStmtUnits (Close _ _ specs) = inferSpecUnits specs
+> inferStmtUnits (Continue _ _) = return ()
+> inferStmtUnits (Cycle _ _ _) = return ()
 > inferStmtUnits (Deallocate _ _ exprs e) =
 >   do mapM_ inferExprUnits exprs
 >      inferExprUnits e
 >      return ()
 > inferStmtUnits (Endfile _ _ specs) = inferSpecUnits specs
+> inferStmtUnits (Exit _ _ _) = return ()
 > inferStmtUnits (Forall _ _ (header, e) s) =
 >   do mapM_ inferForHeaderUnits header
 >      inferExprUnits e
 >      inferStmtUnits s
+> inferStmtUnits (Goto _ _ _) = return ()
 > inferStmtUnits (Nullify _ _ exprs) = mapM_ inferExprUnits exprs
 > inferStmtUnits (Inquire _ _ specs exprs) =
 >   do inferSpecUnits specs
@@ -686,6 +690,8 @@ TODO: error handling in powerUnits
 > inferStmtUnits (ReadS _ _ specs exprs) =
 >   do inferSpecUnits specs
 >      mapM_ inferExprUnits exprs
+> inferStmtUnits (TextStmt _ _ _) = return ()
+> inferStmtUnits (NullStmt _ _) = return ()
 
 > handleStmt :: Data a => Fortran a -> State Lalala (Fortran a)
 > handleStmt x = do inferStmtUnits x
