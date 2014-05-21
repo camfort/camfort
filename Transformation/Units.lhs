@@ -48,7 +48,7 @@
 >   (Unitless n1) / (Unitless n2) = Unitless (n1 / n2)
 >   fromRational = Unitless . fromRational
 
-> data UnitVariable = UnitVariable Int
+> newtype UnitVariable = UnitVariable Int
 > data UnitVarCategory = Literal | Temporary | Variable | Argument deriving Eq
 > type UnitVarEnv = [(Variable, UnitVariable)]
 > type DerivedUnitEnv = [(MeasureUnit, UnitConstant)]
