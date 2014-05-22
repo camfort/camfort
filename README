@@ -42,6 +42,8 @@ Refactor functions:
  	 equivalence 	 [equivalence elimination] 
  	 dataType 	 [derived data type introduction] 
  	 dead 		 [dead-code eliminate] 
+ 	 units 		 [unit-of-measure inference] 
+ 	 removeUnits 	 [unit-of-measure removal] 
 
 Analysis functions: 
  	 lva 		 [live-variable analysis] 
