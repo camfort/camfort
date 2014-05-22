@@ -57,15 +57,17 @@
 > type ProcedureEnv = [(String, Procedure)]
 > type LinearSystem = (Matrix Rational, [UnitConstant])
 > data Lalala = Lalala {
+>   _report :: [String],
 >   _unitVarEnv :: UnitVarEnv,
 >   _derivedUnitEnv :: DerivedUnitEnv,
 >   _procedureEnv :: ProcedureEnv,
 >   _calls :: ProcedureEnv,
 >   _unitVarCats :: [UnitVarCategory],
 >   _reorderedCols :: [Int],
+>   _underdeterminedCols :: [Int],
 >   _linearSystem :: LinearSystem
 > }
-> emptyLalala = Lalala [] [] [] [] [Literal] [] (fromLists [[1]], [Unitful []])
+> emptyLalala = Lalala [] [] [] [] [] [Literal] [] [] (fromLists [[1]], [Unitful []])
 > Data.Label.mkLabels [''Lalala]
 
 > infix 2 <<
@@ -89,6 +91,12 @@
 
 > inverse :: [Int] -> [Int]
 > inverse perm = [j + 1 | Just j <- map (flip elemIndex perm) [1 .. length perm]]
+
+> unique :: Eq a => [a] -> [a]
+> unique = map head . group
+
+> fixValue :: Eq a => (a -> a) -> a -> a
+> fixValue f x = snd $ until (uncurry (==)) (\(x, y) -> (y, f y)) (x, f x)
 
 The indexing for switchScaleElems and moveElem is 1-based, in line with Data.Matrix.
 
@@ -154,21 +162,35 @@ The indexing for switchScaleElems and moveElem is 1-based, in line with Data.Mat
 
 > checkUnderdeterminedM :: State Lalala ()
 > checkUnderdeterminedM = do ucats <- gets unitVarCats
->                            linearSystem =. checkUnderdetermined ucats
+>                            system <- gets linearSystem
+>                            let badCols = checkUnderdetermined ucats system
+>                            unless (null badCols) $ report << "underdetermined units of measure"
+>                            underdeterminedCols =: badCols
 
-> checkUnderdetermined :: [UnitVarCategory] -> LinearSystem -> LinearSystem
-> checkUnderdetermined ucats system = checkUnderdetermined' ucats system 1
+> checkUnderdetermined :: [UnitVarCategory] -> LinearSystem -> [Int]
+> checkUnderdetermined ucats system@(matrix, vector) =
+>   fixValue (propagateUnderdetermined matrix) $ checkUnderdetermined' ucats system 1
 
-> checkUnderdetermined' :: [UnitVarCategory] -> LinearSystem -> Int -> LinearSystem
+> checkUnderdetermined' :: [UnitVarCategory] -> LinearSystem -> Int -> [Int]
 > checkUnderdetermined' ucats system@(matrix, vector) n
->   | n > nrows matrix = system
->   | not (null $ drop 1 ms) && vector !! (n - 1) /= Unitful [] = error "Underdetermined units of measure!"
->   | otherwise = checkUnderdetermined' ucats system (n + 1)
+>   | n > nrows matrix = []
+>   | not (null $ drop 1 ms) && vector !! (n - 1) /= Unitful [] = ms ++ rest
+>   | otherwise = rest
 >   where ms = filter significant [1 .. ncols matrix]
 >         significant m = matrix ! (n, m) /= 0 && ucats !! (m - 1) `notElem` [Literal, Argument]
+>         rest = checkUnderdetermined' ucats system (n + 1)
+
+> propagateUnderdetermined :: Matrix Rational -> [Int] -> [Int]
+> propagateUnderdetermined matrix list =
+>   unique $ sort $ do
+>     m <- list
+>     n <- filter (\n -> matrix ! (n, m) /= 0) [1 .. nrows matrix]
+>     filter (\m -> matrix ! (n, m) /= 0) [1 .. ncols matrix]
 
 > inferUnits :: (Filename, Program Annotation) -> (Report, (Filename, Program Annotation))
-> inferUnits (fname, x) = ("", (fname, evalState (doInferUnits x) emptyLalala))
+> inferUnits (fname, x) = (r, (fname, y))
+>   where (y, lalala) = runState (doInferUnits x) emptyLalala
+>         r = concat [fname ++ ": " ++ r ++ "\n" | r <- Data.Label.get report lalala]
 
 > removeUnits :: (Filename, Program Annotation) -> (Report, (Filename, Program Annotation))
 > removeUnits (fname, x) = ("", (fname, doRemoveUnits x))
@@ -319,15 +341,16 @@ The indexing for switchScaleElems and moveElem is 1-based, in line with Data.Mat
 > removeUnitsInBlock :: Block Annotation -> Block Annotation
 > removeUnitsInBlock = transformBi' deleteUnits
 
-> lookupUnit :: [UnitVarCategory] -> LinearSystem -> Int -> Maybe UnitConstant
-> lookupUnit ucats system@(matrix, vector) m = maybe defaultUnit (lookupUnit' ucats system m) n
+> lookupUnit :: [UnitVarCategory] -> [Int] -> LinearSystem -> Int -> Maybe UnitConstant
+> lookupUnit ucats badCols system@(matrix, vector) m =
+>   maybe defaultUnit (lookupUnit' ucats badCols system m) n
 >   where n = find (\n -> matrix ! (n, m) /= 0) [1 .. nrows matrix]
 >         defaultUnit = if ucats !! (m - 1) == Argument then Nothing else Just (Unitful [])
 
-> lookupUnit' :: [UnitVarCategory] -> LinearSystem -> Int -> Int -> Maybe UnitConstant
-> lookupUnit' ucats (matrix, vector) m n
+> lookupUnit' :: [UnitVarCategory] -> [Int] -> LinearSystem -> Int -> Int -> Maybe UnitConstant
+> lookupUnit' ucats badCols (matrix, vector) m n
 >   | not $ null ms = Nothing
->   | ucats !! (m - 1) /= Argument = Just $ vector !! (n - 1)
+>   | ucats !! (m - 1) /= Argument && m `notElem` badCols = Just $ vector !! (n - 1)
 >   | ms' /= [m] = Nothing
 >   | otherwise = Just $ vector !! (n - 1)
 >   where ms = filter significant [1 .. ncols matrix]
@@ -335,15 +358,16 @@ The indexing for switchScaleElems and moveElem is 1-based, in line with Data.Mat
 >         ms' = filter (\m -> matrix ! (n, m) /= 0) [1 .. ncols matrix]
 
 > insertUnits :: Lalala -> Decl Annotation -> Decl Annotation
-> insertUnits lalala (Decl a sp@(s1, s2) d t) | not (pRefactored a || hasUnits t) =
+> insertUnits lalala (Decl a sp@(s1, s2) d t) | not (pRefactored a || hasUnits t || types == [t]) =
 >   DSeq a (NullDecl a' sp'') (foldr1 (DSeq a) decls)
 >   where system = Data.Label.get linearSystem lalala
 >         order = Data.Label.get reorderedCols lalala
 >         ucats = Data.Label.get unitVarCats lalala
+>         badCols = Data.Label.get underdeterminedCols lalala
 >         unitVar' (Var a' _ _, _) = realColumn order $ UnitVariable $ unitVar a'
->         sameUnits = (==) `on` (lookupUnit ucats system . unitVar')
+>         sameUnits = (==) `on` (lookupUnit ucats badCols system . unitVar')
 >         groups = groupBy sameUnits d
->         types = map (insertUnit ucats system t . unitVar' . head) groups
+>         types = map (insertUnit ucats badCols system t . unitVar' . head) groups
 >         a' = a { refactored = Just s1 }
 >         sp' = dropLine $ refactorSpan sp
 >         sp'' = (toCol0 s1, snd $ dropLine sp)
@@ -369,10 +393,10 @@ The indexing for switchScaleElems and moveElem is 1-based, in line with Data.Mat
 > isUnit (MeasureUnit _ _) = True
 > isUnit _ = False
 
-> insertUnit :: [UnitVarCategory] -> LinearSystem -> Type Annotation -> Int -> Type Annotation
-> insertUnit ucats system (BaseType aa tt attrs kind len) uv =
+> insertUnit :: [UnitVarCategory] -> [Int] -> LinearSystem -> Type Annotation -> Int -> Type Annotation
+> insertUnit ucats badCols system (BaseType aa tt attrs kind len) uv =
 >   BaseType aa tt (insertUnit' unit attrs) kind len
->   where unit = lookupUnit ucats system uv
+>   where unit = lookupUnit ucats badCols system uv
 
 > deleteUnit :: Type Annotation -> Type Annotation
 > deleteUnit (BaseType aa tt attrs kind len) =
