@@ -265,10 +265,10 @@ The indexing for switchScaleElems and moveElem is 1-based, in line with Data.Mat
 > convertSingleUnit :: MeasureUnit -> Rational -> State Lalala UnitConstant
 > convertSingleUnit unit f =
 >   do denv <- gets derivedUnitEnv
->      let uc = Unitful [(unit, f)]
+>      let uc f' = Unitful [(unit, f')]
 >      case lookup unit denv of
 >        Just uc' -> return $ uc' * (fromRational f)
->        Nothing  -> derivedUnitEnv << (unit, uc) >> return uc
+>        Nothing  -> derivedUnitEnv << (unit, uc 1) >> return (uc f)
 
 > fromFraction :: Fraction a -> Rational
 > fromFraction (IntegerConst _ n) = fromInteger $ read n
