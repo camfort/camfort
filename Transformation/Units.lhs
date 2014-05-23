@@ -4,6 +4,7 @@
 > module Transformation.Units where
 
 > import Data.Ratio
+> import Data.Maybe
 > import Data.Matrix
 > import Data.List
 > import Data.Label.Mono (Lens)
@@ -329,8 +330,10 @@ The indexing for switchScaleElems and moveElem is 1-based, in line with Data.Mat
 >       where
 >         learnDerivedUnit (name, spec) =
 >           do denv <- gets derivedUnitEnv
->              let Nothing = lookup name denv -- FIXME: error handling
+>              when (isJust $ lookup name denv) $ error "Redeclared unit of measure"
 >              unit <- convertUnit spec
+>              denv <- gets derivedUnitEnv
+>              when (isJust $ lookup name denv) $ error "Recursive unit-of-measure definition"
 >              derivedUnitEnv << (name, unit)
 >     f x = return x
 
@@ -464,8 +467,8 @@ The indexing for switchScaleElems and moveElem is 1-based, in line with Data.Mat
 >          when (m == dummy) $ do
 >            n' <- addRow' $ vector !! (n - 1)
 >            let ms = filter (\m -> matrix ! (n, m) /= 0) [m .. ncols matrix]
->                m's = map (maybe undefined id . flip lookup dummyToActual) ms
->            mapM_ (handleArgPair matrix n n') (zip ms m's)
+>                m's = mapMaybe (flip lookup dummyToActual) ms
+>            when (length m's == length ms) $ mapM_ (handleArgPair matrix n n') (zip ms m's)
 >     handleArgPair matrix n n' (m, m') = modify $ liftLalala $ setElem (matrix ! (n, m)) (n', m')
 >     decodeResult (Just r1) (Just r2) = ([r1], [r2])
 >     decodeResult Nothing Nothing = ([], [])
@@ -621,7 +624,7 @@ TODO: error handling in powerUnits
 > inferExprUnits (Null _ _) = return $ UnitVariable 1
 > inferExprUnits (ESeq _ _ e1 e2) = do inferExprUnits e1
 >                                      inferExprUnits e2
->                                      return undefined
+>                                      return $ error "ESeq units wanted"
 > inferExprUnits (Bound _ _ e1 e2) = mustEqual (inferExprUnits e1) (inferExprUnits e2)
 > inferExprUnits (Sqrt _ _ e) = sqrtUnits $ inferExprUnits e
 > inferExprUnits (ArrayCon _ _ (e:exprs)) =
