@@ -390,7 +390,7 @@ The indexing for switchScaleElems and moveElem is 1-based, in line with Data.Mat
 
 > hasUnits :: Type a -> Bool
 > hasUnits (BaseType _ _ attrs _ _) = any isUnit attrs
-> hasUnits _ = False
+> hasUnits (ArrayT _ _ _ attrs _ _) = any isUnit attrs
 
 > isUnit :: Attr a -> Bool
 > isUnit (MeasureUnit _ _) = True
@@ -400,10 +400,15 @@ The indexing for switchScaleElems and moveElem is 1-based, in line with Data.Mat
 > insertUnit ucats badCols system (BaseType aa tt attrs kind len) uv =
 >   BaseType aa tt (insertUnit' unit attrs) kind len
 >   where unit = lookupUnit ucats badCols system uv
+> insertUnit ucats badCols system (ArrayT dims aa tt attrs kind len) uv =
+>   ArrayT dims aa tt (insertUnit' unit attrs) kind len
+>   where unit = lookupUnit ucats badCols system uv
 
 > deleteUnit :: Type Annotation -> Type Annotation
 > deleteUnit (BaseType aa tt attrs kind len) =
 >   BaseType aa tt (filter (not . isUnit) attrs) kind len
+> deleteUnit (ArrayT dims aa tt attrs kind len) =
+>   ArrayT dims aa tt (filter (not . isUnit) attrs) kind len
 
 > insertUnit' :: Maybe UnitConstant -> [Attr Annotation] -> [Attr Annotation]
 > insertUnit' (Just unit) attrs = attrs ++ [MeasureUnit unitAnnotation $ makeUnitSpec unit]
