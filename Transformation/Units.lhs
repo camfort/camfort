@@ -12,6 +12,7 @@
 > import qualified Data.Label
 > import Data.Function
 > import Data.Data
+> import Data.Char
 > import Control.Monad.State.Strict hiding (gets)
 
 > import Data.Generics.Uniplate.Operations
@@ -270,9 +271,9 @@ The indexing for switchScaleElems and moveElem is 1-based, in line with Data.Mat
 > convertSingleUnit unit f =
 >   do denv <- gets derivedUnitEnv
 >      let uc f' = Unitful [(unit, f')]
->      case lookup unit denv of
+>      case lookup (map toUpper unit) denv of
 >        Just uc' -> return $ uc' * (fromRational f)
->        Nothing  -> derivedUnitEnv << (unit, uc 1) >> return (uc f)
+>        Nothing  -> derivedUnitEnv << (map toUpper unit, uc 1) >> return (uc f)
 
 > fromFraction :: Fraction a -> Rational
 > fromFraction (IntegerConst _ n) = fromInteger $ read n
@@ -304,8 +305,8 @@ The indexing for switchScaleElems and moveElem is 1-based, in line with Data.Mat
 >       do uenv <- gets unitVarEnv
 >          let resultVar = fmap (lookupUnitByName uenv) resultName
 >              argVars = fmap (lookupUnitByName uenv) argNames
->          procedureEnv << (name, (resultVar, argVars))
->     lookupUnitByName uenv v = maybe (UnitVariable 1) id $ lookup v uenv
+>          procedureEnv << (map toUpper name, (resultVar, argVars))
+>     lookupUnitByName uenv v = maybe (UnitVariable 1) id $ lookup (map toUpper v) uenv
 >     f (Decl a s d t) =
 >       do
 >         let BaseType _ _ attrs _ _ = arrayElementType t
@@ -319,7 +320,7 @@ The indexing for switchScaleElems and moveElem is 1-based, in line with Data.Mat
 >           return $ do
 >             system <- gets linearSystem
 >             let m = ncols (fst system) + 1
->             prepend unitVarEnv (v, UnitVariable m)
+>             prepend unitVarEnv (map toUpper v, UnitVariable m)
 >             unitVarCats << unitVarCat v
 >             linearSystem =. extendConstraints units
 >             return (Var a { unitVar = m } s names, e)
@@ -333,11 +334,11 @@ The indexing for switchScaleElems and moveElem is 1-based, in line with Data.Mat
 >       where
 >         learnDerivedUnit (name, spec) =
 >           do denv <- gets derivedUnitEnv
->              when (isJust $ lookup name denv) $ error "Redeclared unit of measure"
+>              when (isJust $ lookup (map toUpper name) denv) $ error "Redeclared unit of measure"
 >              unit <- convertUnit spec
 >              denv <- gets derivedUnitEnv
->              when (isJust $ lookup name denv) $ error "Recursive unit-of-measure definition"
->              derivedUnitEnv << (name, unit)
+>              when (isJust $ lookup (map toUpper name) denv) $ error "Recursive unit-of-measure definition"
+>              derivedUnitEnv << (map toUpper name, unit)
 >     f x = return x
 
 > insertUnitsInBlock :: Block Annotation -> State Lalala (Block Annotation)
@@ -460,7 +461,7 @@ The indexing for switchScaleElems and moveElem is 1-based, in line with Data.Mat
 >   where
 >     addCall (name, (result, args)) =
 >       do penv <- gets procedureEnv
->          case lookup name penv of
+>          case lookup (map toUpper name) penv of
 >            Just (r, as) -> let (r1, r2) = decodeResult result r in handleArgs (args ++ r1) (as ++ r2)
 >            Nothing      -> return ()
 >     handleArgs actualVars dummyVars =
@@ -610,7 +611,7 @@ TODO: error handling in powerUnits
 > inferExprUnits (Var _ _ names) =
 >   do uenv <- gets unitVarEnv
 >      let (VarName _ v, args) = head names
->      case lookup v uenv of
+>      case lookup (map toUpper v) uenv of
 >        -- variable (possibly array)?
 >        Just uv -> inferArgUnits >> return uv
 >        -- function call?
@@ -666,7 +667,7 @@ TODO: error handling in powerUnits
 > inferForHeaderUnits :: (Variable, Expr a, Expr a, Expr a) -> State Lalala ()
 > inferForHeaderUnits (v, e1, e2, e3) =
 >   do uenv <- gets unitVarEnv
->      let Just uv = lookup v uenv
+>      let Just uv = lookup (map toUpper v) uenv
 >      mustEqual (return uv) (inferExprUnits e1)
 >      mustEqual (return uv) (inferExprUnits e2)
 >      mustEqual (return uv) (inferExprUnits e3)
