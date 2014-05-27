@@ -113,6 +113,9 @@ The indexing for switchScaleElems and moveElem is 1-based, in line with Data.Mat
 >                 where (lj, rj) = splitAt j list
 >                       (a, _:b) = splitAt (i - 1) (lj ++ list !! (i - 1) : rj)
 
+> incrElem :: Num a => a -> (Int, Int) -> Matrix a -> Matrix a
+> incrElem value pos matrix = setElem (matrix ! pos + value) pos matrix
+
 > moveCol :: Int -> Int -> Matrix a -> Matrix a
 > moveCol i j matrix
 >   | i > j = moveCol j i matrix
@@ -546,7 +549,7 @@ The indexing for switchScaleElems and moveElem is 1-based, in line with Data.Mat
 >   do UnitVariable uv1 <- uvm1
 >      UnitVariable uv2 <- uvm2
 >      n <- addRow
->      modify $ liftLalala $ setElem (-1) (n, uv1) . setElem 1 (n, uv2)
+>      modify $ liftLalala $ incrElem (-1) (n, uv1) . incrElem 1 (n, uv2)
 >      solveSystemM
 >      return $ UnitVariable uv1
 
@@ -556,7 +559,7 @@ The indexing for switchScaleElems and moveElem is 1-based, in line with Data.Mat
 >      UnitVariable uv1 <- uvm1
 >      UnitVariable uv2 <- uvm2
 >      n <- addRow
->      modify $ liftLalala $ setElem (-1) (n, m) . setElem k1 (n, uv1) . setElem k2 (n, uv2)
+>      modify $ liftLalala $ incrElem (-1) (n, m) . incrElem k1 (n, uv1) . incrElem k2 (n, uv2)
 >      solveSystemM
 >      return $ UnitVariable m
 
@@ -568,7 +571,7 @@ TODO: error handling in powerUnits
 >      m <- addCol Temporary
 >      UnitVariable uv <- uvm
 >      n <- addRow
->      modify $ liftLalala $ setElem (-1) (n, m) . setElem power (n, uv)
+>      modify $ liftLalala $ incrElem (-1) (n, m) . incrElem power (n, uv)
 >      solveSystemM
 >      return $ UnitVariable m
 
@@ -577,7 +580,7 @@ TODO: error handling in powerUnits
 >   do m <- addCol Temporary
 >      UnitVariable uv <- uvm
 >      n <- addRow
->      modify $ liftLalala $ setElem (-1) (n, m) . setElem 0.5 (n, uv)
+>      modify $ liftLalala $ incrElem (-1) (n, m) . incrElem 0.5 (n, uv)
 >      solveSystemM
 >      return $ UnitVariable m
 
