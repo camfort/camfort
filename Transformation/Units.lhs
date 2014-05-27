@@ -50,7 +50,7 @@
 >   fromRational = Unitless . fromRational
 
 > newtype UnitVariable = UnitVariable Int
-> data UnitVarCategory = Literal | Temporary | Variable | Argument deriving Eq
+> data UnitVarCategory = Literal | Temporary | Variable | Argument | Magic deriving Eq
 > type UnitVarEnv = [(Variable, UnitVariable)]
 > type DerivedUnitEnv = [(MeasureUnit, UnitConstant)]
 > type ProcedureNames = (String, Maybe Variable, [Variable])
@@ -68,7 +68,7 @@
 >   _underdeterminedCols :: [Int],
 >   _linearSystem :: LinearSystem
 > }
-> emptyLalala = Lalala [] [] [] [] [] [Literal] [] [] (fromLists [[1]], [Unitful []])
+> emptyLalala = Lalala [] [] [] [] [] [Magic] [] [] (fromLists [[1]], [Unitful []])
 > Data.Label.mkLabels [''Lalala]
 
 > infix 2 <<
@@ -494,7 +494,7 @@ The indexing for switchScaleElems and moveElem is 1-based, in line with Data.Mat
 
 > reorderColumns' :: Int -> Int -> State Lalala ()
 > reorderColumns' m k
->   | m < 1 = reorderedCols =. inverse
+>   | m < 1 = reorderColumns'' k k
 >   | otherwise =
 >       do (matrix, vector) <- gets linearSystem
 >          ucats <- gets unitVarCats
@@ -505,6 +505,20 @@ The indexing for switchScaleElems and moveElem is 1-based, in line with Data.Mat
 >                          return $ k - 1
 >                  else return k
 >          reorderColumns' (m - 1) k'
+
+> reorderColumns'' :: Int -> Int -> State Lalala ()
+> reorderColumns'' m k
+>   | m < 1 = reorderedCols =. inverse
+>   | otherwise =
+>       do (matrix, vector) <- gets linearSystem
+>          ucats <- gets unitVarCats
+>          k' <- if ucats !! (m - 1) == Literal
+>                  then do modify $ liftLalala $ moveCol m k
+>                          unitVarCats =. moveElem m k
+>                          reorderedCols =. moveElem m k
+>                          return $ k - 1
+>                  else return k
+>          reorderColumns'' (m - 1) k'
 
 > data BinOpKind = AddOp | MulOp | DivOp | PowerOp | LogicOp | RelOp
 > binOpKind :: BinOp a -> BinOpKind
