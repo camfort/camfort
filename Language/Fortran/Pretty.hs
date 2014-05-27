@@ -216,10 +216,10 @@ instance (OutputG (ArgList p) v,
   outputF (ArrayT _ [] bt as (NullExpr _ _) e')         = outputG bt++" (len="++outputG e'++")"++showAttrs as
   outputF (ArrayT _ [] bt as e (NullExpr _ _))          = outputG bt++" (kind="++outputG e++")"++showAttrs as
   outputF (ArrayT _ [] bt as e                e')              = outputG bt++" (len="++outputG e'++"kind="++outputG e++")"++showAttrs as
-  outputF (ArrayT _ rs bt as (NullExpr _ _)  (NullExpr _ _))  = outputG bt++" , dimension ("++showRanges rs++")"++showAttrs as
-  outputF (ArrayT _ rs bt as (NullExpr _ _) e')         = outputG bt++" (len="++outputG e'++")"++" , dimension ("++showRanges rs++")"++showAttrs as
-  outputF (ArrayT _ rs bt as e (NullExpr _ _))          = outputG bt++" (kind="++outputG e++")"++" , dimension ("++showRanges rs++")"++showAttrs as
-  outputF (ArrayT _ rs bt as e               e')               = outputG bt++" (len="++outputG e'++"kind="++outputG e++")"++" , dimension ("++showRanges rs++")"++showAttrs as
+  outputF (ArrayT _ rs bt as (NullExpr _ _)  (NullExpr _ _))  = outputG bt++", dimension ("++showRanges rs++")"++showAttrs as
+  outputF (ArrayT _ rs bt as (NullExpr _ _) e')         = outputG bt++" (len="++outputG e'++")"++", dimension ("++showRanges rs++")"++showAttrs as
+  outputF (ArrayT _ rs bt as e (NullExpr _ _))          = outputG bt++" (kind="++outputG e++")"++", dimension ("++showRanges rs++")"++showAttrs as
+  outputF (ArrayT _ rs bt as e               e')               = outputG bt++" (len="++outputG e'++"kind="++outputG e++")"++", dimension ("++showRanges rs++")"++showAttrs as
 
 
 instance (OutputG (MeasureUnitSpec p) v, Alts v) => OutputF (Attr p) v where --new
