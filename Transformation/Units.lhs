@@ -442,16 +442,37 @@ The indexing for switchScaleElems and moveElem is 1-based, in line with Data.Mat
 >   do reorderColumns
 >      solveSystemM
 >      system <- gets linearSystem
->      inferInterproceduralUnits' x system
+>      inferInterproceduralUnits' x False system
 
-> inferInterproceduralUnits' :: Program Annotation -> LinearSystem -> State Lalala (Program Annotation)
-> inferInterproceduralUnits' x system1 =
+> inferInterproceduralUnits' :: Program Annotation -> Bool -> LinearSystem -> State Lalala (Program Annotation)
+> inferInterproceduralUnits' x haveAssumedLiterals system1 =
 >   do addInterproceduralConstraints x
 >      solveSystemM
 >      system2 <- gets linearSystem
 >      if system1 == system2
->        then checkUnderdeterminedM >> return x
->        else inferInterproceduralUnits' x system2
+>        then checkUnderdeterminedM >> nextStep
+>        else inferInterproceduralUnits' x haveAssumedLiterals system2
+>   where nextStep | haveAssumedLiterals = return x
+>                  | otherwise           = do assumeLiteralUnits
+>                                             system3 <- gets linearSystem
+>                                             inferInterproceduralUnits' x True system3
+
+> assumeLiteralUnits :: State Lalala ()
+> assumeLiteralUnits =
+>   do (matrix, vector) <- gets linearSystem
+>      mapM_ assumeLiteralUnits' [1 .. ncols matrix]
+>      solveSystemM
+>   where
+>     assumeLiteralUnits' m =
+>       do (matrix, vector) <- gets linearSystem
+>          ucats <- gets unitVarCats
+>          let n = find (\n -> matrix ! (n, m) /= 0) [1 .. nrows matrix]
+>              m' = n >>= (\n -> find (\m -> matrix ! (n, m) /= 0) [1 .. ncols matrix])
+>              nonLiteral n m = matrix ! (n, m) /= 0 && ucats !! (m - 1) /= Literal
+>              m's = n >>= (\n -> find (nonLiteral n) [1 .. ncols matrix])
+>          when (ucats !! (m - 1) == Literal && (m' /= Just m || isJust m's)) $ do
+>            n' <- addRow
+>            modify $ liftLalala $ setElem 1 (n', m)
 
 > addInterproceduralConstraints :: Program Annotation -> State Lalala ()
 > addInterproceduralConstraints x =
