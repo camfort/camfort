@@ -586,7 +586,6 @@ The indexing for switchScaleElems and moveElem is 1-based, in line with Data.Mat
 >      UnitVariable uv2 <- uvm2
 >      n <- addRow
 >      modify $ liftLalala $ incrElem (-1) (n, uv1) . incrElem 1 (n, uv2)
->      solveSystemM
 >      return $ UnitVariable uv1
 
 > mustAddUp :: State Lalala UnitVariable -> State Lalala UnitVariable -> Rational -> Rational -> State Lalala UnitVariable
@@ -596,7 +595,6 @@ The indexing for switchScaleElems and moveElem is 1-based, in line with Data.Mat
 >      UnitVariable uv2 <- uvm2
 >      n <- addRow
 >      modify $ liftLalala $ incrElem (-1) (n, m) . incrElem k1 (n, uv1) . incrElem k2 (n, uv2)
->      solveSystemM
 >      return $ UnitVariable m
 
 TODO: error handling in powerUnits
@@ -608,7 +606,6 @@ TODO: error handling in powerUnits
 >      UnitVariable uv <- uvm
 >      n <- addRow
 >      modify $ liftLalala $ incrElem (-1) (n, m) . incrElem power (n, uv)
->      solveSystemM
 >      return $ UnitVariable m
 
 > sqrtUnits :: State Lalala UnitVariable -> State Lalala UnitVariable
@@ -617,7 +614,6 @@ TODO: error handling in powerUnits
 >      UnitVariable uv <- uvm
 >      n <- addRow
 >      modify $ liftLalala $ incrElem (-1) (n, m) . incrElem 0.5 (n, uv)
->      solveSystemM
 >      return $ UnitVariable m
 
 > anyUnits :: UnitVarCategory -> State Lalala UnitVariable
