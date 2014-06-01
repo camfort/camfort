@@ -127,15 +127,19 @@ The indexing for switchScaleElems and moveElem is 1-based, in line with Data.Mat
 >                 where n = nrows matrix
 >                       m = ncols matrix
 
-> solveSystemM :: State Lalala ()
-> solveSystemM = linearSystem =. solveSystem
+> solveSystemM :: String -> State Lalala Bool
+> solveSystemM adjective =
+>   do system <- gets linearSystem
+>      case solveSystem system of
+>        Just system' -> linearSystem =: system' >> return True
+>        Nothing      -> report << (adjective ++ " units of measure") >> return False
 
-> solveSystem :: LinearSystem -> LinearSystem
+> solveSystem :: LinearSystem -> Maybe LinearSystem
 > solveSystem system = solveSystem' system 1 1
 
-> solveSystem' :: LinearSystem -> Int -> Int -> LinearSystem
+> solveSystem' :: LinearSystem -> Int -> Int -> Maybe LinearSystem
 > solveSystem' (matrix, vector) m k
->   | m > ncols matrix = cutSystem k $ checkSystem (matrix, vector) k
+>   | m > ncols matrix = fmap (cutSystem k) $ checkSystem (matrix, vector) k
 >   | otherwise = elimRow (matrix, vector) n m k
 >                 where n = find (\n -> matrix ! (n, m) /= 0) [k .. nrows matrix]
 
@@ -144,13 +148,13 @@ The indexing for switchScaleElems and moveElem is 1-based, in line with Data.Mat
 >   where matrix' = submatrix 1 (k - 1) 1 (ncols matrix) matrix
 >         vector' = take (k - 1) vector
 
-> checkSystem :: LinearSystem -> Int -> LinearSystem
+> checkSystem :: LinearSystem -> Int -> Maybe LinearSystem
 > checkSystem (matrix, vector) k
->   | k > nrows matrix = (matrix, vector)
->   | vector !! (k - 1) /= Unitful [] = error "Inconsistent units of measure!"
+>   | k > nrows matrix = Just (matrix, vector)
+>   | vector !! (k - 1) /= Unitful [] = Nothing
 >   | otherwise = checkSystem (matrix, vector) (k + 1)
 
-> elimRow :: LinearSystem -> Maybe Int -> Int -> Int -> LinearSystem
+> elimRow :: LinearSystem -> Maybe Int -> Int -> Int -> Maybe LinearSystem
 > elimRow system Nothing m k = solveSystem' system (m + 1) k
 > elimRow (matrix, vector) (Just n) m k = solveSystem' system' (m + 1) (k + 1)
 >   where matrix' = switchRows k n $ scaleRow (recip $ matrix ! (n, m)) n matrix
@@ -440,28 +444,36 @@ The indexing for switchScaleElems and moveElem is 1-based, in line with Data.Mat
 > inferInterproceduralUnits :: Program Annotation -> State Lalala (Program Annotation)
 > inferInterproceduralUnits x =
 >   do reorderColumns
->      solveSystemM
+>      solveSystemM "inconsistent"
 >      system <- gets linearSystem
 >      inferInterproceduralUnits' x False system
 
 > inferInterproceduralUnits' :: Program Annotation -> Bool -> LinearSystem -> State Lalala (Program Annotation)
 > inferInterproceduralUnits' x haveAssumedLiterals system1 =
 >   do addInterproceduralConstraints x
->      solveSystemM
->      system2 <- gets linearSystem
->      if system1 == system2
->        then checkUnderdeterminedM >> nextStep
->        else inferInterproceduralUnits' x haveAssumedLiterals system2
+>      consistent <- solveSystemM "inconsistent"
+>      if not consistent then do
+>        linearSystem =: system1
+>        return x
+>      else do
+>        system2 <- gets linearSystem
+>        if system1 == system2
+>          then checkUnderdeterminedM >> nextStep
+>          else inferInterproceduralUnits' x haveAssumedLiterals system2
 >   where nextStep | haveAssumedLiterals = return x
->                  | otherwise           = do assumeLiteralUnits
->                                             system3 <- gets linearSystem
->                                             inferInterproceduralUnits' x True system3
+>                  | otherwise           = do consistent <- assumeLiteralUnits
+>                                             if not consistent then return x
+>                                             else do
+>                                               system3 <- gets linearSystem
+>                                               inferInterproceduralUnits' x True system3
 
-> assumeLiteralUnits :: State Lalala ()
+> assumeLiteralUnits :: State Lalala Bool
 > assumeLiteralUnits =
->   do (matrix, vector) <- gets linearSystem
+>   do system@(matrix, vector) <- gets linearSystem
 >      mapM_ assumeLiteralUnits' [1 .. ncols matrix]
->      solveSystemM
+>      consistent <- solveSystemM "underdetermined"
+>      when (not consistent) $ linearSystem =: system
+>      return consistent
 >   where
 >     assumeLiteralUnits' m =
 >       do (matrix, vector) <- gets linearSystem
