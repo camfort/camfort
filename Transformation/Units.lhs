@@ -327,6 +327,7 @@ The indexing for switchScaleElems and moveElem is 1-based, in line with Data.Mat
 >             prepend unitVarEnv (map toUpper v, UnitVariable m)
 >             unitVarCats << unitVarCat v
 >             linearSystem =. extendConstraints units
+>             mustEqual (return $ UnitVariable m) (inferExprUnits e)
 >             return (Var a { unitVar = m } s names, e)
 >         unitVarCat v
 >           | Just (n, r, args) <- proc, v `elem` args = Argument
