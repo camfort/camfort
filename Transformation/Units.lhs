@@ -507,10 +507,11 @@ The indexing for switchScaleElems and moveElem is 1-based, in line with Data.Mat
 >          let n = maybe 1 id $ find (\n -> matrix ! (n, dummy) /= 0) [1 .. nrows matrix]
 >              Just m = find (\m -> matrix ! (n, m) /= 0) [1 .. ncols matrix]
 >          when (m == dummy) $ do
->            n' <- addRow' $ vector !! (n - 1)
 >            let ms = filter (\m -> matrix ! (n, m) /= 0) [m .. ncols matrix]
 >                m's = mapMaybe (flip lookup dummyToActual) ms
->            when (length m's == length ms) $ mapM_ (handleArgPair matrix n n') (zip ms m's)
+>            when (length m's == length ms) $ do
+>              n' <- addRow' $ vector !! (n - 1)
+>              mapM_ (handleArgPair matrix n n') (zip ms m's)
 >     handleArgPair matrix n n' (m, m') = modify $ liftLalala $ setElem (matrix ! (n, m)) (n', m')
 >     decodeResult (Just r1) (Just r2) = ([r1], [r2])
 >     decodeResult Nothing Nothing = ([], [])
