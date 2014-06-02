@@ -503,14 +503,14 @@ unit_spec
 
 mult_unit_spec :: { [(MeasureUnit, Fraction A0)] }
 mult_unit_spec
-: mult_unit_spec power_unit_spec {$1++[$2]}
-| power_unit_spec                {[$1]}
-| '1'                            {[]}
+: mult_unit_spec power_unit_spec { $1++$2 }
+| power_unit_spec                { $1 }
 
-power_unit_spec :: { (MeasureUnit, Fraction A0) }
+power_unit_spec :: { [(MeasureUnit, Fraction A0)] }
 power_unit_spec
-: ID '**' power_spec { ($1, $3) }
-| ID                 { ($1, NullFraction ()) } 
+: ID '**' power_spec { [($1, $3)] }
+| ID                 { [($1, NullFraction ())] }
+| '1'                { [] }
 
 power_spec :: { Fraction A0 }
 power_spec
