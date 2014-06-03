@@ -613,12 +613,17 @@ TODO: error handling in powerUnits
 
 > powerUnits :: State Lalala UnitVariable -> Expr a -> State Lalala UnitVariable
 > powerUnits uvm (Con _ _ powerString) =
->   do let power = fromInteger $ read powerString
->      m <- addCol Temporary
->      UnitVariable uv <- uvm
->      n <- addRow
->      modify $ liftLalala $ incrElem (-1) (n, m) . incrElem power (n, uv)
->      return $ UnitVariable m
+>   case fmap (fromInteger . fst) $ listToMaybe $ reads powerString of
+>     Just power -> do
+>       m <- addCol Temporary
+>       UnitVariable uv <- uvm
+>       n <- addRow
+>       modify $ liftLalala $ incrElem (-1) (n, m) . incrElem power (n, uv)
+>       return $ UnitVariable m
+>     Nothing -> mustEqual uvm (return $ UnitVariable 1)
+> powerUnits uvm e =
+>   do mustEqual uvm (return $ UnitVariable 1)
+>      mustEqual (inferExprUnits e) (return $ UnitVariable 1)
 
 > sqrtUnits :: State Lalala UnitVariable -> State Lalala UnitVariable
 > sqrtUnits uvm =
