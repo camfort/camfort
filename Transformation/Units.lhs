@@ -52,7 +52,7 @@
 
 > newtype UnitVariable = UnitVariable Int
 > data UnitVarCategory = Literal | Temporary | Variable | Argument | Magic deriving Eq
-> type UnitVarEnv = [(Variable, UnitVariable)]
+> type UnitVarEnv = [(Variable, (UnitVariable, [UnitVariable]))]
 > type DerivedUnitEnv = [(MeasureUnit, UnitConstant)]
 > type ProcedureNames = (String, Maybe Variable, [Variable])
 > type Procedure = (Maybe UnitVariable, [UnitVariable])
@@ -423,7 +423,7 @@ The indexing for switchScaleElems and moveElem is 1-based, in line with Data.Mat
 >          let resultVar = fmap (lookupUnitByName uenv) resultName
 >              argVars = fmap (lookupUnitByName uenv) argNames
 >          procedureEnv << (map toUpper name, (resultVar, argVars))
->     lookupUnitByName uenv v = maybe (UnitVariable 1) id $ lookup (map toUpper v) uenv
+>     lookupUnitByName uenv v = maybe (UnitVariable 1) fst $ lookup (map toUpper v) uenv
 >     f (Decl a s d t) =
 >       do
 >         let BaseType _ _ attrs _ _ = arrayElementType t
@@ -432,12 +432,15 @@ The indexing for switchScaleElems and moveElem is 1-based, in line with Data.Mat
 >         return $ Decl a s d' t
 >       where
 >         dm units (Var a s names, e) = do
->           let (VarName _ v, _) = head names
+>           let (VarName _ v, es) = head names
 >           system <- gets linearSystem
 >           let m = ncols (fst system) + 1
->           prepend unitVarEnv (map toUpper v, UnitVariable m)
 >           unitVarCats << unitVarCat v
 >           linearSystem =. extendConstraints units
+>           ms <- case toArrayType t es of
+>                   ArrayT _ bounds _ _ _ _ -> mapM (const $ fmap UnitVariable $ addCol Variable) bounds
+>                   _ -> return []
+>           prepend unitVarEnv (map toUpper v, (UnitVariable m, ms))
 >           mustEqual (return $ UnitVariable m) (inferExprUnits e)
 >           return (Var a { unitVar = m } s names, e)
 >         unitVarCat v
@@ -759,19 +762,22 @@ TODO: error handling in powerUnits
 >   do uenv <- gets unitVarEnv
 >      let (VarName _ v, args) = head names
 >      case lookup (map toUpper v) uenv of
->        -- variable (possibly array)?
->        Just uv -> inferArgUnits >> return uv
+>        -- array variable?
+>        Just (uv, uvs@(_:_)) -> inferArgUnits' uvs >> return uv
 >        -- function call?
 >        Nothing | not (null args) -> do uv <- anyUnits Temporary
 >                                        uvs <- inferArgUnits
 >                                        let uvs' = justArgUnits args uvs
 >                                        calls << (v, (Just uv, uvs'))
 >                                        return uv
+>        -- scalar variable or external function call?
+>        Just (uv, []) -> inferArgUnits >> return uv
 >        -- default specifier
 >        _ | v == "*" -> anyUnits Literal
 >        -- just bad code
 >        _ -> error $ "Undefined variable " ++ show v
 >   where inferArgUnits = sequence [mapM inferExprUnits exprs | (_, exprs) <- names]
+>         inferArgUnits' uvs = sequence [mustEqual (inferExprUnits expr) (return uv) | ((_, exprs), uv) <- zip names uvs, expr <- exprs]
 >         justArgUnits [NullExpr _ _] _ = []  -- zero-argument function call
 >         justArgUnits _ uvs = head uvs
 > inferExprUnits (Bin _ _ op e1 e2) = do let uv1 = inferExprUnits e1
@@ -814,7 +820,7 @@ TODO: error handling in powerUnits
 > inferForHeaderUnits :: (Variable, Expr a, Expr a, Expr a) -> State Lalala ()
 > inferForHeaderUnits (v, e1, e2, e3) =
 >   do uenv <- gets unitVarEnv
->      let Just uv = lookup (map toUpper v) uenv
+>      let Just (uv, []) = lookup (map toUpper v) uenv
 >      mustEqual (return uv) (inferExprUnits e1)
 >      mustEqual (return uv) (inferExprUnits e2)
 >      mustEqual (return uv) (inferExprUnits e3)
