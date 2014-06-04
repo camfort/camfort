@@ -196,6 +196,118 @@ The indexing for switchScaleElems and moveElem is 1-based, in line with Data.Mat
 >     n <- filter (\n -> matrix ! (n, m) /= 0) [1 .. nrows matrix]
 >     filter (\m -> matrix ! (n, m) /= 0) [1 .. ncols matrix]
 
+> addIntrinsics :: State Lalala ()
+> addIntrinsics =
+>   do mapM_ addPlain1ArgIntrinsic ["ABS", "ACHAR", "ADJUSTL", "ADJUSTR", "AIMAG", "AINT", "ALL", "ANINT", "ANY", "CEILING", "CHAR", "CONJG", "DBLE", "EPSILON", "FLOOR", "FRACTION", "HUGE", "IACHAR", "IALL", "IANY", "ICHAR", "INT", "IPARITY", "LOGICAL", "MAXEXPONENT", "MAXVAL", "MINEXPONENT", "MINVAL", "NEW_LINE", "NINT", "NORM2", "NOT", "NULL", "PARITY", "REAL", "RRSPACING", "SPACING", "SUM", "TINY", "TRANSPOSE", "TRIM"]
+>      mapM_ addPlain2ArgIntrinsic ["CMPLX", "DCOMPLX", "DIM", "HYPOT", "IAND", "IEOR", "IOR", "MAX", "MIN"]
+>      mapM_ addPlain1Arg1ExtraIntrinsic ["CSHIFT", "EOSHIFT", "IBCLR", "IBSET", "MOD", "MODULO", "NEAREST", "PACK", "REPEAT", "RESHAPE", "SHIFTA", "SHIFTL", "SHIFTR", "SIGN"]
+>      mapM_ addPlain2Arg1ExtraIntrinsic ["DSHIFTL", "DSHIFTR", "ISHFT", "ISHFTC", "MERGE", "MERGE_BITS"]
+>      mapM_ addProductIntrinsic ["DOT_PRODUCT", "DPROD", "MATMUL"]
+>      mapM_ addPowerIntrinsic ["SCALE", "SET_EXPONENT"]
+>      mapM_ addUnitlessIntrinsic ["ACOS", "ACOSH", "ASIN", "ASINH", "ATAN", "ATANH", "BESSEL_J0", "BESSEL_J1", "BESSEL_Y0", "BESSEL_Y1", "COS", "COSH", "ERF", "ERFC", "ERFC_SCALED", "EXP", "EXPONENT", "GAMMA", "LOG", "LOG10", "LOG_GAMMA", "PRODUCT", "SIN", "SINH", "TAN", "TANH"]
+>      mapM_ addUnitlessSubIntrinsic ["CPU_TIME", "RANDOM_NUMBER"]
+>      mapM_ addUnitlessResult0ArgIntrinsic ["COMMAND_ARGUMENT_COUNT", "COMPILER_OPTIONS", "COMPILER_VERSION"]
+>      mapM_ addUnitlessResult1ArgIntrinsic ["ALLOCATED", "ASSOCIATED", "BIT_SIZE", "COUNT", "DIGITS", "IS_IOSTAT_END", "IS_IOSTAT_EOR", "KIND", "LBOUND", "LCOBOUND", "LEADZ", "LEN", "LEN_TRIM", "MASKL", "MASKR", "MAXLOC", "MINLOC", "POPCOUNT", "POPPAR", "PRECISION", "PRESENT", "RADIX", "RANGE", "SELECTED_CHAR_KIND", "SELECTED_INT_KIND", "SELECTED_REAL_KIND", "SHAPE", "SIZE", "STORAGE_SIZE", "TRAILZ", "UBOUND", "UCOBOUND"]
+>      mapM_ addUnitlessResult2SameArgIntrinsic ["ATAN2", "BGE", "BGT", "BLE", "BLT", "INDEX", "LGE", "LGT", "LLE", "LLT", "SCAN", "VERIFY"]
+>      mapM_ addUnitlessResult2AnyArgIntrinsic ["BTEST", "EXTENDS_TYPE_OF", "SAME_TYPE_AS"]
+>      -- missing: ATOMIC_DEFINE, ATOMIC_REF, BESSEL_JN, BESSEL_YN, C_*, DATE_AND_TIME, EXECUTE_COMMAND_LINE, GET_COMMAND, GET_COMMAND_ARGUMENT, GET_ENVIRONMENT_VARIABLE, IBITS, any of the image stuff, MOVE_ALLOC, MVBITS, RANDOM_SEED, SPREAD, SYSTEM_CLOCK, TRANSFER, UNPACK
+
+> addPlain1ArgIntrinsic :: String -> State Lalala ()
+> addPlain1ArgIntrinsic name =
+>   do result <- anyUnits Variable
+>      arg <- anyUnits Argument
+>      mustEqual (return result) (return arg)
+>      procedureEnv << (name, (Just result, [arg]))
+
+> addPlain2ArgIntrinsic :: String -> State Lalala ()
+> addPlain2ArgIntrinsic name =
+>   do result <- anyUnits Variable
+>      arg1 <- anyUnits Argument
+>      arg2 <- anyUnits Argument
+>      mustEqual (return result) (return arg1)
+>      mustEqual (return result) (return arg2)
+>      procedureEnv << (name, (Just result, [arg1, arg2]))
+
+> addPlain1Arg1ExtraIntrinsic :: String -> State Lalala ()
+> addPlain1Arg1ExtraIntrinsic name =
+>   do result <- anyUnits Variable
+>      arg1 <- anyUnits Argument
+>      arg2 <- anyUnits Argument
+>      mustEqual (return result) (return arg1)
+>      procedureEnv << (name, (Just result, [arg1, arg2]))
+
+> addPlain2Arg1ExtraIntrinsic :: String -> State Lalala ()
+> addPlain2Arg1ExtraIntrinsic name =
+>   do result <- anyUnits Variable
+>      arg1 <- anyUnits Argument
+>      arg2 <- anyUnits Argument
+>      arg3 <- anyUnits Argument
+>      mustEqual (return result) (return arg1)
+>      mustEqual (return result) (return arg2)
+>      procedureEnv << (name, (Just result, [arg1, arg2, arg3]))
+
+> addProductIntrinsic :: String -> State Lalala ()
+> addProductIntrinsic name =
+>   do result <- anyUnits Variable
+>      arg1 <- anyUnits Argument
+>      arg2 <- anyUnits Argument
+>      temp <- mustAddUp (return arg1) (return arg2) 1 1
+>      mustEqual (return result) (return temp)
+>      procedureEnv << (name, (Just result, [arg1, arg2]))
+
+> addPowerIntrinsic :: String -> State Lalala ()
+> addPowerIntrinsic name =
+>   do result <- anyUnits Variable
+>      arg1 <- anyUnits Argument
+>      arg2 <- anyUnits Argument
+>      mustEqual (return result) (return arg1)
+>      mustEqual (return arg2) (return $ UnitVariable 1)
+>      procedureEnv << (name, (Just result, [arg1, arg2]))
+
+> addUnitlessIntrinsic :: String -> State Lalala ()
+> addUnitlessIntrinsic name =
+>   do result <- anyUnits Variable
+>      arg <- anyUnits Argument
+>      mustEqual (return result) (return $ UnitVariable 1)
+>      mustEqual (return arg) (return $ UnitVariable 1)
+>      procedureEnv << (name, (Just result, [arg]))
+
+> addUnitlessSubIntrinsic :: String -> State Lalala ()
+> addUnitlessSubIntrinsic name =
+>   do arg <- anyUnits Variable
+>      mustEqual (return arg) (return $ UnitVariable 1)
+>      procedureEnv << (name, (Nothing, [arg]))
+
+> addUnitlessResult0ArgIntrinsic :: String -> State Lalala ()
+> addUnitlessResult0ArgIntrinsic name =
+>   do result <- anyUnits Variable
+>      mustEqual (return result) (return $ UnitVariable 1)
+>      procedureEnv << (name, (Just result, []))
+
+> addUnitlessResult1ArgIntrinsic :: String -> State Lalala ()
+> addUnitlessResult1ArgIntrinsic name =
+>   do result <- anyUnits Variable
+>      arg <- anyUnits Argument
+>      mustEqual (return result) (return $ UnitVariable 1)
+>      procedureEnv << (name, (Just result, [arg]))
+
+> addUnitlessResult2AnyArgIntrinsic :: String -> State Lalala ()
+> addUnitlessResult2AnyArgIntrinsic name =
+>   do result <- anyUnits Variable
+>      arg1 <- anyUnits Argument
+>      arg2 <- anyUnits Argument
+>      mustEqual (return result) (return $ UnitVariable 1)
+>      procedureEnv << (name, (Just result, [arg1, arg2]))
+
+> addUnitlessResult2SameArgIntrinsic :: String -> State Lalala ()
+> addUnitlessResult2SameArgIntrinsic name =
+>   do result <- anyUnits Variable
+>      arg1 <- anyUnits Argument
+>      arg2 <- anyUnits Argument
+>      mustEqual (return result) (return $ UnitVariable 1)
+>      mustEqual (return arg1) (return arg2)
+>      procedureEnv << (name, (Just result, [arg1, arg2]))
+
 > inferUnits :: (Filename, Program Annotation) -> (Report, (Filename, Program Annotation))
 > inferUnits (fname, x) = (r, (fname, y))
 >   where (y, lalala) = runState (doInferUnits x) emptyLalala
@@ -205,7 +317,8 @@ The indexing for switchScaleElems and moveElem is 1-based, in line with Data.Mat
 > removeUnits (fname, x) = ("", (fname, doRemoveUnits x))
 
 > doInferUnits :: Program Annotation -> State Lalala (Program Annotation)
-> doInferUnits x = do x <- mapM inferUnitsInProgUnit x
+> doInferUnits x = do addIntrinsics
+>                     x <- mapM inferUnitsInProgUnit x
 >                     x <- inferInterproceduralUnits x
 >                     mapM (descendBiM' insertUnitsInBlock) x
 
