@@ -340,7 +340,7 @@ refactorDecl inp cursor d =
                          case d of 
                            (NullDecl _ _) -> 
                               do added <- get 
-                                 let diff = linesCovered ub lb
+                                 let diff = linesCovered ub lb 
                                  -- remove empty newlines here if extra lines have been added
                                  let (text, removed) = if added <= diff
                                                          then removeNewLines textOut added

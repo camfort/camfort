@@ -212,20 +212,20 @@ their AST, write these to the director
 >                                                          return $ x : xs'
 >                                                      else return $ xs'
 >                                                   
-> isFortran x = let ix = elemIndices '.' x
->               in if (length ix == 0) then False
->                  else case (Prelude.drop (Prelude.last ix) x) of 
->                         ".f" -> True
->                         ".f90" -> True
->                         ".f77" -> True
->                         _     -> False
+> isFortran x = elem (fileExt x) [".f", ".f90", ".f77", ".cmn", ".inc"]
 >               
->            
+> fileExt x = let ix = elemIndices '.' x
+>             in if (length ix == 0) then "" 
+>                else Prelude.drop (Prelude.last ix) x
 
 > pr  :: String -> IO (Program ())
 > pr f = let mode = ParseMode { parseFilename = f }
+>            selectedParser = case (fileExt f) of 
+>                             ".cmn" -> include_parser
+>                             ".inc" -> include_parser
+>                             _      -> parser
 >        in do inp <- readFile f
->              case (runParserWithMode mode parser inp) of
+>              case (runParserWithMode mode selectedParser inp) of
 >                (ParseOk p)       -> return $ p
 >                (ParseFailed l e) -> error e
 

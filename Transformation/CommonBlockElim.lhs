@@ -5,6 +5,7 @@
 
 > import Control.Monad
 
+> import Debug.Trace
 > import Data.Data
 > import Data.List
 > import Data.Ord
@@ -322,8 +323,8 @@ Extending calls version
 (transformBiM collectTCommons)
 
 
-
-> collectCommons :: Filename -> String -> (Block A) -> State (Report, [TLCommon A]) (Block A)
+  -- NEEDS TO BE BE GENERALISED SO THAT BLOCKS AND DECL lists Are possible
+> collectCommons :: Filename -> String -> Block A -> State (Report, [TLCommon A]) (Block A)
 > collectCommons fname pname b = 
 >     let tenv = typeEnv b
 >                     
@@ -343,14 +344,14 @@ Extending calls version
 >                  Nothing -> error $ "Variable " ++ (show v) ++ " is of an unknown type at: " ++ show sp
 >         typeCommonExprs (e:_) = error $ "Not expecting a non-variable expression in expression at: " ++ show (srcSpan e)
 
->     in transformBiM commons' b                           
+>     in (show pname) `trace` transformBiM commons' b                           
 
 > definitionSites :: [(Filename, Program A)] -> State (Report, [TLCommon A]) [(Filename, Program A)] 
 > definitionSites pss = let 
 >                           defs' :: Filename -> ProgUnit A -> State (Report, [TLCommon A]) (ProgUnit A)
 >                           defs' fname p = case (getSubName p) of
->                                             Just pname -> transformBiM (collectCommons fname pname) p
->                                             Nothing -> return $ p
+>                                             Just pname -> ("normal") `trace` transformBiM (collectCommons fname pname) p
+>                                             Nothing -> ("doing an include: " ++ (show fname)) `trace` transformBiM (collectCommons fname fname) p
 
 >                           -- defs' f (Sub _ _ _ (SubName _ n) _ b) rs = (concat rs) ++ [(f, (n, snd $ runState (collectTCommons' b) []))]
 >                           -- Don't support functions yet
