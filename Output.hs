@@ -251,15 +251,10 @@ lineCol x = (srcLine x, srcColumn x)
 
 takeBounds (l, u) inp = takeBounds' (lineCol l, lineCol u) [] inp 
 
-
--- dropNs is a flag to toggle dropping multiple '\n's
-
-
 takeBounds' ((ll, lc), (ul, uc)) tk inp  =
     if (ll == ul && lc == uc) || (ll > ul) then (Prelude.reverse tk, inp)
     else case inp of []             -> (Prelude.reverse tk, inp)
                      ([]:[])        -> (Prelude.reverse tk, inp)
-                     --([]:([]:ys)) | t && dropNs -> takeBounds'' ((ll+2, 0), (ul, uc)) ('\n':tk) ys 
                      ([]:ys)        -> takeBounds' ((ll+1, 0), (ul, uc)) ('\n':tk) ys
                      ((x:xs):ys)    -> takeBounds' ((ll, lc+1), (ul, uc)) (x:tk) (xs:ys) 
 
@@ -381,12 +376,18 @@ countLines (x:xs)    = countLines xs
     this should not happen with the usaage in 'refactorDecl' -}
 
 removeNewLines [] n = ([], 0)
-removeNewLines ('\n':xs) 0 = let (xs', n') = removeNewLines xs 0
-                             in ('\n':xs', 0)
-removeNewLines ('\n':xs) n = let (xs', n') = removeNewLines xs (n - 1)
-                             in (xs', n' + 1)
+
+-- Deal with CR LF in the same way as just LF 
+removeNewLines ('\r':('\n':('\r':('\n':xs)))) n = let (xs', n') = removeNewLines ('\r':'\n':xs) (n - 1)
+                                                   in (xs', n' + 1)
+
+removeNewLines ('\n':('\n':xs)) n = let (xs', n') = removeNewLines ('\n':xs) (n - 1)
+                                     in (xs', n' + 1)
 removeNewLines (x:xs) n = let (xs', n') = removeNewLines xs n
                           in (x:xs', n)
+
+--removeNewLines ('\n':xs) 0 = let (xs', n') = removeNewLines xs 0
+--                             in ('\n':xs', 0)
 
 
 {-

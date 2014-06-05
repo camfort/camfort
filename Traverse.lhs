@@ -20,6 +20,7 @@
 > import Generics.Deriving.Copoint
 > import GHC.Generics
 
+> import Control.Monad.Trans.Writer.Lazy
 
 > import Data.Generics.Zipper
 > import Data.Generics.Aliases
@@ -48,6 +49,12 @@ Data-type generic comonad-style traversal
 > extendBi :: (Biplate (from a) (to a), RComonad to) => (to a -> a) -> (from a) -> (from a)
 > extendBi f x = case biplate x of
 >                      (current, generate) -> generate $ strMap (rextend f) current
+
+> reduceCollect :: (Data s, Data t, Uniplate t) => (s -> Maybe a) -> t -> [a]
+> reduceCollect k x = execWriter (transformBiM (\y -> do case k y of 
+>                                                          Just x -> tell [x]
+>                                                          Nothing -> return ()
+>                                                        return y) x) 
 
 Data-type generic comonad-style traversal with zipper (contextual traversal)
                          

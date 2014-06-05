@@ -70,6 +70,12 @@ This is particularly useful if a whole line is being redacted from a source file
 
 > minaa (SrcLoc f l c) = (SrcLoc f (l-1) c)
 
+> nullLoc :: SrcLoc
+> nullLoc = SrcLoc "" 0 0
+
+> nullSpan :: SrcSpan
+> nullSpan = (nullLoc, nullLoc)
+
 Variable renaming
 
 > caml (x:xs) = (toUpper x) : xs

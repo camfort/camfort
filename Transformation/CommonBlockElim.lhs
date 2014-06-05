@@ -110,16 +110,32 @@ Todo: CallExpr, changing assignments
 >           concatUses :: Uses A -> Uses A -> Uses A
 >           concatUses (UseNil p) y      = y
 >           concatUses (Use p x us p') y = Use p x (UseNil p) p'
->                    
+
+>           inames :: Decl A -> Maybe String
+>           inames (Include _ (Con _ _ inc)) = Just inc
+>           inames _ = Nothing
+
+>           importIncludeCommons :: ProgUnit A -> ProgUnit A
+>           importIncludeCommons p = foldl (\p' iname -> ("Iname = " ++ iname) `trace` matchPUnitAlt iname p') p (reduceCollect inames p)
+
+>           matchPUnitAlt :: Filename -> ProgUnit A -> ProgUnit A
+>           matchPUnitAlt fname p = ("fname = " ++ fname ++ "\n" ++ (show ((lookups' fname) (lookups' fname tcrs)))) `trace` 
+>                                let tcrs' = (lookups' fname) (lookups' fname tcrs)
+>                                    srcloc = useSrcLoc p
+>                                    uses = mkUseStatements srcloc tcrs'
+>                                    p' = transformBi ((flip concatUses) uses) p
+>                                in removeDecls (map snd tcrs') p'
+
+>                                      
 >           matchPUnit :: Filename -> ProgUnit A -> ProgUnit A
->           matchPUnit f p = case getSubName p of
->                              Nothing -> p
->                              Just pname ->
->                                   let tcrs' = (lookups' pname) (lookups' f tcrs)
->                                       srcloc = useSrcLoc p
->                                       uses = mkUseStatements srcloc tcrs'
->                                       p' = transformBi ((flip concatUses) uses) p
->                                   in removeDecls (map snd tcrs') p'
+>           matchPUnit fname p = let pname = case getSubName p of
+>                                              Nothing -> fname -- If no subname is available, use the filename
+>                                              Just pname -> pname
+>                                    tcrs' = (lookups' pname) (lookups' fname tcrs)
+>                                    srcloc = useSrcLoc p
+>                                    uses = mkUseStatements srcloc tcrs'
+>                                    p' = transformBi ((flip concatUses) uses) p
+>                                in removeDecls (map snd tcrs') p'
 
 >           removeDecls :: [RenamerCoercer] -> ProgUnit A -> ProgUnit A
 >           removeDecls rcs p = transformBi (remDecl rcs) p
@@ -137,7 +153,7 @@ Todo: CallExpr, changing assignments
 >           remDecl _ d = d
 >                     
 
->       in each fps (\(f, p) -> (f, transformBi (matchPUnit f) p))
+>       in each fps (\(f, p) -> (f, map importIncludeCommons $ transformBi (matchPUnit f) p))
 
 
 > useSrcLoc :: ProgUnit A -> SrcLoc
@@ -317,13 +333,13 @@ Extending calls version
 >                                  else if (n > n') then GT else EQ
 
 
+{-
  collectTCommons :: [Program Annotation] -> State (TCommons Annotation) [Program Annotation]
  collectTCommons p = transformBiM collectTCommons' p    
-
 (transformBiM collectTCommons)
+-}
 
 
-  -- NEEDS TO BE BE GENERALISED SO THAT BLOCKS AND DECL lists Are possible
 > collectCommons :: Filename -> String -> Block A -> State (Report, [TLCommon A]) (Block A)
 > collectCommons fname pname b = 
 >     let tenv = typeEnv b
@@ -344,14 +360,25 @@ Extending calls version
 >                  Nothing -> error $ "Variable " ++ (show v) ++ " is of an unknown type at: " ++ show sp
 >         typeCommonExprs (e:_) = error $ "Not expecting a non-variable expression in expression at: " ++ show (srcSpan e)
 
->     in (show pname) `trace` transformBiM commons' b                           
+>     in transformBiM commons' b                           
 
 > definitionSites :: [(Filename, Program A)] -> State (Report, [TLCommon A]) [(Filename, Program A)] 
 > definitionSites pss = let 
 >                           defs' :: Filename -> ProgUnit A -> State (Report, [TLCommon A]) (ProgUnit A)
 >                           defs' fname p = case (getSubName p) of
->                                             Just pname -> ("normal") `trace` transformBiM (collectCommons fname pname) p
->                                             Nothing -> ("doing an include: " ++ (show fname)) `trace` transformBiM (collectCommons fname fname) p
+>                                             Just pname -> transformBiM (collectCommons fname pname) p
+>                                             Nothing -> case p of 
+>                                                          IncludeProg a sp ds -> 
+>                                                             -- ("doing an include: " ++ (show fname)) `trace`
+>                                                             let -- create dummy block
+>                                                                 a0 = unitAnnotation
+>                                                                 b = Block a (UseBlock (UseNil a0) nullLoc) 
+>                                                                             (ImplicitNull a0) sp ds
+>                                                                             (NullStmt a0 nullSpan)
+>                                                              in do (Block _ _ _ _ ds' _) <- transformBiM (collectCommons fname fname) b
+>                                                                    return $ IncludeProg a sp ds'
+>                                                          otherwise -> return p 
+
 
 >                           -- defs' f (Sub _ _ _ (SubName _ n) _ b) rs = (concat rs) ++ [(f, (n, snd $ runState (collectTCommons' b) []))]
 >                           -- Don't support functions yet
@@ -361,6 +388,7 @@ Extending calls version
 >                       in mapM (\(f, ps) -> do ps' <- mapM (transformBiM (defs' f)) ps
 >                                               return (f, ps')) pss
 
+{-
 -- Turn common blocks into type defs
 
  commonToTypeDefs :: String -> [(String, [Program Annotation])] -> IO Report
@@ -374,3 +402,4 @@ Extending calls version
  
  commonToTypeDefs' :: String -> (String, [Program Annotation]) -> [Decls]
  commonToTypeDefs' = undefined -- DerivedTypeDef p 
+-}
