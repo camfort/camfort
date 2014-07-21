@@ -48,6 +48,8 @@ type Variable = String
 
 type ProgName = String               -- Fortran program names
 
+type MeasureUnit = String
+
 data SubName p  = SubName p String   -- Fortran subroutine names
                  | NullSubName p
                  deriving (Show, Functor, Typeable, Data, Eq)
@@ -71,10 +73,10 @@ data ArgList  p = ArgList p (Expr p)
 
 type Program p = [ProgUnit p]
 
-             -- Prog type   (type of result)   name      args  body    use's  
+             -- Prog type   (type of result)   name      args  (result)  body    use's
 data ProgUnit  p = Main      p SrcSpan                      (SubName p)  (Arg p)  (Block p) [ProgUnit p]
                 | Sub        p SrcSpan (Maybe (BaseType p)) (SubName p)  (Arg p)  (Block p)
-                | Function   p SrcSpan (Maybe (BaseType p)) (SubName p)  (Arg p)  (Block p)
+                | Function   p SrcSpan (Maybe (BaseType p)) (SubName p)  (Arg p)  (Maybe (VarName p)) (Block p)
                 | Module     p SrcSpan                      (SubName p)  (Uses p) (Implicit p) (Decl p) [ProgUnit p]
                 | BlockData  p SrcSpan                      (SubName p)  (Uses p) (Implicit p) (Decl p)
                 | PSeq       p SrcSpan (ProgUnit p) (ProgUnit p)   -- sequence of programs
@@ -104,6 +106,7 @@ data Decl     p = Decl           p SrcSpan [(Expr p, Expr p)] (Type p)          
                 | Interface      p (Maybe (GSpec p)) [InterfaceSpec p]      -- interface declaration
                 | Common         p SrcSpan (Maybe String) [Expr p]
                 | DerivedTypeDef p SrcSpan (SubName p) [Attr p] [Attr p] [Decl p]  -- derivified
+                | MeasureUnitDef p SrcSpan [(MeasureUnit, MeasureUnitSpec p)]
                 | Include        p (Expr p)                                -- include stmt
                 | DSeq           p (Decl p) (Decl p)                       -- list of decls
                 | TextDecl       p String                                  -- cpp switches to carry over
@@ -132,6 +135,7 @@ data Attr     p = Parameter p
                 | Public p
                 | Private p
                 | Sequence p
+                | MeasureUnit p (MeasureUnitSpec p)
 --              | Dimension [(Expr,Expr)] -- in Type: ArrayT
               deriving (Show, Functor, Typeable, Data, Eq)
 			  
@@ -148,6 +152,16 @@ data IntentAttr p = In p
                   | InOut p
                     deriving (Show, Functor, Typeable, Data, Eq)
 				
+data MeasureUnitSpec p = UnitProduct p [(MeasureUnit, Fraction p)]
+                       | UnitQuotient p [(MeasureUnit, Fraction p)] [(MeasureUnit, Fraction p)]
+                       | UnitNone p
+                         deriving (Show, Functor, Typeable, Data, Eq)
+
+data Fraction p = IntegerConst p String
+                | FractionConst p String String
+                | NullFraction p
+                  deriving (Show, Functor, Typeable, Data, Eq)
+
 data Fortran  p = Assg p SrcSpan (Expr p) (Expr p) 
                 | For  p SrcSpan (VarName p) (Expr p) (Expr p) (Expr p) (Fortran p)
                 | FSeq p SrcSpan (Fortran p) (Fortran p)
@@ -266,17 +280,18 @@ instance GetSpan (Decl a) where
     getSpan (Common _ sp _ _)             = sp
     getSpan (Equivalence x sp _)          = sp
     getSpan (DerivedTypeDef x sp _ _ _ _) = sp
+    getSpan (MeasureUnitDef x sp _)       = sp
     getSpan _ = error "No span for non common/equiv/type/ null declarations"
 
 instance GetSpan (ProgUnit a) where
-    getSpan (Main x sp _ _ _ _)      = sp
-    getSpan (Sub x sp _ _ _ _)       = sp
-    getSpan (Function x sp _ _ _ _)  = sp
-    getSpan (Module x sp _ _ _ _ _ ) = sp
-    getSpan (BlockData x sp _ _ _ _) = sp
-    getSpan (PSeq x sp _ _)          = sp
-    getSpan (Prog x sp _)            = sp
-    getSpan (NullProg x sp)          = sp
+    getSpan (Main x sp _ _ _ _)       = sp
+    getSpan (Sub x sp _ _ _ _)        = sp
+    getSpan (Function x sp _ _ _ _ _) = sp
+    getSpan (Module x sp _ _ _ _ _ )  = sp
+    getSpan (BlockData x sp _ _ _ _)  = sp
+    getSpan (PSeq x sp _ _)           = sp
+    getSpan (Prog x sp _)             = sp
+    getSpan (NullProg x sp)           = sp
 
 instance GetSpan (Expr a) where
     getSpan (Con x sp _)        = sp

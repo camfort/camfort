@@ -107,6 +107,7 @@ their annotaitons (and source span information)
 >     (AnnotationFree (Public _)) == (AnnotationFree (Public _)) = True
 >     (AnnotationFree (Private _)) == (AnnotationFree (Private _)) = True
 >     (AnnotationFree (Sequence _)) == (AnnotationFree (Sequence _)) = True
+>     (AnnotationFree (MeasureUnit _ u)) == (AnnotationFree (MeasureUnit _ u')) = (af u) == (af u')
 >     _ == _ = False
 
 > instance Eq (AnnotationFree (BaseType p)) where
@@ -133,12 +134,26 @@ their annotaitons (and source span information)
 >     (AnnotationFree (InOut _)) == (AnnotationFree (InOut _)) = True
 >     _ == _ = False
 
+> instance Eq (AnnotationFree (MeasureUnitSpec p)) where
+>     (AnnotationFree (UnitProduct _ u)) == (AnnotationFree (UnitProduct _ u')) = (af u) == (af u')
+>     (AnnotationFree (UnitQuotient _ u1 u2)) == (AnnotationFree (UnitQuotient _ u1' u2')) =
+>        (af u1 == af u1') && (af u2 == af u2')
+>     (AnnotationFree (UnitNone _)) == (AnnotationFree (UnitNone _)) = True
+>     _ == _ = False
+
+> instance Eq (AnnotationFree (Fraction p)) where
+>     (AnnotationFree (IntegerConst _ n)) == (AnnotationFree (IntegerConst _ n')) = (af n) == (af n')
+>     (AnnotationFree (FractionConst _ p q)) == (AnnotationFree (FractionConst _ p' q')) =
+>        (af p == af p') && (af q == af q')
+>     (AnnotationFree (NullFraction _)) == (AnnotationFree (NullFraction _)) = True
+>     _ == _ = False
+
 Accessors
 
 > getSubName :: ProgUnit p -> Maybe String
 > getSubName (Main _ _ (SubName _ s) _ _ _) = Just s
 > getSubName (Sub _ _ _ (SubName _ s) _ _) = Just s
-> getSubName (Function _ _ _ (SubName _ s) _ _) = Just s
+> getSubName (Function _ _ _ (SubName _ s) _ _ _) = Just s
 > getSubName (Module _ _ (SubName _ s) _ _ _ _) = Just s
 > getSubName (BlockData _ _ (SubName _ s) _ _ _) = Just s
 > getSubName _ = Nothing

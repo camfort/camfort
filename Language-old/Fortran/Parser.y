@@ -162,11 +162,13 @@ import Data.Char (toLower)
  THEN 			{ Key "then" }
  TYPE 			{ Key "type" }
 -- UNFORMATED 		{ Key "unformatted" }
+ UNIT 			{ Key "unit" }
  USE 			{ Key "use" }
  VOLATILE 		{ Key "volatile" }
  WHERE 			{ Key "where" }
  WRITE 			{ Key "write" }
  ID                     { ID $$ }
+ '1'                    { Num "1" }
  NUM                    { Num $$ }
  TEXT                   { Text $$ }
 %%
@@ -257,8 +259,8 @@ function_subprogram :: { ProgUnit A0 }
 function_subprogram
 : srcloc function_stmt use_stmt_list implicit_part srcloc specification_part_top execution_part end_function_stmt newline0  {% do { s <- srcSpan $1;
                        s' <- srcSpan $5;
-                       name <- cmpNames (fst3 $2) $8 "function";
-		       return (Function () s (trd3 $2) name (snd3 $2) (Block () $3 $4 s' $6 $7)); } }
+                       name <- cmpNames (fst4 $2) $8 "function";
+		       return (Function () s (trd4 $2) name (snd4 $2) (frh4 $2) (Block () $3 $4 s' $6 $7)); } }
 
 block_data :: { ProgUnit A0 }
 block_data
@@ -437,7 +439,7 @@ char_len_param_value
 
 length_value :: { Expr A0 }
 length_value
-: srcloc NUM                                           {% srcSpan $1 >>= (\s -> return $ Con () s $2) }
+: srcloc num                                           {% srcSpan $1 >>= (\s -> return $ Con () s $2) }
 
 dim_spec :: { [(Expr A0, Expr A0)] }
 dim_spec
@@ -457,6 +459,7 @@ attr_spec
 | POINTER                                        { ([],[Pointer ()]) }
 | SAVE                                           { ([],[Save ()]) }
 | TARGET                                         { ([],[Target ()]) }
+| UNIT '(' unit_spec ')'                         { ([],[MeasureUnit () $3]) }
 | VOLATILE                                       { ([],[Volatile ()]) }
 
 access_spec :: { Attr A0 }
@@ -492,6 +495,34 @@ intent_spec
 | OUT           { Out () }
 | INOUT         { InOut () }
 
+unit_spec :: { MeasureUnitSpec A0 }
+unit_spec
+: mult_unit_spec '/' mult_unit_spec { UnitQuotient () $1 $3 }
+| mult_unit_spec                    { UnitProduct () $1 }
+| {- empty -}                       { UnitNone () }
+
+mult_unit_spec :: { [(MeasureUnit, Fraction A0)] }
+mult_unit_spec
+: mult_unit_spec power_unit_spec { $1++$2 }
+| power_unit_spec                { $1 }
+
+power_unit_spec :: { [(MeasureUnit, Fraction A0)] }
+power_unit_spec
+: ID '**' power_spec { [($1, $3)] }
+| ID                 { [($1, NullFraction ())] }
+| '1'                { [] }
+
+power_spec :: { Fraction A0 }
+power_spec
+: '(' signed_num '/' signed_num ')' { FractionConst () $2 $4 }
+| signed_num                        { IntegerConst () $1 }
+| '(' power_spec ')'                { $2 }
+
+signed_num :: { String }
+signed_num
+: '-' num { "-" ++ $2 }
+| num     { $1 }
+
 specification_stmt :: { Decl A0 }
 specification_stmt
   : access_stmt            { $1 }
@@ -508,6 +539,7 @@ specification_stmt
 --  | pointer_stmt           { $1 }
   | save_stmt              { $1 }
 --  | target_stmt            { $1 }
+  | unit_stmt              { $1 }
 
 save_stmt :: { Decl A0 }
  : SAVE { AccessStmt () (Save ()) [] }
@@ -544,13 +576,13 @@ end_interface_stmt
 interface_body :: { InterfaceSpec A0 } 
 interface_body
   : function_stmt  use_stmt_list implicit_part specification_part end_function_stmt 
-        {% do { name <- cmpNames (fst3 $1) $5 "interface declaration";
-	        return (FunctionInterface ()  name (snd3 $1) $2 $3 $4); }}
+        {% do { name <- cmpNames (fst4 $1) $5 "interface declaration";
+	        return (FunctionInterface ()  name (snd4 $1) $2 $3 $4); }}
 
   | function_stmt end_function_stmt  
-        {% do { name <- cmpNames (fst3 $1) $2 "interface declaration";
+        {% do { name <- cmpNames (fst4 $1) $2 "interface declaration";
 	        s <- srcSpanNull;
-	        return (FunctionInterface () name (snd3 $1) (UseNil ()) (ImplicitNull ()) (NullDecl () s)); } }       
+	        return (FunctionInterface () name (snd4 $1) (UseNil ()) (ImplicitNull ()) (NullDecl () s)); } }
 
   | subroutine_stmt use_stmt_list implicit_part specification_part end_subroutine_stmt
         {% do { name <- cmpNames (fst3 $1) $5 "interface declaration";
@@ -573,6 +605,18 @@ sub_name_list
 sub_name :: { SubName A0 }
 sub_name
   :  ID     { SubName () $1 }
+
+unit_stmt :: { Decl A0 }
+  : srcloc UNIT '::' unit_decl_list  {% srcSpan $1 >>= (\s -> return $ MeasureUnitDef () s $4) }
+
+unit_decl_list :: { [(MeasureUnit, MeasureUnitSpec A0)] }
+unit_decl_list
+  : unit_decl ',' unit_decl_list  { $1:$3 }
+  | unit_decl                     { [$1] }
+
+unit_decl :: { (MeasureUnit, MeasureUnitSpec A0) }
+unit_decl
+  : srcloc ID '=' unit_spec  {% srcSpan $1 >>= (\s -> return ($2, $4)) }
 
 derived_type_def :: { Decl A0 }
 derived_type_def
@@ -731,15 +775,15 @@ namelist_group_object_list
 subroutine_stmt :: { (SubName A0, Arg A0, Maybe (BaseType A0)) }
 subroutine_stmt
   : SUBROUTINE subname args_p        newline { ($2,$3,Nothing) }
-| SUBROUTINE subname srcloc        newline {% (srcSpan $3) >>= (\s -> return $ ($2,Arg () (NullArg ()) s,Nothing)) }
+  | SUBROUTINE subname srcloc        newline {% (srcSpan $3) >>= (\s -> return $ ($2,Arg () (NullArg ()) s,Nothing)) }
   | prefix SUBROUTINE subname args_p newline { ($3,$4,Just (fst3 $1)) }
   
-function_stmt :: { (SubName A0, Arg A0, Maybe (BaseType A0)) }
+function_stmt :: { (SubName A0, Arg A0, Maybe (BaseType A0), Maybe (VarName A0)) }
 function_stmt
-  : prefix FUNCTION subname args_p RESULT '(' id2 ')' newline { ($3,$4,Just (fst3 $1)) }
-  | prefix FUNCTION subname args_p                    newline { ($3,$4,Just (fst3 $1)) }
-  | FUNCTION subname args_p RESULT '(' id2 ')'        newline { ($2,$3,Nothing) }
-  | FUNCTION subname args_p                           newline { ($2,$3,Nothing) }
+  : prefix FUNCTION subname args_p RESULT '(' id2 ')' newline { ($3,$4,Just (fst3 $1),Just (VarName () $7)) }
+  | prefix FUNCTION subname args_p                    newline { ($3,$4,Just (fst3 $1),Nothing) }
+  | FUNCTION subname args_p RESULT '(' id2 ')'        newline { ($2,$3,Nothing,Just (VarName () $6)) }
+  | FUNCTION subname args_p                           newline { ($2,$3,Nothing,Nothing) }
   
 subname :: { SubName A0 }
 subname
@@ -916,7 +960,7 @@ constant
 
 literal_constant :: { Expr A0 }
 literal_constant 
-: srcloc NUM                      {% (srcSpan $1) >>= (\s -> return $ Con () s $2) }
+: srcloc num                      {% (srcSpan $1) >>= (\s -> return $ Con () s $2) }
 | srcloc ZLIT                     {% (srcSpan $1) >>= (\s -> return $ ConL () s 'z' $2) }
 | srcloc STR			  {% (srcSpan $1) >>= (\s -> return $ ConS () s $2) }
 | logical_literal_constant	  { $1 }
@@ -1005,7 +1049,7 @@ executable_construct_list
 
 executable_construct :: { Fortran A0 }
 executable_construct
-: srcloc NUM executable_construct                {% (srcSpan $1) >>= (\s -> return $ Label () s $2 $3) }
+: srcloc num executable_construct                {% (srcSpan $1) >>= (\s -> return $ Label () s $2 $3) }
 --  | case_construct
   | do_construct                                  { $1 }
   | if_construct                                  { $1 }
@@ -1197,8 +1241,8 @@ position_spec_list
 position_spec :: { Spec A0 }
 position_spec
 : expr                                          { NoSpec () $1 }
+ | srcloc UNIT '=' expr                         { Unit () $4 }
  | srcloc ID '=' expr                           {% case (map (toLower) $2) of
-                                                       "unit"   -> return (Unit   () $4)
                                                        "iostat" -> return (IOStat () $4)
                                                        s        ->  parseError ("incorrect name in spec list: " ++ s) }
 
@@ -1214,10 +1258,10 @@ close_spec_list
 close_spec :: { Spec A0 }
 close_spec
 : expr                                          { NoSpec () $1 }
+| UNIT '=' expr                                 { Unit () $3 }
 | ID '=' expr                          
 
 {% case (map (toLower) $1) of
-      "unit"   -> return (Unit   () $3)
       "iostat" -> return (IOStat () $3)
       "status" -> return (Status () $3)
       s        -> parseError ("incorrect name in spec list: " ++ s) }
@@ -1295,7 +1339,7 @@ forall_assignment_stmt_list
 
 goto_stmt :: { Fortran A0 }
 goto_stmt
-: srcloc GOTO NUM                                    {% srcSpan $1 >>= (\s -> return $ Goto () s $3) }
+: srcloc GOTO num                                    {% srcSpan $1 >>= (\s -> return $ Goto () s $3) }
 
 if_stmt :: { Fortran A0 }
 if_stmt
@@ -1318,9 +1362,9 @@ inquire_spec :: { Spec A0 }
 inquire_spec
 : expr                             { NoSpec () $1 }
 | READ '=' variable                { Read () $3 }
+| UNIT '=' variable                { Unit () $3 }
 | WRITE '=' variable               { WriteSp () $3 }
 | ID '=' expr                      {% case (map (toLower) $1) of
-                                            "unit"        -> return (Unit ()	  $3)
                                             "file"        -> return (File ()	  $3)
                                             "iostat"      -> return (IOStat ()     $3)
                                             "exist"       -> return (Exist ()      $3)
@@ -1389,8 +1433,8 @@ connect_spec_list
 connect_spec :: { Spec A0 }
 connect_spec
 : expr                    { NoSpec () $1 }
+| UNIT '=' expr           { Unit () $3 }
 | ID '=' expr             {% case (map (toLower) $1) of
-                                          "unit"     -> return (Unit () $3)  
                                           "iostat"   -> return (IOStat () $3)
                                           "file"     -> return (File () $3)
                                           "status"   -> return (Status () $3)
@@ -1472,8 +1516,8 @@ io_control_spec
 
 io_control_spec_id :: { Spec A0 }
 : variable                               { NoSpec () $1 }
+--| UNIT '=' format                      { Unit () $3 }
 --| ID '=' format                          {% case (map (toLower) $1) of
---                                                     "unit"    -> return (Unit () $3)
 --                                                     "fmt"     -> return (FMT () $3)
 --                                                     "rec"     -> return (Rec () $3)
 --                                                     "advance" -> return (Advance () $3)
@@ -1503,7 +1547,12 @@ input_item
 
 label :: { Expr A0 }
 label
-: srcloc NUM                       {% (srcSpan $1) >>= (\s -> return $ Con () s $2) }
+: srcloc num                       {% (srcSpan $1) >>= (\s -> return $ Con () s $2) }
+
+num :: { String }
+num
+: NUM { $1 }
+| '1' { "1" }
 
 --internal_file_unit :: { Expr A0 }
 --internal_file_unit

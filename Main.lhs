@@ -17,6 +17,7 @@
 > import Transformation.CommonBlockElim
 > import Transformation.EquivalenceElim
 > import Transformation.DerivedTypeIntro
+> import Transformation.Units
 
 > import Analysis.Types
 > import Analysis.Loops
@@ -42,7 +43,9 @@ Register all availble refactorings and analyses
 >      ("commonArg", (commonToArgs, "common block elimination (to parameter passing)")),
 >      ("equivalence", (equivalences, "equivalence elimination")),
 >      ("dataType", (typeStructuring, "derived data type introduction")),
->      ("dead", (dead, "dead-code elimination"))]
+>      ("dead", (dead, "dead-code elimination")),
+>      ("units", (units, "unit-of-measure inference")),
+>      ("removeUnits", (unitRemoval, "unit-of-measure removal"))]
 >            
 > analyses = 
 >     [("lva", (lvaA, "live-variable analysis")),
@@ -104,6 +107,12 @@ Wrappers on all of the features
 > equivalences inDir excludes outDir =
 >            do putStrLn $ "Refactoring equivalences blocks for source in directory " ++ show inDir ++ "\n"
 >               doRefactor (mapM refactorEquivalences) inDir excludes outDir
+
+> units d = do putStrLn $ "Inferring units for source in directory " ++ show d ++ "\n"
+>              doRefactor (mapM inferUnits) d
+
+> unitRemoval d = do putStrLn $ "Removing units for source in directory " ++ show d ++ "\n"
+>                    doRefactor (mapM removeUnits) d
 
 
 General analysis/refactor builders
