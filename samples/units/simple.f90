@@ -1,6 +1,5 @@
 program simple
   implicit none
-  unit :: m, s
 
   real, unit(m)   :: x
   real, unit(s)   :: t
