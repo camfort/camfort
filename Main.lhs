@@ -17,7 +17,7 @@
 > import Transformation.CommonBlockElim
 > import Transformation.EquivalenceElim
 > import Transformation.DerivedTypeIntro
-> import Transformation.Units
+> import Extensions.Units
 
 > import Analysis.Types
 > import Analysis.Loops
@@ -108,11 +108,13 @@ Wrappers on all of the features
 >            do putStrLn $ "Refactoring equivalences blocks for source in directory " ++ show inDir ++ "\n"
 >               doRefactor (mapM refactorEquivalences) inDir excludes outDir
 
-> units d = do putStrLn $ "Inferring units for source in directory " ++ show d ++ "\n"
->              doRefactor (mapM inferUnits) d
+> units inDir excludes outDir = 
+>           do putStrLn $ "Inferring units for source in directory " ++ show inDir ++ "\n"
+>              doRefactor (mapM inferUnits) inDir excludes outDir
 
-> unitRemoval d = do putStrLn $ "Removing units for source in directory " ++ show d ++ "\n"
->                    doRefactor (mapM removeUnits) d
+> unitRemoval inDir excludes outDir = 
+>           do putStrLn $ "Removing units for source in directory " ++ show inDir ++ "\n"
+>              doRefactor (mapM removeUnits) inDir excludes outDir
 
 
 General analysis/refactor builders

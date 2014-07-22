@@ -150,6 +150,12 @@ instance OutputG (GSpec p) Alt2 where
 instance OutputG (Attr p) Alt2 where
     outputG = outputF
 
+instance OutputG (Fraction p) Alt2 where
+    outputG = outputF
+
+instance OutputG (MeasureUnitSpec p) Alt2 where
+    outputG = outputF
+
 instance (OutputG (DataForm p) Alt2, OutputIndG (Fortran p) Alt2, OutputG p Alt2, Indentor (Fortran p), Indentor (Decl p)) => OutputG (Block p) Alt2 where
     outputG = outputF
 
