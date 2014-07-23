@@ -82,7 +82,8 @@ Data.Label.mkLabels [''UnitEnv]
 
 infix 2 <<
 (<<) :: MonadState f m => Lens (->) f [o] -> o -> m ()
-(<<) lens o = lens =. (++ [o])
+(<<) lens o = lens =. (o:)
+--(<<) lens o = lens =. (++ [o])
 
 prepend :: MonadState f m => Lens (->) f [o] -> o -> m ()
 prepend lens o = lens =. (o:)
@@ -92,9 +93,6 @@ descendBiM' f x = descendBiM f x
 
 inverse :: [Int] -> [Int]
 inverse perm = [j + 1 | Just j <- map (flip elemIndex perm) [1 .. length perm]]
-
-unique :: Eq a => [a] -> [a]
-unique = map head . group
 
 fixValue :: Eq a => (a -> a) -> a -> a
 fixValue f x = snd $ until (uncurry (==)) (\(x, y) -> (y, f y)) (x, f x)
@@ -112,6 +110,16 @@ moveElem i j list
   | otherwise = a ++ b
                 where (lj, rj) = splitAt j list
                       (a, _:b) = splitAt (i - 1) (lj ++ list !! (i - 1) : rj)
+
+moveElem' :: Int -> Int -> [a] -> [a]
+moveElem' i j []             = []
+moveElem' i j xs | i > j     = moveElem j i xs
+                 | otherwise = moveElem' i j xs Nothing
+                                  where moveElem' 1    1 ys     Nothing  = ys 
+                                        moveElem' 1    j (x:xs) Nothing  = moveElem' 1 j xs (Just x)
+                                        moveElem' 1    j (x:xs) (Just z) = x : moveElem' 1 (j - 1) xs (Just z)
+                                        moveElem' 1    1 ys     (Just z) = z : ys
+                                        moveElem' i    j (x:xs) Nothing  = x : moveElem' (i - 1) j xs Nothing
 
 incrElem :: Num a => a -> (Int, Int) -> Matrix a -> Matrix a
 incrElem value pos matrix = setElem (matrix ! pos + value) pos matrix
@@ -190,7 +198,7 @@ checkUnderdetermined' ucats system@(matrix, vector) n
 
 propagateUnderdetermined :: Matrix Rational -> [Int] -> [Int]
 propagateUnderdetermined matrix list =
-  unique $ sort $ do
+  nub $ do
     m <- list
     n <- filter (\n -> matrix ! (n, m) /= 0) [1 .. nrows matrix]
     filter (\m -> matrix ! (n, m) /= 0) [1 .. ncols matrix]
@@ -680,13 +688,13 @@ reorderColumns'' m k
 
 data BinOpKind = AddOp | MulOp | DivOp | PowerOp | LogicOp | RelOp
 binOpKind :: BinOp a -> BinOpKind
-binOpKind (Plus _) = AddOp
+binOpKind (Plus _)  = AddOp
 binOpKind (Minus _) = AddOp
-binOpKind (Mul _) = MulOp
-binOpKind (Div _) = DivOp
-binOpKind (Or _) = LogicOp
-binOpKind (And _) = LogicOp
-binOpKind (Concat _) = AddOp
+binOpKind (Mul _)   = MulOp
+binOpKind (Div _)   = DivOp
+binOpKind (Or _)    = LogicOp
+binOpKind (And _)   = LogicOp
+binOpKind (Concat _)= AddOp
 binOpKind (Power _) = PowerOp
 binOpKind (RelEQ _) = RelOp
 binOpKind (RelNE _) = RelOp
