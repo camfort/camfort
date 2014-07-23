@@ -21,9 +21,12 @@ import Analysis.Types
 import Transformation.Syntax
 import Language.Fortran
 
+import qualified Debug.Trace as D
+
 import Helpers
 
-data UnitConstant = Unitful [(MeasureUnit, Rational)] | Unitless Rational deriving Eq
+
+data UnitConstant = Unitful [(MeasureUnit, Rational)] | Unitless Rational deriving (Eq, Show)
 trim = filter $ \(unit, r) -> r /= 0
 
 {- Treat 'UnitConstant's as numbers -}
@@ -64,15 +67,15 @@ type ProcedureEnv = [(String, Procedure)]
 type LinearSystem = (Matrix Rational, [UnitConstant])
 
 data UnitEnv = UnitEnv {
-  _report :: [String],
-  _unitVarEnv :: UnitVarEnv,
-  _derivedUnitEnv :: DerivedUnitEnv,
-  _procedureEnv :: ProcedureEnv,
-  _calls :: ProcedureEnv,
-  _unitVarCats :: [UnitVarCategory],
-  _reorderedCols :: [Int],
+  _report              :: [String],
+  _unitVarEnv          :: UnitVarEnv,
+  _derivedUnitEnv      :: DerivedUnitEnv,
+  _procedureEnv        :: ProcedureEnv,
+  _calls               :: ProcedureEnv,
+  _unitVarCats         :: [UnitVarCategory],
+  _reorderedCols       :: [Int],
   _underdeterminedCols :: [Int],
-  _linearSystem :: LinearSystem
+  _linearSystem        :: LinearSystem
 }
 emptyUnitEnv = UnitEnv [] [] [] [] [] [Magic] [] [] (fromLists [[1]], [Unitful []])
 Data.Label.mkLabels [''UnitEnv]
@@ -84,17 +87,8 @@ infix 2 <<
 prepend :: MonadState f m => Lens (->) f [o] -> o -> m ()
 prepend lens o = lens =. (o:)
 
-descendBi' :: (Data (from a), Data (to a)) => (to a -> to a) -> from a -> from a
-descendBi' f x = descendBi f x
-
 descendBiM' :: (Monad m, Data (from a), Data (to a)) => (to a -> m (to a)) -> from a -> m (from a)
 descendBiM' f x = descendBiM f x
-
-transformBi' :: (Data (from a), Data (to a)) => (to a -> to a) -> from a -> from a
-transformBi' f x = transformBi f x
-
-transformBiM' :: (Monad m, Data (from a), Data (to a)) => (to a -> m (to a)) -> from a -> m (from a)
-transformBiM' f x = transformBiM f x
 
 inverse :: [Int] -> [Int]
 inverse perm = [j + 1 | Just j <- map (flip elemIndex perm) [1 .. length perm]]
@@ -202,133 +196,129 @@ propagateUnderdetermined matrix list =
     filter (\m -> matrix ! (n, m) /= 0) [1 .. ncols matrix]
 
 addIntrinsics :: State UnitEnv ()
-addIntrinsics =
-  do mapM_ addPlain1ArgIntrinsic ["ABS", "ACHAR", "ADJUSTL", "ADJUSTR", "AIMAG", "AINT", "ALL", "ANINT", "ANY", "CEILING", "CHAR", "CONJG", "DBLE", "EPSILON", "FLOOR", "FRACTION", "HUGE", "IACHAR", "IALL", "IANY", "ICHAR", "INT", "IPARITY", "LOGICAL", "MAXEXPONENT", "MAXVAL", "MINEXPONENT", "MINVAL", "NEW_LINE", "NINT", "NORM2", "NOT", "NULL", "PARITY", "REAL", "RRSPACING", "SPACING", "SUM", "TINY", "TRANSPOSE", "TRIM"]
+addIntrinsics = 
+  do 
+     -- mapM_ addPlain1ArgIntrinsic ["ABS", "ACHAR", "ADJUSTL", "ADJUSTR", "AIMAG", "AINT", "ALL", "ANINT", "ANY", "CEILING", "CHAR", "CONJG", "DBLE", "EPSILON", "FLOOR", "FRACTION", "HUGE", "IACHAR", "IALL", "IANY", "ICHAR", "INT", "IPARITY", "LOGICAL", "MAXEXPONENT", "MAXVAL", "MINEXPONENT"] -- , "MINVAL", "NEW_LINE", "NINT", "NORM2", "NOT", "NULL", "PARITY", "REAL", "RRSPACING", "SPACING", "SUM", "TINY", "TRANSPOSE", "TRIM"]
+{-
      mapM_ addPlain2ArgIntrinsic ["CMPLX", "DCOMPLX", "DIM", "HYPOT", "IAND", "IEOR", "IOR", "MAX", "MIN"]
      mapM_ addPlain1Arg1ExtraIntrinsic ["CSHIFT", "EOSHIFT", "IBCLR", "IBSET", "MOD", "MODULO", "NEAREST", "PACK", "REPEAT", "RESHAPE", "SHIFTA", "SHIFTL", "SHIFTR", "SIGN"]
      mapM_ addPlain2Arg1ExtraIntrinsic ["DSHIFTL", "DSHIFTR", "ISHFT", "ISHFTC", "MERGE", "MERGE_BITS"]
-     mapM_ addProductIntrinsic ["DOT_PRODUCT", "DPROD", "MATMUL"]
+     mapM_ addProductIntrinsic ["DOT_PRODUCT", "DPROD", "MATMUL"]    
      mapM_ addPowerIntrinsic ["SCALE", "SET_EXPONENT"]
      mapM_ addUnitlessIntrinsic ["ACOS", "ACOSH", "ASIN", "ASINH", "ATAN", "ATANH", "BESSEL_J0", "BESSEL_J1", "BESSEL_Y0", "BESSEL_Y1", "COS", "COSH", "ERF", "ERFC", "ERFC_SCALED", "EXP", "EXPONENT", "GAMMA", "LOG", "LOG10", "LOG_GAMMA", "PRODUCT", "SIN", "SINH", "TAN", "TANH"]
      mapM_ addUnitlessSubIntrinsic ["CPU_TIME", "RANDOM_NUMBER"]
      mapM_ addUnitlessResult0ArgIntrinsic ["COMMAND_ARGUMENT_COUNT", "COMPILER_OPTIONS", "COMPILER_VERSION"]
      mapM_ addUnitlessResult1ArgIntrinsic ["ALLOCATED", "ASSOCIATED", "BIT_SIZE", "COUNT", "DIGITS", "IS_IOSTAT_END", "IS_IOSTAT_EOR", "KIND", "LBOUND", "LCOBOUND", "LEADZ", "LEN", "LEN_TRIM", "MASKL", "MASKR", "MAXLOC", "MINLOC", "POPCOUNT", "POPPAR", "PRECISION", "PRESENT", "RADIX", "RANGE", "SELECTED_CHAR_KIND", "SELECTED_INT_KIND", "SELECTED_REAL_KIND", "SHAPE", "SIZE", "STORAGE_SIZE", "TRAILZ", "UBOUND", "UCOBOUND"]
-     mapM_ addUnitlessResult2SameArgIntrinsic ["ATAN2", "BGE", "BGT", "BLE", "BLT", "INDEX", "LGE", "LGT", "LLE", "LLT", "SCAN", "VERIFY"]
-     mapM_ addUnitlessResult2AnyArgIntrinsic ["BTEST", "EXTENDS_TYPE_OF", "SAME_TYPE_AS"]
+     mapM_ addUnitlessResult2SameArgIntrinsic ["ATAN2", "BGE", "BGT", "BLE", "BLT", "INDEX", "LGE", "LGT", "LLE", "LLT", "SCAN", "VERIFY"] 
+ -}
+     -- mapM_ addUnitlessResult2AnyArgIntrinsic ["BTEST", "EXTENDS_TYPE_OF", "SAME_TYPE_AS"]
      -- missing: ATOMIC_DEFINE, ATOMIC_REF, BESSEL_JN, BESSEL_YN, C_*, DATE_AND_TIME, EXECUTE_COMMAND_LINE, GET_COMMAND, GET_COMMAND_ARGUMENT, GET_ENVIRONMENT_VARIABLE, IBITS, any of the image stuff, MOVE_ALLOC, MVBITS, RANDOM_SEED, SPREAD, SYSTEM_CLOCK, TRANSFER, UNPACK
+     return ()
+
+{- [A] Various helpers for adding information about procedures to the type system -}
 
 addPlain1ArgIntrinsic :: String -> State UnitEnv ()
 addPlain1ArgIntrinsic name =
   do result <- anyUnits Variable
-     arg <- anyUnits Argument
-     mustEqual (return result) (return arg)
+     arg    <- anyUnits Argument
+     mustEqual result arg
      procedureEnv << (name, (Just result, [arg]))
 
 addPlain2ArgIntrinsic :: String -> State UnitEnv ()
 addPlain2ArgIntrinsic name =
   do result <- anyUnits Variable
-     arg1 <- anyUnits Argument
-     arg2 <- anyUnits Argument
-     mustEqual (return result) (return arg1)
-     mustEqual (return result) (return arg2)
+     arg1  <- anyUnits Argument
+     arg2  <- anyUnits Argument
+     mustEqual result arg1
+     mustEqual result arg2
      procedureEnv << (name, (Just result, [arg1, arg2]))
 
 addPlain1Arg1ExtraIntrinsic :: String -> State UnitEnv ()
 addPlain1Arg1ExtraIntrinsic name =
   do result <- anyUnits Variable
-     arg1 <- anyUnits Argument
-     arg2 <- anyUnits Argument
-     mustEqual (return result) (return arg1)
+     arg1   <- anyUnits Argument
+     arg2   <- anyUnits Argument
+     mustEqual result arg1
      procedureEnv << (name, (Just result, [arg1, arg2]))
 
 addPlain2Arg1ExtraIntrinsic :: String -> State UnitEnv ()
 addPlain2Arg1ExtraIntrinsic name =
   do result <- anyUnits Variable
-     arg1 <- anyUnits Argument
-     arg2 <- anyUnits Argument
-     arg3 <- anyUnits Argument
-     mustEqual (return result) (return arg1)
-     mustEqual (return result) (return arg2)
+     arg1   <- anyUnits Argument
+     arg2   <- anyUnits Argument
+     arg3   <- anyUnits Argument
+     mustEqual result arg1
+     mustEqual result arg2
      procedureEnv << (name, (Just result, [arg1, arg2, arg3]))
 
 addProductIntrinsic :: String -> State UnitEnv ()
 addProductIntrinsic name =
   do result <- anyUnits Variable
-     arg1 <- anyUnits Argument
-     arg2 <- anyUnits Argument
-     temp <- mustAddUp (return arg1) (return arg2) 1 1
-     mustEqual (return result) (return temp)
+     arg1   <- anyUnits Argument
+     arg2   <- anyUnits Argument
+     temp   <- mustAddUp arg1 arg2 1 1
+     mustEqual result temp
      procedureEnv << (name, (Just result, [arg1, arg2]))
 
 addPowerIntrinsic :: String -> State UnitEnv ()
 addPowerIntrinsic name =
   do result <- anyUnits Variable
-     arg1 <- anyUnits Argument
-     arg2 <- anyUnits Argument
-     mustEqual (return result) (return arg1)
-     mustEqual (return arg2) (return $ UnitVariable 1)
+     arg1   <- anyUnits Argument
+     arg2   <- anyUnits Argument
+     mustEqual result arg1
+     mustEqual arg2 (UnitVariable 1)
      procedureEnv << (name, (Just result, [arg1, arg2]))
 
 addUnitlessIntrinsic :: String -> State UnitEnv ()
 addUnitlessIntrinsic name =
   do result <- anyUnits Variable
-     arg <- anyUnits Argument
-     mustEqual (return result) (return $ UnitVariable 1)
-     mustEqual (return arg) (return $ UnitVariable 1)
+     arg    <- anyUnits Argument
+     mustEqual result (UnitVariable 1)
+     mustEqual arg (UnitVariable 1)
      procedureEnv << (name, (Just result, [arg]))
 
 addUnitlessSubIntrinsic :: String -> State UnitEnv ()
 addUnitlessSubIntrinsic name =
   do arg <- anyUnits Variable
-     mustEqual (return arg) (return $ UnitVariable 1)
+     mustEqual arg (UnitVariable 1)
      procedureEnv << (name, (Nothing, [arg]))
 
 addUnitlessResult0ArgIntrinsic :: String -> State UnitEnv ()
 addUnitlessResult0ArgIntrinsic name =
   do result <- anyUnits Variable
-     mustEqual (return result) (return $ UnitVariable 1)
+     mustEqual result (UnitVariable 1)
      procedureEnv << (name, (Just result, []))
 
 addUnitlessResult1ArgIntrinsic :: String -> State UnitEnv ()
 addUnitlessResult1ArgIntrinsic name =
   do result <- anyUnits Variable
      arg <- anyUnits Argument
-     mustEqual (return result) (return $ UnitVariable 1)
+     mustEqual result (UnitVariable 1)
      procedureEnv << (name, (Just result, [arg]))
 
 addUnitlessResult2AnyArgIntrinsic :: String -> State UnitEnv ()
 addUnitlessResult2AnyArgIntrinsic name =
   do result <- anyUnits Variable
-     arg1 <- anyUnits Argument
-     arg2 <- anyUnits Argument
-     mustEqual (return result) (return $ UnitVariable 1)
+     arg1   <- anyUnits Argument
+     arg2   <- anyUnits Argument
+     mustEqual result (UnitVariable 1)
      procedureEnv << (name, (Just result, [arg1, arg2]))
 
 addUnitlessResult2SameArgIntrinsic :: String -> State UnitEnv ()
 addUnitlessResult2SameArgIntrinsic name =
   do result <- anyUnits Variable
-     arg1 <- anyUnits Argument
-     arg2 <- anyUnits Argument
-     mustEqual (return result) (return $ UnitVariable 1)
-     mustEqual (return arg1) (return arg2)
+     arg1   <- anyUnits Argument
+     arg2   <- anyUnits Argument
+     mustEqual result (UnitVariable 1)
+     mustEqual arg1 arg2
      procedureEnv << (name, (Just result, [arg1, arg2]))
 
-inferUnits :: (Filename, Program Annotation) -> (Report, (Filename, Program Annotation))
-inferUnits (fname, x) = (r, (fname, y))
-  where (y, lalala) = runState (doInferUnits x) emptyUnitEnv
-        r = concat [fname ++ ": " ++ r ++ "\n" | r <- Data.Label.get report lalala]
 
 removeUnits :: (Filename, Program Annotation) -> (Report, (Filename, Program Annotation))
 removeUnits (fname, x) = ("", (fname, doRemoveUnits x))
 
-doInferUnits :: Program Annotation -> State UnitEnv (Program Annotation)
-doInferUnits x = do addIntrinsics
-                    x <- mapM inferUnitsInProgUnit x
-                    x <- inferInterproceduralUnits x
-                    mapM (descendBiM' insertUnitsInBlock) x
-
 doRemoveUnits :: Program Annotation -> Program Annotation
-doRemoveUnits = map (descendBi' removeUnitsInBlock)
+doRemoveUnits = map (descendBi removeUnitsInBlock)
 
 inferUnitsInProgUnit :: ProgUnit Annotation -> State UnitEnv (ProgUnit Annotation)
 inferUnitsInProgUnit x =
@@ -447,7 +437,8 @@ enterDecls x proc =
                   ArrayT _ bounds _ _ _ _ -> mapM (const $ fmap UnitVariable $ addCol Variable) bounds
                   _ -> return []
           prepend unitVarEnv (map toUpper v, (UnitVariable m, ms))
-          mustEqual (return $ UnitVariable m) (inferExprUnits e)
+          uv <- inferExprUnits e
+          mustEqual (UnitVariable m) uv
           return (Var a { unitVar = m } s names, e)
         unitVarCat v
           | Just (n, r, args) <- proc, v `elem` args = Argument
@@ -466,12 +457,23 @@ enterDecls x proc =
              derivedUnitEnv << (map toUpper name, unit)
     f x = return x
 
+inferUnits :: (Filename, Program Annotation) -> (Report, (Filename, Program Annotation))
+inferUnits (fname, x) = (show $ (_linearSystem env, length $ snd $ _linearSystem env)) `D.trace` (r, (fname, y))
+  where (y, env) = runState (doInferUnits x) emptyUnitEnv
+        r = concat [fname ++ ": " ++ r ++ "\n" | r <- Data.Label.get report env]
+
+doInferUnits :: Program Annotation -> State UnitEnv (Program Annotation)
+doInferUnits x = do addIntrinsics
+                    y <- mapM inferUnitsInProgUnit x
+                    z <- inferInterproceduralUnits y
+                    mapM (descendBiM' insertUnitsInBlock) z
+
 insertUnitsInBlock :: Block Annotation -> State UnitEnv (Block Annotation)
-insertUnitsInBlock x = do lalala <- get
-                          return $ transformBi' (insertUnits lalala) x
+insertUnitsInBlock x = do env <- get
+                          return $ transformBi (insertUnits env) x
 
 removeUnitsInBlock :: Block Annotation -> Block Annotation
-removeUnitsInBlock = transformBi' deleteUnits
+removeUnitsInBlock = transformBi deleteUnits
 
 lookupUnit :: [UnitVarCategory] -> [Int] -> LinearSystem -> Int -> Maybe UnitConstant
 lookupUnit ucats badCols system@(matrix, vector) m =
@@ -490,12 +492,12 @@ lookupUnit' ucats badCols (matrix, vector) m n
         ms' = filter (\m -> matrix ! (n, m) /= 0) [1 .. ncols matrix]
 
 insertUnits :: UnitEnv -> Decl Annotation -> Decl Annotation
-insertUnits lalala (Decl a sp@(s1, s2) d t) | not (pRefactored a || hasUnits t || types == [t]) =
+insertUnits env (Decl a sp@(s1, s2) d t) | not (pRefactored a || hasUnits t || types == [t]) =
   DSeq a (NullDecl a' sp'') (foldr1 (DSeq a) decls)
-  where system = Data.Label.get linearSystem lalala
-        order = Data.Label.get reorderedCols lalala
-        ucats = Data.Label.get unitVarCats lalala
-        badCols = Data.Label.get underdeterminedCols lalala
+  where system = Data.Label.get linearSystem env
+        order = Data.Label.get reorderedCols env
+        ucats = Data.Label.get unitVarCats env
+        badCols = Data.Label.get underdeterminedCols env
         unitVar' (Var a' _ _, _, _) = realColumn order $ UnitVariable $ unitVar a'
         sameUnits = (==) `on` (lookupUnit ucats badCols system . unitVar')
         groups = groupBy sameUnits d
@@ -714,43 +716,38 @@ addRow' uc =
 liftUnitEnv :: (Matrix Rational -> Matrix Rational) -> UnitEnv -> UnitEnv
 liftUnitEnv f = Data.Label.modify linearSystem $ \(matrix, vector) -> (f matrix, vector)
 
-mustEqual :: State UnitEnv UnitVariable -> State UnitEnv UnitVariable -> State UnitEnv UnitVariable
-mustEqual uvm1 uvm2 =
-  do UnitVariable uv1 <- uvm1
-     UnitVariable uv2 <- uvm2
-     n <- addRow
+mustEqual :: UnitVariable -> UnitVariable -> State UnitEnv UnitVariable
+mustEqual (UnitVariable uv1) (UnitVariable uv2) = 
+  do n <- addRow
      modify $ liftUnitEnv $ incrElem (-1) (n, uv1) . incrElem 1 (n, uv2)
      return $ UnitVariable uv1
 
-mustAddUp :: State UnitEnv UnitVariable -> State UnitEnv UnitVariable -> Rational -> Rational -> State UnitEnv UnitVariable
-mustAddUp uvm1 uvm2 k1 k2 =
+mustAddUp :: UnitVariable -> UnitVariable -> Rational -> Rational -> State UnitEnv UnitVariable
+mustAddUp (UnitVariable uv1) (UnitVariable uv2) k1 k2 =
   do m <- addCol Temporary
-     UnitVariable uv1 <- uvm1
-     UnitVariable uv2 <- uvm2
      n <- addRow
      modify $ liftUnitEnv $ incrElem (-1) (n, m) . incrElem k1 (n, uv1) . incrElem k2 (n, uv2)
      return $ UnitVariable m
 
 -- TODO: error handling in powerUnits
 
-powerUnits :: State UnitEnv UnitVariable -> Expr a -> State UnitEnv UnitVariable
-powerUnits uvm (Con _ _ powerString) =
+powerUnits :: UnitVariable -> Expr a -> State UnitEnv UnitVariable
+powerUnits (UnitVariable uv) (Con _ _ powerString) =
   case fmap (fromInteger . fst) $ listToMaybe $ reads powerString of
     Just power -> do
       m <- addCol Temporary
-      UnitVariable uv <- uvm
       n <- addRow
       modify $ liftUnitEnv $ incrElem (-1) (n, m) . incrElem power (n, uv)
       return $ UnitVariable m
-    Nothing -> mustEqual uvm (return $ UnitVariable 1)
-powerUnits uvm e =
-  do mustEqual uvm (return $ UnitVariable 1)
-     mustEqual (inferExprUnits e) (return $ UnitVariable 1)
+    Nothing -> mustEqual (UnitVariable uv) (UnitVariable 1)
+powerUnits uv e =
+  do mustEqual uv (UnitVariable 1)
+     uv <- inferExprUnits e
+     mustEqual uv (UnitVariable 1)
 
-sqrtUnits :: State UnitEnv UnitVariable -> State UnitEnv UnitVariable
-sqrtUnits uvm =
+sqrtUnits :: UnitVariable -> State UnitEnv UnitVariable
+sqrtUnits (UnitVariable uv) =
   do m <- addCol Temporary
-     UnitVariable uv <- uvm
      n <- addRow
      modify $ liftUnitEnv $ incrElem (-1) (n, m) . incrElem 0.5 (n, uv)
      return $ UnitVariable m
@@ -783,11 +780,11 @@ inferExprUnits (Var _ _ names) =
        -- just bad code
        _ -> error $ "Undefined variable " ++ show v
   where inferArgUnits = sequence [mapM inferExprUnits exprs | (_, exprs) <- names]
-        inferArgUnits' uvs = sequence [mustEqual (inferExprUnits expr) (return uv) | ((_, exprs), uv) <- zip names uvs, expr <- exprs]
+        inferArgUnits' uvs = sequence [(inferExprUnits expr) >>= (\uv' -> mustEqual uv' uv) | ((_, exprs), uv) <- zip names uvs, expr <- exprs]
         justArgUnits [NullExpr _ _] _ = []  -- zero-argument function call
         justArgUnits _ uvs = head uvs
-inferExprUnits (Bin _ _ op e1 e2) = do let uv1 = inferExprUnits e1
-                                           uv2 = inferExprUnits e2
+inferExprUnits (Bin _ _ op e1 e2) = do uv1 <- inferExprUnits e1
+                                       uv2 <- inferExprUnits e2
                                        case binOpKind op of
                                          AddOp -> mustEqual uv1 uv2
                                          MulOp -> mustAddUp uv1 uv2 1 1
@@ -807,11 +804,14 @@ inferExprUnits (Null _ _) = return $ UnitVariable 1
 inferExprUnits (ESeq _ _ e1 e2) = do inferExprUnits e1
                                      inferExprUnits e2
                                      return $ error "ESeq units wanted"
-inferExprUnits (Bound _ _ e1 e2) = mustEqual (inferExprUnits e1) (inferExprUnits e2)
-inferExprUnits (Sqrt _ _ e) = sqrtUnits $ inferExprUnits e
+inferExprUnits (Bound _ _ e1 e2) = do uv1 <- inferExprUnits e1
+                                      uv2 <- inferExprUnits e2
+                                      mustEqual uv1 uv2
+inferExprUnits (Sqrt _ _ e) = do uv <- inferExprUnits e
+                                 sqrtUnits uv
 inferExprUnits (ArrayCon _ _ (e:exprs)) =
   do uv <- inferExprUnits e
-     mapM_ (mustEqual (return uv) . inferExprUnits) exprs
+     mapM_ (\e' -> do { uv' <- inferExprUnits e'; mustEqual uv uv'}) exprs
      return uv
 inferExprUnits (AssgExpr _ _ _ e) = inferExprUnits e
 
@@ -827,9 +827,12 @@ inferForHeaderUnits :: (Variable, Expr a, Expr a, Expr a) -> State UnitEnv ()
 inferForHeaderUnits (v, e1, e2, e3) =
   do uenv <- gets unitVarEnv
      let Just (uv, []) = lookup (map toUpper v) uenv
-     mustEqual (return uv) (inferExprUnits e1)
-     mustEqual (return uv) (inferExprUnits e2)
-     mustEqual (return uv) (inferExprUnits e3)
+     uv1 <- inferExprUnits e1
+     mustEqual uv uv1
+     uv2 <- inferExprUnits e2
+     mustEqual uv uv2
+     uv3 <- inferExprUnits e3
+     mustEqual uv uv3
      return ()
 
 inferSpecUnits :: Data a => [Spec a] -> State UnitEnv ()
@@ -837,7 +840,9 @@ inferSpecUnits = mapM_ $ descendBiM' handleExpr
 
 inferStmtUnits :: Data a => Fortran a -> State UnitEnv ()
 inferStmtUnits (Assg _ _ e1 e2) =
-  do mustEqual (inferExprUnits e1) (inferExprUnits e2)
+  do uv1 <- inferExprUnits e1
+     uv2 <- inferExprUnits e2
+     mustEqual uv1 uv2
      return ()
 inferStmtUnits (For _ _ _ (NullExpr _ _) _ _ s) = inferStmtUnits s
 inferStmtUnits (For _ _ (VarName _ v) e1 e2 e3 s) =
@@ -889,7 +894,9 @@ inferStmtUnits (Write _ _ specs exprs) =
   do inferSpecUnits specs
      mapM_ inferExprUnits exprs
 inferStmtUnits (PointerAssg _ _ e1 e2) =
-  do mustEqual (inferExprUnits e1) (inferExprUnits e2)
+  do uv1 <- inferExprUnits e1
+     uv2 <- inferExprUnits e2
+     mustEqual uv1 uv2
      return ()
 inferStmtUnits (Return _ _ e) =
   do inferExprUnits e

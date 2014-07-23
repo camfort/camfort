@@ -1,13 +1,13 @@
 program simple
   implicit none
 
-  real, unit(m)   :: x
-  real, unit(s)   :: t
-  real, unit(m/s) :: v
-  
+  real, unit(m) :: x
+  real, unit(s)  :: t
+  real :: v   
+
   x = 20.0
   t = 3.0 
-  v = x / t 
+  v = t / x
   
   print *, v  
 end program
