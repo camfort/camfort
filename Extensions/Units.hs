@@ -192,10 +192,9 @@ checkSystem (matrix, vector) k
 elimRow :: LinearSystem -> Maybe Int -> Int -> Int -> Maybe LinearSystem
 elimRow system Nothing m k = solveSystem' system (m + 1) k
 elimRow (matrix, vector) (Just n) m k = solveSystem' system' (m + 1) (k + 1)
-  where matrix' = -- if k == n then matrix else let s = matrix ! (n, m) in switchRows k n (if s == 1 then matrix else scaleRow (recip $ s) n matrix)
-                  let s = matrix ! (n, m) in 
+  where matrix' = let s = matrix ! (n, m) in 
                     (if (k == n) then id else switchRows k n)
-                       (if s == 1 then matrix else scaleRow (recip $ matrix ! (n, m)) n matrix)
+                       (if s == 1 then matrix else scaleRow (recip $ s) n matrix)
         vector' = switchScaleElems k n (fromRational $ recip $ matrix ! (n, m)) vector
         system' = elimRow' (matrix', vector') k m
 
@@ -234,25 +233,34 @@ propagateUnderdetermined matrix list =
     n <- filter (\n -> matrix ! (n, m) /= 0) [1 .. nrows matrix]
     filter (\m -> matrix ! (n, m) /= 0) [1 .. ncols matrix]
 
-addIntrinsics :: State UnitEnv ()
-addIntrinsics = 
-  do 
-     mapM_ addPlain1ArgIntrinsic ["ABS", "ACHAR", "ADJUSTL", "ADJUSTR", "AIMAG", "AINT", "ALL", "ANINT", "ANY", "CEILING", "CHAR", "CONJG", "DBLE", "EPSILON", "FLOOR", "FRACTION", "HUGE", "IACHAR", "IALL", "IANY", "ICHAR", "INT", "IPARITY", "LOGICAL", "MAXEXPONENT", "MAXVAL", "MINEXPONENT", "MINVAL", "NEW_LINE", "NINT", "NORM2", "NOT", "NULL", "PARITY", "REAL", "RRSPACING", "SPACING", "SUM", "TINY", "TRANSPOSE", "TRIM"]
-     {-
-     mapM_ addPlain2ArgIntrinsic ["CMPLX", "DCOMPLX", "DIM", "HYPOT", "IAND", "IEOR", "IOR", "MAX", "MIN"] 
-     mapM_ addPlain1Arg1ExtraIntrinsic ["CSHIFT", "EOSHIFT", "IBCLR", "IBSET", "MOD", "MODULO", "NEAREST", "PACK", "REPEAT", "RESHAPE", "SHIFTA", "SHIFTL", "SHIFTR", "SIGN"] 
-     mapM_ addPlain2Arg1ExtraIntrinsic ["DSHIFTL", "DSHIFTR", "ISHFT", "ISHFTC", "MERGE", "MERGE_BITS"]
-     mapM_ addProductIntrinsic ["DOT_PRODUCT", "DPROD", "MATMUL"]    
-     mapM_ addPowerIntrinsic ["SCALE", "SET_EXPONENT"]
-     mapM_ addUnitlessIntrinsic ["ACOS", "ACOSH", "ASIN", "ASINH", "ATAN", "ATANH", "BESSEL_J0", "BESSEL_J1", "BESSEL_Y0", "BESSEL_Y1", "COS", "COSH", "ERF", "ERFC", "ERFC_SCALED", "EXP", "EXPONENT", "GAMMA", "LOG", "LOG10", "LOG_GAMMA", "PRODUCT", "SIN", "SINH", "TAN", "TANH"]
-     mapM_ addUnitlessSubIntrinsic ["CPU_TIME", "RANDOM_NUMBER"]
-     mapM_ addUnitlessResult0ArgIntrinsic ["COMMAND_ARGUMENT_COUNT", "COMPILER_OPTIONS", "COMPILER_VERSION"]
-     mapM_ addUnitlessResult1ArgIntrinsic ["ALLOCATED", "ASSOCIATED", "BIT_SIZE", "COUNT", "DIGITS", "IS_IOSTAT_END", "IS_IOSTAT_EOR", "KIND", "LBOUND", "LCOBOUND", "LEADZ", "LEN", "LEN_TRIM", "MASKL", "MASKR", "MAXLOC", "MINLOC", "POPCOUNT", "POPPAR", "PRECISION", "PRESENT", "RADIX", "RANGE", "SELECTED_CHAR_KIND", "SELECTED_INT_KIND", "SELECTED_REAL_KIND", "SHAPE", "SIZE", "STORAGE_SIZE", "TRAILZ", "UBOUND", "UCOBOUND"]
-     mapM_ addUnitlessResult2SameArgIntrinsic ["ATAN2", "BGE", "BGT", "BLE", "BLT", "INDEX", "LGE", "LGT", "LLE", "LLT", "SCAN", "VERIFY"] 
- 
-     mapM_ addUnitlessResult2AnyArgIntrinsic ["BTEST", "EXTENDS_TYPE_OF", "SAME_TYPE_AS"] -}
+
+intrinsicsDict = 
+    map (\x -> (x, addPlain2ArgIntrinsic)) ["ABS", "ACHAR", "ADJUSTL", "ADJUSTR", "AIMAG", "AINT", "ALL", "ANINT", "ANY", "CEILING", "CHAR", "CONJG", "DBLE", "EPSILON", "FLOOR", "FRACTION", "HUGE", "IACHAR", "IALL", "IANY", "ICHAR", "INT", "IPARITY", "LOGICAL", "MAXEXPONENT", "MAXVAL", "MINEXPONENT", "MINVAL", "NEW_LINE", "NINT", "NORM2", "NOT", "NULL", "PARITY", "REAL", "RRSPACING", "SPACING", "SUM", "TINY", "TRANSPOSE", "TRIM"]
+    
+ ++ map (\x -> (x, addPlain2ArgIntrinsic)) ["CMPLX", "DCOMPLX", "DIM", "HYPOT", "IAND", "IEOR", "IOR", "MAX", "MIN"] 
+    
+ ++ map (\x -> (x, addPlain1Arg1ExtraIntrinsic)) ["CSHIFT", "EOSHIFT", "IBCLR", "IBSET", "MOD", "MODULO", "NEAREST", "PACK", "REPEAT", "RESHAPE", "SHIFTA", "SHIFTL", "SHIFTR", "SIGN"]
+
+ ++ map (\x -> (x, addPlain2Arg1ExtraIntrinsic)) ["DSHIFTL", "DSHIFTR", "ISHFT", "ISHFTC", "MERGE", "MERGE_BITS"]
+
+ ++ map (\x -> (x, addProductIntrinsic)) ["DOT_PRODUCT", "DPROD", "MATMUL"]
+
+ ++ map (\x -> (x, addPowerIntrinsic)) ["SCALE", "SET_EXPONENT"]
+
+ ++ map (\x -> (x, addUnitlessIntrinsic)) ["ACOS", "ACOSH", "ASIN", "ASINH", "ATAN", "ATANH", "BESSEL_J0", "BESSEL_J1", "BESSEL_Y0", "BESSEL_Y1", "COS", "COSH", "ERF", "ERFC", "ERFC_SCALED", "EXP", "EXPONENT", "GAMMA", "LOG", "LOG10", "LOG_GAMMA", "PRODUCT", "SIN", "SINH", "TAN", "TANH"]
+
+ ++ map (\x -> (x, addUnitlessSubIntrinsic)) ["CPU_TIME", "RANDOM_NUMBER"]
+
+ ++ map (\x -> (x, addUnitlessResult0ArgIntrinsic)) ["COMMAND_ARGUMENT_COUNT", "COMPILER_OPTIONS", "COMPILER_VERSION"]
+
+ ++ map (\x -> (x, addUnitlessResult1ArgIntrinsic)) ["ALLOCATED", "ASSOCIATED", "BIT_SIZE", "COUNT", "DIGITS", "IS_IOSTAT_END", "IS_IOSTAT_EOR", "KIND", "LBOUND", "LCOBOUND", "LEADZ", "LEN", "LEN_TRIM", "MASKL", "MASKR", "MAXLOC", "MINLOC", "POPCOUNT", "POPPAR", "PRECISION", "PRESENT", "RADIX", "RANGE", "SELECTED_CHAR_KIND", "SELECTED_INT_KIND", "SELECTED_REAL_KIND", "SHAPE", "SIZE", "STORAGE_SIZE", "TRAILZ", "UBOUND", "UCOBOUND"]
+
+ ++ map (\x -> (x, addUnitlessResult2SameArgIntrinsic)) ["ATAN2", "BGE", "BGT", "BLE", "BLT", "INDEX", "LGE", "LGT", "LLE", "LLT", "SCAN", "VERIFY"]
+
+ ++ map (\x -> (x, addUnitlessResult2AnyArgIntrinsic)) ["BTEST", "EXTENDS_TYPE_OF", "SAME_TYPE_AS"]
+
      -- missing: ATOMIC_DEFINE, ATOMIC_REF, BESSEL_JN, BESSEL_YN, C_*, DATE_AND_TIME, EXECUTE_COMMAND_LINE, GET_COMMAND, GET_COMMAND_ARGUMENT, GET_ENVIRONMENT_VARIABLE, IBITS, any of the image stuff, MOVE_ALLOC, MVBITS, RANDOM_SEED, SPREAD, SYSTEM_CLOCK, TRANSFER, UNPACK
-     return ()
+
 
 {- [A] Various helpers for adding information about procedures to the type system -}
 
@@ -504,8 +512,7 @@ inferUnits (fname, x) = -- (show $ (_linearSystem env, length $ snd $ _linearSys
         r = concat [fname ++ ": " ++ r ++ "\n" | r <- Data.Label.get report env]
 
 doInferUnits :: Program Annotation -> State UnitEnv (Program Annotation)
-doInferUnits x = do addIntrinsics
-                    y <- mapM inferUnitsInProgUnit x
+doInferUnits x = do y <- mapM inferUnitsInProgUnit x
                     z <- inferInterproceduralUnits y
                     mapM (descendBiM' insertUnitsInBlock) z
 
@@ -809,7 +816,10 @@ inferExprUnits (Var _ _ names) =
        -- array variable?
        Just (uv, uvs@(_:_)) -> inferArgUnits' uvs >> return uv
        -- function call?
-       Nothing | not (null args) -> do uv <- anyUnits Temporary
+       Nothing | not (null args) -> do case (lookup (map toUpper v) intrinsicsDict) of
+                                          Just fun -> fun (map toUpper v)
+                                          Nothing  -> return ()
+                                       uv <- anyUnits Temporary
                                        uvs <- inferArgUnits
                                        let uvs' = justArgUnits args uvs
                                        calls << (v, (Just uv, uvs'))
