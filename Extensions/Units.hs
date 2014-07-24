@@ -143,10 +143,12 @@ moveCol' i j m
                                                           else if (c >= i && c < j) then m ! (r, c+1)
                                                                else if (c == j) then m ! (r, i) 
                                                                     else m ! (r, c)
+{-
+
 moveColInt, moveColInt' :: Int -> Int -> Matrix Int -> Matrix Int
 moveColInt = moveCol
 moveColInt' = moveCol'
-{-
+
 moveCol :: Int -> Int -> Matrix a -> Matrix a
 moveCol i j matrix
   | i > j = moveCol j i matrix
@@ -157,6 +159,7 @@ moveCol i j matrix
                 where n = nrows matrix
                       m = ncols matrix
 -}
+
 moveCol = moveCol'
 
 solveSystemM :: String -> State UnitEnv Bool
@@ -189,7 +192,10 @@ checkSystem (matrix, vector) k
 elimRow :: LinearSystem -> Maybe Int -> Int -> Int -> Maybe LinearSystem
 elimRow system Nothing m k = solveSystem' system (m + 1) k
 elimRow (matrix, vector) (Just n) m k = solveSystem' system' (m + 1) (k + 1)
-  where matrix' = switchRows k n $ scaleRow (recip $ matrix ! (n, m)) n matrix
+  where matrix' = -- if k == n then matrix else let s = matrix ! (n, m) in switchRows k n (if s == 1 then matrix else scaleRow (recip $ s) n matrix)
+                  let s = matrix ! (n, m) in 
+                    (if (k == n) then id else switchRows k n)
+                       (if s == 1 then matrix else scaleRow (recip $ matrix ! (n, m)) n matrix)
         vector' = switchScaleElems k n (fromRational $ recip $ matrix ! (n, m)) vector
         system' = elimRow' (matrix', vector') k m
 
@@ -231,10 +237,10 @@ propagateUnderdetermined matrix list =
 addIntrinsics :: State UnitEnv ()
 addIntrinsics = 
   do 
-     -- mapM_ addPlain1ArgIntrinsic ["ABS", "ACHAR", "ADJUSTL", "ADJUSTR", "AIMAG", "AINT", "ALL", "ANINT", "ANY", "CEILING", "CHAR", "CONJG", "DBLE", "EPSILON", "FLOOR", "FRACTION", "HUGE", "IACHAR", "IALL", "IANY", "ICHAR", "INT", "IPARITY", "LOGICAL", "MAXEXPONENT", "MAXVAL", "MINEXPONENT"] -- , "MINVAL", "NEW_LINE", "NINT", "NORM2", "NOT", "NULL", "PARITY", "REAL", "RRSPACING", "SPACING", "SUM", "TINY", "TRANSPOSE", "TRIM"]
-{-
-     mapM_ addPlain2ArgIntrinsic ["CMPLX", "DCOMPLX", "DIM", "HYPOT", "IAND", "IEOR", "IOR", "MAX", "MIN"]
-     mapM_ addPlain1Arg1ExtraIntrinsic ["CSHIFT", "EOSHIFT", "IBCLR", "IBSET", "MOD", "MODULO", "NEAREST", "PACK", "REPEAT", "RESHAPE", "SHIFTA", "SHIFTL", "SHIFTR", "SIGN"]
+     mapM_ addPlain1ArgIntrinsic ["ABS", "ACHAR", "ADJUSTL", "ADJUSTR", "AIMAG", "AINT", "ALL", "ANINT", "ANY", "CEILING", "CHAR", "CONJG", "DBLE", "EPSILON", "FLOOR", "FRACTION", "HUGE", "IACHAR", "IALL", "IANY", "ICHAR", "INT", "IPARITY", "LOGICAL", "MAXEXPONENT", "MAXVAL", "MINEXPONENT", "MINVAL", "NEW_LINE", "NINT", "NORM2", "NOT", "NULL", "PARITY", "REAL", "RRSPACING", "SPACING", "SUM", "TINY", "TRANSPOSE", "TRIM"]
+     {-
+     mapM_ addPlain2ArgIntrinsic ["CMPLX", "DCOMPLX", "DIM", "HYPOT", "IAND", "IEOR", "IOR", "MAX", "MIN"] 
+     mapM_ addPlain1Arg1ExtraIntrinsic ["CSHIFT", "EOSHIFT", "IBCLR", "IBSET", "MOD", "MODULO", "NEAREST", "PACK", "REPEAT", "RESHAPE", "SHIFTA", "SHIFTL", "SHIFTR", "SIGN"] 
      mapM_ addPlain2Arg1ExtraIntrinsic ["DSHIFTL", "DSHIFTR", "ISHFT", "ISHFTC", "MERGE", "MERGE_BITS"]
      mapM_ addProductIntrinsic ["DOT_PRODUCT", "DPROD", "MATMUL"]    
      mapM_ addPowerIntrinsic ["SCALE", "SET_EXPONENT"]
@@ -243,8 +249,8 @@ addIntrinsics =
      mapM_ addUnitlessResult0ArgIntrinsic ["COMMAND_ARGUMENT_COUNT", "COMPILER_OPTIONS", "COMPILER_VERSION"]
      mapM_ addUnitlessResult1ArgIntrinsic ["ALLOCATED", "ASSOCIATED", "BIT_SIZE", "COUNT", "DIGITS", "IS_IOSTAT_END", "IS_IOSTAT_EOR", "KIND", "LBOUND", "LCOBOUND", "LEADZ", "LEN", "LEN_TRIM", "MASKL", "MASKR", "MAXLOC", "MINLOC", "POPCOUNT", "POPPAR", "PRECISION", "PRESENT", "RADIX", "RANGE", "SELECTED_CHAR_KIND", "SELECTED_INT_KIND", "SELECTED_REAL_KIND", "SHAPE", "SIZE", "STORAGE_SIZE", "TRAILZ", "UBOUND", "UCOBOUND"]
      mapM_ addUnitlessResult2SameArgIntrinsic ["ATAN2", "BGE", "BGT", "BLE", "BLT", "INDEX", "LGE", "LGT", "LLE", "LLT", "SCAN", "VERIFY"] 
- -}
-     -- mapM_ addUnitlessResult2AnyArgIntrinsic ["BTEST", "EXTENDS_TYPE_OF", "SAME_TYPE_AS"]
+ 
+     mapM_ addUnitlessResult2AnyArgIntrinsic ["BTEST", "EXTENDS_TYPE_OF", "SAME_TYPE_AS"] -}
      -- missing: ATOMIC_DEFINE, ATOMIC_REF, BESSEL_JN, BESSEL_YN, C_*, DATE_AND_TIME, EXECUTE_COMMAND_LINE, GET_COMMAND, GET_COMMAND_ARGUMENT, GET_ENVIRONMENT_VARIABLE, IBITS, any of the image stuff, MOVE_ALLOC, MVBITS, RANDOM_SEED, SPREAD, SYSTEM_CLOCK, TRANSFER, UNPACK
      return ()
 
@@ -491,7 +497,9 @@ enterDecls x proc =
     f x = return x
 
 inferUnits :: (Filename, Program Annotation) -> (Report, (Filename, Program Annotation))
-inferUnits (fname, x) = (show $ (_linearSystem env, length $ snd $ _linearSystem env)) `D.trace` (r, (fname, y))
+inferUnits (fname, x) = -- (show $ (_linearSystem env, length $ snd $ _linearSystem env)) `D.trace` 
+                          (show $ length $ snd $ _linearSystem env) `D.trace`
+                          (r, (fname, y))
   where (y, env) = runState (doInferUnits x) emptyUnitEnv
         r = concat [fname ++ ": " ++ r ++ "\n" | r <- Data.Label.get report env]
 
