@@ -21,10 +21,16 @@ import Analysis.Types
 import Transformation.Syntax
 import Language.Fortran
 
+import Test.QuickCheck
+
 import qualified Debug.Trace as D
 
 import Helpers
 
+instance (Arbitrary a) => Arbitrary (Matrix a) where
+    arbitrary = sized (\n -> do xs <- vectorOf (n*n) arbitrary
+                                return $ matrix n n (\(i, j) -> xs !! ((i-1)*n + (j-1))))
+    
 
 data UnitConstant = Unitful [(MeasureUnit, Rational)] | Unitless Rational deriving (Eq, Show)
 trim = filter $ \(unit, r) -> r /= 0
@@ -130,6 +136,17 @@ moveElem i j xs | i > j     = moveElem j i xs
 incrElem :: Num a => a -> (Int, Int) -> Matrix a -> Matrix a
 incrElem value pos matrix = setElem (matrix ! pos + value) pos matrix
 
+moveCol' :: Int -> Int -> Matrix a -> Matrix a
+moveCol' i j m
+    | i > j = moveCol' j i m
+    | otherwise = matrix (nrows m) (ncols m) $ \(r, c) -> if (c < i) then m ! (r, c)
+                                                          else if (c >= i && c < j) then m ! (r, c+1)
+                                                               else if (c == j) then m ! (r, i) 
+                                                                    else m ! (r, c)
+moveColInt, moveColInt' :: Int -> Int -> Matrix Int -> Matrix Int
+moveColInt = moveCol
+moveColInt' = moveCol'
+{-
 moveCol :: Int -> Int -> Matrix a -> Matrix a
 moveCol i j matrix
   | i > j = moveCol j i matrix
@@ -139,6 +156,8 @@ moveCol i j matrix
                 submatrix 1 n (j + 1) m matrix
                 where n = nrows matrix
                       m = ncols matrix
+-}
+moveCol = moveCol'
 
 solveSystemM :: String -> State UnitEnv Bool
 solveSystemM adjective =
@@ -176,7 +195,7 @@ elimRow (matrix, vector) (Just n) m k = solveSystem' system' (m + 1) (k + 1)
 
 elimRow' :: LinearSystem -> Int -> Int -> LinearSystem
 elimRow' (matrix, vector) k m = (matrix', vector')
-  where mstep matrix n = combineRows n (- matrix ! (n, m)) k matrix
+  where mstep matrix n = let s = (- matrix ! (n, m)) in if s == 0 then matrix else combineRows n s k matrix 
         matrix' = foldl mstep matrix $ [1 .. k - 1] ++ [k + 1 .. nrows matrix]
         vector'' = [x - fromRational (matrix ! (n, m)) * vector !! (k - 1) | (n, x) <- zip [1..] vector]
         (a, _ : b) = splitAt (k - 1) vector''

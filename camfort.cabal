@@ -48,7 +48,7 @@ library
                         syz >= 0.2,
                         syb >= 0.4,
                         matrix >=0.2.2, 
-                        mtl >= 2.1,
+                        mtl >= 2.2.1,
                         text >= 0.11.2.3,
                         array >= 0.4,
                         directory >= 1.2, 

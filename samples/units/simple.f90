@@ -31,15 +31,6 @@ program simple
   real :: a711
   real :: a811
   real :: a911
-  real :: a1111
-  real :: a2111
-  real :: a3111
-  real :: a4111
-  real :: a5111
-  real :: a6111
-  real :: a7111
-  real :: a8111
-  real :: a9111
     
 
   x = 20.0
