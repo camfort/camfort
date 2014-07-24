@@ -104,22 +104,28 @@ switchScaleElems i j factor list = a ++ factor * b : c
   where (lj, b:rj) = splitAt (j - 1) list
         (a, _:c) = splitAt (i - 1) (lj ++ list !! (i - 1) : rj)
 
+{-
+- Old, slower algorithm.
+- Tested, by QuickCheck with:
+     quickCheck (\(i,j,s) -> if (i > 0 && j >0 && (j <= (length s))) then (moveElem i j s) == (moveElem' i j s) else True)
+
 moveElem :: Int -> Int -> [a] -> [a]
 moveElem i j list
   | i > j = moveElem j i list
   | otherwise = a ++ b
                 where (lj, rj) = splitAt j list
                       (a, _:b) = splitAt (i - 1) (lj ++ list !! (i - 1) : rj)
+-}
 
-moveElem' :: Int -> Int -> [a] -> [a]
-moveElem' i j []             = []
-moveElem' i j xs | i > j     = moveElem j i xs
-                 | otherwise = moveElem' i j xs Nothing
-                                  where moveElem' 1    1 ys     Nothing  = ys 
-                                        moveElem' 1    j (x:xs) Nothing  = moveElem' 1 j xs (Just x)
-                                        moveElem' 1    j (x:xs) (Just z) = x : moveElem' 1 (j - 1) xs (Just z)
-                                        moveElem' 1    1 ys     (Just z) = z : ys
-                                        moveElem' i    j (x:xs) Nothing  = x : moveElem' (i - 1) j xs Nothing
+moveElem :: Int -> Int -> [a] -> [a]
+moveElem i j []             = []
+moveElem i j xs | i > j     = moveElem j i xs
+                 | otherwise = moveElemA i j xs Nothing
+                                where moveElemA i    j []     (Just z) = [z]
+                                      moveElemA i    j []     Nothing  = []
+                                      moveElemA 1    j (x:xs) (Just z) = x : moveElemA 1 (j - 1) xs (Just z)
+                                      moveElemA 1    j (x:xs) Nothing  = moveElemA 1 j xs (Just x)                                      
+                                      moveElemA i    j (x:xs) Nothing  = x : moveElemA (i - 1) j xs Nothing
 
 incrElem :: Num a => a -> (Int, Int) -> Matrix a -> Matrix a
 incrElem value pos matrix = setElem (matrix ! pos + value) pos matrix
