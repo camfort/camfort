@@ -12,6 +12,7 @@ module Analysis.Syntax where
 -- Standard imports 
 import Data.Char
 import Data.List
+import Data.Monoid
 import Control.Monad.State.Lazy
 
 -- Data-type generics imports
@@ -193,6 +194,15 @@ successorsF z = maybe [] id
                                     _                    -> []
                                  Nothing -> [] 
  
+{- **** Various siple syntax analyses **** -}
+
+instance Monoid Int where
+    mempty = 0
+    mappend = (+)
+
+countVariableDeclarations :: Program Annotation -> Int
+countVariableDeclarations x = sum [length xs | (Decl _ _ xs _) <- (universeBi x)::[Decl Annotation]]
+                               
 
 
 {-| Numbers all the statements in a program unit (for analysis output) -}
@@ -214,10 +224,11 @@ lower = map toLower
 
 {- EDSL for describing syntax tree queries -}
 data ETag t where
-    Exprs :: ETag (Expr Annotation)
+    Exprs  :: ETag (Expr Annotation)
     Blocks :: ETag (Block Annotation)
-    Locs :: ETag Access
-    Vars :: ETag (Expr Annotation)
+    Decls  :: ETag (Decl Annotation)
+    Locs   :: ETag Access
+    Vars   :: ETag (Expr Annotation)
 
 from :: forall t synTyp . (Data t, Data synTyp) => ETag synTyp -> t -> [synTyp]
 from Locs x = accesses x

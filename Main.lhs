@@ -9,6 +9,7 @@
 
 > import Language.Haskell.ParseMonad
 
+> import Data.Monoid
 > import Data.Generics.Uniplate.Operations
 
 > import Analysis.Annotations
@@ -49,7 +50,8 @@ Register all availble refactorings and analyses
 >            
 > analyses = 
 >     [("lva", (lvaA, "live-variable analysis")),
->      ("loops", (loops, "loop information"))]
+>      ("loops", (loops, "loop information")), 
+>      ("count", (countVarDecls, "count variable declarations"))]
 
 > main = do putStrLn introMessage 
 >           d <- getArgs 
@@ -83,6 +85,9 @@ Wrappers on all of the features
 > ast d f = do (_, _, p) <- readParseSrcFile (d ++ "/" ++ f)
 >              putStrLn $ show p
 
+> countVarDecls inDir excludes _ =  
+>     do putStrLn $ "Counting variable declarations in directory " ++ show inDir ++ "\n"
+>        doAnalysisSummary countVariableDeclarations inDir excludes 
 
 > loops inDir excludes _ =  
 >            do putStrLn $ "Analysing loops for source in directory " ++ show inDir ++ "\n"
@@ -132,6 +137,19 @@ General analysis/refactor builders
 >                        let asts' = map (\(f, _, ps) -> aFun ps) ps
 >                        -- (show (map (map (fmap (const ()))) (map (\(_, _, f) -> f) pss))) `trace`
 >                        outputAnalysisFiles d asts' outFiles
+
+> doAnalysisSummary aFun d excludes = 
+>                     do if excludes /= "" 
+>                            then putStrLn $ "Excluding " ++ excludes ++ " from " ++ d ++ "/"
+>                            else return ()
+>                       
+>                        ps <- readParseSrcDir d excludes
+
+>                        let inFiles = map fst3 ps
+>                        let outFiles = filter (\f -> not ((take (length $ d ++ "out") f) == (d ++ "out"))) inFiles
+>                        putStrLn "Output of the analysis:" 
+>                        putStrLn $ show $ Prelude.foldl (\n (f, _, ps) -> n `mappend` (aFun ps)) mempty ps
+>                        
 
 
 > doRefactor rFun inDir excludes outDir
