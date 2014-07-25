@@ -136,22 +136,25 @@ moveElem i j xs | i > j     = moveElem j i xs
 incrElem :: Num a => a -> (Int, Int) -> Matrix a -> Matrix a
 incrElem value pos matrix = setElem (matrix ! pos + value) pos matrix
 
-moveCol' :: Int -> Int -> Matrix a -> Matrix a
-moveCol' i j m
-    | i > j = moveCol' j i m
-    | otherwise = matrix (nrows m) (ncols m) $ \(r, c) -> if (c < i) then m ! (r, c)
-                                                          else if (c >= i && c < j) then m ! (r, c+1)
-                                                               else if (c == j) then m ! (r, i) 
-                                                                    else m ! (r, c)
+moveCol :: Int -> Int -> Matrix a -> Matrix a
+moveCol i j m
+    | i > j = moveCol j i m
+    | otherwise = matrix (nrows m) (ncols m) 
+                     $ \(r, c) -> if (c < i || c > j)       then m ! (r, c)
+                                  else if (c >= i && c < j) then m ! (r, c+1)
+                                       else                      m ! (r, i) 
+                                                                    
+
 {-
+Old version, SLOW
 
 moveColInt, moveColInt' :: Int -> Int -> Matrix Int -> Matrix Int
 moveColInt = moveCol
 moveColInt' = moveCol'
 
-moveCol :: Int -> Int -> Matrix a -> Matrix a
-moveCol i j matrix
-  | i > j = moveCol j i matrix
+moveCol' :: Int -> Int -> Matrix a -> Matrix a
+moveCol' i j matrix
+  | i > j = moveCol' j i matrix
   | otherwise = submatrix 1 n 1 (i - 1) matrix <|>
                 submatrix 1 n (i + 1) j matrix <|>
                 submatrix 1 n i i matrix <|>
@@ -159,8 +162,6 @@ moveCol i j matrix
                 where n = nrows matrix
                       m = ncols matrix
 -}
-
-moveCol = moveCol'
 
 solveSystemM :: String -> State UnitEnv Bool
 solveSystemM adjective =
