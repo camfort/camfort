@@ -615,7 +615,7 @@ toFraction r
 
 inferInterproceduralUnits :: Program Annotation -> State UnitEnv (Program Annotation)
 inferInterproceduralUnits x =
-  do reorderColumns
+  do -- reorderColumns
      solveSystemM "inconsistent"
      system <- gets linearSystem
      inferInterproceduralUnits' x False system
