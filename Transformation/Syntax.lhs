@@ -76,6 +76,9 @@ This is particularly useful if a whole line is being redacted from a source file
 > nullSpan :: SrcSpan
 > nullSpan = (nullLoc, nullLoc)
 
+> afterEnd :: SrcSpan -> SrcSpan
+> afterEnd (_, SrcLoc f l c) = (SrcLoc f (l+1) 0, SrcLoc f (l+1) 0)
+
 Variable renaming
 
 > caml (x:xs) = (toUpper x) : xs
@@ -92,5 +95,13 @@ Variable renaming
 >                                                         Nothing -> vn
 >                                                         Just v' -> VarName p v')::(VarName A -> VarName A))
 
+> class Renaming r where
+>     hasRenaming :: Variable -> r -> Bool
 
-> 
+> instance Renaming RenamerCoercer where
+>     hasRenaming _ Nothing   = False
+>     hasRenaming v (Just rc) = Data.Map.member v rc
+
+> -- sometimes we have a number of renamer coercers together
+> instance Renaming [RenamerCoercer] where
+>     hasRenaming v rcss = or (map (hasRenaming v) rcss)

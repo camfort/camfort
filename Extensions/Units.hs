@@ -63,7 +63,7 @@ instance Fractional UnitConstant where
   (Unitless n1) / (Unitless n2) = Unitless (n1 / n2)
   fromRational = Unitless . fromRational
 
-newtype UnitVariable = UnitVariable Int
+newtype UnitVariable = UnitVariable Int deriving Show
 data UnitVarCategory = Literal | Temporary | Variable | Argument | Magic deriving Eq
 type UnitVarEnv = [(Variable, (UnitVariable, [UnitVariable]))]
 type DerivedUnitEnv = [(MeasureUnit, UnitConstant)]
@@ -110,18 +110,6 @@ switchScaleElems i j factor list = a ++ factor * b : c
   where (lj, b:rj) = splitAt (j - 1) list
         (a, _:c) = splitAt (i - 1) (lj ++ list !! (i - 1) : rj)
 
-{-
-- Old, slower algorithm.
-- Tested, by QuickCheck with:
-     quickCheck (\(i,j,s) -> if (i > 0 && j >0 && (j <= (length s))) then (moveElem i j s) == (moveElem' i j s) else True)
-
-moveElem :: Int -> Int -> [a] -> [a]
-moveElem i j list
-  | i > j = moveElem j i list
-  | otherwise = a ++ b
-                where (lj, rj) = splitAt j list
-                      (a, _:b) = splitAt (i - 1) (lj ++ list !! (i - 1) : rj)
--}
 
 moveElem :: Int -> Int -> [a] -> [a]
 moveElem i j []             = []
@@ -144,24 +132,6 @@ moveCol i j m
                                   else if (c >= i && c < j) then m ! (r, c+1)
                                        else                      m ! (r, i) 
                                                                     
-
-{-
-Old version, SLOW
-
-moveColInt, moveColInt' :: Int -> Int -> Matrix Int -> Matrix Int
-moveColInt = moveCol
-moveColInt' = moveCol'
-
-moveCol' :: Int -> Int -> Matrix a -> Matrix a
-moveCol' i j matrix
-  | i > j = moveCol' j i matrix
-  | otherwise = submatrix 1 n 1 (i - 1) matrix <|>
-                submatrix 1 n (i + 1) j matrix <|>
-                submatrix 1 n i i matrix <|>
-                submatrix 1 n (j + 1) m matrix
-                where n = nrows matrix
-                      m = ncols matrix
--}
 
 solveSystemM :: String -> State UnitEnv Bool
 solveSystemM adjective =
@@ -370,10 +340,10 @@ doRemoveUnits = map (descendBi removeUnitsInBlock)
 
 inferUnitsInProgUnit :: ProgUnit Annotation -> State UnitEnv (ProgUnit Annotation)
 inferUnitsInProgUnit x =
-  do uenv <- gets unitVarEnv
+  do --uenv <- gets unitVarEnv
+     ps <- mapM inferUnitsInProgUnit $ (progUnits x)
      b <- enterBlock $ block x
-     ps <- mapM inferUnitsInProgUnit $ progUnits x
-     unitVarEnv =: uenv
+     --unitVarEnv =: uenv
      return $ refillProgUnits (refillBlock x b) ps
   where enterBlock Nothing = return Nothing
         enterBlock (Just (block, proc)) = fmap Just $ blockUnitEnv block proc
@@ -381,7 +351,7 @@ inferUnitsInProgUnit x =
 block :: ProgUnit Annotation -> Maybe (Block Annotation, Maybe ProcedureNames)
 block (Main x sp n a b ps)                            = Just (b, Nothing)
 block (Sub x sp t (SubName _ n) (Arg _ a _) b)        = Just (b, Just (n, Nothing, argNames a))
-block (Function x sp t (SubName _ n) (Arg _ a _) r b) = Just (b, Just (n, Just (resultName n r), argNames a))
+block (Function x sp t (SubName _ n) (Arg _ a _) r b) = ("--# " ++ show (resultName n r)) `D.trace` Just (b, Just (n, Just (resultName n r), argNames a))
 block x                                               = Nothing
 
 progUnits :: ProgUnit Annotation -> [ProgUnit Annotation]
@@ -461,7 +431,7 @@ enterDecls x proc =
     return y
   where
     addProcedure Nothing = return ()
-    addProcedure (Just (name, resultName, argNames)) =
+    addProcedure (Just (name, resultName, argNames)) = ("add p " ++ show name) `D.trace`
       do uenv <- gets unitVarEnv
          let resultVar = fmap (lookupUnitByName uenv) resultName
              argVars = fmap (lookupUnitByName uenv) argNames
@@ -506,11 +476,10 @@ enterDecls x proc =
     f x = return x
 
 inferUnits :: (Filename, Program Annotation) -> (Report, (Filename, Program Annotation))
-inferUnits (fname, x) = -- (show $ (_linearSystem env, length $ snd $ _linearSystem env)) `D.trace` 
-                          (show $ length $ snd $ _linearSystem env) `D.trace`
-                          (r, (fname, y))
+inferUnits (fname, x) = (r, (fname, y))
   where (y, env) = runState (doInferUnits x) emptyUnitEnv
-        r = concat [fname ++ ": " ++ r ++ "\n" | r <- Data.Label.get report env]
+        r = concat [fname ++ ": " ++ r ++ "\n" | r <- Data.Label.get report env] ++ 
+            "\n" ++ fname ++ ": checked/inferred " ++ (show $ length $ snd $ _linearSystem env) ++ " variables\n"
 
 doInferUnits :: Program Annotation -> State UnitEnv (Program Annotation)
 doInferUnits x = do y <- mapM inferUnitsInProgUnit x
@@ -780,7 +749,7 @@ mustAddUp (UnitVariable uv1) (UnitVariable uv2) k1 k2 =
 
 -- TODO: error handling in powerUnits
 
-powerUnits :: UnitVariable -> Expr a -> State UnitEnv UnitVariable
+powerUnits :: Show a => UnitVariable -> Expr a -> State UnitEnv UnitVariable
 powerUnits (UnitVariable uv) (Con _ _ powerString) =
   case fmap (fromInteger . fst) $ listToMaybe $ reads powerString of
     Just power -> do
@@ -789,6 +758,7 @@ powerUnits (UnitVariable uv) (Con _ _ powerString) =
       modify $ liftUnitEnv $ incrElem (-1) (n, m) . incrElem power (n, uv)
       return $ UnitVariable m
     Nothing -> mustEqual (UnitVariable uv) (UnitVariable 1)
+
 powerUnits uv e =
   do mustEqual uv (UnitVariable 1)
      uv <- inferExprUnits e
@@ -806,19 +776,32 @@ anyUnits category =
   do m <- addCol category
      return $ UnitVariable m
 
-inferExprUnits :: Expr a -> State UnitEnv UnitVariable
+{-
+class InferUnits t r where
+    inferUnits :: t -> State UnitEnv r
+
+instance InferUnits (Expr a) UnitVariable where
+    inferUnits = inferExprUnits
+
+instance InferUnits (Fortran a) () where
+    inferUnits = inferStmtUnits
+-}
+
+inferExprUnits :: Show a => Expr a -> State UnitEnv UnitVariable
 inferExprUnits (Con _ _ _) = anyUnits Literal
 inferExprUnits (ConL _ _ _ _) = anyUnits Literal
 inferExprUnits (ConS _ _ _) = anyUnits Literal
 inferExprUnits (Var _ _ names) =
-  do uenv <- gets unitVarEnv
-     let (VarName _ v, args) = head names
+ do uenv <- gets unitVarEnv
+    penv <- gets procedureEnv
+    let (VarName _ v, args) = head names
+    (v ++ " " ++  (show $ length args)) `D.trace`
      case lookup (map toUpper v) uenv of
        -- array variable?
        Just (uv, uvs@(_:_)) -> inferArgUnits' uvs >> return uv
        -- function call?
        Nothing | not (null args) -> do case (lookup (map toUpper v) intrinsicsDict) of
-                                          Just fun -> fun (map toUpper v)
+                                          Just fun -> (show v) `D.trace` fun (map toUpper v)
                                           Nothing  -> return ()
                                        uv <- anyUnits Temporary
                                        uvs <- inferArgUnits
@@ -830,7 +813,17 @@ inferExprUnits (Var _ _ names) =
        -- default specifier
        _ | v == "*" -> anyUnits Literal
        -- just bad code
-       _ -> error $ "Undefined variable " ++ show v
+       x -> case (lookup (map toUpper v) penv) of 
+              Just (Just uv, argUnits) ->
+                   if (null args) then (show uv ++ " - " ++ show argUnits) `D.trace` inferArgUnits' argUnits >> return uv
+                   else  "blurg" `D.trace` 
+                         do uv  <- anyUnits Temporary
+                            uvs <- inferArgUnits 
+                            let uvs' = justArgUnits args uvs
+                            calls << (v, (Just uv, uvs'))
+                            return uv
+
+              Nothing -> error $ "Undefined variable " ++ show v ++ "(" ++ show x ++ ")"
   where inferArgUnits = sequence [mapM inferExprUnits exprs | (_, exprs) <- names]
         inferArgUnits' uvs = sequence [(inferExprUnits expr) >>= (\uv' -> mustEqual uv' uv) | ((_, exprs), uv) <- zip names uvs, expr <- exprs]
         justArgUnits [NullExpr _ _] _ = []  -- zero-argument function call
@@ -867,15 +860,15 @@ inferExprUnits (ArrayCon _ _ (e:exprs)) =
      return uv
 inferExprUnits (AssgExpr _ _ _ e) = inferExprUnits e
 
-inferExprSeqUnits :: Expr a -> State UnitEnv [UnitVariable]
+inferExprSeqUnits :: Show a => Expr a -> State UnitEnv [UnitVariable]
 inferExprSeqUnits (ESeq _ _ e1 e2) = liftM2 (++) (inferExprSeqUnits e1) (inferExprSeqUnits e2)
 inferExprSeqUnits e = (:[]) `liftM` inferExprUnits e
 
-handleExpr :: Expr a -> State UnitEnv (Expr a)
+handleExpr :: Show a => Expr a -> State UnitEnv (Expr a)
 handleExpr x = do inferExprUnits x
                   return x
 
-inferForHeaderUnits :: (Variable, Expr a, Expr a, Expr a) -> State UnitEnv ()
+inferForHeaderUnits :: Show a => (Variable, Expr a, Expr a, Expr a) -> State UnitEnv ()
 inferForHeaderUnits (v, e1, e2, e3) =
   do uenv <- gets unitVarEnv
      let Just (uv, []) = lookup (map toUpper v) uenv
@@ -887,10 +880,10 @@ inferForHeaderUnits (v, e1, e2, e3) =
      mustEqual uv uv3
      return ()
 
-inferSpecUnits :: Data a => [Spec a] -> State UnitEnv ()
+inferSpecUnits :: (Show a, Data a) => [Spec a] -> State UnitEnv ()
 inferSpecUnits = mapM_ $ descendBiM' handleExpr
 
-inferStmtUnits :: Data a => Fortran a -> State UnitEnv ()
+inferStmtUnits :: (Show a, Data a) => Fortran a -> State UnitEnv ()
 inferStmtUnits (Assg _ _ e1 e2) =
   do uv1 <- inferExprUnits e1
      uv2 <- inferExprUnits e2
@@ -961,6 +954,6 @@ inferStmtUnits (ReadS _ _ specs exprs) =
 inferStmtUnits (TextStmt _ _ _) = return ()
 inferStmtUnits (NullStmt _ _) = return ()
 
-handleStmt :: Data a => Fortran a -> State UnitEnv (Fortran a)
+handleStmt :: (Show a, Data a) => Fortran a -> State UnitEnv (Fortran a)
 handleStmt x = do inferStmtUnits x
                   return x

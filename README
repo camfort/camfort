@@ -21,7 +21,7 @@ For development purpsoses, you probably want to load CamFort in interactive mode
 
 OR compile to the binary format locally:
 
-  ghc Main.lhs -o camfort
+  ghc Main.lhs -o camfort -package mtl-2.1.3.1
 
 Alternatively, to install as a library in your Haskell build 
 

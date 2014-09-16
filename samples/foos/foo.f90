@@ -2,7 +2,7 @@ program foo
   implicit none
 
   integer :: i
-  integer :: x
+  integer :: x = 4
   integer :: y
 
   real(kind=8) :: z

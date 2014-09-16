@@ -27,7 +27,7 @@
 > import Transformation.Syntax
 > import Traverse
 
-Todo: CallExpr, changing assignments 
+
 
 > -- Typed common block representation
 > type TCommon p = (Maybe String, [(Variable, Type p)])
@@ -124,7 +124,7 @@ Todo: CallExpr, changing assignments
 >                                    srcloc = useSrcLoc p
 >                                    uses = mkUseStatements srcloc tcrs'
 >                                    p' = transformBi ((flip concatUses) uses) p
->                                in removeDecls (map snd tcrs') p'
+>                                in let ?fname = fname in removeDecls (map snd tcrs') p'
 
 >                                      
 >           matchPUnit :: Filename -> ProgUnit A -> ProgUnit A
@@ -135,25 +135,63 @@ Todo: CallExpr, changing assignments
 >                                    srcloc = useSrcLoc p
 >                                    uses = mkUseStatements srcloc tcrs'
 >                                    p' = transformBi ((flip concatUses) uses) p
->                                in removeDecls (map snd tcrs') p'
+>                                in let ?fname = fname in removeDecls (map snd tcrs') p'
 
->           removeDecls :: [RenamerCoercer] -> ProgUnit A -> ProgUnit A
->           removeDecls rcs p = transformBi (remDecl rcs) p
+>           removeDecls :: (?fname :: Filename) => [RenamerCoercer] -> ProgUnit A -> ProgUnit A
+>           removeDecls rcs p = let (p', remainingAssignments) = runState (transformBiM (remDecl rcs) p) []
+>                               in (show remainingAssignments) `trace`  addToProgUnit p' remainingAssignments
 
->           matchrc _ Nothing = False
->           matchrc v (Just rc) =  Data.Map.member v rc
-
->           remDecl :: [RenamerCoercer] -> Decl A -> (Decl A) --  [Fortran A])
->           remDecl rcs d@(Decl p srcP [lvar@(Var _ _ [(VarName _ v, [])], e, _)] _) =
->                 if (or (map (matchrc v) rcs)) then 
+>           remDecl :: (?fname :: Filename) => [RenamerCoercer] -> Decl A -> State [Fortran A] (Decl A)
+>           {-remDecl rcs d@(Decl p srcP [lvar@(Var _ _ [(VarName _ v, [])], e, _)] _) = ("remove decls in " ++ (show ?fname) ++ " lvar = " ++ v) `trace` 
+>                 if (hasRenaming v rcs) then 
 >                   case e of
 >                     NullExpr _ _ -> (NullDecl ( p { refactored = Just (fst srcP) }) srcP) --  [])
 >                     e            -> (NullDecl ( p { refactored = Just (fst srcP) }) srcP) -- [Assg (p { refactored = Just (fst srcP) }) srcP lvar e])
->                 else d
->           remDecl _ d = d
+>                 else d-}
+>           remDecl rcs d@(Decl p srcP vars typ) = 
+
+>               do modify (++ assgns)
+>                  if (vars' == []) then  return $ NullDecl p' srcP 
+>                                   else  return $ Decl p' srcP vars' typ
+>               where
+>                   (assgns, vars') = foldl matchVar ([],[]) vars
+>                   p'    = if (length vars == length vars') then p else p { refactored = Just (fst srcP) }
+
+>                   matchVar :: ([Fortran A], [(Expr A, Expr A, Maybe Int)]) -> (Expr A, Expr A, Maybe Int)
+>                                                                            -> ([Fortran A], [(Expr A, Expr A, Maybe Int)])
+>                   matchVar (assgns, decls) dec@(lvar@(Var _ _ [(VarName _ v, _)]), e, _) = 
+>                                 if (hasRenaming v rcs) then
+>                                    case e of
+>                                     -- Renaming exists and no default, then remove
+>                                        NullExpr _ _ -> (assgns, decls)  
+>                                     -- Renaming exists but has default, so create an assignment for this
+>                                        e            -> ((Assg p' srcP lvar e) : assgns, decls)
+>                                 else -- no renaming, preserve declaration
+>                                       (assgns, dec : decls)
+>                   matchVar (assgns, decls) _ = (assgns, decls)
+>           remDecl _ d = return d
 >                     
 
 >       in each fps (\(f, p) -> (f, map importIncludeCommons $ transformBi (matchPUnit f) p))
+
+> addToProgUnit :: ProgUnit A -> [Fortran A] -> ProgUnit A
+> addToProgUnit p [] = p
+> addToProgUnit (IncludeProg p sp decl Nothing) stmts = IncludeProg p sp decl (Just $ 
+>                                                            prependStatements (Just $ afterEnd sp) (NullStmt unitAnnotation (afterEnd sp)) stmts)
+> addToProgUnit (IncludeProg p sp decl (Just f)) stmts = IncludeProg p sp decl (Just $ prependStatements Nothing f stmts)
+> addToProgUnit p stmts = transformBi (flip addToBlock stmts) p
+
+> addToBlock :: Block A -> [Fortran A] -> Block A
+> addToBlock b [] = b
+> addToBlock (Block p useBlock imps sp decls stmt) stmts = Block p useBlock imps sp decls (prependStatements Nothing stmt stmts)
+
+> prependStatements :: Maybe SrcSpan -> Fortran A -> [Fortran A] -> Fortran A
+> prependStatements sp stmt ss = FSeq p' sp' (foldl1 (FSeq p' sp') ss) stmt
+>                                   where p' = (annotation stmt) { refactored = Just (fst sp') }
+>                                         sp' = case sp of 
+>                                                 Nothing -> srcSpan stmt
+>                                                 Just s  -> s
+
 
 
 > useSrcLoc :: ProgUnit A -> SrcLoc
@@ -368,7 +406,7 @@ Extending calls version
 >                           defs' fname p = case (getSubName p) of
 >                                             Just pname -> transformBiM (collectCommons fname pname) p
 >                                             Nothing -> case p of 
->                                                          IncludeProg a sp ds -> 
+>                                                          IncludeProg a sp ds f -> 
 >                                                             -- ("doing an include: " ++ (show fname)) `trace`
 >                                                             let -- create dummy block
 >                                                                 a0 = unitAnnotation
@@ -376,7 +414,7 @@ Extending calls version
 >                                                                             (ImplicitNull a0) sp ds
 >                                                                             (NullStmt a0 nullSpan)
 >                                                              in do (Block _ _ _ _ ds' _) <- transformBiM (collectCommons fname fname) b
->                                                                    return $ IncludeProg a sp ds'
+>                                                                    return $ IncludeProg a sp ds' f
 >                                                          otherwise -> return p 
 
 

@@ -210,6 +210,9 @@ instance Refill Fortran where
 -- >     extend k y@(NullStmt _ sp)            = NullStmt (k y) sp 
 
 
+annotation :: Copointed g => g a -> a
+annotation = copoint
+
 class Copointed d where
    copoint :: d a -> a 
 

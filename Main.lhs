@@ -1,6 +1,7 @@
 > module Main where
 
 > import Language.Fortran.Parser
+> import Language.Fortran.PreProcess
 > import Language.Fortran
 
 > import System.Directory
@@ -254,7 +255,7 @@ their AST, write these to the director
 >                             ".inc" -> include_parser
 >                             _      -> parser
 >        in do inp <- readFile f
->              case (runParserWithMode mode selectedParser inp) of
+>              case (runParserWithMode mode selectedParser (pre_process inp)) of
 >                (ParseOk p)       -> return $ p
 >                (ParseFailed l e) -> error e
 

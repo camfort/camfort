@@ -323,10 +323,11 @@ refactorFortran inp cursor e =  return $
           let (lb, ub) = srcSpan e
               (p0, _) = takeBounds (cursor, lb) inp 
               outE = let ?variant = Alt1 in outputF e
-              lnl = case e of (NullStmt _ _) -> (if ((p0 /= []) && Prelude.last p0 /= '\n') then "\n" else "")
+              lnl = case e of (NullStmt _ _) -> (if ((p0 /= []) && (Prelude.last p0 /= '\n')) then "\n" else "")
                               _              -> ""
-              textOut = if p0 == "\n" then outE else (p0 ++ outE ++ lnl)
-          in (textOut, ub, True)
+              lnl2 = if ((p0 /= []) && (Prelude.last p0 /= '\n')) then "\n" else ""
+              textOut = if p0 == "\n" then outE else (p0 ++ lnl2 ++ outE ++ lnl)
+          in (show $ Prelude.last p0) `trace` (textOut, ub, True)
        else ("", cursor, False)
 
 
