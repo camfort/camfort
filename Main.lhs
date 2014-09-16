@@ -17,6 +17,7 @@
 
 > import Transformation.DeadCode
 > import Transformation.CommonBlockElim
+> import Transformation.CommonBlockElimToCalls
 > import Transformation.EquivalenceElim
 > import Transformation.DerivedTypeIntro
 > import Extensions.Units
