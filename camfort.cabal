@@ -1,5 +1,5 @@
 name:                   camfort
-version:                0.3
+version:                0.615
 synopsis:               CamFort - Cambridge Fortran infrastructure
 description:		CamFort is a tool for the analysis, transformation, and extension of Fortran code base.
 
@@ -27,6 +27,7 @@ library
                         Analysis.Syntax
                         Analysis.Types
                         Transformation.CommonBlockElim
+                        Transformation.CommonBlockElimToCalls
                         Transformation.DeadCode
                         Transformation.DerivedTypeIntro
                         Transformation.EquivalenceElim

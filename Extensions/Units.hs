@@ -180,9 +180,19 @@ elimRow' (matrix, vector) k m = (matrix', vector')
 checkUnderdeterminedM :: State UnitEnv ()
 checkUnderdeterminedM = do ucats <- gets unitVarCats
                            system <- gets linearSystem
+                           uvarenv <- gets unitVarEnv
                            let badCols = checkUnderdetermined ucats system
-                           unless (null badCols) $ report << "underdetermined units of measure"
+                           -- (show system) `D.trace` (unless (null badCols) $ report << "underdetermined units of measure: " ++ show badCols ++ " - " ++ show uvarenv)
+                           report << "please give annotation to variables " ++ (show (lookupUnderdeterminedVariables uvarenv badCols))
                            underdeterminedCols =: badCols
+
+lookupUnderdeterminedVariables :: UnitVarEnv -> [Int] -> [String]
+lookupUnderdeterminedVariables uenv badcols = 
+      mapMaybe (\j -> lookupEnv j uenv) badcols
+         where lookupEnv j [] = Nothing
+               lookupEnv j ((v, (UnitVariable i, _)):uenv)
+                                              | i == j    = Just v 
+                                              | otherwise = lookupEnv j uenv
 
 checkUnderdetermined :: [UnitVarCategory] -> LinearSystem -> [Int]
 checkUnderdetermined ucats system@(matrix, vector) =
@@ -795,8 +805,8 @@ inferExprUnits (Var _ _ names) =
  do uenv <- gets unitVarEnv
     penv <- gets procedureEnv
     let (VarName _ v, args) = head names
-    (v ++ " " ++  (show $ length args)) `D.trace`
-     case lookup (map toUpper v) uenv of
+    -- (v ++ " " ++  (show $ length args)) `D.trace`
+    case lookup (map toUpper v) uenv of
        -- array variable?
        Just (uv, uvs@(_:_)) -> inferArgUnits' uvs >> return uv
        -- function call?
