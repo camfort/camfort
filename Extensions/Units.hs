@@ -1,4 +1,4 @@
-{-# LANGUAGE ScopedTypeVariables, TemplateHaskell #-}
+{-# LANGUAGE ScopedTypeVariables, TemplateHaskell, ImplicitParams #-}
 
 module Extensions.Units where
 
@@ -6,6 +6,7 @@ import Data.Ratio
 import Data.Maybe
 import Data.Matrix
 import Data.List
+import qualified Data.Vector as V
 import Data.Label.Mono (Lens)
 import Data.Label.Monadic hiding (modify)
 import qualified Data.Label
@@ -20,6 +21,8 @@ import Analysis.Annotations
 import Analysis.Types
 import Transformation.Syntax
 import Language.Fortran
+import Output
+import Language.Fortran.Pretty
 
 import Test.QuickCheck
 
@@ -34,6 +37,36 @@ instance (Arbitrary a) => Arbitrary (Matrix a) where
 
 data UnitConstant = Unitful [(MeasureUnit, Rational)] | Unitless Rational deriving (Eq, Show)
 trim = filter $ \(unit, r) -> r /= 0
+
+newtype UnitVariable = UnitVariable Int deriving Show
+data UnitVarCategory = Literal | Temporary | Variable | Argument | Magic deriving (Eq, Show)
+type UnitVarEnv = [(Variable, (UnitVariable, [UnitVariable]))]
+type DerivedUnitEnv = [(MeasureUnit, UnitConstant)]
+type ProcedureNames = (String, Maybe Variable, [Variable])
+type Procedure = (Maybe UnitVariable, [UnitVariable])
+type ProcedureEnv = [(String, Procedure)]
+type LinearSystem = (Matrix Rational, [UnitConstant])
+
+type Row = Int
+type Col = Int
+
+type DebugInfo = [(Int, String)]
+
+data UnitEnv = UnitEnv {
+  _report              :: [String],
+  _unitVarEnv          :: UnitVarEnv,
+  _derivedUnitEnv      :: DerivedUnitEnv,
+  _procedureEnv        :: ProcedureEnv,
+  _calls               :: ProcedureEnv,
+  _unitVarCats         :: [UnitVarCategory],
+  _reorderedCols       :: [Int],
+  _underdeterminedCols :: [Int],
+  _linearSystem        :: LinearSystem, 
+  _debugInfo           :: DebugInfo
+}
+emptyUnitEnv = UnitEnv [] [] [] [] [] [Magic] [] [] (fromLists [[1]], [Unitful []]) []
+Data.Label.mkLabels [''UnitEnv]
+
 
 {- Treat 'UnitConstant's as numbers -}
 
@@ -63,33 +96,13 @@ instance Fractional UnitConstant where
   (Unitless n1) / (Unitless n2) = Unitless (n1 / n2)
   fromRational = Unitless . fromRational
 
-newtype UnitVariable = UnitVariable Int deriving Show
-data UnitVarCategory = Literal | Temporary | Variable | Argument | Magic deriving Eq
-type UnitVarEnv = [(Variable, (UnitVariable, [UnitVariable]))]
-type DerivedUnitEnv = [(MeasureUnit, UnitConstant)]
-type ProcedureNames = (String, Maybe Variable, [Variable])
-type Procedure = (Maybe UnitVariable, [UnitVariable])
-type ProcedureEnv = [(String, Procedure)]
-type LinearSystem = (Matrix Rational, [UnitConstant])
-
-data UnitEnv = UnitEnv {
-  _report              :: [String],
-  _unitVarEnv          :: UnitVarEnv,
-  _derivedUnitEnv      :: DerivedUnitEnv,
-  _procedureEnv        :: ProcedureEnv,
-  _calls               :: ProcedureEnv,
-  _unitVarCats         :: [UnitVarCategory],
-  _reorderedCols       :: [Int],
-  _underdeterminedCols :: [Int],
-  _linearSystem        :: LinearSystem
-}
-emptyUnitEnv = UnitEnv [] [] [] [] [] [Magic] [] [] (fromLists [[1]], [Unitful []])
-Data.Label.mkLabels [''UnitEnv]
 
 infix 2 <<
 (<<) :: MonadState f m => Lens (->) f [o] -> o -> m ()
 (<<) lens o = lens =. (o:)
---(<<) lens o = lens =. (++ [o])
+
+--(<<<<) = (<<)
+(<<<<) lens o = lens =. (++ [o])
 
 prepend :: MonadState f m => Lens (->) f [o] -> o -> m ()
 prepend lens o = lens =. (o:)
@@ -120,6 +133,7 @@ moveElem i j xs | i > j     = moveElem j i xs
                                       moveElemA 1    j (x:xs) (Just z) = x : moveElemA 1 (j - 1) xs (Just z)
                                       moveElemA 1    j (x:xs) Nothing  = moveElemA 1 j xs (Just x)                                      
                                       moveElemA i    j (x:xs) Nothing  = x : moveElemA (i - 1) j xs Nothing
+
 
 incrElem :: Num a => a -> (Int, Int) -> Matrix a -> Matrix a
 incrElem value pos matrix = setElem (matrix ! pos + value) pos matrix
@@ -181,13 +195,37 @@ checkUnderdeterminedM :: State UnitEnv ()
 checkUnderdeterminedM = do ucats <- gets unitVarCats
                            system <- gets linearSystem
                            uvarenv <- gets unitVarEnv
+                                      
+                           debugs <- gets debugInfo
+
                            let badCols = checkUnderdetermined ucats system
                            -- (show system) `D.trace` (unless (null badCols) $ report << "underdetermined units of measure: " ++ show badCols ++ " - " ++ show uvarenv)
-                           report << "please give annotation to variables " ++ (show (lookupUnderdeterminedVariables uvarenv badCols))
+                           --((show system) ++ "\n\n" ++ (show uvarenv) ++ "\n\n" ++ show ucats ++ "\n\n" ++ show debugs ++ "\n\n" ++ show badCols) `D.trace`
+                           --  report << "please give annotation to variables " ++ (show (lookupVarsByCols uvarenv badCols))
+
+                           report << "Critical variables " ++ (show (criticalVars uvarenv (fst system) 1))
+
                            underdeterminedCols =: badCols
 
-lookupUnderdeterminedVariables :: UnitVarEnv -> [Int] -> [String]
-lookupUnderdeterminedVariables uenv badcols = 
+firstNonZeroCoeff :: Matrix Rational -> Row -> Col
+firstNonZeroCoeff matrix row = case (V.findIndex (/= 0) (getRow row matrix)) of
+                                 Nothing -> ncols matrix
+                                 Just i  -> i + 1
+
+-- criticalVars :: Matrix Rational -> Row -> State UnitEnv [String]
+criticalVars varenv matrix i =
+    if (i == nrows matrix) then []
+    else  let m = firstNonZeroCoeff matrix
+          in  if (m (i + 1)) /= ((m i) + 1)         
+              then (lookupVarsByCols varenv [(m i)..(m (i + 1) - 1)]) ++ (criticalVars varenv matrix (i + 1))
+              else criticalVars varenv matrix (i + 1) 
+    
+                                   
+    
+                                  
+
+lookupVarsByCols :: UnitVarEnv -> [Int] -> [String]
+lookupVarsByCols uenv badcols = 
       mapMaybe (\j -> lookupEnv j uenv) badcols
          where lookupEnv j [] = Nothing
                lookupEnv j ((v, (UnitVariable i, _)):uenv)
@@ -201,11 +239,16 @@ checkUnderdetermined ucats system@(matrix, vector) =
 checkUnderdetermined' :: [UnitVarCategory] -> LinearSystem -> Int -> [Int]
 checkUnderdetermined' ucats system@(matrix, vector) n
   | n > nrows matrix = []
-  | not (null $ drop 1 ms) && vector !! (n - 1) /= Unitful [] = ms ++ rest
+  | not ((drop 1 ms) == []) && vector !! (n - 1) /= Unitful [] = ms ++ rest
   | otherwise = rest
   where ms = filter significant [1 .. ncols matrix]
         significant m = matrix ! (n, m) /= 0 && ucats !! (m - 1) `notElem` [Literal, Argument]
         rest = checkUnderdetermined' ucats system (n + 1)
+
+fooMatrix :: Matrix Rational
+fooMatrix = matrix 4 4 $ (\(i,j) -> if (i==j) then (toInteger i) % 1 else 0)
+
+-- 0 else (5 + 2*(toInteger i) - (toInteger j)) % 1)
 
 propagateUnderdetermined :: Matrix Rational -> [Int] -> [Int]
 propagateUnderdetermined matrix list =
@@ -459,15 +502,22 @@ enterDecls x proc =
           let (VarName _ v, es) = head names
           system <- gets linearSystem
           let m = ncols (fst system) + 1
-          unitVarCats << unitVarCat v
+          unitVarCats <<<< unitVarCat v
           linearSystem =. extendConstraints units
           ms <- case toArrayType t es of
                   ArrayT _ bounds _ _ _ _ -> mapM (const $ fmap UnitVariable $ addCol Variable) bounds
                   _ -> return []
           prepend unitVarEnv (map toUpper v, (UnitVariable m, ms))
-          uv <- inferExprUnits e
-          mustEqual (UnitVariable m) uv
+
+          -- If the declaration has a null expression, do not create a unifying variable
+          case e of 
+            NullExpr _ _ -> return ()
+            _            -> do uv <- inferExprUnits e
+                               mustEqual (UnitVariable m) uv
+                               return ()
+
           return (Var a { unitVar = m } s names, e)
+
         unitVarCat v
           | Just (n, r, args) <- proc, v `elem` args = Argument
           | otherwise = Variable
@@ -728,7 +778,7 @@ addCol category =
   do (matrix, vector) <- gets linearSystem
      let m = ncols matrix + 1
      linearSystem =: (extendTo 0 0 m matrix, vector)
-     unitVarCats << category
+     unitVarCats <<<< category
      return m
 
 addRow :: State UnitEnv Int
@@ -744,12 +794,16 @@ addRow' uc =
 liftUnitEnv :: (Matrix Rational -> Matrix Rational) -> UnitEnv -> UnitEnv
 liftUnitEnv f = Data.Label.modify linearSystem $ \(matrix, vector) -> (f matrix, vector)
 
+-- mustEqual - used for saying that two units must be the same- returns one of the variables
+--             (choice doesn't matter, but left is chosen).
 mustEqual :: UnitVariable -> UnitVariable -> State UnitEnv UnitVariable
 mustEqual (UnitVariable uv1) (UnitVariable uv2) = 
   do n <- addRow
      modify $ liftUnitEnv $ incrElem (-1) (n, uv1) . incrElem 1 (n, uv2)
      return $ UnitVariable uv1
 
+-- mustAddUp - used for multipling and dividing. Creates a new 'temporary' column and returns
+--             the variable associated with it
 mustAddUp :: UnitVariable -> UnitVariable -> Rational -> Rational -> State UnitEnv UnitVariable
 mustAddUp (UnitVariable uv1) (UnitVariable uv2) k1 k2 =
   do m <- addCol Temporary
@@ -801,11 +855,11 @@ inferExprUnits :: Show a => Expr a -> State UnitEnv UnitVariable
 inferExprUnits (Con _ _ _) = anyUnits Literal
 inferExprUnits (ConL _ _ _ _) = anyUnits Literal
 inferExprUnits (ConS _ _ _) = anyUnits Literal
-inferExprUnits (Var _ _ names) =
+inferExprUnits ve@(Var _ _ names) =
  do uenv <- gets unitVarEnv
     penv <- gets procedureEnv
     let (VarName _ v, args) = head names
-    -- (v ++ " " ++  (show $ length args)) `D.trace`
+
     case lookup (map toUpper v) uenv of
        -- array variable?
        Just (uv, uvs@(_:_)) -> inferArgUnits' uvs >> return uv
@@ -813,7 +867,8 @@ inferExprUnits (Var _ _ names) =
        Nothing | not (null args) -> do case (lookup (map toUpper v) intrinsicsDict) of
                                           Just fun -> (show v) `D.trace` fun (map toUpper v)
                                           Nothing  -> return ()
-                                       uv <- anyUnits Temporary
+                                       uv@(UnitVariable uvn) <- anyUnits Temporary
+                                       debugInfo << (uvn, let ?variant = Alt1 in outputF ve)
                                        uvs <- inferArgUnits
                                        let uvs' = justArgUnits args uvs
                                        calls << (v, (Just uv, uvs'))
@@ -826,35 +881,44 @@ inferExprUnits (Var _ _ names) =
        x -> case (lookup (map toUpper v) penv) of 
               Just (Just uv, argUnits) ->
                    if (null args) then (show uv ++ " - " ++ show argUnits) `D.trace` inferArgUnits' argUnits >> return uv
-                   else  "blurg" `D.trace` 
-                         do uv  <- anyUnits Temporary
+                   else  do uv <- anyUnits Temporary
                             uvs <- inferArgUnits 
                             let uvs' = justArgUnits args uvs
                             calls << (v, (Just uv, uvs'))
                             return uv
 
               Nothing -> error $ "Undefined variable " ++ show v ++ "(" ++ show x ++ ")"
-  where inferArgUnits = sequence [mapM inferExprUnits exprs | (_, exprs) <- names]
-        inferArgUnits' uvs = sequence [(inferExprUnits expr) >>= (\uv' -> mustEqual uv' uv) | ((_, exprs), uv) <- zip names uvs, expr <- exprs]
+  where inferArgUnits = sequence [mapM inferExprUnits exprs | (_, exprs) <- names, not (nullExpr exprs)]
+        inferArgUnits' uvs = sequence [(inferExprUnits expr) >>= (\uv' -> mustEqual uv' uv) | ((_, exprs), uv) <- zip names uvs, expr <- exprs, not (nullExpr [expr])]
+
+        nullExpr []                  = False
+        nullExpr [NullExpr _ _]      = True
+        nullExpr ((NullExpr _ _):xs) = nullExpr xs
+        nullExpr _                   = False
+
         justArgUnits [NullExpr _ _] _ = []  -- zero-argument function call
         justArgUnits _ uvs = head uvs
-inferExprUnits (Bin _ _ op e1 e2) = do uv1 <- inferExprUnits e1
-                                       uv2 <- inferExprUnits e2
-                                       case binOpKind op of
-                                         AddOp -> mustEqual uv1 uv2
-                                         MulOp -> mustAddUp uv1 uv2 1 1
-                                         DivOp -> mustAddUp uv1 uv2 1 (-1)
-                                         PowerOp -> powerUnits uv1 e2
-                                         LogicOp -> mustEqual uv1 uv2
-                                         RelOp -> do mustEqual uv1 uv2
-                                                     return $ UnitVariable 1
+inferExprUnits e@(Bin _ _ op e1 e2) = do uv1 <- inferExprUnits e1
+                                         uv2 <- inferExprUnits e2
+                                         (UnitVariable n) <- case binOpKind op of
+                                                               AddOp   -> mustEqual uv1 uv2
+                                                               MulOp   -> mustAddUp uv1 uv2 1 1
+                                                               DivOp   -> mustAddUp uv1 uv2 1 (-1)
+                                                               PowerOp -> powerUnits uv1 e2
+                                                               LogicOp -> mustEqual uv1 uv2
+                                                               RelOp   -> do mustEqual uv1 uv2
+                                                                             return $ UnitVariable 1
+                                         debugInfo << (n, let ?variant = Alt1 in outputF e)
+                                         return (UnitVariable n)
 inferExprUnits (Unary _ _ _ e) = inferExprUnits e
 inferExprUnits (CallExpr _ _ e1 (ArgList _ e2)) = do uv <- anyUnits Temporary
                                                      inferExprUnits e1
                                                      inferExprUnits e2
                                                      error "CallExpr not implemented"
                                                      return uv
-inferExprUnits (NullExpr _ _) = anyUnits Temporary
+-- inferExprUnits (NullExpr .... Shouldn't occur very often as adds unnnecessary cruft
+inferExprUnits (NullExpr _ _) = anyUnits Temporary 
+
 inferExprUnits (Null _ _) = return $ UnitVariable 1
 inferExprUnits (ESeq _ _ e1 e2) = do inferExprUnits e1
                                      inferExprUnits e2
