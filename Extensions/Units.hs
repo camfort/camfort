@@ -1,6 +1,7 @@
 {-  
 
-  Units of measure extension to Fortnra
+  Units of measure extension to Fortran
+
 
 TODO: 
  * cleanup comments, where 'toUpper' appears, remove these (left overs)
@@ -112,8 +113,7 @@ infix 2 <<
 (<<) :: MonadState f m => Lens (->) f [o] -> o -> m ()
 (<<) lens o = lens =. (o:)
 
---(<<<<) = (<<)
-(<<<<) lens o = lens =. (++ [o])
+postpend lens o = lens =. (++ [o])
 
 prepend :: MonadState f m => Lens (->) f [o] -> o -> m ()
 prepend lens o = lens =. (o:)
@@ -249,6 +249,8 @@ debugGaussian = do ucats   <- gets unitVarCats
                            ++ [[], map showCat ucats]
                        -- Debug info, e.g., expression or variable
                            ++ [map (showExpr ucats varenv procenv debugs) [1.. (ncols matrix)]]
+                       -- Additional debug info for args that are also variables
+                           ++ [map (showArgVars ucats varenv) [1..(ncols matrix)]]
                    let colSize = maximum' (map maximum' (map (notLast . (map length)) grid)) 
                    let expand r = r ++ (replicate (colSize - length r) ' ') 
                    let showLine x = (concatMap expand x) ++ "\n"
@@ -276,6 +278,13 @@ debugGaussian = do ucats   <- gets unitVarCats
                                                    (x:_) -> x
                                     Literal   -> fromJust $ lookup c debugInfo
                                     Magic     -> ""
+
+                          showArgVars cats vars c = 
+                                  case (cats !! (c - 1)) of
+                                    Argument -> case (lookupVarsByCols vars [c]) of
+                                                  []    -> ""
+                                                  (x:_) -> x
+                                    _        -> ""
                              
                           showRational r = show (numerator r) ++ if ((denominator r) == 1) then "" else "%" ++ (show $ denominator r)
 
@@ -588,11 +597,11 @@ enterDecls x proc =
                                                 return (e1', e2', multiplier)) d
         return $ Decl a s d' t
       where
-        dm units (Var a s names, e) = do
+        dm units (Var a s names, e) = do 
           let (VarName _ v, es) = head names
           system <- gets linearSystem
           let m = ncols (fst system) + 1
-          unitVarCats <<<< unitVarCat v
+          postpend unitVarCats (unitVarCat v)
           linearSystem =. extendConstraints units
           ms <- case toArrayType t es of
                   ArrayT _ bounds _ _ _ _ -> mapM (const $ fmap UnitVariable $ addCol Variable) bounds
@@ -618,10 +627,10 @@ enterDecls x proc =
       where
         learnDerivedUnit (name, spec) =
           do denv <- gets derivedUnitEnv
-             when (isJust $ lookup name denv) $ error "Redeclared unit of measure" -- (map toUpper name) denv) $ error "Redeclared unit of measure"
+             when (isJust $ lookup name denv) $ error "Redeclared unit of measure" -- toUpper name
              unit <- convertUnit spec
              denv <- gets derivedUnitEnv
-             when (isJust $ lookup name denv) $ error "Recursive unit-of-measure definition" -- (map toUpper name) denv) $ error "Recursive unit-of-measure definition"
+             when (isJust $ lookup name denv) $ error "Recursive unit-of-measure definition" -- toUpper name
              derivedUnitEnv << (name, unit) --(map toUpper name, unit)
     processDecls x = return x
 
@@ -734,7 +743,7 @@ toFraction r
 
 inferInterproceduralUnits :: Program Annotation -> State UnitEnv (Program Annotation)
 inferInterproceduralUnits x =
-  do -- reorderColumns
+  do --reorderColumns
      solveSystemM "inconsistent"
      system <- gets linearSystem
      inferInterproceduralUnits' x False system
@@ -782,20 +791,28 @@ addInterproceduralConstraints :: Program Annotation -> State UnitEnv ()
 addInterproceduralConstraints x =
   do
     cs <- gets calls
-    mapM_ addCall cs
+    (show cs) `D.trace` mapM_ addCall cs
   where
     addCall (name, (result, args)) =
       do penv <- gets procedureEnv
-         case lookup name penv of -- (map toUpper name) penv of
-           Just (r, as) -> let (r1, r2) = decodeResult result r in handleArgs (args ++ r1) (as ++ r2)
+         case lookup name penv of -- toUpper name
+           Just (r, as) -> 
+                             let (r1, r2) = decodeResult result r 
+                             in (name ++ " -- " ++ show (args ++ r1, as ++ r2)) `D.trace` 
+                                  handleArgs (args ++ r1) (as ++ r2)
            Nothing      -> return ()
+
     handleArgs actualVars dummyVars =
       do order <- gets reorderedCols
          let actual = map (realColumn order) actualVars
              dummy = map (realColumn order) dummyVars
-         mapM_ (handleArg $ zip dummy actual) dummy
+         (show (actual, dummy)) `D.trace`
+            mapM_ (handleArg $ zip dummy actual) dummy
+
     handleArg dummyToActual dummy =
       do (matrix, vector) <- gets linearSystem
+         report << "ABOUT TO HANDLE" 
+         debugGaussian
          let n = maybe 1 id $ find (\n -> matrix ! (n, dummy) /= 0) [1 .. nrows matrix]
              Just m = find (\m -> matrix ! (n, m) /= 0) [1 .. ncols matrix]
          when (m == dummy) $ do
@@ -804,6 +821,9 @@ addInterproceduralConstraints x =
            when (length m's == length ms) $ do
              n' <- addRow' $ vector !! (n - 1)
              mapM_ (handleArgPair matrix n n') (zip ms m's)
+         report << "HANDLED" 
+         debugGaussian
+
     handleArgPair matrix n n' (m, m') = modify $ liftUnitEnv $ setElem (matrix ! (n, m)) (n', m')
     decodeResult (Just r1) (Just r2) = ([r1], [r2])
     decodeResult Nothing Nothing = ([], [])
@@ -871,7 +891,7 @@ addCol category =
   do (matrix, vector) <- gets linearSystem
      let m = ncols matrix + 1
      linearSystem =: (extendTo 0 0 m matrix, vector)
-     unitVarCats <<<< category
+     postpend unitVarCats category
      return m
 
 addRow :: State UnitEnv Int
@@ -969,7 +989,8 @@ inferExprUnits ve@(Var _ _ names) =
                                        debugInfo << (uvn, let ?variant = Alt1 in outputF ve)
                                        uvs <- inferArgUnits
                                        let uvs' = justArgUnits args uvs
-                                       calls << (v, (Just uv, uvs'))
+                                       (show v ++ " _ " ++ show uvs ++ " - " ++ show uvs') `D.trace` 
+                                          calls << (v, (Just uv, uvs'))
                                        return uv
        -- scalar variable or external function call?
        Just (uv, []) -> inferArgUnits >> return uv
