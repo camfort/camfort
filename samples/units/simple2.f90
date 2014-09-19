@@ -18,9 +18,9 @@ program simple
 
   contains 
 
-  real function square(x) 
-    real x
-    square = x * x
+  real function square(y)
+    real y
+    square = y * y
   end function
 
     

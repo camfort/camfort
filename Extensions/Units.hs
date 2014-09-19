@@ -1,3 +1,14 @@
+{-  
+
+  Units of measure extension to Fortnra
+
+TODO: 
+ * cleanup comments, where 'toUpper' appears, remove these (left overs)
+
+-}
+
+
+
 {-# LANGUAGE ScopedTypeVariables, TemplateHaskell, ImplicitParams #-}
 
 module Extensions.Units where
@@ -38,7 +49,7 @@ instance (Arbitrary a) => Arbitrary (Matrix a) where
 data UnitConstant = Unitful [(MeasureUnit, Rational)] | Unitless Rational deriving (Eq, Show)
 trim = filter $ \(unit, r) -> r /= 0
 
-newtype UnitVariable = UnitVariable Int deriving Show
+newtype UnitVariable = UnitVariable Int deriving (Eq, Show)
 data UnitVarCategory = Literal | Temporary | Variable | Argument | Magic deriving (Eq, Show)
 type UnitVarEnv = [(Variable, (UnitVariable, [UnitVariable]))]
 type DerivedUnitEnv = [(MeasureUnit, UnitConstant)]
@@ -204,6 +215,7 @@ checkUnderdeterminedM = do ucats <- gets unitVarCats
                            --  report << "please give annotation to variables " ++ (show (lookupVarsByCols uvarenv badCols))
 
                            report << "Critical variables " ++ (show (criticalVars uvarenv (fst system) 1))
+                           debugGaussian
 
                            underdeterminedCols =: badCols
 
@@ -220,13 +232,80 @@ criticalVars varenv matrix i =
               then (lookupVarsByCols varenv [(m i)..(m (i + 1) - 1)]) ++ (criticalVars varenv matrix (i + 1))
               else criticalVars varenv matrix (i + 1) 
     
-                                   
-    
-                                  
+-- debugGaussian - a debugging routine which shose the Gaussian matrix with various peieces of info
+--               - mainly used for development purposes
+debugGaussian :: State UnitEnv String
+debugGaussian = do ucats   <- gets unitVarCats
+                   (matrix,rowv)  <- gets linearSystem
+                   varenv <- gets unitVarEnv
+                   debugs  <- gets debugInfo
+                   procenv <- gets procedureEnv
+
+                   let -- Column headings and then a space 
+                       grid = [map show [1..(ncols matrix)], []] 
+                       -- Gaussian matrix 
+                           ++ map (\r -> (map showRational $ V.toList $ getRow r matrix) ++ [show $ rowv !! (r - 1)]) [1..(nrows matrix)]
+                       -- Column categories
+                           ++ [[], map showCat ucats]
+                       -- Debug info, e.g., expression or variable
+                           ++ [map (showExpr ucats varenv procenv debugs) [1.. (ncols matrix)]]
+                   let colSize = maximum' (map maximum' (map (notLast . (map length)) grid)) 
+                   let expand r = r ++ (replicate (colSize - length r) ' ') 
+                   let showLine x = (concatMap expand x) ++ "\n"
+                              
+                   let grid' = concatMap showLine grid
+
+                   report << "Dump of units-of-measure system matrix\n" ++ grid'
+                   return grid'
+
+                    where maximum' [] = 0
+                          maximum' xs = maximum xs
+
+                          notLast xs = take (length xs - 1) xs
+
+                          showExpr cats vars procs debugInfo c = 
+                                  case (cats !! (c - 1)) of
+                                    Variable  -> case (lookupVarsByCols vars [c]) of
+                                                   []    -> case (lookupProcByCols procs [c]) of
+                                                              []    -> "?"
+                                                              (x:_) -> "=" ++ x
+                                                   (x:_) -> x
+                                    Temporary -> fromJust $ lookup c debugInfo
+                                    Argument  -> case (lookupProcByArgCol procs [c]) of 
+                                                   []    -> "?"
+                                                   (x:_) -> x
+                                    Literal   -> fromJust $ lookup c debugInfo
+                                    Magic     -> ""
+                             
+                          showRational r = show (numerator r) ++ if ((denominator r) == 1) then "" else "%" ++ (show $ denominator r)
+
+                          showCat Variable  = "Var"
+                          showCat Magic     = "Magic"
+                          showCat Temporary = "Temp"
+                          showCat Argument  = "Arg"
+                          showCat Literal   = "Lit"
+
+lookupProcByArgCol :: ProcedureEnv -> [Int] -> [String]
+lookupProcByArgCol penv cols = 
+    mapMaybe (\j -> lookupEnv j penv) cols
+       where lookupEnv j [] = Nothing
+             lookupEnv j ((p, (_, args)):penv) 
+                                  | elem (UnitVariable j) args  = Just (p ++ "#" ++ (show $ fromJust $ elemIndex (UnitVariable j) args))
+                                  | otherwise    = lookupEnv j penv
+             
+
+lookupProcByCols :: ProcedureEnv -> [Int] -> [String]
+lookupProcByCols penv cols = 
+    mapMaybe (\j -> lookupEnv j penv) cols
+       where lookupEnv j [] = Nothing
+             lookupEnv j ((p, (Just (UnitVariable i), _)):penv) 
+                                  | i == j    = Just p
+                                  | otherwise = lookupEnv j penv
+             lookupEnv j ((p, (Nothing, _)):penv) = lookupEnv j penv
 
 lookupVarsByCols :: UnitVarEnv -> [Int] -> [String]
-lookupVarsByCols uenv badcols = 
-      mapMaybe (\j -> lookupEnv j uenv) badcols
+lookupVarsByCols uenv cols = 
+      mapMaybe (\j -> lookupEnv j uenv) cols
          where lookupEnv j [] = Nothing
                lookupEnv j ((v, (UnitVariable i, _)):uenv)
                                               | i == j    = Just v 
@@ -259,9 +338,9 @@ propagateUnderdetermined matrix list =
 
 
 intrinsicsDict = 
-    map (\x -> (x, addPlain2ArgIntrinsic)) ["ABS", "ACHAR", "ADJUSTL", "ADJUSTR", "AIMAG", "AINT", "ALL", "ANINT", "ANY", "CEILING", "CHAR", "CONJG", "DBLE", "EPSILON", "FLOOR", "FRACTION", "HUGE", "IACHAR", "IALL", "IANY", "ICHAR", "INT", "IPARITY", "LOGICAL", "MAXEXPONENT", "MAXVAL", "MINEXPONENT", "MINVAL", "NEW_LINE", "NINT", "NORM2", "NOT", "NULL", "PARITY", "REAL", "RRSPACING", "SPACING", "SUM", "TINY", "TRANSPOSE", "TRIM"]
+    map (\x -> (x, addPlain1ArgIntrinsic)) ["ABS", "ACHAR", "ADJUSTL", "ADJUSTR", "AIMAG", "AINT", "ANINT", "CEILING", "CONJG", "DBLE", "EPSILON", "FLOOR", "FRACTION", "HUGE", "IACHAR", "ICHAR", "INT", "IPARITY", "LOGICAL", "MAXEXPONENT", "MINEXPONENT",  "NEW_LINE", "NINT", "NORM2", "NOT", "NULL", "PARITY", "REAL", "RRSPACING", "SPACING", "SUM", "TINY", "TRANSPOSE", "TRIM"]
     
- ++ map (\x -> (x, addPlain2ArgIntrinsic)) ["CMPLX", "DCOMPLX", "DIM", "HYPOT", "IAND", "IEOR", "IOR", "MAX", "MIN"] 
+ ++ map (\x -> (x, addPlain2ArgIntrinsic)) ["ALL", "ANY", "IALL", "IANY", "CHAR", "CMPLX", "DCOMPLX", "DIM", "HYPOT", "IAND", "IEOR", "IOR", "MAX", "MIN", "MAXVAL", "MINVAL"] 
     
  ++ map (\x -> (x, addPlain1Arg1ExtraIntrinsic)) ["CSHIFT", "EOSHIFT", "IBCLR", "IBSET", "MOD", "MODULO", "NEAREST", "PACK", "REPEAT", "RESHAPE", "SHIFTA", "SHIFTL", "SHIFTR", "SIGN"]
 
@@ -404,7 +483,7 @@ inferUnitsInProgUnit x =
 block :: ProgUnit Annotation -> Maybe (Block Annotation, Maybe ProcedureNames)
 block (Main x sp n a b ps)                            = Just (b, Nothing)
 block (Sub x sp t (SubName _ n) (Arg _ a _) b)        = Just (b, Just (n, Nothing, argNames a))
-block (Function x sp t (SubName _ n) (Arg _ a _) r b) = ("--# " ++ show (resultName n r)) `D.trace` Just (b, Just (n, Just (resultName n r), argNames a))
+block (Function x sp t (SubName _ n) (Arg _ a _) r b) = Just (b, Just (n, Just (resultName n r), argNames a))
 block x                                               = Nothing
 
 progUnits :: ProgUnit Annotation -> [ProgUnit Annotation]
@@ -438,8 +517,27 @@ resultName _ (Just (VarName _ r)) = r
 
 blockUnitEnv :: Block Annotation -> Maybe ProcedureNames -> State UnitEnv (Block Annotation)
 blockUnitEnv x proc = do y <- enterDecls x proc
+                         addProcedure proc
                          descendBiM' handleStmt y
                          return y
+                       where
+                         handleStmt :: (Show a, Data a) => Fortran a -> State UnitEnv (Fortran a)
+                         handleStmt x = do inferStmtUnits x
+                                           return x
+
+addProcedure Nothing = return ()
+addProcedure (Just (name, resultName, argNames)) = 
+      do uenv <- gets unitVarEnv 
+         resultVar <- case resultName of 
+                        Just rname -> case (lookup rname uenv) of
+                                        Just (uvar, _) -> return $ Just uvar
+                                        Nothing        -> do m <- addCol Variable
+                                                             return $ Just (UnitVariable m)
+                        Nothing    -> return Nothing
+         let argVars = fmap (lookupUnitByName uenv) argNames
+         procedureEnv << (name, (resultVar, argVars)) -- toUpper name
+        where
+          lookupUnitByName uenv v = maybe (UnitVariable 1) fst $ lookup v uenv -- toUpper v
 
 convertUnit :: MeasureUnitSpec a -> State UnitEnv UnitConstant
 convertUnit (UnitProduct _ units) = convertUnits units
@@ -454,9 +552,9 @@ convertSingleUnit :: MeasureUnit -> Rational -> State UnitEnv UnitConstant
 convertSingleUnit unit f =
   do denv <- gets derivedUnitEnv
      let uc f' = Unitful [(unit, f')]
-     case lookup (map toUpper unit) denv of
+     case lookup unit denv of -- (map toUpper unit) denv of
        Just uc' -> return $ uc' * (fromRational f)
-       Nothing  -> derivedUnitEnv << (map toUpper unit, uc 1) >> return (uc f)
+       Nothing  -> derivedUnitEnv << (unit, uc 1) >> return (uc f) -- (map toUpper unit, uc 1) >> return (uc f)
 
 fromFraction :: Fraction a -> Rational
 fromFraction (IntegerConst _ n) = fromInteger $ read n
@@ -479,18 +577,10 @@ extendConstraints units (matrix, vector) =
 enterDecls :: Block Annotation -> Maybe ProcedureNames -> State UnitEnv (Block Annotation)
 enterDecls x proc =
   do
-    y <- transformBiM f x
-    addProcedure proc
+    y <- transformBiM processDecls x
     return y
   where
-    addProcedure Nothing = return ()
-    addProcedure (Just (name, resultName, argNames)) = ("add p " ++ show name) `D.trace`
-      do uenv <- gets unitVarEnv
-         let resultVar = fmap (lookupUnitByName uenv) resultName
-             argVars = fmap (lookupUnitByName uenv) argNames
-         procedureEnv << (map toUpper name, (resultVar, argVars))
-    lookupUnitByName uenv v = maybe (UnitVariable 1) fst $ lookup (map toUpper v) uenv
-    f (Decl a s d t) =
+    processDecls (Decl a s d t) =
       do
         let BaseType _ _ attrs _ _ = arrayElementType t
         units <- sequence $ concatMap extractUnit attrs
@@ -507,7 +597,7 @@ enterDecls x proc =
           ms <- case toArrayType t es of
                   ArrayT _ bounds _ _ _ _ -> mapM (const $ fmap UnitVariable $ addCol Variable) bounds
                   _ -> return []
-          prepend unitVarEnv (map toUpper v, (UnitVariable m, ms))
+          prepend unitVarEnv (v, (UnitVariable m, ms)) -- (map toUpper v, (UnitVariable m, ms))
 
           -- If the declaration has a null expression, do not create a unifying variable
           case e of 
@@ -521,19 +611,19 @@ enterDecls x proc =
         unitVarCat v
           | Just (n, r, args) <- proc, v `elem` args = Argument
           | otherwise = Variable
-    f x@(MeasureUnitDef a s d) =
+    processDecls x@(MeasureUnitDef a s d) =
       do
         mapM_ learnDerivedUnit d
         return x
       where
         learnDerivedUnit (name, spec) =
           do denv <- gets derivedUnitEnv
-             when (isJust $ lookup (map toUpper name) denv) $ error "Redeclared unit of measure"
+             when (isJust $ lookup name denv) $ error "Redeclared unit of measure" -- (map toUpper name) denv) $ error "Redeclared unit of measure"
              unit <- convertUnit spec
              denv <- gets derivedUnitEnv
-             when (isJust $ lookup (map toUpper name) denv) $ error "Recursive unit-of-measure definition"
-             derivedUnitEnv << (map toUpper name, unit)
-    f x = return x
+             when (isJust $ lookup name denv) $ error "Recursive unit-of-measure definition" -- (map toUpper name) denv) $ error "Recursive unit-of-measure definition"
+             derivedUnitEnv << (name, unit) --(map toUpper name, unit)
+    processDecls x = return x
 
 inferUnits :: (Filename, Program Annotation) -> (Report, (Filename, Program Annotation))
 inferUnits (fname, x) = (r, (fname, y))
@@ -655,6 +745,7 @@ inferInterproceduralUnits' x haveAssumedLiterals system1 =
      consistent <- solveSystemM "inconsistent"
      if not consistent then 
           do  linearSystem =: system1
+              debugGaussian
               return x
       else do
         system2 <- gets linearSystem
@@ -695,7 +786,7 @@ addInterproceduralConstraints x =
   where
     addCall (name, (result, args)) =
       do penv <- gets procedureEnv
-         case lookup (map toUpper name) penv of
+         case lookup name penv of -- (map toUpper name) penv of
            Just (r, as) -> let (r1, r2) = decodeResult result r in handleArgs (args ++ r1) (as ++ r2)
            Nothing      -> return ()
     handleArgs actualVars dummyVars =
@@ -772,6 +863,8 @@ binOpKind (RelLT _) = RelOp
 binOpKind (RelLE _) = RelOp
 binOpKind (RelGT _) = RelOp
 binOpKind (RelGE _) = RelOp
+
+{- 'addCol' and 'addRow' extend the Gaussian matrix -}
 
 addCol :: UnitVarCategory -> State UnitEnv Int
 addCol category =
@@ -851,21 +944,26 @@ instance InferUnits (Fortran a) () where
     inferUnits = inferStmtUnits
 -}
 
+-- inferLiteral - a little helper to infer the 'literal' with debugging info
+inferLiteral e = do uv@(UnitVariable uvn) <- anyUnits Literal
+                    debugInfo << (uvn, let ?variant = Alt1 in outputF e)
+                    return uv
+
 inferExprUnits :: Show a => Expr a -> State UnitEnv UnitVariable
-inferExprUnits (Con _ _ _) = anyUnits Literal
-inferExprUnits (ConL _ _ _ _) = anyUnits Literal
-inferExprUnits (ConS _ _ _) = anyUnits Literal
+inferExprUnits e@(Con _ _ _)    = inferLiteral e
+inferExprUnits e@(ConL _ _ _ _) = inferLiteral e
+inferExprUnits e@(ConS _ _ _)   = inferLiteral e
 inferExprUnits ve@(Var _ _ names) =
  do uenv <- gets unitVarEnv
     penv <- gets procedureEnv
     let (VarName _ v, args) = head names
 
-    case lookup (map toUpper v) uenv of
+    case lookup v uenv of -- (map toUpper v) uenv of
        -- array variable?
        Just (uv, uvs@(_:_)) -> inferArgUnits' uvs >> return uv
        -- function call?
        Nothing | not (null args) -> do case (lookup (map toUpper v) intrinsicsDict) of
-                                          Just fun -> (show v) `D.trace` fun (map toUpper v)
+                                          Just fun -> fun v -- toUpper v
                                           Nothing  -> return ()
                                        uv@(UnitVariable uvn) <- anyUnits Temporary
                                        debugInfo << (uvn, let ?variant = Alt1 in outputF ve)
@@ -876,11 +974,11 @@ inferExprUnits ve@(Var _ _ names) =
        -- scalar variable or external function call?
        Just (uv, []) -> inferArgUnits >> return uv
        -- default specifier
-       _ | v == "*" -> anyUnits Literal
+       _ | v == "*" -> inferLiteral ve
        -- just bad code
-       x -> case (lookup (map toUpper v) penv) of 
+       x -> case (lookup v penv) of -- (map toUpper v) penv) of 
               Just (Just uv, argUnits) ->
-                   if (null args) then (show uv ++ " - " ++ show argUnits) `D.trace` inferArgUnits' argUnits >> return uv
+                   if (null args) then inferArgUnits' argUnits >> return uv
                    else  do uv <- anyUnits Temporary
                             uvs <- inferArgUnits 
                             let uvs' = justArgUnits args uvs
@@ -945,7 +1043,7 @@ handleExpr x = do inferExprUnits x
 inferForHeaderUnits :: Show a => (Variable, Expr a, Expr a, Expr a) -> State UnitEnv ()
 inferForHeaderUnits (v, e1, e2, e3) =
   do uenv <- gets unitVarEnv
-     let Just (uv, []) = lookup (map toUpper v) uenv
+     let Just (uv, []) = lookup v uenv -- (map toUpper v) uenv
      uv1 <- inferExprUnits e1
      mustEqual uv uv1
      uv2 <- inferExprUnits e2
@@ -958,7 +1056,7 @@ inferSpecUnits :: (Show a, Data a) => [Spec a] -> State UnitEnv ()
 inferSpecUnits = mapM_ $ descendBiM' handleExpr
 
 inferStmtUnits :: (Show a, Data a) => Fortran a -> State UnitEnv ()
-inferStmtUnits (Assg _ _ e1 e2) =
+inferStmtUnits e@(Assg _ _ e1 e2) = 
   do uv1 <- inferExprUnits e1
      uv2 <- inferExprUnits e2
      mustEqual uv1 uv2
@@ -1028,6 +1126,4 @@ inferStmtUnits (ReadS _ _ specs exprs) =
 inferStmtUnits (TextStmt _ _ _) = return ()
 inferStmtUnits (NullStmt _ _) = return ()
 
-handleStmt :: (Show a, Data a) => Fortran a -> State UnitEnv (Fortran a)
-handleStmt x = do inferStmtUnits x
-                  return x
+
