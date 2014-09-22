@@ -14,6 +14,7 @@ import Data.Char
 import Data.List
 import Data.Monoid
 import Control.Monad.State.Lazy
+import Debug.Trace
 
 -- Data-type generics imports
 import Data.Data
@@ -21,7 +22,6 @@ import Data.Generics.Uniplate.Data
 import Data.Generics.Uniplate.Operations
 import Data.Generics.Zipper
 import Data.Typeable
-
 
 -- CamFort specific functionality
 import Analysis.Annotations
@@ -229,7 +229,6 @@ data ETag t where
     Decls  :: ETag (Decl Annotation)
     Locs   :: ETag Access
     Vars   :: ETag (Expr Annotation)
-
 from :: forall t synTyp . (Data t, Data synTyp) => ETag synTyp -> t -> [synTyp]
 from Locs x = accesses x
 from Vars x = [v | v@(Var _ _ _) <- (universeBi x)::[Expr Annotation]]
@@ -238,6 +237,9 @@ from _ x = (universeBi x)::[synTyp]
 topFrom :: forall t synTyp . (Data t, Data synTyp) => ETag synTyp -> t -> [synTyp]
 topFrom Locs x = accesses x
 topFrom _ x = (childrenBi x)::[synTyp]
+
+fromTop :: forall t synTyp . (Data t, Data synTyp) => ETag synTyp -> t -> [synTyp]
+fromTop = topFrom
 
 
 {-| All accessors (variables and array indexing) -}

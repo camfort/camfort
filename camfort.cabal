@@ -33,6 +33,7 @@ library
                         Transformation.EquivalenceElim
                         Transformation.Syntax
                         Extensions.Units
+                        Extensions.UnitsEnvironment
                         Helpers
                         Main
                         Output
