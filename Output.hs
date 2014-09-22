@@ -384,6 +384,8 @@ countLines (x:xs)    = countLines xs
 
 removeNewLines [] n = ([], 0)
 
+removeNewLines xs 0 = (xs, 0)
+
 -- Deal with CR LF in the same way as just LF 
 removeNewLines ('\r':('\n':('\r':('\n':xs)))) n = let (xs', n') = removeNewLines ('\r':'\n':xs) (n - 1)
                                                    in (xs', n' + 1)
