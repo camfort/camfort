@@ -139,11 +139,18 @@ inferBlockUnits :: Block Annotation -> Maybe ProcedureNames -> State UnitEnv (Bl
 inferBlockUnits x proc = do y <- enterDecls x proc
                             addProcedure proc
                             descendBiM handleStmt y
+                            -- <intermediate solve>
+                            {-system <- gets linearSystem
+                            case (solveSystem system) of 
+                              Just system' -> linearSystem =: system' 
+                              Nothing      -> "Wasn't able to do an intermediate solve" `D.trace` return () -}
+                            -- </intermediate solve>
                             return y
                          where
                            handleStmt :: Fortran Annotation -> State UnitEnv (Fortran Annotation)
                            handleStmt x = do inferStmtUnits x
                                              return x
+
 
 
 
@@ -451,7 +458,7 @@ inferExprUnits (ESeq _ _ e1 e2) = do inferExprUnits e1
                                      return $ error "ESeq units wanted"
 inferExprUnits (Bound _ _ e1 e2) = do uv1 <- inferExprUnits e1
                                       uv2 <- inferExprUnits e2
-                                      mustEqual uv1 uv2
+                                      mustEqual uv1 uv2 
 inferExprUnits (Sqrt _ _ e) = do uv <- inferExprUnits e
                                  sqrtUnits uv
 inferExprUnits (ArrayCon _ _ (e:exprs)) =
@@ -483,24 +490,27 @@ inferForHeaderUnits (v, e1, e2, e3) =
 inferSpecUnits :: [Spec Annotation] -> State UnitEnv ()
 inferSpecUnits = mapM_ $ descendBiM handleExpr
 
+{-| inferStmtUnits, does what it says on the tin -}
 inferStmtUnits :: Fortran Annotation -> State UnitEnv ()
 inferStmtUnits e@(Assg _ _ e1 e2) = 
   do uv1 <- inferExprUnits e1
      uv2 <- inferExprUnits e2
      mustEqual uv1 uv2
      return ()
-inferStmtUnits (For _ _ _ (NullExpr _ _) _ _ s) = inferStmtUnits s
+ 
+inferStmtUnits (For _ _ _ (NullExpr _ _) _ _ s)   = inferStmtUnits s
 inferStmtUnits (For _ _ (VarName _ v) e1 e2 e3 s) =
   do inferForHeaderUnits (v, e1, e2, e3)
      inferStmtUnits s
+
 inferStmtUnits (FSeq _ _ s1 s2) = mapM_ inferStmtUnits [s1, s2]
 inferStmtUnits (If _ _ e1 s1 elseifs ms2) =
   do inferExprUnits e1
      inferStmtUnits s1
-     sequence_ [inferExprUnits e >> inferStmtUnits s | (e, s) <- elseifs]
+     sequence [inferExprUnits e >> inferStmtUnits s | (e, s) <- elseifs]
      case ms2 of
-       Just s2 -> inferStmtUnits s2
-       Nothing -> return ()
+           Just s2 -> inferStmtUnits s2
+           Nothing -> return ()
 inferStmtUnits (Allocate _ _ e1 e2) = mapM_ inferExprUnits [e1, e2]
 inferStmtUnits (Backspace _ _ specs) = inferSpecUnits specs
 inferStmtUnits (Call _ _ (Var _ _ [(VarName _ v, [])]) (ArgList _ e2)) =
@@ -630,6 +640,7 @@ liftUnitEnv f = Data.Label.modify linearSystem $ \(matrix, vector) -> (f matrix,
                                    
 -- mustEqual - used for saying that two units must be the same- returns one of the variables
 --             (choice doesn't matter, but left is chosen).
+--             Returns the unit variables equaled upon
 mustEqual :: UnitVariable -> UnitVariable -> State UnitEnv UnitVariable
 mustEqual (UnitVariable uv1) (UnitVariable uv2) = 
   do n <- addRow
