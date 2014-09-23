@@ -76,7 +76,8 @@ inferCriticalVariables (fname, x) =
                        vars <- criticalVars
                        case vars of 
                          [] -> report <<++ "No critical variables. Appropriate annotations."
-                         _  -> report <<++ ("Critical variables: " ++ (concat $ intersperse "," vars))
+                         _  -> report <<++ "Critical variables: " ++ (concat $ intersperse "," vars)
+                       -- debugGaussian
 
             (y, env) = runState infer emptyUnitEnv
             r = concat [fname ++ ": " ++ r ++ "\n" | r <- Data.Label.get report env]
@@ -105,15 +106,11 @@ emptyUnitEnv = UnitEnv { _report              = [],
                          _tmpColsAdded        = []}
 
 
-
 doInferUnits :: (?criticals :: Bool) => Program Annotation -> State UnitEnv (Program Annotation)
 doInferUnits x = do y <- mapM inferProgUnits x
                     z <- inferInterproceduralUnits y
-                    p <- if ?criticals then 
-                             return x
-                         else
-                             mapM (descendBiM insertUnitsInBlock) z
-                    return p
+                    if ?criticals then  return x -- don't insert unit annotations
+                                  else  mapM (descendBiM insertUnitsInBlock) z
 
 inferProgUnits :: (?criticals :: Bool) => ProgUnit Annotation -> State UnitEnv (ProgUnit Annotation)
 inferProgUnits p =
@@ -222,31 +219,23 @@ addProcedure (Just (name, resultName, argNames)) =
 -- *************************************
 
 enterDecls :: Block Annotation -> Maybe ProcedureNames -> State UnitEnv (Block Annotation)
-enterDecls x proc =
-  do
-    y <- transformBiM processDecls x
-    return y
+enterDecls x proc = transformBiM processDecls x
   where
-    processDecls (Decl a s d t) =
-      do
-        let BaseType _ _ attrs _ _ = arrayElementType t
-        units <- sequence $ concatMap extractUnit attrs
-        d' <- mapM (\(e1, e2, multiplier) -> do (e1', e2') <- dm units (e1, e2)
-                                                return (e1', e2', multiplier)) d
-        return $ Decl a s d' t
-      where
-        dm units (Var a s names, e) = do 
+    processVar :: [UnitConstant] -> (Expr Annotation, Expr Annotation) -> Type Annotation -> 
+                  State UnitEnv (Expr Annotation, Expr Annotation)
+    processVar units (Var a s names, e) typ = 
+       do 
           let (VarName _ v, es) = head names
           system <- gets linearSystem
           let m = ncols (fst system) + 1
           unitVarCats <<++ (unitVarCat v)
           extendConstraints units
-          ms <- case toArrayType t es of
+          ms <- case toArrayType typ es of
                   ArrayT _ bounds _ _ _ _ -> mapM (const $ fmap UnitVariable $ addCol Variable) bounds
                   _ -> return []
           unitVarEnv << (v, (UnitVariable m, ms)) -- (map toUpper v, (UnitVariable m, ms))
 
-          -- If the declaration has a null expression, do not create a unifying variable
+             -- If the declaration has a null expression, do not create a unifying variable
           case e of 
             NullExpr _ _ -> return ()
             _            -> do uv <- inferExprUnits e
@@ -255,11 +244,23 @@ enterDecls x proc =
 
           return (Var a { unitVar = m } s names, e)
 
-        unitVarCat v
+    unitVarCat :: Variable -> UnitVarCategory
+    unitVarCat v
           | Just (n, r, args) <- proc, v `elem` args = Argument
-          | otherwise = Variable
+          | otherwise                                = Variable
 
-    {-| processDecls - extra and record information from explicit unit declarations -}
+
+    {-| processDecls - extract and record information from explicit unit declarations -}
+    processDecls :: Decl Annotation -> State UnitEnv (Decl Annotation)
+    processDecls (Decl a s d typ) =
+      do
+         let BaseType _ _ attrs _ _ = arrayElementType typ
+         units <- sequence $ concatMap extractUnit attrs
+         d' <- mapM (\(e1, e2, multiplier) -> do (e1', e2') <- processVar units (e1, e2) typ
+                                                 return (e1', e2', multiplier)) d
+         return $ Decl a s d' typ
+
+
     processDecls x@(MeasureUnitDef a s d) =
       do
         mapM learnDerivedUnit d
@@ -807,15 +808,28 @@ checkUnderdeterminedM = do ucats <- gets unitVarCats
 criticalVars :: State UnitEnv [String]
 criticalVars = do uvarenv     <- gets unitVarEnv
                   (matrix, _) <- gets linearSystem
-                  return $ criticalVars' uvarenv matrix 1
+                  ucats       <- gets unitVarCats
+                  return $ criticalVars' uvarenv ucats matrix 1
 
-criticalVars' :: UnitVarEnv -> Matrix Rational -> Row -> [String]
-criticalVars' varenv matrix i =
+criticalVars' :: UnitVarEnv -> [UnitVarCategory] -> Matrix Rational -> Row -> [String]
+criticalVars' varenv ucats matrix i =
     if (i == nrows matrix) then []
     else  let m = firstNonZeroCoeff matrix
           in  if (m (i + 1)) /= ((m i) + 1)         
-              then (lookupVarsByCols varenv [(m i)..(m (i + 1) - 1)]) ++ (criticalVars' varenv matrix (i + 1))
-              else criticalVars' varenv matrix (i + 1) 
+              then (lookupVarsByColsFilterByArg varenv ucats [(m i)..(m (i + 1) - 1)]) ++ (criticalVars' varenv ucats matrix (i + 1))
+              else criticalVars' varenv ucats matrix (i + 1) 
+
+lookupVarsByColsFilterByArg :: UnitVarEnv -> [UnitVarCategory] -> [Int] -> [String]
+lookupVarsByColsFilterByArg uenv ucats cols = 
+      mapMaybe (\j -> lookupEnv j uenv) cols
+         where lookupEnv j [] = Nothing
+               lookupEnv j ((v, (UnitVariable i, _)):uenv)
+                                              | i == j    = if (j < length ucats) then
+                                                             case (ucats !! (j - 1)) of
+                                                                Argument -> Nothing
+                                                                _        -> Just v 
+                                                            else Nothing
+                                              | otherwise = lookupEnv j uenv
 
 firstNonZeroCoeff :: Matrix Rational -> Row -> Col
 firstNonZeroCoeff matrix row = case (V.findIndex (/= 0) (getRow row matrix)) of
@@ -1078,13 +1092,13 @@ debugGaussian' = do ucats   <- gets unitVarCats
                                     | otherwise = lookupEnv j penv
                        lookupEnv j ((p, (Nothing, _)):penv) = lookupEnv j penv
 
-lookupVarsByCols :: UnitVarEnv -> [Int] -> [String]
-lookupVarsByCols uenv cols = 
-      mapMaybe (\j -> lookupEnv j uenv) cols
-         where lookupEnv j [] = Nothing
-               lookupEnv j ((v, (UnitVariable i, _)):uenv)
-                                              | i == j    = Just v 
-                                              | otherwise = lookupEnv j uenv
+         lookupVarsByCols :: UnitVarEnv -> [Int] -> [String]
+         lookupVarsByCols uenv cols = 
+             mapMaybe (\j -> lookupEnv j uenv) cols
+                 where lookupEnv j [] = Nothing
+                       lookupEnv j ((v, (UnitVariable i, _)):uenv)
+                                    | i == j    = Just v 
+                                    | otherwise = lookupEnv j uenv
 
 -- *************************************
 --   Insert unit declarations into code
