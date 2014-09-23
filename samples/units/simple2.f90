@@ -3,7 +3,7 @@ program simple
 
   real, unit(s) :: t
   real, unit(m/s):: v
-  real :: x, s, a
+  real :: x, s, a, b
 
   x = 20.0
   t = 3.0 
@@ -11,6 +11,8 @@ program simple
   s = abs(v)
 
   a = square (x) 
+
+  b = square (t)
   
   print *, s
   print *, v
@@ -19,7 +21,9 @@ program simple
   contains 
 
   real function square(y)
-    real y
+    real y, m
+    real, unit(n) :: n
+    m = n 
     square = y * y
   end function
 

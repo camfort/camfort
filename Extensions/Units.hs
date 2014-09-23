@@ -84,7 +84,9 @@ emptyUnitEnv = UnitEnv { _report              = [],
                          _reorderedCols       = [],
                          _underdeterminedCols = [],
                          _linearSystem        = (fromLists [[1]], [Unitful []]),
-                         _debugInfo           = [] }
+                         _debugInfo           = [],
+                         _tmpRowsAdded        = [],
+                         _tmpColsAdded        = []}
 
 
 
@@ -92,7 +94,6 @@ doInferUnits :: Program Annotation -> State UnitEnv (Program Annotation)
 doInferUnits x = do y <- mapM inferProgUnits x
                     z <- inferInterproceduralUnits y
                     p <- mapM (descendBiM insertUnitsInBlock) z
-                    debugGaussian
                     return p
 
 inferProgUnits :: ProgUnit Annotation -> State UnitEnv (ProgUnit Annotation)
@@ -136,22 +137,49 @@ inferProgUnits p =
 
 
 inferBlockUnits :: Block Annotation -> Maybe ProcedureNames -> State UnitEnv (Block Annotation)
-inferBlockUnits x proc = do y <- enterDecls x proc
+inferBlockUnits x proc = do resetTemps
+                            y <- enterDecls x proc
                             addProcedure proc
                             descendBiM handleStmt y
-                            -- <intermediate solve>
-                            {-system <- gets linearSystem
-                            case (solveSystem system) of 
-                              Just system' -> linearSystem =: system' 
-                              Nothing      -> "Wasn't able to do an intermediate solve" `D.trace` return () -}
-                            -- </intermediate solve>
+
+                            case proc of 
+                              Just _ -> do -- <intermediate solve>
+                                           solveSystemM "" 
+                                           --debugGaussian
+                                           linearSystem =. reduceRows 1
+                                           --debugGaussian
+                                           -- </intermediate solve>
+                              Nothing -> return ()
                             return y
                          where
                            handleStmt :: Fortran Annotation -> State UnitEnv (Fortran Annotation)
                            handleStmt x = do inferStmtUnits x
                                              return x
 
-
+{-| reduceRows is a core part of the polymorphic unit checking for procedures. 
+               
+               It is essentially an "optimiation" of the Gaussian matrix (not in the sense of performance),
+               that elimiantes rows in the system such that there are as few variables as possible. Within
+               a function, assuming everything is consistent, then this should generate a linear constraint
+               between the parameters and the return as a single row in the matrix. This is then used by the
+               interprocedural constraints to hookup call-sites with definitions (in a parametrically polymorphic
+               way- i.e. lambda abstraction is polymorphic in its units, different to say ML).
+-}
+reduceRows :: Col -> LinearSystem -> LinearSystem
+reduceRows m (matrix, vector) 
+    | m > ncols matrix = (matrix, vector)
+    | otherwise = case (find (\n -> matrix ! (n, m) /= 0) [1..nrows matrix]) of
+                    Just r1 -> case (find (\n -> matrix ! (n, m) /= 0) [(r1 + 1)..nrows matrix]) of
+                                 Just r2 -> -- Found two rows with non-zero coeffecicients in this column 
+                                            case (elimRow (matrix, vector) (Just r1) m r2) of
+                                                 -- Eliminate the row and cut the system down
+                                                 Just (matrix', vector') -> reduceRows m (cutSystem r2 (matrix', vector'))
+                                                 Nothing                 -> reduceRows (m+1) (matrix, vector)
+                                            
+                                 Nothing -> -- If there are no two rows with non-zero coeffecieints in colum m
+                                            -- then move onto the next column
+                                            reduceRows (m+1) (matrix, vector)
+                    Nothing -> reduceRows (m+1) (matrix, vector)
 
 
 addProcedure Nothing = return ()
@@ -193,7 +221,7 @@ enterDecls x proc =
           system <- gets linearSystem
           let m = ncols (fst system) + 1
           unitVarCats <<++ (unitVarCat v)
-          linearSystem =. extendConstraints units
+          extendConstraints units
           ms <- case toArrayType t es of
                   ArrayT _ bounds _ _ _ _ -> mapM (const $ fmap UnitVariable $ addCol Variable) bounds
                   _ -> return []
@@ -211,9 +239,11 @@ enterDecls x proc =
         unitVarCat v
           | Just (n, r, args) <- proc, v `elem` args = Argument
           | otherwise = Variable
+
+    {-| processDecls - extra and record information from explicit unit declarations -}
     processDecls x@(MeasureUnitDef a s d) =
       do
-        mapM_ learnDerivedUnit d
+        mapM learnDerivedUnit d
         return x
       where
         learnDerivedUnit (name, spec) =
@@ -224,6 +254,18 @@ enterDecls x proc =
              when (isJust $ lookup name denv) $ error "Recursive unit-of-measure definition" -- toUpper name
              derivedUnitEnv << (name, unit) --(map toUpper name, unit)
     processDecls x = return x
+
+    extendConstraints :: [UnitConstant] -> State UnitEnv () 
+    extendConstraints units =
+        do (matrix, vector) <- gets linearSystem
+           let n = nrows matrix + 1
+               m = ncols matrix + 1
+           linearSystem =: case units of
+                             [] -> do (extendTo 0 0 m matrix, vector)
+                             _ -> (setElem 1 (n, m) $ extendTo 0 n m matrix, vector ++ [last units])
+           tmpColsAdded << m
+           tmpRowsAdded << n
+           return ()
 
 inferInterproceduralUnits :: Program Annotation -> State UnitEnv (Program Annotation)
 inferInterproceduralUnits x =
@@ -275,24 +317,25 @@ addInterproceduralConstraints :: Program Annotation -> State UnitEnv ()
 addInterproceduralConstraints x =
   do
     cs <- gets calls
-    (show cs) `D.trace` mapM_ addCall cs
+    mapM_ addCall cs
   where
     addCall (name, (result, args)) =
       do penv <- gets procedureEnv
          case lookup name penv of -- toUpper name
            Just (r, as) -> 
                              let (r1, r2) = decodeResult result r 
-                             in (name ++ " -- " ++ show (args ++ r1, as ++ r2)) `D.trace` 
-                                  handleArgs (args ++ r1) (as ++ r2)
+                             in handleArgs (args ++ r1) (as ++ r2)
            Nothing      -> return ()
 
     handleArgs actualVars dummyVars =
       do order <- gets reorderedCols
          let actual = map (realColumn order) actualVars
              dummy = map (realColumn order) dummyVars
-         -- mapM_ (handleArg $ zip dummy actual) dummy
-         handleArgNew (zip dummy actual) undefined
+         mapM_ (handleArg $ zip dummy actual) dummy
+         -- handleArgNew (zip dummy actual) undefined
 
+    -- experimentation but now deprecated. 
+{-
     handleArgNew dummyToActual dummy = 
         do grid0 <- debugGaussian'
            mapM (\(l, r) -> do n <- addRow 
@@ -306,13 +349,13 @@ addInterproceduralConstraints x =
              do report <<++ "HANDLED AND DIFFERENT!"
                 report <<++ ("\n" ++ grid0)
                 report <<++ ("\n" ++ grid1)
-                return ()
+                return ()-}
    
     handleArg dummyToActual dummy =
       do (matrix, vector) <- gets linearSystem
-         grid0 <- debugGaussian'
+         -- grid0 <- debugGaussian'
 
-         report <<++ ("hArg - " ++ show dummyToActual ++ "-" ++ show dummy)
+         --report <<++ ("hArg - " ++ show dummyToActual ++ "-" ++ show dummy)
 
          let -- find the first row with a non-zero column for the variable
              n = maybe 1 id $ find (\n -> matrix ! (n, dummy) /= 0) [1 .. nrows matrix]
@@ -320,7 +363,7 @@ addInterproceduralConstraints x =
              -- find the first non-zero column on the row just select
              Just m = find (\m -> matrix ! (n, m) /= 0) [1 .. ncols matrix]
 
-         report <<++ ("n = " ++ show n ++ ", m = " ++ show m)
+         --report <<++ ("n = " ++ show n ++ ", m = " ++ show m)
 
          if (m == dummy) then
            do  let -- Get list of columns with non-zero coefficients to the left of the focus
@@ -333,7 +376,7 @@ addInterproceduralConstraints x =
                            --else
                                (zip ms m's)
 
-               report <<++ ("ms = " ++ show ms ++ ", m's' = " ++ show m's ++ ", their zip = " ++ show pairs)
+               --report <<++ ("ms = " ++ show ms ++ ", m's' = " ++ show m's ++ ", their zip = " ++ show pairs)
 
                if (length m's == length ms) then
                   do   n' <- addRow' $ vector !! (n - 1)
@@ -342,7 +385,7 @@ addInterproceduralConstraints x =
          else
              return ()
 
-         (matrix', vector') <- gets linearSystem
+         {-(matrix', vector') <- gets linearSystem
          if ((matrix == matrix') && (vector == vector')) then
              return ()
          else
@@ -350,11 +393,10 @@ addInterproceduralConstraints x =
                 report <<++ ("\n" ++ grid0)
                 gridn <- debugGaussian'
                 report <<++ ("\n" ++ gridn)
-                return ()
+                return ()-}
 
     handleArgPair matrix n n' (m, m') = do modify $ liftUnitEnv $ setElem (matrix ! (n, m)) (n', m')
-                                           report <<++ ("(n', m') = " ++ show (n', m') ++ "(n, m) = " ++ show (n, m))
-
+                                           
     decodeResult (Just r1) (Just r2) = ([r1], [r2])
     decodeResult Nothing Nothing = ([], [])
     decodeResult (Just _) Nothing = error "Subroutine used as a function!"
@@ -403,8 +445,7 @@ inferExprUnits ve@(Var _ _ names) =
                                        debugInfo << (uvn, let ?variant = Alt1 in outputF ve)
                                        uvs <- inferArgUnits
                                        let uvs' = justArgUnits args uvs
-                                       (show v ++ " _ " ++ show uvs ++ " - " ++ show uvs') `D.trace` 
-                                          calls << (v, (Just uv, uvs'))
+                                       calls << (v, (Just uv, uvs'))
                                        return uv
        -- scalar variable or external function call?
        Just (uv, []) -> inferArgUnits >> return uv
@@ -617,6 +658,7 @@ addCol category =
      let m = ncols matrix + 1
      linearSystem =: (extendTo 0 0 m matrix, vector)
      unitVarCats <<++ category
+     tmpColsAdded << m
      return m
 
 addRow :: State UnitEnv Int
@@ -627,6 +669,7 @@ addRow' uc =
   do (matrix, vector) <- gets linearSystem
      let n = nrows matrix + 1
      linearSystem =: (extendTo 0 n 0 matrix, vector ++ [uc])
+     tmpRowsAdded << n
      return n
 
 liftUnitEnv :: (Matrix Rational -> Matrix Rational) -> UnitEnv -> UnitEnv
@@ -702,7 +745,7 @@ solveSystemM adjective =
 solveSystem :: LinearSystem -> Maybe LinearSystem
 solveSystem system = solveSystem' system 1 1
 
-solveSystem' :: LinearSystem -> Int -> Int -> Maybe LinearSystem
+solveSystem' :: LinearSystem -> Col -> Row -> Maybe LinearSystem
 solveSystem' (matrix, vector) m k
   | m > ncols matrix = fmap (cutSystem k) $ checkSystem (matrix, vector) k
   | otherwise = elimRow (matrix, vector) n m k
@@ -713,13 +756,13 @@ cutSystem k (matrix, vector) = (matrix', vector')
   where matrix' = submatrix 1 (k - 1) 1 (ncols matrix) matrix
         vector' = take (k - 1) vector
 
-checkSystem :: LinearSystem -> Int -> Maybe LinearSystem
+checkSystem :: LinearSystem -> Row -> Maybe LinearSystem
 checkSystem (matrix, vector) k
   | k > nrows matrix = Just (matrix, vector)
   | vector !! (k - 1) /= Unitful [] = Nothing
   | otherwise = checkSystem (matrix, vector) (k + 1)
 
-elimRow :: LinearSystem -> Maybe Int -> Int -> Int -> Maybe LinearSystem
+elimRow :: LinearSystem -> Maybe Row -> Col -> Row -> Maybe LinearSystem
 elimRow system Nothing m k = solveSystem' system (m + 1) k
 elimRow (matrix, vector) (Just n) m k = solveSystem' system' (m + 1) (k + 1)
   where matrix' = let s = matrix ! (n, m) in 
@@ -728,7 +771,7 @@ elimRow (matrix, vector) (Just n) m k = solveSystem' system' (m + 1) (k + 1)
         vector' = switchScaleElems k n (fromRational $ recip $ matrix ! (n, m)) vector
         system' = elimRow' (matrix', vector') k m
 
-elimRow' :: LinearSystem -> Int -> Int -> LinearSystem
+elimRow' :: LinearSystem -> Row -> Col -> LinearSystem
 elimRow' (matrix, vector) k m = (matrix', vector')
   where mstep matrix n = let s = (- matrix ! (n, m)) in if s == 0 then matrix else combineRows n s k matrix 
         matrix' = foldl mstep matrix $ [1 .. k - 1] ++ [k + 1 .. nrows matrix]
@@ -746,14 +789,8 @@ checkUnderdeterminedM = do ucats <- gets unitVarCats
                            let badCols = checkUnderdetermined ucats system
 
                            report <<++ ("Critical variables " ++ (show (criticalVars uvarenv (fst system) 1)))
-                           debugGaussian
 
                            underdeterminedCols =: badCols
-
-firstNonZeroCoeff :: Matrix Rational -> Row -> Col
-firstNonZeroCoeff matrix row = case (V.findIndex (/= 0) (getRow row matrix)) of
-                                 Nothing -> ncols matrix
-                                 Just i  -> i + 1
 
 -- criticalVars :: Matrix Rational -> Row -> State UnitEnv [String]
 criticalVars varenv matrix i =
@@ -762,6 +799,11 @@ criticalVars varenv matrix i =
           in  if (m (i + 1)) /= ((m i) + 1)         
               then (lookupVarsByCols varenv [(m i)..(m (i + 1) - 1)]) ++ (criticalVars varenv matrix (i + 1))
               else criticalVars varenv matrix (i + 1) 
+
+firstNonZeroCoeff :: Matrix Rational -> Row -> Col
+firstNonZeroCoeff matrix row = case (V.findIndex (/= 0) (getRow row matrix)) of
+                                 Nothing -> ncols matrix
+                                 Just i  -> i + 1
 
 checkUnderdetermined :: [UnitVarCategory] -> LinearSystem -> [Int]
 checkUnderdetermined ucats system@(matrix, vector) =
@@ -945,20 +987,20 @@ debugGaussian = do grid' <- debugGaussian'
 
 debugGaussian' = do ucats   <- gets unitVarCats
                     (matrix,rowv)  <- gets linearSystem
-                    varenv <- gets unitVarEnv
+                    varenv  <- gets unitVarEnv
                     debugs  <- gets debugInfo
                     procenv <- gets procedureEnv
 
                     let -- Column headings and then a space 
-                        grid = [map show [1..(ncols matrix)], []] 
+                        grid = ["" : map show [1..(ncols matrix)], []] 
                         -- Gaussian matrix 
-                            ++ map (\r -> (map showRational $ V.toList $ getRow r matrix) ++ [show $ rowv !! (r - 1)]) [1..(nrows matrix)]
+                            ++ map (\r -> (show r) : (map showRational $ V.toList $ getRow r matrix) ++ [show $ rowv !! (r - 1)]) [1..(nrows matrix)]
                         -- Column categories
-                            ++ [[], map showCat ucats]
+                            ++ [[], "" : map showCat ucats]
                         -- Debug info, e.g., expression or variable
-                            ++ [map (showExpr ucats varenv procenv debugs) [1.. (ncols matrix)]]
+                            ++ ["" : map (showExpr ucats varenv procenv debugs) [1.. (ncols matrix)]]
                         -- Additional debug info for args that are also variables
-                            ++ [map (showArgVars ucats varenv) [1..(ncols matrix)]]
+                            ++ ["" : map (showArgVars ucats varenv) [1..(ncols matrix)]]
                     let colSize = maximum' (map maximum' (map (notLast . (map length)) grid)) 
                     let expand r = r ++ (replicate (colSize - length r) ' ') 
                     let showLine x = (concatMap expand x) ++ "\n"
@@ -1028,10 +1070,9 @@ lookupVarsByCols uenv cols =
                                               | otherwise = lookupEnv j uenv
 
 -- *************************************
---   Add units into code
+--   Insert unit declarations into code
 --
 -- *************************************
-
 
 insertUnitsInBlock :: Block Annotation -> State UnitEnv (Block Annotation)
 insertUnitsInBlock x = do env <- get
@@ -1053,9 +1094,9 @@ convertSingleUnit :: MeasureUnit -> Rational -> State UnitEnv UnitConstant
 convertSingleUnit unit f =
   do denv <- gets derivedUnitEnv
      let uc f' = Unitful [(unit, f')]
-     case lookup unit denv of -- (map toUpper unit) denv of
+     case lookup unit denv of 
        Just uc' -> return $ uc' * (fromRational f)
-       Nothing  -> derivedUnitEnv << (unit, uc 1) >> return (uc f) -- (map toUpper unit, uc 1) >> return (uc f)
+       Nothing  -> derivedUnitEnv << (unit, uc 1) >> return (uc f) 
 
 fromFraction :: Fraction a -> Rational
 fromFraction (IntegerConst _ n) = fromInteger $ read n
@@ -1067,13 +1108,7 @@ extractUnit attr = case attr of
                      MeasureUnit _ unit -> [convertUnit unit]
                      _ -> []
 
-extendConstraints :: [UnitConstant] -> LinearSystem -> LinearSystem
-extendConstraints units (matrix, vector) =
-  case units of
-    [] -> (extendTo 0 0 m matrix, vector)
-    _ -> (setElem 1 (n, m) $ extendTo 0 n m matrix, vector ++ [last units])
-  where n = nrows matrix + 1
-        m = ncols matrix + 1
+
 
 
 lookupUnit :: [UnitVarCategory] -> [Int] -> LinearSystem -> Int -> Maybe UnitConstant

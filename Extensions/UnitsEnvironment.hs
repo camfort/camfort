@@ -6,6 +6,9 @@ module Extensions.UnitsEnvironment where
 
 
 import qualified Data.Label
+import Data.Label.Mono (Lens)
+import Data.Label.Monadic hiding (modify)
+import Control.Monad.State.Strict hiding (gets)
 import Language.Fortran
 import Data.Matrix
 
@@ -39,10 +42,16 @@ data UnitEnv = UnitEnv {
   _reorderedCols       :: [Int],
   _underdeterminedCols :: [Int],
   _linearSystem        :: LinearSystem, 
-  _debugInfo           :: DebugInfo
+  _debugInfo           :: DebugInfo,
+  _tmpRowsAdded        :: [Int],
+  _tmpColsAdded        :: [Int]
 }
 
 Data.Label.mkLabels [''UnitEnv]
+
+resetTemps :: State UnitEnv ()
+resetTemps = do tmpRowsAdded =: []
+                tmpColsAdded =: []
 
 trim = filter $ \(unit, r) -> r /= 0
 
