@@ -123,6 +123,10 @@ Wrappers on all of the features
 >           do putStrLn $ "Removing units for source in directory " ++ show inDir ++ "\n"
 >              doRefactor (mapM removeUnits) inDir excludes outDir
 
+> unitCriticals inDir excludes outDir = 
+>           do putStrLn $ "Infering critical variables for units inference in directory " ++ show inDir ++ "\n"
+>              doAnalysisReport (mapM inferCriticalVariables) inDir excludes outDir
+
 
 General analysis/refactor builders
 ----------------------------------
@@ -140,6 +144,7 @@ General analysis/refactor builders
 >                        -- (show (map (map (fmap (const ()))) (map (\(_, _, f) -> f) pss))) `trace`
 >                        outputAnalysisFiles d asts' outFiles
 
+
 > doAnalysisSummary aFun d excludes = 
 >                     do if excludes /= "" 
 >                            then putStrLn $ "Excluding " ++ excludes ++ " from " ++ d ++ "/"
@@ -148,10 +153,18 @@ General analysis/refactor builders
 >                        ps <- readParseSrcDir d excludes
 
 >                        let inFiles = map fst3 ps
->                        let outFiles = filter (\f -> not ((take (length $ d ++ "out") f) == (d ++ "out"))) inFiles
 >                        putStrLn "Output of the analysis:" 
 >                        putStrLn $ show $ Prelude.foldl (\n (f, _, ps) -> n `mappend` (aFun ps)) mempty ps
 >                        
+
+> doAnalysisReport rFun inDir excludes outDir
+>                   = do if excludes /= "" 
+>                            then putStrLn $ "Excluding " ++ excludes ++ " from " ++ inDir ++ "/"
+>                            else return ()
+>                        ps <- readParseSrcDir inDir excludes
+>                        putStr "\n"
+>                        let (report, ps') = rFun (map (\(f, inp, ast) -> (f, ast)) ps)
+>                        putStrLn report
 
 
 > doRefactor rFun inDir excludes outDir

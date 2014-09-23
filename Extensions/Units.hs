@@ -60,7 +60,7 @@ infix 2 <<++
 
 
 removeUnits :: (Filename, Program Annotation) -> (Report, (Filename, Program Annotation))
-removeUnits (fname, x) = ("", (fname, map (descendBi removeUnitsInBlock) x))
+removeUnits (fname, x) = let ?criticals = False in ("", (fname, map (descendBi removeUnitsInBlock) x))
 
 
 -- *************************************
@@ -68,11 +68,27 @@ removeUnits (fname, x) = ("", (fname, map (descendBi removeUnitsInBlock) x))
 -- 
 -- *************************************
 
+
+inferCriticalVariables :: (Filename, Program Annotation) -> (Report, (Filename, Program Annotation))
+inferCriticalVariables (fname, x) = 
+    let ?criticals = True 
+    in  let infer = do doInferUnits x
+                       vars <- criticalVars
+                       case vars of 
+                         [] -> report <<++ "No critical variables. Appropriate annotations."
+                         _  -> report <<++ ("Critical variables: " ++ (concat $ intersperse "," vars))
+
+            (y, env) = runState infer emptyUnitEnv
+            r = concat [fname ++ ": " ++ r ++ "\n" | r <- Data.Label.get report env]
+        in (r, (fname, x))
+
 inferUnits :: (Filename, Program Annotation) -> (Report, (Filename, Program Annotation))
-inferUnits (fname, x) = (r, (fname, y))
-  where (y, env) = runState (doInferUnits x) emptyUnitEnv
-        r = concat [fname ++ ": " ++ r ++ "\n" | r <- Data.Label.get report env] ++ 
-            "\n" ++ fname ++ ": checked/inferred " ++ (show $ length $ snd $ _linearSystem env) ++ " variables\n"
+inferUnits (fname, x) = 
+    let ?criticals = False
+    in let (y, env) = runState (doInferUnits x) emptyUnitEnv
+           r = concat [fname ++ ": " ++ r ++ "\n" | r <- Data.Label.get report env] ++ 
+                  "\n" ++ fname ++ ": checked/inferred " ++ (show $ length $ snd $ _linearSystem env) ++ " variables\n"
+       in (r ++ "\n", (fname, y))
 
 
 emptyUnitEnv = UnitEnv { _report              = [],
@@ -90,13 +106,16 @@ emptyUnitEnv = UnitEnv { _report              = [],
 
 
 
-doInferUnits :: Program Annotation -> State UnitEnv (Program Annotation)
+doInferUnits :: (?criticals :: Bool) => Program Annotation -> State UnitEnv (Program Annotation)
 doInferUnits x = do y <- mapM inferProgUnits x
                     z <- inferInterproceduralUnits y
-                    p <- mapM (descendBiM insertUnitsInBlock) z
+                    p <- if ?criticals then 
+                             return x
+                         else
+                             mapM (descendBiM insertUnitsInBlock) z
                     return p
 
-inferProgUnits :: ProgUnit Annotation -> State UnitEnv (ProgUnit Annotation)
+inferProgUnits :: (?criticals :: Bool) => ProgUnit Annotation -> State UnitEnv (ProgUnit Annotation)
 inferProgUnits p =
   do ps <- mapM inferProgUnits $ ((children p)::[ProgUnit Annotation])
      p' <- case (block p) of 
@@ -136,20 +155,20 @@ inferProgUnits p =
 
 
 
-inferBlockUnits :: Block Annotation -> Maybe ProcedureNames -> State UnitEnv (Block Annotation)
+inferBlockUnits :: (?criticals :: Bool) => Block Annotation -> Maybe ProcedureNames -> State UnitEnv (Block Annotation)
 inferBlockUnits x proc = do resetTemps
                             y <- enterDecls x proc
                             addProcedure proc
                             descendBiM handleStmt y
 
                             case proc of 
-                              Just _ -> do -- <intermediate solve>
-                                           solveSystemM "" 
-                                           --debugGaussian
-                                           linearSystem =. reduceRows 1
-                                           --debugGaussian
-                                           -- </intermediate solve>
-                              Nothing -> return ()
+                              Just _ | not ?criticals -> 
+                                         do -- Intermediate solve for procedures (subroutines & functions)
+                                            solveSystemM "" 
+                                            linearSystem =. reduceRows 1
+
+                              _     -> return ()
+
                             return y
                          where
                            handleStmt :: Fortran Annotation -> State UnitEnv (Fortran Annotation)
@@ -782,23 +801,21 @@ elimRow' (matrix, vector) k m = (matrix', vector')
 checkUnderdeterminedM :: State UnitEnv ()
 checkUnderdeterminedM = do ucats <- gets unitVarCats
                            system <- gets linearSystem
-                           uvarenv <- gets unitVarEnv
-                                      
-                           debugs <- gets debugInfo
-
                            let badCols = checkUnderdetermined ucats system
-
-                           report <<++ ("Critical variables " ++ (show (criticalVars uvarenv (fst system) 1)))
-
                            underdeterminedCols =: badCols
 
--- criticalVars :: Matrix Rational -> Row -> State UnitEnv [String]
-criticalVars varenv matrix i =
+criticalVars :: State UnitEnv [String]
+criticalVars = do uvarenv     <- gets unitVarEnv
+                  (matrix, _) <- gets linearSystem
+                  return $ criticalVars' uvarenv matrix 1
+
+criticalVars' :: UnitVarEnv -> Matrix Rational -> Row -> [String]
+criticalVars' varenv matrix i =
     if (i == nrows matrix) then []
     else  let m = firstNonZeroCoeff matrix
           in  if (m (i + 1)) /= ((m i) + 1)         
-              then (lookupVarsByCols varenv [(m i)..(m (i + 1) - 1)]) ++ (criticalVars varenv matrix (i + 1))
-              else criticalVars varenv matrix (i + 1) 
+              then (lookupVarsByCols varenv [(m i)..(m (i + 1) - 1)]) ++ (criticalVars' varenv matrix (i + 1))
+              else criticalVars' varenv matrix (i + 1) 
 
 firstNonZeroCoeff :: Matrix Rational -> Row -> Col
 firstNonZeroCoeff matrix row = case (V.findIndex (/= 0) (getRow row matrix)) of
