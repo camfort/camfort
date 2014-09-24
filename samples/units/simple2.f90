@@ -11,7 +11,6 @@ program simple
   s = abs(v)
 
   a = square (x) 
-
   b = square (t)
   
   print *, s
@@ -22,10 +21,7 @@ program simple
 
   real function square(y)
     real y, m
-    real, unit(n) :: n
-    m = n 
-    square = y * y
+    square = y * y * m
   end function
-
     
 end program

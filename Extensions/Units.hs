@@ -75,9 +75,12 @@ inferCriticalVariables (fname, x) =
     in  let infer = do doInferUnits x
                        vars <- criticalVars
                        case vars of 
-                         [] -> report <<++ "No critical variables. Appropriate annotations."
-                         _  -> report <<++ "Critical variables: " ++ (concat $ intersperse "," vars)
-                       -- debugGaussian
+                         [] -> do report <<++ "No critical variables. Appropriate annotations."
+                                  --debugGaussian
+                                  return ""
+                         _  -> do report <<++ "Critical variables: " ++ (concat $ intersperse "," vars)
+                                  debugGaussian
+                       
 
             (y, env) = runState infer emptyUnitEnv
             r = concat [fname ++ ": " ++ r ++ "\n" | r <- Data.Label.get report env]
@@ -87,10 +90,17 @@ inferUnits :: (Filename, Program Annotation) -> (Report, (Filename, Program Anno
 inferUnits (fname, x) = 
     let ?criticals = False
     in let (y, env) = runState (doInferUnits x) emptyUnitEnv
-           r = concat [fname ++ ": " ++ r ++ "\n" | r <- Data.Label.get report env] ++ 
-                  "\n" ++ fname ++ ": checked/inferred " ++ (show $ length $ snd $ _linearSystem env) ++ " variables\n"
+           r = concat [fname ++ ": " ++ r ++ "\n" | r <- Data.Label.get report env] 
+               ++ "\n" ++ fname ++ ": checked/inferred " 
+               ++ (show $ countVariables (fst $ _linearSystem env) (_unitVarCats env))
+               ++ " variables\n"
        in (r ++ "\n", (fname, y))
 
+
+countVariables matrix ucats = 
+    length $ filter (\c -> case (ucats !! (c - 1)) of 
+                             Variable -> True
+                             _        -> False) [1..ncols matrix]
 
 emptyUnitEnv = UnitEnv { _report              = [],
                          _unitVarEnv          = [],
@@ -159,7 +169,7 @@ inferBlockUnits x proc = do resetTemps
                             descendBiM handleStmt y
 
                             case proc of 
-                              Just _ | not ?criticals -> 
+                              Just _ -> -- | not ?criticals -> 
                                          do -- Intermediate solve for procedures (subroutines & functions)
                                             solveSystemM "" 
                                             linearSystem =. reduceRows 1
@@ -803,7 +813,14 @@ checkUnderdeterminedM :: State UnitEnv ()
 checkUnderdeterminedM = do ucats <- gets unitVarCats
                            system <- gets linearSystem
                            let badCols = checkUnderdetermined ucats system
+                           unless (null badCols) $ report << "underdetermined units of measure"
+                           report <<++ show badCols
                            underdeterminedCols =: badCols
+
+
+checkUnderdetermined :: [UnitVarCategory] -> LinearSystem -> [Int]
+checkUnderdetermined ucats system@(matrix, vector) =
+  fixValue (propagateUnderdetermined matrix) $ checkUnderdetermined' ucats system 1
 
 criticalVars :: State UnitEnv [String]
 criticalVars = do uvarenv     <- gets unitVarEnv
@@ -836,9 +853,6 @@ firstNonZeroCoeff matrix row = case (V.findIndex (/= 0) (getRow row matrix)) of
                                  Nothing -> ncols matrix
                                  Just i  -> i + 1
 
-checkUnderdetermined :: [UnitVarCategory] -> LinearSystem -> [Int]
-checkUnderdetermined ucats system@(matrix, vector) =
-  fixValue (propagateUnderdetermined matrix) $ checkUnderdetermined' ucats system 1
 
 checkUnderdetermined' :: [UnitVarCategory] -> LinearSystem -> Int -> [Int]
 checkUnderdetermined' ucats system@(matrix, vector) n

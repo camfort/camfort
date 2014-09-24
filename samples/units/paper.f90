@@ -1,6 +1,7 @@
 program paper
   implicit none
-  real :: a, b, c, e
+  real, unit(s) :: x
+  real :: b, c, e
   real, unit(m) :: d
-  e = a + c*d
+  e = x + c*d
 end program
