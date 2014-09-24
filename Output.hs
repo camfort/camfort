@@ -182,20 +182,27 @@ instance OutputIndG (Fortran Annotation) Alt2 where
                                          
     -- outputIndG i t@(FSeq p f1 f2) =  (outputAnn p False i) ++ outputIndG i f1 ++ outputIndG i f2
     outputIndG i t = "<div style=''>" ++ (outputAnn (rextract t) False i showt) ++  (annotationMark i t (outputIndF i t)) ++ "</div>"
-                        where showt = bracketing 0 (show (setCompactSrcLocs $ fmap (\x -> ()) t)) 
-                              bracketing _ [] = []
-                              bracketing n ('(':'{':cs) = "{" ++ bracketing n cs
-                              bracketing n ('}':')':cs) = "}" ++ bracketing n cs
-                              bracketing n (c:cs) 
-                                  | c == '(' = ("<span style='background-color:" ++ (countToColor n) ++ ";'>(" ++ bracketing (n+1) cs)
-                                  | c == ')' = ")</span>" ++ bracketing n cs
-                                  | otherwise = c : (bracketing n cs)
+                        where showt = bracketing 0 0 (show (setCompactSrcLocs $ fmap (\x -> ()) t)) 
+                              bracketing _ _ [] = []
+                              bracketing n s ('(':'{':cs) = "{" ++ bracketing n s cs
+                              bracketing n s ('}':')':cs) = "}" ++ bracketing n s cs
+                              bracketing n s (c:cs) 
+                                  | c == '(' = ("<span style='background-color:" ++ (countToColor n) ++ ";'>(" ++ bracketing (n+1) (s+1) cs)
+                                  | c == ')' = ")</span>" ++ bracketing n (s-1) cs
+                                  | otherwise = c : (bracketing n s cs)
                               countToColor n = colors !! (n `mod` (length colors)) --  printf "#%06x" ((256*256*256 - (n * 40)) :: Int)
                               colors = ["#ffeeee", "#ffdddd", "#ffcccc", "#eedddd", "#eecccc",  "#eebbbb", "#ddcccc", "#ddbbbbb",
                                         "#ffffee", "#ffffdd", "#ffffcc", "#eeeedd", "#eeeecc",  "#eeeebb", "#ddddcc", "#ddddbb",
                                         "#ffeeff", "#ffddff", "#ffccff", "#eeddee", "#eeccee",  "#eebbee", "#ddccdd", "#ddbbdd",
                                         "#eeffff", "#ddffff", "#ccffff", "#ddeeee", "#cceeee",  "#bbeeee", "#ccdddd", "#bbdddd"]
 
+{-
+lookahead [] 0 l        = l
+lookahead (')':_) 0 l   = l
+lookeahead (')':xs) n l = lookeahd xs (n-1) (l+1)
+lookahead ('(':xs) n l  = lookahead xs (n+1) (l+1)
+lookahead (x:xs)  n l   = lookahead xs n (l+1)
+-}
 
 annotationMark i t x = "<div class='clickable' onClick='toggle(" ++  
                        (show $ number (rextract t)) ++ ");'>" ++
