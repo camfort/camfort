@@ -14,7 +14,6 @@ import Data.Generics.Uniplate.Operations
 
 import Language.Fortran
 import Language.Fortran.Pretty
-import Language.Haskell.Syntax (SrcLoc(..))
 
 import Helpers
 import Traverse

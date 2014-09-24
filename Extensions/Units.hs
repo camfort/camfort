@@ -12,7 +12,7 @@ TODO:
 -}
 
 
-{-# LANGUAGE ScopedTypeVariables, ImplicitParams #-}
+{-# LANGUAGE ScopedTypeVariables, ImplicitParams, DoAndIfThenElse #-}
 
 module Extensions.Units where
 
@@ -169,7 +169,7 @@ inferBlockUnits x proc = do resetTemps
                             descendBiM handleStmt y
 
                             case proc of 
-                              Just _ -> -- | not ?criticals -> 
+                              Just _ -> {- not ?criticals -> -}
                                          do -- Intermediate solve for procedures (subroutines & functions)
                                             solveSystemM "" 
                                             linearSystem =. reduceRows 1
@@ -223,10 +223,12 @@ addProcedure (Just (name, resultName, argNames)) =
           lookupUnitByName uenv v = maybe (UnitVariable 1) fst $ lookup v uenv -- toUpper v
 
 
--- *************************************
---   Unit inference (main, over all AST)
--- 
--- *************************************
+
+-- ***************************************
+--
+-- *  Unit inference (main, over all AST)
+--
+-- ***************************************
 
 enterDecls :: Block Annotation -> Maybe ProcedureNames -> State UnitEnv (Block Annotation)
 enterDecls x proc = transformBiM processDecls x
@@ -408,10 +410,10 @@ addInterproceduralConstraints x =
 
                --report <<++ ("ms = " ++ show ms ++ ", m's' = " ++ show m's ++ ", their zip = " ++ show pairs)
 
-               if (length m's == length ms) then
-                  do   n' <- addRow' $ vector !! (n - 1)
-                       mapM_ (handleArgPair matrix n n') pairs
-               else return ()
+               if (length m's == length ms) 
+                 then do { n' <- addRow' $ vector !! (n - 1);
+                           mapM_ (handleArgPair matrix n n') pairs; }
+                 else return ()
          else
              return ()
 

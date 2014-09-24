@@ -46,10 +46,10 @@
 map (fmap ((,[""]),[""]))
 
 > loopAnalyse :: Program a -> Program Annotation
-> loopAnalyse p = map ((descendBi arrayIndices) . ix . lva' . (transformBi reassociate) . (fmap (const unitAnnotation))) p
+> loopAnalyse p = map ((descendBi arrayIndices) . ix . lvaOnUnit . (transformBi reassociate) . (fmap (const unitAnnotation))) p
 
 > analyse' :: Program Annotation -> Program Annotation
-> analyse' p = map ((descendBi arrayIndices) . ix . lva' . (transformBi reassociate))  p
+> analyse' p = map ((descendBi arrayIndices) . ix . lvaOnUnit . (transformBi reassociate))  p
 
 
 > collect :: (Eq a, Ord k) => [(k, a)] -> Map.Map k [a]

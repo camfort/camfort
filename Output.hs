@@ -1,19 +1,5 @@
-{-# LANGUAGE QuasiQuotes #-}
-{-# LANGUAGE FlexibleInstances #-}
-{-# LANGUAGE UndecidableInstances #-}
-{-# LANGUAGE OverlappingInstances #-}
-{-# LANGUAGE ImplicitParams #-}
-{-# LANGUAGE MultiParamTypeClasses #-}
-
-{-# LANGUAGE OverlappingInstances #-}
-{-# LANGUAGE KindSignatures #-}
-
-{-# LANGUAGE FlexibleContexts #-}
-{-# LANGUAGE ScopedTypeVariables #-}
-
-
-{-# LANGUAGE DeriveGeneric #-}
-{-# LANGUAGE DeriveDataTypeable #-}
+{-# LANGUAGE FlexibleInstances, UndecidableInstances, OverlappingInstances, ImplicitParams, MultiParamTypeClasses, FlexibleContexts #-}
+{-# LANGUAGE OverlappingInstances, KindSignatures, ScopedTypeVariables, DeriveGeneric, DeriveDataTypeable #-}
 
 module Output where
 
@@ -21,11 +7,12 @@ import Helpers
 import Traverse
 
 import Analysis.Annotations
+import Analysis.Syntax
 import Language.Fortran as Fortran
 import Language.Fortran.Pretty
 import Transformation.Syntax
 
-import Data.Text hiding (foldl,map,concatMap,take,drop)
+import Data.Text hiding (foldl,map,concatMap,take,drop,length)
 import qualified Data.Text as Text 
 import Data.Map.Lazy hiding (map, foldl)
 import Data.Functor.Identity
@@ -33,27 +20,16 @@ import Data.Generics
 import GHC.Generics
 import Data.List
 import Data.Generics.Uniplate.Data
-
 import Generics.Deriving.Copoint
-
 import Data.Char
-
-import Control.Monad.Trans.State.Lazy
-
-import Language.Haskell.Syntax (SrcLoc(..), srcLine, srcColumn)
 import Data.Generics.Zipper
-
 import Data.Maybe
-
 import Debug.Trace
-
-
-purple = "#800080"
-green = "#008000"
-blue = "#000080"
+import Control.Monad.Trans.State.Lazy
+import Text.Printf
 
 keyword = map pack
-          ["end","subroutine","function","program","module","block","data", "common",
+          ["end","subroutine","function","program","module","data", "common",
            "namelist", "external", "interface", "type", "include", "format", 
            "len", "kind", "dimension", "allocatable", "parameter", "external",
            "intent", "intrinsic", "optional", "pointer", "save", "target",
@@ -61,26 +37,29 @@ keyword = map pack
            "procedure", "do", "if", "else", "then", "allocate", "backspace", 
            "call", "open", "close", "continue", "cycle", "deallocate", "endfile",
            "exit", "forall", "goto", "nullify", "inquire", "rewind", "stop", "where",
-           "write", "reurn", "print", "read", "write", "implicit", "use"]
+           "write", "rerun", "print", "read", "write", "implicit", "use"]
 
-addColor c k = "<span style='color:" ++ c ++ "'>" ++ k ++ "</span>"
-toColor c t k = replace k (Text.concat [pack ("<span style='color:" ++ c ++ "'>"), k, pack "</span>"]) t
-
-types = map pack ["real", "integer", "character", "type", "logical"]
-
-pre l = Text.concat [pack "<pre>", l, pack "</pre>"]
-
-outputHTML :: forall p . (Data p, Typeable p, OutputG p Alt2, OutputIndG (Fortran p) Alt2, Indentor (Decl p), Indentor (Fortran p)) => Fortran.ProgUnit p -> String
+outputHTML :: forall p . (Data p, Typeable p, OutputG p Alt2, OutputIndG (Fortran p) Alt2, Indentor (Decl p), Indentor (Fortran p)) => 
+              Fortran.ProgUnit p -> String
 outputHTML prog = unpack html
                 where
                   t :: SubName p -> SubName p
                   t (SubName p n) = SubName p (addColor blue n)
                   t x = x
-                  
+
+                  purple = "#800080"
+                  green = "#008000"
+                  blue = "#000080"
+
+                  toColor c t k = replace k (Text.concat [pack ("<span style='color:" ++ c ++ "'>"), k, pack "</span>"]) t
+                  addColor c k = "<span style='color:" ++ c ++ "'>" ++ k ++ "</span>"
+                  pre l = Text.concat [pack "<pre>", l, pack "</pre>"]
+                  types = map pack ["real", "integer", "character", "type", "logical"]
 
                   html = let ?variant = Alt2
                          in 
-                           (Text.append (pack "<head><script type='text/javascript' src='../source.js'></script><link href='../source.css' type='text/css' rel='stylesheet' /></head>"))
+                           (Text.append (pack $ "<head><script type='text/javascript' src='../source.js'></script>"
+                                             ++ "<link href='../source.css' type='text/css' rel='stylesheet' /></head>"))
                          . (\t -> replace (pack "newline") (pack "\n") t)
                          . (Text.concat . (map pre) . Text.lines)
                          . (\t -> foldl (toColor green) t types)
@@ -202,7 +181,21 @@ instance OutputIndG (Fortran Annotation) Alt2 where
 
                                          
     -- outputIndG i t@(FSeq p f1 f2) =  (outputAnn p False i) ++ outputIndG i f1 ++ outputIndG i f2
-    outputIndG i t = "<div style=''>" ++ (outputAnn (rextract t) False i (show t)) ++  (annotationMark i t (outputIndF i t)) ++ "</div>"
+    outputIndG i t = "<div style=''>" ++ (outputAnn (rextract t) False i showt) ++  (annotationMark i t (outputIndF i t)) ++ "</div>"
+                        where showt = bracketing 0 (show (setCompactSrcLocs $ fmap (\x -> ()) t)) 
+                              bracketing _ [] = []
+                              bracketing n ('(':'{':cs) = "{" ++ bracketing n cs
+                              bracketing n ('}':')':cs) = "}" ++ bracketing n cs
+                              bracketing n (c:cs) 
+                                  | c == '(' = ("<span style='background-color:" ++ (countToColor n) ++ ";'>(" ++ bracketing (n+1) cs)
+                                  | c == ')' = ")</span>" ++ bracketing n cs
+                                  | otherwise = c : (bracketing n cs)
+                              countToColor n = colors !! (n `mod` (length colors)) --  printf "#%06x" ((256*256*256 - (n * 40)) :: Int)
+                              colors = ["#ffeeee", "#ffdddd", "#ffcccc", "#eedddd", "#eecccc",  "#eebbbb", "#ddcccc", "#ddbbbbb",
+                                        "#ffffee", "#ffffdd", "#ffffcc", "#eeeedd", "#eeeecc",  "#eeeebb", "#ddddcc", "#ddddbb",
+                                        "#ffeeff", "#ffddff", "#ffccff", "#eeddee", "#eeccee",  "#eebbee", "#ddccdd", "#ddbbdd",
+                                        "#eeffff", "#ddffff", "#ccffff", "#ddeeee", "#cceeee",  "#bbeeee", "#ccdddd", "#bbdddd"]
+
 
 annotationMark i t x = "<div class='clickable' onClick='toggle(" ++  
                        (show $ number (rextract t)) ++ ");'>" ++
@@ -214,7 +207,15 @@ row xs = "<tr>" ++ (concatMap (\x -> "<td>" ++ x ++ "</td>") xs) ++ "</tr>"
 instance OutputG Annotation Alt2 where
     outputG t = outputAnn t False 0 (show t)
 
-breakUp xs = (take 80 xs) ++ "newline" ++ (if (drop 80 xs) == [] then [] else breakUp (drop 80 xs))
+breakUp xs = breakup' xs 0 False
+              where breakup' [] _ _ = []
+                    breakup' (x:xs) c mode | x == '<' = x : (breakup' xs c True)
+                                           | x == '>' = x : (breakup' xs c False)
+                                           | c >= 80 && (not mode) = x : ("newline" ++ breakup' xs 0 False)
+                                           | mode                  = x : (breakup' xs c mode)
+                                           | otherwise             = x : (breakup' xs (c+1) mode)
+
+ --  (take 80 xs) ++ "newline" ++ (if (drop 80 xs) == [] then [] else breakUp (drop 80 xs))
 
 outputAnn t visible i astString = 
      "<div id='a" ++ (show $ number t) ++ "' style='" ++
@@ -223,7 +224,7 @@ outputAnn t visible i astString =
      "<div class='annotation'><div class='number'>" ++ (show $ number t) ++ "</div>" ++ 
      "<div><div class='clickable' onClick=\"toggle('" ++ (show $ number t) ++  "src');\">" ++
      "<u>show ast</u></div><div id='a" ++ (show $ number t) ++ "src' " ++
-     "style='background:#fff;display:none;width:600px;overflow:auto;'>" ++ (breakUp astString) ++ "</div></div>" ++ "<p><table>" ++
+     "style='background:#fff;display:none;width:600px;overflow:wrap;'>" ++ (breakUp astString) ++ "</div></div>" ++ "<p><table>" ++
      row ["lives: (in) ",    showList $ (map show) $ fst $ lives t, "(out)", showList $ (map show) $ snd $ lives t] ++ 
      row ["indices:",  showList $ indices t] ++ 
      row ["successors:", showList $ (map show) (successorStmts t)] ++ 
@@ -271,8 +272,10 @@ instance Tagged p => Indentor (p Annotation) where
                  Just (SrcLoc f _ c) -> Prelude.take c (repeat ' ')
                  Nothing             -> ind i
 
-{- GLORIOUS REFACTORING ALGORITHM! -}
 
+-- GLORIOUS REFACTORING ALGORITHM!
+
+{-| -}
 reprint :: SourceText -> Filename -> Program Annotation -> String
 reprint ""    f p = let ?variant = Alt1 in foldl (\a b -> a ++ "\n" ++ outputF b) "" p 
 reprint input f p = let input' = Prelude.lines input
@@ -397,6 +400,7 @@ removeNewLines (x:xs) n = let (xs', n') = removeNewLines xs n
 
 --removeNewLines ('\n':xs) 0 = let (xs', n') = removeNewLines xs 0
 --                             in ('\n':xs', 0)
+
 
 
 {-
