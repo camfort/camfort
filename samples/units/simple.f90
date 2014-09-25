@@ -1,16 +1,17 @@
 program simple
   implicit none
-
-  real :: x
+  integer, unit(m) :: x
   real, unit(s) :: t
-  real, unit(m/s):: v
+  real :: v
   real :: s
+  real :: y
 
-  x = 20.0
-  t = 3.0 
+   y = x * x
+
+  x = 20.0  ! initial
+  t = 3.0   !  values
   v = x / t
   s = abs(v)
   
-  print *, s
-  print *, v
+  print *, s, v
 end program

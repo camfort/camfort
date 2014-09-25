@@ -59,7 +59,6 @@ library
                         array >= 0.4,
                         directory >= 1.2, 
                         language-fortran >= 0.2.5.1, 
-                        transformers >= 0.3,
                         vector >= 0.1,
                         QuickCheck >= 2
 
