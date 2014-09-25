@@ -50,5 +50,14 @@ This show us the various refactoring and analysis options. In this case, we want
 
   ./camfort asts samples/tutorial 
 
+This will generate a file 'samples/tutorail/test.f90.html' which gives a syntax highlighted pretty-printed version
+of the source code where each statement can be clicked, revealing some analysis output information. 
+Load this up into your browser and click on the two headers for the 'if' blocks. This should reveal two boxes
+marked '8' and '18' (the statement number given by the analysis). Click on 'show ast' for each. 
+This will reveal a highlighted syntax tree. The colours don't mean anything other than helping to separate out the
+parts. Comparing the two tree fragements we should be able to see the difference between the two. 
 
+Look in Haddock to see:
+
+If p SrcSpan (Expr p) (Fortran p) [(Expr p, Fortran p)] (Maybe (Fortran p))
 

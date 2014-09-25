@@ -12,7 +12,7 @@ import Language.Fortran as Fortran
 import Language.Fortran.Pretty
 import Transformation.Syntax
 
-import Data.Text hiding (foldl,map,concatMap,take,drop,length)
+import Data.Text hiding (foldl,map,concatMap,take,drop,length,last,head,tail,replicate,concat)
 import qualified Data.Text as Text 
 import Data.Map.Lazy hiding (map, foldl)
 import Data.Functor.Identity
@@ -182,27 +182,33 @@ instance OutputIndG (Fortran Annotation) Alt2 where
                                          
     -- outputIndG i t@(FSeq p f1 f2) =  (outputAnn p False i) ++ outputIndG i f1 ++ outputIndG i f2
     outputIndG i t = "<div style=''>" ++ (outputAnn (rextract t) False i showt) ++  (annotationMark i t (outputIndF i t)) ++ "</div>"
-                        where showt = bracketing 0 0 (show (setCompactSrcLocs $ fmap (\x -> ()) t)) 
-                              bracketing _ _ [] = []
-                              bracketing n s ('(':'{':cs) = "{" ++ bracketing n s cs
-                              bracketing n s ('}':')':cs) = "}" ++ bracketing n s cs
-                              bracketing n s (c:cs) 
-                                  | c == '(' = ("<span style='background-color:" ++ (countToColor n) ++ ";'>(" ++ bracketing (n+1) (s+1) cs)
-                                  | c == ')' = ")</span>" ++ bracketing n (s-1) cs
-                                  | otherwise = c : (bracketing n s cs)
-                              countToColor n = colors !! (n `mod` (length colors)) --  printf "#%06x" ((256*256*256 - (n * 40)) :: Int)
-                              colors = ["#ffeeee", "#ffdddd", "#ffcccc", "#eedddd", "#eecccc",  "#eebbbb", "#ddcccc", "#ddbbbbb",
-                                        "#ffffee", "#ffffdd", "#ffffcc", "#eeeedd", "#eeeecc",  "#eeeebb", "#ddddcc", "#ddddbb",
-                                        "#ffeeff", "#ffddff", "#ffccff", "#eeddee", "#eeccee",  "#eebbee", "#ddccdd", "#ddbbdd",
-                                        "#eeffff", "#ddffff", "#ccffff", "#ddeeee", "#cceeee",  "#bbeeee", "#ccdddd", "#bbdddd"]
+                        where showt = prettyp (show (setCompactSrcLocs $ fmap (\x -> ()) t))
+                             
 
-{-
-lookahead [] 0 l        = l
-lookahead (')':_) 0 l   = l
-lookeahead (')':xs) n l = lookeahd xs (n-1) (l+1)
-lookahead ('(':xs) n l  = lookahead xs (n+1) (l+1)
-lookahead (x:xs)  n l   = lookahead xs n (l+1)
--}
+countToColor n = colors !! (n `mod` (length colors)) --  printf "#%06x" ((256*256*256 - (n * 40)) :: Int)
+
+colors = ["#ffeeee", "#eeffee", "#eeeeff", "#ffffee",
+          "#eeffff", "#eeffee", "#ffdddd", "#ddffdd", 
+          "#ddddff", "#ffffdd", "#ffddff", "#ddffff", 
+          "#eecccc", "#cceecc", "#eeeecc", "#ddeeee"]
+
+prettyp xs = prettyp' xs 0 []
+prettyp' [] n f       = []
+prettyp' ('(':xs) n f = let k = "<span style='background-color:" ++ (countToColor n) ++ ";'>" 
+                 in  if (nearbyClose xs 10) then 
+                         k ++ ('(':(prettyp' xs n (False:f)))
+                     else
+                         ("<br>" ++ (concat $ replicate (2 * (n+1)) "&nbsp;")) ++ k ++ ('(' : (prettyp' xs (n+1) (True:f)))
+prettyp' (')':xs) n (False:f) = ')' : ("</span>" ++ prettyp' xs n f)
+prettyp' (')':xs) n (True:f)  = ')' : ("</span>" ++ prettyp' xs (n - 1) f)
+prettyp' (x:xs) n f = x : prettyp' xs n f
+
+nearbyClose []       n = False
+nearbyClose _        0 = False
+nearbyClose ('(':(')':xs)) n = nearbyClose xs (n - 2)
+nearbyClose (')':xs) n = True
+nearbyClose (x:xs)   n = nearbyClose xs (n - 1)
+
 
 annotationMark i t x = "<div class='clickable' onClick='toggle(" ++  
                        (show $ number (rextract t)) ++ ");'>" ++
@@ -231,7 +237,7 @@ outputAnn t visible i astString =
      "<div class='annotation'><div class='number'>" ++ (show $ number t) ++ "</div>" ++ 
      "<div><div class='clickable' onClick=\"toggle('" ++ (show $ number t) ++  "src');\">" ++
      "<u>show ast</u></div><div id='a" ++ (show $ number t) ++ "src' " ++
-     "style='background:#fff;display:none;width:600px;overflow:wrap;'>" ++ (breakUp astString) ++ "</div></div>" ++ "<p><table>" ++
+     "style='background:#fff;display:none;width:600px;overflow:wrap;'>" ++ (astString) ++ "</div></div>" ++ "<p><table>" ++
      row ["lives: (in) ",    showList $ (map show) $ fst $ lives t, "(out)", showList $ (map show) $ snd $ lives t] ++ 
      row ["indices:",  showList $ indices t] ++ 
      row ["successors:", showList $ (map show) (successorStmts t)] ++ 
