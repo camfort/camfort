@@ -27,6 +27,7 @@ import Traverse
 
 
 {-| live-variable analysis on a program -}
+-- Recall: type Program a = [ProgUnit a]
 lva :: Program Annotation -> Program Annotation
 lva x = map lvaOnUnit x
         
