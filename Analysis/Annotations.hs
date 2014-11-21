@@ -13,6 +13,7 @@ import Debug.Trace
 
 import Language.Haskell.ParseMonad 
 
+import Language.Haskell.Syntax (SrcLoc)
 import Language.Fortran
 import Analysis.IntermediateReps 
 
