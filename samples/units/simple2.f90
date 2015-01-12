@@ -8,7 +8,8 @@ program simple
   x = 20.0
   t = 3.0 
   v = x / t
-  s = abs(v)
+  s = abss(v)
+
 
   a = square (x) 
   b = square (t)
@@ -20,8 +21,19 @@ program simple
   contains 
 
   real function square(y)
-    real y, m
-    square = y * y * m
+    real y
+    real, unit(m) :: k
+    square = y * y * k
   end function
-    
+
+  ! fun abs x = if x < zero then zero-x else x
+  real function abss(x) 
+    real x
+    if (x < 0) then 
+      abss = 0 - x
+    else
+      abss = x
+    end if
+  end function
+
 end program

@@ -14,7 +14,7 @@ import Data.Matrix
 
 data UnitConstant = Unitful [(MeasureUnit, Rational)] | Unitless Rational deriving (Eq, Show)
 
-newtype UnitVariable = UnitVariable Int deriving (Eq, Show)
+newtype UnitVariable = UnitVariable Col deriving (Eq, Show)
 data UnitVarCategory = Literal | Temporary | Variable | Argument | Magic deriving (Eq, Show)
 
 type UnitVarEnv = [(Variable, (UnitVariable, [UnitVariable]))]
@@ -45,7 +45,7 @@ data UnitEnv = UnitEnv {
   _debugInfo           :: DebugInfo,
   _tmpRowsAdded        :: [Int],
   _tmpColsAdded        :: [Int]
-}
+} deriving Show
 
 Data.Label.mkLabels [''UnitEnv]
 

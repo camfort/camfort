@@ -58,7 +58,6 @@ infix 2 <<++
 
 {- START HERE! Two main functions of this file: inferUnits and removeUnits -}
 
-
 removeUnits :: (Filename, Program Annotation) -> (Report, (Filename, Program Annotation))
 removeUnits (fname, x) = let ?criticals = False in ("", (fname, map (descendBi removeUnitsInBlock) x))
 
@@ -79,7 +78,8 @@ inferCriticalVariables (fname, x) =
                                   --debugGaussian
                                   return ""
                          _  -> do report <<++ "Critical variables: " ++ (concat $ intersperse "," vars)
-                                  debugGaussian
+                                  debugGaussian -- remove for production
+                                  return ""
                        
 
             (y, env) = runState infer emptyUnitEnv
@@ -118,9 +118,12 @@ emptyUnitEnv = UnitEnv { _report              = [],
 
 doInferUnits :: (?criticals :: Bool) => Program Annotation -> State UnitEnv (Program Annotation)
 doInferUnits x = do y <- mapM inferProgUnits x
-                    z <- inferInterproceduralUnits y
+                    inferInterproceduralUnits y
+                    debugGaussian
+                    allState <- get 
+                    report <<++ (show allState)
                     if ?criticals then  return x -- don't insert unit annotations
-                                  else  mapM (descendBiM insertUnitsInBlock) z
+                                  else  mapM (descendBiM insertUnitsInBlock) x
 
 inferProgUnits :: (?criticals :: Bool) => ProgUnit Annotation -> State UnitEnv (ProgUnit Annotation)
 inferProgUnits p =
@@ -299,12 +302,15 @@ enterDecls x proc = transformBiM processDecls x
            tmpRowsAdded << n
            return ()
 
-inferInterproceduralUnits :: Program Annotation -> State UnitEnv (Program Annotation)
+inferInterproceduralUnits :: (?criticals :: Bool) => Program Annotation -> State UnitEnv (Program Annotation)
 inferInterproceduralUnits x =
   do --reorderColumns
+     if ?criticals then reorderVarCols else return ()
+     --reorderVarCols
      solveSystemM "inconsistent"
      system <- gets linearSystem
-     inferInterproceduralUnits' x False system
+     let dontAssumeLiterals = if ?criticals then True else False
+     inferInterproceduralUnits' x dontAssumeLiterals system
 
 inferInterproceduralUnits' :: Program Annotation -> Bool -> LinearSystem -> State UnitEnv (Program Annotation)
 inferInterproceduralUnits' x haveAssumedLiterals system1 =
@@ -326,13 +332,75 @@ inferInterproceduralUnits' x haveAssumedLiterals system1 =
                                              else do system3 <- gets linearSystem
                                                      inferInterproceduralUnits' x True system3
 
+
+class UpdateColInfo t where
+    updateColInfo :: Col -> Col -> t -> t
+
+instance UpdateColInfo UnitVariable where
+    updateColInfo x n (UnitVariable y) | y == x = UnitVariable n
+                                       | y == n = UnitVariable x
+                                       | otherwise = UnitVariable y
+
+instance UpdateColInfo UnitVarEnv where
+    updateColInfo _ _ [] = []
+    updateColInfo x n ((v, (uv, uvs)):ys) = (v, (updateColInfo x n uv, map (updateColInfo x n) uvs)) : (updateColInfo x n ys)
+
+instance UpdateColInfo Procedure where
+    updateColInfo x n (Nothing, ps) = (Nothing, map (updateColInfo x n) ps)
+    updateColInfo x n (Just p, ps) = (Just $ updateColInfo x n p, map (updateColInfo x n) ps)
+
+instance UpdateColInfo ProcedureEnv where
+    updateColInfo x n = map (\(s, p) -> (s, updateColInfo x n p))
+
+instance UpdateColInfo (Int, String) where
+    updateColInfo x n (y, s) | y == x = (n, s)
+                             | y == n = (x, s)
+                             | otherwise = (y, s)
+
+instance UpdateColInfo Int where
+    updateColInfo x n y | y == x = x
+                        | y == n = n
+                        | otherwise = y
+
+swapUnitVarCats x n xs = swapUnitVarCats' x n xs xs 1
+swapUnitVarCats' x n [] ys c = []
+swapUnitVarCats' x n (z:zs) ys c | c == x = (ys !! (n - 1)) : (swapUnitVarCats' x n zs ys (c + 1))
+                                 | c == n = (ys !! (x - 1)) : (swapUnitVarCats' x n zs ys (c + 1))
+                                 | otherwise = z : (swapUnitVarCats' x n zs ys (c + 1))
+
+swapCols :: Int -> Int -> State UnitEnv ()
+swapCols x n = do --report <<++ ("Pre swap - " ++ (show x) ++ " <-> " ++ (show n))
+                  --debugGaussian
+                  unitVarEnv   =. updateColInfo x n
+                  procedureEnv =. updateColInfo x n
+                  calls        =. updateColInfo x n
+                  unitVarCats  =. swapUnitVarCats x n
+                  linearSystem =. (\(m, v) -> (switchCols x n m, v))
+                  debugInfo    =. map (updateColInfo x n)
+                  tmpColsAdded =. map (updateColInfo x n)
+                  --report <<++ "Post swap"
+                  --debugGaussian
+                  return ()
+
+
+{-| reorderVarCols puts any variable columns to the end of the Gaussian matrix (along with the associated information) -}
+reorderVarCols :: State UnitEnv ()
+reorderVarCols = do ucats <- gets unitVarCats
+                    (matrix, _) <- gets linearSystem
+                    reorderVarCols' (ncols matrix) ucats 1 
+                   where   reorderVarCols' :: Int -> [UnitVarCategory] -> Int -> State UnitEnv ()
+                           reorderVarCols' end [] c = return ()
+                           reorderVarCols' end (Variable:xs) c = do swapCols end c
+                                                                    reorderVarCols' (end - 1) xs (c+1)
+                           reorderVarCols' end (_:xs) c = reorderVarCols' end xs (c+1)
+
 assumeLiteralUnits :: State UnitEnv Bool
-assumeLiteralUnits =
+assumeLiteralUnits = 
   do system@(matrix, vector) <- gets linearSystem
      mapM_ assumeLiteralUnits' [1 .. ncols matrix]
      consistent <- solveSystemM "underdetermined"
      when (not consistent) $ linearSystem =: system
-     return consistent
+     return consistent 
   where
     assumeLiteralUnits' m =
       do (matrix, vector) <- gets linearSystem
@@ -361,10 +429,9 @@ addInterproceduralConstraints x =
 
     handleArgs actualVars dummyVars =
       do order <- gets reorderedCols
-         let actual = map (realColumn order) actualVars
-             dummy = map (realColumn order) dummyVars
+         let actual = map (\(UnitVariable uv) -> uv) actualVars
+             dummy = map (\(UnitVariable uv) -> uv) dummyVars
          mapM_ (handleArg $ zip dummy actual) dummy
-         -- handleArgNew (zip dummy actual) undefined
 
     -- experimentation but now deprecated. 
 {-
@@ -683,6 +750,22 @@ moveCol i j m
                                        else                      m ! (r, i) 
 
 {- 'addCol' and 'addRow' extend the Gaussian matrix -}
+{- Experiment 
+addCol :: UnitVarCategory -> State UnitEnv Int
+addCol category =
+  do (matrix, vector) <- gets linearSystem
+     let m = ncols matrix + 1
+     let matrix' = extendTo 0 0 m matrix
+     let matrix'' = switchCols 2 m matrix'
+     linearSystem =: (matrix'', vector)
+     ucats <- gets unitVarCats
+     unitVarCats =: ((head ucats) : (category : (tail ucats)))
+     report <<++ "add cols"
+     debugGaussian
+     return 2
+-}
+
+
 
 addCol :: UnitVarCategory -> State UnitEnv Int
 addCol category =
@@ -692,6 +775,7 @@ addCol category =
      unitVarCats <<++ category
      tmpColsAdded << m
      return m
+
 
 addRow :: State UnitEnv Int
 addRow = addRow' (Unitful [])
@@ -796,7 +880,8 @@ checkSystem (matrix, vector) k
 
 elimRow :: LinearSystem -> Maybe Row -> Col -> Row -> Maybe LinearSystem
 elimRow system Nothing m k = solveSystem' system (m + 1) k
-elimRow (matrix, vector) (Just n) m k = solveSystem' system' (m + 1) (k + 1)
+elimRow (matrix, vector) (Just n) m k = -- (show (m, k)) `D.trace`
+ solveSystem' system' (m + 1) (k + 1)
   where matrix' = let s = matrix ! (n, m) in 
                     (if (k == n) then id else switchRows k n)
                        (if s == 1 then matrix else scaleRow (recip $ s) n matrix)
@@ -816,7 +901,7 @@ checkUnderdeterminedM = do ucats <- gets unitVarCats
                            system <- gets linearSystem
                            let badCols = checkUnderdetermined ucats system
                            unless (null badCols) $ report << "underdetermined units of measure"
-                           report <<++ show badCols
+                           -- report <<++ show badCols
                            underdeterminedCols =: badCols
 
 
@@ -828,25 +913,34 @@ criticalVars :: State UnitEnv [String]
 criticalVars = do uvarenv     <- gets unitVarEnv
                   (matrix, _) <- gets linearSystem
                   ucats       <- gets unitVarCats
-                  return $ criticalVars' uvarenv ucats matrix 1
+                  let cv1 = criticalVars' uvarenv ucats matrix 1
+                  let cv2 = [] -- criticalVars
+                  return (cv1 ++ cv2)
 
 criticalVars' :: UnitVarEnv -> [UnitVarCategory] -> Matrix Rational -> Row -> [String]
 criticalVars' varenv ucats matrix i =
-    if (i == nrows matrix) then []
-    else  let m = firstNonZeroCoeff matrix
-          in  if (m (i + 1)) /= ((m i) + 1)         
-              then (lookupVarsByColsFilterByArg varenv ucats [(m i)..(m (i + 1) - 1)]) ++ (criticalVars' varenv ucats matrix (i + 1))
-              else criticalVars' varenv ucats matrix (i + 1) 
+  let m = firstNonZeroCoeff matrix
+  in
+    if (i == nrows matrix) then 
+       if (m i) /= (ncols matrix) then
+          lookupVarsByColsFilterByArg matrix varenv ucats [((m i) + 1)..(ncols matrix)]
+       else []
+    else  
+        if (m (i + 1)) /= ((m i) + 1)         
+        then (lookupVarsByColsFilterByArg matrix varenv ucats [(m i)..(m (i + 1) - 1)]) ++ (criticalVars' varenv ucats matrix (i + 1))
+        else criticalVars' varenv ucats matrix (i + 1) 
 
-lookupVarsByColsFilterByArg :: UnitVarEnv -> [UnitVarCategory] -> [Int] -> [String]
-lookupVarsByColsFilterByArg uenv ucats cols = 
+lookupVarsByColsFilterByArg :: Matrix Rational -> UnitVarEnv -> [UnitVarCategory] -> [Int] -> [String]
+lookupVarsByColsFilterByArg matrix uenv ucats cols = 
       mapMaybe (\j -> lookupEnv j uenv) cols
          where lookupEnv j [] = Nothing
                lookupEnv j ((v, (UnitVariable i, _)):uenv)
-                                              | i == j    = if (j < length ucats) then
+                                              | i == j    = if (j <= length ucats) then
                                                              case (ucats !! (j - 1)) of
                                                                 Argument -> Nothing
-                                                                _        -> Just v 
+                                                                _        -> if (all (==0) (V.toList (getCol j matrix)))
+                                                                            then Nothing
+                                                                            else Just v 
                                                             else Nothing
                                               | otherwise = lookupEnv j uenv
 
@@ -1156,13 +1250,13 @@ extractUnit attr = case attr of
                      _ -> []
 
 
-
-
-lookupUnit :: [UnitVarCategory] -> [Int] -> LinearSystem -> Int -> Maybe UnitConstant
+lookupUnit :: [UnitVarCategory] -> [Int] -> LinearSystem -> Col -> Maybe UnitConstant
 lookupUnit ucats badCols system@(matrix, vector) m =
-  maybe defaultUnit (lookupUnit' ucats badCols system m) n
-  where n = find (\n -> matrix ! (n, m) /= 0) [1 .. nrows matrix]
-        defaultUnit = if ucats !! (m - 1) == Argument then Nothing else Just (Unitful [])
+  let -- m is the column corresopnding to the variable for which we are looking up the unit
+      n = find (\n -> matrix ! (n, m) /= 0) [1 .. nrows matrix]
+      defaultUnit = if ucats !! (m - 1) == Argument then Nothing else Just (Unitful [])
+  in maybe defaultUnit (lookupUnit' ucats badCols system m) n
+
 
 lookupUnit' :: [UnitVarCategory] -> [Int] -> LinearSystem -> Int -> Int -> Maybe UnitConstant
 lookupUnit' ucats badCols (matrix, vector) m n
@@ -1178,13 +1272,15 @@ insertUnits :: UnitEnv -> Decl Annotation -> Decl Annotation
 insertUnits env (Decl a sp@(s1, s2) d t) | not (pRefactored a || hasUnits t || types == [t]) =
   DSeq a (NullDecl a' sp'') (foldr1 (DSeq a) decls)
   where system = Data.Label.get linearSystem env
-        order = Data.Label.get reorderedCols env
         ucats = Data.Label.get unitVarCats env
         badCols = Data.Label.get underdeterminedCols env
-        unitVar' (Var a' _ _, _, _) = realColumn order $ UnitVariable $ unitVar a'
-        sameUnits = (==) `on` (lookupUnit ucats badCols system . unitVar')
+        uVarEnv = Data.Label.get unitVarEnv env
+        varCol (Var _ _ ((VarName _ v, _):_), _, _) = case (lookup v uVarEnv) of
+                                                          (Just (UnitVariable m,_)) -> m
+                                                          Nothing -> error $ "No variable " ++ (show v)
+        sameUnits = (==) `on` (lookupUnit ucats badCols system . varCol)
         groups = groupBy sameUnits d
-        types = map (insertUnit ucats badCols system t . unitVar' . head) groups
+        types = map (insertUnit ucats badCols system t . varCol . head) groups
         a' = a { refactored = Just s1 }
         sp' = dropLine $ refactorSpan sp
         sp'' = (toCol0 s1, snd $ dropLine sp)
@@ -1247,11 +1343,6 @@ toFraction r
   where p = numerator r
         q = denominator r
 
-
-
-
-realColumn :: [Int] -> UnitVariable -> Int
-realColumn order (UnitVariable uv) = if null order then uv else order !! (uv - 1)
 
 
 {- DEPRECATED 
