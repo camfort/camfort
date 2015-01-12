@@ -4,9 +4,7 @@ program simple
   unit :: le = m
   integer, unit(le) :: x
   real, unit(s) :: t
-  real :: v
-  real :: s
-  real :: y
+  real :: v, s, y
   logical :: check
 
   real :: d

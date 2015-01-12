@@ -78,7 +78,7 @@ inferCriticalVariables (fname, x) =
                                   --debugGaussian
                                   return ""
                          _  -> do report <<++ "Critical variables: " ++ (concat $ intersperse "," vars)
-                                  debugGaussian -- remove for production
+                                  --debugGaussian -- remove for production
                                   return ""
                        
 
@@ -93,8 +93,8 @@ inferUnits (fname, x) =
            r = concat [fname ++ ": " ++ r ++ "\n" | r <- Data.Label.get report env] 
                ++ "\n" ++ fname ++ ": checked/inferred " 
                ++ (show $ countVariables (fst $ _linearSystem env) (_unitVarCats env))
-               ++ " variables\n"
-       in (r ++ "\n", (fname, y))
+               ++ " variables"
+       in (r, (fname, y))
 
 
 countVariables matrix ucats = 
@@ -117,22 +117,20 @@ emptyUnitEnv = UnitEnv { _report              = [],
 
 
 doInferUnits :: (?criticals :: Bool) => Program Annotation -> State UnitEnv (Program Annotation)
-doInferUnits x = do y <- mapM inferProgUnits x
-                    inferInterproceduralUnits y
-                    debugGaussian
-                    allState <- get 
-                    report <<++ (show allState)
+doInferUnits x = do mapM inferProgUnits x
+                    inferInterproceduralUnits x
+                    --debugGaussian
+                    --allState <- get 
+                    --report <<++ (show allState)
                     if ?criticals then  return x -- don't insert unit annotations
                                   else  mapM (descendBiM insertUnitsInBlock) x
 
-inferProgUnits :: (?criticals :: Bool) => ProgUnit Annotation -> State UnitEnv (ProgUnit Annotation)
+inferProgUnits :: (?criticals :: Bool) => ProgUnit Annotation -> State UnitEnv ()
 inferProgUnits p =
   do ps <- mapM inferProgUnits $ ((children p)::[ProgUnit Annotation])
-     p' <- case (block p) of 
-             Just (b, procNames)  -> do b' <- inferBlockUnits b procNames
-                                        return $ refillBlock p b'
-             Nothing -> return p
-     return $ refillProgUnits p' ps
+     case (block p) of 
+          Just (b, procNames)  -> inferBlockUnits b procNames >> return ()
+          Nothing -> return ()
 
   where 
         block :: ProgUnit Annotation -> Maybe (Block Annotation, Maybe ProcedureNames)
@@ -140,19 +138,6 @@ inferProgUnits p =
         block (Sub x sp t (SubName _ n) (Arg _ a _) b)        = Just (b, Just (n, Nothing, argNames a))
         block (Function x sp t (SubName _ n) (Arg _ a _) r b) = Just (b, Just (n, Just (resultName n r), argNames a))
         block x                                               = Nothing
-
-        refillBlock :: ProgUnit Annotation -> Block Annotation -> ProgUnit Annotation
-        refillBlock (Main x sp n a _ ps)      b = Main x sp n a b ps
-        refillBlock (Sub x sp t n a _)        b = Sub x sp t n a b
-        refillBlock (Function x sp t n a r _) b = Function x sp t n a r b
-        refillBlock x                         _ = x
-
-        refillProgUnits :: ProgUnit Annotation -> [ProgUnit Annotation] -> ProgUnit Annotation
-        refillProgUnits (Main x sp n a b _)     ps       = Main x sp n a b ps
-        refillProgUnits (Module x sp n u i d _) ps       = Module x sp n u i d ps
-        refillProgUnits (PSeq x sp _ _)         [p1, p2] = PSeq x sp p1 p2
-        refillProgUnits (Prog x sp _)           [p]      = Prog x sp p
-        refillProgUnits x                       _        = x
 
         argNames :: ArgName a -> [Variable]
         argNames (ArgName _ n) = [n]
@@ -167,19 +152,18 @@ inferProgUnits p =
 
 inferBlockUnits :: (?criticals :: Bool) => Block Annotation -> Maybe ProcedureNames -> State UnitEnv (Block Annotation)
 inferBlockUnits x proc = do resetTemps
-                            y <- enterDecls x proc
+                            enterDecls x proc
                             addProcedure proc
-                            descendBiM handleStmt y
+                            descendBiM handleStmt x
 
                             case proc of 
                               Just _ -> {- not ?criticals -> -}
                                          do -- Intermediate solve for procedures (subroutines & functions)
                                             solveSystemM "" 
                                             linearSystem =. reduceRows 1
-
                               _     -> return ()
+                            return x
 
-                            return y
                          where
                            handleStmt :: Fortran Annotation -> State UnitEnv (Fortran Annotation)
                            handleStmt x = do inferStmtUnits x
@@ -238,7 +222,7 @@ enterDecls x proc = transformBiM processDecls x
   where
     processVar :: [UnitConstant] -> (Expr Annotation, Expr Annotation) -> Type Annotation -> 
                   State UnitEnv (Expr Annotation, Expr Annotation)
-    processVar units (Var a s names, e) typ = 
+    processVar units exps@(Var a s names, e) typ = 
        do 
           let (VarName _ v, es) = head names
           system <- gets linearSystem
@@ -256,8 +240,7 @@ enterDecls x proc = transformBiM processDecls x
             _            -> do uv <- inferExprUnits e
                                mustEqual (UnitVariable m) uv
                                return ()
-
-          return (Var a { unitVar = m } s names, e)
+          return exps 
 
     unitVarCat :: Variable -> UnitVarCategory
     unitVarCat v
@@ -267,13 +250,12 @@ enterDecls x proc = transformBiM processDecls x
 
     {-| processDecls - extract and record information from explicit unit declarations -}
     processDecls :: Decl Annotation -> State UnitEnv (Decl Annotation)
-    processDecls (Decl a s d typ) =
+    processDecls decl@(Decl a s d typ) =
       do
          let BaseType _ _ attrs _ _ = arrayElementType typ
          units <- sequence $ concatMap extractUnit attrs
-         d' <- mapM (\(e1, e2, multiplier) -> do (e1', e2') <- processVar units (e1, e2) typ
-                                                 return (e1', e2', multiplier)) d
-         return $ Decl a s d' typ
+         mapM_ (\(e1, e2, multiplier) -> processVar units (e1, e2) typ) d
+         return $ decl
 
 
     processDecls x@(MeasureUnitDef a s d) =
@@ -305,8 +287,8 @@ enterDecls x proc = transformBiM processDecls x
 inferInterproceduralUnits :: (?criticals :: Bool) => Program Annotation -> State UnitEnv (Program Annotation)
 inferInterproceduralUnits x =
   do --reorderColumns
-     if ?criticals then reorderVarCols else return ()
-     --reorderVarCols
+     --if ?criticals then reorderVarCols else return ()
+     reorderVarCols
      solveSystemM "inconsistent"
      system <- gets linearSystem
      let dontAssumeLiterals = if ?criticals then True else False
@@ -1342,42 +1324,3 @@ toFraction r
   | otherwise = FractionConst unitAnnotation (show p) (show q)
   where p = numerator r
         q = denominator r
-
-
-
-{- DEPRECATED 
-reorderColumns :: State UnitEnv ()
-reorderColumns =
-  do (matrix, vector) <- gets linearSystem
-     reorderedCols =: [1 .. ncols matrix]
-     reorderColumns' (ncols matrix) (ncols matrix)
-
-reorderColumns' :: Int -> Int -> State UnitEnv ()
-reorderColumns' m k
-  | m < 1 = reorderColumns'' k k
-  | otherwise =
-      do (matrix, vector) <- gets linearSystem
-         ucats <- gets unitVarCats
-         k' <- if ucats !! (m - 1) == Argument
-                 then do modify $ liftUnitEnv $ moveCol m k
-                         unitVarCats =. moveElem m k
-                         reorderedCols =. moveElem m k
-                         return $ k - 1
-                 else return k
-         reorderColumns' (m - 1) k'
-
-reorderColumns'' :: Int -> Int -> State UnitEnv ()
-reorderColumns'' m k
-  | m < 1 = reorderedCols =. inverse
-  | otherwise =
-      do (matrix, vector) <- gets linearSystem
-         ucats <- gets unitVarCats
-         k' <- if ucats !! (m - 1) == Literal
-                 then do modify $ liftUnitEnv $ moveCol m k
-                         unitVarCats =. moveElem m k
-                         reorderedCols =. moveElem m k
-                         return $ k - 1
-                 else return k
-         reorderColumns'' (m - 1) k'
--}
-
