@@ -4,14 +4,14 @@ program simple
   unit :: le = m
   integer, unit(le) :: x
   real, unit(s) :: t
-  real :: v, s, y
+  real :: v, s, y, fooz
   logical :: check
+  real :: foon
 
   real :: d
   real, unit(le**2) :: c
-  
 
-   y = x * x
+   y = x ** 1 !x * x
 
   x = 20.0  ! initial
   t = 3.0   !  values
