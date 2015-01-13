@@ -94,14 +94,16 @@ inferUnits (fname, x) =
     in let (y, env) = runState (doInferUnits x) emptyUnitEnv
            r = concat [fname ++ ": " ++ r ++ "\n" | r <- Data.Label.get report env] 
                ++ "\n" ++ fname ++ ": checked/inferred " 
-               ++ (show $ countVariables (fst $ _linearSystem env) (_unitVarCats env))
-               ++ " variables"
+               ++ (show $ countVariables (_unitVarEnv env) (_debugInfo env) (_procedureEnv env) (fst $ _linearSystem env) (_unitVarCats env))
+               ++ " user variables"
        in (r, (fname, y))
 
 
-countVariables matrix ucats = 
+countVariables vars debugs procs matrix ucats = 
     length $ filter (\c -> case (ucats !! (c - 1)) of 
-                             Variable -> True
+                             Variable -> case (lookupVarsByCols vars [c]) of
+                                           [] -> False
+                                           _  -> True
                              _        -> False) [1..ncols matrix]
 
 emptyUnitEnv = UnitEnv { _report              = [],
@@ -1216,7 +1218,7 @@ showSrcSpan (start, end) = "(" ++ showSrcLoc start ++ " - " ++ showSrcLoc end ++
 showExprLines cats vars procs debugInfo c = 
              case (cats !! (c - 1)) of
                Variable  -> case (lookup c debugInfo) of 
-                              Just (sp, expr) -> expr ++ " \t\t on " ++ (showSrcSpan sp)
+                              Just (sp, expr) -> (showSrcSpan sp) ++ "\t" ++ expr 
                               Nothing -> 
                                 case (lookupVarsByCols vars [c]) of
                                   []    -> case (lookupProcByCols procs [c]) of
@@ -1224,12 +1226,12 @@ showExprLines cats vars procs debugInfo c =
                                              (x:_) -> "=" ++ x
                                   (x:_) -> x
                Temporary -> let (sp, expr) = fromJust $ lookup c debugInfo
-                            in expr ++ " \t\t on " ++ (showSrcSpan sp)
+                            in (showSrcSpan sp) ++ "\t" ++ expr 
                Argument  -> case (lookupProcByArgCol procs [c]) of 
                               []    -> "?"
                               (x:_) -> x
                Literal   -> let (sp, expr) = fromJust $ lookup c debugInfo
-                            in expr ++ " \t\t on " ++ (showSrcSpan sp)
+                            in (showSrcSpan sp) ++ "\t" ++ expr 
                Magic     -> ""
 
 showArgVars cats vars c = 
