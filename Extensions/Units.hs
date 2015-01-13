@@ -607,14 +607,15 @@ handleExpr x = do inferExprUnits x
 inferForHeaderUnits :: (Variable, Expr a, Expr a, Expr a) -> State UnitEnv ()
 inferForHeaderUnits (v, e1, e2, e3) =
   do uenv <- gets unitVarEnv
-     let Just (uv, []) = lookup v uenv 
-     uv1 <- inferExprUnits e1
-     mustEqual uv uv1
-     uv2 <- inferExprUnits e2
-     mustEqual uv uv2
-     uv3 <- inferExprUnits e3
-     mustEqual uv uv3
-     return ()
+     case (lookup v uenv) of
+       Just (uv, []) -> do uv1 <- inferExprUnits e1
+                           mustEqual uv uv1
+                           uv2 <- inferExprUnits e2
+                           mustEqual uv uv2
+                           uv3 <- inferExprUnits e3
+                           mustEqual uv uv3
+                           return ()
+       Nothing -> report <<++ "Ill-formed Fortran code. Variable '" ++ v ++ "' is not declared."
 
 inferSpecUnits :: [Spec Annotation] -> State UnitEnv ()
 inferSpecUnits = mapM_ $ descendBiM handleExpr
@@ -840,7 +841,7 @@ anyUnits category =
 -- *************************************
                                                                     
 
-data Consistency a = Ok a | Bad a (UnitConstant, [Rational])
+data Consistency a = Ok a | Bad a (UnitConstant, [Rational]) deriving Show
 
 efmap :: (a -> a) -> Consistency a -> Consistency a
 efmap f (Ok x)      = Ok (f x)
@@ -886,9 +887,10 @@ solveSystemM adjective =
        Bad system' (unit, vars) -> 
                      do report <<++ (adjective ++ " units of measure")
                         linearSystem =: system' 
-                        if adjective == "inconsistent" then 
+                        if (adjective `elem` ["inconsistent", "underdetermined"]) then 
                             do msg <- errorMessage unit vars
                                report <<++ msg
+                               debugGaussian
                                return False
                         else
                             return False
@@ -911,7 +913,8 @@ checkSystem :: LinearSystem -> Row -> Consistency LinearSystem
 checkSystem (matrix, vector) k
   | k > nrows matrix = Ok (matrix, vector)
   | vector !! (k - 1) /= Unitful [] = let vars = V.toList $ getRow k matrix 
-                                      in Bad (matrix, vector) (vector !! (k - 1), vars)
+                                          bad = Bad (matrix, vector) (vector !! (k - 1), vars)
+                                      in bad
   | otherwise = checkSystem (matrix, vector) (k + 1)
 
 elimRow :: LinearSystem -> Maybe Row -> Col -> Row -> Consistency LinearSystem
@@ -945,6 +948,8 @@ checkUnderdeterminedM = do ucats <- gets unitVarCats
                                do let exprs = map (showExprLines ucats varenv procenv debugs) badCols
                                   let exprsL = concat $ intersperse "\n\t" exprs
                                   report << "Underdetermined units of measure. Try adding units to: \n\t" ++ exprsL
+                                  debugGaussian
+                                  return ()
                            else return ()
                            underdeterminedCols =: badCols
 
@@ -994,21 +999,23 @@ firstNonZeroCoeff matrix row = case (V.findIndex (/= 0) (getRow row matrix)) of
                                  Just i  -> i + 1
 
 
+
+-- debug string ("n = " ++ show n ++ " vc = " ++ (show (vector !! (n - 1))) ++ " ms = " ++ show ms ++ " rest = " ++ show rest) `D.trace` 
 checkUnderdetermined' :: [UnitVarCategory] -> LinearSystem -> Int -> [Int]
 checkUnderdetermined' ucats system@(matrix, vector) n
   | n > nrows matrix = []
   | not ((drop 1 ms) == []) && vector !! (n - 1) /= Unitful [] = ms ++ rest
   | otherwise = rest
-  where ms = filter significant [1 .. ncols matrix]
-        significant m = matrix ! (n, m) /= 0 && ucats !! (m - 1) `notElem` [Literal, Argument]
+  where ms = filter significant [2 .. ncols matrix]
+        significant m = matrix ! (n, m) /= 0 && ucats !! (m - 1) `notElem` [Literal, Argument, Temporary]
         rest = checkUnderdetermined' ucats system (n + 1)
 
 propagateUnderdetermined :: Matrix Rational -> [Int] -> [Int]
-propagateUnderdetermined matrix list =
-  nub $ do
-    m <- list
-    n <- filter (\n -> matrix ! (n, m) /= 0) [1 .. nrows matrix]
-    filter (\m -> matrix ! (n, m) /= 0) [1 .. ncols matrix]
+propagateUnderdetermined matrix list = 
+    nub $ do m <- list
+             n <- filter (\n -> matrix ! (n, m) /= 0) [1 .. nrows matrix]
+             filter (\m -> matrix ! (n, m) /= 0) [1 .. ncols matrix]
+
 
     
 
