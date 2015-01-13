@@ -39,6 +39,7 @@ import Analysis.Types
 import Extensions.UnitsEnvironment -- Provides the types and data accessors used in this module
 import Language.Fortran
 import Language.Fortran.Pretty
+import Language.Haskell.Syntax (SrcLoc(..))
 import Transformation.Syntax
 
 -- For debugging and development purposes
@@ -338,7 +339,7 @@ instance UpdateColInfo Procedure where
 instance UpdateColInfo ProcedureEnv where
     updateColInfo x n = map (\(s, p) -> (s, updateColInfo x n p))
 
-instance UpdateColInfo (Int, String) where
+instance UpdateColInfo (Int, a) where
     updateColInfo x n (y, s) | y == x = (n, s)
                              | y == n = (x, s)
                              | otherwise = (y, s)
@@ -488,7 +489,7 @@ addInterproceduralConstraints x =
     decodeResult Nothing (Just _) = error "Function used as a subroutine!"
 
 inferLiteral e = do uv@(UnitVariable uvn) <- anyUnits Literal
-                    debugInfo << (uvn, let ?variant = Alt1 in outputF e)
+                    debugInfo << (uvn, (srcSpan e, let ?variant = Alt1 in outputF e))
                     return uv
 
 
@@ -527,7 +528,7 @@ inferExprUnits ve@(Var _ _ names) =
                                           Just fun -> fun v 
                                           Nothing  -> return ()
                                        uv@(UnitVariable uvn) <- anyUnits Temporary
-                                       debugInfo << (uvn, let ?variant = Alt1 in outputF ve)
+                                       debugInfo << (uvn, (srcSpan ve , let ?variant = Alt1 in outputF ve))
                                        uvs <- inferArgUnits
                                        let uvs' = justArgUnits args uvs
                                        calls << (v, (Just uv, uvs'))
@@ -567,7 +568,7 @@ inferExprUnits e@(Bin _ _ op e1 e2) = do uv1 <- inferExprUnits e1
                                                                LogicOp -> mustEqual uv1 uv2
                                                                RelOp   -> do mustEqual uv1 uv2
                                                                              return $ UnitVariable 1
-                                         debugInfo << (n, let ?variant = Alt1 in outputF e)
+                                         debugInfo << (n, (srcSpan e, let ?variant = Alt1 in outputF e))
                                          return (UnitVariable n)
 inferExprUnits (Unary _ _ _ e) = inferExprUnits e
 inferExprUnits (CallExpr _ _ e1 (ArgList _ e2)) = do uv <- anyUnits Temporary
@@ -858,6 +859,12 @@ errorMessage unit vars =
                                 unitStrR = outputF (makeUnitSpec (Unitful $ xs'))
                                 msg = "Conflict since " ++ unitStrL ++ " != " ++ unitStrR
                             in return msg
+             {- A single unit with no variable column suggests an attempt to unify an unit
+                with unitless -}
+             Unitful xs | length xs == 1 ->                                
+                            let xs' = map (\(v, r) -> (v, r * (-1))) xs
+                                unitStrL = outputF (makeUnitSpec (Unitful xs'))
+                            in return $ "Conflict since " ++ unitStrL ++ " != 1"
              _ -> do debugGaussian
                      return "Sorry, I can't give a better error."
        else
@@ -926,9 +933,17 @@ elimRow' (matrix, vector) k m = (matrix', vector')
 checkUnderdeterminedM :: State UnitEnv ()
 checkUnderdeterminedM = do ucats <- gets unitVarCats
                            system <- gets linearSystem
+                           varenv  <- gets unitVarEnv
+                           debugs  <- gets debugInfo
+                           procenv <- gets procedureEnv
+
                            let badCols = checkUnderdetermined ucats system
-                           unless (null badCols) $ report << "underdetermined units of measure"
-                           -- report <<++ show badCols
+                           uenv <- gets unitVarEnv
+                           if not (null badCols) then 
+                               do let exprs = map (showExprLines ucats varenv procenv debugs) badCols
+                                  let exprsL = concat $ intersperse "\n\t" exprs
+                                  report << "Underdetermined units of measure. Try adding units to: \n\t" ++ exprsL
+                           else return ()
                            underdeterminedCols =: badCols
 
 
@@ -1015,13 +1030,13 @@ intrinsicsDict =
 
  ++ map (\x -> (x, addPowerIntrinsic)) ["SCALE", "SET_EXPONENT"]
 
- ++ map (\x -> (x, addUnitlessIntrinsic)) ["ACOS", "ACOSH", "ASIN", "ASINH", "ATAN", "ATANH", "BESSEL_J0", "BESSEL_J1", "BESSEL_Y0", "BESSEL_Y1", "COS", "COSH", "ERF", "ERFC", "ERFC_SCALED", "EXP", "EXPONENT", "GAMMA", "LOG", "LOG10", "LOG_GAMMA", "PRODUCT", "SIN", "SINH", "TAN", "TANH","FLOAT"]
+ ++ map (\x -> (x, addUnitlessIntrinsic)) ["ACOS", "ACOSH", "ASIN", "ASINH", "ATAN", "ATANH", "BESSEL_J0", "BESSEL_J1", "BESSEL_Y0", "BESSEL_Y1", "COS", "COSH", "ERF", "ERFC", "ERFC_SCALED", "EXP", "EXPONENT", "GAMMA", "LOG", "LOG10", "LOG_GAMMA", "PRODUCT", "SIN", "SINH", "TAN", "TANH"]
 
  ++ map (\x -> (x, addUnitlessSubIntrinsic)) ["CPU_TIME", "RANDOM_NUMBER"]
 
  ++ map (\x -> (x, addUnitlessResult0ArgIntrinsic)) ["COMMAND_ARGUMENT_COUNT", "COMPILER_OPTIONS", "COMPILER_VERSION"]
 
- ++ map (\x -> (x, addUnitlessResult1ArgIntrinsic)) ["ALLOCATED", "ASSOCIATED", "BIT_SIZE", "COUNT", "DIGITS", "IS_IOSTAT_END", "IS_IOSTAT_EOR", "KIND", "LBOUND", "LCOBOUND", "LEADZ", "LEN", "LEN_TRIM", "MASKL", "MASKR", "MAXLOC", "MINLOC", "POPCOUNT", "POPPAR", "PRECISION", "PRESENT", "RADIX", "RANGE", "SELECTED_CHAR_KIND", "SELECTED_INT_KIND", "SELECTED_REAL_KIND", "SHAPE", "SIZE", "STORAGE_SIZE", "TRAILZ", "UBOUND", "UCOBOUND"]
+ ++ map (\x -> (x, addUnitlessResult1ArgIntrinsic)) ["ALLOCATED", "ASSOCIATED", "BIT_SIZE", "COUNT", "DIGITS", "FLOAT", "IS_IOSTAT_END", "IS_IOSTAT_EOR", "KIND", "LBOUND", "LCOBOUND", "LEADZ", "LEN", "LEN_TRIM", "MASKL", "MASKR", "MAXLOC", "MINLOC", "POPCOUNT", "POPPAR", "PRECISION", "PRESENT", "RADIX", "RANGE", "SELECTED_CHAR_KIND", "SELECTED_INT_KIND", "SELECTED_REAL_KIND", "SHAPE", "SIZE", "STORAGE_SIZE", "TRAILZ", "UBOUND", "UCOBOUND"]
 
  ++ map (\x -> (x, addUnitlessResult2SameArgIntrinsic)) ["ATAN2", "BGE", "BGT", "BLE", "BLT", "INDEX", "LGE", "LGT", "LLE", "LLT", "SCAN", "VERIFY"]
 
@@ -1181,21 +1196,43 @@ debugGaussian' = do ucats   <- gets unitVarCats
 
          notLast xs = take (length xs - 1) xs
 
-         showExpr cats vars procs debugInfo c = 
+showExpr cats vars procs debugInfo c = 
              case (cats !! (c - 1)) of
                Variable  -> case (lookupVarsByCols vars [c]) of
                               []    -> case (lookupProcByCols procs [c]) of
                                          []    -> "?"
                                          (x:_) -> "=" ++ x
                               (x:_) -> x
-               Temporary -> fromJust $ lookup c debugInfo
+               Temporary -> snd $ fromJust $ lookup c debugInfo
                Argument  -> case (lookupProcByArgCol procs [c]) of 
                               []    -> "?"
                               (x:_) -> x
-               Literal   -> fromJust $ lookup c debugInfo
+               Literal   -> snd $ fromJust $ lookup c debugInfo
                Magic     -> ""
 
-         showArgVars cats vars c = 
+showSrcLoc loc = show (srcLine loc) ++ ":" ++ show (srcColumn loc)
+showSrcSpan (start, end) = "(" ++ showSrcLoc start ++ " - " ++ showSrcLoc end ++ ")"
+
+showExprLines cats vars procs debugInfo c = 
+             case (cats !! (c - 1)) of
+               Variable  -> case (lookup c debugInfo) of 
+                              Just (sp, expr) -> expr ++ " \t\t on " ++ (showSrcSpan sp)
+                              Nothing -> 
+                                case (lookupVarsByCols vars [c]) of
+                                  []    -> case (lookupProcByCols procs [c]) of
+                                             []    -> "?"
+                                             (x:_) -> "=" ++ x
+                                  (x:_) -> x
+               Temporary -> let (sp, expr) = fromJust $ lookup c debugInfo
+                            in expr ++ " \t\t on " ++ (showSrcSpan sp)
+               Argument  -> case (lookupProcByArgCol procs [c]) of 
+                              []    -> "?"
+                              (x:_) -> x
+               Literal   -> let (sp, expr) = fromJust $ lookup c debugInfo
+                            in expr ++ " \t\t on " ++ (showSrcSpan sp)
+               Magic     -> ""
+
+showArgVars cats vars c = 
              case (cats !! (c - 1)) of
                Argument -> case (lookupVarsByCols vars [c]) of
                              []    -> ""
@@ -1203,15 +1240,14 @@ debugGaussian' = do ucats   <- gets unitVarCats
                _        -> ""
                               
 
-         showCat Variable  = "Var"
-         showCat Magic     = "Magic"
-         showCat Temporary = "Temp"
-         showCat Argument  = "Arg"
-         showCat Literal   = "Lit"
+showCat Variable  = "Var"
+showCat Magic     = "Magic"
+showCat Temporary = "Temp"
+showCat Argument  = "Arg"
+showCat Literal   = "Lit"
 
-
-         lookupProcByArgCol :: ProcedureEnv -> [Int] -> [String]
-         lookupProcByArgCol penv cols = 
+lookupProcByArgCol :: ProcedureEnv -> [Int] -> [String]
+lookupProcByArgCol penv cols = 
              mapMaybe (\j -> lookupEnv j penv) cols
                  where lookupEnv j [] = Nothing
                        lookupEnv j ((p, (_, args)):penv) 
@@ -1219,8 +1255,8 @@ debugGaussian' = do ucats   <- gets unitVarCats
                            | otherwise    = lookupEnv j penv
              
 
-         lookupProcByCols :: ProcedureEnv -> [Int] -> [String]
-         lookupProcByCols penv cols = 
+lookupProcByCols :: ProcedureEnv -> [Int] -> [String]
+lookupProcByCols penv cols = 
              mapMaybe (\j -> lookupEnv j penv) cols
                  where lookupEnv j [] = Nothing
                        lookupEnv j ((p, (Just (UnitVariable i), _)):penv) 

@@ -30,7 +30,7 @@ type LinearSystem = (Matrix Rational, [UnitConstant])
 type Row = Int
 type Col = Int
 
-type DebugInfo = [(Int, String)]
+type DebugInfo = [(Int, (SrcSpan, String))]
 
 data UnitEnv = UnitEnv {
   _report              :: [String],
