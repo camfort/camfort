@@ -890,7 +890,6 @@ solveSystemM adjective =
                         if (adjective `elem` ["inconsistent", "underdetermined"]) then 
                             do msg <- errorMessage unit vars
                                report <<++ msg
-                               debugGaussian
                                return False
                         else
                             return False
@@ -948,7 +947,6 @@ checkUnderdeterminedM = do ucats <- gets unitVarCats
                                do let exprs = map (showExprLines ucats varenv procenv debugs) badCols
                                   let exprsL = concat $ intersperse "\n\t" exprs
                                   report << "Underdetermined units of measure. Try adding units to: \n\t" ++ exprsL
-                                  debugGaussian
                                   return ()
                            else return ()
                            underdeterminedCols =: badCols
