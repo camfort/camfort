@@ -38,6 +38,7 @@ library
                         Transformation.Syntax
                         Extensions.Units
                         Extensions.UnitsEnvironment
+                        Extensions.UnitsSolve
                         Helpers
                         Main
                         Output

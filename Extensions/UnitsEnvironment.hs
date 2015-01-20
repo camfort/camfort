@@ -12,6 +12,8 @@ import Control.Monad.State.Strict hiding (gets)
 import Language.Fortran
 import Data.Matrix
 
+data Solver = LAPACK | Custom
+
 data UnitConstant = Unitful [(MeasureUnit, Rational)] | Unitless Rational deriving (Eq, Show)
 
 newtype UnitVariable = UnitVariable Col deriving (Eq, Show)
@@ -81,3 +83,9 @@ instance Fractional UnitConstant where
   (Unitful units) / (Unitless n) = Unitful [(unit, r / n) | (unit, r) <- units]
   (Unitless n1) / (Unitless n2) = Unitless (n1 / n2)
   fromRational = Unitless . fromRational
+
+data Consistency a = Ok a | Bad a (UnitConstant, [Rational]) | BadL a deriving Show
+
+efmap :: (a -> a) -> Consistency a -> Consistency a
+efmap f (Ok x)      = Ok (f x)
+efmap f (Bad x msg) = Bad x msg

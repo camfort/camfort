@@ -37,6 +37,8 @@ import Analysis.Annotations
 import Analysis.Syntax
 import Analysis.Types
 import Extensions.UnitsEnvironment -- Provides the types and data accessors used in this module
+import Extensions.UnitsSolve -- Solvers for the Gaussian matrix
+
 import Language.Fortran
 import Language.Fortran.Pretty
 import Language.Haskell.Syntax (SrcLoc(..))
@@ -70,7 +72,8 @@ removeUnits (fname, x) = let ?criticals = False in ("", (fname, map (descendBi r
 -- *************************************
 
 
-inferCriticalVariables :: (Filename, Program Annotation) -> (Report, (Filename, Program Annotation))
+inferCriticalVariables :: (?solver :: Solver) => 
+                          (Filename, Program Annotation) -> (Report, (Filename, Program Annotation))
 inferCriticalVariables (fname, x) = 
     let ?criticals = True 
     in  let infer = do doInferUnits x
@@ -88,7 +91,7 @@ inferCriticalVariables (fname, x) =
             r = concat [fname ++ ": " ++ r ++ "\n" | r <- Data.Label.get report env]
         in (r, (fname, x))
 
-inferUnits :: (Filename, Program Annotation) -> (Report, (Filename, Program Annotation))
+inferUnits :: (?solver :: Solver) =>  (Filename, Program Annotation) -> (Report, (Filename, Program Annotation))
 inferUnits (fname, x) = 
     let ?criticals = False
     in let (y, env) = runState (doInferUnits x) emptyUnitEnv
@@ -120,7 +123,7 @@ emptyUnitEnv = UnitEnv { _report              = [],
                          _tmpColsAdded        = []}
 
 
-doInferUnits :: (?criticals :: Bool) => Program Annotation -> State UnitEnv (Program Annotation)
+doInferUnits :: (?criticals :: Bool, ?solver :: Solver) => Program Annotation -> State UnitEnv (Program Annotation)
 doInferUnits x = do mapM inferProgUnits x
                     inferInterproceduralUnits x
                     --debugGaussian
@@ -129,7 +132,7 @@ doInferUnits x = do mapM inferProgUnits x
                     if ?criticals then  return x -- don't insert unit annotations
                                   else  mapM (descendBiM insertUnitsInBlock) x
 
-inferProgUnits :: (?criticals :: Bool) => ProgUnit Annotation -> State UnitEnv ()
+inferProgUnits :: (?criticals :: Bool, ?solver :: Solver) => ProgUnit Annotation -> State UnitEnv ()
 inferProgUnits p =
   do ps <- mapM inferProgUnits $ ((children p)::[ProgUnit Annotation])
      case (block p) of 
@@ -154,7 +157,7 @@ inferProgUnits p =
 
 
 
-inferBlockUnits :: (?criticals :: Bool) => Block Annotation -> Maybe ProcedureNames -> State UnitEnv (Block Annotation)
+inferBlockUnits :: (?solver :: Solver, ?criticals :: Bool) => Block Annotation -> Maybe ProcedureNames -> State UnitEnv (Block Annotation)
 inferBlockUnits x proc = do resetTemps
                             enterDecls x proc
                             addProcedure proc
@@ -288,7 +291,7 @@ enterDecls x proc = transformBiM processDecls x
            tmpRowsAdded << n
            return ()
 
-inferInterproceduralUnits :: (?criticals :: Bool) => Program Annotation -> State UnitEnv ()
+inferInterproceduralUnits :: (?solver :: Solver, ?criticals :: Bool) => Program Annotation -> State UnitEnv ()
 inferInterproceduralUnits x =
   do --reorderColumns
      --if ?criticals then reorderVarCols else return ()
@@ -302,7 +305,7 @@ inferInterproceduralUnits x =
      else
          return ()
 
-inferInterproceduralUnits' :: Program Annotation -> Bool -> LinearSystem -> State UnitEnv (Program Annotation)
+inferInterproceduralUnits' :: (?solver :: Solver) => Program Annotation -> Bool -> LinearSystem -> State UnitEnv (Program Annotation)
 inferInterproceduralUnits' x haveAssumedLiterals system1 =
   do addInterproceduralConstraints x
      consistent <- solveSystemM "inconsistent"
@@ -383,7 +386,7 @@ reorderVarCols = do ucats <- gets unitVarCats
                                                                     reorderVarCols' (end - 1) xs (c+1)
                            reorderVarCols' end (_:xs) c = reorderVarCols' end xs (c+1)
 
-assumeLiteralUnits :: State UnitEnv Bool
+assumeLiteralUnits :: (?solver :: Solver) => State UnitEnv Bool
 assumeLiteralUnits = 
   do system@(matrix, vector) <- gets linearSystem
      mapM_ assumeLiteralUnits' [1 .. ncols matrix]
@@ -711,10 +714,6 @@ fixValue f x = snd $ until (uncurry (==)) (\(x, y) -> (y, f y)) (x, f x)
 
 -- The indexing for switchScaleElems and moveElem is 1-based, in line with Data.Matrix.
 
-switchScaleElems :: Num a => Int -> Int -> a -> [a] -> [a]
-switchScaleElems i j factor list = a ++ factor * b : c
-  where (lj, b:rj) = splitAt (j - 1) list
-        (a, _:c) = splitAt (i - 1) (lj ++ list !! (i - 1) : rj)
 
 
 moveElem :: Int -> Int -> [a] -> [a]
@@ -841,11 +840,6 @@ anyUnits category =
 -- *************************************
                                                                     
 
-data Consistency a = Ok a | Bad a (UnitConstant, [Rational]) deriving Show
-
-efmap :: (a -> a) -> Consistency a -> Consistency a
-efmap f (Ok x)      = Ok (f x)
-efmap f (Bad x msg) = Bad x msg
 
 {- | An attempt at getting some useful user information. Needs position information -}
 errorMessage :: UnitConstant -> [Rational] -> State UnitEnv String
@@ -879,10 +873,10 @@ errorMessage unit vars =
                msg     = "Conflict arising from " ++ exprStr ++ " of unit " ++ unitStr
            in return msg
 
-solveSystemM :: String -> State UnitEnv Bool
+solveSystemM :: (?solver :: Solver) => String -> State UnitEnv Bool
 solveSystemM adjective =
   do system <- gets linearSystem
-     case solveSystem system of
+     case (solveSystem system) of
        Ok system'     -> linearSystem =: system' >> return True
        Bad system' (unit, vars) -> 
                      do report <<++ (adjective ++ " units of measure")
@@ -893,46 +887,10 @@ solveSystemM adjective =
                                return False
                         else
                             return False
-
-solveSystem :: LinearSystem -> Consistency LinearSystem
-solveSystem system = solveSystem' system 1 1
-
-solveSystem' :: LinearSystem -> Col -> Row -> Consistency LinearSystem
-solveSystem' (matrix, vector) m k
-  | m > ncols matrix = efmap (cutSystem k) $ checkSystem (matrix, vector) k
-  | otherwise = elimRow (matrix, vector) n m k
-                where n = find (\n -> matrix ! (n, m) /= 0) [k .. nrows matrix]
-
-cutSystem :: Int -> LinearSystem -> LinearSystem
-cutSystem k (matrix, vector) = (matrix', vector')
-  where matrix' = submatrix 1 (k - 1) 1 (ncols matrix) matrix
-        vector' = take (k - 1) vector
-
-checkSystem :: LinearSystem -> Row -> Consistency LinearSystem
-checkSystem (matrix, vector) k
-  | k > nrows matrix = Ok (matrix, vector)
-  | vector !! (k - 1) /= Unitful [] = let vars = V.toList $ getRow k matrix 
-                                          bad = Bad (matrix, vector) (vector !! (k - 1), vars)
-                                      in bad
-  | otherwise = checkSystem (matrix, vector) (k + 1)
-
-elimRow :: LinearSystem -> Maybe Row -> Col -> Row -> Consistency LinearSystem
-elimRow system Nothing m k = solveSystem' system (m + 1) k
-elimRow (matrix, vector) (Just n) m k = -- (show (m, k)) `D.trace`
- solveSystem' system' (m + 1) (k + 1)
-  where matrix' = let s = matrix ! (n, m) in 
-                    (if (k == n) then id else switchRows k n)
-                       (if s == 1 then matrix else scaleRow (recip $ s) n matrix)
-        vector' = switchScaleElems k n (fromRational $ recip $ matrix ! (n, m)) vector
-        system' = elimRow' (matrix', vector') k m
-
-elimRow' :: LinearSystem -> Row -> Col -> LinearSystem
-elimRow' (matrix, vector) k m = (matrix', vector')
-  where mstep matrix n = let s = (- matrix ! (n, m)) in if s == 0 then matrix else combineRows n s k matrix 
-        matrix' = foldl mstep matrix $ [1 .. k - 1] ++ [k + 1 .. nrows matrix]
-        vector'' = [x - fromRational (matrix ! (n, m)) * vector !! (k - 1) | (n, x) <- zip [1..] vector]
-        (a, _ : b) = splitAt (k - 1) vector''
-        vector' = a ++ vector !! (k - 1) : b
+       BadL system' -> do report <<++ (adjective ++ " units of measure")
+                          linearSystem =: system'
+                          debugGaussian
+                          return False
 
 checkUnderdeterminedM :: State UnitEnv ()
 checkUnderdeterminedM = do ucats <- gets unitVarCats
@@ -1158,10 +1116,12 @@ addUnitlessResult2SameArgIntrinsic name =
 -- *************************************
 
     
+
 -- QuickCheck instance for matrices, used for testing matrix operations
 instance (Arbitrary a) => Arbitrary (Matrix a) where
     arbitrary = sized (\n -> do xs <- vectorOf (n*n) arbitrary
                                 return $ matrix n n (\(i, j) -> xs !! ((i-1)*n + (j-1))))
+
 
 -- Matrix for development 
 fooMatrix :: Matrix Rational
