@@ -1,4 +1,4 @@
-{-# LANGUAGE ImplicitParams #-}
+{-# LANGUAGE ImplicitParams, BangPatterns #-}
 
 module Extensions.UnitsSolve where
 
@@ -9,6 +9,7 @@ import Numeric.LinearAlgebra.LAPACK
 import qualified Data.Packed.Matrix as LM
 import Control.Exception
 import System.IO.Unsafe
+import qualified Debug.Trace as D
 
 
 import Language.Fortran
@@ -23,16 +24,17 @@ solveSystem = case ?solver of
 -- Top-level custom solver
 solveSystemC :: LinearSystem -> Consistency LinearSystem
 solveSystemC system = solveSystem' system 1 1
+
+solveSystemL :: LinearSystem -> Consistency LinearSystem
 solveSystemL system@(m0, _) = 
-    let ((lhs, rhs), names) = convertToLapackFormat system
-    in unsafePerformIO $
-            do x <- catch (evaluate $ (linearSolveR lhs rhs))
-                             (\e -> let x = (e :: SomeException) in return $ LM.fromLists [])
-               if (LM.toLists x == []) 
-                 then return $ BadL system 
+    let ((!lhs, !rhs), !names) = convertToLapackFormat system
+        x = unsafePerformIO $ catch (evaluate $ (linearSolveLSR lhs rhs))
+                                           (\e -> let x = (e :: SomeException) in return $ LM.fromLists [])
+    in     if (LM.toLists x == []) 
+                 then "FAILO" `D.trace` BadL system 
                  else let rhs' = convertFromLapackFormat (x, names)
-                          m = identity (ncols m0) 
-                      in return $ Ok (m, rhs')
+                          m = extendTo 0 (nrows m0) (ncols m0) (identity ((nrows m0) `min` (ncols m0)))
+                      in Ok (m, rhs')
 
 -- Converts the matrix into a format for LAPACK
 convertToLapackFormat :: LinearSystem -> ((LM.Matrix Double, LM.Matrix Double), [MeasureUnit])
@@ -42,30 +44,37 @@ convertToLapackFormat (m, rhs) =
         extractNames rs (Unitless _) = rs
         extractNames rs (Unitful rw) = rs ++ (map fst rw)
         names = sort $ nub $ foldl extractNames [] rhs
-        padding = take ((nrows m) - (length names) - 1) (repeat 0)
-        rhs' = LM.fromLists $ map (\x -> convRowRhs x padding names) rhs
-        padRows = if r < c then take (c - r) (repeat (take c (repeat 0))) else []
-        padCols = if c < r then take (r - c) (repeat 0) else []
-        m' = LM.fromLists $ (map (\x -> padCols ++ (map fromRational x)) (toLists m)) ++ padRows
-    in ((m', rhs'), names)
+        n = (r `max` c) `max` (length names + 1)
+        padColsRhs = [] -- take (n - (length names + 1)) (repeat 0)
+        padRowsRhs = [] -- take (n - r) (repeat (take n (repeat 0)))
+        rhs' = (LM.fromLists $ map (\x -> convRowRhs x padColsRhs names) (rhs) ++ padRowsRhs) -- :: LM.Matrix Double
+        padRows = [] -- take (n - r) (repeat (1 : take (n - 1) (repeat 0))) 
+        padCols = [] -- take (n - c) (repeat 0) 
+        m' = (LM.fromLists $ (map (\x -> padCols ++ (map fromRational x)) (toLists m)) ++ padRows) -- :: LM.Matrix Double
+    in ("m = " ++ show m' ++ "\nrhs = " ++ show rhs') `D.trace` -- (error "out")
+           ((m', rhs'), names)
 
 convRowRhs (Unitless r) pad names = ((fromRational r) : (take (length names) (repeat 0))) ++ pad
-convRowRhs (Unitful rws) pad names = 0 : (convVec names rws pad)
+convRowRhs (Unitful rws) pad names = (convVec names rws pad)
 
 convVec [] rows pad     = pad
 convVec (n : ns) rows pad = case (lookup n rows) of
                                Nothing -> 0 : convVec ns rows pad
                                Just r  -> (fromRational r) : convVec ns rows pad
+
+toNearestEps :: RealFrac a => a -> a
+toNearestEps x = (fromInteger $ round $ x * (10^n)) / (10.0^^n) where n = 5 :: Int
  
 convertFromLapackFormat :: (LM.Matrix Double, [MeasureUnit]) -> [UnitConstant] 
-convertFromLapackFormat (rhs, names) =
+convertFromLapackFormat (rhs, names) = 0 : 
     map (\(x : xs) -> case (convRow xs names) of 
-                        [] -> Unitless (toRational x)
+                        [] -> Unitless (toRational . toNearestEps $ x)
                         xs -> Unitful xs) (LM.toLists rhs)
 
 convRow xs [] = []
+convRow [] xs = []
 convRow (0 : xs) (n : ns) = convRow xs ns
-convRow (r : xs) (n : ns) = (n, toRational r) : convRow xs ns
+convRow (r : xs) (n : ns) = (n, toRational . toNearestEps $ r) : convRow xs ns
 
 
 solveSystem' :: LinearSystem -> Col -> Row -> Consistency LinearSystem

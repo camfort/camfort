@@ -48,7 +48,6 @@ import Transformation.Syntax
 import Test.QuickCheck
 import qualified Debug.Trace as D
 
-
 {- HELPERS -}
 
 -- Update a list state by consing
@@ -76,13 +75,14 @@ inferCriticalVariables :: (?solver :: Solver) =>
                           (Filename, Program Annotation) -> (Report, (Filename, Program Annotation))
 inferCriticalVariables (fname, x) = 
     let ?criticals = True 
+        ?debug = False
     in  let infer = do doInferUnits x
                        vars <- criticalVars
                        case vars of 
-                         [] -> do report <<++ "No critical variables. Appropriate annotations."
+                         [] -> do ifDebug (report <<++ "No critical variables. Appropriate annotations.")
                                   --debugGaussian
                                   return ""
-                         _  -> do report <<++ "Critical variables: " ++ (concat $ intersperse "," vars)
+                         _  -> do ifDebug (report <<++ "Critical variables: " ++ (concat $ intersperse "," vars))
                                   --debugGaussian -- remove for production
                                   return ""
                        
@@ -91,9 +91,10 @@ inferCriticalVariables (fname, x) =
             r = concat [fname ++ ": " ++ r ++ "\n" | r <- Data.Label.get report env]
         in (r, (fname, x))
 
-inferUnits :: (?solver :: Solver) =>  (Filename, Program Annotation) -> (Report, (Filename, Program Annotation))
+inferUnits :: (?solver :: Solver) => (Filename, Program Annotation) -> (Report, (Filename, Program Annotation))
 inferUnits (fname, x) = 
     let ?criticals = False
+        ?debug = False
     in let (y, env) = runState (doInferUnits x) emptyUnitEnv
            r = concat [fname ++ ": " ++ r ++ "\n" | r <- Data.Label.get report env] 
                ++ "\n" ++ fname ++ ": checked/inferred " 
@@ -123,8 +124,8 @@ emptyUnitEnv = UnitEnv { _report              = [],
                          _tmpColsAdded        = []}
 
 
-doInferUnits :: (?criticals :: Bool, ?solver :: Solver) => Program Annotation -> State UnitEnv (Program Annotation)
-doInferUnits x = do mapM inferProgUnits x
+doInferUnits :: (?criticals :: Bool, ?solver :: Solver, ?debug :: Bool) => Program Annotation -> State UnitEnv (Program Annotation)
+doInferUnits x = do mapM inferProgUnits (reverse x)
                     inferInterproceduralUnits x
                     --debugGaussian
                     --allState <- get 
@@ -132,12 +133,14 @@ doInferUnits x = do mapM inferProgUnits x
                     if ?criticals then  return x -- don't insert unit annotations
                                   else  mapM (descendBiM insertUnitsInBlock) x
 
-inferProgUnits :: (?criticals :: Bool, ?solver :: Solver) => ProgUnit Annotation -> State UnitEnv ()
+inferProgUnits :: (?criticals :: Bool, ?solver :: Solver, ?debug :: Bool) => ProgUnit Annotation -> State UnitEnv ()
 inferProgUnits p =
-  do ps <- mapM inferProgUnits $ ((children p)::[ProgUnit Annotation])
-     case (block p) of 
-          Just (b, procNames)  -> inferBlockUnits b procNames >> return ()
+  do case (block p) of 
+          Just (b, procNames)  -> inferBlockUnits b procNames  >> return ()
           Nothing -> return ()
+     -- Look at children afterwards (so that the parent scope is processed first)
+     mapM_ inferProgUnits $ ((children p)::[ProgUnit Annotation])
+     
 
   where 
         block :: ProgUnit Annotation -> Maybe (Block Annotation, Maybe ProcedureNames)
@@ -157,7 +160,7 @@ inferProgUnits p =
 
 
 
-inferBlockUnits :: (?solver :: Solver, ?criticals :: Bool) => Block Annotation -> Maybe ProcedureNames -> State UnitEnv (Block Annotation)
+inferBlockUnits :: (?solver :: Solver, ?criticals :: Bool, ?debug :: Bool) => Block Annotation -> Maybe ProcedureNames -> State UnitEnv (Block Annotation)
 inferBlockUnits x proc = do resetTemps
                             enterDecls x proc
                             addProcedure proc
@@ -166,8 +169,12 @@ inferBlockUnits x proc = do resetTemps
                             case proc of 
                               Just _ -> {- not ?criticals -> -}
                                          do -- Intermediate solve for procedures (subroutines & functions)
-                                            solveSystemM "" 
+                                            ifDebug (report <<++ "Pre doing row reduce")
+                                            solveSystemM ""                                             
                                             linearSystem =. reduceRows 1
+                                            ifDebug (report <<++ "Post doing reduce")
+                                            ifDebug (debugGaussian)
+                                            return ()
                               _     -> return ()
                             return x
 
@@ -291,21 +298,21 @@ enterDecls x proc = transformBiM processDecls x
            tmpRowsAdded << n
            return ()
 
-inferInterproceduralUnits :: (?solver :: Solver, ?criticals :: Bool) => Program Annotation -> State UnitEnv ()
+inferInterproceduralUnits :: (?solver :: Solver, ?criticals :: Bool, ?debug :: Bool) => Program Annotation -> State UnitEnv ()
 inferInterproceduralUnits x =
   do --reorderColumns
-     --if ?criticals then reorderVarCols else return ()
-     reorderVarCols
+     if ?criticals then reorderVarCols else return ()
+     --reorderVarCols
      consistent <- solveSystemM "inconsistent"
      if consistent then 
          do system <- gets linearSystem
-            let dontAssumeLiterals = if ?criticals then True else False
+            let dontAssumeLiterals = False -- if ?criticals then True else False
             inferInterproceduralUnits' x dontAssumeLiterals system
             return ()
      else
          return ()
 
-inferInterproceduralUnits' :: (?solver :: Solver) => Program Annotation -> Bool -> LinearSystem -> State UnitEnv (Program Annotation)
+inferInterproceduralUnits' :: (?solver :: Solver, ?criticals :: Bool, ?debug :: Bool) => Program Annotation -> Bool -> LinearSystem -> State UnitEnv (Program Annotation)
 inferInterproceduralUnits' x haveAssumedLiterals system1 =
   do addInterproceduralConstraints x
      consistent <- solveSystemM "inconsistent"
@@ -315,7 +322,7 @@ inferInterproceduralUnits' x haveAssumedLiterals system1 =
       else do
         system2 <- gets linearSystem
         if system1 == system2
-          then checkUnderdeterminedM >> nextStep
+          then if ?criticals then nextStep else checkUnderdeterminedM >> nextStep
           else inferInterproceduralUnits' x haveAssumedLiterals system2
   where nextStep | haveAssumedLiterals = return x
                  | otherwise           = do consistent <- assumeLiteralUnits
@@ -379,14 +386,24 @@ swapCols x n = do --report <<++ ("Pre swap - " ++ (show x) ++ " <-> " ++ (show n
 reorderVarCols :: State UnitEnv ()
 reorderVarCols = do ucats <- gets unitVarCats
                     (matrix, _) <- gets linearSystem
-                    reorderVarCols' (ncols matrix) ucats 1 
-                   where   reorderVarCols' :: Int -> [UnitVarCategory] -> Int -> State UnitEnv ()
-                           reorderVarCols' end [] c = return ()
-                           reorderVarCols' end (Variable:xs) c = do swapCols end c
-                                                                    reorderVarCols' (end - 1) xs (c+1)
-                           reorderVarCols' end (_:xs) c = reorderVarCols' end xs (c+1)
+                    reorderVarCols' (ncols matrix) 1 
+                   where   correctEnd :: Int -> State UnitEnv Int 
+                           correctEnd 0   = return 0
+                           correctEnd end = do ucats <- gets unitVarCats
+                                               case (ucats !! (end - 1)) of
+                                                  Variable -> correctEnd (end - 1)
+                                                  _        -> return $ end
 
-assumeLiteralUnits :: (?solver :: Solver) => State UnitEnv Bool
+                           reorderVarCols' :: Int -> Int -> State UnitEnv ()
+                           reorderVarCols' end c | c >= end = return ()
+                           reorderVarCols' end c = do ucats <- gets unitVarCats 
+                                                      case (ucats !! (c - 1)) of
+                                                        Variable -> do end' <- correctEnd end
+                                                                       swapCols end' c
+                                                                       reorderVarCols' (end' - 1) (c+1)
+                                                        _        -> reorderVarCols' end (c+1)
+
+assumeLiteralUnits :: (?solver :: Solver, ?debug :: Bool) => State UnitEnv Bool
 assumeLiteralUnits = 
   do system@(matrix, vector) <- gets linearSystem
      mapM_ assumeLiteralUnits' [1 .. ncols matrix]
@@ -861,7 +878,7 @@ errorMessage unit vars =
              Unitful xs | length xs == 1 ->                                
                             let xs' = map (\(v, r) -> (v, r * (-1))) xs
                                 unitStrL = outputF (makeUnitSpec (Unitful xs'))
-                            in return $ "Conflict since " ++ unitStrL ++ " != 1"
+                            in debugGaussian >> (return $ "Conflict since " ++ unitStrL ++ " != 1")
              _ -> do debugGaussian
                      return "Sorry, I can't give a better error."
        else
@@ -873,9 +890,10 @@ errorMessage unit vars =
                msg     = "Conflict arising from " ++ exprStr ++ " of unit " ++ unitStr
            in return msg
 
-solveSystemM :: (?solver :: Solver) => String -> State UnitEnv Bool
+solveSystemM :: (?solver :: Solver, ?debug :: Bool) => String -> State UnitEnv Bool
 solveSystemM adjective =
   do system <- gets linearSystem
+     ifDebug debugGaussian
      case (solveSystem system) of
        Ok system'     -> linearSystem =: system' >> return True
        Bad system' (unit, vars) -> 
@@ -889,7 +907,7 @@ solveSystemM adjective =
                             return False
        BadL system' -> do report <<++ (adjective ++ " units of measure")
                           linearSystem =: system'
-                          debugGaussian
+                          ifDebug debugGaussian
                           return False
 
 checkUnderdeterminedM :: State UnitEnv ()
@@ -918,13 +936,14 @@ criticalVars :: State UnitEnv [String]
 criticalVars = do uvarenv     <- gets unitVarEnv
                   (matrix, _) <- gets linearSystem
                   ucats       <- gets unitVarCats
+                  -- debugGaussian -- criticals debug
                   let cv1 = criticalVars' uvarenv ucats matrix 1
                   let cv2 = [] -- criticalVars
                   return (cv1 ++ cv2)
 
 criticalVars' :: UnitVarEnv -> [UnitVarCategory] -> Matrix Rational -> Row -> [String]
 criticalVars' varenv ucats matrix i =
-  let m = firstNonZeroCoeff matrix
+  let m = firstNonZeroCoeff matrix ucats
   in
     if (i == nrows matrix) then 
        if (m i) /= (ncols matrix) then
@@ -932,7 +951,7 @@ criticalVars' varenv ucats matrix i =
        else []
     else  
         if (m (i + 1)) /= ((m i) + 1)         
-        then (lookupVarsByColsFilterByArg matrix varenv ucats [(m i)..(m (i + 1) - 1)]) ++ (criticalVars' varenv ucats matrix (i + 1))
+        then (lookupVarsByColsFilterByArg matrix varenv ucats [((m i) + 1)..(m (i + 1) - 1)]) ++ (criticalVars' varenv ucats matrix (i + 1))
         else criticalVars' varenv ucats matrix (i + 1) 
 
 lookupVarsByColsFilterByArg :: Matrix Rational -> UnitVarEnv -> [UnitVarCategory] -> [Int] -> [String]
@@ -949,10 +968,19 @@ lookupVarsByColsFilterByArg matrix uenv ucats cols =
                                                             else Nothing
                                               | otherwise = lookupEnv j uenv
 
-firstNonZeroCoeff :: Matrix Rational -> Row -> Col
-firstNonZeroCoeff matrix row = case (V.findIndex (/= 0) (getRow row matrix)) of
-                                 Nothing -> ncols matrix
-                                 Just i  -> i + 1
+firstNonZeroCoeff :: Matrix Rational -> [UnitVarCategory] -> Row -> Col
+firstNonZeroCoeff matrix ucats row = 
+      case (V.findIndex (/= 0) (getRow row matrix)) of
+                                  Nothing -> ncols matrix
+                                  Just i  -> i + 1
+{-    firstNonZeroCoeff' (V.toList $ getRow row matrix) 0
+       where
+                {-   -}
+         firstNonZeroCoeff' []     n = n + 1
+         firstNonZeroCoeff' (0:rs) n = firstNonZeroCoeff' rs (n+1)
+         firstNonZeroCoeff' (r:rs) n = case (ucats !! n) of
+                                         Literal -> firstNonZeroCoeff' rs (n + 1)
+                                         _       -> n + 1-}
 
 
 
@@ -1355,6 +1383,7 @@ insertUnit' (Just unit) attrs = attrs ++ [MeasureUnit unitAnnotation $ makeUnitS
 insertUnit' Nothing attrs = attrs
 
 makeUnitSpec :: UnitConstant -> MeasureUnitSpec Annotation
+makeUnitSpec (Unitless r) = UnitProduct unitAnnotation [("1", (FractionConst unitAnnotation (show $ numerator r) (show $ denominator r)))] --hm!
 makeUnitSpec (Unitful []) = UnitNone unitAnnotation
 makeUnitSpec (Unitful units)
   | null neg = UnitProduct unitAnnotation $ formatUnits pos

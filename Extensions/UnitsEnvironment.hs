@@ -1,4 +1,4 @@
-{-# LANGUAGE TemplateHaskell #-}
+{-# LANGUAGE TemplateHaskell, ImplicitParams #-}
 
 {- Provides various data types and type class instances for the Units extension -}
 
@@ -89,3 +89,6 @@ data Consistency a = Ok a | Bad a (UnitConstant, [Rational]) | BadL a deriving S
 efmap :: (a -> a) -> Consistency a -> Consistency a
 efmap f (Ok x)      = Ok (f x)
 efmap f (Bad x msg) = Bad x msg
+
+ifDebug :: (?debug :: Bool, Monad m) => m a -> m ()
+ifDebug e = if ?debug then e >> return () else return ()
