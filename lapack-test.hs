@@ -17,16 +17,18 @@ import Debug.Trace
 import Test.QuickCheck
 
 coeff :: Num a => [[a]]
-coeff = [[1, 0, 1, 0], [0, 1, 0, 0], [0, 0, 1, 0]]
+coeff = [[1, 0, 1, 0], [0, 4, 0, 0], [0, 0, 2, 0]]
 
 rhs :: Num a => [a]
 rhs = [1, 2, 3]
 
+rhs' = [[0, 1, 0], [0, 2, 0], [0, 0, 3]]
+
 {- Lapack -}
 coeffL, rhsL :: Matrix Double
 coeffL = fromLists $ coeff
-rhsL = fromLists $ map (\x -> [x]) rhs -- (map (\x -> x) rhs)
-solveL = linearSolveLSR coeffL rhsL
+rhsL = fromLists $ rhs' -- map (\x -> [x]) rhs -- (map (\x -> x) rhs)
+solveL = linearSolveSVDR Nothing coeffL rhsL
 
 {- CamFort -}
 coeffC :: M.Matrix Rational
@@ -76,7 +78,7 @@ toCamfort :: LSystem Rational -> LinearSystem
 toCamfort (LSystem m v n) = (m, map (\x -> Unitless x) v)
 
 fromCamfort :: LinearSystem -> [Double]
-fromCamfort (m, v) = show m `trace` map (\(Unitless r) -> fromRational r) v
+fromCamfort (m, v) = map (\(Unitless r) -> fromRational r) v
 
 fromCamfortSol :: Consistency LinearSystem -> TestResult
 fromCamfortSol (Ok m) = Solved $ fromCamfort m
@@ -128,10 +130,31 @@ foo2 = LSystem (M.fromLists [[10 % 1, 2 % 1],
 fooExample = LSystem (M.fromLists (map (map toRational) m)) rhs 10
                where
                  m = [[ 1.0, 0.0, 0.0,  0.0, 0.0,  0.0, 0.0,  0.0,  0.0,  0.0 ]
-                    , [ 0.0, 0.0, 0.0,  0.0, 1 .0,  0.0, 0.0,  0.0,  0.0,  0.0 ]
+                    , [ 0.0, 0.0, 0.0,  0.0, 1.0,  0.0, 0.0,  0.0,  0.0,  0.0 ]
                     , [ 0.0, 1.0,  0.0, 0.0,  0.0, 1.0, -1.0,  0.0,  0.0, 0.0 ]
                     , [ 0.0, 0.0,  0.0, 0.0, -1.0, 0.0,  1.0,  0.0,  0.0, 0.0 ]
                     , [ 1.0, 0.0,  0.0, 0.0,  0.0, 0.0,  0.0, -1.0,  0.0, 0.0 ]
                     , [ 1.0, 0.0,  0.0, 0.0,  0.0, 0.0,  0.0,  0.0, -1.0, 0.0 ]
                     , [ 0.0, 0.0, -1.0, 0.0,  0.0, 0.0,  0.0,  0.0,  0.0, 1.0 ]]
                  rhs = [ 0.0, 1.0 , 0.0 , 0.0 , 0.0 , 0.0 , 0.0 ]
+
+fooExample2 = linearSolveSVDR Nothing (fromLists m) (fromLists rhs)
+     where 
+       m = [[ 1.0,  0.0,  0.0,  0.0,  0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0,  0.0,  0.0] 
+           ,[ 0.0,  0.0,  0.0,  1.0,  0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0,  0.0,  0.0]
+           ,[ 0.0,  0.0,  0.0,  0.0,  1.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0,  0.0,  0.0]
+           ,[ 0.0,  0.0,  0.0, -1.0,  0.0, 1.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0,  0.0,  0.0]
+           ,[ 0.0,  0.0,  0.0,  0.0, -1.0, 0.0, 1.0, 0.0, 0.0, 0.0, 0.0, 0.0,  0.0,  0.0]
+           ,[ 0.0, -1.0,  0.0,  0.0,  0.0, 0.0, 0.0, 1.0, 0.0, 0.0, 0.0, 0.0,  0.0,  0.0]
+           ,[ 0.0,  0.0, -1.0,  0.0,  0.0, 0.0, 0.0, 0.0, 1.0, 0.0, 0.0, 0.0,  0.0,  0.0]
+           ,[ 0.0,  0.0,  0.0,  0.0,  0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 2.0,  0.0, -1.0]
+           ,[0.0,  0.0,  0.0,  0.0,  0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, -1.0,  1.0 ]]
+       rhs = [[ 0.0, 0.0, 0.0]
+             ,[0.0, 1.0, 0.0]
+             ,[0.0, 0.0, 1.0]
+             ,[0.0, 0.0, 0.0]
+             ,[0.0, 0.0, 0.0]
+             ,[0.0, 0.0, 0.0]
+             ,[0.0, 0.0, 0.0]
+             ,[0.0, 0.0, 0.0]
+             ,[0.0, 0.0, 0.0 ]]

@@ -28,33 +28,38 @@ solveSystemC system = solveSystem' system 1 1
 solveSystemL :: LinearSystem -> Consistency LinearSystem
 solveSystemL system@(m0, _) = 
     let ((!lhs, !rhs), !names) = convertToLapackFormat system
-        x = unsafePerformIO $ catch (evaluate $ (linearSolveLSR lhs rhs))
-                                           (\e -> let x = (e :: SomeException) in return $ LM.fromLists [])
-    in     if (LM.toLists x == []) 
-                 then "FAILO" `D.trace` BadL system 
-                 else let rhs' = convertFromLapackFormat (x, names)
-                          m = extendTo 0 (nrows m0) (ncols m0) (identity ((nrows m0) `min` (ncols m0)))
-                      in Ok (m, rhs')
+        x = unsafePerformIO $ catch (evaluate $ (linearSolveSVDR Nothing lhs rhs))
+                                        (\e -> let x = (e :: SomeException) in return $ LM.fromLists [])
+    in  if (LM.toLists x == []) 
+                 then ("FAILO" ++ (show (lhs, rhs))) `D.trace` BadL system 
+                 else ("Solved = " ++ show x) `D.trace`  
+                     let rhs' = convertFromLapackFormat (x, names)
+                         rhs'' = take (nrows m0) rhs'
+                         m = extendTo 0 (nrows m0) (ncols m0) (identity ((nrows m0) `min` (ncols m0)))
+                     in Ok (m, rhs'')
 
 -- Converts the matrix into a format for LAPACK
 convertToLapackFormat :: LinearSystem -> ((LM.Matrix Double, LM.Matrix Double), [MeasureUnit])
-convertToLapackFormat (m, rhs) = 
+convertToLapackFormat (m, rhs) = "convertTo" `D.trace` 
     let r = nrows m
         c = ncols m
         extractNames rs (Unitless _) = rs
         extractNames rs (Unitful rw) = rs ++ (map fst rw)
-        names = sort $ nub $ foldl extractNames [] rhs
+        names = "" : (sort $ nub $ foldl extractNames [] rhs)
         n = (r `max` c) `max` (length names + 1)
         padColsRhs = [] -- take (n - (length names + 1)) (repeat 0)
         padRowsRhs = [] -- take (n - r) (repeat (take n (repeat 0)))
-        rhs' = (LM.fromLists $ map (\x -> convRowRhs x padColsRhs names) (rhs) ++ padRowsRhs) -- :: LM.Matrix Double
+        rhsData = (map (\x -> convRowRhs x padColsRhs names) (rhs)) ++ padRowsRhs
+        rhs' = (LM.fromLists rhsData) -- :: LM.Matrix Double
         padRows = [] -- take (n - r) (repeat (1 : take (n - 1) (repeat 0))) 
         padCols = [] -- take (n - c) (repeat 0) 
-        m' = (LM.fromLists $ (map (\x -> padCols ++ (map fromRational x)) (toLists m)) ++ padRows) -- :: LM.Matrix Double
-    in ("m = " ++ show m' ++ "\nrhs = " ++ show rhs') `D.trace` -- (error "out")
-           ((m', rhs'), names)
+        mdata = (map (\x -> padCols ++ (map fromRational x)) (toLists m)) ++ padRows
+        m' = (LM.fromLists mdata) -- :: LM.Matrix Double
+    in  (("m = " ++ show m' ++ "\nrhs = " ++ show rhs' ++ "\nnames = " ++ show names) 
+               `D.trace` -- (error "out")
+                ((m', rhs'), names))
 
-convRowRhs (Unitless r) pad names = ((fromRational r) : (take (length names) (repeat 0))) ++ pad
+convRowRhs (Unitless r) pad names = ((fromRational r) : (take ((length names)  - 1) (repeat 0))) ++ pad
 convRowRhs (Unitful rws) pad names = (convVec names rws pad)
 
 convVec [] rows pad     = pad
@@ -66,8 +71,8 @@ toNearestEps :: RealFrac a => a -> a
 toNearestEps x = (fromInteger $ round $ x * (10^n)) / (10.0^^n) where n = 5 :: Int
  
 convertFromLapackFormat :: (LM.Matrix Double, [MeasureUnit]) -> [UnitConstant] 
-convertFromLapackFormat (rhs, names) = 0 : 
-    map (\(x : xs) -> case (convRow xs names) of 
+convertFromLapackFormat (rhs, names) = -- 0 : 
+    map (\(x : xs) -> case (convRow xs (tail names)) of 
                         [] -> Unitless (toRational . toNearestEps $ x)
                         xs -> Unitful xs) (LM.toLists rhs)
 

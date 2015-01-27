@@ -94,7 +94,7 @@ inferCriticalVariables (fname, x) =
 inferUnits :: (?solver :: Solver) => (Filename, Program Annotation) -> (Report, (Filename, Program Annotation))
 inferUnits (fname, x) = 
     let ?criticals = False
-        ?debug = False
+        ?debug = True
     in let (y, env) = runState (doInferUnits x) emptyUnitEnv
            r = concat [fname ++ ": " ++ r ++ "\n" | r <- Data.Label.get report env] 
                ++ "\n" ++ fname ++ ": checked/inferred " 
@@ -125,7 +125,9 @@ emptyUnitEnv = UnitEnv { _report              = [],
 
 
 doInferUnits :: (?criticals :: Bool, ?solver :: Solver, ?debug :: Bool) => Program Annotation -> State UnitEnv (Program Annotation)
-doInferUnits x = do mapM inferProgUnits (reverse x)
+doInferUnits x = do mapM inferProgUnits x
+                    ifDebug (report <<++ "Finished inferring prog units")
+                    ifDebug debugGaussian
                     inferInterproceduralUnits x
                     --debugGaussian
                     --allState <- get 
@@ -895,7 +897,10 @@ solveSystemM adjective =
   do system <- gets linearSystem
      ifDebug debugGaussian
      case (solveSystem system) of
-       Ok system'     -> linearSystem =: system' >> return True
+       Ok system'     -> do linearSystem =: system'
+                            ifDebug (report <<++ "After solve")
+                            ifDebug (debugGaussian)
+                            return True
        Bad system' (unit, vars) -> 
                      do report <<++ (adjective ++ " units of measure")
                         linearSystem =: system' 
