@@ -94,7 +94,7 @@ inferCriticalVariables (fname, x) =
 inferUnits :: (?solver :: Solver) => (Filename, Program Annotation) -> (Report, (Filename, Program Annotation))
 inferUnits (fname, x) = 
     let ?criticals = False
-        ?debug = True
+        ?debug = False
     in let (y, env) = runState (doInferUnits x) emptyUnitEnv
            r = concat [fname ++ ": " ++ r ++ "\n" | r <- Data.Label.get report env] 
                ++ "\n" ++ fname ++ ": checked/inferred " 
@@ -137,32 +137,31 @@ doInferUnits x = do mapM inferProgUnits x
 
 inferProgUnits :: (?criticals :: Bool, ?solver :: Solver, ?debug :: Bool) => ProgUnit Annotation -> State UnitEnv ()
 inferProgUnits p =
-  do case (block p) of 
-          Just (b, procNames)  -> inferBlockUnits b procNames  >> return ()
-          Nothing -> return ()
+  do inferPUnit p
      -- Look at children afterwards (so that the parent scope is processed first)
      mapM_ inferProgUnits $ ((children p)::[ProgUnit Annotation])
-     
+     return ()
 
   where 
-        block :: ProgUnit Annotation -> Maybe (Block Annotation, Maybe ProcedureNames)
-        block (Main x sp n a b ps)                            = Just (b, Nothing)
-        block (Sub x sp t (SubName _ n) (Arg _ a _) b)        = Just (b, Just (n, Nothing, argNames a))
-        block (Function x sp t (SubName _ n) (Arg _ a _) r b) = Just (b, Just (n, Just (resultName n r), argNames a))
-        block x                                               = Nothing
+    -- Infer the units for the *root* program unit (not children)
+     inferPUnit :: ProgUnit Annotation -> State UnitEnv ()
+     inferPUnit (Main x sp n a b _)                       = inferBlockUnits b Nothing
+     inferPUnit (Sub x sp t (SubName _ n) (Arg _ a _) b)  = inferBlockUnits b (Just (n, Nothing, argNames a))
+     inferPUnit (Function _ _ _ (SubName _ n) (Arg _ a _) r b) = inferBlockUnits b (Just (n, Just (resultName n r), argNames a))
+     inferPUnit (Module x sp (SubName _ n) _ _ d _)       = processDecls (Just (n, Nothing, [])) d >> return ()
+     inferPUnit x = return ()
 
-        argNames :: ArgName a -> [Variable]
-        argNames (ArgName _ n) = [n]
-        argNames (ASeq _ n1 n2) = argNames n1 ++ argNames n2
-        argNames (NullArg _) = []
+     argNames :: ArgName a -> [Variable]
+     argNames (ArgName _ n) = [n]
+     argNames (ASeq _ n1 n2) = argNames n1 ++ argNames n2
+     argNames (NullArg _) = []
 
-        resultName :: Variable -> Maybe (VarName a) -> Variable
-        resultName n Nothing = n
-        resultName _ (Just (VarName _ r)) = r
+     resultName :: Variable -> Maybe (VarName a) -> Variable
+     resultName n Nothing = n
+     resultName _ (Just (VarName _ r)) = r
 
 
-
-inferBlockUnits :: (?solver :: Solver, ?criticals :: Bool, ?debug :: Bool) => Block Annotation -> Maybe ProcedureNames -> State UnitEnv (Block Annotation)
+inferBlockUnits :: (?solver :: Solver, ?criticals :: Bool, ?debug :: Bool) => Block Annotation -> Maybe ProcedureNames -> State UnitEnv ()
 inferBlockUnits x proc = do resetTemps
                             enterDecls x proc
                             addProcedure proc
@@ -178,7 +177,7 @@ inferBlockUnits x proc = do resetTemps
                                             ifDebug (debugGaussian)
                                             return ()
                               _     -> return ()
-                            return x
+                            -- return x
 
                          where
                            handleStmt :: Fortran Annotation -> State UnitEnv (Fortran Annotation)
@@ -234,51 +233,49 @@ addProcedure (Just (name, resultName, argNames)) =
 -- ***************************************
 
 enterDecls :: Block Annotation -> Maybe ProcedureNames -> State UnitEnv (Block Annotation)
-enterDecls x proc = transformBiM processDecls x
-  where
-    processVar :: [UnitConstant] -> (Expr Annotation, Expr Annotation) -> Type Annotation -> 
-                  State UnitEnv (Expr Annotation, Expr Annotation)
-    processVar units exps@(Var a s names, e) typ = 
-       do 
-          let (VarName _ v, es) = head names
-          system <- gets linearSystem
-          let m = ncols (fst system) + 1
-          unitVarCats <<++ (unitVarCat v)
-          extendConstraints units
-          ms <- case toArrayType typ es of
-                  ArrayT _ bounds _ _ _ _ -> mapM (const $ fmap UnitVariable $ addCol Variable) bounds
-                  _ -> return []
-          unitVarEnv << (v, (UnitVariable m, ms)) 
+enterDecls x proc = transformBiM (processDecls proc) x
 
-             -- If the declaration has a null expression, do not create a unifying variable
-          case e of 
+processVar :: [UnitConstant] -> Maybe ProcedureNames -> 
+              (Expr Annotation, Expr Annotation) -> Type Annotation -> 
+              State UnitEnv (Expr Annotation, Expr Annotation)
+processVar units proc exps@(Var a s names, e) typ = 
+    do 
+       let (VarName _ v, es) = head names
+       system <- gets linearSystem
+       let m = ncols (fst system) + 1
+       unitVarCats <<++ (unitVarCat v proc)
+       extendConstraints units
+       ms <- case toArrayType typ es of
+               ArrayT _ bounds _ _ _ _ -> mapM (const $ fmap UnitVariable $ addCol Variable) bounds
+               _                       -> return []
+       unitVarEnv << (v, (UnitVariable m, ms)) 
+
+       -- If the declaration has a null expression, do not create a unifying variable
+       case e of 
             NullExpr _ _ -> return ()
             _            -> do uv <- inferExprUnits e
                                mustEqual (UnitVariable m) uv
                                return ()
-          return exps 
+       return exps 
 
-    unitVarCat :: Variable -> UnitVarCategory
-    unitVarCat v
-          | Just (n, r, args) <- proc, v `elem` args = Argument
-          | otherwise                                = Variable
+unitVarCat :: Variable -> Maybe ProcedureNames -> UnitVarCategory
+unitVarCat v proc | Just (n, r, args) <- proc, v `elem` args = Argument
+                  | otherwise                                = Variable
 
 
-    {-| processDecls - extract and record information from explicit unit declarations -}
-    processDecls :: Decl Annotation -> State UnitEnv (Decl Annotation)
-    processDecls decl@(Decl a s d typ) =
+{-| processDecls - extract and record information from explicit unit declarations -}
+processDecls :: Maybe ProcedureNames -> Decl Annotation -> State UnitEnv (Decl Annotation)
+processDecls proc decl@(Decl a s d typ) =
       do
          let BaseType _ _ attrs _ _ = arrayElementType typ
          units <- sequence $ concatMap extractUnit attrs
-         mapM_ (\(e1, e2, multiplier) -> processVar units (e1, e2) typ) d
+         mapM_ (\(e1, e2, multiplier) -> processVar units proc (e1, e2) typ) d
          return $ decl
 
-
-    processDecls x@(MeasureUnitDef a s d) =
-      do
-        mapM learnDerivedUnit d
-        return x
-      where
+processDecls proc x@(MeasureUnitDef a s d) =
+   do mapM learnDerivedUnit d
+      return x
+     where
         learnDerivedUnit (name, spec) =
           do denv <- gets derivedUnitEnv
              when (isJust $ lookup name denv) $ error "Redeclared unit of measure" 
@@ -286,10 +283,10 @@ enterDecls x proc = transformBiM processDecls x
              denv <- gets derivedUnitEnv
              when (isJust $ lookup name denv) $ error "Recursive unit-of-measure definition" 
              derivedUnitEnv << (name, unit) 
-    processDecls x = return x
+processDecls _ x = return x
 
-    extendConstraints :: [UnitConstant] -> State UnitEnv () 
-    extendConstraints units =
+extendConstraints :: [UnitConstant] -> State UnitEnv () 
+extendConstraints units =
         do (matrix, vector) <- gets linearSystem
            let n = nrows matrix + 1
                m = ncols matrix + 1
@@ -650,6 +647,7 @@ inferStmtUnits e@(Assg _ _ e1 e2) =
      mustEqual uv1 uv2
      return ()
  
+inferStmtUnits (DoWhile _ _ _ f)   = inferStmtUnits f
 inferStmtUnits (For _ _ _ (NullExpr _ _) _ _ s)   = inferStmtUnits s
 inferStmtUnits (For _ _ (VarName _ v) e1 e2 e3 s) =
   do inferForHeaderUnits (v, e1, e2, e3)
@@ -1203,11 +1201,15 @@ showExpr cats vars procs debugInfo c =
                                          []    -> "?"
                                          (x:_) -> "=" ++ x
                               (x:_) -> x
-               Temporary -> snd $ fromJust $ lookup c debugInfo
+               Temporary -> snd $ case (lookup c debugInfo) of
+                                    Just x -> x
+                                    Nothing -> (undefined, "") -- error $ "Temporary fail " ++ (show c) " not in " ++ (show cats)
                Argument  -> case (lookupProcByArgCol procs [c]) of 
                               []    -> "?"
                               (x:_) -> x
-               Literal   -> snd $ fromJust $ lookup c debugInfo
+               Literal   -> snd $ case (lookup c debugInfo) of
+                                    Just x -> x
+                                    Nothing -> show c `D.trace` error "Literal fail"
                Magic     -> ""
 
 showSrcLoc loc = show (srcLine loc) ++ ":" ++ show (srcColumn loc)

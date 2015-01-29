@@ -1,6 +1,7 @@
 {-# LANGUAGE FlexibleInstances, ImplicitParams #-}
 
 import Numeric.LinearAlgebra.LAPACK
+import Numeric.LinearAlgebra.Algorithms
 import Data.Packed.Matrix
 import qualified Data.Matrix as M
 import Extensions.Units
@@ -17,7 +18,7 @@ import Debug.Trace
 import Test.QuickCheck
 
 coeff :: Num a => [[a]]
-coeff = [[1, 0, 1, 0], [0, 4, 0, 0], [0, 0, 2, 0]]
+coeff = [[1, 0, 1, 0], [0, 4, 0, 3], [0, 0, 2, 0]]
 
 rhs :: Num a => [a]
 rhs = [1, 2, 3]
@@ -27,7 +28,7 @@ rhs' = [[0, 1, 0], [0, 2, 0], [0, 0, 3]]
 {- Lapack -}
 coeffL, rhsL :: Matrix Double
 coeffL = fromLists $ coeff
-rhsL = fromLists $ rhs' -- map (\x -> [x]) rhs -- (map (\x -> x) rhs)
+rhsL = fromLists $ map (\x -> [x]) rhs -- (map (\x -> x) rhs)
 solveL = linearSolveSVDR Nothing coeffL rhsL
 
 {- CamFort -}
