@@ -12,12 +12,15 @@ import Control.Monad.State.Strict hiding (gets)
 import Language.Fortran
 import Data.Matrix
 
-data Solver = LAPACK | Custom
+type EqualityConstrained = Bool
 
-data UnitConstant = Unitful [(MeasureUnit, Rational)] | Unitless Rational deriving (Eq, Show)
+data Solver = LAPACK | Custom deriving (Show, Read, Eq)
+data AssumeLiterals = Poly | Unitless | Mixed deriving (Show, Read, Eq)
+
+data UnitConstant = Unitful [(MeasureUnit, Rational)] | UnitlessC Rational deriving (Eq, Show)
 
 newtype UnitVariable = UnitVariable Col deriving (Eq, Show)
-data UnitVarCategory = Literal | Temporary | Variable | Argument | Magic deriving (Eq, Show)
+data UnitVarCategory = Literal EqualityConstrained | Temporary | Variable | Argument | Magic deriving (Eq, Show)
 
 type UnitVarEnv = [(Variable, (UnitVariable, [UnitVariable]))]
 
@@ -66,23 +69,23 @@ instance Num UnitConstant where
             | unit1 == unit2 = (unit1, r1 + r2) : merge u1 u2
             | unit1 <  unit2 = (unit1, r1) : merge u1 ((unit2, r2) : u2)
             | otherwise      = (unit2, r2) : merge ((unit1, r1) : u1) u2
-  (Unitless n1) + (Unitless n2) = Unitless (n1 + n2)
-  (Unitful units) * (Unitless n) = Unitful $ trim [(unit, r * n) | (unit, r) <- units]
-  (Unitless n) * (Unitful units) = Unitful $ trim [(unit, n * r) | (unit, r) <- units]
-  (Unitless n1) * (Unitless n2) = Unitless (n1 * n2)
+  (UnitlessC n1) + (UnitlessC n2) = UnitlessC (n1 + n2)
+  (Unitful units) * (UnitlessC n) = Unitful $ trim [(unit, r * n) | (unit, r) <- units]
+  (UnitlessC n) * (Unitful units) = Unitful $ trim [(unit, n * r) | (unit, r) <- units]
+  (UnitlessC n1) * (UnitlessC n2) = UnitlessC (n1 * n2)
   negate (Unitful units) = Unitful [(unit, -r) | (unit, r) <- units]
-  negate (Unitless n) = Unitless (-n)
+  negate (UnitlessC n) = UnitlessC (-n)
   abs (Unitful units) = Unitful [(unit, abs r) | (unit, r) <- units]
-  abs (Unitless n) = Unitless $ abs n
+  abs (UnitlessC n) = UnitlessC $ abs n
   signum (Unitful units) = Unitful [(unit, signum r) | (unit, r) <- units]
-  signum (Unitless n) = Unitless $ signum n
-  fromInteger = Unitless . fromInteger
+  signum (UnitlessC n) = UnitlessC $ signum n
+  fromInteger = UnitlessC . fromInteger
 
 {- Treat 'UnitConstant's as fractionals -}
 instance Fractional UnitConstant where
-  (Unitful units) / (Unitless n) = Unitful [(unit, r / n) | (unit, r) <- units]
-  (Unitless n1) / (Unitless n2) = Unitless (n1 / n2)
-  fromRational = Unitless . fromRational
+  (Unitful units) / (UnitlessC n) = Unitful [(unit, r / n) | (unit, r) <- units]
+  (UnitlessC n1) / (UnitlessC n2) = UnitlessC (n1 / n2)
+  fromRational = UnitlessC . fromRational
 
 data Consistency a = Ok a | Bad a (UnitConstant, [Rational]) | BadL a deriving Show
 

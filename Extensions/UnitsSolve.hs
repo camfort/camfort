@@ -21,9 +21,9 @@ solveSystem = case ?solver of
                   LAPACK -> solveSystemL
                   Custom -> solveSystemC
                   
--- Top-level custom solver
-solveSystemC :: LinearSystem -> Consistency LinearSystem
-solveSystemC system = solveSystem' system 1 1
+------------------------------------
+-- LAPACK Solver
+------------------------------------
 
 solveSystemL :: LinearSystem -> Consistency LinearSystem
 solveSystemL system@(m0, _) = 
@@ -43,7 +43,7 @@ convertToLapackFormat :: LinearSystem -> ((LM.Matrix Double, LM.Matrix Double), 
 convertToLapackFormat (m, rhs) = "convertTo" `D.trace` 
     let r = nrows m
         c = ncols m
-        extractNames rs (Unitless _) = rs
+        extractNames rs (UnitlessC _) = rs
         extractNames rs (Unitful rw) = rs ++ (map fst rw)
         names = "" : (sort $ nub $ foldl extractNames [] rhs)
         n = (r `max` c) `max` (length names + 1)
@@ -59,7 +59,7 @@ convertToLapackFormat (m, rhs) = "convertTo" `D.trace`
                `D.trace` -- (error "out")
                 ((m', rhs'), names))
 
-convRowRhs (Unitless r) pad names = ((fromRational r) : (take ((length names)  - 1) (repeat 0))) ++ pad
+convRowRhs (UnitlessC r) pad names = ((fromRational r) : (take ((length names)  - 1) (repeat 0))) ++ pad
 convRowRhs (Unitful rws) pad names = (convVec names rws pad)
 
 convVec [] rows pad     = pad
@@ -73,7 +73,7 @@ toNearestEps x = (fromInteger $ round $ x * (10^n)) / (10.0^^n) where n = 5 :: I
 convertFromLapackFormat :: (LM.Matrix Double, [MeasureUnit]) -> [UnitConstant] 
 convertFromLapackFormat (rhs, names) = -- 0 : 
     map (\(x : xs) -> case (convRow xs (tail names)) of 
-                        [] -> Unitless (toRational . toNearestEps $ x)
+                        [] -> UnitlessC (toRational . toNearestEps $ x)
                         xs -> Unitful xs) (LM.toLists rhs)
 
 convRow xs [] = []
@@ -81,6 +81,13 @@ convRow [] xs = []
 convRow (0 : xs) (n : ns) = convRow xs ns
 convRow (r : xs) (n : ns) = (n, toRational . toNearestEps $ r) : convRow xs ns
 
+--------------------------------------------------
+-- CUSTOM SOLVER
+--------------------------------------------------
+
+-- Top-level custom solver
+solveSystemC :: LinearSystem -> Consistency LinearSystem
+solveSystemC system = solveSystem' system 1 1
 
 solveSystem' :: LinearSystem -> Col -> Row -> Consistency LinearSystem
 solveSystem' (matrix, vector) m k

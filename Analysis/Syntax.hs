@@ -199,7 +199,8 @@ instance Successors Fortran where
     successorsRoot (For _ _ _ _ _ _ f)       = [f]
     successorsRoot (If _ _ _ f efs f')       = [f]
     successorsRoot (Forall _ _ _ f)          = [f]
-    successorsRoot (Where _ _ _ f)           = [f]
+    successorsRoot (Where _ _ _ f Nothing)   = [f]
+    successorsRoot (Where _ _ _ f (Just f')) = [f, f']
     successorsRoot (Label _ _ _ f)           = [f]
     successorsRoot _                         = []
 
@@ -222,7 +223,7 @@ instance Successors Fortran where
                                (If _ _ _ gf efs f') -> if (f == gf) then (maybe [] (:[]) f') ++ (map snd efs) 
                                                        else seekUp uf (z >>= up) 
                                (Forall _ _ _ f')    -> seekUp uf (z >>= up)
-                               (Where _ _ _ f')     -> seekUp uf (z >>= up)
+                               (Where _ _ _ f' _)   -> seekUp uf (z >>= up)
                                (Label _ _ _ f')     -> seekUp uf (z >>= up)
                                _                    -> []
                          Nothing -> [] 
@@ -258,7 +259,7 @@ rhsExpr (Nullify _ _ es)        = concatMap (\e -> (universeBi e)::[Expr Annotat
 
 rhsExpr (Inquire _ _ s es)      = concatMap (\e -> (universeBi e)::[Expr Annotation]) es
 rhsExpr (Stop _ _ e)            = (universeBi e)::[Expr Annotation]
-rhsExpr (Where _ _ e f)         = (universeBi e)::[Expr Annotation]
+rhsExpr (Where _ _ e f _)       = (universeBi e)::[Expr Annotation]
 
 rhsExpr (Write _ _ s es)        = concatMap (\e -> (universeBi e)::[Expr Annotation]) es
 

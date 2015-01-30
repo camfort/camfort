@@ -114,7 +114,8 @@ instance RComonad Fortran where
     rextend k y@(Inquire _ sp s e)         = Inquire (k y) sp s e
     rextend k y@(Rewind _ sp s)            = Rewind (k y) sp s
     rextend k y@(Stop _ sp e)              = Stop (k y) sp e
-    rextend k y@(Where _ sp e f)           = Where (k y) sp e (rextend k f)
+    rextend k y@(Where _ sp e f Nothing)   = Where (k y) sp e (rextend k f) Nothing
+    rextend k y@(Where _ sp e f (Just f')) = Where (k y) sp e (rextend k f) (Just (rextend k f'))
     rextend k y@(Write _ sp s e)           = Write (k y) sp s e
     rextend k y@(PointerAssg _ sp e1 e2)   = PointerAssg (k y) sp e1 e2
     rextend k y@(Return _ sp e)            = Return (k y) sp e
@@ -148,7 +149,7 @@ instance Refill Fortran where
     refill y@(Inquire _ sp s e)        a = Inquire a sp s e
     refill y@(Rewind _ sp s)           a = Rewind a sp s
     refill y@(Stop _ sp e)             a = Stop a sp e
-    refill y@(Where _ sp e f)          a = Where a sp e f
+    refill y@(Where _ sp e f f')       a = Where a sp e f f'
     refill y@(Write _ sp s e)          a = Write a sp s e
     refill y@(PointerAssg _ sp e1 e2)  a = PointerAssg a sp e1 e2
     refill y@(Return _ sp e)           a = Return a sp e
@@ -210,112 +211,6 @@ instance Refill Fortran where
 -- >     extend k y@(NullStmt _ sp)            = NullStmt (k y) sp 
 
 
-annotation :: Copointed g => g a -> a
-annotation = copoint
+annotation :: Tagged g => g a -> a
+annotation = tag
 
-class Copointed d where
-   copoint :: d a -> a 
-
-{-
-Old: previously derived copointed instance from the datatype generic copoint
- instance Copointed Attr where copoint = gcopoint
- instance Copointed BaseType where copoint = gcopoint
- instance Copointed SubName where copoint = gcopoint
- instance Copointed VarName where copoint = gcopoint
- instance Copointed ArgName where copoint = gcopoint
- instance Copointed Arg     where copoint = gcopoint
- instance Copointed Implicit where copoint = gcopoint
--}
-
-instance Copointed Uses where 
-    copoint (Use x _ _ _) = x
-    copoint (UseNil x) = x
-
-instance Copointed Arg where
-    copoint (Arg x _ _) = x
-
-instance Copointed ArgList where 
-    copoint (ArgList x _) = x
-
-instance Copointed ArgName where
-    copoint (ASeq x _ _) = x
-    copoint (NullArg x) = x
-    copoint (ArgName x _) = x
-
-instance Copointed ProgUnit where
-    copoint (Main x sp _ _ _ _)       = x
-    copoint (Sub x sp _ _ _ _)        = x
-    copoint (Function x sp _ _ _ _ _) = x
-    copoint (Module x sp _ _ _ _ _ )  = x
-    copoint (BlockData x sp _ _ _ _)  = x
-    copoint (PSeq x sp _ _)           = x
-    copoint (Prog x sp _)             = x
-    copoint (NullProg x sp)           = x
-
-instance Copointed Decl where
-    copoint (Decl x _ _ _)          = x
-    copoint (Namelist x _)        = x
-    copoint (DataDecl x _)            = x
-    copoint (AccessStmt x _ _)    = x
-    copoint (ExternalStmt x _)    = x
-    copoint (Interface x _ _)     = x
-    copoint (Common x _ _ _)        = x
-    copoint (Equivalence x sp _)    = x
-    copoint (DerivedTypeDef x sp _ _ _ _) = x
-    copoint (MeasureUnitDef x sp _) = x
-    copoint (Include x _)         = x
-    copoint (DSeq x _ _)          = x
-    copoint (TextDecl x _)        = x
-    copoint (NullDecl x _)        = x
-
-instance Copointed Fortran where
-    copoint (Assg x s e1 e2)        = x
-    copoint (For x s v e1 e2 e3 fs) = x
-    copoint (FSeq x sp f1 f2)       = x
-    copoint (If x sp e f1 fes f3)   = x
-    copoint (Allocate x sp e1 e2)   = x
-    copoint (Backspace x sp _)      = x
-    copoint (Call x sp e as)        = x
-    copoint (Open x sp s)           = x
-    copoint (Close x sp s)          = x 
-    copoint (Continue x sp)         = x
-    copoint (Cycle x sp s)          = x
-    copoint (Deallocate x sp es e)  = x
-    copoint (Endfile x sp s)        = x
-    copoint (Exit x sp s)           = x
-    copoint (Forall x sp es f)      = x
-    copoint (Goto x sp s)           = x
-    copoint (Nullify x sp e)        = x
-    copoint (Inquire x sp s e)      = x
-    copoint (Rewind x sp s)         = x 
-    copoint (Stop x sp e)           = x
-    copoint (Where x sp e f)        = x 
-    copoint (Write x sp s e)        = x
-    copoint (PointerAssg x sp e1 e2) = x
-    copoint (Return x sp e)         = x
-    copoint (Label x sp s f)        = x
-    copoint (Print x sp e es)       = x
-    copoint (ReadS x sp s e)        = x
-    copoint (TextStmt x sp s)       = x
-    copoint (NullStmt x sp)         = x
-
-instance Copointed Expr where
-   copoint (Con x sp _) = x
-   copoint (ConL x sp _ _) = x
-   copoint (ConS x sp _) = x
-   copoint (Var x sp _ ) = x
-   copoint (Bin x sp _ _ _) = x
-   copoint (Unary x sp _ _) = x
-   copoint (CallExpr x sp _ _) = x
-   copoint (NullExpr x _) = x
-   copoint (Null x _) = x
-   copoint (ESeq x sp _ _) = x
-   copoint (Bound x sp _ _) = x
-   copoint (Sqrt x sp _) = x
-   copoint (ArrayCon x sp _) = x
-   copoint (AssgExpr x sp _ _) = x
-
-instance Copointed GSpec where
-   copoint (GName x _) = x
-   copoint (GOper x _) = x
-   copoint (GAssg x)   = x

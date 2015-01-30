@@ -40,7 +40,7 @@ import Debug.Trace
 import Data.List (nub, (\\), elemIndices, intersperse)
 import Data.Text (pack, unpack, split) -- hiding (replicate, concat, length, head, concatMap, map, filter, take, last, intersperse, zip)
 
-data Options = Units Solver | None
+data Options = Units Solver AssumeLiterals | None
 
 -- * The main entry point to CamFort
 {-| The entry point to CamFort. Displays user information, and handlers which functionality is being requested -}
@@ -50,10 +50,9 @@ main = do putStrLn introMessage
              let (func:(dir:_)) = args
                  excludes = if (length args == 2) then [] else args !! 2
                  outdir   = if (length args <= 3) then dir else args !! 3
-                 options  = if (length args <= 4) then None else 
-                                case args !! 4 of
-                                     "LAPACK" -> Units LAPACK
-                                     "Custom" -> Units Custom
+                 options  = if (length args <= 4) then None else  
+                               let literals = if (length args >= 5) then read $ args!!5 else (literalsBehaviour None) -- choose default
+                               in Units (read $ args !! 4) literals
 
                  excluded_files = map unpack (split (==',') (pack excludes))
              in case (lookup func (analyses ++ refactorings)) of 
@@ -72,7 +71,7 @@ refactorings =
      ("equivalence", (equivalences, "equivalence elimination")),
      ("dataType", (typeStructuring, "derived data type introduction")),
      ("dead", (dead, "dead-code elimination")),
-     ("units", (units, "unit-of-measure inference [extra option of either 'LAPACK' or 'custom' solver]")),
+     ("units", (units, "unit-of-measure inference [extra options: LAPACK/Custom Poly/Unitless]")),
      ("removeUnits", (unitRemoval, "unit-of-measure removal"))]
      
 {-| List of analses provided by CamFort -}
@@ -137,19 +136,29 @@ equivalences inDir excludes outDir _ =
               doRefactor (mapM refactorEquivalences) inDir excludes outDir
 
 solverType None = LAPACK
-solverType (Units s) = s
+solverType (Units s _) = s
+
+literalsBehaviour None = Poly
+literalsBehaviour (Units _ b) = b
+
 
 units inDir excludes outDir opt = 
           do putStrLn $ "Inferring units for source in directory " ++ show inDir ++ "\n"
-             let ?solver = solverType opt in doRefactor (mapM inferUnits) inDir excludes outDir
+             let ?solver = solverType opt 
+              in let ?assumeLiterals = literalsBehaviour opt
+                 in doRefactor (mapM inferUnits) inDir excludes outDir
 
 unitRemoval inDir excludes outDir opt = 
           do putStrLn $ "Removing units for source in directory " ++ show inDir ++ "\n"
-             let ?solver = solverType opt in doRefactor (mapM removeUnits) inDir excludes outDir
+             let ?solver = solverType opt 
+              in let ?assumeLiterals = literalsBehaviour opt
+                 in doRefactor (mapM removeUnits) inDir excludes outDir
 
 unitCriticals inDir excludes outDir opt = 
           do putStrLn $ "Infering critical variables for units inference in directory " ++ show inDir ++ "\n"
-             let ?solver = solverType opt in doAnalysisReport (mapM inferCriticalVariables) inDir excludes outDir
+             let ?solver = solverType opt 
+              in let ?assumeLiterals = literalsBehaviour opt
+                 in doAnalysisReport (mapM inferCriticalVariables) inDir excludes outDir
 
 
 -- * Builders for analysers and refactorings
