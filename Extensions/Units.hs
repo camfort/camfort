@@ -129,6 +129,14 @@ doInferUnits x = do mapM inferProgUnits x
                     if ?criticals then  return x -- don't insert unit annotations
                                   else  mapM (descendBiM insertUnitsInBlock) x
 
+{-
+To be removed: 
+infoA [] = []
+infoA ((Main _ _ _ _ _ _):ms) = "Main" : infoA ms
+infoA ((Module _ _ _ _ _ _ _ ):ms) = "Module" : infoA ms
+infoA (m:ms) = "Other" : infoA ms
+-}
+
 inferProgUnits :: (?criticals :: Bool, ?solver :: Solver, ?debug :: Bool, ?assumeLiterals :: AssumeLiterals) => ProgUnit Annotation -> State UnitEnv ()
 inferProgUnits p =
   do -- infer units for *root* program unit
@@ -142,7 +150,7 @@ inferProgUnits p =
      inferPUnit (Main x sp n a b _)                       = inferBlockUnits b Nothing
      inferPUnit (Sub x sp t (SubName _ n) (Arg _ a _) b)  = inferBlockUnits b (Just (n, Nothing, argNames a))
      inferPUnit (Function _ _ _ (SubName _ n) (Arg _ a _) r b) = inferBlockUnits b (Just (n, Just (resultName n r), argNames a))
-     inferPUnit (Module x sp (SubName _ n) _ _ d _)       = inferDecl (Just (n, Nothing, [])) d >> return ()
+     inferPUnit (Module x sp (SubName _ n) _ _ d ds)       = transformBiM (inferDecl (Just (n, Nothing, []))) d >> return ()
      inferPUnit x = return ()
 
      argNames :: ArgName a -> [Variable]
@@ -260,10 +268,9 @@ unitVarCat v proc | Just (n, r, args) <- proc, v `elem` args = Argument
 
 {-| inferDecl - extract and record information from explicit unit declarations -}
 inferDecl :: (?assumeLiterals :: AssumeLiterals) => Maybe ProcedureNames -> Decl Annotation -> State UnitEnv (Decl Annotation)
-inferDecl proc decl@(Decl a s d typ) =
-      do
-         let BaseType _ _ attrs _ _ = arrayElementType typ
-         units <- sequence $ concatMap extractUnit attrs
+inferDecl proc decl@(Decl a s d typ) = 
+      do let BaseType _ _ attrs _ _ = arrayElementType typ
+         units <- sequence $ concatMap extractUnit attrs 
          mapM_ (\(e1, e2, multiplier) -> processVar units proc (e1, e2) typ) d
          return $ decl
 
@@ -566,7 +573,7 @@ inferExprUnits ve@(Var _ _ names) =
                             calls << (v, (Just uv, uvs'))
                             return uv
 
-              Nothing -> error $ "\n" ++ (showSrcFile . srcSpan $ ve) ++ ": undefined variable " ++ v ++ " at " ++ (showSrcSpan . srcSpan $ ve)
+              Nothing -> do error $ "\n" ++ (showSrcFile . srcSpan $ ve) ++ ": undefined variable " ++ v ++ " at " ++ (showSrcSpan . srcSpan $ ve) 
   where inferArgUnits = sequence [mapM inferExprUnits exprs | (_, exprs) <- names, not (nullExpr exprs)]
         inferArgUnits' uvs = sequence [(inferExprUnits expr) >>= (\uv' -> mustEqual True uv' uv) | ((_, exprs), uv) <- zip names uvs, expr <- exprs, not (nullExpr [expr])]
 
@@ -849,7 +856,7 @@ anyUnits category =
 
 
 {- | An attempt at getting some useful user information. Needs position information -}
-errorMessage :: UnitConstant -> [Rational] -> State UnitEnv String
+errorMessage :: (?debug :: Bool) => UnitConstant -> [Rational] -> State UnitEnv String
 errorMessage unit vars = 
  let ?variant = Alt1 in
     do uvarEnv <- gets unitVarEnv
@@ -868,7 +875,8 @@ errorMessage unit vars =
              Unitful xs | length xs == 1 ->                                
                             let xs' = map (\(v, r) -> (v, r * (-1))) xs
                                 unitStrL = outputF (makeUnitSpec (Unitful xs'))
-                            in debugGaussian >> (return $ "Conflict since " ++ unitStrL ++ " != 1")
+                            in do ifDebug debugGaussian
+                                  return $ "Conflict since " ++ unitStrL ++ " != 1"
              _ -> do debugGaussian
                      return "Sorry, I can't give a better error."
        else

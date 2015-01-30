@@ -131,6 +131,7 @@ class Refill d where
 instance Refill Fortran where
     refill y@(Assg _ sp e1 e2)         a = Assg a sp e1 e2
     refill y@(For _ sp v e1 e2 e3 fs)  a = For a sp v e1 e2 e3 fs
+    refill y@(DoWhile _ sp e f)        a = DoWhile a sp e f
     refill y@(FSeq _ sp f1 f2)         a = FSeq a sp f1 f2
     refill y@(If _ sp e f1 fes f3)     a = If a sp e f1 fes f3
     refill y@(Allocate _ sp e1 e2)     a = Allocate a sp e1 e2
@@ -140,13 +141,16 @@ instance Refill Fortran where
     refill y@(Close _ sp s)            a = Close a sp s
     refill y@(Continue _ sp)           a = Continue a sp
     refill y@(Cycle _ sp s)            a = Cycle a sp s
+    refill y@(DataStmt _ sp p)         a = DataStmt a sp p
     refill y@(Deallocate _ sp es e)    a = Deallocate a sp es e
     refill y@(Endfile _ sp s)          a = Endfile a sp s
     refill y@(Exit _ sp s)             a = Exit a sp s
     refill y@(Forall _ sp es f)        a = Forall a sp es f
+    refill y@(Format _ sp s)           a = Format a sp s
     refill y@(Goto _ sp s)             a = Goto a sp s
     refill y@(Nullify _ sp e)          a = Nullify a sp e
     refill y@(Inquire _ sp s e)        a = Inquire a sp s e
+    refill y@(Pause _ sp s)            a = Pause a sp s
     refill y@(Rewind _ sp s)           a = Rewind a sp s
     refill y@(Stop _ sp e)             a = Stop a sp e
     refill y@(Where _ sp e f f')       a = Where a sp e f f'

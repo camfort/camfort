@@ -94,6 +94,12 @@ instance OutputG (Implicit p) Alt2 where
 instance (Indentor (Decl p), OutputG (DataForm p) Alt2) => OutputG (Decl p) Alt2 where
     outputG = outputF
 
+{-
+instance OutputIndG (Decl p) Alt2 where
+    outputIndG i t = "<div style=''>" ++ (outputAnn (rextract t) False i showt) ++  (annotationMark i t (outputIndF i t)) ++ "</div>"
+                        where showt = prettyp (show (setCompactSrcLocs $ fmap (\x -> ()) t))x
+-}
+
 instance OutputG (Type p) Alt2 where
     outputG = outputF
 
@@ -185,6 +191,7 @@ instance OutputIndG (Fortran Annotation) Alt2 where
     outputIndG i t = "<div style=''>" ++ (outputAnn (rextract t) False i showt) ++  (annotationMark i t (outputIndF i t)) ++ "</div>"
                         where showt = prettyp (show (setCompactSrcLocs $ fmap (\x -> ()) t))
                              
+
 
 countToColor n = colors !! (n `mod` (length colors)) --  printf "#%06x" ((256*256*256 - (n * 40)) :: Int)
 
