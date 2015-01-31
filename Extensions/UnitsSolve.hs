@@ -104,7 +104,7 @@ checkSystem :: LinearSystem -> Row -> Consistency LinearSystem
 checkSystem (matrix, vector) k
   | k > nrows matrix = Ok (matrix, vector)
   | vector !! (k - 1) /= Unitful [] = let vars = V.toList $ getRow k matrix 
-                                          bad = Bad (matrix, vector) (vector !! (k - 1), vars)
+                                          bad = Bad (matrix, vector) k (vector !! (k - 1), vars)
                                       in bad
   | otherwise = checkSystem (matrix, vector) (k + 1)
 

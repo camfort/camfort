@@ -29,9 +29,6 @@ import Analysis.IntermediateReps
 import Traverse
 import Language.Fortran
 
-import Language.Haskell.Syntax (SrcLoc(..))
-
-
 -- * Comparison and ordering
 
 {-|  'AnnotationFree' is a data type that wraps other types and denotes terms which should 

@@ -27,7 +27,7 @@ import Data.Maybe
 import Debug.Trace
 import Control.Monad.Trans.State.Lazy
 import Text.Printf
-import Language.Haskell.Syntax (SrcLoc(..))
+--import Language.Haskell.Syntax (SrcLoc(..))
 
 keyword = map pack
           ["end","subroutine","function","program","module","data", "common",

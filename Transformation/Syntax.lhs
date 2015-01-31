@@ -31,7 +31,7 @@ CamFort specific functionality
 > import Traverse
 > import Language.Fortran
 
-> import Language.Haskell.Syntax (SrcLoc(..))
+ import Language.Haskell.Syntax (SrcLoc(..))
 
 TODO: Needs fixing with the spans - need to pull apart and put back together
 

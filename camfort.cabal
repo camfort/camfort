@@ -51,7 +51,7 @@ library
                         uniplate >= 1.6.10,
                         comonad >= 3,
                         fclabels >= 2,
-                        haskell-src >= 1.0.1,
+--                        haskell-src >= 1.0.1,
                         syz >= 0.2,
                         syb >= 0.4,
                         matrix >=0.2.2, 
@@ -59,7 +59,7 @@ library
                         text >= 0.11.2.3,
                         array >= 0.4,
                         directory >= 1.2, 
-                        language-fortran >= 0.2.5.1, 
+                        language-fortran >= 0.3, 
                         vector >= 0.1,
                         QuickCheck >= 2
 

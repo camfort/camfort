@@ -87,11 +87,11 @@ instance Fractional UnitConstant where
   (UnitlessC n1) / (UnitlessC n2) = UnitlessC (n1 / n2)
   fromRational = UnitlessC . fromRational
 
-data Consistency a = Ok a | Bad a (UnitConstant, [Rational]) | BadL a deriving Show
+data Consistency a = Ok a | Bad a Int (UnitConstant, [Rational]) | BadL a deriving Show
 
 efmap :: (a -> a) -> Consistency a -> Consistency a
 efmap f (Ok x)      = Ok (f x)
-efmap f (Bad x msg) = Bad x msg
+efmap f (Bad x l msg) = Bad x l msg
 
 ifDebug :: (?debug :: Bool, Monad m) => m a -> m ()
 ifDebug e = if ?debug then e >> return () else return ()

@@ -21,7 +21,6 @@ import Analysis.Annotations
 import Analysis.Syntax
 import Analysis.Types
 import Transformation.Syntax
-import Language.Haskell.Syntax (SrcLoc(..))
 
 -- Typed common block representation
 type TCommon p = (Maybe String, [(Variable, Type p)])
