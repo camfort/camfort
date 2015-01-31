@@ -141,6 +141,22 @@ solverType (Units s _) = s
 literalsBehaviour None = Poly
 literalsBehaviour (Units _ b) = b
 
+{- Units feature on single files -}
+
+unitsF inFile outDir opt = 
+          do putStrLn $ "Inferring units for source in file " ++ show inFile ++ "\n"
+             let ?solver = solverType opt 
+              in let ?assumeLiterals = literalsBehaviour opt
+                 in doRefactorSingleFile (mapM inferUnits) inFile outDir
+
+unitCriticalsF inFile opt = 
+          do putStrLn $ "Infering critical variables for units inference in file " ++ show inFile ++ "\n"
+             let ?solver = solverType opt 
+              in let ?assumeLiterals = literalsBehaviour opt
+                 in doAnalysisReportSingleFile (mapM inferCriticalVariables) inFile
+
+
+{- Units feature -}
 
 units inDir excludes outDir opt = 
           do putStrLn $ "Inferring units for source in directory " ++ show inDir ++ "\n"
@@ -219,6 +235,24 @@ doRefactor rFun inDir excludes outDir
                        putStrLn report
                        outputFiles inDir outDir (zip3 outFiles (map Fortran.snd3 ps ++ (repeat "")) (map snd ps'))
 
+{-| Performs a refactoring provided by its first parameter, on the file specified by second argument, outputing
+to directory specified by the third parameter -}
+doRefactorSingleFile :: ([(Filename, Program A)] -> (String, [(Filename, Program Annotation)])) -> Filename -> Directory -> IO ()
+doRefactorSingleFile rFun file outDir
+                  = do p <- readParseSrcFile file
+                       let (report, ps') = rFun [(\(f, inp, ast) -> (f, ast)) p]
+                       let outFiles = map fst ps'
+                       let inDir = take (last $ elemIndices '/' file) file
+                       putStrLn report
+                       outputFiles inDir outDir (zip3 outFiles (map Fortran.snd3 [p] ++ (repeat "")) (map snd ps'))
+
+{-| Performs an analysis which reports to the user, but does not output any files -}
+doAnalysisReportSingleFile :: ([(Filename, Program A)] -> (String, t1)) -> Filename -> IO ()
+doAnalysisReportSingleFile rFun inFile
+                  = do p <- readParseSrcFile inFile
+                       putStr "\n"
+                       let (report, ps') = rFun (map (\(f, inp, ast) -> (f, ast)) [p])
+                       putStrLn report
 
 -- * Source directory and file handling
 
