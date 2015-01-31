@@ -73,7 +73,7 @@ inferCriticalVariables :: (?solver :: Solver, ?assumeLiterals :: AssumeLiterals)
                           (Filename, Program Annotation) -> (Report, (Filename, Program Annotation))
 inferCriticalVariables (fname, x) = 
     let ?criticals = True 
-        ?debug = True
+        ?debug = False
     in  let infer = do doInferUnits x
                        vars <- criticalVars
                        case vars of 
