@@ -957,6 +957,7 @@ criticalVars = do uvarenv     <- gets unitVarEnv
                   (matrix, _) <- gets linearSystem
                   ucats       <- gets unitVarCats
                   dbgs        <- gets debugInfo
+                  -- debugGaussian
                   let cv1 = criticalVars' uvarenv ucats matrix 1 dbgs
                   let cv2 = [] -- criticalVars
                   return (cv1 ++ cv2)
@@ -978,9 +979,12 @@ lookupVarsByColsFilterByArg :: Matrix Rational -> UnitVarEnv -> [UnitVarCategory
 lookupVarsByColsFilterByArg matrix uenv ucats cols dbgs = 
       mapMaybe (\j -> lookupEnv j uenv) cols
          where lookupEnv j [] = --Nothing
-                                case (lookup (j - 1) dbgs) of
-                                  Just (srcSpan, info) -> Just ("[expr: " ++ (showSrcSpan srcSpan) ++ "@" ++ info ++ "]")
-                                  Nothing              -> Nothing
+                                if (ucats !! (j - 1) == Temporary && (not (all (==0) (V.toList (getCol j matrix))))) then
+                                     case (lookup j dbgs) of
+                                       Just (srcSpan, info) -> Just ("[expr: " ++ (showSrcSpan srcSpan) ++ "@" ++ info ++ "]")
+                                       Nothing              -> Nothing
+                                      
+                                else Nothing
                lookupEnv j ((v, (UnitVariable i, _)):uenv)
                                               | i == j    = if (j <= length ucats) then
                                                              case (ucats !! (j - 1)) of
