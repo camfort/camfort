@@ -23,8 +23,9 @@ SUBROUTINE GRNF (X,Y)
 !
   IMPLICIT NONE
   REAL, INTENT (OUT) :: X,Y
-  REAL, unit(r/i) :: PI
-  REAL, unit(1) :: R1,R2
+  REAL, unit(pi) :: PI
+  REAL, unit(r1) :: R1
+  real, unit(r2) :: R2
   REAL :: RANF,R
 !
   PI = 4.0*ATAN(1.0)
@@ -43,8 +44,9 @@ FUNCTION RANF() RESULT (R)
 !  USE CSEED
  
   IMPLICIT NONE
-INTEGER, unit(i) :: ISEED
-  INTEGER, unit(i) :: IH,IA
+INTEGER, unit(is) :: ISEED
+  INTEGER, unit(ih) :: IH
+  INTEGER, unut(ia) :: IA
   INTEGER :: IL,IT,IC,IQ,IR
   DATA IA/16807/,IC/2147483647/,IQ/127773/,IR/2836/
   REAL :: R

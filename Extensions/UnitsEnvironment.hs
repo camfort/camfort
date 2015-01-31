@@ -49,8 +49,28 @@ data UnitEnv = UnitEnv {
   _linearSystem        :: LinearSystem, 
   _debugInfo           :: DebugInfo,
   _tmpRowsAdded        :: [Int],
-  _tmpColsAdded        :: [Int]
-} deriving Show
+  _tmpColsAdded        :: [Int],
+  -- This part of the state is just for some evaluation metrics 
+  _evUnitsAdded        :: (Int, [String]),
+  _evCriticals         :: [Int]
+} deriving Show 
+
+emptyUnitEnv = UnitEnv { _report              = [],
+                         _unitVarEnv          = [],
+                         _derivedUnitEnv      = [],
+                         _procedureEnv        = [],
+                         _calls               = [],
+                         _unitVarCats         = [Magic],
+                         _reorderedCols       = [],
+                         _underdeterminedCols = [],
+                         _linearSystem        = (fromLists [[1]], [Unitful []]),
+                         _debugInfo           = [],
+                         _tmpRowsAdded        = [],
+                         _tmpColsAdded        = [],
+                         ---
+                         _evUnitsAdded        = (0, []),
+                         _evCriticals         = []
+                       }
 
 Data.Label.mkLabels [''UnitEnv]
 

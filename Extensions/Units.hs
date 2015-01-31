@@ -106,27 +106,16 @@ countVariables vars debugs procs matrix ucats =
                                            _  -> True
                              _        -> False) [1..ncols matrix]
 
-emptyUnitEnv = UnitEnv { _report              = [],
-                         _unitVarEnv          = [],
-                         _derivedUnitEnv      = [],
-                         _procedureEnv        = [],
-                         _calls               = [],
-                         _unitVarCats         = [Magic],
-                         _reorderedCols       = [],
-                         _underdeterminedCols = [],
-                         _linearSystem        = (fromLists [[1]], [Unitful []]),
-                         _debugInfo           = [],
-                         _tmpRowsAdded        = [],
-                         _tmpColsAdded        = []}
-
-
 doInferUnits :: (?criticals :: Bool, ?solver :: Solver, ?debug :: Bool, ?assumeLiterals :: AssumeLiterals) => Program Annotation -> State UnitEnv (Program Annotation)
 doInferUnits x = do mapM inferProgUnits x
                     ifDebug (report <<++ "Finished inferring prog units")
                     ifDebug debugGaussian
                     inferInterproceduralUnits x
-                    if ?criticals then  return x -- don't insert unit annotations
-                                  else  mapM (descendBiM insertUnitsInBlock) x
+                    p <- if ?criticals then  return x -- don't insert unit annotations
+                                      else  mapM (descendBiM insertUnitsInBlock) x
+                    (n, added) <- gets evUnitsAdded 
+                    report <<++ ("Added " ++ (show n) ++ " non-unitless annotation: " ++ (concat $ intersperse "," $ added))
+                    return p
 
 {-
 To be removed: 
@@ -424,7 +413,7 @@ assumeLiteralUnits' m =
            n' <- addRow
            modify $ liftUnitEnv $ setElem 1 (n', m)
 
-addInterproceduralConstraints :: Program Annotation -> State UnitEnv ()
+addInterproceduralConstraints :: (?debug :: Bool) => Program Annotation -> State UnitEnv ()
 addInterproceduralConstraints x =
   do
     cs <- gets calls
@@ -461,51 +450,45 @@ addInterproceduralConstraints x =
                 report <<++ ("\n" ++ grid1)
                 return ()-}
    
+    -- TODO: this can be optimised
     handleArg dummyToActual dummy =
       do (matrix, vector) <- gets linearSystem
-         -- grid0 <- debugGaussian'
+         --grid0 <- debugGaussian'
+         ifDebug (debugGaussian)
 
-         --report <<++ ("hArg - " ++ show dummyToActual ++ "-" ++ show dummy)
+         ifDebug (report <<++ ("hArg - " ++ show dummyToActual ++ "-" ++ show dummy))
 
          let -- find the first row with a non-zero column for the variable
              n = maybe 1 id $ find (\n -> matrix ! (n, dummy) /= 0) [1 .. nrows matrix]
 
-             -- find the first non-zero column on the row just select
+             -- find the first non-zero column on the row just selected
              Just m = find (\m -> matrix ! (n, m) /= 0) [1 .. ncols matrix]
 
-         --report <<++ ("n = " ++ show n ++ ", m = " ++ show m)
+         ifDebug (report <<++ ("n = " ++ show n ++ ", m = " ++ show m))
 
          if (m == dummy) then
-           do  let -- Get list of columns with non-zero coefficients to the left of the focus
+           do  let -- Get list of columns with non-zero coefficients to the right of the focus
                    ms = filter (\m -> matrix ! (n, m) /= 0) [m .. ncols matrix]
 
-                   -- Get the list of columns to which the non-zero coeffecients are paied by 'dummyToActual' relation. 
+                   -- Get the list of columns to which the non-zero coeffecients are paired by 'dummyToActual' relation. 
                    m's = mapMaybe (flip lookup dummyToActual) ms
                    pairs = --if (length m's == 1) then -- i.e. there is not a direct relationship between variable and return
                            --    zip ms (repeat (head m's))
                            --else
                                (zip ms m's)
 
-               --report <<++ ("ms = " ++ show ms ++ ", m's' = " ++ show m's ++ ", their zip = " ++ show pairs)
+               ifDebug(report <<++ ("ms = " ++ show ms ++ ", m's' = " ++ show m's ++ ", their zip = " ++ show pairs ++ " dA = " ++ show dummyToActual))
 
-               if (length m's == length ms) 
-                 then do { n' <- addRow' $ vector !! (n - 1);
-                           mapM_ (handleArgPair matrix n n') pairs; }
+               if (True) -- length m's == length ms) 
+                 then do { newRow <- addRow' $ vector !! (n - 1);
+--                           mapM_ (handleArgPair matrix n newRow) pairs ; }
+                           mapM_ (handleArgPair matrix n newRow) dummyToActual ; }
                  else return ()
          else
              return ()
 
-         {-(matrix', vector') <- gets linearSystem
-         if ((matrix == matrix') && (vector == vector')) then
-             return ()
-         else
-             do report <<++ "HANDLED AND DIFFERENT!"
-                report <<++ ("\n" ++ grid0)
-                gridn <- debugGaussian'
-                report <<++ ("\n" ++ gridn)
-                return ()-}
-
-    handleArgPair matrix n n' (m, m') = do modify $ liftUnitEnv $ setElem (matrix ! (n, m)) (n', m')
+    -- Copy the row 
+    handleArgPair matrix n newRow (m, m') = do modify $ liftUnitEnv $ setElem (matrix ! (n, m)) (newRow, m')
                                            
     decodeResult (Just r1) (Just r2) = ([r1], [r2])
     decodeResult Nothing Nothing = ([], [])
@@ -561,7 +544,7 @@ inferExprUnits ve@(Var _ _ names) =
        -- function call?
        Nothing | not (null args) -> do case (lookup (map toUpper v) intrinsicsDict) of
                                           Just fun -> fun v 
-                                          Nothing  -> return ()
+                                          Nothing  -> return () -- error $ "I don't know the intrinsic " ++ v -- return ()
                                        uv@(UnitVariable uvn) <- anyUnits Temporary
                                        debugInfo << (uvn, (srcSpan ve , let ?variant = Alt1 in outputF ve))
                                        uvs <- inferArgUnits
@@ -870,31 +853,36 @@ errorMessage row unit vars =
  let ?variant = Alt1 in
     do uvarEnv <- gets unitVarEnv
        debugs <- gets debugInfo
-       let unitStr = outputF (makeUnitSpec unit)
+       u <- makeUnitSpec unit
+       let unitStr = outputF u
        let varCols = map (+1) (findIndices (\n -> n /= 0) vars)
        if varCols == [] then
            case unit of
              Unitful xs | length xs > 1 -> 
-                            let unitStrL = outputF (makeUnitSpec (Unitful [head xs]))
-                                xs' = map (\(v, r) -> (v, r * (-1))) (tail xs)
-                                unitStrR = outputF (makeUnitSpec (Unitful $ xs'))
-                                msg = "Conflict since " ++ unitStrL ++ " != " ++ unitStrR
+                     do let xs' = map (\(v, r) -> (v, r * (-1))) (tail xs)
+                        uR <- makeUnitSpec (Unitful $ xs')
+                        uL <- makeUnitSpec (Unitful [head xs])
+                        return $
+                           let unitStrL = outputF uL
+                               unitStrR = outputF uR
+                               msg = "Conflict since " ++ unitStrL ++ " != " ++ unitStrR
 
-                                getConflict (n, 0)      = ""
-                                getConflict (n, r) =  case lookup n debugs of
+                               getConflict (n, 0)      = ""
+                               getConflict (n, r) =  case lookup n debugs of
                                                         (Just (span, s)) -> "\t" ++ (showSrcSpan span) ++ " - " ++ s ++ "\n"
                                                         _                -> ""
 
 
-                                conflictSpots = concatMap getConflict (zip [1..] vars)
-                            in (return $ msg ++ (if (conflictSpots == []) then "" else " arising from \n" ++ conflictSpots))
+                               conflictSpots = concatMap getConflict (zip [1..] vars)
+                           in msg ++ (if (conflictSpots == []) then "" else " arising from \n" ++ conflictSpots)
              {- A single unit with no variable column suggests an attempt to unify an unit
                 with unitless -}
              Unitful xs | length xs == 1 ->                                
-                            let xs' = map (\(v, r) -> (v, r * (-1))) xs
-                                unitStrL = outputF (makeUnitSpec (Unitful xs'))
-                            in do ifDebug debugGaussian
-                                  return $ "Conflict since " ++ unitStrL ++ " != 1"
+                          do let xs' = map (\(v, r) -> (v, r * (-1))) xs
+                             uL <- makeUnitSpec (Unitful xs')
+                             let unitStrL = outputF uL
+                             ifDebug debugGaussian
+                             return $ "Conflict since " ++ unitStrL ++ " != 1"
              _ -> do debugGaussian
                      return "Sorry, I can't give a better error."
        else
@@ -1051,7 +1039,7 @@ intrinsicsDict =
 
  ++ map (\x -> (x, addPowerIntrinsic)) ["SCALE", "SET_EXPONENT"]
 
- ++ map (\x -> (x, addUnitlessIntrinsic)) ["ACOS", "ACOSH", "ASIN", "ASINH", "ATAN", "ATANH", "BESSEL_J0", "BESSEL_J1", "BESSEL_Y0", "BESSEL_Y1", "COS", "COSH", "ERF", "ERFC", "ERFC_SCALED", "EXP", "EXPONENT", "GAMMA", "LOG", "LOG10", "LOG_GAMMA", "PRODUCT", "SIN", "SINH", "TAN", "TANH"]
+ ++ map (\x -> (x, addUnitlessIntrinsic)) ["ACOS", "ACOSH", "ASIN", "ASINH", "ATAN", "ATANH", "BESSEL_J0", "BESSEL_J1", "BESSEL_Y0", "BESSEL_Y1", "COS", "COSH", "ERF", "ERFC", "ERFC_SCALED", "EXP", "EXPONENT", "GAMMA", "LOG", "ALOG", "LOG10", "LOG_GAMMA", "PRODUCT", "SIN", "SINH", "TAN", "TANH"]
 
  ++ map (\x -> (x, addUnitlessSubIntrinsic)) ["CPU_TIME", "RANDOM_NUMBER"]
 
@@ -1309,8 +1297,7 @@ showRational r = show (numerator r) ++ if ((denominator r) == 1) then "" else "%
 -- *************************************
 
 insertUnitsInBlock :: Block Annotation -> State UnitEnv (Block Annotation)
-insertUnitsInBlock x = do env <- get
-                          return $ transformBi (insertUnits env) x
+insertUnitsInBlock x = transformBiM insertUnits x
 
 removeUnitsInBlock :: Block Annotation -> Block Annotation
 removeUnitsInBlock = transformBi deleteUnits
@@ -1361,24 +1348,28 @@ lookupUnit' ucats badCols (matrix, vector) m n
         significant m' = m' /= m && matrix ! (n, m') /= 0 && ucats !! (m' - 1) == Argument
         ms' = filter (\m -> matrix ! (n, m) /= 0) [1 .. ncols matrix]
 
-insertUnits :: UnitEnv -> Decl Annotation -> Decl Annotation
-insertUnits env (Decl a sp@(s1, s2) d t) | not (pRefactored a || hasUnits t || types == [t]) =
-  DSeq a (NullDecl a' sp'') (foldr1 (DSeq a) decls)
-  where system = Data.Label.get linearSystem env
-        ucats = Data.Label.get unitVarCats env
-        badCols = Data.Label.get underdeterminedCols env
-        uVarEnv = Data.Label.get unitVarEnv env
-        varCol (Var _ _ ((VarName _ v, _):_), _, _) = case (lookup v uVarEnv) of
-                                                          (Just (UnitVariable m,_)) -> m
-                                                          Nothing -> error $ "No variable " ++ (show v)
-        sameUnits = (==) `on` (lookupUnit ucats badCols system . varCol)
-        groups = groupBy sameUnits d
-        types = map (insertUnit ucats badCols system t . varCol . head) groups
-        a' = a { refactored = Just s1 }
-        sp' = dropLine $ refactorSpan sp
-        sp'' = (toCol0 s1, snd $ dropLine sp)
-        decls = [Decl a' sp' group t' | (group, t') <- zip groups types]
-insertUnits _ decl = decl
+insertUnits :: Decl Annotation -> State UnitEnv (Decl Annotation)
+insertUnits decl@(Decl a sp@(s1, s2) d t) | not (pRefactored a || hasUnits t) =
+  do system  <- gets linearSystem 
+     ucats   <- gets unitVarCats 
+     badCols <- gets underdeterminedCols
+     uVarEnv <- gets unitVarEnv
+     let varCol (Var _ _ ((VarName _ v, _):_), _, _) =  case (lookup v uVarEnv) of
+                                                           (Just (UnitVariable m,_)) -> m
+                                                           Nothing -> error $ "No variable " ++ (show v)
+     let sameUnits = (==) `on` (lookupUnit ucats badCols system . varCol)
+     let groups = groupBy sameUnits d
+     types <- mapM (insertUnit ucats badCols system t . varCol . head) groups
+     let   a' = a { refactored = Just s1 }
+     let   sp' = dropLine $ refactorSpan sp
+     let   sp'' = (toCol0 s1, snd $ dropLine sp)
+     let   decls = [Decl a' sp' group t' | (group, t') <- zip groups types]
+     if (not (types == [t])) then 
+         return $ DSeq a (NullDecl a' sp'') (foldr1 (DSeq a) decls) 
+     else
+         return $ decl
+
+insertUnits decl = return decl
 
 deleteUnits :: Decl Annotation -> Decl Annotation
 deleteUnits (Decl a sp@(s1, s2) d t) | hasUnits t =
@@ -1399,13 +1390,16 @@ isUnit :: Attr a -> Bool
 isUnit (MeasureUnit _ _) = True
 isUnit _ = False
 
-insertUnit :: [UnitVarCategory] -> [Int] -> LinearSystem -> Type Annotation -> Int -> Type Annotation
+insertUnit :: [UnitVarCategory] -> [Int] -> LinearSystem -> Type Annotation -> Int -> State UnitEnv (Type Annotation)
 insertUnit ucats badCols system (BaseType aa tt attrs kind len) uv =
-  BaseType aa tt (insertUnit' unit attrs) kind len
-  where unit = lookupUnit ucats badCols system uv
+  do let unit = lookupUnit ucats badCols system uv
+     u <- (insertUnit' unit attrs)
+     return $ BaseType aa tt u kind len
+
 insertUnit ucats badCols system (ArrayT dims aa tt attrs kind len) uv =
-  ArrayT dims aa tt (insertUnit' unit attrs) kind len
-  where unit = lookupUnit ucats badCols system uv
+  do let unit = lookupUnit ucats badCols system uv 
+     u <- insertUnit' unit attrs
+     return $ ArrayT dims aa tt u kind len
 
 deleteUnit :: Type Annotation -> Type Annotation
 deleteUnit (BaseType aa tt attrs kind len) =
@@ -1413,16 +1407,30 @@ deleteUnit (BaseType aa tt attrs kind len) =
 deleteUnit (ArrayT dims aa tt attrs kind len) =
   ArrayT dims aa tt (filter (not . isUnit) attrs) kind len
 
-insertUnit' :: Maybe UnitConstant -> [Attr Annotation] -> [Attr Annotation]
-insertUnit' (Just unit) attrs = attrs ++ [MeasureUnit unitAnnotation $ makeUnitSpec unit]
-insertUnit' Nothing attrs = attrs
+insertUnit' :: Maybe UnitConstant -> [Attr Annotation] -> State UnitEnv [Attr Annotation]
+insertUnit' (Just unit) attrs = do spec <- makeUnitSpec unit
+                                   return $ attrs ++ [MeasureUnit unitAnnotation $ spec]
+insertUnit' Nothing attrs = return attrs
 
-makeUnitSpec :: UnitConstant -> MeasureUnitSpec Annotation
-makeUnitSpec (UnitlessC r) = UnitProduct unitAnnotation [("1", (FractionConst unitAnnotation (show $ numerator r) (show $ denominator r)))] --hm!
-makeUnitSpec (Unitful []) = UnitNone unitAnnotation
+-- Used for evaluation
+updateAdded s = do (n, xs) <- gets evUnitsAdded
+                   evUnitsAdded =: (n + 1, xs ++ [s])
+
+
+makeUnitSpec :: UnitConstant -> State UnitEnv (MeasureUnitSpec Annotation)
+makeUnitSpec (UnitlessC r) = 
+    do let u = UnitProduct unitAnnotation [("1", (FractionConst unitAnnotation (show $ numerator r) (show $ denominator r)))] --hm!
+       updateAdded (let ?variant = Alt1 in outputF u)
+       return $ u
+
+makeUnitSpec (Unitful []) = return $ UnitNone unitAnnotation
 makeUnitSpec (Unitful units)
-  | null neg = UnitProduct unitAnnotation $ formatUnits pos
-  | otherwise = UnitQuotient unitAnnotation (formatUnits pos) (formatUnits neg)
+  | null neg = let u = UnitProduct unitAnnotation $ formatUnits pos
+               in do updateAdded (let ?variant = Alt1 in outputF u)
+                     return u
+  | otherwise = let u = UnitQuotient unitAnnotation (formatUnits pos) (formatUnits neg)
+                in do updateAdded (let ?variant = Alt1 in outputF u)
+                      return u
   where pos = filter (\(unit, r) -> r > 0) units
         neg = [(unit, -r) | (unit, r) <- units, r < 0]
 
