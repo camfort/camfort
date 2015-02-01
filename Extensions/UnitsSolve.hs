@@ -118,12 +118,14 @@ elimRow (matrix, vector) (Just n) m k = -- (show (m, k)) `D.trace`
         vector' = switchScaleElems k n (fromRational $ recip $ matrix ! (n, m)) vector
         system' = elimRow' (matrix', vector') k m
 
-msteeper matrix k m = msteep matrix k (nrows matrix) 1 
+msteeper matrix k m = msteep matrix 1 
                        where
-                         msteep matrix k n i | i == n = matrix
-                                             | i == k = msteep matrix k n (i+1)
-                                             | otherwise = let s = (- matrix ! (n, m)) in if s == 0 then msteep matrix k n (i+1)
-                                                                                          else msteep (combineRows n s k matrix) k n (i+1)
+                         r = nrows matrix
+                         msteep matrix n | n > r = matrix
+                                         | n == k = msteep matrix (n+1)
+                                         | otherwise = let s = (- matrix ! (n, m)) 
+                                                       in if s == 0 then msteep matrix (n+1)
+                                                          else msteep (combineRows n s k matrix) (n+1)
 
 elimRow' :: LinearSystem -> Row -> Col -> LinearSystem
 elimRow' (matrix, vector) k m = (matrix', vector')
