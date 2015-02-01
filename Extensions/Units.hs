@@ -104,7 +104,9 @@ countVariables vars debugs procs matrix ucats =
                              Variable -> case (lookupVarsByCols vars [c]) of
                                            [] -> False
                                            _  -> True
-                             Argument -> True
+                             Argument -> case (lookupVarsByCols vars [c]) of
+                                           [] -> False
+                                           _  -> True 
                              _        -> False) [1..ncols matrix]
 
 doInferUnits :: (?criticals :: Bool, ?solver :: Solver, ?debug :: Bool, ?assumeLiterals :: AssumeLiterals) => Program Annotation -> State UnitEnv (Program Annotation)
