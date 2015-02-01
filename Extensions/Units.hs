@@ -851,6 +851,7 @@ anyUnits category =
 errorMessage :: (?debug :: Bool) => Row -> UnitConstant -> [Rational] -> State UnitEnv String
 errorMessage row unit vars = 
  let ?variant = Alt1 in
+ let ?num = 0 in 
     do uvarEnv <- gets unitVarEnv
        debugs <- gets debugInfo
        u <- makeUnitSpec unit
@@ -1359,7 +1360,7 @@ insertUnits decl@(Decl a sp@(s1, s2) d t) | not (pRefactored a || hasUnits t) =
                                                            Nothing -> error $ "No variable " ++ (show v)
      let sameUnits = (==) `on` (lookupUnit ucats badCols system . varCol)
      let groups = groupBy sameUnits d
-     types <- mapM (insertUnit ucats badCols system t . varCol . head) groups
+     types <- mapM (\g -> let ?num = length g in insertUnit ucats badCols system t . varCol . head $ g) groups
      let   a' = a { refactored = Just s1 }
      let   sp' = dropLine $ refactorSpan sp
      let   sp'' = (toCol0 s1, snd $ dropLine sp)
@@ -1390,7 +1391,7 @@ isUnit :: Attr a -> Bool
 isUnit (MeasureUnit _ _) = True
 isUnit _ = False
 
-insertUnit :: [UnitVarCategory] -> [Int] -> LinearSystem -> Type Annotation -> Int -> State UnitEnv (Type Annotation)
+insertUnit :: (?num :: Int) => [UnitVarCategory] -> [Int] -> LinearSystem -> Type Annotation -> Int -> State UnitEnv (Type Annotation)
 insertUnit ucats badCols system (BaseType aa tt attrs kind len) uv =
   do let unit = lookupUnit ucats badCols system uv
      u <- (insertUnit' unit attrs)
@@ -1407,29 +1408,30 @@ deleteUnit (BaseType aa tt attrs kind len) =
 deleteUnit (ArrayT dims aa tt attrs kind len) =
   ArrayT dims aa tt (filter (not . isUnit) attrs) kind len
 
-insertUnit' :: Maybe UnitConstant -> [Attr Annotation] -> State UnitEnv [Attr Annotation]
+insertUnit' :: (?num :: Int) => Maybe UnitConstant -> [Attr Annotation] -> State UnitEnv [Attr Annotation]
 insertUnit' (Just unit) attrs = do spec <- makeUnitSpec unit
                                    return $ attrs ++ [MeasureUnit unitAnnotation $ spec]
 insertUnit' Nothing attrs = return attrs
 
 -- Used for evaluation
-updateAdded s = do (n, xs) <- gets evUnitsAdded
-                   evUnitsAdded =: (n + 1, xs ++ [s])
+updateAdded k s = do (n, xs) <- gets evUnitsAdded
+                     let k' = if k == 0 then 1 else k
+                     evUnitsAdded =: (n + k, xs ++ [s])
 
 
-makeUnitSpec :: UnitConstant -> State UnitEnv (MeasureUnitSpec Annotation)
+makeUnitSpec :: (?num :: Int) => UnitConstant -> State UnitEnv (MeasureUnitSpec Annotation)
 makeUnitSpec (UnitlessC r) = 
     do let u = UnitProduct unitAnnotation [("1", (FractionConst unitAnnotation (show $ numerator r) (show $ denominator r)))] --hm!
-       updateAdded (let ?variant = Alt1 in outputF u)
+       updateAdded ?num (let ?variant = Alt1 in outputF u)
        return $ u
 
 makeUnitSpec (Unitful []) = return $ UnitNone unitAnnotation
 makeUnitSpec (Unitful units)
   | null neg = let u = UnitProduct unitAnnotation $ formatUnits pos
-               in do updateAdded (let ?variant = Alt1 in outputF u)
+               in do updateAdded ?num (let ?variant = Alt1 in outputF u)
                      return u
   | otherwise = let u = UnitQuotient unitAnnotation (formatUnits pos) (formatUnits neg)
-                in do updateAdded (let ?variant = Alt1 in outputF u)
+                in do updateAdded ?num (let ?variant = Alt1 in outputF u)
                       return u
   where pos = filter (\(unit, r) -> r > 0) units
         neg = [(unit, -r) | (unit, r) <- units, r < 0]
