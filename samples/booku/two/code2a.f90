@@ -48,7 +48,7 @@ SUBROUTINE UPDOWN (N,XI,FI,X,F,DF)
   REAL :: DXT
   REAL, INTENT (IN), DIMENSION (N) :: XI,FI
   REAL, DIMENSION (NMAX,NMAX) :: DP
-  REAL, DIMENSION (NMAX,NMAX), unit(dm) :: DM
+  REAL, DIMENSION (NMAX,NMAX), unit(dt dx) :: DM
 !
   IF (N.GT.NMAX) STOP 'Dimension of the data set is too large.'
     DX = ABS(XI(N)-XI(1))

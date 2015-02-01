@@ -21,7 +21,7 @@ PROGRAM NEWTON
   INTEGER, unit(i) :: ISTEP
   REAL, unit(a) :: A
   REAL :: B,DL,DX,X0,X1,F,DFX
-  real :: FX
+  real, unit(f) :: FX
   REAL, unit(df) :: DF
 !
   DL = 1.0E-06

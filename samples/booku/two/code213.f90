@@ -24,7 +24,7 @@ SUBROUTINE GRNF (X,Y)
   IMPLICIT NONE
   REAL, INTENT (OUT) :: X,Y
   REAL, unit(pi) :: PI
-  REAL, unit(r1) :: R1
+  REAL, unit(1) :: R1
   real, unit(r2) :: R2
   REAL :: RANF,R
 !

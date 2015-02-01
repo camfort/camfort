@@ -20,7 +20,7 @@ PROGRAM INTERPOLATION
   IMPLICIT NONE
   INTEGER, PARAMETER, unit(n) :: N=5
   REAL :: F,DF
-  real, unit(x) :: X
+  real, unit(1) :: X
   REAL, DIMENSION (N) :: XI,FI
   DATA XI/0.0,0.5,1.0,1.5,2.0/, &
        FI/1.0,0.938470,0.765198,0.511828,0.223891/

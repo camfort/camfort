@@ -15,7 +15,7 @@
 MODULE CB
   REAL, unit(ro) :: R0
   REAL, unit(ee) :: EE2
-  REAL, unit(ao) :: A0
+  REAL, unit(ee/ro) :: A0
 END MODULE CB
 !
 PROGRAM BOND
