@@ -129,9 +129,9 @@ msteeper matrix k m = msteep matrix 1
 
 elimRow' :: LinearSystem -> Row -> Col -> LinearSystem
 elimRow' (matrix, vector) k m = (matrix', vector')
-  where --mstep matrix n = let s = (- matrix ! (n, m)) in if s == 0 then matrix else combineRows n s k matrix 
-        --matrix' = foldl mstep matrix $ [1 .. k - 1] ++ [k + 1 .. nrows matrix]
-        matrix' = msteeper matrix k m
+  where mstep matrix n = let s = (- matrix ! (n, m)) in if s == 0 then matrix else combineRows n s k matrix 
+        matrix' = foldl mstep matrix $ [1 .. k - 1] ++ [k + 1 .. nrows matrix]
+        --matrix' = msteeper matrix k m
         vector'' = [x - fromRational (matrix ! (n, m)) * vector !! (k - 1) | (n, x) <- zip [1..] vector]
         (a, _ : b) = splitAt (k - 1) vector''
         vector' = a ++ vector !! (k - 1) : b
