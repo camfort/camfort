@@ -14,7 +14,7 @@
 !
 MODULE CB
   REAL, unit (q) :: Q
-  REAL, unit (b) :: B
+  REAL, unit (1) :: B
   REAL, unit (w) :: W
 END MODULE CB
 !

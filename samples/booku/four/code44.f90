@@ -72,7 +72,7 @@ SUBROUTINE ELGS (A,N,INDX)
   INTEGER, INTENT (OUT), DIMENSION (N) :: INDX
   REAL, unit(p) :: PI
   REAL :: PI1,PJ
-  REAL, unit(c) :: C1
+  REAL, unit(1/p) :: C1
   REAL, INTENT (INOUT), DIMENSION (N,N) :: A
   REAL, DIMENSION (N) :: C
 !

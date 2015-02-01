@@ -59,7 +59,7 @@ SUBROUTINE GRNF (X,Y)
   REAL, INTENT (OUT) :: X,Y
   REAL :: R ! RANF
   REAL, unit(p) ::  PI
-  REAL, unit(ra) :: R1
+  REAL, unit(1) :: R1
   REAL, unit(rb) :: R2
 !
   PI = 4.0*ATAN(1.0)

@@ -46,7 +46,7 @@ END SUBROUTINE FFT2D
   IMPLICIT NONE
   INTEGER, INTENT (IN) :: N,M
   INTEGER :: N1,N2,I,J,K,L,L1,L2
-  REAL, unit(p) :: PI
+  REAL, unit(1) :: PI
   REAL, unit(a) :: A1
   REAL :: A2,Q,U,V
   REAL, INTENT (INOUT), DIMENSION (N) :: AR,AI

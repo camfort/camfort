@@ -21,10 +21,10 @@ PROGRAM INTEGRAL
   INTEGER, PARAMETER, unit(1) :: N=9
   INTEGER :: I
   REAL, unit(d) :: PI
-  real, unit(h) :: H
+  real, unit(1) :: H
   REAL :: S
   REAL, DIMENSION (N) :: X
-  REAL, DIMENSION (N), unit(f) :: F
+  REAL, DIMENSION (N), unit(1) :: F
 !
   PI = 4.0*ATAN(1.0)
   H  = PI/(2*(N-1))

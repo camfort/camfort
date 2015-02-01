@@ -20,7 +20,7 @@ PROGRAM WAVE
 ! Copyright (c) Tao Pang 1997.
 !
   IMPLICIT NONE
-  INTEGER, PARAMETER, unit(n) :: N=101
+  INTEGER, PARAMETER, unit(1) :: N=101
   INTEGER :: I
   INTEGER, unit(i) :: ISTEP
   REAL, unit(dl) :: DL

@@ -20,9 +20,9 @@ MODULE ORDER_AN_ARRAY
   SUBROUTINE REARRANGE (A)
     IMPLICIT NONE
     REAL, INTENT(INOUT) :: A(:)
-    LOGICAL, ALLOCATABLE, unit(m) :: MASK(:)
+    LOGICAL, ALLOCATABLE, unit(1) :: MASK(:)
     INTEGER :: I
-    INTEGER, unit(n) :: N
+    INTEGER, unit(1) :: N
     INTEGER, DIMENSION(1) :: K
     N = SIZE (A)
     ALLOCATE (MASK(N))
