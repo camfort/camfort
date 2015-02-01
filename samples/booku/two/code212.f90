@@ -18,7 +18,7 @@ FUNCTION ERNF() RESULT (E)
 ! Exponential random number generator from a uniform random
 ! number generator.  Copyright (c) Tao Pang 1997.
 !
-  REAL, unit(e) :: E
+  REAL :: E
   REAL R,RANF
 !
   E = -ALOG(1.0-RANF())

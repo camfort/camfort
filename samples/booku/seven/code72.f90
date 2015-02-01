@@ -13,7 +13,7 @@
 !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
 !
 MODULE CSEED
-  INTEGER :: ISEED
+  INTEGER, unit(i) :: ISEED
 END MODULE CSEED
 !
 SUBROUTINE MXWL (N,M,T,V)
@@ -25,7 +25,7 @@ SUBROUTINE MXWL (N,M,T,V)
 !
   IMPLICIT NONE
   INTEGER, INTENT (IN) :: N,M
-  INTEGER :: I
+  INTEGER, unit(i) :: I
   REAL, INTENT (IN) :: T
   REAL :: V1,V2,EK,VS
   REAL, INTENT (OUT), DIMENSION (N) :: V
@@ -57,7 +57,10 @@ SUBROUTINE GRNF (X,Y)
 !
   IMPLICIT NONE
   REAL, INTENT (OUT) :: X,Y
-  REAL :: PI,R1,R2,R,RANF
+  REAL :: R ! RANF
+  REAL, unit(p) ::  PI
+  REAL, unit(ra) :: R1
+  REAL, unit(rb) :: R2
 !
   PI = 4.0*ATAN(1.0)
   R1 = -ALOG(1.0-RANF())
@@ -67,16 +70,18 @@ SUBROUTINE GRNF (X,Y)
   Y  = R1*SIN(R2)
 END SUBROUTINE GRNF
 !
-FUNCTION RANF() RESULT (R)
+FUNCTION RANF() !RESULT (R)
 !
 ! Uniform random number generator x(n+1) = a*x(n) mod c with
 ! a=7**5 and c = 2**(31)-1.  Copyright (c) Tao Pang 1997.
 !
   USE CSEED
   IMPLICIT NONE
-  INTEGER :: IH,IL,IT,IA,IC,IQ,IR
+  INTEGER :: IH,IL,IT,IC,IQ
+  INTEGER, unit(r) :: IR
+  INTEGER, unit(a) :: IA
   DATA IA/16807/,IC/2147483647/,IQ/127773/,IR/2836/
-  REAL :: R
+  !REAL :: R
 !
   IH = ISEED/IQ
   IL = MOD(ISEED,IQ)
@@ -86,5 +91,5 @@ FUNCTION RANF() RESULT (R)
   ELSE
     ISEED = IC+IT
   END IF
-  R = ISEED/FLOAT(IC)
+  RANF = ISEED/FLOAT(IC)
 END FUNCTION RANF

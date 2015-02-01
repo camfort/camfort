@@ -37,18 +37,18 @@ SUBROUTINE UPDOWN (N,XI,FI,X,F,DF)
 ! value.  DF: error estimated.  Copyright (c) Tao Pang 1997.
 !
   IMPLICIT NONE
-  INTEGER, PARAMETER :: NMAX=21
+  INTEGER, PARAMETER, unit(nmax) :: NMAX=21
   INTEGER, INTENT (IN) :: N
   INTEGER :: I,J,I0,J0,K
   INTEGER, unit(i) :: IT
-  REAL, INTENT (IN), unit(1) :: X
+  REAL, INTENT (IN) :: X
   REAL, INTENT (OUT) :: F,DF
-  REAL, unit(1) :: DX
-  REAL, unit (d) :: DT
+  REAL, unit(dx) :: DX
+  REAL, unit (dt) :: DT
   REAL :: DXT
   REAL, INTENT (IN), DIMENSION (N) :: XI,FI
   REAL, DIMENSION (NMAX,NMAX) :: DP
-  REAL, DIMENSION (NMAX,NMAX), unit(d) :: DM
+  REAL, DIMENSION (NMAX,NMAX), unit(dm) :: DM
 !
   IF (N.GT.NMAX) STOP 'Dimension of the data set is too large.'
     DX = ABS(XI(N)-XI(1))

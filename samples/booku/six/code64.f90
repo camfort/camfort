@@ -19,9 +19,16 @@ PROGRAM N_T_FIELD
 ! Copyright (c) Tao Pang 1997.
 !
   IMPLICIT NONE
-  INTEGER, PARAMETER :: M1=1001,M=2001,N=19
+  INTEGER, PARAMETER, unit(m1) :: M1=1001
+  INTEGER, PARAMETER, unit(m) :: M=2001
+  INTEGER, PARAMETER :: N=19
   INTEGER :: I,J
-  REAL :: HT,TC,XK,RA,RB,H,H2,T0,S0,CS,A0,B0,C0,R,T
+  REAL :: TC,RB,H,H2,S0,CS,B0,C0,R,T
+  real, unit(h) :: HT
+  REAL, unit(x) :: XK
+  REAL, unit(r) :: RA
+  REAL, unit(t) :: T0
+  REAL, unit(a) :: A0
   REAL, DIMENSION (N) :: A,B,C,Y,G,W,V,U
   REAL, DIMENSION (M,N) :: S
   REAL, DIMENSION (M,N+1) :: X

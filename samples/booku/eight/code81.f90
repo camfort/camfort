@@ -18,9 +18,11 @@ PROGRAM GALERKIN
 ! Galerkin method as described in the text.  Copyright (c) Tao Pang 1997.
 !
   IMPLICIT NONE
-  INTEGER, PARAMETER :: N=99
+  INTEGER, PARAMETER, unit(n) :: N=99
   INTEGER :: I
-  REAL :: PI,XL,H,D,E,B0,B1,XIM,XI,XIP
+  REAL :: XL,H,E,B0,B1,XIM,XI,XIP
+  REAL, unit(p) :: PI
+  REAL, unit(d) :: D
   REAL, DIMENSION (N) :: B,A,Y,W,U
 !
   PI  =  4.0*ATAN(1.0)

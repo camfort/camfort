@@ -30,7 +30,7 @@ PROGRAM TALK_0_TO_1
   IF (IRANK.EQ.ISEND) THEN
     HELLO = 'I am process 0, who are you ?'
     IM = 29
-    CALL MPI_SEND (HELLO,IM,MPI_CHARACTER,IRECV,&
+    CALL MPI_SEND (HELLO,IM,MPI_CHARACTER,IRECV, &
                  ITAG,MPI_COMM_WORLD,IERR)
     PRINT*, 'I sent the message: ', HELLO
   ELSE IF (IRANK.EQ.IRECV) THEN

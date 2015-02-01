@@ -18,13 +18,13 @@ PROGRAM INTEGRAL
 ! sin(x) in the region of [0,pi/2].  Copyright (c) Tao Pang 1997.
 !
   IMPLICIT NONE
-  INTEGER, PARAMETER :: N=9
+  INTEGER, PARAMETER, unit(n) :: N=9
   INTEGER :: I
   REAL, unit(d) :: PI
   real, unit(h) :: H
   REAL :: S
   REAL, DIMENSION (N) :: X
-  REAL, DIMENSION (N), unit(1) :: F
+  REAL, DIMENSION (N), unit(f) :: F
 !
   PI = 4.0*ATAN(1.0)
   H  = PI/(2*(N-1))

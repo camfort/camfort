@@ -20,9 +20,13 @@ PROGRAM WAVE
 ! Copyright (c) Tao Pang 1997.
 !
   IMPLICIT NONE
-  INTEGER, PARAMETER :: N=101
-  INTEGER :: I,ISTEP
-  REAL :: DL,H,AK,BK,DK,EK,F0,F1
+  INTEGER, PARAMETER, unit(n) :: N=101
+  INTEGER :: I
+  INTEGER, unit(i) :: ISTEP
+  REAL, unit(dl) :: DL
+  REAL :: BK,DK,EK,F0,F1
+  REAL, unit(h) :: H
+  REAL, unit(ak) :: AK
   REAL, DIMENSION (N) :: Q,S,U
 !
 ! Initialization of the problem

@@ -19,10 +19,14 @@ PROGRAM COMET
 ! Copyright (c) Tao Pang 1997.
 !
   IMPLICIT NONE
-  INTEGER, PARAMETER :: N=20001,NP=10000,NI =200
+  INTEGER, PARAMETER, unit(n) :: N=20001
+  INTEGER, PARAMETER, unit(np) :: NP=10000
+  INTEGER, PARAMETER, unit(ni) :: NI =200
   INTEGER :: I
-  REAL :: H,KAPPA
-  REAL, DIMENSION (N) :: X,Y,VX,VY,GX,GY,T,R
+  REAL, unit(h) :: H
+  REAL, unit(k) :: KAPPA
+  REAL, DIMENSION (N), unit(x) :: X
+  REAL, DIMENSION (N) :: Y,VX,VY,GX,GY,T,R
 !
 ! Initialization of the problem
 !

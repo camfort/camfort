@@ -13,7 +13,9 @@
 !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
 !
 MODULE CB
-  REAL :: Q,B,W
+  REAL, unit (q) :: Q
+  REAL, unit (b) :: B
+  REAL, unit (w) :: W
 END MODULE CB
 !
 PROGRAM PENDULUM
@@ -24,7 +26,8 @@ PROGRAM PENDULUM
 !
   USE CB
   IMPLICIT NONE
-  INTEGER, PARAMETER :: N=1000,L=100,M=1
+  INTEGER, PARAMETER :: N=1000,M=1
+  INTEGER, PARAMETER, unit(l) :: L=100
   INTEGER :: I
   REAL :: PI,H,T,Y1,Y2,G1,G1F,G2,G2F
   REAL :: DK11,DK21,DK12,DK22,DK13,DK23,DK14,DK24

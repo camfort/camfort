@@ -22,7 +22,9 @@
   IMPLICIT NONE
   INTEGER, INTENT (IN) :: N,M
   INTEGER :: N1,N2,I,J,K,L,L1,L2
-  REAL :: PI,A1,A2,Q,U,V
+  REAL, unit(p) :: PI
+  REAL :: A2,Q,U,V
+  REAL, unit(a) :: A1
   REAL, INTENT (INOUT), DIMENSION (N) :: AR,AI
 !
   PI = 4.0*ATAN(1.0)

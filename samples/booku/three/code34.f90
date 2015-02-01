@@ -19,7 +19,7 @@ PROGRAM S_L_LEGENDRE
 ! for the root search.  Copyright (c) Tao Pang 1997.
 ! 
   IMPLICIT NONE
-  INTEGER, PARAMETER :: N=501
+  INTEGER, PARAMETER, unit(n) :: N=501
   INTEGER :: ISTEP
   REAL :: DL,H,AK,BK,DK,EK,F0,F1
   REAL, DIMENSION (N) :: U

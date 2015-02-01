@@ -21,7 +21,8 @@ PROGRAM ONE_D_MOTION
 ! Copyright (c) Tao Pang 1997.
 !
   IMPLICIT NONE
-  INTEGER, PARAMETER :: N=10001,IN=500
+  INTEGER, PARAMETER, unit(n) :: N=10001
+  INTEGER, PARAMETER, unit(in) :: IN=500
   INTEGER :: I
   REAL, unit(s) :: PI
   REAL :: DT

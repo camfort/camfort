@@ -13,7 +13,7 @@
 !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
 !
 MODULE CSEED
-  INTEGER ISEED
+  INTEGER, unit(i) :: ISEED
 END MODULE CSEED
 !
 SUBROUTINE RMSG (N,XS,A)
@@ -24,7 +24,8 @@ SUBROUTINE RMSG (N,XS,A)
 !
   IMPLICIT NONE
   INTEGER, INTENT (IN) :: N
-  INTEGER :: I,J
+  INTEGER, unit(i) :: I
+  INTEGER :: J
   REAL, INTENT (IN) :: XS
   REAL :: G1,G2
   REAL, INTENT (OUT), DIMENSION (N,N) :: A
@@ -67,7 +68,9 @@ FUNCTION RANF() RESULT (R)
 !
   USE CSEED
   IMPLICIT NONE
-  INTEGER :: IH,IL,IT,IA,IC,IQ,IR
+  INTEGER :: IH,IL,IT,IC,IQ
+  INTEGER, unit(r) :: IR
+  INTEGER, unit(a) :: IA
   DATA IA/16807/,IC/2147483647/,IQ/127773/,IR/2836/
   REAL :: R
 !

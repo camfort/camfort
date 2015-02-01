@@ -53,11 +53,15 @@ SUBROUTINE ELGS (A,N,INDX)
 ! plus the pivoting element ratios below the diagonal in the output.
 ! INDX(N) records the pivoting order.  Copyright (c) Tao Pang 2001.
 !
+
   IMPLICIT NONE
   INTEGER, INTENT (IN) :: N
-  INTEGER :: I,J,K,ITMP
+  INTEGER, unit(i) :: I
+  INTEGER :: J,K,ITMP
   INTEGER, INTENT (OUT), DIMENSION (N) :: INDX
-  REAL :: C1,PI,PI1,PJ
+  REAL, unit(c) :: C1
+  REAL :: PI1,PJ
+  REAL, unit(p) :: PI
   REAL, INTENT (INOUT), DIMENSION (N,N) :: A
   REAL, DIMENSION (N) :: C
 !

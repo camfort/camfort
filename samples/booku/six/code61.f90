@@ -18,9 +18,12 @@ PROGRAM BENCH
 ! bench as described in the text.  Copyright (c) Tao Pang 1997.
 !
   IMPLICIT NONE
-  INTEGER, PARAMETER :: N=99
+  INTEGER, PARAMETER, unit(n) :: N=99
   INTEGER :: I
-  REAL :: XL,H,H2,Y0,X0,RHO,G,F0,D,E,Ee0,XD
+  REAL, unit(x) :: XL
+  REAL :: H,H2,Y0,X0,F0,D,E,Ee0,XD
+  REAL, unit(g) :: G
+  REAL, unit(r) :: RHO
   REAL, DIMENSION (N):: B,X,Y,W,U
 !
   XL  = 3.0

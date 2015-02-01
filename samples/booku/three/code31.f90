@@ -18,10 +18,13 @@ PROGRAM ONE_D_MOTION2
 ! dimension under an elastic force.  Copyright (c) Tao Pang 1997.
 !
   IMPLICIT NONE
-  INTEGER, PARAMETER :: N=101,IN=5
+  INTEGER, PARAMETER, unit(n) :: N=101
+  INTEGER, PARAMETER, unit(i) :: IN=5
   INTEGER :: I
-  REAL :: PI,DT
-  REAL, DIMENSION (N) :: T,V,X
+  REAL, unit(pi) :: PI
+  REAL :: DT
+  REAL, DIMENSION (N) :: T,X
+  REAL, DIMENSION (N), unit(v) :: V
 !
   PI  = 4.0*ATAN(1.0)
   DT  =2.0*PI/100
