@@ -73,7 +73,7 @@ main = do putStrLn introMessage
 
 -- * Options for CamFort  and information on the different modes
 
-fullUsageInfo = (usageInfo (usage ++ menu) options)
+fullUsageInfo = (usageInfo (usage ++ menu ++ "\nOptions:") options)
 
 type Options = [Flag]
 data Flag = Version | Input String | Output String 
@@ -95,7 +95,7 @@ getExcludes (x : xs) = getExcludes xs
 options :: [OptDescr Flag]
 options =
      [ Option ['v','?'] ["version"] (NoArg Version)       "show version number"
-     , Option ['e']     ["exclude"] (ReqArg Excludes "FILES") "files to exclude"
+     , Option ['e']     ["exclude"] (ReqArg Excludes "FILES") "files to exclude (comma separated list, no spaces)"
      , Option ['s']     ["units-solver"]  (ReqArg (Solver . read) "ID") "units-of-measure solver. ID = Custom or LAPACK"
      , Option ['l']     ["units-literals"] (ReqArg (Literals . read) "ID") "units-of-measure literals mode. ID = Unitless, Poly, or Mixed"
      ]
@@ -105,7 +105,7 @@ compilerOpts argv =
        case getOpt Permute options argv of
           (o,n,[]  ) -> return (o,n)
           (_,_,errs) -> ioError (userError (concat errs ++ usageInfo header options))
-      where header = introMessage ++ usage ++ menu
+      where header = introMessage ++ usage ++ menu ++ "\nOptions:"
 
 -- * Which modes do not require an output
 outputNotRequired = ["criticalUnits", "count"]
