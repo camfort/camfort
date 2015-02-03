@@ -39,19 +39,29 @@ using --user.
 2. Usage
 ---------------------------------------
 
-Usage: camfort <function> <directory> 
+CamFort 0.615 - Cambridge Fortran Infrastructure.
+Usage: camfort <MODE> <INPUT> [OUTPUT] [OPTIONS...]
+Refactor functions:
+	common         	 [common block elimination] 
+	commonArg      	 [common block elimination (to parameter passing)] 
+	equivalence    	 [equivalence elimination] 
+	dataType       	 [derived data type introduction] 
+	dead           	 [dead-code elimination] 
+	units          	 [unit-of-measure inference] 
+	removeUnits    	 [unit-of-measure removal] 
 
-Refactor functions: 
- 	 common 	 [common block elimination] 
-  	 commonArg 	 [common block elimination (to paramter passing)] 
- 	 equivalence 	 [equivalence elimination] 
- 	 dataType 	 [derived data type introduction] 
- 	 dead 		 [dead-code eliminate] 
- 	 units 		 [unit-of-measure inference] 
- 	 removeUnits 	 [unit-of-measure removal] 
+Analysis functions:
+	asts           	 [blank analysis, outputs analysis files with AST information] 
+	lva            	 [live-variable analysis] 
+	loops          	 [loop information] 
+	count          	 [count variable declarations] 
+	criticalUnits  	 [calculate the critical variables for units-of-measure inference] 
+	ast            	 [print the raw AST -- for development purposes] 
 
-Analysis functions: 
- 	 lva 		 [live-variable analysis] 
- 	 loops 		 [analyse loops] 
+Options:
+  -v, -?    --version            show version number
+  -e FILES  --exclude=FILES      files to exclude (comma separated list, no spaces)
+  -s ID     --units-solver=ID    units-of-measure solver. ID = Custom or LAPACK
+  -l ID     --units-literals=ID  units-of-measure literals mode. ID = Unitless, Poly, or Mixed
 
 
