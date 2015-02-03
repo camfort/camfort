@@ -5,6 +5,7 @@ module Helpers where
 type Filename = String
 type Directory = String
 type SourceText = String
+type FileOrDir = String
 
 -- Helpers
 

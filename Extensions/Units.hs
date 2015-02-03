@@ -44,7 +44,6 @@ import Language.Fortran.Pretty
 import Transformation.Syntax
 
 -- For debugging and development purposes
-import Test.QuickCheck
 import qualified Debug.Trace as D
 
 {- HELPERS -}
@@ -117,16 +116,8 @@ doInferUnits x = do mapM inferProgUnits x
                     p <- if ?criticals then  return x -- don't insert unit annotations
                                       else  mapM (descendBiM insertUnitsInBlock) x
                     (n, added) <- gets evUnitsAdded 
-                    report <<++ ("Added " ++ (show n) ++ " non-unitless annotation: " ++ (concat $ intersperse "," $ added))
+                    if ?criticals then return () else report <<++ ("Added " ++ (show n) ++ " non-unitless annotation: " ++ (concat $ intersperse "," $ added))
                     return p
-
-{-
-To be removed: 
-infoA [] = []
-infoA ((Main _ _ _ _ _ _):ms) = "Main" : infoA ms
-infoA ((Module _ _ _ _ _ _ _ ):ms) = "Module" : infoA ms
-infoA (m:ms) = "Other" : infoA ms
--}
 
 inferProgUnits :: (?criticals :: Bool, ?solver :: Solver, ?debug :: Bool, ?assumeLiterals :: AssumeLiterals) => ProgUnit Annotation -> State UnitEnv ()
 inferProgUnits p =
@@ -1166,10 +1157,11 @@ addUnitlessResult2SameArgIntrinsic name =
     
 
 -- QuickCheck instance for matrices, used for testing matrix operations
+{-
 instance (Arbitrary a) => Arbitrary (Matrix a) where
     arbitrary = sized (\n -> do xs <- vectorOf (n*n) arbitrary
                                 return $ matrix n n (\(i, j) -> xs !! ((i-1)*n + (j-1))))
-
+-}
 
 -- Matrix for development 
 fooMatrix :: Matrix Rational
