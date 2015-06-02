@@ -1,0 +1,192 @@
+<!DOCTYPE HTML PUBLIC "-//IETF//DTD HTML//EN">
+<html> <head>
+<title></title>
+<style type='text/css'>
+body {
+  font-family: Helvetica, arial, Sans;
+}
+pre.codeblock {
+  background: #d0dddf;
+  border: solid 2px #444;
+  padding:5px;
+  margin:10px;
+  margin-top:2px;
+}
+pre.cmdline {
+  background: #eee;
+  border: solid 1px #888;
+  padding:5px;
+  margin:10px;
+}
+</style>
+</head>
+
+
+<body>
+<h1>Download CamFort</h1>
+
+<ul><li>Binaries
+   <ul><li><a href="https://github.com/dorchard/camfort/blob/master/bin/linux/camfort?raw=true">Linux</a> (compiled on Ubuntu)</li>
+       <li>Windows</li>
+       <li><a href="https://github.com/dorchard/camfort/blob/master/bin/macosx/camfort?raw=true ">Mac OSX</a></li></ul>
+<li>Build from source:
+       <blockquote>
+         Download the <a href="https://github.com/dorchard/camfort/">source from GitHub</a>.
+<br /> Compilation requires <a href="https://www.haskell.org/ghc/download_ghc_7_8_4">ghc</a> (6.3 or above). Then compile to binary via: <br />
+
+        <pre class='cmdline'>
+         runhaskell Setup.hs configure
+         runhaskell Setup.hs build
+         ghc --make Main.hs -o camfort -package mtl</pre>
+      </blockquote></li></ul>
+      </li></ul>
+     
+
+<h4>CamFort is in development and we would value any feedback! Please e-mail
+      dominic.orchard AT cl.cam.ac.uk if you have any problems.</h4>
+      
+<h1>Quick guide to using units-of-measure feature of CamFort</h1>
+      
+More details of this tool can be found in <a href="http://www.doc.ic.ac.uk/~dorchard/publ/iccs15-fortran-units.pdf">the ICCS'15 publication</a>. We give a quick guide to getting started here.<br /><br />
+Consider the following Fortran source file: <br /><br />
+
+<b>example.f90</b>
+<pre class='codeblock'>
+program example
+  implicit none
+
+  real :: x 
+  real :: t 
+  real :: v  
+
+  x = 50 
+  t = 1.3
+  v = x / t
+
+end program
+</pre>
+
+CamFort can report the set of <i>critical variables</i>, that is, a minimal set
+of variables which, if given a unit, would provide the most amount of information to
+the type checker. This can be done as follows:
+
+<pre class='cmdline'>
+$ camfort criticalUnits <inputDirectory>
+</pre>
+
+For example, if we are in the current directory of example.f90 we can just do:
+
+<pre class='cmdline'>
+$ camfort criticalUnits .
+CamFort 0.615 - Cambridge Fortran Infrastructure.
+Infering critical variables for units inference in directory "."
+
+./iccs.f90
+./iccs.f90: Critical variables: t,x
+</pre>
+
+CamFort tells us that <i>t</i> and <i>x</i> are critical variables, so we annotate
+those with unit information (<i>m</i> (metres) for <i>x</i> and <i>s</i> (seconds) for <i>t</i> here): <br /><br />
+
+<b>example.f90</b>
+<pre class='codeblock'>
+program example
+  implicit none
+
+  real, unit(m) :: x 
+  real, unit(s) :: t 
+  real :: v  
+
+  x = 50 
+  t = 1.3
+  v = x / t
+
+end program
+</pre>
+
+We can now ask CamFort to infer the rest of the units, which outputs to a file:
+
+<pre class='cmdline'>
+$ camfort units <inputDirectory> <outputDirectory>
+</pre>
+
+For example, if we are in the current directory of example.f90 and we want to output
+to a new directory 'out' then we can do:
+
+<pre class='cmdline'>
+$ mkdir out
+$ camfort units . out
+CamFort 0.615 - Cambridge Fortran Infrastructure.
+Inferring units for "."
+
+./iccs.f90
+./iccs.f90: Added 1 non-unitless annotation: m / s
+./iccs.f90: checked/inferred 3 user variables
+
+Writing refactored files to directory: out/
+Writing out/iccs.f90
+</pre>
+
+We see that CamFort has added one annotation: <br /><br />
+
+<b>out/example.f90</b>
+<pre class='codeblock'>
+program example
+  implicit none
+
+  real, unit(m) :: x 
+  real, unit(s) :: t 
+  real, unit(m / s) :: v  
+
+  x = 50 
+  t = 1.3
+  v = x / t
+
+end program
+</pre>
+
+So now we have units for all variables. But when we want to compile using our usual compiler tool chain we need to erase these annotations. CamFort can do this as part of your build process:
+
+<pre class='cmdline'>
+$ camfort removeUnits <inputDirectory> <outputDirectory>
+</pre>
+
+For example:
+
+<pre class='cmdline'>
+$ mkdir src
+$ camfort removeUnits out src
+</pre>
+
+Which now give us: <br /><br />
+
+<b>src/example.f90</b>
+<pre class='codeblock'>
+program example
+  implicit none
+
+  real :: x 
+  real :: t 
+  real :: v  
+
+  x = 50 
+  t = 1.3
+  v = x / t
+
+end program
+</pre>
+
+We are currently in the process of allowing unit attributes to be given only as comments,
+which simplifies the integration of CamFort with your existing tool chain (no need to
+run the 'remove' step).
+
+<h4>CamFort is in development and we would value any feedback! Please e-mail
+      dominic.orchard AT cl.cam.ac.uk if you have any problems.
+More details of our project can be found <a href="http://www.cl.cam.ac.uk/research/dtg/naps/">here</a>.</h4>
+
+
+
+<hr>
+<address></address>
+<!-- hhmts start --> Last modified: Tue Jun  2 11:26:32 GMT 2015 <!-- hhmts end -->
+</body> </html>
