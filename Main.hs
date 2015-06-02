@@ -271,9 +271,8 @@ getDir file = take (last $ elemIndices '/' file) file
 readParseSrcDir :: FileOrDir -> [Filename] -> IO [(Filename, SourceText, Program A)]
 readParseSrcDir inp excludes = do isdir <- isDirectory inp
                                   files <- if isdir then 
-                                               do dirF <- rGetDirContents inp
-                                                  let files = dirF \\ excludes
-                                                  return $ map (\y -> inp ++ "/" ++ y) files
+                                               do files <- rGetDirContents inp
+                                                  return $ (map (\y -> inp ++ "/" ++ y) files) \\ excludes
                                            else return [inp]
                                   mapM readParseSrcFile files
                                 

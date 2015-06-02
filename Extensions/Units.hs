@@ -113,10 +113,12 @@ doInferUnits x = do mapM inferProgUnits x
                     ifDebug (report <<++ "Finished inferring prog units")
                     ifDebug debugGaussian
                     inferInterproceduralUnits x
-                    p <- if ?criticals then  return x -- don't insert unit annotations
+                    succeeded <- gets success
+                    p <- if (?criticals || (not succeeded)) 
+                                      then  return x -- don't insert unit annotations
                                       else  mapM (descendBiM insertUnitsInBlock) x
                     (n, added) <- gets evUnitsAdded 
-                    if ?criticals then return () else report <<++ ("Added " ++ (show n) ++ " non-unitless annotation: " ++ (concat $ intersperse "," $ added))
+                    if (?criticals || (not succeeded)) then return () else report <<++ ("Added " ++ (show n) ++ " non-unitless annotation: " ++ (concat $ intersperse "," $ added))
                     return p
 
 inferProgUnits :: (?criticals :: Bool, ?solver :: Solver, ?debug :: Bool, ?assumeLiterals :: AssumeLiterals) => ProgUnit Annotation -> State UnitEnv ()
@@ -155,7 +157,9 @@ inferBlockUnits x proc = do resetTemps
                               Just _ -> {- not ?criticals -> -}
                                          do -- Intermediate solve for procedures (subroutines & functions)
                                             ifDebug (report <<++ "Pre doing row reduce")
-                                            solveSystemM ""                                             
+                                            consistent <- solveSystemM ""
+                                            success =: consistent
+
                                             linearSystem =. reduceRows 1
                                             ifDebug (report <<++ "Post doing reduce")
                                             ifDebug (debugGaussian)
@@ -857,6 +861,7 @@ errorMessage row unit vars =
                      do let xs' = map (\(v, r) -> (v, r * (-1))) (tail xs)
                         uR <- makeUnitSpec (Unitful $ xs')
                         uL <- makeUnitSpec (Unitful [head xs])
+                        success =: False
                         return $
                            let unitStrL = outputF uL
                                unitStrR = outputF uR

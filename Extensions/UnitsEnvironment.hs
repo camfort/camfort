@@ -50,6 +50,7 @@ data UnitEnv = UnitEnv {
   _debugInfo           :: DebugInfo,
   _tmpRowsAdded        :: [Int],
   _tmpColsAdded        :: [Int],
+  _success             :: Bool, 
   -- This part of the state is just for some evaluation metrics 
   _evUnitsAdded        :: (Int, [String]),
   _evCriticals         :: [Int]
@@ -67,6 +68,7 @@ emptyUnitEnv = UnitEnv { _report              = [],
                          _debugInfo           = [],
                          _tmpRowsAdded        = [],
                          _tmpColsAdded        = [],
+                         _success             = True,
                          ---
                          _evUnitsAdded        = (0, []),
                          _evCriticals         = []
