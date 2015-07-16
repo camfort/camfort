@@ -294,7 +294,7 @@ instance Tagged p => Indentor (p Annotation) where
                  Nothing             -> ind i
 
 
--- GLORIOUS REFACTORING ALGORITHM!
+-- Start of GLORIOUS REFACTORING ALGORITHM!
 
 {-| -}
 reprint :: SourceText -> Filename -> Program Annotation -> String
@@ -327,6 +327,8 @@ enterDown cursor inp z = case (down' z) of
 enterRight cursor inp z = case (right z) of
                              Just rz -> reprintC cursor inp rz
                              Nothing -> return $ ("", cursor)
+
+-- End of GLORIOUS REFACTORING ALGORITHM
 
 
 {- Specifies how to do specific refactorings

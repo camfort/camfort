@@ -4,7 +4,7 @@ program simple
   unit :: le = m
   integer, unit(le) :: x
   real, unit(s) :: t
-  real :: v, s, y, fooz
+  real :: v, s, y, fooz  ! core variables
   logical :: check
   real :: foon
 
