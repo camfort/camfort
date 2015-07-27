@@ -1,5 +1,5 @@
-{-# LANGUAGE FlexibleInstances, UndecidableInstances, OverlappingInstances, ImplicitParams, MultiParamTypeClasses, FlexibleContexts #-}
-{-# LANGUAGE OverlappingInstances, KindSignatures, ScopedTypeVariables, DeriveGeneric, DeriveDataTypeable #-}
+{-# LANGUAGE FlexibleInstances, UndecidableInstances, ImplicitParams #-}
+{-# LANGUAGE MultiParamTypeClasses, FlexibleContexts, KindSignatures, ScopedTypeVariables, DeriveGeneric, DeriveDataTypeable #-}
 
 module Output where
 
@@ -27,10 +27,8 @@ import Data.Maybe
 import Debug.Trace
 import Control.Monad.Trans.State.Lazy
 import Text.Printf
---import Language.Haskell.Syntax (SrcLoc(..))
 
 -- Define new pretty printing version for HTML output
-
 data HTMLPP = HTMLPP
 instance PPVersion HTMLPP
 
@@ -76,7 +74,8 @@ outputHTML prog = unpack html
                          -- . (pack . (para (\p -> \ss -> showPara p ++ (Prelude.concat ss))))
                          . (transformBi t) $ prog
 
-{- Output routines specialised to the analysis. -}
+{- | Pretty printer for HTML, specialised to the analysis of CamFort, which mostly uses the default master
+     behaviour, but with a few special cases -}
                    
 instance PrintSlave Bool HTMLPP where
     printSlave = show
@@ -98,12 +97,6 @@ instance PrintSlave (Implicit p) HTMLPP where
 
 instance (Indentor (Decl p), PrintSlave (DataForm p) HTMLPP) => PrintSlave (Decl p) HTMLPP where
     printSlave = printMaster
-
-{-
-instance PrintIndSlave (Decl p) HTMLPP where
-    outputPrintSlave i t = "<div style=''>" ++ (outputAnn (rextract t) False i showt) ++  (annotationMark i t (printIndMaster i t)) ++ "</div>"
-                        where showt = prettyp (show (setCompactSrcLocs $ fmap (\x -> ()) t))x
--}
 
 instance PrintSlave (Type p) HTMLPP where
     printSlave = printMaster
@@ -162,8 +155,6 @@ showUse' (Use _ (n, renames) us _) = ("use "++n++", " ++
 
 
 instance (PrintIndSlave (Fortran p) HTMLPP, PrintSlave p HTMLPP, Indentor (Fortran p)) => PrintSlave (Fortran p) HTMLPP where
-                              
-
     printSlave (For p _ v e e' e'' f) = "do"++" "++printSlave v++" = "++printSlave e++", "++
                                    printSlave e'++", "++printSlave e''++"\n"++
                                    "<span style='color:#707d8f'>"++"{"++printSlave p++"}</span>\n" ++ 
@@ -196,7 +187,11 @@ instance PrintIndSlave (Fortran Annotation) HTMLPP where
     printIndSlave i t = "<div style=''>" ++ (outputAnn (rextract t) False i showt) ++  (annotationMark i t (printIndMaster i t)) ++ "</div>"
                           where showt = prettyp (show (setCompactSrcLocs $ fmap (\x -> ()) t))
                              
-
+{-
+instance PrintIndSlave (Decl p) HTMLPP where
+    outputPrintSlave i t = "<div style=''>" ++ (outputAnn (rextract t) False i showt) ++  (annotationMark i t (printIndMaster i t)) ++ "</div>"
+                        where showt = prettyp (show (setCompactSrcLocs $ fmap (\x -> ()) t))x
+-}
 
 countToColor n = colors !! (n `mod` (length colors)) --  printf "#%06x" ((256*256*256 - (n * 40)) :: Int)
 
