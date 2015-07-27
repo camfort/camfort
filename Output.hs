@@ -29,6 +29,11 @@ import Control.Monad.Trans.State.Lazy
 import Text.Printf
 --import Language.Haskell.Syntax (SrcLoc(..))
 
+-- Define new pretty printing version for HTML output
+
+data HTMLPP = HTMLPP
+instance PPVersion HTMLPP
+
 keyword = map pack
           ["end","subroutine","function","program","module","data", "common",
            "namelist", "external", "interface", "type", "include", "format", 
@@ -40,7 +45,7 @@ keyword = map pack
            "exit", "forall", "goto", "nullify", "inquire", "rewind", "stop", "where",
            "write", "rerun", "print", "read", "write", "implicit", "use"]
 
-outputHTML :: forall p . (Data p, Typeable p, OutputG p Alt2, OutputIndG (Fortran p) Alt2, Indentor (Decl p), Indentor (Fortran p)) => 
+outputHTML :: forall p . (Data p, Typeable p, PrintSlave p HTMLPP, PrintIndSlave (Fortran p) HTMLPP, Indentor (Decl p), Indentor (Fortran p)) => 
               Fortran.ProgUnit p -> String
 outputHTML prog = unpack html
                 where
@@ -57,7 +62,7 @@ outputHTML prog = unpack html
                   pre l = Text.concat [pack "<pre>", l, pack "</pre>"]
                   types = map pack ["real", "integer", "character", "type", "logical"]
 
-                  html = let ?variant = Alt2
+                  html = let ?variant = HTMLPP
                          in 
                            (Text.append (pack $ "<head><script type='text/javascript' src='../source.js'></script>"
                                              ++ "<link href='../source.css' type='text/css' rel='stylesheet' /></head>"))
@@ -65,7 +70,7 @@ outputHTML prog = unpack html
                          . (Text.concat . (map pre) . Text.lines)
                          . (\t -> foldl (toColor green) t types)
                          . (\t -> foldl (toColor purple) t keyword)
-                         . (pack . outputF)
+                         . (pack . printMaster)
                          -- . (pack . output) 
                          -- . (pack . paraBi (\p -> \ss -> (showPara p) ++ ss) "")
                          -- . (pack . (para (\p -> \ss -> showPara p ++ (Prelude.concat ss))))
@@ -73,80 +78,80 @@ outputHTML prog = unpack html
 
 {- Output routines specialised to the analysis. -}
                    
-instance OutputG Bool Alt2 where
-    outputG = show
+instance PrintSlave Bool HTMLPP where
+    printSlave = show
 
-instance OutputG SrcLoc Alt2 where
-    outputG _ = "" -- not sure if I want this to shown
+instance PrintSlave SrcLoc HTMLPP where
+    printSlave _ = "" -- not sure if I want this to shown
 
-instance (OutputIndG (Fortran p) Alt2, OutputG p Alt2, Indentor (Decl p), Indentor (Fortran p)) => OutputG (ProgUnit p) Alt2 where
-    outputG = outputF
+instance (PrintIndSlave (Fortran p) HTMLPP, PrintSlave p HTMLPP, Indentor (Decl p), Indentor (Fortran p)) => PrintSlave (ProgUnit p) HTMLPP where
+    printSlave = printMaster
 
-instance OutputG (DataForm p) Alt2 where
-    outputG = outputF
+instance PrintSlave (DataForm p) HTMLPP where
+    printSlave = printMaster
 
-instance (OutputG (DataForm p) Alt2) => OutputG (SubName p) Alt2 where
-    outputG = outputF
+instance (PrintSlave (DataForm p) HTMLPP) => PrintSlave (SubName p) HTMLPP where
+    printSlave = printMaster
 
-instance OutputG (Implicit p) Alt2 where
-    outputG = outputF
+instance PrintSlave (Implicit p) HTMLPP where
+    printSlave = printMaster
 
-instance (Indentor (Decl p), OutputG (DataForm p) Alt2) => OutputG (Decl p) Alt2 where
-    outputG = outputF
+instance (Indentor (Decl p), PrintSlave (DataForm p) HTMLPP) => PrintSlave (Decl p) HTMLPP where
+    printSlave = printMaster
 
 {-
-instance OutputIndG (Decl p) Alt2 where
-    outputIndG i t = "<div style=''>" ++ (outputAnn (rextract t) False i showt) ++  (annotationMark i t (outputIndF i t)) ++ "</div>"
+instance PrintIndSlave (Decl p) HTMLPP where
+    outputPrintSlave i t = "<div style=''>" ++ (outputAnn (rextract t) False i showt) ++  (annotationMark i t (printIndMaster i t)) ++ "</div>"
                         where showt = prettyp (show (setCompactSrcLocs $ fmap (\x -> ()) t))x
 -}
 
-instance OutputG (Type p) Alt2 where
-    outputG = outputF
+instance PrintSlave (Type p) HTMLPP where
+    printSlave = printMaster
 
-instance OutputG (VarName p) Alt2 where
-    outputG = outputF
+instance PrintSlave (VarName p) HTMLPP where
+    printSlave = printMaster
 
-instance (OutputG (DataForm p) Alt2) => OutputG (Expr p) Alt2 where
-    outputG = outputF
+instance (PrintSlave (DataForm p) HTMLPP) => PrintSlave (Expr p) HTMLPP where
+    printSlave = printMaster
 
-instance OutputG (UnaryOp p) Alt2 where
-    outputG = outputF
+instance PrintSlave (UnaryOp p) HTMLPP where
+    printSlave = printMaster
 
-instance OutputG (BinOp p) Alt2 where
-    outputG = outputF
+instance PrintSlave (BinOp p) HTMLPP where
+    printSlave = printMaster
 
-instance OutputG (ArgList p) Alt2 where
-    outputG = outputF
+instance PrintSlave (ArgList p) HTMLPP where
+    printSlave = printMaster
 
-instance OutputG (BaseType p) Alt2 where
-    outputG = outputF
+instance PrintSlave (BaseType p) HTMLPP where
+    printSlave = printMaster
 
-instance (Indentor (Decl p)) => OutputG (InterfaceSpec p) Alt2 where
-    outputG = outputF
+instance (Indentor (Decl p)) => PrintSlave (InterfaceSpec p) HTMLPP where
+    printSlave = printMaster
 
-instance OutputG (Arg p) Alt2 where
-    outputG = outputF
+instance PrintSlave (Arg p) HTMLPP where
+    printSlave = printMaster
 
-instance OutputG (ArgName p) Alt2 where
-    outputG = outputF
+instance PrintSlave (ArgName p) HTMLPP where
+    printSlave = printMaster
 
-instance OutputG (GSpec p) Alt2 where
-    outputG = outputF
+instance PrintSlave (GSpec p) HTMLPP where
+    printSlave = printMaster
 
-instance OutputG (Attr p) Alt2 where
-    outputG = outputF
+instance PrintSlave (Attr p) HTMLPP where
+    printSlave = printMaster
 
-instance OutputG (Fraction p) Alt2 where
-    outputG = outputF
+instance PrintSlave (Fraction p) HTMLPP where
+    printSlave = printMaster
 
-instance OutputG (MeasureUnitSpec p) Alt2 where
-    outputG = outputF
+instance PrintSlave (MeasureUnitSpec p) HTMLPP where
+    printSlave = printMaster
 
-instance (OutputG (DataForm p) Alt2, OutputIndG (Fortran p) Alt2, OutputG p Alt2, Indentor (Fortran p), Indentor (Decl p)) => OutputG (Block p) Alt2 where
-    outputG = outputF
+instance (PrintSlave (DataForm p) HTMLPP, PrintIndSlave (Fortran p) HTMLPP, PrintSlave p HTMLPP, Indentor (Fortran p), Indentor (Decl p)) => PrintSlave (Block p) HTMLPP where
+    printSlave = printMaster
 
-instance OutputG (Uses p) Alt2 where
-    outputG u = showUse' u
+instance PrintSlave (Uses p) HTMLPP where
+    printSlave u = showUse' u
 
 showUse' :: Uses p -> String
 showUse' (UseNil _) = ""
@@ -156,17 +161,17 @@ showUse' (Use _ (n, renames) us _) = ("use "++n++", " ++
                                   "\n") ++ (showUse' us)
 
 
-instance (OutputIndG (Fortran p) Alt2, OutputG p Alt2, Indentor (Fortran p)) => OutputG (Fortran p) Alt2 where
+instance (PrintIndSlave (Fortran p) HTMLPP, PrintSlave p HTMLPP, Indentor (Fortran p)) => PrintSlave (Fortran p) HTMLPP where
                               
 
-    outputG (For p _ v e e' e'' f) = "do"++" "++outputG v++" = "++outputG e++", "++
-                                   outputG e'++", "++outputG e''++"\n"++
-                                   "<span style='color:#707d8f'>"++"{"++outputG p++"}</span>\n" ++ 
-                                   (outputIndG 1 f)++"\n"++(ind 1)++"end do"
-    outputG t = outputF t
+    printSlave (For p _ v e e' e'' f) = "do"++" "++printSlave v++" = "++printSlave e++", "++
+                                   printSlave e'++", "++printSlave e''++"\n"++
+                                   "<span style='color:#707d8f'>"++"{"++printSlave p++"}</span>\n" ++ 
+                                   (printIndSlave 1 f)++"\n"++(ind 1)++"end do"
+    printSlave t = printMaster t
 
-instance OutputG (Spec p) Alt2 where
-    outputG = outputF
+instance PrintSlave (Spec p) HTMLPP where
+    printSlave = printMaster
 
 instance Indentor (Fortran Bool) where
     indR t i = if (tag t) then
@@ -174,22 +179,22 @@ instance Indentor (Fortran Bool) where
                    in Prelude.take c (repeat ' ')
                else ind i
 
-instance OutputIndG (Fortran A1) Alt2 where
-    outputIndG = outputIndF
+instance PrintIndSlave (Fortran A1) HTMLPP where
+    printIndSlave = printIndMaster
 
-instance OutputIndG (Fortran Annotation) Alt2 where
+instance PrintIndSlave (Fortran Annotation) HTMLPP where
 
-    outputIndG i t@(For p _ v e e' e'' f) = (outputAnn p False i (show t)) ++ 
+    printIndSlave i t@(For p _ v e e' e'' f) = (outputAnn p False i (show t)) ++ 
                                           annotationMark i t
-                                          ((ind i) ++ "do"++" "++outputG v++" = "++
-                                           outputG e++", "++
-                                           outputG e'++", "++outputG e''++"\n"++
-                                           (outputIndG (i+1) f)++"\n"++(ind i)++"end do")
+                                          ((ind i) ++ "do"++" "++printSlave v++" = "++
+                                           printSlave e++", "++
+                                           printSlave e'++", "++printSlave e''++"\n"++
+                                           (printIndSlave (i+1) f)++"\n"++(ind i)++"end do")
 
                                          
-    -- outputIndG i t@(FSeq p f1 f2) =  (outputAnn p False i) ++ outputIndG i f1 ++ outputIndG i f2
-    outputIndG i t = "<div style=''>" ++ (outputAnn (rextract t) False i showt) ++  (annotationMark i t (outputIndF i t)) ++ "</div>"
-                        where showt = prettyp (show (setCompactSrcLocs $ fmap (\x -> ()) t))
+    -- printIndSlave i t@(FSeq p f1 f2) =  (outputAnn p False i) ++ printIndSlave i f1 ++ printIndSlave i f2
+    printIndSlave i t = "<div style=''>" ++ (outputAnn (rextract t) False i showt) ++  (annotationMark i t (printIndMaster i t)) ++ "</div>"
+                          where showt = prettyp (show (setCompactSrcLocs $ fmap (\x -> ()) t))
                              
 
 
@@ -225,8 +230,8 @@ annotationMark i t x = "<div class='clickable' onClick='toggle(" ++
 
 row xs = "<tr>" ++ (concatMap (\x -> "<td>" ++ x ++ "</td>") xs) ++ "</tr>"
 
-instance OutputG Annotation Alt2 where
-    outputG t = outputAnn t False 0 (show t)
+instance PrintSlave Annotation HTMLPP where
+    printSlave t = outputAnn t False 0 (show t)
 
 breakUp xs = breakup' xs 0 False
               where breakup' [] _ _ = []
@@ -255,8 +260,8 @@ outputAnn t visible i astString =
          where
            listToPair x       = "(" ++ listToPair' x ++ ")"
            listToPair' []     = ""
-           listToPair' [x]    = outputF x
-           listToPair' (x:xs) = outputF x ++ ", " ++ listToPair' xs
+           listToPair' [x]    = printMaster x
+           listToPair' (x:xs) = printMaster x ++ ", " ++ listToPair' xs
 
            showExps []           = ""
            showExps [(v, es)]    = "[" ++ v ++ ": " ++ (showList $ map listToPair es) ++ "]"
@@ -298,7 +303,7 @@ instance Tagged p => Indentor (p Annotation) where
 
 {-| -}
 reprint :: SourceText -> Filename -> Program Annotation -> String
-reprint ""    f p = let ?variant = Alt1 in foldl (\a b -> a ++ "\n" ++ outputF b) "" p 
+reprint ""    f p = let ?variant = DefaultPP in foldl (\a b -> a ++ "\n" ++ printMaster b) "" p 
 reprint input f p = let input' = Prelude.lines input
                         start = SrcLoc f 1 0
                         end = SrcLoc f (Prelude.length input') (1 + (Prelude.length $ Prelude.last input'))
@@ -348,7 +353,7 @@ refactorFortran inp cursor e =  return $
        if (pRefactored $ tag e) then 
           let (lb, ub) = srcSpan e
               (p0, _) = takeBounds (cursor, lb) inp 
-              outE = let ?variant = Alt1 in outputF e
+              outE = pprint e
               lnl = case e of (NullStmt _ _) -> (if ((p0 /= []) && (Prelude.last p0 /= '\n')) then "\n" else "")
                               _              -> ""
               lnl2 = if ((p0 /= []) && (Prelude.last p0 /= '\n')) then "\n" else ""
@@ -359,11 +364,10 @@ refactorFortran inp cursor e =  return $
 
 refactorDecl :: Monad m => [String] -> SrcLoc -> Decl Annotation -> StateT Int m (String, SrcLoc, Bool)
 refactorDecl inp cursor d = 
- let ?variant = Alt1 in
     if (pRefactored $ tag d) then
        let (lb, ub) = srcSpan d
            (p0, _) = takeBounds (cursor, lb) inp
-           textOut = p0 ++ (outputF d)
+           textOut = p0 ++ (pprint d)
        in do textOut' <- -- The following compensates new lines with removed lines
                          case d of 
                            (NullDecl _ _) -> 
@@ -381,18 +385,17 @@ refactorDecl inp cursor d =
 
 refactorArgName :: Monad m => [String] -> SrcLoc -> ArgName Annotation -> m (String, SrcLoc, Bool)
 refactorArgName inp cursor a = return $ 
-    let ?variant = Alt1 in
         case (refactored $ tag a) of
             Just lb -> let (p0, _) = takeBounds (cursor, lb) inp
-                       in (p0 ++ outputF a, lb, True)
+                       in (p0 ++ pprint a, lb, True)
             Nothing -> ("", cursor, False)
 
 refactorUses :: Monad m => [String] -> SrcLoc -> Uses Annotation -> StateT Int m (String, SrcLoc, Bool)
 refactorUses inp cursor u = 
-    let ?variant = Alt2 in
+    let ?variant = HTMLPP in
         case (refactored $ tag u) of
            Just lb -> let (p0, _) = takeBounds (cursor, lb) inp
-                          syntax  = outputG u
+                          syntax  = printSlave u
                        in do added <- get
                              if (newNode $ tag u) then put (added + (countLines syntax))
                                                   else return ()
@@ -435,13 +438,13 @@ OLD (FLAKEY) ALGORITHM
 
 
  doHole :: (Show (d A1)) => SrcLoc -> SrcLoc -> [String] -> Zipper (d A1) -> (String, SrcLoc)
- doHole cursor end inp z = let ?variant = Alt2 in
+ doHole cursor end inp z = let ?variant = HTMLPP in
                              case (getHole z)::(Maybe (Fortran A1)) of
                            Just e  -> let flag = tag e
                                           (lb, ub) = srcSpan e
                                           (p1, rest1) = takeBounds (cursor, lb) inp
-                                      in  if flag then let ?variant = Alt2
-                                                       in (p1 ++ outputF e, ub)
+                                      in  if flag then let ?variant = HTMLPP
+                                                       in (p1 ++ printMaster e, ub)
                                           else case (down' z) of
                                                     Just cz -> (p1 ++ reprintA lb ub rest1 cz, ub)
                                                     Nothing -> let (p2, _) = takeBounds (lb, ub) rest1

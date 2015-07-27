@@ -153,7 +153,7 @@ collectCommons fname pname b =
          unitSrcLoc = SrcLoc (name ++ ".f90") 0 0
          decls = undefined
          mod = Module () (unitSrcLoc, unitSrcLoc) (SubName () name) [] ImplicitNode decls []
-     in let ?variant = Alt1 in writeFile (d ++ "/" ++ name ++ ".f90") (outputF mod)
+     in let ?variant = DefaultPP in writeFile (d ++ "/" ++ name ++ ".f90") (outputF mod)
 
  
  commonToTypeDefs' :: String -> (String, [Program Annotation]) -> [Decls]

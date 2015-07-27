@@ -495,7 +495,7 @@ addInterproceduralConstraints x =
 
 
 inferLiteral e = do uv@(UnitVariable uvn) <- anyUnits (Literal (?assumeLiterals /= Mixed))
-                    debugInfo << (uvn, (srcSpan e, let ?variant = Alt1 in outputF e))
+                    debugInfo << (uvn, (srcSpan e, pprint e))
                     return uv
 
 
@@ -544,7 +544,7 @@ inferExprUnits ve@(Var _ _ names) =
                                           Just fun -> fun v 
                                           Nothing  -> return () -- error $ "I don't know the intrinsic " ++ v -- return ()
                                        uv@(UnitVariable uvn) <- anyUnits Temporary
-                                       debugInfo << (uvn, (srcSpan ve , let ?variant = Alt1 in outputF ve))
+                                       debugInfo << (uvn, (srcSpan ve, pprint ve))
                                        uvs <- inferArgUnits
                                        let uvs' = justArgUnits args uvs
                                        calls << (v, (Just uv, uvs'))
@@ -584,7 +584,7 @@ inferExprUnits e@(Bin _ _ op e1 e2) = do uv1 <- inferExprUnits e1
                                                                LogicOp -> mustEqual True uv1 uv2
                                                                RelOp   -> do mustEqual True uv1 uv2
                                                                              return $ UnitVariable 1
-                                         debugInfo << (n, (srcSpan e, let ?variant = Alt1 in outputF e))
+                                         debugInfo << (n, (srcSpan e, pprint e))
                                          return (UnitVariable n)
 inferExprUnits (Unary _ _ _ e) = inferExprUnits e
 inferExprUnits (CallExpr _ _ e1 (ArgList _ e2)) = do uv <- anyUnits Temporary
@@ -848,12 +848,11 @@ anyUnits category =
 {- | An attempt at getting some useful user information. Needs position information -}
 errorMessage :: (?debug :: Bool) => Row -> UnitConstant -> [Rational] -> State UnitEnv String
 errorMessage row unit vars = 
- let ?variant = Alt1 in
  let ?num = 0 in 
     do uvarEnv <- gets unitVarEnv
        debugs <- gets debugInfo
        u <- makeUnitSpec unit
-       let unitStr = outputF u
+       let unitStr = pprint u
        let varCols = map (+1) (findIndices (\n -> n /= 0) vars)
        if varCols == [] then
            case unit of
@@ -863,8 +862,8 @@ errorMessage row unit vars =
                         uL <- makeUnitSpec (Unitful [head xs])
                         success =: False
                         return $
-                           let unitStrL = outputF uL
-                               unitStrR = outputF uR
+                           let unitStrL = pprint uL
+                               unitStrR = pprint uR
                                msg = "Conflict since " ++ unitStrL ++ " != " ++ unitStrR
 
                                getConflict (n, 0)      = ""
@@ -880,7 +879,7 @@ errorMessage row unit vars =
              Unitful xs | length xs == 1 ->                                
                           do let xs' = map (\(v, r) -> (v, r * (-1))) xs
                              uL <- makeUnitSpec (Unitful xs')
-                             let unitStrL = outputF uL
+                             let unitStrL = pprint uL
                              ifDebug debugGaussian
                              return $ "Conflict since " ++ unitStrL ++ " != 1"
              _ -> do debugGaussian
@@ -1422,16 +1421,16 @@ updateAdded k s = do (n, xs) <- gets evUnitsAdded
 makeUnitSpec :: (?num :: Int) => UnitConstant -> State UnitEnv (MeasureUnitSpec Annotation)
 makeUnitSpec (UnitlessC r) = 
     do let u = UnitProduct unitAnnotation [("1", (FractionConst unitAnnotation (show $ numerator r) (show $ denominator r)))] --hm!
-       updateAdded ?num (let ?variant = Alt1 in outputF u)
+       updateAdded ?num (pprint u)
        return $ u
 
 makeUnitSpec (Unitful []) = return $ UnitNone unitAnnotation
 makeUnitSpec (Unitful units)
   | null neg = let u = UnitProduct unitAnnotation $ formatUnits pos
-               in do updateAdded ?num (let ?variant = Alt1 in outputF u)
+               in do updateAdded ?num (pprint u)
                      return u
   | otherwise = let u = UnitQuotient unitAnnotation (formatUnits pos) (formatUnits neg)
-                in do updateAdded ?num (let ?variant = Alt1 in outputF u)
+                in do updateAdded ?num (pprint u)
                       return u
   where pos = filter (\(unit, r) -> r > 0) units
         neg = [(unit, -r) | (unit, r) <- units, r < 0]

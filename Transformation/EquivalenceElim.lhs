@@ -66,8 +66,8 @@
 
 >              -- Reporting
 >              (l, c) = srcLineCol s1
->              reportF (e', i) = ?fname ++ show (l + i, c) ++ ": addded copy: " ++ (outputF e') ++ " due to refactored equivalence\n"
->              report n = let ?variant = Alt1 in concatMap reportF (zip eqs'' [n..(n + length eqs'')])
+>              reportF (e', i) = ?fname ++ show (l + i, c) ++ ": addded copy: " ++ (pprint e') ++ " due to refactored equivalence\n"
+>              report n = concatMap reportF (zip eqs'' [n..(n + length eqs'')])
 
 >          in do -- Update refactoring state
 >                (equivs, n, r) <- get

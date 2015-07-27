@@ -18,7 +18,7 @@
 
 > instance Show (AccessP ()) where
 >     show (VarA s) = s
->     show (ArrayA v es) = let ?variant = Alt1 in v ++ "(" ++ (showList (map outputF es)) ++ ")"
+>     show (ArrayA v es) = v ++ "(" ++ (showList (map pprint es)) ++ ")"
 >                            where showList []  = ""
 >                                  showList [x] = x
 >                                  showList (x:xs) = x ++ ", " ++ showList xs

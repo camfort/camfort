@@ -284,9 +284,8 @@ coherentCommonsP (f1, (p1, (n1, vtys1))) (f2, (p2, (n2, vtys2))) =
               coherent ((var1, ty1):xs) ((var2, ty2):ys) 
                       | af ty1 == af ty2 = let (r', c) = coherent xs ys
                                            in (r', c && True)
-                      | otherwise = let ?variant = Alt1 in
-                                    let r = (var1 ++ ":" ++ (outputF ty1) ++ "(" ++ (show $ af ty1) ++ ")" ++ " differs from " ++ 
-                                             var2 ++ ":" ++ (outputF ty2) ++ "(" ++ (show $ af ty2) ++ ")" ++ "\n")
+                      | otherwise = let r = (var1 ++ ":" ++ (pprint ty1) ++ "(" ++ (show $ af ty1) ++ ")" ++ " differs from " ++ 
+                                             var2 ++ ":" ++ (pprint ty2) ++ "(" ++ (show $ af ty2) ++ ")" ++ "\n")
                                         (r', _) = coherent xs ys
                                     in (r ++ r', False)
               coherent _ _ = ("Common blocks of different field lengths", False) -- Doesn't say which is longer
