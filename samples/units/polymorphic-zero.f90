@@ -13,6 +13,8 @@ program foo
 
   contains
 
+
+  ! We want this to fine: 0 is polymorphic.
   real function abs(x)
     real x
     if (x < 0) then 
@@ -22,6 +24,7 @@ program foo
     endif 
  end function
 
+ ! This should not be well-typed. 
  real function bad_abs(x)
     real x
     if (x < 1) then 
