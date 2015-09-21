@@ -1,0 +1,22 @@
+program simple
+  implicit none
+
+  real :: x ! @unit m
+  real :: y 
+  
+  real :: a ! @unit q
+  real :: b
+
+  y = id(x)
+  b = id(a)
+
+  contains 
+  
+  ! @unit 'a -> 'a
+  real function id(y) 
+    real y
+    id = y
+  end function
+
+    
+end program
