@@ -1,4 +1,5 @@
-! Test via:
+! Run (in the top-directory):
+!
 !   ./camfort units samples/units/poly-bug.f90 samples/unitso 
 
 program foo 

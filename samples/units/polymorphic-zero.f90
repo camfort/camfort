@@ -1,3 +1,8 @@
+! Run (in the top-directory): 
+! 
+!   ./camfort units samples/units/polymorphic_zero.f90 samples/unitso 
+
+
 program foo 
   implicit none
   
