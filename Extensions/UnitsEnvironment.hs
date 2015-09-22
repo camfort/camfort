@@ -17,7 +17,12 @@ type EqualityConstrained = Bool
 data Solver = LAPACK | Custom deriving (Show, Read, Eq)
 data AssumeLiterals = Poly | Unitless | Mixed deriving (Show, Read, Eq)
 
+{- Represents a constant unit expression (i.e. one without unit variables) for the RHSs of the Gaussian matrix.
+    e.g. Unitful [("a", 2/3), ("b",2)] represents the linear term  2/3 log a + 2 log b
+         UnitlessC marks unitless i.e., 1
+-}
 data UnitConstant = Unitful [(MeasureUnit, Rational)] | UnitlessC Rational deriving (Eq, Show)
+
 
 newtype UnitVariable = UnitVariable Col deriving (Eq, Show)
 data UnitVarCategory = Literal EqualityConstrained | Temporary | Variable | Argument | Magic deriving (Eq, Show)
