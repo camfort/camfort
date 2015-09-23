@@ -119,7 +119,7 @@ instance Fractional UnitConstant where
   (UnitlessC n1) / (UnitlessC n2) = UnitlessC (n1 / n2)
   fromRational = UnitlessC . fromRational
 
-data Consistency a = Ok a | Bad a Int (UnitConstant, [Rational]) | BadL a deriving Show
+data Consistency a = Ok a | Bad a Int (UnitConstant, [Rational])
 
 efmap :: (a -> a) -> Consistency a -> Consistency a
 efmap f (Ok x)      = Ok (f x)

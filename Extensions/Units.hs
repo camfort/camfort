@@ -914,10 +914,6 @@ solveSystemM adjective =
                                return False
                         else
                             return False
-       BadL system' -> do report <<++ (adjective ++ " units of measure")
-                          linearSystem =: system'
-                          ifDebug debugGaussian
-                          return False
 
 checkUnderdeterminedM :: State UnitEnv ()
 checkUnderdeterminedM = do ucats <- gets unitVarCats
