@@ -78,3 +78,15 @@ switchScaleElems :: Num a => Int -> Int -> a -> [a] -> [a]
 switchScaleElems i j factor list = a ++ factor * b : c
   where (lj, b:rj) = splitAt (j - 1) list
         (a, _:c) = splitAt (i - 1) (lj ++ list !! (i - 1) : rj)
+
+--------------------------------------------------
+-- Top-level custom solver based on HMatrix
+solveSystemH :: LinearSystem -> Consistency LinearSystem
+solveSystemH system@(m,v) = D.trace ("Input:\n" ++ show m' ++ "\nv=" ++ show v) $
+                            Ok (f sys')
+  where
+    (m', units) = convertToHMatrix system
+    m2 = rref m'
+    m3 = takeRows (rank m2) m2
+    sys' = convertFromHMatrix (m3, units)
+    f sys@(m, v) = D.trace ("Ok:\n" ++ dispf 1 m3 ++ "\nv=" ++ show v) $ sys
