@@ -1,5 +1,7 @@
 *.o
+*.p_o
 *.hi
+*~
 /Language/Fortran/Lexer.hs
 /Language/Fortran/Parser.hs
 /camfort
