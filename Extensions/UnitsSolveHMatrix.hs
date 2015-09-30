@@ -80,11 +80,12 @@ convertToHMatrix (a, ucs) = (fromBlocks [[a', unitA]], units)
                    Unitful us -> flip map units (toDouble . fromMaybe 0 . flip lookup us)
                    _          -> map (const 0) units
 
-convertFromHMatrix :: Enum a => (Matrix Double, [MeasureUnit]) -> (Old.Matrix a, [UnitConstant])
-convertFromHMatrix (a, units) = (a', ucs)
+convertFromHMatrix :: (Enum a) => (Matrix Double, [MeasureUnit]) -> (Old.Matrix a, [UnitConstant])
+convertFromHMatrix (a, units) = (a', ucs')
   where
     ulen  = length units
     a'    = convertHMatrixToMatrix $ takeColumns (cols a - ulen) a
     unitA = dropColumns (cols a - ulen) a
     ucs   :: [UnitConstant]
     ucs   = flip map (toLists unitA) (Unitful . filter ((/= 0) . snd) . zip units . map (toEnum . fromEnum))
+    ucs'  = if null ucs then replicate (rows a) (Unitful []) else ucs
