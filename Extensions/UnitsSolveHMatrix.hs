@@ -6,6 +6,8 @@ import Data.Ratio
 import Debug.Trace (trace)
 import Numeric.LinearAlgebra
 import Data.Packed.Matrix (fromBlocks)
+import Data.Packed.ST
+import Control.Monad.ST
 import qualified Data.Matrix as Old (nrows, ncols, toList, Matrix, fromList)
 import Foreign.Storable (Storable)
 import Data.List (findIndex, nub, sort)
@@ -14,17 +16,17 @@ import Extensions.UnitsEnvironment (LinearSystem, UnitConstant(..))
 import Language.Fortran (MeasureUnit)
 
 -- | Reduced Row Echelon Form
-rref :: (Eq a, Fractional a, Product a) => Matrix a -> Matrix a
+rref :: Matrix Double -> Matrix Double
 rref a = snd $ rrefMatrices' a 0 0 []
 
 -- | List of matrices that when multiplied transform input into
 -- Reduced Row Echelon Form
-rrefMatrices :: (Eq a, Fractional a, Product a) => Matrix a -> [Matrix a]
+rrefMatrices :: Matrix Double -> [Matrix Double]
 rrefMatrices a = fst $ rrefMatrices' a 0 0 []
 
 -- | Single matrix that transforms input into Reduced Row Echelon form
 -- when multiplied to the original.
-rrefMatrix :: (Eq t, Fractional t, Product t) => Matrix t -> Matrix t
+rrefMatrix :: Matrix Double -> Matrix Double
 rrefMatrix a = foldr (<>) (ident (rows a)) . fst $ rrefMatrices' a 0 0 []
 
 -- worker function
@@ -43,7 +45,8 @@ rrefMatrices' a j k mats
     m     = cols a
     below = concat . toLists $ subMatrix (j - k, j) (n - (j - k), 1) a
     a'    = foldr (<>) a ms
-    ms    = adds ++ (if a @@> (j - k, j) /= 1 then [elemRowMult n (j - k) (recip (a @@> (j - k, j)))] else [])
+    ms    = adds ++ mult
+    mult  = if a @@> (j - k, j) /= 1 then [elemRowMult n (j - k) (recip (a @@> (j - k, j)))] else []
     adds  = [0..(n - 1)] >>= f
     f i | i == j - k        = []
         | a @@> (i, j) == 0 = []
@@ -54,10 +57,24 @@ elemRowMult n i k
   | 0 <= i && i < n = diag (fromList (replicate i 1.0 ++ [k] ++ replicate (n - i - 1) 1.0))
   | otherwise       = undefined
 
+elemRowAdd :: Int -> Int -> Int -> Double -> Matrix Double
 elemRowAdd n i j k
   | i < 0 || i >= n = undefined
   | j < 0 || j >= n = undefined
-  | otherwise       = flip mapMatrixWithIndex (ident n) $ \ p x -> if (i, j) == p then k else x
+  | otherwise       = runSTMatrix $ do
+      m <- newMatrix 0 n n
+      sequence [ writeMatrix m i' i' 1 | i' <- [0 .. (n - 1)] ]
+      writeMatrix m i j k
+      return m
+
+elemRowAdd_spec n i j k
+  | i < 0 || i >= n = undefined
+  | j < 0 || j >= n = undefined
+  | otherwise       = buildMatrix n n f
+  where
+    f (i', j') | i == i' && j == j' = k
+               | i' == j'           = 1
+               | otherwise          = 0
 
 elemRowSwap n i j
   | i == j          = ident n
