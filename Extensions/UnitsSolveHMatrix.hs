@@ -32,25 +32,47 @@ rrefMatrix a = foldr (<>) (ident (rows a)) . fst $ rrefMatrices' a 0 0 []
 -- worker function
 -- invariant: the matrix a is in rref except within the submatrix (j-k,j) to (n,n)
 rrefMatrices' a j k mats
+  -- Base cases:
   | j - k == n            = (mats, a)
   | j     == m            = (mats, a)
+
+  -- When we haven't yet found the first non-zero number in the row, but we really need one:
   | a @@> (j - k, j) == 0 = case findIndex (/= 0) below of
-    Nothing -> rrefMatrices' a (j + 1) (k + 1) mats  -- column is all 0s below current row
-    Just i' -> rrefMatrices' (swapMat <> a) j k (swapMat:mats) -- swap and try again
+    -- this column is all 0s below current row, must move onto the next column
+    Nothing -> rrefMatrices' a (j + 1) (k + 1) mats
+    -- we've found a row that has a non-zero element that can be swapped into this row
+    Just i' -> rrefMatrices' (swapMat <> a) j k (swapMat:mats)
       where i       = j - k + i'
             swapMat = elemRowSwap n i (j - k)
-  | otherwise             = rrefMatrices' a' (j + 1) k (ms ++ mats)
+
+  -- We have found a non-zero cell at (j - k, j), so transform it into
+  -- a 1 if needed using elemRowMult, and then clear out any lingering
+  -- non-zero values that might appear in the same column, using
+  -- elemRowAdd:
+  | otherwise             = rrefMatrices' a2 (j + 1) k mats2
   where
     n     = rows a
     m     = cols a
-    below = concat . toLists $ subMatrix (j - k, j) (n - (j - k), 1) a
-    a'    = foldr (<>) a ms
-    ms    = adds ++ mult
-    mult  = if a @@> (j - k, j) /= 1 then [elemRowMult n (j - k) (recip (a @@> (j - k, j)))] else []
-    adds  = [0..(n - 1)] >>= f
-    f i | i == j - k        = []
-        | a @@> (i, j) == 0 = []
-        | otherwise         = [elemRowAdd n i (j - k) (- (a @@> (i, j)))]
+    below = getColumnBelow a (j - k, j)
+
+    -- scale the row if the cell is not already equal to 1
+    erm    = elemRowMult n (j - k) (recip (a @@> (j - k, j)))
+    (a1, mats1) = if a @@> (j - k, j) /= 1 then
+                    (erm <> a, erm:mats)
+                  else (a, mats)
+
+    -- locate any non-zero values in the same column as (j - k, j) and cancel them out
+    findAdds i m ms
+      | i >= n            = (m, ms)
+      | i == j - k        = findAdds (i + 1) m ms
+      | a @@> (i, j) == 0 = findAdds (i + 1) m ms
+      | otherwise         = findAdds (i + 1) (era <> m) (era:ms)
+      where
+        era = elemRowAdd n i (j - k) (- (a @@> (i, j)))
+    (a2, mats2) = findAdds 0 a1 mats1
+
+getColumnBelow a (i, j) = concat . toLists $ subMatrix (i, j) (n - i, 1) a
+  where n = rows a
 
 -- 'Elementary row operation' matrices
 elemRowMult n i k
