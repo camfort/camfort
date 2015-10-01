@@ -12,13 +12,14 @@ import qualified Debug.Trace as D
 
 import Language.Fortran
 import Extensions.UnitsEnvironment
+import Extensions.UnitsSolveHMatrix
 
 -- Top-level, select the solver
 solveSystem :: (?solver :: Solver) => LinearSystem -> Consistency LinearSystem
 solveSystem = case ?solver of
 --                  LAPACK -> solveSystemL
-                  Custom -> solveSystemC
-                  
+--                  Custom -> solveSystemC
+                  Custom -> solveSystemH
 --------------------------------------------------
 -- CUSTOM SOLVER
 --------------------------------------------------
