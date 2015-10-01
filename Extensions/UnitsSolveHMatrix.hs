@@ -61,16 +61,26 @@ rrefMatrices' a j k mats
                     (erm <> a, erm:mats)
                   else (a, mats)
 
-    -- locate any non-zero values in the same column as (j - k, j) and cancel them out
-    findAdds i m ms
-      | i >= n            = (m, ms)
-      | i == j - k        = findAdds (i + 1) m ms
-      | a @@> (i, j) == 0 = findAdds (i + 1) m ms
-      | otherwise         = findAdds (i + 1) (era <> m) (era:ms)
+    -- Locate any non-zero values in the same column as (j - k, j) and
+    -- cancel them out. Optimisation: instead of constructing a
+    -- separate elemRowAdd matrix for each cancellation that are then
+    -- multiplied together, simply build a single matrix that cancels
+    -- all of them out at the same time, using the ST Monad.
+    findAdds i m ms = (new <> m, new:ms)
       where
-        era = elemRowAdd n i (j - k) (- (a @@> (i, j)))
+        new = runSTMatrix $ do
+          new <- newMatrix 0 n n
+          sequence [ writeMatrix new i' i' 1 | i' <- [0 .. (n - 1)] ]
+          let f i | i >= n            = return ()
+                  | i == j - k        = f (i + 1)
+                  | a @@> (i, j) == 0 = f (i + 1)
+                  | otherwise         = writeMatrix new i (j - k) (- (a @@> (i, j)))
+                                        >> f (i + 1)
+          f 0
+          return new
     (a2, mats2) = findAdds 0 a1 mats1
 
+-- Get a list of values that occur below (i, j) in the matrix a.
 getColumnBelow a (i, j) = concat . toLists $ subMatrix (i, j) (n - i, 1) a
   where n = rows a
 
