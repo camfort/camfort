@@ -17,6 +17,9 @@ source-repository head
 library
   hs-source-dirs:       .
 
+
+--  ghc-options:          -package mtl-2.1.3.1
+
   build-tools:          alex, happy
 
   exposed-modules:      Analysis.Annotations
@@ -51,6 +54,7 @@ library
                         syz >= 0.2,
                         syb >= 0.4,
                         matrix >=0.2.2,
+                        hmatrix >= 0.15,
                         mtl >= 2.1,
                         text >= 0.11.2.3,
                         array >= 0.4,

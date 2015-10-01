@@ -1,24 +1,33 @@
 module Extensions.UnitsSolveHMatrix
   ( rref, rrefMatrices, convertToHMatrix, convertFromHMatrix, dispf, Units, lu, rank, takeRows )
 where
+
+import Data.Ratio
+import Debug.Trace (trace)
 import Numeric.LinearAlgebra
 import Data.Packed.Matrix (fromBlocks)
 import qualified Data.Matrix as Old (nrows, ncols, toList, Matrix, fromList)
 import Foreign.Storable (Storable)
-import Data.List (findIndex, nub)
+import Data.List (findIndex, nub, sort)
 import Data.Maybe (fromMaybe)
 import Extensions.UnitsEnvironment (LinearSystem, UnitConstant(..))
 import Language.Fortran (MeasureUnit)
 
+-- | Reduced Row Echelon Form
 rref :: (Eq a, Fractional a, Product a) => Matrix a -> Matrix a
 rref a = snd $ rrefMatrices' a 0 0 []
 
+-- | List of matrices that when multiplied transform input into
+-- Reduced Row Echelon Form
 rrefMatrices :: (Eq a, Fractional a, Product a) => Matrix a -> [Matrix a]
 rrefMatrices a = fst $ rrefMatrices' a 0 0 []
 
+-- | Single matrix that transforms input into Reduced Row Echelon form
+-- when multiplied to the original.
 rrefMatrix :: (Eq t, Fractional t, Product t) => Matrix t -> Matrix t
 rrefMatrix a = foldr (<>) (ident (rows a)) . fst $ rrefMatrices' a 0 0 []
 
+-- worker function
 -- invariant: the matrix a is in rref except within the submatrix (j-k,j) to (n,n)
 rrefMatrices' a j k mats
   | j - k == n            = (mats, a)
@@ -40,6 +49,7 @@ rrefMatrices' a j k mats
         | a @@> (i, j) == 0 = []
         | otherwise         = [elemRowAdd n i (j - k) (- (a @@> (i, j)))]
 
+-- 'Elementary row operation' matrices
 elemRowMult n i k
   | 0 <= i && i < n = diag (fromList (replicate i 1.0 ++ [k] ++ replicate (n - i - 1) 1.0))
   | otherwise       = undefined
@@ -57,35 +67,58 @@ elemRowSwap n i j
   | otherwise       = extractRows ([0..i-1] ++ [j] ++ [i+1..j-1] ++ [i] ++ [j+1..n-1]) $ ident n
 
 
-convertMatrixToHMatrix :: (Enum a) => Old.Matrix a -> Matrix Double
-convertMatrixToHMatrix a = (Old.nrows a >< Old.ncols a) . map (toEnum . fromEnum) $ Old.toList a
-
-convertHMatrixToMatrix :: (Enum a) => Matrix Double -> Old.Matrix a
-convertHMatrixToMatrix a = Old.fromList (rows a) (cols a) . map (toEnum . fromEnum) . toList $ flatten a
+--------------------------------------------------
 
 type Units = [MeasureUnit]
+
+-- | Convert a LinearSystem into an hmatrix and a list of units that are used
 convertToHMatrix :: LinearSystem -> (Matrix Double, Units)
 convertToHMatrix (a, ucs) = (fromBlocks [[a', unitA]], units)
   where
+    s = show ucs
     a'       = convertMatrixToHMatrix a
     m        = cols a'
-    units    :: [String]
-    units    = nub . (ucs >>=) $ \ uc -> case uc of
-                   Unitful us -> map fst us
-                   _          -> []
-    toDouble :: Enum a => a -> Double
-    toDouble = toEnum . fromEnum
-    unitA    :: Matrix Double
-    unitA    = fromLists . flip map ucs $ \ uc -> case uc of
-                   Unitful us -> flip map units (toDouble . fromMaybe 0 . flip lookup us)
-                   _          -> map (const 0) units
+    units    = ucsToUnits ucs
+    unitA    = unitsToUnitA ucs units
 
-convertFromHMatrix :: (Enum a) => (Matrix Double, [MeasureUnit]) -> (Old.Matrix a, [UnitConstant])
+-- | Convert an hmatrix and the list of units used back into a LinearSystem
+convertFromHMatrix :: (Matrix Double, [MeasureUnit]) -> LinearSystem
 convertFromHMatrix (a, units) = (a', ucs')
   where
     ulen  = length units
-    a'    = convertHMatrixToMatrix $ takeColumns (cols a - ulen) a
+    a'    = convertHMatrixToMatrix (takeColumns (cols a - ulen) a)
     unitA = dropColumns (cols a - ulen) a
-    ucs   :: [UnitConstant]
-    ucs   = flip map (toLists unitA) (Unitful . filter ((/= 0) . snd) . zip units . map (toEnum . fromEnum))
+    ucs   = unitAToUcs unitA units
+    -- special case: when there are no units, ensure the empty list is replaced with [Unitful [] ...]
     ucs'  = if null ucs then replicate (rows a) (Unitful []) else ucs
+
+
+-- Worker functions:
+
+convertMatrixToHMatrix :: Old.Matrix Rational -> Matrix Double
+convertMatrixToHMatrix a = (Old.nrows a >< Old.ncols a) . map toDouble $ Old.toList a
+
+convertHMatrixToMatrix :: Matrix Double -> Old.Matrix Rational
+convertHMatrixToMatrix a = Old.fromList (rows a) (cols a) . map fromDouble . toList $ flatten a
+
+toDouble :: Rational -> Double
+toDouble = fromRational
+
+fromDouble :: Double -> Rational
+fromDouble = toRational
+
+unitsToUnitA :: [UnitConstant] -> Units -> Matrix Double
+unitsToUnitA ucs units = unitA
+  where
+    unitA = fromLists . flip map ucs $ \ uc -> case uc of
+              Unitful us -> flip map units (toDouble . fromMaybe 0 . flip lookup us)
+              _          -> map (const 0) units
+
+ucsToUnits :: [UnitConstant] -> Units
+ucsToUnits ucs = sort . nub . (ucs >>=) $ \ uc -> case uc of
+                   Unitful us -> map fst us
+                   _          -> []
+
+unitAToUcs :: Matrix Double -> Units -> [UnitConstant]
+unitAToUcs unitA units =
+  flip map (toLists unitA) (Unitful . filter ((/= 0) . snd) . zip units . map fromDouble)
