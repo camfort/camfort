@@ -1,5 +1,6 @@
 module Extensions.UnitsSolveHMatrix
-  ( rref, rrefMatrices, convertToHMatrix, convertFromHMatrix, dispf, Units, lu, rank, takeRows )
+  ( rref, rrefMatrices, convertToHMatrix, convertFromHMatrix, isInconsistentRREF
+  , dispf, Units, lu, rank, takeRows )
 where
 
 import Data.Ratio
@@ -15,7 +16,11 @@ import Data.Maybe (fromMaybe)
 import Extensions.UnitsEnvironment (LinearSystem, UnitConstant(..))
 import Language.Fortran (MeasureUnit)
 
--- | Reduced Row Echelon Form
+-- | Returns True iff the given matrix in reduced row echelon form
+-- represents an inconsistent system of linear equations
+isInconsistentRREF a = a @@> (rows a - 1, cols a - 1) == 1 && rank (takeColumns (cols a - 1) (dropRows (rows a - 1) a))== 0
+
+-- | Returns given matrix transformed into Reduced Row Echelon Form
 rref :: Matrix Double -> Matrix Double
 rref a = snd $ rrefMatrices' a 0 0 []
 
