@@ -30,7 +30,8 @@ newtype VarCol = VarCol Col deriving (Eq, Show)
 --   e.g., for a(i,k) we have a map from 'a' to its column paired with
 --       a two element list of the columns for 'i' and 'j'
 
-type VarColEnv = [(Variable, (VarCol, [VarCol]))]
+newtype VarBinder = VarBinder (Variable, SrcSpan) deriving Show
+type VarColEnv = [(VarBinder, (VarCol, [VarCol]))]
 
 data UnitVarCategory = Literal EqualityConstrained | Temporary | Variable | Argument | Magic deriving (Eq, Show)
 
@@ -121,7 +122,7 @@ instance Fractional UnitConstant where
   (UnitlessC n1) / (UnitlessC n2) = UnitlessC (n1 / n2)
   fromRational = UnitlessC . fromRational
 
-data Consistency a = Ok a | Bad a Int (UnitConstant, [Rational])
+data Consistency a = Ok a | Bad a Int (UnitConstant, [Rational]) deriving Show
 
 efmap :: (a -> a) -> Consistency a -> Consistency a
 efmap f (Ok x)      = Ok (f x)

@@ -198,11 +198,12 @@ reduceRows m (matrix, vector)
                     Nothing -> reduceRows (m+1) (matrix, vector)
 
 
+addProcedure :: Maybe ProcedureNames -> State UnitEnv ()
 addProcedure Nothing = return ()
-addProcedure (Just (name, resultName, argNames)) = 
-      do uenv <- gets varColEnv 
-         resultVar <- case resultName of 
-                        Just rname -> case (lookup rname uenv) of
+addProcedure (Just (name, resultName, argNames)) =
+      do uenv <- gets varColEnv
+         resultVar <- case resultName of
+                        Just rname -> case (lookupWithoutSrcSpan rname uenv) of
                                         Just (uvar, _) -> return $ Just uvar
                                         Nothing        -> do m <- addCol Variable
                                                              return $ Just (VarCol m)
@@ -210,7 +211,7 @@ addProcedure (Just (name, resultName, argNames)) =
          let argVars = fmap (lookupUnitByName uenv) argNames
          procedureEnv << (name, (resultVar, argVars))
         where
-          lookupUnitByName uenv v = maybe (VarCol 1) fst $ lookup v uenv 
+          lookupUnitByName uenv v = maybe (VarCol 1) fst $ lookupWithoutSrcSpan v uenv
 
 
 
@@ -237,8 +238,8 @@ processVar units proc exps@(Var a s names, e) typ =
        ms <- case toArrayType typ es of
                ArrayT _ bounds _ _ _ _ -> mapM (const $ fmap VarCol $ addCol Variable) bounds
                _                       -> return []
-       varColEnv << (v, (VarCol m, ms)) 
-       
+       varColEnv << (VarBinder (v, s), (VarCol m, ms))
+
        uv <- gets varColEnv
        -- If the declaration has a null expression, do not create a unifying variable
        case e of
@@ -519,11 +520,22 @@ binOpKind (RelGE _) = RelOp
 
 (<**>) :: Maybe a -> Maybe a -> Maybe a
 Nothing <**> x = x
-(Just x) <**> y = (Just x) 
+(Just x) <**> y = (Just x)
 
 lookupCaseInsensitive :: String -> [(String, a)] -> Maybe a
 lookupCaseInsensitive x m = let x' = map toUpper x in (find (\(k, v) -> (map toUpper k) == x') m) >>= (return . snd)
 
+lookupWithoutSrcSpan :: Variable -> [(VarBinder, a)] -> Maybe a
+lookupWithoutSrcSpan v env = snd `fmap` find f env
+  where
+    f (VarBinder (w, _), _) = map toUpper w == v'
+    v'   = map toUpper v
+
+lookupWithSrcSpan :: Variable -> SrcSpan -> [(VarBinder, a)] -> Maybe a
+lookupWithSrcSpan v s env = snd `fmap` find f env
+  where
+    f (VarBinder (w, t), _) = map toUpper w == v' && s == t
+    v'   = map toUpper v
 
 inferExprUnits :: (?assumeLiterals :: AssumeLiterals) => Expr Annotation -> State UnitEnv VarCol
 inferExprUnits e@(Con _ _ _)    = inferLiteral e
@@ -534,7 +546,7 @@ inferExprUnits ve@(Var _ _ names) =
     penv <- gets procedureEnv
     let (VarName _ v, args) = head names
 
-    case (lookup v uenv) <**> (lookupCaseInsensitive v uenv) of 
+    case lookupWithoutSrcSpan v uenv of
        -- array variable?
        Just (uv, uvs@(_:_)) -> inferArgUnits' uvs >> return uv
        -- function call?
@@ -552,7 +564,7 @@ inferExprUnits ve@(Var _ _ names) =
        -- default specifier
        _ | v == "*" -> inferLiteral ve
        -- just bad code
-       x -> case ((lookup v penv) <**> (lookupCaseInsensitive v penv)) of
+       x -> case lookupCaseInsensitive v penv of
               Just (Just uv, argUnits) ->
                    if (null args) then inferArgUnits' argUnits >> return uv
                    else  do uv <- anyUnits Temporary
@@ -619,7 +631,7 @@ handleExpr x = do inferExprUnits x
 inferForHeaderUnits :: (?assumeLiterals :: AssumeLiterals) => (Variable, Expr Annotation, Expr Annotation, Expr Annotation) -> State UnitEnv ()
 inferForHeaderUnits (v, e1, e2, e3) =
   do uenv <- gets varColEnv
-     case (lookup v uenv) of
+     case (lookupWithoutSrcSpan v uenv) of
        Just (uv, []) -> do uv1 <- inferExprUnits e1
                            mustEqual True uv uv1
                            uv2 <- inferExprUnits e2
@@ -971,7 +983,7 @@ lookupVarsByColsFilterByArg matrix uenv ucats cols dbgs =
                                        Nothing              -> Nothing
 
                                 else Nothing
-               lookupEnv j ((v, (VarCol i, _)):uenv)
+               lookupEnv j ((VarBinder (v, _), (VarCol i, _)):uenv)
                                               | i == j    = if (j <= length ucats) then
                                                              case (ucats !! (j - 1)) of
                                                                 Argument -> Nothing
@@ -1281,11 +1293,11 @@ lookupProcByCols penv cols =
                                     | otherwise = lookupEnv j penv
                        lookupEnv j ((p, (Nothing, _)):penv) = lookupEnv j penv
 
-lookupVarsByCols :: VarColEnv -> [Int] -> [String]
+lookupVarsByCols :: VarColEnv -> [Int] -> [Variable]
 lookupVarsByCols uenv cols = mapMaybe (\j -> lookupEnv j uenv) cols
                  where lookupEnv j [] = Nothing
-                       lookupEnv j ((v, (VarCol i, _)):uenv)
-                                    | i == j    = Just v 
+                       lookupEnv j ((VarBinder (v, _), (VarCol i, _)):uenv)
+                                    | i == j    = Just v
                                     | otherwise = lookupEnv j uenv
 
 showRational r = show (numerator r) ++ if ((denominator r) == 1) then "" else "%" ++ (show $ denominator r)
@@ -1353,7 +1365,7 @@ insertUnits decl@(Decl a sp@(s1, s2) d t) | not (pRefactored a || hasUnits t) =
      ucats   <- gets unitVarCats
      badCols <- gets underdeterminedCols
      vColEnv <- gets varColEnv
-     let varCol (Var _ _ ((VarName _ v, _):_), _, _) =  case (lookupCaseInsensitive v (reverse vColEnv)) of
+     let varCol (Var _ s ((VarName _ v, _):_), _, _) =  case (lookupWithSrcSpan v s (vColEnv)) of
                                                            (Just (VarCol m,_)) ->  m
                                                            Nothing -> error $ "No variable " ++ (show v)
      let sameUnits = (==) `on` (lookupUnit ucats badCols system . varCol)
