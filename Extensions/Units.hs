@@ -241,8 +241,7 @@ processVar units proc exps@(Var a s names, e) typ =
        
        uv <- gets varColEnv
        -- If the declaration has a null expression, do not create a unifying variable
-       (show uv) `D.trace` 
-        case e of 
+       case e of 
               NullExpr _ _ -> return ()
               _            -> do uv <- inferExprUnits e
                                  mustEqual False (VarCol m) uv
@@ -1354,7 +1353,7 @@ insertUnits decl@(Decl a sp@(s1, s2) d t) | not (pRefactored a || hasUnits t) =
      badCols <- gets underdeterminedCols
      vColEnv <- gets varColEnv
      let varCol (Var _ _ ((VarName _ v, _):_), _, _) =  case (lookupCaseInsensitive v (reverse vColEnv)) of
-                                                           (Just (VarCol m,_)) -> ("GOT VAR --" ++ show (v, m)) `D.trace` m
+                                                           (Just (VarCol m,_)) ->  m
                                                            Nothing -> error $ "No variable " ++ (show v)
      let sameUnits = (==) `on` (lookupUnit ucats badCols system . varCol)
      let groups = groupBy sameUnits d
