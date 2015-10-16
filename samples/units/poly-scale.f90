@@ -24,8 +24,8 @@ program foo
 
    real function dub(x) 
      real x
-     real :: k = 2
-     dub = k*x
+     ! real :: k = 2
+     dub = 2*x
    end function
 
 end program

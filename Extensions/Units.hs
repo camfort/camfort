@@ -205,12 +205,12 @@ addProcedure (Just (name, resultName, argNames)) =
                         Just rname -> case (lookup rname uenv) of
                                         Just (uvar, _) -> return $ Just uvar
                                         Nothing        -> do m <- addCol Variable
-                                                             return $ Just (UnitVariable m)
+                                                             return $ Just (VarCol m)
                         Nothing    -> return Nothing
          let argVars = fmap (lookupUnitByName uenv) argNames
          procedureEnv << (name, (resultVar, argVars)) 
         where
-          lookupUnitByName uenv v = maybe (UnitVariable 1) fst $ lookup v uenv 
+          lookupUnitByName uenv v = maybe (VarCol 1) fst $ lookup v uenv 
 
 
 
@@ -235,16 +235,18 @@ processVar units proc exps@(Var a s names, e) typ =
        unitVarCats <<++ (unitVarCat v proc)
        extendConstraints units
        ms <- case toArrayType typ es of
-               ArrayT _ bounds _ _ _ _ -> mapM (const $ fmap UnitVariable $ addCol Variable) bounds
+               ArrayT _ bounds _ _ _ _ -> mapM (const $ fmap VarCol $ addCol Variable) bounds
                _                       -> return []
-       unitVarEnv << (v, (UnitVariable m, ms)) 
-
+       unitVarEnv << (v, (VarCol m, ms)) 
+       
+       uv <- gets unitVarEnv
        -- If the declaration has a null expression, do not create a unifying variable
-       case e of 
-            NullExpr _ _ -> return ()
-            _            -> do uv <- inferExprUnits e
-                               mustEqual False (UnitVariable m) uv
-                               return ()
+       (show uv) `D.trace` 
+        case e of 
+              NullExpr _ _ -> return ()
+              _            -> do uv <- inferExprUnits e
+                                 mustEqual False (VarCol m) uv
+                                 return ()
        return exps 
 
 unitVarCat :: Variable -> Maybe ProcedureNames -> UnitVarCategory
@@ -324,12 +326,12 @@ inferInterproceduralUnits' x haveAssumedLiterals system1 =
 class UpdateColInfo t where
     updateColInfo :: Col -> Col -> t -> t
 
-instance UpdateColInfo UnitVariable where
-    updateColInfo x n (UnitVariable y) | y == x = UnitVariable n
-                                       | y == n = UnitVariable x
-                                       | otherwise = UnitVariable y
+instance UpdateColInfo VarCol where
+    updateColInfo x n (VarCol y) | y == x = VarCol n
+                                       | y == n = VarCol x
+                                       | otherwise = VarCol y
 
-instance UpdateColInfo UnitVarEnv where
+instance UpdateColInfo VarColEnv where
     updateColInfo _ _ [] = []
     updateColInfo x n ((v, (uv, uvs)):ys) = (v, (updateColInfo x n uv, map (updateColInfo x n) uvs)) : (updateColInfo x n ys)
 
@@ -427,8 +429,8 @@ addInterproceduralConstraints x =
 
     handleArgs actualVars dummyVars =
       do order <- gets reorderedCols
-         let actual = map (\(UnitVariable uv) -> uv) actualVars
-             dummy = map (\(UnitVariable uv) -> uv) dummyVars
+         let actual = map (\(VarCol uv) -> uv) actualVars
+             dummy = map (\(VarCol uv) -> uv) dummyVars
          mapM_ (handleArg $ zip dummy actual) dummy
 
     -- experimentation but now deprecated. 
@@ -494,7 +496,7 @@ addInterproceduralConstraints x =
     decodeResult Nothing (Just _) = error "Function used as a subroutine!"
 
 
-inferLiteral e = do uv@(UnitVariable uvn) <- anyUnits (Literal (?assumeLiterals /= Mixed))
+inferLiteral e = do uv@(VarCol uvn) <- anyUnits (Literal (?assumeLiterals /= Mixed))
                     debugInfo << (uvn, (srcSpan e, pprint e))
                     return uv
 
@@ -521,13 +523,10 @@ Nothing <**> x = x
 (Just x) <**> y = (Just x) 
 
 lookupCaseInsensitive :: String -> [(String, a)] -> Maybe a
-lookupCaseInsensitive x ys = lookup' (map toUpper x) ys where
-                               lookup' :: String -> [(String, a)] -> Maybe a
-                               lookup' x [] = Nothing
-                               lookup' x ((y,r):ys) | x == (map toUpper y) = Just r
-                                                    | otherwise        = lookup' x ys
+lookupCaseInsensitive x m = let x' = map toUpper x in (find (\(k, v) -> (map toUpper k) == x') m) >>= (return . snd)
 
-inferExprUnits :: (?assumeLiterals :: AssumeLiterals) => Expr Annotation -> State UnitEnv UnitVariable
+
+inferExprUnits :: (?assumeLiterals :: AssumeLiterals) => Expr Annotation -> State UnitEnv VarCol
 inferExprUnits e@(Con _ _ _)    = inferLiteral e
 inferExprUnits e@(ConL _ _ _ _) = inferLiteral e
 inferExprUnits e@(ConS _ _ _)   = inferLiteral e
@@ -543,7 +542,7 @@ inferExprUnits ve@(Var _ _ names) =
        Nothing | not (null args) -> do case (lookup (map toUpper v) intrinsicsDict) of
                                           Just fun -> fun v 
                                           Nothing  -> return () -- error $ "I don't know the intrinsic " ++ v -- return ()
-                                       uv@(UnitVariable uvn) <- anyUnits Temporary
+                                       uv@(VarCol uvn) <- anyUnits Temporary
                                        debugInfo << (uvn, (srcSpan ve, pprint ve))
                                        uvs <- inferArgUnits
                                        let uvs' = justArgUnits args uvs
@@ -576,16 +575,16 @@ inferExprUnits ve@(Var _ _ names) =
         justArgUnits _ uvs = head uvs
 inferExprUnits e@(Bin _ _ op e1 e2) = do uv1 <- inferExprUnits e1
                                          uv2 <- inferExprUnits e2
-                                         (UnitVariable n) <- case binOpKind op of
+                                         (VarCol n) <- case binOpKind op of
                                                                AddOp   -> mustEqual True uv1 uv2
                                                                MulOp   -> mustAddUp uv1 uv2 1 1
                                                                DivOp   -> mustAddUp uv1 uv2 1 (-1)
                                                                PowerOp -> powerUnits uv1 e2
                                                                LogicOp -> mustEqual True uv1 uv2
                                                                RelOp   -> do mustEqual True uv1 uv2
-                                                                             return $ UnitVariable 1
+                                                                             return $ VarCol 1
                                          debugInfo << (n, (srcSpan e, pprint e))
-                                         return (UnitVariable n)
+                                         return (VarCol n)
 inferExprUnits (Unary _ _ _ e) = inferExprUnits e
 inferExprUnits (CallExpr _ _ e1 (ArgList _ e2)) = do uv <- anyUnits Temporary
                                                      inferExprUnits e1
@@ -595,7 +594,7 @@ inferExprUnits (CallExpr _ _ e1 (ArgList _ e2)) = do uv <- anyUnits Temporary
 -- inferExprUnits (NullExpr .... Shouldn't occur very often as adds unnnecessary cruft
 inferExprUnits (NullExpr _ _) = anyUnits Temporary 
 
-inferExprUnits (Null _ _) = return $ UnitVariable 1
+inferExprUnits (Null _ _) = return $ VarCol 1
 inferExprUnits (ESeq _ _ e1 e2) = do inferExprUnits e1
                                      inferExprUnits e2
                                      return $ error "ESeq units wanted"
@@ -610,7 +609,7 @@ inferExprUnits (ArrayCon _ _ (e:exprs)) =
      return uv
 inferExprUnits (AssgExpr _ _ _ e) = inferExprUnits e
 
-inferExprSeqUnits :: (?assumeLiterals :: AssumeLiterals) => Expr Annotation -> State UnitEnv [UnitVariable]
+inferExprSeqUnits :: (?assumeLiterals :: AssumeLiterals) => Expr Annotation -> State UnitEnv [VarCol]
 inferExprSeqUnits (ESeq _ _ e1 e2) = liftM2 (++) (inferExprSeqUnits e1) (inferExprSeqUnits e2)
 inferExprSeqUnits e = (:[]) `liftM` inferExprUnits e
 
@@ -785,8 +784,8 @@ liftUnitEnv f = Data.Label.modify linearSystem $ \(matrix, vector) -> (f matrix,
 -- mustEqual - used for saying that two units must be the same- returns one of the variables
 --             (choice doesn't matter, but left is chosen).
 --             Returns the unit variables equaled upon
-mustEqual :: (?assumeLiterals :: AssumeLiterals) => Bool -> UnitVariable -> UnitVariable -> State UnitEnv UnitVariable
-mustEqual flagAsUnitlessIfLit (UnitVariable uv1) (UnitVariable uv2) = 
+mustEqual :: (?assumeLiterals :: AssumeLiterals) => Bool -> VarCol -> VarCol -> State UnitEnv VarCol
+mustEqual flagAsUnitlessIfLit (VarCol uv1) (VarCol uv2) = 
   do n <- addRow
      modify $ liftUnitEnv $ incrElem (-1) (n, uv1) . incrElem 1 (n, uv2)
      ucats <- gets unitVarCats 
@@ -797,45 +796,45 @@ mustEqual flagAsUnitlessIfLit (UnitVariable uv1) (UnitVariable uv2) =
                                                     else cat)  (zip [1..] ucats))
          _     -> return ()
       else return ()
-     return $ UnitVariable uv1
+     return $ VarCol uv1
 
 -- mustAddUp - used for multipling and dividing. Creates a new 'temporary' column and returns
 --             the variable associated with it
-mustAddUp :: UnitVariable -> UnitVariable -> Rational -> Rational -> State UnitEnv UnitVariable
-mustAddUp (UnitVariable uv1) (UnitVariable uv2) k1 k2 =
+mustAddUp :: VarCol -> VarCol -> Rational -> Rational -> State UnitEnv VarCol
+mustAddUp (VarCol uv1) (VarCol uv2) k1 k2 =
   do m <- addCol Temporary
      n <- addRow
      modify $ liftUnitEnv $ incrElem (-1) (n, m) . incrElem k1 (n, uv1) . incrElem k2 (n, uv2)
-     return $ UnitVariable m
+     return $ VarCol m
 
 -- TODO: error handling in powerUnits
 
-powerUnits :: (?assumeLiterals :: AssumeLiterals) => UnitVariable -> Expr Annotation -> State UnitEnv UnitVariable
-powerUnits (UnitVariable uv) (Con _ _ powerString) =
+powerUnits :: (?assumeLiterals :: AssumeLiterals) => VarCol -> Expr Annotation -> State UnitEnv VarCol
+powerUnits (VarCol uv) (Con _ _ powerString) =
   case fmap (fromInteger . fst) $ listToMaybe $ reads powerString of
     Just power -> do
       m <- addCol Temporary
       n <- addRow
       modify $ liftUnitEnv $ incrElem (-1) (n, m) . incrElem power (n, uv)
-      return $ UnitVariable m
-    Nothing -> mustEqual False (UnitVariable uv) (UnitVariable 1)
+      return $ VarCol m
+    Nothing -> mustEqual False (VarCol uv) (VarCol 1)
 
 powerUnits uv e =
-  do mustEqual False uv (UnitVariable 1)
+  do mustEqual False uv (VarCol 1)
      uv <- inferExprUnits e
-     mustEqual False uv (UnitVariable 1)
+     mustEqual False uv (VarCol 1)
 
-sqrtUnits :: UnitVariable -> State UnitEnv UnitVariable
-sqrtUnits (UnitVariable uv) =
+sqrtUnits :: VarCol -> State UnitEnv VarCol
+sqrtUnits (VarCol uv) =
   do m <- addCol Temporary
      n <- addRow
      modify $ liftUnitEnv $ incrElem (-1) (n, m) . incrElem 0.5 (n, uv)
-     return $ UnitVariable m
+     return $ VarCol m
 
-anyUnits :: UnitVarCategory -> State UnitEnv UnitVariable
+anyUnits :: UnitVarCategory -> State UnitEnv VarCol
 anyUnits category =
   do m <- addCol category
-     return $ UnitVariable m     
+     return $ VarCol m     
 
 
 -- *************************************
@@ -949,7 +948,7 @@ criticalVars = do uvarenv     <- gets unitVarEnv
                   let cv2 = [] -- criticalVars
                   return (cv1 ++ cv2)
 
-criticalVars' :: UnitVarEnv -> [UnitVarCategory] -> Matrix Rational -> Row -> DebugInfo -> [String]
+criticalVars' :: VarColEnv -> [UnitVarCategory] -> Matrix Rational -> Row -> DebugInfo -> [String]
 criticalVars' varenv ucats matrix i dbgs =
   let m = firstNonZeroCoeff matrix ucats
   in
@@ -962,7 +961,7 @@ criticalVars' varenv ucats matrix i dbgs =
         then (lookupVarsByColsFilterByArg matrix varenv ucats [((m i) + 1)..(m (i + 1) - 1)] dbgs) ++ (criticalVars' varenv ucats matrix (i + 1) dbgs)
         else criticalVars' varenv ucats matrix (i + 1) dbgs
 
-lookupVarsByColsFilterByArg :: Matrix Rational -> UnitVarEnv -> [UnitVarCategory] -> [Int] -> DebugInfo -> [String]
+lookupVarsByColsFilterByArg :: Matrix Rational -> VarColEnv -> [UnitVarCategory] -> [Int] -> DebugInfo -> [String]
 lookupVarsByColsFilterByArg matrix uenv ucats cols dbgs = 
       mapMaybe (\j -> lookupEnv j uenv) cols
          where lookupEnv j [] = --Nothing
@@ -972,7 +971,7 @@ lookupVarsByColsFilterByArg matrix uenv ucats cols dbgs =
                                        Nothing              -> Nothing
                                       
                                 else Nothing
-               lookupEnv j ((v, (UnitVariable i, _)):uenv)
+               lookupEnv j ((v, (VarCol i, _)):uenv)
                                               | i == j    = if (j <= length ucats) then
                                                              case (ucats !! (j - 1)) of
                                                                 Argument -> Nothing
@@ -1104,34 +1103,34 @@ addPowerIntrinsic name =
      arg1   <- anyUnits Argument
      arg2   <- anyUnits Argument
      mustEqual False result arg1
-     mustEqual False arg2 (UnitVariable 1)
+     mustEqual False arg2 (VarCol 1)
      procedureEnv << (name, (Just result, [arg1, arg2]))
 
 addUnitlessIntrinsic :: (?assumeLiterals :: AssumeLiterals) => String -> State UnitEnv ()
 addUnitlessIntrinsic name =
   do result <- anyUnits Variable
      arg    <- anyUnits Argument
-     mustEqual False result (UnitVariable 1)
-     mustEqual False arg (UnitVariable 1)
+     mustEqual False result (VarCol 1)
+     mustEqual False arg (VarCol 1)
      procedureEnv << (name, (Just result, [arg]))
 
 addUnitlessSubIntrinsic :: (?assumeLiterals :: AssumeLiterals) => String -> State UnitEnv ()
 addUnitlessSubIntrinsic name =
   do arg <- anyUnits Variable
-     mustEqual False arg (UnitVariable 1)
+     mustEqual False arg (VarCol 1)
      procedureEnv << (name, (Nothing, [arg]))
 
 addUnitlessResult0ArgIntrinsic :: (?assumeLiterals :: AssumeLiterals) => String -> State UnitEnv ()
 addUnitlessResult0ArgIntrinsic name =
   do result <- anyUnits Variable
-     mustEqual False result (UnitVariable 1)
+     mustEqual False result (VarCol 1)
      procedureEnv << (name, (Just result, []))
 
 addUnitlessResult1ArgIntrinsic :: (?assumeLiterals :: AssumeLiterals) => String -> State UnitEnv ()
 addUnitlessResult1ArgIntrinsic name =
   do result <- anyUnits Variable
      arg <- anyUnits Argument
-     mustEqual False result (UnitVariable 1)
+     mustEqual False result (VarCol 1)
      procedureEnv << (name, (Just result, [arg]))
 
 addUnitlessResult2AnyArgIntrinsic :: (?assumeLiterals :: AssumeLiterals) => String -> State UnitEnv ()
@@ -1139,7 +1138,7 @@ addUnitlessResult2AnyArgIntrinsic name =
   do result <- anyUnits Variable
      arg1   <- anyUnits Argument
      arg2   <- anyUnits Argument
-     mustEqual False result (UnitVariable 1)
+     mustEqual False result (VarCol 1)
      procedureEnv << (name, (Just result, [arg1, arg2]))
 
 addUnitlessResult2SameArgIntrinsic :: (?assumeLiterals :: AssumeLiterals) => String -> State UnitEnv ()
@@ -1147,7 +1146,7 @@ addUnitlessResult2SameArgIntrinsic name =
   do result <- anyUnits Variable
      arg1   <- anyUnits Argument
      arg2   <- anyUnits Argument
-     mustEqual False result (UnitVariable 1)
+     mustEqual False result (VarCol 1)
      mustEqual False arg1 arg2
      procedureEnv << (name, (Just result, [arg1, arg2]))
 
@@ -1269,7 +1268,7 @@ lookupProcByArgCol penv cols =
              mapMaybe (\j -> lookupEnv j penv) cols
                  where lookupEnv j [] = Nothing
                        lookupEnv j ((p, (_, args)):penv) 
-                           | elem (UnitVariable j) args  = Just (p ++ "#" ++ (show $ fromJust $ elemIndex (UnitVariable j) args))
+                           | elem (VarCol j) args  = Just (p ++ "#" ++ (show $ fromJust $ elemIndex (VarCol j) args))
                            | otherwise    = lookupEnv j penv
              
 
@@ -1277,15 +1276,15 @@ lookupProcByCols :: ProcedureEnv -> [Int] -> [String]
 lookupProcByCols penv cols = 
              mapMaybe (\j -> lookupEnv j penv) cols
                  where lookupEnv j [] = Nothing
-                       lookupEnv j ((p, (Just (UnitVariable i), _)):penv) 
+                       lookupEnv j ((p, (Just (VarCol i), _)):penv) 
                                     | i == j    = Just p
                                     | otherwise = lookupEnv j penv
                        lookupEnv j ((p, (Nothing, _)):penv) = lookupEnv j penv
 
-lookupVarsByCols :: UnitVarEnv -> [Int] -> [String]
+lookupVarsByCols :: VarColEnv -> [Int] -> [String]
 lookupVarsByCols uenv cols = mapMaybe (\j -> lookupEnv j uenv) cols
                  where lookupEnv j [] = Nothing
-                       lookupEnv j ((v, (UnitVariable i, _)):uenv)
+                       lookupEnv j ((v, (VarCol i, _)):uenv)
                                     | i == j    = Just v 
                                     | otherwise = lookupEnv j uenv
 
@@ -1355,7 +1354,7 @@ insertUnits decl@(Decl a sp@(s1, s2) d t) | not (pRefactored a || hasUnits t) =
      badCols <- gets underdeterminedCols
      uVarEnv <- gets unitVarEnv
      let varCol (Var _ _ ((VarName _ v, _):_), _, _) =  case (lookup v uVarEnv) of
-                                                           (Just (UnitVariable m,_)) -> m
+                                                           (Just (VarCol m,_)) -> m
                                                            Nothing -> error $ "No variable " ++ (show v)
      let sameUnits = (==) `on` (lookupUnit ucats badCols system . varCol)
      let groups = groupBy sameUnits d

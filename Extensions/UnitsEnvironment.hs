@@ -23,16 +23,20 @@ data AssumeLiterals = Poly | Unitless | Mixed deriving (Show, Read, Eq)
 -}
 data UnitConstant = Unitful [(MeasureUnit, Rational)] | UnitlessC Rational deriving (Eq, Show)
 
+-- Column of the Guassian matrix associated with a variable
+newtype VarCol = VarCol Col deriving (Eq, Show) 
 
-newtype UnitVariable = UnitVariable Col deriving (Eq, Show)
+-- Map from Variable names to their column paired with any column of their indices 
+--   e.g., for a(i,k) we have a map from 'a' to its column paired with 
+--       a two element list of the columns for 'i' and 'j'
+type VarColEnv = [(Variable, (VarCol, [VarCol]))]
+
 data UnitVarCategory = Literal EqualityConstrained | Temporary | Variable | Argument | Magic deriving (Eq, Show)
-
-type UnitVarEnv = [(Variable, (UnitVariable, [UnitVariable]))]
 
 type DerivedUnitEnv = [(MeasureUnit, UnitConstant)]
 
 type ProcedureNames = (String, Maybe Variable, [Variable])
-type Procedure = (Maybe UnitVariable, [UnitVariable])
+type Procedure = (Maybe VarCol, [VarCol])
 type ProcedureEnv = [(String, Procedure)]
 
 type LinearSystem = (Matrix Rational, [UnitConstant])
@@ -44,7 +48,7 @@ type DebugInfo = [(Int, (SrcSpan, String))]
 
 data UnitEnv = UnitEnv {
   _report              :: [String],
-  _unitVarEnv          :: UnitVarEnv,
+  _unitVarEnv          :: VarColEnv,
   _derivedUnitEnv      :: DerivedUnitEnv,
   _procedureEnv        :: ProcedureEnv,
   _calls               :: ProcedureEnv,
