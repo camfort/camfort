@@ -89,11 +89,11 @@ inferCriticalVariables (fname, x) =
 inferUnits :: (?solver :: Solver, ?assumeLiterals :: AssumeLiterals) => (Filename, Program Annotation) -> (Report, (Filename, Program Annotation))
 inferUnits (fname, x) = 
     let ?criticals = False
-        ?debug = False
+        ?debug = True
     in let (y, env) = runState (doInferUnits x) emptyUnitEnv
            r = concat [fname ++ ": " ++ r ++ "\n" | r <- Data.Label.get report env] 
                ++ fname ++ ": checked/inferred " 
-               ++ (show $ countVariables (_unitVarEnv env) (_debugInfo env) (_procedureEnv env) (fst $ _linearSystem env) (_unitVarCats env))
+               ++ (show $ countVariables (_varColEnv env) (_debugInfo env) (_procedureEnv env) (fst $ _linearSystem env) (_unitVarCats env))
                ++ " user variables\n"
        in (r, (fname, y))
 
@@ -200,7 +200,7 @@ reduceRows m (matrix, vector)
 
 addProcedure Nothing = return ()
 addProcedure (Just (name, resultName, argNames)) = 
-      do uenv <- gets unitVarEnv 
+      do uenv <- gets varColEnv 
          resultVar <- case resultName of 
                         Just rname -> case (lookup rname uenv) of
                                         Just (uvar, _) -> return $ Just uvar
@@ -237,9 +237,9 @@ processVar units proc exps@(Var a s names, e) typ =
        ms <- case toArrayType typ es of
                ArrayT _ bounds _ _ _ _ -> mapM (const $ fmap VarCol $ addCol Variable) bounds
                _                       -> return []
-       unitVarEnv << (v, (VarCol m, ms)) 
+       varColEnv << (v, (VarCol m, ms)) 
        
-       uv <- gets unitVarEnv
+       uv <- gets varColEnv
        -- If the declaration has a null expression, do not create a unifying variable
        (show uv) `D.trace` 
         case e of 
@@ -361,7 +361,7 @@ swapUnitVarCats' x n (z:zs) ys c | c == x = (ys !! (n - 1)) : (swapUnitVarCats' 
 swapCols :: Int -> Int -> State UnitEnv ()
 swapCols x n = do --report <<++ ("Pre swap - " ++ (show x) ++ " <-> " ++ (show n))
                   --debugGaussian
-                  unitVarEnv   =. updateColInfo x n
+                  varColEnv   =. updateColInfo x n
                   procedureEnv =. updateColInfo x n
                   calls        =. updateColInfo x n
                   unitVarCats  =. swapUnitVarCats x n
@@ -531,7 +531,7 @@ inferExprUnits e@(Con _ _ _)    = inferLiteral e
 inferExprUnits e@(ConL _ _ _ _) = inferLiteral e
 inferExprUnits e@(ConS _ _ _)   = inferLiteral e
 inferExprUnits ve@(Var _ _ names) =
- do uenv <- gets unitVarEnv
+ do uenv <- gets varColEnv
     penv <- gets procedureEnv
     let (VarName _ v, args) = head names
 
@@ -619,7 +619,7 @@ handleExpr x = do inferExprUnits x
 
 inferForHeaderUnits :: (?assumeLiterals :: AssumeLiterals) => (Variable, Expr Annotation, Expr Annotation, Expr Annotation) -> State UnitEnv ()
 inferForHeaderUnits (v, e1, e2, e3) =
-  do uenv <- gets unitVarEnv
+  do uenv <- gets varColEnv
      case (lookup v uenv) of
        Just (uv, []) -> do uv1 <- inferExprUnits e1
                            mustEqual True uv uv1
@@ -848,7 +848,7 @@ anyUnits category =
 errorMessage :: (?debug :: Bool) => Row -> UnitConstant -> [Rational] -> State UnitEnv String
 errorMessage row unit vars = 
  let ?num = 0 in 
-    do uvarEnv <- gets unitVarEnv
+    do uvarEnv <- gets varColEnv
        debugs <- gets debugInfo
        u <- makeUnitSpec unit
        let unitStr = pprint u
@@ -918,12 +918,12 @@ solveSystemM adjective =
 checkUnderdeterminedM :: State UnitEnv ()
 checkUnderdeterminedM = do ucats <- gets unitVarCats
                            system <- gets linearSystem
-                           varenv  <- gets unitVarEnv
+                           varenv  <- gets varColEnv
                            debugs  <- gets debugInfo
                            procenv <- gets procedureEnv
 
                            let badCols = checkUnderdetermined ucats system
-                           uenv <- gets unitVarEnv
+                           uenv <- gets varColEnv
                            if not (null badCols) then 
                                do let exprs = map (showExprLines ucats varenv procenv debugs) badCols
                                   let exprsL = concat $ intersperse "\n\t" exprs
@@ -939,7 +939,7 @@ checkUnderdetermined ucats system@(matrix, vector) =
   fixValue (propagateUnderdetermined matrix) $ checkUnderdetermined' ucats system 1
 
 criticalVars :: State UnitEnv [String]
-criticalVars = do uvarenv     <- gets unitVarEnv
+criticalVars = do uvarenv     <- gets varColEnv
                   (matrix, _) <- gets linearSystem
                   ucats       <- gets unitVarCats
                   dbgs        <- gets debugInfo
@@ -1180,7 +1180,7 @@ debugGaussian = do grid' <- debugGaussian'
 
 debugGaussian' = do ucats   <- gets unitVarCats
                     (matrix,rowv)  <- gets linearSystem
-                    varenv  <- gets unitVarEnv
+                    varenv  <- gets varColEnv
                     debugs  <- gets debugInfo
                     procenv <- gets procedureEnv
 
@@ -1352,9 +1352,9 @@ insertUnits decl@(Decl a sp@(s1, s2) d t) | not (pRefactored a || hasUnits t) =
   do system  <- gets linearSystem 
      ucats   <- gets unitVarCats 
      badCols <- gets underdeterminedCols
-     uVarEnv <- gets unitVarEnv
-     let varCol (Var _ _ ((VarName _ v, _):_), _, _) =  case (lookup v uVarEnv) of
-                                                           (Just (VarCol m,_)) -> m
+     vColEnv <- gets varColEnv
+     let varCol (Var _ _ ((VarName _ v, _):_), _, _) =  case (lookupCaseInsensitive v (reverse vColEnv)) of
+                                                           (Just (VarCol m,_)) -> ("GOT VAR --" ++ show (v, m)) `D.trace` m
                                                            Nothing -> error $ "No variable " ++ (show v)
      let sameUnits = (==) `on` (lookupUnit ucats badCols system . varCol)
      let groups = groupBy sameUnits d
