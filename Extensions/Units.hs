@@ -89,7 +89,7 @@ inferCriticalVariables (fname, x) =
 inferUnits :: (?solver :: Solver, ?assumeLiterals :: AssumeLiterals) => (Filename, Program Annotation) -> (Report, (Filename, Program Annotation))
 inferUnits (fname, x) =
     let ?criticals = False
-        ?debug = True
+        ?debug = False
     in let (y, env) = runState (doInferUnits x) emptyUnitEnv
            r = concat [fname ++ ": " ++ r ++ "\n" | r <- Data.Label.get report env]
                ++ fname ++ ": checked/inferred "
