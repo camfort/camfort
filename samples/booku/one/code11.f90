@@ -24,8 +24,8 @@ PROGRAM ONE_D_MOTION
   INTEGER, PARAMETER, unit(n) :: N=10001
   INTEGER, PARAMETER, unit(i) :: IN=500
   INTEGER :: I
-  REAL, unit(s) :: PI
-  REAL :: DT
+  REAL :: PI
+  REAL, unit(s) :: DT
   REAL, DIMENSION (N):: T,X
   real, dimension (N), unit (m/s) :: V
 !
@@ -41,8 +41,8 @@ PROGRAM ONE_D_MOTION
 !
   DO I = 1, N-1
     T(I+1) = DT*I
-    X(I+1) = X(I)+V(I)*DT
-    V(I+1) = V(I)-X(I)*DT
+    X(I+1) = X(I)+V(I)*DT ! u(x) = u(v * dt)
+    V(I+1) = V(I)-X(I)*DT ! u(v) = u(x * dt)
   END DO
 !
 ! Write the position and velocity every 500 steps

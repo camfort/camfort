@@ -841,17 +841,27 @@ anyUnits category =
 -- 
 -- *************************************
                                                                     
-
+{-| Print debug information for non-zero coefficients from the Gaussian matrix -}
+debugInfoForNonZeros :: [Rational] -> State UnitEnv String
+debugInfoForNonZeros row = do debugs <- gets debugInfo
+                              let cSpots = concatMap (getInfo debugs) (zip [1..] row)
+                              return $ if (cSpots == []) then "" else (" arising from \n" ++ cSpots)
+                                  where
+                                    getInfo debugs (n, 0) = ""
+                                    getInfo debugs (n, r) = 
+                                         case lookup n debugs of
+                                                        (Just (span, s)) -> "\t" ++ (showSrcSpan span) ++ " - " ++ s ++ "\n"
+                                                        _                -> ""
 
 {- | An attempt at getting some useful user information. Needs position information -}
 errorMessage :: (?debug :: Bool) => Row -> UnitConstant -> [Rational] -> State UnitEnv String
-errorMessage row unit vars = 
+errorMessage row unit rowCoeffs = 
  let ?num = 0 in 
     do uvarEnv <- gets varColEnv
        debugs <- gets debugInfo
        u <- makeUnitSpec unit
        let unitStr = pprint u
-       let varCols = map (+1) (findIndices (\n -> n /= 0) vars)
+       let varCols = map (+1) (findIndices (\n -> n /= 0) rowCoeffs)
        if varCols == [] then
            case unit of
              Unitful xs | length xs > 1 -> 
@@ -859,19 +869,12 @@ errorMessage row unit vars =
                         uR <- makeUnitSpec (Unitful $ xs')
                         uL <- makeUnitSpec (Unitful [head xs])
                         success =: False
+                        conflictInfo <- debugInfoForNonZeros rowCoeffs
                         return $
                            let unitStrL = pprint uL
                                unitStrR = pprint uR
-                               msg = "Conflict since " ++ unitStrL ++ " != " ++ unitStrR
-
-                               getConflict (n, 0)      = ""
-                               getConflict (n, r) =  case lookup n debugs of
-                                                        (Just (span, s)) -> "\t" ++ (showSrcSpan span) ++ " - " ++ s ++ "\n"
-                                                        _                -> ""
-
-
-                               conflictSpots = concatMap getConflict (zip [1..] vars)
-                           in msg ++ (if (conflictSpots == []) then "" else " arising from \n" ++ conflictSpots)
+                               msg = "Conflict since " ++ unitStrL ++ " != " ++ unitStrR 
+                           in msg ++ conflictInfo
              {- A single unit with no variable column suggests an attempt to unify an unit
                 with unitless -}
              Unitful xs | length xs == 1 ->                                
@@ -879,17 +882,19 @@ errorMessage row unit vars =
                              uL <- makeUnitSpec (Unitful xs')
                              let unitStrL = pprint uL
                              ifDebug debugGaussian
-                             return $ "Conflict since " ++ unitStrL ++ " != 1"
+                             conflictInfo <- debugInfoForNonZeros rowCoeffs
+                             return $ "Conflict since " ++ unitStrL ++ " != 1" ++ conflictInfo
              _ -> do debugGaussian
                      return "Sorry, I can't give a better error."
        else
            let varColsAndNames = zip varCols (lookupVarsByCols uvarEnv varCols)
-               exprStr' = map (\(k,v) -> if (vars !! (k - 1)) == 1 
+               exprStr' = map (\(k,v) -> if (rowCoeffs !! (k - 1)) == 1 
                                          then v
-                                         else (showRational (vars !! (k - 1))) ++ "*" ++ v) varColsAndNames
+                                         else (showRational (rowCoeffs !! (k - 1))) ++ "*" ++ v) varColsAndNames
                exprStr = concat $ intersperse "*" exprStr'
                msg     = "Conflict arising from " ++ exprStr ++ " of unit " ++ unitStr
-           in return msg
+           in do conflictInfo <- debugInfoForNonZeros rowCoeffs
+                 return $ msg ++ conflictInfo
 
 solveSystemM :: (?solver :: Solver, ?debug :: Bool) => String -> State UnitEnv Bool
 solveSystemM adjective =

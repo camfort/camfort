@@ -45,11 +45,11 @@ type LinearSystem = (Matrix Rational, [UnitConstant])
 type Row = Int
 type Col = Int
 
-type DebugInfo = [(Int, (SrcSpan, String))]
+type DebugInfo = [(Col, (SrcSpan, String))]
 
 data UnitEnv = UnitEnv {
   _report              :: [String],
-  _varColEnv          :: VarColEnv,
+  _varColEnv           :: VarColEnv,
   _derivedUnitEnv      :: DerivedUnitEnv,
   _procedureEnv        :: ProcedureEnv,
   _calls               :: ProcedureEnv,
