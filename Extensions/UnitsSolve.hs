@@ -84,18 +84,11 @@ switchScaleElems i j factor list = a ++ factor * b : c
 --------------------------------------------------
 -- Top-level custom solver based on HMatrix
 solveSystemH :: LinearSystem -> Consistency LinearSystem
-solveSystemH system@(m,v) = -- D.trace ("Input:\n" ++ show m' ++ "\nv=" ++ show v) $
-                            if isInconsistentRREF m3 then
-                              Bad (f sys')
-                                  (nrows (fst sys'))
-                                  (snd sys' !! (nrows (fst sys') - 1),
-                                   replicate (ncols (fst sys')) (0 % 1))
-                            else
-                              Ok (f sys')
-  where
-    (m', units) = convertToHMatrix system
-    m2 = rref m'
-    m3 = takeRows (rank m2) m2
-    sys' = convertFromHMatrix (m3, units)
-    f sys@(m, v) = -- D.trace ("Result:\n" ++ show m3 ++ "\nv=" ++ show v) $
-                   sys
+solveSystemH system@(m,v) =
+  case convertToHMatrix system of
+    Left  (n:_)       -> Bad system (nrows m) (v !! n, V.toList (getRow n m))
+    Right (m', units) -> Ok sys'
+      where
+        m2   = rref m'
+        m3   = takeRows (rank m2) m2
+        sys' = convertFromHMatrix (m3, units)

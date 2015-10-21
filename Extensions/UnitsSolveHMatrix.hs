@@ -8,10 +8,11 @@ import Debug.Trace (trace)
 import Numeric.LinearAlgebra
 import Data.Packed.Matrix (fromBlocks)
 import Data.Packed.ST
+import Control.Monad (filterM)
 import Control.Monad.ST
 import qualified Data.Matrix as Old (nrows, ncols, toList, Matrix, fromList)
 import Foreign.Storable (Storable)
-import Data.List (findIndex, nub, sort)
+import Data.List (findIndex, nub, sort, (\\))
 import Data.Maybe (fromMaybe)
 import Extensions.UnitsEnvironment (LinearSystem, UnitConstant(..))
 import Language.Fortran (MeasureUnit)
@@ -126,14 +127,16 @@ elemRowSwap n i j
 type Units = [MeasureUnit]
 
 -- | Convert a LinearSystem into an hmatrix and a list of units that are used
-convertToHMatrix :: LinearSystem -> (Matrix Double, Units)
-convertToHMatrix (a, ucs) = (fromBlocks [[a', unitA]], units)
+convertToHMatrix :: LinearSystem -> Either [Int] (Matrix Double, Units)
+convertToHMatrix (a, ucs) = case findInconsistentRows a' augA of
+                              [] -> Right (augA, units)
+                              ns -> Left ns
   where
-    s = show ucs
     a'       = convertMatrixToHMatrix a
     m        = cols a'
     units    = ucsToUnits ucs
     unitA    = unitsToUnitA ucs units
+    augA     = fromBlocks [[a', unitA]]
 
 -- | Convert an hmatrix and the list of units used back into a LinearSystem
 convertFromHMatrix :: (Matrix Double, [MeasureUnit]) -> LinearSystem
@@ -176,3 +179,18 @@ ucsToUnits ucs = sort . nub . (ucs >>=) $ \ uc -> case uc of
 unitAToUcs :: Matrix Double -> Units -> [UnitConstant]
 unitAToUcs unitA units =
   flip map (toLists unitA) (Unitful . filter ((/= 0) . snd) . zip units . map fromDouble)
+
+findInconsistentRows :: Matrix Double -> Matrix Double -> [Int]
+findInconsistentRows coA augA = [0..(rows augA - 1)] \\ consistent
+  where
+    consistent = head (filter (tryRows coA augA) (pset ( [0..(rows augA - 1)])) ++ [[]])
+
+    -- Rouché–Capelli theorem is that if the rank of the coefficient
+    -- matrix is not equal to the rank of the augmented matrix then
+    -- the system of linear equations is inconsistent.
+    tryRows coA augA ns = (rank coA' == rank augA')
+      where
+        coA'  = extractRows ns coA
+        augA' = extractRows ns augA
+
+    pset = filterM (const [True, False])
