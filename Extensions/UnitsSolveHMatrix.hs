@@ -91,15 +91,11 @@ getColumnBelow a (i, j) = concat . toLists $ subMatrix (i, j) (n - i, 1) a
   where n = rows a
 
 -- 'Elementary row operation' matrices
-elemRowMult n i k
-  | 0 <= i && i < n = diag (fromList (replicate i 1.0 ++ [k] ++ replicate (n - i - 1) 1.0))
-  | otherwise       = undefined
+elemRowMult n i k = diag (fromList (replicate i 1.0 ++ [k] ++ replicate (n - i - 1) 1.0))
+
 
 elemRowAdd :: Int -> Int -> Int -> Double -> Matrix Double
-elemRowAdd n i j k
-  | i < 0 || i >= n = undefined
-  | j < 0 || j >= n = undefined
-  | otherwise       = runSTMatrix $ do
+elemRowAdd n i j k = runSTMatrix $ do
       m <- newMatrix 0 n n
       sequence [ writeMatrix m i' i' 1 | i' <- [0 .. (n - 1)] ]
       writeMatrix m i j k
@@ -116,8 +112,6 @@ elemRowAdd_spec n i j k
 
 elemRowSwap n i j
   | i == j          = ident n
-  | i < 0 || i >= n = undefined
-  | j < 0 || j >= n = undefined
   | i > j           = elemRowSwap n j i
   | otherwise       = extractRows ([0..i-1] ++ [j] ++ [i+1..j-1] ++ [i] ++ [j+1..n-1]) $ ident n
 
