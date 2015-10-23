@@ -908,24 +908,56 @@ errorMessage row unit rowCoeffs =
            in do conflictInfo <- debugInfoForNonZeros rowCoeffs
                  return $ msg ++ conflictInfo
 
+reportInconsistency :: (?debug :: Bool) => LinearSystem -> [Int] -> State UnitEnv ()
+reportInconsistency (m, v) ns = do
+  uvarEnv <- gets varColEnv
+  debugs <- gets debugInfo
+
+  -- helper functions
+  let srcLineCompare = compare `on` (srcLine . fst . fst)
+  let nonZeroVectorIndices = V.toList . V.map (+1) . V.findIndices (/= 0)
+
+  -- examine all row numbers given to us as the parameter
+  vs <- fmap (sortBy srcLineCompare . concat) . forM ns $ \ n -> do
+    -- find out column indices of interest in the row
+    let colsOfInterest = nonZeroVectorIndices (getRow n m)
+
+    -- for each index of interest in the row, see what other rows also use it
+    vs <- forM colsOfInterest $ \ i -> do
+      let rowsOfInterest = nub . (i:) . nonZeroVectorIndices $ getCol i m
+      -- lookup debug info for those row indices of interest
+      let colDebugs = mapMaybe (flip lookup debugs) $ rowsOfInterest
+      -- also lookup VarBinder info for i and convert it to same format
+      let vs = map (\ (VarBinder (v, s)) -> (s, v)) $ lookupVarBindersByCols uvarEnv [i]
+      return $ vs ++ colDebugs
+
+    -- flatten it out
+    return (concat vs)
+
+  forM_ vs $ \ (src, str) -> do
+    report <<++ str ++ " at " ++ show (fst src)
+
 solveSystemM :: (?solver :: Solver, ?debug :: Bool) => String -> State UnitEnv Bool
-solveSystemM adjective =
-  do system <- gets linearSystem
-     ifDebug debugGaussian
-     case (solveSystem system) of
-       Ok system'     -> do linearSystem =: system'
-                            ifDebug (report <<++ "After solve")
-                            ifDebug (debugGaussian)
-                            return True
-       Bad system' row (unit, vars) ->
-                     do report <<++ (adjective ++ " units of measure")
-                        linearSystem =: system'
-                        if (adjective `elem` ["inconsistent", "underdetermined"]) then
-                            do msg <- errorMessage row unit vars
-                               report <<++ msg
-                               return False
-                        else
-                            return False
+solveSystemM adjective = do
+  system <- gets linearSystem
+  ifDebug debugGaussian
+  case (solveSystemH2 system) of
+    Right system' -> do
+      linearSystem =: system'
+      ifDebug (report <<++ "After solve")
+      ifDebug (debugGaussian)
+      return True
+    Left ns       -> do
+      report <<++ (adjective ++ " units of measure")
+      reportInconsistency system ns
+      return False
+      -- linearSystem =: system'
+      -- if (adjective `elem` ["inconsistent", "underdetermined"]) then
+      --     do msg <- errorMessage row unit vars
+      --        report <<++ msg
+      --        return False
+      -- else
+      --     return False
 
 checkUnderdeterminedM :: State UnitEnv ()
 checkUnderdeterminedM = do ucats <- gets unitVarCats
@@ -1298,6 +1330,13 @@ lookupVarsByCols uenv cols = mapMaybe (\j -> lookupEnv j uenv) cols
                  where lookupEnv j [] = Nothing
                        lookupEnv j ((VarBinder (v, _), (VarCol i, _)):uenv)
                                     | i == j    = Just v
+                                    | otherwise = lookupEnv j uenv
+
+lookupVarBindersByCols :: VarColEnv -> [Int] -> [VarBinder]
+lookupVarBindersByCols uenv cols = mapMaybe (\j -> lookupEnv j uenv) cols
+                 where lookupEnv j [] = Nothing
+                       lookupEnv j ((vb@(VarBinder (v, _)), (VarCol i, _)):uenv)
+                                    | i == j    = Just vb
                                     | otherwise = lookupEnv j uenv
 
 showRational r = show (numerator r) ++ if ((denominator r) == 1) then "" else "%" ++ (show $ denominator r)

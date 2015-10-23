@@ -92,3 +92,15 @@ solveSystemH system@(m,v) =
         m2   = rref m'
         m3   = takeRows (rank m2) m2
         sys' = convertFromHMatrix (m3, units)
+
+--------------------------------------------------
+-- Top-level custom solver based on HMatrix
+solveSystemH2 :: LinearSystem -> Either [Int] LinearSystem
+solveSystemH2 system@(m,v) =
+  case convertToHMatrix system of
+    Left  ns          -> Left ns
+    Right (m', units) -> Right sys'
+      where
+        m2   = rref m'
+        m3   = takeRows (rank m2) m2
+        sys' = convertFromHMatrix (m3, units)
