@@ -21,6 +21,7 @@ import Data.Ratio
 import Data.Maybe
 import Data.Matrix
 import Data.List
+import Data.Char (isNumber)
 import qualified Data.Vector as V
 import Data.Label.Mono (Lens)
 import qualified Data.Label
@@ -934,8 +935,10 @@ reportInconsistency (m, v) ns = do
     -- flatten it out
     return (concat vs)
 
-  forM_ vs $ \ (src, str) -> do
-    report <<++ str ++ " at " ++ show (fst src)
+  report <<++ "Caused by at least one of the following terms:"
+  forM_ vs $ \ ((s1, _), str) -> do
+    unless (all (\ x -> isNumber x || x == '.' || x == '-') str) $
+      report <<++ "line " ++ show (srcLine s1) ++ ": " ++ str
 
 solveSystemM :: (?solver :: Solver, ?debug :: Bool) => String -> State UnitEnv Bool
 solveSystemM adjective = do
