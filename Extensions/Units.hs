@@ -944,7 +944,7 @@ solveSystemM :: (?solver :: Solver, ?debug :: Bool) => String -> State UnitEnv B
 solveSystemM adjective = do
   system <- gets linearSystem
   ifDebug debugGaussian
-  case (solveSystemH2 system) of
+  case (solveSystemH_Either system) of
     Right system' -> do
       linearSystem =: system'
       ifDebug (report <<++ "After solve")

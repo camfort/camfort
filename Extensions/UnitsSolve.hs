@@ -95,8 +95,9 @@ solveSystemH system@(m,v) =
 
 --------------------------------------------------
 -- Top-level custom solver based on HMatrix
-solveSystemH2 :: LinearSystem -> Either [Int] LinearSystem
-solveSystemH2 system@(m,v) =
+-- This version uses "Either" result instead of "Consistency".
+solveSystemH_Either :: LinearSystem -> Either [Int] LinearSystem
+solveSystemH_Either system@(m,v) =
   case convertToHMatrix system of
     Left  ns          -> Left ns
     Right (m', units) -> Right sys'
