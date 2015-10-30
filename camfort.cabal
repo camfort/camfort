@@ -10,16 +10,12 @@ build-type:             Simple
 cabal-version:          >= 1.6
 tested-with:            GHC >= 7.4
 
-
 source-repository head
   type: git
   location: https://github.com/dorchard/camfort
 
 library
   hs-source-dirs:       .
-
-
---  ghc-options:          -package mtl-2.1.3.1 
 
   build-tools:          alex, happy
 
@@ -55,13 +51,10 @@ library
                         syz >= 0.2,
                         syb >= 0.4,
                         matrix >=0.2.2, 
---                        hmatrix >= 0.15, 
                         mtl >= 2.1,
                         text >= 0.11.2.3,
                         array >= 0.4,
                         directory >= 1.2, 
-                        language-fortran >= 0.3, 
+                        language-fortran >= 0.4, 
                         transformers >= 0.4,
                         vector >= 0.1
-
---  ghc-options:          -fglasgow-exts
