@@ -1,46 +1,29 @@
 # CamFort
 
-## Prerequisites
+## Installation & Building
 
-On a Debian/Ubuntu system
-
-```
-   sudo apt-get install ghc alex happy libghc-text-dev libghc-comonad-dev libghc-mtl-dev
-
-   cabal update
-   cabal install syz generic-deriving uniplate
-```
-
-Also required is the language-fortran package which needs to be built from source and installed.  This contains the lexer and the parser.
-
-## Building
-
-For development purpsoses, you probably want to load CamFort in interactive mode:
+### For general usage
 
 ```
-   ghci Main.hs
- ```
-
-OR compile to the binary format locally:
-
-```
-  ghc Main.hs -o camfort -package mtl
+  cabal install camfort
 ```
 
-Alternatively, to install as a library in your Haskell build 
+### For development
 
 ```
-  runhaskell Setup.hs configure
-  runhaskell Setup.hs build
-  runhaskell Setup.hs install
+  cabal sandbox init
+  cabal install --only-dependencies
+  cabal exec bash
 ```
 
-OR, for local install (depending how your Haskell install is setup), try to configure
-using --user.
+This spawns a new shell with only the packages within the sandbox available.
 
 ```
-  runhaskell Setup.hs configure --user
+  ghc Main.hs -o camfort
 ```
+
+This generates a camfort executable in the root directory using only the
+packages in the sandbox and none of ~/.cabal or system packages.
 
 ## Usage
 
@@ -48,21 +31,21 @@ using --user.
 CamFort - Cambridge Fortran Infrastructure.
 Usage: camfort <MODE> <INPUT> [OUTPUT] [OPTIONS...]
 Refactor functions:
-	common         	 [common block elimination] 
-	commonArg      	 [common block elimination (to parameter passing)] 
-	equivalence    	 [equivalence elimination] 
-	dataType       	 [derived data type introduction] 
-	dead           	 [dead-code elimination] 
-	units          	 [unit-of-measure inference] 
-	removeUnits    	 [unit-of-measure removal] 
+	common         	 [common block elimination]
+	commonArg      	 [common block elimination (to parameter passing)]
+	equivalence    	 [equivalence elimination]
+	dataType       	 [derived data type introduction]
+	dead           	 [dead-code elimination]
+	units          	 [unit-of-measure inference]
+	removeUnits    	 [unit-of-measure removal]
 
 Analysis functions:
-	asts           	 [blank analysis, outputs analysis files with AST information] 
-	lva            	 [live-variable analysis] 
-	loops          	 [loop information] 
-	count          	 [count variable declarations] 
-	criticalUnits  	 [calculate the critical variables for units-of-measure inference] 
-	ast            	 [print the raw AST -- for development purposes] 
+	asts           	 [blank analysis, outputs analysis files with AST information]
+	lva            	 [live-variable analysis]
+	loops          	 [loop information]
+	count          	 [count variable declarations]
+	criticalUnits  	 [calculate the critical variables for units-of-measure inference]
+	ast            	 [print the raw AST -- for development purposes]
 
 Options:
   -v, -?    --version            show version number
