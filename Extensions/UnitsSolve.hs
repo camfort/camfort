@@ -43,7 +43,7 @@ cutSystem k (matrix, vector) = (matrix', vector')
 checkSystem :: LinearSystem -> Row -> Consistency LinearSystem
 checkSystem (matrix, vector) k
   | k > nrows matrix = Ok (matrix, vector)
-  | vector !! (k - 1) /= Unitful [] = let vars = V.toList $ getRow k matrix 
+  | vector !! (k - 1) /= Unitful [] = let vars = V.toList $ getRow k matrix
                                           bad = Bad (matrix, vector) k (vector !! (k - 1), vars)
                                       in bad
   | otherwise = checkSystem (matrix, vector) (k + 1)
@@ -52,24 +52,24 @@ elimRow :: LinearSystem -> Maybe Row -> Col -> Row -> Consistency LinearSystem
 elimRow system Nothing m k = solveSystem' system (m + 1) k
 elimRow (matrix, vector) (Just n) m k = -- (show (m, k)) `D.trace`
  solveSystem' system' (m + 1) (k + 1)
-  where matrix' = let s = matrix ! (n, m) in 
+  where matrix' = let s = matrix ! (n, m) in
                     (if (k == n) then id else switchRows k n)
                        (if s == 1 then matrix else scaleRow (recip $ s) n matrix)
         vector' = switchScaleElems k n (fromRational $ recip $ matrix ! (n, m)) vector
         system' = elimRow' (matrix', vector') k m
 
-msteeper matrix k m = msteep matrix 1 
+msteeper matrix k m = msteep matrix 1
                        where
                          r = nrows matrix
                          msteep matrix n | n > r = matrix
                                          | n == k = msteep matrix (n+1)
-                                         | otherwise = let s = (- matrix ! (n, m)) 
+                                         | otherwise = let s = (- matrix ! (n, m))
                                                        in if s == 0 then msteep matrix (n+1)
                                                           else msteep (combineRows n s k matrix) (n+1)
 
 elimRow' :: LinearSystem -> Row -> Col -> LinearSystem
 elimRow' (matrix, vector) k m = (matrix', vector')
-  where mstep matrix n = let s = (- matrix ! (n, m)) in if s == 0 then matrix else combineRows n s k matrix 
+  where mstep matrix n = let s = (- matrix ! (n, m)) in if s == 0 then matrix else combineRows n s k matrix
         matrix' = foldl mstep matrix $ [1 .. k - 1] ++ [k + 1 .. nrows matrix]
         --matrix' = msteeper matrix k m
         vector'' = [x - fromRational (matrix ! (n, m)) * vector !! (k - 1) | (n, x) <- zip [1..] vector]

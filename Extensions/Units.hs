@@ -115,7 +115,7 @@ doInferUnits x = do mapM inferProgUnits x
                     ifDebug debugGaussian
                     inferInterproceduralUnits x
                     succeeded <- gets success
-                    p <- if (?criticals || (not succeeded)) 
+                    p <- if (?criticals || (not succeeded))
                                       then  return x -- don't insert unit annotations
                                       else  mapM (descendBiM insertUnitsInBlock) x
                     (n, added) <- gets evUnitsAdded
