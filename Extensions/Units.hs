@@ -936,7 +936,7 @@ reportInconsistency (m, v) ns = do
     return (concat vs)
 
   report <<++ "Caused by at least one of the following terms:"
-  forM_ vs $ \ ((s1, _), str) -> do
+  forM_ (nub vs) $ \ ((s1, _), str) -> do
     unless (all (\ x -> isNumber x || x == '.' || x == '-') str) $
       report <<++ "line " ++ show (srcLine s1) ++ ": " ++ str
 
