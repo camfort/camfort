@@ -853,7 +853,7 @@ anyUnits category =
 --   Gaussian Elimination (Main)
 --
 -- *************************************
-                                                                    
+
 {-| Print debug information for non-zero coefficients from the Gaussian matrix -}
 debugInfoForNonZeros :: [Rational] -> State UnitEnv String
 debugInfoForNonZeros row = do debugs <- gets debugInfo
@@ -861,15 +861,15 @@ debugInfoForNonZeros row = do debugs <- gets debugInfo
                               return $ if (cSpots == []) then "" else (" arising from \n" ++ cSpots)
                                   where
                                     getInfo debugs (n, 0) = ""
-                                    getInfo debugs (n, r) = 
+                                    getInfo debugs (n, r) =
                                          case lookup n debugs of
                                                         (Just (span, s)) -> "\t" ++ (showSrcSpan span) ++ " - " ++ s ++ "\n"
                                                         _                -> ""
 
 {- | An attempt at getting some useful user information. Needs position information -}
 errorMessage :: (?debug :: Bool) => Row -> UnitConstant -> [Rational] -> State UnitEnv String
-errorMessage row unit rowCoeffs = 
- let ?num = 0 in 
+errorMessage row unit rowCoeffs =
+ let ?num = 0 in
     do uvarEnv <- gets varColEnv
        debugs <- gets debugInfo
        u <- makeUnitSpec unit
@@ -886,7 +886,7 @@ errorMessage row unit rowCoeffs =
                         return $
                            let unitStrL = pprint uL
                                unitStrR = pprint uR
-                               msg = "Conflict since " ++ unitStrL ++ " != " ++ unitStrR 
+                               msg = "Conflict since " ++ unitStrL ++ " != " ++ unitStrR
                            in msg ++ conflictInfo
              {- A single unit with no variable column suggests an attempt to unify an unit
                 with unitless -}
@@ -901,7 +901,7 @@ errorMessage row unit rowCoeffs =
                      return "Sorry, I can't give a better error."
        else
            let varColsAndNames = zip varCols (lookupVarsByCols uvarEnv varCols)
-               exprStr' = map (\(k,v) -> if (rowCoeffs !! (k - 1)) == 1 
+               exprStr' = map (\(k,v) -> if (rowCoeffs !! (k - 1)) == 1
                                          then v
                                          else (showRational (rowCoeffs !! (k - 1))) ++ "*" ++ v) varColsAndNames
                exprStr = concat $ intersperse "*" exprStr'
