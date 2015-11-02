@@ -5,3 +5,4 @@
 /Language/Fortran/Lexer.hs
 /Language/Fortran/Parser.hs
 /camfort
+/fixman_fixtures
