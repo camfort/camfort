@@ -2,24 +2,33 @@
 
 ## Installation & Building
 
+### Dependencies
+
+Cabal does not automatically install the build tools. If you wonder why
+checkout haskell/cabal#220.
+
+```
+$ cabal install alex happy
+```
+
 ### For general usage
 
 ```
-  cabal install camfort
+$ cabal install camfort
 ```
 
 ### For development
 
 ```
-  cabal sandbox init
-  cabal install --only-dependencies
-  cabal exec bash
+$ cabal sandbox init
+$ cabal install camfort.cabal --only-dependencies
+$ cabal exec bash
 ```
 
 This spawns a new shell with only the packages within the sandbox available.
 
 ```
-  ghc Main.hs -o camfort
+$ ghc Main.hs -o camfort
 ```
 
 This generates a camfort executable in the root directory using only the
