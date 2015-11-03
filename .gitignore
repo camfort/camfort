@@ -6,3 +6,5 @@
 /Language/Fortran/Parser.hs
 /camfort
 /fixman_fixtures
+/.cabal-sandbox
+/cabal.sandbox.config
