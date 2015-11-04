@@ -1,0 +1,23 @@
+:fixtures_base: fixman_fixtures
+:tasks:
+  - :name: criticalUnits
+    :command:
+      :action: "./camfort criticalUnits TARGET"
+    :condition:
+      :type: :ruby
+      :action: |
+        proc do |t| 
+          t.basename.extname =~ /\.f(90)?/
+        end
+  - :name: units
+    :command:
+      :action: ./camfort units TARGET ./fixman_output
+    :condition:
+      :type: :ruby
+      :action: |
+        proc do |t| 
+          t.basename.extname =~ /\.f(90)?/
+        end
+    :cleanup:
+      :type: :shell
+      :action: "rm -fr ./fixman_output"

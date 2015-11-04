@@ -1,5 +1,10 @@
 *.o
+*.p_o
 *.hi
+*~
 /Language/Fortran/Lexer.hs
 /Language/Fortran/Parser.hs
 /camfort
+/fixman_fixtures
+/.cabal-sandbox
+/cabal.sandbox.config

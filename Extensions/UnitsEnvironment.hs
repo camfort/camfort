@@ -24,15 +24,18 @@ data AssumeLiterals = Poly | Unitless | Mixed deriving (Show, Read, Eq)
 data UnitConstant = Unitful [(MeasureUnit, Rational)] | UnitlessC Rational deriving (Eq, Show)
 
 -- Column of the Guassian matrix associated with a variable
-newtype VarCol = VarCol Col deriving (Eq, Show) 
+newtype VarCol = VarCol Col deriving (Eq, Show)
 
--- Map from Variable names to their column paired with any column of their indices 
---   e.g., for a(i,k) we have a map from 'a' to its column paired with 
+-- Map from Variable names to their column paired with any column of their indices
+--   e.g., for a(i,k) we have a map from 'a' to its column paired with
 --       a two element list of the columns for 'i' and 'j'
 
-type VarColEnv = [(Variable, (VarCol, [VarCol]))]
+newtype VarBinder = VarBinder (Variable, SrcSpan) deriving Show
+type VarColEnv = [(VarBinder, (VarCol, [VarCol]))]
 
 data UnitVarCategory = Literal EqualityConstrained | Temporary | Variable | Argument | Magic deriving (Eq, Show)
+
+
 
 type DerivedUnitEnv = [(MeasureUnit, UnitConstant)]
 
@@ -56,15 +59,15 @@ data UnitEnv = UnitEnv {
   _unitVarCats         :: [UnitVarCategory],
   _reorderedCols       :: [Int],
   _underdeterminedCols :: [Int],
-  _linearSystem        :: LinearSystem, 
+  _linearSystem        :: LinearSystem,
   _debugInfo           :: DebugInfo,
   _tmpRowsAdded        :: [Int],
   _tmpColsAdded        :: [Int],
-  _success             :: Bool, 
-  -- This part of the state is just for some evaluation metrics 
+  _success             :: Bool,
+  -- This part of the state is just for some evaluation metrics
   _evUnitsAdded        :: (Int, [String]),
   _evCriticals         :: [Int]
-} deriving Show 
+} deriving Show
 
 emptyUnitEnv = UnitEnv { _report              = [],
                          _varColEnv          = [],
@@ -119,7 +122,7 @@ instance Fractional UnitConstant where
   (UnitlessC n1) / (UnitlessC n2) = UnitlessC (n1 / n2)
   fromRational = UnitlessC . fromRational
 
-data Consistency a = Ok a | Bad a Int (UnitConstant, [Rational]) | BadL a deriving Show
+data Consistency a = Ok a | Bad a Int (UnitConstant, [Rational]) deriving Show
 
 efmap :: (a -> a) -> Consistency a -> Consistency a
 efmap f (Ok x)      = Ok (f x)
