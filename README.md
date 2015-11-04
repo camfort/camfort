@@ -11,6 +11,12 @@ checkout haskell/cabal#220.
 $ cabal install alex happy
 ```
 
+Install the native packages needed for `hmatrix` dependency
+
+```
+sudo apt-get install libgsl0-dev liblapack-dev libatlas-base-dev
+```
+
 ### For general usage
 
 ```
@@ -21,7 +27,7 @@ $ cabal install camfort
 
 ```
 $ cabal sandbox init
-$ cabal install camfort.cabal --only-dependencies
+$ cabal install --only-dependencies
 $ cabal exec bash
 ```
 
@@ -32,7 +38,7 @@ $ ghc Main.hs -o camfort
 ```
 
 This generates a camfort executable in the root directory using only the
-packages in the sandbox and none of ~/.cabal or system packages.
+packages in the sandbox and none of ~/.cabal or system Haskell packages.
 
 ## Usage
 
