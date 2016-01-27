@@ -31,6 +31,7 @@ import Analysis.Types
 import Analysis.Loops
 import Analysis.LVA
 import Analysis.Syntax
+import qualified Analysis.Stencils as Stencils
 
 import Helpers
 import Output
@@ -131,7 +132,9 @@ analyses =
      ("loops", (loops, "loop information")), 
      ("count", (countVarDecls, "count variable declarations")),
      ("criticalUnits", (unitCriticals, "calculate the critical variables for units-of-measure inference")),
-     ("ast", (ast, "print the raw AST -- for development purposes"))]
+     ("ast", (ast, "print the raw AST -- for development purposes")),
+     ("stencils-infer", (stencilsInf, "stencil spec inference")),
+     ("stencils-check", (stencilsCheck, "stencil spec checking"))]
 
 -- * Usage and about information
 version = 0.615
@@ -159,6 +162,14 @@ asts inSrc excludes _ _ =
 countVarDecls inSrc excludes _ _ =  
     do putStrLn $ "Counting variable declarations in " ++ show inSrc ++ "\n"
        doAnalysisSummary countVariableDeclarations inSrc excludes 
+
+stencilsInf inSrc excludes _ _ =
+          do putStrLn $ "Inferring stencil specs for " ++ show inSrc ++ "\n"
+             doAnalysis Stencils.infer inSrc excludes
+
+stencilsCheck inSrc excludes _ _ =
+          do putStrLn $ "Checking stencil specs for " ++ show inSrc ++ "\n"
+             doAnalysis Stencils.check inSrc excludes   
 
 loops inSrc excludes _ _ =  
            do putStrLn $ "Analysing loops for " ++ show inSrc ++ "\n"

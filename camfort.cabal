@@ -27,6 +27,7 @@ library
                         Analysis.IntermediateReps
                         Analysis.Loops
                         Analysis.LVA
+                        Analysis.Stencils
                         Analysis.Syntax
                         Analysis.Types
                         Transformation.CommonBlockElim
@@ -54,7 +55,7 @@ library
                         syz >= 0.2,
                         syb >= 0.4,
                         matrix >=0.2.2,
-                        hmatrix >= 0.15,
+                        hmatrix >= 0.17.0.1,
                         mtl >= 2.1,
                         text >= 0.11.2.3,
                         array >= 0.4,
