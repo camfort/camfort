@@ -127,5 +127,5 @@ foldPair :: (a -> a -> Maybe a) -> [a] -> [a]
 foldPair f [] = []
 foldPair f [a] = [a]
 foldPair f (a:(b:xs)) = case f a b of
-                          Nothing -> a : (b : foldPair f xs)
+                          Nothing -> a : (foldPair f (b : xs))
                           Just c  -> foldPair f (c : xs)
