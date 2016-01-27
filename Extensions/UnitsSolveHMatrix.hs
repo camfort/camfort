@@ -1,3 +1,5 @@
+{-# LANGUAGE FlexibleContexts #-}
+
 module Extensions.UnitsSolveHMatrix
   ( rref, rrefMatrices, convertToHMatrix, convertFromHMatrix, isInconsistentRREF
   , dispf, Units, lu, rank, takeRows )
