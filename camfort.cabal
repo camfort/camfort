@@ -45,7 +45,7 @@ library
 
   build-depends:        base < 5,
                         containers >= 0.5.0.0,
-                        template-haskell >=2.4 && <2.10,
+                        template-haskell >=2.4,
                         generic-deriving >=1.5.5,
                         uniplate >= 1.6.10,
                         comonad >= 3,
@@ -54,7 +54,7 @@ library
                         syz >= 0.2,
                         syb >= 0.4,
                         matrix >=0.2.2,
-                        hmatrix >= 0.15 && <=0.16.1.5,
+                        hmatrix >= 0.15,
                         mtl >= 2.1,
                         text >= 0.11.2.3,
                         array >= 0.4,

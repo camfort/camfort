@@ -7,9 +7,14 @@ where
 
 import Data.Ratio
 import Debug.Trace (trace)
-import Numeric.LinearAlgebra
-import Data.Packed.Matrix (fromBlocks)
-import Data.Packed.ST
+import Numeric.LinearAlgebra (
+    atIndex, (<>), (><), rank, (?), toLists, toList, fromLists, fromList, rows, cols,
+    Matrix, takeRows, takeColumns, dropRows, dropColumns, subMatrix, diag, build, fromBlocks,
+    ident, flatten, lu, dispf
+  )
+import Numeric.LinearAlgebra.Devel (
+    newMatrix, writeMatrix, runSTMatrix
+  )
 import Control.Monad (filterM)
 import Control.Monad.ST
 import qualified Data.Matrix as Old (nrows, ncols, toList, Matrix, fromList)
@@ -106,7 +111,7 @@ elemRowAdd n i j k = runSTMatrix $ do
 elemRowAdd_spec n i j k
   | i < 0 || i >= n = undefined
   | j < 0 || j >= n = undefined
-  | otherwise       = buildMatrix n n f
+  | otherwise       = build n n f
   where
     f (i', j') | i == i' && j == j' = k
                | i' == j'           = 1
@@ -190,3 +195,6 @@ findInconsistentRows coA augA = [0..(rows augA - 1)] \\ consistent
         augA' = extractRows ns augA
 
     pset = filterM (const [True, False])
+
+extractRows = flip (?) -- hmatrix 0.17 changed interface
+m @@> i = m `atIndex` i
