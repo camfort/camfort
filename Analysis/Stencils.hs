@@ -17,6 +17,8 @@ import Data.List
 import Helpers
 import Traverse
 
+import Debug.Trace
+
 import Transformation.Syntax
 
 infer :: Program a -> Program Annotation
@@ -32,23 +34,86 @@ type Depth      = Int
 type Saturation = Bool
 data Direction  = Fwd | Bwd deriving (Eq, Show)
 
--- Specification elements
+-- High-level spec algebra
 data Spec where
-     Span        :: Depth -> Dimension -> Direction -> Saturation -> Spec
-     Reflexive   :: Spec
-deriving instance Show Spec
+     Reflexive :: Spec
+     Forward :: Depth -> [Dimension] -> Spec
+     Backward :: Depth -> [Dimension] -> Spec
+     Symmetric :: Depth -> [Dimension] -> Spec
+     Unspecified :: [Dimension] -> Spec
+     Linear :: Spec -> Spec
 
-depth :: Spec -> Int
-depth Reflexive = 0
+-- Syntax
+showL = concat . (intersperse ",") . (map show)
+instance Show Spec where
+     show Reflexive            = "reflexive"
+     show (Forward dep dims)   = "forward " ++ show dep ++ " " ++ showL dims
+     show (Backward dep dims)  = "backward " ++ show dep ++ " " ++ showL dims
+     show (Symmetric dep dims) = "centered " ++ show dep ++ " " ++ showL dims
+     show (Unspecified dims)   = "unspecified " ++ showL dims
+     show (Linear spec)        = (show spec) ++ " unique "
+
+--specGen :: Normalised [[SpecI]] -> [Spec]
+--specGen =
+
+isReflexiveMultiDim :: Normalised [[SpecI]] -> Bool
+isReflexiveMultiDim (NSpecIGroups spanss) = all (\spans -> (length spans > 0) && (head spans == Reflx)) spanss
+
+-- Find speccs for the same depth and direction but differnt dim and combine them
+coalesceSameDepth :: [Spec] -> [Spec]
+coalesceSameDepth = id 
+
+specIsToSpecs :: Normalised [[SpecI]] -> [Spec]
+specIsToSpecs x@(NSpecIGroups spanss) =
+     (if isReflexiveMultiDim x then [Reflexive] else [])
+  ++ coalesceSameDepth (concatMap (uncurry go) (zip [0..length spanss] spanss))
+                  where go :: Dimension -> [SpecI] -> [Spec]
+                        go dim (Reflx : xs) = go dim xs
+                        go dim [Span d _ Fwd True, Span d' _ Bwd True] =
+                           if d==d' then [Symmetric d [dim]]
+                           else if d > d' then [Symmetric (abs (d-d')) [dim], Forward d [dim]]
+                                          else [Symmetric (abs (d-d')) [dim], Backward d' [dim]]
+                        go dim xs = (show (dim, xs)) `trace` []
+                           
+
+-- SpecIification (intermediate) elements
+data SpecI where
+     Span        :: Depth -> Dimension -> Direction -> Saturation -> SpecI
+     Reflx   :: SpecI
+deriving instance Show SpecI
+
+depth :: SpecI -> Int
+depth Reflx = 0
 depth (Span depth _ _ _) = depth
 
-dim :: Spec -> Dimension
-dim Reflexive = 0
+dim :: SpecI -> Dimension
+dim Reflx = 0
 dim (Span _ dim _ _) = dim
 
-direction :: Spec -> Direction
+direction :: SpecI -> Direction
 direction (Span _ _ dir _) = dir
-direction Reflexive        = Fwd
+direction Reflx        = Fwd
+
+ixExprToSpecIs :: Expr p -> [SpecI]
+ixExprToSpecIs (Var _ _ [(VarName _ a, es)]) | length es > 0 =
+              case (mapM (uncurry ixCompExprToSpecI) (zip [0..(length es)] es)) of
+                   Nothing -> []
+                   Just es -> es
+ixExprToSpecIs _ = []                   
+
+ixCompExprToSpecI :: Dimension -> Expr p -> Maybe SpecI
+ixCompExprToSpecI d (Var _ _ [(VarName _ v, [])]) = Just Reflx
+
+ixCompExprToSpecI d (Bin _ _ (Plus _) (Var _ _ [(VarName _ v, [])]) (Con _ _ offset)) =
+                       let x = read offset in Just $ Span (read offset) d (if x < 0 then Bwd else Fwd) False
+
+ixCompExprToSpecI d (Bin _ _ (Plus _) (Con _ _ offset) (Var _ _ [(VarName _ v, [])])) =
+                       let x = read offset in Just $ Span (read offset) d (if x < 0 then Bwd else Fwd) False
+
+ixCompExprToSpecI d (Bin _ _ (Minus _) (Var _ _ [(VarName _ v, [])]) (Con _ _ offset)) =
+                       let x = read offset in Just $ Span (read offset) d (if x < 0 then Fwd else Bwd) False
+
+ixCompExprToSpecI d _ = Nothing
 
 
 {-
@@ -64,8 +129,8 @@ direction Reflexive        = Fwd
 -}
 
 -- Ordering
-deriving instance Eq Spec
-instance Ord Spec where
+deriving instance Eq SpecI
+instance Ord SpecI where
          (Span depth dim Fwd s) <= (Span depth' dim' Fwd s')
                   | (dim < dim')  = True
                   | (dim == dim') = depth <= depth'
@@ -75,51 +140,51 @@ instance Ord Spec where
                   | (dim == dim') = depth <= depth'
                   | otherwise     = False
          (Span _ _ Fwd _) <= (Span _ _ Bwd _) = True
-         Reflexive       <= _                 = True
+         Reflx       <= _                 = True
          _ <= _                               = False
 
 -- Types various normal forms of specifications and specification groups
 data Normalised a where
      -- Two specifications belonging to the same dimension which are not duplicates
-     NS :: Spec -> Spec -> Normalised (Spec, Spec)
+     NS :: SpecI -> SpecI -> Normalised (SpecI, SpecI)
 
      -- A list of specifications all of the same dimension
-     NSpecs :: [Spec]   -> Normalised [Spec]
+     NSpecIs :: [SpecI]   -> Normalised [SpecI]
 
      -- Grouped lists of specifications in normal form (maximally coalesced), grouped by dimension
-     NSpecGroups :: [[Spec]] -> Normalised [[Spec]]
+     NSpecIGroups :: [[SpecI]] -> Normalised [[SpecI]]
 
 -- Normalise a list of spans
-normalise :: [Spec] -> Normalised [[Spec]]
+normalise :: [SpecI] -> Normalised [[SpecI]]
 normalise = coalesce . groupByDim
 
 -- Takes lists of specs belonging to the same dimension/direction and coalesces contiguous regions
-coalesce :: [Normalised [Spec]] -> Normalised [[Spec]]
-coalesce = NSpecGroups . (map (\(NSpecs specs) -> foldPair (\x y -> plus (NS x y)) $ specs))
+coalesce :: [Normalised [SpecI]] -> Normalised [[SpecI]]
+coalesce = NSpecIGroups . (map (\(NSpecIs specs) -> foldPair (\x y -> plus (NS x y)) $ specs))
 
-groupByDim :: [Spec] -> [Normalised [Spec]]
-groupByDim = (map (NSpecs . nub)) . (groupBy eqDim) . sort
+groupByDim :: [SpecI] -> [Normalised [SpecI]]
+groupByDim = (map (NSpecIs . nub)) . (groupBy eqDim) . sort
 
-eqDim :: Spec -> Spec -> Bool
-eqDim Reflexive Reflexive                 = True
+eqDim :: SpecI -> SpecI -> Bool
+eqDim Reflx Reflx                 = True
 eqDim (Span _ d dir _) (Span _ d' dir' _) = (d == d') && (dir == dir')
 eqDim _ _                                 = False
 
 -- Coalesces two contiguous specifications (of the same dimension and direction)
 --  This is a partial operation and fails when the two specs are not contiguous
-plus :: Normalised (Spec, Spec) -> Maybe Spec
+plus :: Normalised (SpecI, SpecI) -> Maybe SpecI
 plus (NS (Span d1 _ _ s1) (Span d2 dim dir s2)) =
-     if d2 == (d1 + 1) then -- Specs are one apart
+     if d2 == (d1 + 1) then -- SpecIs are one apart
         if s1 || s2 then    -- At least one is marked as saturated
             Just (Span d2 dim dir True) -- Grow the saturated area
         else 
             Nothing         -- Neither span is satured so mark both as needed
-     else -- d2 >= d1 by Normalised -- Specs are more than one apart
+     else -- d2 >= d1 by Normalised -- SpecIs are more than one apart
         if s2 then -- if the greater span is saturated, then it subsumes the smaller
             Just (Span d2 dim dir True)
         else
             Nothing
-plus (NS Reflexive Reflexive) = Just Reflexive
+plus (NS Reflx Reflx) = Just Reflx
 plus _ = error "Trying to coalesce a reflexive and a span"
 
 -- Helper function, reduces a list two elements at a time with a partial operation
