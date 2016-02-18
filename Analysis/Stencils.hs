@@ -44,15 +44,23 @@ specInference' p =
                       in  modify (\out -> out ++ show (spanLineCol span)
                                               ++ " - " ++ arrayVar
                                               ++ ": " ++ show spec ++ "\n")
+                 perBlock :: Block Annotation -> State String (Block Annotation)
+                 perBlock b = let tenv = typeEnv b
+                              in transformBiM (perStmt tenv) b
 
-                 assigns :: Fortran Annotation -> State String (Fortran Annotation)
-                 assigns f@(Assg annotation span lhs rhs) =
-                     do let arrayAccesses = Map.toList $ arrsRead annotation
+                 perStmt :: TypeEnv Annotation -> Fortran Annotation -> State String (Fortran Annotation)
+                 perStmt tenv f@(Assg annotation span lhs rhs) =
+                     do --let arrayAccesses = Map.toList $ arrsRead annotation
+                        let arrayAccesses = Map.toList $ collect
+                                                    [(v, mfmap (const ()) e) | 
+                                                     (Var _ _ [(VarName _ v, e)]) <- rhsExpr f,
+                                                     length e > 0,
+                                                     isArrayTypeP' tenv v]
                         mapM (calcAndFormatSpec span) arrayAccesses
                         return f
-                 assigns f = return f
+                 perStmt _ f = return f
                  
-             in case runState (transformBiM assigns p) "" of (_, output) -> output
+             in case runState (transformBiM perBlock p) "" of (_, output) -> output
 
 
 {- *** 1 . Specification syntax *** -}
