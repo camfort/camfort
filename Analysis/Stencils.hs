@@ -25,8 +25,8 @@ import Transformation.Syntax
 -- Infer and check stencil specifications
 infer :: Program a -> String
 infer p = specInference .
-          -- Perform some standard transformations first
-          map (ix . lvaOnUnit . (transformBi reassociate) . (fmap (const unitAnnotation))) $ p
+          -- First set the unit annotation
+          map (fmap (const unitAnnotation)) $ p
 
 check :: Program a -> Program Annotation
 check = error "Not yet implemented"
@@ -62,7 +62,7 @@ specInference' p =
              in case runState (transformBiM perBlock p) "" of (_, output) -> output
 
 
-{- *** 1 . Specification syntax *** -}
+{- *** 1 . Specification syntax -}
 
 type Dimension  = Int
 type Depth      = Int
@@ -96,7 +96,7 @@ instance Show Spec where
      show (Constant dims)      = "fixed dim=" ++ showL (map (\x -> x - 1) dims)
      show (Linear spec)        = (show spec) ++ " unique "
 
-{- *** 2 . Operations on specs, and conversion from indexing expressions *** -}
+{- *** 2 . Operations on specs, and conversion from indexing expressions -}
 
 -- Convert list of indexing expressions to list of specs
 ixCollectionToSpec :: [[Expr p]] -> [Spec]
@@ -115,7 +115,7 @@ specPlus (Symmetric dep dims) (Symmetric dep' dims') | dep == dep' = Just (Symme
 specPlus (Unspecified dims) (Unspecified dims')                    = Just (Unspecified (dims ++ dims'))
 specPlus x y                                                       = Nothing
 
-{- *** 3 . Intermediate representation 'SpecI' between indexing expressions and speccs *** -}
+{- *** 3 . Intermediate representation 'SpecI' between indexing expressions and speccs -}
 
 -- SpecIification (intermediate) elements
 data SpecI where
