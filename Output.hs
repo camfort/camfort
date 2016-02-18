@@ -270,8 +270,6 @@ outputAnn t visible i astString =
 
 type A1 =  Bool
 
-lineCol :: SrcLoc -> (Int, Int)
-lineCol x = (srcLine x, srcColumn x)
 
 -- inBounds :: SrcLoc -> (SrcLoc, SrcLoc) -> Bool
 -- inBounds x (l,u) = (lineCol x) >= (lineCol l) && (lineCol x) < (lineCol u)

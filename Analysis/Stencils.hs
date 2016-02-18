@@ -1,4 +1,4 @@
-{-# LANGUAGE GADTs, StandaloneDeriving #-}
+{-# LANGUAGE GADTs, StandaloneDeriving, FlexibleContexts #-}
 
 module Analysis.Stencils where
 
@@ -13,6 +13,7 @@ import Analysis.Annotations
 import Analysis.Syntax
 import Analysis.Types
 
+import qualified Data.Map as Map
 import Data.List
 import Helpers
 import Traverse
@@ -21,107 +22,120 @@ import Debug.Trace
 
 import Transformation.Syntax
 
-infer :: Program a -> Program Annotation
-infer p = map ((descendBi arrayIndices) . ix . lvaOnUnit . (transformBi reassociate) . (fmap (const unitAnnotation))) p
+-- Infer and check stencil specifications
+infer :: Program a -> String
+infer p = specInference .
+          -- Collecting array index expressions
+          map (descendBi arrayIndices .
+          -- Perform some standard transformations first
+          ix . lvaOnUnit . (transformBi reassociate) . (fmap (const unitAnnotation))) $ p
 
 check :: Program a -> Program Annotation
-check = undefined
+check = error "Not yet implemented"
 
-{- Algebra of specifications -}
+-- For the purposes of development, a representative example is given by running (in ghci):
+--      stencilsInf "samples/stencils/one.f90" [] () ()
+
+specInference :: Program Annotation -> String
+specInference p = concatMap specInference' p
+specInference' p =
+             let calcAndFormatSpec span (arrayVar, ixExprs) =
+                      let spec = ixCollectionToSpec ixExprs
+                      in  modify (\out -> out ++ show (spanLineCol span)
+                                              ++ " - " ++ arrayVar
+                                              ++ ": " ++ show spec ++ "\n")
+
+                 assigns :: Fortran Annotation -> State String (Fortran Annotation)
+                 assigns f@(Assg annotation span lhs rhs) =
+                     do let arrayAccesses = Map.toList $ arrsRead annotation
+                        mapM (calcAndFormatSpec span) arrayAccesses
+                        return f
+                 assigns f = return f
+                 
+             in case runState (transformBiM assigns p) "" of (_, output) -> output
+
+
+{- *** 1 . Specification syntax *** -}
 
 type Dimension  = Int
 type Depth      = Int
 type Saturation = Bool
 data Direction  = Fwd | Bwd deriving (Eq, Show)
 
--- High-level spec algebra
 data Spec where
-     Reflexive :: Spec
-     Forward :: Depth -> [Dimension] -> Spec
-     Backward :: Depth -> [Dimension] -> Spec
-     Symmetric :: Depth -> [Dimension] -> Spec
+     Reflexive   :: Spec
+     Forward     :: Depth -> [Dimension] -> Spec
+     Backward    :: Depth -> [Dimension] -> Spec
+     Symmetric   :: Depth -> [Dimension] -> Spec
      Unspecified :: [Dimension] -> Spec
-     Linear :: Spec -> Spec
+     Constant    :: [Dimension] -> Spec
+     Linear      :: Spec -> Spec
+
+instance Ord Direction where
+         Fwd <= Bwd = True
+         Fwd <= Fwd = True
+         Bwd <= Bwd = True
+         Bwd <= Fwd = False
 
 -- Syntax
+showL :: Show a => [a] -> String
 showL = concat . (intersperse ",") . (map show)
 instance Show Spec where
      show Reflexive            = "reflexive"
-     show (Forward dep dims)   = "forward " ++ show dep ++ " " ++ showL dims
-     show (Backward dep dims)  = "backward " ++ show dep ++ " " ++ showL dims
-     show (Symmetric dep dims) = "centered " ++ show dep ++ " " ++ showL dims
-     show (Unspecified dims)   = "unspecified " ++ showL dims
+     show (Forward dep dims)   = "forward depth=" ++ show dep ++ " dim=" ++ showL (map (\x -> x - 1) dims)
+     show (Backward dep dims)  = "backward depth=" ++ show dep ++ " dim=" ++ showL (map (\x -> x - 1) dims)
+     show (Symmetric dep dims) = "centered depth=" ++ show dep ++ " dim=" ++ showL (map (\x -> x - 1) dims)
+     show (Unspecified dims)   = "unspecified "  ++ showL (map (\x -> x - 1) dims)
+     show (Constant dims)      = "fixed dim=" ++ showL (map (\x -> x - 1) dims)
      show (Linear spec)        = (show spec) ++ " unique "
 
---specGen :: Normalised [[SpecI]] -> [Spec]
---specGen =
+{- *** 2 . Operations on specs, and conversion from indexing expressions *** -}
 
-isReflexiveMultiDim :: Normalised [[SpecI]] -> Bool
-isReflexiveMultiDim (NSpecIGroups spanss) = all (\spans -> (length spans > 0) && (head spans == Reflx)) spanss
+-- Convert list of indexing expressions to list of specs
+ixCollectionToSpec :: [[Expr p]] -> [Spec]
+ixCollectionToSpec es = let x = normalise . ixExprAToSpecIs $ es
+                        in specIsToSpecs x -- (show (ixExprAToSpecIs $ (v, es)) ++ "\n" ++ show x) `trace` 
 
--- Find speccs for the same depth and direction but differnt dim and combine them
-coalesceSameDepth :: [Spec] -> [Spec]
-coalesceSameDepth = id 
+-- Simplifies lists specifications based on the 'specPlus' operation:
+simplify :: [Spec] -> [Spec]
+simplify = foldPair specPlus
+-- Combine specs 
+specPlus :: Spec -> Spec -> Maybe Spec
+specPlus Reflexive Reflexive                                       = Just Reflexive
+specPlus (Forward dep dims) (Forward dep' dims')     | dep == dep' = Just (Forward dep (dims ++ dims'))
+specPlus (Backward dep dims) (Backward dep' dims')   | dep == dep' = Just (Backward dep (dims ++ dims'))
+specPlus (Symmetric dep dims) (Symmetric dep' dims') | dep == dep' = Just (Symmetric dep (dims ++ dims'))
+specPlus (Unspecified dims) (Unspecified dims')                    = Just (Unspecified (dims ++ dims'))
+specPlus x y                                                       = Nothing
 
-specIsToSpecs :: Normalised [[SpecI]] -> [Spec]
-specIsToSpecs x@(NSpecIGroups spanss) =
-     (if isReflexiveMultiDim x then [Reflexive] else [])
-  ++ coalesceSameDepth (concatMap (uncurry go) (zip [0..length spanss] spanss))
-                  where go :: Dimension -> [SpecI] -> [Spec]
-                        go dim (Reflx : xs) = go dim xs
-                        go dim [Span d _ Fwd True, Span d' _ Bwd True] =
-                           if d==d' then [Symmetric d [dim]]
-                           else if d > d' then [Symmetric (abs (d-d')) [dim], Forward d [dim]]
-                                          else [Symmetric (abs (d-d')) [dim], Backward d' [dim]]
-                        go dim xs = (show (dim, xs)) `trace` []
-                           
+{- *** 3 . Intermediate representation 'SpecI' between indexing expressions and speccs *** -}
 
 -- SpecIification (intermediate) elements
 data SpecI where
-     Span        :: Depth -> Dimension -> Direction -> Saturation -> SpecI
-     Reflx   :: SpecI
+     Span        :: Dimension -> Depth -> Direction -> Saturation -> SpecI
+     Reflx       :: SpecI
+     Const       :: Dimension -> SpecI
 deriving instance Show SpecI
 
 depth :: SpecI -> Int
-depth Reflx = 0
-depth (Span depth _ _ _) = depth
+depth (Span _ depth _ _) = depth
+depth x = 0
 
 dim :: SpecI -> Dimension
-dim Reflx = 0
-dim (Span _ dim _ _) = dim
+dim (Span dim _ _ _) = dim
+dim (Const dim)      = dim
+dim x                = 0
 
 direction :: SpecI -> Direction
 direction (Span _ _ dir _) = dir
-direction Reflx        = Fwd
-
-ixExprToSpecIs :: Expr p -> [SpecI]
-ixExprToSpecIs (Var _ _ [(VarName _ a, es)]) | length es > 0 =
-              case (mapM (uncurry ixCompExprToSpecI) (zip [0..(length es)] es)) of
-                   Nothing -> []
-                   Just es -> es
-ixExprToSpecIs _ = []                   
-
-ixCompExprToSpecI :: Dimension -> Expr p -> Maybe SpecI
-ixCompExprToSpecI d (Var _ _ [(VarName _ v, [])]) = Just Reflx
-
-ixCompExprToSpecI d (Bin _ _ (Plus _) (Var _ _ [(VarName _ v, [])]) (Con _ _ offset)) =
-                       let x = read offset in Just $ Span (read offset) d (if x < 0 then Bwd else Fwd) False
-
-ixCompExprToSpecI d (Bin _ _ (Plus _) (Con _ _ offset) (Var _ _ [(VarName _ v, [])])) =
-                       let x = read offset in Just $ Span (read offset) d (if x < 0 then Bwd else Fwd) False
-
-ixCompExprToSpecI d (Bin _ _ (Minus _) (Var _ _ [(VarName _ v, [])]) (Con _ _ offset)) =
-                       let x = read offset in Just $ Span (read offset) d (if x < 0 then Fwd else Bwd) False
-
-ixCompExprToSpecI d _ = Nothing
-
+direction x                = Fwd
 
 {-
  This provides a representation for index ranges along with
  a normalisation function that coalesces contiguous ranges.
 
  Any non-reflexive index is converted to a (list of) spans
-  e.g. a(i - 1, j + 1) -> [Span 1 Bwd 0 False, Span 1 Fwd 1 False]
+  e.g. a(i - 1, j + 1) -> [Span 0 1 Bwd False, Span 0 1 Fwd False]
 
  the 'normalise' function then turns a list of these spans 
  into a list of list of spans (per dimension/direction)
@@ -131,17 +145,12 @@ ixCompExprToSpecI d _ = Nothing
 -- Ordering
 deriving instance Eq SpecI
 instance Ord SpecI where
-         (Span depth dim Fwd s) <= (Span depth' dim' Fwd s')
-                  | (dim < dim')  = True
-                  | (dim == dim') = depth <= depth'
-                  | otherwise     = False
-         (Span depth dim Bwd s) <= (Span depth' dim' Bwd s')
-                  | (dim <= dim') = True
-                  | (dim == dim') = depth <= depth'
-                  | otherwise     = False
-         (Span _ _ Fwd _) <= (Span _ _ Bwd _) = True
-         Reflx       <= _                 = True
-         _ <= _                               = False
+         (Span dim depth dir s) <= (Span dim' depth' dir' s')
+           | (dim == dim') && (dir == dir') = depth <= depth'
+           | (dim == dim') = dir <= dir'
+         Reflx <= _ = True
+         (Const dim) <= (Const dim') = dim <= dim'
+         _     <= _ = False
 
 -- Types various normal forms of specifications and specification groups
 data Normalised a where
@@ -154,9 +163,11 @@ data Normalised a where
      -- Grouped lists of specifications in normal form (maximally coalesced), grouped by dimension
      NSpecIGroups :: [[SpecI]] -> Normalised [[SpecI]]
 
+deriving instance Show (Normalised a)
+
 -- Normalise a list of spans
 normalise :: [SpecI] -> Normalised [[SpecI]]
-normalise = coalesce . groupByDim
+normalise = coalesce . firstAsSaturated . groupByDim
 
 -- Takes lists of specs belonging to the same dimension/direction and coalesces contiguous regions
 coalesce :: [Normalised [SpecI]] -> Normalised [[SpecI]]
@@ -165,27 +176,88 @@ coalesce = NSpecIGroups . (map (\(NSpecIs specs) -> foldPair (\x y -> plus (NS x
 groupByDim :: [SpecI] -> [Normalised [SpecI]]
 groupByDim = (map (NSpecIs . nub)) . (groupBy eqDim) . sort
 
+-- Mark spans from 0 to 1 as saturated.
+firstAsSaturated :: [Normalised [SpecI]] -> [Normalised [SpecI]]
+firstAsSaturated [] = []
+firstAsSaturated ((NSpecIs s):xs) = (NSpecIs $ map go s) : (firstAsSaturated xs)
+                                     where go (Span dim 1 dir sat) = Span dim 1 dir True
+                                           go s = Reflx
+
 eqDim :: SpecI -> SpecI -> Bool
 eqDim Reflx Reflx                 = True
-eqDim (Span _ d dir _) (Span _ d' dir' _) = (d == d') && (dir == dir')
-eqDim _ _                                 = False
+eqDim (Span d _ dir _) (Span d' _ dir' _) = (d == d') 
+eqDim (Const d) (Const d')                = (d == d')
+eqDim _ _                         = False
 
 -- Coalesces two contiguous specifications (of the same dimension and direction)
 --  This is a partial operation and fails when the two specs are not contiguous
 plus :: Normalised (SpecI, SpecI) -> Maybe SpecI
-plus (NS (Span d1 _ _ s1) (Span d2 dim dir s2)) =
+plus (NS (Span _ d1 dir s1) (Span dim d2 dir' s2)) | dir == dir' = 
      if d2 == (d1 + 1) then -- SpecIs are one apart
         if s1 || s2 then    -- At least one is marked as saturated
-            Just (Span d2 dim dir True) -- Grow the saturated area
+            Just (Span dim d2 dir True) -- Grow the saturated area
         else 
             Nothing         -- Neither span is satured so mark both as needed
      else -- d2 >= d1 by Normalised -- SpecIs are more than one apart
         if s2 then -- if the greater span is saturated, then it subsumes the smaller
-            Just (Span d2 dim dir True)
+            Just (Span dim d2 dir True)
         else
             Nothing
-plus (NS Reflx Reflx) = Just Reflx
+plus (NS (Const dim1) (Const dim2))                  = Just $ Const dim1 -- assumes Normalised premise
+plus (NS s@(Span _ d1 dir s1) (Span dim d2 dir' s2)) = Nothing
+plus (NS Reflx Reflx)                                = Just Reflx
 plus _ = error "Trying to coalesce a reflexive and a span"
+
+-- Convert a normalised list of index specifications to a list of specifications
+specIsToSpecs :: Normalised [[SpecI]] -> [Spec]
+specIsToSpecs x@(NSpecIGroups spanss) =
+     (if isReflexiveMultiDim x then [Reflexive] else [])
+  ++ simplify (concatMap (uncurry go) (zip [0..length spanss] spanss))
+        where go :: Dimension -> [SpecI] -> [Spec]
+              go dim (Reflx : xs) = go dim xs
+              go dim (Const _ : xs) = Constant [dim] : go dim xs
+              go dim [Span _ d Fwd True, Span _ d' Bwd True] =
+                           if d==d' then [Symmetric d [dim]]
+                           else if d > d' then [Symmetric (abs (d-d')) [dim], Forward d [dim]]
+                                          else [Symmetric (abs (d-d')) [dim], Backward d' [dim]]
+              go dim ((Span _ d Fwd True) : xs) = Forward d [dim] : go dim xs
+              go dim ((Span _ d Bwd True) : xs) = Backward d [dim] : go dim xs
+              go dim xs = []
+              
+              isReflexiveMultiDim :: Normalised [[SpecI]] -> Bool
+              isReflexiveMultiDim (NSpecIGroups spanss) = all (\spans -> (length spans > 0) && (head spans == Reflx)) spanss
+
+-- From a list of index expressions (themselves a list of expressions)
+--  to a set of intermediate specs
+ixExprAToSpecIs :: [[Expr p]] -> [SpecI]
+ixExprAToSpecIs ess = 
+                concatMap (\es -> case (mapM (uncurry ixCompExprToSpecI) (zip [0..(length es)] es)) of
+                                     Nothing -> []
+                                     Just es -> es) ess
+{- old 
+ixExprToSpecIs :: Expr p -> [SpecI]
+ixExprToSpecIs (Var _ _ [(VarName _ a, es)]) | length es > 0 =
+              case (mapM (uncurry ixCompExprToSpecI) (zip [0..(length es)] es)) of
+                   Nothing -> []
+                   Just es -> es
+ixExprToSpecIs _ = []                   
+-}
+-- Convert a single index expression for a particular dimension to intermediate spec
+ixCompExprToSpecI :: Dimension -> Expr p -> Maybe SpecI
+ixCompExprToSpecI d (Var _ _ [(VarName _ v, [])]) = Just Reflx
+
+ixCompExprToSpecI d (Bin _ _ (Plus _) (Var _ _ [(VarName _ v, [])]) (Con _ _ offset)) =
+                       let x = read offset in Just $ Span d (read offset) (if x < 0 then Bwd else Fwd) False
+
+ixCompExprToSpecI d (Bin _ _ (Plus _) (Con _ _ offset) (Var _ _ [(VarName _ v, [])])) =
+                       let x = read offset in Just $ Span d (read offset) (if x < 0 then Bwd else Fwd) False
+
+ixCompExprToSpecI d (Bin _ _ (Minus _) (Var _ _ [(VarName _ v, [])]) (Con _ _ offset)) =
+                       let x = read offset in Just $ Span d (read offset) (if x < 0 then Fwd else Bwd) False
+
+ixCompExprToSpecI d (Con _ _ offset) = Just $ Const d
+
+ixCompExprToSpecI d _ = Nothing
 
 -- Helper function, reduces a list two elements at a time with a partial operation
 foldPair :: (a -> a -> Maybe a) -> [a] -> [a]

@@ -2,6 +2,14 @@
 
 module Helpers where
 
+import Language.Fortran
+
+lineCol :: SrcLoc -> (Int, Int)
+lineCol s = (srcLine s, srcColumn s)
+
+spanLineCol :: SrcSpan -> ((Int, Int), (Int, Int))
+spanLineCol (l, u) = (lineCol l, lineCol u)
+
 type Filename = String
 type Directory = String
 type SourceText = String

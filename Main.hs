@@ -165,7 +165,7 @@ countVarDecls inSrc excludes _ _ =
 
 stencilsInf inSrc excludes _ _ =
           do putStrLn $ "Inferring stencil specs for " ++ show inSrc ++ "\n"
-             doAnalysis Stencils.infer inSrc excludes
+             doAnalysisSummary Stencils.infer inSrc excludes
 
 stencilsCheck inSrc excludes _ _ =
           do putStrLn $ "Checking stencil specs for " ++ show inSrc ++ "\n"
@@ -234,7 +234,7 @@ doAnalysis aFun d excludes =
 
 {-| Performs an analysis provided by its first parameter which generates information 's', which is then combined
     together (via a monoid) -}
-doAnalysisSummary :: (Monoid s, Show s) => (Program A -> s) -> FileOrDir -> [Filename] -> IO ()
+doAnalysisSummary :: (Monoid s, Show' s) => (Program A -> s) -> FileOrDir -> [Filename] -> IO ()
 doAnalysisSummary aFun d excludes = 
                     do if excludes /= [] && excludes /= [""]
                            then putStrLn $ "Excluding " ++ (concat $ intersperse "," excludes) ++ " from " ++ d ++ "/"
@@ -244,7 +244,14 @@ doAnalysisSummary aFun d excludes =
 
                        let inFiles = map Fortran.fst3 ps
                        putStrLn "Output of the analysis:" 
-                       putStrLn $ show $ Prelude.foldl (\n (f, _, ps) -> n `mappend` (aFun ps)) mempty ps
+                       putStrLn $ show' $ Prelude.foldl (\n (f, _, ps) -> n `mappend` (aFun ps)) mempty ps
+
+class Show' s where
+      show' :: s -> String
+instance Show' String where
+      show' = id
+instance Show' Int where
+      show' = show
 
 {-| Performs an analysis which reports to the user, but does not output any files -}
 doAnalysisReport :: ([(Filename, Program A)] -> (String, t1)) -> FileOrDir -> [Filename] -> t -> IO ()
@@ -399,3 +406,5 @@ doFooTrans f = do inp <- readFile f
                   let out = reprint inp f p'
                   writeFile (f ++ ".out") out
                   return $ (out, p')
+
+test = stencilsInf "samples/stencils/one.f90" [] () ()
