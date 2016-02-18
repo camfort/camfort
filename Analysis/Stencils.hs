@@ -25,10 +25,8 @@ import Transformation.Syntax
 -- Infer and check stencil specifications
 infer :: Program a -> String
 infer p = specInference .
-          -- Collecting array index expressions
-          map (descendBi arrayIndices .
           -- Perform some standard transformations first
-          ix . lvaOnUnit . (transformBi reassociate) . (fmap (const unitAnnotation))) $ p
+          map (ix . lvaOnUnit . (transformBi reassociate) . (fmap (const unitAnnotation))) $ p
 
 check :: Program a -> Program Annotation
 check = error "Not yet implemented"
@@ -50,14 +48,15 @@ specInference' p =
 
                  perStmt :: TypeEnv Annotation -> Fortran Annotation -> State String (Fortran Annotation)
                  perStmt tenv f@(Assg annotation span lhs rhs) =
-                     do --let arrayAccesses = Map.toList $ arrsRead annotation
-                        let arrayAccesses = Map.toList $ collect
-                                                    [(v, mfmap (const ()) e) | 
-                                                     (Var _ _ [(VarName _ v, e)]) <- rhsExpr f,
-                                                     length e > 0,
-                                                     isArrayTypeP' tenv v]
-                        mapM (calcAndFormatSpec span) arrayAccesses
+                     do -- Get array indexing (on the RHS)
+                        let arrayAccesses = collect
+                                                    [(v, e) | (Var _ _ [(VarName _ v, e)]) <- rhsExpr f,
+                                                              length e > 0,
+                                                              isArrayTypeP' tenv v]
+                        mapM (calcAndFormatSpec span) (Map.toList $ arrayAccesses)
                         return f
+                 perStmt tenv f@(For annotation span ivar start end inc body) = -- TODO: Get induction-variable info from here
+                                                                                return f
                  perStmt _ f = return f
                  
              in case runState (transformBiM perBlock p) "" of (_, output) -> output
@@ -242,25 +241,27 @@ ixExprAToSpecIs ess =
                 concatMap (\es -> case (mapM (uncurry ixCompExprToSpecI) (zip [0..(length es)] es)) of
                                      Nothing -> []
                                      Just es -> es) ess
-{- old 
-ixExprToSpecIs :: Expr p -> [SpecI]
-ixExprToSpecIs (Var _ _ [(VarName _ a, es)]) | length es > 0 =
-              case (mapM (uncurry ixCompExprToSpecI) (zip [0..(length es)] es)) of
-                   Nothing -> []
-                   Just es -> es
-ixExprToSpecIs _ = []                   
+
+{- TODO: need to check that any variable in an index expression that we are adding to 
+         the spec is actually an induction variable 
+         Going to need some state pushed in here... implicit parameters are fine to do this
+                                                    can get this information from the 
 -}
+isInductionVariable v = True
+
 -- Convert a single index expression for a particular dimension to intermediate spec
+-- e.g., for the expression a(i+1,j+1) then this function gets
+-- passed dim = 0, expr = i + 1 and dim = 1, expr = j + 1
 ixCompExprToSpecI :: Dimension -> Expr p -> Maybe SpecI
-ixCompExprToSpecI d (Var _ _ [(VarName _ v, [])]) = Just Reflx
+ixCompExprToSpecI d (Var _ _ [(VarName _ v, [])]) | isInductionVariable v = Just Reflx 
 
-ixCompExprToSpecI d (Bin _ _ (Plus _) (Var _ _ [(VarName _ v, [])]) (Con _ _ offset)) =
+ixCompExprToSpecI d (Bin _ _ (Plus _) (Var _ _ [(VarName _ v, [])]) (Con _ _ offset)) | isInductionVariable v =
                        let x = read offset in Just $ Span d (read offset) (if x < 0 then Bwd else Fwd) False
 
-ixCompExprToSpecI d (Bin _ _ (Plus _) (Con _ _ offset) (Var _ _ [(VarName _ v, [])])) =
+ixCompExprToSpecI d (Bin _ _ (Plus _) (Con _ _ offset) (Var _ _ [(VarName _ v, [])])) | isInductionVariable v =
                        let x = read offset in Just $ Span d (read offset) (if x < 0 then Bwd else Fwd) False
 
-ixCompExprToSpecI d (Bin _ _ (Minus _) (Var _ _ [(VarName _ v, [])]) (Con _ _ offset)) =
+ixCompExprToSpecI d (Bin _ _ (Minus _) (Var _ _ [(VarName _ v, [])]) (Con _ _ offset)) | isInductionVariable v =
                        let x = read offset in Just $ Span d (read offset) (if x < 0 then Fwd else Bwd) False
 
 ixCompExprToSpecI d (Con _ _ offset) = Just $ Const d
