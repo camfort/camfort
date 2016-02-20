@@ -48,24 +48,19 @@ gtypes x = let decAndTypes :: [([(Expr a, Expr a, Maybe Int)], Type a)]
 
 lowercase = map toLower 
 
-isArrayTypeP :: Variable -> State (TypeEnv t) Bool
-isArrayTypeP v = do tenv <- get
-                    case (lookup v tenv) of
-                       Nothing -> error $ "Variable not found: " ++ v
-                       Just t -> case t of
-                                   (ArrayT _ _ _ _ _ _) -> return $ True
-                                   _                    -> return $ False
 
-isArrayTypeP' :: (TypeEnv t) -> Variable -> Bool
-isArrayTypeP' env v = case (lookup v env) of
+isArrayType :: (TypeEnv t) -> Variable -> Bool
+isArrayType env v = case (lookup v env) of
                        Nothing -> False -- probably a primitive 
                        Just t -> case t of
                                    (ArrayT _ _ _ _ _ _) -> True
+                                   (BaseType _ _ attrs _ _) -> any (\x -> case x of Dimension _ _ -> True
+                                                                                    _             -> False) attrs
                                    _                    -> False
                               
-toArrayType (BaseType x b a e1 e2) es 
-                  | boundsP es = ArrayT x (bounds es) b a e1 e2
-                  | otherwise = BaseType x b a e1 e2
+toArrayType (BaseType x b as e1 e2) es
+                  | boundsP es = ArrayT x (bounds es) b as e1 e2
+                  | otherwise = BaseType x b as e1 e2
 toArrayType t es = t
 
 arrayElementType :: Type p -> Type p

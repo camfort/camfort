@@ -66,12 +66,12 @@ arrayIndices x =
         arrIxsF y = let readIxs = [(v, mfmap (const ()) e) | 
                                      (Var _ _ [(VarName _ v, e)]) <- rhsExpr y,
                                      length e > 0,
-                                     isArrayTypeP' tenv v]
+                                     isArrayType tenv v]
 
                         writeIxs = [(v, mfmap (const ()) e) |
                                      (Var _ _ [(VarName _ v, e)]) <- lhsExpr y,
                                      length e > 0,
-                                     isArrayTypeP' tenv v]
+                                     isArrayType tenv v]
 
                     in (tag y) { arrsRead = (collect readIxs), arrsWrite = (collect writeIxs) } 
     in extendBi arrIxsF x               

@@ -43,7 +43,10 @@ keyword = map pack
            "exit", "forall", "goto", "nullify", "inquire", "rewind", "stop", "where",
            "write", "rerun", "print", "read", "write", "implicit", "use"]
 
-outputHTML :: forall p . (Data p, Typeable p, PrintSlave p HTMLPP, PrintIndSlave (Fortran p) HTMLPP, Indentor (Decl p), Indentor (Fortran p)) => 
+outputHTMLA :: Fortran.ProgUnit Annotation -> String
+outputHTMLA x = outputHTML x           
+
+outputHTML :: forall p . (Data p, Typeable p, PrintSlave p HTMLPP, PrintSlave (Decl p) HTMLPP, PrintIndSlave (Fortran p) HTMLPP, Indentor (Decl p), Indentor (Fortran p)) => 
               Fortran.ProgUnit p -> String
 outputHTML prog = unpack html
                 where
@@ -83,7 +86,7 @@ instance PrintSlave Bool HTMLPP where
 instance PrintSlave SrcLoc HTMLPP where
     printSlave _ = "" -- not sure if I want this to shown
 
-instance (PrintIndSlave (Fortran p) HTMLPP, PrintSlave p HTMLPP, Indentor (Decl p), Indentor (Fortran p)) => PrintSlave (ProgUnit p) HTMLPP where
+instance (PrintSlave (Decl p) HTMLPP, PrintIndSlave (Fortran p) HTMLPP, PrintSlave p HTMLPP, Indentor (Decl p), Indentor (Fortran p)) => PrintSlave (ProgUnit p) HTMLPP where
     printSlave = printMaster
 
 instance PrintSlave (DataForm p) HTMLPP where
@@ -92,11 +95,17 @@ instance PrintSlave (DataForm p) HTMLPP where
 instance (PrintSlave (DataForm p) HTMLPP) => PrintSlave (SubName p) HTMLPP where
     printSlave = printMaster
 
-instance PrintSlave (Implicit p) HTMLPP where
+instance (PrintSlave (Decl p) HTMLPP) => PrintSlave (Implicit p) HTMLPP where
     printSlave = printMaster
 
-instance (Indentor (Decl p), PrintSlave (DataForm p) HTMLPP) => PrintSlave (Decl p) HTMLPP where
+instance {-# OVERLAPPABLE #-} (Indentor (Decl p), PrintSlave (DataForm p) HTMLPP) => PrintSlave (Decl p) HTMLPP where
     printSlave = printMaster
+
+instance {-# OVERLAPS #-} PrintSlave (Decl Annotation) HTMLPP where
+    printSlave t = let i = 0
+                   in "<div style=''>" ++ (outputAnn (tag t) False i showt) ++  (annotationMark i t (printMaster t)) ++ "</div>"
+                    where showt = prettyp (show (setCompactSrcLocs $ fmap (\x -> ()) t))
+
 
 instance PrintSlave (Type p) HTMLPP where
     printSlave = printMaster
@@ -119,7 +128,7 @@ instance PrintSlave (ArgList p) HTMLPP where
 instance PrintSlave (BaseType p) HTMLPP where
     printSlave = printMaster
 
-instance (Indentor (Decl p)) => PrintSlave (InterfaceSpec p) HTMLPP where
+instance (PrintSlave (Decl p) HTMLPP, Indentor (Decl p)) => PrintSlave (InterfaceSpec p) HTMLPP where
     printSlave = printMaster
 
 instance PrintSlave (Arg p) HTMLPP where
@@ -140,7 +149,7 @@ instance PrintSlave (Fraction p) HTMLPP where
 instance PrintSlave (MeasureUnitSpec p) HTMLPP where
     printSlave = printMaster
 
-instance (PrintSlave (DataForm p) HTMLPP, PrintIndSlave (Fortran p) HTMLPP, PrintSlave p HTMLPP, Indentor (Fortran p), Indentor (Decl p)) => PrintSlave (Block p) HTMLPP where
+instance (PrintSlave (Decl p) HTMLPP, PrintSlave (DataForm p) HTMLPP, PrintIndSlave (Fortran p) HTMLPP, PrintSlave p HTMLPP, Indentor (Fortran p), Indentor (Decl p)) => PrintSlave (Block p) HTMLPP where
     printSlave = printMaster
 
 instance PrintSlave (Uses p) HTMLPP where
@@ -217,7 +226,7 @@ nearbyClose (x:xs)   n = nearbyClose xs (n - 1)
 
 
 annotationMark i t x = "<div class='clickable' onClick='toggle(" ++  
-                       (show $ number (rextract t)) ++ ");'>" ++
+                       (show $ number (tag t)) ++ ");'>" ++
                        x ++ "</div>"
 
 

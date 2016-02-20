@@ -368,7 +368,7 @@ changeDir newDir oldDir oldFilename = newDir ++ (listDiffL oldDir oldFilename)
 outputAnalysisFiles :: FileOrDir -> [Program Annotation] -> [Filename] -> IO ()
 outputAnalysisFiles dir asts files =
            do putStrLn $ "Writing analysis files to directory: " ++ dir ++ "/"
-              mapM (\(ast', f) -> writeFile (f ++ ".html") ((concatMap outputHTML) ast')) (zip asts files)
+              mapM (\(ast', f) -> writeFile (f ++ ".html") ((concatMap outputHTMLA) ast')) (zip asts files)
               return ()
 
 

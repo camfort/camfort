@@ -37,11 +37,10 @@ check = error "Not yet implemented"
 specInference :: Program Annotation -> String
 specInference p = concatMap specInference' p
 specInference' p =
-             let calcAndFormatSpec span (arrayVar, ixExprs) =
-                      let spec = ixCollectionToSpec ixExprs
-                      in  modify (\out -> out ++ show (spanLineCol span)
-                                              ++ " - " ++ arrayVar
-                                              ++ ": " ++ show spec ++ "\n")
+             let formatSpec span (arrayVar, spec) =
+                      modify (\out -> out ++ show (spanLineCol span)
+                                          ++ " - " ++ (concat $ intersperse "," arrayVar)
+                                          ++ ": " ++ show spec ++ "\n")
                  perBlock :: Block Annotation -> State String (Block Annotation)
                  perBlock b = let tenv = typeEnv b
                               in transformBiM (perStmt tenv) b
@@ -52,8 +51,8 @@ specInference' p =
                         let arrayAccesses = collect
                                                     [(v, e) | (Var _ _ [(VarName _ v, e)]) <- rhsExpr f,
                                                               length e > 0,
-                                                              isArrayTypeP' tenv v]
-                        mapM (calcAndFormatSpec span) (Map.toList $ arrayAccesses)
+                                                              isArrayType tenv v]
+                        mapM (formatSpec span) (groupKeyBy $ Map.toList $ fmap ixCollectionToSpec $ arrayAccesses)
                         return f
                  perStmt tenv f@(For annotation span ivar start end inc body) = -- TODO: Get induction-variable info from here
                                                                                 return f
@@ -77,6 +76,8 @@ data Spec where
      Unspecified :: [Dimension] -> Spec
      Constant    :: [Dimension] -> Spec
      Linear      :: Spec -> Spec
+
+deriving instance Eq Spec
 
 instance Ord Direction where
          Fwd <= Bwd = True
@@ -275,3 +276,11 @@ foldPair f [a] = [a]
 foldPair f (a:(b:xs)) = case f a b of
                           Nothing -> a : (foldPair f (b : xs))
                           Just c  -> foldPair f (c : xs)
+
+groupKeyBy :: Eq b => [(a, b)] -> [([a], b)]
+groupKeyBy xs = groupKeyBy' (map (\(k, v) -> ([k], v)) xs)
+
+groupKeyBy' []                                    = []
+groupKeyBy' [(ks, v)]                             = [(ks, v)]
+groupKeyBy' ((ks1, v1):((ks2, v2):xs)) | v1 == v2 = groupKeyBy' ((ks1 ++ ks2, v1) : xs)
+                                       | otherwise = (ks1, v1) : groupKeyBy' ((ks2, v2) : xs)
