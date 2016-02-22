@@ -62,4 +62,5 @@ library
                         directory >= 1.2,
                         language-fortran >= 0.4,
                         transformers >= 0.4,
-                        vector >= 0.1
+                        vector >= 0.1,
+                        forpar
