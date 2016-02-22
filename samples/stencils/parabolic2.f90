@@ -35,7 +35,7 @@ program parabolic2
         d(i) = r  
         c(i) = -1.0 
         u(i) = sin(pi*real(i)*h)      
-      end do
+     end do
       print "(//(5(5x,e22.14)))",(u(i),i = 1,n-1)
       do j = 1,m 
        do i = 1,n-1

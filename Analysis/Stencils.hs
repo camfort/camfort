@@ -90,11 +90,11 @@ showL :: Show a => [a] -> String
 showL = concat . (intersperse ",") . (map show)
 instance Show Spec where
      show Reflexive            = "reflexive"
-     show (Forward dep dims)   = "forward depth=" ++ show dep ++ " dim=" ++ showL (map (\x -> x - 1) dims)
-     show (Backward dep dims)  = "backward depth=" ++ show dep ++ " dim=" ++ showL (map (\x -> x - 1) dims)
-     show (Symmetric dep dims) = "centered depth=" ++ show dep ++ " dim=" ++ showL (map (\x -> x - 1) dims)
-     show (Unspecified dims)   = "unspecified "  ++ showL (map (\x -> x - 1) dims)
-     show (Constant dims)      = "fixed dim=" ++ showL (map (\x -> x - 1) dims)
+     show (Forward dep dims)   = "forward depth=" ++ show dep ++ " dim=" ++ showL dims
+     show (Backward dep dims)  = "backward depth=" ++ show dep ++ " dim=" ++ showL dims
+     show (Symmetric dep dims) = "centered depth=" ++ show dep ++ " dim=" ++ showL dims
+     show (Unspecified dims)   = "unspecified "  ++ showL dims
+     show (Constant dims)      = "fixed dim=" ++ showL dims
      show (Linear spec)        = (show spec) ++ " unique "
 
 {- *** 2 . Operations on specs, and conversion from indexing expressions -}
@@ -102,7 +102,7 @@ instance Show Spec where
 -- Convert list of indexing expressions to list of specs
 ixCollectionToSpec :: [[Expr p]] -> [Spec]
 ixCollectionToSpec es = let x = normalise . ixExprAToSpecIs $ es
-                        in specIsToSpecs x -- (show (ixExprAToSpecIs $ (v, es)) ++ "\n" ++ show x) `trace` 
+                        in specIsToSpecs x  -- (show (ixExprAToSpecIs $ (es)) ++ "\n" ++ show x) `trace`  
 
 -- Simplifies lists specifications based on the 'specPlus' operation:
 simplify :: [Spec] -> [Spec]
@@ -121,7 +121,7 @@ specPlus x y                                                       = Nothing
 -- SpecIification (intermediate) elements
 data SpecI where
      Span        :: Dimension -> Depth -> Direction -> Saturation -> SpecI
-     Reflx       :: SpecI
+     Reflx       :: Dimension -> SpecI
      Const       :: Dimension -> SpecI
 deriving instance Show SpecI
 
@@ -132,7 +132,7 @@ depth x = 0
 dim :: SpecI -> Dimension
 dim (Span dim _ _ _) = dim
 dim (Const dim)      = dim
-dim x                = 0
+dim (Reflx dim)      = dim
 
 direction :: SpecI -> Direction
 direction (Span _ _ dir _) = dir
@@ -156,7 +156,8 @@ instance Ord SpecI where
          (Span dim depth dir s) <= (Span dim' depth' dir' s')
            | (dim == dim') && (dir == dir') = depth <= depth'
            | (dim == dim') = dir <= dir'
-         Reflx <= _ = True
+         (Reflx dim) <= (Reflx dim') = dim <= dim'
+         (Reflx _)   <= _            = True
          (Const dim) <= (Const dim') = dim <= dim'
          _     <= _ = False
 
@@ -189,13 +190,19 @@ firstAsSaturated :: [Normalised [SpecI]] -> [Normalised [SpecI]]
 firstAsSaturated [] = []
 firstAsSaturated ((NSpecIs s):xs) = (NSpecIs $ map go s) : (firstAsSaturated xs)
                                      where go (Span dim 1 dir sat) = Span dim 1 dir True
-                                           go s = Reflx
+                                           go s = s
 
 eqDim :: SpecI -> SpecI -> Bool
-eqDim Reflx Reflx                 = True
+eqDim (Reflx d) (Reflx d')                = (d == d')
 eqDim (Span d _ dir _) (Span d' _ dir' _) = (d == d') 
 eqDim (Const d) (Const d')                = (d == d')
-eqDim _ _                         = False
+eqDim (Const d) (Reflx d')                = d == d'
+eqDim (Reflx d) (Const d')                = d == d'
+eqDim (Span d _ _ _) (Reflx d')           = d == d'
+eqDim (Reflx d') (Span d _ _ _)           = d == d'
+eqDim (Const d) (Span d' _ _ _)           = d == d'
+eqDim (Span d _ _ _) (Const d')           = d == d'
+-- eqDim _ _ = False
 
 -- Coalesces two contiguous specifications (of the same dimension and direction)
 --  This is a partial operation and fails when the two specs are not contiguous
@@ -213,7 +220,9 @@ plus (NS (Span _ d1 dir s1) (Span dim d2 dir' s2)) | dir == dir' =
             Nothing
 plus (NS (Const dim1) (Const dim2))                  = Just $ Const dim1 -- assumes Normalised premise
 plus (NS s@(Span _ d1 dir s1) (Span dim d2 dir' s2)) = Nothing
-plus (NS Reflx Reflx)                                = Just Reflx
+plus (NS (Reflx d) (Reflx _))                        = Just $ Reflx d
+plus (NS s@(Span _ d1 dir s1) (Reflx _))             = Just $ s
+plus (NS  (Reflx _) s@(Span _ d1 dir s1))            = Just $ s
 plus _ = error "Trying to coalesce a reflexive and a span"
 
 -- Convert a normalised list of index specifications to a list of specifications
@@ -222,7 +231,7 @@ specIsToSpecs x@(NSpecIGroups spanss) =
      (if isReflexiveMultiDim x then [Reflexive] else [])
   ++ simplify (concatMap (uncurry go) (zip [0..length spanss] spanss))
         where go :: Dimension -> [SpecI] -> [Spec]
-              go dim (Reflx : xs) = go dim xs
+              go dim (Reflx _ : xs) = go dim xs
               go dim (Const _ : xs) = Constant [dim] : go dim xs
               go dim [Span _ d Fwd True, Span _ d' Bwd True] =
                            if d==d' then [Symmetric d [dim]]
@@ -233,7 +242,9 @@ specIsToSpecs x@(NSpecIGroups spanss) =
               go dim xs = []
               
               isReflexiveMultiDim :: Normalised [[SpecI]] -> Bool
-              isReflexiveMultiDim (NSpecIGroups spanss) = all (\spans -> (length spans > 0) && (head spans == Reflx)) spanss
+              isReflexiveMultiDim (NSpecIGroups spanss) = all (\spans -> (length spans > 0) &&
+                                                                           (case (head spans) of (Reflx _) -> True
+                                                                                                 _         -> False)) spanss                                                      
 
 -- From a list of index expressions (themselves a list of expressions)
 --  to a set of intermediate specs
@@ -254,7 +265,7 @@ isInductionVariable v = True
 -- e.g., for the expression a(i+1,j+1) then this function gets
 -- passed dim = 0, expr = i + 1 and dim = 1, expr = j + 1
 ixCompExprToSpecI :: Dimension -> Expr p -> Maybe SpecI
-ixCompExprToSpecI d (Var _ _ [(VarName _ v, [])]) | isInductionVariable v = Just Reflx 
+ixCompExprToSpecI d (Var _ _ [(VarName _ v, [])]) | isInductionVariable v = Just $ Reflx d
 
 ixCompExprToSpecI d (Bin _ _ (Plus _) (Var _ _ [(VarName _ v, [])]) (Con _ _ offset)) | isInductionVariable v =
                        let x = read offset in Just $ Span d (read offset) (if x < 0 then Bwd else Fwd) False
