@@ -22,7 +22,8 @@ program parabolic2
       interface                                                       
       subroutine tri(n,a,d,c,b,x)                               
       integer, intent(in)::n                                    
-      real, dimension(:), intent(in):: a,d,c,b                  
+      real, dimension(:), intent(in):: a,c
+      real, dimension(:) :: d,b      
       real, dimension(:), intent(out)::x                        
       end subroutine tri                                        
       end interface
@@ -59,7 +60,8 @@ end program parabolic2
   
 subroutine tri(n,a,d,c,b,x)                                        
       integer, intent(in)::n                                       
-      real, dimension(:), intent(in)::a,d,c,b                      
+      real, dimension(:), intent(in)::a,c
+      real, dimension(:) :: d, b
       real, dimension(:), intent(out):: x                          
       integer ::i                                                  
       real :: xmult                                                

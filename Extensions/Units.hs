@@ -1462,7 +1462,7 @@ deleteUnit (ArrayT dims aa tt attrs kind len) =
 
 insertUnitAttribute :: (?num :: Int) => Maybe UnitConstant -> [Attr Annotation] -> State UnitEnv [Attr Annotation]
 insertUnitAttribute (Just unit) attrs = do spec <- makeUnitSpec unit
-                                   return $ attrs ++ [MeasureUnit unitAnnotation $ spec]
+                                           return $ attrs ++ [MeasureUnit unitAnnotation $ spec]
 insertUnitAttribute Nothing attrs = return attrs
 
 -- Used for evaluation

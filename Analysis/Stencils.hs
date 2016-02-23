@@ -295,3 +295,16 @@ groupKeyBy' []                                    = []
 groupKeyBy' [(ks, v)]                             = [(ks, v)]
 groupKeyBy' ((ks1, v1):((ks2, v2):xs)) | v1 == v2 = groupKeyBy' ((ks1 ++ ks2, v1) : xs)
                                        | otherwise = (ks1, v1) : groupKeyBy' ((ks2, v2) : xs)
+
+type FlowsMap = [(Variable, [Variable])] -- e.g. (v, [a, b]) means that 'a' and 'b' flow to 'v'
+
+{-
+flowAnalysisArrays :: Program Annotation -> Program (Annotation, FlowsMap)
+flowAnalysisArrays p = 
+         let perBlock :: Block Annotation -> State String (Block Annotation)
+             perBlock b = let tenv = typeEnv b
+                          in transformBiM (perStmt tenv) b
+
+             perStmt :: Fortran Annotation -> Fortran (Annotation, FlowsMap)
+             perStmt tenv f@(Assg annotation span lhs rhs) = 
+-}
