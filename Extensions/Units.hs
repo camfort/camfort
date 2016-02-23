@@ -175,7 +175,7 @@ inferBlockUnits x proc = do resetTemps
 
 {-| reduceRows is a core part of the polymorphic unit checking for procedures.
 
-               It is essentially an "optimiation" of the Gaussian matrix (not in the sense of performance),
+               It is essentially an "optimisation" of the Gaussian matrix (not in the sense of performance),
                that elimiantes rows in the system such that there are as few variables as possible. Within
                a function, assuming everything is consistent, then this should generate a linear constraint
                between the parameters and the return as a single row in the matrix. This is then used by the
@@ -1446,12 +1446,12 @@ isUnit _ = False
 insertUnit :: (?num :: Int) => [UnitVarCategory] -> [Int] -> LinearSystem -> Type Annotation -> Int -> State UnitEnv (Type Annotation)
 insertUnit ucats badCols system (BaseType aa tt attrs kind len) uv =
   do let unit = lookupUnit ucats badCols system uv
-     u <- (insertUnit' unit attrs)
+     u <- (insertUnitAttribute unit attrs)
      return $ BaseType aa tt u kind len
 
 insertUnit ucats badCols system (ArrayT dims aa tt attrs kind len) uv =
   do let unit = lookupUnit ucats badCols system uv
-     u <- insertUnit' unit attrs
+     u <- insertUnitAttribute unit attrs
      return $ ArrayT dims aa tt u kind len
 
 deleteUnit :: Type Annotation -> Type Annotation
@@ -1460,10 +1460,10 @@ deleteUnit (BaseType aa tt attrs kind len) =
 deleteUnit (ArrayT dims aa tt attrs kind len) =
   ArrayT dims aa tt (filter (not . isUnit) attrs) kind len
 
-insertUnit' :: (?num :: Int) => Maybe UnitConstant -> [Attr Annotation] -> State UnitEnv [Attr Annotation]
-insertUnit' (Just unit) attrs = do spec <- makeUnitSpec unit
+insertUnitAttribute :: (?num :: Int) => Maybe UnitConstant -> [Attr Annotation] -> State UnitEnv [Attr Annotation]
+insertUnitAttribute (Just unit) attrs = do spec <- makeUnitSpec unit
                                    return $ attrs ++ [MeasureUnit unitAnnotation $ spec]
-insertUnit' Nothing attrs = return attrs
+insertUnitAttribute Nothing attrs = return attrs
 
 -- Used for evaluation
 updateAdded k s = do (n, xs) <- gets evUnitsAdded
