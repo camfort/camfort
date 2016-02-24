@@ -14,6 +14,30 @@ source-repository head
   type: git
   location: https://github.com/dorchard/camfort
 
+executable camfort
+  main-is: Main.hs
+  hs-source-dirs:       .
+  other-modules:        Extensions.UnitParser
+  build-depends:        base < 5,
+                        containers >= 0.5.0.0,
+                        template-haskell >=2.4,
+                        generic-deriving >=1.5.5,
+                        uniplate >= 1.6.10,
+                        comonad >= 3,
+                        fclabels >= 2,
+                        haskell-src >= 1.0.1,
+                        syz >= 0.2,
+                        syb >= 0.4,
+                        matrix >=0.2.2,
+                        hmatrix >= 0.15,
+                        mtl >= 2.1,
+                        text >= 0.11.2.3,
+                        array >= 0.4,
+                        directory >= 1.2,
+                        language-fortran >= 0.4,
+                        transformers >= 0.4,
+                        vector >= 0.1
+
 library
   hs-source-dirs:       .
 
@@ -35,6 +59,8 @@ library
                         Transformation.DerivedTypeIntro
                         Transformation.EquivalenceElim
                         Transformation.Syntax
+                        Extensions.UnitParser
+                        Extensions.UnitSyntaxConversion
                         Extensions.Units
                         Extensions.UnitsEnvironment
                         Extensions.UnitsSolve
