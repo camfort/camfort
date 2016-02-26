@@ -63,4 +63,5 @@ library
                         language-fortran >= 0.4,
                         transformers >= 0.4,
                         vector >= 0.1,
+                        GenericPretty >= 1.2,
                         forpar

@@ -11,6 +11,7 @@ import Data.Label.Monadic hiding (modify)
 import Control.Monad.State.Strict hiding (gets)
 import Language.Fortran
 import Data.Matrix
+import qualified Forpar.Util.Position as P
 
 type EqualityConstrained = Bool
 
@@ -30,7 +31,7 @@ newtype VarCol = VarCol Col deriving (Eq, Show)
 --   e.g., for a(i,k) we have a map from 'a' to its column paired with
 --       a two element list of the columns for 'i' and 'j'
 
-newtype VarBinder = VarBinder (Variable, SrcSpan) deriving Show
+newtype VarBinder = VarBinder (Variable, P.SrcSpan) deriving Show
 type VarColEnv = [(VarBinder, (VarCol, [VarCol]))]
 
 data UnitVarCategory = Literal EqualityConstrained | Temporary | Variable | Argument | Magic deriving (Eq, Show)
@@ -48,7 +49,7 @@ type LinearSystem = (Matrix Rational, [UnitConstant])
 type Row = Int
 type Col = Int
 
-type DebugInfo = [(Col, (SrcSpan, String))]
+type DebugInfo = [(Col, (P.SrcSpan, String))]
 
 data UnitEnv = UnitEnv {
   _report              :: [String],
