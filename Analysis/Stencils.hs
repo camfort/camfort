@@ -296,10 +296,6 @@ groupKeyBy' [(ks, v)]                             = [(ks, v)]
 groupKeyBy' ((ks1, v1):((ks2, v2):xs)) | v1 == v2 = groupKeyBy' ((ks1 ++ ks2, v1) : xs)
                                        | otherwise = (ks1, v1) : groupKeyBy' ((ks2, v2) : xs)
 
-<<<<<<< Updated upstream
-=======
-
->>>>>>> Stashed changes
 type FlowsMap = [(Variable, [Variable])] -- e.g. (v, [a, b]) means that 'a' and 'b' flow to 'v'
 
 flowAnalysisArrays :: Program Annotation -> State FlowsMap Program 
