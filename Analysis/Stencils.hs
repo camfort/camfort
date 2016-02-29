@@ -47,7 +47,7 @@ specInference' (p, flMap) =
              let formatSpec span (arrayVar, spec) =
                       show (spanLineCol span)
                          ++ " - " ++ (concat $ intersperse "," arrayVar)
-                         ++ ": " ++ show spec ++ "\n"
+                         ++ ": " ++ showL spec ++ "\n"
                  perBlock :: (?cycles :: Cycles) => Block Annotation -> State String (Block Annotation)
                  perBlock b = let tenv = typeEnv b
                               in transformBiM (perStmt tenv) b
@@ -63,7 +63,7 @@ specInference' (p, flMap) =
                         mapM (addToReport . (formatSpec span)) (groupKeyBy $ Map.toList $ fmap ixCollectionToSpec $ arrayAccesses)
                         -- Insert time specification if there is a cyclic depenency through the assignment (for arrays)
                         case (lookup lhsV ?cycles) of
-                                   Just v' -> addToReport $ formatSpec span ([lhsV], TemporalBwd [v'])
+                                   Just v' -> addToReport $ formatSpec span ([lhsV], [TemporalBwd [v']])
                                    Nothing -> return ()
                         -- Done
                         return f
@@ -72,7 +72,8 @@ specInference' (p, flMap) =
                  perStmt _ f = return f
                  
              in let ?cycles = cyclicDependents flMap
-                in let (_, output) = runState (transformBiM perBlock p) ""
+                in -- ("---" ++ show ?cycles ++ "\n") `trace`
+                   let (_, output) = runState (transformBiM perBlock p) ""
                    in output
 
 {- *** 1 . Specification syntax -}
@@ -116,8 +117,8 @@ instance Show Spec where
      show (Unspecified dims)   = "unspecified "  ++ showL dims
      show (Constant dims)      = "fixed dim=" ++ showL dims
      show (Linear spec)        = (show spec) ++ " unique "
-     show (TemporalFwd dims)   = "forward depth=" ++ show (length dims) ++ "dim=t{" ++ showL dims ++ "}"
-     show (TemporalBwd dims)   = "backward depth=" ++ show (length dims) ++ "dim=t{" ++ showL dims ++ "}"
+     show (TemporalFwd dims)   = "forward depth=" ++ show (length dims) ++ " dim=t{" ++ showL dims ++ "}"
+     show (TemporalBwd dims)   = "backward depth=" ++ show (length dims) ++ " dim=t{" ++ showL dims ++ "}"
 
 {- *** 2 . Operations on specs, and conversion from indexing expressions -}
 
@@ -330,9 +331,10 @@ flowAnalysisArrays ps = map (\p -> flowAnalysisArraysRecur p Map.empty) ps
 flowAnalysisArraysRecur :: ProgUnit Annotation -> FlowsMap -> (ProgUnit Annotation, FlowsMap)
 flowAnalysisArraysRecur p flowMap =
           let (p', flowMap') = runState (flowAnalysisArraysStep p) flowMap
-          in if (flowMap == flowMap') then (p', flowMap')
-             else  flowAnalysisArraysRecur p' flowMap'
-
+          in --("flowMap' = " ++ show flowMap' ++ "\n") `trace`
+              if (flowMap == flowMap') then (p', flowMap')
+              else  flowAnalysisArraysRecur p' flowMap'
+         
 flowAnalysisArraysStep :: ProgUnit Annotation -> State FlowsMap (ProgUnit Annotation)
 flowAnalysisArraysStep p =
          let perBlock :: Block Annotation -> State FlowsMap (Block Annotation)
@@ -343,12 +345,12 @@ flowAnalysisArraysStep p =
              lookupList v map = maybe [] id (Map.lookup v map)
 
              perStmt :: TypeEnv Annotation -> Fortran Annotation -> State FlowsMap (Fortran Annotation)
-             perStmt tenv f@(Assg annotation span lhs rhs) =
-                     do let lhses = [v | (Var _ _ [(VarName _ v, es)]) <- (universeBi lhs)::[Expr Annotation], length es > 0]
-                        let rhses = [v | (Var _ _ [(VarName _ v, es)]) <- (universeBi rhs)::[Expr Annotation], length es > 0]
+             perStmt tenv f@(Assg annotation span lhs rhs) = 
+                     do let lhses = [v | (Var _ _ [(VarName _ v, es)]) <- (universeBi lhs)::[Expr Annotation], isArrayType tenv v]
+                        let rhses = [v | (Var _ _ [(VarName _ v, es)]) <- (universeBi rhs)::[Expr Annotation], isArrayType tenv v]
                         flowMap <- get
-                        let pullInFlowsFromRight lhsV map rhsV = Map.insertWith (++) lhsV (lookupList rhsV map) map
-                        let fromRightToLeft           map lhsV = foldl (pullInFlowsFromRight lhsV) map rhses
+                        let pullInFlowsFromRight lhsV map rhsV = Map.insertWith (\a b -> nub (a ++ b)) lhsV (lookupList rhsV map) map
+                        let fromRightToLeft           map lhsV = foldl (pullInFlowsFromRight lhsV) (Map.insertWith (++) lhsV rhses map) rhses
                         put $ foldl fromRightToLeft flowMap lhses
                         return f
              perStmt tenv f = return f
@@ -357,15 +359,16 @@ flowAnalysisArraysStep p =
 
 -- Find all array accesses which have a cylcic dependency 
 cyclicDependents :: FlowsMap -> Cycles
-cyclicDependents flmap = let self = (invertRel flmap) `composeRelW` flmap
+cyclicDependents flmap = let self = flmap `composeRelW` flmap
                              reflSubset = foldl (\p (k, ks) -> case (lookup k (map (\(a, b) -> (b, a)) ks)) of
                                                                   Nothing -> p
                                                                   Just v  -> (k, v) : p) [] (Map.assocs self)
-                         in reflSubset
+                            -- Remove reflexive dependencies
+                         in filter (\(u, v) -> not (u == v)) (reflSubset)
 
 -- Inverts a relation (represented as a map)
-invertRel :: Ord v => Map.Map k [v] -> Map.Map v [k]
-invertRel m = foldl (\m (k, vs) -> foldl (\m' v -> Map.insertWith (++) v [k] m') m vs) Map.empty (Map.assocs m)
+--invertRel :: Ord v => Map.Map k [v] -> Map.Map v [k]
+--invertRel m = foldl (\m (k, vs) -> foldl (\m' v -> Map.insertWith (++) v [k] m') m vs) Map.empty (Map.assocs m)
 
 -- compose two relations with a witness of where the 'join' point in the middle is
 -- e.g., for two relations R and S, if (a R b) and (b S c) then (a R.S (b, c))
