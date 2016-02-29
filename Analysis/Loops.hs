@@ -80,3 +80,6 @@ ix :: ProgUnit Annotation -> ProgUnit Annotation
 ix = let ixF :: Fortran Annotation -> Annotation
          ixF f = (tag f) { indices = (nub [v | (For _ _ (VarName _ v) _ _ _ _) <- ((universeBi f)::[Fortran Annotation])])}
      in extendBi ixF
+
+loopVariables :: ProgUnit Annotation -> [String]
+loopVariables f = (nub [v | (For _ _ (VarName _ v) _ _ _ _) <- ((universeBi f)::[Fortran Annotation])])
