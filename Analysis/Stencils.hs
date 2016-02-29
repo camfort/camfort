@@ -39,7 +39,7 @@ check = error "Not yet implemented"
 specInference :: Program Annotation -> String
 specInference p = let flowProgUnitPairs = flowAnalysisArrays p
                   in concatMap specInference' flowProgUnitPairs
-                  
+
 specInference' (p, flMap) =
              let formatSpec span (arrayVar, spec) =
                       modify (\out -> out ++ show (spanLineCol span)
@@ -61,7 +61,7 @@ specInference' (p, flMap) =
                  perStmt tenv f@(For annotation span ivar start end inc body) = -- TODO: Get induction-variable info from here
                                                                                 return f
                  perStmt _ f = return f
-                 
+
              in let ?flowsMap = flMap
                 in let (_, output) = runState (transformBiM perBlock p) ""
                    in output
@@ -108,12 +108,12 @@ instance Show Spec where
 -- Convert list of indexing expressions to list of specs
 ixCollectionToSpec :: [[Expr p]] -> [Spec]
 ixCollectionToSpec es = let x = normalise . ixExprAToSpecIs $ es
-                        in specIsToSpecs x  -- (show (ixExprAToSpecIs $ (es)) ++ "\n" ++ show x) `trace`  
+                        in specIsToSpecs x  -- (show (ixExprAToSpecIs $ (es)) ++ "\n" ++ show x) `trace`
 
 -- Simplifies lists specifications based on the 'specPlus' operation:
 simplify :: [Spec] -> [Spec]
 simplify = foldPair specPlus
--- Combine specs 
+-- Combine specs
 specPlus :: Spec -> Spec -> Maybe Spec
 specPlus Reflexive Reflexive                                       = Just Reflexive
 specPlus (Forward dep dims) (Forward dep' dims')     | dep == dep' = Just (Forward dep (dims ++ dims'))
@@ -151,9 +151,9 @@ direction x                = Fwd
  Any non-reflexive index is converted to a (list of) spans
   e.g. a(i - 1, j + 1) -> [Span 0 1 Bwd False, Span 0 1 Fwd False]
 
- the 'normalise' function then turns a list of these spans 
+ the 'normalise' function then turns a list of these spans
  into a list of list of spans (per dimension/direction)
- 
+
 -}
 
 -- Ordering
@@ -200,7 +200,7 @@ firstAsSaturated ((NSpecIs s):xs) = (NSpecIs $ map go s) : (firstAsSaturated xs)
 
 eqDim :: SpecI -> SpecI -> Bool
 eqDim (Reflx d) (Reflx d')                = (d == d')
-eqDim (Span d _ dir _) (Span d' _ dir' _) = (d == d') 
+eqDim (Span d _ dir _) (Span d' _ dir' _) = (d == d')
 eqDim (Const d) (Const d')                = (d == d')
 eqDim (Const d) (Reflx d')                = d == d'
 eqDim (Reflx d) (Const d')                = d == d'
@@ -213,11 +213,11 @@ eqDim (Span d _ _ _) (Const d')           = d == d'
 -- Coalesces two contiguous specifications (of the same dimension and direction)
 --  This is a partial operation and fails when the two specs are not contiguous
 plus :: Normalised (SpecI, SpecI) -> Maybe SpecI
-plus (NS (Span _ d1 dir s1) (Span dim d2 dir' s2)) | dir == dir' = 
+plus (NS (Span _ d1 dir s1) (Span dim d2 dir' s2)) | dir == dir' =
      if d2 == (d1 + 1) then -- SpecIs are one apart
         if s1 || s2 then    -- At least one is marked as saturated
             Just (Span dim d2 dir True) -- Grow the saturated area
-        else 
+        else
             Nothing         -- Neither span is satured so mark both as needed
      else -- d2 >= d1 by Normalised -- SpecIs are more than one apart
         if s2 then -- if the greater span is saturated, then it subsumes the smaller
@@ -246,24 +246,24 @@ specIsToSpecs x@(NSpecIGroups spanss) =
               go dim ((Span _ d Fwd True) : xs) = Forward d [dim] : go dim xs
               go dim ((Span _ d Bwd True) : xs) = Backward d [dim] : go dim xs
               go dim xs = []
-              
+
               isReflexiveMultiDim :: Normalised [[SpecI]] -> Bool
               isReflexiveMultiDim (NSpecIGroups spanss) = all (\spans -> (length spans > 0) &&
                                                                            (case (head spans) of (Reflx _) -> True
-                                                                                                 _         -> False)) spanss                                                      
+                                                                                                 _         -> False)) spanss
 
 -- From a list of index expressions (themselves a list of expressions)
 --  to a set of intermediate specs
 ixExprAToSpecIs :: [[Expr p]] -> [SpecI]
-ixExprAToSpecIs ess = 
+ixExprAToSpecIs ess =
                 concatMap (\es -> case (mapM (uncurry ixCompExprToSpecI) (zip [0..(length es)] es)) of
                                      Nothing -> []
                                      Just es -> es) ess
 
-{- TODO: need to check that any variable in an index expression that we are adding to 
-         the spec is actually an induction variable 
+{- TODO: need to check that any variable in an index expression that we are adding to
+         the spec is actually an induction variable
          Going to need some state pushed in here... implicit parameters are fine to do this
-                                                    can get this information from the 
+                                                    can get this information from the
 -}
 isInductionVariable v = True
 
@@ -306,7 +306,7 @@ groupKeyBy' ((ks1, v1):((ks2, v2):xs)) | v1 == v2 = groupKeyBy' ((ks1 ++ ks2, v1
 
 -- FlowsMap structure:
 -- -- e.g. (v, [a, b]) means that 'a' and 'b' flow to 'v'
-type FlowsMap = Map.Map Variable [Variable] 
+type FlowsMap = Map.Map Variable [Variable]
 
 flowAnalysisArrays :: Program Annotation -> [(ProgUnit Annotation, FlowsMap)]
 flowAnalysisArrays ps = map (\p -> flowAnalysisArraysRecur p Map.empty) ps
@@ -316,9 +316,9 @@ flowAnalysisArraysRecur p flowMap =
           let (p', flowMap') = runState (flowAnalysisArraysStep p) flowMap
           in if (flowMap == flowMap') then (p', flowMap')
              else  flowAnalysisArraysRecur p' flowMap'
-         
+
 flowAnalysisArraysStep :: ProgUnit Annotation -> State FlowsMap (ProgUnit Annotation)
-flowAnalysisArraysStep p = 
+flowAnalysisArraysStep p =
          let perBlock :: Block Annotation -> State FlowsMap (Block Annotation)
              perBlock b = let tenv = typeEnv b
                           in transformBiM (perStmt tenv) b
@@ -327,7 +327,7 @@ flowAnalysisArraysStep p =
              lookupList v map = maybe [] id (Map.lookup v map)
 
              perStmt :: TypeEnv Annotation -> Fortran Annotation -> State FlowsMap (Fortran Annotation)
-             perStmt tenv f@(Assg annotation span lhs rhs) = 
+             perStmt tenv f@(Assg annotation span lhs rhs) =
                      do let lhses = [v | (Var _ _ [(VarName _ v, es)]) <- (universeBi lhs)::[Expr Annotation], length es > 0]
                         let rhses = [v | (Var _ _ [(VarName _ v, es)]) <- (universeBi rhs)::[Expr Annotation], length es > 0]
                         flowMap <- get
@@ -343,7 +343,7 @@ cyclicDependents flmap = let self = (invertRel flmap) `composeRelW` flmap
                              reflSubset = foldl (\p (k, ks) -> case (lookup k (map (\(a, b) -> (b, a)) ks)) of
                                                                   Nothing -> p
                                                                   Just v  -> (k, v) : p) [] (Map.assocs self)
-                         in reflSubset 
+                         in reflSubset
 
 -- Inverts a relation (represented as a map)
 invertRel :: Ord v => Map.Map k [v] -> Map.Map v [k]
@@ -355,5 +355,3 @@ composeRelW :: (Ord k, Ord v) => Map.Map k [v] -> Map.Map v [k] -> Map.Map k [(v
 composeRelW r s = foldl (\rs (k, vs) -> foldl (\rs' v -> case (Map.lookup v s) of
                                                            Nothing -> rs'
                                                            Just k' -> Map.insertWith (++) k (map (\k -> (v,k)) k') rs') rs vs) Map.empty (Map.assocs r)
-
-
