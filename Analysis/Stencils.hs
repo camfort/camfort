@@ -40,8 +40,8 @@ specInference :: Program Annotation -> String
 specInference p = let flowProgUnitPairs = flowAnalysisArrays p
                   in concatMap specInference' flowProgUnitPairs
 -- Helper for appending the specification report information in the state monad
-addToReport :: String -> State String ()
-addToReport x = modify (\y -> y ++ x)
+addToReport :: String -> State (String, [String]) ()
+addToReport x = modify (\ (y, vs) -> (y ++ x, vs))
 
 specInference' (p, flMap) =
              let formatSpec span (arrayVar, spec) =
@@ -49,10 +49,14 @@ specInference' (p, flMap) =
                          ++ " - " ++ (concat $ intersperse "," arrayVar)
                          ++ ": " ++ showL spec ++ "\n"
                  perBlock :: (?cycles :: Cycles) => Block Annotation -> State String (Block Annotation)
-                 perBlock b = let tenv = typeEnv b
-                              in transformBiM (perStmt tenv) b
+                 perBlock b =
+                   do s <- get
+                      let tenv = typeEnv b
+                      let (b', (s', _)) = runState (transformBiM (perStmt tenv) b) (s, [])
+                      put s'
+                      return b'
 
-                 perStmt :: (?cycles :: Cycles) => TypeEnv Annotation -> Fortran Annotation -> State String (Fortran Annotation)
+                 perStmt :: (?cycles :: Cycles) => TypeEnv Annotation -> Fortran Annotation -> State (String, [String]) (Fortran Annotation)
                  -- Match statements that are assingments to arrays
                  perStmt tenv f@(Assg annotation span lhs@(Var _ _ [(VarName _ lhsV, es)]) rhs) | length es > 0 =
                      do -- Get array indexing (on the RHS)
@@ -60,17 +64,20 @@ specInference' (p, flMap) =
                                                               length e > 0,
                                                               isArrayType tenv v]
                         -- Create specification information
-                        mapM (addToReport . (formatSpec span)) (groupKeyBy $ Map.toList $ fmap ixCollectionToSpec $ arrayAccesses)
+                        ivs <- gets snd
+                        trace (show ivs) (return ())
+                        mapM (addToReport . (formatSpec span)) (groupKeyBy $ Map.toList $ fmap (ixCollectionToSpec ivs) $ arrayAccesses)
                         -- Insert time specification if there is a cyclic depenency through the assignment (for arrays)
                         case (lookup lhsV ?cycles) of
                                    Just v' -> addToReport $ formatSpec span ([lhsV], [TemporalBwd [v']])
                                    Nothing -> return ()
                         -- Done
                         return f
-                 perStmt tenv f@(For annotation span ivar start end inc body) = -- TODO: Get induction-variable info from here
-                                                                                return f
+                 perStmt tenv f@(For annotation span (VarName _ v) start end inc body) =
+                   do modify $ \ (r, vs) -> (r, nub (v:vs))
+                      return f
                  perStmt _ f = return f
-                 
+
              in let ?cycles = cyclicDependents flMap
                 in -- ("---" ++ show ?cycles ++ "\n") `trace`
                    let (_, output) = runState (transformBiM perBlock p) ""
@@ -93,7 +100,7 @@ data Spec where
      -- through which time is represented
      TemporalFwd    :: [Variable] -> Spec
      TemporalBwd    :: [Variable] -> Spec
-     
+
      Unspecified :: [Dimension] -> Spec
      Constant    :: [Dimension] -> Spec
      Linear      :: Spec -> Spec
@@ -123,9 +130,9 @@ instance Show Spec where
 {- *** 2 . Operations on specs, and conversion from indexing expressions -}
 
 -- Convert list of indexing expressions to list of specs
-ixCollectionToSpec :: [[Expr p]] -> [Spec]
-ixCollectionToSpec es = let x = normalise . ixExprAToSpecIs $ es
-                        in specIsToSpecs x  -- (show (ixExprAToSpecIs $ (es)) ++ "\n" ++ show x) `trace`
+ixCollectionToSpec :: [String] -> [[Expr p]] -> [Spec]
+ixCollectionToSpec ivs es = let x = normalise . (ixExprAToSpecIs ivs) $ es
+                            in specIsToSpecs x  -- (show (ixExprAToSpecIs $ (es)) ++ "\n" ++ show x) `trace`
 
 -- Simplifies lists specifications based on the 'specPlus' operation:
 simplify :: [Spec] -> [Spec]
@@ -145,7 +152,7 @@ specPlus x y                                                       = Nothing
 data SpecI where
      -- Regular spatial spans
      Span        :: Dimension -> Depth -> Direction -> Saturation -> SpecI
-     -- Reflexive access 
+     -- Reflexive access
      Reflx       :: Dimension -> SpecI
      -- Constant access
      Const       :: Dimension -> SpecI
@@ -270,11 +277,11 @@ specIsToSpecs x@(NSpecIGroups spanss) =
 
 -- From a list of index expressions (themselves a list of expressions)
 --  to a set of intermediate specs
-ixExprAToSpecIs :: [[Expr p]] -> [SpecI]
-ixExprAToSpecIs ess =
-                concatMap (\es -> case (mapM (uncurry ixCompExprToSpecI) (zip [0..(length es)] es)) of
-                                     Nothing -> []
-                                     Just es -> es) ess
+ixExprAToSpecIs :: [String] -> [[Expr p]] -> [SpecI]
+ixExprAToSpecIs ivs ess =
+  concatMap (\es -> case (mapM (uncurry (ixCompExprToSpecI ivs)) (zip [0..(length es)] es)) of
+                      Nothing -> []
+                      Just es -> es) ess
 
 {- TODO: need to check that any variable in an index expression that we are adding to
          the spec is actually an induction variable
@@ -286,21 +293,21 @@ isInductionVariable v = True
 -- Convert a single index expression for a particular dimension to intermediate spec
 -- e.g., for the expression a(i+1,j+1) then this function gets
 -- passed dim = 0, expr = i + 1 and dim = 1, expr = j + 1
-ixCompExprToSpecI :: Dimension -> Expr p -> Maybe SpecI
-ixCompExprToSpecI d (Var _ _ [(VarName _ v, [])]) | isInductionVariable v = Just $ Reflx d
+ixCompExprToSpecI :: [String] -> Dimension -> Expr p -> Maybe SpecI
+ixCompExprToSpecI ivs d (Var _ _ [(VarName _ v, [])]) | v `elem` ivs = Just $ Reflx d
 
-ixCompExprToSpecI d (Bin _ _ (Plus _) (Var _ _ [(VarName _ v, [])]) (Con _ _ offset)) | isInductionVariable v =
-                       let x = read offset in Just $ Span d (read offset) (if x < 0 then Bwd else Fwd) False
+ixCompExprToSpecI ivs d (Bin _ _ (Plus _) (Var _ _ [(VarName _ v, [])]) (Con _ _ offset)) | v `elem` ivs =
+  let x = read offset in Just $ Span d (read offset) (if x < 0 then Bwd else Fwd) False
 
-ixCompExprToSpecI d (Bin _ _ (Plus _) (Con _ _ offset) (Var _ _ [(VarName _ v, [])])) | isInductionVariable v =
-                       let x = read offset in Just $ Span d (read offset) (if x < 0 then Bwd else Fwd) False
+ixCompExprToSpecI ivs d (Bin _ _ (Plus _) (Con _ _ offset) (Var _ _ [(VarName _ v, [])])) | v `elem` ivs =
+  let x = read offset in Just $ Span d (read offset) (if x < 0 then Bwd else Fwd) False
 
-ixCompExprToSpecI d (Bin _ _ (Minus _) (Var _ _ [(VarName _ v, [])]) (Con _ _ offset)) | isInductionVariable v =
-                       let x = read offset in Just $ Span d (read offset) (if x < 0 then Fwd else Bwd) False
+ixCompExprToSpecI ivs d (Bin _ _ (Minus _) (Var _ _ [(VarName _ v, [])]) (Con _ _ offset)) | v `elem` ivs =
+  let x = read offset in Just $ Span d (read offset) (if x < 0 then Fwd else Bwd) False
 
-ixCompExprToSpecI d (Con _ _ offset) = Just $ Const d
+ixCompExprToSpecI ivs d (Con _ _ offset) = Just $ Const d
 
-ixCompExprToSpecI d _ = Nothing
+ixCompExprToSpecI ivs d _ = Nothing
 
 -- Helper function, reduces a list two elements at a time with a partial operation
 foldPair :: (a -> a -> Maybe a) -> [a] -> [a]
@@ -322,7 +329,7 @@ groupKeyBy' ((ks1, v1):((ks2, v2):xs)) | v1 == v2 = groupKeyBy' ((ks1 ++ ks2, v1
 
 -- FlowsMap structure:
 -- -- e.g. (v, [a, b]) means that 'a' and 'b' flow to 'v'
-type FlowsMap = Map.Map Variable [Variable] 
+type FlowsMap = Map.Map Variable [Variable]
 type Cycles = [(Variable, Variable)]
 
 flowAnalysisArrays :: Program Annotation -> [(ProgUnit Annotation, FlowsMap)]
@@ -334,7 +341,7 @@ flowAnalysisArraysRecur p flowMap =
           in --("flowMap' = " ++ show flowMap' ++ "\n") `trace`
               if (flowMap == flowMap') then (p', flowMap')
               else  flowAnalysisArraysRecur p' flowMap'
-         
+
 flowAnalysisArraysStep :: ProgUnit Annotation -> State FlowsMap (ProgUnit Annotation)
 flowAnalysisArraysStep p =
          let perBlock :: Block Annotation -> State FlowsMap (Block Annotation)
@@ -345,7 +352,7 @@ flowAnalysisArraysStep p =
              lookupList v map = maybe [] id (Map.lookup v map)
 
              perStmt :: TypeEnv Annotation -> Fortran Annotation -> State FlowsMap (Fortran Annotation)
-             perStmt tenv f@(Assg annotation span lhs rhs) = 
+             perStmt tenv f@(Assg annotation span lhs rhs) =
                      do let lhses = [v | (Var _ _ [(VarName _ v, es)]) <- (universeBi lhs)::[Expr Annotation], isArrayType tenv v]
                         let rhses = [v | (Var _ _ [(VarName _ v, es)]) <- (universeBi rhs)::[Expr Annotation], isArrayType tenv v]
                         flowMap <- get
@@ -354,10 +361,10 @@ flowAnalysisArraysStep p =
                         put $ foldl fromRightToLeft flowMap lhses
                         return f
              perStmt tenv f = return f
-             
+
         in transformBiM perBlock p
 
--- Find all array accesses which have a cylcic dependency 
+-- Find all array accesses which have a cyclic dependency
 cyclicDependents :: FlowsMap -> Cycles
 cyclicDependents flmap = let self = flmap `composeRelW` flmap
                              reflSubset = foldl (\p (k, ks) -> case (lookup k (map (\(a, b) -> (b, a)) ks)) of
