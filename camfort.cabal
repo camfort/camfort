@@ -36,7 +36,7 @@ library
                         Transformation.DerivedTypeIntro
                         Transformation.EquivalenceElim
                         Transformation.Syntax
-                        Extensions.Units
+                        Extensions.UnitsForpar
                         Extensions.UnitsEnvironment
                         Extensions.UnitsSolve
                         Helpers

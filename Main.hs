@@ -26,7 +26,7 @@ import Transformation.CommonBlockElim
 import Transformation.CommonBlockElimToCalls
 import Transformation.EquivalenceElim
 import Transformation.DerivedTypeIntro
-import Extensions.Units
+import Extensions.UnitsForpar
 import Extensions.UnitsEnvironment
 import Extensions.UnitsSolve
 
@@ -201,9 +201,8 @@ equivalences inSrc excludes outSrc _ =
 {- Units feature -}
 units inSrc excludes outSrc opt =
           do putStrLn $ "Inferring units for " ++ show inSrc ++ "\n"
-             let ?solver = solverType opt
-              in let ?assumeLiterals = literalsBehaviour opt
-                 in doRefactorForpar (mapM inferUnits) inSrc excludes outSrc
+             let s0 = UnitState { solver = solverType opt, assumeLiterals = literalsBehaviour opt }
+             doRefactorForpar (mapM (runUnits s0 . inferUnits)) inSrc excludes outSrc
 
 unitRemoval inSrc excludes outSrc opt =
           do putStrLn $ "Removing units in " ++ show inSrc ++ "\n"
@@ -211,12 +210,10 @@ unitRemoval inSrc excludes outSrc opt =
               in let ?assumeLiterals = literalsBehaviour opt
                  in doRefactorForpar (mapM removeUnits) inSrc excludes outSrc
 
-unitCriticals inSrc excludes outSrc opt =
-          do putStrLn $ "Infering critical variables for units inference in directory " ++ show inSrc ++ "\n"
-             let ?solver = solverType opt
-              in let ?assumeLiterals = literalsBehaviour opt
-                 in doAnalysisReportForpar (mapM inferCriticalVariables) inSrc excludes outSrc
-
+unitCriticals inSrc excludes outSrc opt = do
+  putStrLn $ "Infering critical variables for units inference in directory " ++ show inSrc ++ "\n"
+  let s0 = UnitState { solver = solverType opt, assumeLiterals = literalsBehaviour opt }
+  doRefactorForpar (mapM (runUnits s0 . inferCriticalVariables)) inSrc excludes outSrc
 
 -- * Builders for analysers and refactorings
 
