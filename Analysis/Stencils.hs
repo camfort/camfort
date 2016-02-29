@@ -335,6 +335,8 @@ flowAnalysisArraysStep p =
                         let fromRightToLeft           map lhsV = foldl (pullInFlowsFromRight lhsV) map rhses
                         put $ foldl fromRightToLeft flowMap lhses
                         return f
+             perStmt tenv f = return f
+             
         in transformBiM perBlock p
 
 
