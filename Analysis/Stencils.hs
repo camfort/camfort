@@ -1,4 +1,4 @@
-{-# LANGUAGE GADTs, StandaloneDeriving, FlexibleContexts #-}
+{-# LANGUAGE GADTs, StandaloneDeriving, FlexibleContexts, ImplicitParams #-}
 
 module Analysis.Stencils where
 
@@ -34,18 +34,22 @@ check = error "Not yet implemented"
 -- For the purposes of development, a representative example is given by running (in ghci):
 --      stencilsInf "samples/stencils/one.f90" [] () ()
 
+-- Provides the main inference procedure for specifications which is currently at the level of
+-- per statement for spatial stencils, and per for-loop for temporal stencils
 specInference :: Program Annotation -> String
-specInference p = concatMap specInference' p
-specInference' p =
+specInference p = let flowProgUnitPairs = flowAnalysisArrays p
+                  in concatMap specInference' flowProgUnitPairs
+                  
+specInference' (p, flMap) =
              let formatSpec span (arrayVar, spec) =
                       modify (\out -> out ++ show (spanLineCol span)
                                           ++ " - " ++ (concat $ intersperse "," arrayVar)
                                           ++ ": " ++ show spec ++ "\n")
-                 perBlock :: Block Annotation -> State String (Block Annotation)
+                 perBlock :: (?flowsMap :: FlowsMap) => Block Annotation -> State String (Block Annotation)
                  perBlock b = let tenv = typeEnv b
                               in transformBiM (perStmt tenv) b
 
-                 perStmt :: TypeEnv Annotation -> Fortran Annotation -> State String (Fortran Annotation)
+                 perStmt :: (?flowsMap :: FlowsMap) => TypeEnv Annotation -> Fortran Annotation -> State String (Fortran Annotation)
                  perStmt tenv f@(Assg annotation span lhs rhs) =
                      do -- Get array indexing (on the RHS)
                         let arrayAccesses = collect
@@ -58,7 +62,9 @@ specInference' p =
                                                                                 return f
                  perStmt _ f = return f
                  
-             in case runState (transformBiM perBlock p) "" of (_, output) -> output
+             in let ?flowsMap = flMap
+                in let (_, output) = runState (transformBiM perBlock p) ""
+                   in output
 
 
 {- *** 1 . Specification syntax -}
@@ -296,13 +302,58 @@ groupKeyBy' [(ks, v)]                             = [(ks, v)]
 groupKeyBy' ((ks1, v1):((ks2, v2):xs)) | v1 == v2 = groupKeyBy' ((ks1 ++ ks2, v1) : xs)
                                        | otherwise = (ks1, v1) : groupKeyBy' ((ks2, v2) : xs)
 
-type FlowsMap = [(Variable, [Variable])] -- e.g. (v, [a, b]) means that 'a' and 'b' flow to 'v'
+{- *** 4. Flows-to analysis -}
 
-flowAnalysisArrays :: Program Annotation -> State FlowsMap Program 
-flowAnalysisArrays p = 
-         let perBlock :: Block Annotation -> State String (Block Annotation)
+-- FlowsMap structure:
+-- -- e.g. (v, [a, b]) means that 'a' and 'b' flow to 'v'
+type FlowsMap = Map.Map Variable [Variable] 
+
+flowAnalysisArrays :: Program Annotation -> [(ProgUnit Annotation, FlowsMap)]
+flowAnalysisArrays ps = map (\p -> flowAnalysisArraysRecur p Map.empty) ps
+
+flowAnalysisArraysRecur :: ProgUnit Annotation -> FlowsMap -> (ProgUnit Annotation, FlowsMap)
+flowAnalysisArraysRecur p flowMap =
+          let (p', flowMap') = runState (flowAnalysisArraysStep p) flowMap
+          in if (flowMap == flowMap') then (p', flowMap')
+             else  flowAnalysisArraysRecur p' flowMap'
+         
+flowAnalysisArraysStep :: ProgUnit Annotation -> State FlowsMap (ProgUnit Annotation)
+flowAnalysisArraysStep p = 
+         let perBlock :: Block Annotation -> State FlowsMap (Block Annotation)
              perBlock b = let tenv = typeEnv b
                           in transformBiM (perStmt tenv) b
 
-             perStmt :: Fortran Annotation -> Fortran (Annotation, FlowsMap)
-             perStmt tenv f@(Assg annotation span lhs rhs) = undfined
+             lookupList :: Variable -> FlowsMap -> [Variable]
+             lookupList v map = maybe [] id (Map.lookup v map)
+
+             perStmt :: TypeEnv Annotation -> Fortran Annotation -> State FlowsMap (Fortran Annotation)
+             perStmt tenv f@(Assg annotation span lhs rhs) = 
+                     do let lhses = [v | (Var _ _ [(VarName _ v, es)]) <- (universeBi lhs)::[Expr Annotation], length es > 0]
+                        let rhses = [v | (Var _ _ [(VarName _ v, es)]) <- (universeBi rhs)::[Expr Annotation], length es > 0]
+                        flowMap <- get
+                        let pullInFlowsFromRight lhsV map rhsV = Map.insertWith (++) lhsV (lookupList rhsV map) map
+                        let fromRightToLeft           map lhsV = foldl (pullInFlowsFromRight lhsV) map rhses
+                        put $ foldl fromRightToLeft flowMap lhses
+                        return f
+        in transformBiM perBlock p
+
+
+cyclicDependents :: FlowsMap -> [(Variable, Variable)]
+cyclicDependents flmap = let self = (invertRel flmap) `composeRelW` flmap
+                             reflSubset = foldl (\p (k, ks) -> case (lookup k (map (\(a, b) -> (b, a)) ks)) of
+                                                                  Nothing -> p
+                                                                  Just v  -> (k, v) : p) [] (Map.assocs self)
+                         in reflSubset 
+
+-- Inverts a relation (represented as a map)
+invertRel :: Ord v => Map.Map k [v] -> Map.Map v [k]
+invertRel m = foldl (\m (k, vs) -> foldl (\m' v -> Map.insertWith (++) v [k] m') m vs) Map.empty (Map.assocs m)
+
+-- compose two relations with a witness of where the 'join' point in the middle is
+-- e.g., for two relations R and S, if (a R b) and (b S c) then (a R.S (b, c))
+composeRelW :: (Ord k, Ord v) => Map.Map k [v] -> Map.Map v [k] -> Map.Map k [(v, k)]
+composeRelW r s = foldl (\rs (k, vs) -> foldl (\rs' v -> case (Map.lookup v s) of
+                                                           Nothing -> rs'
+                                                           Just k' -> Map.insertWith (++) k (map (\k -> (v,k)) k') rs') rs vs) Map.empty (Map.assocs r)
+
+
