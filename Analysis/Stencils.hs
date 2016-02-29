@@ -39,37 +39,45 @@ check = error "Not yet implemented"
 specInference :: Program Annotation -> String
 specInference p = let flowProgUnitPairs = flowAnalysisArrays p
                   in concatMap specInference' flowProgUnitPairs
-                  
+-- Helper for appending the specification report information in the state monad
+addToReport :: String -> State String ()
+addToReport x = modify (\y -> y ++ x)
+
 specInference' (p, flMap) =
              let formatSpec span (arrayVar, spec) =
-                      modify (\out -> out ++ show (spanLineCol span)
-                                          ++ " - " ++ (concat $ intersperse "," arrayVar)
-                                          ++ ": " ++ show spec ++ "\n")
-                 perBlock :: (?flowsMap :: FlowsMap) => Block Annotation -> State String (Block Annotation)
+                      show (spanLineCol span)
+                         ++ " - " ++ (concat $ intersperse "," arrayVar)
+                         ++ ": " ++ show spec ++ "\n"
+                 perBlock :: (?cycles :: Cycles) => Block Annotation -> State String (Block Annotation)
                  perBlock b = let tenv = typeEnv b
                               in transformBiM (perStmt tenv) b
 
-                 perStmt :: (?flowsMap :: FlowsMap) => TypeEnv Annotation -> Fortran Annotation -> State String (Fortran Annotation)
-                 perStmt tenv f@(Assg annotation span lhs rhs) =
+                 perStmt :: (?cycles :: Cycles) => TypeEnv Annotation -> Fortran Annotation -> State String (Fortran Annotation)
+                 -- Match statements that are assingments to arrays
+                 perStmt tenv f@(Assg annotation span lhs@(Var _ _ [(VarName _ lhsV, es)]) rhs) | length es > 0 =
                      do -- Get array indexing (on the RHS)
-                        let arrayAccesses = collect
-                                                    [(v, e) | (Var _ _ [(VarName _ v, e)]) <- rhsExpr f,
+                        let arrayAccesses = collect [(v, e) | (Var _ _ [(VarName _ v, e)]) <- rhsExpr f,
                                                               length e > 0,
                                                               isArrayType tenv v]
-                        mapM (formatSpec span) (groupKeyBy $ Map.toList $ fmap ixCollectionToSpec $ arrayAccesses)
+                        -- Create specification information
+                        mapM (addToReport . (formatSpec span)) (groupKeyBy $ Map.toList $ fmap ixCollectionToSpec $ arrayAccesses)
+                        -- Insert time specification if there is a cyclic depenency through the assignment (for arrays)
+                        case (lookup lhsV ?cycles) of
+                                   Just v' -> addToReport $ formatSpec span ([lhsV], TemporalBwd [v'])
+                                   Nothing -> return ()
+                        -- Done
                         return f
                  perStmt tenv f@(For annotation span ivar start end inc body) = -- TODO: Get induction-variable info from here
                                                                                 return f
                  perStmt _ f = return f
                  
-             in let ?flowsMap = flMap
+             in let ?cycles = cyclicDependents flMap
                 in let (_, output) = runState (transformBiM perBlock p) ""
                    in output
 
-
 {- *** 1 . Specification syntax -}
 
-type Dimension  = Int
+type Dimension  = Int -- spatial dimensions are 0 indexed
 type Depth      = Int
 type Saturation = Bool
 data Direction  = Fwd | Bwd deriving (Eq, Show)
@@ -79,6 +87,12 @@ data Spec where
      Forward     :: Depth -> [Dimension] -> Spec
      Backward    :: Depth -> [Dimension] -> Spec
      Symmetric   :: Depth -> [Dimension] -> Spec
+
+     -- Temporal specifications, with a list of variables for the arrays
+     -- through which time is represented
+     TemporalFwd    :: [Variable] -> Spec
+     TemporalBwd    :: [Variable] -> Spec
+     
      Unspecified :: [Dimension] -> Spec
      Constant    :: [Dimension] -> Spec
      Linear      :: Spec -> Spec
@@ -102,6 +116,8 @@ instance Show Spec where
      show (Unspecified dims)   = "unspecified "  ++ showL dims
      show (Constant dims)      = "fixed dim=" ++ showL dims
      show (Linear spec)        = (show spec) ++ " unique "
+     show (TemporalFwd dims)   = "forward depth=" ++ show (length dims) ++ "dim=t{" ++ showL dims ++ "}"
+     show (TemporalBwd dims)   = "backward depth=" ++ show (length dims) ++ "dim=t{" ++ showL dims ++ "}"
 
 {- *** 2 . Operations on specs, and conversion from indexing expressions -}
 
@@ -126,8 +142,11 @@ specPlus x y                                                       = Nothing
 
 -- SpecIification (intermediate) elements
 data SpecI where
+     -- Regular spatial spans
      Span        :: Dimension -> Depth -> Direction -> Saturation -> SpecI
+     -- Reflexive access 
      Reflx       :: Dimension -> SpecI
+     -- Constant access
      Const       :: Dimension -> SpecI
 deriving instance Show SpecI
 
@@ -159,13 +178,15 @@ direction x                = Fwd
 -- Ordering
 deriving instance Eq SpecI
 instance Ord SpecI where
-         (Span dim depth dir s) <= (Span dim' depth' dir' s')
-           | (dim == dim') && (dir == dir') = depth <= depth'
-           | (dim == dim') = dir <= dir'
-         (Reflx dim) <= (Reflx dim') = dim <= dim'
-         (Reflx _)   <= _            = True
-         (Const dim) <= (Const dim') = dim <= dim'
-         _     <= _ = False
+         s1 <= s2 | (dim s1) < (dim s2)  = True
+         s1 <= s2 | (dim s1) > (dim s2)  = False
+         s1 <= s2 | (dim s1) == (dim s2) =
+            case (s1, s2) of
+              (Reflx _, _) -> True
+              (Const _, _) -> True
+              (Span dim depth dir s, Span dim' depth' dir' s') | (dim == dim') && (dir == dir') -> depth <= depth'
+                                                               | (dim == dim')                  -> dir <= dir'
+              (_, _)       -> False
 
 -- Types various normal forms of specifications and specification groups
 data Normalised a where
@@ -188,8 +209,12 @@ normalise = coalesce . firstAsSaturated . groupByDim
 coalesce :: [Normalised [SpecI]] -> Normalised [[SpecI]]
 coalesce = NSpecIGroups . (map (\(NSpecIs specs) -> foldPair (\x y -> plus (NS x y)) $ specs))
 
+
+
 groupByDim :: [SpecI] -> [Normalised [SpecI]]
 groupByDim = (map (NSpecIs . nub)) . (groupBy eqDim) . sort
+                where eqDim :: SpecI -> SpecI -> Bool
+                      eqDim s1 s2 = (dim s1) == (dim s2)
 
 -- Mark spans from 0 to 1 as saturated.
 firstAsSaturated :: [Normalised [SpecI]] -> [Normalised [SpecI]]
@@ -198,17 +223,6 @@ firstAsSaturated ((NSpecIs s):xs) = (NSpecIs $ map go s) : (firstAsSaturated xs)
                                      where go (Span dim 1 dir sat) = Span dim 1 dir True
                                            go s = s
 
-eqDim :: SpecI -> SpecI -> Bool
-eqDim (Reflx d) (Reflx d')                = (d == d')
-eqDim (Span d _ dir _) (Span d' _ dir' _) = (d == d') 
-eqDim (Const d) (Const d')                = (d == d')
-eqDim (Const d) (Reflx d')                = d == d'
-eqDim (Reflx d) (Const d')                = d == d'
-eqDim (Span d _ _ _) (Reflx d')           = d == d'
-eqDim (Reflx d') (Span d _ _ _)           = d == d'
-eqDim (Const d) (Span d' _ _ _)           = d == d'
-eqDim (Span d _ _ _) (Const d')           = d == d'
--- eqDim _ _ = False
 
 -- Coalesces two contiguous specifications (of the same dimension and direction)
 --  This is a partial operation and fails when the two specs are not contiguous
@@ -234,7 +248,8 @@ plus _ = error "Trying to coalesce a reflexive and a span"
 -- Convert a normalised list of index specifications to a list of specifications
 specIsToSpecs :: Normalised [[SpecI]] -> [Spec]
 specIsToSpecs x@(NSpecIGroups spanss) =
-     (if isReflexiveMultiDim x then [Reflexive] else [])
+--   ("___" ++ show spanss ++ "\n") `trace`
+   (if isReflexiveMultiDim x then [Reflexive] else [])
   ++ simplify (concatMap (uncurry go) (zip [0..length spanss] spanss))
         where go :: Dimension -> [SpecI] -> [Spec]
               go dim (Reflx _ : xs) = go dim xs
@@ -307,6 +322,7 @@ groupKeyBy' ((ks1, v1):((ks2, v2):xs)) | v1 == v2 = groupKeyBy' ((ks1 ++ ks2, v1
 -- FlowsMap structure:
 -- -- e.g. (v, [a, b]) means that 'a' and 'b' flow to 'v'
 type FlowsMap = Map.Map Variable [Variable] 
+type Cycles = [(Variable, Variable)]
 
 flowAnalysisArrays :: Program Annotation -> [(ProgUnit Annotation, FlowsMap)]
 flowAnalysisArrays ps = map (\p -> flowAnalysisArraysRecur p Map.empty) ps
@@ -339,8 +355,8 @@ flowAnalysisArraysStep p =
              
         in transformBiM perBlock p
 
-
-cyclicDependents :: FlowsMap -> [(Variable, Variable)]
+-- Find all array accesses which have a cylcic dependency 
+cyclicDependents :: FlowsMap -> Cycles
 cyclicDependents flmap = let self = (invertRel flmap) `composeRelW` flmap
                              reflSubset = foldl (\p (k, ks) -> case (lookup k (map (\(a, b) -> (b, a)) ks)) of
                                                                   Nothing -> p
