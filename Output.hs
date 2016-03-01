@@ -157,11 +157,8 @@ instance PrintSlave (Uses p) HTMLPP where
 
 showUse' :: Uses p -> String
 showUse' (UseNil _) = ""
-showUse' (Use _ (n, []) us _) = ("use "++n++"\n") ++ (showUse' us)
-showUse' (Use _ (n, renames) us _) = ("use "++n++", " ++ 
-                                     (Prelude.concat $ Data.List.intersperse ", " (map (\(a, b) -> a ++ " => " ++ b) renames)) ++
-                                  "\n") ++ (showUse' us)
-
+showUse' (Uses _ (Use n []) us _) = ("use "++n++"\n") ++ (showUse' us)
+showUse' (Uses _ (Use n renames) us _) = ("use "++n++", " ++ (Prelude.concat $ Data.List.intersperse ", " (map (\(a, b) -> a ++ " => " ++ b) renames)) ++ "\n") ++ (showUse' us)
 
 instance (PrintIndSlave (Fortran p) HTMLPP, PrintSlave p HTMLPP, Indentor (Fortran p)) => PrintSlave (Fortran p) HTMLPP where
     printSlave (For p _ v e e' e'' f) = "do"++" "++printSlave v++" = "++printSlave e++", "++
