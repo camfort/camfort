@@ -24,6 +24,7 @@ import Transformation.CommonBlockElimToCalls
 import Transformation.EquivalenceElim
 import Transformation.DerivedTypeIntro
 import Extensions.Units
+import Extensions.UnitSyntaxConversion
 import Extensions.UnitsEnvironment
 import Extensions.UnitsSolve
 
@@ -189,7 +190,7 @@ units inSrc excludes outSrc opt =
           do putStrLn $ "Inferring units for " ++ show inSrc ++ "\n"
              let ?solver = solverType opt 
               in let ?assumeLiterals = literalsBehaviour opt
-                 in doRefactor (mapM inferUnits) inSrc excludes outSrc
+                 in doRefactor' (mapM inferUnits) inSrc excludes outSrc
 
 unitRemoval inSrc excludes outSrc opt = 
           do putStrLn $ "Removing units in " ++ show inSrc ++ "\n"
@@ -201,8 +202,7 @@ unitCriticals inSrc excludes outSrc opt =
           do putStrLn $ "Infering critical variables for units inference in directory " ++ show inSrc ++ "\n"
              let ?solver = solverType opt 
               in let ?assumeLiterals = literalsBehaviour opt
-                 in doAnalysisReport (mapM inferCriticalVariables) inSrc excludes outSrc
-
+                 in doAnalysisReport' (mapM inferCriticalVariables) inSrc excludes outSrc
 
 -- * Builders for analysers and refactorings
 
@@ -246,6 +246,24 @@ doAnalysisReport rFun inSrc excludes outSrc
                        let (report, ps') = rFun (map (\(f, inp, ast) -> (f, ast)) ps)
                        putStrLn report
 
+-- Temporary doAnalysisReport version to make it work with Units-Of-Measure
+-- glue code.
+doAnalysisReport' :: ([(Filename, Program A)] -> (String, t1)) -> FileOrDir -> [Filename] -> t -> IO ()
+doAnalysisReport' rFun inSrc excludes outSrc
+                  = do if excludes /= [] && excludes /= [""]
+                           then putStrLn $ "Excluding " ++ (concat $ intersperse "," excludes) ++ " from " ++ inSrc ++ "/"
+                           else return ()
+                       ps <- readParseSrcDir inSrc excludes
+                       putStr "\n"
+                       let (report, ps') = rFun (map modifyAST ps)
+                       putStrLn report
+  where
+    modifyAST (f, inp, ast) = 
+      let ast' = map (fmap (const ())) ast
+          ast'' = convertSyntax f inp ast'
+          ast''' = map (fmap (const unitAnnotation)) ast''
+      in (f, ast''')
+
 {-| Performs a refactoring provided by its first parameter, on the directory of the second, excluding files listed by third, 
  output to the directory specified by the fourth parameter -}
 doRefactor :: ([(Filename, Program A)] -> (String, [(Filename, Program Annotation)])) -> FileOrDir -> [Filename] -> FileOrDir -> IO ()
@@ -260,6 +278,27 @@ doRefactor rFun inSrc excludes outSrc
                        let outFiles = map fst ps'
                        putStrLn report
                        outputFiles inSrc outSrc (zip3 outFiles (map Fortran.snd3 ps ++ (repeat "")) (map snd ps'))
+
+-- Temporarily for the units-of-measure glue code
+doRefactor' :: ([(Filename, Program A)] -> (String, [(Filename, Program Annotation)])) -> FileOrDir -> [Filename] -> FileOrDir -> IO ()
+doRefactor' rFun inSrc excludes outSrc = do 
+    if excludes /= [] && excludes /= [""]
+    then putStrLn $ "Excluding " ++ (concat $ intersperse "," excludes) ++ " from " ++ inSrc ++ "/"
+    else return ()
+    ps <- readParseSrcDir inSrc excludes
+    let (report, ps') = rFun (map modifyAST ps)
+    let outFiles = map fst ps'
+    let newASTs = map (map (fmap (const ()))) (map snd ps')
+    let inputs = map Fortran.snd3 ps
+    let outputs = zip outFiles (map (\(a,b) -> a b) (zip (map convertSyntaxBack inputs) newASTs))
+    putStrLn report
+    outputFiles' inSrc outSrc outputs
+  where
+    modifyAST (f, inp, ast) = 
+      let ast' = map (fmap (const ())) ast
+          ast'' = convertSyntax f inp ast'
+          ast''' = map (fmap (const unitAnnotation)) ast''
+      in (f, ast''')
 
 -- gets the directory part of a filename
 getDir :: String -> String
@@ -336,6 +375,30 @@ outputFiles inp outp pdata =
                     let (f, input, ast') = head pdata
                     putStrLn $ "Writing " ++ outp
                     writeFile outp (reprint input outp ast')
+
+outputFiles' :: FileOrDir -> FileOrDir -> [(Filename, SourceText)] -> IO ()
+outputFiles' inp outp pdata = 
+  do outIsDir <- isDirectory outp
+     inIsDir  <- isDirectory inp
+     if outIsDir then
+       do createDirectoryIfMissing True outp
+          putStrLn $ "Writing refactored files to directory: " ++ outp ++ "/"
+          isdir <- isDirectory inp 
+          let inSrc = if isdir then inp else getDir inp
+          mapM_ (\(f, output) -> let f' = changeDir outp inSrc f
+                                 in do checkDir f'
+                                       putStrLn $ "Writing " ++ f'
+                                       writeFile f' output) pdata
+     else
+         if inIsDir || length pdata > 1 then 
+             error $ "Error: attempting to output multiple files, but the given output destination " ++ 
+                       "is a single file. \n" ++ "Please specify an output directory"
+         else let outSrc = getDir outp
+              in do createDirectoryIfMissing True outSrc
+                    putStrLn $ "Writing refactored file to: " ++ outp 
+                    let (f, output) = head pdata
+                    putStrLn $ "Writing " ++ outp
+                    writeFile outp output
 
 {-| changeDir is used to change the directory of a filename string.
     If the filename string has no directory then this is an identity  -}
