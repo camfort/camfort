@@ -40,7 +40,7 @@ specInference :: Program Annotation -> String
 specInference p = let flowProgUnitPairs = flowAnalysisArrays p
                   in concatMap specInference' flowProgUnitPairs
 -- Helper for appending the specification report information in the state monad
-addToReport :: String -> State (String, [String]) ()
+addToReport :: String -> State (String, [Variable]) ()
 addToReport x = modify (\ (y, vs) -> (y ++ x, vs))
 
 specInference' (p, flMap) =
@@ -56,7 +56,7 @@ specInference' (p, flMap) =
                       put s'
                       return b'
 
-                 perStmt :: (?cycles :: Cycles) => TypeEnv Annotation -> Fortran Annotation -> State (String, [String]) (Fortran Annotation)
+                 perStmt :: (?cycles :: Cycles) => TypeEnv Annotation -> Fortran Annotation -> State (String, [Variable]) (Fortran Annotation)
                  -- Match statements that are assingments to arrays
                  perStmt tenv f@(Assg annotation span lhs@(Var _ _ [(VarName _ lhsV, es)]) rhs) | length es > 0 =
                      do -- Get array indexing (on the RHS)
@@ -74,7 +74,7 @@ specInference' (p, flMap) =
                         -- Done
                         return f
                  perStmt tenv f@(For annotation span (VarName _ v) start end inc body) =
-                   do modify $ \ (r, vs) -> (r, nub (v:vs))
+                   do modify $ \(r, vs) -> (r, nub (v:vs))
                       return f
                  perStmt _ f = return f
 
@@ -130,7 +130,7 @@ instance Show Spec where
 {- *** 2 . Operations on specs, and conversion from indexing expressions -}
 
 -- Convert list of indexing expressions to list of specs
-ixCollectionToSpec :: [String] -> [[Expr p]] -> [Spec]
+ixCollectionToSpec :: [Variable] -> [[Expr p]] -> [Spec]
 ixCollectionToSpec ivs es = let x = normalise . (ixExprAToSpecIs ivs) $ es
                             in specIsToSpecs x  -- (show (ixExprAToSpecIs $ (es)) ++ "\n" ++ show x) `trace`
 
@@ -277,7 +277,7 @@ specIsToSpecs x@(NSpecIGroups spanss) =
 
 -- From a list of index expressions (themselves a list of expressions)
 --  to a set of intermediate specs
-ixExprAToSpecIs :: [String] -> [[Expr p]] -> [SpecI]
+ixExprAToSpecIs :: [Variable] -> [[Expr p]] -> [SpecI]
 ixExprAToSpecIs ivs ess =
   concatMap (\es -> case (mapM (uncurry (ixCompExprToSpecI ivs)) (zip [0..(length es)] es)) of
                       Nothing -> []
@@ -293,7 +293,7 @@ isInductionVariable v = True
 -- Convert a single index expression for a particular dimension to intermediate spec
 -- e.g., for the expression a(i+1,j+1) then this function gets
 -- passed dim = 0, expr = i + 1 and dim = 1, expr = j + 1
-ixCompExprToSpecI :: [String] -> Dimension -> Expr p -> Maybe SpecI
+ixCompExprToSpecI :: [Variable] -> Dimension -> Expr p -> Maybe SpecI
 ixCompExprToSpecI ivs d (Var _ _ [(VarName _ v, [])]) | v `elem` ivs = Just $ Reflx d
 
 ixCompExprToSpecI ivs d (Bin _ _ (Plus _) (Var _ _ [(VarName _ v, [])]) (Con _ _ offset)) | v `elem` ivs =
