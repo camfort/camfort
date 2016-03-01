@@ -156,7 +156,7 @@ updateUseDecls fps tcs =
 
           concatUses :: Uses A -> Uses A -> Uses A
           concatUses (UseNil p) y      = y
-          concatUses (Use p x us p') y = Use p x (UseNil p) p'
+          concatUses (Uses p x us p') y = Uses p x (UseNil p) p'
 
           inames :: Decl A -> Maybe String
           inames (Include _ (Con _ _ inc)) = Just inc
@@ -256,7 +256,7 @@ mkUseStatements :: SrcLoc -> [(TCommon A, RenamerCoercer)] -> Uses A
 mkUseStatements s [] = UseNil (unitAnnotation)
 mkUseStatements s (((name, _), r):trs) = 
                         let a = unitAnnotation { refactored = Just s, newNode = True } -- previously-- Just (toCol0 s)
-                        in Use a (commonName name, renamerToUse r) (mkUseStatements s trs) a
+                        in Uses a (Use (commonName name) (renamerToUse r)) (mkUseStatements s trs) a
 
 mkRenamerCoercerTLC :: TLCommon A :? source -> TLCommon A :? target -> RenamerCoercer
 mkRenamerCoercerTLC x@(fname, (pname, common1)) (_, (_, common2)) = mkRenamerCoercer common1 common2
