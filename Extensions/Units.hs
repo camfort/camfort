@@ -13,7 +13,7 @@ TODO:
 -}
 
 
-{-# LANGUAGE ScopedTypeVariables, ImplicitParams, DoAndIfThenElse #-}
+{-# LANGUAGE ScopedTypeVariables, ImplicitParams, DoAndIfThenElse, PatternGuards #-}
 
 module Extensions.Units where
 
