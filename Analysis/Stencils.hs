@@ -65,7 +65,6 @@ specInference' (p, flMap) =
                                                               isArrayType tenv v]
                         -- Create specification information
                         ivs <- gets snd
-                        trace (show ivs) (return ())
                         mapM (addToReport . (formatSpec span)) (groupKeyBy $ Map.toList $ fmap (ixCollectionToSpec ivs) $ arrayAccesses)
                         -- Insert time specification if there is a cyclic depenency through the assignment (for arrays)
                         case (lookup lhsV ?cycles) of
@@ -294,7 +293,8 @@ isInductionVariable v = True
 -- e.g., for the expression a(i+1,j+1) then this function gets
 -- passed dim = 0, expr = i + 1 and dim = 1, expr = j + 1
 ixCompExprToSpecI :: [Variable] -> Dimension -> Expr p -> Maybe SpecI
-ixCompExprToSpecI ivs d (Var _ _ [(VarName _ v, [])]) | v `elem` ivs = Just $ Reflx d
+ixCompExprToSpecI ivs d (Var _ _ [(VarName _ v, [])]) = if (v `elem` ivs) then Just $ Reflx d
+                                                        else Just $ Const d
 
 ixCompExprToSpecI ivs d (Bin _ _ (Plus _) (Var _ _ [(VarName _ v, [])]) (Con _ _ offset)) | v `elem` ivs =
   let x = read offset in Just $ Span d (read offset) (if x < 0 then Bwd else Fwd) False

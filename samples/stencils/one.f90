@@ -21,7 +21,7 @@ program one
   write (*,*) "A = "
   do i = 0, imax
      do j = 0, jmax       
-        !write (*,'(" ",f0.2," ")',advance="no") a(i,j)
+        write (*,'(" ",f0.2," ")',advance="no") a(i,j)
      end do
      write (*,*) "\n"
   end do
@@ -53,7 +53,7 @@ program one
   write (*,*) "B = "
   do i = 0, imax
      do j = 0, jmax
-        !write (*,'(" ",f0.2," ")',advance="no") b(i,j)
+        write (*,'(" ",f0.2," ")',advance="no") b(i,j)
      end do
      write (*,*) "\n"
   end do
