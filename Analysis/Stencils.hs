@@ -40,25 +40,25 @@ specInference :: Program Annotation -> String
 specInference p = let flowProgUnitPairs = flowAnalysisArrays p
                   in concatMap specInference' flowProgUnitPairs
 -- Helper for appending the specification report information in the state monad
-addToReport :: String -> State (String, [Variable]) ()
-addToReport x = modify (\ (y, vs) -> (y ++ x, vs))
+addToReport :: String -> State ([String], [Variable]) ()
+addToReport x = modify (\ (y, vs) -> (y ++ [x], vs))
 
 specInference' (p, flMap) =
              let formatSpec span (arrayVar, spec) =
                       show (spanLineCol span)
                          ++ " - " ++ (concat $ intersperse "," arrayVar)
                          ++ ": " ++ showL spec ++ "\n"
-                 perBlock :: (?cycles :: Cycles) => Block Annotation -> State String (Block Annotation)
+                 perBlock :: (?cycles :: Cycles) => Block Annotation -> State [String] (Block Annotation)
                  perBlock b =
                    do s <- get
                       let tenv = typeEnv b
-                      let (b', (s', _)) = runState (transformBiM (perStmt tenv) b) (s, [])
+                      let (b', (s', _)) = runState (descendBiM (perStmt tenv) b) (s, [])
                       put s'
                       return b'
 
-                 perStmt :: (?cycles :: Cycles) => TypeEnv Annotation -> Fortran Annotation -> State (String, [Variable]) (Fortran Annotation)
-                 -- Match statements that are assingments to arrays
-                 perStmt tenv f@(Assg annotation span lhs@(Var _ _ [(VarName _ lhsV, es)]) rhs) | length es > 0 =
+                 perStmt :: (?cycles :: Cycles) => TypeEnv Annotation -> Fortran Annotation -> State ([String], [Variable]) (Fortran Annotation)
+                 -- Match any assignment statements
+                 perStmt tenv f@(Assg annotation span lhs@(Var _ _ [(VarName _ lhsV, es)]) rhs) =
                      do -- Get array indexing (on the RHS)
                         let arrayAccesses = collect [(v, e) | (Var _ _ [(VarName _ v, e)]) <- rhsExpr f,
                                                               length e > 0,
@@ -66,21 +66,31 @@ specInference' (p, flMap) =
                         -- Create specification information
                         ivs <- gets snd
                         mapM (addToReport . (formatSpec span)) (groupKeyBy $ Map.toList $ fmap (ixCollectionToSpec ivs) $ arrayAccesses)
-                        -- Insert time specification if there is a cyclic depenency through the assignment (for arrays)
-                        case (lookup lhsV ?cycles) of
-                                   Just v' -> addToReport $ formatSpec span ([lhsV], [TemporalBwd [v']])
-                                   Nothing -> return ()
+                        
                         -- Done
                         return f
+                        
                  perStmt tenv f@(For annotation span (VarName _ v) start end inc body) =
                    do modify $ \(r, vs) -> (r, nub (v:vs))
-                      return f
-                 perStmt _ f = return f
+                      ivs <- gets snd
+                      -- Insert temporal specs for anything inside the for-loop
+                      mapM (\e -> case e of
+                                   (Var _ _ [(VarName _ lhsV, _)]) -> 
+                                       -- Insert time specification if there is a cyclic depenency through the assignment (for arrays)
+                                       case (lookup lhsV ?cycles) of
+                                          Just v' -> addToReport $ formatSpec span ([lhsV], [TemporalBwd [v']])
+                                          Nothing -> return ()
+                                   _ -> return ()) (lhsExpr body)
+
+                      descendBiM (perStmt tenv) body -- Descend inside for-loop
+                      
+                 perStmt tenv f = do mapM (perStmt tenv) (children f) -- Descend
+                                     return f 
 
              in let ?cycles = cyclicDependents flMap
                 in -- ("---" ++ show ?cycles ++ "\n") `trace`
-                   let (_, output) = runState (transformBiM perBlock p) ""
-                   in output
+                   let (_, output) = runState (transformBiM perBlock p) []
+                   in concat $ nub output
 
 {- *** 1 . Specification syntax -}
 

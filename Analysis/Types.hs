@@ -13,20 +13,22 @@ import Data.Generics.Uniplate.Operations
 import Analysis.Syntax
 import Language.Fortran
 
+import Debug.Trace
+
 type TypeEnv t = [(Variable, Type t)]
 type TypeEnvStack t = [TypeEnv t] -- stack of environments
 
-typeAnnotations :: (Typeable a, Data a) => Program a -> State (TypeEnv a) (Program a)
+typeAnnotations :: (Show a, Typeable a, Data a) => Program a -> State (TypeEnv a) (Program a)
 typeAnnotations = mapM (descendBiM buildTypeEnv)
 
-typeEnv :: (Typeable a, Data a) => Block a -> TypeEnv a
+typeEnv :: (Show a, Typeable a, Data a) => Block a -> TypeEnv a
 typeEnv x = snd $ runState (buildTypeEnv x) []
 
 tenvLookup :: Variable -> TypeEnv t -> Maybe (Type t)
 tenvLookup v = lookup (lowercase v)
 
 
-buildTypeEnv :: (Typeable a, Data a) => Block a -> State (TypeEnv a) (Block a)
+buildTypeEnv :: (Show a, Typeable a, Data a) => Block a -> State (TypeEnv a) (Block a)
 buildTypeEnv x = do tenv <- get
                     tenv' <- return $ gtypes x
                     put (tenv ++ tenv')
@@ -40,14 +42,18 @@ eqType v1 v2 vs = case lookup v1 vs of
                                  Just t2 -> (AnnotationFree t1 == AnnotationFree t2)
 
 
-gtypes :: forall a t . (Data (t a), Typeable (t a), Data a, Typeable a) => t a -> TypeEnv a
+gtypes :: forall a t . (Show a, Data (t a), Typeable (t a), Data a, Typeable a) => t a -> TypeEnv a
 gtypes x = let decAndTypes :: [([(Expr a, Expr a, Maybe Int)], Type a)]
                decAndTypes = [(d, t) | (Decl _ _ d t) <- (universeBi x)::[Decl a]]
            in concatMap (\(d, t) ->
-                             [(lowercase v, toArrayType t es) | (Var _ _ [(VarName _ v, es)], _, _) <- d]) decAndTypes
+                            [(lowercase v, toArrayType t es)
+                               | (Var _ _ vs, _, _) <- d, (VarName _ v, es) <- vs]) decAndTypes
 
 lowercase = map toLower
 
+quicktest t = case t of
+                (ArrayT _ _ _ _ _ _) -> True
+                _ -> False
 
 isArrayType :: (TypeEnv t) -> Variable -> Bool
 isArrayType env v = case (lookup v env) of

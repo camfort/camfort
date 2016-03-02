@@ -275,7 +275,7 @@ lhsExpr :: Fortran Annotation -> [Expr Annotation]
 lhsExpr (Assg _ _ e1 e2)        = ((universeBi e1)::[Expr Annotation])
 lhsExpr (For x sp v e1 e2 e3 fs) = [Var x sp [(v, [])]]
 lhsExpr (PointerAssg _ _ e1 e2) = ((universeBi e1)::[Expr Annotation])
-lhsExpr t                        = [] --  concatMap lhsExpr ((children t)::[Fortran Annotation])
+lhsExpr t                        = concatMap lhsExpr ((children t)::[Fortran Annotation])
 
 
 -- * Various simple analyses
