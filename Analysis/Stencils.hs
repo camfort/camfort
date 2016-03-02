@@ -44,10 +44,12 @@ addToReport :: String -> State ([String], [Variable]) ()
 addToReport x = modify (\ (y, vs) -> (y ++ [x], vs))
 
 specInference' (p, flMap) =
-             let formatSpec span (arrayVar, spec) =
-                      show (spanLineCol span)
-                         ++ " - " ++ (concat $ intersperse "," arrayVar)
-                         ++ ": " ++ showL spec ++ "\n"
+             let formatSpec span []    = ""
+                 formatSpec span specs = 
+                      show (spanLineCol span) ++ " \t"
+                         ++ (concat $ intersperse ", " $ nub $ map (\(arrayVar, spec) -> (concat $ intersperse "," arrayVar) ++ ": " ++ showL spec) specs)
+                         ++ "\n"
+                         
                  perBlock :: (?cycles :: Cycles) => Block Annotation -> State [String] (Block Annotation)
                  perBlock b =
                    do s <- get
@@ -65,7 +67,8 @@ specInference' (p, flMap) =
                                                               isArrayType tenv v]
                         -- Create specification information
                         ivs <- gets snd
-                        mapM (addToReport . (formatSpec span)) (groupKeyBy $ Map.toList $ fmap (ixCollectionToSpec ivs) $ arrayAccesses)
+                        let specs = groupKeyBy $ Map.toList $ fmap (ixCollectionToSpec ivs) $ arrayAccesses
+                        addToReport (formatSpec span specs)
                         
                         -- Done
                         return f
@@ -74,13 +77,15 @@ specInference' (p, flMap) =
                    do modify $ \(r, vs) -> (r, nub (v:vs))
                       ivs <- gets snd
                       -- Insert temporal specs for anything inside the for-loop
-                      mapM (\e -> case e of
-                                   (Var _ _ [(VarName _ lhsV, _)]) -> 
-                                       -- Insert time specification if there is a cyclic depenency through the assignment (for arrays)
-                                       case (lookup lhsV ?cycles) of
-                                          Just v' -> addToReport $ formatSpec span ([lhsV], [TemporalBwd [v']])
-                                          Nothing -> return ()
-                                   _ -> return ()) (lhsExpr body)
+                      let tempSpecs = foldl (\ts e -> 
+                                             case e of
+                                                (Var _ _ [(VarName _ lhsV, _)]) -> 
+                                              -- Insert time specification if there is a cyclic depenency through the assignment (for arrays)
+                                                 case (lookup lhsV ?cycles) of
+                                                    Just v' -> ([lhsV], [TemporalBwd [v']]) : ts
+                                                    Nothing -> ts
+                                                _ -> ts) [] (lhsExpr body)
+                      addToReport $ formatSpec span tempSpecs
 
                       descendBiM (perStmt tenv) body -- Descend inside for-loop
                       
