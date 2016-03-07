@@ -7,20 +7,16 @@ import Language.Fortran hiding (Spec)
 import Data.Generics.Uniplate.Operations
 import Control.Monad.State.Lazy
 
-import Analysis.Loops
-import Analysis.LVA
-import Analysis.Annotations
-import Analysis.Syntax
-import Analysis.Types
+import Analysis.Loops (collect)
+import Analysis.Annotations (Annotation, unitAnnotation)
+import Analysis.Syntax (lhsExpr)
+import Analysis.Types (typeEnv, TypeEnv, isArrayType)
 
 import qualified Data.Map as Map
 import Data.List
-import Helpers
-import Traverse
+import Helpers (spanLineCol)
 
 import Debug.Trace
-
-import Transformation.Syntax
 
 -- Infer and check stencil specifications
 infer :: Program a -> String
@@ -45,11 +41,11 @@ addToReport x = modify (\ (y, vs) -> (y ++ [x], vs))
 
 specInference' (p, flMap) =
              let formatSpec span []    = ""
-                 formatSpec span specs = 
+                 formatSpec span specs =
                       show (spanLineCol span) ++ " \t"
                          ++ (concat $ intersperse ", " $ nub $ map (\(arrayVar, spec) -> (concat $ intersperse "," arrayVar) ++ ": " ++ showL spec) specs)
                          ++ "\n"
-                         
+
                  perBlock :: (?cycles :: Cycles) => Block Annotation -> State [String] (Block Annotation)
                  perBlock b =
                    do s <- get
@@ -62,24 +58,25 @@ specInference' (p, flMap) =
                  -- Match any assignment statements
                  perStmt tenv f@(Assg annotation span lhs@(Var _ _ [(VarName _ lhsV, es)]) rhs) =
                      do -- Get array indexing (on the RHS)
-                        let arrayAccesses = collect [(v, e) | (Var _ _ [(VarName _ v, e)]) <- rhsExpr f,
+                        let rhsExprs = universeBi rhs :: [Expr Annotation]
+                        let arrayAccesses = collect [(v, e) | (Var _ _ [(VarName _ v, e)]) <- rhsExprs,
                                                               length e > 0,
                                                               isArrayType tenv v]
                         -- Create specification information
                         ivs <- gets snd
                         let specs = groupKeyBy $ Map.toList $ fmap (ixCollectionToSpec ivs) $ arrayAccesses
                         addToReport (formatSpec span specs)
-                        
+
                         -- Done
                         return f
-                        
+
                  perStmt tenv f@(For annotation span (VarName _ v) start end inc body) =
                    do modify $ \(r, vs) -> (r, nub (v:vs))
                       ivs <- gets snd
                       -- Insert temporal specs for anything inside the for-loop
-                      let tempSpecs = foldl (\ts e -> 
+                      let tempSpecs = foldl (\ts e ->
                                              case e of
-                                                (Var _ _ [(VarName _ lhsV, _)]) -> 
+                                                (Var _ _ [(VarName _ lhsV, _)]) ->
                                               -- Insert time specification if there is a cyclic depenency through the assignment (for arrays)
                                                  case (lookup lhsV ?cycles) of
                                                     Just v' -> ([lhsV], [TemporalBwd [v']]) : ts
@@ -88,9 +85,9 @@ specInference' (p, flMap) =
                       addToReport $ formatSpec span tempSpecs
 
                       descendBiM (perStmt tenv) body -- Descend inside for-loop
-                      
+
                  perStmt tenv f = do mapM (perStmt tenv) (children f) -- Descend
-                                     return f 
+                                     return f
 
              in let ?cycles = cyclicDependents flMap
                 in -- ("---" ++ show ?cycles ++ "\n") `trace`
