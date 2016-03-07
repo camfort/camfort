@@ -43,6 +43,7 @@ library
                         Main
                         Output
                         Traverse
+  other-modules:        Extensions.UnitsParser
 
   build-depends:        base < 5,
                         containers >= 0.5.0.0,
