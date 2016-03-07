@@ -51,12 +51,8 @@ loopAnalyse p = map ((descendBi arrayIndices) . ix . lvaOnUnit . (transformBi re
 analyse' :: Program Annotation -> Program Annotation
 analyse' p = map ((descendBi arrayIndices) . ix . lvaOnUnit . (transformBi reassociate))  p
 
-
 collect :: (Eq a, Ord k) => [(k, a)] -> Map.Map k [a]
-collect = collect' Map.empty 
-          where collect' as []                         = as
-                collect' as ((v, n):es) | Map.member v as = collect' (Map.insert v (nub $ n : ((Map.!) as v)) as) es
-                                        | otherwise   = collect' (Map.insert v [n] as) es
+collect = Map.fromListWith union . map (fmap (:[]))
 
 arrayIndices :: Block Annotation -> Block Annotation
 arrayIndices x = 
