@@ -20,8 +20,11 @@ import qualified Forpar.Util.Position as FU
 
 import qualified Data.Map as Map
 import qualified Data.Map as M
+import Data.Function (on)
 import Data.Maybe
 import Data.List
+import Data.Tuple (swap)
+import Data.Ord
 
 import Debug.Trace
 
@@ -91,7 +94,6 @@ blockLoop (b@(F.BlStatement _ span _ (F.StExpressionAssign _ _ _ rhs)):bs) = do
           (v, e) | F.ExpSubscript _ _ (F.ExpValue _ _ (F.ValArray _ v)) subs <- rhsExprs
                  , let e = F.aStrip subs
                  , not (null e)
-                 , isArrayType tenv puName v
         ]
 
   -- Create specification information
@@ -240,27 +242,25 @@ direction x                = Fwd
 -- Ordering
 deriving instance Eq SpecI
 instance Ord SpecI where
-         s1 <= s2 | (dim s1) < (dim s2)  = True
-         s1 <= s2 | (dim s1) > (dim s2)  = False
-         s1 <= s2 | (dim s1) == (dim s2) =
-            case (s1, s2) of
-              (Reflx _, _) -> True
-              (Const _, _) -> True
-              (Span dim depth dir s, Span dim' depth' dir' s')
-                | (dim == dim') && (dir == dir') -> depth <= depth'
-                | (dim == dim')                  -> dir <= dir'
-              (_, _)       -> False
+  s1 <= s2 | (dim s1) < (dim s2)  = True
+  s1 <= s2 | (dim s1) > (dim s2)  = False
+  s1 <= s2 | (dim s1) == (dim s2) =
+     case (s1, s2) of
+       (Reflx _, _) -> True
+       (Const _, _) -> True
+       (Span dim depth dir s, Span dim' depth' dir' s')
+         | (dim == dim') && (dir == dir') -> depth <= depth'
+         | (dim == dim')                  -> dir <= dir'
+       (_, _)       -> False
 
 -- Types various normal forms of specifications and specification groups
 data Normalised a where
-     -- Two specifications belonging to the same dimension which are not duplicates
-     NS :: SpecI -> SpecI -> Normalised (SpecI, SpecI)
-
-     -- A list of specifications all of the same dimension
-     NSpecIs :: [SpecI]   -> Normalised [SpecI]
-
-     -- Grouped lists of specifications in normal form (maximally coalesced), grouped by dimension
-     NSpecIGroups :: [[SpecI]] -> Normalised [[SpecI]]
+  -- Two specifications belonging to the same dimension which are not duplicates
+  NS :: SpecI -> SpecI -> Normalised (SpecI, SpecI)
+  -- A list of specifications all of the same dimension
+  NSpecIs :: [SpecI]   -> Normalised [SpecI]
+  -- Grouped lists of specifications in normal form (maximally coalesced), grouped by dimension
+  NSpecIGroups :: [[SpecI]] -> Normalised [[SpecI]]
 
 deriving instance Show (Normalised a)
 
@@ -270,35 +270,33 @@ normalise = coalesce . firstAsSaturated . groupByDim
 
 -- Takes lists of specs belonging to the same dimension/direction and coalesces contiguous regions
 coalesce :: [Normalised [SpecI]] -> Normalised [[SpecI]]
-coalesce = NSpecIGroups . (map (\(NSpecIs specs) -> foldPair (\x y -> plus (NS x y)) $ specs))
+coalesce = NSpecIGroups . map (\ (NSpecIs specs) -> foldPair (\ x y -> plus (NS x y)) specs)
 
 groupByDim :: [SpecI] -> [Normalised [SpecI]]
-groupByDim = (map (NSpecIs . nub)) . (groupBy eqDim) . sort
-                where eqDim :: SpecI -> SpecI -> Bool
-                      eqDim s1 s2 = (dim s1) == (dim s2)
+groupByDim = map (NSpecIs . nub) . groupBy ((==) `on` dim) . sort
 
 -- Mark spans from 0 to 1 as saturated.
 firstAsSaturated :: [Normalised [SpecI]] -> [Normalised [SpecI]]
-firstAsSaturated [] = []
-firstAsSaturated ((NSpecIs s):xs) = (NSpecIs $ map go s) : (firstAsSaturated xs)
-                                     where go (Span dim 1 dir sat) = Span dim 1 dir True
-                                           go s = s
-
+firstAsSaturated []               = []
+firstAsSaturated ((NSpecIs s):xs) = NSpecIs (map go s) : firstAsSaturated xs
+  where go (Span dim 1 dir sat) = Span dim 1 dir True
+        go s                    = s
 
 -- Coalesces two contiguous specifications (of the same dimension and direction)
 --  This is a partial operation and fails when the two specs are not contiguous
 plus :: Normalised (SpecI, SpecI) -> Maybe SpecI
-plus (NS (Span _ d1 dir s1) (Span dim d2 dir' s2)) | dir == dir' =
-     if d2 == (d1 + 1) then -- SpecIs are one apart
-        if s1 || s2 then    -- At least one is marked as saturated
-            Just (Span dim d2 dir True) -- Grow the saturated area
-        else
-            Nothing         -- Neither span is satured so mark both as needed
-     else -- d2 >= d1 by Normalised -- SpecIs are more than one apart
-        if s2 then -- if the greater span is saturated, then it subsumes the smaller
-            Just (Span dim d2 dir True)
-        else
-            Nothing
+plus (NS (Span _ d1 dir s1) (Span dim d2 dir' s2))
+  | dir == dir'                                      =
+    if d2 == d1 + 1 then -- SpecIs are one apart
+       if s1 || s2 then    -- At least one is marked as saturated
+           Just (Span dim d2 dir True) -- Grow the saturated area
+       else
+           Nothing         -- Neither span is satured so mark both as needed
+    else -- d2 >= d1 by Normalised -- SpecIs are more than one apart
+       if s2 then -- if the greater span is saturated, then it subsumes the smaller
+           Just (Span dim d2 dir True)
+       else
+           Nothing
 plus (NS (Const dim1) (Const dim2))                  = Just $ Const dim1 -- assumes Normalised premise
 plus (NS s@(Span _ d1 dir s1) (Span dim d2 dir' s2)) = Nothing
 plus (NS (Reflx d) (Reflx _))                        = Just $ Reflx d
@@ -308,40 +306,29 @@ plus _ = error "Trying to coalesce a reflexive and a span"
 
 -- Convert a normalised list of index specifications to a list of specifications
 specIsToSpecs :: Normalised [[SpecI]] -> [Spec]
-specIsToSpecs x@(NSpecIGroups spanss) =
---   ("___" ++ show spanss ++ "\n") `trace`
-   (if isReflexiveMultiDim x then [Reflexive] else [])
-  ++ simplify (concatMap (uncurry go) (zip [0..length spanss] spanss))
-        where go :: Dimension -> [SpecI] -> [Spec]
-              go dim (Reflx _ : xs) = go dim xs
-              go dim (Const _ : xs) = Constant [dim] : go dim xs
-              go dim [Span _ d Fwd True, Span _ d' Bwd True] =
-                           if d==d' then [Symmetric d [dim]]
-                           else if d > d' then [Symmetric (abs (d-d')) [dim], Forward d [dim]]
-                                          else [Symmetric (abs (d-d')) [dim], Backward d' [dim]]
-              go dim ((Span _ d Fwd True) : xs) = Forward d [dim] : go dim xs
-              go dim ((Span _ d Bwd True) : xs) = Backward d [dim] : go dim xs
-              go dim xs = []
+specIsToSpecs x@(NSpecIGroups spanss) = refl ++ simplify (uncurry go =<< zip [0..] spanss)
+  where
+    refl = if isReflexiveMultiDim x then [Reflexive] else []
+    go :: Dimension -> [SpecI] -> [Spec]
+    go dim (Reflx _ : xs)            = go dim xs
+    go dim (Const _ : xs)            = Constant [dim] : go dim xs
+    go dim [Span _ d Fwd True, Span _ d' Bwd True]
+      | d == d'                      = [Symmetric d [dim]]
+      | d > d'                       = [Symmetric (abs (d - d')) [dim], Forward d [dim]]
+      | otherwise                    = [Symmetric (abs (d - d')) [dim], Backward d' [dim]]
+    go dim (Span _ d Fwd True : xs)  = Forward d [dim] : go dim xs
+    go dim (Span _ d Bwd True : xs)  = Backward d [dim] : go dim xs
+    go dim xs                        = []
 
-              isReflexiveMultiDim :: Normalised [[SpecI]] -> Bool
-              isReflexiveMultiDim (NSpecIGroups spanss) = all (\spans -> (length spans > 0) &&
-                                                                           (case (head spans) of (Reflx _) -> True
-                                                                                                 _         -> False)) spanss
+    isReflexiveMultiDim :: Normalised [[SpecI]] -> Bool
+    isReflexiveMultiDim (NSpecIGroups spanss) = flip all spanss $ \ spans ->
+      case spans of Reflx _:_ -> True
+                    _         -> False
 
 -- From a list of index expressions (themselves a list of expressions)
 --  to a set of intermediate specs
 ixExprAToSpecIs :: [Variable] -> [[F.Expression A]] -> [SpecI]
-ixExprAToSpecIs ivs ess =
-  concatMap (\es -> case (mapM (uncurry (ixCompExprToSpecI ivs)) (zip [0..(length es)] es)) of
-                      Nothing -> []
-                      Just es -> es) ess
-
-{- TODO: need to check that any variable in an index expression that we are adding to
-         the spec is actually an induction variable
-         Going to need some state pushed in here... implicit parameters are fine to do this
-                                                    can get this information from the
--}
-isInductionVariable v = True
+ixExprAToSpecIs ivs = concatMap (fromMaybe [] . zipWithM (ixCompExprToSpecI ivs) [0..])
 
 -- Convert a single index expression for a particular dimension to intermediate spec
 -- e.g., for the expression a(i+1,j+1) then this function gets
@@ -351,47 +338,23 @@ ixCompExprToSpecI ivs d (F.ExpValue _ _ (F.ValVariable _ v))
   | v `elem` ivs = Just $ Reflx d
   | otherwise    = Just $ Const d
 ixCompExprToSpecI ivs d (F.ExpBinary _ _ F.Addition (F.ExpValue _ _ (F.ValVariable _ v))
-                                                      (F.ExpValue _ _ (F.ValInteger offs)))
-  | v `elem` ivs = Just $ Span d (read offs) (if x < 0 then Bwd else Fwd) False
+                                                    (F.ExpValue _ _ (F.ValInteger offs)))
+  | v `elem` ivs = Just $ Span d x (if x < 0 then Bwd else Fwd) False
   where x = read offs
 ixCompExprToSpecI ivs d (F.ExpBinary _ _ F.Addition (F.ExpValue _ _ (F.ValInteger offs))
-                                                      (F.ExpValue _ _ (F.ValVariable _ v)))
-  | v `elem` ivs = Just $ Span d (read offs) (if x < 0 then Bwd else Fwd) False
+                                                    (F.ExpValue _ _ (F.ValVariable _ v)))
+  | v `elem` ivs = Just $ Span d x (if x < 0 then Bwd else Fwd) False
   where x = read offs
 ixCompExprToSpecI ivs d (F.ExpBinary _ _ F.Subtraction (F.ExpValue _ _ (F.ValVariable _ v))
-                                                         (F.ExpValue _ _ (F.ValInteger offs)))
-  | v `elem` ivs = Just $ Span d (read offs) (if x < 0 then Fwd else Bwd) False
+                                                       (F.ExpValue _ _ (F.ValInteger offs)))
+  | v `elem` ivs = Just $ Span d x (if x < 0 then Fwd else Bwd) False
   where x = read offs
 ixCompExprToSpecI ivs d (F.ExpValue _ _ (F.ValInteger _)) = Just $ Const d
 ixCompExprToSpecI ivs d _ = Nothing
 
-
--- Helper function, reduces a list two elements at a time with a partial operation
-foldPair :: (a -> a -> Maybe a) -> [a] -> [a]
-foldPair f [] = []
-foldPair f [a] = [a]
-foldPair f (a:(b:xs)) = case f a b of
-                          Nothing -> a : (foldPair f (b : xs))
-                          Just c  -> foldPair f (c : xs)
-
-groupKeyBy :: Eq b => [(a, b)] -> [([a], b)]
-groupKeyBy = groupKeyBy' . map (\ (k, v) -> ([k], v))
-
-groupKeyBy' []                         = []
-groupKeyBy' [(ks, v)]                  = [(ks, v)]
-groupKeyBy' ((ks1, v1):((ks2, v2):xs))
-  | v1 == v2                           = groupKeyBy' ((ks1 ++ ks2, v1) : xs)
-  | otherwise                          = (ks1, v1) : groupKeyBy' ((ks2, v2) : xs)
+--------------------------------------------------
 
 {- *** 4. Flows-to analysis -}
-
-type TypeEnv a = M.Map FAT.TypeScope (M.Map String FAT.IDType)
-isArrayType :: TypeEnv A -> F.ProgramUnitName -> String -> Bool
-isArrayType tenv name v = fromMaybe False $ do
-  tmap <- M.lookup (FAT.Local name) tenv `mplus` M.lookup FAT.Global tenv
-  idty <- M.lookup v tmap
-  cty  <- FAT.idCType idty
-  return $ cty == FAT.CTArray
 
 type Flows = ReaderT (TypeEnv A) (State FlowsMap) -- Monad
 
@@ -405,7 +368,7 @@ type Cycles = [(Variable, Variable)]
 
 flowAnalysisArrays :: F.ProgramFile A -> [(F.ProgramUnit A, FlowsMap)]
 flowAnalysisArrays pf@(F.ProgramFile cm_pus _) = fst . runFlows tenv $ do
-  flip mapM cm_pus $ \ (_, pu) -> flowAnalysisArraysRecur pu Map.empty
+  forM cm_pus $ \ (_, pu) -> flowAnalysisArraysRecur pu Map.empty
   where tenv = FAT.inferTypes pf
 
 flowAnalysisArraysRecur :: F.ProgramUnit A -> FlowsMap -> Flows (F.ProgramUnit A, FlowsMap)
@@ -428,46 +391,45 @@ flowAnalysisArraysStep pu = transformBiM perBlock pu
 
     perStmt :: F.Statement A -> Flows (F.Statement A)
     perStmt f@(F.StExpressionAssign _ _ lhs rhs) = do
-      tenv <- ask
+      tenv    <- ask
       flowMap <- get
-      let lhses = [ v | (F.ExpValue _ _ (F.ValArray _ v)) <- universeBi lhs :: [F.Expression A]
-                                                          ,  isArrayType tenv (F.getName pu) v ]
-      let rhses = [ v | (F.ExpValue _ _ (F.ValArray _ v)) <- universeBi rhs :: [F.Expression A]
-                                                          ,  isArrayType tenv (F.getName pu) v ]
-      let pullInFlowsFromRight lhsV map rhsV =
-            M.insertWith (\ a b -> nub (a++b))
-                         lhsV
-                         (lookupList rhsV map)
-                         map
-      let fromRightToLeft map lhsV =
-            foldl' (pullInFlowsFromRight lhsV)
-                   (Map.insertWith (++) lhsV rhses map)
-                   rhses
+
+      let lhses = [ v | (F.ExpValue _ _ (F.ValArray _ v)) <- universeBi lhs :: [F.Expression A] ]
+      let rhses = [ v | (F.ExpValue _ _ (F.ValArray _ v)) <- universeBi rhs :: [F.Expression A] ]
+
+      let pullInFlowsFromRight lhsV map rhsV = M.insertWith union lhsV (lookupList rhsV map) map
+
+      let fromRightToLeft map lhsV = foldl' (pullInFlowsFromRight lhsV)
+                                            (M.insertWith union lhsV rhses map)
+                                            rhses
 
       put $ foldl' fromRightToLeft flowMap lhses
+
       return f
     perStmt f = return f
 
 -- Find all array accesses which have a cyclic dependency
 cyclicDependents :: FlowsMap -> Cycles
-cyclicDependents flmap = filter (\(u, v) -> not (u == v)) (reflSubset)
+cyclicDependents flmap = filter (uncurry (/=)) reflSubset
   where
-    self = flmap `composeRelW` flmap
-    reflSubset = foldl' (\ p (k, ks) -> case lookup k (map (\(a, b) -> (b, a)) ks) of
-                                          Nothing -> p
-                                          Just v  -> (k, v) : p)
-                        [] (M.assocs self)
+    self           = flmap `composeRelW` flmap
+    reflSubset     = foldl' frob [] (M.assocs self)
+    frob p (k, ks) = maybe p ((:p) . (k,)) $ k `lookup` map swap ks
 
 -- Inverts a relation (represented as a map)
 --invertRel :: Ord v => Map.Map k [v] -> Map.Map v [k]
---invertRel m = foldl (\m (k, vs) -> foldl (\m' v -> Map.insertWith (++) v [k] m') m vs) Map.empty (Map.assocs m)
+--invertRel m = foldl' (\m (k, vs) -> foldl' (\m' v -> Map.insertWith (++) v [k] m') m vs) Map.empty (Map.assocs m)
 
--- compose two relations with a witness of where the 'join' point in the middle is
+-- Compose two relations with a witness of where the 'join' point in
+-- the middle is.
 -- e.g., for two relations R and S, if (a R b) and (b S c) then (a R.S (b, c))
-composeRelW :: (Ord k, Ord v) => Map.Map k [v] -> Map.Map v [k] -> Map.Map k [(v, k)]
-composeRelW r s = foldl' (\rs (k, vs) -> foldl' (\rs' v -> case (Map.lookup v s) of
-                                                           Nothing -> rs'
-                                                           Just k' -> Map.insertWith (++) k (map (\k -> (v,k)) k') rs') rs vs) Map.empty (Map.assocs r)
+composeRelW :: (Ord k, Ord v) => M.Map k [v] -> M.Map v [k] -> M.Map k [(v, k)]
+composeRelW r s = foldl' frob1 M.empty (M.assocs r)
+  where
+    frob1 rs (k, vs) = foldl' (frob2 k) rs vs
+    frob2 k rs' v    = fromMaybe rs' $ do
+                         k' <- M.lookup v s
+                         return $ M.insertWith (++) k (map (v,) k') rs'
 
 --------------------------------------------------
 
@@ -484,3 +446,31 @@ lineCol p  = (fromIntegral $ FU.posLine p, fromIntegral $ FU.posColumn p)
 
 spanLineCol :: FU.SrcSpan -> ((Int, Int), (Int, Int))
 spanLineCol (FU.SrcSpan l u) = (lineCol l, lineCol u)
+
+-- Helper function, reduces a list two elements at a time with a partial operation
+foldPair :: (a -> a -> Maybe a) -> [a] -> [a]
+foldPair f [] = []
+foldPair f [a] = [a]
+foldPair f (a:(b:xs)) = case f a b of
+                          Nothing -> a : (foldPair f (b : xs))
+                          Just c  -> foldPair f (c : xs)
+
+groupKeyBy :: Eq b => [(a, b)] -> [([a], b)]
+groupKeyBy = groupKeyBy' . map (\ (k, v) -> ([k], v))
+
+groupKeyBy' []                         = []
+groupKeyBy' [(ks, v)]                  = [(ks, v)]
+groupKeyBy' ((ks1, v1):((ks2, v2):xs))
+  | v1 == v2                           = groupKeyBy' ((ks1 ++ ks2, v1) : xs)
+  | otherwise                          = (ks1, v1) : groupKeyBy' ((ks2, v2) : xs)
+
+-- Although type analysis isn't necessary anymore (Forpar does it
+-- internally) I'm going to leave this infrastructure in-place in case
+-- it might be useful later.
+type TypeEnv a = M.Map FAT.TypeScope (M.Map String FAT.IDType)
+isArrayType :: TypeEnv A -> F.ProgramUnitName -> String -> Bool
+isArrayType tenv name v = fromMaybe False $ do
+  tmap <- M.lookup (FAT.Local name) tenv `mplus` M.lookup FAT.Global tenv
+  idty <- M.lookup v tmap
+  cty  <- FAT.idCType idty
+  return $ cty == FAT.CTArray
