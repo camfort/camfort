@@ -8,7 +8,6 @@ import Data.Generics.Uniplate.Operations
 import Control.Monad.State.Lazy
 import Control.Monad.Reader
 import Control.Monad.Writer
-import Control.Monad.Loops (unfoldrM)
 
 import Analysis.Loops (collect)
 import Analysis.Annotations (Annotation, unitAnnotation)
@@ -78,7 +77,7 @@ specInference' tenv (pu, flMap) = runInferer cycles (F.getName pu) tenv (descend
 -- Because loop bodies are not nested (yet), we need to look for the
 -- beginning of lists (use descendBiM!!!) and scan over them.
 perBlocks :: [F.Block A] -> Inferer [F.Block A]
-perBlocks bs = unfoldrM_ blockLoop bs >> return bs
+perBlocks bs = iterateMaybe_ blockLoop bs >> return bs
 
 -- Chomp through the list of blocks until we run out of blocks
 blockLoop :: [F.Block A] -> Inferer (Maybe [F.Block A])
@@ -170,7 +169,7 @@ instance Ord Direction where
 
 -- Syntax
 showL :: Show a => [a] -> String
-showL = concat . (intersperse ",") . (map show)
+showL = concat . intersperse "," . map show
 instance Show Spec where
      show Reflexive            = "reflexive"
      show (Forward dep dims)   = "forward depth=" ++ show dep ++ " dim=" ++ showL dims
@@ -247,8 +246,9 @@ instance Ord SpecI where
             case (s1, s2) of
               (Reflx _, _) -> True
               (Const _, _) -> True
-              (Span dim depth dir s, Span dim' depth' dir' s') | (dim == dim') && (dir == dir') -> depth <= depth'
-                                                               | (dim == dim')                  -> dir <= dir'
+              (Span dim depth dir s, Span dim' depth' dir' s')
+                | (dim == dim') && (dir == dir') -> depth <= depth'
+                | (dim == dim')                  -> dir <= dir'
               (_, _)       -> False
 
 -- Types various normal forms of specifications and specification groups
@@ -271,8 +271,6 @@ normalise = coalesce . firstAsSaturated . groupByDim
 -- Takes lists of specs belonging to the same dimension/direction and coalesces contiguous regions
 coalesce :: [Normalised [SpecI]] -> Normalised [[SpecI]]
 coalesce = NSpecIGroups . (map (\(NSpecIs specs) -> foldPair (\x y -> plus (NS x y)) $ specs))
-
-
 
 groupByDim :: [SpecI] -> [Normalised [SpecI]]
 groupByDim = (map (NSpecIs . nub)) . (groupBy eqDim) . sort
@@ -377,12 +375,13 @@ foldPair f (a:(b:xs)) = case f a b of
                           Just c  -> foldPair f (c : xs)
 
 groupKeyBy :: Eq b => [(a, b)] -> [([a], b)]
-groupKeyBy xs = groupKeyBy' (map (\(k, v) -> ([k], v)) xs)
+groupKeyBy = groupKeyBy' . map (\ (k, v) -> ([k], v))
 
-groupKeyBy' []                                    = []
-groupKeyBy' [(ks, v)]                             = [(ks, v)]
-groupKeyBy' ((ks1, v1):((ks2, v2):xs)) | v1 == v2 = groupKeyBy' ((ks1 ++ ks2, v1) : xs)
-                                       | otherwise = (ks1, v1) : groupKeyBy' ((ks2, v2) : xs)
+groupKeyBy' []                         = []
+groupKeyBy' [(ks, v)]                  = [(ks, v)]
+groupKeyBy' ((ks1, v1):((ks2, v2):xs))
+  | v1 == v2                           = groupKeyBy' ((ks1 ++ ks2, v1) : xs)
+  | otherwise                          = (ks1, v1) : groupKeyBy' ((ks2, v2) : xs)
 
 {- *** 4. Flows-to analysis -}
 
@@ -472,8 +471,10 @@ composeRelW r s = foldl' (\rs (k, vs) -> foldl' (\rs' v -> case (Map.lookup v s)
 
 --------------------------------------------------
 
-unfoldrM_ :: Monad m => (a -> m (Maybe a)) -> a -> m ()
-unfoldrM_ f x = unfoldrM (((fmap ((),)) `fmap`) . f) x >> return ()
+-- Iterate on action, supplying its return value back to itself, until
+-- the action results in Nothing.
+iterateMaybe_ :: Monad m => (a -> m (Maybe a)) -> a -> m ()
+iterateMaybe_ f x = f x >>= return () `maybe` iterateMaybe_ f
 
 labelEq (Just (F.ExpValue _ _ (F.ValLabel l1))) (Just (F.ExpValue _ _ (F.ValLabel l2))) = l1 == l2
 labelEq _ _ = False
