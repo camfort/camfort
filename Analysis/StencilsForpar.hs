@@ -16,6 +16,7 @@ import Analysis.Annotations (Annotation, unitAnnotation)
 import qualified Forpar.AST as F
 import qualified Forpar.Analysis as FA
 import qualified Forpar.Analysis.Types as FAT
+import qualified Forpar.Analysis.Renaming as FAR
 import qualified Forpar.Util.Position as FU
 
 import qualified Data.Map as Map
@@ -28,38 +29,45 @@ import Debug.Trace
 type A = Annotation
 
 --------------------------------------------------
-
--- Infer and check stencil specifications
-infer :: F.ProgramFile a -> String
-infer = specInference . fmap (const unitAnnotation)
-
-check :: Program a -> Program Annotation
-check = error "Not yet implemented"
-
 -- For the purposes of development, a representative example is given by running (in ghci):
 --      stencilsInf "samples/stencils/one.f" [] () ()
 
--- Provides the main inference procedure for specifications which is
--- currently at the level of per statement for spatial stencils, and
--- per for-loop for temporal stencils
-specInference :: F.ProgramFile Annotation -> String
-specInference pf = formatSpec =<< logs
-  where tenv = FAT.inferTypes pf
-        logs = specInference' tenv =<< flowAnalysisArrays pf
+-- Infer and check stencil specifications
+infer :: F.ProgramFile Annotation -> String
+infer = specInference . FAR.renameAndStrip . FAR.analyseRenames . FA.initAnalysis
+
+check :: Program a -> Program a
+check = error "Not yet implemented"
 
 --------------------------------------------------
 
 type LogLine = (FU.SrcSpan, [([Variable], [Spec])])
-formatSpec :: LogLine -> String
-formatSpec (span, []) = ""
-formatSpec (span, specs) =
-  show (spanLineCol span) ++ " \t" ++
-  (concat . intersperse ", " . nub . map (\ (arrayVar, spec) -> (concat $ intersperse "," arrayVar) ++ ": " ++ showL spec) $ specs) ++ "\n"
+formatSpec :: FAR.NameMap -> LogLine -> String
+formatSpec nm (span, []) = ""
+formatSpec nm (span, specs) = loc ++ " \t" ++ (commaSep . nub . map doSpec $ specs) ++ "\n"
+  where
+    loc                     = show (spanLineCol span)
+    commaSep                = concat . intersperse ", "
+    doSpec (arrayVar, spec) = commaSep (map fixName arrayVar) ++ ": " ++ showL spec
+    fixName v               = v `fromMaybe` (v `M.lookup` nm)
 
+--------------------------------------------------
+
+-- The inferer works within this monad
 type Inferer = WriterT [LogLine] (ReaderT (Cycles, F.ProgramUnitName, TypeEnv A) (State [Variable]))
 runInferer :: Cycles -> F.ProgramUnitName -> TypeEnv A -> Inferer a -> [LogLine]
 runInferer cycles puName tenv =
   flip evalState [] . flip runReaderT (cycles, puName, tenv) . execWriterT
+
+--------------------------------------------------
+
+-- Provides the main inference procedure for specifications which is
+-- currently at the level of per statement for spatial stencils, and
+-- per for-loop for temporal stencils
+specInference :: (F.ProgramFile A, FAR.NameMap) -> String
+specInference (pf, nm) = formatSpec nm =<< logs
+  where tenv = FAT.inferTypes pf
+        logs = specInference' tenv =<< flowAnalysisArrays pf
 
 specInference' :: TypeEnv A -> (F.ProgramUnit A, FlowsMap) -> [LogLine]
 specInference' tenv (pu, flMap) = runInferer cycles (F.getName pu) tenv (descendBiM perBlocks pu)
@@ -72,34 +80,34 @@ specInference' tenv (pu, flMap) = runInferer cycles (F.getName pu) tenv (descend
 perBlocks :: [F.Block A] -> Inferer [F.Block A]
 perBlocks bs = unfoldrM_ blockLoop bs >> return bs
 
--- Look at the first statement in the list and use the remaining statements if needed;
--- return the first statement again.
+-- Chomp through the list of blocks until we run out of blocks
 blockLoop :: [F.Block A] -> Inferer (Maybe [F.Block A])
+
 -- Match any assignment statements
-blockLoop (b@(F.BlStatement _ span _
-               (F.StExpressionAssign _ _ _ rhs)):bs) = do
+blockLoop (b@(F.BlStatement _ span _ (F.StExpressionAssign _ _ _ rhs)):bs) = do
   (_, puName, tenv) <- ask
   -- Get array indexing (on the RHS)
   let rhsExprs = universeBi rhs :: [F.Expression A]
   let arrayAccesses = collect [
-        (v, e) | F.ExpSubscript _ _ (F.ExpValue _ _ (F.ValArray _ v)) subs <- rhsExprs
-               , let e = F.aStrip subs
-               , not (null e)
-               , isArrayType tenv puName v
+          (v, e) | F.ExpSubscript _ _ (F.ExpValue _ _ (F.ValArray _ v)) subs <- rhsExprs
+                 , let e = F.aStrip subs
+                 , not (null e)
+                 , isArrayType tenv puName v
         ]
 
   -- Create specification information
   ivs <- get
-  let specs = groupKeyBy $ M.toList $ fmap (ixCollectionToSpec ivs) $ arrayAccesses
+  let specs = groupKeyBy . M.toList . fmap (ixCollectionToSpec ivs) $ arrayAccesses
   tell $ [(span, specs)] -- add to report
   return $ Just bs
 
+-- Match a Do-loop, and chomp the entire body by finding the "continue" statement
 blockLoop (b@(F.BlStatement _ span _
                (F.StDo _ _ label (doSpec@F.DoSpecification {}))):bs) = do
   let F.DoSpecification _ _ (
           F.StExpressionAssign _ _ (F.ExpValue _ _ (F.ValVariable _ v)) _
         ) _ _ = doSpec
-  modify $ union [v]
+  modify $ union [v] -- introduce v into the list of induction variables
   ivs <- get
   (cycles, _, _) <- ask
 
