@@ -272,7 +272,7 @@ specIsToSpecs :: Normalised [[SpecI]] -> [Spec]
 specIsToSpecs x@(NSpecIGroups spanss) =
 --   ("___" ++ show spanss ++ "\n") `trace`
    (if isReflexiveMultiDim x then [Reflexive] else [])
-  ++ simplify (concatMap (uncurry go) (zip [0..length spanss] spanss))
+  ++ simplify (concatMap (uncurry go) (zip [1..length spanss] spanss))
         where go :: Dimension -> [SpecI] -> [Spec]
               go dim (Reflx _ : xs) = go dim xs
               go dim (Const _ : xs) = Constant [dim] : go dim xs
@@ -293,7 +293,7 @@ specIsToSpecs x@(NSpecIGroups spanss) =
 --  to a set of intermediate specs
 ixExprAToSpecIs :: [Variable] -> [[Expr p]] -> [SpecI]
 ixExprAToSpecIs ivs ess =
-  concatMap (\es -> case (mapM (uncurry (ixCompExprToSpecI ivs)) (zip [0..(length es)] es)) of
+  concatMap (\es -> case (mapM (uncurry (ixCompExprToSpecI ivs)) (zip [1..(length es)] es)) of
                       Nothing -> []
                       Just es -> es) ess
 
