@@ -48,8 +48,8 @@ formatSpec nm (span, specs) = loc ++ " \t" ++ (commaSep . nub . map doSpec $ spe
   where
     loc                     = show (spanLineCol span)
     commaSep                = concat . intersperse ", "
-    doSpec (arrayVar, spec) = commaSep (map fixName arrayVar) ++ ": " ++ showL spec
-    fixName v               = v `fromMaybe` (v `M.lookup` nm)
+    doSpec (arrayVar, spec) = commaSep (map realName arrayVar) ++ ": " ++ showL spec
+    realName v              = v `fromMaybe` (v `M.lookup` nm)
 
 --------------------------------------------------
 
@@ -114,38 +114,27 @@ blockLoop (b@(F.BlStatement _ span _
   -- use label to search for end of loop and return list of blocks inside of loop
   let (body, bs') = break ((`labelEq` Just label) . F.getLabel) bs
 
-  -- Insert temporal specs for anything inside the for-loop
+  -- Insert temporal specs for anything inside the Do-loop
   let lexps = FA.lhsExprs =<< body
-  let tempSpecs = foldl' (\ ts e -> case e of
-                           F.ExpValue _ _ (F.ValVariable _ lhsV) ->
-                           -- Insert time specification if there is
-                           -- a cyclic depenency through the
-                           -- assignment (for arrays)
-                             case (lookup lhsV cycles) of
-                               Just v' -> ([lhsV], [TemporalBwd [v']]) : ts
-                               Nothing -> ts
-                           F.ExpValue _ _ (F.ValArray _ lhsV) ->
-                           -- Insert time specification if there is
-                           -- a cyclic depenency through the
-                           -- assignment (for arrays)
-                             case (lookup lhsV cycles) of
-                               Just v' -> ([lhsV], [TemporalBwd [v']]) : ts
-                               Nothing -> ts
-                           F.ExpSubscript _ _ (F.ExpValue _ _ (F.ValArray _ lhsV)) _ ->
-                           -- Insert time specification if there is
-                           -- a cyclic depenency through the
-                           -- assignment (for arrays)
-                             case (lookup lhsV cycles) of
-                               Just v' -> ([lhsV], [TemporalBwd [v']]) : ts
-                               Nothing -> ts
-                           )
-                         [] lexps
+
+  let getTimeSpec e = do
+        lhsV <- case e of F.ExpValue _ _ (F.ValVariable _ lhsV)                     -> Just lhsV
+                          F.ExpValue _ _ (F.ValArray _ lhsV)                        -> Just lhsV
+                          F.ExpSubscript _ _ (F.ExpValue _ _ (F.ValArray _ lhsV)) _ -> Just lhsV
+                          _                                                         -> Nothing
+        v'   <- lookup lhsV cycles
+        return ([lhsV], [TemporalBwd [v']])
+
+  let tempSpecs = foldl' (\ ts -> maybe ts (:ts) . getTimeSpec) [] lexps
+
   tell $ [(span, tempSpecs)]
-  descendBiM perBlocks body -- Descend inside for-loop
-  return $ Just bs'
+
+  perBlocks body                -- process loop body
+
+  return $ Just bs'             -- return post-loop blocks
 
 blockLoop (b:bs) = return $ Just bs
-blockLoop [] = return Nothing
+blockLoop []     = return Nothing
 
 --------------------------------------------------
 
