@@ -35,6 +35,7 @@ import Analysis.Loops
 import Analysis.LVA
 import Analysis.Syntax
 import qualified Analysis.Stencils as Stencils
+import qualified Analysis.StencilsForpar as StencilsForpar
 
 import Helpers
 import Output
@@ -42,7 +43,7 @@ import Traverse
 
 import Debug.Trace
 
-import Data.List (nub, (\\), elemIndices, intersperse)
+import Data.List (foldl', nub, (\\), elemIndices, intersperse)
 import Data.Text (pack, unpack, split)
 
 
@@ -166,9 +167,13 @@ countVarDecls inSrc excludes _ _ =
     do putStrLn $ "Counting variable declarations in " ++ show inSrc ++ "\n"
        doAnalysisSummary countVariableDeclarations inSrc excludes
 
-stencilsInf inSrc excludes _ _ =
+stencilsInfOld inSrc excludes _ _ =
           do putStrLn $ "Inferring stencil specs for " ++ show inSrc ++ "\n"
              doAnalysisSummary Stencils.infer inSrc excludes
+
+stencilsInf inSrc excludes _ _ =
+          do putStrLn $ "Inferring stencil specs for " ++ show inSrc ++ "\n"
+             doAnalysisSummaryForpar StencilsForpar.infer inSrc excludes
 
 stencilsCheck inSrc excludes _ _ =
           do putStrLn $ "Checking stencil specs for " ++ show inSrc ++ "\n"
@@ -245,6 +250,16 @@ doAnalysisSummary aFun d excludes =
                        let inFiles = map Fortran.fst3 ps
                        putStrLn "Output of the analysis:" 
                        putStrLn $ show' $ Prelude.foldl (\n (f, _, ps) -> n `mappend` (aFun ps)) mempty ps
+
+doAnalysisSummaryForpar :: (Monoid s, Show' s) => (A.ProgramFile A -> s) -> FileOrDir -> [Filename] -> IO ()
+doAnalysisSummaryForpar aFun inSrc excludes = do
+  if excludes /= [] && excludes /= [""]
+    then putStrLn $ "Excluding " ++ (concat $ intersperse "," excludes) ++ " from " ++ inSrc ++ "/"
+    else return ()
+  ps <- readForparseSrcDir inSrc excludes
+  let inFiles = map Fortran.fst3 ps
+  putStrLn "Output of the analysis:"
+  putStrLn . show' $ foldl' (\n (f, _, ps) -> n `mappend` (aFun ps)) mempty ps
 
 class Show' s where
       show' :: s -> String

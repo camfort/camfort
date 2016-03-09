@@ -27,7 +27,7 @@ library
                         Analysis.IntermediateReps
                         Analysis.Loops
                         Analysis.LVA
-                        Analysis.Stencils
+                        Analysis.StencilsForpar
                         Analysis.Syntax
                         Analysis.Types
                         Transformation.CommonBlockElim
@@ -63,6 +63,7 @@ library
                         directory >= 1.2,
                         language-fortran >= 0.4,
                         transformers >= 0.4,
+                        monad-loops >= 0.4.3,
                         vector >= 0.1,
                         GenericPretty >= 1.2,
                         forpar
