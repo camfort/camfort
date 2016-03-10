@@ -1446,12 +1446,12 @@ isUnit _ = False
 insertUnit :: (?num :: Int) => [UnitVarCategory] -> [Int] -> LinearSystem -> Type Annotation -> Int -> State UnitEnv (Type Annotation)
 insertUnit ucats badCols system (BaseType aa tt attrs kind len) uv =
   do let unit = lookupUnit ucats badCols system uv
-     u <- (insertUnit' unit attrs)
+     u <- (insertUnitAttribute unit attrs)
      return $ BaseType aa tt u kind len
 
 insertUnit ucats badCols system (ArrayT dims aa tt attrs kind len) uv =
   do let unit = lookupUnit ucats badCols system uv
-     u <- insertUnit' unit attrs
+     u <- insertUnitAttribute unit attrs
      return $ ArrayT dims aa tt u kind len
 
 deleteUnit :: Type Annotation -> Type Annotation
@@ -1460,10 +1460,10 @@ deleteUnit (BaseType aa tt attrs kind len) =
 deleteUnit (ArrayT dims aa tt attrs kind len) =
   ArrayT dims aa tt (filter (not . isUnit) attrs) kind len
 
-insertUnit' :: (?num :: Int) => Maybe UnitConstant -> [Attr Annotation] -> State UnitEnv [Attr Annotation]
-insertUnit' (Just unit) attrs = do spec <- makeUnitSpec unit
-                                   return $ attrs ++ [MeasureUnit unitAnnotation $ spec]
-insertUnit' Nothing attrs = return attrs
+insertUnitAttribute :: (?num :: Int) => Maybe UnitConstant -> [Attr Annotation] -> State UnitEnv [Attr Annotation]
+insertUnitAttribute (Just unit) attrs = do spec <- makeUnitSpec unit
+                                           return $ attrs ++ [MeasureUnit unitAnnotation $ spec]
+insertUnitAttribute Nothing attrs = return attrs
 
 -- Used for evaluation
 updateAdded k s = do (n, xs) <- gets evUnitsAdded
