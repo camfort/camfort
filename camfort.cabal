@@ -1,12 +1,19 @@
 name:                   camfort
-version:                0.615
+version:                0.62
 synopsis:               CamFort - Cambridge Fortran infrastructure
 description:		CamFort is a tool for the analysis, transformation, and extension of Fortran code base.
 
-copyright:              2012-2014 University of Cambridge
-author:                 Dominic Orchard, Andrew Rice, Oleg Oshmyan
+copyright:              2012-2016 University of Cambridge
+author:                 Dominic Orchard, Matthew Danish, Mistral Contrastin, Andrew Rice, Oleg Oshmyan
+maintainer:             dom.orchard@gmail.com
+
+license:                BSD3
+license-file:           LICENSE
+
 stability:              experimental
 build-type:             Simple
+category:               Language, tools
+
 cabal-version:          >= 1.6
 tested-with:            GHC >= 7.4
 
@@ -64,6 +71,7 @@ library
                         Extensions.Units
                         Extensions.UnitsEnvironment
                         Extensions.UnitsSolve
+                        Extensions.UnitsSolveHMatrix			
                         Helpers
                         Main
                         Output
@@ -85,6 +93,6 @@ library
                         text >= 0.11.2.3,
                         array >= 0.4,
                         directory >= 1.2,
-                        language-fortran >= 0.4,
+                        language-fortran >= 0.5,
                         transformers >= 0.4,
                         vector >= 0.1
