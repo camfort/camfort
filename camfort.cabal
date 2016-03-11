@@ -1,5 +1,5 @@
 name:                   camfort
-version:                0.62
+version:                0.700
 synopsis:               CamFort - Cambridge Fortran infrastructure
 description:            CamFort is a tool for the analysis, transformation, and extension of Fortran code base.
 
@@ -7,7 +7,7 @@ copyright:              2012-2016 University of Cambridge
 author:                 Dominic Orchard, Matthew Danish, Mistral Contrastin, Andrew Rice, Oleg Oshmyan
 maintainer:             dom.orchard@gmail.com
 
-license:                BSD3
+license:                Apache-2.0
 license-file:           LICENSE
 
 stability:              experimental

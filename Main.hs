@@ -136,8 +136,7 @@ refactorings =
      ("equivalence", (equivalences, "equivalence elimination")),
      ("dataType", (typeStructuring, "derived data type introduction")),
      ("dead", (dead, "dead-code elimination")),
-     ("units", (units, "unit-of-measure inference")), 
-     ("removeUnits", (unitRemoval, "unit-of-measure removal"))]
+     ("units", (units, "unit-of-measure inference")) ]
      
 {-| List of analses provided by CamFort -}
 analyses :: [(String, (FileOrDir -> [Filename] -> FileOrDir -> Options -> IO (), String))]
@@ -150,7 +149,7 @@ analyses =
      ("ast", (ast, "print the raw AST -- for development purposes"))]
 
 -- * Usage and about information
-version = 0.615
+version = 0.700
 introMessage = "CamFort " ++ (show version) ++ " - Cambridge Fortran Infrastructure."
 usage = "Usage: camfort <MODE> <INPUT> [OUTPUT] [OPTIONS...]\n"
 menu = "Refactor functions:\n"
@@ -206,12 +205,6 @@ units inSrc excludes outSrc opt =
              let ?solver = solverType opt 
               in let ?assumeLiterals = literalsBehaviour opt
                  in doRefactor' (mapM inferUnits) inSrc excludes outSrc
-
-unitRemoval inSrc excludes outSrc opt = 
-          do putStrLn $ "Removing units in " ++ show inSrc ++ "\n"
-             let ?solver = solverType opt 
-              in let ?assumeLiterals = literalsBehaviour opt
-                 in doRefactor (mapM removeUnits) inSrc excludes outSrc
 
 unitCriticals inSrc excludes outSrc opt = 
           do putStrLn $ "Infering critical variables for units inference in directory " ++ show inSrc ++ "\n"
