@@ -147,7 +147,7 @@ type Saturation = Bool
 data Direction  = Fwd | Bwd deriving (Eq, Show)
 
 data Spec where
-     Reflexive   :: Spec
+     Reflexive   :: [Dimension] -> Spec
      Forward     :: Depth -> [Dimension] -> Spec
      Backward    :: Depth -> [Dimension] -> Spec
      Symmetric   :: Depth -> [Dimension] -> Spec
@@ -173,7 +173,8 @@ instance Ord Direction where
 showL :: Show a => [a] -> String
 showL = concat . intersperse "," . map show
 instance Show Spec where
-     show Reflexive            = "reflexive"
+     show (Reflexive [])       = "reflexive"
+     show (Reflexive dims)     = "reflexive dims=" ++ showL dims
      show (Forward dep dims)   = "forward depth=" ++ show dep ++ " dim=" ++ showL dims
      show (Backward dep dims)  = "backward depth=" ++ show dep ++ " dim=" ++ showL dims
      show (Symmetric dep dims) = "centered depth=" ++ show dep ++ " dim=" ++ showL dims
@@ -195,7 +196,7 @@ simplify :: [Spec] -> [Spec]
 simplify = foldPair specPlus
 -- Combine specs
 specPlus :: Spec -> Spec -> Maybe Spec
-specPlus Reflexive Reflexive                                       = Just Reflexive
+specPlus (Reflexive dims) (Reflexive dims')                        = Just (Reflexive (dims ++ dims'))
 specPlus (Forward dep dims) (Forward dep' dims')     | dep == dep' = Just (Forward dep (dims ++ dims'))
 specPlus (Backward dep dims) (Backward dep' dims')   | dep == dep' = Just (Backward dep (dims ++ dims'))
 specPlus (Symmetric dep dims) (Symmetric dep' dims') | dep == dep' = Just (Symmetric dep (dims ++ dims'))
@@ -306,11 +307,15 @@ plus _ = error "Trying to coalesce a reflexive and a span"
 
 -- Convert a normalised list of index specifications to a list of specifications
 specIsToSpecs :: Normalised [[SpecI]] -> [Spec]
-specIsToSpecs x@(NSpecIGroups spanss) = refl ++ simplify (uncurry go =<< zip [0..] spanss)
+specIsToSpecs x@(NSpecIGroups spanss) = --(show x) `trace`
+                                         let specs = simplify (uncurry go =<< zip [0..] spanss)
+                                         in case specs of
+                                              [] -> [Unspecified []]
+                                              xs -> xs
   where
-    refl = if isReflexiveMultiDim x then [Reflexive] else []
+    -- refl = if isReflexiveMultiDim x then [Reflexive] else []
     go :: Dimension -> [SpecI] -> [Spec]
-    go dim (Reflx _ : xs)            = go dim xs
+    go dim (Reflx _ : xs)            = Reflexive [dim] : go dim xs
     go dim (Const _ : xs)            = Constant [dim] : go dim xs
     go dim [Span _ d Fwd True, Span _ d' Bwd True]
       | d == d'                      = [Symmetric d [dim]]
@@ -322,8 +327,8 @@ specIsToSpecs x@(NSpecIGroups spanss) = refl ++ simplify (uncurry go =<< zip [0.
 
     isReflexiveMultiDim :: Normalised [[SpecI]] -> Bool
     isReflexiveMultiDim (NSpecIGroups spanss) = flip all spanss $ \ spans ->
-      case spans of Reflx _:_ -> True
-                    _         -> False
+      case spans of (Reflx _) :_  -> True
+                    _             -> False
 
 -- From a list of index expressions (themselves a list of expressions)
 --  to a set of intermediate specs
