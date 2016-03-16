@@ -309,7 +309,7 @@ plus _ = error "Trying to coalesce a reflexive and a span"
 
 -- Convert a normalised list of index specifications to a list of specifications
 specIsToSpecs :: Normalised [[SpecI]] -> [Spec]
-specIsToSpecs x@(NSpecIGroups spanss) = refl ++ simplify (uncurry go =<< zip [0..] spanss)
+specIsToSpecs x@(NSpecIGroups spanss) = refl ++ simplify (uncurry go =<< zip [1..] spanss)
   where
     refl = if isReflexiveMultiDim x then [Reflexive] else []
     go :: Dimension -> [SpecI] -> [Spec]
