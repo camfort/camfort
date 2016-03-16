@@ -21,7 +21,8 @@ module Extensions.UnitsForpar
   , UnitState(..)
   , inferUnits
   , removeUnits
-  , inferCriticalVariables )
+  , inferCriticalVariables
+  , parameterise )
 where
 
 import Prelude hiding (EQ, GT, LT)
