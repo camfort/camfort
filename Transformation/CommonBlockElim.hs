@@ -70,7 +70,7 @@ collectCommons fname pname b =
                     
         commons' :: Decl A -> State (Report, [TLCommon A]) (Decl A)
         commons' f@(Common a sp cname exprs) = 
-            do let r' = fname ++ (show $ srcLineCol $ fst sp) ++ ": removed common declaration\n"
+            do let r' = (show $ srcLineCol $ fst sp) ++ ": removed common declaration\n"
                (r, env) <- get
                put (r ++ r', (fname, (pname, (cname, typeCommonExprs exprs))):env)
                return $ (NullDecl (a { refactored = (Just $ fst sp) }) sp)

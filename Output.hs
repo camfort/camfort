@@ -350,7 +350,7 @@ refactorFortran inp cursor e =  return $
                               _              -> ""
               lnl2 = if ((p0 /= []) && (Prelude.last p0 /= '\n')) then "\n" else ""
               textOut = if p0 == "\n" then outE else (p0 ++ lnl2 ++ outE ++ lnl)
-          in (show $ Prelude.last p0) `trace` (textOut, ub, True)
+          in (textOut, ub, True)
        else ("", cursor, False)
 
 

@@ -18,6 +18,8 @@ import Analysis.Types
 import Transformation.Syntax
 import Transformation.CommonBlockElim
 
+import Debug.Trace
+
 {- This is somewhat experimental and incomplete -}
 
 -- Top-level functions for eliminating common blocks in a set of files
@@ -39,10 +41,10 @@ introduceCalls cenv (fname, ps) = do ps' <- mapM (transformBiM commonElim) ps
                          let commons = lookups moduleName (lookups fname cenv) 
                              sortedC = sortBy cmpTConBNames commons
                              tArgs = extendArgs (nonNullArgs arg) asp (concatMap snd sortedC)
-                             ra = p { refactored = Just (fst sp) }
+                             --ra = p { refactored = Just (fst sp) }
                              arg' = Arg unitAnnotation (ASeq unitAnnotation arg tArgs) asp
                              a' = a -- { pRefactored = Just sp }
-                             r = fname ++ (show $ srcLineCol $ snd asp) ++ ": changed common variables to parameters\n"
+                             r = (show $ srcLineCol $ snd asp) ++ ": changed common variables to parameters\n"
                          in do b' <- transformBiM (extendCalls fname moduleName cenv) b
                                (r, Sub a' sp mbt (SubName a' moduleName) arg' b')
 
@@ -68,7 +70,7 @@ extendCalls fname localSub cenv f@(Call p sp v@(Var _ _ ((VarName _ n, _):_)) (A
             ap' = ap { refactored = Just $ fst sp } 
 
             arglist' = toArgList p' sp (select targetCommonNames localCommons')
-            r = fname  ++ (show $ srcLineCol $ fst sp) ++ ": call, added common variables as parameters\n"
+            r = (show $ srcLineCol $ fst sp) ++ ": call, added common variables as parameters\n"
         in (r, Call p' sp v (ArgList ap' $ ESeq p' sp arglist arglist'))
         
       --       Nothing -> error "Source has less commons than the target!"
@@ -91,7 +93,7 @@ nonNullArgs (NullArg _) = False
 
 
 extendArgs nonNullArgs sp' args = if nonNullArgs then 
-                                     let p' = unitAnnotation { refactored = Just $ snd sp' }
+                                     let p' = unitAnnotation { refactored = Just $ decCol $ snd sp' }
                                      in ASeq p' (ArgName p' "") (extendArgs' sp' args)
                                   else extendArgs' sp' args
                                  
@@ -128,7 +130,7 @@ collectCommons fname pname b =
                     
         commons' :: Decl A -> State (Report, [TLCommon A]) (Decl A)
         commons' f@(Common a sp cname exprs) = 
-            do let r' = fname ++ (show $ srcLineCol $ fst sp) ++ ": removed common declaration\n"
+            do let r' = (show $ srcLineCol $ fst sp) ++ ": removed common declaration\n"
                (r, env) <- get
                put (r ++ r', (fname, (pname, (cname, typeCommonExprs exprs))):env)
                return $ (NullDecl (a { refactored = (Just $ fst sp) }) sp)

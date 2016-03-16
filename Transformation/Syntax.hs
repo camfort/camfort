@@ -52,6 +52,10 @@ refactorSpan (SrcLoc f ll cl, SrcLoc _ lu cu) = (SrcLoc f (lu+1) 0, SrcLoc f lu 
 refactorSpanN :: Int -> SrcSpan -> SrcSpan
 refactorSpanN n (SrcLoc f ll cl, SrcLoc _ lu cu) = (SrcLoc f (lu+1+n) 0, SrcLoc f (lu+n) cu)
 
+incLine (SrcLoc f l c) = SrcLoc f (l + 1) c
+decLine (SrcLoc f l c) = SrcLoc f (l - 1) c
+incCol (SrcLoc f l c) = SrcLoc f l (c + 1)
+decCol (SrcLoc f l c) = SrcLoc f l (c - 1)
 toCol0 (SrcLoc f l c) = SrcLoc f l 0
 
 -- ropLine extends a span to the start of the next line
