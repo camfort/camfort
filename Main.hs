@@ -8,6 +8,8 @@ import Language.Fortran
 
 import qualified Forpar.Parser.Fortran77 as F77
 import qualified Forpar.AST as A
+import Forpar.Analysis.Renaming(renameAndStrip, analyseRenames, unrename, NameMap)
+import Forpar.Analysis(initAnalysis)
 
 import System.Console.GetOpt
 import System.Directory
@@ -45,7 +47,8 @@ import Debug.Trace
 
 import Data.List (foldl', nub, (\\), elemIndices, intersperse)
 import Data.Text (pack, unpack, split)
-
+import qualified Data.Map as M
+import Data.Maybe
 
 
 -- * The main entry point to CamFort
@@ -174,6 +177,20 @@ stencilsInfOld inSrc excludes _ _ =
 stencilsInf inSrc excludes _ _ =
           do putStrLn $ "Inferring stencil specs for " ++ show inSrc ++ "\n"
              doAnalysisSummaryForpar StencilsForpar.infer inSrc excludes
+
+stencilsFlow inSrc excludes _ _ = do
+  putStrLn $ "Flows for " ++ show inSrc ++ "\n"
+  doAnalysisSummaryForpar showFlow inSrc excludes
+  where
+    showFlow pf = unlines . flip map puFlows $ \ (pu, flmap) ->
+                    let flows = M.toList (transformBi fixName flmap) in
+                      show (A.getName pu) ++ "\n" ++
+                      unlines (map (("\t"++) . show) flows)
+      where
+        (pf', nm) = renameAndStrip . analyseRenames . initAnalysis $ pf
+        puFlows   = StencilsForpar.flowAnalysisArrays pf'
+        fixName   :: String -> String
+        fixName n = n `fromMaybe` M.lookup n nm
 
 stencilsCheck inSrc excludes _ _ =
           do putStrLn $ "Checking stencil specs for " ++ show inSrc ++ "\n"
