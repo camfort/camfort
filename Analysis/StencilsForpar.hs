@@ -48,10 +48,13 @@ formatSpec :: FAR.NameMap -> LogLine -> String
 formatSpec nm (span, []) = ""
 formatSpec nm (span, specs) = loc ++ " \t" ++ (commaSep . nub . map doSpec $ specs) ++ "\n"
   where
-    loc                     = show (spanLineCol span)
-    commaSep                = concat . intersperse ", "
-    doSpec (arrayVar, spec) = commaSep (map realName arrayVar) ++ ": " ++ showL spec
-    realName v              = v `fromMaybe` (v `M.lookup` nm)
+    loc                      = show (spanLineCol span)
+    commaSep                 = concat . intersperse ", "
+    doSpec (arrayVar, spec)  = commaSep (map realName arrayVar) ++ ": " ++ showL (map fixSpec spec)
+    realName v               = v `fromMaybe` (v `M.lookup` nm)
+    fixSpec (TemporalFwd vs) = TemporalFwd $ map realName vs
+    fixSpec (TemporalBwd vs) = TemporalBwd $ map realName vs
+    fixSpec s                = s
 
 --------------------------------------------------
 
