@@ -88,3 +88,6 @@ Options:
   -s ID     --units-solver=ID    units-of-measure solver. ID = Custom or LAPACK
   -l ID     --units-literals=ID  units-of-measure literals mode. ID = Unitless, Poly, or Mixed
 ```
+
+### Troubleshooting
+ Sometimes MacOSX has problems with GHC and libiconv. Some of the techniques here are useful: http://blog.omega-prime.co.uk/?p=96
