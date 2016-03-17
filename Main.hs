@@ -1,4 +1,19 @@
-{-# LANGUAGE ImplicitParams, DoAndIfThenElse #-}
+{-
+   Copyright 2016, Dominic Orchard, Andrew Rice, Mistral Contrastin, Matthew Danish
+
+   Licensed under the Apache License, Version 2.0 (the "License");
+   you may not use this file except in compliance with the License.
+   You may obtain a copy of the License at
+       http://www.apache.org/licenses/LICENSE-2.0
+
+   Unless required by applicable law or agreed to in writing, software
+   distributed under the License is distributed on an "AS IS" BASIS,
+   WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+   See the License for the specific language governing permissions and
+   limitations under the License.
+-}
+
+{-# LANGUAGE ScopedTypeVariables, ImplicitParams, DoAndIfThenElse, PatternGuards #-}
 
 module Main where
 
@@ -11,18 +26,11 @@ import qualified Forpar.AST as A
 import Forpar.Analysis.Renaming(renameAndStrip, analyseRenames, unrename, NameMap)
 import Forpar.Analysis(initAnalysis)
 
+import Data.Generics.Uniplate.Operations
 import System.Console.GetOpt
 import System.Directory
 import System.Environment
 import System.IO
-
-import Language.Haskell.ParseMonad
-
-import Data.Monoid
-import Data.Generics.Uniplate.Operations
-
-import Analysis.Annotations
-
 import Transformation.DeadCode
 import Transformation.CommonBlockElim
 import Transformation.CommonBlockElimToCalls
@@ -32,6 +40,7 @@ import Extensions.UnitsForpar
 import Extensions.UnitsEnvironment
 import Extensions.UnitsSolve
 
+import Analysis.Annotations hiding (Unitless)
 import Analysis.Types
 import Analysis.Loops
 import Analysis.LVA
@@ -41,7 +50,12 @@ import qualified Analysis.StencilsForpar as StencilsForpar
 
 import Helpers
 import Output
-import Traverse
+import Input
+import Functionality
+
+import System.Console.GetOpt
+import System.Environment
+import System.IO
 
 import Debug.Trace
 
@@ -50,6 +64,7 @@ import Data.Text (pack, unpack, split)
 import qualified Data.Map as M
 import Data.Maybe
 
+import Data.Text (pack, unpack, split)
 
 -- * The main entry point to CamFort
 {-| The entry point to CamFort. Displays user information, and handlers which functionality
@@ -83,23 +98,6 @@ main = do putStrLn introMessage
 
 fullUsageInfo = (usageInfo (usage ++ menu ++ "\nOptions:") options)
 
-type Options = [Flag]
-data Flag = Version | Input String | Output String
-         | Solver Solver | Excludes String
-         | Literals AssumeLiterals | Debug deriving Show
-
-solverType [] = Custom
-solverType ((Solver s) : _) = s
-solverType (x : xs) = solverType xs
-
-literalsBehaviour [] = Poly
-literalsBehaviour ((Literals l) : _) = l
-literalsBehaviour (x : xs) = literalsBehaviour xs
-
-getExcludes [] = ""
-getExcludes ((Excludes s) : xs) = s
-getExcludes (x : xs) = getExcludes xs
-
 options :: [OptDescr Flag]
 options =
      [ Option ['v','?'] ["version"] (NoArg Version)       "show version number"
@@ -128,8 +126,7 @@ refactorings =
      ("equivalence", (equivalences, "equivalence elimination")),
      ("dataType", (typeStructuring, "derived data type introduction")),
      ("dead", (dead, "dead-code elimination")),
-     ("units", (units, "unit-of-measure inference")),
-     ("removeUnits", (unitRemoval, "unit-of-measure removal"))]
+     ("units", (units, "unit-of-measure inference")) ]
 
 {-| List of analses provided by CamFort -}
 analyses :: [(String, (FileOrDir -> [Filename] -> FileOrDir -> Options -> IO (), String))]
@@ -144,7 +141,7 @@ analyses =
      ("stencils-check", (stencilsCheck, "stencil spec checking"))]
 
 -- * Usage and about information
-version = 0.615
+version = 0.750
 introMessage = "CamFort " ++ (show version) ++ " - Cambridge Fortran Infrastructure."
 usage = "Usage: camfort <MODE> <INPUT> [OUTPUT] [OPTIONS...]\n"
 menu = "Refactor functions:\n"
@@ -155,21 +152,6 @@ menu = "Refactor functions:\n"
         ++ "\t [" ++ info ++ "] \n") analyses
 
 -- * Wrappers on all of the features
-typeStructuring inSrc excludes outSrc _ =
-     do putStrLn $ "Introducing derived data types in " ++ show inSrc ++ "\n"
-        doRefactor typeStruct inSrc excludes outSrc
-
-ast d _ f _ = do (_, _, p) <- readParseSrcFile (d ++ "/" ++ f)
-                 putStrLn $ show p
-
-asts inSrc excludes _ _ =
-     do putStrLn $ "Do a basic analysis and output the HTML files with AST information for " ++ show inSrc ++ "\n"
-        doAnalysis ((map numberStmts) . map (fmap (const unitAnnotation))) inSrc excludes
-
-countVarDecls inSrc excludes _ _ =
-    do putStrLn $ "Counting variable declarations in " ++ show inSrc ++ "\n"
-       doAnalysisSummary countVariableDeclarations inSrc excludes
-
 stencilsInfOld inSrc excludes _ _ =
           do putStrLn $ "Inferring stencil specs for " ++ show inSrc ++ "\n"
              doAnalysisSummary Stencils.infer inSrc excludes
@@ -194,79 +176,10 @@ stencilsFlow inSrc excludes _ _ = do
 
 stencilsCheck inSrc excludes _ _ =
           do putStrLn $ "Checking stencil specs for " ++ show inSrc ++ "\n"
-             doAnalysis Stencils.check inSrc excludes   
+             doAnalysis Stencils.check inSrc excludes
 
-loops inSrc excludes _ _ =  
-           do putStrLn $ "Analysing loops for " ++ show inSrc ++ "\n"
-              doAnalysis loopAnalyse inSrc excludes
-
-lvaA inSrc excludes _ _ =
-          do putStrLn $ "Analysing loops for " ++ show inSrc ++ "\n"
-             doAnalysis lva inSrc excludes
-
-dead inSrc excludes outSrc _ =
-         do putStrLn $ "Eliminating dead code in " ++ show inSrc ++ "\n"
-            doRefactor ((mapM (deadCode False))) inSrc excludes outSrc
-
-commonToArgs inSrc excludes outSrc _ =
-                 do putStrLn $ "Refactoring common blocks in " ++ show inSrc ++ "\n"
-                    doRefactor (commonElimToCalls inSrc) inSrc excludes outSrc
-
-common inSrc excludes outSrc _ =
-           do putStrLn $ "Refactoring common blocks in " ++ show inSrc ++ "\n"
-              doRefactor (commonElimToModules inSrc) inSrc excludes outSrc
-
-equivalences inSrc excludes outSrc _ =
-           do putStrLn $ "Refactoring equivalences blocks in " ++ show inSrc ++ "\n"
-              doRefactor (mapM refactorEquivalences) inSrc excludes outSrc
-
-{- Units feature -}
-units inSrc excludes outSrc opt =
-          do putStrLn $ "Inferring units for " ++ show inSrc ++ "\n"
-             let s0 = UnitState { solver = solverType opt, assumeLiterals = literalsBehaviour opt }
-             doRefactorForpar (mapM (runUnits s0 . inferUnits)) inSrc excludes outSrc
-
-unitRemoval inSrc excludes outSrc opt =
-          do putStrLn $ "Removing units in " ++ show inSrc ++ "\n"
-             let ?solver = solverType opt
-              in let ?assumeLiterals = literalsBehaviour opt
-                 in doRefactorForpar (mapM removeUnits) inSrc excludes outSrc
-
-unitCriticals inSrc excludes outSrc opt = do
-  putStrLn $ "Infering critical variables for units inference in directory " ++ show inSrc ++ "\n"
-  let s0 = UnitState { solver = solverType opt, assumeLiterals = literalsBehaviour opt }
-  doRefactorForpar (mapM (runUnits s0 . inferCriticalVariables)) inSrc excludes outSrc
 
 -- * Builders for analysers and refactorings
-
-{-| Performs an analysis provided by its first parameter on the directory of its second, excluding files listed by
-    its third -}
-doAnalysis :: (Program A -> Program Annotation) -> FileOrDir -> [Filename] -> IO ()
-doAnalysis aFun d excludes =
-                    do if excludes /= [] && excludes /= [""]
-                           then putStrLn $ "Excluding " ++ (concat $ intersperse "," excludes) ++ " from " ++ d ++ "/"
-                           else return ()
-
-                       ps <- readParseSrcDir d excludes
-
-                       let inFiles = map Fortran.fst3 ps
-                       let outFiles = filter (\f -> not ((take (length $ d ++ "out") f) == (d ++ "out"))) inFiles
-                       let asts' = map (\(f, _, ps) -> aFun ps) ps
-                       outputAnalysisFiles d asts' outFiles
-
-{-| Performs an analysis provided by its first parameter which generates information 's', which is then combined
-    together (via a monoid) -}
-doAnalysisSummary :: (Monoid s, Show' s) => (Program A -> s) -> FileOrDir -> [Filename] -> IO ()
-doAnalysisSummary aFun d excludes = 
-                    do if excludes /= [] && excludes /= [""]
-                           then putStrLn $ "Excluding " ++ (concat $ intersperse "," excludes) ++ " from " ++ d ++ "/"
-                           else return ()
-
-                       ps <- readParseSrcDir d excludes
-
-                       let inFiles = map Fortran.fst3 ps
-                       putStrLn "Output of the analysis:" 
-                       putStrLn $ show' $ Prelude.foldl (\n (f, _, ps) -> n `mappend` (aFun ps)) mempty ps
 
 doAnalysisSummaryForpar :: (Monoid s, Show' s) => (A.ProgramFile A -> s) -> FileOrDir -> [Filename] -> IO ()
 doAnalysisSummaryForpar aFun inSrc excludes = do
@@ -336,21 +249,7 @@ doRefactorForpar rFun inSrc excludes outSrc =
      putStrLn report
      -- outputFiles inSrc outSrc (zip3 outFiles (map Fortran.snd3 ps ++ (repeat "")) (map snd ps'))
 
--- gets the directory part of a filename
-getDir :: String -> String
-getDir file = take (last $ elemIndices '/' file) file
-
 -- * Source directory and file handling
-
-{-| Read files from a direcotry, excluding those listed by the second parameter -}
-readParseSrcDir :: FileOrDir -> [Filename] -> IO [(Filename, SourceText, Program A)]
-readParseSrcDir inp excludes = do isdir <- isDirectory inp
-                                  files <- if isdir then
-                                               do files <- rGetDirContents inp
-                                                  return $ (map (\y -> inp ++ "/" ++ y) files) \\ excludes
-                                           else return [inp]
-                                  mapM readParseSrcFile files
-
 readForparseSrcDir :: FileOrDir -> [Filename] -> IO [(Filename, SourceText, A.ProgramFile A)]
 readForparseSrcDir inp excludes = do isdir <- isDirectory inp
                                      files <- if isdir then
@@ -358,24 +257,6 @@ readForparseSrcDir inp excludes = do isdir <- isDirectory inp
                                                      return $ (map (\y -> inp ++ "/" ++ y) files) \\ excludes
                                               else return [inp]
                                      mapM readForparseSrcFile files
-
-rGetDirContents :: FileOrDir -> IO [String]
-rGetDirContents d = do ds <- getDirectoryContents d
-                       ds' <- return $ ds \\ [".", ".."] -- remove '.' and '..' entries
-                       rec ds'
-                             where
-                               rec []     = return $ []
-                               rec (x:xs) = do xs' <- rec xs
-                                               g <- doesDirectoryExist (d ++ "/" ++ x)
-                                               if g then
-                                                  do x' <- rGetDirContents (d ++ "/" ++ x)
-                                                     return $ (map (\y -> x ++ "/" ++ y) x') ++ xs'
-                                                else if (isFortran x) then
-                                                         return $ x : xs'
-                                                     else return $ xs'
-
-{-| predicate on which fileextensions are Fortran files -}
-isFortran x = elem (fileExt x) [".f", ".f90", ".f77", ".cmn", ".inc"]
 
 {-| Read a specific file, and parse it -}
 readParseSrcFile :: Filename -> IO (Filename, SourceText, Program A)
@@ -397,35 +278,6 @@ checkDir f = case (elemIndices '/' f) of
                ix -> let d = take (last ix) f
                      in createDirectoryIfMissing True d
 
-isDirectory :: FileOrDir -> IO Bool
-isDirectory s = doesDirectoryExist s
-
-{-| Given a directory and list of triples of filenames, with their source text (if it exists) and
-   their AST, write these to the director -}
-outputFiles :: FileOrDir -> FileOrDir -> [(Filename, SourceText, Program Annotation)] -> IO ()
-outputFiles inp outp pdata =
-  do outIsDir <- isDirectory outp
-     inIsDir  <- isDirectory inp
-     if outIsDir then
-       do createDirectoryIfMissing True outp
-          putStrLn $ "Writing refactored files to directory: " ++ outp ++ "/"
-          isdir <- isDirectory inp
-          let inSrc = if isdir then inp else getDir inp
-          mapM_ (\(f, input, ast') -> let f' = changeDir outp inSrc f
-                                      in do checkDir f'
-                                            putStrLn $ "Writing " ++ f'
-                                            writeFile f' (reprint input f' ast')) pdata
-     else
-         if inIsDir || length pdata > 1 then
-             error $ "Error: attempting to output multiple files, but the given output destination " ++
-                       "is a single file. \n" ++ "Please specify an output directory"
-         else let outSrc = getDir outp
-              in do createDirectoryIfMissing True outSrc
-                    putStrLn $ "Writing refactored file to: " ++ outp
-                    let (f, input, ast') = head pdata
-                    putStrLn $ "Writing " ++ outp
-                    writeFile outp (reprint input outp ast')
-
 {-| changeDir is used to change the directory of a filename string.
     If the filename string has no directory then this is an identity  -}
 changeDir newDir oldDir oldFilename = newDir ++ (listDiffL oldDir oldFilename)
@@ -444,36 +296,11 @@ outputAnalysisFiles dir asts files =
 
 
 {-| parse file into an un-annotated Fortran AST -}
-parse  :: Filename -> IO (Program ())
-parse f = let mode = ParseMode { parseFilename = f }
-              selectedParser = case (fileExt f) of
-                                  ".cmn" -> Fortran.include_parser
-                                  ".inc" -> Fortran.include_parser
-                                  _      -> Fortran.parser
-          in do inp <- readFile f
-                case (runParserWithMode mode selectedParser (pre_process inp)) of
-                   (ParseOk p)       -> return $ p
-                   (ParseFailed l e) -> error e
-
-{-| parse file into an un-annotated Fortran AST -}
 forparse :: SourceText -> Filename -> A.ProgramFile ()
 forparse contents f = F77.fortran77Parser contents f
 
 
-{-| extract a filename's extension -}
-fileExt x = let ix = elemIndices '.' x
-            in if (length ix == 0) then ""
-               else Prelude.drop (Prelude.last ix) x
-
-
 -- * Simple example
-
-{-|  A simple, sample transformation using the 'transformBi' function -}
-fooTrans p = transformBi f p
-                where f :: Fortran A1 -> Fortran A1
-                      f p@(Call x sp e as) = Label True sp "10" p
-                      f p@(Assg x sp e1 e2) = Label True sp "5" p
-                      f p = p
 
 {-| Parse a file and apply the 'fooTrans' transformation, outputting to the filename + .out -}
 doFooTrans f = do inp <- readFile f

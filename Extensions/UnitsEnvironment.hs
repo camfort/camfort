@@ -1,3 +1,18 @@
+{-
+   Copyright 2016, Dominic Orchard, Andrew Rice, Mistral Contrastin, Matthew Danish
+
+   Licensed under the Apache License, Version 2.0 (the "License");
+   you may not use this file except in compliance with the License.
+   You may obtain a copy of the License at
+
+       http://www.apache.org/licenses/LICENSE-2.0
+
+   Unless required by applicable law or agreed to in writing, software
+   distributed under the License is distributed on an "AS IS" BASIS,
+   WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+   See the License for the specific language governing permissions and
+   limitations under the License.
+-}
 {-# LANGUAGE TemplateHaskell, ImplicitParams #-}
 
 {- Provides various data types and type class instances for the Units extension -}
@@ -11,7 +26,6 @@ import Data.Label.Monadic hiding (modify)
 import Control.Monad.State.Strict hiding (gets)
 import Language.Fortran
 import Data.Matrix
-import qualified Forpar.Util.Position as P
 
 type EqualityConstrained = Bool
 
@@ -31,7 +45,7 @@ newtype VarCol = VarCol Col deriving (Eq, Show)
 --   e.g., for a(i,k) we have a map from 'a' to its column paired with
 --       a two element list of the columns for 'i' and 'j'
 
-newtype VarBinder = VarBinder (Variable, P.SrcSpan) deriving Show
+newtype VarBinder = VarBinder (Variable, SrcSpan) deriving Show
 type VarColEnv = [(VarBinder, (VarCol, [VarCol]))]
 
 data UnitVarCategory = Literal EqualityConstrained | Temporary | Variable | Argument | Magic deriving (Eq, Show)
@@ -49,7 +63,7 @@ type LinearSystem = (Matrix Rational, [UnitConstant])
 type Row = Int
 type Col = Int
 
-type DebugInfo = [(Col, (P.SrcSpan, String))]
+type DebugInfo = [(Col, (SrcSpan, String))]
 
 data UnitEnv = UnitEnv {
   _report              :: [String],

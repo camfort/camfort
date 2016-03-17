@@ -1,0 +1,13 @@
+resolver: lts-5.5
+
+# Local packages, usually specified by relative directory name
+packages:
+- '.'
+- '../language-fortran'
+
+# Override default flag values for local packages and extra-deps
+flags: {}
+
+# Extra package databases containing global packages
+extra-package-dbs: []
+

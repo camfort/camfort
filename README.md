@@ -2,7 +2,27 @@
 
 ## Installation & Building
 
-### Dependencies
+### Using Stack
+
+We recommend using Stack (http://www.haskellstack.org) to build Camfort. 
+
+ 1. Install Stack following the instructions here: http://docs.haskellstack.org/en/stable/README/#how-to-install
+ 2. Checkout the latest version of language-fortran
+ 3. Checkout the latest version of camfort
+ 4. Build using Stack
+
+```
+git clone git@github.com:dorchard/language-fortran.git
+git clone git@github.com:dorchard/camfort.git
+cd camfort
+stack build
+stack install      # install binary
+stack exec camfort # run camfort
+```
+
+Please note that at this time we have been unable to compile Camfort on Windows due to a problem with the hmatrix dependency. 
+
+### Using Cabal
 
 Cabal does not automatically install the build tools. If you wonder why
 checkout haskell/cabal#220.
@@ -68,3 +88,6 @@ Options:
   -s ID     --units-solver=ID    units-of-measure solver. ID = Custom or LAPACK
   -l ID     --units-literals=ID  units-of-measure literals mode. ID = Unitless, Poly, or Mixed
 ```
+
+### Troubleshooting
+ Sometimes MacOSX has problems with GHC and libiconv. Some of the techniques here are useful: http://blog.omega-prime.co.uk/?p=96

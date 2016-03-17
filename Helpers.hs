@@ -1,7 +1,24 @@
+{-
+   Copyright 2016, Dominic Orchard, Andrew Rice, Mistral Contrastin, Matthew Danish
+
+   Licensed under the Apache License, Version 2.0 (the "License");
+   you may not use this file except in compliance with the License.
+   You may obtain a copy of the License at
+
+       http://www.apache.org/licenses/LICENSE-2.0
+
+   Unless required by applicable law or agreed to in writing, software
+   distributed under the License is distributed on an "AS IS" BASIS,
+   WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+   See the License for the specific language governing permissions and
+   limitations under the License.
+-}
 {-# LANGUAGE TypeOperators #-}
 
 module Helpers where
 
+import Data.List (elemIndices)
+import System.Directory
 import Language.Fortran
 
 lineCol :: SrcLoc -> (Int, Int)
@@ -14,6 +31,24 @@ type Filename = String
 type Directory = String
 type SourceText = String
 type FileOrDir = String
+
+
+-- Filename and directory related helpers
+
+-- gets the directory part of a filename
+getDir :: String -> String
+getDir file = take (last $ elemIndices '/' file) file
+
+
+{-| Creates a directory (from a filename string) if it doesn't exist -}
+checkDir f = case (elemIndices '/' f) of
+               [] -> return ()
+               ix -> let d = take (last ix) f
+                     in createDirectoryIfMissing True d
+
+isDirectory :: FileOrDir -> IO Bool
+isDirectory s = doesDirectoryExist s
+
 
 -- Helpers
 
@@ -35,7 +70,7 @@ lookups x ((a, b):xs) = if (x == a) then b : lookups x xs
 
 lookups' :: Eq a => a -> [((a, b), c)] -> [(b, c)]
 lookups' _ [] = []
-lookups' x (((a, b), c):xs) = if (x == a) then (b, c) : lookups' x xs 
+lookups' x (((a, b), c):xs) = if (x == a) then (b, c) : lookups' x xs
                                           else lookups' x xs
 
 {-| Computes all pairwise combinations -}
