@@ -154,6 +154,8 @@ data Spec where
      Backward    :: Depth -> [Dimension] -> Spec
      Symmetric   :: Depth -> [Dimension] -> Spec
 
+     Product     :: Spec -> Spec -> Spec
+
      -- Temporal specifications, with a list of variables for the arrays
      -- through which time is represented
      TemporalFwd    :: [Variable] -> Spec
@@ -175,16 +177,15 @@ instance Ord Direction where
 showL :: Show a => [a] -> String
 showL = concat . intersperse "," . map show
 instance Show Spec where
-     show (Reflexive [])       = "reflexive"
-     show (Reflexive dims)     = "reflexive dims=" ++ showL dims
-     show (Forward dep dims)   = "forward depth=" ++ show dep ++ " dim=" ++ showL dims
-     show (Backward dep dims)  = "backward depth=" ++ show dep ++ " dim=" ++ showL dims
-     show (Symmetric dep dims) = "centered depth=" ++ show dep ++ " dim=" ++ showL dims
+     show (Reflexive dims)     = "reflexive, dims=" ++ showL dims
+     show (Forward dep dims)   = "forward, depth="  ++ show dep ++ ", dim=" ++ showL dims
+     show (Backward dep dims)  = "backward, depth=" ++ show dep ++ ", dim=" ++ showL dims
+     show (Symmetric dep dims) = "centered, depth=" ++ show dep ++ ", dim=" ++ showL dims
      show (Unspecified dims)   = "unspecified "  ++ showL dims
-     show (Constant dims)      = "fixed dim=" ++ showL dims
-     show (Linear spec)        = (show spec) ++ " unique "
-     show (TemporalFwd dims)   = "forward depth=" ++ show (length dims) ++ " dim=t{" ++ showL dims ++ "}"
-     show (TemporalBwd dims)   = "backward depth=" ++ show (length dims) ++ " dim=t{" ++ showL dims ++ "}"
+     show (Constant dims)      = "fixed, dim=" ++ showL dims
+     show (Linear spec)        = (show spec) ++ ", unique "
+     show (TemporalFwd dims)   = "forward, depth=" ++ show (length dims) ++ ", dim=t{" ++ showL dims ++ "}"
+     show (TemporalBwd dims)   = "backward, depth=" ++ show (length dims) ++ ", dim=t{" ++ showL dims ++ "}"
 
 {- *** 2 . Operations on specs, and conversion from indexing expressions -}
 
