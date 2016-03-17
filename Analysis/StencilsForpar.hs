@@ -10,7 +10,8 @@ import Control.Monad.Reader
 import Control.Monad.Writer
 
 import Analysis.Loops (collect)
-import Analysis.Annotations (Annotation, unitAnnotation)
+import Analysis.Annotations
+import Extensions.UnitsForpar (parameterise)
 
 import qualified Forpar.AST as F
 import qualified Forpar.Analysis as FA
@@ -27,8 +28,6 @@ import Data.Tuple (swap)
 import Data.Ord
 
 import Debug.Trace
-
-type A = Annotation
 
 --------------------------------------------------
 -- For the purposes of development, a representative example is given by running (in ghci):
@@ -48,10 +47,13 @@ formatSpec :: FAR.NameMap -> LogLine -> String
 formatSpec nm (span, []) = ""
 formatSpec nm (span, specs) = loc ++ " \t" ++ (commaSep . nub . map doSpec $ specs) ++ "\n"
   where
-    loc                     = show (spanLineCol span)
-    commaSep                = concat . intersperse ", "
-    doSpec (arrayVar, spec) = commaSep (map realName arrayVar) ++ ": " ++ showL spec
-    realName v              = v `fromMaybe` (v `M.lookup` nm)
+    loc                      = show (spanLineCol span)
+    commaSep                 = concat . intersperse ", "
+    doSpec (arrayVar, spec)  = commaSep (map realName arrayVar) ++ ": " ++ showL (map fixSpec spec)
+    realName v               = v `fromMaybe` (v `M.lookup` nm)
+    fixSpec (TemporalFwd vs) = TemporalFwd $ map realName vs
+    fixSpec (TemporalBwd vs) = TemporalBwd $ map realName vs
+    fixSpec s                = s
 
 --------------------------------------------------
 
@@ -307,13 +309,8 @@ plus _ = error "Trying to coalesce a reflexive and a span"
 
 -- Convert a normalised list of index specifications to a list of specifications
 specIsToSpecs :: Normalised [[SpecI]] -> [Spec]
-specIsToSpecs x@(NSpecIGroups spanss) = --(show x) `trace`
-                                         let specs = simplify (uncurry go =<< zip [0..] spanss)
-                                         in case specs of
-                                              [] -> [Unspecified []]
-                                              xs -> xs
+specIsToSpecs x@(NSpecIGroups spanss) = simplify (uncurry go =<< zip [1..] spanss)
   where
-    -- refl = if isReflexiveMultiDim x then [Reflexive] else []
     go :: Dimension -> [SpecI] -> [Spec]
     go dim (Reflx _ : xs)            = Reflexive [dim] : go dim xs
     go dim (Const _ : xs)            = Constant [dim] : go dim xs
@@ -361,33 +358,56 @@ ixCompExprToSpecI ivs d _ = Nothing
 
 {- *** 4. Flows-to analysis -}
 
-type Flows = ReaderT (TypeEnv A) (State FlowsMap) -- Monad
+type Flows = ReaderT FlowsMapTable (State FlowsMap) -- Monad
 
-runFlows :: TypeEnv A -> Flows a -> (a, FlowsMap)
-runFlows tenv = flip runState M.empty . flip runReaderT tenv
+runFlows :: FlowsMapTable -> Flows a -> (a, FlowsMap)
+runFlows fmt = flip runState M.empty . flip runReaderT fmt
 
 -- FlowsMap structure:
 -- -- e.g. (v, [a, b]) means that 'a' and 'b' flow to 'v'
-type FlowsMap = Map.Map Variable [Variable]
+type FlowsMap = M.Map Variable [Variable]
+type FlowsMapTable = M.Map F.ProgramUnitName (F.ProgramUnit A, FlowsMap)
 type Cycles = [(Variable, Variable)]
 
 flowAnalysisArrays :: F.ProgramFile A -> [(F.ProgramUnit A, FlowsMap)]
-flowAnalysisArrays pf@(F.ProgramFile cm_pus _) = fst . runFlows tenv $ do
-  forM cm_pus $ \ (_, pu) -> flowAnalysisArraysRecur pu Map.empty
-  where tenv = FAT.inferTypes pf
+flowAnalysisArrays pf = M.elems fmt
+  where
+    F.ProgramFile cm_pus _ = parameterise pf -- identify function/subroutine parameters
+    (fmt, _)               = runFlows fmt flowMaker -- intentionally recursive
+    flowMaker              = (M.fromList `fmap`) . forM cm_pus $ \ (_, pu) -> do
+                               put M.empty
+                               res <- flowAnalysisArraysRecur pu
+                               return (F.getName pu, res)
 
-flowAnalysisArraysRecur :: F.ProgramUnit A -> FlowsMap -> Flows (F.ProgramUnit A, FlowsMap)
-flowAnalysisArraysRecur p flowMap = do
+flowAnalysisArraysRecur :: F.ProgramUnit A -> Flows (F.ProgramUnit A, FlowsMap)
+flowAnalysisArraysRecur p = do
   flowMap  <- get
   p'       <- flowAnalysisArraysStep p
   flowMap' <- get
   if flowMap == flowMap'
     then return (p', flowMap')
-    else flowAnalysisArraysRecur p' flowMap'
+    else flowAnalysisArraysRecur p'
 
 flowAnalysisArraysStep :: F.ProgramUnit A -> Flows (F.ProgramUnit A)
 flowAnalysisArraysStep pu = transformBiM perBlock pu
   where
+    -- FIXME: do function call expression. This is subtle because
+    -- function calls can appear as sub-expressions to assignment
+    -- statements. Function calls can change the meaning of assignment
+    -- statements too. For example, consider this:
+    --
+    -- a = f(a, b)
+    -- ...
+    -- function f(a, b)
+    --   f = a
+    -- end
+    --
+    -- A naive flows analysis would conclude that ("a", ["a","b"]) but
+    -- interprocedural analysis should uncover that ("a", ["a"]) only.
+    --
+    -- Further question: what should be the correct flows-map output
+    -- of "a(i) = a(b(i))", where a and b are arrays?
+
     perBlock :: F.Block A -> Flows (F.Block A)
     perBlock = transformBiM perStmt
 
@@ -396,11 +416,15 @@ flowAnalysisArraysStep pu = transformBiM perBlock pu
 
     perStmt :: F.Statement A -> Flows (F.Statement A)
     perStmt f@(F.StExpressionAssign _ _ lhs rhs) = do
-      tenv    <- ask
       flowMap <- get
 
-      let lhses = [ v | (F.ExpValue _ _ (F.ValArray _ v)) <- universeBi lhs :: [F.Expression A] ]
-      let rhses = [ v | (F.ExpValue _ _ (F.ValArray _ v)) <- universeBi rhs :: [F.Expression A] ]
+      -- Using the parameterisation analysis, rename function &
+      -- subroutine parameters to this schema so that they may be
+      -- substituted later by actual arguments.
+      let p (F.ValArray (A { unitInfo = Just (Parametric (fn, n)) }) _) = fn ++ "[" ++ show n ++ "]"
+          p (F.ValArray _ v) = v
+      let lhses = [ p v | (F.ExpValue _ _ v@(F.ValArray _ _)) <- universeBi lhs :: [F.Expression A] ]
+      let rhses = [ p v | (F.ExpValue _ _ v@(F.ValArray _ _)) <- universeBi rhs :: [F.Expression A] ]
 
       let pullInFlowsFromRight lhsV map rhsV = M.insertWith union lhsV (lookupList rhsV map) map
 
@@ -411,7 +435,30 @@ flowAnalysisArraysStep pu = transformBiM perBlock pu
       put $ foldl' fromRightToLeft flowMap lhses
 
       return f
+
+    perStmt f@(F.StCall _ _ (F.ExpValue _ _ (F.ValSubroutineName sn)) (Just argAList)) = do
+      let args = F.aStrip argAList
+      fmt <- ask
+
+      -- lazily look-up flows analysis of subroutine
+      let subFlMap  = maybe M.empty snd $ M.lookup (F.Named sn) fmt
+
+      let doArg n (F.ExpValue _ _ (F.ValVariable _ v)) = [(sn ++ "[" ++ show n ++ "]", v)]
+          doArg n (F.ExpValue _ _ (F.ValArray _ v))    = [(sn ++ "[" ++ show n ++ "]", v)]
+          doArg _ _                                    = []
+      -- assemble necessary substitutions
+      let argSubs   = concat $ zipWith doArg [1..] args
+
+      -- apply
+      let subFlMap' = transformBi (\ s -> s `fromMaybe` lookup s argSubs) subFlMap
+
+      -- combine with other mappings
+      modify $ M.union subFlMap'
+
+      return f
     perStmt f = return f
+
+--------------------------------------------------
 
 -- Find all array accesses which have a cyclic dependency
 cyclicDependents :: FlowsMap -> Cycles
