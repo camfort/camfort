@@ -444,6 +444,7 @@ flowAnalysisArraysStep pu = transformBiM perBlock pu
       let subFlMap  = maybe M.empty snd $ M.lookup (F.Named sn) fmt
 
       let doArg n (F.ExpValue _ _ (F.ValVariable _ v)) = [(sn ++ "[" ++ show n ++ "]", v)]
+          doArg n (F.ExpValue _ _ (F.ValArray _ v))    = [(sn ++ "[" ++ show n ++ "]", v)]
           doArg _ _                                    = []
       -- assemble necessary substitutions
       let argSubs   = concat $ zipWith doArg [1..] args

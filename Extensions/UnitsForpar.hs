@@ -132,6 +132,7 @@ parameterise pf = transformBi fPU pf
         varName (ValArray _ n) = n
 
         fP fn (ValVariable _ n) i = (n, Parametric (fn, i))
+        fP fn (ValArray _ n) i    = (n, Parametric (fn, i))
 
         fV v@(ValVariable a n) = case n `lookup` params of
           Just info -> ValVariable (a { unitInfo = Just info }) n
