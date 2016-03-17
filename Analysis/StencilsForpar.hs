@@ -7,7 +7,7 @@ import Language.Fortran hiding (Spec)
 import Data.Generics.Uniplate.Operations
 import Control.Monad.State.Lazy
 import Control.Monad.Reader
-import Control.Monad.Writer
+import Control.Monad.Writer hiding (Product)
 
 import Analysis.Loops (collect)
 import Analysis.Annotations
@@ -153,8 +153,8 @@ data Spec where
      Forward     :: Depth -> [Dimension] -> Spec
      Backward    :: Depth -> [Dimension] -> Spec
      Symmetric   :: Depth -> [Dimension] -> Spec
-
-     Product     :: Spec -> Spec -> Spec
+     -- Product of two specs (takes the intersection of their models)
+     Product     :: [Spec] -> Spec
 
      -- Temporal specifications, with a list of variables for the arrays
      -- through which time is represented
@@ -183,6 +183,7 @@ instance Show Spec where
      show (Symmetric dep dims) = "centered, depth=" ++ show dep ++ ", dim=" ++ showL dims
      show (Unspecified dims)   = "unspecified "  ++ showL dims
      show (Constant dims)      = "fixed, dim=" ++ showL dims
+     show (Product specs)      = concat $ intersperse " & " $ map (\spec -> "(" ++ show spec ++ ")") specs
      show (Linear spec)        = (show spec) ++ ", unique "
      show (TemporalFwd dims)   = "forward, depth=" ++ show (length dims) ++ ", dim=t{" ++ showL dims ++ "}"
      show (TemporalBwd dims)   = "backward, depth=" ++ show (length dims) ++ ", dim=t{" ++ showL dims ++ "}"
