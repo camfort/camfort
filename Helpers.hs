@@ -17,10 +17,31 @@
 
 module Helpers where
 
+import Data.List (elemIndices)
+import System.Directory
+
 type Filename = String
 type Directory = String
 type SourceText = String
 type FileOrDir = String
+
+
+-- Filename and directory related helpers
+
+-- gets the directory part of a filename
+getDir :: String -> String
+getDir file = take (last $ elemIndices '/' file) file
+
+
+{-| Creates a directory (from a filename string) if it doesn't exist -}
+checkDir f = case (elemIndices '/' f) of 
+               [] -> return ()
+               ix -> let d = take (last ix) f
+                     in createDirectoryIfMissing True d
+
+isDirectory :: FileOrDir -> IO Bool
+isDirectory s = doesDirectoryExist s
+
 
 -- Helpers
 

@@ -1,5 +1,5 @@
 name:                   camfort
-version:                0.700
+version:                0.750
 synopsis:               CamFort - Cambridge Fortran infrastructure
 description:            CamFort is a tool for the analysis, transformation, and extension of Fortran code base.
 
@@ -14,8 +14,16 @@ stability:              experimental
 build-type:             Simple
 category:               Language, tools
 
-cabal-version:          >= 1.6
-tested-with:            GHC >= 7.4
+cabal-version:          >= 1.8
+tested-with:            GHC >= 7.10.1
+
+test-suite camfort-tests
+  type:                 exitcode-stdio-1.0
+  main-is:              TestSuite.hs
+  hs-source-dirs:       tests
+  build-depends:        base < 5,
+                        camfort,
+                        HUnit >= 1.2
 
 source-repository head
   type: git
@@ -36,7 +44,9 @@ executable camfort
                         Extensions.UnitParser
                         Extensions.UnitsSolve
                         Extensions.UnitsSolveHMatrix
+                        Functionality			
                         Helpers
+                        Input
                         Output
                         Transformation.CommonBlockElim
                         Transformation.CommonBlockElimToCalls
@@ -62,7 +72,7 @@ executable camfort
                         text >= 0.11.2.3,
                         array >= 0.4,
                         directory >= 1.2,
-                        language-fortran >= 0.4,
+                        language-fortran >= 0.5,
                         transformers >= 0.4,
                         vector >= 0.1
 
@@ -95,6 +105,8 @@ library
                         Extensions.UnitsSolveHMatrix
                         Helpers
                         Main
+                        Functionality
+                        Input
                         Output
                         Traverse
 

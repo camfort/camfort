@@ -13,13 +13,25 @@
    See the License for the specific language governing permissions and
    limitations under the License.
 -}
-{-# LANGUAGE FlexibleInstances, UndecidableInstances, ImplicitParams #-}
-{-# LANGUAGE MultiParamTypeClasses, FlexibleContexts, KindSignatures, ScopedTypeVariables, DeriveGeneric, DeriveDataTypeable #-}
+
+{-# LANGUAGE FlexibleInstances, UndecidableInstances, ImplicitParams, DoAndIfThenElse,
+             MultiParamTypeClasses, FlexibleContexts, KindSignatures, ScopedTypeVariables, 
+             DeriveGeneric, DeriveDataTypeable #-}
+
+{-
+
+ Provides support for outputting source files and analysis information
+
+-}
 
 module Output where
 
 import Helpers
 import Traverse
+
+import qualified Language.Fortran.Parser as Fortran
+import Language.Fortran.PreProcess
+import Language.Fortran
 
 import Analysis.Annotations
 import Analysis.Syntax
@@ -27,13 +39,15 @@ import Language.Fortran as Fortran
 import Language.Fortran.Pretty
 import Transformation.Syntax
 
-import Data.Text hiding (foldl,map,concatMap,take,drop,length,last,head,tail,replicate,concat)
+import System.Directory
+
+import Data.Text hiding (zip,foldl,map,concatMap,take,drop,length,last,head,tail,replicate,concat)
 import qualified Data.Text as Text 
 import Data.Map.Lazy hiding (map, foldl)
 import Data.Functor.Identity
 import Data.Generics
 import GHC.Generics
-import Data.List
+import Data.List hiding (zip)
 import Data.Generics.Uniplate.Data
 import Generics.Deriving.Copoint
 import Data.Char
@@ -43,9 +57,74 @@ import Debug.Trace
 import Control.Monad.Trans.State.Lazy
 import Text.Printf
 
--- Define new pretty printing version for HTML output
-data HTMLPP = HTMLPP
-instance PPVersion HTMLPP
+import Extensions.UnitsEnvironment
+
+
+{-| Given a directory and list of triples of filenames, with their source text (if it exists) and
+   their AST, write these to the director -}
+outputFiles :: FileOrDir -> FileOrDir -> [(Filename, SourceText, Program Annotation)] -> IO ()
+outputFiles inp outp pdata = 
+  do outIsDir <- isDirectory outp
+     inIsDir  <- isDirectory inp
+     if outIsDir then
+       do createDirectoryIfMissing True outp
+          putStrLn $ "Writing refactored files to directory: " ++ outp ++ "/"
+          isdir <- isDirectory inp 
+          let inSrc = if isdir then inp else getDir inp
+          mapM_ (\(f, input, ast') -> let f' = changeDir outp inSrc f
+                                      in do checkDir f'
+                                            putStrLn $ "Writing " ++ f'
+                                            writeFile f' (reprint input f' ast')) pdata
+     else
+         if inIsDir || length pdata > 1 then 
+             error $ "Error: attempting to output multiple files, but the given output destination " ++ 
+                       "is a single file. \n" ++ "Please specify an output directory"
+         else let outSrc = getDir outp
+              in do createDirectoryIfMissing True outSrc
+                    putStrLn $ "Writing refactored file to: " ++ outp 
+                    let (f, input, ast') = head pdata
+                    putStrLn $ "Writing " ++ outp
+                    writeFile outp (reprint input outp ast')
+
+outputFiles' :: FileOrDir -> FileOrDir -> [(Filename, SourceText)] -> IO ()
+outputFiles' inp outp pdata = 
+  do outIsDir <- isDirectory outp
+     inIsDir  <- isDirectory inp
+     if outIsDir then
+       do createDirectoryIfMissing True outp
+          putStrLn $ "Writing refactored files to directory: " ++ outp ++ "/"
+          isdir <- isDirectory inp 
+          let inSrc = if isdir then inp else getDir inp
+          mapM_ (\(f, output) -> let f' = changeDir outp inSrc f
+                                 in do checkDir f'
+                                       putStrLn $ "Writing " ++ f'
+                                       writeFile f' output) pdata
+     else
+         if inIsDir || length pdata > 1 then 
+             error $ "Error: attempting to output multiple files, but the given output destination " ++ 
+                       "is a single file. \n" ++ "Please specify an output directory"
+         else let outSrc = getDir outp
+              in do createDirectoryIfMissing True outSrc
+                    putStrLn $ "Writing refactored file to: " ++ outp 
+                    let (f, output) = head pdata
+                    putStrLn $ "Writing " ++ outp
+                    writeFile outp output
+
+{-| changeDir is used to change the directory of a filename string.
+    If the filename string has no directory then this is an identity  -}
+changeDir newDir oldDir oldFilename = newDir ++ (listDiffL oldDir oldFilename)
+                                      where listDiffL []     ys = ys
+                                            listDiffL xs     [] = []
+                                            listDiffL (x:xs) (y:ys) | x==y      = listDiffL xs ys
+                                                                    | otherwise = ys
+
+{-| output pre-analysis ASTs into the directory with the given file names (the list of ASTs should match the
+    list of filenames) -}
+outputAnalysisFiles :: FileOrDir -> [Program Annotation] -> [Filename] -> IO ()
+outputAnalysisFiles dir asts files =
+           do putStrLn $ "Writing analysis files to directory: " ++ dir ++ "/"
+              mapM (\(ast', f) -> writeFile (f ++ ".html") ((concatMap outputHTML) ast')) (zip asts files)
+              return ()
 
 keyword = map pack
           ["end","subroutine","function","program","module","data", "common",
@@ -58,6 +137,12 @@ keyword = map pack
            "exit", "forall", "goto", "nullify", "inquire", "rewind", "stop", "where",
            "write", "rerun", "print", "read", "write", "implicit", "use"]
 
+
+-- Define new pretty printing version for HTML output
+data HTMLPP = HTMLPP
+instance PPVersion HTMLPP
+
+{-| Convert source code to a pretty-printed HTML format -}
 outputHTML :: forall p . (Data p, Typeable p, PrintSlave p HTMLPP, PrintIndSlave (Fortran p) HTMLPP, Indentor (Decl p), Indentor (Fortran p)) => 
               Fortran.ProgUnit p -> String
 outputHTML prog = unpack html
@@ -434,37 +519,3 @@ removeNewLines (x:xs) n = let (xs', n') = removeNewLines xs n
 --removeNewLines ('\n':xs) 0 = let (xs', n') = removeNewLines xs 0
 --                             in ('\n':xs', 0)
 
-
-
-{-
-OLD (FLAKEY) ALGORITHM
-
- reprint :: String -> String -> Program A1 -> String
- reprint input f z = let input' = Prelude.lines input
-                     in reprintA (SrcLoc f 1 0) (SrcLoc f (Prelude.length input') (1 + (Prelude.length $ Prelude.last input'))) input' (toZipper z)
-
-
- doHole :: (Show (d A1)) => SrcLoc -> SrcLoc -> [String] -> Zipper (d A1) -> (String, SrcLoc)
- doHole cursor end inp z = let ?variant = HTMLPP in
-                             case (getHole z)::(Maybe (Fortran A1)) of
-                           Just e  -> let flag = tag e
-                                          (lb, ub) = srcSpan e
-                                          (p1, rest1) = takeBounds (cursor, lb) inp
-                                      in  if flag then let ?variant = HTMLPP
-                                                       in (p1 ++ printMaster e, ub)
-                                          else case (down' z) of
-                                                    Just cz -> (p1 ++ reprintA lb ub rest1 cz, ub)
-                                                    Nothing -> let (p2, _) = takeBounds (lb, ub) rest1
-                                                               in (p1 ++ p2, ub)
-                           Nothing -> case (down' z) of 
-                                        Just cz -> "no - down\n" `trace` (reprintA cursor end inp cz, cursor)
-                                        Nothing -> ("", cursor)
-
- reprintA :: (Show (d A1)) =>  SrcLoc -> SrcLoc -> [String] -> Zipper (d A1) -> String
- reprintA cursor end inp z = let (p1, cursor') = doHole cursor end inp z
-                                 (p2, inp')    = takeBounds (cursor, cursor') inp
-                             in p1 ++ case (right z) of 
-                                         Just rz -> reprintA cursor' end inp' rz
-                                         Nothing -> fst $ takeBounds (cursor', end) inp'
-                                                    
--}

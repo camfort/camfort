@@ -108,7 +108,7 @@ nonNullArgs (NullArg _) = False
 
 
 extendArgs nonNullArgs sp' args = if nonNullArgs then 
-                                     let p' = unitAnnotation { refactored = Just $ decCol $ snd sp' }
+                                     let p' = unitAnnotation { refactored = Just $ snd sp' }
                                      in ASeq p' (ArgName p' "") (extendArgs' sp' args)
                                   else extendArgs' sp' args
                                  
