@@ -16,7 +16,7 @@
 
 {-
 
-Handles input of code base (files and directories) 
+Handles input of code base (files and directories)
  and passing them into the core functionality
 
 -}
@@ -47,8 +47,8 @@ import Traverse
 import Data.List (nub, (\\), elemIndices, intersperse)
 
 type Options = [Flag]
-data Flag = Version | Input String | Output String 
-         | Solver Solver | Excludes String 
+data Flag = Version | Input String | Output String
+         | Solver Solver | Excludes String
          | Literals AssumeLiterals | Debug deriving Show
 
 
@@ -63,18 +63,18 @@ literalsBehaviour (x : xs) = literalsBehaviour xs
 getExcludes [] = ""
 getExcludes ((Excludes s) : xs) = s
 getExcludes (x : xs) = getExcludes xs
-    
+
 
 -- * Builders for analysers and refactorings
 
 {-| Performs an analysis provided by its first parameter on the directory of its second, excluding files listed by
     its third -}
 doAnalysis :: (Program A -> Program Annotation) -> FileOrDir -> [Filename] -> IO ()
-doAnalysis aFun d excludes = 
+doAnalysis aFun d excludes =
                     do if excludes /= [] && excludes /= [""]
                            then putStrLn $ "Excluding " ++ (concat $ intersperse "," excludes) ++ " from " ++ d ++ "/"
                            else return ()
-                      
+
                        ps <- readParseSrcDir d excludes
 
                        let inFiles = map Fortran.fst3 ps
@@ -85,15 +85,15 @@ doAnalysis aFun d excludes =
 {-| Performs an analysis provided by its first parameter which generates information 's', which is then combined
     together (via a monoid) -}
 doAnalysisSummary :: (Monoid s, Show s) => (Program A -> s) -> FileOrDir -> [Filename] -> IO ()
-doAnalysisSummary aFun d excludes = 
+doAnalysisSummary aFun d excludes =
                     do if excludes /= [] && excludes /= [""]
                            then putStrLn $ "Excluding " ++ (concat $ intersperse "," excludes) ++ " from " ++ d ++ "/"
                            else return ()
-                      
+
                        ps <- readParseSrcDir d excludes
 
                        let inFiles = map Fortran.fst3 ps
-                       putStrLn "Output of the analysis:" 
+                       putStrLn "Output of the analysis:"
                        putStrLn $ show $ Prelude.foldl (\n (f, _, ps) -> n `mappend` (aFun ps)) mempty ps
 
 {-| Performs an analysis which reports to the user, but does not output any files -}
@@ -119,13 +119,13 @@ doAnalysisReport' rFun inSrc excludes outSrc
                        let (report, ps') = rFun (map modifyAST ps)
                        putStrLn report
   where
-    modifyAST (f, inp, ast) = 
+    modifyAST (f, inp, ast) =
       let ast' = map (fmap (const ())) ast
           ast'' = convertSyntax f inp ast'
           ast''' = map (fmap (const unitAnnotation)) ast''
       in (f, ast''')
 
-{-| Performs a refactoring provided by its first parameter, on the directory of the second, excluding files listed by third, 
+{-| Performs a refactoring provided by its first parameter, on the directory of the second, excluding files listed by third,
  output to the directory specified by the fourth parameter -}
 doRefactor :: ([(Filename, Program A)] -> (String, [(Filename, Program Annotation)])) -> FileOrDir -> [Filename] -> FileOrDir -> IO ()
 doRefactor rFun inSrc excludes outSrc
@@ -142,7 +142,7 @@ doRefactor rFun inSrc excludes outSrc
 
 -- Temporarily for the units-of-measure glue code
 doRefactor' :: ([(Filename, Program A)] -> (String, [(Filename, Program Annotation)])) -> FileOrDir -> [Filename] -> FileOrDir -> IO ()
-doRefactor' rFun inSrc excludes outSrc = do 
+doRefactor' rFun inSrc excludes outSrc = do
     if excludes /= [] && excludes /= [""]
     then putStrLn $ "Excluding " ++ (concat $ intersperse "," excludes) ++ " from " ++ inSrc ++ "/"
     else return ()
@@ -155,7 +155,7 @@ doRefactor' rFun inSrc excludes outSrc = do
     putStrLn report
     outputFiles' inSrc outSrc outputs
   where
-    modifyAST (f, inp, ast) = 
+    modifyAST (f, inp, ast) =
       let ast' = map (fmap (const ())) ast
           ast'' = convertSyntax f inp ast'
           ast''' = map (fmap (const unitAnnotation)) ast''
@@ -166,47 +166,47 @@ doRefactor' rFun inSrc excludes outSrc = do
 {-| Read files from a direcotry, excluding those listed by the second parameter -}
 readParseSrcDir :: FileOrDir -> [Filename] -> IO [(Filename, SourceText, Program A)]
 readParseSrcDir inp excludes = do isdir <- isDirectory inp
-                                  files <- if isdir then 
+                                  files <- if isdir then
                                                do files <- rGetDirContents inp
                                                   return $ (map (\y -> inp ++ "/" ++ y) files) \\ excludes
                                            else return [inp]
                                   mapM readParseSrcFile files
-                                
+
 rGetDirContents :: FileOrDir -> IO [String]
 rGetDirContents d = do ds <- getDirectoryContents d
                        ds' <- return $ ds \\ [".", ".."] -- remove '.' and '..' entries
                        rec ds'
-                             where 
+                             where
                                rec []     = return $ []
                                rec (x:xs) = do xs' <- rec xs
                                                g <- doesDirectoryExist (d ++ "/" ++ x)
-                                               if g then 
+                                               if g then
                                                   do x' <- rGetDirContents (d ++ "/" ++ x)
                                                      return $ (map (\y -> x ++ "/" ++ y) x') ++ xs'
                                                 else if (isFortran x) then
                                                          return $ x : xs'
                                                      else return $ xs'
 
-{-| predicate on which fileextensions are Fortran files -}                               
+{-| predicate on which fileextensions are Fortran files -}
 isFortran x = elem (fileExt x) [".f", ".f90", ".f77", ".cmn", ".inc"]
 
 {-| Read a specific file, and parse it -}
 readParseSrcFile :: Filename -> IO (Filename, SourceText, Program A)
-readParseSrcFile f = do putStrLn f 
+readParseSrcFile f = do putStrLn f
                         inp <- readFile f
                         ast <- parse f
-                        return $ (f, inp, map (fmap (const unitAnnotation)) ast)                                   
+                        return $ (f, inp, map (fmap (const unitAnnotation)) ast)
 
 
 
-{-| parse file into an un-annotated Fortran AST -}                                           
+{-| parse file into an un-annotated Fortran AST -}
 parse  :: Filename -> IO (Program ())
 parse f = let mode = ParseMode { parseFilename = f }
-              selectedParser = case (fileExt f) of 
+              selectedParser = case (fileExt f) of
                                   ".cmn" -> Fortran.include_parser
                                   ".inc" -> Fortran.include_parser
                                   _      -> Fortran.parser
-              
+
           in do inp <- readFile f
                 -- There is a temporary fix here of adding a space at the start, this is to deal
                 -- with an alingment issue in the parser, but will be removed when we move to the
@@ -217,7 +217,7 @@ parse f = let mode = ParseMode { parseFilename = f }
 
 {-| extract a filename's extension -}
 fileExt x = let ix = elemIndices '.' x
-            in if (length ix == 0) then "" 
+            in if (length ix == 0) then ""
                else Prelude.drop (Prelude.last ix) x
 
 

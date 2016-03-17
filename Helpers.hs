@@ -19,6 +19,13 @@ module Helpers where
 
 import Data.List (elemIndices)
 import System.Directory
+import Language.Fortran
+
+lineCol :: SrcLoc -> (Int, Int)
+lineCol s = (srcLine s, srcColumn s)
+
+spanLineCol :: SrcSpan -> ((Int, Int), (Int, Int))
+spanLineCol (l, u) = (lineCol l, lineCol u)
 
 type Filename = String
 type Directory = String
@@ -34,7 +41,7 @@ getDir file = take (last $ elemIndices '/' file) file
 
 
 {-| Creates a directory (from a filename string) if it doesn't exist -}
-checkDir f = case (elemIndices '/' f) of 
+checkDir f = case (elemIndices '/' f) of
                [] -> return ()
                ix -> let d = take (last ix) f
                      in createDirectoryIfMissing True d
@@ -63,7 +70,7 @@ lookups x ((a, b):xs) = if (x == a) then b : lookups x xs
 
 lookups' :: Eq a => a -> [((a, b), c)] -> [(b, c)]
 lookups' _ [] = []
-lookups' x (((a, b), c):xs) = if (x == a) then (b, c) : lookups' x xs 
+lookups' x (((a, b), c):xs) = if (x == a) then (b, c) : lookups' x xs
                                           else lookups' x xs
 
 {-| Computes all pairwise combinations -}

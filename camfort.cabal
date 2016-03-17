@@ -41,10 +41,10 @@ executable camfort
                         Extensions.UnitSyntaxConversion
                         Extensions.Units
                         Extensions.UnitsEnvironment
-                        Extensions.UnitParser
+                        Extensions.UnitsParser
                         Extensions.UnitsSolve
                         Extensions.UnitsSolveHMatrix
-                        Functionality			
+                        Functionality
                         Helpers
                         Input
                         Output
@@ -74,7 +74,9 @@ executable camfort
                         directory >= 1.2,
                         language-fortran >= 0.5,
                         transformers >= 0.4,
-                        vector >= 0.1
+                        vector >= 0.1,
+                        GenericPretty >= 1.2,
+                        forpar
 
 library
   hs-source-dirs:       .
@@ -89,6 +91,7 @@ library
                         Analysis.IntermediateReps
                         Analysis.Loops
                         Analysis.LVA
+                        Analysis.StencilsForpar
                         Analysis.Syntax
                         Analysis.Types
                         Transformation.CommonBlockElim
@@ -97,9 +100,10 @@ library
                         Transformation.DerivedTypeIntro
                         Transformation.EquivalenceElim
                         Transformation.Syntax
-                        Extensions.UnitParser
+                        Extensions.UnitsParser
                         Extensions.UnitSyntaxConversion
                         Extensions.Units
+                        Extensions.UnitsForpar
                         Extensions.UnitsEnvironment
                         Extensions.UnitsSolve
                         Extensions.UnitsSolveHMatrix
@@ -109,6 +113,7 @@ library
                         Input
                         Output
                         Traverse
+  other-modules:
 
   build-depends:        base < 5,
                         containers >= 0.5.0.0,
@@ -121,11 +126,13 @@ library
                         syz >= 0.2,
                         syb >= 0.4,
                         matrix >=0.2.2,
-                        hmatrix >= 0.15,
+                        hmatrix >= 0.17.0.1,
                         mtl >= 2.1,
                         text >= 0.11.2.3,
                         array >= 0.4,
                         directory >= 1.2,
                         language-fortran >= 0.5,
                         transformers >= 0.4,
-                        vector >= 0.1
+                        vector >= 0.1,
+                        GenericPretty >= 1.2,
+                        forpar

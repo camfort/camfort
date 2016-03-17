@@ -31,12 +31,12 @@ import GHC.Exts (sortWith)
 
 import qualified Language.Fortran as LF
 
-import Extensions.UnitParser
+import Extensions.UnitsParser
 
 import Debug.Trace
 
 convertSyntax :: String -> String -> LF.Program () -> LF.Program ()
-convertSyntax fn src ast = 
+convertSyntax fn src ast =
   let (attrs, decls) = convert . cluster fn $ src
   in addAliasDecls decls (addUnitAttrs attrs ast)
 
@@ -48,7 +48,7 @@ convertSyntaxBack src ast = unlines (go info processedSource)
     averageSpace = round $ (fromIntegral $ foldr ((+) . length . takeWhile isSpace) 0 processedSource) / (fromIntegral $ length processedSource)
     go [] zs = zs
     go  inf@((var,uom):xs) (z:zs)
-      | isInfixOf var z = ((replicate averageSpace ' ') 
+      | isInfixOf var z = ((replicate averageSpace ' ')
                            ++ show' (UnitAssignment (Just var) uom)) : (go xs (z:zs))
       | otherwise = z : go inf zs
     go qs _ = error "Not all unit annotations are correctly declared."
@@ -58,22 +58,22 @@ convertSyntaxBack src ast = unlines (go info processedSource)
 
 processSource :: String -> [ String ]
 processSource src =
-    let ls = lines . map toLower $ src 
+    let ls = lines . map toLower $ src
     in map snd . filter p . zip (map parse $ ls) $ ls
   where
-    parse s = 
+    parse s =
       case dropWhile isSpace s of
         '!':xs -> unitParser xs
         _ -> Nothing
     p (Just UnitAssignment{}, _) = False
     p _ = True
 
-gatherUnitInformation :: LF.Program () -> [ (String, UnitOfMeasure) ] 
-gatherUnitInformation ast = 
+gatherUnitInformation :: LF.Program () -> [ (String, UnitOfMeasure) ]
+gatherUnitInformation ast =
     let decls = [ d | d@(LF.Decl () _ _ _) <- universeBi ast ]
     in foldr update' [ ] decls
   where
-    update' decl mapping = 
+    update' decl mapping =
       let names = [ name | LF.VarName () name <- universeBi decl ]
           units = [ fromOldUnits u | LF.MeasureUnit () u <- universeBi decl ]
       in foldr (:) mapping [ (map toLower name, unit) | name <- names, unit <- units ]
@@ -88,13 +88,13 @@ type SrcSpan = (LF.SrcLoc, LF.SrcLoc)
 type ElaborateAttr = (LF.Attr (), Maybe String)
 
 containsSpan :: (LF.Span a, LF.Span b) => a -> b -> Bool
-containsSpan a b 
+containsSpan a b
  | (LF.SrcLoc _ l1 _, LF.SrcLoc _ l2 _)  <- LF.srcSpan a
  , (LF.SrcLoc _ l1' _, LF.SrcLoc _ l2' _) <- LF.srcSpan b
  = l1 <= l1' && l2' <= l2
 
 addUnitAttrs :: [ ([ ElaborateAttr ], TargetIndex) ]
-             -> LF.Program () 
+             -> LF.Program ()
              -> LF.Program ()
 addUnitAttrs attrStrIs ast = foldr addUnitAttr ast attrStrIs
   where
@@ -109,19 +109,19 @@ addUnitAttrs attrStrIs ast = foldr addUnitAttr ast attrStrIs
     breakUp ti attrStrs (b :: LF.Block ()) = descendBi (breakUp' ti attrStrs) b
     -- If there is a single declaration, then we have Decl inside Block
     breakUp' ti attrStrs d@(LF.Decl () s ls t)
-      | getLine s == ti = 
+      | getLine s == ti =
         let newDecls = genNewDecls attrStrs d
         in append newDecls (LF.NullDecl () s)
       | otherwise = d
     -- If there are multiple declarations we have DSeq inside Block
     breakUp' ti attrStrs d@(LF.DSeq () decl@(LF.Decl () s ls t) drest)
-      | getLine s == ti = 
+      | getLine s == ti =
         let newDecls = genNewDecls attrStrs decl
         in append newDecls drest
       | (LF.DSeq () decl drest) <- d = LF.DSeq () decl (breakUp' ti attrStrs drest)
     breakUp' _ _ x = x
     genNewDecls :: [ (LF.Attr (), Maybe String) ] -> LF.Decl () ->  [ LF.Decl () ]
-    genNewDecls attrStrs (LF.Decl () s ls t) = 
+    genNewDecls attrStrs (LF.Decl () s ls t) =
         let decls = map (\l -> LF.Decl () s [ l ] t) ls
             dNames = extractNames ls
             aNames = map (\s -> fromJust . snd $ s) attrStrs
@@ -131,7 +131,7 @@ addUnitAttrs attrStrIs ast = foldr addUnitAttr ast attrStrIs
                     newDecls = map (\(a,b) -> transformBi (trans (getLine s) b) a) pairs
                 in newDecls ++ rest
            else error $ "Annotated variables " ++ (intercalate ", " diff) ++ " do not appear in the following declaration."
-    pair intersection decls attrStrs = 
+    pair intersection decls attrStrs =
       let pickedDecls = filter (\d -> extractName d `elem` intersection) decls
           sDecls = sortWith extractName pickedDecls
           sAttrs = map fst $ sortWith (fromJust . snd) attrStrs
@@ -139,12 +139,12 @@ addUnitAttrs attrStrIs ast = foldr addUnitAttr ast attrStrIs
     append [ ] drest = drest
     append (d:ds) drest = LF.DSeq () d (append ds drest)
     trans ti attr d@(LF.Decl () s@((LF.SrcLoc _ l _),_) ls t)
-      | l == ti = 
+      | l == ti =
         LF.Decl () s ls $
           case t of
-            LF.BaseType () a as b c -> 
+            LF.BaseType () a as b c ->
               LF.BaseType () a (attr : as) b c
-            LF.ArrayT () z a as b c -> 
+            LF.ArrayT () z a as b c ->
               LF.ArrayT () z a (attr : as) b c
       | otherwise = d
     trans _ _ x = x
@@ -158,6 +158,7 @@ extractName' :: (LF.Expr (), b, c) -> String
 extractName' ((LF.Var _ _ [(LF.VarName _ name, _)]),_,_) = name
 instance Named [ (LF.Expr (), b, c) ] where
   extractNames = map extractName'
+  extractName = intercalate ", " . map extractName'
 
 instance Named (LF.Decl ()) where
   extractNames (LF.Decl _ _ ls _) = extractNames ls
@@ -166,22 +167,21 @@ instance Named (LF.Decl ()) where
 addAliasDecls :: [ LF.Decl () ] -> LF.Program () -> LF.Program ()
 addAliasDecls decls ast = foldr addAliasDecl ast decls
   where
-    addAliasDecl decl ast' = 
+    addAliasDecl decl ast' =
       let p = smallest [ p | (p :: LF.ProgUnit ()) <- universeBi ast', p `containsSpan` decl ]
       in transformBi (trans decl p) ast'
     trans decl p1 p2
       | p1 == p2 = insertDecl decl p2
       | otherwise = p2
-    trans _ _ p = p
-    smallest ps = 
-      let m = minimum $ map (getLen . LF.srcSpan) ps 
+    smallest ps =
+      let m = minimum $ map (getLen . LF.srcSpan) ps
       in case find (\a -> (getLen . LF.srcSpan) a == m) ps of
            Just a -> a
            Nothing -> error "Couldn't find ProgUnit"
     getLen (LF.SrcLoc _ l1 _, LF.SrcLoc _ l2 _) = l2 - l1
 
 insertDecl :: LF.Decl () -> LF.ProgUnit () -> LF.ProgUnit ()
-insertDecl decl (LF.Main () a b c block d) = 
+insertDecl decl (LF.Main () a b c block d) =
   LF.Main () a b c (insertDecl' decl block) d
 insertDecl decl (LF.Sub () a b c d block) =
   LF.Sub () a b c d (insertDecl' decl block)
@@ -193,7 +193,7 @@ insertDecl decl (LF.BlockData () a b c d decls) =
   LF.BlockData () a b c d (LF.DSeq () decl decls)
 
 insertDecl' :: LF.Decl () -> LF.Block () -> LF.Block ()
-insertDecl' decl (LF.Block () a b c decls d) = 
+insertDecl' decl (LF.Block () a b c decls d) =
   (LF.Block () a b c (LF.DSeq () decl decls) d)
 
 getLine :: SrcSpan -> Line
@@ -209,84 +209,84 @@ convert (attrs, decls) = (map l attrs, map r decls)
     l' us =
       case fromNewUnitStatements us of
         Left attr -> attr
-    r (us, s) = 
+    r (us, s) =
       case fromNewUnitStatements us of
         Right declF -> declF s
 
-cluster :: String 
-        -> String 
+cluster :: String
+        -> String
         -> ( [ ([ UnitStatement ], TargetIndex) ]
            , [ (UnitStatement, SrcSpan) ] )
 cluster f = filterCluster . cluster' . addIndex . parse f
 
-filterCluster (annotations, aliases) = 
+filterCluster (annotations, aliases) =
   (filter (not . null . fst) annotations, aliases)
 
-cluster' :: [ (Maybe UnitStatement, SrcSpan) ] 
-         -> ( [ ([ UnitStatement ], TargetIndex) ], 
+cluster' :: [ (Maybe UnitStatement, SrcSpan) ]
+         -> ( [ ([ UnitStatement ], TargetIndex) ],
               [ (UnitStatement, SrcSpan) ])
 cluster' [] = ([], [])
-cluster' ((Nothing,s):xs) = 
-  let (fs,sn) = cluster' xs 
+cluster' ((Nothing,s):xs) =
+  let (fs,sn) = cluster' xs
   in (([],getLine s):fs, sn)
-cluster' ((Just x@UnitAssignment{}, s):xs) = 
+cluster' ((Just x@UnitAssignment{}, s):xs) =
   case cluster' xs of
     ([], as) -> ([ ([ x ], (getLine s) + 1) ], as)
     ((h:t), as) -> ((x:fst h, snd h):t, as)
-cluster' ((Just x@UnitAlias{}, s):xs) = 
+cluster' ((Just x@UnitAlias{}, s):xs) =
   case cluster' xs of
     (as, []) -> (([],getLine s):as, [ (x,s) ])
     (as, xs) -> (([],getLine s):as, (x,s):xs)
 
-addIndex :: [ (Maybe UnitStatement, Line -> SrcSpan) ] 
+addIndex :: [ (Maybe UnitStatement, Line -> SrcSpan) ]
          -> [ (Maybe UnitStatement, SrcSpan) ]
 addIndex xs = map f (zip xs [1..(length xs)])
   where
     f ((us,toSrcLoc),i) = (us, toSrcLoc i)
 
-parse :: String 
-      -> String 
+parse :: String
+      -> String
       -> [ (Maybe UnitStatement, Line -> SrcSpan) ]
 parse fn src = map (t 0) $ lines src
   where
     t col line
       | isPrefixOf " " line = t (col + 1) (tail line)
-      | isPrefixOf "!" line = 
+      | isPrefixOf "!" line =
         (unitParser $ tail line, genSrcLoc col (length line))
       | otherwise = (Nothing, genSrcLoc 0 0)
     genSrcLoc c len l = (LF.SrcLoc fn l c, LF.SrcLoc fn c (c + len))
 
 -- Convert new units of measure to old units of measure
-fromNewUnitStatements :: UnitStatement 
+fromNewUnitStatements :: UnitStatement
                       -> (Either ElaborateAttr)
-                                 (SrcSpan -> LF.Decl ()) 
+                                 (SrcSpan -> LF.Decl ())
 fromNewUnitStatements (UnitAssignment ms uom) =
   Left (LF.MeasureUnit () (fromNewUnits uom), ms)
 fromNewUnitStatements (UnitAlias s uom) =
   Right $ flip (LF.MeasureUnitDef ()) [ (s, fromNewUnits uom) ]
 
-fromNewUnits :: UnitOfMeasure -> LF.MeasureUnitSpec () 
+fromNewUnits :: UnitOfMeasure -> LF.MeasureUnitSpec ()
 fromNewUnits Unitless = LF.UnitNone ()
 fromNewUnits uom@(UnitBasic s) = LF.UnitProduct () (fromNewUnits' uom)
-fromNewUnits (UnitProduct uom1 uom2) = 
+fromNewUnits (UnitProduct uom1 uom2) =
   LF.UnitProduct () $ fromNewUnits' uom1 ++ fromNewUnits' uom2
-fromNewUnits (UnitQuotient uom1 uom2) = 
+fromNewUnits (UnitQuotient uom1 uom2) =
   LF.UnitQuotient () (fromNewUnits' uom1) (fromNewUnits' uom2)
 
-fromNewUnits' :: UnitOfMeasure -> [ (LF.MeasureUnit, LF.Fraction ()) ] 
-fromNewUnits' (UnitProduct uom1 uom2) = 
+fromNewUnits' :: UnitOfMeasure -> [ (LF.MeasureUnit, LF.Fraction ()) ]
+fromNewUnits' (UnitProduct uom1 uom2) =
   fromNewUnits' uom1 ++ fromNewUnits' uom2
 fromNewUnits' (UnitBasic s) = [(s, LF.NullFraction ())]
 fromNewUnits' (UnitExponentiation uom power) =
   case uom of
-    UnitBasic s -> 
+    UnitBasic s ->
       case power of
         UnitPowerInteger i -> [ (s, LF.IntegerConst () $ show i) ]
         UnitPowerRational i1 i2 -> [ (s, LF.FractionConst () (show i1) (show i2)) ]
     _ -> error "Only base units can be exponentiated."
-fromNewUnits' (UnitQuotient _ _) = 
+fromNewUnits' (UnitQuotient _ _) =
   error "Unit should have only one division."
-fromNewUnits' Unitless = 
+fromNewUnits' Unitless =
   error "Unit should not have unitless component inside."
 
 -- Convert old units of measure to new units of measure
@@ -315,4 +315,4 @@ fromOldUnits'' (s, f) = UnitExponentiation (UnitBasic s) $ fromOldUnits''' f
 
 fromOldUnits''' :: LF.Fraction () -> UnitPower
 fromOldUnits''' (LF.FractionConst () i1 i2) = UnitPowerRational (read i1) (read i2)
-fromOldUnits''' (LF.IntegerConst () i) = UnitPowerInteger (read i) 
+fromOldUnits''' (LF.IntegerConst () i) = UnitPowerInteger (read i)

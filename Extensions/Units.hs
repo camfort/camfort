@@ -28,7 +28,7 @@ TODO:
 -}
 
 
-{-# LANGUAGE ScopedTypeVariables, ImplicitParams, DoAndIfThenElse #-}
+{-# LANGUAGE ScopedTypeVariables, ImplicitParams, DoAndIfThenElse, PatternGuards #-}
 
 module Extensions.Units where
 
@@ -49,7 +49,7 @@ import Data.Generics.Uniplate.Operations
 
 import Helpers
 import Output
-import Analysis.Annotations
+import Analysis.Annotations hiding (Unitless)
 import Analysis.Syntax
 import Analysis.Types
 import Extensions.UnitsEnvironment -- Provides the types and data accessors used in this module
@@ -190,7 +190,7 @@ inferBlockUnits x proc = do resetTemps
 
 {-| reduceRows is a core part of the polymorphic unit checking for procedures.
 
-               It is essentially an "optimiation" of the Gaussian matrix (not in the sense of performance),
+               It is essentially an "optimisation" of the Gaussian matrix (not in the sense of performance),
                that elimiantes rows in the system such that there are as few variables as possible. Within
                a function, assuming everything is consistent, then this should generate a linear constraint
                between the parameters and the return as a single row in the matrix. This is then used by the
