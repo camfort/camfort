@@ -165,8 +165,8 @@ stencilsFlow inSrc excludes _ _ = do
   doAnalysisSummaryForpar showFlow inSrc excludes
   where
     showFlow pf = unlines . flip map puFlows $ \ (pu, flmap) ->
-                    let flows = M.toList (transformBi fixName flmap) in
-                      show (A.getName pu) ++ "\n" ++
+                    let flows = M.toList (descendBi fixName flmap) in
+                      show (descendBi fixName (A.getName pu)) ++ "\n" ++
                       unlines (map (("\t"++) . show) flows)
       where
         (pf', nm) = renameAndStrip . analyseRenames . initAnalysis $ pf
