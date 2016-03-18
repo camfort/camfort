@@ -66,12 +66,8 @@ loopAnalyse p = map ((descendBi arrayIndices) . ix . lvaOnUnit . (transformBi re
 analyse' :: Program Annotation -> Program Annotation
 analyse' p = map ((descendBi arrayIndices) . ix . lvaOnUnit . (transformBi reassociate))  p
 
-
 collect :: (Eq a, Ord k) => [(k, a)] -> Map.Map k [a]
-collect = collect' Map.empty 
-          where collect' as []                         = as
-                collect' as ((v, n):es) | Map.member v as = collect' (Map.insert v (nub $ n : ((Map.!) as v)) as) es
-                                        | otherwise   = collect' (Map.insert v [n] as) es
+collect = Map.fromListWith union . map (fmap (:[]))
 
 arrayIndices :: Block Annotation -> Block Annotation
 arrayIndices x = 
@@ -81,12 +77,12 @@ arrayIndices x =
         arrIxsF y = let readIxs = [(v, mfmap (const ()) e) | 
                                      (Var _ _ [(VarName _ v, e)]) <- rhsExpr y,
                                      length e > 0,
-                                     isArrayTypeP' tenv v]
+                                     isArrayType tenv v]
 
                         writeIxs = [(v, mfmap (const ()) e) |
                                      (Var _ _ [(VarName _ v, e)]) <- lhsExpr y,
                                      length e > 0,
-                                     isArrayTypeP' tenv v]
+                                     isArrayType tenv v]
 
                     in (tag y) { arrsRead = (collect readIxs), arrsWrite = (collect writeIxs) } 
     in extendBi arrIxsF x               
@@ -95,3 +91,6 @@ ix :: ProgUnit Annotation -> ProgUnit Annotation
 ix = let ixF :: Fortran Annotation -> Annotation
          ixF f = (tag f) { indices = (nub [v | (For _ _ (VarName _ v) _ _ _ _) <- ((universeBi f)::[Fortran Annotation])])}
      in extendBi ixF
+
+loopVariables :: ProgUnit Annotation -> [String]
+loopVariables f = (nub [v | (For _ _ (VarName _ v) _ _ _ _) <- ((universeBi f)::[Fortran Annotation])])

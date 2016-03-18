@@ -273,7 +273,6 @@ mkUseStatements s (((name, _), r):trs) =
                         let a = unitAnnotation { refactored = Just s, newNode = True } -- previously-- Just (toCol0 s)
                         in Uses a (Use (commonName name) (renamerToUse r)) (mkUseStatements s trs) a
 
-
 mkRenamerCoercerTLC :: TLCommon A :? source -> TLCommon A :? target -> RenamerCoercer
 mkRenamerCoercerTLC x@(fname, (pname, common1)) (_, (_, common2)) = mkRenamerCoercer common1 common2
 

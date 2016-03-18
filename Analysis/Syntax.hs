@@ -290,7 +290,7 @@ lhsExpr :: Fortran Annotation -> [Expr Annotation]
 lhsExpr (Assg _ _ e1 e2)        = ((universeBi e1)::[Expr Annotation])
 lhsExpr (For x sp v e1 e2 e3 fs) = [Var x sp [(v, [])]]
 lhsExpr (PointerAssg _ _ e1 e2) = ((universeBi e1)::[Expr Annotation])
-lhsExpr t                        = [] --  concatMap lhsExpr ((children t)::[Fortran Annotation])
+lhsExpr t                        = concatMap lhsExpr ((children t)::[Fortran Annotation])
 
 
 -- * Various simple analyses
@@ -311,13 +311,19 @@ numberStmts x = let
                   numberF :: Fortran Annotation -> State Int (Fortran Annotation)
                   numberF = descendBiM number'
 
+                  numberD :: Decl Annotation -> State Int (Decl Annotation)
+                  numberD = descendBiM number'
+
                   number' :: Annotation -> State Int Annotation
                   -- actually numbers more than just statements, but this doesn't matter 
                   number' x = do n <- get 
                                  put (n + 1)
                                  return $ x { number = n }
-         
-                in fst $ runState (descendBiM numberF x) 0
+
+                  (x', n)  = runState (descendBiM numberD x) 0
+                  (x'', _) = runState (descendBiM numberF x') n
+
+                in x''
 
 {-| All variables from a Fortran syntax tree -}
 variables f = nub $ map (map toLower) $ [v | (AssgExpr _ _ v _) <- (universeBi f)::[Expr Annotation]]

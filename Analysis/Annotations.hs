@@ -43,6 +43,16 @@ data LoopType = Functor ReduceType
                | Gather ReduceType ReduceType AccessPatternType 
                | Scatter ReduceType AccessPatternType
 
+data UnitInfo
+  = Parametric (String, Int)
+  | ParametricUse (String, Int, Int) -- identify particular instantiation of parameters
+  | UnitName String
+  | Undetermined String
+  | Unitless
+  | UnitMul UnitInfo UnitInfo
+  | UnitPow UnitInfo Double
+  deriving (Show, Eq, Ord, Data, Typeable)
+
 {- classify :: Fortran Annotation -> Fortran Annotation
  classify x = -}
 
@@ -56,7 +66,8 @@ data Annotation = A { indices        :: [Variable],
                       number         :: Int,
                       refactored     :: Maybe SrcLoc, 
                       successorStmts :: [Int], 
-                      newNode        :: Bool      -- used to indicate when a node is newly introduced
+                      newNode        :: Bool,   -- used to indicate when a node is newly introduced
+                      unitInfo       :: Maybe UnitInfo
                     }
                    deriving (Eq, Show, Typeable, Data)
 
@@ -70,5 +81,5 @@ pRefactored x = case (refactored x) of
                   Nothing -> False
                   Just _  -> True
 
-unitAnnotation = A [] ([], []) empty empty 0 0 Nothing [] False 
+unitAnnotation = A [] ([], []) empty empty 0 0 Nothing [] False Nothing
 
