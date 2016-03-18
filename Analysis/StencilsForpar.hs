@@ -414,6 +414,9 @@ flowAnalysisArraysStep pu = transformBiM perBlock pu
     --
     -- Further question: what should be the correct flows-map output
     -- of "a(i) = a(b(i))", where a and b are arrays?
+    --
+    -- Don't forget to handle cases like a(i) = f(g(b(i))) either,
+    -- where f and g are functions.
 
     perBlock :: F.Block A -> Flows (F.Block A)
     perBlock = transformBiM perStmt
