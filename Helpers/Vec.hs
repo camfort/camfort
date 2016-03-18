@@ -14,6 +14,10 @@ data Vec (n :: Nat) a where
      Nil :: Vec Z a
      Cons :: a -> Vec n a -> Vec (S n) a
 
+lengthV :: Vec n a -> Int
+lengthV Nil = 0
+lengthV (Cons x xs) = 1 + lengthV xs
+
 -- Lists existentially quanitify over a vector's size : Exists n . Vec n a 
 data List a where
      List :: Vec n a -> List a

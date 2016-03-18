@@ -12,6 +12,8 @@ import Control.Monad.Writer hiding (Product)
 import Analysis.Loops (collect)
 import Analysis.Annotations
 import Extensions.UnitsForpar (parameterise)
+import Helpers.Vec
+import Helpers hiding (lineCol, spanLineCol) -- These two are redefined here for ForPar ASTs
 
 import qualified Forpar.AST as F
 import qualified Forpar.Analysis as FA
@@ -192,8 +194,7 @@ instance Show Spec where
 
 -- Convert list of indexing expressions to list of specs
 ixCollectionToSpec :: [Variable] -> [[F.Expression A]] -> [Spec]
-ixCollectionToSpec ivs es = specIsToSpecs x
-  where x = normalise . ixExprAToSpecIs ivs $ es
+ixCollectionToSpec ivs es = specIsToSpecs . normalise . ixExprAToSpecIs ivs $ es
 
 -- Simplifies lists specifications based on the 'specPlus' operation:
 simplify :: [Spec] -> [Spec]
@@ -268,6 +269,10 @@ data Normalised a where
   NSpecIGroups :: [[SpecI]] -> Normalised [[SpecI]]
 
 deriving instance Show (Normalised a)
+
+
+
+
 
 -- Normalise a list of spans
 normalise :: [SpecI] -> Normalised [[SpecI]]
@@ -501,14 +506,6 @@ lineCol p  = (fromIntegral $ FU.posLine p, fromIntegral $ FU.posColumn p)
 spanLineCol :: FU.SrcSpan -> ((Int, Int), (Int, Int))
 spanLineCol (FU.SrcSpan l u) = (lineCol l, lineCol u)
 
--- Helper function, reduces a list two elements at a time with a partial operation
-foldPair :: (a -> a -> Maybe a) -> [a] -> [a]
-foldPair f [] = []
-foldPair f [a] = [a]
-foldPair f (a:(b:xs)) = case f a b of
-                          Nothing -> a : (foldPair f (b : xs))
-                          Just c  -> foldPair f (c : xs)
-
 groupKeyBy :: Eq b => [(a, b)] -> [([a], b)]
 groupKeyBy = groupKeyBy' . map (\ (k, v) -> ([k], v))
 
@@ -528,3 +525,10 @@ isArrayType tenv name v = fromMaybe False $ do
   idty <- M.lookup v tmap
   cty  <- FAT.idCType idty
   return $ cty == FAT.CTArray
+
+coalesceRegions :: [(Int, Int)] -> [(Int, Int)]
+coalesceRegions [] = []
+coalesceRegions [x] = [x]
+coalesceRegions ((x, y) : ((z, a) : zs)) | y == z = (x, a) : (coalesceRegions zs)
+
+--coalesce2D :: [[(Int, Int)]] -> [[(Int, Int)]]

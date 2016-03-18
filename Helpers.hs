@@ -32,7 +32,6 @@ type Directory = String
 type SourceText = String
 type FileOrDir = String
 
-
 -- Filename and directory related helpers
 
 -- gets the directory part of a filename
@@ -98,3 +97,11 @@ cmpSnd c (x1, y1) (x2, y2) = c y1 y2
 
 {-| used for type-level annotations giving documentation -}
 type (:?) a b = a
+
+-- Helper function, reduces a list two elements at a time with a partial operation
+foldPair :: (a -> a -> Maybe a) -> [a] -> [a]
+foldPair f [] = []
+foldPair f [a] = [a]
+foldPair f (a:(b:xs)) = case f a b of
+                          Nothing -> a : (foldPair f (b : xs))
+                          Just c  -> foldPair f (c : xs)
