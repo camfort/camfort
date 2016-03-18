@@ -84,12 +84,12 @@ testEngine = [
                 -- Sort the expected value for the sake of easy equality
                 (sort [(Cons (-1) (Cons 0 Nil), Cons 1 (Cons 0 Nil)),
                        (Cons 0 (Cons (-1) Nil), Cons 0 (Cons 1 Nil))])
-                (minimalise . allRegionPermutations $ fivepoint)),
+                (inferMinimalVectorRegions $ fivepoint)),
         test (assertEqual "seven point stencil 3D"
                 (sort  [(Cons (-1) (Cons 0 (Cons 0 Nil)), Cons 1 (Cons 0 (Cons 0 Nil))),
                         (Cons 0 (Cons (-1) (Cons 0 Nil)), Cons 0 (Cons 1 (Cons 0 Nil))),
                         (Cons 0 (Cons 0 (Cons (-1) Nil)), Cons 0 (Cons 0 (Cons 1 Nil)))])
-                (minimalise . allRegionPermutations $ sevenpoint))
+                (inferMinimalVectorRegions $ sevenpoint))
         ]
 
 -- Indices for the 2D five point stencil (deliberately in an odd order)

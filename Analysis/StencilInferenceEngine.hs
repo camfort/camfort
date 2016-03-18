@@ -16,41 +16,9 @@ type Interval a = (a, Maybe a, a)
 mkExact x = (x, Just x, x)
 mkInexact x y = (x, Nothing, y)
 
+{- Spans are a pair of a lower and upper bound -}
 type Span a = (a, a)
-
-upDimN :: Span (Vec n Int) -> Int -> Span (Vec (S n) Int)
-upDimN (a, b) y = (Cons y a, Cons y b)
-
-{-
-norm :: [Vec n Int] -> [Span (Vec n) Int]
-norm xs = sort xs
-  where norm' []       = []
-        norm' (x : xs) = (x, x) `comp
--}
-
---rowToSpans :: [Vec n Int] -> Vec n [Span (Vec n Int)]
---rowToSpans xs = sort xs 
-
-
-
-
-{- composeRegions
-
-   From a span of (n+1)-dimensional spans,
-    if the inner span describe two regions of the same size, shape, and position in (n)-dimension
-    and in the (n+1)-dimension these are two apart, then coalesce into a single (n+1) span.
-
--}
-
-composeRegions :: Span (Vec (S n) Int) -> Span (Vec (S n) Int) -> Interval (Span (Vec (S n) Int))
-composeRegions x y = composeRegions' (normaliseSpan x) (normaliseSpan y)
-  where composeRegions' :: Span (Vec (S n) Int) -> Span (Vec (S n) Int) -> Interval (Span (Vec (S n) Int))
-        composeRegions' x@(Cons l1 ls1, Cons u1 us1) y@(Cons l2 ls2, Cons u2 us2)
-            | (ls1 == ls2) && (us1 == us2) && (l2 == l1 + 1) && (u1 == l1) && (u2 == l2)
-              = mkExact (Cons l1 ls1, Cons u2 us2)
-   
-            | otherwise
-              = mkInexact undefined (spanBoundingBox x y)
+mkTrivialSpan a = (a, a)
 
 {- Normalise a span into the form (lower, upper) based on the first index -}
 normaliseSpan :: Span (Vec n Int) -> Span (Vec n Int)
@@ -72,69 +40,8 @@ spanBoundingBox a b = boundingBox' (normaliseSpan a) (normaliseSpan b)
            in (Cons (min l1 l2) ls', Cons (max u1 u2) us')
 
 
-
-{-
-
-  | 1 2 3 4 5 6
-----------------
-1 | 0 0 1 1 1 0 
-2 | 0 0 1 1 1 0 
-
--> 
-
-3-5 in y = 1
-(3,1) - (5,1)
-
-3-5 in 7 = 2
-(3,2) - (5,2)
-
-vs say
-
-(1, 3)  (2, 3) 
-(1, 5)  (2, 5)
-
--}
-
-{-
-createSpan2D :: (Int, Int) -> (Int, Int) -> ((Int, Int), (Int, Int))
-createSpan2D (x, y) (a, b) =
--}
-
-
-{-
-
-0 1 0 
-1 1 1
-0 1 0
-in two dimensions
-
-i->j
-[((0, -1), (0, -1)),    ((-1, 0), (1, 0)),    ((0, 1), (0, 1))]
-
-j->i
-[((-1, 0), (-1, 0)),    ((0, -1), (0, 1)),    ((1, 0), (1, 0))]
-
-how can we find them equivalent? and even compose them into:
-
-[((0, -1), (0, 1)),   ((-1, 0), (1, 0))]
-
-0 0 0   0 1 0    0 0 0 
-0 1 0   1 1 1    0 1 0
-0 0 0   0 1 0    0 0 0
-in three dimensions
-i -> j -> k
-[((0, 0, -1), (0, 0, -1)),   ((0, -1, 0), (0, -1, 0)),    ((-1, 0, 0), (1, 0, 0)),    ((0, 1, 0), (0, 1, 0))
- ((0, 0,  1), (0, 0,  1))]
-
-k -> j -> i
-[((-1, 0, 0), (-1, 0, 0)),   ((0, -1, 0), (0, -1, 0)),    ((0, 0, -1), (0, 0, 1)),    ((0, 1, 0), (0, 1, 0)),  
-  ((1, 0, 0), (1, 0, 0))]
-
-a third way....
-output
-[((0, 0, -1), (0, 0, 1)), ((0, -1, 0), (0, 1, 0)), ((-1, 0, 0), (1, 0, 0))]
--}
-
+{-| Given two spans, if they are consecutive (i.e., (lower1, upper1) (lower2, upper2) where lower2 = upper1 + 1)
+    then compose them together returning Just of the new span. Otherwise Nothing -}
 composeConsecutiveSpans :: Span (Vec n Int) -> Span (Vec n Int) -> Maybe (Span (Vec n Int))
 composeConsecutiveSpans (Nil, Nil) (Nil, Nil) = Just (Nil, Nil)
 composeConsecutiveSpans x@(Cons l1 ls1, Cons u1 us1) y@(Cons l2 ls2, Cons u2 us2)
@@ -147,9 +54,14 @@ composeConsecutiveSpans x@(Cons l1 ls1, Cons u1 us1) y@(Cons l2 ls2, Cons u2 us2
    Parameters: d (dimensionality
      for n in Fin(d) -}
 
-trivialSpan a = (a, a)
-isTrivialSpan (x, y) = x == y
+{-| |inferMinimalVectorRegions| a key part of the algorithm, from a list of n-dimensional relative indices 
+    it infers a list of (possibly overlapping) 1-dimensional spans (vectors) within the n-dimensional space.
+    Built from |minimalise| and |allRegionPermutations| -}
+inferMinimalVectorRegions :: (Permutable n) => [Vec n Int] -> [Span (Vec n Int)]
+inferMinimalVectorRegions = minimaliseRegions . allRegionPermutations
 
+{-| Map from a lists of n-dimensional relative indices into all possible contiguous 1-dimensional vectors
+    within that n-dimensional space -}    
 allRegionPermutations :: (Permutable n) => [Vec n Int] -> [[Span (Vec n Int)]]
 allRegionPermutations ixs =
     unpermuteIndices . coalesceRegions . groupByPerm . permuteIndices $ ixs
@@ -160,7 +72,7 @@ allRegionPermutations ixs =
     groupByPerm      = transpose
     
     mkRegions :: [Vec n Int] -> [Span (Vec n Int)]
-    mkRegions = foldPair composeConsecutiveSpans . map trivialSpan . sort 
+    mkRegions = foldPair composeConsecutiveSpans . map mkTrivialSpan . sort 
 
     coalesceRegions :: [[(Vec n Int, Vec n Int -> Vec n Int)]]
                     -> [([Span (Vec n Int)], Vec n Int -> Vec n Int)]
@@ -171,17 +83,20 @@ allRegionPermutations ixs =
                      -> [[Span (Vec n Int)]]
     unpermuteIndices = map (\(rs, unPerm) -> map (\(l, u) -> (unPerm l, unPerm u)) rs)
 
-minimalise :: [[Span (Vec n Int)]] -> [Span (Vec n Int)] 
-minimalise [] = []
-minimalise xss = nub $ go xss'
+{-| Collapses the regions into a small set by looking for potential overlaps and eliminating those
+    that overlap -}
+minimaliseRegions :: [[Span (Vec n Int)]] -> [Span (Vec n Int)] 
+minimaliseRegions [] = []
+minimaliseRegions xss = nub $ go xss'
   where xss' = concat xss
         go []     = []
         go (x:xs) = (filter' x (\y -> overlaps x y && (x /= y)) xss') ++ (go xs)
-
-        filter' y f xs = case (filter f xs) of
-                              [] -> [y]
-                              ys -> ys
-
+        -- If nothing is caught by the filter, i.e. no overlaps then return the original regions r
+        filter' r f xs = case (filter f xs) of
+                           [] -> [r]
+                           ys -> ys
+                           
+{-| Binary predicate on whether the first region overlaps the second -}
 overlaps :: Span (Vec n Int) -> Span (Vec n Int) -> Bool
 overlaps (Nil, Nil) (Nil, Nil) 
   = True
@@ -191,8 +106,8 @@ overlaps (Cons l1 ls1, Cons u1 us1) (Cons l2 ls2, Cons u2 us2)
     else False
 
       
-       
-{-| Defines the (total) class of vector sizes which are pemutable -}
+{-| Defines the (total) class of vector sizes which are permutable, along with the
+     permutation function which pairs permutations with the 'unpermute' operation -}
 class Permutable (n :: Nat) where
   selectionsV :: Vec n a -> [Selection n a]
   permutationsV :: Vec n a -> [(Vec n a, Vec n a -> Vec n a)]
