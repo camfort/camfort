@@ -109,7 +109,10 @@ overlaps (Cons l1 ls1, Cons u1 us1) (Cons l2 ls2, Cons u2 us2)
 {-| Defines the (total) class of vector sizes which are permutable, along with the
      permutation function which pairs permutations with the 'unpermute' operation -}
 class Permutable (n :: Nat) where
+  -- From a Vector of length n to a list of 'selections'
+  --   (triples of a selected element, the rest of the vector, a function to 'unselect')
   selectionsV :: Vec n a -> [Selection n a]
+  -- From a Vector of length n to a list of its permutations paired with the 'unpermute' function
   permutationsV :: Vec n a -> [(Vec n a, Vec n a -> Vec n a)]
 
 -- 'Split' is a size-indexed family which gives the type of selections
@@ -162,7 +165,6 @@ prop_perms_invertable :: (Permutable n) => Natural n -> Vec n Int -> Bool
 prop_perms_invertable w xs
     = take (fact (lengthV xs)) (repeat xs)
     == map (\(xs, f) -> f xs) (permutationsV xs)
-
-fact 0 = 1
-fact n = n * (fact $ n - 1)
+    where fact 0 = 1
+          fact n = n * (fact $ n - 1)
 
