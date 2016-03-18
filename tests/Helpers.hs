@@ -11,3 +11,4 @@ instance (Arbitrary (Vec n a), Arbitrary a) => Arbitrary (Vec (S n) a) where
                      xs <- arbitrary :: Gen (Vec n a)
                      return $ Cons x xs
                      
+                     
