@@ -247,6 +247,7 @@ prop_perms_invertable :: (Permutable n) => Natural n -> Vec n Int -> Bool
 prop_perms_invertable w xs
     = take (fact (lengthV xs)) (repeat xs)
     == map (\(xs, f) -> f xs) (permutationsV xs)
-  where fact 0 = 1
-        fact n = n * (fact $ n - 1)
+
+fact 0 = 1
+fact n = n * (fact $ n - 1)
 

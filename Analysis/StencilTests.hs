@@ -81,11 +81,27 @@ testEngine = [
                 (composeConsecutiveSpans (Cons 1 (Cons 0 Nil), Cons 2 (Cons 0 Nil)) 
                         (Cons 3 (Cons 1 Nil), Cons 3 (Cons 1 Nil)))),
         test (assertEqual "five point stencil 2D"
-                (sort [(Cons (-1) (Cons 0 Nil), Cons 1 (Cons 0 Nil)), (Cons 0 (Cons (-1) Nil), Cons 0 (Cons 1 Nil))])
-                (minimalise . allRegionPermutations $ fivepoint))
+                -- Sort the expected value for the sake of easy equality
+                (sort [(Cons (-1) (Cons 0 Nil), Cons 1 (Cons 0 Nil)),
+                       (Cons 0 (Cons (-1) Nil), Cons 0 (Cons 1 Nil))])
+                (minimalise . allRegionPermutations $ fivepoint)),
+        test (assertEqual "seven point stencil 3D"
+                (sort  [(Cons (-1) (Cons 0 (Cons 0 Nil)), Cons 1 (Cons 0 (Cons 0 Nil))),
+                        (Cons 0 (Cons (-1) (Cons 0 Nil)), Cons 0 (Cons 1 (Cons 0 Nil))),
+                        (Cons 0 (Cons 0 (Cons (-1) Nil)), Cons 0 (Cons 0 (Cons 1 Nil)))])
+                (minimalise . allRegionPermutations $ sevenpoint))
         ]
 
-fivepoint = [Cons (-1) (Cons 0 Nil), Cons 0 (Cons (-1) Nil), Cons 1 (Cons 0 Nil), Cons 0 (Cons 1 Nil), Cons 0 (Cons 0 Nil)]
+-- Indices for the 2D five point stencil (deliberately in an odd order)
+fivepoint = [Cons (-1) (Cons 0 Nil), Cons 0 (Cons (-1) Nil), Cons 1 (Cons 0 Nil),
+             Cons 0 (Cons 1 Nil), Cons 0 (Cons 0 Nil)]
+-- Indices for the 3D seven point stencil
+sevenpoint = [Cons (-1) (Cons 0 (Cons 0 Nil)), Cons 0 (Cons (-1) (Cons 0 Nil)),
+              Cons 0 (Cons 0 (Cons 1 Nil)), Cons 0 (Cons 1 (Cons 0 Nil)),
+              Cons 1 (Cons 0 (Cons 0 Nil)), Cons 0 (Cons 0 (Cons (-1) Nil)),
+              Cons 0 (Cons 0 (Cons 0 Nil))]
+
+
 
 
 
