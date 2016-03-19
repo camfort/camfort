@@ -18,6 +18,28 @@ lengthV :: Vec n a -> Int
 lengthV Nil = 0
 lengthV (Cons x xs) = 1 + lengthV xs
 
+vmap :: (a -> b) -> Vec n a -> Vec n b
+vmap f Nil         = Nil
+vmap f (Cons x xs) = Cons (f x) (vmap f xs)
+
+instance Functor (Vec n) where
+    fmap = vmap
+deriving instance Eq a => Eq (Vec n a)
+instance Ord a => Ord (Vec n a) where
+    (Cons x xs) <= (Cons y ys) | xs == ys = x <= y
+                               | otherwise = xs <= ys
+instance Show a => Show (Vec n a) where
+    show = showV
+
+showV :: Show a => Vec n a -> String
+showV xs = "<" ++ showV' xs ++ ">"
+  where
+    showV' :: Show a => Vec n a -> String
+    showV' Nil          = ""
+    showV' (Cons x Nil) = show x
+    showV' (Cons x xs)  = show x ++ "," ++ showV' xs
+
+
 -- Lists existentially quanitify over a vector's size : Exists n . Vec n a 
 data List a where
      List :: Vec n a -> List a
@@ -31,15 +53,5 @@ fromList :: [a] -> List a
 fromList []       = lnil
 fromList (x : xs) = lcons x (fromList xs)
 
-vmap :: (a -> b) -> Vec n a -> Vec n b
-vmap f Nil         = Nil
-vmap f (Cons x xs) = Cons (f x) (vmap f xs)
 
-instance Functor (Vec n) where
-    fmap = vmap
-deriving instance Eq a => Eq (Vec n a)
-deriving instance Show a => Show (Vec n a)
-instance Ord a => Ord (Vec n a) where
-       (Cons x xs) <= (Cons y ys) | xs == ys = x <= y
-                                  | otherwise = xs <= ys
 

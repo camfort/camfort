@@ -1,4 +1,4 @@
-{-# LANGUAGE DataKinds, GADTs, KindSignatures, TypeFamilies, FlexibleInstances, InstanceSigs, FlexibleContexts #-}
+{-# LANGUAGE DataKinds, GADTs, KindSignatures, TypeFamilies, FlexibleInstances, InstanceSigs, FlexibleContexts, NoMonomorphismRestriction #-}
 
 module Analysis.StencilInferenceEngine where
 
@@ -45,43 +45,54 @@ spanBoundingBox a b = boundingBox' (normaliseSpan a) (normaliseSpan b)
 composeConsecutiveSpans :: Span (Vec n Int) -> Span (Vec n Int) -> Maybe (Span (Vec n Int))
 composeConsecutiveSpans (Nil, Nil) (Nil, Nil) = Just (Nil, Nil)
 composeConsecutiveSpans x@(Cons l1 ls1, Cons u1 us1) y@(Cons l2 ls2, Cons u2 us2)
-    | (ls1 == ls2) && (us1 == us2) && (ls1 == us2) && (u1 + 1 == l2) 
+    | (ls1 == ls2) && (us1 == us2) && (u1 + 1 == l2)  -- && (ls1 == us2)  [means they have to be in the same 1D vector slice, but maybe we can avoid this]
       = Just (Cons l1 ls1, Cons u2 us2)
     | otherwise
       = Nothing
+
+-- ** Note the above is only in 1D - need to look at other dimensions too and not just by permuting
+-- [previously the technique worked by permutation but now I need to ask ....
+--
+-- 
 
 {- Inference algorithm:
    Parameters: d (dimensionality
      for n in Fin(d) -}
 
+
 {-| |inferMinimalVectorRegions| a key part of the algorithm, from a list of n-dimensional relative indices 
     it infers a list of (possibly overlapping) 1-dimensional spans (vectors) within the n-dimensional space.
     Built from |minimalise| and |allRegionPermutations| -}
 inferMinimalVectorRegions :: (Permutable n) => [Vec n Int] -> [Span (Vec n Int)]
-inferMinimalVectorRegions = minimaliseRegions . allRegionPermutations
+inferMinimalVectorRegions = fixCoalesce . map mkTrivialSpan
+  where fixCoalesce spans = let spans' = minimaliseRegions . allRegionPermutations $ spans
+                            in if spans' == spans then spans' else fixCoalesce spans'
 
-{-| Map from a lists of n-dimensional relative indices into all possible contiguous 1-dimensional vectors
-    within that n-dimensional space -}    
-allRegionPermutations :: (Permutable n) => [Vec n Int] -> [[Span (Vec n Int)]]
-allRegionPermutations ixs =
-    unpermuteIndices . coalesceRegions . groupByPerm . permuteIndices $ ixs
-  where
-    permuteIndices :: Permutable n => [Vec n Int] -> [[(Vec n Int, Vec n Int -> Vec n Int)]]
-    permuteIndices   = map permutationsV
+{-| Map from a lists of n-dimensional spans of relative indices into all possible
+    contiguous spans within that n-dimensional space (individual pass) -}    
+allRegionPermutations :: (Permutable n) => [Span (Vec n Int)] -> [[Span (Vec n Int)]]
+allRegionPermutations =
+    unpermuteIndices . map (coalesceRegions >< id) . groupByPerm . map permutationsS
+    where
+      {- Permutations of a indices in a span 
+         (independently permutes the lower and upper bounds in the same way) -}
+      permutationsS :: Permutable n => Span (Vec n Int) -> [(Span (Vec n Int), (Vec n Int) -> (Vec n Int))]
+      -- Since the permutation ordering is identical for lower & upper bound,
+      -- reuse the same unpermutation
+      permutationsS (l, u) = map (\((l', un1), (u', un2)) -> ((l', u'), un1))
+                           $ zip (permutationsV l) (permutationsV u)
+
+      sortByFst        = (sortBy (\(l1, u1) (l2, u2) -> compare l1 l2))
       
-    groupByPerm      = transpose
-    
-    mkRegions :: [Vec n Int] -> [Span (Vec n Int)]
-    mkRegions = foldPair composeConsecutiveSpans . map mkTrivialSpan . sort 
+      groupByPerm      = map (\ixP -> let unPerm = snd $ head ixP
+                                      in (map fst ixP, unPerm)) . transpose
 
-    coalesceRegions :: [[(Vec n Int, Vec n Int -> Vec n Int)]]
-                    -> [([Span (Vec n Int)], Vec n Int -> Vec n Int)]
-    coalesceRegions  = map (\ixsP -> let unPerm = snd $ head ixsP
-                                     in (mkRegions (map fst ixsP), unPerm))
+      coalesceRegions :: [Span (Vec n Int)] -> [Span (Vec n Int)]
+      coalesceRegions  = foldPair composeConsecutiveSpans . sortByFst
 
-    unpermuteIndices :: [([Span (Vec n Int)], Vec n Int -> Vec n Int)]
-                     -> [[Span (Vec n Int)]]
-    unpermuteIndices = map (\(rs, unPerm) -> map (\(l, u) -> (unPerm l, unPerm u)) rs)
+      unpermuteIndices :: [([Span (Vec n Int)], Vec n Int -> Vec n Int)]
+                       -> [[Span (Vec n Int)]]
+      unpermuteIndices = map (\(rs, unPerm) -> map (\(l, u) -> (unPerm l, unPerm u)) rs)
 
 {-| Collapses the regions into a small set by looking for potential overlaps and eliminating those
     that overlap -}
