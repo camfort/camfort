@@ -46,6 +46,7 @@ executable camfort
                         Extensions.UnitsSolveHMatrix
                         Functionality
                         Helpers
+                        Helpers.Vec
                         Input
                         Output
                         Transformation.CommonBlockElim
@@ -76,6 +77,7 @@ executable camfort
                         transformers >= 0.4,
                         vector >= 0.1,
                         GenericPretty >= 1.2,
+                        QuickCheck >= 2.8,
                         forpar
 
 library
