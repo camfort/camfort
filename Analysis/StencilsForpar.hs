@@ -174,6 +174,9 @@ instance Ord Direction where
          Fwd <= Fwd = True
          Bwd <= Bwd = True
          Bwd <= Fwd = False
+         
+-- Penelope's first code, 20/03/2016. 
+-- iii././//////////////////////. mvnmmmmmmmmmu
 
 -- Syntax
 showL :: Show a => [a] -> String
