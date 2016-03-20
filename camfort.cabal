@@ -23,7 +23,8 @@ test-suite camfort-tests
   hs-source-dirs:       tests
   build-depends:        base < 5,
                         camfort,
-                        HUnit >= 1.2
+                        HUnit >= 1.2,
+                        QuickCheck >= 2.8
 
 source-repository head
   type: git
