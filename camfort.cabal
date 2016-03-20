@@ -23,7 +23,8 @@ test-suite camfort-tests
   hs-source-dirs:       tests
   build-depends:        base < 5,
                         camfort,
-                        HUnit >= 1.2
+                        HUnit >= 1.2,
+                        QuickCheck >= 2.8
 
 source-repository head
   type: git
@@ -46,6 +47,7 @@ executable camfort
                         Extensions.UnitsSolveHMatrix
                         Functionality
                         Helpers
+                        Helpers.Vec
                         Input
                         Output
                         Transformation.CommonBlockElim
@@ -76,7 +78,8 @@ executable camfort
                         transformers >= 0.4,
                         vector >= 0.1,
                         GenericPretty >= 1.2,
-                        forpar
+                        QuickCheck >= 2.8
+--                        ,forpar
 
 library
   hs-source-dirs:       .
@@ -91,7 +94,7 @@ library
                         Analysis.IntermediateReps
                         Analysis.Loops
                         Analysis.LVA
-                        Analysis.StencilsForpar
+--                        Analysis.StencilsForpar
                         Analysis.Syntax
                         Analysis.Types
                         Transformation.CommonBlockElim
@@ -103,7 +106,7 @@ library
                         Extensions.UnitsParser
                         Extensions.UnitSyntaxConversion
                         Extensions.Units
-                        Extensions.UnitsForpar
+--                        Extensions.UnitsForpar
                         Extensions.UnitsEnvironment
                         Extensions.UnitsSolve
                         Extensions.UnitsSolveHMatrix
@@ -134,5 +137,5 @@ library
                         language-fortran >= 0.5.1,
                         transformers >= 0.4,
                         vector >= 0.1,
-                        GenericPretty >= 1.2,
-                        forpar
+                        GenericPretty >= 1.2
+--                        ,forpar
