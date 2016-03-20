@@ -9,6 +9,8 @@ import Control.Monad.State.Lazy
 import Control.Monad.Reader
 import Control.Monad.Writer hiding (Product)
 
+import Analysis.StencilInferenceEngine
+import Analysis.StencilSpecs
 import Analysis.Loops (collect)
 import Analysis.Annotations
 import Extensions.UnitsForpar (parameterise)
@@ -141,57 +143,8 @@ blockLoop (b@(F.BlStatement _ span _
 blockLoop (b:bs) = return $ Just bs
 blockLoop []     = return Nothing
 
---------------------------------------------------
-
-{- *** 1 . Specification syntax -}
-
-type Dimension  = Int -- spatial dimensions are 0 indexed
-type Depth      = Int
-type Saturation = Bool
-data Direction  = Fwd | Bwd deriving (Eq, Show)
-
-data Spec where
-     Reflexive   :: [Dimension] -> Spec
-     Forward     :: Depth -> [Dimension] -> Spec
-     Backward    :: Depth -> [Dimension] -> Spec
-     Symmetric   :: Depth -> [Dimension] -> Spec
-     -- Product of two specs (takes the intersection of their models)
-     Product     :: [Spec] -> Spec
-
-     -- Temporal specifications, with a list of variables for the arrays
-     -- through which time is represented
-     TemporalFwd    :: [Variable] -> Spec
-     TemporalBwd    :: [Variable] -> Spec
-
-     Unspecified :: [Dimension] -> Spec
-     Constant    :: [Dimension] -> Spec
-     Linear      :: Spec -> Spec
-
-deriving instance Eq Spec
-
-instance Ord Direction where
-         Fwd <= Bwd = True
-         Fwd <= Fwd = True
-         Bwd <= Bwd = True
-         Bwd <= Fwd = False
-         
 -- Penelope's first code, 20/03/2016. 
 -- iii././//////////////////////. mvnmmmmmmmmmu
-
--- Syntax
-showL :: Show a => [a] -> String
-showL = concat . intersperse "," . map show
-instance Show Spec where
-     show (Reflexive dims)     = "reflexive, dims=" ++ showL dims
-     show (Forward dep dims)   = "forward, depth="  ++ show dep ++ ", dim=" ++ showL dims
-     show (Backward dep dims)  = "backward, depth=" ++ show dep ++ ", dim=" ++ showL dims
-     show (Symmetric dep dims) = "centered, depth=" ++ show dep ++ ", dim=" ++ showL dims
-     show (Unspecified dims)   = "unspecified "  ++ showL dims
-     show (Constant dims)      = "fixed, dim=" ++ showL dims
-     show (Product specs)      = concat $ intersperse " & " $ map (\spec -> "(" ++ show spec ++ ")") specs
-     show (Linear spec)        = (show spec) ++ ", unique "
-     show (TemporalFwd dims)   = "forward, depth=" ++ show (length dims) ++ ", dim=t{" ++ showL dims ++ "}"
-     show (TemporalBwd dims)   = "backward, depth=" ++ show (length dims) ++ ", dim=t{" ++ showL dims ++ "}"
 
 {- *** 2 . Operations on specs, and conversion from indexing expressions -}
 
@@ -199,17 +152,6 @@ instance Show Spec where
 ixCollectionToSpec :: [Variable] -> [[F.Expression A]] -> [Spec]
 ixCollectionToSpec ivs es = specIsToSpecs . normalise . ixExprAToSpecIs ivs $ es
 
--- Simplifies lists specifications based on the 'specPlus' operation:
-simplify :: [Spec] -> [Spec]
-simplify = foldPair specPlus
--- Combine specs
-specPlus :: Spec -> Spec -> Maybe Spec
-specPlus (Reflexive dims) (Reflexive dims')                        = Just (Reflexive (dims ++ dims'))
-specPlus (Forward dep dims) (Forward dep' dims')     | dep == dep' = Just (Forward dep (dims ++ dims'))
-specPlus (Backward dep dims) (Backward dep' dims')   | dep == dep' = Just (Backward dep (dims ++ dims'))
-specPlus (Symmetric dep dims) (Symmetric dep' dims') | dep == dep' = Just (Symmetric dep (dims ++ dims'))
-specPlus (Unspecified dims) (Unspecified dims')                    = Just (Unspecified (dims ++ dims'))
-specPlus x y                                                       = Nothing
 
 {- *** 3 . Intermediate representation 'SpecI' between indexing expressions and speccs -}
 

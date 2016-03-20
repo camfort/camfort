@@ -8,6 +8,7 @@ import Test.QuickCheck
 import Data.List
 
 import Helpers.Vec
+import Analysis.StencilSpecs
 import Analysis.StencilInferenceEngine
 import Analysis.Annotations
 import Analysis.StencilsForpar
@@ -30,7 +31,7 @@ fromFormatToExprs ((ri,rj):xs) = [mkOffset "i" ri, mkOffset "j" rj] : fromFormat
 
 test2DSpecVariations [] = []
 test2DSpecVariations ((forms,spec):xs) =
-  let t = test (assertEqual ("format= " ++ show forms) spec (ixCollectionToSpec ["i", "j"] (fromFormatToExprs forms)))
+  let t = test (assertEqual ("format= " ++ show forms) (sort spec) (ixCollectionToSpec ["i", "j"] (fromFormatToExprs forms)))
       ts = test2DSpecVariations xs
   in t : ts
 
@@ -89,7 +90,33 @@ testEngine = [
                 (sort  [(Cons (-1) (Cons 0 (Cons 0 Nil)), Cons 1 (Cons 0 (Cons 0 Nil))),
                         (Cons 0 (Cons (-1) (Cons 0 Nil)), Cons 0 (Cons 1 (Cons 0 Nil))),
                         (Cons 0 (Cons 0 (Cons (-1) Nil)), Cons 0 (Cons 0 (Cons 1 Nil)))])
-                (inferMinimalVectorRegions $ sevenpoint))
+                (inferMinimalVectorRegions $ sevenpoint)),
+        -- Example stencil inferences
+        test (assertEqual "stencil infer: five point stencil 2D"
+                [Only (Symmetric 1 [0, 1])]
+                (snd3 $ inferSpecInterval fivepoint)),
+        test (assertEqual "stencil infer: seven point stencil 2D"
+                [Only (Symmetric 1 [0, 1, 2])]
+                (snd3 $ inferSpecInterval sevenpoint)),
+        test (assertEqual "stencil infer: five point stencil 2D with blip"
+                [Product [Forward 1 [0], Forward 1 [1]], Only (Symmetric 1 [0,1])]
+                (snd3 $ inferSpecInterval fivepointErr)),
+        test (assertEqual "stencil infer: centered forward"
+                [Product [Symmetric 1 [1], Forward 1 [0]]]
+                (snd3 $ inferSpecInterval centeredFwd)), 
+        -- Example bounding boxes
+        test (assertEqual "bounding box: five point stencil 2D"
+                (Product [Symmetric 1 [0], Symmetric 1 [1]])
+                (thd3 $ inferSpecInterval fivepoint)),
+        test (assertEqual "bounding box: seven point stencil 2D"
+                (Product [Symmetric 1 [0], Symmetric 1 [1], Symmetric 1 [2]])
+                (thd3 $ inferSpecInterval sevenpoint)),
+        test (assertEqual "bounding box: five point stencil 2D with blip"
+                (Product [Symmetric 1 [0], Symmetric 1 [1]])
+                (thd3 $ inferSpecInterval fivepointErr)),
+        test (assertEqual "bounding box: centered forward"
+                (Product [Forward 1 [0], Symmetric 1 [1]])
+                (thd3 $ inferSpecInterval centeredFwd))
         ]
 
 -- Indices for the 2D five point stencil (deliberately in an odd order)
@@ -103,7 +130,9 @@ sevenpoint = [Cons (-1) (Cons 0 (Cons 0 Nil)), Cons 0 (Cons (-1) (Cons 0 Nil)),
 centeredFwd = [Cons 1 (Cons 0 Nil), Cons 0 (Cons 1 Nil), Cons 0 (Cons (-1) Nil),
                Cons 1 (Cons 1 Nil), Cons 0 (Cons 0 Nil), Cons 1 (Cons (-1) Nil)]::[Vec (S (S Z)) Int]
 
-
+-- Examples of unusal patterns
+fivepointErr = [Cons (-1) (Cons 0 Nil), Cons 0 (Cons (-1) Nil), Cons 1 (Cons 0 Nil),
+                Cons 0 (Cons 1 Nil), Cons 0 (Cons 0 Nil), Cons 1 (Cons 1 Nil)]::[Vec (S (S Z)) Int]
 
 
 main = do

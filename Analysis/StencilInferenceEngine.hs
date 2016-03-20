@@ -1,20 +1,118 @@
-{-# LANGUAGE DataKinds, GADTs, KindSignatures, TypeFamilies, FlexibleInstances, InstanceSigs, FlexibleContexts, NoMonomorphismRestriction #-}
+{-# LANGUAGE DataKinds, GADTs, KindSignatures, TypeFamilies, FlexibleInstances, FlexibleContexts, NoMonomorphismRestriction, ScopedTypeVariables #-}
 
 module Analysis.StencilInferenceEngine where
 
+import Data.Generics.Uniplate.Operations
 import Data.List
+import Data.Data
 
 import Helpers
 import Helpers.Vec
-import Test.HUnit
+import Debug.Trace
 
-{- Intervals are triples of lower, "maybe" exact, upper.
-   That is, if an exact value 'x' is known then 'Just x' is the middle
-   part of the tuple. Otherwise 'Nothing' -}   
-type Interval a = (a, Maybe a, a)
+import Analysis.StencilSpecs
 
-mkExact x = (x, Just x, x)
-mkInexact x y = (x, Nothing, y)
+{- Intervals are triples of lower, exact, upper values.
+   If an exact value is available there is a possible fine-grained
+   description as a list of 'a' -}   
+type Interval a = (a, [a], a)
+
+fst3 (a, b, c) = a
+snd3 (a, b, c) = b
+thd3 (a, b, c) = c
+
+inferSpecInterval :: Permutable n => [Vec n Int] -> Interval Spec
+inferSpecInterval ixs = (low, simplify exact, up)
+  where (low, exact, up) = fromRegionsToSpecInterval . inferMinimalVectorRegions $ ixs
+
+-- Simplifies lists specifications based on the 'specPlus', 'specTimes', 'simplifyRefl' operations
+--  
+simplify :: [Spec] -> [Spec]
+simplify = nub . foldPair specPlus . sort . simplifyInsideProducts . simplifyRefl
+  where simplifyInsideProducts = transformBi (nub . foldPair specTimes . sort . simplifyRefl)
+
+-- Removes any 'reflexive' specs that are overlapped by a 'centered'
+simplifyRefl :: [Spec] -> [Spec]
+simplifyRefl sps = transformBi simplifyRefl' sps
+  where
+    simplifyRefl' (Product [s]) = Only s
+        
+    simplifyRefl' (Only r@(Reflexive rdims))
+      = case simplifyRefl' r of
+          Empty -> Empty
+          r     -> Only r
+          
+    simplifyRefl' (Reflexive rdims) 
+      = let rdims' = [d | (Symmetric _ dims) <- universeBi sps, d <- dims, d' <- rdims, d == d']
+        in case rdims \\ rdims' of
+             [] -> Empty
+             ds -> Reflexive ds
+              
+    simplifyRefl' s = s
+ 
+-- Combine specs in a multiplicative way (used within product of specs)
+specTimes :: Spec -> Spec -> Maybe Spec
+specTimes Empty x = Just x
+specTimes x Empty = Just x
+specTimes x y     = Nothing
+
+-- Combine specs in an additive way
+specPlus :: Spec -> Spec -> Maybe Spec
+specPlus Empty x = Just x
+specPlus x Empty = Just x
+specPlus (Product [s]) (Product [s'])
+    = Just $ Only (Product $ foldPair specPlus [s, s'])
+specPlus (Only spec) (Only spec')
+    = (specPlus spec spec') >>= (\spec'' -> Just (Only spec''))
+specPlus (Reflexive dims) (Reflexive dims')
+    = Just $ Reflexive (sort $ dims ++ dims')
+specPlus (Forward dep dims) (Forward dep' dims')
+    | dep == dep' = Just $ Forward dep (sort $ dims ++ dims')
+specPlus (Backward dep dims) (Backward dep' dims')
+    | dep == dep' = Just $ Backward dep (sort $ dims ++ dims')
+specPlus (Symmetric dep dims) (Symmetric dep' dims')
+    | dep == dep' = Just $ Symmetric dep (sort $ dims ++ dims')
+specPlus (Unspecified dims) (Unspecified dims')
+    = Just $ Unspecified (dims ++ dims')
+specPlus x y
+    = Nothing
+
+fromRegionsToSpecInterval :: [Span (Vec n Int)] -> Interval Spec
+fromRegionsToSpecInterval sps = (lower, exact, upper)
+  where
+    (lower, exact) = go sps
+    upper          = toSpecND $ foldl1 spanBoundingBox sps
+
+    go []       = (Empty, [Empty])
+    go [s]      = (Empty, [toSpecND s])
+   -- TODO, compute a better lower bound
+    go (s : ss) = (lS, exact : eS)
+      where exact    = toSpecND s
+            (lS, eS) = go ss
+                  
+toSpecND :: Span (Vec n Int) -> Spec
+toSpecND n = case (toSpecND' n 0) of
+               [s] -> Only s  
+               ss  -> Product ss
+  where
+    toSpecND' :: Span (Vec n Int) -> Int -> [Spec]
+    toSpecND' (Nil, Nil)             d = []
+    toSpecND' (Cons l ls, Cons u us) d = (toSpec1D d l u) ++ (toSpecND' (ls, us) (d + 1))
+
+-- : (toSpec (dim+1) ms ns)
+toSpec1D :: Dimension -> Int -> Int -> [Spec]
+toSpec1D dim m n
+    | m == 0 && n == 0   = [Reflexive [dim]]
+    | m < 0 && n == 0    = [Backward (abs m) [dim], Reflexive [dim]]
+    | m < 0 && n == (-1) = [Backward (abs m) [dim]]
+    | m < 0 && n > 0 && (abs m == n)
+                         = [Symmetric n [dim]]
+    | m < 0 && n > 0 && (abs m /= n)
+                         = [Backward (abs m) [dim], Forward n [dim], Reflexive [dim]]
+    | m == 0 && n > 0    = [Forward n [dim]]
+    | m == 1 && n > 0    = [Forward n [dim], Reflexive [dim]]
+    | otherwise          = [Unspecified [dim]]
+
 
 {- Spans are a pair of a lower and upper bound -}
 type Span a = (a, a)
@@ -40,25 +138,16 @@ spanBoundingBox a b = boundingBox' (normaliseSpan a) (normaliseSpan b)
            in (Cons (min l1 l2) ls', Cons (max u1 u2) us')
 
 
-{-| Given two spans, if they are consecutive (i.e., (lower1, upper1) (lower2, upper2) where lower2 = upper1 + 1)
+{-| Given two spans, if they are consecutive
+    (i.e., (lower1, upper1) (lower2, upper2) where lower2 = upper1 + 1)
     then compose them together returning Just of the new span. Otherwise Nothing -}
 composeConsecutiveSpans :: Span (Vec n Int) -> Span (Vec n Int) -> Maybe (Span (Vec n Int))
 composeConsecutiveSpans (Nil, Nil) (Nil, Nil) = Just (Nil, Nil)
 composeConsecutiveSpans x@(Cons l1 ls1, Cons u1 us1) y@(Cons l2 ls2, Cons u2 us2)
-    | (ls1 == ls2) && (us1 == us2) && (u1 + 1 == l2)  -- && (ls1 == us2)  [means they have to be in the same 1D vector slice, but maybe we can avoid this]
+    | (ls1 == ls2) && (us1 == us2) && (u1 + 1 == l2)  
       = Just (Cons l1 ls1, Cons u2 us2)
     | otherwise
       = Nothing
-
--- ** Note the above is only in 1D - need to look at other dimensions too and not just by permuting
--- [previously the technique worked by permutation but now I need to ask ....
---
--- 
-
-{- Inference algorithm:
-   Parameters: d (dimensionality
-     for n in Fin(d) -}
-
 
 {-| |inferMinimalVectorRegions| a key part of the algorithm, from a list of n-dimensional relative indices 
     it infers a list of (possibly overlapping) 1-dimensional spans (vectors) within the n-dimensional space.

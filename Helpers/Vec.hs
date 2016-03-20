@@ -8,6 +8,16 @@ data Nat = Z | S Nat
 data Natural (n :: Nat) where
      Zero :: Natural Z
      Succ :: Natural n -> Natural (S n)
+
+deriving instance Show (Natural n)
+
+data NatBox where NatBox :: Natural n -> NatBox
+deriving instance Show NatBox
+
+toNatBox :: Int -> NatBox
+toNatBox 0 = NatBox Zero
+toNatBox n = case toNatBox (n-1) of
+              (NatBox n) -> NatBox (Succ n)
      
 -- Indexed vector type
 data Vec (n :: Nat) a where

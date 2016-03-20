@@ -12,6 +12,9 @@ import Analysis.Annotations (Annotation, unitAnnotation)
 import Analysis.Syntax (lhsExpr)
 import Analysis.Types (typeEnv, TypeEnv, isArrayType)
 
+import Analysis.StencilInferenceEngine
+import Analysis.StencilSpecs
+
 import qualified Data.Map as Map
 import Data.List
 import Helpers (spanLineCol)
