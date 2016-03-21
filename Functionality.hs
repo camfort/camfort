@@ -34,6 +34,7 @@ import Analysis.Types
 import Analysis.Loops
 import Analysis.LVA
 import Analysis.Syntax
+import qualified Analysis.Stencils as Stencils
 
 import Transformation.DeadCode
 import Transformation.CommonBlockElim
@@ -45,6 +46,8 @@ import Extensions.Units
 import Extensions.UnitSyntaxConversion
 import Extensions.UnitsEnvironment
 import Extensions.UnitsSolve
+
+
 
 import Output
 import Input
@@ -103,3 +106,14 @@ unitCriticals inSrc excludes outSrc opt =
              let ?solver = solverType opt 
               in let ?assumeLiterals = literalsBehaviour opt
                  in doAnalysisReport' (mapM inferCriticalVariables) inSrc excludes outSrc
+
+
+-- * Wrappers on all of the features
+stencilsInf inSrc excludes _ _ =
+          do putStrLn $ "Inferring stencil specs for " ++ show inSrc ++ "\n"
+             doAnalysisSummary Stencils.infer inSrc excludes
+
+
+stencilsCheck inSrc excludes _ _ =
+          do putStrLn $ "Checking stencil specs for " ++ show inSrc ++ "\n"
+             doAnalysis Stencils.check inSrc excludes

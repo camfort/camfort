@@ -1,4 +1,4 @@
-{-# LANGUAGE DataKinds, GADTs, KindSignatures, TypeFamilies, FlexibleInstances, FlexibleContexts, NoMonomorphismRestriction, ScopedTypeVariables #-}
+{-# LANGUAGE DataKinds, GADTs, KindSignatures, TypeFamilies, FlexibleInstances, FlexibleContexts, NoMonomorphismRestriction, ScopedTypeVariables, PolyKinds #-}
 
 module Analysis.StencilInferenceEngine where
 
@@ -9,6 +9,8 @@ import Data.Data
 import Helpers
 import Helpers.Vec
 import Debug.Trace
+
+import Unsafe.Coerce
 
 import Analysis.StencilSpecs
 
@@ -21,12 +23,53 @@ fst3 (a, b, c) = a
 snd3 (a, b, c) = b
 thd3 (a, b, c) = c
 
+inferSpecIntervalE :: VecList Int -> Interval Spec
+inferSpecIntervalE (VL ixs) = inferSpecInterval ixs
+
+-- Lists existentially quanitify over a vector's size : Exists n . Vec n a 
+data List a where
+     List :: Permutable n => Vec n a -> List a
+     
+lnil :: List a
+lnil = List Nil
+lcons :: a -> List a -> List a
+lcons x (List Nil) = List (Cons x Nil)
+lcons x (List (Cons y Nil)) = List (Cons x (Cons y Nil))
+lcons x (List (Cons y (Cons z xs))) = List (Cons x (Cons y (Cons z xs)))
+
+fromList :: [a] -> List a
+fromList []       = lnil
+fromList (x : xs) = lcons x (fromList xs)
+
+{- Vector list repreentation where the size 'n' is existentiall quantified -}
+data VecList a where VL :: Permutable n => [Vec n a] -> VecList a
+
+data EqT (a :: k) (b :: k) where
+    ReflEq :: EqT a a
+
+-- pre-condition: the input is a 'square' list of lists (i.e. all internal lists have the same size)
+fromLists :: [[Int]] -> VecList Int
+fromLists [] = VL ([] :: [Vec Z Int])
+fromLists (xs:xss) = consList (fromList xs) (fromLists xss)
+  where consList :: List Int -> VecList Int -> VecList Int
+        consList (List vec) (VL [])     = VL [vec]
+        consList (List vec) (VL (x:xs))
+          = let (vec', x') = zipVec vec x
+            in  -- Force the pre-condition equality 
+                case (preCondition x' xs, preCondition vec' xs) of
+                  (ReflEq, ReflEq) -> VL $ (vec' : (x' : xs))
+                
+            where -- At the moment the pre-condition is 'assumed', and therefore
+                  -- force used unsafeCoerce: TODO, rewrite
+                  preCondition :: Vec n a -> [Vec n1 a] -> EqT n n1
+                  preCondition xs x = unsafeCoerce $ ReflEq
+        
+
 inferSpecInterval :: Permutable n => [Vec n Int] -> Interval Spec
 inferSpecInterval ixs = (low, simplify exact, up)
   where (low, exact, up) = fromRegionsToSpecInterval . inferMinimalVectorRegions $ ixs
 
 -- Simplifies lists specifications based on the 'specPlus', 'specTimes', 'simplifyRefl' operations
---  
 simplify :: [Spec] -> [Spec]
 simplify = nub . foldPair specPlus . sort . simplifyInsideProducts . simplifyRefl
   where simplifyInsideProducts = transformBi (nub . foldPair specTimes . sort . simplifyRefl)

@@ -1,6 +1,7 @@
-{-# LANGUAGE DataKinds, GADTs, KindSignatures, StandaloneDeriving, RankNTypes #-}
+{-# LANGUAGE DataKinds, GADTs, KindSignatures, StandaloneDeriving, RankNTypes, TypeFamilies #-}
 
 module Helpers.Vec where
+
 
 data Nat = Z | S Nat
 
@@ -18,6 +19,8 @@ toNatBox :: Int -> NatBox
 toNatBox 0 = NatBox Zero
 toNatBox n = case toNatBox (n-1) of
               (NatBox n) -> NatBox (Succ n)
+
+
      
 -- Indexed vector type
 data Vec (n :: Nat) a where
@@ -50,18 +53,17 @@ showV xs = "<" ++ showV' xs ++ ">"
     showV' (Cons x xs)  = show x ++ "," ++ showV' xs
 
 
--- Lists existentially quanitify over a vector's size : Exists n . Vec n a 
-data List a where
-     List :: Vec n a -> List a
-     
-lnil :: List a
-lnil = List Nil
-lcons :: a -> List a -> List a
-lcons x (List xs) = List (Cons x xs)
-
-fromList :: [a] -> List a
-fromList []       = lnil
-fromList (x : xs) = lcons x (fromList xs)
 
 
+type family Max (n :: Nat) (m :: Nat) :: Nat where
+            Max Z Z = Z
+            Max Z m = m
+            Max m Z = m
+            Max (S n) (S m) = S (Max n m)
 
+zipVec :: Vec m Int -> Vec n Int -> (Vec (Max n m) Int, Vec (Max n m) Int)
+zipVec Nil Nil = (Nil, Nil)
+zipVec Nil xs  = (fmap (const 0) xs, xs)
+zipVec xs Nil  = (xs, fmap (const 0) xs)
+zipVec (Cons x xs) (Cons y ys)
+               = (Cons x xs', Cons y ys') where (xs', ys') = zipVec xs ys
