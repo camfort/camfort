@@ -110,7 +110,7 @@ blockLoop (b@(F.BlStatement _ span _ (F.StExpressionAssign _ _ _ rhs)):bs) = do
 
 -- Match a Do-loop, and chomp the entire body by finding the "continue" statement
 blockLoop (b@(F.BlStatement _ span _
-               (F.StDo _ _ label (doSpec@F.DoSpecification {}))):bs) = do
+               (F.StDo _ _ (Just label) (doSpec@F.DoSpecification {}))):bs) = do
   let F.DoSpecification _ _ (
           F.StExpressionAssign _ _ (F.ExpValue _ _ (F.ValVariable _ v)) _
         ) _ _ = doSpec
