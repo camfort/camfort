@@ -55,6 +55,7 @@ executable camfort
                         Extensions.Units
                         Extensions.UnitsForpar
                         Extensions.UnitsEnvironment
+                        Extensions.UnitParser
                         Extensions.UnitsSolve
                         Extensions.UnitsSolveHMatrix
                         Helpers
