@@ -31,7 +31,7 @@ import GHC.Exts (sortWith)
 
 import qualified Language.Fortran as LF
 
-import Extensions.UnitsParser
+import Extensions.UnitParser
 
 import Debug.Trace
 

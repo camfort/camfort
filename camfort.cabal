@@ -42,7 +42,7 @@ executable camfort
                         Analysis.StencilsForpar
                         Analysis.Types
                         Extensions.Units
-                        Extensions.UnitsParser
+                        Extensions.UnitParser
                         Extensions.UnitsEnvironment
                         Extensions.UnitsSolve
                         Extensions.UnitsSolveHMatrix
@@ -106,7 +106,7 @@ library
                         Transformation.DerivedTypeIntro
                         Transformation.EquivalenceElim
                         Transformation.Syntax
-                        Extensions.UnitsParser
+                        Extensions.UnitParser
                         Extensions.UnitSyntaxConversion
                         Extensions.Units
                         Extensions.UnitsForpar

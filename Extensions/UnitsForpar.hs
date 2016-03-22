@@ -53,7 +53,7 @@ import Analysis.Syntax
 import Analysis.Types
 import Extensions.UnitsEnvironment hiding (Unitless)
 import Extensions.UnitsSolve -- Solvers for the Gaussian matrix
-import qualified Extensions.UnitsParser as P
+import qualified Extensions.UnitParser as P
 
 import Forpar.AST
 import Forpar.Util.Position
