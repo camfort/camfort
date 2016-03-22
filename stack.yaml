@@ -4,6 +4,7 @@ resolver: lts-5.5
 packages:
 - '.'
 - '../language-fortran'
+- '../forpar'
 
 # Override default flag values for local packages and extra-deps
 flags: {}

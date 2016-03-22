@@ -34,28 +34,35 @@ executable camfort
   main-is: Main.hs
   hs-source-dirs:       .
   other-modules:        Analysis.Annotations
+                        Analysis.CallGraph
                         Analysis.IntermediateReps
-                        Analysis.LVA
                         Analysis.Loops
-                        Analysis.Syntax
+                        Analysis.LVA
                         Analysis.Stencils
+                        Analysis.StencilSpecs
+                        Analysis.StencilInferenceEngine
                         Analysis.StencilsForpar
+                        Analysis.Syntax
                         Analysis.Types
-                        Extensions.Units
-                        Extensions.UnitParser
-                        Extensions.UnitsEnvironment
-                        Extensions.UnitsSolve
-                        Extensions.UnitsSolveHMatrix
-                        Functionality
-                        Helpers
-                        Input
-                        Output
                         Transformation.CommonBlockElim
                         Transformation.CommonBlockElimToCalls
                         Transformation.DeadCode
                         Transformation.DerivedTypeIntro
                         Transformation.EquivalenceElim
                         Transformation.Syntax
+                        Extensions.UnitParser
+                        Extensions.UnitSyntaxConversion
+                        Extensions.Units
+                        Extensions.UnitsForpar
+                        Extensions.UnitsEnvironment
+                        Extensions.UnitsSolve
+                        Extensions.UnitsSolveHMatrix
+                        Helpers
+                        Helpers.Vec
+                        Main
+                        Functionality
+                        Input
+                        Output
                         Traverse
 
   build-depends:        base < 5,
