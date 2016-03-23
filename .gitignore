@@ -2,9 +2,17 @@
 *.p_o
 *.hi
 *~
-/Language/Fortran/Lexer.hs
-/Language/Fortran/Parser.hs
-/camfort
 /fixman_fixtures
+
+# sandbox files
 /.cabal-sandbox
 /cabal.sandbox.config
+
+# vim backup files
+.*.swp
+.*.swo
+
+# build files files
+/camfort
+/dist
+/.stack-work
