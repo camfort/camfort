@@ -32,7 +32,7 @@ source-repository head
 
 executable camfort
   main-is: Main.hs
-  hs-source-dirs:       .
+  hs-source-dirs:       src
   other-modules:        Analysis.Annotations
                         Analysis.CallGraph
                         Analysis.IntermediateReps
@@ -90,7 +90,7 @@ executable camfort
                         forpar
 
 library
-  hs-source-dirs:       .
+  hs-source-dirs:       src
 
 
 --  ghc-options:          -package mtl-2.1.3.1
