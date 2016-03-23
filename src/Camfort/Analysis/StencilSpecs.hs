@@ -13,34 +13,34 @@ type Depth      = Int
 type Saturation = Bool
 data Direction  = Fwd | Bwd deriving (Eq, Show)
 
-data Spec where
-     Reflexive   :: [Dimension]          -> Spec
-     Forward     :: Depth -> [Dimension] -> Spec
-     Backward    :: Depth -> [Dimension] -> Spec
-     Symmetric   :: Depth -> [Dimension] -> Spec
+data Specification where
+     Reflexive   :: [Dimension]          -> Specification
+     Forward     :: Depth -> [Dimension] -> Specification
+     Backward    :: Depth -> [Dimension] -> Specification
+     Symmetric   :: Depth -> [Dimension] -> Specification
 
      -- Product of two specs (takes the intersection of their models)
-     Product     :: [Spec] -> Spec
+     Product     :: [Specification] -> Specification
      
      -- This specification modifier means that all other indices not described by it are undefined
-     Only        :: Spec   -> Spec
+     Only        :: Specification   -> Specification
 
      -- Temporal specifications, with a list of variables for the arrays
      -- through which time is represented
-     TemporalFwd :: [String] -> Spec
-     TemporalBwd :: [String] -> Spec
+     TemporalFwd :: [String] -> Specification
+     TemporalBwd :: [String] -> Specification
 
-     Unspecified :: [Dimension] -> Spec
-     Constant    :: [Dimension] -> Spec
-     Linear      :: Spec -> Spec
-     Empty       :: Spec
+     Unspecified :: [Dimension] -> Specification
+     Constant    :: [Dimension] -> Specification
+     Linear      :: Specification -> Specification
+     Empty       :: Specification
 
-deriving instance Eq Spec
-deriving instance Data Spec
-deriving instance Typeable Spec
+deriving instance Eq Specification
+deriving instance Data Specification
+deriving instance Typeable Specification
 
 {-| An (arbitrary) ordering specifications for the sake of normalisation -}
-instance Ord Spec where
+instance Ord Specification where
      Empty           <= _                = True
      _               <= Empty            = False
      
@@ -81,7 +81,7 @@ instance Ord Direction where
 -- Syntax
 showL :: Show a => [a] -> String
 showL = concat . (intersperse ",") . (map show)
-instance Show Spec where
+instance Show Specification where
     show Empty                = "none"
     show (Reflexive dims)     = "reflexive, dims=" ++ showL dims
     show (Forward dep dims)   = "forward, depth="  ++ show dep ++ ", dim=" ++ showL dims

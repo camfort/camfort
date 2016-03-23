@@ -23,7 +23,7 @@ fst3 (a, b, c) = a
 snd3 (a, b, c) = b
 thd3 (a, b, c) = c
 
-inferSpecIntervalE :: VecList Int -> Interval Spec
+inferSpecIntervalE :: VecList Int -> Interval Specification
 inferSpecIntervalE (VL ixs) = inferSpecInterval ixs
 
 -- Lists existentially quanitify over a vector's size : Exists n . Vec n a 
@@ -65,17 +65,17 @@ fromLists (xs:xss) = consList (fromList xs) (fromLists xss)
                   preCondition xs x = unsafeCoerce $ ReflEq
         
 
-inferSpecInterval :: Permutable n => [Vec n Int] -> Interval Spec
+inferSpecInterval :: Permutable n => [Vec n Int] -> Interval Specification
 inferSpecInterval ixs = (low, simplify exact, up)
   where (low, exact, up) = fromRegionsToSpecInterval . inferMinimalVectorRegions $ ixs
 
 -- Simplifies lists specifications based on the 'specPlus', 'specTimes', 'simplifyRefl' operations
-simplify :: [Spec] -> [Spec]
+simplify :: [Specification] -> [Specification]
 simplify = nub . foldPair specPlus . sort . simplifyInsideProducts . simplifyRefl
   where simplifyInsideProducts = transformBi (nub . foldPair specTimes . sort . simplifyRefl)
 
 -- Removes any 'reflexive' specs that are overlapped by a 'centered'
-simplifyRefl :: [Spec] -> [Spec]
+simplifyRefl :: [Specification] -> [Specification]
 simplifyRefl sps = transformBi simplifyRefl' sps
   where
     simplifyRefl' (Product [s]) = Only s
@@ -94,13 +94,13 @@ simplifyRefl sps = transformBi simplifyRefl' sps
     simplifyRefl' s = s
  
 -- Combine specs in a multiplicative way (used within product of specs)
-specTimes :: Spec -> Spec -> Maybe Spec
+specTimes :: Specification -> Specification -> Maybe Specification
 specTimes Empty x = Just x
 specTimes x Empty = Just x
 specTimes x y     = Nothing
 
 -- Combine specs in an additive way
-specPlus :: Spec -> Spec -> Maybe Spec
+specPlus :: Specification -> Specification -> Maybe Specification
 specPlus Empty x = Just x
 specPlus x Empty = Just x
 specPlus (Product [s]) (Product [s'])
@@ -120,7 +120,7 @@ specPlus (Unspecified dims) (Unspecified dims')
 specPlus x y
     = Nothing
 
-fromRegionsToSpecInterval :: [Span (Vec n Int)] -> Interval Spec
+fromRegionsToSpecInterval :: [Span (Vec n Int)] -> Interval Specification
 fromRegionsToSpecInterval sps = (lower, exact, upper)
   where
     (lower, exact) = go sps
@@ -133,17 +133,17 @@ fromRegionsToSpecInterval sps = (lower, exact, upper)
       where exact    = toSpecND s
             (lS, eS) = go ss
                   
-toSpecND :: Span (Vec n Int) -> Spec
+toSpecND :: Span (Vec n Int) -> Specification
 toSpecND n = case (toSpecND' n 0) of
                [s] -> Only s  
                ss  -> Product ss
   where
-    toSpecND' :: Span (Vec n Int) -> Int -> [Spec]
+    toSpecND' :: Span (Vec n Int) -> Int -> [Specification]
     toSpecND' (Nil, Nil)             d = []
     toSpecND' (Cons l ls, Cons u us) d = (toSpec1D d l u) ++ (toSpecND' (ls, us) (d + 1))
 
--- : (toSpec (dim+1) ms ns)
-toSpec1D :: Dimension -> Int -> Int -> [Spec]
+-- : (toSpecification (dim+1) ms ns)
+toSpec1D :: Dimension -> Int -> Int -> [Specification]
 toSpec1D dim m n
     | m == 0 && n == 0   = [Reflexive [dim]]
     | m < 0 && n == 0    = [Backward (abs m) [dim], Reflexive [dim]]
@@ -288,26 +288,3 @@ instance Permutable (S n) => Permutable (S (S n)) where
       [ (Cons y zs, \(Cons y' zs') -> (unSel y') (unPerm zs')) 
         | (y, ys, unSel) <- selectionsV xs,
           (zs,  unPerm)  <- permutationsV ys ]
-
--- *** Various properties of the code here
-
-{- Properties of `spanBoundingBox`: idempotent and associative -}
-prop_spanBoundingIdem :: Natural n -> Span (Vec n Int) -> Bool
-prop_spanBoundingIdem w x
-    = spanBoundingBox x x == (normaliseSpan x)
-
-prop_spanBoundingAssoc :: Natural n -> Span (Vec n Int)
-                                    -> Span (Vec n Int)
-                                    -> Span (Vec n Int) -> Bool
-prop_spanBoundingAssoc w x y z
-    = spanBoundingBox x (spanBoundingBox y z)
-   == spanBoundingBox (spanBoundingBox x y) z
-
-{- Permutations that come with 'unpermute' functions are invertable -}
-prop_perms_invertable :: (Permutable n) => Natural n -> Vec n Int -> Bool
-prop_perms_invertable w xs
-    = take (fact (lengthV xs)) (repeat xs)
-    == map (\(xs, f) -> f xs) (permutationsV xs)
-    where fact 0 = 1
-          fact n = n * (fact $ n - 1)
-

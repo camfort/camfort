@@ -46,7 +46,7 @@ check = error "Not yet implemented"
 
 --------------------------------------------------
 
-type LogLine = (FU.SrcSpan, [([Variable], [Spec])])
+type LogLine = (FU.SrcSpan, [([Variable], [Specification])])
 formatSpec :: FAR.NameMap -> LogLine -> String
 formatSpec nm (span, []) = ""
 formatSpec nm (span, specs) = loc ++ " \t" ++ (commaSep . nub . map doSpec $ specs) ++ "\n"
@@ -149,7 +149,7 @@ blockLoop []     = return Nothing
 {- *** 2 . Operations on specs, and conversion from indexing expressions -}
 
 -- Convert list of indexing expressions to list of specs
-ixCollectionToSpec :: [Variable] -> [[F.Expression A]] -> [Spec]
+ixCollectionToSpec :: [Variable] -> [[F.Expression A]] -> [Specification]
 ixCollectionToSpec ivs ess = snd3 . inferSpecIntervalE . fromLists . padZeros . map toListsOfIndices $ ess
   where
 

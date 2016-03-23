@@ -17,14 +17,17 @@ category:               Language, tools
 cabal-version:          >= 1.8
 tested-with:            GHC >= 7.10.1
 
-test-suite camfort-tests
+test-suite spec
   type:                 exitcode-stdio-1.0
-  main-is:              TestSuite.hs
+  main-is:              Spec.hs
   hs-source-dirs:       tests
   build-depends:        base < 5,
-                        camfort,
-                        HUnit >= 1.2,
-                        QuickCheck >= 2.8
+                        filepath >= 1.4,
+                        directory >= 1.2,
+                        hspec >= 2.2,
+                        QuickCheck >= 2.8,
+                        forpar >= 0.1,
+                        camfort
 
 source-repository head
   type: git
