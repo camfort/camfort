@@ -26,33 +26,33 @@ import qualified Forpar.Parser.Fortran77 as F77
 import qualified Forpar.AST as A
 import Forpar.Analysis.Renaming(renameAndStrip, analyseRenames, unrename, NameMap)
 import Forpar.Analysis(initAnalysis)
-import Extensions.UnitsForpar
-import qualified Analysis.StencilsForpar as StencilsForpar
+import Camfort.Extensions.UnitsForpar
+import qualified Camfort.Analysis.StencilsForpar as StencilsForpar
 
 import Data.Generics.Uniplate.Operations
 import System.Console.GetOpt
 import System.Directory
 import System.Environment
 import System.IO
-import Transformation.DeadCode
-import Transformation.CommonBlockElim
-import Transformation.CommonBlockElimToCalls
-import Transformation.EquivalenceElim
-import Transformation.DerivedTypeIntro
+import Camfort.Transformation.DeadCode
+import Camfort.Transformation.CommonBlockElim
+import Camfort.Transformation.CommonBlockElimToCalls
+import Camfort.Transformation.EquivalenceElim
+import Camfort.Transformation.DerivedTypeIntro
 
-import Extensions.UnitsEnvironment
-import Extensions.UnitsSolve
+import Camfort.Extensions.UnitsEnvironment
+import Camfort.Extensions.UnitsSolve
 
-import Analysis.Annotations hiding (Unitless)
-import Analysis.Types
-import Analysis.Loops
-import Analysis.LVA
-import Analysis.Syntax
+import Camfort.Analysis.Annotations hiding (Unitless)
+import Camfort.Analysis.Types
+import Camfort.Analysis.Loops
+import Camfort.Analysis.LVA
+import Camfort.Analysis.Syntax
 
-import Helpers
-import Output
-import Input
-import Functionality
+import Camfort.Helpers
+import Camfort.Output
+import Camfort.Input
+import Camfort.Functionality
 
 import System.Console.GetOpt
 import System.Environment

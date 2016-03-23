@@ -2,7 +2,7 @@
 
 module Tests.Stencils where
 
-import Analysis.Stencils
+import Camfort.Analysis.Stencils
 
 import Test.QuickCheck
 

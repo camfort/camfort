@@ -33,38 +33,37 @@ source-repository head
 executable camfort
   main-is: Main.hs
   hs-source-dirs:       src
-  other-modules:        Analysis.Annotations
-                        Analysis.CallGraph
-                        Analysis.IntermediateReps
-                        Analysis.Loops
-                        Analysis.LVA
-                        Analysis.Stencils
-                        Analysis.StencilSpecs
-                        Analysis.StencilInferenceEngine
-                        Analysis.StencilsForpar
-                        Analysis.Syntax
-                        Analysis.Types
-                        Transformation.CommonBlockElim
-                        Transformation.CommonBlockElimToCalls
-                        Transformation.DeadCode
-                        Transformation.DerivedTypeIntro
-                        Transformation.EquivalenceElim
-                        Transformation.Syntax
-                        Extensions.UnitParser
-                        Extensions.UnitSyntaxConversion
-                        Extensions.Units
-                        Extensions.UnitsForpar
-                        Extensions.UnitsEnvironment
-                        Extensions.UnitParser
-                        Extensions.UnitsSolve
-                        Extensions.UnitsSolveHMatrix
-                        Helpers
-                        Helpers.Vec
+  other-modules:        Camfort.Analysis.Annotations
+                        Camfort.Analysis.CallGraph
+                        Camfort.Analysis.IntermediateReps
+                        Camfort.Analysis.Loops
+                        Camfort.Analysis.LVA
+                        Camfort.Analysis.Stencils
+                        Camfort.Analysis.StencilSpecs
+                        Camfort.Analysis.StencilInferenceEngine
+                        Camfort.Analysis.StencilsForpar
+                        Camfort.Analysis.Syntax
+                        Camfort.Analysis.Types
+                        Camfort.Transformation.CommonBlockElim
+                        Camfort.Transformation.CommonBlockElimToCalls
+                        Camfort.Transformation.DeadCode
+                        Camfort.Transformation.DerivedTypeIntro
+                        Camfort.Transformation.EquivalenceElim
+                        Camfort.Transformation.Syntax
+                        Camfort.Extensions.UnitParser
+                        Camfort.Extensions.UnitSyntaxConversion
+                        Camfort.Extensions.Units
+                        Camfort.Extensions.UnitsForpar
+                        Camfort.Extensions.UnitsEnvironment
+                        Camfort.Extensions.UnitsSolve
+                        Camfort.Extensions.UnitsSolveHMatrix
+                        Camfort.Helpers
+                        Camfort.Helpers.Vec
+                        Camfort.Functionality
+                        Camfort.Input
+                        Camfort.Output
+                        Camfort.Traverse
                         Main
-                        Functionality
-                        Input
-                        Output
-                        Traverse
 
   build-depends:        base < 5,
                         containers >= 0.5.0.0,
@@ -97,37 +96,36 @@ library
 
   build-tools:          alex, happy
 
-  exposed-modules:      Analysis.Annotations
-                        Analysis.CallGraph
-                        Analysis.IntermediateReps
-                        Analysis.Loops
-                        Analysis.LVA
-                        Analysis.Stencils
-                        Analysis.StencilSpecs
-                        Analysis.StencilInferenceEngine
-                        Analysis.StencilsForpar
-                        Analysis.Syntax
-                        Analysis.Types
-                        Transformation.CommonBlockElim
-                        Transformation.CommonBlockElimToCalls
-                        Transformation.DeadCode
-                        Transformation.DerivedTypeIntro
-                        Transformation.EquivalenceElim
-                        Transformation.Syntax
-                        Extensions.UnitParser
-                        Extensions.UnitSyntaxConversion
-                        Extensions.Units
-                        Extensions.UnitsForpar
-                        Extensions.UnitsEnvironment
-                        Extensions.UnitsSolve
-                        Extensions.UnitsSolveHMatrix
-                        Helpers
-                        Helpers.Vec
-                        Main
-                        Functionality
-                        Input
-                        Output
-                        Traverse
+  exposed-modules:      Camfort.Analysis.Annotations
+                        Camfort.Analysis.CallGraph
+                        Camfort.Analysis.IntermediateReps
+                        Camfort.Analysis.Loops
+                        Camfort.Analysis.LVA
+                        Camfort.Analysis.Stencils
+                        Camfort.Analysis.StencilSpecs
+                        Camfort.Analysis.StencilInferenceEngine
+                        Camfort.Analysis.StencilsForpar
+                        Camfort.Analysis.Syntax
+                        Camfort.Analysis.Types
+                        Camfort.Transformation.CommonBlockElim
+                        Camfort.Transformation.CommonBlockElimToCalls
+                        Camfort.Transformation.DeadCode
+                        Camfort.Transformation.DerivedTypeIntro
+                        Camfort.Transformation.EquivalenceElim
+                        Camfort.Transformation.Syntax
+                        Camfort.Extensions.UnitParser
+                        Camfort.Extensions.UnitSyntaxConversion
+                        Camfort.Extensions.Units
+                        Camfort.Extensions.UnitsForpar
+                        Camfort.Extensions.UnitsEnvironment
+                        Camfort.Extensions.UnitsSolve
+                        Camfort.Extensions.UnitsSolveHMatrix
+                        Camfort.Helpers
+                        Camfort.Helpers.Vec
+                        Camfort.Functionality
+                        Camfort.Input
+                        Camfort.Output
+                        Camfort.Traverse
   other-modules:
 
   build-depends:        base < 5,

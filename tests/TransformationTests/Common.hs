@@ -1,8 +1,8 @@
 module TransformationTests.Common where
 
-import Helpers
+import Camfort.Helpers
 import Test.HUnit
-import Functionality
+import Camfort.Functionality
 
 samples = "tests/TransformationTests/Common/samples/"
 
