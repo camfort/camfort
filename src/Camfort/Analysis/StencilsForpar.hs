@@ -78,21 +78,13 @@ specInference (pf, nm) = formatSpec nm =<< logs
         logs = specInference' tenv =<< flowAnalysisArrays pf
 
 specInference' :: TypeEnv A -> (F.ProgramUnit A, FlowsMap) -> [LogLine]
-specInference' tenv (pu, flMap) = runInferer cycles (F.getName pu) tenv (descendBiM perBlocks pu)
+specInference' tenv (pu, flMap) = runInferer cycles (F.getName pu) tenv (descendBiM perBlock pu)
   where cycles = cyclicDependents flMap
 
 --------------------------------------------------
 
--- Because loop bodies are not nested (yet), we need to look for the
--- beginning of lists (use descendBiM!!!) and scan over them.
-perBlocks :: [F.Block A] -> Inferer [F.Block A]
-perBlocks bs = iterateMaybe_ blockLoop bs >> return bs
-
--- Chomp through the list of blocks until we run out of blocks
-blockLoop :: [F.Block A] -> Inferer (Maybe [F.Block A])
-
--- Match any assignment statements
-blockLoop (b@(F.BlStatement _ span _ (F.StExpressionAssign _ _ _ rhs)):bs) = do
+perBlock :: F.Block A -> Inferer (F.Block A)
+perBlock b@(F.BlStatement _ span _ (F.StExpressionAssign _ _ _ rhs)) = do
   (_, puName, tenv) <- ask
   -- Get array indexing (on the RHS)
   let rhsExprs = universeBi rhs :: [F.Expression A]
@@ -101,27 +93,18 @@ blockLoop (b@(F.BlStatement _ span _ (F.StExpressionAssign _ _ _ rhs)):bs) = do
                  , let e = F.aStrip subs
                  , not (null e)
         ]
-
   -- Create specification information
   ivs <- get
   let specs = groupKeyBy . M.toList . fmap (ixCollectionToSpec ivs) $ arrayAccesses
   tell $ [(span, specs)] -- add to report
-  return $ Just bs
-
--- Match a Do-loop, and chomp the entire body by finding the "continue" statement
-blockLoop (b@(F.BlStatement _ span _
-               (F.StDo _ _ (Just label) (doSpec@F.DoSpecification {}))):bs) = do
+  return b
+perBlock b@(F.BlDo _ span _ (doSpec@F.DoSpecification {}) body) = do
   let F.DoSpecification _ _ (
           F.StExpressionAssign _ _ (F.ExpValue _ _ (F.ValVariable _ v)) _
         ) _ _ = doSpec
   modify $ union [v] -- introduce v into the list of induction variables
-  ivs <- get
   (cycles, _, _) <- ask
 
-  -- use label to search for end of loop and return list of blocks inside of loop
-  let (body, bs') = break ((`labelEq` Just label) . F.getLabel) bs
-
-  -- Insert temporal specs for anything inside the Do-loop
   let lexps = FA.lhsExprs =<< body
 
   let getTimeSpec e = do
@@ -135,13 +118,11 @@ blockLoop (b@(F.BlStatement _ span _
   let tempSpecs = foldl' (\ ts -> maybe ts (:ts) . getTimeSpec) [] lexps
 
   tell $ [(span, tempSpecs)]
-
-  perBlocks body                -- process loop body
-
-  return $ Just bs'             -- return post-loop blocks
-
-blockLoop (b:bs) = return $ Just bs
-blockLoop []     = return Nothing
+  -- descend into the body of the do-statement, with the updated list of induction variables.
+  mapM (descendBiM perBlock) body
+  -- (we don't need to worry about scope, thanks to renaming)
+  return b
+perBlock b = return b
 
 -- Penelope's first code, 20/03/2016. 
 -- iii././//////////////////////. mvnmmmmmmmmmu
@@ -165,7 +146,7 @@ ixCollectionToSpec ivs ess = snd3 . inferSpecIntervalE . fromLists . padZeros . 
    -- passed dim = 0, expr = i + 1 and dim = 1, expr = j + 1
    ixExprToIndex :: [Variable] -> Dimension -> F.Expression A -> Maybe Int
    ixExprToIndex ivs d (F.ExpValue _ _ (F.ValVariable _ v))
-     | v `elem` ivs = Just $ 0
+     | v `elem` ivs = Just 0
      -- TODO: if we want to capture 'constant' parts, then edit htis
      | otherwise    = Nothing
    ixExprToIndex ivs d (F.ExpBinary _ _ F.Addition (F.ExpValue _ _ (F.ValVariable _ v))
