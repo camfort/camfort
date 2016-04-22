@@ -131,37 +131,37 @@ perBlock b = return b
 
 -- Convert list of indexing expressions to list of specs
 ixCollectionToSpec :: [Variable] -> [[F.Expression A]] -> [Specification]
-ixCollectionToSpec ivs ess = snd3 . inferSpecIntervalE . fromLists . padZeros . map toListsOfIndices $ ess
+ixCollectionToSpec ivs ess = snd3 . inferSpecIntervalE . fromLists . padZeros . map toListsOfRelativeIndices $ ess
   where
 
    padZeros :: [[Int]] -> [[Int]]
    padZeros ixss = let m = maximum (map length ixss)
                       in map (\ixs -> ixs ++ (take (m - (length ixs)) [0..])) ixss 
        
-   toListsOfIndices :: [F.Expression A] -> [Int]
-   toListsOfIndices = (fromMaybe [] . zipWithM (ixExprToIndex ivs) [0..])
+   toListsOfRelativeIndices :: [F.Expression A] -> [Int]
+   toListsOfRelativeIndices = fromMaybe [] . mapM (ixExprToOffset ivs)
 
-   -- Convert a single index expression for a particular dimension to intermediate spec
-   -- e.g., for the expression a(i+1,j+1) then this function gets
-   -- passed dim = 0, expr = i + 1 and dim = 1, expr = j + 1
-   ixExprToIndex :: [Variable] -> Dimension -> F.Expression A -> Maybe Int
-   ixExprToIndex ivs d (F.ExpValue _ _ (F.ValVariable _ v))
+   -- Convert indexing expressions which are translations to their translation offsett:
+   -- e.g., for the expression a(i+1,j-1) then this function gets
+   -- passed expr = i + 1   (returning +1) and expr = j - 1 (returning -1)
+   ixExprToOffset :: [Variable] -> F.Expression A -> Maybe Int
+   ixExprToOffset ivs (F.ExpValue _ _ (F.ValVariable _ v))
      | v `elem` ivs = Just 0
      -- TODO: if we want to capture 'constant' parts, then edit htis
      | otherwise    = Nothing
-   ixExprToIndex ivs d (F.ExpBinary _ _ F.Addition (F.ExpValue _ _ (F.ValVariable _ v))
+   ixExprToOffset ivs (F.ExpBinary _ _ F.Addition (F.ExpValue _ _ (F.ValVariable _ v))
                                                        (F.ExpValue _ _ (F.ValInteger offs)))
      | v `elem` ivs = Just $ read offs
-   ixExprToIndex ivs d (F.ExpBinary _ _ F.Addition (F.ExpValue _ _ (F.ValInteger offs))
+   ixExprToOffset ivs (F.ExpBinary _ _ F.Addition (F.ExpValue _ _ (F.ValInteger offs))
                                                     (F.ExpValue _ _ (F.ValVariable _ v)))
      | v `elem` ivs = Just $ read offs
-   ixExprToIndex ivs d (F.ExpBinary _ _ F.Subtraction (F.ExpValue _ _ (F.ValVariable _ v))
+   ixExprToOffset ivs (F.ExpBinary _ _ F.Subtraction (F.ExpValue _ _ (F.ValVariable _ v))
                                                        (F.ExpValue _ _ (F.ValInteger offs)))
      | v `elem` ivs = Just $ if x < 0 then abs x else (- x)
      where x = read offs
    -- TODO: if we want to capture 'constant' parts, then edit htis     
-   --ixExprToIndex ivs d (F.ExpValue _ _ (F.ValInteger _)) = Just $ Const d
-   ixExprToIndex ivs d _ = Nothing
+   --ixExprToOffset ivs d (F.ExpValue _ _ (F.ValInteger _)) = Just $ Const d
+   ixExprToOffset ivs _ = Nothing
 
 --------------------------------------------------
 

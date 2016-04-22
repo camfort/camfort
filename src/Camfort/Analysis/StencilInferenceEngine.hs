@@ -51,18 +51,19 @@ data EqT (a :: k) (b :: k) where
 fromLists :: [[Int]] -> VecList Int
 fromLists [] = VL ([] :: [Vec Z Int])
 fromLists (xs:xss) = consList (fromList xs) (fromLists xss)
-  where consList :: List Int -> VecList Int -> VecList Int
-        consList (List vec) (VL [])     = VL [vec]
-        consList (List vec) (VL (x:xs))
-          = let (vec', x') = zipVec vec x
-            in  -- Force the pre-condition equality 
-                case (preCondition x' xs, preCondition vec' xs) of
-                  (ReflEq, ReflEq) -> VL $ (vec' : (x' : xs))
+  where
+    consList :: List Int -> VecList Int -> VecList Int
+    consList (List vec) (VL [])     = VL [vec]
+    consList (List vec) (VL (x:xs))
+      = let (vec', x') = zipVec vec x
+        in  -- Force the pre-condition equality 
+          case (preCondition x' xs, preCondition vec' xs) of
+            (ReflEq, ReflEq) -> VL $ (vec' : (x' : xs))
                 
             where -- At the moment the pre-condition is 'assumed', and therefore
-                  -- force used unsafeCoerce: TODO, rewrite
-                  preCondition :: Vec n a -> [Vec n1 a] -> EqT n n1
-                  preCondition xs x = unsafeCoerce $ ReflEq
+              -- force used unsafeCoerce: TODO, rewrite
+              preCondition :: Vec n a -> [Vec n1 a] -> EqT n n1
+              preCondition xs x = unsafeCoerce $ ReflEq
         
 
 inferSpecInterval :: Permutable n => [Vec n Int] -> Interval Specification
@@ -134,7 +135,7 @@ fromRegionsToSpecInterval sps = (lower, exact, upper)
             (lS, eS) = go ss
                   
 toSpecND :: Span (Vec n Int) -> Specification
-toSpecND n = case (toSpecND' n 0) of
+toSpecND n = case (toSpecND' n 1) of
                [s] -> Only s  
                ss  -> Product ss
   where

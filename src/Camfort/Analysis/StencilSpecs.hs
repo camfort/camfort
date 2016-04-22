@@ -1,7 +1,8 @@
-{-# LANGUAGE GADTs, StandaloneDeriving, DeriveDataTypeable #-}
+{-# LANGUAGE GADTs, StandaloneDeriving, DeriveDataTypeable, FlexibleInstances #-}
 
 module Camfort.Analysis.StencilSpecs where
 
+import Camfort.Helpers
 import Data.Generics.Uniplate.Data
 import Data.List
 import Data.Data
@@ -38,6 +39,8 @@ data Specification where
 deriving instance Eq Specification
 deriving instance Data Specification
 deriving instance Typeable Specification
+
+
 
 {-| An (arbitrary) ordering specifications for the sake of normalisation -}
 instance Ord Specification where
@@ -78,19 +81,99 @@ instance Ord Direction where
          Bwd <= Bwd = True
          Bwd <= Fwd = False
 
--- Syntax
+-- Show a list with ',' separator (used to represent union of regions)
 showL :: Show a => [a] -> String
 showL = concat . (intersperse ",") . (map show)
+
+showUnionSpecs :: Show a => [a] -> String
+showUnionSpecs = showL
+
+-- Show a list with '*' separator (used to represent product of regions)
+showProdSpecs :: Show a => [a] -> String
+showProdSpecs = concat . (intersperse "*") . (map show)
+
+-- Syntax
 instance Show Specification where
     show Empty                = "none"
     show (Reflexive dims)     = "reflexive, dims=" ++ showL dims
-    show (Forward dep dims)   = "forward, depth="  ++ show dep ++ ", dim=" ++ showL dims
-    show (Backward dep dims)  = "backward, depth=" ++ show dep ++ ", dim=" ++ showL dims
-    show (Symmetric dep dims) = "centered, depth=" ++ show dep ++ ", dim=" ++ showL dims
+    show (Forward dep dims)   = showRegion "forward" (show dep) (showL dims)
+    show (Backward dep dims)  = showRegion "backward" (show dep) (showL dims)
+    show (Symmetric dep dims) = showRegion "centered" (show dep) (showL dims)
     show (Unspecified dims)   = "unspecified "  ++ showL dims
     show (Constant dims)      = "fixed, dim=" ++ showL dims
     show (Only spec)          = "only, " ++ show spec
-    show (Product specs)      = concat $ intersperse " & " $ map (\spec -> "(" ++ show spec ++ ")") specs
+    
+    -- Products of specifications have some specialse case printing.
+    show (Product specs)      = showProdSpecs . pmonoidNormalise' $ map InsideProd specs
+
     show (Linear spec)        = (show spec) ++ ", unique "
-    show (TemporalFwd dims)   = "forward, depth=" ++ show (length dims) ++ ", dim=t{" ++ showL dims ++ "}"
-    show (TemporalBwd dims)   = "backward, depth=" ++ show (length dims) ++ ", dim=t{" ++ showL dims ++ "}"
+    show (TemporalFwd tdims)  = showRegion "forward" (show $ length tdims) ("t{" ++ showL tdims ++ "}")
+    show (TemporalBwd tdims)  = showRegion "backward" (show $ length tdims) ("t{" ++ showL tdims ++ "}")
+
+-- Helper for showing regions
+showRegion typ depS dimS = typ ++ ", depth=" ++ depS ++ ", dim=" ++ dimS
+
+{- For products of regions, we provide a compact pretty-printed output that coalesces specifications 
+    of the same depth and direction
+
+  e.g. (forward, depth=1, dim=1) * (forward, depth=1, dim=2)
+  is actually output as
+        forward, depth=1, dim=1*2
+
+  This is done via a bit of normalisation indicator by a wrapper datatype 'InsideProd'
+  where the 'InsideProd Specification' is the type of specifications over which a 
+  a product is being taken
+-}
+
+data InsideProd a = InsideProd a deriving (Eq, Ord)
+
+instance Show (InsideProd Specification) where
+  show (InsideProd (Forward dep dims))   = showRegion "forward" (show dep) (showProdSpecs dims) 
+  show (InsideProd (Backward dep dims))  = showRegion "backward" (show dep) (showProdSpecs dims)
+  show (InsideProd (Symmetric dep dims)) = showRegion "symmetry" (show dep) (showProdSpecs dims)
+  show (InsideProd x)                    = show x
+
+{-
+-- Equality of specifications inside a product is modulo the dimensionality so that
+-- specifications can be grouped together by their PartialMonoid instance (see below)
+instance Eq (InsideProd Specification) where
+    (InsideProd x) == (InsideProd y) = eqModDim x y
+      where
+        eqModDim (Reflexive _) (Reflexive _)        = True
+        eqModDim (Forward dep _) (Forward dep' _)   = dep == dep'
+        eqModDim (Backward dep _) (Backward dep' _) = dep == dep'
+        eqModDim (Symmetric dep _) (Symmetric dep' _) = dep == dep'
+        eqModDim (Only s) (Only s')                 = InsideProd s == InsideProd s'
+        eqModDim (Product ss) (Product ss')         = and (zipWith (\s s' -> InsideProd s == InsideProd s') ss ss')
+        eqModDim (TemporalFwd _) (TemporalFwd _)    = True
+        eqModDim (TemporalBwd _) (TemporalBwd _)    = True
+        eqModDim (Unspecified _) (Unspecified _)    = True
+        eqModDim (Constant _) (Constant _)          = True
+        eqModDim (Linear s) (Linear s')             = InsideProd s == InsideProd s'
+        eqModDim Empty Empty                        = True
+        eqModDim _     _                            = False
+-}
+
+instance PartialMonoid (InsideProd Specification) where
+  pmempty = InsideProd Empty
+  -- Coalesce 
+  pmappend (InsideProd x) (InsideProd y) = plus x y >>= (Just . InsideProd)
+    where plus (Reflexive ds) (Reflexive ds')
+            = Just $ Reflexive (ds ++ ds')
+
+          plus (Forward dep ds) (Forward dep' ds')
+            | dep == dep' = Just $ Forward dep (ds ++ ds')
+            
+          plus (Backward dep ds) (Backward dep' ds')
+            | dep == dep' = Just $ Backward dep (ds ++ ds')
+            
+          plus (Symmetric dep ds) (Symmetric dep' ds')
+            | dep == dep' = Just $ Symmetric dep (ds ++ ds')
+            
+          plus x y = Nothing
+
+-- Ordering is usual
+--instance Ord (InsideProd Specification) where
+--  (InsideProd x) <= (InsideProd y) = x <= y
+
+

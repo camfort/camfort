@@ -133,6 +133,9 @@ spec =
     describe "2D stencil verification" $
       mapM_ test2DSpecVariation variations
 
+    describe "3D stencil verification" $
+      mapM_ test3DSpecVariation variations3D
+
 {- Properties of `spanBoundingBox`: idempotent and associative -}
 prop_spanBoundingIdem :: Natural n -> Span (Vec n Int) -> Bool
 prop_spanBoundingIdem w x = spanBoundingBox x x == normaliseSpan x
@@ -192,7 +195,9 @@ test2DSpecVariation (input, expectation) =
                (sort expectation)
   where
     fromFormatToExpr (ri,rj) = [mkOffset "i" ri, mkOffset "j" rj]
-    mkOffset v o
+
+-- Make indexing expression from an offset
+mkOffset v o
       | o == 0    = F.ExpValue a s (F.ValVariable a v)
       | o  > 0    =
         F.ExpBinary a s F.Addition
@@ -214,6 +219,17 @@ variations =
         , ( [ (0,-1), (1,-1), (0,0), (1,0), (1,1), (0,1) ]
           , [ Product [ Symmetric 1 [ 2 ], Forward 1 [ 1 ] ] ] )
         ]
+
+test3DSpecVariation (input, expectation) =
+    it ("format=" ++ show input) $
+      shouldBe (ixCollectionToSpec ["i", "j", "k"] (map fromFormatToExpr input))
+               (sort expectation)
+  where
+    fromFormatToExpr (ri,rj,rk) = [mkOffset "i" ri, mkOffset "j" rj, mkOffset "k" rk]
+
+
+variations3D =
+       [ ([ (-1,0,-1), (0,0,-1), (-1,0,0), (0,0,0) ], [ Backward 1 [ 1, 3 ] ]) ]
 
 {-
 instance Arbitrary Direction where

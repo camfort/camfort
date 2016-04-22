@@ -34,21 +34,8 @@ import System.Console.GetOpt
 import System.Directory
 import System.Environment
 import System.IO
-import Camfort.Transformation.DeadCode
-import Camfort.Transformation.CommonBlockElim
-import Camfort.Transformation.CommonBlockElimToCalls
-import Camfort.Transformation.EquivalenceElim
-import Camfort.Transformation.DerivedTypeIntro
-
-import Camfort.Extensions.UnitsEnvironment
-import Camfort.Extensions.UnitsSolve
 
 import Camfort.Analysis.Annotations hiding (Unitless)
-import Camfort.Analysis.Types
-import Camfort.Analysis.Loops
-import Camfort.Analysis.LVA
-import Camfort.Analysis.Syntax
-
 import Camfort.Helpers
 import Camfort.Output
 import Camfort.Input
@@ -57,8 +44,6 @@ import Camfort.Functionality
 import System.Console.GetOpt
 import System.Environment
 import System.IO
-
-import Debug.Trace
 
 import Data.List (foldl', nub, (\\), elemIndices, intersperse)
 import Data.Text (pack, unpack, split)

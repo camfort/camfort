@@ -1,6 +1,6 @@
 {-# LANGUAGE GADTs, StandaloneDeriving, FlexibleContexts, ImplicitParams #-}
 
-module Camfort.Analysis.Stencils where
+module Camfort.Analysis.StencilsLangFort where
 
 import Language.Fortran hiding (Spec)
 

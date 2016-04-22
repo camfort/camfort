@@ -17,7 +17,7 @@
 
 module Camfort.Helpers where
 
-import Data.List (elemIndices)
+import Data.List (elemIndices,group,sort)
 import System.Directory
 import Language.Fortran
 
@@ -105,3 +105,22 @@ foldPair f [a] = [a]
 foldPair f (a:(b:xs)) = case f a b of
                           Nothing -> a : (foldPair f (b : xs))
                           Just c  -> foldPair f (c : xs)
+
+class PartialMonoid x where
+  -- Satisfies equations:
+   --   pmappend x pmempty = Just x
+   --   pmappend pempty x  = Just x
+   --   (pmappend y z) >>= (\w -> pmappend x w) = (pmappend x y) >>= (\w -> pmappend w z)
+
+   pmempty  :: x
+   pmappend :: x -> x -> Maybe x
+
+pmonoidNormalise :: (Ord t, PartialMonoid t) => [t] -> [t]
+pmonoidNormalise = reduce . group . sort
+  where reduce = concatMap (foldPair pmappend)
+
+pmonoidNormalise' :: (Ord t, PartialMonoid t) => [t] -> [t]
+pmonoidNormalise' = reduce . sort
+  where reduce = foldPair pmappend
+
+
