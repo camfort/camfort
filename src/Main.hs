@@ -60,7 +60,7 @@ import System.IO
 
 import Debug.Trace
 
-import Data.List (foldl', nub, (\\), elemIndices, intersperse)
+import Data.List (foldl', nub, (\\), elemIndices, intersperse, intercalate)
 import Data.Text (pack, unpack, split)
 import qualified Data.Map as M
 import Data.Maybe
@@ -163,28 +163,23 @@ instance Show' String where
 instance Show' Int where
       show' = show
 
-test = stencilsInf "samples/stencils/one.f90" [] () ()
+test = stencilsInfForPar "samples/stencils/one.f" [] () ()
+testVFC = stencilsVarFlowCycles "samples/stencils/one.f" [] () ()
+
+oldTest = stencilsInf "samples/stencils/one.f90" [] () ()
 
 --------------------------------------------------
 -- Forpar stuff
 
-stencilsInfForPar inSrc excludes _ _ =
-          do putStrLn $ "Inferring stencil specs for " ++ show inSrc ++ "\n"
-             doAnalysisSummaryForpar StencilsForpar.infer inSrc excludes
+stencilsInfForPar inSrc excludes _ _ = do
+  putStrLn $ "Inferring stencil specs for " ++ show inSrc ++ "\n"
+  doAnalysisSummaryForpar StencilsForpar.infer inSrc excludes
 ----
-stencilsFlow inSrc excludes _ _ = do
-  putStrLn $ "Flows for " ++ show inSrc ++ "\n"
-  doAnalysisSummaryForpar showFlow inSrc excludes
-  where
-    showFlow pf = unlines . flip map puFlows $ \ (pu, flmap) ->
-                    let flows = M.toList (descendBi fixName flmap) in
-                      show (descendBi fixName (A.getName pu)) ++ "\n" ++
-                      unlines (map (("\t"++) . show) flows)
-      where
-        (pf', nm) = renameAndStrip . analyseRenames . initAnalysis $ pf
-        puFlows   = StencilsForpar.flowAnalysisArrays pf'
-        fixName   :: String -> String
-        fixName n = n `fromMaybe` M.lookup n nm
+
+stencilsVarFlowCycles inSrc excludes _ _ = do
+  putStrLn $ "Inferring var flow cycles for " ++ show inSrc ++ "\n"
+  doAnalysisSummaryForpar (intercalate ", " . map show . StencilsForpar.findVarFlowCycles) inSrc excludes
+
 ----
 doAnalysisSummaryForpar :: (Monoid s, Show' s) => (A.ProgramFile A -> s) -> FileOrDir -> [Filename] -> IO ()
 doAnalysisSummaryForpar aFun inSrc excludes = do
