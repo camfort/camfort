@@ -17,7 +17,7 @@
 
 module Camfort.Helpers where
 
-import Data.List (elemIndices,group,sort)
+import Data.List (elemIndices, group, sort, nub)
 import System.Directory
 import Language.Fortran
 
@@ -116,11 +116,8 @@ class PartialMonoid x where
    pmappend :: x -> x -> Maybe x
 
 pmonoidNormalise :: (Ord t, PartialMonoid t) => [t] -> [t]
-pmonoidNormalise = reduce . group . sort
-  where reduce = concatMap (foldPair pmappend)
-
-pmonoidNormalise' :: (Ord t, PartialMonoid t) => [t] -> [t]
-pmonoidNormalise' = reduce . sort
+pmonoidNormalise = nub . reduce . sort
   where reduce = foldPair pmappend
 
-
+normaliseBy :: Ord t => (t -> t -> Maybe t) -> [t] -> [t]
+normaliseBy pmappend = nub . (foldPair pmappend) . sort

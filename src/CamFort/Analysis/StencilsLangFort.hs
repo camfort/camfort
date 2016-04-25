@@ -102,7 +102,7 @@ specInference' (p, flMap) =
 
 -- Convert list of indexing expressions to list of specs
 ixCollectionToSpec :: [Variable] -> [[Expr p]] -> [Specification]
-ixCollectionToSpec ivs ess = snd3 . inferSpecIntervalE . fromLists . padZeros . map toListsOfIndices $ ess
+ixCollectionToSpec ivs ess = snd3 . fromIndicesToSpec . fromLists . padZeros . map toListsOfIndices $ ess
   where
 
    padZeros :: [[Int]] -> [[Int]]

@@ -67,3 +67,5 @@ zipVec Nil xs  = (fmap (const 0) xs, xs)
 zipVec xs Nil  = (xs, fmap (const 0) xs)
 zipVec (Cons x xs) (Cons y ys)
                = (Cons x xs', Cons y ys') where (xs', ys') = zipVec xs ys
+
+

@@ -129,14 +129,17 @@ perBlock b = return b
 
 {- *** 2 . Operations on specs, and conversion from indexing expressions -}
 
+-- padZeros makes this rectilinear
+padZeros :: [[Int]] -> [[Int]]
+padZeros ixss = let m = maximum (map length ixss)
+                in map (\ixs -> ixs ++ (replicate (m - (length ixs)) 0)) ixss 
+   
+
 -- Convert list of indexing expressions to list of specs
 ixCollectionToSpec :: [Variable] -> [[F.Expression A]] -> [Specification]
-ixCollectionToSpec ivs ess = snd3 . inferSpecIntervalE . fromLists . padZeros . map toListsOfRelativeIndices $ ess
+ixCollectionToSpec ivs ess = snd3 . fromIndicesToSpec . fromLists . padZeros . map toListsOfRelativeIndices $ ess
   where
 
-   padZeros :: [[Int]] -> [[Int]]
-   padZeros ixss = let m = maximum (map length ixss)
-                      in map (\ixs -> ixs ++ (take (m - (length ixs)) [0..])) ixss 
        
    toListsOfRelativeIndices :: [F.Expression A] -> [Int]
    toListsOfRelativeIndices = fromMaybe [] . mapM (ixExprToOffset ivs)
@@ -277,6 +280,9 @@ cyclicDependents :: FlowsMap -> Cycles
 cyclicDependents flmap = filter (uncurry (/=)) reflSubset
   where
     self           = flmap `composeRelW` flmap
+    -- From M.Map k [(v, k)] return the list of (k, v) which gives
+    -- those variables 'k' which have a cylcic depenency through 'v'.
+    -- TODO: Possibly only makes sense for paths of length 2: invesitgate length > 2
     reflSubset     = foldl' frob [] (M.assocs self)
     frob p (k, ks) = maybe p ((:p) . (k,)) $ k `lookup` map swap ks
 

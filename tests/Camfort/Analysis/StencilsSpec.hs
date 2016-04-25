@@ -210,14 +210,16 @@ mkOffset v o
 
 variations =
         [ ([ (0,0) ], [ Reflexive [ 1, 2 ] ])
-        , ([ (1,0), (0,0) ], [ Forward 1 [ 1 ], Reflexive [ 2 ] ])
-        , ([ (0,1), (0,0) ], [ Reflexive [ 1 ], Forward 1 [ 2 ] ])
-        , ([ (1,1), (0,1), (1,0), (0,0) ], [ Forward 1 [ 1, 2 ] ])
-        , ([ (-1,0), (0,0) ], [ Backward 1 [ 1 ], Reflexive [ 2 ] ])
-        , ([ (0,-1), (0,0) ], [ Reflexive [ 1 ], Backward 1 [ 2 ] ])
-        , ([ (-1,-1), (0,-1), (-1,0), (0,0) ], [ Backward 1 [ 1, 2 ] ])
+        , ([ (1,0), (0,0) ], [ Forward 1 [ 1 ] ])
+        , ([ (0,1), (0,0) ], [ Forward 1 [ 2 ] ])
+        , ([ (1,1), (0,1), (1,0), (0,0) ], [ Product [Forward 1 [ 1, 2 ] ]])
+        , ([ (-1,0), (0,0) ], [ Backward 1 [ 1 ] ])
+        , ([ (0,-1), (0,0) ], [ Backward 1 [ 2 ] ])
+        , ([ (-1,-1), (0,-1), (-1,0), (0,0) ], [ Product [Backward 1 [ 1, 2 ] ]] )
         , ( [ (0,-1), (1,-1), (0,0), (1,0), (1,1), (0,1) ]
           , [ Product [ Symmetric 1 [ 2 ], Forward 1 [ 1 ] ] ] )
+         -- Stencil which is non-contiguous from the origin in both directions
+        , ([ (0, 1), (1, 1) ], [ Forward 1 [ 1 ] ])
         ]
 
 test3DSpecVariation (input, expectation) =
@@ -229,7 +231,8 @@ test3DSpecVariation (input, expectation) =
 
 
 variations3D =
-       [ ([ (-1,0,-1), (0,0,-1), (-1,0,0), (0,0,0) ], [ Backward 1 [ 1, 3 ] ]) ]
+       [ ([ (-1,0,-1), (0,0,-1), (-1,0,0), (0,0,0) ], [ Reflexive [2], Backward 1 [ 1, 3 ] ]),
+         ([ (-1,4,-1), (0,4,-1), (-1,4,0), (0,4,0) ], [ Backward 1 [ 1, 3 ] ])]
 
 {-
 instance Arbitrary Direction where

@@ -23,138 +23,90 @@ fst3 (a, b, c) = a
 snd3 (a, b, c) = b
 thd3 (a, b, c) = c
 
-inferSpecIntervalE :: VecList Int -> Interval Specification
-inferSpecIntervalE (VL ixs) = inferSpecInterval ixs
-
--- Lists existentially quanitify over a vector's size : Exists n . Vec n a 
-data List a where
-     List :: Permutable n => Vec n a -> List a
-     
-lnil :: List a
-lnil = List Nil
-lcons :: a -> List a -> List a
-lcons x (List Nil) = List (Cons x Nil)
-lcons x (List (Cons y Nil)) = List (Cons x (Cons y Nil))
-lcons x (List (Cons y (Cons z xs))) = List (Cons x (Cons y (Cons z xs)))
-
-fromList :: [a] -> List a
-fromList []       = lnil
-fromList (x : xs) = lcons x (fromList xs)
-
-{- Vector list repreentation where the size 'n' is existentiall quantified -}
-data VecList a where VL :: Permutable n => [Vec n a] -> VecList a
-
-data EqT (a :: k) (b :: k) where
-    ReflEq :: EqT a a
-
--- pre-condition: the input is a 'square' list of lists (i.e. all internal lists have the same size)
-fromLists :: [[Int]] -> VecList Int
-fromLists [] = VL ([] :: [Vec Z Int])
-fromLists (xs:xss) = consList (fromList xs) (fromLists xss)
-  where
-    consList :: List Int -> VecList Int -> VecList Int
-    consList (List vec) (VL [])     = VL [vec]
-    consList (List vec) (VL (x:xs))
-      = let (vec', x') = zipVec vec x
-        in  -- Force the pre-condition equality 
-          case (preCondition x' xs, preCondition vec' xs) of
-            (ReflEq, ReflEq) -> VL $ (vec' : (x' : xs))
-                
-            where -- At the moment the pre-condition is 'assumed', and therefore
-              -- force used unsafeCoerce: TODO, rewrite
-              preCondition :: Vec n a -> [Vec n1 a] -> EqT n n1
-              preCondition xs x = unsafeCoerce $ ReflEq
-        
+fromIndicesToSpec :: VecList Int -> Interval Specification
+fromIndicesToSpec (VL ixs) = inferSpecInterval ixs
 
 inferSpecInterval :: Permutable n => [Vec n Int] -> Interval Specification
 inferSpecInterval ixs = (low, simplify exact, up)
   where (low, exact, up) = fromRegionsToSpecInterval . inferMinimalVectorRegions $ ixs
 
--- Simplifies lists specifications based on the 'specPlus', 'specTimes', 'simplifyRefl' operations
+-- Simplifies lists specifications based on the 'specPlus', 'simplifyRefl' operations
 simplify :: [Specification] -> [Specification]
-simplify = nub . foldPair specPlus . sort . simplifyInsideProducts . simplifyRefl
-  where simplifyInsideProducts = transformBi (nub . foldPair specTimes . sort . simplifyRefl)
-
+simplify = normaliseBy specPlus . simplifyInsideProducts . simplifyRefl
+  where simplifyInsideProducts = map (transformBi simplify)
+  
 -- Removes any 'reflexive' specs that are overlapped by a 'centered'
 simplifyRefl :: [Specification] -> [Specification]
 simplifyRefl sps = transformBi simplifyRefl' sps
   where
-    simplifyRefl' (Product [s]) = Only s
+    simplifyRefl' (Product [s]) = s -- Only s
         
     simplifyRefl' (Only r@(Reflexive rdims))
       = case simplifyRefl' r of
           Empty -> Empty
-          r     -> Only r
+          r     -> r --  Only r
           
     simplifyRefl' (Reflexive rdims) 
       = let rdims' = [d | (Symmetric _ dims) <- universeBi sps, d <- dims, d' <- rdims, d == d']
-        in case rdims \\ rdims' of
-             [] -> Empty
-             ds -> Reflexive ds
+            rdimsF = [d | (Forward _ dims) <- universeBi sps, d <- dims, d' <- rdims, d == d']
+            rdimsB = [d | (Backward _ dims) <- universeBi sps, d <- dims, d' <- rdims, d == d']
+            
+        in --TODO: Refactor this case- it is a bit over-the-top at the moment
+           --(show ((rdims, rdims', rdimsF, rdimsB),(rdimsD,rdimsFD,rdimsBD))) `trace`
+            case rdims \\ (rdims' ++ rdimsF ++ rdimsB) of
+              [] -> Empty
+              ds -> Reflexive ds
               
     simplifyRefl' s = s
- 
--- Combine specs in a multiplicative way (used within product of specs)
-specTimes :: Specification -> Specification -> Maybe Specification
-specTimes Empty x = Just x
-specTimes x Empty = Just x
-specTimes x y     = Nothing
 
--- Combine specs in an additive way
-specPlus :: Specification -> Specification -> Maybe Specification
-specPlus Empty x = Just x
-specPlus x Empty = Just x
-specPlus (Product [s]) (Product [s'])
-    = Just $ Only (Product $ foldPair specPlus [s, s'])
-specPlus (Only spec) (Only spec')
-    = (specPlus spec spec') >>= (\spec'' -> Just (Only spec''))
-specPlus (Reflexive dims) (Reflexive dims')
-    = Just $ Reflexive (sort $ dims ++ dims')
-specPlus (Forward dep dims) (Forward dep' dims')
-    | dep == dep' = Just $ Forward dep (sort $ dims ++ dims')
-specPlus (Backward dep dims) (Backward dep' dims')
-    | dep == dep' = Just $ Backward dep (sort $ dims ++ dims')
-specPlus (Symmetric dep dims) (Symmetric dep' dims')
-    | dep == dep' = Just $ Symmetric dep (sort $ dims ++ dims')
-specPlus (Unspecified dims) (Unspecified dims')
-    = Just $ Unspecified (dims ++ dims')
-specPlus x y
-    = Nothing
 
 fromRegionsToSpecInterval :: [Span (Vec n Int)] -> Interval Specification
 fromRegionsToSpecInterval sps = (lower, exact, upper)
   where
     (lower, exact) = go sps
-    upper          = toSpecND $ foldl1 spanBoundingBox sps
+    upper          = head $ toSpecND $ foldl1 spanBoundingBox sps
 
     go []       = (Empty, [Empty])
-    go [s]      = (Empty, [toSpecND s])
+    go [s]      = (Empty, toSpecND s)
    -- TODO, compute a better lower bound
-    go (s : ss) = (lS, exact : eS)
+    go (s : ss) = (lS, exact ++ eS)
       where exact    = toSpecND s
             (lS, eS) = go ss
-                  
-toSpecND :: Span (Vec n Int) -> Specification
-toSpecND n = case (toSpecND' n 1) of
-               [s] -> Only s  
-               ss  -> Product ss
-  where
-    toSpecND' :: Span (Vec n Int) -> Int -> [Specification]
-    toSpecND' (Nil, Nil)             d = []
-    toSpecND' (Cons l ls, Cons u us) d = (toSpec1D d l u) ++ (toSpecND' (ls, us) (d + 1))
+
+-- toSpecND converts an n-dimensional region into a (list of) specification
+--  The resulting list satisfies the following: 
+--   the first element (if it exists) is a product of specifications
+--   the second and successive elements (if they exists) are all reflexive specifications
+toSpecND :: Span (Vec n Int) -> [Specification]
+toSpecND n =
+    case (toSpecPerDim n 1) of
+      [s] -> [s] -- Previous "Only s" - TODO: figure out how much we need Only representation
+      -- Take the product of the per-dimension specifications
+      ss  -> Product nonRefls : refls
+              where
+                (refls, nonRefls) = partition (\x -> case x of { Reflexive _ -> True; _ -> False }) ss
+  
+-- convert the region one dimension at a time. 
+toSpecPerDim :: Span (Vec n Int) -> Int -> [Specification]
+toSpecPerDim (Nil, Nil)             d = []
+toSpecPerDim (Cons l ls, Cons u us) d = (toSpec1D d l u) ++ (toSpecPerDim (ls, us) (d + 1))
 
 -- : (toSpecification (dim+1) ms ns)
+
+-- toSpec1D takes a dimension identifier, a lower and upper bound of a region in that dimension, and
+-- builds the simple directional spec.
 toSpec1D :: Dimension -> Int -> Int -> [Specification]
-toSpec1D dim m n
-    | m == 0 && n == 0   = [Reflexive [dim]]
-    | m < 0 && n == 0    = [Backward (abs m) [dim], Reflexive [dim]]
-    | m < 0 && n == (-1) = [Backward (abs m) [dim]]
-    | m < 0 && n > 0 && (abs m == n)
-                         = [Symmetric n [dim]]
-    | m < 0 && n > 0 && (abs m /= n)
-                         = [Backward (abs m) [dim], Forward n [dim], Reflexive [dim]]
-    | m == 0 && n > 0    = [Forward n [dim]]
-    | m == 1 && n > 0    = [Forward n [dim], Reflexive [dim]]
+toSpec1D dim l u 
+    | l == 0 && u == 0   = [Reflexive [dim]]
+    | l==u               = [] -- Represents a non-span
+    | l < 0 && u == 0    = [Backward (abs l) [dim], Reflexive [dim]]
+    | l < 0 && u == (-1) = [Backward (abs l) [dim]]
+    | l < 0 && u > 0 && (abs l == u)
+                         = [Symmetric u [dim]]
+    | l < 0 && u > 0 && (abs l /= u)
+                         = [Backward (abs l) [dim], Forward u [dim], Reflexive [dim]]
+    | l == 0 && u > 0    = [Forward u [dim]]
+    | l == 1 && u > 0    = [Forward u [dim], Reflexive [dim]]
     | otherwise          = [Unspecified [dim]]
 
 
@@ -192,6 +144,8 @@ composeConsecutiveSpans x@(Cons l1 ls1, Cons u1 us1) y@(Cons l2 ls2, Cons u2 us2
       = Just (Cons l1 ls1, Cons u2 us2)
     | otherwise
       = Nothing
+
+foobar = [Cons 0 (Cons 1 Nil), Cons 1 (Cons 1 Nil)]
 
 {-| |inferMinimalVectorRegions| a key part of the algorithm, from a list of n-dimensional relative indices 
     it infers a list of (possibly overlapping) 1-dimensional spans (vectors) within the n-dimensional space.
@@ -289,3 +243,44 @@ instance Permutable (S n) => Permutable (S (S n)) where
       [ (Cons y zs, \(Cons y' zs') -> (unSel y') (unPerm zs')) 
         | (y, ys, unSel) <- selectionsV xs,
           (zs,  unPerm)  <- permutationsV ys ]
+
+{- Vector list repreentation where the size 'n' is existential quantified -}
+data VecList a where VL :: Permutable n => [Vec n a] -> VecList a
+
+-- Lists existentially quanitify over a vector's size : Exists n . Vec n a 
+data List a where
+     List :: Permutable n => Vec n a -> List a
+     
+lnil :: List a
+lnil = List Nil
+lcons :: a -> List a -> List a
+lcons x (List Nil) = List (Cons x Nil)
+lcons x (List (Cons y Nil)) = List (Cons x (Cons y Nil))
+lcons x (List (Cons y (Cons z xs))) = List (Cons x (Cons y (Cons z xs)))
+
+fromList :: [a] -> List a
+fromList []       = lnil
+fromList (x : xs) = lcons x (fromList xs)
+
+-- pre-condition: the input is a 'rectangular' list of lists (i.e. all internal lists have the same size)
+fromLists :: [[Int]] -> VecList Int
+fromLists [] = VL ([] :: [Vec Z Int])
+fromLists (xs:xss) = consList (fromList xs) (fromLists xss)
+  where
+    consList :: List Int -> VecList Int -> VecList Int
+    consList (List vec) (VL [])     = VL [vec]
+    consList (List vec) (VL (x:xs))
+      = let (vec', x') = zipVec vec x
+        in  -- Force the pre-condition equality 
+          case (preCondition x' xs, preCondition vec' xs) of
+            (ReflEq, ReflEq) -> VL $ (vec' : (x' : xs))
+                
+            where -- At the moment the pre-condition is 'assumed', and therefore
+              -- force used unsafeCoerce: TODO, rewrite
+              preCondition :: Vec n a -> [Vec n1 a] -> EqT n n1
+              preCondition xs x = unsafeCoerce $ ReflEq
+
+-- Equality type
+data EqT (a :: k) (b :: k) where
+    ReflEq :: EqT a a
+        

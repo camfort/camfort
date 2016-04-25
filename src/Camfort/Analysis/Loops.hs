@@ -66,6 +66,7 @@ loopAnalyse p = map ((descendBi arrayIndices) . ix . lvaOnUnit . (transformBi re
 analyse' :: Program Annotation -> Program Annotation
 analyse' p = map ((descendBi arrayIndices) . ix . lvaOnUnit . (transformBi reassociate))  p
 
+-- collect: from an association list to a map with list-based bins for matching keys
 collect :: (Eq a, Ord k) => [(k, a)] -> Map.Map k [a]
 collect = Map.fromListWith union . map (fmap (:[]))
 

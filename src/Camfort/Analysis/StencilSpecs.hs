@@ -40,8 +40,6 @@ deriving instance Eq Specification
 deriving instance Data Specification
 deriving instance Typeable Specification
 
-
-
 {-| An (arbitrary) ordering specifications for the sake of normalisation -}
 instance Ord Specification where
      Empty           <= _                = True
@@ -73,13 +71,45 @@ instance Ord Specification where
      (Linear s)       <= (Linear s')       = s <= s'
      -- Otherwise do lexicographic ordering on the pretty printed output
      s                <= s'                = (head $ show s) <= (head $ show s')
-      
 
 instance Ord Direction where
          Fwd <= Bwd = True
          Fwd <= Fwd = True
          Bwd <= Bwd = True
          Bwd <= Fwd = False
+
+-- `specPlus` combines specs by coalescing specifications with the same
+-- direction and depth into one
+--   e.g. forward, depth=1, dims=1 `specPlus` forward, depth=1,dims=2
+--       = forward, depth=1, dims=1,2
+
+specPlus :: Specification -> Specification -> Maybe Specification
+specPlus Empty x = Just x
+specPlus x Empty = Just x
+
+specPlus (Product [s]) (Product [s'])
+    = Just $ Only (Product $ foldPair specPlus [s, s'])
+specPlus (Only spec) (Only spec')
+    = (specPlus spec spec') >>= (\spec'' -> Just (Only spec''))
+specPlus (Reflexive dims) (Reflexive dims')
+    = Just $ Reflexive (sort $ dims ++ dims')
+specPlus (Forward dep dims) (Forward dep' dims')
+    | dep == dep' = Just $ Forward dep (sort $ dims ++ dims')
+specPlus (Backward dep dims) (Backward dep' dims')
+    | dep == dep' = Just $ Backward dep (sort $ dims ++ dims')
+specPlus (Symmetric dep dims) (Symmetric dep' dims')
+    | dep == dep' = Just $ Symmetric dep (sort $ dims ++ dims')
+specPlus (Unspecified dims) (Unspecified dims')
+    = Just $ Unspecified (dims ++ dims')
+specPlus x y
+    = Nothing
+
+-- Combine specs in a multiplicative way (used within product of specs)
+specTimes :: Specification -> Specification -> Maybe Specification
+specTimes Empty x = Just x
+specTimes x Empty = Just x
+specTimes x y     = Nothing
+
 
 -- Show a list with ',' separator (used to represent union of regions)
 showL :: Show a => [a] -> String
@@ -103,8 +133,18 @@ instance Show Specification where
     show (Constant dims)      = "fixed, dim=" ++ showL dims
     show (Only spec)          = "only, " ++ show spec
     
-    -- Products of specifications have some specialse case printing.
-    show (Product specs)      = showProdSpecs . pmonoidNormalise' $ map InsideProd specs
+  {-  For products of regions, we provide a compact pretty-printed output that coalesces specifications 
+     of the same depth and direction
+
+   e.g. (forward, depth=1, dim=1) * (forward, depth=1, dim=2)
+   is actually output as
+        forward, depth=1, dim=1*2
+
+  This is done via the specPlus normalisation and a custom pretty-printing routine triggered
+  by the InsideProd wrapepr which interprets normalised specs as produts of specs -}
+
+    show (Product specs)      = concat . (intersperse "*") . (map ((\s -> "(" ++ s ++ ")") . show . InsideProd))
+                                  . normaliseBy specPlus $ specs
 
     show (Linear spec)        = (show spec) ++ ", unique "
     show (TemporalFwd tdims)  = showRegion "forward" (show $ length tdims) ("t{" ++ showL tdims ++ "}")
@@ -113,67 +153,12 @@ instance Show Specification where
 -- Helper for showing regions
 showRegion typ depS dimS = typ ++ ", depth=" ++ depS ++ ", dim=" ++ dimS
 
-{- For products of regions, we provide a compact pretty-printed output that coalesces specifications 
-    of the same depth and direction
-
-  e.g. (forward, depth=1, dim=1) * (forward, depth=1, dim=2)
-  is actually output as
-        forward, depth=1, dim=1*2
-
-  This is done via a bit of normalisation indicator by a wrapper datatype 'InsideProd'
-  where the 'InsideProd Specification' is the type of specifications over which a 
-  a product is being taken
--}
-
+-- InsideProd wrapper to indicate how to treated specs on multi-dimensions
 data InsideProd a = InsideProd a deriving (Eq, Ord)
 
 instance Show (InsideProd Specification) where
+  show (InsideProd (Reflexive dims))     = "reflexive, dims=" ++ showProdSpecs dims
   show (InsideProd (Forward dep dims))   = showRegion "forward" (show dep) (showProdSpecs dims) 
   show (InsideProd (Backward dep dims))  = showRegion "backward" (show dep) (showProdSpecs dims)
   show (InsideProd (Symmetric dep dims)) = showRegion "symmetry" (show dep) (showProdSpecs dims)
   show (InsideProd x)                    = show x
-
-{-
--- Equality of specifications inside a product is modulo the dimensionality so that
--- specifications can be grouped together by their PartialMonoid instance (see below)
-instance Eq (InsideProd Specification) where
-    (InsideProd x) == (InsideProd y) = eqModDim x y
-      where
-        eqModDim (Reflexive _) (Reflexive _)        = True
-        eqModDim (Forward dep _) (Forward dep' _)   = dep == dep'
-        eqModDim (Backward dep _) (Backward dep' _) = dep == dep'
-        eqModDim (Symmetric dep _) (Symmetric dep' _) = dep == dep'
-        eqModDim (Only s) (Only s')                 = InsideProd s == InsideProd s'
-        eqModDim (Product ss) (Product ss')         = and (zipWith (\s s' -> InsideProd s == InsideProd s') ss ss')
-        eqModDim (TemporalFwd _) (TemporalFwd _)    = True
-        eqModDim (TemporalBwd _) (TemporalBwd _)    = True
-        eqModDim (Unspecified _) (Unspecified _)    = True
-        eqModDim (Constant _) (Constant _)          = True
-        eqModDim (Linear s) (Linear s')             = InsideProd s == InsideProd s'
-        eqModDim Empty Empty                        = True
-        eqModDim _     _                            = False
--}
-
-instance PartialMonoid (InsideProd Specification) where
-  pmempty = InsideProd Empty
-  -- Coalesce 
-  pmappend (InsideProd x) (InsideProd y) = plus x y >>= (Just . InsideProd)
-    where plus (Reflexive ds) (Reflexive ds')
-            = Just $ Reflexive (ds ++ ds')
-
-          plus (Forward dep ds) (Forward dep' ds')
-            | dep == dep' = Just $ Forward dep (ds ++ ds')
-            
-          plus (Backward dep ds) (Backward dep' ds')
-            | dep == dep' = Just $ Backward dep (ds ++ ds')
-            
-          plus (Symmetric dep ds) (Symmetric dep' ds')
-            | dep == dep' = Just $ Symmetric dep (ds ++ ds')
-            
-          plus x y = Nothing
-
--- Ordering is usual
---instance Ord (InsideProd Specification) where
---  (InsideProd x) <= (InsideProd y) = x <= y
-
-
