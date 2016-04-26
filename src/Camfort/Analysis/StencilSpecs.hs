@@ -14,17 +14,46 @@ type Depth      = Int
 type Saturation = Bool
 data Direction  = Fwd | Bwd deriving (Eq, Show)
 
+-- Disjunctive normal form (A * B) U (C * D)
+-- with linear / irreflexive (A * B) U (C * D)
+
+{- 
+-- The inner elements of a specification
+data Spec where
+     --ReflexiveA :: [Dimension] -> Spec
+     ForwardA   :: Depth -> [Dimension] -> Spec
+     BackwardA  :: Depth -> [Dimension] -> Spec
+     SymmetricA :: Depth -> [Dimension] -> Spec
+     ConstantA  :: [Dimenson] -> Spec
+
+-- Product of specifications
+data SpecProd where
+     Product :: [Spec] -> SpecProd
+-- 
+data SpecUnion where
+     Union :: [SpecProd] -> SpecUnion
+
+data SpecInner where
+     Reflexivity :: ([Dimension] :? "irreflexives") -> [Dimension] -> SpecUnion -> SpecInner -}
+     
+data Specification where
+     Linear    :: SpecInner -> Specification
+     NonLinear :: SpecInner -> Specification     
+
 data Specification where
      Reflexive   :: [Dimension]          -> Specification
      Forward     :: Depth -> [Dimension] -> Specification
      Backward    :: Depth -> [Dimension] -> Specification
      Symmetric   :: Depth -> [Dimension] -> Specification
 
-     -- Product of two specs (takes the intersection of their models)
+     -- Product of specs
      Product     :: [Specification] -> Specification
+     -- Union of specs
+     Union       :: [Specification] -> Specification
      
-     -- This specification modifier means that all other indices not described by it are undefined
-     Only        :: Specification   -> Specification
+
+     -- The only specification that causes exclusion
+     Irrefl  :: Specification -> [Dimension] -> Specification
 
      -- Temporal specifications, with a list of variables for the arrays
      -- through which time is represented
@@ -62,7 +91,9 @@ instance Ord Specification where
        | otherwise = ds <= ds'
        
      (Product specs)  <= (Product specs')  = specs <= specs'
-     (Only spec)      <= (Only spec')      = spec <= spec'
+     (Irrefl ds spec) <= (Irrefl ds' spec')
+       | ds = ds' = spec <= spec'
+       | otherwise = ds <= ds'
      
      (TemporalFwd vs) <= (TemporalFwd vs') = vs <= vs'
      (TemporalBwd vs) <= (TemporalBwd vs') = vs <= vs'
@@ -88,9 +119,11 @@ specPlus Empty x = Just x
 specPlus x Empty = Just x
 
 specPlus (Product [s]) (Product [s'])
-    = Just $ Only (Product $ foldPair specPlus [s, s'])
-specPlus (Only spec) (Only spec')
-    = (specPlus spec spec') >>= (\spec'' -> Just (Only spec''))
+    = Just $ Product $ foldPair specPlus [s, s']
+specPlus (Reflexive ds) (Irreflexive ds' spec)
+    = Just $ Irreflexive (ds' \\ ds) (
+specPlus (Irrefl ds spec) (Irrefl ds' spec')
+    = (specPlus spec spec') >>= (\spec'' -> Just (Irrefl (ds ++ ds') spec''))
 specPlus (Reflexive dims) (Reflexive dims')
     = Just $ Reflexive (sort $ dims ++ dims')
 specPlus (Forward dep dims) (Forward dep' dims')
@@ -103,13 +136,6 @@ specPlus (Unspecified dims) (Unspecified dims')
     = Just $ Unspecified (dims ++ dims')
 specPlus x y
     = Nothing
-
--- Combine specs in a multiplicative way (used within product of specs)
-specTimes :: Specification -> Specification -> Maybe Specification
-specTimes Empty x = Just x
-specTimes x Empty = Just x
-specTimes x y     = Nothing
-
 
 -- Show a list with ',' separator (used to represent union of regions)
 showL :: Show a => [a] -> String
@@ -131,7 +157,8 @@ instance Show Specification where
     show (Symmetric dep dims) = showRegion "centered" (show dep) (showL dims)
     show (Unspecified dims)   = "unspecified "  ++ showL dims
     show (Constant dims)      = "fixed, dim=" ++ showL dims
-    show (Only spec)          = "only, " ++ show spec
+    show (Irrefl [] spec  )   = "irreflexive, " ++ show spec
+    show (Irrefl dims spec)   = "irreflexive, dims=" ++ showL dims ++ ", (" ++ show spec ++ ")"
     
   {-  For products of regions, we provide a compact pretty-printed output that coalesces specifications 
      of the same depth and direction

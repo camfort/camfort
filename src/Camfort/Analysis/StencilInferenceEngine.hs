@@ -39,12 +39,7 @@ simplify = normaliseBy specPlus . simplifyInsideProducts . simplifyRefl
 simplifyRefl :: [Specification] -> [Specification]
 simplifyRefl sps = transformBi simplifyRefl' sps
   where
-    simplifyRefl' (Product [s]) = s -- Only s
-        
-    simplifyRefl' (Only r@(Reflexive rdims))
-      = case simplifyRefl' r of
-          Empty -> Empty
-          r     -> r --  Only r
+    simplifyRefl' (Product [s]) = s 
           
     simplifyRefl' (Reflexive rdims) 
       = let rdims' = [d | (Symmetric _ dims) <- universeBi sps, d <- dims, d' <- rdims, d == d']
@@ -58,7 +53,6 @@ simplifyRefl sps = transformBi simplifyRefl' sps
               ds -> Reflexive ds
               
     simplifyRefl' s = s
-
 
 fromRegionsToSpecInterval :: [Span (Vec n Int)] -> Interval Specification
 fromRegionsToSpecInterval sps = (lower, exact, upper)
@@ -99,14 +93,14 @@ toSpec1D :: Dimension -> Int -> Int -> [Specification]
 toSpec1D dim l u 
     | l == 0 && u == 0   = [Reflexive [dim]]
     | l==u               = [] -- Represents a non-span
-    | l < 0 && u == 0    = [Backward (abs l) [dim], Reflexive [dim]]
-    | l < 0 && u == (-1) = [Backward (abs l) [dim]]
+    | l < 0 && u == 0    = [Backward (abs l) [dim]]
+    | l < 0 && u == (-1) = [Backward (abs l) [dim], Irreflexive [dim]]
     | l < 0 && u > 0 && (abs l == u)
                          = [Symmetric u [dim]]
     | l < 0 && u > 0 && (abs l /= u)
-                         = [Backward (abs l) [dim], Forward u [dim], Reflexive [dim]]
-    | l == 0 && u > 0    = [Forward u [dim]]
-    | l == 1 && u > 0    = [Forward u [dim], Reflexive [dim]]
+                         = [Backward (abs l) [dim], Forward u [dim]]
+    | l == 0 && u > 0    = [Forward u [dim], Irreflexive [dim]]
+    | l == 1 && u > 0    = [Forward u [dim]]
     | otherwise          = [Unspecified [dim]]
 
 
