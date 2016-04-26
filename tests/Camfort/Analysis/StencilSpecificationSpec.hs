@@ -5,15 +5,15 @@
 {-# LANGUAGE RankNTypes #-}
 {-# LANGUAGE UndecidableInstances #-}
 
-module Camfort.Analysis.StencilsSpec (spec) where
+module Camfort.Analysis.StencilSpecificationSpec (spec) where
 
 import Data.List
 
 import Camfort.Helpers.Vec
-import Camfort.Analysis.StencilSpecs
-import Camfort.Analysis.StencilInferenceEngine
+import Camfort.Analysis.StencilSpecification
+import Camfort.Analysis.StencilSpecification.Inference
+import Camfort.Analysis.StencilSpecification.Syntax hiding (Spec)
 import Camfort.Analysis.Annotations
-import Camfort.Analysis.StencilsForpar
 import qualified Forpar.AST as F
 import Forpar.Util.Position
 
@@ -98,37 +98,36 @@ spec =
     describe "Example stencil inferences" $ do
       it "five point stencil 2D" $
         shouldBe (snd3 $ inferSpecInterval fivepoint)
-                 [ Only (Symmetric 1 [0, 1]) ]
+                 (SpatialSpec [] [] (Union [Product [Symmetric 1 [1, 2]]]))
 
       it "seven point stencil 2D" $
         shouldBe (snd3 $ inferSpecInterval sevenpoint)
-                 [ Only (Symmetric 1 [0, 1, 2]) ]
+                 (SpatialSpec [] [] (Union [Product [Symmetric 1 [1, 2, 3]]]))
 
       it "five point stencil 2D with blip" $
         shouldBe (snd3 $ inferSpecInterval fivepointErr)
-                 [ Product [ Forward 1 [0], Forward 1 [1]]
-                 , Only (Symmetric 1 [0,1]) ]
+                 (SpatialSpec [] [] (Union [Product [ Forward 1 [1,2]], Product [Symmetric 1 [1,2]]]))
 
       it "centered forward" $
         shouldBe (snd3 $ inferSpecInterval centeredFwd)
-                 [ Product [Symmetric 1 [1], Forward 1 [0]] ]
+                 (SpatialSpec [] [] (Union [Product [Forward 1 [1], Symmetric 1 [2]]]))
 
     describe "Example bounding boxes" $ do
       it "five point stencil 2D" $
         shouldBe (thd3 $ inferSpecInterval fivepoint)
-                 (Product [Symmetric 1 [0], Symmetric 1 [1]])
+                 (SpatialSpec [] [] (Union [Product [Symmetric 1 [1,2]]]))
 
       it "seven point stencil 2D" $
         shouldBe (thd3 $ inferSpecInterval sevenpoint)
-                 (Product [Symmetric 1 [0], Symmetric 1 [1], Symmetric 1 [2]])
+                 (SpatialSpec [] [] (Union [Product [Symmetric 1 [1,2,3]]]))
 
       it "five point stencil 2D with blip" $
         shouldBe (thd3 $ inferSpecInterval fivepointErr)
-                 (Product [Symmetric 1 [0], Symmetric 1 [1]])
+                 (SpatialSpec [] [] (Union [Product [Symmetric 1 [1,2]]]))
 
       it "centered forward" $
         shouldBe (thd3 $ inferSpecInterval centeredFwd)
-                 (Product [Forward 1 [0], Symmetric 1 [1]])
+                 (SpatialSpec [] [] (Union [Product [Forward 1 [1], Symmetric 1 [2]]]))
 
     describe "2D stencil verification" $
       mapM_ test2DSpecVariation variations
@@ -192,7 +191,7 @@ s = SrcSpan (Position 0 0 0) (Position 0 0 0)
 test2DSpecVariation (input, expectation) =
     it ("format=" ++ show input) $
       shouldBe (ixCollectionToSpec ["i", "j"] (map fromFormatToExpr input))
-               (sort expectation)
+               expectation
   where
     fromFormatToExpr (ri,rj) = [mkOffset "i" ri, mkOffset "j" rj]
 
@@ -209,30 +208,30 @@ mkOffset v o
                         (F.ExpValue a s (F.ValInteger $ show (abs o)))
 
 variations =
-        [ ([ (0,0) ], [ Reflexive [ 1, 2 ] ])
-        , ([ (1,0), (0,0) ], [ Forward 1 [ 1 ] ])
-        , ([ (0,1), (0,0) ], [ Forward 1 [ 2 ] ])
-        , ([ (1,1), (0,1), (1,0), (0,0) ], [ Product [Forward 1 [ 1, 2 ] ]])
-        , ([ (-1,0), (0,0) ], [ Backward 1 [ 1 ] ])
-        , ([ (0,-1), (0,0) ], [ Backward 1 [ 2 ] ])
-        , ([ (-1,-1), (0,-1), (-1,0), (0,0) ], [ Product [Backward 1 [ 1, 2 ] ]] )
+        [ ([ (0,0) ], NonLinear $ SpatialSpec [] [ 1, 2 ] (Union [Product []]))
+        , ([ (1,0), (0,0) ], NonLinear $ SpatialSpec [] [2] (Union [Product [Forward 1 [ 1 ]]]))
+        , ([ (0,1), (0,0) ], NonLinear $ SpatialSpec [] [1] (Union [Product [Forward 1 [ 2 ]]]))
+        , ([ (1,1), (0,1), (1,0), (0,0) ], NonLinear $ SpatialSpec [] [] (Union [Product [Forward 1 [ 1, 2 ]]]))
+        , ([ (-1,0), (0,0) ], NonLinear $ SpatialSpec [] [2] (Union [Product [Backward 1 [ 1 ]]]))
+        , ([ (0,-1), (0,0) ], NonLinear $ SpatialSpec [] [1] (Union [Product [Backward 1 [ 2 ]]]))
+        , ([ (-1,-1), (0,-1), (-1,0), (0,0) ], NonLinear $ SpatialSpec [] [] (Union [Product [Backward 1 [ 1, 2 ]]]))
         , ( [ (0,-1), (1,-1), (0,0), (1,0), (1,1), (0,1) ]
-          , [ Product [ Symmetric 1 [ 2 ], Forward 1 [ 1 ] ] ] )
+          , NonLinear $ SpatialSpec [] [] (Union [Product [ Forward 1 [ 1 ], Symmetric 1 [ 2 ] ] ] ))
          -- Stencil which is non-contiguous from the origin in both directions
-        , ([ (0, 1), (1, 1) ], [ Forward 1 [ 1 ] ])
+        , ([ (0, 1), (1, 1) ], NonLinear $ SpatialSpec [] [] (Union [Product [Forward 1 [ 1 ]]]))
         ]
 
 test3DSpecVariation (input, expectation) =
     it ("format=" ++ show input) $
       shouldBe (ixCollectionToSpec ["i", "j", "k"] (map fromFormatToExpr input))
-               (sort expectation)
+                expectation
   where
     fromFormatToExpr (ri,rj,rk) = [mkOffset "i" ri, mkOffset "j" rj, mkOffset "k" rk]
 
 
 variations3D =
-       [ ([ (-1,0,-1), (0,0,-1), (-1,0,0), (0,0,0) ], [ Reflexive [2], Backward 1 [ 1, 3 ] ]),
-         ([ (-1,4,-1), (0,4,-1), (-1,4,0), (0,4,0) ], [ Backward 1 [ 1, 3 ] ])]
+       [ ([ (-1,0,-1), (0,0,-1), (-1,0,0), (0,0,0) ], (NonLinear $ SpatialSpec [] [2] (Union [Product [Backward 1 [ 1, 3 ]]]))), 
+         ([ (-1,4,-1), (0,4,-1), (-1,4,0), (0,4,0) ], (NonLinear $ SpatialSpec [] [] (Union [Product [Backward 1 [ 1, 3 ]]]))) ]
 
 {-
 instance Arbitrary Direction where

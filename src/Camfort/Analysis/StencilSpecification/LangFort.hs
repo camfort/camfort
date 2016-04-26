@@ -1,6 +1,22 @@
+{-
+   Copyright 2016, Dominic Orchard, Andrew Rice, Mistral Contrastin, Matthew Danish
+
+   Licensed under the Apache License, Version 2.0 (the "License");
+   you may not use this file except in compliance with the License.
+   You may obtain a copy of the License at
+
+       http://www.apache.org/licenses/LICENSE-2.0
+
+   Unless required by applicable law or agreed to in writing, software
+   distributed under the License is distributed on an "AS IS" BASIS,
+   WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+   See the License for the specific language governing permissions and
+   limitations under the License.
+-}
+
 {-# LANGUAGE GADTs, StandaloneDeriving, FlexibleContexts, ImplicitParams #-}
 
-module Camfort.Analysis.StencilsLangFort where
+module Camfort.Analysis.StencilSpecification.LangFort where
 
 import Language.Fortran hiding (Spec)
 
@@ -12,8 +28,8 @@ import Camfort.Analysis.Annotations (Annotation, unitAnnotation)
 import Camfort.Analysis.Syntax (lhsExpr)
 import Camfort.Analysis.Types (typeEnv, TypeEnv, isArrayType)
 
-import Camfort.Analysis.StencilInferenceEngine
-import Camfort.Analysis.StencilSpecs
+import Camfort.Analysis.StencilSpecification.Inference
+import Camfort.Analysis.StencilSpecification.Syntax
 
 import Data.Maybe
 import qualified Data.Map as Map
@@ -68,7 +84,7 @@ specInference' (p, flMap) =
                                                               isArrayType tenv v]
                         -- Create specification information
                         ivs <- gets snd
-                        let specs = groupKeyBy $ Map.toList $ fmap (ixCollectionToSpec ivs) $ arrayAccesses
+                        let specs = groupKeyBy $ Map.toList $ fmap ((:[]) . ixCollectionToSpec ivs) $ arrayAccesses
                         addToReport (formatSpec span specs)
 
                         -- Done
@@ -101,7 +117,7 @@ specInference' (p, flMap) =
 {- *** 2 . Operations on specs, and conversion from indexing expressions -}
 
 -- Convert list of indexing expressions to list of specs
-ixCollectionToSpec :: [Variable] -> [[Expr p]] -> [Specification]
+ixCollectionToSpec :: [Variable] -> [[Expr p]] -> Specification
 ixCollectionToSpec ivs ess = snd3 . fromIndicesToSpec . fromLists . padZeros . map toListsOfIndices $ ess
   where
 

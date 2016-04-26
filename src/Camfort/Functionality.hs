@@ -34,7 +34,7 @@ import Camfort.Analysis.Types
 import Camfort.Analysis.Loops
 import Camfort.Analysis.LVA
 import Camfort.Analysis.Syntax
-import qualified Camfort.Analysis.StencilsLangFort as Stencils
+import qualified Camfort.Analysis.StencilSpecification.LangFort as Stencils
 
 import Camfort.Transformation.DeadCode
 import Camfort.Transformation.CommonBlockElim

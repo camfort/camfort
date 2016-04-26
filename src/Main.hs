@@ -27,7 +27,8 @@ import qualified Forpar.AST as A
 import Forpar.Analysis.Renaming(renameAndStrip, analyseRenames, unrename, NameMap)
 import Forpar.Analysis(initAnalysis)
 import Camfort.Extensions.UnitsForpar
-import qualified Camfort.Analysis.StencilsForpar as StencilsForpar
+-- TODO: move into the 'Functionality' module
+import qualified Camfort.Analysis.StencilSpecification as StencilsForpar
 
 import Data.Generics.Uniplate.Operations
 import System.Console.GetOpt

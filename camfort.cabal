@@ -41,10 +41,10 @@ executable camfort
                         Camfort.Analysis.IntermediateReps
                         Camfort.Analysis.Loops
                         Camfort.Analysis.LVA			
-                        Camfort.Analysis.StencilsLangFort
-                        Camfort.Analysis.StencilSpecs
-                        Camfort.Analysis.StencilInferenceEngine
-                        Camfort.Analysis.StencilsForpar
+                        Camfort.Analysis.StencilSpecification.LangFort
+                        Camfort.Analysis.StencilSpecification.Syntax
+                        Camfort.Analysis.StencilSpecification.Inference
+                        Camfort.Analysis.StencilSpecification
                         Camfort.Analysis.Syntax
                         Camfort.Analysis.Types
                         Camfort.Transformation.CommonBlockElim
@@ -104,10 +104,10 @@ library
                         Camfort.Analysis.IntermediateReps
                         Camfort.Analysis.Loops
                         Camfort.Analysis.LVA
-                        Camfort.Analysis.StencilsLangFort
-                        Camfort.Analysis.StencilSpecs
-                        Camfort.Analysis.StencilInferenceEngine
-                        Camfort.Analysis.StencilsForpar
+                        Camfort.Analysis.StencilSpecification.LangFort
+                        Camfort.Analysis.StencilSpecification.Syntax
+                        Camfort.Analysis.StencilSpecification.Inference
+                        Camfort.Analysis.StencilSpecification
                         Camfort.Analysis.Syntax
                         Camfort.Analysis.Types
                         Camfort.Transformation.CommonBlockElim

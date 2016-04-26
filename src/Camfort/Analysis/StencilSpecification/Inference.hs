@@ -1,6 +1,6 @@
 {-# LANGUAGE DataKinds, GADTs, KindSignatures, TypeFamilies, FlexibleInstances, FlexibleContexts, NoMonomorphismRestriction, ScopedTypeVariables, PolyKinds #-}
 
-module Camfort.Analysis.StencilInferenceEngine where
+module Camfort.Analysis.StencilSpecification.Inference where
 
 import Data.Generics.Uniplate.Operations
 import Data.List
@@ -12,96 +12,73 @@ import Debug.Trace
 
 import Unsafe.Coerce
 
-import Camfort.Analysis.StencilSpecs
+import Camfort.Analysis.StencilSpecification.Syntax
 
-{- Intervals are triples of lower, exact, upper values.
-   If an exact value is available there is a possible fine-grained
-   description as a list of 'a' -}   
-type Interval a = (a, [a], a)
+{- Intervals are triples of lower, exact, upper values -}   
+type Interval a = (a, a, a)
 
 fst3 (a, b, c) = a
 snd3 (a, b, c) = b
 thd3 (a, b, c) = c
 
 fromIndicesToSpec :: VecList Int -> Interval Specification
-fromIndicesToSpec (VL ixs) = inferSpecInterval ixs
+-- TODO: currently just marked as Non-linear
+fromIndicesToSpec (VL ixs) = (NonLinear low, NonLinear exact, NonLinear up)
+  where (low, exact, up) = inferSpecInterval ixs
 
-inferSpecInterval :: Permutable n => [Vec n Int] -> Interval Specification
-inferSpecInterval ixs = (low, simplify exact, up)
+inferSpecInterval :: Permutable n => [Vec n Int] -> Interval SpatialSpec
+inferSpecInterval ixs = (low, exact, up)
   where (low, exact, up) = fromRegionsToSpecInterval . inferMinimalVectorRegions $ ixs
 
--- Simplifies lists specifications based on the 'specPlus', 'simplifyRefl' operations
-simplify :: [Specification] -> [Specification]
-simplify = normaliseBy specPlus . simplifyInsideProducts . simplifyRefl
-  where simplifyInsideProducts = map (transformBi simplify)
-  
--- Removes any 'reflexive' specs that are overlapped by a 'centered'
-simplifyRefl :: [Specification] -> [Specification]
-simplifyRefl sps = transformBi simplifyRefl' sps
-  where
-    simplifyRefl' (Product [s]) = s 
-          
-    simplifyRefl' (Reflexive rdims) 
-      = let rdims' = [d | (Symmetric _ dims) <- universeBi sps, d <- dims, d' <- rdims, d == d']
-            rdimsF = [d | (Forward _ dims) <- universeBi sps, d <- dims, d' <- rdims, d == d']
-            rdimsB = [d | (Backward _ dims) <- universeBi sps, d <- dims, d' <- rdims, d == d']
+-- Removes any 'reflexive' specs that are overlapped by a directional spec somewhere else
+-- [in theory a lot of these won't get generated in the first place, but when specs are combined
+-- there can be overlapping reflexivities in different parts]
+simplifyRefl :: SpatialSpec -> SpatialSpec
+simplifyRefl (SpatialSpec irdims rdims (Union ss)) =
+    SpatialSpec irdims (rdims \\ overlapped) (Union ss)
+       where overlapped = rdimsS ++ rdimsF ++ rdimsB
+             rdimsS = [d | (Symmetric _ dims) <- universeBi ss, d <- dims, d' <- rdims, d == d']
+             rdimsF = [d | (Forward   _ dims) <- universeBi ss, d <- dims, d' <- rdims, d == d']
+             rdimsB = [d | (Backward  _ dims) <- universeBi ss, d <- dims, d' <- rdims, d == d']
             
-        in --TODO: Refactor this case- it is a bit over-the-top at the moment
-           --(show ((rdims, rdims', rdimsF, rdimsB),(rdimsD,rdimsFD,rdimsBD))) `trace`
-            case rdims \\ (rdims' ++ rdimsF ++ rdimsB) of
-              [] -> Empty
-              ds -> Reflexive ds
-              
-    simplifyRefl' s = s
-
-fromRegionsToSpecInterval :: [Span (Vec n Int)] -> Interval Specification
-fromRegionsToSpecInterval sps = (lower, exact, upper)
+fromRegionsToSpecInterval :: [Span (Vec n Int)] -> Interval SpatialSpec
+fromRegionsToSpecInterval sps = (lower, simplifyRefl exact, upper)
   where
     (lower, exact) = go sps
-    upper          = head $ toSpecND $ foldl1 spanBoundingBox sps
+    upper          = toSpecND $ foldl1 spanBoundingBox sps
 
-    go []       = (Empty, [Empty])
-    go [s]      = (Empty, toSpecND s)
+    go []       = (emptySpec, emptySpec)
    -- TODO, compute a better lower bound
-    go (s : ss) = (lS, exact ++ eS)
-      where exact    = toSpecND s
-            (lS, eS) = go ss
+    go (s : ss) = (lower', unionSpatialSpec exact exact')
+      where exact            = toSpecND s
+            (lower', exact') = go ss
 
 -- toSpecND converts an n-dimensional region into a (list of) specification
---  The resulting list satisfies the following: 
---   the first element (if it exists) is a product of specifications
---   the second and successive elements (if they exists) are all reflexive specifications
-toSpecND :: Span (Vec n Int) -> [Specification]
-toSpecND n =
-    case (toSpecPerDim n 1) of
-      [s] -> [s] -- Previous "Only s" - TODO: figure out how much we need Only representation
-      -- Take the product of the per-dimension specifications
-      ss  -> Product nonRefls : refls
-              where
-                (refls, nonRefls) = partition (\x -> case x of { Reflexive _ -> True; _ -> False }) ss
-  
--- convert the region one dimension at a time. 
-toSpecPerDim :: Span (Vec n Int) -> Int -> [Specification]
-toSpecPerDim (Nil, Nil)             d = []
-toSpecPerDim (Cons l ls, Cons u us) d = (toSpec1D d l u) ++ (toSpecPerDim (ls, us) (d + 1))
+toSpecND :: Span (Vec n Int) -> SpatialSpec
+toSpecND = toSpecPerDim 1
+  where
+   -- convert the region one dimension at a time. 
+   toSpecPerDim :: Int -> Span (Vec n Int) -> SpatialSpec
+   toSpecPerDim d (Nil, Nil)             = emptySpec
+   toSpecPerDim d (Cons l ls, Cons u us) = prodSpatialSpec (toSpec1D d l u) (toSpecPerDim (d + 1) (ls, us))
 
 -- : (toSpecification (dim+1) ms ns)
 
 -- toSpec1D takes a dimension identifier, a lower and upper bound of a region in that dimension, and
 -- builds the simple directional spec.
-toSpec1D :: Dimension -> Int -> Int -> [Specification]
+toSpec1D :: Dimension -> Int -> Int -> SpatialSpec
 toSpec1D dim l u 
-    | l == 0 && u == 0   = [Reflexive [dim]]
-    | l==u               = [] -- Represents a non-span
-    | l < 0 && u == 0    = [Backward (abs l) [dim]]
-    | l < 0 && u == (-1) = [Backward (abs l) [dim], Irreflexive [dim]]
+    | l == 0 && u == 0   = SpatialSpec [] [dim] (Union [Product []])
+    | l==u               = emptySpec -- Represents a non-span
+    | l < 0 && u == 0    = SpatialSpec [] [] (Union [Product [Backward (abs l) [dim]]])
+    | l < 0 && u == (-1) = SpatialSpec [dim] [] (Union [Product [Backward (abs l) [dim]]])
     | l < 0 && u > 0 && (abs l == u)
-                         = [Symmetric u [dim]]
+                         = SpatialSpec [] [] (Union [Product [Symmetric u [dim]]])
     | l < 0 && u > 0 && (abs l /= u)
-                         = [Backward (abs l) [dim], Forward u [dim]]
-    | l == 0 && u > 0    = [Forward u [dim], Irreflexive [dim]]
-    | l == 1 && u > 0    = [Forward u [dim]]
-    | otherwise          = [Unspecified [dim]]
+                         = SpatialSpec [] [] (Union [Product [Backward (abs l) [dim]], Product [Forward u [dim]]])
+    | l == 0 && u > 0    = SpatialSpec [] [] (Union [Product [Forward u [dim]]])
+    | l == 1 && u > 0    = SpatialSpec [dim] [] (Union [Product [Forward u [dim]]])
+    | otherwise          = emptySpec
 
 
 {- Spans are a pair of a lower and upper bound -}
@@ -277,4 +254,4 @@ fromLists (xs:xss) = consList (fromList xs) (fromLists xss)
 -- Equality type
 data EqT (a :: k) (b :: k) where
     ReflEq :: EqT a a
-        
+

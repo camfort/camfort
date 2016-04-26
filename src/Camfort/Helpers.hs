@@ -13,7 +13,7 @@
    See the License for the specific language governing permissions and
    limitations under the License.
 -}
-{-# LANGUAGE TypeOperators #-}
+{-# LANGUAGE TypeOperators, PolyKinds #-}
 
 module Camfort.Helpers where
 
@@ -96,7 +96,7 @@ cmpSnd :: (b -> b -> Ordering) -> (a, b) -> (a, b) -> Ordering
 cmpSnd c (x1, y1) (x2, y2) = c y1 y2
 
 {-| used for type-level annotations giving documentation -}
-type (:?) a b = a
+type (:?) a (b :: k) = a
 
 -- Helper function, reduces a list two elements at a time with a partial operation
 foldPair :: (a -> a -> Maybe a) -> [a] -> [a]
@@ -112,12 +112,13 @@ class PartialMonoid x where
    --   pmappend pempty x  = Just x
    --   (pmappend y z) >>= (\w -> pmappend x w) = (pmappend x y) >>= (\w -> pmappend w z)
 
-   pmempty  :: x
-   pmappend :: x -> x -> Maybe x
+   emptyM  :: x
+   appendM :: x -> x -> Maybe x
 
-pmonoidNormalise :: (Ord t, PartialMonoid t) => [t] -> [t]
-pmonoidNormalise = nub . reduce . sort
-  where reduce = foldPair pmappend
+normalise :: (Ord t, PartialMonoid t) => [t] -> [t]
+normalise = nub . reduce . sort
+  where reduce = foldPair appendM
 
 normaliseBy :: Ord t => (t -> t -> Maybe t) -> [t] -> [t]
-normaliseBy pmappend = nub . (foldPair pmappend) . sort
+normaliseBy plus = nub . (foldPair plus) . sort
+
