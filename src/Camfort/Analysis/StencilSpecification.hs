@@ -182,18 +182,18 @@ padZeros ixss = let m = maximum (map length ixss)
    
 
 -- Convert list of indexing expressions to a spec
-ixCollectionToSpec :: [Variable] -> [[F.Expression A]] -> Specification
+ixCollectionToSpec :: [Variable] -> [[F.Expression (FA.Analysis A)]] -> Specification
 ixCollectionToSpec ivs ess = snd3 . fromIndicesToSpec . fromLists . padZeros . map toListsOfRelativeIndices $ ess
   where
 
        
-   toListsOfRelativeIndices :: [F.Expression A] -> [Int]
+   toListsOfRelativeIndices :: [F.Expression (FA.Analysis A)] -> [Int]
    toListsOfRelativeIndices = fromMaybe [] . mapM (ixExprToOffset ivs)
 
    -- Convert indexing expressions which are translations to their translation offsett:
    -- e.g., for the expression a(i+1,j-1) then this function gets
    -- passed expr = i + 1   (returning +1) and expr = j - 1 (returning -1)
-   ixExprToOffset :: [Variable] -> F.Expression A -> Maybe Int
+   ixExprToOffset :: [Variable] -> F.Expression (FA.Analysis A) -> Maybe Int
    ixExprToOffset ivs (F.ExpValue _ _ (F.ValVariable _ v))
      | v `elem` ivs = Just 0
      -- TODO: if we want to capture 'constant' parts, then edit htis
