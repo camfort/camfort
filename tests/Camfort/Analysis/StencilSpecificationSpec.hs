@@ -11,6 +11,7 @@ import Data.List
 
 import Camfort.Helpers.Vec
 import Camfort.Analysis.StencilSpecification
+import Camfort.Analysis.StencilSpecification.Model
 import Camfort.Analysis.StencilSpecification.Inference
 import Camfort.Analysis.StencilSpecification.Syntax hiding (Spec)
 import Camfort.Analysis.Annotations
@@ -190,8 +191,9 @@ s = SrcSpan (Position 0 0 0) (Position 0 0 0)
 
 test2DSpecVariation (input, expectation) =
     it ("format=" ++ show input) $
-      shouldBe (ixCollectionToSpec ["i", "j"] (map fromFormatToExpr input))
-               expectation
+      do shouldBe (ixCollectionToSpec ["i", "j"] (map fromFormatToExpr input))
+           expectation
+         
   where
     fromFormatToExpr (ri,rj) = [mkOffset "i" ri, mkOffset "j" rj]
 
@@ -230,7 +232,8 @@ test3DSpecVariation (input, expectation) =
 
 
 variations3D =
-       [ ([ (-1,0,-1), (0,0,-1), (-1,0,0), (0,0,0) ], (NonLinear $ SpatialSpec [] [2] (Union [Product [Backward 1 [ 1, 3 ]]]))), 
+       [ ([ (-1,0,-1), (0,0,-1), (-1,0,0), (0,0,0) ], (NonLinear $ SpatialSpec [] [2] (Union [Product [Backward 1 [ 1, 3 ]]]))),
+         ([ (1,1,0), (0,1,0) ], NonLinear $ SpatialSpec [] [3] (Union [Product [Forward 1 [ 1 ]]])), 
          ([ (-1,4,-1), (0,4,-1), (-1,4,0), (0,4,0) ], (NonLinear $ SpatialSpec [] [] (Union [Product [Backward 1 [ 1, 3 ]]]))) ]
 
 {-
