@@ -137,9 +137,9 @@ spec =
     describe "3D stencil verification" $
       mapM_ test3DSpecVariation variations3D
 
---    describe "Synthesising indexing expressions from offsets is inverse to extracting offsets
---             from indexing expressions; and vice versa" $ do
---      it "isomorphism" $ shouldBe
+    describe "Synthesising indexing expressions from offsets is inverse to extracting offsets
+             from indexing expressions; and vice versa" $ do
+      it "isomorphism" $ shouldBe $ property $ prop_extract_synth_inverse
  
 
 {- Properties of `spanBoundingBox`: idempotent and associative -}
@@ -231,6 +231,10 @@ variations3D =
        [ ([ (-1,0,-1), (0,0,-1), (-1,0,0), (0,0,0) ], (NonLinear $ SpatialSpec [] [2] (Union [Product [Backward 1 [ 1, 3 ]]]))),
          ([ (1,1,0), (0,1,0) ], NonLinear $ SpatialSpec [] [3] (Union [Product [Forward 1 [ 1 ]]])), 
          ([ (-1,4,-1), (0,4,-1), (-1,4,0), (0,4,0) ], (NonLinear $ SpatialSpec [] [] (Union [Product [Backward 1 [ 1, 3 ]]]))) ]
+
+prop_extract_synth_inverse :: F.Name -> Int -> Bool
+prop_extract_synth_inverse v o =
+     (ixCollectionToSpec [v] (offsetToIxExpr v o) == Just v)
 
 {-
 instance Arbitrary Direction where
