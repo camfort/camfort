@@ -40,10 +40,12 @@ executable camfort
                         Camfort.Analysis.CallGraph
                         Camfort.Analysis.IntermediateReps
                         Camfort.Analysis.Loops
-                        Camfort.Analysis.LVA			
-                        Camfort.Analysis.StencilSpecification.LangFort
+                        Camfort.Analysis.LVA
+                        Camfort.Analysis.StencilSpecification.Inference			
+                        Camfort.Analysis.StencilSpecification.LangFort			
+                        Camfort.Analysis.StencilSpecification.Model
                         Camfort.Analysis.StencilSpecification.Syntax
-                        Camfort.Analysis.StencilSpecification.Inference
+                        Camfort.Analysis.StencilSpecification.Synthesis			                       
                         Camfort.Analysis.StencilSpecification
                         Camfort.Analysis.Syntax
                         Camfort.Analysis.Types
@@ -104,9 +106,11 @@ library
                         Camfort.Analysis.IntermediateReps
                         Camfort.Analysis.Loops
                         Camfort.Analysis.LVA
-                        Camfort.Analysis.StencilSpecification.LangFort
+                        Camfort.Analysis.StencilSpecification.Inference			
+                        Camfort.Analysis.StencilSpecification.LangFort			
+                        Camfort.Analysis.StencilSpecification.Model
                         Camfort.Analysis.StencilSpecification.Syntax
-                        Camfort.Analysis.StencilSpecification.Inference
+                        Camfort.Analysis.StencilSpecification.Synthesis			                       
                         Camfort.Analysis.StencilSpecification
                         Camfort.Analysis.Syntax
                         Camfort.Analysis.Types

@@ -11,6 +11,7 @@ import Data.List
 
 import Camfort.Helpers.Vec
 import Camfort.Analysis.StencilSpecification
+import Camfort.Analysis.StencilSpecification.Synthesis
 import Camfort.Analysis.StencilSpecification.Model
 import Camfort.Analysis.StencilSpecification.Inference
 import Camfort.Analysis.StencilSpecification.Syntax hiding (Spec)
@@ -136,6 +137,11 @@ spec =
     describe "3D stencil verification" $
       mapM_ test3DSpecVariation variations3D
 
+--    describe "Synthesising indexing expressions from offsets is inverse to extracting offsets
+--             from indexing expressions; and vice versa" $ do
+--      it "isomorphism" $ shouldBe
+ 
+
 {- Properties of `spanBoundingBox`: idempotent and associative -}
 prop_spanBoundingIdem :: Natural n -> Span (Vec n Int) -> Bool
 prop_spanBoundingIdem w x = spanBoundingBox x x == normaliseSpan x
@@ -185,29 +191,16 @@ instance (Arbitrary (Vec n a), Arbitrary a) => Arbitrary (Vec (S n) a) where
                    xs <- arbitrary
                    return $ Cons x xs
 
-
-a = unitAnnotation
-s = SrcSpan (Position 0 0 0) (Position 0 0 0)
-
 test2DSpecVariation (input, expectation) =
     it ("format=" ++ show input) $
-      do shouldBe (ixCollectionToSpec ["i", "j"] (map fromFormatToExpr input))
+      do -- Test inference
+         shouldBe (ixCollectionToSpec ["i", "j"] (map fromFormatToExpr input))
            expectation
+         -- Test model
+         shouldBe (fromList $ model expectation) (sort input)
          
 
-fromFormatToExpr (ri,rj) = [mkOffset "i" ri, mkOffset "j" rj]
-
--- Make indexing expression from an offset
-mkOffset v o
-      | o == 0    = F.ExpValue a s (F.ValVariable a v)
-      | o  > 0    =
-        F.ExpBinary a s F.Addition
-                        (F.ExpValue a s (F.ValVariable a v))
-                        (F.ExpValue a s (F.ValInteger $ show o))
-      | otherwise =
-        F.ExpBinary a s F.Subtraction
-                        (F.ExpValue a s (F.ValVariable a v))
-                        (F.ExpValue a s (F.ValInteger $ show (abs o)))
+fromFormatToExpr (ri,rj) = [offsetToIxExpr "i" ri, offsetToIxExpr "j" rj]
 
 variations =
         [ ([ (0,0) ], NonLinear $ SpatialSpec [] [ 1, 2 ] (Union [Product []]))
@@ -225,10 +218,13 @@ variations =
 
 test3DSpecVariation (input, expectation) =
     it ("format=" ++ show input) $
+      -- Test infer
       shouldBe (ixCollectionToSpec ["i", "j", "k"] (map fromFormatToExpr input))
                 expectation
+       -- Test model
+       shouldBe (fromList $ model expectation) (sort input)
   where
-    fromFormatToExpr (ri,rj,rk) = [mkOffset "i" ri, mkOffset "j" rj, mkOffset "k" rk]
+    fromFormatToExpr (ri,rj,rk) = [offsetToIxExpr "i" ri, offsetToIxExpr "j" rj, offsetToIxExpr "k" rk]
 
 
 variations3D =

@@ -27,6 +27,7 @@ import Control.Monad.Reader
 import Control.Monad.Writer hiding (Product)
 
 import Camfort.Analysis.StencilSpecification.Inference
+import Camfort.Analysis.StencilSpecification.Synthesis
 import Camfort.Analysis.StencilSpecification.Syntax
 import Camfort.Analysis.Loops (collect)
 import Camfort.Analysis.Annotations
@@ -184,34 +185,31 @@ padZeros ixss = let m = maximum (map length ixss)
 -- Convert list of indexing expressions to a spec
 ixCollectionToSpec :: [Variable] -> [[F.Expression (FA.Analysis A)]] -> Specification
 ixCollectionToSpec ivs ess = snd3 . fromIndicesToSpec . fromLists . padZeros . map toListsOfRelativeIndices $ ess
-  where
-
-       
+  where      
    toListsOfRelativeIndices :: [F.Expression (FA.Analysis A)] -> [Int]
    toListsOfRelativeIndices = fromMaybe [] . mapM (ixExprToOffset ivs)
 
-   -- Convert indexing expressions which are translations to their translation offsett:
-   -- e.g., for the expression a(i+1,j-1) then this function gets
-   -- passed expr = i + 1   (returning +1) and expr = j - 1 (returning -1)
-   ixExprToOffset :: [Variable] -> F.Expression (FA.Analysis A) -> Maybe Int
-   ixExprToOffset ivs (F.ExpValue _ _ (F.ValVariable _ v))
-     | v `elem` ivs = Just 0
+-- Convert indexing expressions which are translations to their translation offsett:
+-- e.g., for the expression a(i+1,j-1) then this function gets
+-- passed expr = i + 1   (returning +1) and expr = j - 1 (returning -1)
+ixExprToOffset :: [Variable] -> F.Expression (FA.Analysis A) -> Maybe Int
+ixExprToOffset ivs (F.ExpValue _ _ (F.ValVariable _ v))
+    | v `elem` ivs = Just 0
      -- TODO: if we want to capture 'constant' parts, then edit htis
-     | otherwise    = Nothing
-   ixExprToOffset ivs (F.ExpBinary _ _ F.Addition (F.ExpValue _ _ (F.ValVariable _ v))
-                                                       (F.ExpValue _ _ (F.ValInteger offs)))
-     | v `elem` ivs = Just $ read offs
-   ixExprToOffset ivs (F.ExpBinary _ _ F.Addition (F.ExpValue _ _ (F.ValInteger offs))
+    | otherwise    = Nothing
+ixExprToOffset ivs (F.ExpBinary _ _ F.Addition (F.ExpValue _ _ (F.ValVariable _ v))
+                                                      (F.ExpValue _ _ (F.ValInteger offs)))
+    | v `elem` ivs = Just $ read offs
+ixExprToOffset ivs (F.ExpBinary _ _ F.Addition (F.ExpValue _ _ (F.ValInteger offs))
                                                     (F.ExpValue _ _ (F.ValVariable _ v)))
-     | v `elem` ivs = Just $ read offs
-   ixExprToOffset ivs (F.ExpBinary _ _ F.Subtraction (F.ExpValue _ _ (F.ValVariable _ v))
+    | v `elem` ivs = Just $ read offs
+ixExprToOffset ivs (F.ExpBinary _ _ F.Subtraction (F.ExpValue _ _ (F.ValVariable _ v))
                                                        (F.ExpValue _ _ (F.ValInteger offs)))
-     | v `elem` ivs = Just $ if x < 0 then abs x else (- x)
-     where x = read offs
-
-   -- TODO: if we want to capture 'constant' parts, then edit htis
-   --ixExprToIndex ivs d (F.ExpValue _ _ (F.ValInteger _)) = Just $ Const d
-   ixExprToIndex ivs d _ = Nothing
+   | v `elem` ivs = Just $ if x < 0 then abs x else (- x)
+                     where x = read offs
+-- TODO: if we want to capture 'constant' parts, then edit htis
+--ixExprToIndex ivs d (F.ExpValue _ _ (F.ValInteger _)) = Just $ Const d
+ixExprToIndex ivs d _ = Nothing
 
 --------------------------------------------------
 
