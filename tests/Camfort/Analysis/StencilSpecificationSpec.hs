@@ -194,8 +194,8 @@ test2DSpecVariation (input, expectation) =
       do shouldBe (ixCollectionToSpec ["i", "j"] (map fromFormatToExpr input))
            expectation
          
-  where
-    fromFormatToExpr (ri,rj) = [mkOffset "i" ri, mkOffset "j" rj]
+
+fromFormatToExpr (ri,rj) = [mkOffset "i" ri, mkOffset "j" rj]
 
 -- Make indexing expression from an offset
 mkOffset v o

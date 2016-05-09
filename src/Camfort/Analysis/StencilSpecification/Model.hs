@@ -13,20 +13,31 @@ mkVec i 1 = [i]
 mkVec i d = 0 : (mkVec i $ d - 1)
 
 instance Model Spec where
-   model (Forward d dims) =
-     fromList [mkVec i d | i <- [0..d], d <- dims]
-   model (Backward d dims) =
-     fromList [mkVec i d | i <- [0..d], d <- dims]
-   model (Symmetric d dims) =
-     fromList [mkVec i d | i <- [-d..d], d <- dims]    
+   model (Forward dep dims) = 
+     fromList . cprodVV $ [[mkVec i d | i <- [0..dep]] | d <- dims]
+   model (Backward dep dims) =
+     fromList . cprodVV $ [[mkVec i d | i <- [(-dep)..0]] | d <- dims]
+   model (Symmetric dep dims) =
+     fromList . cprodVV $ [[mkVec i d | i <- [(-dep)..dep]] | d <- dims]
    model (Constant dims) = error "No model yet"
 
 instance Model SpecProd where
+   model (Product []) = Set.empty
    model (Product ss) =
-      fromList $ foldl' cprodV [] (map (toList . model) ss)
-       where -- Cross-product on vectors
-             cprodV :: [[Int]] -> [[Int]] -> [[Int]]
-             cprodV xss yss = xss >>= (\xs -> yss >>= (\ys -> [xs ++ ys])) 
+      fromList $ cprodVV $ map (toList . model) ss
+
+cprodVV :: [[[Int]]] -> [[Int]]
+cprodVV = foldr1 cprodV
+
+-- Cross-product on vectors
+cprodV :: [[Int]] -> [[Int]] -> [[Int]]
+cprodV xss yss = prod (normalise xss) (normalise yss)
+  where
+    findMax = maximum . map length
+    dims = max (findMax xss) (findMax yss)
+    expand n xs = xs ++ take n [0..]
+    normalise = map (expand dims)
+    prod xss yss = sort . nub $ xss >>= (\xs -> yss >>= (\ys -> xs >>= (\x -> ys >>= \y -> return [x, y])))
 
 instance Model SpecUnion where
    model (Union ss) = unions (map model ss)
@@ -62,8 +73,9 @@ variations =
         , ([ (0, 1), (1, 1) ], NonLinear $ SpatialSpec [] [] (Union [Product [Forward 1 [ 1 ]]]))
         ]
 
-check = mapM check' variations
-  where check' (ixs, spec) = putStrLn $ show (ixs == mdl, ixs, mdl)
+check = mapM_ check' variations
+  where check' (ixs, spec) = putStrLn $ show (sort ixs == sort mdl, sort ixs, sort mdl)
           where mdl = nub $ map toPair $ toList $ model spec
                 toPair [x, y] = (x, y)
                 toPair [x]    = (x, 0)
+                toPair xs     = error $ "Got " ++ show xs
