@@ -26,6 +26,7 @@ import Control.Monad.State.Lazy
 import Control.Monad.Reader
 import Control.Monad.Writer hiding (Product)
 
+import Camfort.Analysis.StencilSpecification.Check
 import Camfort.Analysis.StencilSpecification.Inference
 import Camfort.Analysis.StencilSpecification.Synthesis
 import Camfort.Analysis.StencilSpecification.Syntax
