@@ -34,8 +34,8 @@ inferSpecInterval ixs = (low, exact, up)
 -- [in theory a lot of these won't get generated in the first place, but when specs are combined
 -- there can be overlapping reflexivities in different parts]
 simplifyRefl :: SpatialSpec -> SpatialSpec
-simplifyRefl (SpatialSpec irdims rdims (Union ss)) =
-    SpatialSpec irdims (rdims \\ overlapped) (Union ss)
+simplifyRefl (SpatialSpec irdims rdims (Sum ss)) =
+    SpatialSpec irdims (rdims \\ overlapped) (Sum ss)
        where overlapped = rdimsS ++ rdimsF ++ rdimsB
              rdimsS = [d | (Symmetric _ dims) <- universeBi ss, d <- dims, d' <- rdims, d == d']
              rdimsF = [d | (Forward   _ dims) <- universeBi ss, d <- dims, d' <- rdims, d == d']
@@ -68,16 +68,16 @@ toSpecND = toSpecPerDim 1
 -- builds the simple directional spec.
 toSpec1D :: Dimension -> Int -> Int -> SpatialSpec
 toSpec1D dim l u 
-    | l == 0 && u == 0   = SpatialSpec [] [dim] (Union [Product []])
+    | l == 0 && u == 0   = SpatialSpec [] [dim] (Sum [Product []])
     | l==u               = emptySpec -- Represents a non-span
-    | l < 0 && u == 0    = SpatialSpec [] [] (Union [Product [Backward (abs l) [dim]]])
-    | l < 0 && u == (-1) = SpatialSpec [dim] [] (Union [Product [Backward (abs l) [dim]]])
+    | l < 0 && u == 0    = SpatialSpec [] [] (Sum [Product [Backward (abs l) [dim]]])
+    | l < 0 && u == (-1) = SpatialSpec [dim] [] (Sum [Product [Backward (abs l) [dim]]])
     | l < 0 && u > 0 && (abs l == u)
-                         = SpatialSpec [] [] (Union [Product [Symmetric u [dim]]])
+                         = SpatialSpec [] [] (Sum [Product [Symmetric u [dim]]])
     | l < 0 && u > 0 && (abs l /= u)
-                         = SpatialSpec [] [] (Union [Product [Backward (abs l) [dim]], Product [Forward u [dim]]])
-    | l == 0 && u > 0    = SpatialSpec [] [] (Union [Product [Forward u [dim]]])
-    | l == 1 && u > 0    = SpatialSpec [dim] [] (Union [Product [Forward u [dim]]])
+                         = SpatialSpec [] [] (Sum [Product [Backward (abs l) [dim]], Product [Forward u [dim]]])
+    | l == 0 && u > 0    = SpatialSpec [] [] (Sum [Product [Forward u [dim]]])
+    | l == 1 && u > 0    = SpatialSpec [dim] [] (Sum [Product [Forward u [dim]]])
     | otherwise          = emptySpec
 
 

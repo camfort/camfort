@@ -43,7 +43,7 @@ import qualified Forpar.Analysis.DataFlow as FAD
 
 import Forpar.Util.Position
 
-import Data.Set hiding (map)
+import Data.Map hiding (map)
 
 a = unitAnnotation
 s = SrcSpan (Position 0 0 0) (Position 0 0 0)
@@ -52,10 +52,11 @@ s = SrcSpan (Position 0 0 0) (Position 0 0 0)
 -- a list of indexing expressions for the spec
 synthesise :: Specification -> F.Name -> [F.Name] -> [F.Expression Annotation]
 synthesise spec v ixs = map toArrSubsExpr . toList . model $ spec
-  where toArrSubsExpr offs = ixExprToSubscript v . map (uncurry offsetToIxExpr) $ zip ixs offs
+  where toArrSubsExpr (offs, linearity) = ixExprToSubscript v . map (uncurry offsetToIxExpr) $ zip ixs offs
 
 ixExprToSubscript :: F.Name -> [F.Expression Annotation] -> F.Expression Annotation
-ixExprToSubscript v es = F.ExpSubscript a s (F.ExpValue a s (F.ValArray a v)) (F.AList a s es)
+ixExprToSubscript v es = 
+  F.ExpSubscript a s (F.ExpValue a s (F.ValArray a v)) (F.AList a s es)
 
 -- Make indexing expression for variable 'v' from an offset.
 -- essentially inverse to `ixExprToOffset` in StencilSpecification

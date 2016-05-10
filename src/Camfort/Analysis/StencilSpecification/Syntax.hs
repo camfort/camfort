@@ -44,10 +44,10 @@ data Specification =
 data SpatialSpec = 
     SpatialSpec { irreflexives :: [Dimension],
                   reflexives   :: [Dimension],
-                  spatial      :: SpecUnion }
+                  spatial      :: SpecSum }
   deriving (Eq, Data, Typeable)
 
-emptySpec = SpatialSpec [] [] (Union [Product []])
+emptySpec = SpatialSpec [] [] (Sum [Product []])
 
 type Dimension  = Int -- spatial dimensions are 1 indexed
 type Depth      = Int
@@ -64,11 +64,11 @@ data Spec =
 newtype SpecProd = Product [Spec]
   deriving (Eq, Data, Typeable)
   
--- Union of product specifications
-newtype SpecUnion = Union [SpecProd]
+-- Sum of product specifications
+newtype SpecSum = Sum [SpecProd]
   deriving (Eq, Data, Typeable)
 
-injectSpec ss = SpatialSpec [] [] (Union ss)
+injectSpec ss = SpatialSpec [] [] (Sum ss)
 
 -- An (arbitrary) ordering on specifications for the sake of normalisation
 instance Ord Spec where
@@ -177,16 +177,16 @@ instance PartialMonoid SpecProd where
 
 
 unionSpatialSpec :: SpatialSpec -> SpatialSpec -> SpatialSpec
-unionSpatialSpec (SpatialSpec irdim rdim (Union ss)) (SpatialSpec irdim' rdim' (Union ss')) =
-    SpatialSpec (irdim ++ irdim') (rdim ++ rdim') (Union $ normalise $ ss ++ ss')
+unionSpatialSpec (SpatialSpec irdim rdim (Sum ss)) (SpatialSpec irdim' rdim' (Sum ss')) =
+    SpatialSpec (irdim ++ irdim') (rdim ++ rdim') (Sum $ normalise $ ss ++ ss')
 
 prodSpatialSpec :: SpatialSpec -> SpatialSpec -> SpatialSpec
 prodSpatialSpec (SpatialSpec irdim rdim s) (SpatialSpec irdim' rdim' s') =
-    SpatialSpec (irdim ++ irdim') (rdim ++ rdim') (prodSpecUnion s s')
+    SpatialSpec (irdim ++ irdim') (rdim ++ rdim') (prodSpecSum s s')
 
-prodSpecUnion :: SpecUnion -> SpecUnion -> SpecUnion
-prodSpecUnion (Union ss) (Union ss') =
-   Union $ -- Take the cross product of list of unioned specifications
+prodSpecSum :: SpecSum -> SpecSum -> SpecSum
+prodSpecSum (Sum ss) (Sum ss') =
+   Sum $ -- Take the cross product of list of unioned specifications
            do (Product spec) <- ss
               (Product spec') <- ss'
               return $ Product $ normalise $ spec ++ spec'
@@ -195,8 +195,8 @@ prodSpecUnion (Union ss) (Union ss') =
 showL :: Show a => [a] -> String
 showL = concat . (intersperse ",") . (map show)
 
-showUnionSpecs :: Show a => [a] -> String
-showUnionSpecs = showL
+showSumSpecs :: Show a => [a] -> String
+showSumSpecs = showL
 
 -- Show a list with '*' separator (used to represent product of regions)
 showProdSpecs :: Show a => [a] -> String
@@ -213,11 +213,11 @@ instance Show Specification where
 
 instance Show SpatialSpec where
     -- Tweedle-dum
-    show (SpatialSpec [] [] (Union [])) = "none"
+    show (SpatialSpec [] [] (Sum [])) = "none"
     -- Tweedle-dee
-    show (SpatialSpec [] [] (Union [Product []])) = "none"
+    show (SpatialSpec [] [] (Sum [Product []])) = "none"
 
-    show (SpatialSpec irdims rdims (Union specs)) =
+    show (SpatialSpec irdims rdims (Sum specs)) =
       concat $ intersperse ", " ppspecs
       where ppspecs = irspec ++ rspec ++ ppspecs'
             irspec  = if irdims /= [] then ["irreflexive, dims=" ++ showL irdims] else []
