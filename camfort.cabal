@@ -22,11 +22,12 @@ test-suite spec
   main-is:              Spec.hs
   hs-source-dirs:       tests
   build-depends:        base < 5,
+                        containers >= 0.5,
                         filepath >= 1.4,
                         directory >= 1.2,
                         hspec >= 2.2,
                         QuickCheck >= 2.8,
-                        forpar >= 0.1,
+                        fortran-src >= 0.1,
                         camfort
 
 source-repository head
@@ -92,7 +93,7 @@ executable camfort
                         vector >= 0.1,
                         GenericPretty >= 1.2,
                         QuickCheck >= 2.8,
-                        forpar
+                        fortran-src
 
 library
   hs-source-dirs:       src
@@ -157,4 +158,4 @@ library
                         transformers >= 0.4,
                         vector >= 0.1,
                         GenericPretty >= 1.2,
-                        forpar
+                        fortran-src

@@ -34,13 +34,13 @@ import Camfort.Extensions.UnitsForpar (parameterise)
 import Camfort.Helpers.Vec
 import Camfort.Helpers hiding (lineCol, spanLineCol) -- These two are redefined here for ForPar ASTs
 
-import qualified Forpar.AST as F
-import qualified Forpar.Analysis as FA
-import qualified Forpar.Analysis.Types as FAT
-import qualified Forpar.Analysis.Renaming as FAR
-import qualified Forpar.Analysis.BBlocks as FAB
-import qualified Forpar.Analysis.DataFlow as FAD
+import qualified Language.Fortran.AST as F
+import qualified Language.Fortran.Analysis as FA
+import qualified Language.Fortran.Analysis.Types as FAT
+import qualified Language.Fortran.Analysis.Renaming as FAR
+import qualified Language.Fortran.Analysis.BBlocks as FAB
+import qualified Language.Fortran.Analysis.DataFlow as FAD
 
-import Forpar.Util.Position
+import Language.Fortran.Util.Position
 
 import Data.Set hiding (map)

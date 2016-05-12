@@ -22,10 +22,10 @@ import Language.Fortran.PreProcess
 import Language.Fortran
 
 -- FORPAR
-import qualified Forpar.Parser.Fortran77 as F77
-import qualified Forpar.AST as A
-import Forpar.Analysis.Renaming(renameAndStrip, analyseRenames, unrename, NameMap)
-import Forpar.Analysis(initAnalysis)
+import qualified Language.Fortran.Parser.Fortran77 as F77
+import qualified Language.Fortran.AST as A
+import Language.Fortran.Analysis.Renaming(renameAndStrip, analyseRenames, unrename, NameMap)
+import Language.Fortran.Analysis(initAnalysis)
 import Camfort.Extensions.UnitsForpar
 -- TODO: move into the 'Functionality' module
 import qualified Camfort.Analysis.StencilSpecification as StencilsForpar

@@ -16,8 +16,10 @@ import Camfort.Analysis.StencilSpecification.Model
 import Camfort.Analysis.StencilSpecification.Inference
 import Camfort.Analysis.StencilSpecification.Syntax hiding (Spec)
 import Camfort.Analysis.Annotations
-import qualified Forpar.AST as F
-import Forpar.Util.Position
+import qualified Language.Fortran.AST as F
+import Language.Fortran.Util.Position
+
+import Data.Map.Strict (toList)
 
 
 import Test.Hspec
@@ -100,19 +102,24 @@ spec =
     describe "Example stencil inferences" $ do
       it "five point stencil 2D" $
         shouldBe (snd3 $ inferSpecInterval fivepoint)
-                 (SpatialSpec [] [] (Sum [Product [Symmetric 1 [1, 2]]]))
+                 (SpatialSpec [] [] (Sum [ Product [ Symmetric 1 [ 1, 2 ]]]))
 
       it "seven point stencil 2D" $
-        shouldBe (snd3 $ inferSpecInterval sevenpoint)
-                 (SpatialSpec [] [] (Sum [Product [Symmetric 1 [1, 2, 3]]]))
+        shouldBe
+          (snd3 $ inferSpecInterval sevenpoint)
+          (SpatialSpec [] [] (Sum [ Product [ Symmetric 1 [ 1, 2, 3 ]]]))
 
       it "five point stencil 2D with blip" $
-        shouldBe (snd3 $ inferSpecInterval fivepointErr)
-                 (SpatialSpec [] [] (Sum [Product [ Forward 1 [1,2]], Product [Symmetric 1 [1,2]]]))
+        shouldBe
+          (snd3 $ inferSpecInterval fivepointErr)
+          (SpatialSpec [] [] (Sum [ Product [ Forward 1 [ 1, 2 ] ]
+                                    , Product [Symmetric 1 [ 1, 2 ] ] ]))
 
       it "centered forward" $
-        shouldBe (snd3 $ inferSpecInterval centeredFwd)
-                 (SpatialSpec [] [] (Sum [Product [Forward 1 [1], Symmetric 1 [2]]]))
+        shouldBe
+          (snd3 $ inferSpecInterval centeredFwd)
+          (SpatialSpec [] [] (Sum [ Product [ Forward 1 [ 1 ]
+                                              , Symmetric 1 [ 2 ] ] ]))
 
     describe "Example bounding boxes" $ do
       it "five point stencil 2D" $
@@ -129,7 +136,8 @@ spec =
 
       it "centered forward" $
         shouldBe (thd3 $ inferSpecInterval centeredFwd)
-                 (SpatialSpec [] [] (Sum [Product [Forward 1 [1], Symmetric 1 [2]]]))
+                 (SpatialSpec [] [] (Sum [ Product [ Forward 1 [ 1 ]
+                                                     , Symmetric 1 [ 2 ] ] ]))
 
     describe "2D stencil verification" $
       mapM_ test2DSpecVariation variations
@@ -137,10 +145,10 @@ spec =
     describe "3D stencil verification" $
       mapM_ test3DSpecVariation variations3D
 
-    describe "Synthesising indexing expressions from offsets is inverse to extracting offsets
-             from indexing expressions; and vice versa" $ do
-      it "isomorphism" $ shouldBe $ property $ prop_extract_synth_inverse
- 
+    describe ("Synthesising indexing expressions from offsets is inverse to" ++
+              "extracting offsets from indexing expressions; and vice versa") $
+      it "isomorphism" $ property prop_extract_synth_inverse
+
 
 {- Properties of `spanBoundingBox`: idempotent and associative -}
 prop_spanBoundingIdem :: Natural n -> Span (Vec n Int) -> Bool
@@ -168,19 +176,24 @@ three = Succ two
 four = Succ three
 
 -- Indices for the 2D five point stencil (deliberately in an odd order)
-fivepoint = [Cons (-1) (Cons 0 Nil), Cons 0 (Cons (-1) Nil), Cons 1 (Cons 0 Nil),
-             Cons 0 (Cons 1 Nil), Cons 0 (Cons 0 Nil)]
+fivepoint = [ Cons (-1) (Cons 0 Nil), Cons 0 (Cons (-1) Nil)
+            , Cons 1 (Cons 0 Nil) , Cons 0 (Cons 1 Nil), Cons 0 (Cons 0 Nil)
+            ]
 -- Indices for the 3D seven point stencil
-sevenpoint = [Cons (-1) (Cons 0 (Cons 0 Nil)), Cons 0 (Cons (-1) (Cons 0 Nil)),
-              Cons 0 (Cons 0 (Cons 1 Nil)), Cons 0 (Cons 1 (Cons 0 Nil)),
-              Cons 1 (Cons 0 (Cons 0 Nil)), Cons 0 (Cons 0 (Cons (-1) Nil)),
-              Cons 0 (Cons 0 (Cons 0 Nil))]
-centeredFwd = [Cons 1 (Cons 0 Nil), Cons 0 (Cons 1 Nil), Cons 0 (Cons (-1) Nil),
-               Cons 1 (Cons 1 Nil), Cons 0 (Cons 0 Nil), Cons 1 (Cons (-1) Nil)]::[Vec (S (S Z)) Int]
+sevenpoint = [ Cons (-1) (Cons 0 (Cons 0 Nil)), Cons 0 (Cons (-1) (Cons 0 Nil))
+             , Cons 0 (Cons 0 (Cons 1 Nil)), Cons 0 (Cons 1 (Cons 0 Nil))
+             , Cons 1 (Cons 0 (Cons 0 Nil)), Cons 0 (Cons 0 (Cons (-1) Nil))
+             , Cons 0 (Cons 0 (Cons 0 Nil))
+             ]
+centeredFwd = [ Cons 1 (Cons 0 Nil), Cons 0 (Cons 1 Nil), Cons 0 (Cons (-1) Nil)
+              , Cons 1 (Cons 1 Nil), Cons 0 (Cons 0 Nil), Cons 1 (Cons (-1) Nil)
+              ] :: [ Vec (S (S Z)) Int ]
 
 -- Examples of unusal patterns
-fivepointErr = [Cons (-1) (Cons 0 Nil), Cons 0 (Cons (-1) Nil), Cons 1 (Cons 0 Nil),
-                Cons 0 (Cons 1 Nil), Cons 0 (Cons 0 Nil), Cons 1 (Cons 1 Nil)]::[Vec (S (S Z)) Int]
+fivepointErr = [ Cons (-1) (Cons 0 Nil), Cons 0 (Cons (-1) Nil)
+               , Cons 1 (Cons 0 Nil), Cons 0 (Cons 1 Nil), Cons 0 (Cons 0 Nil)
+               , Cons 1 (Cons 1 Nil)
+               ] :: [ Vec (S (S Z)) Int ]
 
 {- Construct arbtirary vectors and test up to certain sizes -}
 instance Arbitrary a => Arbitrary (Vec Z a) where
@@ -192,49 +205,79 @@ instance (Arbitrary (Vec n a), Arbitrary a) => Arbitrary (Vec (S n) a) where
                    return $ Cons x xs
 
 test2DSpecVariation (input, expectation) =
-    it ("format=" ++ show input) $
-      do -- Test inference
-         shouldBe (ixCollectionToSpec ["i", "j"] (map fromFormatToExpr input))
-           expectation
-         -- Test model
-         shouldBe (fromList $ model expectation) (sort input)
-         
-
-fromFormatToExpr (ri,rj) = [offsetToIxExpr "i" ri, offsetToIxExpr "j" rj]
+    it ("format=" ++ show input) $ do -- Test inference
+      shouldBe (ixCollectionToSpec ["i", "j"] (map fromFormatToIx input))
+               expectation
+      -- Test model
+      shouldBe (map fst . toList $ model expectation) (sort input)
+  where
+    fromFormatToIx [ri,rj] = [ offsetToIx "i" ri, offsetToIx "j" rj ]
 
 variations =
-        [ ([ (0,0) ], NonLinear $ SpatialSpec [] [ 1, 2 ] (Sum [Product []]))
-        , ([ (1,0), (0,0) ], NonLinear $ SpatialSpec [] [2] (Sum [Product [Forward 1 [ 1 ]]]))
-        , ([ (0,1), (0,0) ], NonLinear $ SpatialSpec [] [1] (Sum [Product [Forward 1 [ 2 ]]]))
-        , ([ (1,1), (0,1), (1,0), (0,0) ], NonLinear $ SpatialSpec [] [] (Sum [Product [Forward 1 [ 1, 2 ]]]))
-        , ([ (-1,0), (0,0) ], NonLinear $ SpatialSpec [] [2] (Sum [Product [Backward 1 [ 1 ]]]))
-        , ([ (0,-1), (0,0) ], NonLinear $ SpatialSpec [] [1] (Sum [Product [Backward 1 [ 2 ]]]))
-        , ([ (-1,-1), (0,-1), (-1,0), (0,0) ], NonLinear $ SpatialSpec [] [] (Sum [Product [Backward 1 [ 1, 2 ]]]))
-        , ( [ (0,-1), (1,-1), (0,0), (1,0), (1,1), (0,1) ]
-          , NonLinear $ SpatialSpec [] [] (Sum [Product [ Forward 1 [ 1 ], Symmetric 1 [ 2 ] ] ] ))
-         -- Stencil which is non-contiguous from the origin in both directions
-        , ([ (0, 1), (1, 1) ], NonLinear $ SpatialSpec [] [] (Sum [Product [Forward 1 [ 1 ]]]))
-        ]
+  [ ( [ [0,0] ]
+    , NonLinear $ SpatialSpec [] [ 1, 2 ] (Sum [Product []])
+    )
+  , ( [ [1,0], [0,0] ]
+    , NonLinear $ SpatialSpec [] [2] (Sum [Product [Forward 1 [ 1 ]]])
+    )
+  , ( [ [0,1], [0,0] ]
+    , NonLinear $ SpatialSpec [] [1] (Sum [Product [Forward 1 [ 2 ]]])
+    )
+  , ( [ [1,1], [0,1], [1,0], [0,0] ]
+    , NonLinear $
+        SpatialSpec [] [] (Sum [Product [Forward 1 [ 1, 2 ]]])
+    )
+  , ( [ [-1,0], [0,0] ]
+    , NonLinear $ SpatialSpec [] [2] (Sum [Product [Backward 1 [ 1 ]]])
+    )
+  , ( [ [0,-1], [0,0] ]
+    , NonLinear $ SpatialSpec [] [1] (Sum [Product [Backward 1 [ 2 ]]])
+    )
+  , ( [ [-1,-1], [0,-1], [-1,0], [0,0] ]
+    , NonLinear $
+        SpatialSpec [] [] (Sum [Product [Backward 1 [ 1, 2 ]]])
+    )
+  , ( [ [0,-1], [1,-1], [0,0], [1,0], [1,1], [0,1] ]
+    , NonLinear $
+        let spatial =
+              Sum [ Product [ Forward 1 [ 1 ] , Symmetric 1 [ 2 ] ] ]
+        in SpatialSpec [] [] spatial
+    )
+   -- Stencil which is non-contiguous from the origin in both directions
+  , ( [ [0, 1], [1, 1] ]
+    , NonLinear $ SpatialSpec [] [] (Sum [Product [Forward 1 [ 1 ]]])
+    )
+  ]
 
 test3DSpecVariation (input, expectation) =
-    it ("format=" ++ show input) $
+    it ("format=" ++ show input) $ do
       -- Test infer
-      shouldBe (ixCollectionToSpec ["i", "j", "k"] (map fromFormatToExpr input))
-                expectation
-       -- Test model
-       shouldBe (fromList $ model expectation) (sort input)
+      shouldBe (ixCollectionToSpec ["i", "j", "k"] (map fromFormatToIx input))
+               expectation
+      -- Test model
+      shouldBe (map fst . toList $ model expectation) (sort input)
   where
-    fromFormatToExpr (ri,rj,rk) = [offsetToIxExpr "i" ri, offsetToIxExpr "j" rj, offsetToIxExpr "k" rk]
+    fromFormatToIx [ri,rj,rk] =
+      [offsetToIx "i" ri, offsetToIx "j" rj, offsetToIx "k" rk]
 
 
 variations3D =
-       [ ([ (-1,0,-1), (0,0,-1), (-1,0,0), (0,0,0) ], (NonLinear $ SpatialSpec [] [2] (Sum [Product [Backward 1 [ 1, 3 ]]]))),
-         ([ (1,1,0), (0,1,0) ], NonLinear $ SpatialSpec [] [3] (Sum [Product [Forward 1 [ 1 ]]])), 
-         ([ (-1,4,-1), (0,4,-1), (-1,4,0), (0,4,0) ], (NonLinear $ SpatialSpec [] [] (Sum [Product [Backward 1 [ 1, 3 ]]]))) ]
+  [ ( [ [-1,0,-1], [0,0,-1], [-1,0,0], [0,0,0] ]
+    , NonLinear $
+       SpatialSpec [] [2] (Sum [Product [Backward 1 [ 1, 3 ]]])
+    )
+  , ( [ [1,1,0], [0,1,0] ]
+    , NonLinear $ SpatialSpec [] [3] (Sum [Product [Forward 1 [ 1 ]]])
+    )
+  , ( [ [-1,4,-1], [0,4,-1], [-1,4,0], [0,4,0] ]
+    , NonLinear $
+       SpatialSpec [] [] (Sum [Product [Backward 1 [ 1, 3 ]]])
+    )
+  ]
 
 prop_extract_synth_inverse :: F.Name -> Int -> Bool
 prop_extract_synth_inverse v o =
-     (ixCollectionToSpec [v] (offsetToIxExpr v o) == Just v)
+     ixToOffset [v] (offsetToIx v o) == Just o
 
 {-
 instance Arbitrary Direction where

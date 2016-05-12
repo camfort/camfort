@@ -14,7 +14,9 @@
    limitations under the License.
 -}
 
-{-# LANGUAGE GADTs, StandaloneDeriving, FlexibleContexts, ImplicitParams, TupleSections #-}
+{-# LANGUAGE GADTs #-}
+{-# LANGUAGE FlexibleContexts #-}
+{-# LANGUAGE TupleSections #-}
 
 module Camfort.Analysis.StencilSpecification where
 
@@ -36,13 +38,13 @@ import Camfort.Extensions.UnitsForpar (parameterise)
 import Camfort.Helpers.Vec
 import Camfort.Helpers hiding (lineCol, spanLineCol) -- These two are redefined here for ForPar ASTs
 
-import qualified Forpar.AST as F
-import qualified Forpar.Analysis as FA
-import qualified Forpar.Analysis.Types as FAT
-import qualified Forpar.Analysis.Renaming as FAR
-import qualified Forpar.Analysis.BBlocks as FAB
-import qualified Forpar.Analysis.DataFlow as FAD
-import qualified Forpar.Util.Position as FU
+import qualified Language.Fortran.AST as F
+import qualified Language.Fortran.Analysis as FA
+import qualified Language.Fortran.Analysis.Types as FAT
+import qualified Language.Fortran.Analysis.Renaming as FAR
+import qualified Language.Fortran.Analysis.BBlocks as FAB
+import qualified Language.Fortran.Analysis.DataFlow as FAD
+import qualified Language.Fortran.Util.Position as FU
 
 import qualified Data.Map as Map
 import qualified Data.Map as M
@@ -113,7 +115,7 @@ formatSpec nm (span, []) = ""
 formatSpec nm (span, specs) = loc ++ " \t" ++ (commaSep . nub . map doSpec $ specs) ++ "\n"
   where
     loc                      = show (spanLineCol span)
-    commaSep                 = concat . intersperse ", "
+    commaSep                 = intercalate ", "
     doSpec (arrayVar, spec)  = commaSep (map realName arrayVar) ++ ": " ++ showL (map fixSpec spec)
     realName v               = v `fromMaybe` (v `M.lookup` nm)
     fixSpec (TemporalFwd vs) = TemporalFwd $ map realName vs
@@ -137,14 +139,14 @@ perBlock b@(F.BlStatement _ span _ (F.StExpressionAssign _ _ _ rhs)) = do
   -- Get array indexing (on the RHS)
   let rhsExprs = universeBi rhs :: [F.Expression (FA.Analysis A)]
   let arrayAccesses = collect [
-          (v, e) | F.ExpSubscript _ _ (F.ExpValue _ _ (F.ValArray _ v)) subs <- rhsExprs
+          (v, e) | F.ExpSubscript _ _ (F.ExpValue _ _ (F.ValVariable _ v)) subs <- rhsExprs
                  , let e = F.aStrip subs
                  , not (null e)
         ]
   -- Create specification information
   ivs <- get
   let specs = groupKeyBy . M.toList . fmap ((:[]) . ixCollectionToSpec ivs) $ arrayAccesses
-  tell $ [(span, specs)] -- add to report
+  tell [ (span, specs) ] -- add to report
   return b
 perBlock b@(F.BlDo _ span _ (doSpec@F.DoSpecification {}) body) = do
   let F.DoSpecification _ _ (
@@ -156,18 +158,18 @@ perBlock b@(F.BlDo _ span _ (doSpec@F.DoSpecification {}) body) = do
   let lexps = FA.lhsExprs =<< body
 
   let getTimeSpec e = do
-        lhsV <- case e of F.ExpValue _ _ (F.ValVariable _ lhsV)                     -> Just lhsV
-                          F.ExpValue _ _ (F.ValArray _ lhsV)                        -> Just lhsV
-                          F.ExpSubscript _ _ (F.ExpValue _ _ (F.ValArray _ lhsV)) _ -> Just lhsV
-                          _                                                         -> Nothing
+        lhsV <- case e of
+          F.ExpValue _ _ (F.ValVariable _ lhsV) -> Just lhsV
+          F.ExpSubscript _ _ (F.ExpValue _ _ (F.ValVariable _ lhsV)) _ -> Just lhsV
+          _ -> Nothing
         v'   <- lookup lhsV cycles
         return ([lhsV], [TemporalBwd [v']])
 
   let tempSpecs = foldl' (\ ts -> maybe ts (:ts) . getTimeSpec) [] lexps
 
-  tell $ [(span, tempSpecs)]
+  tell [ (span, tempSpecs) ]
   -- descend into the body of the do-statement, with the updated list of induction variables.
-  mapM (descendBiM perBlock) body
+  mapM_ (descendBiM perBlock) body
   -- (we don't need to worry about scope, thanks to renaming)
   return b
 perBlock b = return b
@@ -180,37 +182,49 @@ perBlock b = return b
 -- padZeros makes this rectilinear
 padZeros :: [[Int]] -> [[Int]]
 padZeros ixss = let m = maximum (map length ixss)
-                in map (\ixs -> ixs ++ (replicate (m - (length ixs)) 0)) ixss 
-   
+                in map (\ixs -> ixs ++ replicate (m - length ixs) 0) ixss
+
 
 -- Convert list of indexing expressions to a spec
-ixCollectionToSpec :: [Variable] -> [[F.Expression (FA.Analysis A)]] -> Specification
-ixCollectionToSpec ivs ess = snd3 . fromIndicesToSpec . fromLists . padZeros . map toListsOfRelativeIndices $ ess
-  where      
-   toListsOfRelativeIndices :: [F.Expression (FA.Analysis A)] -> [Int]
-   toListsOfRelativeIndices = fromMaybe [] . mapM (ixExprToOffset ivs)
+ixCollectionToSpec :: [ Variable ] -> [ [ F.Index a ] ] -> Specification
+ixCollectionToSpec ivs = snd3
+                       . fromIndicesToSpec
+                       . fromLists
+                       . padZeros
+                       . map toListsOfRelativeIndices
+  where
+   toListsOfRelativeIndices :: [ F.Index a ] -> [ Int ]
+   toListsOfRelativeIndices = fromMaybe [] . mapM (ixToOffset ivs)
 
 -- Convert indexing expressions which are translations to their translation offsett:
 -- e.g., for the expression a(i+1,j-1) then this function gets
 -- passed expr = i + 1   (returning +1) and expr = j - 1 (returning -1)
-ixExprToOffset :: [Variable] -> F.Expression (FA.Analysis A) -> Maybe Int
-ixExprToOffset ivs (F.ExpValue _ _ (F.ValVariable _ v))
-    | v `elem` ivs = Just 0
-     -- TODO: if we want to capture 'constant' parts, then edit htis
-    | otherwise    = Nothing
-ixExprToOffset ivs (F.ExpBinary _ _ F.Addition (F.ExpValue _ _ (F.ValVariable _ v))
-                                                      (F.ExpValue _ _ (F.ValInteger offs)))
+ixToOffset :: [Variable] -> F.Index a -> Maybe Int
+ixToOffset ivs (F.IxSingle _ _ exp) = expToOffset ivs exp
+ixToOffset _ _ = Nothing -- If the indexing expression is a range
+
+expToOffset :: [Variable] -> F.Expression a -> Maybe Int
+expToOffset ivs (F.ExpValue _ _ (F.ValVariable _ v))
+  | v `elem` ivs = Just 0
+  -- TODO: if we want to capture 'constant' parts, then edit htis
+  | otherwise    = Nothing
+expToOffset ivs (F.ExpBinary _ _ F.Addition
+                                 (F.ExpValue _ _ (F.ValVariable _ v))
+                                 (F.ExpValue _ _ (F.ValInteger offs)))
     | v `elem` ivs = Just $ read offs
-ixExprToOffset ivs (F.ExpBinary _ _ F.Addition (F.ExpValue _ _ (F.ValInteger offs))
-                                                    (F.ExpValue _ _ (F.ValVariable _ v)))
+expToOffset ivs (F.ExpBinary _ _ F.Addition
+                                 (F.ExpValue _ _ (F.ValInteger offs))
+                                 (F.ExpValue _ _ (F.ValVariable _ v)))
     | v `elem` ivs = Just $ read offs
-ixExprToOffset ivs (F.ExpBinary _ _ F.Subtraction (F.ExpValue _ _ (F.ValVariable _ v))
-                                                       (F.ExpValue _ _ (F.ValInteger offs)))
+expToOffset ivs (F.ExpBinary _ _ F.Subtraction
+                                 (F.ExpValue _ _ (F.ValVariable _ v))
+                                 (F.ExpValue _ _ (F.ValInteger offs)))
    | v `elem` ivs = Just $ if x < 0 then abs x else (- x)
                      where x = read offs
+
 -- TODO: if we want to capture 'constant' parts, then edit htis
 --ixExprToIndex ivs d (F.ExpValue _ _ (F.ValInteger _)) = Just $ Const d
-ixExprToIndex ivs d _ = Nothing
+--ixExprToIndex ivs d _ = Nothing
 
 --------------------------------------------------
 

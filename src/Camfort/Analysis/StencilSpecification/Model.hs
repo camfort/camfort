@@ -48,21 +48,21 @@ mkVec i d = 0 : (mkVec i $ d - 1)
 
 instance Model Spec where
    type Domain Spec = Set [Int]
- 
-   model (Forward dep dims) = 
+
+   model (Forward dep dims) =
      fromList . cprodVs $ [[mkVec i d | i <- [0..dep]] | d <- dims]
-     
+
    model (Backward dep dims) =
      fromList . cprodVs $ [[mkVec i d | i <- [(-dep)..0]] | d <- dims]
-     
+
    model (Symmetric dep dims) =
      fromList . cprodVs $ [[mkVec i d | i <- [(-dep)..dep]] | d <- dims]
-     
+
    model (Constant dims) = error "No model yet"
 
 instance Model SpecProd where
    type Domain SpecProd = Set [Int]
-   
+
    model (Product []) = Set.empty
    model (Product ss) =
       fromList $ cprodVs $ map (toList . model) ss
@@ -94,7 +94,7 @@ instance Model SpecSum where
 
 instance Model SpatialSpec where
    type Domain SpatialSpec = Set [Int]
-   
+
    model (SpatialSpec irrefls refls s) =
       Set.difference
         (Set.union (fromList [mkVec 0 d | d <- refls]) (model s))
@@ -102,17 +102,20 @@ instance Model SpatialSpec where
 
 -- Multiset representation where multiplicities are (-1) modulo 2
 -- that is, False = multiplicity 1, True = multiplicity > 1
-type Multiset a = DM.Map a Bool 
+type Multiset a = DM.Map a Bool
 
 instance Model Specification where
    type Domain Specification = Multiset [Int]
-   
+
    model (Linear s)    = DM.fromList . map (,False) . toList . model $ s
-   model (NonLinear s) = DM.fromList . map (,True) . toList . model $ s         
+   model (NonLinear s) = DM.fromList . map (,True) . toList . model $ s
    model Empty         = DM.empty
    model _             = error "Only temporal specs are modelled"
 
 
+
+{-
+NO MORE LOCAL TESTS OR COMMENTED OUT CODE. PLEASE MOVE THIS TO ACTUAL TESTS.
 
 -- Local test
 
@@ -127,14 +130,15 @@ variations =
         , ( [ (0,-1), (1,-1), (0,0), (1,0), (1,1), (0,1), (2,-1), (2,0), (2,1) ]
           , NonLinear $ SpatialSpec [] [] (Sum [Product [ Forward 2 [ 1 ], Symmetric 1 [ 2 ] ] ] ))
         , ( [ (-1,0), (-1,1), (0,0), (0,1), (1,1), (1,0), (-1,2), (0,2), (1,2) ]
-          , NonLinear $ SpatialSpec [] [] (Sum [Product [ Forward 2 [ 2 ], Symmetric 1 [ 1 ] ] ] ))          
+          , NonLinear $ SpatialSpec [] [] (Sum [Product [ Forward 2 [ 2 ], Symmetric 1 [ 1 ] ] ] ))
          -- Stencil which is non-contiguous from the origin in both directions
         , ([ (0, 1), (1, 1) ], NonLinear $ SpatialSpec [] [] (Sum [Product [Forward 1 [ 1 ]]]))
         ]
 
 check = mapM_ check' variations
   where check' (ixs, spec) = putStrLn $ show (sort ixs == sort mdl, sort ixs, sort mdl)
-          where mdl = nub $ map toPair $ DM.toList $ model spec
-                toPair ([x, y],_) = (x, y)
-                toPair ([x],_)    = (x, 0)
-                toPair (xs,_)     = error $ "Got " ++ show xs
+          where mdl = nub $ map toPair $ toList $ model spec
+                toPair [x, y] = (x, y)
+                toPair [x]    = (x, 0)
+                toPair xs     = error $ "Got " ++ show xs
+-}

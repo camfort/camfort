@@ -14,7 +14,9 @@
    limitations under the License.
 -}
 
-{-# LANGUAGE GADTs, StandaloneDeriving, FlexibleContexts, ImplicitParams, TupleSections #-}
+{-# LANGUAGE GADTs #-}
+{-# LANGUAGE FlexibleContexts #-}
+{-# LANGUAGE TupleSections #-}
 
 module Camfort.Analysis.StencilSpecification.Synthesis where
 
@@ -34,14 +36,14 @@ import Camfort.Extensions.UnitsForpar (parameterise)
 import Camfort.Helpers.Vec
 import Camfort.Helpers hiding (lineCol, spanLineCol) -- These two are redefined here for ForPar ASTs
 
-import qualified Forpar.AST as F
-import qualified Forpar.Analysis as FA
-import qualified Forpar.Analysis.Types as FAT
-import qualified Forpar.Analysis.Renaming as FAR
-import qualified Forpar.Analysis.BBlocks as FAB
-import qualified Forpar.Analysis.DataFlow as FAD
+import qualified Language.Fortran.AST as F
+import qualified Language.Fortran.Analysis as FA
+import qualified Language.Fortran.Analysis.Types as FAT
+import qualified Language.Fortran.Analysis.Renaming as FAR
+import qualified Language.Fortran.Analysis.BBlocks as FAB
+import qualified Language.Fortran.Analysis.DataFlow as FAD
 
-import Forpar.Util.Position
+import Language.Fortran.Util.Position
 
 import Data.Map hiding (map)
 
@@ -52,21 +54,19 @@ s = SrcSpan (Position 0 0 0) (Position 0 0 0)
 -- a list of indexing expressions for the spec
 synthesise :: Specification -> F.Name -> [F.Name] -> [F.Expression Annotation]
 synthesise spec v ixs = map toArrSubsExpr . toList . model $ spec
-  where toArrSubsExpr (offs, linearity) = ixExprToSubscript v . map (uncurry offsetToIxExpr) $ zip ixs offs
+  where toArrSubsExpr (offs,_) = ixExprToSubscript v . map (uncurry offsetToIx) $ zip ixs offs
 
-ixExprToSubscript :: F.Name -> [F.Expression Annotation] -> F.Expression Annotation
-ixExprToSubscript v es = 
-  F.ExpSubscript a s (F.ExpValue a s (F.ValArray a v)) (F.AList a s es)
+ixExprToSubscript :: F.Name -> [F.Index Annotation] -> F.Expression Annotation
+ixExprToSubscript v es = F.ExpSubscript a s (F.ExpValue a s (F.ValVariable a v)) (F.AList a s es)
 
 -- Make indexing expression for variable 'v' from an offset.
--- essentially inverse to `ixExprToOffset` in StencilSpecification
-offsetToIxExpr :: F.Name -> Int -> F.Expression Annotation
-offsetToIxExpr v o 
-  | o == 0    = F.ExpValue a s (F.ValVariable a v)
-  | o  > 0    = F.ExpBinary a s F.Addition
-                  (F.ExpValue a s (F.ValVariable a v))
-                  (F.ExpValue a s (F.ValInteger $ show o))
-  | otherwise = F.ExpBinary a s F.Subtraction
-                  (F.ExpValue a s (F.ValVariable a v))
-                  (F.ExpValue a s (F.ValInteger $ show (abs o)))
-                  
+-- essentially inverse to `ixToOffset` in StencilSpecification
+offsetToIx :: F.Name -> Int -> F.Index Annotation
+offsetToIx v o
+  | o == 0    = F.IxSingle a s (F.ExpValue a s (F.ValVariable a v))
+  | o  > 0    = F.IxSingle a s (F.ExpBinary a s F.Addition
+                                 (F.ExpValue a s (F.ValVariable a v))
+                                 (F.ExpValue a s (F.ValInteger $ show o)))
+  | otherwise = F.IxSingle a s (F.ExpBinary a s F.Subtraction
+                                 (F.ExpValue a s (F.ValVariable a v))
+                                 (F.ExpValue a s (F.ValInteger $ show (abs o))))
