@@ -14,7 +14,13 @@
    limitations under the License.
 -}
 
-{-# LANGUAGE TypeOperators, DataKinds, DeriveDataTypeable, FlexibleInstances #-}
+{-# LANGUAGE TypeOperators #-}
+{-# LANGUAGE DataKinds #-}
+{-# LANGUAGE DeriveDataTypeable #-}
+{-# LANGUAGE FlexibleInstances #-}
+{-# LANGUAGE GADTs #-}
+{-# LANGUAGE KindSignatures #-}
+{-# LANGUAGE StandaloneDeriving #-}
 
 module Camfort.Analysis.StencilSpecification.Syntax where
 
@@ -39,58 +45,58 @@ data Specification =
 
 -- Wrap a spatial specication with its reflexivity/irreflexivity information
 -- Spatial specifications are in disjunctive normal form (with respect to
---  products on dimensions and unions):
---    i.e., (A * B) U (C * D)... 
-data SpatialSpec = 
+--  products on dimensions and sums):
+--    i.e., (A * B) U (C * D)...
+data SpatialSpec =
     SpatialSpec { irreflexives :: [Dimension],
                   reflexives   :: [Dimension],
                   spatial      :: SpecSum }
   deriving (Eq, Data, Typeable)
 
-emptySpec = SpatialSpec [] [] (Sum [Product []])
+emptySpec = SpatialSpec [] [] (Summation [Product []])
 
 type Dimension  = Int -- spatial dimensions are 1 indexed
 type Depth      = Int
 
+data Op = Prod | Sum
+
 -- The inner elements of a specification
-data Spec =
-    Forward   Depth [Dimension] 
-  | Backward  Depth [Dimension]
-  | Symmetric Depth [Dimension]
-  | Constant  [Dimension]
+data Spec (op :: Op) where
+    Forward   :: Depth -> [Dimension] -> Spec op
+    Backward  :: Depth -> [Dimension] -> Spec op
+    Symmetric :: Depth -> [Dimension] -> Spec op
   deriving (Eq, Data, Typeable)
+
+deriving instance (Typeable (Spec Sum))
+deriving instance (Typeable (Spec Prod))
 
 -- Product of specifications
-newtype SpecProd = Product [Spec]
-  deriving (Eq, Data, Typeable)
-  
--- Sum of product specifications
-newtype SpecSum = Sum [SpecProd]
+newtype SpecProd = Product [Spec Prod]
   deriving (Eq, Data, Typeable)
 
-injectSpec ss = SpatialSpec [] [] (Sum ss)
+-- Sum of product specifications
+newtype SpecSum = Summation [SpecProd]
+  deriving (Eq, Data, Typeable)
+
+injectSpec ss = SpatialSpec [] [] (Summation ss)
 
 -- An (arbitrary) ordering on specifications for the sake of normalisation
-instance Ord Spec where
-  (Forward dep dims) <= (Forward dep' dims') 
+instance Ord (Spec op) where
+  (Forward dep dims) <= (Forward dep' dims')
     | dep == dep' = (sort dims) <= (sort dims')
     | otherwise   = dep <= dep'
 
-  (Backward dep dims) <= (Backward dep' dims') 
+  (Backward dep dims) <= (Backward dep' dims')
     | dep == dep' = (sort dims) <= (sort dims')
     | otherwise   = dep <= dep'
 
-  (Symmetric dep dims) <= (Symmetric dep' dims') 
+  (Symmetric dep dims) <= (Symmetric dep' dims')
     | dep == dep' = (sort dims) <= (sort dims')
     | otherwise   = dep <= dep'
 
-  (Constant dims) <= (Constant dims') =
-    (sort dims) <= (sort dims')
-
-  -- Order in the way defined above: Forward <: Backward <: Symmetric <: Constant
+  -- Order in the way defined above: Forward <: Backward <: Symmetric
   (Forward _ _ ) <= _               = True
   (Backward _ _) <= (Symmetric _ _) = True
-  _              <= (Constant _)    = True
   _              <= _               = False
 
 instance Ord SpecProd where
@@ -98,73 +104,32 @@ instance Ord SpecProd where
      | length xs == length xs' = xs <= xs'
      | otherwise               = (length xs) <= (length xs')
 
-{-
-
-instance Ord Specification where
-     Empty           <= _                = True
-     _               <= Empty            = False
-     
-     (Reflexive ds)  <= (Reflexive ds')  = ds <= ds'
-     (Reflexive ds)  <= _                = True
-     _               <= (Reflexive ds)   = False
-     
-     (Forward depth ds)  <= (Forward depth' ds')
-       | ds == ds' = depth <= depth'
-       | otherwise = ds <= ds'
-       
-     (Backward depth ds) <= (Backward depth' ds')
-       | ds == ds' = depth <= depth'
-       | otherwise = ds <= ds'
-       
-     (Symmetric depth ds) <= (Symmetric depth' ds')
-       | ds == ds' = depth <= depth'
-       | otherwise = ds <= ds'
-       
-     (Product specs)  <= (Product specs')  = specs <= specs'
-     (Irrefl ds spec) <= (Irrefl ds' spec')
-       | ds = ds' = spec <= spec'
-       | otherwise = ds <= ds'
-     
-     (TemporalFwd vs) <= (TemporalFwd vs') = vs <= vs'
-     (TemporalBwd vs) <= (TemporalBwd vs') = vs <= vs'
-     (Unspecified ds) <= (Unspecified ds') = ds <= ds'
-     (Constant ds)    <= (Constant ds')    = ds <= ds'
-     (Linear s)       <= (Linear s')       = s <= s'
-     -- Otherwise do lexicographic ordering on the pretty printed output
-     s                <= s'                = (head $ show s) <= (head $ show s')
-
--}
-
--- `specPlus` combines specs by coalescing specifications with the same
+-- `appendM` combines specs by coalescing specifications with the same
 -- direction and depth into one
---   e.g. forward, depth=1, dims=1 `specPlus` forward, depth=1,dims=2
---       = forward, depth=1, dims=1,2
+--   e.g. forward, depth=1, dims=1 `appendM` forward, depth=1,dims=2
+--       = forward, depth=1, dims=1 op 2
 
-instance PartialMonoid Spec where
+instance PartialMonoid (Spec op) where
 
-  emptyM = Constant []
-  
+  emptyM = error "No unit"
+
   appendM (Forward dep dims) (Forward dep' dims')
     | dep == dep' = Just $ Forward dep (sort $ dims ++ dims')
   appendM (Backward dep dims) (Backward dep' dims')
     | dep == dep' = Just $ Backward dep (sort $ dims ++ dims')
   appendM (Symmetric dep dims) (Symmetric dep' dims')
     | dep == dep' = Just $ Symmetric dep (sort $ dims ++ dims')
-  appendM (Constant dims) (Constant dims') =
-    Just $ Constant (sort $ dims ++ dims')
-  appendM (Constant []) x = Just x
-  appendM x (Constant []) = Just x
   appendM x y             = Nothing
 
 
 {-
-unionSpec :: Specification -> Specification -> Specification
-unionSpec Empty x = x
-unionSpec x Empty = x
-unionSpec (Linear ss) (Linear ss')       = inferLinearity $ unionSpatialSpec ss ss'
-unionSpec (Linear ss) (NonLinear ss')    = NonLinear $ unionSpatialSpec ss ss'
-unionSpec (NonLinear ss) (Linear ss')    = NonLinear $ unionSpatialSpec ss ss'
-unionSpec (NonLinear ss) (NonLinear ss') = NonLinear $ unionSpatialSpec ss ss'
+sumSpec :: Specification -> Specification -> Specification
+sumSpec Empty x = x
+sumSpec x Empty = x
+sumSpec (Linear ss) (Linear ss')       = inferLinearity $ sumSpatialSpec ss ss'
+sumSpec (Linear ss) (NonLinear ss')    = NonLinear $ sumSpatialSpec ss ss'
+sumSpec (NonLinear ss) (Linear ss')    = NonLinear $ sumSpatialSpec ss ss'
+sumSpec (NonLinear ss) (NonLinear ss') = NonLinear $ sumSpatialSpec ss ss'
 -}
 
 instance PartialMonoid SpecProd where
@@ -172,35 +137,34 @@ instance PartialMonoid SpecProd where
 
    appendM (Product [])   s  = Just $ s
    appendM s (Product [])    = Just $ s
-   appendM (Product [ss]) (Product [ss']) = appendM ss ss' >>= (\ss'' -> return $ Product [ss''])
+   appendM (Product [ss]) (Product [ss']) =
+      appendM ss ss' >>= (\ss'' -> return $ Product [ss''])
    appendM _              _  = Nothing
 
 
-unionSpatialSpec :: SpatialSpec -> SpatialSpec -> SpatialSpec
-unionSpatialSpec (SpatialSpec irdim rdim (Sum ss)) (SpatialSpec irdim' rdim' (Sum ss')) =
-    SpatialSpec (irdim ++ irdim') (rdim ++ rdim') (Sum $ normalise $ ss ++ ss')
+sumSpatialSpec :: SpatialSpec -> SpatialSpec -> SpatialSpec
+sumSpatialSpec (SpatialSpec irdim rdim (Summation ss)) (SpatialSpec irdim' rdim' (Summation ss')) =
+    SpatialSpec (irdim ++ irdim') (rdim ++ rdim') (Summation $ normalise $ ss ++ ss')
 
 prodSpatialSpec :: SpatialSpec -> SpatialSpec -> SpatialSpec
 prodSpatialSpec (SpatialSpec irdim rdim s) (SpatialSpec irdim' rdim' s') =
     SpatialSpec (irdim ++ irdim') (rdim ++ rdim') (prodSpecSum s s')
 
 prodSpecSum :: SpecSum -> SpecSum -> SpecSum
-prodSpecSum (Sum ss) (Sum ss') =
-   Sum $ -- Take the cross product of list of unioned specifications
-           do (Product spec) <- ss
-              (Product spec') <- ss'
-              return $ Product $ normalise $ spec ++ spec'
+prodSpecSum (Summation ss) (Summation ss') =
+   Summation $ -- Take the cross product of list of sumed specifications
+     do (Product spec) <- ss
+        (Product spec') <- ss'
+        return $ Product $ normalise $ spec ++ spec'
 
--- Show a list with ',' separator (used to represent union of regions)
+-- Show a list with ',' separator
 showL :: Show a => [a] -> String
 showL = concat . (intersperse ",") . (map show)
 
-showSumSpecs :: Show a => [a] -> String
-showSumSpecs = showL
-
--- Show a list with '*' separator (used to represent product of regions)
-showProdSpecs :: Show a => [a] -> String
+-- Show lists with '*' or '+' separator (used to represent product of regions)
+showProdSpecs, showSumSpecs :: Show a => [a] -> String
 showProdSpecs = concat . (intersperse "*") . (map show)
+showSumSpecs = concat . (intersperse "+") . (map show)
 
 -- Pretty-printed syntax
 
@@ -213,19 +177,19 @@ instance Show Specification where
 
 instance Show SpatialSpec where
     -- Tweedle-dum
-    show (SpatialSpec [] [] (Sum [])) = "none"
+    show (SpatialSpec [] [] (Summation [])) = "none"
     -- Tweedle-dee
-    show (SpatialSpec [] [] (Sum [Product []])) = "none"
+    show (SpatialSpec [] [] (Summation [Product []])) = "none"
 
-    show (SpatialSpec irdims rdims (Sum specs)) =
-      concat $ intersperse ", " ppspecs
+    show (SpatialSpec irdims rdims (Summation specs)) =
+      concat $ intersperse " + " ppspecs
       where ppspecs = irspec ++ rspec ++ ppspecs'
             irspec  = if irdims /= [] then ["irreflexive, dims=" ++ showL irdims] else []
             rspec   = if rdims /= [] then ["reflexive, dims=" ++ showL rdims] else []
             ppspecs' = filter ((/=) "") $ map show specs
 
-    
-{-  For products of regions, we provide a compact pretty-printed output that coalesces specifications 
+
+{-  For products of regions, we provide a compact pretty-printed output that coalesces specifications
      of the same depth and direction
 
    e.g. (forward, depth=1, dim=1) * (forward, depth=1, dim=2)
@@ -237,24 +201,17 @@ instance Show SpatialSpec where
 instance Show SpecProd where
     show (Product []) = ""
     show (Product ss)  =
-       concat . (intersperse "*") . (map ((\s -> "(" ++ showInsideProd s ++ ")"))) $ ss
+       concat . (intersperse "*") . (map ((\s -> "(" ++ show s ++ ")"))) $ ss
 
-showInsideProd (Forward dep dims)   = showRegion "forward" (show dep) (showProdSpecs dims) 
-showInsideProd (Backward dep dims)  = showRegion "backward" (show dep) (showProdSpecs dims)
-showInsideProd (Symmetric dep dims) = showRegion "symmetry" (show dep) (showProdSpecs dims)
-showInsideProd (Constant dims)      = "fixed, " ++ (showProdSpecs dims)
+instance Show (Spec Prod) where
+   show (Forward dep dims)   = showRegion "forward" (show dep) (showProdSpecs dims)
+   show (Backward dep dims)  = showRegion "backward" (show dep) (showProdSpecs dims)
+   show (Symmetric dep dims) = showRegion "symmetry" (show dep) (showProdSpecs dims)
 
 -- Helper for showing regions
 showRegion typ depS dimS = typ ++ ", depth=" ++ depS ++ ", dim=" ++ dimS
 
-instance Show Spec where
-    show (Forward dep dims)   = showRegion "forward" (show dep) (showL dims)
-    show (Backward dep dims)  = showRegion "backward" (show dep) (showL dims)
-    show (Symmetric dep dims) = showRegion "centered" (show dep) (showL dims)
-    show (Constant dims)      = "fixed, dim=" ++ showL dims
-    
-
-
-
-
-
+instance Show (Spec Sum) where
+    show (Forward dep dims)   = showRegion "forward" (show dep) (showSumSpecs dims)
+    show (Backward dep dims)  = showRegion "backward" (show dep) (showSumSpecs dims)
+    show (Symmetric dep dims) = showRegion "centered" (show dep) (showSumSpecs dims)

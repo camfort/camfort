@@ -102,41 +102,41 @@ spec =
     describe "Example stencil inferences" $ do
       it "five point stencil 2D" $
         shouldBe (snd3 $ inferSpecInterval fivepoint)
-                 (SpatialSpec [] [] (Sum [ Product [ Symmetric 1 [ 1, 2 ]]]))
+                 (SpatialSpec [] [] (Summation [ Product [ Symmetric 1 [ 1, 2 ]]]))
 
       it "seven point stencil 2D" $
         shouldBe
           (snd3 $ inferSpecInterval sevenpoint)
-          (SpatialSpec [] [] (Sum [ Product [ Symmetric 1 [ 1, 2, 3 ]]]))
+          (SpatialSpec [] [] (Summation [ Product [ Symmetric 1 [ 1, 2, 3 ]]]))
 
       it "five point stencil 2D with blip" $
         shouldBe
           (snd3 $ inferSpecInterval fivepointErr)
-          (SpatialSpec [] [] (Sum [ Product [ Forward 1 [ 1, 2 ] ]
+          (SpatialSpec [] [] (Summation [ Product [ Forward 1 [ 1, 2 ] ]
                                     , Product [Symmetric 1 [ 1, 2 ] ] ]))
 
       it "centered forward" $
         shouldBe
           (snd3 $ inferSpecInterval centeredFwd)
-          (SpatialSpec [] [] (Sum [ Product [ Forward 1 [ 1 ]
+          (SpatialSpec [] [] (Summation [ Product [ Forward 1 [ 1 ]
                                               , Symmetric 1 [ 2 ] ] ]))
 
     describe "Example bounding boxes" $ do
       it "five point stencil 2D" $
         shouldBe (thd3 $ inferSpecInterval fivepoint)
-                 (SpatialSpec [] [] (Sum [Product [Symmetric 1 [1,2]]]))
+                 (SpatialSpec [] [] (Summation [Product [Symmetric 1 [1,2]]]))
 
       it "seven point stencil 2D" $
         shouldBe (thd3 $ inferSpecInterval sevenpoint)
-                 (SpatialSpec [] [] (Sum [Product [Symmetric 1 [1,2,3]]]))
+                 (SpatialSpec [] [] (Summation [Product [Symmetric 1 [1,2,3]]]))
 
       it "five point stencil 2D with blip" $
         shouldBe (thd3 $ inferSpecInterval fivepointErr)
-                 (SpatialSpec [] [] (Sum [Product [Symmetric 1 [1,2]]]))
+                 (SpatialSpec [] [] (Summation [Product [Symmetric 1 [1,2]]]))
 
       it "centered forward" $
         shouldBe (thd3 $ inferSpecInterval centeredFwd)
-                 (SpatialSpec [] [] (Sum [ Product [ Forward 1 [ 1 ]
+                 (SpatialSpec [] [] (Summation [ Product [ Forward 1 [ 1 ]
                                                      , Symmetric 1 [ 2 ] ] ]))
 
     describe "2D stencil verification" $
@@ -215,37 +215,37 @@ test2DSpecVariation (input, expectation) =
 
 variations =
   [ ( [ [0,0] ]
-    , NonLinear $ SpatialSpec [] [ 1, 2 ] (Sum [Product []])
+    , NonLinear $ SpatialSpec [] [ 1, 2 ] (Summation [Product []])
     )
   , ( [ [1,0], [0,0] ]
-    , NonLinear $ SpatialSpec [] [2] (Sum [Product [Forward 1 [ 1 ]]])
+    , NonLinear $ SpatialSpec [] [2] (Summation [Product [Forward 1 [ 1 ]]])
     )
   , ( [ [0,1], [0,0] ]
-    , NonLinear $ SpatialSpec [] [1] (Sum [Product [Forward 1 [ 2 ]]])
+    , NonLinear $ SpatialSpec [] [1] (Summation [Product [Forward 1 [ 2 ]]])
     )
   , ( [ [1,1], [0,1], [1,0], [0,0] ]
     , NonLinear $
-        SpatialSpec [] [] (Sum [Product [Forward 1 [ 1, 2 ]]])
+        SpatialSpec [] [] (Summation [Product [Forward 1 [ 1, 2 ]]])
     )
   , ( [ [-1,0], [0,0] ]
-    , NonLinear $ SpatialSpec [] [2] (Sum [Product [Backward 1 [ 1 ]]])
+    , NonLinear $ SpatialSpec [] [2] (Summation [Product [Backward 1 [ 1 ]]])
     )
   , ( [ [0,-1], [0,0] ]
-    , NonLinear $ SpatialSpec [] [1] (Sum [Product [Backward 1 [ 2 ]]])
+    , NonLinear $ SpatialSpec [] [1] (Summation [Product [Backward 1 [ 2 ]]])
     )
   , ( [ [-1,-1], [0,-1], [-1,0], [0,0] ]
     , NonLinear $
-        SpatialSpec [] [] (Sum [Product [Backward 1 [ 1, 2 ]]])
+        SpatialSpec [] [] (Summation [Product [Backward 1 [ 1, 2 ]]])
     )
   , ( [ [0,-1], [1,-1], [0,0], [1,0], [1,1], [0,1] ]
     , NonLinear $
         let spatial =
-              Sum [ Product [ Forward 1 [ 1 ] , Symmetric 1 [ 2 ] ] ]
+              Summation [ Product [ Forward 1 [ 1 ] , Symmetric 1 [ 2 ] ] ]
         in SpatialSpec [] [] spatial
     )
    -- Stencil which is non-contiguous from the origin in both directions
   , ( [ [0, 1], [1, 1] ]
-    , NonLinear $ SpatialSpec [] [] (Sum [Product [Forward 1 [ 1 ]]])
+    , NonLinear $ SpatialSpec [] [] (Summation [Product [Forward 1 [ 1 ]]])
     )
   ]
 
@@ -264,14 +264,14 @@ test3DSpecVariation (input, expectation) =
 variations3D =
   [ ( [ [-1,0,-1], [0,0,-1], [-1,0,0], [0,0,0] ]
     , NonLinear $
-       SpatialSpec [] [2] (Sum [Product [Backward 1 [ 1, 3 ]]])
+       SpatialSpec [] [2] (Summation [Product [Backward 1 [ 1, 3 ]]])
     )
   , ( [ [1,1,0], [0,1,0] ]
-    , NonLinear $ SpatialSpec [] [3] (Sum [Product [Forward 1 [ 1 ]]])
+    , NonLinear $ SpatialSpec [] [3] (Summation [Product [Forward 1 [ 1 ]]])
     )
   , ( [ [-1,4,-1], [0,4,-1], [-1,4,0], [0,4,0] ]
     , NonLinear $
-       SpatialSpec [] [] (Sum [Product [Backward 1 [ 1, 3 ]]])
+       SpatialSpec [] [] (Summation [Product [Backward 1 [ 1, 3 ]]])
     )
   ]
 

@@ -22,7 +22,10 @@ the specification checking and program synthesis features.
 
 -}
 
-{-# LANGUAGE TypeFamilies, TupleSections #-}
+{-# LANGUAGE TypeFamilies #-}
+{-# LANGUAGE DataKinds #-}
+{-# LANGUAGE TupleSections #-}
+{-# LANGUAGE FlexibleInstances #-}
 
 module Camfort.Analysis.StencilSpecification.Model where
 
@@ -46,8 +49,8 @@ mkVec i 0 = error $ "Dimensions are 1-indexed"
 mkVec i 1 = [i]
 mkVec i d = 0 : (mkVec i $ d - 1)
 
-instance Model Spec where
-   type Domain Spec = Set [Int]
+instance Model (Spec Prod) where
+   type Domain (Spec Prod) = Set [Int]
 
    model (Forward dep dims) =
      fromList . cprodVs $ [[mkVec i d | i <- [0..dep]] | d <- dims]
@@ -58,7 +61,17 @@ instance Model Spec where
    model (Symmetric dep dims) =
      fromList . cprodVs $ [[mkVec i d | i <- [(-dep)..dep]] | d <- dims]
 
-   model (Constant dims) = error "No model yet"
+instance Model (Spec Sum) where
+   type Domain (Spec Sum) = Set [Int]
+
+   model (Forward dep dims) =
+     fromList [mkVec i d | i <- [0..dep], d <- dims]
+
+   model (Backward dep dims) =
+     fromList [mkVec i d | i <- [(-dep)..0], d <- dims]
+
+   model (Symmetric dep dims) =
+     fromList [mkVec i d | i <- [(-dep)..dep], d <- dims]
 
 instance Model SpecProd where
    type Domain SpecProd = Set [Int]
@@ -67,7 +80,7 @@ instance Model SpecProd where
    model (Product ss) =
       fromList $ cprodVs $ map (toList . model) ss
 
--- Cartesian product on list of vectors
+-- Cartesian product on list of vectors4
 cprodVs :: [[[Int]]] -> [[Int]]
 cprodVs = foldr1 cprodV
 
@@ -82,15 +95,16 @@ cprodV xss yss = prod (normalise xss) (normalise yss)
     prod xss yss =
       xss >>= (\xs -> yss >>= (\ys -> pairwisePerm xs ys))
 
-    pairwisePerm [] [] = []
-    pairwisePerm [a] [b] = [[a],[b]]
-    pairwisePerm (a:as) (b:bs) =
-         map (a:) (pairwisePerm as bs)
-      ++ map (b:) (pairwisePerm as bs)
+pairwisePerm :: [a] -> [a] -> [[a]]
+pairwisePerm [] [] = []
+pairwisePerm [a] [b] = [[a],[b]]
+pairwisePerm (a:as) (b:bs) =
+    map (a:) (pairwisePerm as bs)
+ ++ map (b:) (pairwisePerm as bs)
 
 instance Model SpecSum where
    type Domain SpecSum = Set [Int]
-   model (Sum ss) = unions (map model ss)
+   model (Summation ss) = unions (map model ss)
 
 instance Model SpatialSpec where
    type Domain SpatialSpec = Set [Int]
@@ -111,34 +125,3 @@ instance Model Specification where
    model (NonLinear s) = DM.fromList . map (,True) . toList . model $ s
    model Empty         = DM.empty
    model _             = error "Only temporal specs are modelled"
-
-
-
-{-
-NO MORE LOCAL TESTS OR COMMENTED OUT CODE. PLEASE MOVE THIS TO ACTUAL TESTS.
-
--- Local test
-
-variations =
-        [ ([ (0,0) ], NonLinear $ SpatialSpec [] [ 1, 2 ] (Sum [Product []]))
-        , ([ (1,0), (0,0) ], NonLinear $ SpatialSpec [] [2] (Sum [Product [Forward 1 [ 1 ]]]))
-        , ([ (0,1), (0,0) ], NonLinear $ SpatialSpec [] [1] (Sum [Product [Forward 1 [ 2 ]]]))
-        , ([ (1,1), (0,1), (1,0), (0,0) ], NonLinear $ SpatialSpec [] [] (Sum [Product [Forward 1 [ 1, 2 ]]]))
-        , ([ (-1,0), (0,0) ], NonLinear $ SpatialSpec [] [2] (Sum [Product [Backward 1 [ 1 ]]]))
-        , ([ (0,-1), (0,0) ], NonLinear $ SpatialSpec [] [1] (Sum [Product [Backward 1 [ 2 ]]]))
-        , ([ (-1,-1), (0,-1), (-1,0), (0,0) ], NonLinear $ SpatialSpec [] [] (Sum [Product [Backward 1 [ 1, 2 ]]]))
-        , ( [ (0,-1), (1,-1), (0,0), (1,0), (1,1), (0,1), (2,-1), (2,0), (2,1) ]
-          , NonLinear $ SpatialSpec [] [] (Sum [Product [ Forward 2 [ 1 ], Symmetric 1 [ 2 ] ] ] ))
-        , ( [ (-1,0), (-1,1), (0,0), (0,1), (1,1), (1,0), (-1,2), (0,2), (1,2) ]
-          , NonLinear $ SpatialSpec [] [] (Sum [Product [ Forward 2 [ 2 ], Symmetric 1 [ 1 ] ] ] ))
-         -- Stencil which is non-contiguous from the origin in both directions
-        , ([ (0, 1), (1, 1) ], NonLinear $ SpatialSpec [] [] (Sum [Product [Forward 1 [ 1 ]]]))
-        ]
-
-check = mapM_ check' variations
-  where check' (ixs, spec) = putStrLn $ show (sort ixs == sort mdl, sort ixs, sort mdl)
-          where mdl = nub $ map toPair $ toList $ model spec
-                toPair [x, y] = (x, y)
-                toPair [x]    = (x, 0)
-                toPair xs     = error $ "Got " ++ show xs
--}

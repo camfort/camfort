@@ -34,7 +34,8 @@ import Camfort.Analysis.Loops (collect)
 import Camfort.Analysis.Annotations
 import Camfort.Extensions.UnitsForpar (parameterise)
 import Camfort.Helpers.Vec
-import Camfort.Helpers hiding (lineCol, spanLineCol) -- These two are redefined here for ForPar ASTs
+-- These two are redefined here for ForPar ASTs
+import Camfort.Helpers hiding (lineCol, spanLineCol) 
 
 import qualified Language.Fortran.AST as F
 import qualified Language.Fortran.Analysis as FA
@@ -54,10 +55,12 @@ s = SrcSpan (Position 0 0 0) (Position 0 0 0)
 -- a list of indexing expressions for the spec
 synthesise :: Specification -> F.Name -> [F.Name] -> [F.Expression Annotation]
 synthesise spec v ixs = map toArrSubsExpr . toList . model $ spec
-  where toArrSubsExpr (offs,_) = ixExprToSubscript v . map (uncurry offsetToIx) $ zip ixs offs
+  where toArrSubsExpr (offs,_) = ixExprToSubscript v . map (uncurry offsetToIx)
+                                  $ zip ixs offs
 
 ixExprToSubscript :: F.Name -> [F.Index Annotation] -> F.Expression Annotation
-ixExprToSubscript v es = F.ExpSubscript a s (F.ExpValue a s (F.ValVariable a v)) (F.AList a s es)
+ixExprToSubscript v es =
+    F.ExpSubscript a s (F.ExpValue a s (F.ValVariable a v)) (F.AList a s es)
 
 -- Make indexing expression for variable 'v' from an offset.
 -- essentially inverse to `ixToOffset` in StencilSpecification
