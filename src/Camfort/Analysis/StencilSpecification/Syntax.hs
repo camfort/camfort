@@ -125,12 +125,15 @@ sumLinearity NonLinear _   = NonLinear
 sumLinearity _ NonLinear   = NonLinear
 
 sumSpatial :: Spatial -> Spatial -> Spatial
-sumSpatial (Spatial lin irdim rdim (Sum ss)) (Spatial lin' irdim' rdim' (Sum ss')) =
-    Spatial (sumLinearity lin lin') (irdim ++ irdim') (rdim ++ rdim') (Sum $ normalise $ ss ++ ss')
+sumSpatial (Spatial lin irdim rdim (Sum ss))
+           (Spatial lin' irdim' rdim' (Sum ss')) =
+    Spatial (sumLinearity lin lin') (irdim ++ irdim') (rdim ++ rdim')
+            (Sum $ normalise $ ss ++ ss')
 
 prodSpatial :: Spatial -> Spatial -> Spatial
 prodSpatial (Spatial lin irdim rdim s) (Spatial lin' irdim' rdim' s') =
-    Spatial (sumLinearity lin lin') (irdim ++ irdim') (rdim ++ rdim') (prodRegionSum s s')
+    Spatial (sumLinearity lin lin') (irdim ++ irdim') (rdim ++ rdim')
+            (prodRegionSum s s')
 
 prodRegionSum :: RegionSum -> RegionSum -> RegionSum
 prodRegionSum (Sum ss) (Sum ss') =

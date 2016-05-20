@@ -123,7 +123,7 @@ spec =
       it "centered forward" $
         shouldBe
           (snd3 $ inferSpecInterval centeredFwd)
-          (Spatial NonLinear [] [] (Sum [ Product [ Forward 1 1 
+          (Spatial NonLinear [] [] (Sum [ Product [ Forward 1 1
                                                   , Centered 1 2 ] ]))
 
     describe "Example bounding boxes" $ do
@@ -142,7 +142,7 @@ spec =
 
       it "centered forward" $
         shouldBe (thd3 $ inferSpecInterval centeredFwd)
-                 (Spatial NonLinear [] [] (Sum [ Product [ Forward 1 1 
+                 (Spatial NonLinear [] [] (Sum [ Product [ Forward 1 1
                                                      , Centered 1 2 ] ]))
 
     describe "2D stencil verification" $
@@ -276,10 +276,10 @@ variations3D =
     ,  Spatial NonLinear [] [2] (Sum [Product [Backward 1 1, Backward 1 3]])
     )
   , ( [ [1,1,0], [0,1,0] ]
-    ,  Spatial NonLinear [] [3] (Sum [Product [Forward 1 1]]) 
+    ,  Spatial NonLinear [] [3] (Sum [Product [Forward 1 1]])
     )
   , ( [ [-1,4,-1], [0,4,-1], [-1,4,0], [0,4,0] ]
-    ,  Spatial NonLinear [] [] (Sum [Product [Backward 1 1, Backward 1 3]])  
+    ,  Spatial NonLinear [] [] (Sum [Product [Backward 1 1, Backward 1 3]])
     )
   ]
 

@@ -1,4 +1,28 @@
-{-# LANGUAGE DataKinds, GADTs, KindSignatures, TypeFamilies, FlexibleInstances, FlexibleContexts, NoMonomorphismRestriction, ScopedTypeVariables, PolyKinds #-}
+{-
+   Copyright 2016, Dominic Orchard, Andrew Rice, Mistral Contrastin, Matthew Danish
+
+   Licensed under the Apache License, Version 2.0 (the "License");
+   you may not use this file except in compliance with the License.
+   You may obtain a copy of the License at
+
+       http://www.apache.org/licenses/LICENSE-2.0
+
+   Unless required by applicable law or agreed to in writing, software
+   distributed under the License is distributed on an "AS IS" BASIS,
+   WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+   See the License for the specific language governing permissions and
+   limitations under the License.
+-}
+
+{-# LANGUAGE DataKinds #-}
+{-# LANGUAGE GADTs #-}
+{-# LANGUAGE KindSignatures #-}
+{-# LANGUAGE TypeFamilies #-}
+{-# LANGUAGE FlexibleInstances #-}
+{-# LANGUAGE FlexibleContexts #-}
+{-# LANGUAGE NoMonomorphismRestriction #-}
+{-# LANGUAGE ScopedTypeVariables #-}
+{-# LANGUAGE PolyKinds #-}
 
 module Camfort.Analysis.StencilSpecification.Inference where
 
@@ -24,16 +48,20 @@ thd3 (a, b, c) = c
 
 fromIndicesToSpec :: VecList Int -> Interval Specification
 -- TODO: currently just marked as Non-linear
-fromIndicesToSpec (VL ixs) = (Specification (Left low), Specification (Left exact), Specification (Left up))
-  where (low, exact, up) = inferSpecInterval ixs
+fromIndicesToSpec (VL ixs) =
+  (Specification $ Left low, Specification $ Left exact, Specification $ Left up)
+    where (low, exact, up) = inferSpecInterval ixs
 
 inferSpecInterval :: Permutable n => [Vec n Int] -> Interval Spatial
 inferSpecInterval ixs = (low, exact, up)
-  where (low, exact, up) = fromRegionsToSpecInterval . inferMinimalVectorRegions $ ixs
+  where
+    (low, exact, up) =
+      fromRegionsToSpecInterval . inferMinimalVectorRegions $ ixs
 
--- Removes any 'reflexive' specs that are overlapped by a directional spec somewhere else
--- [in theory a lot of these won't get generated in the first place, but when specs are combined
--- there can be overlapping reflexivities in different parts]
+-- Removes any 'reflexive' specs that are overlapped by a directional spec
+-- somewhere else [in theory a lot of these won't get generated in the first
+-- place, but when specs are combined there can be overlapping reflexivities in
+-- different parts]
 simplifyRefl :: Spatial -> Spatial
 simplifyRefl (Spatial lin irdims rdims (Sum ss)) =
   Spatial lin irdims (rdims \\ overlapped) (Sum ss)
@@ -67,24 +95,35 @@ toSpecND = toSpecPerDim 1
    -- convert the region one dimension at a time.
    toSpecPerDim :: Int -> Span (Vec n Int) -> Spatial
    toSpecPerDim d (Nil, Nil)             = emptySpec
-   toSpecPerDim d (Cons l ls, Cons u us) = prodSpatial (toSpec1D d l u) (toSpecPerDim (d + 1) (ls, us))
+   toSpecPerDim d (Cons l ls, Cons u us) =
+     prodSpatial (toSpec1D d l u) (toSpecPerDim (d + 1) (ls, us))
 
 -- : (toSpecification (dim+1) ms ns)
 
--- toSpec1D takes a dimension identifier, a lower and upper bound of a region in that dimension, and
--- builds the simple directional spec.
+-- toSpec1D takes a dimension identifier, a lower and upper bound of a region in
+-- that dimension, and builds the simple directional spec.
 toSpec1D :: Dimension -> Int -> Int -> Spatial
 toSpec1D dim l u
     | l == 0 && u == 0   = Spatial Linear [] [dim] (Sum [Product []])
     | l==u               = emptySpec -- Represents a non-span
-    | l < 0 && u == 0    = Spatial Linear [] [] (Sum [Product [Backward (abs l) dim]])
-    | l < 0 && u == (-1) = Spatial Linear [dim] [] (Sum [Product [Backward (abs l) dim]])
-    | l < 0 && u > 0 && (abs l == u)
-                         = Spatial Linear [] [] (Sum [Product [Centered u dim]])
-    | l < 0 && u > 0 && (abs l /= u)
-                         = Spatial Linear [] [] (Sum [Product [Backward (abs l) dim], Product [Forward u dim]])
-    | l == 0 && u > 0    = Spatial Linear [] [] (Sum [Product [Forward u dim]])
-    | l == 1 && u > 0    = Spatial Linear [dim] [] (Sum [Product [Forward u dim]])
+    | l < 0 && u == 0    =
+        Spatial Linear [] [] (Sum [Product [Backward (abs l) dim]])
+
+    | l < 0 && u == (-1) =
+        Spatial Linear [dim] [] (Sum [Product [Backward (abs l) dim]])
+
+    | l < 0 && u > 0 && (abs l == u) =
+        Spatial Linear [] [] (Sum [Product [Centered u dim]])
+
+    | l < 0 && u > 0 && (abs l /= u) =
+        Spatial Linear [] [] (Sum [Product [Backward (abs l) dim],
+                                   Product [Forward u dim]])
+    | l == 0 && u > 0    =
+        Spatial Linear [] [] (Sum [Product [Forward u dim]])
+
+    | l == 1 && u > 0    =
+        Spatial Linear [dim] [] (Sum [Product [Forward u dim]])
+
     | otherwise          = emptySpec
 
 
@@ -114,10 +153,11 @@ spanBoundingBox a b = boundingBox' (normaliseSpan a) (normaliseSpan b)
 
 {-| Given two spans, if they are consecutive
     (i.e., (lower1, upper1) (lower2, upper2) where lower2 = upper1 + 1)
-    then compose them together returning Just of the new span. Otherwise Nothing -}
-composeConsecutiveSpans :: Span (Vec n Int) -> Span (Vec n Int) -> Maybe (Span (Vec n Int))
+    then compose together returning Just of the new span. Otherwise Nothing -}
+composeConsecutiveSpans :: Span (Vec n Int)
+                        -> Span (Vec n Int) -> Maybe (Span (Vec n Int))
 composeConsecutiveSpans (Nil, Nil) (Nil, Nil) = Just (Nil, Nil)
-composeConsecutiveSpans x@(Cons l1 ls1, Cons u1 us1) y@(Cons l2 ls2, Cons u2 us2)
+composeConsecutiveSpans (Cons l1 ls1, Cons u1 us1) (Cons l2 ls2, Cons u2 us2)
     | (ls1 == ls2) && (us1 == us2) && (u1 + 1 == l2)
       = Just (Cons l1 ls1, Cons u2 us2)
     | otherwise
@@ -125,26 +165,31 @@ composeConsecutiveSpans x@(Cons l1 ls1, Cons u1 us1) y@(Cons l2 ls2, Cons u2 us2
 
 foobar = [Cons 0 (Cons 1 Nil), Cons 1 (Cons 1 Nil)]
 
-{-| |inferMinimalVectorRegions| a key part of the algorithm, from a list of n-dimensional relative indices
-    it infers a list of (possibly overlapping) 1-dimensional spans (vectors) within the n-dimensional space.
+{-| |inferMinimalVectorRegions| a key part of the algorithm, from a list of
+    n-dimensional relative indices it infers a list of (possibly overlapping)
+    1-dimensional spans (vectors) within the n-dimensional space.
     Built from |minimalise| and |allRegionPermutations| -}
 inferMinimalVectorRegions :: (Permutable n) => [Vec n Int] -> [Span (Vec n Int)]
 inferMinimalVectorRegions = fixCoalesce . map mkTrivialSpan
-  where fixCoalesce spans = let spans' = minimaliseRegions . allRegionPermutations $ spans
-                            in if spans' == spans then spans' else fixCoalesce spans'
+  where fixCoalesce spans =
+          let spans' = minimaliseRegions . allRegionPermutations $ spans
+          in if spans' == spans then spans' else fixCoalesce spans'
 
-{-| Map from a lists of n-dimensional spans of relative indices into all possible
-    contiguous spans within that n-dimensional space (individual pass) -}
-allRegionPermutations :: (Permutable n) => [Span (Vec n Int)] -> [[Span (Vec n Int)]]
+{-| Map from a lists of n-dimensional spans of relative indices into all
+    possible contiguous spans within the n-dimensional space (individual pass)-}
+allRegionPermutations :: (Permutable n)
+                      => [Span (Vec n Int)] -> [[Span (Vec n Int)]]
 allRegionPermutations =
-    unpermuteIndices . map (coalesceRegions >< id) . groupByPerm . map permutationsS
+  unpermuteIndices . map (coalesceRegions >< id) . groupByPerm . map permutations
     where
       {- Permutations of a indices in a span
          (independently permutes the lower and upper bounds in the same way) -}
-      permutationsS :: Permutable n => Span (Vec n Int) -> [(Span (Vec n Int), Vec n Int -> Vec n Int)]
+      permutations :: Permutable n
+                   => Span (Vec n Int)
+                   -> [(Span (Vec n Int), Vec n Int -> Vec n Int)]
       -- Since the permutation ordering is identical for lower & upper bound,
       -- reuse the same unpermutation
-      permutationsS (l, u) = map (\((l', un1), (u', un2)) -> ((l', u'), un1))
+      permutations (l, u) = map (\((l', un1), (u', un2)) -> ((l', u'), un1))
                            $ zip (permutationsV l) (permutationsV u)
 
       sortByFst        = sortBy (\(l1, u1) (l2, u2) -> compare l1 l2)
@@ -159,14 +204,16 @@ allRegionPermutations =
                        -> [[Span (Vec n Int)]]
       unpermuteIndices = map (\(rs, unPerm) -> map (unPerm *** unPerm) rs)
 
-{-| Collapses the regions into a small set by looking for potential overlaps and eliminating those
-    that overlap -}
+{-| Collapses the regions into a small set by looking for potential overlaps
+    and eliminating those that overlap -}
 minimaliseRegions :: [[Span (Vec n Int)]] -> [Span (Vec n Int)]
 minimaliseRegions [] = []
 minimaliseRegions xss = nub . minimalise $ xss'
   where xss' = concat xss
-        minimalise = foldr (\x ys -> (filter' x (\y -> overlaps x y && (x /= y)) xss') ++ ys) []
-        -- If nothing is caught by the filter, i.e. no overlaps then return the original regions r
+        localMin x ys = (filter' x (\y -> overlaps x y && (x /= y)) xss') ++ ys
+        minimalise = foldr localMin []
+        -- If nothing is caught by the filter, i.e. no overlaps then return
+        -- the original regions r
         filter' r f xs = case filter f xs of
                            [] -> [r]
                            ys -> ys
@@ -179,13 +226,16 @@ overlaps (Cons l1 ls1, Cons u1 us1) (Cons l2 ls2, Cons u2 us2)
   = (l2 <= l1 && u1 <= u2) && overlaps (ls1, us1) (ls2, us2)
 
 
-{-| Defines the (total) class of vector sizes which are permutable, along with the
-     permutation function which pairs permutations with the 'unpermute' operation -}
+{-| Defines the (total) class of vector sizes which are permutable, along with
+    the permutation function which pairs permutations with the 'unpermute'
+    operation -}
 class Permutable (n :: Nat) where
   -- From a Vector of length n to a list of 'selections'
-  --   (triples of a selected element, the rest of the vector, a function to 'unselect')
+  --   (triples of a selected element, the rest of the vector,
+  --   a function to 'unselect')
   selectionsV :: Vec n a -> [Selection n a]
-  -- From a Vector of length n to a list of its permutations paired with the 'unpermute' function
+  -- From a Vector of length n to a list of its permutations paired with the
+  -- 'unpermute' function
   permutationsV :: Vec n a -> [(Vec n a, Vec n a -> Vec n a)]
 
 -- 'Split' is a size-indexed family which gives the type of selections
@@ -208,11 +258,13 @@ instance Permutable (S Z) where
     = [(Cons x Nil, id)]
 
 instance Permutable (S n) => Permutable (S (S n)) where
-  selectionsV (Cons x xs)
-      = (x, xs, Cons) : [ (y, Cons x ys, unselect unSel) | (y, ys, unSel) <- selectionsV xs ]
+  selectionsV (Cons x xs) =
+    (x, xs, Cons) : [ (y, Cons x ys, unselect unSel)
+                    | (y, ys, unSel) <- selectionsV xs ]
     where
-       unselect :: (a -> Vec n a -> Vec (S n) a) -> (a -> Vec (S n) a -> Vec (S (S n)) a)
-       unselect f y' (Cons x' ys') = Cons x' (f y' ys')
+     unselect :: (a -> Vec n a -> Vec (S n) a)
+              -> (a -> Vec (S n) a -> Vec (S (S n)) a)
+     unselect f y' (Cons x' ys') = Cons x' (f y' ys')
 
   permutationsV xs =
       [ (Cons y zs, \(Cons y' zs') -> unSel y' (unPerm zs'))
@@ -236,7 +288,8 @@ lcons x (List (Cons y (Cons z xs))) = List (Cons x (Cons y (Cons z xs)))
 fromList :: [a] -> List a
 fromList = foldr lcons lnil
 
--- pre-condition: the input is a 'rectangular' list of lists (i.e. all internal lists have the same size)
+-- pre-condition: the input is a 'rectangular' list of lists (i.e. all internal
+-- lists have the same size)
 fromLists :: [[Int]] -> VecList Int
 fromLists [] = VL ([] :: [Vec Z Int])
 fromLists (xs:xss) = consList (fromList xs) (fromLists xss)
