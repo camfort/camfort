@@ -24,34 +24,31 @@ thd3 (a, b, c) = c
 
 fromIndicesToSpec :: VecList Int -> Interval Specification
 -- TODO: currently just marked as Non-linear
-fromIndicesToSpec (VL ixs) = (NonLinear low, NonLinear exact, NonLinear up)
+fromIndicesToSpec (VL ixs) = (Specification (Left low), Specification (Left exact), Specification (Left up))
   where (low, exact, up) = inferSpecInterval ixs
 
-inferSpecInterval :: Permutable n => [Vec n Int] -> Interval SpatialSpec
+inferSpecInterval :: Permutable n => [Vec n Int] -> Interval Spatial
 inferSpecInterval ixs = (low, exact, up)
   where (low, exact, up) = fromRegionsToSpecInterval . inferMinimalVectorRegions $ ixs
 
 -- Removes any 'reflexive' specs that are overlapped by a directional spec somewhere else
 -- [in theory a lot of these won't get generated in the first place, but when specs are combined
 -- there can be overlapping reflexivities in different parts]
-simplifyRefl :: SpatialSpec -> SpatialSpec
-simplifyRefl (SpatialSpec irdims rdims (Summation ss)) =
-  SpatialSpec irdims (rdims \\ overlapped) (Summation ss)
+simplifyRefl :: Spatial -> Spatial
+simplifyRefl (Spatial lin irdims rdims (Sum ss)) =
+  Spatial lin irdims (rdims \\ overlapped) (Sum ss)
     where
       overlapped = rdimsS ++ rdimsF ++ rdimsB
-      rdimsS = [d | (Symmetric _ dims)  <- universeBi ss::[Spec Sum],
-                                     d  <- dims,
-                                     d' <- rdims, d == d']
+      rdimsS = [d | (Centered _ d)  <- universeBi ss::[Region],
+                                 d' <- rdims, d == d']
 
-      rdimsF = [d | (Forward   _ dims)  <- universeBi ss::[Spec Sum],
-                                     d  <- dims,
-                                     d' <- rdims, d == d']
+      rdimsF = [d | (Forward  _ d)  <- universeBi ss::[Region],
+                                 d' <- rdims, d == d']
 
-      rdimsB = [d | (Backward  _ dims)  <- universeBi ss::[Spec Sum],
-                                     d  <- dims,
-                                     d' <- rdims, d == d']
+      rdimsB = [d | (Backward  _ d)  <- universeBi ss::[Region],
+                                  d' <- rdims, d == d']
 
-fromRegionsToSpecInterval :: [Span (Vec n Int)] -> Interval SpatialSpec
+fromRegionsToSpecInterval :: [Span (Vec n Int)] -> Interval Spatial
 fromRegionsToSpecInterval sps = (lower, simplifyRefl exact, upper)
   where
     (lower, exact) = go sps
@@ -59,35 +56,35 @@ fromRegionsToSpecInterval sps = (lower, simplifyRefl exact, upper)
 
     go []       = (emptySpec, emptySpec)
    -- TODO, compute a better lower bound
-    go (s : ss) = (lower', sumSpatialSpec exact exact')
+    go (s : ss) = (lower', sumSpatial exact exact')
       where exact            = toSpecND s
             (lower', exact') = go ss
 
 -- toSpecND converts an n-dimensional region into a (list of) specification
-toSpecND :: Span (Vec n Int) -> SpatialSpec
+toSpecND :: Span (Vec n Int) -> Spatial
 toSpecND = toSpecPerDim 1
   where
    -- convert the region one dimension at a time.
-   toSpecPerDim :: Int -> Span (Vec n Int) -> SpatialSpec
+   toSpecPerDim :: Int -> Span (Vec n Int) -> Spatial
    toSpecPerDim d (Nil, Nil)             = emptySpec
-   toSpecPerDim d (Cons l ls, Cons u us) = prodSpatialSpec (toSpec1D d l u) (toSpecPerDim (d + 1) (ls, us))
+   toSpecPerDim d (Cons l ls, Cons u us) = prodSpatial (toSpec1D d l u) (toSpecPerDim (d + 1) (ls, us))
 
 -- : (toSpecification (dim+1) ms ns)
 
 -- toSpec1D takes a dimension identifier, a lower and upper bound of a region in that dimension, and
 -- builds the simple directional spec.
-toSpec1D :: Dimension -> Int -> Int -> SpatialSpec
+toSpec1D :: Dimension -> Int -> Int -> Spatial
 toSpec1D dim l u
-    | l == 0 && u == 0   = SpatialSpec [] [dim] (Summation [Product []])
+    | l == 0 && u == 0   = Spatial Linear [] [dim] (Sum [Product []])
     | l==u               = emptySpec -- Represents a non-span
-    | l < 0 && u == 0    = SpatialSpec [] [] (Summation [Product [Backward (abs l) [dim]]])
-    | l < 0 && u == (-1) = SpatialSpec [dim] [] (Summation [Product [Backward (abs l) [dim]]])
+    | l < 0 && u == 0    = Spatial Linear [] [] (Sum [Product [Backward (abs l) dim]])
+    | l < 0 && u == (-1) = Spatial Linear [dim] [] (Sum [Product [Backward (abs l) dim]])
     | l < 0 && u > 0 && (abs l == u)
-                         = SpatialSpec [] [] (Summation [Product [Symmetric u [dim]]])
+                         = Spatial Linear [] [] (Sum [Product [Centered u dim]])
     | l < 0 && u > 0 && (abs l /= u)
-                         = SpatialSpec [] [] (Summation [Product [Backward (abs l) [dim]], Product [Forward u [dim]]])
-    | l == 0 && u > 0    = SpatialSpec [] [] (Summation [Product [Forward u [dim]]])
-    | l == 1 && u > 0    = SpatialSpec [dim] [] (Summation [Product [Forward u [dim]]])
+                         = Spatial Linear [] [] (Sum [Product [Backward (abs l) dim], Product [Forward u dim]])
+    | l == 0 && u > 0    = Spatial Linear [] [] (Sum [Product [Forward u dim]])
+    | l == 1 && u > 0    = Spatial Linear [dim] [] (Sum [Product [Forward u dim]])
     | otherwise          = emptySpec
 
 

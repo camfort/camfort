@@ -17,18 +17,9 @@
 
 module Main where
 
-import qualified Language.Fortran.Parser as Fortran
-import Language.Fortran.PreProcess
-import Language.Fortran
-
--- FORPAR
-import qualified Language.Fortran.Parser.Fortran77 as F77
-import qualified Language.Fortran.AST as A
-import Language.Fortran.Analysis.Renaming(renameAndStrip, analyseRenames, unrename, NameMap)
-import Language.Fortran.Analysis(initAnalysis)
-import Camfort.Extensions.UnitsForpar
--- TODO: move into the 'Functionality' module
-import qualified Camfort.Analysis.StencilSpecification as StencilsForpar
+--import qualified Language.Fortran.Parser as Fortran
+--import Language.Fortran.PreProcess
+--import Language.Fortran
 
 import Data.Generics.Uniplate.Operations
 import System.Console.GetOpt
@@ -42,13 +33,6 @@ import Camfort.Output
 import Camfort.Input
 import Camfort.Functionality
 
-import System.Console.GetOpt
-import System.Environment
-import System.IO
-
-import Debug.Trace
-
-import Data.List (foldl', nub, (\\), elemIndices, intersperse, intercalate)
 import Data.Text (pack, unpack, split)
 import qualified Data.Map as M
 import Data.Maybe
@@ -140,93 +124,10 @@ menu = "Refactor functions:\n"
         ++ concatMap (\(k, (_, info)) -> "\t" ++ k ++ (replicate (15 - length k) ' ')
         ++ "\t [" ++ info ++ "] \n") analyses
 
+-- Some development tests
 
--- * Builders for analysers and refactorings
-
-
-class Show' s where
-      show' :: s -> String
-instance Show' String where
-      show' = id
-instance Show' Int where
-      show' = show
-
-test = stencilsInfForPar "samples/stencils/one.f" [] () ()
+test = stencilsInf "samples/stencils/one.f" [] () ()
 testVFC = stencilsVarFlowCycles "samples/stencils/one.f" [] () ()
 
 oldTest = stencilsInf "samples/stencils/one.f90" [] () ()
 
---------------------------------------------------
--- Forpar stuff
-
-stencilsInfForPar inSrc excludes _ _ = do
-  putStrLn $ "Inferring stencil specs for " ++ show inSrc ++ "\n"
-  doAnalysisSummaryForpar StencilsForpar.infer inSrc excludes
-----
-
-stencilsVarFlowCycles inSrc excludes _ _ = do
-  putStrLn $ "Inferring var flow cycles for " ++ show inSrc ++ "\n"
-  doAnalysisSummaryForpar (intercalate ", " . map show . StencilsForpar.findVarFlowCycles) inSrc excludes
-
-----
-doAnalysisSummaryForpar :: (Monoid s, Show' s) => (A.ProgramFile A -> s) -> FileOrDir -> [Filename] -> IO ()
-doAnalysisSummaryForpar aFun inSrc excludes = do
-  if excludes /= [] && excludes /= [""]
-    then putStrLn $ "Excluding " ++ (concat $ intersperse "," excludes) ++ " from " ++ inSrc ++ "/"
-    else return ()
-  ps <- readForparseSrcDir inSrc excludes
-  let inFiles = map Fortran.fst3 ps
-  putStrLn "Output of the analysis:"
-  putStrLn . show' $ foldl' (\n (f, _, ps) -> n `mappend` (aFun ps)) mempty ps
-----
-doRefactorForpar :: ([(Filename, A.ProgramFile A)] -> (String, [(Filename, A.ProgramFile Annotation)])) -> FileOrDir -> [Filename] -> FileOrDir -> IO ()
-doRefactorForpar rFun inSrc excludes outSrc =
-  do if excludes /= [] && excludes /= [""]
-         then putStrLn $ "Excluding " ++ (concat $ intersperse "," excludes) ++ " from " ++ inSrc ++ "/"
-         else return ()
-----
-     ps <- readForparseSrcDir inSrc excludes
-     let (report, ps') = rFun (map (\(f, inp, ast) -> (f, ast)) ps)
-     --let outFiles = filter (\f -not ((take (length $ d ++ "out") f) == (d ++ "out"))) (map fst ps')
-     let outFiles = map fst ps'
-     putStrLn report
-     -- outputFiles inSrc outSrc (zip3 outFiles (map Fortran.snd3 ps ++ (repeat "")) (map snd ps'))
-----
-{-| Performs an analysis which reports to the user, but does not output any files -}
-doAnalysisReportForpar :: ([(Filename, A.ProgramFile A)] -> (String, t1)) -> FileOrDir -> [Filename] -> t -> IO ()
-doAnalysisReportForpar rFun inSrc excludes outSrc = do
-  if excludes /= [] && excludes /= [""]
-      then putStrLn $ "Excluding " ++ (concat $ intersperse "," excludes) ++ " from " ++ inSrc ++ "/"
-      else return ()
-  ps <- readForparseSrcDir inSrc excludes
-----
-  putStr "\n"
-  let (report, ps') = rFun (map (\(f, inp, ast) -> (f, ast)) ps)
-  putStrLn report
-----
--- * Source directory and file handling
-readForparseSrcDir :: FileOrDir -> [Filename] -> IO [(Filename, SourceText, A.ProgramFile A)]
-readForparseSrcDir inp excludes = do isdir <- isDirectory inp
-                                     files <- if isdir then
-                                                  do files <- rGetDirContents inp
-                                                     return $ (map (\y -> inp ++ "/" ++ y) files) \\ excludes
-                                              else return [inp]
-                                     mapM readForparseSrcFile files
-----
-{-| Read a specific file, and parse it -}
-readParseSrcFile :: Filename -> IO (Filename, SourceText, Program A)
-readParseSrcFile f = do putStrLn f
-                        inp <- readFile f
-                        ast <- parse f
-                        return $ (f, inp, map (fmap (const unitAnnotation)) ast)
-----
-{-| Read a specific file, and parse it -}
-readForparseSrcFile :: Filename -> IO (Filename, SourceText, A.ProgramFile A)
-readForparseSrcFile f = do putStrLn f
-                           inp <- readFile f
-                           let ast = forparse inp f
-                           return $ (f, inp, fmap (const unitAnnotation) ast)
-----
-{-| parse file into an un-annotated Fortran AST -}
-forparse :: SourceText -> Filename -> A.ProgramFile ()
-forparse contents f = F77.fortran77Parser contents f

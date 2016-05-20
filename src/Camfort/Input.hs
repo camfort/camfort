@@ -194,10 +194,11 @@ isFortran x = elem (fileExt x) [".f", ".f90", ".f77", ".cmn", ".inc"]
 
 {-| Read a specific file, and parse it -}
 readParseSrcFile :: Filename -> IO (Filename, SourceText, Program A)
-readParseSrcFile f = do putStrLn f
-                        inp <- readFile f
-                        ast <- parse f
-                        return $ (f, inp, map (fmap (const unitAnnotation)) ast)
+readParseSrcFile f = do
+    putStrLn f
+    inp <- readFile f
+    ast <- parse f
+    return $ (f, inp, map (fmap (const unitAnnotation)) ast)
 
 
 

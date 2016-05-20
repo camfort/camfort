@@ -49,32 +49,20 @@ mkVec i 0 = error $ "Dimensions are 1-indexed"
 mkVec i 1 = [i]
 mkVec i d = 0 : (mkVec i $ d - 1)
 
-instance Model (Spec Prod) where
-   type Domain (Spec Prod) = Set [Int]
+instance Model Region where
+   type Domain Region = Set [Int]
 
-   model (Forward dep dims) =
-     fromList . cprodVs $ [[mkVec i d | i <- [0..dep]] | d <- dims]
+   model (Forward dep dim) =
+     fromList [mkVec i dim | i <- [0..dep]]
 
-   model (Backward dep dims) =
-     fromList . cprodVs $ [[mkVec i d | i <- [(-dep)..0]] | d <- dims]
+   model (Backward dep dim) =
+     fromList [mkVec i dim | i <- [(-dep)..0]]
 
-   model (Symmetric dep dims) =
-     fromList . cprodVs $ [[mkVec i d | i <- [(-dep)..dep]] | d <- dims]
+   model (Centered dep dim) =
+     fromList [mkVec i dim | i <- [(-dep)..dep]]
 
-instance Model (Spec Sum) where
-   type Domain (Spec Sum) = Set [Int]
-
-   model (Forward dep dims) =
-     fromList [mkVec i d | i <- [0..dep], d <- dims]
-
-   model (Backward dep dims) =
-     fromList [mkVec i d | i <- [(-dep)..0], d <- dims]
-
-   model (Symmetric dep dims) =
-     fromList [mkVec i d | i <- [(-dep)..dep], d <- dims]
-
-instance Model SpecProd where
-   type Domain SpecProd = Set [Int]
+instance Model RegionProd where
+   type Domain RegionProd = Set [Int]
 
    model (Product []) = Set.empty
    model (Product ss) =
@@ -102,17 +90,23 @@ pairwisePerm (a:as) (b:bs) =
     map (a:) (pairwisePerm as bs)
  ++ map (b:) (pairwisePerm as bs)
 
-instance Model SpecSum where
-   type Domain SpecSum = Set [Int]
-   model (Summation ss) = unions (map model ss)
+instance Model RegionSum where
+   type Domain RegionSum = Set [Int]
+   model (Sum ss) = unions (map model ss)
 
-instance Model SpatialSpec where
-   type Domain SpatialSpec = Set [Int]
+instance Model Spatial where
+   type Domain Spatial = Multiset [Int]
 
-   model (SpatialSpec irrefls refls s) =
-      Set.difference
-        (Set.union (fromList [mkVec 0 d | d <- refls]) (model s))
-        (fromList [mkVec 0 d | d <- irrefls])
+   model (Spatial lin irrefls refls s) =
+    case lin of
+      Linear    -> DM.fromList . map (,False) . toList $ indices
+      NonLinear -> DM.fromList . map (,True) . toList $ indices
+    where
+      indices =
+        Set.difference
+          (Set.union (fromList [mkVec 0 d | d <- refls])
+                     (model s))
+          (fromList [mkVec 0 d | d <- irrefls])
 
 -- Multiset representation where multiplicities are (-1) modulo 2
 -- that is, False = multiplicity 1, True = multiplicity > 1
@@ -121,7 +115,5 @@ type Multiset a = DM.Map a Bool
 instance Model Specification where
    type Domain Specification = Multiset [Int]
 
-   model (Linear s)    = DM.fromList . map (,False) . toList . model $ s
-   model (NonLinear s) = DM.fromList . map (,True) . toList . model $ s
-   model Empty         = DM.empty
-   model _             = error "Only temporal specs are modelled"
+   model (Specification (Left s)) = model s
+   model _                        = error "Only temporal specs are modelled"
