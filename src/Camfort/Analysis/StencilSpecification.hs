@@ -116,10 +116,10 @@ formatSpec nm (span, specs) = loc ++ " \t" ++ (commaSep . nub . map doSpec $ spe
   where
     loc                      = show (spanLineCol span)
     commaSep                 = intercalate ", "
-    doSpec (arrayVar, spec)  = commaSep (map realName arrayVar) ++ ": " ++ showL (map fixSpec spec)
+    doSpec (arrayVar, spec)  = showL (map fixSpec spec) ++ " :: " ++ commaSep (map realName arrayVar)
     realName v               = v `fromMaybe` (v `M.lookup` nm)
-    fixSpec (TemporalFwd vs) = TemporalFwd $ map realName vs
-    fixSpec (TemporalBwd vs) = TemporalBwd $ map realName vs
+    fixSpec (Specification (Right (Dependency vs))) =
+        Specification (Right (Dependency $ map realName vs))
     fixSpec s                = s
 
 --------------------------------------------------
@@ -163,7 +163,7 @@ perBlock b@(F.BlDo _ span _ (doSpec@F.DoSpecification {}) body) = do
           F.ExpSubscript _ _ (F.ExpValue _ _ (F.ValVariable _ lhsV)) _ -> Just lhsV
           _ -> Nothing
         v'   <- lookup lhsV cycles
-        return ([lhsV], [TemporalBwd [v']])
+        return ([lhsV], [Specification $ Right $ Dependency [v']])
 
   let tempSpecs = foldl' (\ ts -> maybe ts (:ts) . getTimeSpec) [] lexps
 

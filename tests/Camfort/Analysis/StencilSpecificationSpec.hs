@@ -102,42 +102,48 @@ spec =
     describe "Example stencil inferences" $ do
       it "five point stencil 2D" $
         shouldBe (snd3 $ inferSpecInterval fivepoint)
-                 (SpatialSpec [] [] (Summation [ Product [ Symmetric 1 [ 1, 2 ]]]))
+                 (Spatial NonLinear [] [] (Sum [ Product [ Centered 1 1 ],
+                                                 Product [Centered 1 2]]))
 
       it "seven point stencil 2D" $
         shouldBe
           (snd3 $ inferSpecInterval sevenpoint)
-          (SpatialSpec [] [] (Summation [ Product [ Symmetric 1 [ 1, 2, 3 ]]]))
+          (Spatial NonLinear [] [] (Sum [ Product [ Centered 1 1 ],
+                                          Product [ Centered 1 2 ],
+                                          Product [ Centered 1 3 ]]))
 
       it "five point stencil 2D with blip" $
         shouldBe
           (snd3 $ inferSpecInterval fivepointErr)
-          (SpatialSpec [] [] (Summation [ Product [ Forward 1 [ 1, 2 ] ]
-                                    , Product [Symmetric 1 [ 1, 2 ] ] ]))
+          (Spatial NonLinear [] [] (Sum [ Product [ Forward 1 1 ],
+                                          Product [ Forward 1 2 ],
+                                          Product [ Centered 1 1 ],
+                                          Product [ Centered 1 2 ] ]))
 
       it "centered forward" $
         shouldBe
           (snd3 $ inferSpecInterval centeredFwd)
-          (SpatialSpec [] [] (Summation [ Product [ Forward 1 [ 1 ]
-                                              , Symmetric 1 [ 2 ] ] ]))
+          (Spatial NonLinear [] [] (Sum [ Product [ Forward 1 1
+                                                  , Centered 1 2 ] ]))
 
     describe "Example bounding boxes" $ do
       it "five point stencil 2D" $
         shouldBe (thd3 $ inferSpecInterval fivepoint)
-                 (SpatialSpec [] [] (Summation [Product [Symmetric 1 [1,2]]]))
+                 (Spatial NonLinear [] [] (Sum [Product [Centered 1 1, Centered 1 2]]))
 
       it "seven point stencil 2D" $
         shouldBe (thd3 $ inferSpecInterval sevenpoint)
-                 (SpatialSpec [] [] (Summation [Product [Symmetric 1 [1,2,3]]]))
+                 (Spatial NonLinear [] [] (Sum [Product [Centered 1 1, Centered 1 2, Centered 1 3]]))
 
       it "five point stencil 2D with blip" $
         shouldBe (thd3 $ inferSpecInterval fivepointErr)
-                 (SpatialSpec [] [] (Summation [Product [Symmetric 1 [1,2]]]))
+                 (Spatial NonLinear [] [] (Sum [Product [Centered 1 1,
+                                                         Centered 1 2]]))
 
       it "centered forward" $
         shouldBe (thd3 $ inferSpecInterval centeredFwd)
-                 (SpatialSpec [] [] (Summation [ Product [ Forward 1 [ 1 ]
-                                                     , Symmetric 1 [ 2 ] ] ]))
+                 (Spatial NonLinear [] [] (Sum [ Product [ Forward 1 1
+                                                     , Centered 1 2 ] ]))
 
     describe "2D stencil verification" $
       mapM_ test2DSpecVariation variations
@@ -205,73 +211,75 @@ instance (Arbitrary (Vec n a), Arbitrary a) => Arbitrary (Vec (S n) a) where
                    return $ Cons x xs
 
 test2DSpecVariation (input, expectation) =
-    it ("format=" ++ show input) $ do -- Test inference
-      shouldBe (ixCollectionToSpec ["i", "j"] (map fromFormatToIx input))
-               expectation
-      -- Test model
-      shouldBe (map fst . toList $ model expectation) (sort input)
+    it ("format=" ++ show input) $ do
+
+       -- Test inference
+       (ixCollectionToSpec ["i", "j"] (map fromFormatToIx input))
+          `shouldBe` expectedSpec
+
+       -- Test model
+       (map fst . toList . model $ expectedSpec)
+           `shouldBe` (sort input)
   where
+    expectedSpec = Specification (Left expectation)
     fromFormatToIx [ri,rj] = [ offsetToIx "i" ri, offsetToIx "j" rj ]
 
 variations =
   [ ( [ [0,0] ]
-    , NonLinear $ SpatialSpec [] [ 1, 2 ] (Summation [Product []])
+    , Spatial NonLinear [] [ 1, 2 ] (Sum [Product []])
     )
   , ( [ [1,0], [0,0] ]
-    , NonLinear $ SpatialSpec [] [2] (Summation [Product [Forward 1 [ 1 ]]])
+    , Spatial NonLinear [] [2] (Sum [Product [Forward 1 1]])
     )
   , ( [ [0,1], [0,0] ]
-    , NonLinear $ SpatialSpec [] [1] (Summation [Product [Forward 1 [ 2 ]]])
+    , Spatial NonLinear [] [1] (Sum [Product [Forward 1 2]])
     )
   , ( [ [1,1], [0,1], [1,0], [0,0] ]
-    , NonLinear $
-        SpatialSpec [] [] (Summation [Product [Forward 1 [ 1, 2 ]]])
+    , Spatial NonLinear [] [] (Sum [Product [Forward 1 1, Forward 1 2]])
     )
   , ( [ [-1,0], [0,0] ]
-    , NonLinear $ SpatialSpec [] [2] (Summation [Product [Backward 1 [ 1 ]]])
+    , Spatial NonLinear [] [2] (Sum [Product [Backward 1 1]])
     )
   , ( [ [0,-1], [0,0] ]
-    , NonLinear $ SpatialSpec [] [1] (Summation [Product [Backward 1 [ 2 ]]])
+    , Spatial NonLinear [] [1] (Sum [Product [Backward 1 2]])
     )
   , ( [ [-1,-1], [0,-1], [-1,0], [0,0] ]
-    , NonLinear $
-        SpatialSpec [] [] (Summation [Product [Backward 1 [ 1, 2 ]]])
+    , Spatial NonLinear [] [] (Sum [Product [Backward 1 1, Backward 1 2]])
     )
   , ( [ [0,-1], [1,-1], [0,0], [1,0], [1,1], [0,1] ]
-    , NonLinear $
-        let spatial =
-              Summation [ Product [ Forward 1 [ 1 ] , Symmetric 1 [ 2 ] ] ]
-        in SpatialSpec [] [] spatial
+    , Spatial NonLinear [] [] $ Sum [ Product [ Forward 1 1 , Centered 1 2 ] ]
     )
    -- Stencil which is non-contiguous from the origin in both directions
   , ( [ [0, 1], [1, 1] ]
-    , NonLinear $ SpatialSpec [] [] (Summation [Product [Forward 1 [ 1 ]]])
+    , Spatial NonLinear [] [] (Sum [Product [Forward 1 1]])
     )
   ]
 
 test3DSpecVariation (input, expectation) =
     it ("format=" ++ show input) $ do
-      -- Test infer
-      shouldBe (ixCollectionToSpec ["i", "j", "k"] (map fromFormatToIx input))
-               expectation
+
+      -- Test inference
+      (ixCollectionToSpec ["i", "j", "k"] (map fromFormatToIx input))
+           `shouldBe` expectedSpec
+
       -- Test model
-      shouldBe (map fst . toList $ model expectation) (sort input)
+      (map fst . toList . model $ expectedSpec)
+          `shouldBe`  (sort input)
   where
+    expectedSpec = Specification (Left expectation)
     fromFormatToIx [ri,rj,rk] =
       [offsetToIx "i" ri, offsetToIx "j" rj, offsetToIx "k" rk]
 
 
 variations3D =
   [ ( [ [-1,0,-1], [0,0,-1], [-1,0,0], [0,0,0] ]
-    , NonLinear $
-       SpatialSpec [] [2] (Summation [Product [Backward 1 [ 1, 3 ]]])
+    ,  Spatial NonLinear [] [2] (Sum [Product [Backward 1 1, Backward 1 3]])
     )
   , ( [ [1,1,0], [0,1,0] ]
-    , NonLinear $ SpatialSpec [] [3] (Summation [Product [Forward 1 [ 1 ]]])
+    ,  Spatial NonLinear [] [3] (Sum [Product [Forward 1 1]])
     )
   , ( [ [-1,4,-1], [0,4,-1], [-1,4,0], [0,4,0] ]
-    , NonLinear $
-       SpatialSpec [] [] (Summation [Product [Backward 1 [ 1, 3 ]]])
+    ,  Spatial NonLinear [] [] (Sum [Product [Backward 1 1, Backward 1 3]])
     )
   ]
 

@@ -26,37 +26,37 @@ spec =
 
 variations =
   [ ([ (0,0) ],
-    NonLinear $ SpatialSpec [] [ 1, 2 ] (Summation [Product []]))
+    Spatial NonLinear [] [ 1, 2 ] (Sum [Product []]))
 
   , ([ (1,0), (0,0) ],
-    NonLinear $ SpatialSpec [] [2] (Summation [Product [Forward 1 [ 1 ]]]))
+    Spatial NonLinear [] [2] (Sum [Product [Forward 1 1]]))
 
   , ([ (0,1), (0,0) ],
-    NonLinear $ SpatialSpec [] [1] (Summation [Product [Forward 1 [ 2 ]]]))
+    Spatial NonLinear [] [1] (Sum [Product [Forward 1 2]]))
 
   , ([ (1,1), (0,1), (1,0), (0,0) ],
-    NonLinear $ SpatialSpec [] [] (Summation [Product [Forward 1 [ 1, 2 ]]]))
+    Spatial NonLinear [] [] (Sum [Product [Forward 1 1, Forward 1 2]]))
 
   , ([ (-1,0), (0,0) ],
-    NonLinear $ SpatialSpec [] [2] (Summation [Product [Backward 1 [ 1 ]]]))
+    Spatial NonLinear [] [2] (Sum [Product [Backward 1 1]]))
 
   , ([ (0,-1), (0,0) ],
-    NonLinear $ SpatialSpec [] [1] (Summation [Product [Backward 1 [ 2 ]]]))
+    Spatial NonLinear [] [1] (Sum [Product [Backward 1 2]]))
 
   , ([ (-1,-1), (0,-1), (-1,0), (0,0) ],
-    NonLinear $ SpatialSpec [] [] (Summation [Product [Backward 1 [ 1, 2 ]]]))
+    Spatial NonLinear [] [] (Sum [Product [Backward 1 1, Backward 1 2]]))
 
   , ( [ (0,-1), (1,-1), (0,0), (1,0), (1,1), (0,1), (2,-1), (2,0), (2,1) ],
-    NonLinear $ SpatialSpec [] []
-              (Summation [Product [ Forward 2 [ 1 ], Symmetric 1 [ 2 ] ] ] ))
+    Spatial NonLinear [] []
+              (Sum [Product [ Forward 2 1, Centered 1 2 ] ] ))
 
   , ( [ (-1,0), (-1,1), (0,0), (0,1), (1,1), (1,0), (-1,2), (0,2), (1,2) ],
-    NonLinear $ SpatialSpec [] []
-              (Summation [Product [ Forward 2 [ 2 ], Symmetric 1 [ 1 ] ] ] ))
+    Spatial NonLinear [] []
+              (Sum [Product [ Forward 2 2, Centered 1 1 ] ] ))
 
   -- Stencil which is non-contiguous from the origin in both directions
   , ([ (0, 1), (1, 1) ],
-    NonLinear $ SpatialSpec [] [] (Summation [Product [Forward 1 [ 1 ]]]))
+    Spatial NonLinear [] [] (Sum [Product [Forward 1 1]]))
  ]
 
 modelHasLeftInverse = mapM_ check (zip variations [0..])
