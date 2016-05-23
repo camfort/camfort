@@ -25,12 +25,18 @@
 module Camfort.Analysis.StencilSpecification.Syntax where
 
 import Camfort.Helpers
+import Data.Data
 import Data.Generics.Uniplate.Data
 import Data.List
-import Data.Data
+import Data.Maybe
 
 {-  Contains the syntax representation for stencil specifications -}
 
+-- The `maxBound` of Int models constants and non-affine / non-induction
+-- variable expressions. This can be made smaller for debugging purposes,
+-- e.g., 100, but it needs to be high enough to clash with reasonable
+-- relative indices.
+constantRep = 100 :: Int -- maxBound :: Int
 
 {- *** 1 . Specification syntax -}
 
@@ -67,6 +73,14 @@ data Spatial =
 emptySpec = Specification (Left emptySpatialSpec)
 emptySpatialSpec = Spatial NonLinear [] [] (Sum [Product []])
 
+-- `isEmpty` predicate on which specifications are vacuous or
+-- functional empty (i.e., show not be displayed in an inference setting). 
+isEmpty (Specification (Right (Dependency []))) = True
+isEmpty (Specification (Left (Spatial _ _ _ (Sum xs)))) = all emptyOrConstant xs
+isEmpty _ = False
+emptyOrConstant (Product []) = True
+emptyOrConstant (Product xs) = all (\xs -> case xs of Constant _ -> True; _ -> False) xs
+
 data Linearity = Linear | NonLinear deriving (Eq, Data, Typeable)
 
 type Dimension  = Int -- spatial dimensions are 1 indexed
@@ -77,6 +91,7 @@ data Region where
     Forward  :: Depth -> Dimension -> Region
     Backward :: Depth -> Dimension -> Region
     Centered :: Depth -> Dimension -> Region
+    Constant :: Dimension -> Region
   deriving (Eq, Data, Typeable)
 
 -- An (arbitrary) ordering on regions for the sake of normalisation
@@ -93,9 +108,12 @@ instance Ord Region where
     | dep == dep' = dim <= dim'
     | otherwise   = dep <= dep'
 
-  -- Order in the way defined above: Forward <: Backward <: Centered
+  (Constant dim) <= (Constant dim') = dim <= dim'
+
+  -- Order in the way defined above: Forward <: Backward <: Centered <: Constant
   (Forward _ _ ) <= _               = True
-  (Backward _ _) <= (Centered _ _) = True
+  (Backward _ _) <= (Centered _ _)  = True
+  _              <= (Constant _)    = True
   _              <= _               = False
 
 -- Sum of product specifications
@@ -117,6 +135,7 @@ regionPlus (Forward dep dim) (Backward dep' dim')
     | dep == dep' && dim == dim' = Just $ Centered dep dim
 regionPlus (Backward dep dim) (Forward dep' dim')
     | dep == dep' && dim == dim' = Just $ Centered dep dim
+regionPlus x y | x == y          = Just x
 regionPlus x y                   = Nothing
 
 instance PartialMonoid RegionProd where
@@ -126,6 +145,8 @@ instance PartialMonoid RegionProd where
    appendM s (Product [])    = Just $ s
    appendM (Product [s]) (Product [s']) =
        regionPlus s s' >>= (\sCombined -> return $ Product [sCombined])
+   appendM (Product ss) (Product ss')
+       | ss == ss' = Just $ Product ss
    appendM _               _ = Nothing
 
 
@@ -137,12 +158,12 @@ sumLinearity _ NonLinear   = NonLinear
 sumSpatial :: Spatial -> Spatial -> Spatial
 sumSpatial (Spatial lin irdim rdim (Sum ss))
            (Spatial lin' irdim' rdim' (Sum ss')) =
-    Spatial (sumLinearity lin lin') (irdim ++ irdim') (rdim ++ rdim')
+    Spatial (sumLinearity lin lin') (nub $ irdim ++ irdim') (nub $ rdim ++ rdim')
             (Sum $ normalise $ ss ++ ss')
 
 prodSpatial :: Spatial -> Spatial -> Spatial
 prodSpatial (Spatial lin irdim rdim s) (Spatial lin' irdim' rdim' s') =
-    Spatial (sumLinearity lin lin') (irdim ++ irdim') (rdim ++ rdim')
+    Spatial (sumLinearity lin lin') (nub $ irdim ++ irdim') (nub $ rdim ++ rdim')
             (prodRegionSum s s')
 
 prodRegionSum :: RegionSum -> RegionSum -> RegionSum
@@ -169,15 +190,9 @@ instance Show Specification where
 -- Pretty print spatial specs
 instance Show Spatial where
   show (Spatial modLin modIrrefl modRefl region) =
-    showMods ++ show region
-      where
-      -- Show those modifiers which are defined
-      showMods = case sequence $ [refl,irefl,lin] of
-                   Just mods -> concat . intersperse "," $ mods
-                   Nothing   -> ""
-
+    concat . intersperse ", " . catMaybes $ [refl,irefl, lin, Just (show region)]
+    where
       -- Individual actions to show modifiers
-
       refl = case modRefl of
                 []       -> Nothing
                 ds       -> Just $ "reflexive, dims=" ++ showL ds
@@ -212,6 +227,9 @@ instance Show Region where
    show (Forward dep dim)   = showRegion "forward" (show dep) (show dim)
    show (Backward dep dim)  = showRegion "backward" (show dep) (show dim)
    show (Centered dep dim) = showRegion "centered" (show dep) (show dim)
+   -- Constant parts of the spec are non-shown as this is for internal
+   -- representations only
+   show (Constant _) = ""
 
 -- Helper for showing regions
 showRegion typ depS dimS = typ ++ ", depth=" ++ depS ++ ", dim=" ++ dimS

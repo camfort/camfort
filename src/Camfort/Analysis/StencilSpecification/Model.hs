@@ -43,23 +43,23 @@ class Model spec where
    type Domain spec
    model :: spec -> Domain spec
 
--- | mkVec offset dimension -> relative index vector
-mkVec :: Int -> Int -> [Int]
-mkVec i 0 = error $ "Dimensions are 1-indexed"
-mkVec i 1 = [i]
-mkVec i d = 0 : (mkVec i $ d - 1)
+-- | mkSingleEntry offset dimension -> relative index vector
+mkSingleEntry :: Int -> Int -> [Int]
+mkSingleEntry i 0 = error $ "Dimensions are 1-indexed"
+mkSingleEntry i 1 = [i]
+mkSingleEntry i d = 0 : (mkSingleEntry i $ d - 1)
 
 instance Model Region where
    type Domain Region = Set [Int]
 
    model (Forward dep dim) =
-     fromList [mkVec i dim | i <- [0..dep]]
+     fromList [mkSingleEntry i dim | i <- [0..dep]]
 
    model (Backward dep dim) =
-     fromList [mkVec i dim | i <- [(-dep)..0]]
+     fromList [mkSingleEntry i dim | i <- [(-dep)..0]]
 
    model (Centered dep dim) =
-     fromList [mkVec i dim | i <- [(-dep)..dep]]
+     fromList [mkSingleEntry i dim | i <- [(-dep)..dep]]
 
 instance Model RegionProd where
    type Domain RegionProd = Set [Int]
@@ -104,9 +104,9 @@ instance Model Spatial where
     where
       indices =
         Set.difference
-          (Set.union (fromList [mkVec 0 d | d <- refls])
+          (Set.union (fromList [mkSingleEntry 0 d | d <- refls])
                      (model s))
-          (fromList [mkVec 0 d | d <- irrefls])
+          (fromList [mkSingleEntry 0 d | d <- irrefls])
 
 -- Multiset representation where multiplicities are (-1) modulo 2
 -- that is, False = multiplicity 1, True = multiplicity > 1

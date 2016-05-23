@@ -187,7 +187,8 @@ padZeros ixss = let m = maximum (map length ixss)
 -- Convert list of indexing expressions to a spec
 ixCollectionToSpec :: [ Variable ] -> [ [ F.Index a ] ] -> Maybe [Specification]
 ixCollectionToSpec ivs ixs =
-  if exactSpec == emptySpec then Nothing else Just [exactSpec]
+  if isEmpty exactSpec
+  then Nothing else Just [exactSpec]
     where
      exactSpec = snd3
                . fromIndicesToSpec
@@ -195,20 +196,21 @@ ixCollectionToSpec ivs ixs =
                . padZeros
                . map toListsOfRelativeIndices $ ixs
      toListsOfRelativeIndices :: [ F.Index a ] -> [ Int ]
-     toListsOfRelativeIndices = catMaybes . map (ixToOffset ivs)
+     toListsOfRelativeIndices = map (maybe 0 id . (ixToOffset ivs))
 
--- Convert indexing expressions which are translations to their translation offsett:
+-- Convert indexing expressions that are translations
+-- intto their translation offset:
 -- e.g., for the expression a(i+1,j-1) then this function gets
 -- passed expr = i + 1   (returning +1) and expr = j - 1 (returning -1)
 ixToOffset :: [Variable] -> F.Index a -> Maybe Int
 ixToOffset ivs (F.IxSingle _ _ exp) = expToOffset ivs exp
 ixToOffset _ _ = Nothing -- If the indexing expression is a range
 
+
 expToOffset :: [Variable] -> F.Expression a -> Maybe Int
 expToOffset ivs (F.ExpValue _ _ (F.ValVariable _ v))
   | v `elem` ivs = Just 0
-  -- TODO: if we want to capture 'constant' parts, then edit htis
-  | otherwise    = Nothing
+  | otherwise    = Just maxBound
 expToOffset ivs (F.ExpBinary _ _ F.Addition
                                  (F.ExpValue _ _ (F.ValVariable _ v))
                                  (F.ExpValue _ _ (F.ValInteger offs)))
@@ -222,11 +224,7 @@ expToOffset ivs (F.ExpBinary _ _ F.Subtraction
                                  (F.ExpValue _ _ (F.ValInteger offs)))
    | v `elem` ivs = Just $ if x < 0 then abs x else (- x)
                      where x = read offs
-expToOffset ivs _ = Nothing
-
--- TODO: if we want to capture 'constant' parts, then edit htis
--- expToOffset ivs d (F.ExpValue _ _ (F.ValInteger _)) = Just $ Const d
-
+expToOffset ivs _ = Just constantRep
 
 --------------------------------------------------
 

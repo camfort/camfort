@@ -49,6 +49,7 @@ thd3 (a, b, c) = c
 fromIndicesToSpec :: VecList Int -> Interval Specification
 -- TODO: currently just marked as Non-linear
 fromIndicesToSpec (VL ixs) =
+ (show ixs) `trace`
   (Specification $ Left low
  , Specification $ Left exact
  , Specification $ Left up)
@@ -106,13 +107,23 @@ toSpecND = toSpecPerDim 1
 -- that dimension, and builds the simple directional spec.
 toSpec1D :: Dimension -> Int -> Int -> Spatial
 toSpec1D dim l u
+    | l == constantRep || u == constantRep =
+        Spatial Linear [] [] (Sum [Product [Constant dim]])
     | l == 0 && u == 0   = Spatial Linear [] [dim] (Sum [Product []])
-    | l==u               = emptySpatialSpec -- Represents a non-span
     | l < 0 && u == 0    =
         Spatial Linear [] [] (Sum [Product [Backward (abs l) dim]])
 
     | l < 0 && u == (-1) =
         Spatial Linear [dim] [] (Sum [Product [Backward (abs l) dim]])
+
+    | l == 0 && u > 0    =
+        Spatial Linear [] [] (Sum [Product [Forward u dim]])
+
+    | l == 1 && u > 0    =
+        Spatial Linear [dim] [] (Sum [Product [Forward u dim]])
+
+    -- from the above constraints above, l and u are neither 0, 1 or -1.
+    | l==u               = emptySpatialSpec -- Represents a non-span
 
     | l < 0 && u > 0 && (abs l == u) =
         Spatial Linear [] [] (Sum [Product [Centered u dim]])
@@ -120,12 +131,6 @@ toSpec1D dim l u
     | l < 0 && u > 0 && (abs l /= u) =
         Spatial Linear [] [] (Sum [Product [Backward (abs l) dim],
                                    Product [Forward u dim]])
-    | l == 0 && u > 0    =
-        Spatial Linear [] [] (Sum [Product [Forward u dim]])
-
-    | l == 1 && u > 0    =
-        Spatial Linear [dim] [] (Sum [Product [Forward u dim]])
-
     | otherwise          = emptySpatialSpec
 
 
