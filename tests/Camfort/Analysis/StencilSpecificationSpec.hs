@@ -103,7 +103,7 @@ spec =
       it "five point stencil 2D" $
         shouldBe (snd3 $ inferSpecInterval fivepoint)
                  (Spatial NonLinear [] [] (Sum [ Product [ Centered 1 1 ],
-                                                 Product [Centered 1 2]]))
+                                                 Product [ Centered 1 2]]))
 
       it "seven point stencil 2D" $
         shouldBe
@@ -115,8 +115,8 @@ spec =
       it "five point stencil 2D with blip" $
         shouldBe
           (snd3 $ inferSpecInterval fivepointErr)
-          (Spatial NonLinear [] [] (Sum [ Product [ Forward 1 1 ],
-                                          Product [ Forward 1 2 ],
+          (Spatial NonLinear [] [] (Sum [ Product [ Forward 1 1 ,
+                                                    Forward 1 2 ],
                                           Product [ Centered 1 1 ],
                                           Product [ Centered 1 2 ] ]))
 
@@ -216,10 +216,6 @@ test2DSpecVariation (input, expectation) =
        -- Test inference
        (ixCollectionToSpec ["i", "j"] (map fromFormatToIx input))
           `shouldBe` Just [ expectedSpec ]
-
-       -- Test model
-       (map fst . toList . model $ expectedSpec)
-           `shouldBe` (sort input)
   where
     expectedSpec = Specification (Left expectation)
     fromFormatToIx [ri,rj] = [ offsetToIx "i" ri, offsetToIx "j" rj ]
@@ -250,8 +246,8 @@ variations =
     , Spatial NonLinear [] [] $ Sum [ Product [ Forward 1 1 , Centered 1 2 ] ]
     )
    -- Stencil which is non-contiguous from the origin in both directions
-  , ( [ [0, 1], [1, 1] ]
-    , Spatial NonLinear [] [] (Sum [Product [Forward 1 1]])
+  , ( [ [0, constantRep], [1, constantRep] ]
+    , Spatial NonLinear [] [] (Sum [Product [Forward 1 1, Constant 2]])
     )
   ]
 
@@ -262,9 +258,6 @@ test3DSpecVariation (input, expectation) =
       (ixCollectionToSpec ["i", "j", "k"] (map fromFormatToIx input))
            `shouldBe` Just [ expectedSpec ]
 
-      -- Test model
-      (map fst . toList . model $ expectedSpec)
-          `shouldBe`  (sort input)
   where
     expectedSpec = Specification (Left expectation)
     fromFormatToIx [ri,rj,rk] =
@@ -278,44 +271,11 @@ variations3D =
   , ( [ [1,1,0], [0,1,0] ]
     ,  Spatial NonLinear [] [3] (Sum [Product [Forward 1 1]])
     )
-  , ( [ [-1,4,-1], [0,4,-1], [-1,4,0], [0,4,0] ]
-    ,  Spatial NonLinear [] [] (Sum [Product [Backward 1 1, Backward 1 3]])
+  , ( [ [-1,constantRep,-1], [0,constantRep,-1], [-1,constantRep,0], [0,constantRep,0] ]
+    ,  Spatial NonLinear [] [] (Sum [Product [Backward 1 1, Backward 1 3, Constant 2]])
     )
   ]
 
 prop_extract_synth_inverse :: F.Name -> Int -> Bool
 prop_extract_synth_inverse v o =
      ixToOffset [v] (offsetToIx v o) == Just o
-
-{-
-instance Arbitrary Direction where
-   arbitrary = do coin <- arbitrary
-                  return $ if coin then Fwd else Bwd
-
-instance Arbitrary Spec where
-   arbitrary = do coin <- arbitrary
-                  if coin
-                  then return $ Reflexive
-                  else do dir <- arbitrary
-                          depth <- choose (0, 10)
-                          dim   <- choose (0, 7)
-                          sat   <- arbitrary
-                          return $ Span depth dim dir sat
-
-incrSpecSat :: Spec -> Spec
-incrSpecSat Reflexive = Reflexive
-incrSpecSat (Span depth dim dir s) = Span (depth + 1) dim dir True
-
-coalesceConsecutive =
-  quickCheck (\spec -> case (plus (NS spec (incrSpecSat spec))) of
-                        Just Reflexive -> spec == Reflexive
-                        Just (Span sdepth sdim sdir True) -> sdepth == depth (incrSpecSat spec) && sdir == direction spec && sdim == dim spec
-                        _ -> False)
-
-normalisedSpecs =
-  quickCheck (\specs ->
-    all (\(NSpecs sp) ->
-     let hd = head sp
-     in all (\spec -> (dim spec == dim hd) && (direction spec == direction hd)) sp) (groupByDim specs))
-
--}

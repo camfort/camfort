@@ -74,12 +74,14 @@ emptySpec = Specification (Left emptySpatialSpec)
 emptySpatialSpec = Spatial NonLinear [] [] (Sum [Product []])
 
 -- `isEmpty` predicate on which specifications are vacuous or
--- functional empty (i.e., show not be displayed in an inference setting). 
+-- functional empty (i.e., show not be displayed in an inference setting).
 isEmpty (Specification (Right (Dependency []))) = True
-isEmpty (Specification (Left (Spatial _ _ _ (Sum xs)))) = all emptyOrConstant xs
+isEmpty (Specification (Left (Spatial _ irrefl refl (Sum xs)))) =
+  irrefl == [] && refl == [] && all emptyOrConstant xs
 isEmpty _ = False
 emptyOrConstant (Product []) = True
-emptyOrConstant (Product xs) = all (\xs -> case xs of Constant _ -> True; _ -> False) xs
+emptyOrConstant (Product xs) =
+  all (\xs -> case xs of Constant _ -> True; _ -> False) xs
 
 data Linearity = Linear | NonLinear deriving (Eq, Data, Typeable)
 
@@ -125,9 +127,7 @@ newtype RegionProd = Product [Region]
   deriving (Eq, Data, Typeable)
 
 instance Ord RegionProd where
-   (Product xs) <= (Product xs')
-     | length xs == length xs' = xs <= xs'
-     | otherwise               = (length xs) <= (length xs')
+   (Product xs) <= (Product xs') = xs <= xs'
 
 
 regionPlus :: Region -> Region -> Maybe Region
@@ -138,6 +138,21 @@ regionPlus (Backward dep dim) (Forward dep' dim')
 regionPlus x y | x == y          = Just x
 regionPlus x y                   = Nothing
 
+-- If there are two region lists which are equal modulo an entry in
+-- one which is `Forward d dim` and `Backward d dim` in the other
+equalModuloFwdBwd :: [Region] -> [Region] -> Maybe (Region, [Region])
+equalModuloFwdBwd
+  ((Forward d dim):rs) ((Backward d' dim'):rs')
+    | d == d' && dim == dim' && rs == rs' = Just (Centered d dim, rs)
+    | otherwise                           = Nothing
+equalModuloFwdBwd
+  ((Backward d dim):rs) ((Forward d' dim'):rs')
+    = equalModuloFwdBwd ((Forward d' dim'):rs') ((Backward d dim):rs)
+equalModuloFwdBwd (r:rs) (r':rs')
+    | r == r'   = do (cr, rs'') <- equalModuloFwdBwd rs rs'
+                     return (cr, r : rs'')
+    | otherwise = Nothing
+
 instance PartialMonoid RegionProd where
    emptyM = Product []
 
@@ -147,6 +162,9 @@ instance PartialMonoid RegionProd where
        regionPlus s s' >>= (\sCombined -> return $ Product [sCombined])
    appendM (Product ss) (Product ss')
        | ss == ss' = Just $ Product ss
+       | otherwise = case equalModuloFwdBwd ss ss' of
+                       Just (s, ss') -> Just $ Product (sort $ s : ss')
+                       Nothing       -> Nothing
    appendM _               _ = Nothing
 
 
@@ -171,7 +189,7 @@ prodRegionSum (Sum ss) (Sum ss') =
    Sum $ -- Take the cross product of list of sumed specifications
      do (Product spec) <- ss
         (Product spec') <- ss'
-        return $ Product $ spec ++ spec'
+        return $ Product $ sort $ spec ++ spec'
 
 -- Show a list with ',' separator
 showL :: Show a => [a] -> String
@@ -190,8 +208,12 @@ instance Show Specification where
 -- Pretty print spatial specs
 instance Show Spatial where
   show (Spatial modLin modIrrefl modRefl region) =
-    concat . intersperse ", " . catMaybes $ [refl,irefl, lin, Just (show region)]
+    concat . intersperse ", " . catMaybes $ [refl, irefl, lin, sregion]
     where
+      -- Map "empty" spec to Nothing here
+      sregion = case show region of
+                  "empty" -> Nothing
+                  xs      -> Just xs
       -- Individual actions to show modifiers
       refl = case modRefl of
                 []       -> Nothing
@@ -226,10 +248,8 @@ instance Show RegionProd where
 instance Show Region where
    show (Forward dep dim)   = showRegion "forward" (show dep) (show dim)
    show (Backward dep dim)  = showRegion "backward" (show dep) (show dim)
-   show (Centered dep dim) = showRegion "centered" (show dep) (show dim)
-   -- Constant parts of the spec are non-shown as this is for internal
-   -- representations only
-   show (Constant _) = ""
+   show (Centered dep dim)  = showRegion "centered" (show dep) (show dim)
+   show (Constant dim)      = "constant, dim=" ++ show dim
 
 -- Helper for showing regions
 showRegion typ depS dimS = typ ++ ", depth=" ++ depS ++ ", dim=" ++ dimS

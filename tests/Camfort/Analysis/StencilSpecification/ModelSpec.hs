@@ -55,13 +55,13 @@ variations =
               (Sum [Product [ Forward 2 2, Centered 1 1 ] ] ))
 
   -- Stencil which is non-contiguous from the origin in both directions
-  , ([ (0, 1), (1, 1) ],
-    Spatial NonLinear [] [] (Sum [Product [Forward 1 1]]))
+  , ([ (0, constantRep), (1, constantRep) ],
+    Spatial NonLinear [] [] (Sum [Product [Constant 2, Forward 1 1]]))
  ]
 
 modelHasLeftInverse = mapM_ check (zip variations [0..])
-  where check ((ixs, spec), n) = it ("("++show n++")") $ (sort ixs) `shouldBe` (sort mdl)
-          where mdl = nub $ map (toPair . fst) $ toList $ model spec
+  where check ((ixs, spec), n) = it ("("++show n++")") $ (sort mdl) `shouldBe` (sort ixs)
+          where mdl = map (toPair . fst) $ toList $ (model (Specification (Left spec)))
         toPair [x, y] = (x, y)
         toPair [x]    = (x, 0)
         toPair xs     = error $ "Got " ++ show xs

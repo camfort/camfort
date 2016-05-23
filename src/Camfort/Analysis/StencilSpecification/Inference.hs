@@ -49,7 +49,6 @@ thd3 (a, b, c) = c
 fromIndicesToSpec :: VecList Int -> Interval Specification
 -- TODO: currently just marked as Non-linear
 fromIndicesToSpec (VL ixs) =
- (show ixs) `trace`
   (Specification $ Left low
  , Specification $ Left exact
  , Specification $ Left up)
@@ -67,7 +66,7 @@ inferSpecInterval ixs = (low, exact, up)
 -- different parts]
 simplifyRefl :: Spatial -> Spatial
 simplifyRefl (Spatial lin irdims rdims (Sum ss)) =
-  Spatial lin irdims (rdims \\ overlapped) (Sum ss)
+  Spatial lin (irdims \\ overlapped) (rdims \\ overlapped) (Sum ss)
     where
       overlapped = rdimsS ++ rdimsF ++ rdimsB
       rdimsS = [d | (Centered _ d)  <- universeBi ss::[Region],

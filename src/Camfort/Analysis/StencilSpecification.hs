@@ -211,7 +211,7 @@ ixToOffset _ _ = Nothing -- If the indexing expression is a range
 expToOffset :: [Variable] -> F.Expression a -> Maybe Int
 expToOffset ivs (F.ExpValue _ _ (F.ValVariable _ v))
   | v `elem` ivs = Just 0
-  | otherwise    = Just maxBound
+  | otherwise    = Just constantRep
 expToOffset ivs (F.ExpBinary _ _ F.Addition
                                  (F.ExpValue _ _ (F.ValVariable _ v))
                                  (F.ExpValue _ _ (F.ValInteger offs)))
