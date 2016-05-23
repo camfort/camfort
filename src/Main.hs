@@ -13,13 +13,9 @@
    limitations under the License.
 -}
 
-{-# LANGUAGE ScopedTypeVariables, ImplicitParams, DoAndIfThenElse, PatternGuards #-}
+{-# LANGUAGE ScopedTypeVariables, DoAndIfThenElse #-}
 
 module Main where
-
---import qualified Language.Fortran.Parser as Fortran
---import Language.Fortran.PreProcess
---import Language.Fortran
 
 import Data.Generics.Uniplate.Operations
 import System.Console.GetOpt
@@ -37,46 +33,50 @@ import Data.Text (pack, unpack, split)
 import qualified Data.Map as M
 import Data.Maybe
 
-import Data.Text (pack, unpack, split)
+{-| The entry point to CamFort. Displays user information, and
+    handlers which functionality is being requested -}
+main = do
+  putStrLn introMsg
+  args <- getArgs
 
--- * The main entry point to CamFort
-{-| The entry point to CamFort. Displays user information, and handlers which functionality
-     is being requested -}
-main = do putStrLn introMessage
-          args <- getArgs
+  if length args >= 2 then
 
-          if (length args >= 2) then
+    let (func : (inp : _)) = args
+    in case lookup func functionality of
+         Just (fun, _) -> do
+           (numReqArgs, outp) <-
+             if func `elem` outputNotRequired
+             then if length args >= 3 && (head (args !! 2) == '-')
+                  then return (2, "")
+                  else -- case where an unnecessary output is specified
+                       return (3, "")
+             else if length args >= 3
+                  then return (3, args !! 2)
+                  else error $ usage ++ "This mode requires an output "
+                                     ++ "file/directory to be specified."
+           (opts, _) <- compilerOpts (drop numReqArgs args)
+           let excluded_files = map unpack . split (==',') . pack . getExcludes
+           fun inp (excluded_files opts) outp opts
+         Nothing -> putStrLn fullUsageInfo
 
-              let (func : (inp : _)) = args
-              in case lookup func functionality of
-                   Just (fun, _) ->
-                     do (numReqArgs, outp) <- if (func `elem` outputNotRequired)
-                                               then if (length args >= 3 && (head (args !! 2) == '-'))
-                                                    then return (2, "")
-                                                    else -- case where an unnecessary output is specified
-                                                      return (3, "")
-
-                                               else if (length args >= 3)
-                                                    then return (3, args !! 2)
-                                                    else error $ usage ++ "This mode requires an output file/directory to be specified."
-                        (opts, _) <- compilerOpts (drop numReqArgs args)
-                        let excluded_files = map unpack (split (==',') (pack (getExcludes opts)))
-                        fun inp excluded_files outp opts
-                   Nothing -> putStrLn $ fullUsageInfo
-
-          else if (length args == 1) then putStrLn $ usage ++ "Please specify an input file/directory"
-                                     else putStrLn $ fullUsageInfo
+  else if length args == 1
+       then putStrLn $ usage ++ "Please specify an input file/directory"
+       else putStrLn fullUsageInfo
 
 -- * Options for CamFort  and information on the different modes
 
-fullUsageInfo = (usageInfo (usage ++ menu ++ "\nOptions:") options)
+fullUsageInfo = usageInfo (usage ++ menu ++ "\nOptions:") options
 
 options :: [OptDescr Flag]
 options =
-     [ Option ['v','?'] ["version"] (NoArg Version)       "show version number"
-     , Option ['e']     ["exclude"] (ReqArg Excludes "FILES") "files to exclude (comma separated list, no spaces)"
-     , Option ['s']     ["units-solver"]  (ReqArg (Solver . read) "ID") "units-of-measure solver. ID = Custom or LAPACK"
-     , Option ['l']     ["units-literals"] (ReqArg (Literals . read) "ID") "units-of-measure literals mode. ID = Unitless, Poly, or Mixed"
+     [ Option ['v','?'] ["version"] (NoArg Version)
+         "show version number"
+     , Option ['e']     ["exclude"] (ReqArg Excludes "FILES")
+         "files to exclude (comma separated list, no spaces)"
+     , Option ['s']     ["units-solver"]  (ReqArg (Solver . read) "ID")
+         "units-of-measure solver. ID = Custom or LAPACK"
+     , Option ['l']     ["units-literals"] (ReqArg (Literals . read) "ID")
+         "units-of-measure literals mode. ID = Unitless, Poly, or Mixed"
      ]
 
 compilerOpts :: [String] -> IO ([Flag], [String])
@@ -84,7 +84,7 @@ compilerOpts argv =
        case getOpt Permute options argv of
           (o,n,[]  ) -> return (o,n)
           (_,_,errs) -> ioError (userError (concat errs ++ usageInfo header options))
-      where header = introMessage ++ usage ++ menu ++ "\nOptions:"
+      where header = introMsg ++ usage ++ menu ++ "\nOptions:"
 
 -- * Which modes do not require an output
 outputNotRequired = ["criticalUnits", "count"]
@@ -92,37 +92,45 @@ outputNotRequired = ["criticalUnits", "count"]
 functionality = analyses ++ refactorings
 
 {-| List of refactorings provided in CamFort -}
-refactorings :: [(String, (FileOrDir -> [Filename] -> FileOrDir -> Options -> IO (), String))]
+refactorings :: [(String
+               , (FileOrDir -> [Filename] -> FileOrDir -> Options -> IO ()
+               , String))]
 refactorings =
     [("common", (common, "common block elimination")),
-     ("commonArg", (commonToArgs, "common block elimination (to parameter passing)")),
+     ("commonArg", (commonToArgs,
+       "common block elimination (to parameter passing)")),
      ("equivalence", (equivalences, "equivalence elimination")),
      ("dataType", (typeStructuring, "derived data type introduction")),
      ("dead", (dead, "dead-code elimination")),
      ("units", (units, "unit-of-measure inference")) ]
 
 {-| List of analses provided by CamFort -}
-analyses :: [(String, (FileOrDir -> [Filename] -> FileOrDir -> Options -> IO (), String))]
+analyses :: [(String
+           , (FileOrDir -> [Filename] -> FileOrDir -> Options -> IO ()
+           , String))]
 analyses =
-    [("asts", (asts, "blank analysis, outputs analysis files with AST information")),
+    [("asts", (asts,
+        "blank analysis, outputs analysis files with AST information")),
      ("lva", (lvaA, "live-variable analysis")),
      ("loops", (loops, "loop information")),
      ("count", (countVarDecls, "count variable declarations")),
-     ("criticalUnits", (unitCriticals, "calculate the critical variables for units-of-measure inference")),
+     ("criticalUnits", (unitCriticals,
+         "calculate the critical variables for units-of-measure inference")),
      ("ast", (ast, "print the raw AST -- for development purposes")),
      ("stencils-infer", (stencilsInf, "stencil spec inference")),
      ("stencils-check", (stencilsCheck, "stencil spec checking"))]
 
 -- * Usage and about information
-version = 0.750
-introMessage = "CamFort " ++ (show version) ++ " - Cambridge Fortran Infrastructure."
+version = 0.775
+introMsg = "CamFort " ++ show version ++ " - Cambridge Fortran Infrastructure."
 usage = "Usage: camfort <MODE> <INPUT> [OUTPUT] [OPTIONS...]\n"
-menu = "Refactor functions:\n"
-        ++ concatMap (\(k, (_, info)) -> "\t" ++ k ++ (replicate (15 - length k) ' ')
-        ++ "\t [" ++ info ++ "] \n") refactorings
-        ++ "\nAnalysis functions:\n"
-        ++ concatMap (\(k, (_, info)) -> "\t" ++ k ++ (replicate (15 - length k) ' ')
-        ++ "\t [" ++ info ++ "] \n") analyses
+menu =
+  "Refactor functions:\n"
+  ++ concatMap (\(k, (_, info)) -> "\t" ++ k ++ replicate (15 - length k) ' '
+  ++ "\t [" ++ info ++ "] \n") refactorings
+  ++ "\nAnalysis functions:\n"
+  ++ concatMap (\(k, (_, info)) -> "\t" ++ k ++ replicate (15 - length k) ' '
+  ++ "\t [" ++ info ++ "] \n") analyses
 
 -- Some development tests
 
@@ -130,4 +138,3 @@ test = stencilsInf "samples/stencils/one.f" [] () ()
 testVFC = stencilsVarFlowCycles "samples/stencils/one.f" [] () ()
 
 oldTest = stencilsInf "samples/stencils/one.f90" [] () ()
-

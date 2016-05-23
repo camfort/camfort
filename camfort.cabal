@@ -1,5 +1,5 @@
 name:                   camfort
-version:                0.750
+version:                0.775
 synopsis:               CamFort - Cambridge Fortran infrastructure
 description:            CamFort is a tool for the analysis, transformation, and extension of Fortran code base.
 
@@ -42,11 +42,11 @@ executable camfort
                         Camfort.Analysis.IntermediateReps
                         Camfort.Analysis.Loops
                         Camfort.Analysis.LVA
-                        Camfort.Analysis.StencilSpecification.Check			
-                        Camfort.Analysis.StencilSpecification.Inference			
+                        Camfort.Analysis.StencilSpecification.Check
+                        Camfort.Analysis.StencilSpecification.Inference
                         Camfort.Analysis.StencilSpecification.Model
                         Camfort.Analysis.StencilSpecification.Syntax
-                        Camfort.Analysis.StencilSpecification.Synthesis			                       
+                        Camfort.Analysis.StencilSpecification.Synthesis
                         Camfort.Analysis.StencilSpecification
                         Camfort.Analysis.Syntax
                         Camfort.Analysis.Types
@@ -107,11 +107,11 @@ library
                         Camfort.Analysis.IntermediateReps
                         Camfort.Analysis.Loops
                         Camfort.Analysis.LVA
-                        Camfort.Analysis.StencilSpecification.Check			
-                        Camfort.Analysis.StencilSpecification.Inference	
+                        Camfort.Analysis.StencilSpecification.Check
+                        Camfort.Analysis.StencilSpecification.Inference
                         Camfort.Analysis.StencilSpecification.Model
                         Camfort.Analysis.StencilSpecification.Syntax
-                        Camfort.Analysis.StencilSpecification.Synthesis			                       
+                        Camfort.Analysis.StencilSpecification.Synthesis
                         Camfort.Analysis.StencilSpecification
                         Camfort.Analysis.Syntax
                         Camfort.Analysis.Types

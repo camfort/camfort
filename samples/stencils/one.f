@@ -3,7 +3,7 @@
 
       integer i, j, imax, jmax
       parameter (imax = 3, jmax = 3)
-      
+
       real a(0:imax,0:jmax), b(0:imax,0:jmax)
 
 ! some kind of setup
@@ -17,16 +17,16 @@
 !   do j = 1, (jmax-1)
 !      a(i, j) = i*j
 !   end do
-!end do   
-      
+!end do
+
       write (*,*) 'A = '
       do 3 i = 0, imax
-         do 4 j = 0, jmax       
+         do 4 j = 0, jmax
             write (*,'(" ",f0.2," ")') a(i,j)
  4       continue
          write (*,*) '\n'
  3    continue
-      
+
 ! compute mean
       do 5 i = 1, (imax-1)
          do 6 j = 1, (jmax-1)
@@ -35,7 +35,7 @@
  6       continue
 ! top and bottom (inner) edges
          b(i, 0) = (a(i, 0) + a(i-1,0) + a(i+1,0) + a(i,1))/4.0
-         b(i, jmax) = (a(i, jmax) + a(i-1, jmax) + a(i+1, jmax) + 
+         b(i, jmax) = (a(i, jmax) + a(i-1, jmax) + a(i+1, jmax) +
      .        a(i,jmax-1))/4.0
  5    continue
 
@@ -61,5 +61,5 @@
  9       continue
          write (*,*) '\n'
  8       continue
-      
+
       end
