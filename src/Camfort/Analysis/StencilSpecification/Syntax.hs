@@ -64,7 +64,8 @@ data Spatial =
              region          :: RegionSum }
   deriving (Eq, Data, Typeable)
 
-emptySpec = Spatial NonLinear [] [] (Sum [Product []])
+emptySpec = Specification (Left emptySpatialSpec)
+emptySpatialSpec = Spatial NonLinear [] [] (Sum [Product []])
 
 data Linearity = Linear | NonLinear deriving (Eq, Data, Typeable)
 
@@ -111,13 +112,22 @@ instance Ord RegionProd where
      | otherwise               = (length xs) <= (length xs')
 
 
+regionPlus :: Region -> Region -> Maybe Region
+regionPlus (Forward dep dim) (Backward dep' dim')
+    | dep == dep' && dim == dim' = Just $ Centered dep dim
+regionPlus (Backward dep dim) (Forward dep' dim')
+    | dep == dep' && dim == dim' = Just $ Centered dep dim
+regionPlus x y                   = Nothing
+
 instance PartialMonoid RegionProd where
    emptyM = Product []
 
    appendM (Product [])   s  = Just $ s
    appendM s (Product [])    = Just $ s
-   appendM (Product ss) (Product ss') = Nothing
---        Just $ Product (ss ++ ss')
+   appendM (Product [s]) (Product [s']) =
+       regionPlus s s' >>= (\sCombined -> return $ Product [sCombined])
+   appendM _               _ = Nothing
+
 
 sumLinearity :: Linearity -> Linearity -> Linearity
 sumLinearity Linear Linear = Linear

@@ -49,7 +49,9 @@ thd3 (a, b, c) = c
 fromIndicesToSpec :: VecList Int -> Interval Specification
 -- TODO: currently just marked as Non-linear
 fromIndicesToSpec (VL ixs) =
-  (Specification $ Left low, Specification $ Left exact, Specification $ Left up)
+  (Specification $ Left low
+ , Specification $ Left exact
+ , Specification $ Left up)
     where (low, exact, up) = inferSpecInterval ixs
 
 inferSpecInterval :: Permutable n => [Vec n Int] -> Interval Spatial
@@ -82,7 +84,7 @@ fromRegionsToSpecInterval sps = (lower, simplifyRefl exact, upper)
     (lower, exact) = go sps
     upper          = toSpecND $ foldl1 spanBoundingBox sps
 
-    go []       = (emptySpec, emptySpec)
+    go []       = (emptySpatialSpec, emptySpatialSpec)
    -- TODO, compute a better lower bound
     go (s : ss) = (lower', sumSpatial exact exact')
       where exact            = toSpecND s
@@ -94,7 +96,7 @@ toSpecND = toSpecPerDim 1
   where
    -- convert the region one dimension at a time.
    toSpecPerDim :: Int -> Span (Vec n Int) -> Spatial
-   toSpecPerDim d (Nil, Nil)             = emptySpec
+   toSpecPerDim d (Nil, Nil)             = emptySpatialSpec
    toSpecPerDim d (Cons l ls, Cons u us) =
      prodSpatial (toSpec1D d l u) (toSpecPerDim (d + 1) (ls, us))
 
@@ -105,7 +107,7 @@ toSpecND = toSpecPerDim 1
 toSpec1D :: Dimension -> Int -> Int -> Spatial
 toSpec1D dim l u
     | l == 0 && u == 0   = Spatial Linear [] [dim] (Sum [Product []])
-    | l==u               = emptySpec -- Represents a non-span
+    | l==u               = emptySpatialSpec -- Represents a non-span
     | l < 0 && u == 0    =
         Spatial Linear [] [] (Sum [Product [Backward (abs l) dim]])
 
@@ -124,7 +126,7 @@ toSpec1D dim l u
     | l == 1 && u > 0    =
         Spatial Linear [dim] [] (Sum [Product [Forward u dim]])
 
-    | otherwise          = emptySpec
+    | otherwise          = emptySpatialSpec
 
 
 {- Spans are a pair of a lower and upper bound -}

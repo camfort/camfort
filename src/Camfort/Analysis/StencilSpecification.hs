@@ -46,7 +46,6 @@ import qualified Language.Fortran.Analysis.BBlocks as FAB
 import qualified Language.Fortran.Analysis.DataFlow as FAD
 import qualified Language.Fortran.Util.Position as FU
 
-import qualified Data.Map as Map
 import qualified Data.Map as M
 import qualified Data.Set as S
 import Data.Function (on)
@@ -145,7 +144,7 @@ perBlock b@(F.BlStatement _ span _ (F.StExpressionAssign _ _ _ rhs)) = do
         ]
   -- Create specification information
   ivs <- get
-  let specs = groupKeyBy . M.toList . fmap ((:[]) . ixCollectionToSpec ivs) $ arrayAccesses
+  let specs = groupKeyBy . M.toList . M.mapMaybe (ixCollectionToSpec ivs) $ arrayAccesses
   tell [ (span, specs) ] -- add to report
   return b
 perBlock b@(F.BlDo _ span _ (doSpec@F.DoSpecification {}) body) = do
@@ -186,15 +185,17 @@ padZeros ixss = let m = maximum (map length ixss)
 
 
 -- Convert list of indexing expressions to a spec
-ixCollectionToSpec :: [ Variable ] -> [ [ F.Index a ] ] -> Specification
-ixCollectionToSpec ivs = snd3
-                       . fromIndicesToSpec
-                       . fromLists
-                       . padZeros
-                       . map toListsOfRelativeIndices
-  where
-   toListsOfRelativeIndices :: [ F.Index a ] -> [ Int ]
-   toListsOfRelativeIndices = fromMaybe [] . mapM (ixToOffset ivs)
+ixCollectionToSpec :: [ Variable ] -> [ [ F.Index a ] ] -> Maybe [Specification]
+ixCollectionToSpec ivs ixs =
+  if exactSpec == emptySpec then Nothing else Just [exactSpec]
+    where
+     exactSpec = snd3
+               . fromIndicesToSpec
+               . fromLists
+               . padZeros
+               . map toListsOfRelativeIndices $ ixs
+     toListsOfRelativeIndices :: [ F.Index a ] -> [ Int ]
+     toListsOfRelativeIndices = catMaybes . map (ixToOffset ivs)
 
 -- Convert indexing expressions which are translations to their translation offsett:
 -- e.g., for the expression a(i+1,j-1) then this function gets
@@ -221,10 +222,11 @@ expToOffset ivs (F.ExpBinary _ _ F.Subtraction
                                  (F.ExpValue _ _ (F.ValInteger offs)))
    | v `elem` ivs = Just $ if x < 0 then abs x else (- x)
                      where x = read offs
+expToOffset ivs _ = Nothing
 
 -- TODO: if we want to capture 'constant' parts, then edit htis
---ixExprToIndex ivs d (F.ExpValue _ _ (F.ValInteger _)) = Just $ Const d
---ixExprToIndex ivs d _ = Nothing
+-- expToOffset ivs d (F.ExpValue _ _ (F.ValInteger _)) = Just $ Const d
+
 
 --------------------------------------------------
 
