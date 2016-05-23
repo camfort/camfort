@@ -147,11 +147,12 @@ perBlock b@(F.BlStatement _ span _ (F.StExpressionAssign _ _ _ rhs)) = do
   let specs = groupKeyBy . M.toList . M.mapMaybe (ixCollectionToSpec ivs) $ arrayAccesses
   tell [ (span, specs) ] -- add to report
   return b
-perBlock b@(F.BlDo _ span _ (doSpec@F.DoSpecification {}) body) = do
-  let F.DoSpecification _ _ (
-          F.StExpressionAssign _ _ (F.ExpValue _ _ (F.ValVariable _ v)) _
-        ) _ _ = doSpec
-  modify $ union [v] -- introduce v into the list of induction variables
+perBlock b@(F.BlDo _ span _ mDoSpec body) = do
+  case mDoSpec of
+    Just (F.DoSpecification _ _ (
+            F.StExpressionAssign _ _ (F.ExpValue _ _ (F.ValVariable _ v)) _
+          ) _ _) -> modify $ union [v] -- introduce v into the list of induction variables
+    _ -> return ()
   (cycles, _, _) <- ask
 
   let lexps = FA.lhsExprs =<< body

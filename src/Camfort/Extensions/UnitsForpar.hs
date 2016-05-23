@@ -120,21 +120,27 @@ parameterise = transformBi fPU
   where
     fPU :: ProgramUnit A -> ProgramUnit A
     fPU pu
-      | null params = pu
-      | otherwise   = transformBi fV pu
+      | Nothing <- params = pu
+      | Just params' <- params
+      , null params' = pu
+      | otherwise = transformBi fV pu
       where
         params = case pu of
-          PUFunction _ _ _ _ n params _ _ -> (n, Parametric (n, 0)):zipWith (fP n) (aStrip params) [1..]
-          PUSubroutine _ _ _ n params _ -> zipWith (fP n) (aStrip params) [1..]
-          _                            -> []
+          PUFunction _ _ _ _ n params _ _ _ ->
+            fmap (\params -> (n, Parametric (n, 0)):zipWith (fP n) (aStrip params) [1..]) params
+          PUSubroutine _ _ _ n params _ _ ->
+            fmap (\params -> zipWith (fP n) (aStrip params) [1..]) params
+          _ -> Nothing
 
         varName (ValVariable _ n) = n
 
         fP fn (ExpValue _ _ (ValVariable _ n)) i = (n, Parametric (fn, i))
 
-        fV v@(ValVariable a n) = case n `lookup` params of
-          Just info -> ValVariable (a { unitInfo = Just info }) n
-          Nothing   -> v
+        fV v@(ValVariable a n)
+          | Just params' <- params =
+            case n `lookup` params' of
+              Just info -> ValVariable (a { unitInfo = Just info }) n
+              Nothing   -> v
         fV v                = v
 
 --------------------------------------------------
@@ -225,8 +231,11 @@ fE e@(ExpBinary a s Division e1 e2) =
 fE e@(ExpFunctionCall _ _ (ExpValue _ _ (ValVariable _ fn)) args) = do
   fncallId <- getUniqNum
   let f aexp i = tell [C [(-1, maybeToList (getUI aexp)), (1, [ParametricUse (fn, i, fncallId)])]]
-  let aexps = aMap (\(Language.Fortran.AST.Argument _ _ _ exp) -> exp) args
-  zipWithM_ f (aStrip aexps) [1..]
+  let exps = case args of
+        Nothing -> []
+        Just aargs ->
+          aStrip . aMap (\(Language.Fortran.AST.Argument _ _ _ exp) -> exp) $ aargs
+  zipWithM_ f exps [1..]
   return . Just $ setUI (Just (ParametricUse (fn, 0, fncallId))) e
 fE e = return . Just $ e
 
