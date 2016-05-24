@@ -1,4 +1,5 @@
 {-# LANGUAGE TypeFamilies #-}
+{-# LANGUAGE ImplicitParams #-}
 
 module Camfort.Analysis.StencilSpecification.ModelSpec (spec) where
 
@@ -22,46 +23,56 @@ import Test.Hspec.QuickCheck
 spec :: Spec
 spec =
   describe "Stencils - Model" $ do
-    describe "Soundness of model, on some examples" $ modelHasLeftInverse
+    describe "Test soundness of model 1" $ modelHasLeftInverse
+    describe "Test soundness of model 2" $ modelHasApproxLeftInverse
 
 variations =
   [ ([ (0,0) ],
-    Spatial NonLinear [] [ 1, 2 ] (Sum [Product []]))
+    Exact $ Spatial NonLinear [] [ 1, 2 ] (Sum [Product []]))
 
   , ([ (1,0), (0,0) ],
-    Spatial NonLinear [] [2] (Sum [Product [Forward 1 1]]))
+    Exact $ Spatial NonLinear [] [2] (Sum [Product [Forward 1 1]]))
 
   , ([ (0,1), (0,0) ],
-    Spatial NonLinear [] [1] (Sum [Product [Forward 1 2]]))
+    Exact $ Spatial NonLinear [] [1] (Sum [Product [Forward 1 2]]))
 
   , ([ (1,1), (0,1), (1,0), (0,0) ],
-    Spatial NonLinear [] [] (Sum [Product [Forward 1 1, Forward 1 2]]))
+    Exact $ Spatial NonLinear [] [] (Sum [Product [Forward 1 1, Forward 1 2]]))
 
   , ([ (-1,0), (0,0) ],
-    Spatial NonLinear [] [2] (Sum [Product [Backward 1 1]]))
+    Exact $ Spatial NonLinear [] [2] (Sum [Product [Backward 1 1]]))
 
   , ([ (0,-1), (0,0) ],
-    Spatial NonLinear [] [1] (Sum [Product [Backward 1 2]]))
+    Exact $ Spatial NonLinear [] [1] (Sum [Product [Backward 1 2]]))
 
   , ([ (-1,-1), (0,-1), (-1,0), (0,0) ],
-    Spatial NonLinear [] [] (Sum [Product [Backward 1 1, Backward 1 2]]))
+    Exact $ Spatial NonLinear [] [] (Sum [Product [Backward 1 1, Backward 1 2]]))
 
   , ( [ (0,-1), (1,-1), (0,0), (1,0), (1,1), (0,1), (2,-1), (2,0), (2,1) ],
-    Spatial NonLinear [] []
+    Exact $ Spatial NonLinear [] []
               (Sum [Product [ Forward 2 1, Centered 1 2 ] ] ))
 
   , ( [ (-1,0), (-1,1), (0,0), (0,1), (1,1), (1,0), (-1,2), (0,2), (1,2) ],
-    Spatial NonLinear [] []
+    Exact $ Spatial NonLinear [] []
               (Sum [Product [ Forward 2 2, Centered 1 1 ] ] ))
-
-  -- Stencil which is non-contiguous from the origin in both directions
-  , ([ (0, absoluteRep), (1, absoluteRep) ],
-    Spatial NonLinear [] [] (Sum [Product [Forward 1 1]]))
  ]
+
+variations2 =
+  [
+  -- Stencil which is non-contiguous from the origin in both directions
+    ([ (0, absoluteRep), (1, absoluteRep) ], 2,
+    Exact $ Spatial NonLinear [] [] (Sum [Product [Forward 1 1]]))
+  ]
 
 modelHasLeftInverse = mapM_ check (zip variations [0..])
   where check ((ixs, spec), n) = it ("("++show n++")") $ (sort mdl) `shouldBe` (sort ixs)
-          where mdl = map (toPair . fst) $ toList $ (model (Specification (Left spec)))
+          where mdl = map (toPair . fst) . toList . fromExact . model $ spec
         toPair [x, y] = (x, y)
-        toPair [x]    = (x, 0)
+        toPair xs     = error $ "Got " ++ show xs
+
+modelHasApproxLeftInverse = mapM_ check (zip variations2 [0..])
+  where check ((ixs, dims, spec), n) = it ("("++show n++")") $ (sort mdl') `shouldBe` (sort ixs)
+          where mdl = let ?dimensionality = dims in mkModel spec
+                mdl' = map (toPair . fst) . toList . fromExact $ mdl
+        toPair [x, y] = (x, y)
         toPair xs     = error $ "Got " ++ show xs

@@ -101,20 +101,20 @@ spec =
 
     describe "Example stencil inferences" $ do
       it "five point stencil 2D" $
-        (fromIndicesToSpec $ VL fivepoint)
+        (inferFromIndices $ VL fivepoint)
         `shouldBe`
          (exactSp $ Spatial NonLinear [] [] (Sum [ Product [ Centered 1 1 ],
                                                  Product [ Centered 1 2 ]]))
 
       it "seven point stencil 2D" $
-        (fromIndicesToSpec $ VL sevenpoint)
+        (inferFromIndices $ VL sevenpoint)
         `shouldBe`
           (exactSp $ Spatial NonLinear [] [] (Sum [ Product [ Centered 1 1 ],
                                                   Product [ Centered 1 2 ],
                                                   Product [ Centered 1 3 ]]))
 
       it "five point stencil 2D with blip" $
-         (fromIndicesToSpec $ VL fivepointErr)
+         (inferFromIndices $ VL fivepointErr)
          `shouldBe`
           (exactSp $ Spatial NonLinear [] [] (Sum [ Product [ Forward 1 1 ,
                                                             Forward 1 2 ],
@@ -122,33 +122,33 @@ spec =
                                                   Product [ Centered 1 2 ] ]))
 
       it "centered forward" $
-         (fromIndicesToSpec $ VL centeredFwd)
+         (inferFromIndices $ VL centeredFwd)
          `shouldBe`
           (exactSp $ Spatial NonLinear [] [] (Sum [ Product [ Forward 1 1
                                                   , Centered 1 2 ] ]))
 {-
     describe "Example bounding boxes" $ do
       it "five point stencil 2D" $
-        (fromIndicesToSpec $ VL fivepoint)
+        (inferFromIndices $ VL fivepoint)
         `shouldBe`
         (exactSp $ Spatial NonLinear [] [] (Sum [Product [Centered 1 1,
                                                         Centered 1 2]]))
 
       it "seven point stencil 2D" $
-        (fromIndicesToSpec $ VL sevenpoint)
+        (inferFromIndices $ VL sevenpoint)
         `shouldBe`
         (exactSp $ Spatial NonLinear [] [] (Sum [Product [Centered 1 1,
                                                         Centered 1 2,
                                                         Centered 1 3]]))
 
       it "five point stencil 2D with blip" $
-        (fromIndicesToSpec $ VL fivepointErr)
+        (inferFromIndices $ VL fivepointErr)
         `shouldBe`
         (exactSp $ Spatial NonLinear [] [] (Sum [Product [Centered 1 1,
                                                         Centered 1 2]]))
 
       it "centered forward" $
-        (fromIndicesToSpec $ VL centeredFwd)
+        (inferFromIndices $ VL centeredFwd)
         `shouldBe`
         (exactSp $ Spatial NonLinear [] [] (Sum [ Product [ Forward 1 1
                                                         , Centered 1 2 ] ])) -}
@@ -163,7 +163,7 @@ spec =
               "extracting offsets from indexing expressions; and vice versa") $
       it "isomorphism" $ property prop_extract_synth_inverse
 
-exactSp = Exact . Specification . Left
+exactSp = Specification . Left . Exact
 
 {- Properties of `spanBoundingBox`: idempotent and associative -}
 prop_spanBoundingIdem :: Natural n -> Span (Vec n Int) -> Bool
@@ -226,7 +226,7 @@ test2DSpecVariation (input, expectation) =
        (ixCollectionToSpec ["i", "j"] (map fromFormatToIx input))
           `shouldBe` Just [ expectedSpec ]
   where
-    expectedSpec = fmap (Specification . Left) expectation
+    expectedSpec = Specification . Left $ expectation
     fromFormatToIx [ri,rj] = [ offsetToIx "i" ri, offsetToIx "j" rj ]
 
 variations =
@@ -273,7 +273,7 @@ test3DSpecVariation (input, expectation) =
            `shouldBe` Just [ expectedSpec ]
 
   where
-    expectedSpec = fmap (Specification . Left) expectation
+    expectedSpec = Specification . Left $ expectation
     fromFormatToIx [ri,rj,rk] =
       [offsetToIx "i" ri, offsetToIx "j" rj, offsetToIx "k" rk]
 

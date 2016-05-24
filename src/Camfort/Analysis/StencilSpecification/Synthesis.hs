@@ -35,7 +35,7 @@ import Camfort.Analysis.Annotations
 import Camfort.Extensions.UnitsForpar (parameterise)
 import Camfort.Helpers.Vec
 -- These two are redefined here for ForPar ASTs
-import Camfort.Helpers hiding (lineCol, spanLineCol) 
+import Camfort.Helpers hiding (lineCol, spanLineCol)
 
 import qualified Language.Fortran.AST as F
 import qualified Language.Fortran.Analysis as FA
@@ -54,9 +54,11 @@ s = SrcSpan (Position 0 0 0) (Position 0 0 0)
 -- Given a spec, an array variable, and a list of inductive variables, generate
 -- a list of indexing expressions for the spec
 synthesise :: Specification -> F.Name -> [F.Name] -> [F.Expression Annotation]
-synthesise spec v ixs = map toArrSubsExpr . toList . model $ spec
-  where toArrSubsExpr (offs,_) = ixExprToSubscript v . map (uncurry offsetToIx)
-                                  $ zip ixs offs
+synthesise (Specification (Left (Exact spec))) v ixs =
+  map toSubscriptExpr . toList . fromExact . model $ (Exact spec)
+    where toSubscriptExpr (offs,_) = ixExprToSubscript v
+                                    . map (uncurry offsetToIx) $ zip ixs offs
+synthesise _ _ _ = []
 
 ixExprToSubscript :: F.Name -> [F.Index Annotation] -> F.Expression Annotation
 ixExprToSubscript v es =

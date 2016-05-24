@@ -40,6 +40,10 @@ data Result a =
   Exact a | Bound (Maybe a) (Maybe a)
    deriving (Eq, Data, Typeable)
 
+fromExact :: Result a -> a
+fromExact (Exact a) = a
+fromExact _ = error $ "Exception: fromExact on a non-exact result"
+
 upperBound :: a -> Result a
 upperBound x = Bound Nothing (Just x)
 
@@ -49,7 +53,6 @@ lowerBound x = Bound (Just x) Nothing
 instance Functor Result where
   fmap f (Exact x) = Exact (f x)
   fmap f (Bound x y) = Bound (fmap f x) (fmap f y)
-
 
 -- 'absoluteRep' is an integer to use to represent absolute indexing expressions
 -- (which may be constants, non-affine indexing expressions, or expressions
@@ -63,7 +66,7 @@ absoluteRep = 100 :: Int -- maxBound :: Int
 
 -- Top-level of specifications: may be either spatial or temporal
 data Specification =
-  Specification (Either Spatial Temporal)
+  Specification (Either (Result Spatial) Temporal)
     deriving (Eq, Data, Typeable)
 
 -- ***********************
@@ -91,23 +94,14 @@ data Spatial =
              region          :: RegionSum }
   deriving (Eq, Data, Typeable)
 
-emptySpec = Specification (Left emptySpatialSpec)
+emptySpec = Specification . Left $ (one :: Result Spatial)
 emptySpatialSpec = one :: Spatial
 
 -- `isEmpty` predicate on which specifications are vacuous or
 -- functional empty (i.e., show not be displayed in an inference setting).
-isEmpty :: Result Specification -> Bool
-isEmpty (Exact s) = isEmptyS s
-isEmpty (Bound Nothing Nothing) = True
-isEmpty (Bound (Just x) Nothing) = isEmptyS x
-isEmpty (Bound Nothing (Just y)) = isEmptyS y
-isEmpty (Bound (Just x) (Just y)) = isEmptyS x && isEmptyS y
-
-isEmptyS :: Specification -> Bool
-isEmptyS (Specification (Right (Dependency []))) = True
-isEmptyS (Specification (Left (Spatial _ irrefl refl (Sum xs)))) =
-  irrefl == [] && refl == [] && (all ((==) (Product [])) xs)
-isEmptyS _ = False
+isEmpty :: Specification -> Bool
+isEmpty (Specification (Right (Dependency []))) = True
+isEmpty (Specification (Left s)) = isUnit s
 
 data Linearity = Linear | NonLinear deriving (Eq, Data, Typeable)
 
@@ -203,21 +197,23 @@ class RegionRig t where
   prod :: t -> t -> t
   one  :: t
   zero :: t
+  isUnit :: t -> Bool
 
 -- Lifting to the `Maybe` constructor
 instance RegionRig a => RegionRig (Maybe a) where
   sum (Just x) (Just y) = Just $ sum x y
-  sum (Just x) Nothing  = Just x
-  sum Nothing  (Just x) = Just x
-  sum _ _               = Nothing
+  sum x Nothing = x
+  sum Nothing x = x
 
   prod (Just x) (Just y) = Just $ prod x y
-  prod (Just x) Nothing  = Just x
-  prod Nothing (Just x)  = Just x
-  prod _ _               = Nothing
+  prod x Nothing = x
+  prod Nothing x = x
 
   one  = Just one
   zero = Just zero
+
+  isUnit Nothing = True
+  isUnit (Just x) = isUnit x
 
 instance RegionRig Linearity where
   sum Linear Linear = Linear
@@ -225,6 +221,9 @@ instance RegionRig Linearity where
   prod = sum
   one  = Linear
   zero = Linear
+
+  isUnit Linear = True
+  isUnit _      = False
 
 instance RegionRig Spatial where
   sum (Spatial lin  irdim  rdim  s)
@@ -240,6 +239,9 @@ instance RegionRig Spatial where
   one = Spatial one [] [] one
   zero = Spatial zero [] [] zero
 
+  isUnit (Spatial _ irrefl refl ss) =
+      irrefl == [] && refl == [] && (isUnit ss)
+
 instance RegionRig (Result Spatial) where
   sum (Exact s) (Exact s')      = Exact (sum s s')
   sum (Exact s) (Bound l u)     = Bound (sum (Just s) l) (sum (Just s) u)
@@ -254,6 +256,9 @@ instance RegionRig (Result Spatial) where
   one  = Exact one
   zero = Exact zero
 
+  isUnit (Exact s) = isUnit s
+  isUnit (Bound x y) = isUnit x && isUnit y
+
 instance RegionRig RegionSum where
   prod (Sum ss) (Sum ss') =
    Sum $ -- Take the cross product of list of summed specifications
@@ -263,6 +268,7 @@ instance RegionRig RegionSum where
   sum (Sum ss) (Sum ss') = Sum $ normalise $ ss ++ ss'
   zero = Sum []
   one = Sum [Product []]
+  isUnit s@(Sum ss) = s == zero || s == one || (all ((==) (Product [])) ss)
 
 -- Show a list with ',' separator
 showL :: Show a => [a] -> String
@@ -273,17 +279,18 @@ showProdSpecs, showSumSpecs :: Show a => [a] -> String
 showProdSpecs = concat . (intersperse "*") . (map show)
 showSumSpecs = concat . (intersperse "+") . (map show)
 
-instance Show (Result Specification) where
-  show (Exact s) = show s
-  show (Bound Nothing Nothing) = "empty"
-  show (Bound Nothing (Just s)) = "stencil atMost, " ++ (drop (length "stencil ") (show s))
-  show (Bound (Just s) Nothing) = "stencil atLeast, " ++ (drop (length "stencil ") (show s))
-  show (Bound (Just sL) (Just sU)) = error $ "Lower and upper, l = " ++ show sL ++ ", u = " ++ show sU
-
 -- Pretty print top-level specifications
 instance Show Specification where
   show (Specification (Left sp)) = "stencil " ++ show sp
   show (Specification (Right sp)) = "stencil " ++ show sp
+
+instance Show (Result Spatial) where
+  show (Exact s) = show s
+  show (Bound Nothing Nothing) = "empty"
+  show (Bound Nothing (Just s)) = "atMost, " ++ show s
+  show (Bound (Just s) Nothing) = "atLeast, " ++ show s
+  -- TODO: Figure out the right way to support this
+  show (Bound (Just sL) (Just sU)) = error $ "Lower and upper, l = " ++ show sL ++ ", u = " ++ show sU
 
 -- Pretty print spatial specs
 instance Show Spatial where

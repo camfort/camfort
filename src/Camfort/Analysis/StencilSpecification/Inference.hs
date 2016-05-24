@@ -44,9 +44,9 @@ fst3 (a, b, c) = a
 snd3 (a, b, c) = b
 thd3 (a, b, c) = c
 
-fromIndicesToSpec :: VecList Int -> Result Specification
+inferFromIndices :: VecList Int -> Specification
 -- TODO: currently just marked as Non-linear
-fromIndicesToSpec (VL ixs) = fmap (Specification . Left) . inferSpec $ ixs
+inferFromIndices (VL ixs) = Specification . Left . inferSpec $ ixs
   where inferSpec :: Permutable n => [Vec n Int] -> Result Spatial
         inferSpec = fromRegionsToSpec . inferMinimalVectorRegions
 

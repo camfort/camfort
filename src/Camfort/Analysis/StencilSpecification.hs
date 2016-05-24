@@ -108,14 +108,14 @@ check = error "Not yet implemented"
 
 --------------------------------------------------
 
-type LogLine = (FU.SrcSpan, [([Variable], [Result Specification])])
+type LogLine = (FU.SrcSpan, [([Variable], [Specification])])
 formatSpec :: FAR.NameMap -> LogLine -> String
 formatSpec nm (span, []) = ""
 formatSpec nm (span, specs) = loc ++ " \t" ++ (commaSep . nub . map doSpec $ specs) ++ "\n"
   where
     loc                      = show (spanLineCol span)
     commaSep                 = intercalate ", "
-    doSpec (arrayVar, spec)  = showL (map (fmap fixSpec) spec) ++ " :: " ++ commaSep (map realName arrayVar)
+    doSpec (arrayVar, spec)  = showL (map fixSpec spec) ++ " :: " ++ commaSep (map realName arrayVar)
     realName v               = v `fromMaybe` (v `M.lookup` nm)
     fixSpec (Specification (Right (Dependency vs))) =
         Specification (Right (Dependency $ map realName vs))
@@ -163,7 +163,7 @@ perBlock b@(F.BlDo _ span _ mDoSpec body) = do
           F.ExpSubscript _ _ (F.ExpValue _ _ (F.ValVariable _ lhsV)) _ -> Just lhsV
           _ -> Nothing
         v'   <- lookup lhsV cycles
-        return ([lhsV], [Exact $ Specification $ Right $ Dependency [v']])
+        return ([lhsV], [Specification $ Right $ Dependency [v']])
 
   let tempSpecs = foldl' (\ ts -> maybe ts (:ts) . getTimeSpec) [] lexps
 
@@ -186,12 +186,12 @@ padZeros ixss = let m = maximum (map length ixss)
 
 
 -- Convert list of indexing expressions to a spec
-ixCollectionToSpec :: [ Variable ] -> [ [ F.Index a ] ] -> Maybe [Result Specification]
+ixCollectionToSpec :: [ Variable ] -> [ [ F.Index a ] ] -> Maybe [Specification]
 ixCollectionToSpec ivs ixs =
   if isEmpty exactSpec
   then Nothing else Just [exactSpec]
     where
-     exactSpec = fromIndicesToSpec
+     exactSpec = inferFromIndices
                . fromLists
                . padZeros
                . map toListsOfRelativeIndices $ ixs
