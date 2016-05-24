@@ -78,13 +78,9 @@ instance Model Region where
    mkModel (Centered dep dim) =
      fromList [mkSingleEntry i dim ?dimensionality | i <- [(-dep)..dep]]
 
-   mkModel (Constant dim) =
-     fromList [mkSingleEntry absoluteRep dim ?dimensionality]
-
    dimensionality (Forward _ d)  = d
    dimensionality (Backward _ d) = d
    dimensionality (Centered _ d) = d
-   dimensionality (Constant d)   = d
 
 instance Model RegionProd where
    type Domain RegionProd = Set [Int]

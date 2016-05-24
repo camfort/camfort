@@ -119,8 +119,6 @@ data Region where
     Forward  :: Depth -> Dimension -> Region
     Backward :: Depth -> Dimension -> Region
     Centered :: Depth -> Dimension -> Region
-    -- DEPRECATED
-    Constant :: Dimension -> Region
   deriving (Eq, Data, Typeable)
 
 getDimension :: Region -> Dimension
@@ -142,12 +140,9 @@ instance Ord Region where
     | dep == dep' = dim <= dim'
     | otherwise   = dep <= dep'
 
-  (Constant dim) <= (Constant dim') = dim <= dim'
-
   -- Order in the way defined above: Forward <: Backward <: Centered <: Constant
   (Forward _ _ ) <= _               = True
   (Backward _ _) <= (Centered _ _)  = True
-  _              <= (Constant _)    = True
   _              <= _               = False
 
 -- Sum of product specifications
@@ -334,7 +329,6 @@ instance Show Region where
    show (Forward dep dim)   = showRegion "forward" (show dep) (show dim)
    show (Backward dep dim)  = showRegion "backward" (show dep) (show dim)
    show (Centered dep dim)  = showRegion "centered" (show dep) (show dim)
-   show (Constant dim)      = "constant, dim=" ++ show dim
 
 -- Helper for showing regions
 showRegion typ depS dimS = typ ++ ", depth=" ++ depS ++ ", dim=" ++ dimS

@@ -56,7 +56,7 @@ variations =
 
   -- Stencil which is non-contiguous from the origin in both directions
   , ([ (0, absoluteRep), (1, absoluteRep) ],
-    Spatial NonLinear [] [] (Sum [Product [Constant 2, Forward 1 1]]))
+    Spatial NonLinear [] [] (Sum [Product [Forward 1 1]]))
  ]
 
 modelHasLeftInverse = mapM_ check (zip variations [0..])
