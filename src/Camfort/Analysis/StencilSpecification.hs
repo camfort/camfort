@@ -108,14 +108,14 @@ check = error "Not yet implemented"
 
 --------------------------------------------------
 
-type LogLine = (FU.SrcSpan, [([Variable], [Specification])])
+type LogLine = (FU.SrcSpan, [([Variable], [Result Specification])])
 formatSpec :: FAR.NameMap -> LogLine -> String
 formatSpec nm (span, []) = ""
 formatSpec nm (span, specs) = loc ++ " \t" ++ (commaSep . nub . map doSpec $ specs) ++ "\n"
   where
     loc                      = show (spanLineCol span)
     commaSep                 = intercalate ", "
-    doSpec (arrayVar, spec)  = showL (map fixSpec spec) ++ " :: " ++ commaSep (map realName arrayVar)
+    doSpec (arrayVar, spec)  = showL (map (fmap fixSpec) spec) ++ " :: " ++ commaSep (map realName arrayVar)
     realName v               = v `fromMaybe` (v `M.lookup` nm)
     fixSpec (Specification (Right (Dependency vs))) =
         Specification (Right (Dependency $ map realName vs))
@@ -163,7 +163,7 @@ perBlock b@(F.BlDo _ span _ mDoSpec body) = do
           F.ExpSubscript _ _ (F.ExpValue _ _ (F.ValVariable _ lhsV)) _ -> Just lhsV
           _ -> Nothing
         v'   <- lookup lhsV cycles
-        return ([lhsV], [Specification $ Right $ Dependency [v']])
+        return ([lhsV], [Exact $ Specification $ Right $ Dependency [v']])
 
   let tempSpecs = foldl' (\ ts -> maybe ts (:ts) . getTimeSpec) [] lexps
 
@@ -186,13 +186,12 @@ padZeros ixss = let m = maximum (map length ixss)
 
 
 -- Convert list of indexing expressions to a spec
-ixCollectionToSpec :: [ Variable ] -> [ [ F.Index a ] ] -> Maybe [Specification]
+ixCollectionToSpec :: [ Variable ] -> [ [ F.Index a ] ] -> Maybe [Result Specification]
 ixCollectionToSpec ivs ixs =
   if isEmpty exactSpec
   then Nothing else Just [exactSpec]
     where
-     exactSpec = snd3
-               . fromIndicesToSpec
+     exactSpec = fromIndicesToSpec
                . fromLists
                . padZeros
                . map toListsOfRelativeIndices $ ixs
@@ -211,7 +210,7 @@ ixToOffset _ _ = Nothing -- If the indexing expression is a range
 expToOffset :: [Variable] -> F.Expression a -> Maybe Int
 expToOffset ivs (F.ExpValue _ _ (F.ValVariable _ v))
   | v `elem` ivs = Just 0
-  | otherwise    = Just constantRep
+  | otherwise    = Just absoluteRep
 expToOffset ivs (F.ExpBinary _ _ F.Addition
                                  (F.ExpValue _ _ (F.ValVariable _ v))
                                  (F.ExpValue _ _ (F.ValInteger offs)))
@@ -225,7 +224,7 @@ expToOffset ivs (F.ExpBinary _ _ F.Subtraction
                                  (F.ExpValue _ _ (F.ValInteger offs)))
    | v `elem` ivs = Just $ if x < 0 then abs x else (- x)
                      where x = read offs
-expToOffset ivs _ = Just constantRep
+expToOffset ivs _ = Just absoluteRep
 
 --------------------------------------------------
 

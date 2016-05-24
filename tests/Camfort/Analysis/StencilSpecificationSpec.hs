@@ -30,25 +30,25 @@ spec :: Spec
 spec =
   describe "Stencils" $ do
     describe "Idempotence of spanBounding" $ do
-      it "(0)" $ property $ prop_spanBoundingIdem zero
-      it "(1)" $ property $ prop_spanBoundingIdem one
-      it "(2)" $ property $ prop_spanBoundingIdem two
-      it "(3)" $ property $ prop_spanBoundingIdem three
-      it "(4)" $ property $ prop_spanBoundingIdem four
+      it "(0)" $ property $ prop_spanBoundingIdem zeroN
+      it "(1)" $ property $ prop_spanBoundingIdem oneN
+      it "(2)" $ property $ prop_spanBoundingIdem twoN
+      it "(3)" $ property $ prop_spanBoundingIdem threeN
+      it "(4)" $ property $ prop_spanBoundingIdem fourN
 
     describe "Associativity of spanBounding" $ do
-      it "(0)" $ property $ prop_spanBoundingAssoc zero
-      it "(1)" $ property $ prop_spanBoundingAssoc one
-      it "(2)" $ property $ prop_spanBoundingAssoc two
-      it "(3)" $ property $ prop_spanBoundingAssoc three
-      it "(4)" $ property $ prop_spanBoundingAssoc four
+      it "(0)" $ property $ prop_spanBoundingAssoc zeroN
+      it "(1)" $ property $ prop_spanBoundingAssoc oneN
+      it "(2)" $ property $ prop_spanBoundingAssoc twoN
+      it "(3)" $ property $ prop_spanBoundingAssoc threeN
+      it "(4)" $ property $ prop_spanBoundingAssoc fourN
 
     describe "Un-permutable permutations on vectors" $ do
-      it "(0)" $ property $ prop_perms_invertable zero
-      it "(1)" $ property $ prop_perms_invertable one
-      it "(2)" $ property $ prop_perms_invertable two
-      it "(3)" $ property $ prop_perms_invertable three
-      it "(4)" $ property $ prop_perms_invertable four
+      it "(0)" $ property $ prop_perms_invertable zeroN
+      it "(1)" $ property $ prop_perms_invertable oneN
+      it "(2)" $ property $ prop_perms_invertable twoN
+      it "(3)" $ property $ prop_perms_invertable threeN
+      it "(4)" $ property $ prop_perms_invertable fourN
 
     it "sorting on indices" $
       shouldBe (sort [ Cons 1 (Cons 2 (Cons 1 Nil))
@@ -101,49 +101,57 @@ spec =
 
     describe "Example stencil inferences" $ do
       it "five point stencil 2D" $
-        shouldBe (snd3 $ inferSpecInterval fivepoint)
-                 (Spatial NonLinear [] [] (Sum [ Product [ Centered 1 1 ],
-                                                 Product [ Centered 1 2]]))
+        (fromIndicesToSpec $ VL fivepoint)
+        `shouldBe`
+         (exactSp $ Spatial NonLinear [] [] (Sum [ Product [ Centered 1 1 ],
+                                                 Product [ Centered 1 2 ]]))
 
       it "seven point stencil 2D" $
-        shouldBe
-          (snd3 $ inferSpecInterval sevenpoint)
-          (Spatial NonLinear [] [] (Sum [ Product [ Centered 1 1 ],
-                                          Product [ Centered 1 2 ],
-                                          Product [ Centered 1 3 ]]))
+        (fromIndicesToSpec $ VL sevenpoint)
+        `shouldBe`
+          (exactSp $ Spatial NonLinear [] [] (Sum [ Product [ Centered 1 1 ],
+                                                  Product [ Centered 1 2 ],
+                                                  Product [ Centered 1 3 ]]))
 
       it "five point stencil 2D with blip" $
-        shouldBe
-          (snd3 $ inferSpecInterval fivepointErr)
-          (Spatial NonLinear [] [] (Sum [ Product [ Forward 1 1 ,
-                                                    Forward 1 2 ],
-                                          Product [ Centered 1 1 ],
-                                          Product [ Centered 1 2 ] ]))
+         (fromIndicesToSpec $ VL fivepointErr)
+         `shouldBe`
+          (exactSp $ Spatial NonLinear [] [] (Sum [ Product [ Forward 1 1 ,
+                                                            Forward 1 2 ],
+                                                  Product [ Centered 1 1 ],
+                                                  Product [ Centered 1 2 ] ]))
 
       it "centered forward" $
-        shouldBe
-          (snd3 $ inferSpecInterval centeredFwd)
-          (Spatial NonLinear [] [] (Sum [ Product [ Forward 1 1
+         (fromIndicesToSpec $ VL centeredFwd)
+         `shouldBe`
+          (exactSp $ Spatial NonLinear [] [] (Sum [ Product [ Forward 1 1
                                                   , Centered 1 2 ] ]))
-
+{-
     describe "Example bounding boxes" $ do
       it "five point stencil 2D" $
-        shouldBe (thd3 $ inferSpecInterval fivepoint)
-                 (Spatial NonLinear [] [] (Sum [Product [Centered 1 1, Centered 1 2]]))
+        (fromIndicesToSpec $ VL fivepoint)
+        `shouldBe`
+        (exactSp $ Spatial NonLinear [] [] (Sum [Product [Centered 1 1,
+                                                        Centered 1 2]]))
 
       it "seven point stencil 2D" $
-        shouldBe (thd3 $ inferSpecInterval sevenpoint)
-                 (Spatial NonLinear [] [] (Sum [Product [Centered 1 1, Centered 1 2, Centered 1 3]]))
+        (fromIndicesToSpec $ VL sevenpoint)
+        `shouldBe`
+        (exactSp $ Spatial NonLinear [] [] (Sum [Product [Centered 1 1,
+                                                        Centered 1 2,
+                                                        Centered 1 3]]))
 
       it "five point stencil 2D with blip" $
-        shouldBe (thd3 $ inferSpecInterval fivepointErr)
-                 (Spatial NonLinear [] [] (Sum [Product [Centered 1 1,
-                                                         Centered 1 2]]))
+        (fromIndicesToSpec $ VL fivepointErr)
+        `shouldBe`
+        (exactSp $ Spatial NonLinear [] [] (Sum [Product [Centered 1 1,
+                                                        Centered 1 2]]))
 
       it "centered forward" $
-        shouldBe (thd3 $ inferSpecInterval centeredFwd)
-                 (Spatial NonLinear [] [] (Sum [ Product [ Forward 1 1
-                                                     , Centered 1 2 ] ]))
+        (fromIndicesToSpec $ VL centeredFwd)
+        `shouldBe`
+        (exactSp $ Spatial NonLinear [] [] (Sum [ Product [ Forward 1 1
+                                                        , Centered 1 2 ] ])) -}
 
     describe "2D stencil verification" $
       mapM_ test2DSpecVariation variations
@@ -155,6 +163,7 @@ spec =
               "extracting offsets from indexing expressions; and vice versa") $
       it "isomorphism" $ property prop_extract_synth_inverse
 
+exactSp = Exact . Specification . Left
 
 {- Properties of `spanBoundingBox`: idempotent and associative -}
 prop_spanBoundingIdem :: Natural n -> Span (Vec n Int) -> Bool
@@ -175,11 +184,11 @@ prop_perms_invertable w xs =
     fact 0 = 1
     fact n = n * fact (n - 1)
 
-zero = Zero
-one = Succ zero
-two = Succ one
-three = Succ two
-four = Succ three
+zeroN  = Zero
+oneN   = Succ zeroN
+twoN   = Succ oneN
+threeN = Succ twoN
+fourN  = Succ threeN
 
 -- Indices for the 2D five point stencil (deliberately in an odd order)
 fivepoint = [ Cons (-1) (Cons 0 Nil), Cons 0 (Cons (-1) Nil)
@@ -217,37 +226,42 @@ test2DSpecVariation (input, expectation) =
        (ixCollectionToSpec ["i", "j"] (map fromFormatToIx input))
           `shouldBe` Just [ expectedSpec ]
   where
-    expectedSpec = Specification (Left expectation)
+    expectedSpec = fmap (Specification . Left) expectation
     fromFormatToIx [ri,rj] = [ offsetToIx "i" ri, offsetToIx "j" rj ]
 
 variations =
   [ ( [ [0,0] ]
-    , Spatial NonLinear [] [ 1, 2 ] (Sum [Product []])
+    , Exact $ Spatial NonLinear [] [ 1, 2 ] (Sum [Product []])
     )
   , ( [ [1,0], [0,0] ]
-    , Spatial NonLinear [] [2] (Sum [Product [Forward 1 1]])
+    , Exact $ Spatial NonLinear [] [2] (Sum [Product [Forward 1 1]])
     )
   , ( [ [0,1], [0,0] ]
-    , Spatial NonLinear [] [1] (Sum [Product [Forward 1 2]])
+    , Exact $ Spatial NonLinear [] [1] (Sum [Product [Forward 1 2]])
     )
   , ( [ [1,1], [0,1], [1,0], [0,0] ]
-    , Spatial NonLinear [] [] (Sum [Product [Forward 1 1, Forward 1 2]])
+    , Exact $ Spatial NonLinear [] [] (Sum [Product [Forward 1 1, Forward 1 2]])
     )
   , ( [ [-1,0], [0,0] ]
-    , Spatial NonLinear [] [2] (Sum [Product [Backward 1 1]])
+    , Exact $ Spatial NonLinear [] [2] (Sum [Product [Backward 1 1]])
     )
   , ( [ [0,-1], [0,0] ]
-    , Spatial NonLinear [] [1] (Sum [Product [Backward 1 2]])
+    , Exact $ Spatial NonLinear [] [1] (Sum [Product [Backward 1 2]])
     )
   , ( [ [-1,-1], [0,-1], [-1,0], [0,0] ]
-    , Spatial NonLinear [] [] (Sum [Product [Backward 1 1, Backward 1 2]])
+    , Exact $ Spatial NonLinear [] [] (Sum [Product [Backward 1 1, Backward 1 2]])
     )
   , ( [ [0,-1], [1,-1], [0,0], [1,0], [1,1], [0,1] ]
-    , Spatial NonLinear [] [] $ Sum [ Product [ Forward 1 1 , Centered 1 2 ] ]
+    , Exact $ Spatial NonLinear [] [] $ Sum [ Product [ Forward 1 1 , Centered 1 2 ] ]
     )
-   -- Stencil which is non-contiguous from the origin in both directions
-  , ( [ [0, constantRep], [1, constantRep] ]
-    , Spatial NonLinear [] [] (Sum [Product [Forward 1 1, Constant 2]])
+   -- Stencil which is non-contiguous in one direction
+  , ( [ [0, 4], [1, 4] ]
+    , Bound (Just (Spatial NonLinear [] [] (Sum [Product [Forward 1 1]])))
+            (Just (Spatial NonLinear [] [] (Sum [Product [Forward 1 1, Forward 4 2]])))
+    )
+   -- Stencil which has non-relative indices in one dimension
+  , ( [ [0, absoluteRep], [1, absoluteRep] ]
+    , Exact $ Spatial NonLinear [] [] (Sum [Product [Forward 1 1]])
     )
   ]
 
@@ -259,20 +273,20 @@ test3DSpecVariation (input, expectation) =
            `shouldBe` Just [ expectedSpec ]
 
   where
-    expectedSpec = Specification (Left expectation)
+    expectedSpec = fmap (Specification . Left) expectation
     fromFormatToIx [ri,rj,rk] =
       [offsetToIx "i" ri, offsetToIx "j" rj, offsetToIx "k" rk]
 
 
 variations3D =
   [ ( [ [-1,0,-1], [0,0,-1], [-1,0,0], [0,0,0] ]
-    ,  Spatial NonLinear [] [2] (Sum [Product [Backward 1 1, Backward 1 3]])
+    ,  Exact $ Spatial NonLinear [] [2] (Sum [Product [Backward 1 1, Backward 1 3]])
     )
   , ( [ [1,1,0], [0,1,0] ]
-    ,  Spatial NonLinear [] [3] (Sum [Product [Forward 1 1]])
+    ,  Exact $ Spatial NonLinear [2] [3] (Sum [Product [Forward 1 1, Forward 1 2]])
     )
-  , ( [ [-1,constantRep,-1], [0,constantRep,-1], [-1,constantRep,0], [0,constantRep,0] ]
-    ,  Spatial NonLinear [] [] (Sum [Product [Backward 1 1, Backward 1 3, Constant 2]])
+  , ( [ [-1,absoluteRep,-1], [0,absoluteRep,-1], [-1,absoluteRep,0], [0,absoluteRep,0] ]
+    ,  Exact $ Spatial NonLinear [] [] (Sum [Product [Backward 1 1, Backward 1 3]])
     )
   ]
 

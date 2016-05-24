@@ -55,7 +55,7 @@ variations =
               (Sum [Product [ Forward 2 2, Centered 1 1 ] ] ))
 
   -- Stencil which is non-contiguous from the origin in both directions
-  , ([ (0, constantRep), (1, constantRep) ],
+  , ([ (0, absoluteRep), (1, absoluteRep) ],
     Spatial NonLinear [] [] (Sum [Product [Constant 2, Forward 1 1]]))
  ]
 

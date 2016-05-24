@@ -26,8 +26,9 @@
 
 module Camfort.Analysis.StencilSpecification.Inference where
 
+import Prelude hiding (sum)
 import Data.Generics.Uniplate.Operations
-import Data.List
+import Data.List hiding (sum)
 import Data.Data
 import Control.Arrow ((***))
 
@@ -39,26 +40,15 @@ import Unsafe.Coerce
 
 import Camfort.Analysis.StencilSpecification.Syntax
 
-{- Intervals are triples of lower, exact, upper values -}
-type Interval a = (a, a, a)
-
 fst3 (a, b, c) = a
 snd3 (a, b, c) = b
 thd3 (a, b, c) = c
 
-fromIndicesToSpec :: VecList Int -> Interval Specification
+fromIndicesToSpec :: VecList Int -> Result Specification
 -- TODO: currently just marked as Non-linear
-fromIndicesToSpec (VL ixs) =
-  (Specification $ Left low
- , Specification $ Left exact
- , Specification $ Left up)
-    where (low, exact, up) = inferSpecInterval ixs
-
-inferSpecInterval :: Permutable n => [Vec n Int] -> Interval Spatial
-inferSpecInterval ixs = (low, exact, up)
-  where
-    (low, exact, up) =
-      fromRegionsToSpecInterval . inferMinimalVectorRegions $ ixs
+fromIndicesToSpec (VL ixs) = fmap (Specification . Left) . inferSpec $ ixs
+  where inferSpec :: Permutable n => [Vec n Int] -> Result Spatial
+        inferSpec = fromRegionsToSpec . inferMinimalVectorRegions
 
 -- Removes any 'reflexive' specs that are overlapped by a directional spec
 -- somewhere else [in theory a lot of these won't get generated in the first
@@ -78,59 +68,61 @@ simplifyRefl (Spatial lin irdims rdims (Sum ss)) =
       rdimsB = [d | (Backward  _ d)  <- universeBi ss::[Region],
                                   d' <- rdims, d == d']
 
-fromRegionsToSpecInterval :: [Span (Vec n Int)] -> Interval Spatial
-fromRegionsToSpecInterval sps = (lower, simplifyRefl exact, upper)
+fromRegionsToSpec :: [Span (Vec n Int)] -> Result Spatial
+fromRegionsToSpec sps = fmap simplifyRefl result
   where
-    (lower, exact) = go sps
-    upper          = toSpecND $ foldl1 spanBoundingBox sps
-
-    go []       = (emptySpatialSpec, emptySpatialSpec)
-   -- TODO, compute a better lower bound
-    go (s : ss) = (lower', sumSpatial exact exact')
-      where exact            = toSpecND s
-            (lower', exact') = go ss
+    result = foldr (\x y -> sum (toSpecND x) y) zero sps
+    -- Compute a full upper using a bounding box
+    -- Probably we don't need this anymore: it should agree
+    -- with the upper bound computed using `prod`
+    upper  = toSpecND $ foldl1 spanBoundingBox sps
 
 -- toSpecND converts an n-dimensional region into a (list of) specification
-toSpecND :: Span (Vec n Int) -> Spatial
+toSpecND :: Span (Vec n Int) -> Result Spatial
 toSpecND = toSpecPerDim 1
   where
    -- convert the region one dimension at a time.
-   toSpecPerDim :: Int -> Span (Vec n Int) -> Spatial
-   toSpecPerDim d (Nil, Nil)             = emptySpatialSpec
+   toSpecPerDim :: Int -> Span (Vec n Int) -> Result Spatial
+   toSpecPerDim d (Nil, Nil)             = one
    toSpecPerDim d (Cons l ls, Cons u us) =
-     prodSpatial (toSpec1D d l u) (toSpecPerDim (d + 1) (ls, us))
-
--- : (toSpecification (dim+1) ms ns)
+     prod (toSpec1D d l u) (toSpecPerDim (d + 1) (ls, us))
 
 -- toSpec1D takes a dimension identifier, a lower and upper bound of a region in
 -- that dimension, and builds the simple directional spec.
-toSpec1D :: Dimension -> Int -> Int -> Spatial
+toSpec1D :: Dimension -> Int -> Int -> Result Spatial
 toSpec1D dim l u
-    | l == constantRep || u == constantRep =
-        Spatial Linear [] [] (Sum [Product [Constant dim]])
-    | l == 0 && u == 0   = Spatial Linear [] [dim] (Sum [Product []])
-    | l < 0 && u == 0    =
-        Spatial Linear [] [] (Sum [Product [Backward (abs l) dim]])
+    | l == absoluteRep || u == absoluteRep =
+        Exact emptySpatialSpec -- the "one" element wrt. "prod"
+
+    | l == 0 && u == 0 =
+        Exact $ Spatial NonLinear [] [dim] (Sum [Product []])
+    | l < 0 && u == 0 =
+        Exact $ Spatial NonLinear [] [] (Sum [Product [Backward (abs l) dim]])
 
     | l < 0 && u == (-1) =
-        Spatial Linear [dim] [] (Sum [Product [Backward (abs l) dim]])
+        Exact $ Spatial NonLinear [dim] [] (Sum [Product [Backward (abs l) dim]])
 
-    | l == 0 && u > 0    =
-        Spatial Linear [] [] (Sum [Product [Forward u dim]])
+    | l == 0 && u > 0 =
+        Exact $ Spatial NonLinear [] [] (Sum [Product [Forward u dim]])
 
-    | l == 1 && u > 0    =
-        Spatial Linear [dim] [] (Sum [Product [Forward u dim]])
+    | l == 1 && u > 0 =
+        Exact $ Spatial NonLinear [dim] [] (Sum [Product [Forward u dim]])
 
     -- from the above constraints above, l and u are neither 0, 1 or -1.
-    | l==u               = emptySpatialSpec -- Represents a non-span
+    -- Represents a non-continguous region
+    | l==u = upperBound $ Spatial NonLinear [] [] (Sum [Product
+                            [if l > 0 then Forward u dim else Backward u dim]])
 
     | l < 0 && u > 0 && (abs l == u) =
-        Spatial Linear [] [] (Sum [Product [Centered u dim]])
+        Exact $ Spatial NonLinear [] [] (Sum [Product [Centered u dim]])
 
     | l < 0 && u > 0 && (abs l /= u) =
-        Spatial Linear [] [] (Sum [Product [Backward (abs l) dim],
-                                   Product [Forward u dim]])
-    | otherwise          = emptySpatialSpec
+        Exact $ Spatial NonLinear [] [] (Sum [Product [Backward (abs l) dim],
+                                          Product [Forward u dim]])
+    -- Represents a non-contiguous region
+    | otherwise =
+        upperBound $ Spatial NonLinear [] [] (Sum [Product
+                        [if l > 0 then Forward u dim else Backward u dim]])
 
 
 {- Spans are a pair of a lower and upper bound -}

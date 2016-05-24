@@ -27,16 +27,37 @@ module Camfort.Analysis.StencilSpecification.Syntax where
 import Camfort.Helpers
 import Data.Data
 import Data.Generics.Uniplate.Data
-import Data.List
+import Data.List hiding (sum)
+import Prelude hiding (sum)
 import Data.Maybe
 
 {-  Contains the syntax representation for stencil specifications -}
 
--- The `maxBound` of Int models constants and non-affine / non-induction
--- variable expressions. This can be made smaller for debugging purposes,
+{- *** 0. Representations -}
+
+-- Representation of an inference result, either exact or with some bound
+data Result a =
+  Exact a | Bound (Maybe a) (Maybe a)
+   deriving (Eq, Data, Typeable)
+
+upperBound :: a -> Result a
+upperBound x = Bound Nothing (Just x)
+
+lowerBound :: a -> Result a
+lowerBound x = Bound (Just x) Nothing
+
+instance Functor Result where
+  fmap f (Exact x) = Exact (f x)
+  fmap f (Bound x y) = Bound (fmap f x) (fmap f y)
+
+
+-- 'absoluteRep' is an integer to use to represent absolute indexing expressions
+-- (which may be constants, non-affine indexing expressions, or expressions
+--  involving non-induction variables). This is set to maxBoound :: Int usually,
+-- but can be made smaller for debugging purposes,
 -- e.g., 100, but it needs to be high enough to clash with reasonable
 -- relative indices.
-constantRep = 100 :: Int -- maxBound :: Int
+absoluteRep = 100 :: Int -- maxBound :: Int
 
 {- *** 1 . Specification syntax -}
 
@@ -71,17 +92,22 @@ data Spatial =
   deriving (Eq, Data, Typeable)
 
 emptySpec = Specification (Left emptySpatialSpec)
-emptySpatialSpec = Spatial NonLinear [] [] (Sum [Product []])
+emptySpatialSpec = one :: Spatial
 
 -- `isEmpty` predicate on which specifications are vacuous or
 -- functional empty (i.e., show not be displayed in an inference setting).
-isEmpty (Specification (Right (Dependency []))) = True
-isEmpty (Specification (Left (Spatial _ irrefl refl (Sum xs)))) =
-  irrefl == [] && refl == [] && all emptyOrConstant xs
-isEmpty _ = False
-emptyOrConstant (Product []) = True
-emptyOrConstant (Product xs) =
-  all (\xs -> case xs of Constant _ -> True; _ -> False) xs
+isEmpty :: Result Specification -> Bool
+isEmpty (Exact s) = isEmptyS s
+isEmpty (Bound Nothing Nothing) = True
+isEmpty (Bound (Just x) Nothing) = isEmptyS x
+isEmpty (Bound Nothing (Just y)) = isEmptyS y
+isEmpty (Bound (Just x) (Just y)) = isEmptyS x && isEmptyS y
+
+isEmptyS :: Specification -> Bool
+isEmptyS (Specification (Right (Dependency []))) = True
+isEmptyS (Specification (Left (Spatial _ irrefl refl (Sum xs)))) =
+  irrefl == [] && refl == [] && (all ((==) (Product [])) xs)
+isEmptyS _ = False
 
 data Linearity = Linear | NonLinear deriving (Eq, Data, Typeable)
 
@@ -93,8 +119,14 @@ data Region where
     Forward  :: Depth -> Dimension -> Region
     Backward :: Depth -> Dimension -> Region
     Centered :: Depth -> Dimension -> Region
+    -- DEPRECATED
     Constant :: Dimension -> Region
   deriving (Eq, Data, Typeable)
+
+getDimension :: Region -> Dimension
+getDimension (Forward _ dim) = dim
+getDimension (Backward _ dim) = dim
+getDimension (Centered _ dim) = dim
 
 -- An (arbitrary) ordering on regions for the sake of normalisation
 instance Ord Region where
@@ -168,28 +200,74 @@ instance PartialMonoid RegionProd where
    appendM _               _ = Nothing
 
 
-sumLinearity :: Linearity -> Linearity -> Linearity
-sumLinearity Linear Linear = Linear
-sumLinearity NonLinear _   = NonLinear
-sumLinearity _ NonLinear   = NonLinear
+-- Operations on region specifications form a semiring
+--  where `sum` is the additive, and `prod` is the multiplicative
+--  [without the annihilation property for `zero` with multiplication]
+class RegionRig t where
+  sum  :: t -> t -> t
+  prod :: t -> t -> t
+  one  :: t
+  zero :: t
 
-sumSpatial :: Spatial -> Spatial -> Spatial
-sumSpatial (Spatial lin irdim rdim (Sum ss))
-           (Spatial lin' irdim' rdim' (Sum ss')) =
-    Spatial (sumLinearity lin lin') (nub $ irdim ++ irdim') (nub $ rdim ++ rdim')
-            (Sum $ normalise $ ss ++ ss')
+-- Lifting to the `Maybe` constructor
+instance RegionRig a => RegionRig (Maybe a) where
+  sum (Just x) (Just y) = Just $ sum x y
+  sum (Just x) Nothing  = Just x
+  sum Nothing  (Just x) = Just x
+  sum _ _               = Nothing
 
-prodSpatial :: Spatial -> Spatial -> Spatial
-prodSpatial (Spatial lin irdim rdim s) (Spatial lin' irdim' rdim' s') =
-    Spatial (sumLinearity lin lin') (nub $ irdim ++ irdim') (nub $ rdim ++ rdim')
-            (prodRegionSum s s')
+  prod (Just x) (Just y) = Just $ prod x y
+  prod (Just x) Nothing  = Just x
+  prod Nothing (Just x)  = Just x
+  prod _ _               = Nothing
 
-prodRegionSum :: RegionSum -> RegionSum -> RegionSum
-prodRegionSum (Sum ss) (Sum ss') =
-   Sum $ -- Take the cross product of list of sumed specifications
+  one  = Just one
+  zero = Just zero
+
+instance RegionRig Linearity where
+  sum Linear Linear = Linear
+  sum _  _          = NonLinear
+  prod = sum
+  one  = Linear
+  zero = Linear
+
+instance RegionRig Spatial where
+  sum (Spatial lin  irdim  rdim  s)
+      (Spatial lin' irdim' rdim' s') =
+    Spatial (sum lin lin') (nub $ irdim ++ irdim') (nub $ rdim ++ rdim')
+            (sum s s')
+
+  prod (Spatial lin  irdim  rdim  s)
+       (Spatial lin' irdim' rdim' s') =
+    Spatial (prod lin lin') (nub $ irdim ++ irdim') (nub $ rdim ++ rdim')
+            (prod s s')
+
+  one = Spatial one [] [] one
+  zero = Spatial zero [] [] zero
+
+instance RegionRig (Result Spatial) where
+  sum (Exact s) (Exact s')      = Exact (sum s s')
+  sum (Exact s) (Bound l u)     = Bound (sum (Just s) l) (sum (Just s) u)
+  sum (Bound l u) (Bound l' u') = Bound (sum l l') (sum (sum l u') (sum l' u))
+  sum s s'                      = sum s' s
+
+  prod (Exact s) (Exact s')     = Exact (prod s s')
+  prod (Exact s) (Bound l u)    = Bound (prod (Just s) l) (prod (Just s) u)
+  prod (Bound l u) (Bound l' u') = Bound (prod l l') (prod (prod l u') (prod l' u))
+  prod s s'                      = prod s' s
+
+  one  = Exact one
+  zero = Exact zero
+
+instance RegionRig RegionSum where
+  prod (Sum ss) (Sum ss') =
+   Sum $ -- Take the cross product of list of summed specifications
      do (Product spec) <- ss
         (Product spec') <- ss'
         return $ Product $ sort $ spec ++ spec'
+  sum (Sum ss) (Sum ss') = Sum $ normalise $ ss ++ ss'
+  zero = Sum []
+  one = Sum [Product []]
 
 -- Show a list with ',' separator
 showL :: Show a => [a] -> String
@@ -199,6 +277,13 @@ showL = concat . (intersperse ",") . (map show)
 showProdSpecs, showSumSpecs :: Show a => [a] -> String
 showProdSpecs = concat . (intersperse "*") . (map show)
 showSumSpecs = concat . (intersperse "+") . (map show)
+
+instance Show (Result Specification) where
+  show (Exact s) = show s
+  show (Bound Nothing Nothing) = "empty"
+  show (Bound Nothing (Just s)) = "stencil atMost, " ++ (drop (length "stencil ") (show s))
+  show (Bound (Just s) Nothing) = "stencil atLeast, " ++ (drop (length "stencil ") (show s))
+  show (Bound (Just sL) (Just sU)) = error $ "Lower and upper, l = " ++ show sL ++ ", u = " ++ show sU
 
 -- Pretty print top-level specifications
 instance Show Specification where

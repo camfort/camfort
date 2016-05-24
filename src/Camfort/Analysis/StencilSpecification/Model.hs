@@ -79,7 +79,7 @@ instance Model Region where
      fromList [mkSingleEntry i dim ?dimensionality | i <- [(-dep)..dep]]
 
    mkModel (Constant dim) =
-     fromList [mkSingleEntry constantRep dim ?dimensionality]
+     fromList [mkSingleEntry absoluteRep dim ?dimensionality]
 
    dimensionality (Forward _ d)  = d
    dimensionality (Backward _ d) = d
@@ -106,12 +106,12 @@ cprodV xss yss = xss >>= (\xs -> yss >>= (\ys -> pairwisePerm xs ys))
 pairwisePerm :: [Int] -> [Int] -> [[Int]]
 pairwisePerm [] [] = []
 
-pairwisePerm [a] [b] | a == constantRep = [[constantRep]]
-                     | b == constantRep = [[constantRep]]
+pairwisePerm [a] [b] | a == absoluteRep = [[absoluteRep]]
+                     | b == absoluteRep = [[absoluteRep]]
                      | otherwise        = [[a],[b]]
-pairwisePerm (a:as) (b:bs) | a == constantRep =
+pairwisePerm (a:as) (b:bs) | a == absoluteRep =
     map (a:) (pairwisePerm as bs)
-pairwisePerm (a:as) (b:bs) | b == constantRep =
+pairwisePerm (a:as) (b:bs) | b == absoluteRep =
     map (b:) (pairwisePerm as bs)
 pairwisePerm (a:as) (b:bs) =
     map (a:) (pairwisePerm as bs)
