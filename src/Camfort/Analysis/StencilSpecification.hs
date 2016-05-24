@@ -203,7 +203,7 @@ ixCollectionToSpec ivs ixs =
 -- e.g., for the expression a(i+1,j-1) then this function gets
 -- passed expr = i + 1   (returning +1) and expr = j - 1 (returning -1)
 ixToOffset :: [Variable] -> F.Index a -> Maybe Int
-ixToOffset ivs (F.IxSingle _ _ exp) = expToOffset ivs exp
+ixToOffset ivs (F.IxSingle _ _ _ exp) = expToOffset ivs exp
 ixToOffset _ _ = Nothing -- If the indexing expression is a range
 
 
