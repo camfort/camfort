@@ -38,7 +38,7 @@ import Data.Maybe
 -- Representation of an inference result, either exact or with some bound
 data Result a =
   Exact a | Bound (Maybe a) (Maybe a)
-   deriving (Eq, Data, Typeable)
+   deriving (Eq, Data, Typeable, Show)
 
 fromExact :: Result a -> a
 fromExact (Exact a) = a
@@ -284,7 +284,7 @@ instance Show Specification where
   show (Specification (Left sp)) = "stencil " ++ show sp
   show (Specification (Right sp)) = "stencil " ++ show sp
 
-instance Show (Result Spatial) where
+instance {-# OVERLAPS #-} Show (Result Spatial) where
   show (Exact s) = show s
   show (Bound Nothing Nothing) = "empty"
   show (Bound Nothing (Just s)) = "atMost, " ++ show s

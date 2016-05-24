@@ -8,6 +8,7 @@ import Camfort.Analysis.StencilSpecification
 import Camfort.Analysis.StencilSpecification.Synthesis
 import Camfort.Analysis.StencilSpecification.Model
 import Camfort.Analysis.StencilSpecification.Syntax hiding (Spec)
+import qualified Camfort.Analysis.StencilSpecification.Syntax as Syn
 
 import Camfort.Analysis.Annotations
 import qualified Language.Fortran.AST as F
@@ -24,8 +25,10 @@ spec :: Spec
 spec =
   describe "Stencils - Model" $ do
     describe "Test soundness of model 1" $ modelHasLeftInverse
-    describe "Test soundness of model 2" $ modelHasApproxLeftInverse
+    describe "Test soundness of model 2" $ modelHasApproxLeftInverse variations2
+    describe "Test soundness of model 3" $ modelHasApproxLeftInverse variations3
 
+variations :: [([(Int, Int)], Syn.Result Spatial)]
 variations =
   [ ([ (0,0) ],
     Exact $ Spatial NonLinear [] [ 1, 2 ] (Sum [Product []]))
@@ -57,11 +60,30 @@ variations =
               (Sum [Product [ Forward 2 2, Centered 1 1 ] ] ))
  ]
 
+variations2 :: [(Syn.Result [[Int]], Int, Syn.Result Spatial)]
 variations2 =
   [
-  -- Stencil which is non-contiguous from the origin in both directions
-    ([ (0, absoluteRep), (1, absoluteRep) ], 2,
+  -- Stencil which has some absolute component (not represented in the spec)
+    (Exact [ [0, absoluteRep], [1, absoluteRep] ], 2,
     Exact $ Spatial NonLinear [] [] (Sum [Product [Forward 1 1]]))
+
+ -- Spec on bounds
+ ,  (Bound Nothing (Just $ [ [0, absoluteRep], [1, absoluteRep],
+                             [2, absoluteRep] ]), 2,
+     Bound Nothing
+           (Just $ Spatial NonLinear [] [] (Sum [Product [Forward 2 1]])))
+ ]
+
+variations3 :: [(Syn.Result [[Int]], Int, Syn.Result Spatial)]
+variations3 =
+  [
+ -- Spec on bounds
+    (Bound Nothing (Just $ [ [0, absoluteRep, 0], [1, absoluteRep, 0],
+                             [2, absoluteRep, 0],
+                             [0, absoluteRep, 1], [1, absoluteRep, 1],
+                             [2, absoluteRep, 1]]), 3,
+     Bound Nothing
+           (Just $ Spatial NonLinear [] [] (Sum [Product [Forward 1 3, Forward 2 1]])))
   ]
 
 modelHasLeftInverse = mapM_ check (zip variations [0..])
@@ -70,9 +92,8 @@ modelHasLeftInverse = mapM_ check (zip variations [0..])
         toPair [x, y] = (x, y)
         toPair xs     = error $ "Got " ++ show xs
 
-modelHasApproxLeftInverse = mapM_ check (zip variations2 [0..])
-  where check ((ixs, dims, spec), n) = it ("("++show n++")") $ (sort mdl') `shouldBe` (sort ixs)
-          where mdl = let ?dimensionality = dims in mkModel spec
-                mdl' = map (toPair . fst) . toList . fromExact $ mdl
-        toPair [x, y] = (x, y)
-        toPair xs     = error $ "Got " ++ show xs
+modelHasApproxLeftInverse vars = mapM_ check (zip vars [(0 :: Int)..])
+  where check ((ixs, dims, spec), n) =
+          it ("("++show n++")") $ mdl' `shouldBe` (fmap sort ixs)
+            where mdl = let ?dimensionality = dims in mkModel spec
+                  mdl' = fmap (sort . map fst . toList) mdl
