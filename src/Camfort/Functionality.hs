@@ -53,7 +53,7 @@ import Camfort.Input
 import Data.List (foldl', nub, (\\), elemIndices, intersperse, intercalate)
 
 -- FORPAR
-import qualified Language.Fortran.Parser.Fortran77 as F77
+import qualified Language.Fortran.Parser.Any as FP
 import qualified Language.Fortran.AST as A
 import Language.Fortran.Analysis.Renaming
   (renameAndStrip, analyseRenames, unrename, NameMap)
@@ -71,7 +71,7 @@ ast d _ f _ = do
     putStrLn $ show p
 
 asts inSrc excludes _ _ = do
-    putStrLn $ "Do a basic analysis and output the HTML files"
+    putStrLn $ "Do a basic analysis and output the HTML files "
             ++ "with AST information for " ++ show inSrc ++ "\n"
     let astAnalysis = (map numberStmts) . map (fmap (const unitAnnotation))
     doAnalysis astAnalysis inSrc excludes
@@ -185,14 +185,9 @@ readForparseSrcFile :: Filename -> IO (Filename, SourceText, A.ProgramFile A)
 readForparseSrcFile f = do
     putStrLn f
     inp <- readFile f
-    let ast = forparse inp f
+    let ast = FP.fortranParser inp f
     return $ (f, inp, fmap (const unitAnnotation) ast)
 ----
-
-{-| parse file into an un-annotated Fortran AST -}
-forparse :: SourceText -> Filename -> A.ProgramFile ()
-forparse contents f = F77.fortran77Parser contents f
-
 
 doAnalysisSummaryForpar :: (Monoid s, Show' s) => (A.ProgramFile A -> s)
                         -> FileOrDir -> [Filename] -> IO ()

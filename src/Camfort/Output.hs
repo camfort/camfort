@@ -39,6 +39,7 @@ import Language.Fortran as Fortran
 import Language.Fortran.Pretty
 import Camfort.Transformation.Syntax
 
+import System.FilePath
 import System.Directory
 
 import Data.Text hiding (zip,foldl,map,concatMap,take,drop,length,last,head,tail,replicate,concat)
@@ -121,10 +122,12 @@ changeDir newDir oldDir oldFilename = newDir ++ (listDiffL oldDir oldFilename)
 {-| output pre-analysis ASTs into the directory with the given file names (the list of ASTs should match the
     list of filenames) -}
 outputAnalysisFiles :: FileOrDir -> [Program Annotation] -> [Filename] -> IO ()
-outputAnalysisFiles dir asts files =
-           do putStrLn $ "Writing analysis files to directory: " ++ dir ++ "/"
-              mapM (\(ast', f) -> writeFile (f ++ ".html") ((concatMap outputHTML) ast')) (zip asts files)
-              return ()
+outputAnalysisFiles src asts files = do
+  isdir <- isDirectory src
+  let src' = if isdir then src else dropFileName src
+  putStrLn $ "Writing analysis files to directory: " ++ src'
+  mapM (\(ast', f) -> writeFile (f ++ ".html") ((concatMap outputHTML) ast')) (zip asts files)
+  return ()
 
 keyword = map pack
           ["end","subroutine","function","program","module","data", "common",

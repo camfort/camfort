@@ -71,18 +71,18 @@ getExcludes (x : xs) = getExcludes xs
      second, excluding files listed by its third -}
 doAnalysis :: (Program A -> Program Annotation)
            -> FileOrDir -> [Filename] -> IO ()
-doAnalysis aFun d excludes = do
+doAnalysis aFun src excludes = do
   if excludes /= [] && excludes /= [""]
   then putStrLn $ "Excluding " ++ (concat $ intersperse "," excludes)
-                               ++ " from " ++ d ++ "/"
+                               ++ " from " ++ src ++ "/"
   else return ()
 
-  ps <- readParseSrcDir d excludes
+  ps <- readParseSrcDir src excludes
 
   let inFiles = map Fortran.fst3 ps
-  let outFiles = filter (\f -> not ((take (length $ d ++ "out") f) == (d ++ "out"))) inFiles
+  let outFiles = filter (\f -> not ((take (length $ src ++ "out") f) == (src ++ "out"))) inFiles
   let asts' = map (\(f, _, ps) -> aFun ps) ps
-  outputAnalysisFiles d asts' outFiles
+  outputAnalysisFiles src asts' outFiles
 
 {-| Performs an analysis provided by its first parameter which generates
     information 's', which is then combined together (via a monoid) -}
