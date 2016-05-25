@@ -77,7 +77,7 @@ infer' pf@(F.ProgramFile cm_pus _) = concatMap perPU cm_pus
     -- find 2-cycles: A -> B -> A
     cycs2 = [ (n, m) | (n, ns) <- M.toList flMap
                      , m       <- S.toList ns
-                     , let Just ms = M.lookup m flMap
+                     , ms      <- maybeToList $ M.lookup m flMap
                      , n `S.member` ms && n /= m ]
     beMap = FAD.genBackEdgeMap (FAD.dominators gr) gr -- identify every loop by its back-edge
     ivMap = FAD.genInductionVarMap beMap gr -- get [basic] induction variables for every loop
@@ -99,8 +99,8 @@ findVarFlowCycles' pf = cycs2
     flMap = FAD.genVarFlowsToMap dm flTo -- create VarFlowsToMap
     -- find 2-cycles: A -> B -> A
     cycs2 = [ (n, m) | (n, ns) <- M.toList flMap
-                     , m <- S.toList ns
-                     , let Just ms = M.lookup m flMap
+                     , m       <- S.toList ns
+                     , ms      <- maybeToList $ M.lookup m flMap
                      , n `S.member` ms && n /= m ]
 
 check :: Program a -> Program a
