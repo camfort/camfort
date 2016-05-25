@@ -61,92 +61,105 @@ import Language.Fortran.Analysis(initAnalysis)
 import Camfort.Extensions.UnitsForpar
 import qualified Camfort.Analysis.StencilSpecification as StencilsForpar
 
--- * Wrappers on all of the features 
-typeStructuring inSrc excludes outSrc _ = 
-     do putStrLn $ "Introducing derived data types in " ++ show inSrc ++ "\n"
-        doRefactor typeStruct inSrc excludes outSrc
+-- * Wrappers on all of the features
+typeStructuring inSrc excludes outSrc _ = do
+    putStrLn $ "Introducing derived data types in " ++ show inSrc ++ "\n"
+    doRefactor typeStruct inSrc excludes outSrc
 
-ast d _ f _ = do (_, _, p) <- readParseSrcFile (d ++ "/" ++ f)
-                 putStrLn $ show p
+ast d _ f _ = do
+    (_, _, p) <- readParseSrcFile (d ++ "/" ++ f)
+    putStrLn $ show p
 
-asts inSrc excludes _ _ = 
-     do putStrLn $ "Do a basic analysis and output the HTML files with AST information for " ++ show inSrc ++ "\n"
-        doAnalysis ((map numberStmts) . map (fmap (const unitAnnotation))) inSrc excludes 
+asts inSrc excludes _ _ = do
+    putStrLn $ "Do a basic analysis and output the HTML files"
+            ++ "with AST information for " ++ show inSrc ++ "\n"
+    let astAnalysis = (map numberStmts) . map (fmap (const unitAnnotation))
+    doAnalysis astAnalysis inSrc excludes
 
-countVarDecls inSrc excludes _ _ =  
-    do putStrLn $ "Counting variable declarations in " ++ show inSrc ++ "\n"
-       doAnalysisSummary countVariableDeclarations inSrc excludes 
+countVarDecls inSrc excludes _ _ = do
+    putStrLn $ "Counting variable declarations in " ++ show inSrc ++ "\n"
+    doAnalysisSummary countVariableDeclarations inSrc excludes
 
-loops inSrc excludes _ _ =  
-           do putStrLn $ "Analysing loops for " ++ show inSrc ++ "\n"
-              doAnalysis loopAnalyse inSrc excludes 
+loops inSrc excludes _ _ = do
+    putStrLn $ "Analysing loops for " ++ show inSrc ++ "\n"
+    doAnalysis loopAnalyse inSrc excludes
 
-lvaA inSrc excludes _ _ =
-          do putStrLn $ "Analysing loops for " ++ show inSrc ++ "\n"
-             doAnalysis lva inSrc excludes 
+lvaA inSrc excludes _ _ = do
+    putStrLn $ "Analysing loops for " ++ show inSrc ++ "\n"
+    doAnalysis lva inSrc excludes
 
-dead inSrc excludes outSrc _ =
-         do putStrLn $ "Eliminating dead code in " ++ show inSrc ++ "\n"
-            doRefactor ((mapM (deadCode False))) inSrc excludes outSrc
+dead inSrc excludes outSrc _ = do
+    putStrLn $ "Eliminating dead code in " ++ show inSrc ++ "\n"
+    doRefactor ((mapM (deadCode False))) inSrc excludes outSrc
 
-commonToArgs inSrc excludes outSrc _ = 
-                 do putStrLn $ "Refactoring common blocks in " ++ show inSrc ++ "\n"
-                    doRefactor (commonElimToCalls inSrc) inSrc excludes outSrc
+commonToArgs inSrc excludes outSrc _ = do
+    putStrLn $ "Refactoring common blocks in " ++ show inSrc ++ "\n"
+    doRefactor (commonElimToCalls inSrc) inSrc excludes outSrc
 
-common inSrc excludes outSrc _ =  
-           do putStrLn $ "Refactoring common blocks in " ++ show inSrc ++ "\n"
-              doRefactor (commonElimToModules inSrc) inSrc excludes outSrc
+common inSrc excludes outSrc _ = do
+    putStrLn $ "Refactoring common blocks in " ++ show inSrc ++ "\n"
+    doRefactor (commonElimToModules inSrc) inSrc excludes outSrc
 
-equivalences inSrc excludes outSrc _ =
-           do putStrLn $ "Refactoring equivalences blocks in " ++ show inSrc ++ "\n"
-              doRefactor (mapM refactorEquivalences) inSrc excludes outSrc
+equivalences inSrc excludes outSrc _ = do
+    putStrLn $ "Refactoring equivalences blocks in " ++ show inSrc ++ "\n"
+    doRefactor (mapM refactorEquivalences) inSrc excludes outSrc
 
 {- Units feature -}
-units inSrc excludes outSrc opt = 
-          do putStrLn $ "Inferring units for " ++ show inSrc ++ "\n"
-             let ?solver = solverType opt 
-              in let ?assumeLiterals = literalsBehaviour opt
-                 in doRefactor' (mapM LU.inferUnits) inSrc excludes outSrc
+units inSrc excludes outSrc opt = do
+    putStrLn $ "Inferring units for " ++ show inSrc ++ "\n"
+    let ?solver = solverType opt
+     in let ?assumeLiterals = literalsBehaviour opt
+        in doRefactor' (mapM LU.inferUnits) inSrc excludes outSrc
 
-unitCriticals inSrc excludes outSrc opt = 
-          do putStrLn $ "Infering critical variables for units inference in directory " ++ show inSrc ++ "\n"
-             let ?solver = solverType opt 
-              in let ?assumeLiterals = literalsBehaviour opt
-                 in doAnalysisReport' (mapM LU.inferCriticalVariables) inSrc excludes outSrc
+unitCriticals inSrc excludes outSrc opt = do
+    putStrLn $ "Infering critical variables for units inference in directory "
+             ++ show inSrc ++ "\n"
+    let ?solver = solverType opt
+     in let ?assumeLiterals = literalsBehaviour opt
+        in doAnalysisReport' (mapM LU.inferCriticalVariables)
+              inSrc excludes outSrc
 
 stencilsInf inSrc excludes _ _ = do
   putStrLn $ "Inferring stencil specs for " ++ show inSrc ++ "\n"
   doAnalysisSummaryForpar StencilsForpar.infer inSrc excludes
 
-stencilsCheck inSrc excludes _ _ =
-          do putStrLn $ "Checking stencil specs for " ++ show inSrc ++ "\n"
-             doAnalysis StencilsForpar.check inSrc excludes
+stencilsCheck inSrc excludes _ _ = do
+  putStrLn $ "Checking stencil specs for " ++ show inSrc ++ "\n"
+  doAnalysis StencilsForpar.check inSrc excludes
 
 stencilsVarFlowCycles inSrc excludes _ _ = do
   putStrLn $ "Inferring var flow cycles for " ++ show inSrc ++ "\n"
-  doAnalysisSummaryForpar (intercalate ", " . map show . StencilsForpar.findVarFlowCycles) inSrc excludes
+  let flowAnalysis = intercalate ", " . map show . StencilsForpar.findVarFlowCycles
+  doAnalysisSummaryForpar flowAnalysis inSrc excludes
 
 --------------------------------------------------
 -- Forpar wrappers
 
-doRefactorForpar :: ([(Filename, A.ProgramFile A)] -> (String, [(Filename, A.ProgramFile Annotation)])) -> FileOrDir -> [Filename] -> FileOrDir -> IO ()
-doRefactorForpar rFun inSrc excludes outSrc =
-  do if excludes /= [] && excludes /= [""]
-         then putStrLn $ "Excluding " ++ (concat $ intersperse "," excludes) ++ " from " ++ inSrc ++ "/"
-         else return ()
+doRefactorForpar :: ([(Filename, A.ProgramFile A)]
+                 -> (String, [(Filename, A.ProgramFile Annotation)]))
+                 -> FileOrDir -> [Filename] -> FileOrDir -> IO ()
+doRefactorForpar rFun inSrc excludes outSrc = do
+    if excludes /= [] && excludes /= [""]
+    then putStrLn $ "Excluding " ++ (concat $ intersperse "," excludes)
+           ++ " from " ++ inSrc ++ "/"
+    else return ()
 ----
-     ps <- readForparseSrcDir inSrc excludes
-     let (report, ps') = rFun (map (\(f, inp, ast) -> (f, ast)) ps)
-     --let outFiles = filter (\f -not ((take (length $ d ++ "out") f) == (d ++ "out"))) (map fst ps')
-     let outFiles = map fst ps'
-     putStrLn report
-     -- outputFiles inSrc outSrc (zip3 outFiles (map Fortran.snd3 ps ++ (repeat "")) (map snd ps'))
+    ps <- readForparseSrcDir inSrc excludes
+    let (report, ps') = rFun (map (\(f, inp, ast) -> (f, ast)) ps)
+    --let outFiles = filter (\f -not ((take (length $ d ++ "out") f) == (d ++ "out"))) (map fst ps')
+    let outFiles = map fst ps'
+    putStrLn report
+    -- outputFiles inSrc outSrc (zip3 outFiles (map Fortran.snd3 ps ++ (repeat "")) (map snd ps'))
 ----
-{-| Performs an analysis which reports to the user, but does not output any files -}
-doAnalysisReportForpar :: ([(Filename, A.ProgramFile A)] -> (String, t1)) -> FileOrDir -> [Filename] -> t -> IO ()
+
+{-| Performs an analysis which reports to the user,
+     but does not output any files -}
+doAnalysisReportForpar :: ([(Filename, A.ProgramFile A)] -> (String, t1))
+                       -> FileOrDir -> [Filename] -> t -> IO ()
 doAnalysisReportForpar rFun inSrc excludes outSrc = do
   if excludes /= [] && excludes /= [""]
-      then putStrLn $ "Excluding " ++ (concat $ intersperse "," excludes) ++ " from " ++ inSrc ++ "/"
+      then putStrLn $ "Excluding " ++ (concat $ intersperse "," excludes)
+                    ++ " from " ++ inSrc ++ "/"
       else return ()
   ps <- readForparseSrcDir inSrc excludes
 ----
@@ -154,31 +167,39 @@ doAnalysisReportForpar rFun inSrc excludes outSrc = do
   let (report, ps') = rFun (map (\(f, inp, ast) -> (f, ast)) ps)
   putStrLn report
 ----
+
 -- * Source directory and file handling
-readForparseSrcDir :: FileOrDir -> [Filename] -> IO [(Filename, SourceText, A.ProgramFile A)]
-readForparseSrcDir inp excludes = do isdir <- isDirectory inp
-                                     files <- if isdir then
-                                                  do files <- rGetDirContents inp
-                                                     return $ (map (\y -> inp ++ "/" ++ y) files) \\ excludes
-                                              else return [inp]
-                                     mapM readForparseSrcFile files
+readForparseSrcDir :: FileOrDir -> [Filename]
+                   -> IO [(Filename, SourceText, A.ProgramFile A)]
+readForparseSrcDir inp excludes = do
+    isdir <- isDirectory inp
+    files <- if isdir
+             then do files <- rGetDirContents inp
+                     return $ (map (\y -> inp ++ "/" ++ y) files) \\ excludes
+             else return [inp]
+    mapM readForparseSrcFile files
 ----
+
 {-| Read a specific file, and parse it -}
 readForparseSrcFile :: Filename -> IO (Filename, SourceText, A.ProgramFile A)
-readForparseSrcFile f = do putStrLn f
-                           inp <- readFile f
-                           let ast = forparse inp f
-                           return $ (f, inp, fmap (const unitAnnotation) ast)
+readForparseSrcFile f = do
+    putStrLn f
+    inp <- readFile f
+    let ast = forparse inp f
+    return $ (f, inp, fmap (const unitAnnotation) ast)
 ----
+
 {-| parse file into an un-annotated Fortran AST -}
 forparse :: SourceText -> Filename -> A.ProgramFile ()
 forparse contents f = F77.fortran77Parser contents f
 
 
-doAnalysisSummaryForpar :: (Monoid s, Show' s) => (A.ProgramFile A -> s) -> FileOrDir -> [Filename] -> IO ()
+doAnalysisSummaryForpar :: (Monoid s, Show' s) => (A.ProgramFile A -> s)
+                        -> FileOrDir -> [Filename] -> IO ()
 doAnalysisSummaryForpar aFun inSrc excludes = do
   if excludes /= [] && excludes /= [""]
-    then putStrLn $ "Excluding " ++ (concat $ intersperse "," excludes) ++ " from " ++ inSrc ++ "/"
+    then putStrLn $ "Excluding " ++ (concat $ intersperse "," excludes)
+                                 ++ " from " ++ inSrc ++ "/"
     else return ()
   ps <- readForparseSrcDir inSrc excludes
   let inFiles = map (\(a, _, _) -> a) ps
