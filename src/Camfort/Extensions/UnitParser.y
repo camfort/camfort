@@ -1,4 +1,4 @@
-{
+{ -- -*- Mode: Haskell -*-
 module Camfort.Extensions.UnitParser ( unitParser
                                      , UnitStatement(..)
                                      , UnitOfMeasure(..)
