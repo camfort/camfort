@@ -19,7 +19,7 @@ spec =
       Just (SpecDec (Temporal ["a","b","c","foo"] True) ["foo", "bar"])
     it "complex stencil" $
       parse "stencil atLeast, reflexive(dims=1,2), readOnce, (forward(depth=1, dim=1) + r) * backward(depth=3, dim=4) :: frob" `shouldBe`
-      Just (SpecDec (Spatial [AtLeast,Reflexive [1,2],ReadOnce] (And (Or (Forward 1 1) (Var "r")) (Backward 3 4))) ["frob"])
+      Just (SpecDec (Spatial [AtLeast,ReadOnce,Reflexive [1,2]] (And (Or (Forward 1 1) (Var "r")) (Backward 3 4))) ["frob"])
 
 
 parse = specParser

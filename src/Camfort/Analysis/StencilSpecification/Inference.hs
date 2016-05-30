@@ -40,10 +40,6 @@ import Unsafe.Coerce
 
 import Camfort.Analysis.StencilSpecification.Syntax
 
-fst3 (a, b, c) = a
-snd3 (a, b, c) = b
-thd3 (a, b, c) = c
-
 inferFromIndices :: VecList Int -> Specification
 -- TODO: currently just marked as Non-linear
 inferFromIndices (VL ixs) = Specification . Left . inferSpec $ ixs

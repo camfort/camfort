@@ -4,6 +4,7 @@ module Camfort.Analysis.StencilSpecification.Grammar
 ( specParser, Specification(..), Region(..), Spec(..), Mod(..), lexer ) where
 
 import Data.Char (isLetter, isNumber, isAlphaNum, toLower, isAlpha, isSpace)
+import Data.List (intersect, sort)
 import Data.Data
 
 }
@@ -109,11 +110,11 @@ data Spec
   deriving (Show, Eq, Ord, Typeable, Data)
 
 data Mod
-  = ReadOnce
-  | Reflexive [Int]
-  | Irreflexive [Int]
+  = AtLeast
   | AtMost
-  | AtLeast
+  | Irreflexive [Int]
+  | ReadOnce
+  | Reflexive [Int]
   deriving (Show, Eq, Ord, Typeable, Data)
 
 --------------------------------------------------
@@ -163,7 +164,39 @@ lexer _                                               = Nothing
 specParser :: String -> Maybe Specification
 specParser src = do
  tokens <- lexer src
- parseSpec tokens
+ parseSpec tokens >>= modCheck
+
+-- Check whether modifiers are used correctly
+modCheck :: Specification -> Maybe Specification
+modCheck (SpecDec (Spatial mods r) vars)
+  = return $ SpecDec (Spatial mods' r) vars
+     where mods' = modCheck' $ sort mods
+           modCheck' [] = []
+           modCheck' (Reflexive ds : Reflexive ds' : xs)
+             = error "Duplicate 'reflexive' modifier; use at most one."
+           modCheck' (Irreflexive ds : Irreflexive ds' : xs)
+             = error "Duplicate 'irreflexive' modifier; use at most one."
+           modCheck' (AtLeast : AtLeast : xs)
+             = error "Duplicate 'atLeast' modifier; use at most one."
+           modCheck' (AtMost : AtMost : xs)
+             = error "Duplicate 'atMost' modifier; use at most one."
+           modCheck' (ReadOnce : ReadOnce : xs)
+             = error "Duplicate 'readOnce' modifier; use at most one."
+           modCheck' (AtLeast : AtMost : xs)
+             = error "Conflicting modifiers: cannot use 'atLeast' and 'atMost' together"
+           modCheck' (Irreflexive ds : xs)
+             = case inconsistentReflexives ds xs of
+                 [] -> modCheck' xs
+                 ds' -> error $ "Conflicting modifiers: stencil marked as both"
+                           ++ "irreflexive and reflexive in dimensions = "
+                           ++ show ds'
+           modCheck' (x : xs)
+             = x : modCheck' xs
+           -- Find reflexive dimenions which overlap with the first parameter
+           inconsistentReflexives ds [] = []
+           inconsistentReflexives ds (Reflexive ds' : _) = intersect ds ds'
+           inconsistentReflexives ds (m : ms) = inconsistentReflexives ds ms
+modCheck x = return x
 
 happyError :: [ Token ] -> Maybe a
 happyError _ = Nothing

@@ -139,13 +139,14 @@ instance Ord Region where
   (Backward _ _) <= (Centered _ _)  = True
   _              <= _               = False
 
--- Sum of product specifications
-newtype RegionSum = Sum [RegionProd]
-  deriving (Eq, Data, Typeable)
-
 -- Product of specifications
 newtype RegionProd = Product [Region]
   deriving (Eq, Data, Typeable)
+
+-- Sum of product specifications
+newtype RegionSum = Sum {unSum :: [RegionProd]}
+  deriving (Eq, Data, Typeable)
+
 
 instance Ord RegionProd where
    (Product xs) <= (Product xs') = xs <= xs'
