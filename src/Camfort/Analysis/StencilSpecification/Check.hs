@@ -35,7 +35,8 @@ import Camfort.Analysis.Loops (collect)
 import Camfort.Analysis.Annotations
 import Camfort.Extensions.UnitsForpar (parameterise)
 import Camfort.Helpers.Vec
-import Camfort.Helpers hiding (lineCol, spanLineCol) -- These two are redefined here for ForPar ASTs
+-- These two are redefined here for ForPar ASTs
+import Camfort.Helpers hiding (lineCol, spanLineCol)
 
 import qualified Language.Fortran.AST as F
 import qualified Language.Fortran.Analysis as FA
@@ -53,14 +54,26 @@ import Data.Set hiding (map)
 class SynToAst s t | s -> t where
   synToAst :: s -> t
 
+-- Top-level conversion of declarations
+instance SynToAst SYN.Specification (Either RegionEnv SpecEnv) where
+  synToAst (SYN.SpecDec spec vars) = Right [(synToAst spec, vars)]
+  synToAst (SYN.RegionDec rvar region) = Left [(synToAst region, rvar)]
+
+-- Convert temporal or spatial specifications
 instance SynToAst SYN.Spec Specification where
   synToAst (SYN.Spatial mods r) = Specification $ Left $
     case approx of
       Just SYN.AtMost  -> Bound Nothing (Just s')
       Just SYN.AtLeast -> Bound (Just s') Nothing
       Nothing          -> Exact s'
-    where s' = Spatial modLinear modIrrefl modRefl (dnf r)
+    where s' = Spatial modLinear modIrrefl modRefl (synToAst r)
           (modLinear, modIrrefl, modRefl, approx) = synToAst mods
+  synToAst (SYN.Temporal vars mutual) = Specification $ Right $
+      Dependency vars mutual
+
+-- Convert region definitions into the DNF-form used internally
+instance SynToAst SYN.Region RegionSum where
+  synToAst = dnf
 
 -- Convert a grammar syntax to Disjunctive Normal Form AST
 dnf :: SYN.Region -> RegionSum

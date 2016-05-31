@@ -64,6 +64,11 @@ absoluteRep = 100 :: Int -- maxBound :: Int
 
 {- *** 1 . Specification syntax -}
 
+-- List of region sums associated to region variables
+type RegionEnv = [(RegionSum, String)]
+-- List of specifications associated to variables
+type SpecEnv = [(Specification, [String])]
+
 -- Top-level of specifications: may be either spatial or temporal
 data Specification =
   Specification (Either (Result Spatial) Temporal)
@@ -73,7 +78,7 @@ data Specification =
 -- Temporal specifications:
 --   Defines a list of variables which the subject
 --   of the specification depends upon
-data Temporal = Dependency [String]
+data Temporal = Dependency [String] Bool
     deriving (Eq, Data, Typeable)
 
 -- **********************
@@ -100,7 +105,7 @@ emptySpatialSpec = one :: Spatial
 -- `isEmpty` predicate on which specifications are vacuous or
 -- functional empty (i.e., show not be displayed in an inference setting).
 isEmpty :: Specification -> Bool
-isEmpty (Specification (Right (Dependency []))) = True
+isEmpty (Specification (Right (Dependency [] _))) = True
 isEmpty (Specification (Left s)) = isUnit s
 
 data Linearity = Linear | NonLinear deriving (Eq, Data, Typeable)
@@ -305,17 +310,18 @@ instance Show Spatial where
       -- Individual actions to show modifiers
       refl = case modRefl of
                 []       -> Nothing
-                ds       -> Just $ "reflexive, dims=" ++ showL ds
+                ds       -> Just $ "reflexive(dims=" ++ showL ds ++ ")"
       irefl = case modIrrefl of
                 []       -> Nothing
-                ds       -> Just $ "irreflexive, dims=" ++ showL ds
+                ds       -> Just $ "irreflexive(dims=" ++ showL ds ++ ")"
       lin = case modLin of
                 NonLinear -> Nothing
                 Linear    -> Just $ "readOnce"
 
 -- Pretty print temporal specs
 instance Show Temporal where
-    show (Dependency vars) = "dependency " ++ showL vars
+    show (Dependency vars mutual) =
+      "dependency (" ++ showL vars ++ ")" ++ if mutual then ", mutual" else ""
 
 -- Pretty print region sums
 instance Show RegionSum where
@@ -339,4 +345,4 @@ instance Show Region where
    show (Centered dep dim)  = showRegion "centered" (show dep) (show dim)
 
 -- Helper for showing regions
-showRegion typ depS dimS = typ ++ ", depth=" ++ depS ++ ", dim=" ++ dimS
+showRegion typ depS dimS = typ ++ "(depth=" ++ depS ++ ", dim=" ++ dimS ++")"

@@ -44,7 +44,7 @@ import Data.Data
 %%
 
 SPEC :: { Specification }
-: REGIONDEC                 { RegionDec $1 }
+: REGIONDEC                 { RegionDec (fst $1) (snd $1) }
 | stencil SPECDEC '::' VARS { SpecDec $2 $4 }
 
 REGIONDEC :: { (String, Region) }
@@ -91,7 +91,7 @@ VARS :: { [String] }
 {
 
 data Specification
-  = RegionDec (String, Region)
+  = RegionDec String Region
   | SpecDec Spec [String]
   deriving (Show, Eq, Ord, Typeable, Data)
 
@@ -186,7 +186,7 @@ modCheck (SpecDec (Spatial mods r) vars)
              = error "Conflicting modifiers: cannot use 'atLeast' and 'atMost' together"
            modCheck' (Irreflexive ds : xs)
              = case inconsistentReflexives ds xs of
-                 [] -> modCheck' xs
+                 [] -> Irreflexive ds : modCheck' xs
                  ds' -> error $ "Conflicting modifiers: stencil marked as both"
                            ++ "irreflexive and reflexive in dimensions = "
                            ++ show ds'
@@ -199,6 +199,6 @@ modCheck (SpecDec (Spatial mods r) vars)
 modCheck x = return x
 
 happyError :: [ Token ] -> Maybe a
-happyError _ = Nothing
+happyError t = error $ "Could not parse specification at: " ++ show t
 
 }
