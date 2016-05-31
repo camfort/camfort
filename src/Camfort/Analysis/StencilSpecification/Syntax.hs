@@ -20,7 +20,6 @@
 {-# LANGUAGE FlexibleInstances #-}
 {-# LANGUAGE GADTs #-}
 {-# LANGUAGE KindSignatures #-}
-{-# LANGUAGE StandaloneDeriving #-}
 
 module Camfort.Analysis.StencilSpecification.Syntax where
 
@@ -42,7 +41,7 @@ data Result a =
 
 fromExact :: Result a -> a
 fromExact (Exact a) = a
-fromExact _ = error $ "Exception: fromExact on a non-exact result"
+fromExact _ = error "Exception: fromExact on a non-exact result"
 
 upperBound :: a -> Result a
 upperBound x = Bound Nothing (Just x)
@@ -169,12 +168,12 @@ regionPlus x y                   = Nothing
 -- one which is `Forward d dim` and `Backward d dim` in the other
 equalModuloFwdBwd :: [Region] -> [Region] -> Maybe (Region, [Region])
 equalModuloFwdBwd
-  ((Forward d dim):rs) ((Backward d' dim'):rs')
+  (Forward d dim : rs) (Backward d' dim' :rs')
     | d == d' && dim == dim' && rs == rs' = Just (Centered d dim, rs)
     | otherwise                           = Nothing
 equalModuloFwdBwd
-  ((Backward d dim):rs) ((Forward d' dim'):rs')
-    = equalModuloFwdBwd ((Forward d' dim'):rs') ((Backward d dim):rs)
+  (Backward d dim : rs) (Forward d' dim' :rs')
+    = equalModuloFwdBwd (Forward d' dim' : rs') (Backward d dim : rs)
 equalModuloFwdBwd (r:rs) (r':rs')
     | r == r'   = do (cr, rs'') <- equalModuloFwdBwd rs rs'
                      return (cr, r : rs'')
@@ -183,8 +182,8 @@ equalModuloFwdBwd (r:rs) (r':rs')
 instance PartialMonoid RegionProd where
    emptyM = Product []
 
-   appendM (Product [])   s  = Just $ s
-   appendM s (Product [])    = Just $ s
+   appendM (Product [])   s  = Just s
+   appendM s (Product [])    = Just s
    appendM (Product [s]) (Product [s']) =
        regionPlus s s' >>= (\sCombined -> return $ Product [sCombined])
    appendM (Product ss) (Product ss')
@@ -246,7 +245,7 @@ instance RegionRig Spatial where
   zero = Spatial zero [] [] zero
 
   isUnit (Spatial _ irrefl refl ss) =
-      irrefl == [] && refl == [] && (isUnit ss)
+      irrefl == [] && refl == [] && isUnit ss
 
 instance RegionRig (Result Spatial) where
   sum (Exact s) (Exact s')      = Exact (sum s s')
@@ -274,16 +273,16 @@ instance RegionRig RegionSum where
   sum (Sum ss) (Sum ss') = Sum $ normalise $ ss ++ ss'
   zero = Sum []
   one = Sum [Product []]
-  isUnit s@(Sum ss) = s == zero || s == one || (all ((==) (Product [])) ss)
+  isUnit s@(Sum ss) = s == zero || s == one || all ((==) (Product [])) ss
 
 -- Show a list with ',' separator
 showL :: Show a => [a] -> String
-showL = concat . (intersperse ",") . (map show)
+showL = intercalate "," . map show
 
 -- Show lists with '*' or '+' separator (used to represent product of regions)
 showProdSpecs, showSumSpecs :: Show a => [a] -> String
-showProdSpecs = concat . (intersperse "*") . (map show)
-showSumSpecs = concat . (intersperse "+") . (map show)
+showProdSpecs = intercalate "*" . map show
+showSumSpecs  = intercalate "+" . map show
 
 -- Pretty print top-level specifications
 instance Show Specification where
@@ -301,7 +300,7 @@ instance {-# OVERLAPS #-} Show (Result Spatial) where
 -- Pretty print spatial specs
 instance Show Spatial where
   show (Spatial modLin modIrrefl modRefl region) =
-    concat . intersperse ", " . catMaybes $ [refl, irefl, lin, sregion]
+    intercalate ", " . catMaybes $ [refl, irefl, lin, sregion]
     where
       -- Map "empty" spec to Nothing here
       sregion = case show region of
@@ -316,7 +315,7 @@ instance Show Spatial where
                 ds       -> Just $ "irreflexive(dims=" ++ showL ds ++ ")"
       lin = case modLin of
                 NonLinear -> Nothing
-                Linear    -> Just $ "readOnce"
+                Linear    -> Just "readOnce"
 
 -- Pretty print temporal specs
 instance Show Temporal where
@@ -331,13 +330,13 @@ instance Show RegionSum where
     show (Sum [Product []]) = "empty"
 
     show (Sum specs) =
-      concat $ intersperse " + " ppspecs
+      intercalate " + " ppspecs
       where ppspecs = filter ((/=) "") $ map show specs
 
 instance Show RegionProd where
     show (Product []) = ""
     show (Product ss)  =
-       concat . (intersperse "*") . (map ((\s -> "(" ++ show s ++ ")"))) $ ss
+       intercalate "*" . (map (\s -> "(" ++ show s ++ ")")) $ ss
 
 instance Show Region where
    show (Forward dep dim)   = showRegion "forward" (show dep) (show dim)

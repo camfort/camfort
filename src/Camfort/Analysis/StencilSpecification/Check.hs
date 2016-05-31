@@ -14,12 +14,13 @@
    limitations under the License.
 -}
 
-{-# LANGUAGE GADTs, StandaloneDeriving, FlexibleContexts, ImplicitParams,
-    TupleSections, FunctionalDependencies #-}
+{-# LANGUAGE GADTs, FlexibleContexts, FlexibleInstances,
+             TupleSections, FunctionalDependencies #-}
 
 module Camfort.Analysis.StencilSpecification.Check where
 
 import Data.Data
+import Data.Maybe
 import Data.List
 import Data.Generics.Uniplate.Operations
 import Control.Monad.State.Lazy
@@ -80,12 +81,12 @@ dnf :: SYN.Region -> RegionSum
 
 -- Distributive law
 dnf (SYN.And r1 r2) =
-    Sum $ (unSum $ dnf r1) >>= (\(Product ps1) ->
-            (unSum $ dnf r2) >>= (\(Product ps2) ->
+    Sum $ unSum (dnf r1) >>= (\(Product ps1) ->
+            unSum (dnf r2) >>= (\(Product ps2) ->
                return $ Product $ ps1 ++ ps2))
 -- Coalesce sums
 dnf (SYN.Or r1 r2) =
-    Sum $ (unSum $ dnf r1) ++ (unSum $ dnf r2)
+    Sum $ unSum (dnf r1) ++ unSum (dnf r2)
 -- Region conversion
 dnf (SYN.Forward dep dim)  = Sum [Product [Forward dep dim]]
 dnf (SYN.Backward dep dim) = Sum [Product [Backward dep dim]]
@@ -97,19 +98,19 @@ instance SynToAst [SYN.Mod]
                   (Linearity, [Dimension], [Dimension], Maybe SYN.Mod) where
   synToAst mods = (linearity, irrefls, refls, approx)
     where
-      linearity = if elem SYN.ReadOnce mods then Linear else NonLinear
+      linearity = if SYN.ReadOnce `elem` mods then Linear else NonLinear
 
-      irrefls = maybe [] id (find' isIrrefl mods)
-      isIrrefl (SYN.Irreflexive ds) = Just $ ds
+      irrefls = fromMaybe [] (find' isIrrefl mods)
+      isIrrefl (SYN.Irreflexive ds) = Just ds
       isIrrefl _                    = Nothing
 
       approx = find' isApprox mods
-      isApprox SYN.AtMost  = Just $ SYN.AtMost
-      isApprox SYN.AtLeast = Just $ SYN.AtLeast
+      isApprox SYN.AtMost  = Just SYN.AtMost
+      isApprox SYN.AtLeast = Just SYN.AtLeast
       isApprox _           = Nothing
 
-      refls = maybe [] id (find' isRefl mods)
-      isRefl (SYN.Reflexive ds) = Just $ ds
+      refls = fromMaybe [] (find' isRefl mods)
+      isRefl (SYN.Reflexive ds) = Just ds
       isRefl _                  = Nothing
 
 find' :: Eq a => (a -> Maybe b) -> [a] -> Maybe b
