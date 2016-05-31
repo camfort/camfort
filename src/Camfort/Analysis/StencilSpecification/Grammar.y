@@ -4,12 +4,15 @@ module Camfort.Analysis.StencilSpecification.Grammar
 ( specParser, Specification(..), Region(..), Spec(..), Mod(..), lexer ) where
 
 import Data.Char (isLetter, isNumber, isAlphaNum, toLower, isAlpha, isSpace)
-import Data.List (intersect, sort)
+import Data.List (intersect, sort, isPrefixOf)
 import Data.Data
+
+import Camfort.Analysis.CommentAnnotator
+import Camfort.Analysis.StencilSpecification.Syntax (showL)
 
 }
 
-%monad { Maybe } { >>= } { return }
+%monad { Either AnnotationParseError } { >>= } { return }
 %name parseSpec SPEC
 %tokentype { Token }
 %token
@@ -62,7 +65,7 @@ REGION ::                            { Region }
 SPECDEC :: { Spec }
 : dependency '(' VARS ')'        { Temporal $3 False }
 | dependency '(' VARS ')' mutual { Temporal $3 True }
-| APPROXMOD MODS REGION          { Spatial ($1: $2) $3 }
+| APPROXMODS MODS REGION         { Spatial ($1 ++ $2) $3 }
 | MODS REGION                    { Spatial $1 $2 }
 | APPROXMOD REGION               { Spatial [$1] $2 }
 | REGION                         { Spatial [] $1 }
@@ -75,6 +78,13 @@ MOD :: { Mod }
 : readOnce                          { ReadOnce }
 | reflexive '(' dims '=' DIMS ')'   { Reflexive $5 }
 | irreflexive '(' dims '=' DIMS ')' { Irreflexive $5 }
+
+-- Even though multiple approx mods is not allowed
+-- allow them to be parsed so that the validator can
+-- report a nice error if the user supplies more than one
+APPROXMODS :: { [Mod] }
+: APPROXMOD APPROXMODS { $1 : $2 }
+| APPROXMOD            { [$1] }
 
 APPROXMOD :: { Mod }
 : atMost                    { AtMost }
@@ -131,74 +141,102 @@ data Token
   | TNum String
  deriving (Show)
 
-addToTokens :: Token -> String -> Maybe [ Token ]
+addToTokens :: Token -> String -> Either AnnotationParseError [ Token ]
 addToTokens tok rest = do
- tokens <- lexer rest
+ tokens <- lexer' rest
  return $ tok : tokens
 
-lexer :: String -> Maybe [ Token ]
-lexer []                                              = Just []
-lexer (' ':xs)                                        = lexer xs
-lexer ('\t':xs)                                       = lexer xs
-lexer (':':':':xs)                                    = addToTokens TDoubleColon xs
-lexer ('*':xs)                                        = addToTokens TStar xs
-lexer ('+':xs)                                        = addToTokens TPlus xs
-lexer ('=':xs)                                        = addToTokens TEqual xs
+lexer :: String -> Either AnnotationParseError [ Token ]
+lexer input =
+  -- First test to see if the input looks like an actual
+  -- specification of either a stencil or region
+  if (input `hasPrefix` "stencil" || input `hasPrefix` "region")
+  then lexer' input
+  else Left NotAnnotation
+
+  where
+    hasPrefix []       str = False
+    hasPrefix (' ':xs) str = hasPrefix xs str
+    hasPrefix xs       str = isPrefixOf str xs
+
+lexer' :: String -> Either AnnotationParseError [ Token ]
+lexer' []                                              = return []
+lexer' (' ':xs)                                        = lexer' xs
+lexer' ('\t':xs)                                       = lexer' xs
+lexer' (':':':':xs)                                    = addToTokens TDoubleColon xs
+lexer' ('*':xs)                                        = addToTokens TStar xs
+lexer' ('+':xs)                                        = addToTokens TPlus xs
+lexer' ('=':xs)                                        = addToTokens TEqual xs
 -- Comma hack: drop commas that are not separating numbers, in order to avoid need for 2-token lookahead.
-lexer (',':xs)
-  | x':xs' <- dropWhile isSpace xs, not (isNumber x') = lexer (x':xs')
+lexer' (',':xs)
+  | x':xs' <- dropWhile isSpace xs, not (isNumber x') = lexer' (x':xs')
   | otherwise                                         = addToTokens TComma xs
-lexer ('(':xs)                                        = addToTokens TLParen xs
-lexer (')':xs)                                        = addToTokens TRParen xs
-lexer (x:xs)
+lexer' ('(':xs)                                        = addToTokens TLParen xs
+lexer' (')':xs)                                        = addToTokens TRParen xs
+lexer' (x:xs)
   | isLetter x                                        = aux TId $ \ c -> isAlphaNum c || c == '_'
   | isNumber x                                        = aux TNum isNumber
-  | otherwise                                         = Nothing
+  | otherwise
+     = failWith $ "Not an indentifier " ++ show x
  where
-   aux f p = (f target :) `fmap` lexer rest
+   aux f p = (f target :) `fmap` lexer' rest
      where (target, rest) = span p (x:xs)
-lexer _                                               = Nothing
+lexer' x
+    = failWith $ "Not a valid piece of stencil syntax " ++ show x
 
 --------------------------------------------------
 
-specParser :: String -> Maybe Specification
+-- specParser :: String -> Either AnnotationParseError Specification
+specParser :: AnnotationParser Specification
 specParser src = do
  tokens <- lexer src
- parseSpec tokens >>= modCheck
+ parseSpec tokens >>= modValidate
 
 -- Check whether modifiers are used correctly
-modCheck :: Specification -> Maybe Specification
-modCheck (SpecDec (Spatial mods r) vars)
-  = return $ SpecDec (Spatial mods' r) vars
-     where mods' = modCheck' $ sort mods
-           modCheck' [] = []
-           modCheck' (Reflexive ds : Reflexive ds' : xs)
-             = error "Duplicate 'reflexive' modifier; use at most one."
-           modCheck' (Irreflexive ds : Irreflexive ds' : xs)
-             = error "Duplicate 'irreflexive' modifier; use at most one."
-           modCheck' (AtLeast : AtLeast : xs)
-             = error "Duplicate 'atLeast' modifier; use at most one."
-           modCheck' (AtMost : AtMost : xs)
-             = error "Duplicate 'atMost' modifier; use at most one."
-           modCheck' (ReadOnce : ReadOnce : xs)
-             = error "Duplicate 'readOnce' modifier; use at most one."
-           modCheck' (AtLeast : AtMost : xs)
-             = error "Conflicting modifiers: cannot use 'atLeast' and 'atMost' together"
-           modCheck' (Irreflexive ds : xs)
+modValidate :: Specification -> Either AnnotationParseError Specification
+modValidate (SpecDec (Spatial mods r) vars) =
+  do mods' <- modValidate' $ sort mods
+     return $ SpecDec (Spatial mods' r) vars
+
+  where    modValidate' [] = return $ []
+
+           modValidate' (Reflexive ds : Reflexive ds' : xs)
+             = failWith "Duplicate 'reflexive' modifier; use at most one."
+
+           modValidate' (Irreflexive ds : Irreflexive ds' : xs)
+             = failWith "Duplicate 'irreflexive' modifier; use at most one."
+
+           modValidate' (AtLeast : AtLeast : xs)
+             = failWith "Duplicate 'atLeast' modifier; use at most one."
+
+           modValidate' (AtMost : AtMost : xs)
+             = failWith "Duplicate 'atMost' modifier; use at most one."
+
+           modValidate' (ReadOnce : ReadOnce : xs)
+             = failWith "Duplicate 'readOnce' modifier; use at most one."
+
+           modValidate' (AtLeast : AtMost : xs)
+             = failWith $ "Conflicting modifiers: cannot use 'atLeast' and "
+                     ++ "'atMost' together"
+
+           modValidate' (Irreflexive ds : xs)
              = case inconsistentReflexives ds xs of
-                 [] -> Irreflexive ds : modCheck' xs
-                 ds' -> error $ "Conflicting modifiers: stencil marked as both"
-                           ++ "irreflexive and reflexive in dimensions = "
-                           ++ show ds'
-           modCheck' (x : xs)
-             = x : modCheck' xs
+                 [] ->  do xs' <- modValidate' xs
+                           return $ Irreflexive ds : xs'
+                 ds' -> failWith $ "Conflicting modifiers: stencil marked as "
+                                ++ "both irreflexive and reflexive in "
+                                ++ "dimensions = " ++ showL ds'
+           modValidate' (x : xs)
+             = do xs' <- modValidate' xs
+                  return $ x : xs'
+
            -- Find reflexive dimenions which overlap with the first parameter
            inconsistentReflexives ds [] = []
            inconsistentReflexives ds (Reflexive ds' : _) = intersect ds ds'
            inconsistentReflexives ds (m : ms) = inconsistentReflexives ds ms
-modCheck x = return x
+modValidate x = return x
 
-happyError :: [ Token ] -> Maybe a
-happyError t = error $ "Could not parse specification at: " ++ show t
+happyError :: [ Token ] -> Either AnnotationParseError a
+happyError t = failWith $ "Could not parse specification at: " ++ show t
 
 }

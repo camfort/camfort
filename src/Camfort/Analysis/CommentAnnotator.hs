@@ -23,6 +23,8 @@ module Camfort.Analysis.CommentAnnotator ( annotateComments
                                          , ASTEmbeddable(..)
                                          , Linkable(..)
                                          , AnnotationParseError(..)
+                                         , AnnotationParser
+                                         , failWith
                                          ) where
 
 import Control.Monad.Writer.Lazy (Writer(..), tell)
@@ -33,21 +35,27 @@ import Language.Fortran.AST
 import Language.Fortran.Util.Position
 
 type Logger = Writer [ String ]
-type Parser ast = String -> Either AnnotationParseError ast
+type AnnotationParser ast = String -> Either AnnotationParseError ast
 
 data AnnotationParseError =
     NotAnnotation
   | ProbablyAnnotation String
+  deriving (Eq, Show)
+
+-- A parser that throws an annotation parsing error
+failWith :: AnnotationParser ast
+failWith = Left . ProbablyAnnotation
 
 annotateComments :: forall a ast . (Data a, Linkable a, ASTEmbeddable a ast)
-                                 => Parser ast
+                                 => AnnotationParser ast
                                  -> ProgramFile a
                                  -> Logger (ProgramFile a)
 annotateComments parse pf = do
     pf' <- transformBiM (writeAST parse) pf
     return $ transformBi linkBlocks pf'
   where
-    writeAST :: (Data a, ASTEmbeddable a ast) => Parser ast -> Block a -> Logger (Block a)
+    writeAST :: (Data a, ASTEmbeddable a ast)
+             => AnnotationParser ast -> Block a -> Logger (Block a)
     writeAST parse b@(BlComment a srcSpan comment) =
       case parse comment of
         Right ast -> return $ setAnnotation (annotateWithAST a ast) b
