@@ -67,7 +67,7 @@ program one
   write (*,*) "B = "
   do i = 0, imax
      do j = 0, jmax
-        != stencil reflexive(dim=1,2) :: b
+        != stencil reflexive(dims=1,2) :: b
         write (*,'(" ",f0.2," ")',advance="no") b(i,j)
      end do
      write (*,*) "\n"

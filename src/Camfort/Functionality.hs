@@ -125,7 +125,7 @@ stencilsInf inSrc excludes _ _ = do
 
 stencilsCheck inSrc excludes _ _ = do
   putStrLn $ "Checking stencil specs for " ++ show inSrc ++ "\n"
-  doAnalysis StencilsForpar.check inSrc excludes
+  doAnalysisSummaryForpar StencilsForpar.check inSrc excludes
 
 stencilsVarFlowCycles inSrc excludes _ _ = do
   putStrLn $ "Inferring var flow cycles for " ++ show inSrc ++ "\n"

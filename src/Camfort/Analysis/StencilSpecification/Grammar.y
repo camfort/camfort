@@ -7,6 +7,8 @@ import Data.Char (isLetter, isNumber, isAlphaNum, toLower, isAlpha, isSpace)
 import Data.List (intersect, sort, isPrefixOf)
 import Data.Data
 
+import Debug.Trace
+
 import Camfort.Analysis.CommentAnnotator
 import Camfort.Analysis.StencilSpecification.Syntax (showL)
 
@@ -18,11 +20,11 @@ import Camfort.Analysis.StencilSpecification.Syntax (showL)
 %token
   stencil     { TId "stencil" }
   region      { TId "region" }
-  readOnce    { TId "readOnce" }
+  readOnce    { TId "readonce" }
   reflexive   { TId "reflexive" }
   irreflexive { TId "irreflexive" }
-  atMost      { TId "atMost" }
-  atLeast     { TId "atLeast" }
+  atMost      { TId "atmost" }
+  atLeast     { TId "atleast" }
   dims        { TId "dims" }
   dim         { TId "dim" }
   depth       { TId "depth" }
@@ -65,10 +67,11 @@ REGION ::                            { Region }
 SPECDEC :: { Spec }
 : dependency '(' VARS ')'        { Temporal $3 False }
 | dependency '(' VARS ')' mutual { Temporal $3 True }
-| APPROXMODS MODS REGION         { Spatial ($1 ++ $2) $3 }
-| MODS REGION                    { Spatial $1 $2 }
-| APPROXMOD REGION               { Spatial [$1] $2 }
-| REGION                         { Spatial [] $1 }
+| APPROXMODS MODS REGION         { Spatial ($1 ++ $2) (Just $3) }
+| MODS                           { Spatial $1 Nothing }
+| MODS REGION                    { Spatial $1 (Just $2) }
+| APPROXMOD REGION               { Spatial [$1] (Just $2) }
+| REGION                         { Spatial [] (Just $1) }
 
 MODS :: { [Mod] }
 : MOD MODS { $1 : $2 }
@@ -115,7 +118,7 @@ data Region
   deriving (Show, Eq, Ord, Typeable, Data)
 
 data Spec
-  = Spatial [Mod] Region
+  = Spatial [Mod] (Maybe Region)
   | Temporal [String] Bool
   deriving (Show, Eq, Ord, Typeable, Data)
 
@@ -146,18 +149,29 @@ addToTokens tok rest = do
  tokens <- lexer' rest
  return $ tok : tokens
 
-lexer :: String -> Either AnnotationParseError [ Token ]
-lexer input =
-  -- First test to see if the input looks like an actual
-  -- specification of either a stencil or region
-  if (input `hasPrefix` "stencil" || input `hasPrefix` "region")
-  then lexer' input
-  else Left NotAnnotation
+stripLeadingWhiteSpace (' ':xs)  = stripLeadingWhiteSpace xs
+stripLeadingWhiteSpace ('\t':xs) = stripLeadingWhiteSpace xs
+stripLeadingWhiteSpace ('\n':xs) = stripLeadingWhiteSpace xs
+stripLeadingWhiteSpace xs = xs
 
-  where
+
+lexer :: String -> Either AnnotationParseError [ Token ]
+lexer input | length (stripLeadingWhiteSpace input) >= 2 =
+  case stripLeadingWhiteSpace input of
+    -- Check the leading character is '=' for specification
+    '!':'=':input' ->
+           -- First test to see if the input looks like an actual
+           -- specification of either a stencil or region
+           if (input' `hasPrefix` "stencil" || input' `hasPrefix` "region")
+           then lexer' input'
+           else Left NotAnnotation
+    _ -> Left NotAnnotation
+   where
     hasPrefix []       str = False
     hasPrefix (' ':xs) str = hasPrefix xs str
     hasPrefix xs       str = isPrefixOf str xs
+lexer _ = Left NotAnnotation
+
 
 lexer' :: String -> Either AnnotationParseError [ Token ]
 lexer' []                                              = return []

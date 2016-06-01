@@ -17,7 +17,7 @@
 {-# LANGUAGE GADTs #-}
 {-# LANGUAGE FlexibleContexts #-}
 {-# LANGUAGE TupleSections #-}
-{-# LANGUAGE ImplicitParams #-}
+{-# LANGUAGE MultiParamTypeClasses #-}
 
 module Camfort.Analysis.StencilSpecification where
 
@@ -30,14 +30,17 @@ import Control.Monad.Reader
 import Control.Monad.Writer hiding (Product)
 
 import Camfort.Analysis.StencilSpecification.Check
+import qualified Camfort.Analysis.StencilSpecification.Grammar as SYN
 import Camfort.Analysis.StencilSpecification.Inference
 import Camfort.Analysis.StencilSpecification.Synthesis
 import Camfort.Analysis.StencilSpecification.Syntax
 import Camfort.Analysis.Loops (collect)
 import Camfort.Analysis.Annotations
+import Camfort.Analysis.CommentAnnotator
 import Camfort.Extensions.UnitsForpar (parameterise)
 import Camfort.Helpers.Vec
-import Camfort.Helpers hiding (lineCol, spanLineCol) -- These two are redefined here for ForPar ASTs
+-- These two are redefined here for ForPar ASTs
+import Camfort.Helpers hiding (lineCol, spanLineCol)
 
 import qualified Language.Fortran.AST as F
 import qualified Language.Fortran.Analysis as FA
@@ -104,8 +107,19 @@ findVarFlowCycles' pf = cycs2
                      , ms      <- maybeToList $ M.lookup m flMap
                      , n `S.member` ms && n /= m ]
 
-check :: Program a -> Program a
-check = error "Not yet implemented"
+instance ASTEmbeddable Annotation SYN.Specification where
+  -- TODO: stub
+  annotateWithAST ann ast = (show ast) `trace` ann
+
+instance Linkable Annotation where
+  -- TOOD: is stub
+  link s b = s
+
+-- TODO: is stub
+check :: F.ProgramFile Annotation -> String
+check pf = intercalate "\n" . snd . runWriter $ do
+   pf' <- annotateComments SYN.specParser pf
+   return pf'
 
 --------------------------------------------------
 
@@ -139,6 +153,19 @@ getInductionVar (Just (F.DoSpecification _ _ (
 getInductionVar _ = []
 
 perBlock :: F.Block (FA.Analysis A) -> Inferer (F.Block (FA.Analysis A))
+{-
+perBlock b@(F.BlStatement _ span _ (F.StExpressionAssign _ _ lhs rhs)) = do
+ inductionVars <- get
+ case lhs of
+   F.ExpSubscript _ _ (F.ExpValue _ _ (F.ValVariable _ v)) subs
+     -> case (mapM_ (expToOffset inductionVars) subs)
+          -- all subscripts are affine induction exrepssions
+          Just () ->
+          -- subscript are non-affine
+          Nothing -> return ()
+   _ -> -- Expression is not an array subscript
+-}
+
 perBlock b@(F.BlStatement _ span _ (F.StExpressionAssign _ _ _ rhs)) = do
   (_, puName, tenv) <- ask
   -- Get array indexing (on the RHS)
@@ -148,11 +175,14 @@ perBlock b@(F.BlStatement _ span _ (F.StExpressionAssign _ _ _ rhs)) = do
                  , let e = F.aStrip subs
                  , not (null e)
         ]
+
   -- Create specification information
   ivs <- get
   let specs = groupKeyBy . M.toList . M.mapMaybe (ixCollectionToSpec ivs) $ arrayAccesses
-  tell [ (span, specs) ] -- add to report
+  -- add to report
+  tell [ (span, specs) ]
   return b
+
 perBlock b@(F.BlDo _ span _ mDoSpec body) = do
   let localIvs = getInductionVar mDoSpec
   -- introduce any induction variables into the induction variable state

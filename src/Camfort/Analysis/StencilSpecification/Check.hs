@@ -58,7 +58,7 @@ class SynToAst s t | s -> t where
 -- Top-level conversion of declarations
 instance SynToAst SYN.Specification (Either RegionEnv SpecEnv) where
   synToAst (SYN.SpecDec spec vars) = Right [(synToAst spec, vars)]
-  synToAst (SYN.RegionDec rvar region) = Left [(synToAst region, rvar)]
+  synToAst (SYN.RegionDec rvar region) = Left [(synToAst $ Just region, rvar)]
 
 -- Convert temporal or spatial specifications
 instance SynToAst SYN.Spec Specification where
@@ -73,8 +73,9 @@ instance SynToAst SYN.Spec Specification where
       Dependency vars mutual
 
 -- Convert region definitions into the DNF-form used internally
-instance SynToAst SYN.Region RegionSum where
-  synToAst = dnf
+instance SynToAst (Maybe SYN.Region) RegionSum where
+  synToAst Nothing  = Sum []
+  synToAst (Just r) = dnf r
 
 -- Convert a grammar syntax to Disjunctive Normal Form AST
 dnf :: SYN.Region -> RegionSum

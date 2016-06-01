@@ -36,7 +36,9 @@ type FileOrDir = String
 
 -- gets the directory part of a filename
 getDir :: String -> String
-getDir file = take (last $ elemIndices '/' file) file
+getDir file = let ixs = elemIndices '/' file
+              in if null ixs then file
+                 else take (last $ ixs) file
 
 
 {-| Creates a directory (from a filename string) if it doesn't exist -}
