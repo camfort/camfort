@@ -9,6 +9,7 @@ module Camfort.Analysis.StencilSpecificationSpec (spec) where
 
 import Data.List
 
+import Camfort.Functionality
 import Camfort.Helpers.Vec
 import Camfort.Analysis.StencilSpecification
 import Camfort.Analysis.StencilSpecification.Synthesis
@@ -126,32 +127,6 @@ spec =
          `shouldBe`
           (exactSp $ Spatial NonLinear [] [] (Sum [ Product [ Forward 1 1
                                                   , Centered 1 2 ] ]))
-{-
-    describe "Example bounding boxes" $ do
-      it "five point stencil 2D" $
-        (inferFromIndices $ VL fivepoint)
-        `shouldBe`
-        (exactSp $ Spatial NonLinear [] [] (Sum [Product [Centered 1 1,
-                                                        Centered 1 2]]))
-
-      it "seven point stencil 2D" $
-        (inferFromIndices $ VL sevenpoint)
-        `shouldBe`
-        (exactSp $ Spatial NonLinear [] [] (Sum [Product [Centered 1 1,
-                                                        Centered 1 2,
-                                                        Centered 1 3]]))
-
-      it "five point stencil 2D with blip" $
-        (inferFromIndices $ VL fivepointErr)
-        `shouldBe`
-        (exactSp $ Spatial NonLinear [] [] (Sum [Product [Centered 1 1,
-                                                        Centered 1 2]]))
-
-      it "centered forward" $
-        (inferFromIndices $ VL centeredFwd)
-        `shouldBe`
-        (exactSp $ Spatial NonLinear [] [] (Sum [ Product [ Forward 1 1
-                                                        , Centered 1 2 ] ])) -}
 
     describe "2D stencil verification" $
       mapM_ test2DSpecVariation variations
@@ -162,6 +137,22 @@ spec =
     describe ("Synthesising indexing expressions from offsets is inverse to" ++
               "extracting offsets from indexing expressions; and vice versa") $
       it "isomorphism" $ property prop_extract_synth_inverse
+
+    -------------------------
+    -- Some integration tests
+    -------------------------
+
+    let file = "tests/Camfort/Analysis/StencilSpecification/example2.f"
+    program <- runIO $ readForparseSrcDir file []
+
+    describe "integration test on inference for example2.f"
+       $ it "stencil infer" $
+         (callAndSummarise infer program)
+           `shouldBe`
+            "((20,8),(21,48)) \tstencil (centered(depth=1, dim=1)) \
+                                     \+ (centered(depth=1, dim=2)) :: a\n"
+
+
 
 exactSp = Specification . Left . Exact
 
