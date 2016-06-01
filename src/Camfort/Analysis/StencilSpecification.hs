@@ -109,17 +109,25 @@ findVarFlowCycles' pf = cycs2
 
 instance ASTEmbeddable Annotation SYN.Specification where
   -- TODO: stub
-  annotateWithAST ann ast = (show ast) `trace` ann
+  annotateWithAST ann ast = (show ast) `trace` ann { stencilSpec = Just $ synToAst ast }
 
 instance Linkable Annotation where
   -- TOOD: is stub
-  link s b = s
+  link s b = (show s) `trace` s
 
 -- TODO: is stub
 check :: F.ProgramFile Annotation -> String
 check pf = intercalate "\n" . snd . runWriter $ do
    pf' <- annotateComments SYN.specParser pf
+   descendBiM perBlockCheck pf'
    return pf'
+
+perBlockCheck :: Monad m => F.Block Annotation -> m (F.Block Annotation)
+perBlockCheck b@(F.BlStatement ann span _ (F.StExpressionAssign _ _ _ rhs)) =
+  case stencilSpec ann of
+    Nothing -> return b
+    Just spec -> return b
+
 
 --------------------------------------------------
 
@@ -211,7 +219,11 @@ perBlock b@(F.BlDo _ span _ mDoSpec body) = do
   -- Remove any induction variable from the state
   modify $ (\\ localIvs)
   return b
-perBlock b = return b
+
+perBlock b = do
+  -- Go inside child blocks
+  mapM_ (descendBiM perBlock) $ children b
+  return b
 
 -- Penelope's first code, 20/03/2016.
 -- iii././//////////////////////. mvnmmmmmmmmmu
