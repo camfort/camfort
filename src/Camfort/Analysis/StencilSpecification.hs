@@ -17,6 +17,7 @@
 {-# LANGUAGE GADTs #-}
 {-# LANGUAGE FlexibleContexts #-}
 {-# LANGUAGE TupleSections #-}
+{-# LANGUAGE ImplicitParams #-}
 
 module Camfort.Analysis.StencilSpecification where
 
@@ -132,6 +133,11 @@ runInferer cycles puName tenv =
 
 --------------------------------------------------
 
+getInductionVar (Just (F.DoSpecification _ _ (
+                        F.StExpressionAssign _ _ (
+                          F.ExpValue _ _ (F.ValVariable _ v)) _) _ _)) = [v]
+getInductionVar _ = []
+
 perBlock :: F.Block (FA.Analysis A) -> Inferer (F.Block (FA.Analysis A))
 perBlock b@(F.BlStatement _ span _ (F.StExpressionAssign _ _ _ rhs)) = do
   (_, puName, tenv) <- ask
@@ -148,11 +154,10 @@ perBlock b@(F.BlStatement _ span _ (F.StExpressionAssign _ _ _ rhs)) = do
   tell [ (span, specs) ] -- add to report
   return b
 perBlock b@(F.BlDo _ span _ mDoSpec body) = do
-  case mDoSpec of
-    Just (F.DoSpecification _ _ (
-            F.StExpressionAssign _ _ (F.ExpValue _ _ (F.ValVariable _ v)) _
-          ) _ _) -> modify $ union [v] -- introduce v into the list of induction variables
-    _ -> return ()
+  let localIvs = getInductionVar mDoSpec
+  -- introduce any induction variables into the induction variable state
+  modify $ union localIvs
+
   (cycles, _, _) <- ask
 
   let lexps = FA.lhsExprs =<< body
@@ -169,9 +174,12 @@ perBlock b@(F.BlDo _ span _ mDoSpec body) = do
   let tempSpecs = foldl' (\ ts -> maybe ts (:ts) . getTimeSpec) [] lexps
 
   tell [ (span, tempSpecs) ]
-  -- descend into the body of the do-statement, with the updated list of induction variables.
+  -- descend into the body of the do-statement
   mapM_ (descendBiM perBlock) body
   -- (we don't need to worry about scope, thanks to renaming)
+
+  -- Remove any induction variable from the state
+  modify $ (\\ localIvs)
   return b
 perBlock b = return b
 
@@ -184,7 +192,6 @@ perBlock b = return b
 padZeros :: [[Int]] -> [[Int]]
 padZeros ixss = let m = maximum (map length ixss)
                 in map (\ixs -> ixs ++ replicate (m - length ixs) 0) ixss
-
 
 -- Convert list of indexing expressions to a spec
 ixCollectionToSpec :: [ Variable ] -> [ [ F.Index a ] ] -> Maybe [Specification]
