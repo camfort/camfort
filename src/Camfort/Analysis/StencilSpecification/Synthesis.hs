@@ -62,16 +62,16 @@ synthesise _ _ _ = []
 
 ixExprToSubscript :: F.Name -> [F.Index Annotation] -> F.Expression Annotation
 ixExprToSubscript v es =
-    F.ExpSubscript a s (F.ExpValue a s (F.ValVariable a v)) (F.AList a s es)
+    F.ExpSubscript a s (F.ExpValue a s (F.ValVariable v)) (F.AList a s es)
 
 -- Make indexing expression for variable 'v' from an offset.
 -- essentially inverse to `ixToOffset` in StencilSpecification
 offsetToIx :: F.Name -> Int -> F.Index Annotation
 offsetToIx v o
-  | o == 0    = F.IxSingle a s Nothing (F.ExpValue a s (F.ValVariable a v))
+  | o == 0    = F.IxSingle a s Nothing (F.ExpValue a s (F.ValVariable v))
   | o  > 0    = F.IxSingle a s Nothing (F.ExpBinary a s F.Addition
-                                 (F.ExpValue a s (F.ValVariable a v))
+                                 (F.ExpValue a s (F.ValVariable v))
                                  (F.ExpValue a s (F.ValInteger $ show o)))
   | otherwise = F.IxSingle a s Nothing (F.ExpBinary a s F.Subtraction
-                                 (F.ExpValue a s (F.ValVariable a v))
+                                 (F.ExpValue a s (F.ValVariable v))
                                  (F.ExpValue a s (F.ValInteger $ show (abs o))))

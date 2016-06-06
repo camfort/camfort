@@ -284,3 +284,8 @@ variations3D =
 prop_extract_synth_inverse :: F.Name -> Int -> Bool
 prop_extract_synth_inverse v o =
      ixToOffset [v] (offsetToIx v o) == Just o
+
+-- Local variables:
+-- mode: haskell
+-- haskell-program-name: "cabal repl test-suite:spec"
+-- End:

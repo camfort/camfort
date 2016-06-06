@@ -51,7 +51,7 @@ instance Linkable A where
   link a block = a { annLink = Just block }
 
 -- Some helper functions
-varGen x = ExpValue ea p (ValVariable ea x)
+varGen x = ExpValue ea p (ValVariable x)
 intGen i = ExpValue ea p (ValInteger (show i))
 wrapBlocks bs = ProgramFile [ ([], pu) ] []
   where

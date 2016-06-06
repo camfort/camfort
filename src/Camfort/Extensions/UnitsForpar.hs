@@ -17,6 +17,7 @@ TODO:
 {-# LANGUAGE DoAndIfThenElse#-}
 {-# LANGUAGE DeriveDataTypeable #-}
 {-# LANGUAGE FlexibleContexts #-}
+{-# LANGUAGE PatternGuards #-}
 
 module Camfort.Extensions.UnitsForpar
   ( runUnits
@@ -105,11 +106,10 @@ annotBS bs = bs'
       Just us -> (us:uenv, bl)
     fBlocks uenv bl@(BlStatement _ _ _ StDeclaration{}) = (uenv, bl')
       where
-        bl' = transformBi fV bl
+        bl'    = transformBi fE bl
         find n = fromMaybe (Undetermined n) undefined -- n `lookup` uenv
-        fV (ValVariable a@A{ unitInfo = Nothing } n) =
-            ValVariable (a { unitInfo = Just (find n) }) n
-        fV v                                            = v
+        fE (ExpValue a@A{ unitInfo = Nothing } s (ValVariable n)) = ExpValue (a { unitInfo = Just (find n) }) s (ValVariable n)
+        fE e                                                      = e
     fBlocks uenv bl = (uenv, bl)
 
 --------------------------------------------------
@@ -120,37 +120,34 @@ parameterise = transformBi fPU
   where
     fPU :: ProgramUnit A -> ProgramUnit A
     fPU pu
-      | Nothing <- params = pu
-      | Just params' <- params
-      , null params' = pu
-      | otherwise = transformBi fV pu
+      | Nothing      <- params               = pu
+      | Just params' <- params, null params' = pu
+      | otherwise                            = transformBi fE pu
       where
         params = case pu of
-          PUFunction _ _ _ _ n params _ _ _ ->
-            fmap (\params -> (n, Parametric (n, 0)):zipWith (fP n) (aStrip params) [1..]) params
-          PUSubroutine _ _ _ n params _ _ ->
-            fmap (\params -> zipWith (fP n) (aStrip params) [1..]) params
+          PUFunction _ _ _ _ n mParams _ _ _ ->
+            fmap (\ params -> (n, Parametric (n, 0)):zipWith (fP n) (aStrip params) [1..]) mParams
+          PUSubroutine _ _ _ n mParams _ _   ->
+            fmap (\ params -> zipWith (fP n) (aStrip params) [1..]) mParams
           _ -> Nothing
 
-        varName (ValVariable _ n) = n
+        fP fn (ExpValue _ _ (ValVariable n)) i = (n, Parametric (fn, i))
 
-        fP fn (ExpValue _ _ (ValVariable _ n)) i = (n, Parametric (fn, i))
-
-        fV v@(ValVariable a n)
+        fE v@(ExpValue a s (ValVariable n))
           | Just params' <- params =
             case n `lookup` params' of
-              Just info -> ValVariable (a { unitInfo = Just info }) n
+              Just info -> ExpValue (a { unitInfo = Just info }) s $ ValVariable n
               Nothing   -> v
-        fV v                = v
+        fE v                = v
 
 --------------------------------------------------
 
 markUndetermined :: ProgramFile A -> ProgramFile A
-markUndetermined = transformBi fV
+markUndetermined = transformBi fE
   where
-    fV (ValVariable a@A{ unitInfo = Nothing } n) =
-        ValVariable (a { unitInfo = Just (Undetermined n) }) n
-    fV v                                          = v
+    fE (ExpValue (a@A{ unitInfo = Nothing }) s (ValVariable n)) =
+        ExpValue (a { unitInfo = Just (Undetermined n) }) s (ValVariable n)
+    fE e                                                        = e
 
 --------------------------------------------------
 
@@ -196,14 +193,14 @@ fS_PF st@StExpressionAssign{} = do
   unless (null r) $ tell [C (lexpr e1 ++ r)]
   return $ Just st'
   where
-    lexpr (ExpValue _ _ (ValVariable a _)) = [(-1, maybeToList (unitInfo a))]
+    lexpr (ExpValue a _ (ValVariable _)) = [(-1, maybeToList (unitInfo a))]
     -- FIXME: more...
 
     rexpr e = case unitInfo (getAnnotation e) of
                 Just ui -> [(1, [ui])]
                 Nothing -> [] -- FIXME: for now...
-fS_PF st@(StCall _ _ (ExpValue _ _ (ValVariable _ _)) (Just _)) = do
-  st'@(StCall a s (ExpValue _ _ (ValVariable _ sn)) (Just args))
+fS_PF st@(StCall _ _ (ExpValue _ _ (ValVariable _)) (Just _)) = do
+  st'@(StCall a s (ExpValue _ _ (ValVariable sn)) (Just args))
            <- transformBiM (fmap fromJust . fE) st
   sncallId <- getUniqNum
   let f aexp i = tell [C [(-1, maybeToList (getUI aexp)), (1, [ParametricUse (sn, i, sncallId)])]]
@@ -217,7 +214,7 @@ fS_PF st = Just `fmap` transformBiM ((fromJust `fmap`) . fE) st
 fE :: Expression A -> Constrainer (Maybe (Expression A))
 fE e@(ExpValue _ _ (ValInteger i)) = return . Just $ setUI (Just (Undetermined i)) e
 fE e@(ExpValue _ _ (ValReal i)) = return . Just $ setUI (Just (Undetermined i)) e
-fE (ExpValue a s v@(ValVariable a' n)) = return . Just $ ExpValue (a { unitInfo = unitInfo a' }) s v
+fE (ExpValue a s v@(ValVariable n)) = return . Just $ ExpValue (a { unitInfo = unitInfo a }) s v
 fE e@(ExpBinary a s Addition e1 e2) = do
   tell [C [(-1, maybeToList (getUI e1)), (1, maybeToList (getUI e2))]]
   return . Just $ setUI (getUI e1) e
@@ -228,7 +225,7 @@ fE e@(ExpBinary a s Multiplication e1 e2) =
   return . Just $ setUI (Just (UnitMul (fromJust (getUI e1)) (fromJust (getUI e2)))) e
 fE e@(ExpBinary a s Division e1 e2) =
   return . Just $ setUI (Just (UnitMul (fromJust (getUI e1)) (UnitPow (fromJust (getUI e2)) (-1)))) e
-fE e@(ExpFunctionCall _ _ (ExpValue _ _ (ValVariable _ fn)) args) = do
+fE e@(ExpFunctionCall _ _ (ExpValue _ _ (ValVariable fn)) args) = do
   fncallId <- getUniqNum
   let f aexp i = tell [C [(-1, maybeToList (getUI aexp)), (1, [ParametricUse (fn, i, fncallId)])]]
   let exps = case args of
@@ -247,7 +244,7 @@ setUI ui x = setAnnotation ((getAnnotation x) { unitInfo = ui }) x
 
 --------------------------------------------------
 
-extractUnitInfo pf = [ (n, ui) | ValVariable A{ unitInfo = ui } n <- universeBi pf ]
+extractUnitInfo pf = [ (n, ui) | ExpValue (A{ unitInfo = ui }) _ (ValVariable n) <- universeBi pf ]
 
 --------------------------------------------------
 

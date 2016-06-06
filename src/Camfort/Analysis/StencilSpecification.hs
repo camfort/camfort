@@ -157,7 +157,7 @@ runInferer cycles puName tenv =
 
 getInductionVar (Just (F.DoSpecification _ _ (
                         F.StExpressionAssign _ _ (
-                          F.ExpValue _ _ (F.ValVariable _ v)) _) _ _)) = [v]
+                          F.ExpValue _ _ (F.ValVariable v)) _) _ _)) = [v]
 getInductionVar _ = []
 
 perBlock :: F.Block (FA.Analysis A) -> Inferer (F.Block (FA.Analysis A))
@@ -165,7 +165,7 @@ perBlock :: F.Block (FA.Analysis A) -> Inferer (F.Block (FA.Analysis A))
 perBlock b@(F.BlStatement _ span _ (F.StExpressionAssign _ _ lhs rhs)) = do
  inductionVars <- get
  case lhs of
-   F.ExpSubscript _ _ (F.ExpValue _ _ (F.ValVariable _ v)) subs
+   F.ExpSubscript _ _ (F.ExpValue _ _ (F.ValVariable v)) subs
      -> case (mapM_ (expToOffset inductionVars) subs)
           -- all subscripts are affine induction exrepssions
           Just () ->
@@ -179,7 +179,7 @@ perBlock b@(F.BlStatement _ span _ (F.StExpressionAssign _ _ _ rhs)) = do
   -- Get array indexing (on the RHS)
   let rhsExprs = universeBi rhs :: [F.Expression (FA.Analysis A)]
   let arrayAccesses = collect [
-          (v, e) | F.ExpSubscript _ _ (F.ExpValue _ _ (F.ValVariable _ v)) subs <- rhsExprs
+          (v, e) | F.ExpSubscript _ _ (F.ExpValue _ _ (F.ValVariable v)) subs <- rhsExprs
                  , let e = F.aStrip subs
                  , not (null e)
         ]
@@ -202,8 +202,8 @@ perBlock b@(F.BlDo _ span _ mDoSpec body) = do
 
   let getTimeSpec e = do
         lhsV <- case e of
-          F.ExpValue _ _ (F.ValVariable _ lhsV) -> Just lhsV
-          F.ExpSubscript _ _ (F.ExpValue _ _ (F.ValVariable _ lhsV)) _ -> Just lhsV
+          F.ExpValue _ _ (F.ValVariable lhsV) -> Just lhsV
+          F.ExpSubscript _ _ (F.ExpValue _ _ (F.ValVariable lhsV)) _ -> Just lhsV
           _ -> Nothing
         v'   <- lookup lhsV cycles
         -- TODO: update with mutual info
@@ -258,19 +258,19 @@ ixToOffset _ _ = Nothing -- If the indexing expression is a range
 
 
 expToOffset :: [Variable] -> F.Expression a -> Maybe Int
-expToOffset ivs (F.ExpValue _ _ (F.ValVariable _ v))
+expToOffset ivs (F.ExpValue _ _ (F.ValVariable v))
   | v `elem` ivs = Just 0
   | otherwise    = Just absoluteRep
 expToOffset ivs (F.ExpBinary _ _ F.Addition
-                                 (F.ExpValue _ _ (F.ValVariable _ v))
+                                 (F.ExpValue _ _ (F.ValVariable v))
                                  (F.ExpValue _ _ (F.ValInteger offs)))
     | v `elem` ivs = Just $ read offs
 expToOffset ivs (F.ExpBinary _ _ F.Addition
                                  (F.ExpValue _ _ (F.ValInteger offs))
-                                 (F.ExpValue _ _ (F.ValVariable _ v)))
+                                 (F.ExpValue _ _ (F.ValVariable v)))
     | v `elem` ivs = Just $ read offs
 expToOffset ivs (F.ExpBinary _ _ F.Subtraction
-                                 (F.ExpValue _ _ (F.ValVariable _ v))
+                                 (F.ExpValue _ _ (F.ValVariable v))
                                  (F.ExpValue _ _ (F.ValInteger offs)))
    | v `elem` ivs = Just $ if x < 0 then abs x else (- x)
                      where x = read offs
