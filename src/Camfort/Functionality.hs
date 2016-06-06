@@ -203,11 +203,3 @@ doAnalysisSummaryForpar aFun inSrc excludes = do
 
 callAndSummarise aFun ps = do
   foldl' (\n (f, _, ps) -> n `mappend` aFun ps) mempty ps
-
--- Custom 'Show' which on strings is the identity
-class Show' s where
-      show' :: s -> String
-instance Show' String where
-      show' = id
-instance Show' Int where
-      show' = show

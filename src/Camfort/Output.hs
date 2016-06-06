@@ -60,6 +60,13 @@ import Text.Printf
 
 import Camfort.Extensions.UnitsEnvironment
 
+-- Custom 'Show' which on strings is the identity
+class Show' s where
+      show' :: s -> String
+instance {-# OVERLAPS #-} Show' String where
+      show' = id
+instance {-# OVERLAPPABLE #-} Show a => Show' a where
+      show' = show
 
 {-| Given a directory and list of triples of filenames, with their source text (if it exists) and
    their AST, write these to the director -}
