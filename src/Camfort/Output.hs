@@ -65,8 +65,11 @@ class Show' s where
       show' :: s -> String
 instance {-# OVERLAPS #-} Show' String where
       show' = id
-instance {-# OVERLAPPABLE #-} Show a => Show' a where
+instance {-# OVERLAPS #-} (Show' a, Show' b) => Show' (a, b) where
+      show' (a, b) = "(" ++ show' a ++ "," ++ show' b ++")"
+instance {-# OVERLAPPABLE #-} (Show a) => Show' a where
       show' = show
+
 
 {-| Given a directory and list of triples of filenames, with their source text (if it exists) and
    their AST, write these to the director -}
