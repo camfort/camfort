@@ -31,6 +31,7 @@ import Language.Haskell.ParseMonad
 
 import Language.Fortran
 import Camfort.Analysis.IntermediateReps
+import qualified Camfort.Analysis.StencilSpecification.Syntax as StencilSpec
 
 type Report = String
 
@@ -67,8 +68,11 @@ data Annotation = A { indices        :: [Variable],
                       number         :: Int,
                       refactored     :: Maybe SrcLoc,
                       successorStmts :: [Int],
-                      newNode        :: Bool,   -- used to indicate when a node is newly introduced
-                      unitInfo       :: Maybe UnitInfo
+                      -- used to indicate when a node is newly introduced
+                      newNode        :: Bool,
+                      unitInfo       :: Maybe UnitInfo,
+                      stencilSpec    ::
+                        Maybe (Either StencilSpec.RegionEnv StencilSpec.SpecEnv)
                     }
                    deriving (Eq, Show, Typeable, Data)
 
@@ -80,4 +84,4 @@ liveIn = fst . lives
 pRefactored :: Annotation -> Bool
 pRefactored = isJust . refactored
 
-unitAnnotation = A [] ([], []) empty empty 0 0 Nothing [] False Nothing
+unitAnnotation = A [] ([], []) empty empty 0 0 Nothing [] False Nothing Nothing
