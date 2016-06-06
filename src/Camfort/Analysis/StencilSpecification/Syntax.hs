@@ -191,7 +191,6 @@ instance PartialMonoid RegionProd where
        | otherwise = case equalModuloFwdBwd ss ss' of
                        Just (s, ss') -> Just $ Product (sort $ s : ss')
                        Nothing       -> Nothing
-   appendM _               _ = Nothing
 
 
 -- Operations on region specifications form a semiring
