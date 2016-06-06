@@ -215,7 +215,7 @@ test2DSpecVariation (input, expectation) =
 
        -- Test inference
        (ixCollectionToSpec ["i", "j"] (map fromFormatToIx input))
-          `shouldBe` Just [ expectedSpec ]
+          `shouldBe` Just expectedSpec
   where
     expectedSpec = Specification . Left $ expectation
     fromFormatToIx [ri,rj] = [ offsetToIx "i" ri, offsetToIx "j" rj ]
@@ -261,7 +261,7 @@ test3DSpecVariation (input, expectation) =
 
       -- Test inference
       (ixCollectionToSpec ["i", "j", "k"] (map fromFormatToIx input))
-           `shouldBe` Just [ expectedSpec ]
+           `shouldBe` Just expectedSpec
 
   where
     expectedSpec = Specification . Left $ expectation

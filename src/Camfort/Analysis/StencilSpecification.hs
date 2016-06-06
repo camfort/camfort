@@ -18,6 +18,7 @@
 {-# LANGUAGE FlexibleContexts #-}
 {-# LANGUAGE TupleSections #-}
 {-# LANGUAGE MultiParamTypeClasses #-}
+{-# LANGUAGE ImplicitParams #-}
 
 module Camfort.Analysis.StencilSpecification where
 
@@ -25,12 +26,14 @@ import Language.Fortran hiding (Spec)
 
 import Data.Data
 import Data.Generics.Uniplate.Operations
+import Control.Arrow
 import Control.Monad.State.Lazy
 import Control.Monad.Reader
 import Control.Monad.Writer hiding (Product)
 
 import Camfort.Analysis.StencilSpecification.Check
-import qualified Camfort.Analysis.StencilSpecification.Grammar as SYN
+import qualified Camfort.Analysis.StencilSpecification.Grammar as Gram
+import Camfort.Analysis.StencilSpecification.Model
 import Camfort.Analysis.StencilSpecification.Inference
 import Camfort.Analysis.StencilSpecification.Synthesis
 import Camfort.Analysis.StencilSpecification.Syntax
@@ -107,38 +110,104 @@ findVarFlowCycles' pf = cycs2
                      , ms      <- maybeToList $ M.lookup m flMap
                      , n `S.member` ms && n /= m ]
 
-instance ASTEmbeddable Annotation SYN.Specification where
-  -- TODO: stub
-  annotateWithAST ann ast = (show ast) `trace` ann { stencilSpec = Just $ synToAst ast }
+instance ASTEmbeddable Annotation Gram.Specification where
+  annotateWithAST ann ast = ann { stencilSpec = Just $ synToAst ast }
 
 instance Linkable Annotation where
-  -- TOOD: is stub
-  link s b = (show s) `trace` s
+  link ann (b@(F.BlDo {})) =
+      ann { stencilBlock = Just b }
+  link ann (b@(F.BlStatement _ _ _ (F.StExpressionAssign _ _ (F.ExpSubscript {}) _))) = 
+      ann { stencilBlock = Just b }
+  link ann b = ann
 
--- TODO: is stub
+
 check :: F.ProgramFile Annotation -> String
 check pf = intercalate "\n" . snd . runWriter $ do
-   pf' <- annotateComments SYN.specParser pf
-   descendBiM perBlockCheck pf'
-   return pf'
+   pf' <- annotateComments Gram.specParser pf
+   tell . map show . snd . fst $ runState (runWriterT $ descendBiM perBlockCheck pf') ([], [])
 
-perBlockCheck :: Monad m => F.Block Annotation -> m (F.Block Annotation)
-perBlockCheck b@(F.BlStatement ann span _ (F.StExpressionAssign _ _ _ rhs)) =
+updateRegionEnv :: Annotation -> WriterT [(FU.SrcSpan, String)]
+        (State (RegionEnv, [Variable])) ()
+updateRegionEnv ann =
   case stencilSpec ann of
-    Nothing -> return b
-    Just spec -> return b
+    Just (Left regionEnv) -> modify $ ((++) regionEnv) *** id
+    _                     -> return ()
+
+-- For a list of names -> specs, compare the model for each
+-- against any matching names in the spec env (second param)
+compareModel :: [([F.Name], Specification)] -> SpecEnv -> Bool
+compareModel [] _ = True
+compareModel ((names, spec) : ss) env =
+  foldr (\n r -> compareModel' n spec env && r) True names
+  && compareModel ss env
+   where compareModel' :: F.Name -> Specification -> SpecEnv -> Bool
+         compareModel' name spec1 senv =
+          case lookupSpecEnv senv name of
+            Just spec2 -> let d1 = dimensionality spec1
+                              d2 = dimensionality spec2
+                          in let ?dimensionality = d1 `max` d2
+                             in mkModel spec1 == mkModel spec2
+            Nothing    -> True
+
+perBlockCheck :: F.Block Annotation
+   -> WriterT [(FU.SrcSpan, String)]
+        (State (RegionEnv, [Variable])) (F.Block Annotation)
+
+perBlockCheck b@(F.BlComment ann span _) = do
+  updateRegionEnv ann
+  case (stencilSpec ann, stencilBlock ann) of
+    -- Comment contains a specification and an associated block
+    (Just (Right specEnv), Just block) ->
+     case block of
+      (F.BlStatement ann span _ (F.StExpressionAssign _ _ _ rhs)) -> do
+        -- Get array indexing (on the RHS)
+        let rhsExprs = universeBi rhs :: [F.Expression (FA.Analysis A)]
+        let arrayAccesses = collect [
+               (v, e) | F.ExpSubscript _ _ (F.ExpValue _ _ (F.ValVariable v)) subs <- rhsExprs
+                      , let e = F.aStrip subs
+                      , not (null e)]
+        -- Create list of relative indices
+        (_, ivs) <- get
+        let analysis = groupKeyBy . M.toList . M.mapMaybe (ixCollectionToSpec ivs) $ arrayAccesses
+        if compareModel analysis specEnv  then
+           -- Not well-specified
+           tell [ (span, "Not well specified: expecting \n\t" ++ show specEnv
+                      ++ " but inferred indices " )] -- ++ (show $ M.toList analysisIxs)) ]
+         else
+            tell [ (span, "Correct.") ]
+        return b
+      _ -> return b
+
+      (F.BlDo ann span _ mDoSpec body) -> do
+        let localIvs = getInductionVar mDoSpec
+        -- introduce any induction variables into the induction variable state
+        modify $ id *** union localIvs
+        -- descend into the body of the do-statement
+        mapM_ (descendBiM perBlockCheck) body
+        -- Remove any induction variable from the state
+        modify $ id *** (\\ localIvs)
+        return b
+      _ -> return b
+    _ -> return b
+
+perBlockCheck b = do
+  updateRegionEnv . F.getAnnotation $ b
+  -- Go inside child blocks
+  mapM_ (descendBiM perBlockCheck) $ children b
+  return b
+
 
 
 --------------------------------------------------
 
-type LogLine = (FU.SrcSpan, [([Variable], [Specification])])
+type LogLine = (FU.SrcSpan, [([Variable], Specification)])
 formatSpec :: FAR.NameMap -> LogLine -> String
 formatSpec nm (span, []) = ""
 formatSpec nm (span, specs) = loc ++ " \t" ++ (commaSep . nub . map doSpec $ specs) ++ "\n"
   where
     loc                      = show (spanLineCol span)
     commaSep                 = intercalate ", "
-    doSpec (arrayVar, spec)  = showL (map fixSpec spec) ++ " :: " ++ commaSep (map realName arrayVar)
+    doSpec (arrayVar, spec)  = show (fixSpec spec) ++ " :: " ++ commaSep (map realName arrayVar)
     realName v               = v `fromMaybe` (v `M.lookup` nm)
     fixSpec (Specification (Right (Dependency vs b))) =
         Specification (Right (Dependency (map realName vs) b))
@@ -207,9 +276,9 @@ perBlock b@(F.BlDo _ span _ mDoSpec body) = do
           _ -> Nothing
         v'   <- lookup lhsV cycles
         -- TODO: update with mutual info
-        return ([lhsV], [Specification $ Right $ Dependency [v'] False])
+        return (lhsV, Specification $ Right $ Dependency [v'] False)
 
-  let tempSpecs = foldl' (\ ts -> maybe ts (:ts) . getTimeSpec) [] lexps
+  let tempSpecs = groupKeyBy $ foldl' (\ ts -> maybe ts (:ts) . getTimeSpec) [] lexps
 
   tell [ (span, tempSpecs) ]
   -- descend into the body of the do-statement
@@ -236,17 +305,18 @@ padZeros ixss = let m = maximum (map length ixss)
                 in map (\ixs -> ixs ++ replicate (m - length ixs) 0) ixss
 
 -- Convert list of indexing expressions to a spec
-ixCollectionToSpec :: [ Variable ] -> [ [ F.Index a ] ] -> Maybe [Specification]
+ixCollectionToSpec :: [ Variable ] -> [ [ F.Index a ] ] -> Maybe Specification
 ixCollectionToSpec ivs ixs =
   if isEmpty exactSpec
-  then Nothing else Just [exactSpec]
+  then Nothing else Just exactSpec
     where
      exactSpec = inferFromIndices
                . fromLists
                . padZeros
-               . map toListsOfRelativeIndices $ ixs
-     toListsOfRelativeIndices :: [ F.Index a ] -> [ Int ]
-     toListsOfRelativeIndices = map (maybe 0 id . (ixToOffset ivs))
+               . map (toListsOfRelativeIndices ivs) $ ixs
+
+toListsOfRelativeIndices :: [ Variable ] -> [ F.Index a ] -> [ Int ]
+toListsOfRelativeIndices ivs = map (maybe 0 id . (ixToOffset ivs))
 
 -- Convert indexing expressions that are translations
 -- intto their translation offset:
@@ -296,13 +366,13 @@ groupKeyBy' ((ks1, v1):((ks2, v2):xs))
 -- Although type analysis isn't necessary anymore (Forpar does it
 -- internally) I'm going to leave this infrastructure in-place in case
 -- it might be useful later.
-type TypeEnv a = M.Map FAT.TypeScope (M.Map String FAT.IDType)
+type TypeEnv a = M.Map FAT.TypeScope (M.Map String FA.IDType)
 isArrayType :: TypeEnv A -> F.ProgramUnitName -> String -> Bool
 isArrayType tenv name v = fromMaybe False $ do
   tmap <- M.lookup (FAT.Local name) tenv `mplus` M.lookup FAT.Global tenv
   idty <- M.lookup v tmap
-  cty  <- FAT.idCType idty
-  return $ cty == FAT.CTArray
+  cty  <- FA.idCType idty
+  return $ cty == FA.CTArray
 
 -- Local variables:
 -- mode: haskell

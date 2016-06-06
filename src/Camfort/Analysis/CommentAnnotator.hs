@@ -31,6 +31,7 @@ import Control.Monad.Writer.Lazy (Writer(..), tell)
 import Data.Generics.Uniplate.Operations
 import Data.Data (Data)
 
+
 import Language.Fortran.AST
 import Language.Fortran.Util.Position
 
@@ -46,7 +47,7 @@ data AnnotationParseError =
 failWith :: AnnotationParser ast
 failWith = Left . ProbablyAnnotation
 
-annotateComments :: forall a ast . (Data a, Linkable a, ASTEmbeddable a ast)
+annotateComments :: forall a ast . (Data a, Linkable a, ASTEmbeddable a ast, Show ast)
                                  => AnnotationParser ast
                                  -> ProgramFile a
                                  -> Logger (ProgramFile a)
@@ -72,7 +73,8 @@ annotateComments parse pf = do
         let (comments, rest) = span isComment blocks
         in if null rest -- Does the group of blocks end with comments
              then comments
-             else map (fmap $ flip link (head rest)) comments ++ linkBlocks rest
+             else let (bs, bs') = linkMultiple comments rest
+                  in bs ++ linkBlocks bs'
       | otherwise = b : linkBlocks bs
       where
         isComment BlComment{} = True
@@ -83,6 +85,17 @@ class ASTEmbeddable a ast where
 
 class Linkable a where
   link :: a -> Block a -> a
+
+  -- Given a list of comments and a list of non-comment blocks which occur
+  -- afterward in the code, then link them together (either forward or backward)
+  -- returning a pair of processed blocks and unprocessed blocks
+
+  -- pre-condition: first parameter is a list of comments
+
+  -- default uses 'link' to associate every comment to the first following block
+  linkMultiple :: [Block a] -> [Block a] -> ([Block a], [Block a])
+  linkMultiple comments blocks =
+     (map (fmap $ flip link (head blocks)) comments, blocks)
 
 parserWarn :: SrcSpan -> String -> Logger ()
 parserWarn srcSpan err = tell [ "Error " ++ show srcSpan ++ ": " ++ err ]

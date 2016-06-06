@@ -57,8 +57,8 @@ class SynToAst s t | s -> t where
 
 -- Top-level conversion of declarations
 instance SynToAst SYN.Specification (Either RegionEnv SpecEnv) where
-  synToAst (SYN.SpecDec spec vars) = Right [(synToAst spec, vars)]
-  synToAst (SYN.RegionDec rvar region) = Left [(synToAst $ Just region, rvar)]
+  synToAst (SYN.SpecDec spec vars) = Right [(vars, synToAst spec)]
+  synToAst (SYN.RegionDec rvar region) = Left [(rvar, synToAst $ Just region)]
 
 -- Convert temporal or spatial specifications
 instance SynToAst SYN.Spec Specification where
@@ -92,7 +92,8 @@ dnf (SYN.Or r1 r2) =
 dnf (SYN.Forward dep dim)  = Sum [Product [Forward dep dim]]
 dnf (SYN.Backward dep dim) = Sum [Product [Backward dep dim]]
 dnf (SYN.Centered dep dim) = Sum [Product [Centered dep dim]]
-dnf (SYN.Var v)            = error "TODO ?"
+-- TODO - will need to do something here. 
+dnf (SYN.Var v)            = Sum [Product []]
 
 -- Convert modifier list to modifier info
 instance SynToAst [SYN.Mod]

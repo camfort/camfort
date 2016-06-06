@@ -64,9 +64,16 @@ absoluteRep = 100 :: Int -- maxBound :: Int
 {- *** 1 . Specification syntax -}
 
 -- List of region sums associated to region variables
-type RegionEnv = [(RegionSum, String)]
+type RegionEnv = [(String, RegionSum)]
 -- List of specifications associated to variables
-type SpecEnv = [(Specification, [String])]
+type SpecEnv = [([String], Specification)]
+
+lookupSpecEnv :: SpecEnv -> String -> Maybe Specification
+lookupSpecEnv [] _ = Nothing
+lookupSpecEnv ((names, spec) : ss) name =
+  if name `elem` names
+  then Just spec
+  else lookupSpecEnv ss name
 
 -- Top-level of specifications: may be either spatial or temporal
 data Specification =
@@ -294,7 +301,8 @@ instance {-# OVERLAPS #-} Show (Result Spatial) where
   show (Bound Nothing (Just s)) = "atMost, " ++ show s
   show (Bound (Just s) Nothing) = "atLeast, " ++ show s
   -- TODO: Figure out the right way to support this
-  show (Bound (Just sL) (Just sU)) = error $ "Lower and upper, l = " ++ show sL ++ ", u = " ++ show sU
+  show (Bound (Just sL) (Just sU)) =
+      error $ "Lower and upper, l = " ++ show sL ++ ", u = " ++ show sU
 
 -- Pretty print spatial specs
 instance Show Spatial where

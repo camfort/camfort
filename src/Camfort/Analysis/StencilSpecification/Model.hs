@@ -67,6 +67,12 @@ class Model spec where
 -- that is, False = multiplicity 1, True = multiplicity > 1
 type Multiset a = DM.Map a Bool
 
+-- Build a multiset representation from a list (of possibly repeated) elements
+mkMultiset :: Ord a => [a] -> DM.Map a Bool
+mkMultiset =
+  Prelude.foldr (\a map -> DM.insertWithKey multi a True map) DM.empty
+     where multi k x y = x || y
+
 instance Model Specification where
    type Domain Specification = Result (Multiset [Int])
 
