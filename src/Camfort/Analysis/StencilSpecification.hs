@@ -44,6 +44,7 @@ import Camfort.Extensions.UnitsForpar (parameterise)
 import Camfort.Helpers.Vec
 -- These two are redefined here for ForPar ASTs
 import Camfort.Helpers hiding (lineCol, spanLineCol)
+import Camfort.Output
 
 import qualified Language.Fortran.AST as F
 import qualified Language.Fortran.Analysis as FA
@@ -116,7 +117,7 @@ instance ASTEmbeddable Annotation Gram.Specification where
 instance Linkable Annotation where
   link ann (b@(F.BlDo {})) =
       ann { stencilBlock = Just b }
-  link ann (b@(F.BlStatement _ _ _ (F.StExpressionAssign _ _ (F.ExpSubscript {}) _))) = 
+  link ann (b@(F.BlStatement _ _ _ (F.StExpressionAssign {}))) =
       ann { stencilBlock = Just b }
   link ann b = ann
 
@@ -124,7 +125,7 @@ instance Linkable Annotation where
 check :: F.ProgramFile Annotation -> String
 check pf = intercalate "\n" . snd . runWriter $ do
    pf' <- annotateComments Gram.specParser pf
-   tell . map show . snd . fst $ runState (runWriterT $ descendBiM perBlockCheck pf') ([], [])
+   tell . map show' . snd . fst $ runState (runWriterT $ descendBiM perBlockCheck pf') ([], [])
 
 updateRegionEnv :: Annotation -> WriterT [(FU.SrcSpan, String)]
         (State (RegionEnv, [Variable])) ()
@@ -159,36 +160,42 @@ perBlockCheck b@(F.BlComment ann span _) = do
     -- Comment contains a specification and an associated block
     (Just (Right specEnv), Just block) ->
      case block of
-      (F.BlStatement ann span _ (F.StExpressionAssign _ _ _ rhs)) -> do
+      s@(F.BlStatement ann span _ (F.StExpressionAssign _ _ _ rhs)) -> do
         -- Get array indexing (on the RHS)
-        let rhsExprs = universeBi rhs :: [F.Expression (FA.Analysis A)]
+        let rhsExprs = universeBi rhs :: [F.Expression Annotation]
         let arrayAccesses = collect [
-               (v, e) | F.ExpSubscript _ _ (F.ExpValue _ _ (F.ValVariable v)) subs <- rhsExprs
-                      , let e = F.aStrip subs
-                      , not (null e)]
+              (v, e) | F.ExpSubscript _ _ (F.ExpValue _ _ (F.ValVariable v)) subs <- rhsExprs
+                     , let e = F.aStrip subs
+                     , not (null e)]
         -- Create list of relative indices
         (_, ivs) <- get
-        let analysis = groupKeyBy . M.toList . M.mapMaybe (ixCollectionToSpec ivs) $ arrayAccesses
-        if compareModel analysis specEnv  then
+        let analysis = groupKeyBy
+                     . M.toList
+                     . M.mapMaybe (ixCollectionToSpec ivs) $ arrayAccesses
+        -- Model and compare the current and specified stencil specs
+        if compareModel analysis specEnv
            -- Not well-specified
-           tell [ (span, "Not well specified: expecting \n\t" ++ show specEnv
-                      ++ " but inferred indices " )] -- ++ (show $ M.toList analysisIxs)) ]
-         else
-            tell [ (span, "Correct.") ]
+         then tell [ (span, "Not well specified: expecting " ++ show specEnv
+                      ++ " but inferred indices " ++ show analysis) ]
+         else tell [ (span, "Correct.") ]
         return b
       _ -> return b
 
       (F.BlDo ann span _ mDoSpec body) -> do
-        let localIvs = getInductionVar mDoSpec
-        -- introduce any induction variables into the induction variable state
-        modify $ id *** union localIvs
-        -- descend into the body of the do-statement
-        mapM_ (descendBiM perBlockCheck) body
-        -- Remove any induction variable from the state
-        modify $ id *** (\\ localIvs)
+        -- Stub, collect stencils inside 'do' block
         return b
       _ -> return b
     _ -> return b
+
+perBlockCheck b@(F.BlDo ann span _ mDoSpec body) = do
+   let localIvs = getInductionVar mDoSpec
+   -- introduce any induction variables into the induction variable state
+   modify $ id *** union localIvs
+   -- descend into the body of the do-statement
+   mapM_ (descendBiM perBlockCheck) body
+   -- Remove any induction variable from the state
+   modify $ id *** (\\ localIvs)
+   return b
 
 perBlockCheck b = do
   updateRegionEnv . F.getAnnotation $ b

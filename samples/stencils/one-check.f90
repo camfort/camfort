@@ -4,7 +4,7 @@ program one
   integer :: i, j
   integer, parameter :: imax = 3, jmax = 3
   
-  real a(0:imax,0:jmax), b(0:imax,0:jmax)
+  real, dimension(0:imax, 0:jmax) :: a, b 
 
   ! Setup some region specs for the file
   
