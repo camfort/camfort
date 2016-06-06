@@ -197,9 +197,12 @@ doAnalysisSummaryForpar aFun inSrc excludes = do
                                  ++ " from " ++ inSrc ++ "/"
     else return ()
   ps <- readForparseSrcDir inSrc excludes
-  let inFiles = map (\(a, _, _) -> a) ps
+  let out = callAndSummarise aFun ps
   putStrLn "Output of the analysis:"
-  putStrLn . show' $ foldl' (\n (f, _, ps) -> n `mappend` (aFun ps)) mempty ps
+  putStrLn . show' $ out
+
+callAndSummarise aFun ps = do
+  foldl' (\n (f, _, ps) -> n `mappend` aFun ps) mempty ps
 
 -- Custom 'Show' which on strings is the identity
 class Show' s where
