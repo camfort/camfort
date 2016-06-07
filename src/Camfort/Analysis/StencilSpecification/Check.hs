@@ -16,6 +16,7 @@
 
 {-# LANGUAGE GADTs, FlexibleContexts, FlexibleInstances,
              TupleSections, FunctionalDependencies #-}
+{-# LANGUAGE ImplicitParams #-}
 
 module Camfort.Analysis.StencilSpecification.Check where
 
@@ -50,55 +51,71 @@ import Language.Fortran.Util.Position
 
 import Data.Set hiding (map)
 
+type ErrorMsg = String
+
 -- Class for functions converting from Grammar parse
 -- syntax to the AST representation of the Syntax module
 class SynToAst s t | s -> t where
-  synToAst :: s -> t
+  synToAst :: (?renv :: RegionEnv) => s -> Either ErrorMsg t
 
 -- Top-level conversion of declarations
-instance SynToAst SYN.Specification (Either RegionEnv SpecEnv) where
-  synToAst (SYN.SpecDec spec vars) = Right [(vars, synToAst spec)]
-  synToAst (SYN.RegionDec rvar region) = Left [(rvar, synToAst $ Just region)]
+instance SynToAst SYN.Specification (Either RegionEnv SpecDecls) where
+  synToAst (SYN.SpecDec spec vars) = do
+     spec' <- synToAst spec
+     return $ Right [(vars, spec')]
+
+  synToAst (SYN.RegionDec rvar region) = do
+     spec' <- synToAst $ Just region
+     return $ Left [(rvar, spec')]
 
 -- Convert temporal or spatial specifications
 instance SynToAst SYN.Spec Specification where
-  synToAst (SYN.Spatial mods r) = Specification $ Left $
-    case approx of
-      Just SYN.AtMost  -> Bound Nothing (Just s')
-      Just SYN.AtLeast -> Bound (Just s') Nothing
-      Nothing          -> Exact s'
-    where s' = Spatial modLinear modIrrefl modRefl (synToAst r)
-          (modLinear, modIrrefl, modRefl, approx) = synToAst mods
-  synToAst (SYN.Temporal vars mutual) = Specification $ Right $
-      Dependency vars mutual
+  synToAst (SYN.Spatial mods r) = do
+    (modLinear, modIrrefl, modRefl, approx) <- synToAst mods
+    r' <- synToAst r
+    let s' = Spatial modLinear modIrrefl modRefl r'
+    return $ Specification $ Left $
+       case approx of
+        Just SYN.AtMost  -> Bound Nothing (Just s')
+        Just SYN.AtLeast -> Bound (Just s') Nothing
+        Nothing          -> Exact s'
+
+  synToAst (SYN.Temporal vars mutual) =
+     return $ Specification $ Right $ Dependency vars mutual
 
 -- Convert region definitions into the DNF-form used internally
 instance SynToAst (Maybe SYN.Region) RegionSum where
-  synToAst Nothing  = Sum []
+  synToAst Nothing  = return $ Sum []
   synToAst (Just r) = dnf r
 
 -- Convert a grammar syntax to Disjunctive Normal Form AST
-dnf :: SYN.Region -> RegionSum
+dnf :: (?renv :: RegionEnv) => SYN.Region -> Either ErrorMsg RegionSum
 
 -- Distributive law
-dnf (SYN.And r1 r2) =
-    Sum $ unSum (dnf r1) >>= (\(Product ps1) ->
-            unSum (dnf r2) >>= (\(Product ps2) ->
-               return $ Product $ ps1 ++ ps2))
+dnf (SYN.And r1 r2) = do
+    r1' <- dnf r1
+    r2' <- dnf r2
+    return $ Sum $ unSum r1' >>= (\(Product ps1) ->
+                    unSum r2' >>= (\(Product ps2) ->
+                      return $ Product $ ps1 ++ ps2))
 -- Coalesce sums
-dnf (SYN.Or r1 r2) =
-    Sum $ unSum (dnf r1) ++ unSum (dnf r2)
+dnf (SYN.Or r1 r2) = do
+    r1' <- dnf r1
+    r2' <- dnf r2
+    return $ Sum $ unSum r1' ++ unSum r2'
 -- Region conversion
-dnf (SYN.Forward dep dim)  = Sum [Product [Forward dep dim]]
-dnf (SYN.Backward dep dim) = Sum [Product [Backward dep dim]]
-dnf (SYN.Centered dep dim) = Sum [Product [Centered dep dim]]
--- TODO - will need to do something here. 
-dnf (SYN.Var v)            = Sum [Product []]
+dnf (SYN.Forward dep dim)  = return $ Sum [Product [Forward dep dim]]
+dnf (SYN.Backward dep dim) = return $ Sum [Product [Backward dep dim]]
+dnf (SYN.Centered dep dim) = return $ Sum [Product [Centered dep dim]]
+dnf (SYN.Var v)            =
+    case lookup v ?renv of
+      Nothing -> Left $ "Error: region " ++ v ++ " is not in scope."
+      Just rs -> return $ rs
 
 -- Convert modifier list to modifier info
 instance SynToAst [SYN.Mod]
                   (Linearity, [Dimension], [Dimension], Maybe SYN.Mod) where
-  synToAst mods = (linearity, irrefls, refls, approx)
+  synToAst mods = return (linearity, irrefls, refls, approx)
     where
       linearity = if SYN.ReadOnce `elem` mods then Linear else NonLinear
 

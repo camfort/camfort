@@ -112,7 +112,7 @@ findVarFlowCycles' pf = cycs2
                      , n `S.member` ms && n /= m ]
 
 instance ASTEmbeddable Annotation Gram.Specification where
-  annotateWithAST ann ast = ann { stencilSpec = Just $ synToAst ast }
+  annotateWithAST ann ast = ann { stencilSpec = Just $ Left ast }
 
 instance Linkable Annotation where
   link ann (b@(F.BlDo {})) =
@@ -125,25 +125,42 @@ instance Linkable Annotation where
 check :: F.ProgramFile Annotation -> String
 check pf = intercalate "\n" . snd . runWriter $ do
    pf' <- annotateComments Gram.specParser pf
-   tell . map show' . snd . fst $ runState (runWriterT $ descendBiM perBlockCheck pf') ([], [])
+   tell . pprint . snd . fst $ runState (runWriterT $ descendBiM perBlockCheck pf') ([], [])
+     where pprint =  map (\(span, spec) -> show span ++ "\t" ++ spec)
 
+-- If the annotation contains an unconverted stencil specification syntax tree
+-- then convert it and return an updated annotation containing the AST
+parseCommentToAST :: Annotation -> FU.SrcSpan ->
+  WriterT [(FU.SrcSpan, String)] (State (RegionEnv, [Variable])) Annotation
+parseCommentToAST ann span =
+  case stencilSpec ann of
+    Just (Left stencilComment) -> do
+         (regionEnv, _) <- get
+         let ?renv = regionEnv
+          in case synToAst stencilComment of
+               Left err   -> error $ show span ++ ": " ++ err
+               Right ast  -> return $ ann { stencilSpec = Just (Right ast) }
+    _ -> return ann
+
+-- If the annotation contains an encapsulated region environment, extract it
+-- and add it to current region environment in scope
 updateRegionEnv :: Annotation -> WriterT [(FU.SrcSpan, String)]
         (State (RegionEnv, [Variable])) ()
 updateRegionEnv ann =
   case stencilSpec ann of
-    Just (Left regionEnv) -> modify $ ((++) regionEnv) *** id
-    _                     -> return ()
+    Just (Right (Left regionEnv)) -> modify $ ((++) regionEnv) *** id
+    _                             -> return ()
 
 -- For a list of names -> specs, compare the model for each
 -- against any matching names in the spec env (second param)
-compareModel :: [([F.Name], Specification)] -> SpecEnv -> Bool
+compareModel :: [([F.Name], Specification)] -> SpecDecls -> Bool
 compareModel [] _ = True
 compareModel ((names, spec) : ss) env =
   foldr (\n r -> compareModel' n spec env && r) True names
   && compareModel ss env
-   where compareModel' :: F.Name -> Specification -> SpecEnv -> Bool
+   where compareModel' :: F.Name -> Specification -> SpecDecls -> Bool
          compareModel' name spec1 senv =
-          case lookupSpecEnv senv name of
+          case lookupSpecDecls senv name of
             Just spec2 -> let d1 = dimensionality spec1
                               d2 = dimensionality spec2
                           in let ?dimensionality = d1 `max` d2
@@ -155,10 +172,12 @@ perBlockCheck :: F.Block Annotation
         (State (RegionEnv, [Variable])) (F.Block Annotation)
 
 perBlockCheck b@(F.BlComment ann span _) = do
-  updateRegionEnv ann
-  case (stencilSpec ann, stencilBlock ann) of
+  ann' <- parseCommentToAST ann span
+  updateRegionEnv ann'
+  let b' = F.setAnnotation ann' b
+  case (stencilSpec ann', stencilBlock ann') of
     -- Comment contains a specification and an associated block
-    (Just (Right specEnv), Just block) ->
+    (Just (Right (Right specDecls)), Just block) ->
      case block of
       s@(F.BlStatement ann span _ (F.StExpressionAssign _ _ _ rhs)) -> do
         -- Get array indexing (on the RHS)
@@ -173,19 +192,20 @@ perBlockCheck b@(F.BlComment ann span _) = do
                      . M.toList
                      . M.mapMaybe (ixCollectionToSpec ivs) $ arrayAccesses
         -- Model and compare the current and specified stencil specs
-        if compareModel analysis specEnv
+        if compareModel analysis specDecls
            -- Not well-specified
-         then tell [ (span, "Not well specified: expecting " ++ show specEnv
-                      ++ " but inferred indices " ++ show analysis) ]
-         else tell [ (span, "Correct.") ]
-        return b
-      _ -> return b
+         then tell [ (span, "Correct.") ]
+         else tell [ (span, "Not well specified:\n\t\t  expecting: "
+                         ++ pprintSpecDecls specDecls
+                         ++ "\t\t  actual:    " ++ pprintSpecDecls analysis) ]
+        return $ b'
+      _ -> return $ b'
 
       (F.BlDo ann span _ mDoSpec body) -> do
         -- Stub, collect stencils inside 'do' block
-        return b
-      _ -> return b
-    _ -> return b
+        return $ b'
+      _ -> return $ b'
+    _ -> return b'
 
 perBlockCheck b@(F.BlDo ann span _ mDoSpec body) = do
    let localIvs = getInductionVar mDoSpec

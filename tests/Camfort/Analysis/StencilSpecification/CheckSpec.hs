@@ -1,5 +1,8 @@
+{-# LANGUAGE ImplicitParams #-}
+
 module Camfort.Analysis.StencilSpecification.CheckSpec (spec) where
 
+import Camfort.Analysis.CommentAnnotator
 import Camfort.Analysis.StencilSpecification.Check
 import qualified Camfort.Analysis.StencilSpecification.Grammar as SYN
 import Camfort.Analysis.StencilSpecification.Syntax
@@ -7,7 +10,11 @@ import Camfort.Analysis.StencilSpecification.Syntax
 import Test.Hspec hiding (Spec)
 import qualified Test.Hspec as Test
 
-parseAndConvert x = SYN.specParser x >>= (return . synToAst)
+promoteErrors :: Either String x -> Either AnnotationParseError x
+promoteErrors (Left x)  = Left (ProbablyAnnotation x)
+promoteErrors (Right x) = Right x
+
+parseAndConvert x = let ?renv = [] in SYN.specParser x >>= (promoteErrors . synToAst)
 
 spec :: Test.Spec
 spec = describe "Stencils - Check" $ do

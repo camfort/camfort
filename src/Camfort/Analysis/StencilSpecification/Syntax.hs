@@ -66,14 +66,19 @@ absoluteRep = 100 :: Int -- maxBound :: Int
 -- List of region sums associated to region variables
 type RegionEnv = [(String, RegionSum)]
 -- List of specifications associated to variables
-type SpecEnv = [([String], Specification)]
+type SpecDecls = [([String], Specification)]
 
-lookupSpecEnv :: SpecEnv -> String -> Maybe Specification
-lookupSpecEnv [] _ = Nothing
-lookupSpecEnv ((names, spec) : ss) name =
+pprintSpecDecls :: SpecDecls -> String
+pprintSpecDecls =
+ foldr (\(names, spec) rest ->
+            show spec ++ " :: " ++ intercalate "," names ++ "\n" ++ rest) ""
+
+lookupSpecDecls :: SpecDecls -> String -> Maybe Specification
+lookupSpecDecls [] _ = Nothing
+lookupSpecDecls ((names, spec) : ss) name =
   if name `elem` names
   then Just spec
-  else lookupSpecEnv ss name
+  else lookupSpecDecls ss name
 
 -- Top-level of specifications: may be either spatial or temporal
 data Specification =

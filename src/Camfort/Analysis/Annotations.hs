@@ -32,6 +32,7 @@ import Language.Haskell.ParseMonad
 import Language.Fortran
 import Camfort.Analysis.IntermediateReps
 import qualified Camfort.Analysis.StencilSpecification.Syntax as StencilSpec
+import qualified Camfort.Analysis.StencilSpecification.Grammar as StencilComment
 
 import qualified Language.Fortran.AST as F
 
@@ -74,7 +75,10 @@ data Annotation = A { indices        :: [Variable],
                       newNode        :: Bool,
                       unitInfo       :: Maybe UnitInfo,
                       stencilSpec    ::
-                        Maybe (Either StencilSpec.RegionEnv StencilSpec.SpecEnv), 
+                        Maybe -- If defined, either an unprocessed syntax tree
+                               (Either StencilComment.Specification
+                               -- Or a parser AST of a RegionEnv or SpecDecls
+                                (Either StencilSpec.RegionEnv StencilSpec.SpecDecls)),
                       stencilBlock   ::
                         Maybe (F.Block Annotation)
                     }
