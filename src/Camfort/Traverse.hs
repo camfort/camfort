@@ -41,7 +41,7 @@ import Control.Comonad
 
 import Data.Data
 import Data.Maybe
-import Data.Monoid     
+import Data.Monoid
 
 import Debug.Trace
 
@@ -50,8 +50,6 @@ instance Monoid x => Monad ((,) x) where
     (x, a) >>= k = let (x', b) = k a
                    in (mappend x x', b)
 
-
-
 -- Data-type generic comonad-style traversal
 
 extendBi :: (Biplate (from a) (to a), RComonad to) => (to a -> a) -> (from a) -> (from a)
@@ -59,16 +57,16 @@ extendBi f x = case biplate x of
                      (current, generate) -> generate $ strMap (rextend f) current
 
 reduceCollect :: (Data s, Data t, Uniplate t, Biplate t s) => (s -> Maybe a) -> t -> [a]
-reduceCollect k x = execWriter (transformBiM (\y -> do case k y of 
+reduceCollect k x = execWriter (transformBiM (\y -> do case k y of
                                                          Just x -> tell [x]
                                                          Nothing -> return ()
-                                                       return y) x) 
+                                                       return y) x)
 
 -- Data-type generic comonad-style traversal with zipper (contextual traversal)
-                         
+
 everywhere :: (Zipper a -> Zipper a) -> Zipper a -> Zipper a
 everywhere k z = let everywhere' = enterRight . enterDown . k
-           
+
                      enterDown z = case (down' z) of
                                      Just dz -> let dz' = everywhere' dz
                                                 in case (up $ dz') of
@@ -79,11 +77,10 @@ everywhere k z = let everywhere' = enterRight . enterDown . k
                      enterRight z = case (right z) of
                                       Just rz -> let rz' = everywhere' rz
                                                  in case (left $ rz') of
-                                                     Just lz -> lz 
+                                                     Just lz -> lz
                                                      Nothing -> rz'
                                       Nothing -> z
                   in everywhere' z
-                              
 
 zfmap :: Data a => (a -> a) -> Zipper (d a) -> Zipper (d a)
 zfmap f x = zeverywhere (mkT f) x
@@ -100,7 +97,6 @@ class RComonad t where
 
 class RFunctor t where
     rfmap :: (a -> a) -> t a -> t a
-     
 
 instance RComonad Fortran where
     rextract x = tag x
@@ -109,7 +105,7 @@ instance RComonad Fortran where
     rextend k y@(For _ sp v e1 e2 e3 fs) = For (k y) sp v e1 e2 e3 (rextend k fs)
     rextend k y@(FSeq _ sp f1 f2)        = FSeq (k y) sp (rextend k f1) (rextend k f2)
     rextend k y@(If _ sp e f1 fes f3)    = let fes' = map (\(e, f) -> (e, rextend k f)) fes
-                                               f3' = case f3 of 
+                                               f3' = case f3 of
                                                     Nothing -> Nothing
                                                     Just f3a -> Just (rextend k f3a)
                                             in If (k y) sp e (rextend k f1) fes' f3'
@@ -179,57 +175,5 @@ instance Refill Fortran where
     refill y@(NullStmt _ sp)           a = NullStmt a sp
 
 
--- > instance Comonad Fortran where
--- >     extract x = rextract x
-
--- >     extend k y@(Assg _ sp e1 e2)        = Assg (k y) sp  (fmap (k . NullStmt) e1) 
--- >                                                     (fmap (k . NullStmt) e2)
-
--- >     extend k y@(For _ sp v e1 e2 e3 fs) = For (k y) sp  (fmap (k . NullStmt) v)
--- >                                                   (fmap (k . NullStmt) e1)
--- >                                                    (fmap (k . NullStmt) e2)
--- >                                                     (fmap (k . NullStmt) e3)
--- >                                                      (extend k fs)
-
--- >     extend k y@(FSeq _ sp f1 f2)        = FSeq (k y) sp  (extend k f1) (extend k f2)
--- >     extend k y@(If _ sp e f1 fes f3)    = let fes' = map (\(e, f) -> (fmap (k . NullStmt) e, extend k f)) fes
--- >                                               f3' = case f3 of 
--- >                                                       Nothing -> Nothing
--- >                                                       Just f3a -> Just (extend k f3a)
--- >                                           in If (k y) sp  (fmap (k . NullStmt) e) (extend k f1) fes' f3'
-
--- >     extend k y@(Allocate _ sp e1 e2)      = Allocate (k y) sp  (fmap (k . NullStmt) e1)
--- >                                                           (fmap (k . NullStmt) e2)
--- >     extend k y@(Backspace _ sp sp')        = Backspace (k y) sp  (map (fmap (k . NullStmt)) sp')
--- >     extend k y@(Call _ sp e as)           = Call (k y) sp  (fmap (k . NullStmt) e)
--- >                                                       (fmap (k . NullStmt) as)
--- >     extend k y@(Open _ sp s)              = Open (k y) sp  (map (fmap (k . NullStmt)) s)
--- >     extend k y@(Close _ sp s)             = Close (k y) sp  (map (fmap (k . NullStmt)) s)
--- >     extend k y@(Continue _ sp)            = Continue (k y) sp 
--- >     extend k y@(Cycle _ sp s)             = Cycle (k y) sp  s
--- >     extend k y@(Deallocate _ sp es e)     = Deallocate (k y) sp  (map (fmap (k . NullStmt)) es) (fmap (k . NullStmt) e)
--- >     extend k y@(Endfile _ sp s)           = Endfile (k y) sp  (map (fmap (k . NullStmt)) s)
--- >     extend k y@(Exit _ sp s)              = Exit (k y) sp  s
--- >     extend k y@(Forall _ sp (es, e) f)    = let g (s, e1, e2, e3) = (s, fmap (k . NullStmt) e1, 
--- >                                                                        fmap (k . NullStmt) e2,
--- >                                                                          fmap (k . NullStmt) e3)
--- >                                             in Forall (k y) sp  (map g es, fmap (k . NullStmt) e) (extend k f)
--- >     extend k y@(Goto _ sp s)              = Goto (k y) sp  s
--- >     extend k y@(Nullify _ sp es)          = Nullify (k y) sp  (map (fmap (k . NullStmt)) es)
--- >     extend k y@(Inquire _ sp ss es)       = Inquire (k y) sp  (map (fmap (k . NullStmt)) ss) (map (fmap (k . NullStmt)) es)
--- >     extend k y@(Rewind _ sp ss)           = Rewind (k y) sp  (map (fmap (k . NullStmt)) ss)
--- >     extend k y@(Stop _ sp e)              = Stop (k y) sp  (fmap (k . NullStmt) e)
--- >     extend k y@(Where _ sp e f)           = Where (k y) sp  (fmap (k . NullStmt) e) (extend k f)
--- >     extend k y@(Write _ sp ss es)         = Write (k y) sp  (map (fmap (k . NullStmt)) ss) (map (fmap (k . NullStmt)) es)
--- >     extend k y@(PointerAssg _ sp e1 e2)   = PointerAssg (k y) sp  (fmap (k . NullStmt) e1) (fmap (k . NullStmt) e2)
--- >     extend k y@(Return _ sp e)            = Return (k y) sp  (fmap (k . NullStmt) e)
--- >     extend k y@(Label _ sp s f)           = Label (k y) sp  s (extend k f)
--- >     extend k y@(Print _ sp e es)          = Print (k y) sp  (fmap (k . NullStmt) e) (map (fmap (k . NullStmt)) es)
--- >     extend k y@(ReadS _ sp ss es)         = ReadS (k y) sp  (map (fmap (k . NullStmt)) ss) (map (fmap (k . NullStmt)) es)
--- >     extend k y@(TextStmt _ sp s)          = TextStmt (k y) sp  s
--- >     extend k y@(NullStmt _ sp)            = NullStmt (k y) sp 
-
-
 annotation :: Tagged g => g a -> a
 annotation = tag
-
