@@ -19,6 +19,7 @@
 {-# LANGUAGE TupleSections #-}
 {-# LANGUAGE MultiParamTypeClasses #-}
 {-# LANGUAGE ImplicitParams #-}
+{-# LANGUAGE ScopedTypeVariables #-}
 
 module Camfort.Analysis.StencilSpecification where
 
@@ -256,6 +257,46 @@ getInductionVar (Just (F.DoSpecification _ _ (
                           F.ExpValue _ _ (F.ValVariable v)) _) _ _)) = [v]
 getInductionVar _ = []
 
+-- Idea: allow the behaviour of the whole-program spec inference to
+-- be switched between two modes:
+--  * infer for all assigns to affine induction subscripted arrays inside loops
+--  * infer for all do-loops with affine induction subscripte reads
+-- Considerations: need to be able to call inference from checking part too
+-- perDoBlock should be easy
+
+isStencilDo :: F.Block (FA.Analysis A) -> Bool
+isStencilDo b@(F.BlDo _ span _ mDoSpec body) = hasAffineSubscriptsOnIVar b
+isStencilDo _                                = False
+
+hasAffineSubscriptsOnIVar :: forall a . Data a => F.Block a -> Bool
+hasAffineSubscriptsOnIVar b@(F.BlDo _ _ _ mDoSpec body) =
+  case getInductionVar mDoSpec of
+    [] -> False
+    [ivar] ->
+       and [ all (\sub -> sub `isAffineOnVar` ivar) subs' |
+              F.ExpSubscript _ _ _ subs <- universeBi body :: [F.Expression a]
+              , let subs' = F.aStrip subs
+              , not (null subs') ]
+
+-- Only infer specification on those classified to be stencil do-blocks
+-- by the above predicate
+perDoBlock :: F.Block (FA.Analysis A) -> Inferer (F.Block (FA.Analysis A))
+perDoBlock b@(F.BlDo _ span _ mDoSpec body) | isStencilDo b = do
+  let localIvs = getInductionVar mDoSpec
+
+  -- ** INSERT ANALYSIS HERE
+  
+  -- introduce any induction variables into the induction variable state
+  modify $ union localIvs
+  -- descend into the body of the do-statement
+  mapM_ (descendBiM perDoBlock) body
+  -- Remove any induction variable from the state
+  modify $ (\\ localIvs)
+  return b
+
+perDoBlock b = return b
+
+
 perBlock :: F.Block (FA.Analysis A) -> Inferer (F.Block (FA.Analysis A))
 {-
 perBlock b@(F.BlStatement _ span _ (F.StExpressionAssign _ _ lhs rhs)) = do
@@ -353,6 +394,8 @@ ixToOffset :: [Variable] -> F.Index a -> Maybe Int
 ixToOffset ivs (F.IxSingle _ _ _ exp) = expToOffset ivs exp
 ixToOffset _ _ = Nothing -- If the indexing expression is a range
 
+isAffineOnVar :: F.Index a -> Variable -> Bool
+isAffineOnVar exp v = ixToOffset [v] exp /= Nothing
 
 expToOffset :: [Variable] -> F.Expression a -> Maybe Int
 expToOffset ivs (F.ExpValue _ _ (F.ValVariable v))
