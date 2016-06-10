@@ -280,6 +280,8 @@ perBlockInfer mode b@(F.BlStatement _ span _ (F.StExpressionAssign _ _ lhs _))
         if all (isAffineISubscript ivs) (F.aStrip subs)
          then tell [ (span, genSpecifications ivs b) ]
          else return ()
+       -- Not an assign we are interested in
+       _ -> return ()
     return b
 
 perBlockInfer mode b@(F.BlDo _ span _ mDoSpec body) = do
@@ -289,7 +291,8 @@ perBlockInfer mode b@(F.BlDo _ span _ mDoSpec body) = do
     ivs <- get
 
     if (mode == DoMode || mode == CombinedMode) && isStencilDo b
-     then tell [ (span, genSpecifications ivs b) ]
+     -- TODO: generalise this from the jsut thead of the BlDo body
+     then tell [ (span, genSpecifications ivs $ head body) ]
      else return ()
 
     -- descend into the body of the do-statement
@@ -317,8 +320,7 @@ genRHSsubscripts ivs b =
   where
    subscripts :: M.Map Variable [[F.Index (FA.Analysis A)]]
    subscripts = collect [ (v, e)
-      | F.ExpSubscript _ _ (F.ExpValue _ _ (F.ValVariable v)) subs
-         <- FA.blockRhsExprs b
+      | F.ExpSubscript _ _ (F.ExpValue _ _ (F.ValVariable v)) subs <- FA.rhsExprs b
        , let e = F.aStrip subs
        , not (null e) ]
 
