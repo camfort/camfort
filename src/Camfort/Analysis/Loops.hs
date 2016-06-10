@@ -52,7 +52,7 @@ import qualified Data.Map.Lazy as Map hiding (map, (\\))
 --     let
 --         anno = (
 --     in For anno v e1 e2 e3 body
---  
+--
 -- newFrame gammas = []:gammas
 -- pushVar v t (g:gs) = ((v, t):g):gs
 -- popVar (((v,t):g):gs) = (g:gs)

@@ -71,7 +71,7 @@ type SpecDecls = [([String], Specification)]
 pprintSpecDecls :: SpecDecls -> String
 pprintSpecDecls =
  foldr (\(names, spec) rest ->
-            show spec ++ " :: " ++ intercalate "," names ++ "\n" ++ rest) ""
+            show spec ++ " :: " ++ (intercalate "," names) ++ "\n" ++ rest) ""
 
 lookupSpecDecls :: SpecDecls -> String -> Maybe Specification
 lookupSpecDecls [] _ = Nothing

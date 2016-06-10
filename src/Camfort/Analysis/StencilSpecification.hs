@@ -20,6 +20,7 @@
 {-# LANGUAGE MultiParamTypeClasses #-}
 {-# LANGUAGE ImplicitParams #-}
 {-# LANGUAGE ScopedTypeVariables #-}
+{-# LANGUAGE DeriveDataTypeable #-}
 
 module Camfort.Analysis.StencilSpecification where
 
@@ -46,6 +47,7 @@ import Camfort.Helpers.Vec
 -- These two are redefined here for ForPar ASTs
 import Camfort.Helpers hiding (lineCol, spanLineCol)
 import Camfort.Output
+import Camfort.Input
 
 import qualified Language.Fortran.AST as F
 import qualified Language.Fortran.Analysis as FA
@@ -55,6 +57,7 @@ import qualified Language.Fortran.Analysis.BBlocks as FAB
 import qualified Language.Fortran.Analysis.DataFlow as FAD
 import qualified Language.Fortran.Util.Position as FU
 
+import Data.Graph.Inductive.Graph hiding (isEmpty)
 import qualified Data.Map as M
 import qualified Data.Set as S
 import Data.Function (on)
@@ -69,17 +72,25 @@ import Debug.Trace
 -- For the purposes of development, a representative example is given by running (in ghci):
 --      stencilsInf "samples/stencils/one.f" [] () ()
 
-infer :: F.ProgramFile Annotation -> String
-infer = concatMap (formatSpec M.empty) . FAR.underRenaming (infer' . FAB.analyseBBlocks)
-infer' pf@(F.ProgramFile cm_pus _) = concatMap perPU cm_pus
+data InferMode = DoMode | AssignMode | CombinedMode deriving (Eq, Show, Data, Read)
+instance Default InferMode where
+    defaultValue = AssignMode
+
+infer :: InferMode -> F.ProgramFile Annotation -> String
+infer mode = concatMap (formatSpec M.empty)
+           . FAR.underRenaming (infer' mode . FAB.analyseBBlocks)
+
+infer' mode pf@(F.ProgramFile cm_pus _) = concatMap perPU cm_pus
   where
-    perPU (_, pu) = runInferer cycs2 (F.getName pu) tenv (descendBiM perBlock pu)
+    perPU (_, pu) = let ?flowMap = flTo in
+       runInferer cycs2 (F.getName pu) tenv (descendBiM (perBlockInfer mode) pu)
+
     bm    = FAD.genBlockMap pf     -- get map of AST-Block-ID ==> corresponding AST-Block
     bbm   = FAB.genBBlockMap pf    -- get map of program unit ==> basic block graph
     sgr   = FAB.genSuperBBGr bbm   -- stitch all of the graphs together into a 'supergraph'
     gr    = FAB.superBBGrGraph sgr -- extract the supergraph itself
     dm    = FAD.genDefMap bm       -- get map of variable name ==> { defining AST-Block-IDs }
-    rd    = FAD.reachingDefinitions dm gr   -- perform reaching definitions analysis
+    rd    = FAD.reachingDefinitions dm gr   -- perform reachi ng definitions analysis
     flTo  = FAD.genFlowsToGraph bm dm gr rd -- create graph of definition "flows"
     -- VarFlowsToMap: A -> { B, C } indicates that A contributes to B, C.
     flMap = FAD.genVarFlowsToMap dm flTo -- create VarFlowsToMap
@@ -231,7 +242,7 @@ perBlockCheck b = do
 type LogLine = (FU.SrcSpan, [([Variable], Specification)])
 formatSpec :: FAR.NameMap -> LogLine -> String
 formatSpec nm (span, []) = ""
-formatSpec nm (span, specs) = loc ++ " \t" ++ (commaSep . nub . map doSpec $ specs) ++ "\n"
+formatSpec nm (span, specs) = (intercalate "\n" $ map (\s -> loc ++ " \t" ++ doSpec s) specs) ++ "\n"
   where
     loc                      = show (spanLineCol span)
     commaSep                 = intercalate ", "
@@ -246,97 +257,111 @@ formatSpec nm (span, specs) = loc ++ " \t" ++ (commaSep . nub . map doSpec $ spe
 -- The inferer works within this monad
 type Inferer = WriterT [LogLine] (ReaderT (Cycles, F.ProgramUnitName, TypeEnv A) (State [Variable]))
 type Cycles = [(F.Name, F.Name)]
+
 runInferer :: Cycles -> F.ProgramUnitName -> TypeEnv A -> Inferer a -> [LogLine]
 runInferer cycles puName tenv =
   flip evalState [] . flip runReaderT (cycles, puName, tenv) . execWriterT
 
---------------------------------------------------
 
+-- Traverse Blocks in the AST and infer stencil specifications
+perBlockInfer :: (?flowMap :: FAD.FlowsGraph A)
+    => InferMode -> F.Block (FA.Analysis A) -> Inferer (F.Block (FA.Analysis A))
+
+perBlockInfer mode b@(F.BlStatement _ span _ (F.StExpressionAssign _ _ lhs _))
+  | mode == AssignMode || mode == CombinedMode = do
+    ivs <- get
+    case lhs of
+       F.ExpSubscript _ _ (F.ExpValue _ _ (F.ValVariable v)) subs ->
+        -- Left-hand side is a subscript-by translation of an induction variable
+        if all (isAffineISubscript ivs) (F.aStrip subs)
+         then tell [ (span, genSpecifications ivs b) ]
+         else return ()
+    return b
+
+perBlockInfer mode b@(F.BlDo _ span _ mDoSpec body) = do
+    let localIvs = getInductionVar mDoSpec
+    -- introduce any induction variables into the induction variable state
+    modify $ union localIvs
+    ivs <- get
+
+    if (mode == DoMode || mode == CombinedMode) && isStencilDo b
+     then tell [ (span, genSpecifications ivs b) ]
+     else return ()
+
+    -- descend into the body of the do-statement
+    mapM_ (descendBiM (perBlockInfer mode)) body
+    -- Remove any induction variable from the state
+    modify $ (\\ localIvs)
+    return b
+
+perBlockInfer mode b = do
+    -- Go inside child blocks
+    mapM_ (descendBiM (perBlockInfer mode)) $ children b
+    return b
+
+getInductionVar :: Maybe (F.DoSpecification a) -> [Variable]
 getInductionVar (Just (F.DoSpecification _ _ (
                         F.StExpressionAssign _ _ (
                           F.ExpValue _ _ (F.ValVariable v)) _) _ _)) = [v]
 getInductionVar _ = []
 
--- Idea: allow the behaviour of the whole-program spec inference to
--- be switched between two modes:
---  * infer for all assigns to affine induction subscripted arrays inside loops
---  * infer for all do-loops with affine induction subscripte reads
--- Considerations: need to be able to call inference from checking part too
--- perDoBlock should be easy
+-- Get all RHS subscript which are translated induction variables
+genRHSsubscripts :: [Variable]
+                 -> F.Block (FA.Analysis A) -> M.Map Variable (M.Map [Int] Bool)
+genRHSsubscripts ivs b =
+  convertMultiples . M.map (toListsOfRelativeIndices ivs) $ subscripts
+  where
+   subscripts :: M.Map Variable [[F.Index (FA.Analysis A)]]
+   subscripts = collect [ (v, e)
+      | F.ExpSubscript _ _ (F.ExpValue _ _ (F.ValVariable v)) subs
+         <- FA.blockRhsExprs b
+       , let e = F.aStrip subs
+       , not (null e) ]
+
+   convertMultiples :: Ord a => M.Map k [a] -> M.Map k (M.Map a Bool)
+   -- Marks all 'a' values as 'False' (multiplicity 1) and then if
+   -- any duplicate values for 'a' occur, the 'with' functions
+   -- marks them as 'True' (multiplicity > 1)
+   convertMultiples = M.map (M.fromListWith (\_ _ -> True) . map (,False))
+
+-- Generate all subscripting expressions (that are translations on
+-- induction variables) that flow to this block
+genSubscripts ::
+    (?flowMap :: FAD.FlowsGraph A) => [Variable] ->
+    F.Block (FA.Analysis A) -> M.Map Variable (M.Map [Int] Bool)
+genSubscripts ivs block =
+  case (FA.insLabel $ F.getAnnotation block) of
+
+    Just node -> M.unionsWith plus (map (genRHSsubscripts ivs) (block : blocksFlowingIn))
+      where plus = M.unionWith (\_ _ -> True)
+            blocksFlowingIn = map (fromJust . lab ?flowMap) $ pre ?flowMap node
+
+    Nothing -> M.empty
+
+genSpecifications :: (?flowMap :: FAD.FlowsGraph A) =>
+   [Variable] -> F.Block (FA.Analysis A) -> [([Variable], Specification)]
+genSpecifications ivs = groupKeyBy . M.toList . specs
+  where specs = M.mapMaybe (relativeIxsToSpec ivs . M.keys) . genSubscripts ivs
 
 isStencilDo :: F.Block (FA.Analysis A) -> Bool
-isStencilDo b@(F.BlDo _ span _ mDoSpec body) = hasAffineSubscriptsOnIVar b
-isStencilDo _                                = False
-
-hasAffineSubscriptsOnIVar :: forall a . Data a => F.Block a -> Bool
-hasAffineSubscriptsOnIVar b@(F.BlDo _ _ _ mDoSpec body) =
-  case getInductionVar mDoSpec of
+isStencilDo b@(F.BlDo _ span _ mDoSpec body) =
+ -- Check to see if the body contains any affine use of the induction variable
+ -- as a subscript
+ case getInductionVar mDoSpec of
     [] -> False
     [ivar] ->
        and [ all (\sub -> sub `isAffineOnVar` ivar) subs' |
-              F.ExpSubscript _ _ _ subs <- universeBi body :: [F.Expression a]
+              F.ExpSubscript _ _ _ subs <- universeBi body :: [F.Expression (FA.Analysis A)]
               , let subs' = F.aStrip subs
               , not (null subs') ]
-
--- Only infer specification on those classified to be stencil do-blocks
--- by the above predicate
-perDoBlock :: F.Block (FA.Analysis A) -> Inferer (F.Block (FA.Analysis A))
-perDoBlock b@(F.BlDo _ span _ mDoSpec body) | isStencilDo b = do
-  let localIvs = getInductionVar mDoSpec
-
-  -- ** INSERT ANALYSIS HERE
-  
-  -- introduce any induction variables into the induction variable state
-  modify $ union localIvs
-  -- descend into the body of the do-statement
-  mapM_ (descendBiM perDoBlock) body
-  -- Remove any induction variable from the state
-  modify $ (\\ localIvs)
-  return b
-
-perDoBlock b = return b
+isStencilDo _  = False
 
 
-perBlock :: F.Block (FA.Analysis A) -> Inferer (F.Block (FA.Analysis A))
-{-
-perBlock b@(F.BlStatement _ span _ (F.StExpressionAssign _ _ lhs rhs)) = do
- inductionVars <- get
- case lhs of
-   F.ExpSubscript _ _ (F.ExpValue _ _ (F.ValVariable v)) subs
-     -> case (mapM_ (expToOffset inductionVars) subs)
-          -- all subscripts are affine induction exrepssions
-          Just () ->
-          -- subscript are non-affine
-          Nothing -> return ()
-   _ -> -- Expression is not an array subscript
--}
-
-perBlock b@(F.BlStatement _ span _ (F.StExpressionAssign _ _ _ rhs)) = do
-  (_, puName, tenv) <- ask
-  -- Get array indexing (on the RHS)
-  let rhsExprs = universeBi rhs :: [F.Expression (FA.Analysis A)]
-  let arrayAccesses = collect [
-          (v, e) | F.ExpSubscript _ _ (F.ExpValue _ _ (F.ValVariable v)) subs <- rhsExprs
-                 , let e = F.aStrip subs
-                 , not (null e)
-        ]
-
-  -- Create specification information
-  ivs <- get
-  let specs = groupKeyBy . M.toList . M.mapMaybe (ixCollectionToSpec ivs) $ arrayAccesses
-  -- add to report
-  tell [ (span, specs) ]
-  return b
-
-perBlock b@(F.BlDo _ span _ mDoSpec body) = do
-  let localIvs = getInductionVar mDoSpec
-  -- introduce any induction variables into the induction variable state
-  modify $ union localIvs
+{- OLD TEMPORAL INFERENCE CODE FROM perBlockInfer on DO
+   Temporarily removed
 
   (cycles, _, _) <- ask
-
   let lexps = FA.lhsExprs =<< body
-
   let getTimeSpec e = do
         lhsV <- case e of
           F.ExpValue _ _ (F.ValVariable lhsV) -> Just lhsV
@@ -349,21 +374,9 @@ perBlock b@(F.BlDo _ span _ mDoSpec body) = do
   let tempSpecs = groupKeyBy $ foldl' (\ ts -> maybe ts (:ts) . getTimeSpec) [] lexps
 
   tell [ (span, tempSpecs) ]
-  -- descend into the body of the do-statement
-  mapM_ (descendBiM perBlock) body
-  -- (we don't need to worry about scope, thanks to renaming)
+-}
 
-  -- Remove any induction variable from the state
-  modify $ (\\ localIvs)
-  return b
 
-perBlock b = do
-  -- Go inside child blocks
-  mapM_ (descendBiM perBlock) $ children b
-  return b
-
--- Penelope's first code, 20/03/2016.
--- iii././//////////////////////. mvnmmmmmmmmmu
 
 {- *** 2 . Operations on specs, and conversion from indexing expressions -}
 
@@ -373,18 +386,18 @@ padZeros ixss = let m = maximum (map length ixss)
                 in map (\ixs -> ixs ++ replicate (m - length ixs) 0) ixss
 
 -- Convert list of indexing expressions to a spec
-ixCollectionToSpec :: [ Variable ] -> [ [ F.Index a ] ] -> Maybe Specification
-ixCollectionToSpec ivs ixs =
-  if isEmpty exactSpec
-  then Nothing else Just exactSpec
-    where
-     exactSpec = inferFromIndices
-               . fromLists
-               . padZeros
-               . map (toListsOfRelativeIndices ivs) $ ixs
+ixCollectionToSpec :: [Variable] -> [[F.Index a]] -> Maybe Specification
+ixCollectionToSpec ivs =
+    (relativeIxsToSpec ivs) . (toListsOfRelativeIndices ivs)
 
-toListsOfRelativeIndices :: [ Variable ] -> [ F.Index a ] -> [ Int ]
-toListsOfRelativeIndices ivs = map (maybe 0 id . (ixToOffset ivs))
+-- Convert list of relative indices to a spec
+relativeIxsToSpec :: [Variable] -> [[Int]] -> Maybe Specification
+relativeIxsToSpec ivs ixs =
+    if isEmpty exactSpec then Nothing else Just exactSpec
+      where exactSpec = inferFromIndices . fromLists $ ixs
+
+toListsOfRelativeIndices :: [Variable] -> [[F.Index a]] -> [[Int]]
+toListsOfRelativeIndices ivs = padZeros . map (map (maybe 0 id . (ixToOffset ivs)))
 
 -- Convert indexing expressions that are translations
 -- intto their translation offset:
@@ -396,6 +409,9 @@ ixToOffset _ _ = Nothing -- If the indexing expression is a range
 
 isAffineOnVar :: F.Index a -> Variable -> Bool
 isAffineOnVar exp v = ixToOffset [v] exp /= Nothing
+
+isAffineISubscript :: [Variable] -> F.Index a -> Bool
+isAffineISubscript vs exp = ixToOffset vs exp /= Nothing
 
 expToOffset :: [Variable] -> F.Expression a -> Maybe Int
 expToOffset ivs (F.ExpValue _ _ (F.ValVariable v))
@@ -443,6 +459,9 @@ isArrayType tenv name v = fromMaybe False $ do
   idty <- M.lookup v tmap
   cty  <- FA.idCType idty
   return $ cty == FA.CTArray
+
+-- Penelope's first code, 20/03/2016.
+-- iii././//////////////////////. mvnmmmmmmmmmu
 
 -- Local variables:
 -- mode: haskell
