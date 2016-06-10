@@ -22,6 +22,7 @@ Handles input of code base (files and directories)
 -}
 
 {-# LANGUAGE DoAndIfThenElse #-}
+{-# LANGUAGE ScopedTypeVariables #-}
 
 module Camfort.Input where
 
@@ -44,26 +45,27 @@ import Camfort.Helpers
 import Camfort.Output
 import Camfort.Traverse
 
+import Data.Data
 import Data.List (nub, (\\), elemIndices, intersperse)
 
-type Options = [Flag]
-data Flag = Version | Input String | Output String
-         | Solver Solver | Excludes String
-         | Literals AssumeLiterals | Debug deriving Show
+-- Class for default values of some type 't'
+class Default t where
+    defaultValue :: t
 
+-- From a '[t]' extract the first occurence of an 'opt' value.
+-- If one does not exist, return the default 'opt'
+getOption :: forall t opt . (Data opt, Data t, Default opt) => [t] -> opt
+getOption [] = defaultValue
+getOption (x : xs) =
+    case universeBi x :: [opt] of
+      []        -> getOption xs
+      (opt : _) -> opt
 
-solverType [] = Custom
-solverType ((Solver s) : _) = s
-solverType (x : xs) = solverType xs
-
-literalsBehaviour [] = Poly
-literalsBehaviour ((Literals l) : _) = l
-literalsBehaviour (x : xs) = literalsBehaviour xs
-
+{-
 getExcludes [] = ""
 getExcludes ((Excludes s) : xs) = s
 getExcludes (x : xs) = getExcludes xs
-
+-}
 
 -- * Builders for analysers and refactorings
 

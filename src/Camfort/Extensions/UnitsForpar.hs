@@ -50,6 +50,7 @@ import Control.Arrow (first, second)
 import Data.Generics.Uniplate.Operations
 
 import Camfort.Helpers
+import Camfort.Input
 import Camfort.Output
 import Camfort.Analysis.Annotations
 import Camfort.Analysis.Syntax
@@ -86,6 +87,11 @@ data UnitState = UnitState { solver :: Solver, assumeLiterals :: AssumeLiterals 
 type UnitsM a = StateT UnitState Identity a
 
 runUnits s0 m = runIdentity (evalStateT m s0)
+
+instance Default Solver where
+    defaultValue = Custom
+instance Default AssumeLiterals where
+    defaultValue = Poly
 
 --------------------------------------------------
 

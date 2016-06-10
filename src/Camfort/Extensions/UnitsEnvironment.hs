@@ -13,7 +13,7 @@
    See the License for the specific language governing permissions and
    limitations under the License.
 -}
-{-# LANGUAGE TemplateHaskell, ImplicitParams #-}
+{-# LANGUAGE TemplateHaskell, ImplicitParams, DeriveDataTypeable #-}
 
 {- Provides various data types and type class instances for the Units extension -}
 
@@ -26,11 +26,12 @@ import Data.Label.Monadic hiding (modify)
 import Control.Monad.State.Strict hiding (gets)
 import Language.Fortran
 import Data.Matrix
+import Data.Data
 
 type EqualityConstrained = Bool
 
-data Solver = LAPACK | Custom deriving (Show, Read, Eq)
-data AssumeLiterals = Poly | Unitless | Mixed deriving (Show, Read, Eq)
+data Solver = LAPACK | Custom deriving (Show, Read, Eq, Data)
+data AssumeLiterals = Poly | Unitless | Mixed deriving (Show, Read, Eq, Data)
 
 {- Represents a constant unit expression (i.e. one without unit variables) for the RHSs of the Gaussian matrix.
     e.g. Unitful [("a", 2/3), ("b",2)] represents the linear term  2/3 log a + 2 log b

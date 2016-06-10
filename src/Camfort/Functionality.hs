@@ -17,7 +17,9 @@
 {- This module collects together stubs that connect analysis/transformations
    with the input -> output procedures -}
 
-{-# LANGUAGE ImplicitParams, DoAndIfThenElse #-}
+{-# LANGUAGE ImplicitParams #-}
+{-# LANGUAGE DoAndIfThenElse #-}
+{-# LANGUAGE DeriveDataTypeable #-}
 
 module Camfort.Functionality where
 
@@ -50,6 +52,7 @@ import Camfort.Helpers
 import Camfort.Output
 import Camfort.Input
 
+import Data.Data
 import Data.List (foldl', nub, (\\), elemIndices, intersperse, intercalate)
 
 -- FORPAR
@@ -59,7 +62,25 @@ import Language.Fortran.Analysis.Renaming
   (renameAndStrip, analyseRenames, unrename, NameMap)
 import Language.Fortran.Analysis(initAnalysis)
 import Camfort.Extensions.UnitsForpar
-import qualified Camfort.Analysis.StencilSpecification as StencilsForpar
+import qualified Camfort.Analysis.StencilSpecification as Stencils
+
+-- CamFort optional flags
+data Flag = Version
+         | Input String
+         | Output String
+         | Solver Solver
+         | Excludes String
+         | Literals AssumeLiterals
+         | StencilInferMode Stencils.InferMode
+         | Debug deriving (Data, Show)
+
+type Options = [Flag]
+
+-- Extract excluces information from options
+instance Default String where
+    defaultValue = ""
+getExcludes :: Options -> String
+getExcludes xs = getOption xs
 
 -- * Wrappers on all of the features
 typeStructuring inSrc excludes outSrc _ = do
@@ -107,29 +128,29 @@ equivalences inSrc excludes outSrc _ = do
 {- Units feature -}
 units inSrc excludes outSrc opt = do
     putStrLn $ "Inferring units for " ++ show inSrc ++ "\n"
-    let ?solver = solverType opt
-     in let ?assumeLiterals = literalsBehaviour opt
+    let ?solver = getOption opt :: Solver
+     in let ?assumeLiterals = getOption opt :: AssumeLiterals
         in doRefactor' (mapM LU.inferUnits) inSrc excludes outSrc
 
 unitCriticals inSrc excludes outSrc opt = do
     putStrLn $ "Infering critical variables for units inference in directory "
              ++ show inSrc ++ "\n"
-    let ?solver = solverType opt
-     in let ?assumeLiterals = literalsBehaviour opt
+    let ?solver = getOption opt :: Solver
+     in let ?assumeLiterals = getOption opt :: AssumeLiterals
         in doAnalysisReport' (mapM LU.inferCriticalVariables)
               inSrc excludes outSrc
 
-stencilsInf inSrc excludes _ _ = do
+stencilsInf inSrc excludes _ opt = do
   putStrLn $ "Inferring stencil specs for " ++ show inSrc ++ "\n"
-  doAnalysisSummaryForpar StencilsForpar.infer inSrc excludes
+  doAnalysisSummaryForpar (Stencils.infer (getOption opt)) inSrc excludes
 
 stencilsCheck inSrc excludes _ _ = do
   putStrLn $ "Checking stencil specs for " ++ show inSrc ++ "\n"
-  doAnalysisSummaryForpar StencilsForpar.check inSrc excludes
+  doAnalysisSummaryForpar Stencils.check inSrc excludes
 
 stencilsVarFlowCycles inSrc excludes _ _ = do
   putStrLn $ "Inferring var flow cycles for " ++ show inSrc ++ "\n"
-  let flowAnalysis = intercalate ", " . map show . StencilsForpar.findVarFlowCycles
+  let flowAnalysis = intercalate ", " . map show . Stencils.findVarFlowCycles
   doAnalysisSummaryForpar flowAnalysis inSrc excludes
 
 --------------------------------------------------

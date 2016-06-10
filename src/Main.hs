@@ -13,7 +13,7 @@
    limitations under the License.
 -}
 
-{-# LANGUAGE ScopedTypeVariables, DoAndIfThenElse #-}
+{-# LANGUAGE DoAndIfThenElse #-}
 
 module Main where
 
@@ -77,6 +77,9 @@ options =
          "units-of-measure solver. ID = Custom or LAPACK"
      , Option ['l']     ["units-literals"] (ReqArg (Literals . read) "ID")
          "units-of-measure literals mode. ID = Unitless, Poly, or Mixed"
+     , Option ['m']     ["stencil-inference-mode"]
+                (ReqArg (StencilInferMode . read . (++ "Mode")) "ID")
+                "stencil specification inference mode. ID = Do, Assign, or Both"
      ]
 
 compilerOpts :: [String] -> IO ([Flag], [String])
@@ -131,10 +134,3 @@ menu =
   ++ "\nAnalysis functions:\n"
   ++ concatMap (\(k, (_, info)) -> "\t" ++ k ++ replicate (15 - length k) ' '
   ++ "\t [" ++ info ++ "] \n") analyses
-
--- Some development tests
-
-test = stencilsInf "samples/stencils/one.f" [] () ()
-testVFC = stencilsVarFlowCycles "samples/stencils/one.f" [] () ()
-
-oldTest = stencilsInf "samples/stencils/one.f90" [] () ()
