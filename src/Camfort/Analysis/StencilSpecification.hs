@@ -86,7 +86,8 @@ infer mode = concatMap (formatSpec M.empty)
 infer' mode pf@(F.ProgramFile cm_pus _) = concatMap perPU cm_pus
   where
     -- Run inference per program unit, placing the flowsmap in scope
-    perPU (_, pu) = let ?flowsGraph = flTo in
+    perPU (_, pu) = ("Flows graph = " ++ (show $ nodes flTo))
+      `trace` let ?flowsGraph = flTo in
        runInferer cycs2 (F.getName pu) tenv (descendBiM (perBlockInfer mode) pu)
 
     bm    = FAD.genBlockMap pf     -- get map of AST-Block-ID ==> corresponding AST-Block
@@ -337,12 +338,13 @@ genSubscripts ::
 genSubscripts ivs block =
   case (FA.insLabel $ F.getAnnotation block) of
 
-    Just node -> M.unionsWith plus (genRHSsubscripts ivs block
+    Just node -> -- ("fl = " ++ (show $ nodes ?flowsGraph) ++ "\n n = " ++ show node ++ " - " ++ show (pre ?flowsGraph node)) `trace`
+                 M.unionsWith plus (genRHSsubscripts ivs block
                                    : map (genSubscripts ivs) blocksFlowingIn)
       where plus = M.unionWith (\_ _ -> True)
             blocksFlowingIn = map (fromJust . lab ?flowsGraph) $ pre ?flowsGraph node
 
-    Nothing -> M.empty
+    Nothing -> error $ "Missing a label for: " ++ show block
 
 genSpecifications :: (?flowsGraph :: FAD.FlowsGraph A) =>
    [Variable] -> [F.Block (FA.Analysis A)] -> [([Variable], Specification)]
