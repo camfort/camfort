@@ -55,7 +55,7 @@ import Camfort.Input
 import Data.Data
 import Data.List (foldl', nub, (\\), elemIndices, intersperse, intercalate)
 
--- FORPAR
+-- FORPAR related imports
 import qualified Language.Fortran.Parser.Any as FP
 import qualified Language.Fortran.AST as A
 import Language.Fortran.Analysis.Renaming

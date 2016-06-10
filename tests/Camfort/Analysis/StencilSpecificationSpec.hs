@@ -147,7 +147,7 @@ spec =
 
     describe "integration test on inference for example2.f"
        $ it "stencil infer" $
-         (callAndSummarise infer program)
+         (callAndSummarise (infer AssignMode) program)
            `shouldBe`
             "((20,8),(21,48)) \tstencil (centered(depth=1, dim=1)) \
                                      \+ (centered(depth=1, dim=2)) :: a\n"

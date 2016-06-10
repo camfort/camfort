@@ -72,7 +72,10 @@ import Debug.Trace
 -- For the purposes of development, a representative example is given by running (in ghci):
 --      stencilsInf "samples/stencils/one.f" [] () ()
 
-data InferMode = DoMode | AssignMode | CombinedMode deriving (Eq, Show, Data, Read)
+data InferMode =
+  DoMode | AssignMode | CombinedMode
+  deriving (Eq, Show, Data, Read)
+
 instance Default InferMode where
     defaultValue = AssignMode
 
@@ -82,6 +85,7 @@ infer mode = concatMap (formatSpec M.empty)
 
 infer' mode pf@(F.ProgramFile cm_pus _) = concatMap perPU cm_pus
   where
+    -- Run inference per program unit, placing the flowsmap in scope
     perPU (_, pu) = let ?flowMap = flTo in
        runInferer cycs2 (F.getName pu) tenv (descendBiM (perBlockInfer mode) pu)
 

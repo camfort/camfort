@@ -84,10 +84,10 @@ options =
 
 compilerOpts :: [String] -> IO ([Flag], [String])
 compilerOpts argv =
-       case getOpt Permute options argv of
-          (o,n,[]  ) -> return (o,n)
-          (_,_,errs) -> ioError (userError (concat errs ++ usageInfo header options))
-      where header = introMsg ++ usage ++ menu ++ "\nOptions:"
+  case getOpt Permute options argv of
+    (o,n,[]  ) -> return (o,n)
+    (_,_,errs) -> ioError (userError (concat errs ++ usageInfo header options))
+  where header = introMsg ++ usage ++ menu ++ "\nOptions:"
 
 -- * Which modes do not require an output
 outputNotRequired = ["criticalUnits", "count"]

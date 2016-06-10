@@ -61,12 +61,6 @@ getOption (x : xs) =
       []        -> getOption xs
       (opt : _) -> opt
 
-{-
-getExcludes [] = ""
-getExcludes ((Excludes s) : xs) = s
-getExcludes (x : xs) = getExcludes xs
--}
-
 -- * Builders for analysers and refactorings
 
 {-| Performs an analysis provided by its first parameter on the directory of its
