@@ -86,7 +86,7 @@ infer mode = concatMap (formatSpec M.empty)
 infer' mode pf@(F.ProgramFile cm_pus _) = concatMap perPU cm_pus
   where
     -- Run inference per program unit, placing the flowsmap in scope
-    perPU (_, pu) = let ?flowMap = flTo in
+    perPU (_, pu) = let ?flowsGraph = flTo in
        runInferer cycs2 (F.getName pu) tenv (descendBiM (perBlockInfer mode) pu)
 
     bm    = FAD.genBlockMap pf     -- get map of AST-Block-ID ==> corresponding AST-Block
@@ -268,7 +268,7 @@ runInferer cycles puName tenv =
 
 
 -- Traverse Blocks in the AST and infer stencil specifications
-perBlockInfer :: (?flowMap :: FAD.FlowsGraph A)
+perBlockInfer :: (?flowsGraph :: FAD.FlowsGraph A)
     => InferMode -> F.Block (FA.Analysis A) -> Inferer (F.Block (FA.Analysis A))
 
 perBlockInfer mode b@(F.BlStatement _ span _ (F.StExpressionAssign _ _ lhs _))
@@ -278,7 +278,7 @@ perBlockInfer mode b@(F.BlStatement _ span _ (F.StExpressionAssign _ _ lhs _))
        F.ExpSubscript _ _ (F.ExpValue _ _ (F.ValVariable v)) subs ->
         -- Left-hand side is a subscript-by translation of an induction variable
         if all (isAffineISubscript ivs) (F.aStrip subs)
-         then tell [ (span, genSpecifications ivs b) ]
+         then tell [ (span, genSpecifications ivs [b]) ]
          else return ()
        -- Not an assign we are interested in
        _ -> return ()
@@ -291,8 +291,7 @@ perBlockInfer mode b@(F.BlDo _ span _ mDoSpec body) = do
     ivs <- get
 
     if (mode == DoMode || mode == CombinedMode) && isStencilDo b
-     -- TODO: generalise this from the jsut thead of the BlDo body
-     then tell [ (span, genSpecifications ivs $ head body) ]
+     then tell [ (span, genSpecifications ivs body) ]
      else return ()
 
     -- descend into the body of the do-statement
@@ -333,21 +332,24 @@ genRHSsubscripts ivs b =
 -- Generate all subscripting expressions (that are translations on
 -- induction variables) that flow to this block
 genSubscripts ::
-    (?flowMap :: FAD.FlowsGraph A) => [Variable] ->
+    (?flowsGraph :: FAD.FlowsGraph A) => [Variable] ->
     F.Block (FA.Analysis A) -> M.Map Variable (M.Map [Int] Bool)
 genSubscripts ivs block =
   case (FA.insLabel $ F.getAnnotation block) of
 
-    Just node -> M.unionsWith plus (map (genRHSsubscripts ivs) (block : blocksFlowingIn))
+    Just node -> M.unionsWith plus (genRHSsubscripts ivs block
+                                   : map (genSubscripts ivs) blocksFlowingIn)
       where plus = M.unionWith (\_ _ -> True)
-            blocksFlowingIn = map (fromJust . lab ?flowMap) $ pre ?flowMap node
+            blocksFlowingIn = map (fromJust . lab ?flowsGraph) $ pre ?flowsGraph node
 
     Nothing -> M.empty
 
-genSpecifications :: (?flowMap :: FAD.FlowsGraph A) =>
-   [Variable] -> F.Block (FA.Analysis A) -> [([Variable], Specification)]
+genSpecifications :: (?flowsGraph :: FAD.FlowsGraph A) =>
+   [Variable] -> [F.Block (FA.Analysis A)] -> [([Variable], Specification)]
 genSpecifications ivs = groupKeyBy . M.toList . specs
-  where specs = M.mapMaybe (relativeIxsToSpec ivs . M.keys) . genSubscripts ivs
+  where specs = M.mapMaybe (relativeIxsToSpec ivs . M.keys)
+              . M.unionsWith (M.unionWith (\_ _ -> True))
+              . map (genSubscripts ivs)
 
 isStencilDo :: F.Block (FA.Analysis A) -> Bool
 isStencilDo b@(F.BlDo _ span _ mDoSpec body) =
@@ -355,11 +357,15 @@ isStencilDo b@(F.BlDo _ span _ mDoSpec body) =
  -- as a subscript
  case getInductionVar mDoSpec of
     [] -> False
-    [ivar] ->
-       and [ all (\sub -> sub `isAffineOnVar` ivar) subs' |
-              F.ExpSubscript _ _ _ subs <- universeBi body :: [F.Expression (FA.Analysis A)]
-              , let subs' = F.aStrip subs
-              , not (null subs') ]
+    [ivar] -> length exprs > 0 &&
+               and [ all (\sub -> sub `isAffineOnVar` ivar) subs' |
+               F.ExpSubscript _ _ _ subs <- exprs
+               , let subs' = F.aStrip subs
+               , not (null subs') ]
+      where exprs = universeBi upToNextDo :: [F.Expression (FA.Analysis A)]
+            upToNextDo = takeWhile (not . isDo) body
+            isDo (F.BlDo {}) = True
+            isDo _            = False
 isStencilDo _  = False
 
 
