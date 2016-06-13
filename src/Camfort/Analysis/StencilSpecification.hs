@@ -79,33 +79,42 @@ data InferMode =
 instance Default InferMode where
     defaultValue = AssignMode
 
-infer :: InferMode -> F.ProgramFile Annotation -> String
-infer mode = concatMap (formatSpec M.empty)
-           . FAR.underRenaming (infer' mode . FAB.analyseBBlocks)
+infer :: InferMode -> Filename -> F.ProgramFile Annotation -> String
+infer mode filename =
+      (\x -> if null x then "" else "\n" ++ filename ++ "\n" ++ x)
+    . concatMap (formatSpec M.empty)
+    . FAR.underRenaming (infer' mode . FAB.analyseBBlocks)
 
-infer' mode pf@(F.ProgramFile cm_pus _) = concatMap perPU cm_pus
+infer' mode pf@(F.ProgramFile cm_pus others) =
+  concatMap perPU (universeBi cm_pus)
   where
     -- Run inference per program unit, placing the flowsmap in scope
-    perPU (_, pu) = ("Flows graph = " ++ (show $ nodes flTo))
-      `trace` let ?flowsGraph = flTo in
-       runInferer cycs2 (F.getName pu) tenv (descendBiM (perBlockInfer mode) pu)
+    perPU :: F.ProgramUnit (FA.Analysis A)
+          -> [(FU.SrcSpan, [([Variable], Specification)])]
+
+    perPU pu | Just gr <- FA.bBlocks $ F.getAnnotation pu =
+      let -- perform reaching definitions analysis
+          rd    = FAD.reachingDefinitions dm gr
+          -- create graph of definition "flows"
+          flTo =  FAD.genFlowsToGraph bm dm gr rd
+          -- VarFlowsToMap: A -> { B, C } indicates that A contributes to B, C
+          flMap = FAD.genVarFlowsToMap dm flTo
+          -- find 2-cycles: A -> B -> A
+          cycs2 = [ (n, m) | (n, ns) <- M.toList flMap
+                    , m       <- S.toList ns
+                    , ms      <- maybeToList $ M.lookup m flMap
+                    , n `S.member` ms && n /= m ]
+          -- identify every loop by its back-edge
+          beMap = FAD.genBackEdgeMap (FAD.dominators gr) gr
+      in let ?flowsGraph = flTo
+         in runInferer cycs2 (F.getName pu) tenv (descendBiM (perBlockInfer mode) pu)
+    perPU _ = []
 
     bm    = FAD.genBlockMap pf     -- get map of AST-Block-ID ==> corresponding AST-Block
     bbm   = FAB.genBBlockMap pf    -- get map of program unit ==> basic block graph
-    sgr   = FAB.genSuperBBGr bbm   -- stitch all of the graphs together into a 'supergraph'
-    gr    = FAB.superBBGrGraph sgr -- extract the supergraph itself
+    --sgr   = FAB.genSuperBBGr bbm   -- stitch all of the graphs together into a 'supergraph'
+    --gr    = FAB.superBBGrGraph sgr -- extract the supergraph itself
     dm    = FAD.genDefMap bm       -- get map of variable name ==> { defining AST-Block-IDs }
-    rd    = FAD.reachingDefinitions dm gr   -- perform reachi ng definitions analysis
-    flTo  = FAD.genFlowsToGraph bm dm gr rd -- create graph of definition "flows"
-    -- VarFlowsToMap: A -> { B, C } indicates that A contributes to B, C.
-    flMap = FAD.genVarFlowsToMap dm flTo -- create VarFlowsToMap
-    -- find 2-cycles: A -> B -> A
-    cycs2 = [ (n, m) | (n, ns) <- M.toList flMap
-                     , m       <- S.toList ns
-                     , ms      <- maybeToList $ M.lookup m flMap
-                     , n `S.member` ms && n /= m ]
-    beMap = FAD.genBackEdgeMap (FAD.dominators gr) gr -- identify every loop by its back-edge
-    ivMap = FAD.genInductionVarMap beMap gr -- get [basic] induction variables for every loop
     tenv  = FAT.inferTypes pf
 
 -- | Return list of variable names that flow into themselves via a 2-cycle
@@ -333,16 +342,21 @@ genRHSsubscripts ivs b =
 -- Generate all subscripting expressions (that are translations on
 -- induction variables) that flow to this block
 genSubscripts ::
-    (?flowsGraph :: FAD.FlowsGraph A) => [Variable] ->
+    (?flowsGraph :: FAD.FlowsGraph A) => [Variable] -> [Int] ->
     F.Block (FA.Analysis A) -> M.Map Variable (M.Map [Int] Bool)
-genSubscripts ivs block =
+genSubscripts ivs visited block =
   case (FA.insLabel $ F.getAnnotation block) of
 
-    Just node -> -- ("fl = " ++ (show $ nodes ?flowsGraph) ++ "\n n = " ++ show node ++ " - " ++ show (pre ?flowsGraph node)) `trace`
-                 M.unionsWith plus (genRHSsubscripts ivs block
-                                   : map (genSubscripts ivs) blocksFlowingIn)
-      where plus = M.unionWith (\_ _ -> True)
-            blocksFlowingIn = map (fromJust . lab ?flowsGraph) $ pre ?flowsGraph node
+    Just node ->
+     if node `elem` visited
+     -- This dependency has already been visited during this traversal
+     then M.empty
+     -- Fresh dependency
+     else M.unionsWith plus (genRHSsubscripts ivs block : dependencies)
+
+      where dependencies    = map (genSubscripts ivs (node : visited)) blocksFlowingIn
+            plus            = M.unionWith (\_ _ -> True)
+            blocksFlowingIn = mapMaybe (lab ?flowsGraph) $ pre ?flowsGraph node
 
     Nothing -> error $ "Missing a label for: " ++ show block
 
@@ -351,7 +365,7 @@ genSpecifications :: (?flowsGraph :: FAD.FlowsGraph A) =>
 genSpecifications ivs = groupKeyBy . M.toList . specs
   where specs = M.mapMaybe (relativeIxsToSpec ivs . M.keys)
               . M.unionsWith (M.unionWith (\_ _ -> True))
-              . map (genSubscripts ivs)
+              . map (genSubscripts ivs [])
 
 isStencilDo :: F.Block (FA.Analysis A) -> Bool
 isStencilDo b@(F.BlDo _ span _ mDoSpec body) =

@@ -146,12 +146,12 @@ stencilsInf inSrc excludes _ opt = do
 
 stencilsCheck inSrc excludes _ _ = do
   putStrLn $ "Checking stencil specs for " ++ show inSrc ++ "\n"
-  doAnalysisSummaryForpar Stencils.check inSrc excludes
+  doAnalysisSummaryForpar (const Stencils.check) inSrc excludes
 
 stencilsVarFlowCycles inSrc excludes _ _ = do
   putStrLn $ "Inferring var flow cycles for " ++ show inSrc ++ "\n"
   let flowAnalysis = intercalate ", " . map show . Stencils.findVarFlowCycles
-  doAnalysisSummaryForpar flowAnalysis inSrc excludes
+  doAnalysisSummaryForpar (const flowAnalysis) inSrc excludes
 
 --------------------------------------------------
 -- Forpar wrappers
@@ -204,13 +204,12 @@ readForparseSrcDir inp excludes = do
 {-| Read a specific file, and parse it -}
 readForparseSrcFile :: Filename -> IO (Filename, SourceText, A.ProgramFile A)
 readForparseSrcFile f = do
-    putStrLn f
     inp <- readFile f
     let ast = FP.fortranParser inp f
     return $ (f, inp, fmap (const unitAnnotation) ast)
 ----
 
-doAnalysisSummaryForpar :: (Monoid s, Show' s) => (A.ProgramFile A -> s)
+doAnalysisSummaryForpar :: (Monoid s, Show' s) => (Filename -> A.ProgramFile A -> s)
                         -> FileOrDir -> [Filename] -> IO ()
 doAnalysisSummaryForpar aFun inSrc excludes = do
   if excludes /= [] && excludes /= [""]
@@ -223,4 +222,4 @@ doAnalysisSummaryForpar aFun inSrc excludes = do
   putStrLn . show' $ out
 
 callAndSummarise aFun ps = do
-  foldl' (\n (f, _, ps) -> n `mappend` aFun ps) mempty ps
+  foldl' (\n (f, _, ps) -> n `mappend` aFun f ps) mempty ps
