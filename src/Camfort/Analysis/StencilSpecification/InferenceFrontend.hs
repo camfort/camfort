@@ -50,6 +50,8 @@ import qualified Data.Set as S
 import Data.Maybe
 import Data.List
 
+import Debug.Trace
+
 -- Define modes of interaction with the inference
 data InferMode =
   DoMode | AssignMode | CombinedMode
@@ -170,12 +172,38 @@ perBlockInfer mode b = do
     return b
 
 
+genSpecifications :: (?flowsGraph :: FAD.FlowsGraph A) =>
+   [Variable] -> [F.Block (FA.Analysis A)] -> [([Variable], Specification)]
+genSpecifications ivs = groupKeyBy . M.toList . specs
+  where specs = M.mapMaybe (relativeIxsToSpec ivs . M.keys)
+              . M.unionsWith (M.unionWith (\_ _ -> True))
+              . flip evalState []
+              . mapM (genSubscripts ivs)
 
-getInductionVar :: Maybe (F.DoSpecification a) -> [Variable]
-getInductionVar (Just (F.DoSpecification _ _ (
-                        F.StExpressionAssign _ _ (
-                          F.ExpValue _ _ (F.ValVariable v)) _) _ _)) = [v]
-getInductionVar _ = []
+-- Generate all subscripting expressions (that are translations on
+-- induction variables) that flow to this block
+-- The State monad provides a list of the visited nodes so far
+genSubscripts ::
+    (?flowsGraph :: FAD.FlowsGraph A) => [Variable] ->
+    F.Block (FA.Analysis A) -> State [Int] (M.Map Variable (M.Map [Int] Bool))
+genSubscripts ivs block = do
+  visited <- get
+  case (FA.insLabel $ F.getAnnotation block) of
+
+    Just node ->
+     if node `elem` visited
+     -- This dependency has already been visited during this traversal
+     then return $ M.empty
+     -- Fresh dependency
+     else do
+       put $ node : visited
+       let blocksFlowingIn = mapMaybe (lab ?flowsGraph) $ pre ?flowsGraph node
+       dependencies <- mapM (genSubscripts ivs) blocksFlowingIn
+       let plus = M.unionWith (\_ _ -> True)
+       return $ M.unionsWith plus (genRHSsubscripts ivs block : dependencies)
+
+    Nothing -> error $ "Missing a label for: " ++ show block
+
 
 -- Get all RHS subscript which are translated induction variables
 genRHSsubscripts :: [Variable]
@@ -195,33 +223,12 @@ genRHSsubscripts ivs b =
    -- marks them as 'True' (multiplicity > 1)
    convertMultiples = M.map (M.fromListWith (\_ _ -> True) . map (,False))
 
--- Generate all subscripting expressions (that are translations on
--- induction variables) that flow to this block
-genSubscripts ::
-    (?flowsGraph :: FAD.FlowsGraph A) => [Variable] -> [Int] ->
-    F.Block (FA.Analysis A) -> M.Map Variable (M.Map [Int] Bool)
-genSubscripts ivs visited block =
-  case (FA.insLabel $ F.getAnnotation block) of
+getInductionVar :: Maybe (F.DoSpecification a) -> [Variable]
+getInductionVar (Just (F.DoSpecification _ _ (
+                        F.StExpressionAssign _ _ (
+                          F.ExpValue _ _ (F.ValVariable v)) _) _ _)) = [v]
+getInductionVar _ = []
 
-    Just node ->
-     if node `elem` visited
-     -- This dependency has already been visited during this traversal
-     then M.empty
-     -- Fresh dependency
-     else M.unionsWith plus (genRHSsubscripts ivs block : dependencies)
-
-      where dependencies    = map (genSubscripts ivs (node : visited)) blocksFlowingIn
-            plus            = M.unionWith (\_ _ -> True)
-            blocksFlowingIn = mapMaybe (lab ?flowsGraph) $ pre ?flowsGraph node
-
-    Nothing -> error $ "Missing a label for: " ++ show block
-
-genSpecifications :: (?flowsGraph :: FAD.FlowsGraph A) =>
-   [Variable] -> [F.Block (FA.Analysis A)] -> [([Variable], Specification)]
-genSpecifications ivs = groupKeyBy . M.toList . specs
-  where specs = M.mapMaybe (relativeIxsToSpec ivs . M.keys)
-              . M.unionsWith (M.unionWith (\_ _ -> True))
-              . map (genSubscripts ivs [])
 
 isStencilDo :: F.Block (FA.Analysis A) -> Bool
 isStencilDo b@(F.BlDo _ span _ mDoSpec body) =
