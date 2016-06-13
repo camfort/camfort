@@ -18,7 +18,7 @@
              TupleSections, FunctionalDependencies #-}
 {-# LANGUAGE ImplicitParams #-}
 
-module Camfort.Analysis.StencilSpecification.Check where
+module Camfort.Analysis.StencilSpecification.CheckBackend where
 
 import Data.Data
 import Data.Maybe
@@ -28,7 +28,7 @@ import Control.Monad.State.Lazy
 import Control.Monad.Reader
 import Control.Monad.Writer hiding (Product,Sum)
 
-import Camfort.Analysis.StencilSpecification.Inference
+import Camfort.Analysis.StencilSpecification.InferenceBackend
 import Camfort.Analysis.StencilSpecification.Syntax
 import Camfort.Analysis.StencilSpecification.Model
 import qualified Camfort.Analysis.StencilSpecification.Grammar as SYN
@@ -138,3 +138,8 @@ find' p (x : xs) =
   case p x of
     Nothing -> find' p xs
     Just b  -> Just b
+
+-- Local variables:
+-- mode: haskell
+-- haskell-program-name: "cabal repl"
+-- End:

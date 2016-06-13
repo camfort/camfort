@@ -24,7 +24,7 @@
 {-# LANGUAGE ScopedTypeVariables #-}
 {-# LANGUAGE PolyKinds #-}
 
-module Camfort.Analysis.StencilSpecification.Inference where
+module Camfort.Analysis.StencilSpecification.InferenceBackend where
 
 import Prelude hiding (sum)
 import Data.Generics.Uniplate.Operations
@@ -304,3 +304,8 @@ fromLists (xs:xss) = consList (fromList xs) (fromLists xss)
 -- Equality type
 data EqT (a :: k) (b :: k) where
     ReflEq :: EqT a a
+
+-- Local variables:
+-- mode: haskell
+-- haskell-program-name: "cabal repl"
+-- End:

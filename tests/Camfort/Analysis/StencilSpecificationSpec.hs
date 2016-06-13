@@ -14,7 +14,8 @@ import Camfort.Helpers.Vec
 import Camfort.Analysis.StencilSpecification
 import Camfort.Analysis.StencilSpecification.Synthesis
 import Camfort.Analysis.StencilSpecification.Model
-import Camfort.Analysis.StencilSpecification.Inference
+import Camfort.Analysis.StencilSpecification.InferenceBackend
+import Camfort.Analysis.StencilSpecification.InferenceFrontend
 import Camfort.Analysis.StencilSpecification.Syntax hiding (Spec)
 import Camfort.Analysis.Annotations
 import qualified Language.Fortran.AST as F

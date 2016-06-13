@@ -3,7 +3,8 @@
 module Camfort.Analysis.StencilSpecification.CheckSpec (spec) where
 
 import Camfort.Analysis.CommentAnnotator
-import Camfort.Analysis.StencilSpecification.Check
+import Camfort.Analysis.StencilSpecification.CheckBackend
+import Camfort.Analysis.StencilSpecification.CheckFrontend
 import qualified Camfort.Analysis.StencilSpecification.Grammar as SYN
 import Camfort.Analysis.StencilSpecification.Syntax
 
