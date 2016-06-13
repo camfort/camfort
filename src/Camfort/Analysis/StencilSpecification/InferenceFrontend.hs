@@ -140,6 +140,7 @@ perBlockInfer mode b@(F.BlStatement _ span _ (F.StExpressionAssign _ _ lhs _))
     case lhs of
        F.ExpSubscript _ _ (F.ExpValue _ _ (F.ValVariable v)) subs ->
         -- Left-hand side is a subscript-by translation of an induction variable
+        -- or by a range
         if all (isAffineISubscript ivs) (F.aStrip subs)
          then tell [ (span, genSpecifications ivs [b]) ]
          else return ()
@@ -285,6 +286,10 @@ toListsOfRelativeIndices ivs = padZeros . map (map (maybe 0 id . (ixToOffset ivs
 -- e.g., for the expression a(i+1,j-1) then this function gets
 -- passed expr = i + 1   (returning +1) and expr = j - 1 (returning -1)
 ixToOffset :: [Variable] -> F.Index a -> Maybe Int
+-- Range with stride = 1 count as reflexive indexing
+ixToOffset ivs (F.IxRange _ _ _ _ Nothing) = Just 0
+ixToOffset ivs (F.IxRange _ _ _ _ (Just (F.ExpValue _ _ (F.ValInteger "1")))) =
+    Just 0
 ixToOffset ivs (F.IxSingle _ _ _ exp) = expToOffset ivs exp
 ixToOffset _ _ = Nothing -- If the indexing expression is a range
 
