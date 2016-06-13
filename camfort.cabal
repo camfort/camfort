@@ -45,9 +45,9 @@ executable camfort
                         Camfort.Analysis.Loops
                         Camfort.Analysis.LVA
                         Camfort.Analysis.StencilSpecification.CheckBackend
-                        Camfort.Analysis.StencilSpecification.CheckFrontend		
+                        Camfort.Analysis.StencilSpecification.CheckFrontend
                         Camfort.Analysis.StencilSpecification.InferenceBackend
-                        Camfort.Analysis.StencilSpecification.InferenceFrontend			
+                        Camfort.Analysis.StencilSpecification.InferenceFrontend
                         Camfort.Analysis.StencilSpecification.Model
                         Camfort.Analysis.StencilSpecification.Syntax
                         Camfort.Analysis.StencilSpecification.Grammar
@@ -116,9 +116,9 @@ library
                         Camfort.Analysis.Loops
                         Camfort.Analysis.LVA
                         Camfort.Analysis.StencilSpecification.CheckBackend
-                        Camfort.Analysis.StencilSpecification.CheckFrontend			
+                        Camfort.Analysis.StencilSpecification.CheckFrontend
                         Camfort.Analysis.StencilSpecification.InferenceFrontend
-                        Camfort.Analysis.StencilSpecification.InferenceBackend		
+                        Camfort.Analysis.StencilSpecification.InferenceBackend
                         Camfort.Analysis.StencilSpecification.Model
                         Camfort.Analysis.StencilSpecification.Syntax
                         Camfort.Analysis.StencilSpecification.Grammar
