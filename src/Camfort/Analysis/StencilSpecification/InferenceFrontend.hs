@@ -74,35 +74,38 @@ inferFromAST mode pf@(F.ProgramFile cm_pus others) =
     -- Run inference per program unit, placing the flowsmap in scope
     perPU :: F.ProgramUnit (FA.Analysis A) -> [LogLine]
 
-    perPU pu | Just _ <- FA.bBlocks $ F.getAnnotation pu =
-         let ?flowsGraph = flTo
-         in runInferer cycs2 (F.getName pu) tenv (descendBiM (perBlockInfer mode) pu)
-    perPU _ = []
-
--- perform reaching definitions analysis
-    rd    = FAD.reachingDefinitions dm gr
-    -- create graph of definition "flows"
-    flTo =  FAD.genFlowsToGraph bm dm gr rd
-    -- VarFlowsToMap: A -> { B, C } indicates that A contributes to B, C
-    flMap = FAD.genVarFlowsToMap dm flTo
-    -- find 2-cycles: A -> B -> A
-    cycs2 = [ (n, m) | (n, ns) <- M.toList flMap
+    perPU pu | Just gr <- FA.bBlocks $ F.getAnnotation pu =
+         let
+         -- perform reaching definitions analysis
+         rd    = FAD.reachingDefinitions dm gr
+         -- create graph of definition "flows"
+         flTo =  FAD.genFlowsToGraph bm dm gr rd
+         -- VarFlowsToMap: A -> { B, C } indicates that A contributes to B, C
+         flMap = FAD.genVarFlowsToMap dm flTo
+         -- find 2-cycles: A -> B -> A
+         cycs2 = [ (n, m) | (n, ns) <- M.toList flMap
                     , m       <- S.toList ns
                     , ms      <- maybeToList $ M.lookup m flMap
                     , n `S.member` ms && n /= m ]
-    -- identify every loop by its back-edge
-    beMap = FAD.genBackEdgeMap (FAD.dominators gr) gr
+         -- identify every loop by its back-edge
+         beMap = FAD.genBackEdgeMap (FAD.dominators gr) gr
 
-    -- get map of AST-Block-ID ==> corresponding AST-Block
-    bm    = FAD.genBlockMap pf
-    -- get map of program unit ==> basic block graph
-    bbm   = FAB.genBBlockMap pf
-    -- stitch all of the graphs together into a 'supergraph'
-    sgr   = FAB.genSuperBBGr bbm
-    -- extract the supergraph itself
-    gr    = FAB.superBBGrGraph sgr
-    -- get map of variable name ==> { defining AST-Block-IDs }
-    dm    = FAD.genDefMap bm
+         -- get map of AST-Block-ID ==> corresponding AST-Block
+         bm    = FAD.genBlockMap pf
+         -- get map of program unit ==> basic block graph
+         bbm   = FAB.genBBlockMap pf
+         -- stitch all of the graphs together into a 'supergraph'
+         --sgr   = FAB.genSuperBBGr bbm
+         -- extract the supergraph itself
+         --gr    = FAB.superBBGrGraph sgr
+         -- get map of variable name ==> { defining AST-Block-IDs }
+         dm    = FAD.genDefMap bm
+         in
+          let ?flowsGraph = flTo
+          in runInferer cycs2 (F.getName pu) tenv (descendBiM (perBlockInfer mode) pu)
+    perPU _ = []
+
+
     tenv  = FAT.inferTypes pf
 
 -- | Return list of variable names that flow into themselves via a 2-cycle
