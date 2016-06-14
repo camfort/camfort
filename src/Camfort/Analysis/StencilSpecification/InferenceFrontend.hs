@@ -179,31 +179,32 @@ genSpecifications ivs = groupKeyBy . M.toList . specs
   where specs = M.mapMaybe (relativeIxsToSpec ivs . M.keys)
               . M.unionsWith (M.unionWith (\_ _ -> True))
               . flip evalState []
-              . mapM (genSubscripts ivs)
+              . mapM (genSubscripts ivs True)
 
 -- Generate all subscripting expressions (that are translations on
 -- induction variables) that flow to this block
 -- The State monad provides a list of the visited nodes so far
 genSubscripts ::
-    (?flowsGraph :: FAD.FlowsGraph A) => [Variable] ->
+    (?flowsGraph :: FAD.FlowsGraph A) => [Variable] -> Bool ->
     F.Block (FA.Analysis A) -> State [Int] (M.Map Variable (M.Map [Int] Bool))
-genSubscripts ivs block = do
-  visited <- get
-  case (FA.insLabel $ F.getAnnotation block) of
+genSubscripts ivs False (F.BlStatement _ _ _ (F.StExpressionAssign _ _ (F.ExpSubscript {}) _)) = return M.empty
+genSubscripts ivs top block = do
+    visited <- get
+    case (FA.insLabel $ F.getAnnotation block) of
 
-    Just node ->
-     if node `elem` visited
-     -- This dependency has already been visited during this traversal
-     then return $ M.empty
-     -- Fresh dependency
-     else do
-       put $ node : visited
-       let blocksFlowingIn = mapMaybe (lab ?flowsGraph) $ pre ?flowsGraph node
-       dependencies <- mapM (genSubscripts ivs) blocksFlowingIn
-       let plus = M.unionWith (\_ _ -> True)
-       return $ M.unionsWith plus (genRHSsubscripts ivs block : dependencies)
+      Just node ->
+         if node `elem` visited
+         -- This dependency has already been visited during this traversal
+         then return $ M.empty
+         -- Fresh dependency
+         else do
+           put $ node : visited
+           let blocksFlowingIn = mapMaybe (lab ?flowsGraph) $ pre ?flowsGraph node
+           dependencies <- mapM (genSubscripts ivs False) blocksFlowingIn
+           let plus = M.unionWith (\_ _ -> True)
+           return $ M.unionsWith plus (genRHSsubscripts ivs block : dependencies)
 
-    Nothing -> error $ "Missing a label for: " ++ show block
+      Nothing -> error $ "Missing a label for: " ++ show block
 
 
 -- Get all RHS subscript which are translated induction variables
