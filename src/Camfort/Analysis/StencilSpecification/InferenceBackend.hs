@@ -174,7 +174,7 @@ inferMinimalVectorRegions = fixCoalesce . map mkTrivialSpan
 allRegionPermutations :: (Permutable n)
                       => [Span (Vec n Int)] -> [[Span (Vec n Int)]]
 allRegionPermutations =
-  unpermuteIndices . map (coalesceRegions >< id) . groupByPerm . map permutations
+  nub . unpermuteIndices . map (coalesceRegions >< id) . groupByPerm . map permutations
     where
       {- Permutations of a indices in a span
          (independently permutes the lower and upper bounds in the same way) -}
@@ -192,11 +192,11 @@ allRegionPermutations =
                                       in (map fst ixP, unPerm)) . transpose
 
       coalesceRegions :: [Span (Vec n Int)] -> [Span (Vec n Int)]
-      coalesceRegions  = foldPair composeConsecutiveSpans . sortByFst
+      coalesceRegions  = nub . foldPair composeConsecutiveSpans . sortByFst
 
       unpermuteIndices :: [([Span (Vec n Int)], Vec n Int -> Vec n Int)]
                        -> [[Span (Vec n Int)]]
-      unpermuteIndices = map (\(rs, unPerm) -> map (unPerm *** unPerm) rs)
+      unpermuteIndices = nub . map (\(rs, unPerm) -> map (unPerm *** unPerm) rs)
 
 {-| Collapses the regions into a small set by looking for potential overlaps
     and eliminating those that overlap -}
