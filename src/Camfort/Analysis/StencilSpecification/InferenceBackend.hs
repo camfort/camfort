@@ -253,7 +253,7 @@ type family Selection n a where
 
 instance Permutable Z where
   selectionsV Nil   = []
-  permutationsV Nil = []
+  permutationsV Nil = [(Nil, id)]
 
 instance Permutable (S Z) where
   selectionsV (Cons x xs)

@@ -2,7 +2,6 @@
 
 module Camfort.Helpers.Vec where
 
-
 data Nat = Z | S Nat
 
 -- Indexed natural number type
@@ -20,8 +19,6 @@ toNatBox 0 = NatBox Zero
 toNatBox n = case toNatBox (n-1) of
               (NatBox n) -> NatBox (Succ n)
 
-
-     
 -- Indexed vector type
 data Vec (n :: Nat) a where
      Nil :: Vec Z a
@@ -52,9 +49,6 @@ showV xs = "<" ++ showV' xs ++ ">"
     showV' (Cons x Nil) = show x
     showV' (Cons x xs)  = show x ++ "," ++ showV' xs
 
-
-
-
 type family Max (n :: Nat) (m :: Nat) :: Nat where
             Max Z Z = Z
             Max Z m = m
@@ -67,5 +61,3 @@ zipVec Nil xs  = (fmap (const 0) xs, xs)
 zipVec xs Nil  = (xs, fmap (const 0) xs)
 zipVec (Cons x xs) (Cons y ys)
                = (Cons x xs', Cons y ys') where (xs', ys') = zipVec xs ys
-
-
