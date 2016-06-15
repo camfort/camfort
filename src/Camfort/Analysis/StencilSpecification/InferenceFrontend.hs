@@ -176,17 +176,25 @@ perBlockInfer mode b = do
 genSpecifications :: (?flowsGraph :: FAD.FlowsGraph A) =>
    [Variable] -> [F.Block (FA.Analysis A)] -> [([Variable], Specification)]
 genSpecifications ivs = groupKeyBy . M.toList . specs
-  where specs = M.mapMaybe (relativeIxsToSpec ivs . M.keys)
-              . M.unionsWith (M.unionWith (\_ _ -> True))
+  where specs = M.mapMaybe (relativeIxsToSpec ivs)
+              . M.unionsWith contraction
               . flip evalState []
               . mapM (genSubscripts ivs True)
+
+-- Given two lists paired with their 'multiplicity' information
+-- (False = has no duplicates, True = has duplicates)
+-- Take the union of the two, combing the multiplicity information
+contraction :: Eq b => ([b], Bool) -> ([b], Bool) -> ([b], Bool)
+contraction (xs, m) (xs', m') =
+  (ys, ((xs ++ xs') /= ys) || m || m')
+    where ys = nub (xs ++ xs')
 
 -- Generate all subscripting expressions (that are translations on
 -- induction variables) that flow to this block
 -- The State monad provides a list of the visited nodes so far
 genSubscripts ::
     (?flowsGraph :: FAD.FlowsGraph A) => [Variable] -> Bool ->
-    F.Block (FA.Analysis A) -> State [Int] (M.Map Variable (M.Map [Int] Bool))
+    F.Block (FA.Analysis A) -> State [Int] (M.Map Variable ([[Int]], Bool))
 genSubscripts ivs False (F.BlStatement _ _ _ (F.StExpressionAssign _ _ (F.ExpSubscript {}) _)) = return M.empty
 genSubscripts ivs top block = do
     visited <- get
@@ -201,15 +209,16 @@ genSubscripts ivs top block = do
            put $ node : visited
            let blocksFlowingIn = mapMaybe (lab ?flowsGraph) $ pre ?flowsGraph node
            dependencies <- mapM (genSubscripts ivs False) blocksFlowingIn
-           let plus = M.unionWith (\_ _ -> True)
-           return $ M.unionsWith plus (genRHSsubscripts ivs block : dependencies)
+           return $ M.unionsWith contraction (genRHSsubscripts ivs block : dependencies)
 
       Nothing -> error $ "Missing a label for: " ++ show block
 
 
 -- Get all RHS subscript which are translated induction variables
+-- return as a map from (program) variables to a list of relative indices and
+-- a flag marking whether there are any duplicate indices
 genRHSsubscripts :: [Variable]
-                 -> F.Block (FA.Analysis A) -> M.Map Variable (M.Map [Int] Bool)
+                 -> F.Block (FA.Analysis A) -> M.Map Variable ([[Int]], Bool)
 genRHSsubscripts ivs b =
   convertMultiples . M.map (toListsOfRelativeIndices ivs) $ subscripts
   where
@@ -219,11 +228,11 @@ genRHSsubscripts ivs b =
        , let e = F.aStrip subs
        , not (null e) ]
 
-   convertMultiples :: Ord a => M.Map k [a] -> M.Map k (M.Map a Bool)
-   -- Marks all 'a' values as 'False' (multiplicity 1) and then if
-   -- any duplicate values for 'a' occur, the 'with' functions
-   -- marks them as 'True' (multiplicity > 1)
-   convertMultiples = M.map (M.fromListWith (\_ _ -> True) . map (,False))
+   convertMultiples :: Ord a => M.Map k [a] -> M.Map k ([a], Bool)
+   -- Remove duplicates
+   -- If there are duplicates then pair list with True (multiplicity > 1)
+   -- otherwise pair with 'False' (multiplicity = 1)
+   convertMultiples = M.map (\x -> let x' = nub x in (x', x /= x'))
 
 getInductionVar :: Maybe (F.DoSpecification a) -> [Variable]
 getInductionVar (Just (F.DoSpecification _ _ (
@@ -279,13 +288,16 @@ padZeros ixss = let m = maximum (map length ixss)
 -- Convert list of indexing expressions to a spec
 ixCollectionToSpec :: [Variable] -> [[F.Index a]] -> Maybe Specification
 ixCollectionToSpec ivs =
-    (relativeIxsToSpec ivs) . (toListsOfRelativeIndices ivs)
+    (relativeIxsToSpec ivs) . hasDuplicates . (toListsOfRelativeIndices ivs)
+    
 
 -- Convert list of relative indices to a spec
-relativeIxsToSpec :: [Variable] -> [[Int]] -> Maybe Specification
-relativeIxsToSpec ivs ixs =
-    if isEmpty exactSpec then Nothing else Just exactSpec
-      where exactSpec = inferFromIndices . fromLists $ ixs
+relativeIxsToSpec :: [Variable] -> ([[Int]], Bool) -> Maybe Specification
+relativeIxsToSpec ivs (ixs, mult) =
+    if isEmpty exactSpec then Nothing else Just $ setMultiplicity mult exactSpec
+      where setMultiplicity True spec = setLinearity NonLinear spec
+            setMultiplicity False spec = setLinearity Linear spec
+            exactSpec = inferFromIndices . fromLists $ ixs
 
 toListsOfRelativeIndices :: [Variable] -> [[F.Index a]] -> [[Int]]
 toListsOfRelativeIndices ivs = padZeros . map (map (maybe 0 id . (ixToOffset ivs)))

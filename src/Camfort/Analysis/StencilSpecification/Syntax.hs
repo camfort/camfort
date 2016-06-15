@@ -110,6 +110,25 @@ data Spatial =
              region          :: RegionSum }
   deriving (Eq, Data, Typeable)
 
+-- Helpers for dealing with linearity information
+
+-- A boolean is used to represent multiplicity in the backend
+-- with False = multiplicity=1 and True = multiplicity > 1
+boolToLinearity :: Bool -> Linearity
+boolToLinearity True = NonLinear
+boolToLinearity False = Linear
+
+hasDuplicates :: Eq a => [a] -> ([a], Bool)
+hasDuplicates xs = (nub xs, nub xs /= xs)
+
+setLinearity :: Linearity -> Specification -> Specification
+setLinearity l (Specification (Left (Exact s))) =
+    Specification (Left (Exact (s { modLinearity = l })))
+setLinearity l (Specification (Left (Bound sl su))) =
+    Specification (Left (Bound (sl >>= \s -> return $ s { modLinearity = l })
+                               (su >>= \s -> return $ s { modLinearity = l })))
+setLinearity l s = s
+
 emptySpec = Specification . Left $ (one :: Result Spatial)
 emptySpatialSpec = one :: Spatial
 
@@ -312,7 +331,7 @@ instance {-# OVERLAPS #-} Show (Result Spatial) where
 -- Pretty print spatial specs
 instance Show Spatial where
   show (Spatial modLin modIrrefl modRefl region) =
-    intercalate ", " . catMaybes $ [refl, irefl, lin, sregion]
+    intercalate ", " . catMaybes $ [lin, refl, irefl, sregion]
     where
       -- Map "empty" spec to Nothing here
       sregion = case show region of

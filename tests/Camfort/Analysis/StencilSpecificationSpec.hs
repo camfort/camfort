@@ -105,20 +105,20 @@ spec =
       it "five point stencil 2D" $
         (inferFromIndices $ VL fivepoint)
         `shouldBe`
-         (exactSp $ Spatial NonLinear [] [] (Sum [ Product [ Centered 1 1 ],
+         (exactSp $ Spatial Linear [] [] (Sum [ Product [ Centered 1 1 ],
                                                  Product [ Centered 1 2 ]]))
 
       it "seven point stencil 2D" $
         (inferFromIndices $ VL sevenpoint)
         `shouldBe`
-          (exactSp $ Spatial NonLinear [] [] (Sum [ Product [ Centered 1 1 ],
+          (exactSp $ Spatial Linear [] [] (Sum [ Product [ Centered 1 1 ],
                                                   Product [ Centered 1 2 ],
                                                   Product [ Centered 1 3 ]]))
 
       it "five point stencil 2D with blip" $
          (inferFromIndices $ VL fivepointErr)
          `shouldBe`
-          (exactSp $ Spatial NonLinear [] [] (Sum [ Product [ Forward 1 1 ,
+          (exactSp $ Spatial Linear [] [] (Sum [ Product [ Forward 1 1 ,
                                                             Forward 1 2 ],
                                                   Product [ Centered 1 1 ],
                                                   Product [ Centered 1 2 ] ]))
@@ -126,7 +126,7 @@ spec =
       it "centered forward" $
          (inferFromIndices $ VL centeredFwd)
          `shouldBe`
-          (exactSp $ Spatial NonLinear [] [] (Sum [ Product [ Forward 1 1
+          (exactSp $ Spatial Linear [] [] (Sum [ Product [ Forward 1 1
                                                   , Centered 1 2 ] ]))
 
     describe "2D stencil verification" $
@@ -150,7 +150,8 @@ spec =
        $ it "stencil infer" $
          (callAndSummarise (infer AssignMode) program)
            `shouldBe`
-            "((20,8),(21,48)) \tstencil (centered(depth=1, dim=1)) \
+           "\ntests/Camfort/Analysis/StencilSpecification/example2.f\n\
+            \((20,8),(21,48)) \tstencil readOnce, (centered(depth=1, dim=1)) \
                                      \+ (centered(depth=1, dim=2)) :: a\n"
 
 
@@ -223,37 +224,37 @@ test2DSpecVariation (input, expectation) =
 
 variations =
   [ ( [ [0,0] ]
-    , Exact $ Spatial NonLinear [] [ 1, 2 ] (Sum [Product []])
+    , Exact $ Spatial Linear [] [ 1, 2 ] (Sum [Product []])
     )
   , ( [ [1,0], [0,0] ]
-    , Exact $ Spatial NonLinear [] [2] (Sum [Product [Forward 1 1]])
+    , Exact $ Spatial Linear [] [2] (Sum [Product [Forward 1 1]])
     )
   , ( [ [0,1], [0,0] ]
-    , Exact $ Spatial NonLinear [] [1] (Sum [Product [Forward 1 2]])
+    , Exact $ Spatial Linear [] [1] (Sum [Product [Forward 1 2]])
     )
   , ( [ [1,1], [0,1], [1,0], [0,0] ]
-    , Exact $ Spatial NonLinear [] [] (Sum [Product [Forward 1 1, Forward 1 2]])
+    , Exact $ Spatial Linear [] [] (Sum [Product [Forward 1 1, Forward 1 2]])
     )
   , ( [ [-1,0], [0,0] ]
-    , Exact $ Spatial NonLinear [] [2] (Sum [Product [Backward 1 1]])
+    , Exact $ Spatial Linear [] [2] (Sum [Product [Backward 1 1]])
     )
-  , ( [ [0,-1], [0,0] ]
+  , ( [ [0,-1], [0,0], [0,-1] ]
     , Exact $ Spatial NonLinear [] [1] (Sum [Product [Backward 1 2]])
     )
-  , ( [ [-1,-1], [0,-1], [-1,0], [0,0] ]
+  , ( [ [-1,-1], [0,-1], [-1,0], [0,0], [0, -1] ]
     , Exact $ Spatial NonLinear [] [] (Sum [Product [Backward 1 1, Backward 1 2]])
     )
   , ( [ [0,-1], [1,-1], [0,0], [1,0], [1,1], [0,1] ]
-    , Exact $ Spatial NonLinear [] [] $ Sum [ Product [ Forward 1 1 , Centered 1 2 ] ]
+    , Exact $ Spatial Linear [] [] $ Sum [ Product [ Forward 1 1 , Centered 1 2 ] ]
     )
    -- Stencil which is non-contiguous in one direction
   , ( [ [0, 4], [1, 4] ]
-    , Bound (Just (Spatial NonLinear [] [] (Sum [Product [Forward 1 1]])))
-            (Just (Spatial NonLinear [] [] (Sum [Product [Forward 1 1, Forward 4 2]])))
+    , Bound (Just (Spatial Linear [] [] (Sum [Product [Forward 1 1]])))
+            (Just (Spatial Linear [] [] (Sum [Product [Forward 1 1, Forward 4 2]])))
     )
    -- Stencil which has non-relative indices in one dimension
   , ( [ [0, absoluteRep], [1, absoluteRep] ]
-    , Exact $ Spatial NonLinear [] [] (Sum [Product [Forward 1 1]])
+    , Exact $ Spatial Linear [] [] (Sum [Product [Forward 1 1]])
     )
   ]
 
@@ -272,13 +273,13 @@ test3DSpecVariation (input, expectation) =
 
 variations3D =
   [ ( [ [-1,0,-1], [0,0,-1], [-1,0,0], [0,0,0] ]
-    ,  Exact $ Spatial NonLinear [] [2] (Sum [Product [Backward 1 1, Backward 1 3]])
+    ,  Exact $ Spatial Linear [] [2] (Sum [Product [Backward 1 1, Backward 1 3]])
     )
   , ( [ [1,1,0], [0,1,0] ]
-    ,  Exact $ Spatial NonLinear [2] [3] (Sum [Product [Forward 1 1, Forward 1 2]])
+    ,  Exact $ Spatial Linear [2] [3] (Sum [Product [Forward 1 1, Forward 1 2]])
     )
   , ( [ [-1,absoluteRep,-1], [0,absoluteRep,-1], [-1,absoluteRep,0], [0,absoluteRep,0] ]
-    ,  Exact $ Spatial NonLinear [] [] (Sum [Product [Backward 1 1, Backward 1 3]])
+    ,  Exact $ Spatial Linear [] [] (Sum [Product [Backward 1 1, Backward 1 3]])
     )
   ]
 

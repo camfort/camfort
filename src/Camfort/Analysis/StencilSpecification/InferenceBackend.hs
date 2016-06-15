@@ -41,7 +41,6 @@ import Unsafe.Coerce
 import Camfort.Analysis.StencilSpecification.Syntax
 
 inferFromIndices :: VecList Int -> Specification
--- TODO: currently just marked as Non-linear
 inferFromIndices (VL ixs) = Specification . Left . inferSpec $ ixs
   where inferSpec :: Permutable n => [Vec n Int] -> Result Spatial
         inferSpec = fromRegionsToSpec . inferMinimalVectorRegions
