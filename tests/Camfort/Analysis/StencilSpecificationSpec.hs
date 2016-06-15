@@ -216,7 +216,7 @@ test2DSpecVariation (input, expectation) =
     it ("format=" ++ show input) $ do
 
        -- Test inference
-       (ixCollectionToSpec ["i", "j"] (map fromFormatToIx input))
+       (indicesToSpec ["i", "j"] (map fromFormatToIx input))
           `shouldBe` Just expectedSpec
   where
     expectedSpec = Specification . Left $ expectation
@@ -226,8 +226,8 @@ variations =
   [ ( [ [0,0] ]
     , Exact $ Spatial Linear [] [ 1, 2 ] (Sum [Product []])
     )
-  , ( [ [1,0], [0,0] ]
-    , Exact $ Spatial Linear [] [2] (Sum [Product [Forward 1 1]])
+  , ( [ [1,0], [0,0], [0,0] ]
+    , Exact $ Spatial NonLinear [] [2] (Sum [Product [Forward 1 1]])
     )
   , ( [ [0,1], [0,0] ]
     , Exact $ Spatial Linear [] [1] (Sum [Product [Forward 1 2]])
@@ -262,7 +262,7 @@ test3DSpecVariation (input, expectation) =
     it ("format=" ++ show input) $ do
 
       -- Test inference
-      (ixCollectionToSpec ["i", "j", "k"] (map fromFormatToIx input))
+      (indicesToSpec ["i", "j", "k"] (map fromFormatToIx input))
            `shouldBe` Just expectedSpec
 
   where

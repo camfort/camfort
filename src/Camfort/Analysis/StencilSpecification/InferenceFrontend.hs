@@ -172,67 +172,53 @@ perBlockInfer mode b = do
     mapM_ (descendBiM (perBlockInfer mode)) $ children b
     return b
 
-
 genSpecifications :: (?flowsGraph :: FAD.FlowsGraph A) =>
    [Variable] -> [F.Block (FA.Analysis A)] -> [([Variable], Specification)]
 genSpecifications ivs = groupKeyBy . M.toList . specs
-  where specs = M.mapMaybe (relativeIxsToSpec ivs)
-              . M.unionsWith contraction
+  where specs = M.mapMaybe (indicesToSpec ivs)
+              . M.unionsWith (++)
               . flip evalState []
               . mapM (genSubscripts ivs True)
-
--- Given two lists paired with their 'multiplicity' information
--- (False = has no duplicates, True = has duplicates)
--- Take the union of the two, combing the multiplicity information
-contraction :: Eq b => ([b], Bool) -> ([b], Bool) -> ([b], Bool)
-contraction (xs, m) (xs', m') =
-  (ys, ((xs ++ xs') /= ys) || m || m')
-    where ys = nub (xs ++ xs')
 
 -- Generate all subscripting expressions (that are translations on
 -- induction variables) that flow to this block
 -- The State monad provides a list of the visited nodes so far
-genSubscripts ::
-    (?flowsGraph :: FAD.FlowsGraph A) => [Variable] -> Bool ->
-    F.Block (FA.Analysis A) -> State [Int] (M.Map Variable ([[Int]], Bool))
-genSubscripts ivs False (F.BlStatement _ _ _ (F.StExpressionAssign _ _ (F.ExpSubscript {}) _)) = return M.empty
+genSubscripts :: (?flowsGraph :: FAD.FlowsGraph A)
+  => [Variable] -> Bool
+  -> F.Block (FA.Analysis A)
+  -> State [Int] (M.Map Variable [[F.Index (FA.Analysis A)]])
+genSubscripts ivs False
+  (F.BlStatement _ _ _ (F.StExpressionAssign _ _ (F.ExpSubscript {}) _))
+    = return M.empty
 genSubscripts ivs top block = do
     visited <- get
     case (FA.insLabel $ F.getAnnotation block) of
 
       Just node ->
-         if node `elem` visited
-         -- This dependency has already been visited during this traversal
-         then return $ M.empty
-         -- Fresh dependency
-         else do
-           put $ node : visited
-           let blocksFlowingIn = mapMaybe (lab ?flowsGraph) $ pre ?flowsGraph node
-           dependencies <- mapM (genSubscripts ivs False) blocksFlowingIn
-           return $ M.unionsWith contraction (genRHSsubscripts ivs block : dependencies)
+        if node `elem` visited
+        -- This dependency has already been visited during this traversal
+        then return $ M.empty
+        -- Fresh dependency
+        else do
+          put $ node : visited
+          let blocksFlowingIn = mapMaybe (lab ?flowsGraph) $ pre ?flowsGraph node
+          dependencies <- mapM (genSubscripts ivs False) blocksFlowingIn
+          return $ M.unionsWith (++) (genRHSsubscripts ivs block : dependencies)
 
       Nothing -> error $ "Missing a label for: " ++ show block
-
 
 -- Get all RHS subscript which are translated induction variables
 -- return as a map from (program) variables to a list of relative indices and
 -- a flag marking whether there are any duplicate indices
-genRHSsubscripts :: [Variable]
-                 -> F.Block (FA.Analysis A) -> M.Map Variable ([[Int]], Bool)
+genRHSsubscripts ::
+     [Variable]
+  -> F.Block (FA.Analysis A)
+  -> M.Map Variable [[F.Index (FA.Analysis A)]]
 genRHSsubscripts ivs b =
-  convertMultiples . M.map (toListsOfRelativeIndices ivs) $ subscripts
-  where
-   subscripts :: M.Map Variable [[F.Index (FA.Analysis A)]]
-   subscripts = collect [ (v, e)
+    collect [ (v, e)
       | F.ExpSubscript _ _ (F.ExpValue _ _ (F.ValVariable v)) subs <- FA.rhsExprs b
-       , let e = F.aStrip subs
-       , not (null e) ]
-
-   convertMultiples :: Ord a => M.Map k [a] -> M.Map k ([a], Bool)
-   -- Remove duplicates
-   -- If there are duplicates then pair list with True (multiplicity > 1)
-   -- otherwise pair with 'False' (multiplicity = 1)
-   convertMultiples = M.map (\x -> let x' = nub x in (x', x /= x'))
+      , let e = F.aStrip subs
+      , not (null e) ]
 
 getInductionVar :: Maybe (F.DoSpecification a) -> [Variable]
 getInductionVar (Just (F.DoSpecification _ _ (
@@ -286,21 +272,23 @@ padZeros ixss = let m = maximum (map length ixss)
                 in map (\ixs -> ixs ++ replicate (m - length ixs) 0) ixss
 
 -- Convert list of indexing expressions to a spec
-ixCollectionToSpec :: [Variable] -> [[F.Index a]] -> Maybe Specification
-ixCollectionToSpec ivs =
-    (relativeIxsToSpec ivs) . hasDuplicates . (toListsOfRelativeIndices ivs)
-    
+indicesToSpec :: Eq a => [Variable] -> [[F.Index a]] -> Maybe Specification
+indicesToSpec ivs ixs =
+    fmap (setLinearity (fromBool mult)) . relativeIxsToSpec ivs $ rixs'
+      where rixs = toListsOfRelativeIndices ivs $ ixs
+            -- As an optimisation, do duplicate check in front-end first
+            -- so that duplicate indices don't get passed into the main engine
+            (rixs', mult) = hasDuplicates rixs
 
 -- Convert list of relative indices to a spec
-relativeIxsToSpec :: [Variable] -> ([[Int]], Bool) -> Maybe Specification
-relativeIxsToSpec ivs (ixs, mult) =
-    if isEmpty exactSpec then Nothing else Just $ setMultiplicity mult exactSpec
-      where setMultiplicity True spec = setLinearity NonLinear spec
-            setMultiplicity False spec = setLinearity Linear spec
-            exactSpec = inferFromIndices . fromLists $ ixs
+relativeIxsToSpec :: [Variable] -> [[Int]] -> Maybe Specification
+relativeIxsToSpec ivs ixs =
+    if isEmpty exactSpec then Nothing else Just exactSpec
+    where exactSpec = inferFromIndicesWithoutLinearity . fromLists $ ixs
 
 toListsOfRelativeIndices :: [Variable] -> [[F.Index a]] -> [[Int]]
-toListsOfRelativeIndices ivs = padZeros . map (map (maybe 0 id . (ixToOffset ivs)))
+toListsOfRelativeIndices ivs =
+    padZeros . map (map (maybe 0 id . (ixToOffset ivs)))
 
 -- Convert indexing expressions that are translations
 -- intto their translation offset:

@@ -41,9 +41,20 @@ import Unsafe.Coerce
 import Camfort.Analysis.StencilSpecification.Syntax
 
 inferFromIndices :: VecList Int -> Specification
-inferFromIndices (VL ixs) = Specification . Left . inferSpec $ ixs
-  where inferSpec :: Permutable n => [Vec n Int] -> Result Spatial
-        inferSpec = fromRegionsToSpec . inferMinimalVectorRegions
+inferFromIndices (VL ixs) =
+    setLinearity (fromBool mult) (Specification . Left . inferSpec $ ixs')
+      where (ixs', mult) = hasDuplicates ixs
+            inferSpec :: Permutable n => [Vec n Int] -> Result Spatial
+            inferSpec = fromRegionsToSpec . inferMinimalVectorRegions
+
+-- Same as inferFromIndices but don't do any linearity checking
+-- (defaults to NonLinear). This is used when the front-end does
+-- the linearity check first as an optimimsation.
+inferFromIndicesWithoutLinearity :: VecList Int -> Specification
+inferFromIndicesWithoutLinearity (VL ixs) =
+    Specification . Left . inferSpec $ ixs
+      where inferSpec :: Permutable n => [Vec n Int] -> Result Spatial
+            inferSpec = fromRegionsToSpec . inferMinimalVectorRegions
 
 -- Removes any 'reflexive' specs that are overlapped by a directional spec
 -- somewhere else [in theory a lot of these won't get generated in the first

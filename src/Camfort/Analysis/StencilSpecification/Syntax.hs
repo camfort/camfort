@@ -114,9 +114,9 @@ data Spatial =
 
 -- A boolean is used to represent multiplicity in the backend
 -- with False = multiplicity=1 and True = multiplicity > 1
-boolToLinearity :: Bool -> Linearity
-boolToLinearity True = NonLinear
-boolToLinearity False = Linear
+fromBool :: Bool -> Linearity
+fromBool True = NonLinear
+fromBool False = Linear
 
 hasDuplicates :: Eq a => [a] -> ([a], Bool)
 hasDuplicates xs = (nub xs, nub xs /= xs)

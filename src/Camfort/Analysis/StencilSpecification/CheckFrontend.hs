@@ -126,7 +126,7 @@ perBlockCheck b@(F.BlComment ann span _) = do
         (_, ivs) <- get
         let analysis = groupKeyBy
                      . M.toList
-                     . M.mapMaybe (ixCollectionToSpec ivs) $ arrayAccesses
+                     . M.mapMaybe (indicesToSpec ivs) $ arrayAccesses
         -- Model and compare the current and specified stencil specs
         if compareModel analysis specDecls
            -- Not well-specified
