@@ -36,6 +36,7 @@ instance Functor (Vec n) where
     fmap = vmap
 deriving instance Eq a => Eq (Vec n a)
 instance Ord a => Ord (Vec n a) where
+    Nil         <= _ = True
     (Cons x xs) <= (Cons y ys) | xs == ys = x <= y
                                | otherwise = xs <= ys
 instance Show a => Show (Vec n a) where

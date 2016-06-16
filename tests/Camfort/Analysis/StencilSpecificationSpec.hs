@@ -52,6 +52,24 @@ spec =
       it "(3)" $ property $ prop_perms_invertable threeN
       it "(4)" $ property $ prop_perms_invertable fourN
 
+    describe "Some checks on containing spans" $ do
+      it "(0)" $ containedWithin (Cons 1 (Cons 1 Nil), Cons 2 (Cons 2 Nil))
+                          (Cons 0 (Cons 0 Nil), Cons 3 (Cons 3 Nil))
+                  `shouldBe` True
+      it "(1)" $ containedWithin (Cons 0 (Cons 0 Nil), Cons 3 (Cons 3 Nil))
+                          (Cons 1 (Cons 1 Nil), Cons 2 (Cons 2 Nil))
+                  `shouldBe` False
+      it "(2)" $ containedWithin (Cons 2 (Cons 2 Nil), Cons 2 (Cons 2 Nil))
+                          (Cons 1 (Cons 1 Nil), Cons 2 (Cons 2 Nil))
+                  `shouldBe` True
+      it "(3)" $ containedWithin (Cons 2 (Cons 2 Nil), Cons 3 (Cons 3 Nil))
+                          (Cons 1 (Cons 1 Nil), Cons 2 (Cons 2 Nil))
+                  `shouldBe` False
+      it "(4)" $ containedWithin (Cons 2 Nil, Cons 2 Nil)
+                                 (Cons 2 Nil, Cons 2 Nil)
+                  `shouldBe` True
+
+
     it "sorting on indices" $
       shouldBe (sort [ Cons 1 (Cons 2 (Cons 1 Nil))
                       , Cons 2 (Cons 2 (Cons 3 Nil))

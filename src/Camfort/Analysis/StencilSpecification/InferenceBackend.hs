@@ -40,6 +40,10 @@ import Unsafe.Coerce
 
 import Camfort.Analysis.StencilSpecification.Syntax
 
+{- Spans are a pair of a lower and upper bound -}
+type Span a = (a, a)
+mkTrivialSpan a = (a, a)
+
 inferFromIndices :: VecList Int -> Specification
 inferFromIndices (VL ixs) =
     setLinearity (fromBool mult) (Specification . Left . inferSpec $ ixs')
@@ -81,7 +85,7 @@ fromRegionsToSpec sps = fmap simplifyRefl result
     -- Compute a full upper using a bounding box
     -- Probably we don't need this anymore: it should agree
     -- with the upper bound computed using `prod`
-    upper  = toSpecND $ foldl1 spanBoundingBox sps
+    -- upper  = toSpecND $ foldl1 spanBoundingBox sps
 
 -- toSpecND converts an n-dimensional region into a (list of) specification
 toSpecND :: Span (Vec n Int) -> Result Spatial
@@ -130,11 +134,6 @@ toSpec1D dim l u
         upperBound $ Spatial NonLinear [] [] (Sum [Product
                         [if l > 0 then Forward u dim else Backward u dim]])
 
-
-{- Spans are a pair of a lower and upper bound -}
-type Span a = (a, a)
-mkTrivialSpan a = (a, a)
-
 {- Normalise a span into the form (lower, upper) based on the first index -}
 normaliseSpan :: Span (Vec n Int) -> Span (Vec n Int)
 normaliseSpan (Nil, Nil)
@@ -182,22 +181,24 @@ inferMinimalVectorRegions = fixCoalesce . map mkTrivialSpan
 {-| Map from a lists of n-dimensional spans of relative indices into all
     possible contiguous spans within the n-dimensional space (individual pass)-}
 allRegionPermutations :: (Permutable n)
-                      => [Span (Vec n Int)] -> [[Span (Vec n Int)]]
+                      => [Span (Vec n Int)] -> [Span (Vec n Int)]
 allRegionPermutations =
-  nub . unpermuteIndices . map (coalesceRegions >< id) . groupByPerm . map permutations
+  nub . concat . unpermuteIndices . map (coalesceRegions >< id) . groupByPerm . map permutationss
     where
       {- Permutations of a indices in a span
          (independently permutes the lower and upper bounds in the same way) -}
-      permutations :: Permutable n
+      permutationss :: Permutable n
                    => Span (Vec n Int)
                    -> [(Span (Vec n Int), Vec n Int -> Vec n Int)]
       -- Since the permutation ordering is identical for lower & upper bound,
       -- reuse the same unpermutation
-      permutations (l, u) = map (\((l', un1), (u', un2)) -> ((l', u'), un1))
+      permutationss (l, u) = map (\((l', un1), (u', un2)) -> ((l', u'), un1))
                            $ zip (permutationsV l) (permutationsV u)
 
       sortByFst        = sortBy (\(l1, u1) (l2, u2) -> compare l1 l2)
 
+      groupByPerm  :: [[(Span (Vec n Int), Vec n Int -> Vec n Int)]]
+                   -> [( [Span (Vec n Int)] , Vec n Int -> Vec n Int)]
       groupByPerm      = map (\ixP -> let unPerm = snd $ head ixP
                                       in (map fst ixP, unPerm)) . transpose
 
@@ -210,11 +211,10 @@ allRegionPermutations =
 
 {-| Collapses the regions into a small set by looking for potential overlaps
     and eliminating those that overlap -}
-minimaliseRegions :: [[Span (Vec n Int)]] -> [Span (Vec n Int)]
+minimaliseRegions :: [Span (Vec n Int)] -> [Span (Vec n Int)]
 minimaliseRegions [] = []
-minimaliseRegions xss = nub . minimalise $ xss'
-  where xss' = concat xss
-        localMin x ys = (filter' x (\y -> overlaps x y && (x /= y)) xss') ++ ys
+minimaliseRegions xss = nub . minimalise $ xss
+  where localMin x ys = (filter' x (\y -> containedWithin x y && (x /= y)) xss) ++ ys
         minimalise = foldr localMin []
         -- If nothing is caught by the filter, i.e. no overlaps then return
         -- the original regions r
@@ -222,12 +222,12 @@ minimaliseRegions xss = nub . minimalise $ xss'
                            [] -> [r]
                            ys -> ys
 
-{-| Binary predicate on whether the first region overlaps the second -}
-overlaps :: Span (Vec n Int) -> Span (Vec n Int) -> Bool
-overlaps (Nil, Nil) (Nil, Nil)
+{-| Binary predicate on whether the first region containedWithin the second -}
+containedWithin :: Span (Vec n Int) -> Span (Vec n Int) -> Bool
+containedWithin (Nil, Nil) (Nil, Nil)
   = True
-overlaps (Cons l1 ls1, Cons u1 us1) (Cons l2 ls2, Cons u2 us2)
-  = (l2 <= l1 && u1 <= u2) && overlaps (ls1, us1) (ls2, us2)
+containedWithin (Cons l1 ls1, Cons u1 us1) (Cons l2 ls2, Cons u2 us2)
+  = (l2 <= l1 && u1 <= u2) && containedWithin (ls1, us1) (ls2, us2)
 
 
 {-| Defines the (total) class of vector sizes which are permutable, along with
