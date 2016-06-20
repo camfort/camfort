@@ -65,20 +65,23 @@ absoluteRep = 100 :: Int -- maxBound :: Int
 
 -- List of region sums associated to region variables
 type RegionEnv = [(String, RegionSum)]
+
 -- List of specifications associated to variables
+-- This is not a map so there might be multiple entries for each variable
+-- use `lookupAggregate` to access it
 type SpecDecls = [([String], Specification)]
 
 pprintSpecDecls :: SpecDecls -> String
 pprintSpecDecls =
- foldr (\(names, spec) rest ->
-            show spec ++ " :: " ++ (intercalate "," names) ++ "\n" ++ rest) ""
+ concatMap (\(names, spec) ->
+            show spec ++ " :: " ++ (intercalate "," names) ++ "\n")
 
-lookupSpecDecls :: SpecDecls -> String -> Maybe Specification
-lookupSpecDecls [] _ = Nothing
-lookupSpecDecls ((names, spec) : ss) name =
+lookupAggregate :: Eq a => [([a], b)] -> a -> [b]
+lookupAggregate [] _ = []
+lookupAggregate ((names, spec) : ss) name =
   if name `elem` names
-  then Just spec
-  else lookupSpecDecls ss name
+  then spec : lookupAggregate ss name
+  else lookupAggregate ss name
 
 -- Top-level of specifications: may be either spatial or temporal
 data Specification =
@@ -182,10 +185,38 @@ newtype RegionProd = Product [Region]
 newtype RegionSum = Sum {unSum :: [RegionProd]}
   deriving (Eq, Data, Typeable)
 
-
 instance Ord RegionProd where
    (Product xs) <= (Product xs') = xs <= xs'
 
+
+-- Operations on specifications
+
+specPlus :: Specification -> Specification -> Maybe Specification
+
+specPlus (Specification (Left (Bound (Just l) Nothing)))
+         (Specification (Left (Bound Nothing (Just u)))) =
+    Just $ Specification (Left (Bound (Just l) (Just u)))
+
+specPlus (Specification (Left (Bound Nothing (Just u))))
+         (Specification (Left (Bound (Just l) Nothing))) =
+    Just $ Specification (Left (Bound (Just l) (Just u)))
+
+specPlus (Specification (Left (Bound (Just l1) Nothing)))
+         (Specification (Left (Bound (Just l2) Nothing))) =
+    Just $ Specification (Left (Bound (Just $ l1 `sum` l2) Nothing))
+
+specPlus (Specification (Left (Bound Nothing (Just l1))))
+         (Specification (Left (Bound Nothing (Just l2)))) =
+    Just $ Specification (Left (Bound Nothing (Just $ l1 `sum` l2)))
+
+specPlus (Specification (Left (Exact s1))) (Specification (Left (Exact s2))) =
+    Just $ Specification (Left (Exact $ s1 `sum` s2))
+
+specPlus (Specification (Right (Dependency vs1 m1)))
+         (Specification (Right (Dependency vs2 m2))) | m1 == m2=
+    Just $ Specification (Right (Dependency (vs1 ++ vs2) m1))
+
+specPlus _ _ = Nothing
 
 regionPlus :: Region -> Region -> Maybe Region
 regionPlus (Forward dep dim) (Backward dep' dim')
@@ -324,9 +355,8 @@ instance {-# OVERLAPS #-} Show (Result Spatial) where
   show (Bound Nothing Nothing) = "empty"
   show (Bound Nothing (Just s)) = "atMost, " ++ show s
   show (Bound (Just s) Nothing) = "atLeast, " ++ show s
-  -- TODO: Figure out the right way to support this
   show (Bound (Just sL) (Just sU)) =
-      error $ "Lower and upper, l = " ++ show sL ++ ", u = " ++ show sU
+      "atMost, " ++ show sU
 
 -- Pretty print spatial specs
 instance Show Spatial where
@@ -376,3 +406,14 @@ instance Show Region where
 
 -- Helper for showing regions
 showRegion typ depS dimS = typ ++ "(depth=" ++ depS ++ ", dim=" ++ dimS ++")"
+
+-- Helper for reassociating an association list, grouping the keys together that
+-- have matching values
+groupKeyBy :: Eq b => [(a, b)] -> [([a], b)]
+groupKeyBy = groupKeyBy' . map (\ (k, v) -> ([k], v))
+  where
+    groupKeyBy' []        = []
+    groupKeyBy' [(ks, v)] = [(ks, v)]
+    groupKeyBy' ((ks1, v1):((ks2, v2):xs))
+      | v1 == v2          = groupKeyBy' ((ks1 ++ ks2, v1) : xs)
+      | otherwise         = (ks1, v1) : groupKeyBy' ((ks2, v2) : xs)

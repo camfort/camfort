@@ -18,10 +18,9 @@
 {-# LANGUAGE FlexibleContexts #-}
 {-# LANGUAGE ImplicitParams #-}
 {-# LANGUAGE DeriveDataTypeable #-}
+{-# LANGUAGE PatternGuards #-}
 
 module Camfort.Analysis.StencilSpecification.InferenceFrontend where
-
-import Language.Fortran hiding (Spec)
 
 import Control.Monad.State.Lazy
 import Control.Monad.Reader
@@ -50,7 +49,7 @@ import qualified Data.Set as S
 import Data.Maybe
 import Data.List
 
-import Debug.Trace
+type Variable = String
 
 -- Define modes of interaction with the inference
 data InferMode =
@@ -67,8 +66,8 @@ type Inferer = WriterT [LogLine] (ReaderT (Cycles, F.ProgramUnitName, TypeEnv A)
 type Cycles = [(F.Name, F.Name)]
 
 
-inferFromAST :: InferMode -> F.ProgramFile (FA.Analysis A) -> [LogLine]
-inferFromAST mode pf@(F.ProgramFile cm_pus others) =
+stencilInference :: InferMode -> F.ProgramFile (FA.Analysis A) -> [LogLine]
+stencilInference mode pf@(F.ProgramFile cm_pus others) =
  concatMap perPU (universeBi cm_pus)
   where
     -- Run inference per program unit, placing the flowsmap in scope
@@ -174,11 +173,16 @@ perBlockInfer mode b = do
 
 genSpecifications :: (?flowsGraph :: FAD.FlowsGraph A) =>
    [Variable] -> [F.Block (FA.Analysis A)] -> [([Variable], Specification)]
-genSpecifications ivs = groupKeyBy . M.toList . specs
+genSpecifications ivs = splitUpperAndLower . groupKeyBy . M.toList . specs
   where specs = M.mapMaybe (indicesToSpec ivs)
               . M.unionsWith (++)
               . flip evalState []
               . mapM (genSubscripts ivs True)
+        splitUpperAndLower = concatMap splitUpperAndLower'
+        splitUpperAndLower' (vs, Specification (Left (Bound (Just l) (Just u))))
+          = [(vs, Specification (Left (Bound (Just l) Nothing))),
+             (vs, Specification (Left (Bound Nothing (Just u))))]
+        splitUpperAndLower' x = [x]
 
 -- Generate all subscripting expressions (that are translations on
 -- induction variables) that flow to this block
@@ -280,6 +284,19 @@ indicesToSpec ivs ixs =
             -- so that duplicate indices don't get passed into the main engine
             (rixs', mult) = hasDuplicates rixs
 
+consistentIVSuse :: [[(Variable, Int)]] -> [[Int]]
+consistentIVSuse offsets =
+    if consistent then map (map snd) offsets else []
+    where consistent = sequence vars /= Nothing
+          vars = foldr (\a b -> map (uncurry cmp) $ zip a b)
+                       (repeat (Just ""))
+                       (map (map (Just . fst)) offsets)
+
+cmp (Just "") (Just v) = Just v
+cmp (Just v) (Just "") = Just v
+cmp (Just v) (Just w)  = if v == w then Just v else Nothing
+cmp _ _                = Nothing
+
 -- Convert list of relative indices to a spec
 relativeIxsToSpec :: [Variable] -> [[Int]] -> Maybe Specification
 relativeIxsToSpec ivs ixs =
@@ -288,17 +305,18 @@ relativeIxsToSpec ivs ixs =
 
 toListsOfRelativeIndices :: [Variable] -> [[F.Index a]] -> [[Int]]
 toListsOfRelativeIndices ivs =
-    padZeros . map (map (maybe 0 id . (ixToOffset ivs)))
+    padZeros . consistentIVSuse . ignoreNonNeighbour . map (map (ixToOffset ivs))
+    where ignoreNonNeighbour = map (map (maybe ("", 0) id))
 
 -- Convert indexing expressions that are translations
--- intto their translation offset:
+-- intto their translation offset:2
 -- e.g., for the expression a(i+1,j-1) then this function gets
 -- passed expr = i + 1   (returning +1) and expr = j - 1 (returning -1)
-ixToOffset :: [Variable] -> F.Index a -> Maybe Int
+ixToOffset :: [Variable] -> F.Index a -> Maybe (Variable, Int)
 -- Range with stride = 1 count as reflexive indexing
-ixToOffset ivs (F.IxRange _ _ _ _ Nothing) = Just 0
+ixToOffset ivs (F.IxRange _ _ _ _ Nothing) = Just ("", 0)
 ixToOffset ivs (F.IxRange _ _ _ _ (Just (F.ExpValue _ _ (F.ValInteger "1")))) =
-    Just 0
+    Just ("", 0)
 ixToOffset ivs (F.IxSingle _ _ _ exp) = expToOffset ivs exp
 ixToOffset _ _ = Nothing -- If the indexing expression is a range
 
@@ -308,36 +326,26 @@ isAffineOnVar exp v = ixToOffset [v] exp /= Nothing
 isAffineISubscript :: [Variable] -> F.Index a -> Bool
 isAffineISubscript vs exp = ixToOffset vs exp /= Nothing
 
-expToOffset :: [Variable] -> F.Expression a -> Maybe Int
+expToOffset :: [Variable] -> F.Expression a -> Maybe (Variable, Int)
 expToOffset ivs (F.ExpValue _ _ (F.ValVariable v))
-  | v `elem` ivs = Just 0
-  | otherwise    = Just absoluteRep
+  | v `elem` ivs = Just (v, 0)
+  | otherwise    = Just ("", absoluteRep)
 expToOffset ivs (F.ExpBinary _ _ F.Addition
                                  (F.ExpValue _ _ (F.ValVariable v))
                                  (F.ExpValue _ _ (F.ValInteger offs)))
-    | v `elem` ivs = Just $ read offs
+    | v `elem` ivs = Just $ (v, read offs)
 expToOffset ivs (F.ExpBinary _ _ F.Addition
                                  (F.ExpValue _ _ (F.ValInteger offs))
                                  (F.ExpValue _ _ (F.ValVariable v)))
-    | v `elem` ivs = Just $ read offs
+    | v `elem` ivs = Just $ (v, read offs)
 expToOffset ivs (F.ExpBinary _ _ F.Subtraction
                                  (F.ExpValue _ _ (F.ValVariable v))
                                  (F.ExpValue _ _ (F.ValInteger offs)))
-   | v `elem` ivs = Just $ if x < 0 then abs x else (- x)
+   | v `elem` ivs = Just $ (v, if x < 0 then abs x else (- x))
                      where x = read offs
-expToOffset ivs _ = Just absoluteRep
+expToOffset ivs _ = Just $ ("", absoluteRep)
 
 --------------------------------------------------
-
-
-groupKeyBy :: Eq b => [(a, b)] -> [([a], b)]
-groupKeyBy = groupKeyBy' . map (\ (k, v) -> ([k], v))
-
-groupKeyBy' []                         = []
-groupKeyBy' [(ks, v)]                  = [(ks, v)]
-groupKeyBy' ((ks1, v1):((ks2, v2):xs))
-  | v1 == v2                           = groupKeyBy' ((ks1 ++ ks2, v1) : xs)
-  | otherwise                          = (ks1, v1) : groupKeyBy' ((ks2, v2) : xs)
 
 -- Although type analysis isn't necessary anymore (Forpar does it
 -- internally) I'm going to leave this infrastructure in-place in case

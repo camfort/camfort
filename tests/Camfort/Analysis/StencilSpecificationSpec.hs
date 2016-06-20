@@ -157,6 +157,18 @@ spec =
               "extracting offsets from indexing expressions; and vice versa") $
       it "isomorphism" $ property prop_extract_synth_inverse
 
+    describe ("Inconsistent induction variable usage") $ do
+      it "consistent" $
+        (indicesToSpec ["i", "j"] [[offsetToIx "i" 1, offsetToIx "j" 1],
+                                  [offsetToIx "i" 0, offsetToIx "j" 0]])
+         `shouldBe` (Just $ Specification $ Left $ Exact $ Spatial Linear [] []
+                       (Sum [Product [Forward 1 1], Product [Forward 1 2]]))
+
+      it "inconsistent" $
+        (indicesToSpec ["i", "j"] [[offsetToIx "i" 1, offsetToIx "j" 1],
+                                  [offsetToIx "j" 0, offsetToIx "i" 0]])
+         `shouldBe` Nothing
+
     -------------------------
     -- Some integration tests
     -------------------------
@@ -303,7 +315,7 @@ variations3D =
 
 prop_extract_synth_inverse :: F.Name -> Int -> Bool
 prop_extract_synth_inverse v o =
-     ixToOffset [v] (offsetToIx v o) == Just o
+     ixToOffset [v] (offsetToIx v o) == Just (v, o)
 
 -- Local variables:
 -- mode: haskell
