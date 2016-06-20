@@ -68,6 +68,7 @@ SPECDEC :: { Spec }
 : dependency '(' VARS ')'        { Temporal $3 False }
 | dependency '(' VARS ')' mutual { Temporal $3 True }
 | APPROXMODS MODS REGION         { Spatial ($1 ++ $2) (Just $3) }
+| APPROXMODS MODS                { Spatial ($1 ++ $2) Nothing }
 | MODS                           { Spatial $1 Nothing }
 | MODS REGION                    { Spatial $1 (Just $2) }
 | APPROXMOD REGION               { Spatial [$1] (Just $2) }
