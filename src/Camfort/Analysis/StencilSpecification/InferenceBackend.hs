@@ -34,7 +34,6 @@ import Control.Arrow ((***))
 
 import Camfort.Helpers
 import Camfort.Helpers.Vec
-import Debug.Trace
 
 import Unsafe.Coerce
 

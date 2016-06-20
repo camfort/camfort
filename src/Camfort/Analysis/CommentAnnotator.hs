@@ -47,7 +47,7 @@ data AnnotationParseError =
 failWith :: AnnotationParser ast
 failWith = Left . ProbablyAnnotation
 
-annotateComments :: forall a ast . (Data a, Linkable a, ASTEmbeddable a ast, Show ast)
+annotateComments :: forall a ast . (Data a, Linkable a, ASTEmbeddable a ast)
                                  => AnnotationParser ast
                                  -> ProgramFile a
                                  -> Logger (ProgramFile a)
