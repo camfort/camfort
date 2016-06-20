@@ -17,11 +17,6 @@ program one
         a(i,j) = i+j
      end do
   end do
-  !do i = 1, (imax-1)
-  !   do j = 1, (jmax-1)
-  !      a(i, j) = i*j
-  !   end do
-  !end do   
   
   write (*,*) "A = "
   do i = 0, imax

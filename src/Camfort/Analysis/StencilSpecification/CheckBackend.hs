@@ -48,7 +48,7 @@ import qualified Language.Fortran.Analysis.BBlocks as FAB
 import qualified Language.Fortran.Analysis.DataFlow as FAD
 
 import Language.Fortran.Util.Position
-
+import qualified Data.Map as M
 import Data.Set hiding (map)
 
 type ErrorMsg = String
@@ -62,7 +62,7 @@ class SynToAst s t | s -> t where
 instance SynToAst SYN.Specification (Either RegionEnv SpecDecls) where
   synToAst (SYN.SpecDec spec vars) = do
      spec' <- synToAst spec
-     return $ Right [(vars, spec')]
+     return $ Right $ [(vars, spec')]
 
   synToAst (SYN.RegionDec rvar region) = do
      spec' <- synToAst $ Just region

@@ -8,8 +8,7 @@
       
       do 1 i = 0, imax
          do 2 j = 0, jmax
- != stencil readOnce, reflexive(dims=2), (centered(depth=1, dim=1)) :: a
-            a(i,j) = a(j-1,i) + a(i+1,j) + a(i, j) 
+            a(i,j) = a(j,i-1) + a(i+1,j) + a(i, j) 
  2       continue
  1    continue
 
