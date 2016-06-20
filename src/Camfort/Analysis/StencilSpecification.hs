@@ -50,12 +50,15 @@ import Data.List
 -- Top-level of specification inference
 infer :: InferMode -> Filename -> F.ProgramFile Annotation -> String
 infer mode filename =
-    -- Apprend filename to any outputs
+    -- Append filename to any outputs
       (\x -> if null x then "" else "\n" ++ filename ++ "\n" ++ x)
     -- Form inference output
     . concatMap (formatSpec M.empty)
     -- Call main inference procedure, under renaming
-    . FAR.underRenaming (inferFromAST mode . FAB.analyseBBlocks)
+    . stencilInference mode
+    . FAB.analyseBBlocks
+    . FAR.analyseRenames
+    . FA.initAnalysis
 
 -- Format inferred specifications
 formatSpec :: FAR.NameMap -> LogLine -> String
@@ -82,15 +85,18 @@ spanLineCol (FU.SrcSpan l u) = (lineCol l, lineCol u)
 --         Stencil specification checking       --
 --------------------------------------------------
 
-check :: F.ProgramFile Annotation -> String
-check pf =
-  -- Collect output
-  intercalate "\n" . snd . runWriter $ do
-    -- Attempt to parse comments
-    pf' <- annotateComments Gram.specParser pf
-    -- Applying checking mehcanisem
-    tell . pprint $ runState (runWriterT $ descendBiM perBlockCheck pf') ([], [])
-      where pprint = map (\(span, spec) -> show span ++ "\t" ++ spec) . snd . fst
+check :: Filename -> F.ProgramFile Annotation -> String
+check filename =
+    -- Append filename to any outputs
+    (\x -> if null x then "" else "\n" ++ filename ++ "\n" ++ x)
+    -- Collect output
+  . (intercalate "\n")
+    -- Applying checking mechanism
+    --(FAR.underRenaming (stencilChecking . FAB.analyseBBlocks))
+  . stencilChecking
+  . FAB.analyseBBlocks
+  . FAR.analyseRenames
+  . FA.initAnalysis
 
 -- Local variables:
 -- mode: haskell

@@ -35,6 +35,7 @@ import qualified Camfort.Analysis.StencilSpecification.Syntax as StencilSpec
 import qualified Camfort.Analysis.StencilSpecification.Grammar as StencilComment
 
 import qualified Language.Fortran.AST as F
+import qualified Language.Fortran.Analysis as FA
 
 type Report = String
 
@@ -74,13 +75,13 @@ data Annotation = A { indices        :: [Variable],
                       -- used to indicate when a node is newly introduced
                       newNode        :: Bool,
                       unitInfo       :: Maybe UnitInfo,
-                      stencilSpec    ::
-                        Maybe -- If defined, either an unprocessed syntax tree
-                               (Either StencilComment.Specification
-                               -- Or a parser AST of a RegionEnv or SpecDecls
-                                (Either StencilSpec.RegionEnv StencilSpec.SpecDecls)),
+                      stencilSpec    :: Maybe
+                        -- If defined, either an unprocessed syntax tree
+                        (Either StencilComment.Specification
+                          -- Or a parser AST of a RegionEnv or SpecDecls
+                          (Either StencilSpec.RegionEnv StencilSpec.SpecDecls)),
                       stencilBlock   ::
-                        Maybe (F.Block Annotation)
+                        Maybe (F.Block (FA.Analysis Annotation))
                     }
                    deriving (Eq, Show, Typeable, Data)
 
