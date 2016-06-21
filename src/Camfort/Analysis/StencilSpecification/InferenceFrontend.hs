@@ -156,7 +156,7 @@ perBlockInfer mode b@(F.BlStatement _ span _ (F.StExpressionAssign _ _ lhs _))
        F.ExpSubscript _ _ (F.ExpValue _ _ (F.ValVariable v)) subs ->
         -- Left-hand side is a subscript-by translation of an induction variable
         -- or by a range
-        if all (isRelativeISubscript ivs) (F.aStrip subs)
+        if all (flip isRelativeOnVars ivs) (F.aStrip subs)
          then genSpecsAndReport mode span ivs [b]
          else return ()
        -- Not an assign we are interested in
@@ -264,7 +264,7 @@ isStencilDo b@(F.BlDo _ span _ mDoSpec body) =
  case getInductionVar mDoSpec of
     [] -> False
     [ivar] -> length exprs > 0 &&
-               and [ all (\sub -> sub `isRelativeOnVar` ivar) subs' |
+               and [ all (\sub -> sub `isRelativeOnVars` [ivar]) subs' |
                F.ExpSubscript _ _ _ subs <- exprs
                , let subs' = F.aStrip subs
                , not (null subs') ]
@@ -273,26 +273,6 @@ isStencilDo b@(F.BlDo _ span _ mDoSpec body) =
             isDo (F.BlDo {}) = True
             isDo _            = False
 isStencilDo _  = False
-
-
-{- OLD TEMPORAL INFERENCE CODE FROM perBlockInfer on DO
-   Temporarily removed
-
-  (cycles, _, _) <- ask
-  let lexps = FA.lhsExprs =<< body
-  let getTimeSpec e = do
-        lhsV <- case e of
-          F.ExpValue _ _ (F.ValVariable lhsV) -> Just lhsV
-          F.ExpSubscript _ _ (F.ExpValue _ _ (F.ValVariable lhsV)) _ -> Just lhsV
-          _ -> Nothing
-        v'   <- lookup lhsV cycles
-        -- TODO: update with mutual info
-        return (lhsV, Specification $ Right $ Dependency [v'] False)
-
-  let tempSpecs = groupKeyBy $ foldl' (\ ts -> maybe ts (:ts) . getTimeSpec) [] lexps
-
-  tell [ (span, tempSpecs) ]
--}
 
 {- *** 2 .Conversion from indexing expressions -}
 
@@ -362,12 +342,8 @@ ixToOffset ivs (F.IxRange _ _ _ _ (Just (F.ExpValue _ _ (F.ValInteger "1")))) =
 ixToOffset ivs (F.IxSingle _ _ _ exp) = expToOffset ivs exp
 ixToOffset _ _ = Nothing -- If the indexing expression is a range
 
-
-isRelativeOnVar :: Data a => F.Index a -> Variable -> Bool
-isRelativeOnVar exp v = ixToOffset [v] exp /= Nothing
-
-isRelativeISubscript :: Data a => [Variable] -> F.Index a -> Bool
-isRelativeISubscript vs exp = ixToOffset vs exp /= Nothing
+isRelativeOnVars :: Data a => F.Index a -> [Variable] -> Bool
+isRelativeOnVars exp vs = ixToOffset vs exp /= Nothing
 
 
 expToOffset :: forall a . Data a => [Variable] -> F.Expression a -> Maybe (Variable, Int)
