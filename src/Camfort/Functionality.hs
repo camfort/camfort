@@ -55,6 +55,11 @@ import Camfort.Input
 import Data.Data
 import Data.List (foldl', nub, (\\), elemIndices, intersperse, intercalate)
 
+import qualified Data.ByteString as BS
+import Data.Text (unpack)
+import Data.Text.Encoding (decodeUtf8With)
+import Data.Text.Encoding.Error (replace)
+
 -- FORPAR related imports
 import qualified Language.Fortran.Parser.Any as FP
 import qualified Language.Fortran.AST as A
@@ -204,7 +209,7 @@ readForparseSrcDir inp excludes = do
 {-| Read a specific file, and parse it -}
 readForparseSrcFile :: Filename -> IO (Filename, SourceText, A.ProgramFile A)
 readForparseSrcFile f = do
-    inp <- readFile f
+    inp <- flexReadFile f
     let ast = FP.fortranParser inp f
     return $ (f, inp, fmap (const unitAnnotation) ast)
 ----
@@ -223,3 +228,12 @@ doAnalysisSummaryForpar aFun inSrc excludes = do
 
 callAndSummarise aFun ps = do
   foldl' (\n (f, _, ps) -> n `mappend` aFun f ps) mempty ps
+
+----
+
+-- | Read file using ByteString library and deal with any weird characters.
+flexReadFile :: String -> IO String
+flexReadFile path = do
+  bs <- BS.readFile path
+  let text = decodeUtf8With (replace ' ') bs
+  return $ unpack text

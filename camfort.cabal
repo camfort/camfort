@@ -99,7 +99,8 @@ executable camfort
                         QuickCheck >= 2.8,
                         fortran-src,
                         filepath,
-                        fgl >= 5.5
+                        fgl >= 5.5,
+                        bytestring >= 0.10
 
 library
   hs-source-dirs:       src
@@ -169,4 +170,5 @@ library
                         GenericPretty >= 1.2,
                         fortran-src,
                         filepath,
-                        fgl >= 5.5
+                        fgl >= 5.5,
+                        bytestring >= 0.10
