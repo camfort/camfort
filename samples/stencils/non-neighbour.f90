@@ -12,4 +12,10 @@
  2       continue
  1    continue
 
+      do i = 0, imax
+         do j = 0, jmax
+            write (*,*) a(i,j)
+         end do
+      end do
+            
       end

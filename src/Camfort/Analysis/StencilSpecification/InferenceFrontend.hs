@@ -154,7 +154,7 @@ perBlockInfer mode b@(F.BlStatement _ span _ (F.StExpressionAssign _ _ lhs _))
     ivs <- get
     case lhs of
        F.ExpSubscript _ _ (F.ExpValue _ _ (F.ValVariable v)) subs ->
-        -- Left-hand side is a subscript-by translation of an induction variable
+        -- Left-hand side is a subscript-by relative index
         -- or by a range
         if all (flip isRelativeOnVars ivs) (F.aStrip subs)
          then genSpecsAndReport mode span ivs [b]
@@ -342,8 +342,10 @@ ixToOffset ivs (F.IxRange _ _ _ _ (Just (F.ExpValue _ _ (F.ValInteger "1")))) =
 ixToOffset ivs (F.IxSingle _ _ _ exp) = expToOffset ivs exp
 ixToOffset _ _ = Nothing -- If the indexing expression is a range
 
+
 isRelativeOnVars :: Data a => F.Index a -> [Variable] -> Bool
 isRelativeOnVars exp vs = ixToOffset vs exp /= Nothing
+                       && ixToOffset vs exp /= Just ("", absoluteRep)
 
 
 expToOffset :: forall a . Data a => [Variable] -> F.Expression a -> Maybe (Variable, Int)
@@ -363,7 +365,8 @@ expToOffset ivs (F.ExpBinary _ _ F.Subtraction
                                  (F.ExpValue _ _ (F.ValInteger offs)))
    | v `elem` ivs = Just $ (v, if x < 0 then abs x else (- x))
                      where x = read offs
-expToOffset ivs e = Just $ (v, absoluteRep)
+
+expToOffset ivs e@(F.ExpBinary {}) = Just $ (v, absoluteRep)
   where
     -- Record when there is a relative index, but that is not a neighbourhood
     -- index by our definitions
@@ -371,6 +374,15 @@ expToOffset ivs e = Just $ (v, absoluteRep)
     -- set of all induction variables involved in this expression
     ivs' = [i | (F.ValVariable i) <- universeBi e :: [F.Value a], i `elem` ivs]
 
+expToOffset ivs e@(F.ExpUnary {}) = Just $ (v, absoluteRep)
+  where
+    -- Record when there is a relative index, but that is not a neighbourhood
+    -- index by our definitions
+    v = if null ivs' then "" else head ivs'
+    -- set of all induction variables involved in this expression
+    ivs' = [i | (F.ValVariable i) <- universeBi e :: [F.Value a], i `elem` ivs]
+
+expToOffset ivs e = Just ("", absoluteRep)
 
 --------------------------------------------------
 
