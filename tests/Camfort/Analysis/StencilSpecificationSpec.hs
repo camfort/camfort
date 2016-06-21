@@ -7,6 +7,7 @@
 
 module Camfort.Analysis.StencilSpecificationSpec (spec) where
 
+import Control.Monad.Writer hiding (Sum, Product)
 import Data.List
 
 import Camfort.Functionality
@@ -159,13 +160,13 @@ spec =
 
     describe ("Inconsistent induction variable usage") $ do
       it "consistent" $
-        (indicesToSpec ["i", "j"] [[offsetToIx "i" 1, offsetToIx "j" 1],
+        (indicesToSpec' ["i", "j"] [[offsetToIx "i" 1, offsetToIx "j" 1],
                                   [offsetToIx "i" 0, offsetToIx "j" 0]])
          `shouldBe` (Just $ Specification $ Left $ Exact $ Spatial Linear [] []
                        (Sum [Product [Forward 1 1], Product [Forward 1 2]]))
 
       it "inconsistent" $
-        (indicesToSpec ["i", "j"] [[offsetToIx "i" 1, offsetToIx "j" 1],
+        (indicesToSpec' ["i", "j"] [[offsetToIx "i" 1, offsetToIx "j" 1],
                                   [offsetToIx "j" 0, offsetToIx "i" 0]])
          `shouldBe` Nothing
 
@@ -246,11 +247,13 @@ test2DSpecVariation (input, expectation) =
     it ("format=" ++ show input) $ do
 
        -- Test inference
-       (indicesToSpec ["i", "j"] (map fromFormatToIx input))
+       (indicesToSpec' ["i", "j"] (map fromFormatToIx input))
           `shouldBe` Just expectedSpec
   where
     expectedSpec = Specification . Left $ expectation
     fromFormatToIx [ri,rj] = [ offsetToIx "i" ri, offsetToIx "j" rj ]
+
+indicesToSpec' ivs = fst . runWriter . (indicesToSpec ivs)
 
 variations =
   [ ( [ [0,0] ]
@@ -292,7 +295,7 @@ test3DSpecVariation (input, expectation) =
     it ("format=" ++ show input) $ do
 
       -- Test inference
-      (indicesToSpec ["i", "j", "k"] (map fromFormatToIx input))
+      (indicesToSpec' ["i", "j", "k"] (map fromFormatToIx input))
            `shouldBe` Just expectedSpec
 
   where

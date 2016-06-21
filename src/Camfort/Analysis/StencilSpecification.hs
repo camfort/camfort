@@ -62,8 +62,10 @@ infer mode filename =
 
 -- Format inferred specifications
 formatSpec :: FAR.NameMap -> LogLine -> String
-formatSpec nm (span, []) = ""
-formatSpec nm (span, specs) =
+formatSpec nm (span, Right evalInfo) =
+  show (spanLineCol span) ++ " \t" ++ evalInfo ++ "\n"
+formatSpec nm (span, Left []) = ""
+formatSpec nm (span, Left specs) =
   (intercalate "\n" $ map (\s -> loc ++ " \t" ++ doSpec s) specs) ++ "\n"
     where
       loc                      = show (spanLineCol span)

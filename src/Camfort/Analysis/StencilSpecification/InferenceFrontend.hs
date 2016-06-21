@@ -19,6 +19,7 @@
 {-# LANGUAGE ImplicitParams #-}
 {-# LANGUAGE DeriveDataTypeable #-}
 {-# LANGUAGE PatternGuards #-}
+{-# LANGUAGE ScopedTypeVariables #-}
 
 module Camfort.Analysis.StencilSpecification.InferenceFrontend where
 
@@ -53,18 +54,22 @@ type Variable = String
 
 -- Define modes of interaction with the inference
 data InferMode =
-  DoMode | AssignMode | CombinedMode
+  DoMode | AssignMode | CombinedMode | EvalMode
   deriving (Eq, Show, Data, Read)
 
 instance Default InferMode where
     defaultValue = AssignMode
 
 -- The inferer returns information as a LogLine
-type LogLine = (FU.SrcSpan, [([Variable], Specification)])
+type EvalLog = [String]
+type LogLine = (FU.SrcSpan, Either [([Variable], Specification)] String)
 -- The core of the inferer works within this monad
 type Inferer = WriterT [LogLine] (ReaderT (Cycles, F.ProgramUnitName, TypeEnv A) (State [Variable]))
 type Cycles = [(F.Name, F.Name)]
 
+runInferer :: Cycles -> F.ProgramUnitName -> TypeEnv A -> Inferer a -> [LogLine]
+runInferer cycles puName tenv =
+  flip evalState [] . flip runReaderT (cycles, puName, tenv) . execWriterT
 
 stencilInference :: InferMode -> F.ProgramFile (FA.Analysis A) -> [LogLine]
 stencilInference mode pf@(F.ProgramFile cm_pus others) =
@@ -127,24 +132,32 @@ findVarFlowCycles' pf = cycs2
 
 {- *** 1 . Core inference over blocks -}
 
-runInferer :: Cycles -> F.ProgramUnitName -> TypeEnv A -> Inferer a -> [LogLine]
-runInferer cycles puName tenv =
-  flip evalState [] . flip runReaderT (cycles, puName, tenv) . execWriterT
-
+genSpecsAndReport :: (?flowsGraph :: FAD.FlowsGraph A)
+  => InferMode -> FU.SrcSpan -> [Variable] -> [F.Block (FA.Analysis A)]
+  -> Inferer ()
+genSpecsAndReport mode span ivs blocks =
+ let (specs, evalInfos) = runWriter $ genSpecifications ivs blocks
+ in do tell [ (span, Left specs) ]
+       if mode == EvalMode
+         then do mapM_ (\evalInfo -> tell [ (span, Right evalInfo) ]) evalInfos
+                 mapM_ (\spec -> if show spec == ""
+                                 then tell [ (span, Right "EVALMODE: Cannot make spec") ]
+                                 else return ()) specs
+         else return ()
 
 -- Traverse Blocks in the AST and infer stencil specifications
 perBlockInfer :: (?flowsGraph :: FAD.FlowsGraph A)
     => InferMode -> F.Block (FA.Analysis A) -> Inferer (F.Block (FA.Analysis A))
 
 perBlockInfer mode b@(F.BlStatement _ span _ (F.StExpressionAssign _ _ lhs _))
-  | mode == AssignMode || mode == CombinedMode = do
+  | mode == AssignMode || mode == CombinedMode || mode == EvalMode = do
     ivs <- get
     case lhs of
        F.ExpSubscript _ _ (F.ExpValue _ _ (F.ValVariable v)) subs ->
         -- Left-hand side is a subscript-by translation of an induction variable
         -- or by a range
-        if all (isAffineISubscript ivs) (F.aStrip subs)
-         then tell [ (span, genSpecifications ivs [b]) ]
+        if all (isRelativeISubscript ivs) (F.aStrip subs)
+         then genSpecsAndReport mode span ivs [b]
          else return ()
        -- Not an assign we are interested in
        _ -> return ()
@@ -157,7 +170,7 @@ perBlockInfer mode b@(F.BlDo _ span _ mDoSpec body) = do
     ivs <- get
 
     if (mode == DoMode || mode == CombinedMode) && isStencilDo b
-     then tell [ (span, genSpecifications ivs body) ]
+     then genSpecsAndReport mode span ivs body
      else return ()
 
     -- descend into the body of the do-statement
@@ -172,12 +185,25 @@ perBlockInfer mode b = do
     return b
 
 genSpecifications :: (?flowsGraph :: FAD.FlowsGraph A) =>
-   [Variable] -> [F.Block (FA.Analysis A)] -> [([Variable], Specification)]
-genSpecifications ivs = splitUpperAndLower . groupKeyBy . M.toList . specs
-  where specs = M.mapMaybe (indicesToSpec ivs)
+                     [Variable]
+                  -> [F.Block (FA.Analysis A)]
+                  -> Writer EvalLog [([Variable], Specification)]
+genSpecifications ivs = do
+  fmap (splitUpperAndLower . groupKeyBy . filterMaybe) . sequenceListSnd . specs
+  where specs = M.toList
+              . M.map (indicesToSpec ivs)
               . M.unionsWith (++)
               . flip evalState []
               . mapM (genSubscripts ivs True)
+
+        filterMaybe :: [(a, Maybe b)] -> [(a, b)]
+        filterMaybe [] = []
+        filterMaybe ((a, Nothing):xs) = filterMaybe xs
+        filterMaybe ((a, Just b):xs) = (a, b) : filterMaybe xs
+
+        sequenceListSnd :: Monad m => [(a, m b)] -> m [(a, b)]
+        sequenceListSnd = sequence . map (\(a, mb) -> mb >>= (\b -> return (a, b)))
+
         splitUpperAndLower = concatMap splitUpperAndLower'
         splitUpperAndLower' (vs, Specification (Left (Bound (Just l) (Just u))))
           = [(vs, Specification (Left (Bound (Just l) Nothing))),
@@ -238,7 +264,7 @@ isStencilDo b@(F.BlDo _ span _ mDoSpec body) =
  case getInductionVar mDoSpec of
     [] -> False
     [ivar] -> length exprs > 0 &&
-               and [ all (\sub -> sub `isAffineOnVar` ivar) subs' |
+               and [ all (\sub -> sub `isRelativeOnVar` ivar) subs' |
                F.ExpSubscript _ _ _ subs <- exprs
                , let subs' = F.aStrip subs
                , not (null subs') ]
@@ -276,21 +302,37 @@ padZeros ixss = let m = maximum (map length ixss)
                 in map (\ixs -> ixs ++ replicate (m - length ixs) 0) ixss
 
 -- Convert list of indexing expressions to a spec
-indicesToSpec :: Eq a => [Variable] -> [[F.Index a]] -> Maybe Specification
-indicesToSpec ivs ixs =
-    fmap (setLinearity (fromBool mult)) . relativeIxsToSpec ivs $ rixs'
-      where rixs = toListsOfRelativeIndices ivs $ ixs
-            -- As an optimisation, do duplicate check in front-end first
-            -- so that duplicate indices don't get passed into the main engine
-            (rixs', mult) = hasDuplicates rixs
+indicesToSpec :: (Data a, Eq a)
+              => [Variable]
+              -> [[F.Index a]]
+              -> Writer EvalLog (Maybe Specification)
+indicesToSpec ivs ixs = do
+  rixs <- toListsOfRelativeIndices ivs $ ixs
+  -- As an optimisation, do duplicate check in front-end first
+  -- so that duplicate indices don't get passed into the main engine
+  let (rixs', mult) = hasDuplicates rixs
+  return $ fmap (setLinearity (fromBool mult)) . relativeIxsToSpec ivs $ rixs'
 
-consistentIVSuse :: [[(Variable, Int)]] -> [[Int]]
-consistentIVSuse offsets =
-    if consistent then map (map snd) offsets else []
+consistentIVSuse :: [[(Variable, Int)]] -> Writer EvalLog [[Int]]
+consistentIVSuse offsets = do
+  -- For the EvalMode, if there are any non-neighbourhood relative
+  -- subscripts detected then add this to the eval log
+  if hasNonNeighbourhoodRelatives offsets
+    then tell ["EVALMODE: Non-neighbour relative subscripts"]
+    else return ()
+  if consistent
+    then return $ map (map snd) offsets
+    else do tell ["EVALMODE: Inconsistent IV use"]
+            return []
+
     where consistent = sequence vars /= Nothing
           vars = foldr (\a b -> map (uncurry cmp) $ zip a b)
                        (repeat (Just ""))
                        (map (map (Just . fst)) offsets)
+
+          hasNonNeighbourhoodRelatives :: [[(Variable, Int)]] -> Bool
+          hasNonNeighbourhoodRelatives xs =
+               or (map (any (\(v, i) -> not (null v) && i == absoluteRep)) xs)
 
 cmp (Just "") (Just v) = Just v
 cmp (Just v) (Just "") = Just v
@@ -303,16 +345,16 @@ relativeIxsToSpec ivs ixs =
     if isEmpty exactSpec then Nothing else Just exactSpec
     where exactSpec = inferFromIndicesWithoutLinearity . fromLists $ ixs
 
-toListsOfRelativeIndices :: [Variable] -> [[F.Index a]] -> [[Int]]
+toListsOfRelativeIndices :: Data a => [Variable] -> [[F.Index a]] -> Writer EvalLog [[Int]]
 toListsOfRelativeIndices ivs =
-    padZeros . consistentIVSuse . ignoreNonNeighbour . map (map (ixToOffset ivs))
+    (fmap padZeros) . consistentIVSuse . ignoreNonNeighbour . map (map (ixToOffset ivs))
     where ignoreNonNeighbour = map (map (maybe ("", 0) id))
 
 -- Convert indexing expressions that are translations
 -- intto their translation offset:2
 -- e.g., for the expression a(i+1,j-1) then this function gets
 -- passed expr = i + 1   (returning +1) and expr = j - 1 (returning -1)
-ixToOffset :: [Variable] -> F.Index a -> Maybe (Variable, Int)
+ixToOffset :: Data a => [Variable] -> F.Index a -> Maybe (Variable, Int)
 -- Range with stride = 1 count as reflexive indexing
 ixToOffset ivs (F.IxRange _ _ _ _ Nothing) = Just ("", 0)
 ixToOffset ivs (F.IxRange _ _ _ _ (Just (F.ExpValue _ _ (F.ValInteger "1")))) =
@@ -320,13 +362,15 @@ ixToOffset ivs (F.IxRange _ _ _ _ (Just (F.ExpValue _ _ (F.ValInteger "1")))) =
 ixToOffset ivs (F.IxSingle _ _ _ exp) = expToOffset ivs exp
 ixToOffset _ _ = Nothing -- If the indexing expression is a range
 
-isAffineOnVar :: F.Index a -> Variable -> Bool
-isAffineOnVar exp v = ixToOffset [v] exp /= Nothing
 
-isAffineISubscript :: [Variable] -> F.Index a -> Bool
-isAffineISubscript vs exp = ixToOffset vs exp /= Nothing
+isRelativeOnVar :: Data a => F.Index a -> Variable -> Bool
+isRelativeOnVar exp v = ixToOffset [v] exp /= Nothing
 
-expToOffset :: [Variable] -> F.Expression a -> Maybe (Variable, Int)
+isRelativeISubscript :: Data a => [Variable] -> F.Index a -> Bool
+isRelativeISubscript vs exp = ixToOffset vs exp /= Nothing
+
+
+expToOffset :: forall a . Data a => [Variable] -> F.Expression a -> Maybe (Variable, Int)
 expToOffset ivs (F.ExpValue _ _ (F.ValVariable v))
   | v `elem` ivs = Just (v, 0)
   | otherwise    = Just ("", absoluteRep)
@@ -343,7 +387,14 @@ expToOffset ivs (F.ExpBinary _ _ F.Subtraction
                                  (F.ExpValue _ _ (F.ValInteger offs)))
    | v `elem` ivs = Just $ (v, if x < 0 then abs x else (- x))
                      where x = read offs
-expToOffset ivs _ = Just $ ("", absoluteRep)
+expToOffset ivs e = Just $ (v, absoluteRep)
+  where
+    -- Record when there is a relative index, but that is not a neighbourhood
+    -- index by our definitions
+    v = if null ivs' then "" else head ivs'
+    -- set of all induction variables involved in this expression
+    ivs' = [i | (F.ValVariable i) <- universeBi e :: [F.Value a], i `elem` ivs]
+
 
 --------------------------------------------------
 
