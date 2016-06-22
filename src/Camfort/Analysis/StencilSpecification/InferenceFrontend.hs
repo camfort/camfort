@@ -141,10 +141,10 @@ genSpecsAndReport mode span ivs blocks =
    tell [ (span, Left specs) ]
    if mode == EvalMode
     then do
-      tell [ (span, Right "EVALMODE: TICK assign to relative array subscript") ]
+      tell [ (span, Right "EVALMODE: TICK assign to relative array subscript (tag: tickAssign)") ]
       mapM_ (\evalInfo -> tell [ (span, Right evalInfo) ]) evalInfos
       mapM_ (\spec -> if show spec == ""
-                      then tell [ (span, Right "EVALMODE: Cannot make spec") ]
+                      then tell [ (span, Right "EVALMODE: Cannot make spec (tag: emptySpec)") ]
                       else return ()) specs
     else return ()
 
@@ -301,11 +301,11 @@ consistentIVSuse offsets = do
   -- For the EvalMode, if there are any non-neighbourhood relative
   -- subscripts detected then add this to the eval log
   if hasNonNeighbourhoodRelatives offsets
-    then tell ["EVALMODE: Non-neighbour relative subscripts"]
+    then tell ["EVALMODE: Non-neighbour relative subscripts (tag: nonNeighbour)"]
     else return ()
   if consistent
     then return $ map (map snd) offsets
-    else do tell ["EVALMODE: Inconsistent IV use"]
+    else do tell ["EVALMODE: Inconsistent IV use (tag: inconsistentIV)"]
             return []
 
     where consistent = sequence vars /= Nothing
