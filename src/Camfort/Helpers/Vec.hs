@@ -1,7 +1,11 @@
 {-# LANGUAGE DataKinds, GADTs, KindSignatures, StandaloneDeriving, RankNTypes, TypeFamilies #-}
+{-# LANGUAGE PolyKinds #-}
+{-# LANGUAGE FlexibleInstances #-}
+{-# LANGUAGE ScopedTypeVariables #-}
 
 module Camfort.Helpers.Vec where
 
+data Proxy (n :: k) = Proxy
 data Nat = Z | S Nat
 
 -- Indexed natural number type
@@ -18,6 +22,13 @@ toNatBox :: Int -> NatBox
 toNatBox 0 = NatBox Zero
 toNatBox n = case toNatBox (n-1) of
               (NatBox n) -> NatBox (Succ n)
+
+class FromNat n where
+   fromNat :: Proxy n -> Int
+instance FromNat 0 where
+   fromNat Proxy = 0
+instance FromNat n => FromNat (S n) where
+   fromNat Proxy = 1 + fromNat (Proxy :: Proxy n)
 
 -- Indexed vector type
 data Vec (n :: Nat) a where
