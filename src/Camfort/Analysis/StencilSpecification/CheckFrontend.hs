@@ -161,7 +161,7 @@ perBlockCheck b@(F.BlComment ann span _) = do
         -- Create list of relative indices
         (_, ivs) <- get
         -- Do inference
-        let inferred = genSpecifications ivs [s]
+        let inferred = fst . runWriter $ genSpecifications ivs [s]
         -- Model and compare the current and specified stencil specs
         if compareInferredToDeclared inferred specDecls
           then tell [ (span, "Correct.") ]

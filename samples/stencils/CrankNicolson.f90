@@ -29,5 +29,7 @@ program CrankNicolson
   ! compute mean
   do i = 1, (imax-1)
      do j = 1, (jmax-1)
-        b(i, j) = a(i, j) 
+        b(i, j) = a(i, j)
+     end do
+  end do
 end program
