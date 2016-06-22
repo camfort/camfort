@@ -97,7 +97,7 @@ data Temporal = Dependency [String] Bool
 
 -- **********************
 -- Spatial specifications:
--- Comprises some modifies on spatial specifications:
+-- Comprises some modifiers on spatial specifications:
 --         * linearity
 --         * irreflexivity
 --         * reflexivity
@@ -229,6 +229,7 @@ regionPlus x y                   = Nothing
 -- If there are two region lists which are equal modulo an entry in
 -- one which is `Forward d dim` and `Backward d dim` in the other
 equalModuloFwdBwd :: [Region] -> [Region] -> Maybe (Region, [Region])
+equalModuloFwdBwd [] [] = Nothing
 equalModuloFwdBwd
   (Forward d dim : rs) (Backward d' dim' :rs')
     | d == d' && dim == dim' && rs == rs' = Just (Centered d dim, rs)
@@ -314,7 +315,22 @@ instance RegionRig (Result Spatial) where
   sum (Bound l u) (Bound l' u') = Bound (sum l l') (sum (sum l u') (sum l' u))
   sum s s'                      = sum s' s
 
-  prod (Exact s) (Exact s')     = Exact (prod s s')
+
+  prod (Exact s) (Exact s') =
+    -- If any of the spatial regions has non continguous behaviour
+    -- due to irreflexivity then changed the offending spec into a bound
+    if null (nonContig s) || null (nonContig s')
+    then prod as as'
+    -- Usutal case
+    else Exact (prod s s')
+      where as = mkBoundIfNonContig s
+            as' = mkBoundIfNonContig s'
+            mkBoundIfNonContig s =
+             if null (nonContig s)
+             then Exact s
+             else Bound Nothing
+                   (Just $ s { modIrreflexives = modIrreflexives s \\ nonContig s })
+
   prod (Exact s) (Bound l u)    = Bound (prod (Just s) l) (prod (Just s) u)
   prod (Bound l u) (Bound l' u') = Bound (prod l l') (prod (prod l u') (prod l' u))
   prod s s'                      = prod s' s
@@ -324,6 +340,11 @@ instance RegionRig (Result Spatial) where
 
   isUnit (Exact s) = isUnit s
   isUnit (Bound x y) = isUnit x && isUnit y
+
+nonContig (Spatial _ irrefl _ (Sum ss)) =
+  filter (\d ->
+     any (\(Product sp) ->
+        any (\s -> getDimension s == d) sp) ss) irrefl
 
 instance RegionRig RegionSum where
   prod (Sum ss) (Sum ss') =

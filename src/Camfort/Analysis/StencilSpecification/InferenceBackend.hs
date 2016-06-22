@@ -86,7 +86,8 @@ fromRegionsToSpec sps = fmap simplifyRefl result
     -- with the upper bound computed using `prod`
     -- upper  = toSpecND $ foldl1 spanBoundingBox sps
 
--- toSpecND converts an n-dimensional region into a (list of) specification
+-- toSpecND converts an n-dimensional region into an exact
+-- spatial specification or a bound of spatial specifications
 toSpecND :: Span (Vec n Int) -> Result Spatial
 toSpecND = toSpecPerDim 1
   where
@@ -164,8 +165,6 @@ composeConsecutiveSpans (Cons l1 ls1, Cons u1 us1) (Cons l2 ls2, Cons u2 us2)
       = Just (Cons l1 ls1, Cons u2 us2)
     | otherwise
       = Nothing
-
-foobar = [Cons 0 (Cons 1 Nil), Cons 1 (Cons 1 Nil)]
 
 {-| |inferMinimalVectorRegions| a key part of the algorithm, from a list of
     n-dimensional relative indices it infers a list of (possibly overlapping)
