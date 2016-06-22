@@ -163,7 +163,7 @@ spec =
         (indicesToSpec' ["i", "j"] [[offsetToIx "i" 1, offsetToIx "j" 1],
                                   [offsetToIx "i" 0, offsetToIx "j" 0]])
          `shouldBe` (Just $ Specification $ Left $ Bound
-                       (Just $ Spatial Linear [0] []
+                       (Just $ Spatial Linear [] [1,2]
                             (Sum [Product []]))
                        (Just $ Spatial Linear [] []
                             (Sum [Product [Forward 1 1, Forward 1 2]])))
@@ -261,6 +261,9 @@ indicesToSpec' ivs = fst . runWriter . (indicesToSpec ivs)
 variations =
   [ ( [ [0,0] ]
     , Exact $ Spatial Linear [] [ 1, 2 ] (Sum [Product []])
+    )
+  , ( [ [1,0] ]
+    , Exact $ Spatial Linear [1] [2] (Sum [Product [Forward 1 1]])
     )
   , ( [ [1,0], [0,0], [0,0] ]
     , Exact $ Spatial NonLinear [] [2] (Sum [Product [Forward 1 1]])

@@ -315,8 +315,21 @@ instance RegionRig (Result Spatial) where
   sum (Bound l u) (Bound l' u') = Bound (sum l l') (sum (sum l u') (sum l' u))
   sum s s'                      = sum s' s
 
+  prod (Exact s) (Exact s') =
+    -- If any of the spatial regions has non continguous behaviour
+    -- due to irreflexivity then changed the offending spec into a bound
+    if null (nonContig s) || null (nonContig s')
+    -- Usual case
+    then Exact (prod s s')
+    else prod as as'
+      where as = mkBoundIfNonContig s
+            as' = mkBoundIfNonContig s'
+            mkBoundIfNonContig s =
+             if null (nonContig s)
+             then Exact s
+             else Bound Nothing
+                   (Just $ s { modIrreflexives = modIrreflexives s \\ nonContig s })
 
-  prod (Exact s) (Exact s') = Exact (prod s s')
   prod (Exact s) (Bound l u)    = Bound (prod (Just s) l) (prod (Just s) u)
   prod (Bound l u) (Bound l' u') = Bound (prod l l') (prod (prod l u') (prod l' u))
   prod s s'                      = prod s' s
@@ -327,10 +340,12 @@ instance RegionRig (Result Spatial) where
   isUnit (Exact s) = isUnit s
   isUnit (Bound x y) = isUnit x && isUnit y
 
+
 nonContig (Spatial _ irrefl _ (Sum ss)) =
   filter (\d ->
      any (\(Product sp) ->
         any (\s -> getDimension s == d) sp) ss) irrefl
+
 
 instance RegionRig RegionSum where
   prod (Sum ss) (Sum ss') =
