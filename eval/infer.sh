@@ -11,7 +11,7 @@ LOGFILE="$DIR"/logs/infer_`date --rfc-3339=seconds | tr ' ' '_'`.log
 
 TMPOUT=`mktemp -d`
 
-STENCILWORDS=(readOnce reflexive forward backward atMost atLeast boundedBoth)
+STENCILWORDS=(readOnce reflexive irreflexive forward backward centered atMost atLeast boundedBoth)
 
 parsefailed=0
 matches=0
