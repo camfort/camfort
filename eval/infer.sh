@@ -31,7 +31,7 @@ while IFS=',' read m f; do
     [ -z "${MODULES[$m]}" ] && MODULES+=([$m]=yes)
     echo -n "stencils-infer MOD=$m FILE=\"$f\"..."
     echo "%%% begin stencils-infer MOD=$m FILE=\"$f\"" >> "$LOGFILE"
-    "$TIME" stack exec camfort stencils-infer "$f" "$TMPOUT" -m Eval &>> "$LOGFILE"
+    "$TIME" stack exec camfort -- stencils-infer "$f" "$TMPOUT" -m Eval &>> "$LOGFILE"
     echo "%%% end stencils-infer MOD=$m FILE=\"$f\"" >> "$LOGFILE"
     echo "done."
 done < <("$DIR"/files.sh)
