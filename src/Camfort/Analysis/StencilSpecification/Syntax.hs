@@ -316,21 +316,7 @@ instance RegionRig (Result Spatial) where
   sum s s'                      = sum s' s
 
 
-  prod (Exact s) (Exact s') =
-    -- If any of the spatial regions has non continguous behaviour
-    -- due to irreflexivity then changed the offending spec into a bound
-    if null (nonContig s) || null (nonContig s')
-    then prod as as'
-    -- Usutal case
-    else Exact (prod s s')
-      where as = mkBoundIfNonContig s
-            as' = mkBoundIfNonContig s'
-            mkBoundIfNonContig s =
-             if null (nonContig s)
-             then Exact s
-             else Bound Nothing
-                   (Just $ s { modIrreflexives = modIrreflexives s \\ nonContig s })
-
+  prod (Exact s) (Exact s') = Exact (prod s s')
   prod (Exact s) (Bound l u)    = Bound (prod (Just s) l) (prod (Just s) u)
   prod (Bound l u) (Bound l' u') = Bound (prod l l') (prod (prod l u') (prod l' u))
   prod s s'                      = prod s' s
@@ -377,7 +363,7 @@ instance {-# OVERLAPS #-} Show (Result Spatial) where
   show (Bound Nothing (Just s)) = "atMost, " ++ show s
   show (Bound (Just s) Nothing) = "atLeast, " ++ show s
   show (Bound (Just sL) (Just sU)) =
-      "atMost, " ++ show sU
+      "atLeast, " ++ show sL ++ "; atMost, " ++ show sU
 
 -- Pretty print spatial specs
 instance Show Spatial where

@@ -137,13 +137,16 @@ genSpecsAndReport :: (?flowsGraph :: FAD.FlowsGraph A)
   -> Inferer ()
 genSpecsAndReport mode span ivs blocks =
  let (specs, evalInfos) = runWriter $ genSpecifications ivs blocks
- in do tell [ (span, Left specs) ]
-       if mode == EvalMode
-         then do mapM_ (\evalInfo -> tell [ (span, Right evalInfo) ]) evalInfos
-                 mapM_ (\spec -> if show spec == ""
-                                 then tell [ (span, Right "EVALMODE: Cannot make spec") ]
-                                 else return ()) specs
-         else return ()
+ in do
+   tell [ (span, Left specs) ]
+   if mode == EvalMode
+    then do
+      tell [ (span, Right "EVALMODE: TICK assign to relative array subscript") ]
+      mapM_ (\evalInfo -> tell [ (span, Right evalInfo) ]) evalInfos
+      mapM_ (\spec -> if show spec == ""
+                      then tell [ (span, Right "EVALMODE: Cannot make spec") ]
+                      else return ()) specs
+    else return ()
 
 -- Traverse Blocks in the AST and infer stencil specifications
 perBlockInfer :: (?flowsGraph :: FAD.FlowsGraph A)

@@ -26,7 +26,8 @@
 
 module Camfort.Helpers.Vec where
 
-data Proxy (n :: k) = Proxy
+import Data.Data
+
 data Nat = Z | S Nat
 
 -- Indexed natural number type
@@ -46,11 +47,11 @@ toNatBox 0 = NatBox Zero
 toNatBox n = case toNatBox (n-1) of
               (NatBox n) -> NatBox (Succ n)
 
-class FromNat n where
+class IsNatural (n :: Nat) where
    fromNat :: Proxy n -> Int
-instance FromNat 0 where
+instance IsNatural Z where
    fromNat Proxy = 0
-instance FromNat n => FromNat (S n) where
+instance IsNatural n => IsNatural (S n) where
    fromNat Proxy = 1 + fromNat (Proxy :: Proxy n)
 
 -- Indexed vector type

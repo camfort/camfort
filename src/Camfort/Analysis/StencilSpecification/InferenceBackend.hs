@@ -45,41 +45,76 @@ mkTrivialSpan a = (a, a)
 
 inferFromIndices :: VecList Int -> Specification
 inferFromIndices (VL ixs) =
-    setLinearity (fromBool mult) (Specification . Left . inferSpec $ ixs')
-      where (ixs', mult) = hasDuplicates ixs
-            inferSpec :: Permutable n => [Vec n Int] -> Result Spatial
-            inferSpec = fromRegionsToSpec . inferMinimalVectorRegions
+    setLinearity (fromBool mult) (Specification . Left . infer $ ixs')
+      where
+        (ixs', mult) = hasDuplicates ixs
+        infer :: (IsNatural n, Permutable n) => [Vec n Int] -> Result Spatial
+        infer = fromRegionsToSpec . inferMinimalVectorRegions
 
 -- Same as inferFromIndices but don't do any linearity checking
 -- (defaults to NonLinear). This is used when the front-end does
 -- the linearity check first as an optimimsation.
 inferFromIndicesWithoutLinearity :: VecList Int -> Specification
 inferFromIndicesWithoutLinearity (VL ixs) =
-    Specification . Left . inferSpec $ ixs
-      where inferSpec :: Permutable n => [Vec n Int] -> Result Spatial
-            inferSpec = fromRegionsToSpec . inferMinimalVectorRegions
+    Specification . Left . infer $ ixs
+      where
+        infer :: (IsNatural n, Permutable n) => [Vec n Int] -> Result Spatial
+        infer = fromRegionsToSpec . inferMinimalVectorRegions
 
--- Removes any 'reflexive' specs that are overlapped by a directional spec
--- somewhere else [in theory a lot of these won't get generated in the first
--- place, but when specs are combined there can be overlapping reflexivities in
--- different parts]
-simplifyRefl :: Spatial -> Spatial
-simplifyRefl (Spatial lin irdims rdims (Sum ss)) =
-  Spatial lin (irdims \\ overlapped) (rdims \\ overlapped) (Sum ss)
+-- Generate the reflexivity and irreflexivity information
+genModifiers :: IsNatural n => [Span (Vec n Int)] -> Spatial -> Spatial
+genModifiers sps (Spatial lin _ _ s) =
+  Spatial lin irrefls (refls \\ overlapped) s
     where
-      overlapped = rdimsS ++ rdimsF ++ rdimsB
-      rdimsS = [d | (Centered _ d)  <- universeBi ss::[Region],
-                                 d' <- rdims, d == d']
+      (refls, irrefls) = reflexivity sps
+      overlapped = reflsC ++ reflsF ++ reflsB
+      reflsC = [d | (Centered _ d)  <- universeBi s::[Region],
+                                 d' <- refls, d == d']
 
-      rdimsF = [d | (Forward  _ d)  <- universeBi ss::[Region],
-                                 d' <- rdims, d == d']
+      reflsF = [d | (Forward  _ d)  <- universeBi s::[Region],
+                                 d' <- refls, d == d']
 
-      rdimsB = [d | (Backward  _ d)  <- universeBi ss::[Region],
-                                  d' <- rdims, d == d']
+      reflsB = [d | (Backward  _ d)  <- universeBi s::[Region],
+                                  d' <- refls, d == d']
 
-fromRegionsToSpec :: [Span (Vec n Int)] -> Result Spatial
-fromRegionsToSpec sps = fmap simplifyRefl result
+-- For a list of region spans, calculate which dimensions do
+-- have a region cross their origin and which do not. Return
+-- a pair of lists for each respectively
+reflexivity :: forall n . IsNatural n
+            => [Span (Vec n Int)] -> ([Dimension], [Dimension])
+reflexivity spans = (refls, irrefls \\ onlyAbs)
+  where refls   = reflexiveDims spans
+        irrefls = [1..(fromNat (Proxy :: (Proxy n)))] \\ refls
+        onlyAbs = nub $ concatMap (onlyAbs' 1) spans
+        onlyAbs' :: Int -> Span (Vec m Int) -> [Dimension]
+        onlyAbs' d (Nil, Nil) = []
+        onlyAbs' d (Cons l ls, Cons u us)
+          |   l == absoluteRep
+           && u == absoluteRep = d : onlyAbs' (d + 1) (ls, us)
+          | otherwise = onlyAbs' (d + 1) (ls, us)
+
+-- For a list or region spans, calculate which dimensions have
+-- a region cross the origin, i.e., which dimensions have reflexive
+-- access
+reflexiveDims :: [Span (Vec n Int)] -> [Dimension]
+reflexiveDims = nub . concatMap (reflexiveDims' 1)
   where
+    reflexiveDims' :: Int -> Span (Vec n Int) -> [Dimension]
+    reflexiveDims' d (Nil, Nil) = []
+    reflexiveDims' d (Cons l ls, Cons u us)
+      | l <= 0 && u >= 0 = d : reflexiveDims' (d + 1) (ls, us)
+      | otherwise = reflexiveDims' (d + 1) (ls, us)
+
+
+fromRegionsToSpec :: IsNatural n => [Span (Vec n Int)] -> Result Spatial
+fromRegionsToSpec sps = onResult (genModifiers sps) result
+  where
+    onResult f (Exact s) = Exact (f s)
+    -- Don't give reflexive/irreflexive modifiers to an upper bound
+    -- Don't give irreflexive modifiers to a lower bound
+    onResult f (Bound l u) =
+         Bound (fmap ((\s -> s { modIrreflexives = []}) . f) l) u
+
     result = foldr (\x y -> sum (toSpecND x) y) zero sps
     -- Compute a full upper using a bounding box
     -- Probably we don't need this anymore: it should agree
@@ -105,7 +140,8 @@ toSpec1D dim l u
         Exact emptySpatialSpec -- the "one" element wrt. "prod"
 
     | l == 0 && u == 0 =
-        Exact $ Spatial NonLinear [] [dim] (Sum [Product []])
+        Exact $ Spatial NonLinear [] [] (Sum [Product []])
+
     | l < 0 && u == 0 =
         Exact $ Spatial NonLinear [] [] (Sum [Product [Backward (abs l) dim]])
 
@@ -128,7 +164,7 @@ toSpec1D dim l u
 
     | l < 0 && u > 0 && (abs l /= u) =
         Exact $ Spatial NonLinear [] [] (Sum [Product [Backward (abs l) dim],
-                                          Product [Forward u dim]])
+                                             Product [Forward u dim]])
     -- Represents a non-contiguous region
     | otherwise =
         upperBound $ Spatial NonLinear [] [] (Sum [Product
@@ -274,11 +310,11 @@ instance Permutable (S n) => Permutable (S (S n)) where
           (zs,  unPerm)  <- permutationsV ys ]
 
 {- Vector list repreentation where the size 'n' is existential quantified -}
-data VecList a where VL :: Permutable n => [Vec n a] -> VecList a
+data VecList a where VL :: (IsNatural n, Permutable n) => [Vec n a] -> VecList a
 
 -- Lists existentially quanitify over a vector's size : Exists n . Vec n a
 data List a where
-     List :: Permutable n => Vec n a -> List a
+     List :: (IsNatural n, Permutable n) => Vec n a -> List a
 
 lnil :: List a
 lnil = List Nil
