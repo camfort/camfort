@@ -1,6 +1,32 @@
-{-# LANGUAGE DataKinds, GADTs, KindSignatures, StandaloneDeriving, RankNTypes, TypeFamilies #-}
+{-
+   Copyright 2016, Dominic Orchard, Andrew Rice, Mistral Contrastin, Matthew Danish
+
+   Licensed under the Apache License, Version 2.0 (the "License");
+   you may not use this file except in compliance with the License.
+   You may obtain a copy of the License at
+
+       http://www.apache.org/licenses/LICENSE-2.0
+
+   Unless required by applicable law or agreed to in writing, software
+   distributed under the License is distributed on an "AS IS" BASIS,
+   WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+   See the License for the specific language governing permissions and
+   limitations under the License.
+-}
+
+{-# LANGUAGE DataKinds #-}
+{-# LANGUAGE GADTs #-}
+{-# LANGUAGE KindSignatures #-}
+{-# LANGUAGE StandaloneDeriving #-}
+{-# LANGUAGE RankNTypes #-}
+{-# LANGUAGE TypeFamilies #-}
+{-# LANGUAGE PolyKinds #-}
+{-# LANGUAGE FlexibleInstances #-}
+{-# LANGUAGE ScopedTypeVariables #-}
 
 module Camfort.Helpers.Vec where
+
+import Data.Data
 
 data Nat = Z | S Nat
 
@@ -14,10 +40,19 @@ deriving instance Show (Natural n)
 data NatBox where NatBox :: Natural n -> NatBox
 deriving instance Show NatBox
 
+-- Conversions to and from the type-representation
+-- of natural numbers
 toNatBox :: Int -> NatBox
 toNatBox 0 = NatBox Zero
 toNatBox n = case toNatBox (n-1) of
               (NatBox n) -> NatBox (Succ n)
+
+class IsNatural (n :: Nat) where
+   fromNat :: Proxy n -> Int
+instance IsNatural Z where
+   fromNat Proxy = 0
+instance IsNatural n => IsNatural (S n) where
+   fromNat Proxy = 1 + fromNat (Proxy :: Proxy n)
 
 -- Indexed vector type
 data Vec (n :: Nat) a where

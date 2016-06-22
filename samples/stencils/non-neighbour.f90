@@ -8,7 +8,7 @@
       
       do 1 i = 0, imax
          do 2 j = 0, jmax
-            a(i,j) = a(i, j) + a(i*2,j)
+            a(i,j) = a(i, j) + a(i+1, j+1)
  2       continue
  1    continue
 
@@ -19,3 +19,4 @@
       end do
             
       end
+3
