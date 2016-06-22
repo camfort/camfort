@@ -46,8 +46,8 @@ program one
 
   ! left and right (inner) edges
   do j = 1, (jmax-1)
-     != stencil r2 :: a
-     b(0, j) = (a(0, j) + a(0,j-1) + a(0,j+1) + a(1,j))/4.0
+     != stencil irreflexive(dims=2), r2 :: a
+     b(0, j) = (a(0, 0) + a(0,j-1) + a(0,j+1) + a(1,0))/4.0
      != stencil r2 :: a     
      b(imax, j) = (a(imax, j) + a(imax, j-1) + a(imax, j+1) + a(imax-1,j))/4.0
   end do

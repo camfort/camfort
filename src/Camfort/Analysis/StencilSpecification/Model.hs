@@ -153,7 +153,7 @@ instance Model Spatial where
          indices = Set.difference (Set.union reflIxs model) irreflIxs
 
          reflIxs   = fromList [mkSingleEntry 0 d ?dimensionality | d <- refls]
-         irreflIxs = fromList [mkSingleEntry 0 d ?dimensionality | d <- irrefls]
+         irreflIxs = fromList [mkSingleEntryNeg 0 d ?dimensionality | d <- irrefls]
 
          mdl = mkModel s
          model = case absoluteIxs of
@@ -206,6 +206,11 @@ mkSingleEntry i 0 ds = error $ "Dimensions are 1-indexed"
 mkSingleEntry i 1 ds = [i] ++ take (ds - 1) (repeat 0)
 mkSingleEntry i d ds = 0 : mkSingleEntry i (d - 1) (ds - 1)
 
+mkSingleEntryNeg :: Int -> Int -> Int -> [Int]
+mkSingleEntryNeg i 0 ds = error $ "Dimensions are 1-indexed"
+mkSingleEntryNeg i 1 ds = [i] ++ take (ds - 1) (repeat absoluteRep)
+mkSingleEntryNeg i d ds = absoluteRep : mkSingleEntry i (d - 1) (ds - 1)
+
 
 instance Model RegionProd where
    type Domain RegionProd = Set [Int]
@@ -227,20 +232,10 @@ cprodV :: [[Int]] -> [[Int]] -> [[Int]]
 cprodV xss yss = xss >>= (\xs -> yss >>= (\ys -> pairwisePerm xs ys))
 
 pairwisePerm :: [Int] -> [Int] -> [[Int]]
-pairwisePerm [] [] = []
-
-pairwisePerm [a] [b] | a == absoluteRep = [[absoluteRep]]
-                     | b == absoluteRep = [[absoluteRep]]
-                     | otherwise        = [[a],[b]]
-pairwisePerm (a:as) (b:bs) | a == absoluteRep =
-    map (a:) (pairwisePerm as bs)
-pairwisePerm (a:as) (b:bs) | b == absoluteRep =
-    map (b:) (pairwisePerm as bs)
-pairwisePerm (a:as) (b:bs) =
-    map (a:) (pairwisePerm as bs)
- ++ map (b:) (pairwisePerm as bs)
-
-
+pairwisePerm x y = sequence . map prod . transpose $ [x, y]
+  where prod xs = if any (\x -> x == absoluteRep) xs
+                  then [absoluteRep]
+                  else xs
 
 maximum1 [] = 0
 maximum1 xs = maximum xs

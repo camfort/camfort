@@ -3,6 +3,7 @@
 module Camfort.Analysis.StencilSpecification.CheckSpec (spec) where
 
 import Camfort.Analysis.CommentAnnotator
+import Camfort.Analysis.StencilSpecification.Model
 import Camfort.Analysis.StencilSpecification.CheckBackend
 import Camfort.Analysis.StencilSpecification.CheckFrontend
 import qualified Camfort.Analysis.StencilSpecification.Grammar as SYN
@@ -16,6 +17,7 @@ promoteErrors (Left x)  = Left (ProbablyAnnotation x)
 promoteErrors (Right x) = Right x
 
 parseAndConvert x = let ?renv = [] in SYN.specParser x >>= (promoteErrors . synToAst)
+extract (Right (Right [(_, s)])) = s
 
 spec :: Test.Spec
 spec = describe "Stencils - Check" $ do
@@ -32,6 +34,23 @@ spec = describe "Stencils - Check" $ do
         (Right $ Right $ [(["x","y","z"], Specification $ Left $
          Exact (Spatial NonLinear [] []
                   (Sum [Product [Forward 1 1]])))])
+
+  it "parse and convert simple exact stencil with irreflexive (2a)" $
+      (parseAndConvert "!= stencil irreflexive(dims=2), centered(depth=1, dim=2) :: x, y, z")
+      `shouldBe`
+        (Right $ Right $ [(["x","y","z"], Specification $ Left $
+         Exact (Spatial NonLinear [2] []
+                  (Sum [Product [Centered 1 2]])))])
+
+  it "parse and convert simple exact stencil with irreflexive (2b)" $
+     let ?dimensionality = 2 in
+      ((extract $
+        parseAndConvert "!= stencil irreflexive(dims=2), centered(depth=1, dim=2) :: x, y, z")
+      `eqByModel`
+      (Specification $ Left $ Exact (Spatial NonLinear [2] []
+                                    (Sum [Product [Centered 1 2]]))))
+       `shouldBe` True
+
 
   it "parse and convert simple upper bounded stencil (3)" $
       (parseAndConvert "!= stencil atmost, forward(depth=1, dim=1) :: x")

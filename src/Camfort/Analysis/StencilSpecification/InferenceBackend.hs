@@ -31,6 +31,7 @@ import Data.Generics.Uniplate.Operations
 import Data.List hiding (sum)
 import Data.Data
 import Control.Arrow ((***))
+import Camfort.Analysis.StencilSpecification.Model
 
 import Camfort.Helpers
 import Camfort.Helpers.Vec
@@ -85,13 +86,19 @@ reflexivity :: forall n . IsNatural n
 reflexivity spans = (refls, irrefls \\ onlyAbs)
   where refls   = reflexiveDims spans
         irrefls = [1..(fromNat (Proxy :: (Proxy n)))] \\ refls
-        onlyAbs = nub $ concatMap (onlyAbs' 1) spans
+
+        -- Find dimensions that are always constant, remove these from irrefls
+        onlyAbs = common $ map (onlyAbs' 1) spans
         onlyAbs' :: Int -> Span (Vec m Int) -> [Dimension]
         onlyAbs' d (Nil, Nil) = []
         onlyAbs' d (Cons l ls, Cons u us)
           |   l == absoluteRep
            && u == absoluteRep = d : onlyAbs' (d + 1) (ls, us)
           | otherwise = onlyAbs' (d + 1) (ls, us)
+        common [] = []
+        common [x] = x
+        common (x : (y : xs)) | x == y = common (y : xs)
+                              | otherwise = []
 
 -- For a list or region spans, calculate which dimensions have
 -- a region cross the origin, i.e., which dimensions have reflexive
@@ -116,10 +123,6 @@ fromRegionsToSpec sps = onResult (genModifiers sps) result
          Bound (fmap ((\s -> s { modIrreflexives = []}) . f) l) u
 
     result = foldr (\x y -> sum (toSpecND x) y) zero sps
-    -- Compute a full upper using a bounding box
-    -- Probably we don't need this anymore: it should agree
-    -- with the upper bound computed using `prod`
-    -- upper  = toSpecND $ foldl1 spanBoundingBox sps
 
 -- toSpecND converts an n-dimensional region into an exact
 -- spatial specification or a bound of spatial specifications
@@ -137,7 +140,7 @@ toSpecND = toSpecPerDim 1
 toSpec1D :: Dimension -> Int -> Int -> Result Spatial
 toSpec1D dim l u
     | l == absoluteRep || u == absoluteRep =
-        Exact emptySpatialSpec -- the "one" element wrt. "prod"
+        Exact $ Spatial NonLinear [dim] [] (Sum [Product []])
 
     | l == 0 && u == 0 =
         Exact $ Spatial NonLinear [] [] (Sum [Product []])
