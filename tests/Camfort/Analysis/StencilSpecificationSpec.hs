@@ -185,7 +185,7 @@ spec =
          (callAndSummarise (infer AssignMode) program)
            `shouldBe`
            "\ntests/Camfort/Analysis/StencilSpecification/example2.f\n\
-            \((22,8),(23,48)) \tstencil readOnce, (centered(depth=1, dim=1)) \
+            \((24,8),(24,53)) \tstencil readOnce, (centered(depth=1, dim=1)) \
                                      \+ (centered(depth=1, dim=2)) :: a\n"
 
       it "stencil check" $

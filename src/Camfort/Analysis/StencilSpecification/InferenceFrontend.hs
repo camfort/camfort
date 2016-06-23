@@ -141,12 +141,21 @@ genSpecsAndReport mode span ivs blocks =
    tell [ (span, Left specs) ]
    if mode == EvalMode
     then do
-        tell [ (span, Right "EVALMODE: TICK assign to relative array subscript (tag: tickAssign)") ]
+        tell [ (span, Right "EVALMODE: assign to relative array subscript (tag: tickAssign)") ]
         mapM_ (\evalInfo -> tell [ (span, Right evalInfo) ]) evalInfos
         mapM_ (\spec -> if show spec == ""
                         then tell [ (span, Right "EVALMODE: Cannot make spec (tag: emptySpec)") ]
                         else return ()) specs
     else return ()
+
+-- Match expressions which are array subscripts, returning Just of their
+-- index expressions, else Nothing
+isArraySubscript :: F.Expression (FA.Analysis A)
+                 -> Maybe [F.Index (FA.Analysis A)]
+isArraySubscript (F.ExpSubscript _ _ (F.ExpValue _ _ (F.ValVariable _)) subs) =
+   Just $ F.aStrip subs
+isArraySubscript (F.ExpDataRef _ _ _ e) = isArraySubscript e
+isArraySubscript _ = Nothing
 
 -- Traverse Blocks in the AST and infer stencil specifications
 perBlockInfer :: (?flowsGraph :: FAD.FlowsGraph A)
@@ -155,13 +164,16 @@ perBlockInfer :: (?flowsGraph :: FAD.FlowsGraph A)
 perBlockInfer mode b@(F.BlStatement _ span _ (F.StExpressionAssign _ _ lhs _))
   | mode == AssignMode || mode == CombinedMode || mode == EvalMode = do
     ivs <- get
-    case lhs of
-       F.ExpSubscript _ _ (F.ExpValue _ _ (F.ValVariable _)) subs ->
+    case isArraySubscript lhs of
+       Just subs ->
         -- Left-hand side is a subscript-by relative index
         -- or by a range
-        if all (flip isRelativeOnVars ivs) (F.aStrip subs)
+        if all (flip isReflexiveOnVars ivs) subs
            then do genSpecsAndReport mode span ivs [b]
-           else return ()
+           else if mode == EvalMode then
+                  tell [(span , Right "EVALMDOE: LHS is an array subscript we \
+                                      \ can't handle (tag: LHSnotHandled)")]
+                else return ()
        -- Not an assign we are interested in
        _ -> return ()
     return b
@@ -220,9 +232,11 @@ genSubscripts :: (?flowsGraph :: FAD.FlowsGraph A)
   => Bool
   -> F.Block (FA.Analysis A)
   -> State [Int] (M.Map Variable [[F.Index (FA.Analysis A)]])
-genSubscripts False
-  (F.BlStatement _ _ _ (F.StExpressionAssign _ _ (F.ExpSubscript {}) _))
+genSubscripts False (F.BlStatement _ _ _ (F.StExpressionAssign _ _ e _))
+    | isArraySubscript e /= Nothing
+    -- Don't pull dependencies through arrays
     = return M.empty
+
 genSubscripts top block = do
     visited <- get
     case (FA.insLabel $ F.getAnnotation block) of
@@ -346,6 +360,16 @@ ixToOffset ivs (F.IxRange _ _ Nothing Nothing
 ixToOffset ivs (F.IxSingle _ _ _ exp) = expToOffset ivs exp
 ixToOffset _ _ = Nothing -- If the indexing expression is a range
 
+
+isReflexiveOnVars :: Data a => F.Index (FA.Analysis a) -> [Variable] -> Bool
+isReflexiveOnVars (F.IxRange _ _ Nothing Nothing Nothing) ivs = True
+isReflexiveOnVars (F.IxRange _ _ Nothing Nothing
+                 (Just (F.ExpValue _ _ (F.ValInteger "1")))) ivs = True
+isReflexiveOnVars (F.IxSingle _ _ _ e@(F.ExpValue _ _ (F.ValVariable _))) ivs =
+    FA.varName e `elem` ivs
+-- Allow constants
+isReflexiveOnVars (F.IxSingle _ _ _ e@(F.ExpValue _ _ _)) ivs = True
+isReflexiveOnVars _ _ = False
 
 isRelativeOnVars :: Data a => F.Index (FA.Analysis a) -> [Variable] -> Bool
 isRelativeOnVars exp vs = ixToOffset vs exp /= Nothing

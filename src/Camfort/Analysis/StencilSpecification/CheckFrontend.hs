@@ -23,7 +23,7 @@ module Camfort.Analysis.StencilSpecification.CheckFrontend where
 import Data.Data
 import Data.Generics.Uniplate.Operations
 import Control.Arrow
-import Control.Monad.State.Lazy
+import Control.Monad.State.Strict
 import Control.Monad.Reader
 import Control.Monad.Writer hiding (Product)
 
@@ -52,45 +52,36 @@ import qualified Data.Map as M
 import qualified Data.Set as S
 import Data.Maybe
 import Data.List
+import Debug.Trace
 
 -- Entry point
 stencilChecking :: FAR.NameMap -> F.ProgramFile (FA.Analysis A) -> [String]
 stencilChecking nameMap pf = snd . runWriter $
   do -- Attempt to parse comments to specifications
      pf' <- annotateComments Gram.specParser pf
+
+     -- get map of AST-Block-ID ==> corresponding AST-Block
+     let bm    = FAD.genBlockMap pf'
+     -- get map of program unit ==> basic block graph
+     let bbm   = FAB.genBBlockMap pf'
+     -- build the supergraph of global dependency
+     let sgr   = FAB.genSuperBBGr bbm
+     -- extract the supergraph itself
+     let gr    = FAB.superBBGrGraph sgr
+     -- get map of variable name ==> { defining AST-Block-IDs }
+     let dm    = FAD.genDefMap bm
+     let pprint = map (\(span, spec) -> show span ++ "\t" ++ spec)
+     -- perform reaching definitions analysis
+     let rd    = FAD.reachingDefinitions dm gr
+     -- create graph of definition "flows"
+     let flTo =  FAD.genFlowsToGraph bm dm gr rd
+
      let results = let ?flowsGraph = flTo in
                     let ?nameMap = nameMap
                       in descendBiM perProgramUnitCheck pf'
      -- Format output
      let a@(_, output) = evalState (runWriterT $ results) (([], Nothing), [])
      tell $ pprint output
-  where
-    pprint = map (\(span, spec) -> show span ++ "\t" ++ spec)
-    -- perform reaching definitions analysis
-    rd    = FAD.reachingDefinitions dm gr
-    -- create graph of definition "flows"
-    flTo =  FAD.genFlowsToGraph bm dm gr rd
-    -- VarFlowsToMap: A -> { B, C } indicates that A contributes to B, C
-    flMap = FAD.genVarFlowsToMap dm flTo
-    -- find 2-cycles: A -> B -> A
-    cycs2 = [ (n, m) | (n, ns) <- M.toList flMap
-                    , m       <- S.toList ns
-                    , ms      <- maybeToList $ M.lookup m flMap
-                    , n `S.member` ms && n /= m ]
-    -- identify every loop by its back-edge
-    beMap = FAD.genBackEdgeMap (FAD.dominators gr) gr
-
-    -- get map of AST-Block-ID ==> corresponding AST-Block
-    bm    = FAD.genBlockMap pf
-    -- get map of program unit ==> basic block graph
-    bbm   = FAB.genBBlockMap pf
-    -- build the supergraph of global dependency
-    sgr   = FAB.genSuperBBGr bbm
-    -- extract the supergraph itself
-    gr    = FAB.superBBGrGraph sgr
-    -- get map of variable name ==> { defining AST-Block-IDs }
-    dm    = FAD.genDefMap bm
-    tenv  = FAT.inferTypes pf
 
 -- Helper for transforming the 'previous' annotation
 onPrev :: (a -> a) -> FA.Analysis a -> FA.Analysis a
@@ -183,8 +174,8 @@ perBlockCheck b@(F.BlComment ann span _) = do
       _ -> return $ b'
 
       (F.BlDo ann span _ mDoSpec body) -> do
-          -- Stub, collect stencils inside 'do' block
-          return $ b'
+           -- Stub, maybe collect stencils inside 'do' block
+           return $ b'
       _ -> return $ b'
     _ -> return b'
 
