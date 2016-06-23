@@ -334,14 +334,17 @@ toListsOfRelativeIndices ivs =
     where ignoreNonNeighbour = map (map (maybe ("", 0) id))
 
 -- Convert indexing expressions that are translations
--- intto their translation offset:2
+-- into their translation offset:2
 -- e.g., for the expression a(i+1,j-1) then this function gets
 -- passed expr = i + 1   (returning +1) and expr = j - 1 (returning -1)
 ixToOffset :: Data a => [Variable] -> F.Index a -> Maybe (Variable, Int)
--- Range with stride = 1 count as reflexive indexing
-ixToOffset ivs (F.IxRange _ _ _ _ Nothing) = Just ("", 0)
-ixToOffset ivs (F.IxRange _ _ _ _ (Just (F.ExpValue _ _ (F.ValInteger "1")))) =
+
+-- Range with stride = 1 and no explicit bounds count as reflexive indexing
+ixToOffset ivs (F.IxRange _ _ Nothing Nothing Nothing) = Just ("", 0)
+ixToOffset ivs (F.IxRange _ _ Nothing Nothing
+                  (Just (F.ExpValue _ _ (F.ValInteger "1")))) =
     Just ("", 0)
+
 ixToOffset ivs (F.IxSingle _ _ _ exp) = expToOffset ivs exp
 ixToOffset _ _ = Nothing -- If the indexing expression is a range
 
