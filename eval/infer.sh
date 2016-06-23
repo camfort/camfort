@@ -43,6 +43,23 @@ function start_thread() {
     echo "[PID=$BASHPID] Ending stencils-infer MOD=$m FILE=\"$f\"" >&2
 }
 
+function check_threads() {
+    declare -a newpids
+    newpids=()
+    for p in ${PIDS[@]}; do
+        ps -p $p &> /dev/null
+        if [ "$?" -ne "0" ]; then
+            cat ${PIPES[$p]} >> "$LOGFILE"
+            rm -f ${PIPES[$p]}
+            unset PIPES[$p]
+            wait $p &> /dev/null
+        else
+            newpids+=($p)
+        fi
+    done
+    PIDS=(${newpids[@]})
+}
+
 while IFS=',' read m f; do
     if [ ${#PIDS[@]} -lt "$THREADS" ]; then
         pipe=`mktemp -p $TMPOUT pipeXXX`
@@ -53,18 +70,8 @@ while IFS=',' read m f; do
     else
         sleep 1
     fi
-    declare -a newpids
-    newpids=()
-    for p in ${PIDS[@]}; do
-        ps -p $p &> /dev/null
-        if [ "$?" -ne "0" ]; then
-            cat ${PIPES[$p]} >> "$LOGFILE"
-            rm -f ${PIPES[$p]}
-            unset PIPES[$p]
-            wait $p
-        else
-            newpids+=($p)
-        fi
-    done
-    PIDS=(${newpids[@]})
+    check_threads
 done < <("$DIR"/files.sh)
+
+wait
+check_threads
