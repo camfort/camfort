@@ -1,6 +1,7 @@
 #!/bin/bash
 
 TIME=/usr/bin/time
+THREADS=8
 
 ##################################################
 
@@ -22,16 +23,48 @@ function finish() {
     echo "%%% end run $DATE elapsed=`date -d@$SECS -u +%H:%M:%S`" >> "$LOGFILE"
 }
 
-trap "{ finish; rm -f $TMPOUT/* ; rmdir $TMPOUT ; exit 255; }" EXIT
+trap "{ wait; finish; rm -f $TMPOUT/*; rmdir $TMPOUT; exit 0; }" EXIT
+
+declare -A PIPES
+declare -a PIDS
 
 echo "%%% begin run $DATE" > "$LOGFILE"
 
-# loop for each line containing the name of a module, the name of a file
-while IFS=',' read m f; do
+function start_thread() {
     [ -z "${MODULES[$m]}" ] && MODULES+=([$m]=yes)
-    echo -n "stencils-infer MOD=$m FILE=\"$f\"..."
-    echo "%%% begin stencils-infer MOD=$m FILE=\"$f\"" >> "$LOGFILE"
-    "$TIME" stack exec camfort -- stencils-infer "$f" "$TMPOUT" -m Eval &>> "$LOGFILE"
-    echo "%%% end stencils-infer MOD=$m FILE=\"$f\"" >> "$LOGFILE"
-    echo "done."
+    echo "[PID=$BASHPID] Starting stencils-infer MOD=$m FILE=\"$f\"..." >&2
+    echo "%%% begin stencils-infer MOD=$m FILE=\"$f\""
+    lines=`wc -l "$f" | cut -f 1 -d ' '`
+    echo "LineCount: $lines"
+    echo "StartTime: `date --rfc-3339=seconds`"
+    "$TIME" stack exec camfort -- stencils-infer "$f" "$TMPOUT" -m Eval 2>&1
+    echo "EndTime: `date --rfc-3339=seconds`"
+    echo "%%% end stencils-infer MOD=$m FILE=\"$f\""
+    echo "[PID=$BASHPID] Ending stencils-infer MOD=$m FILE=\"$f\"" >&2
+}
+
+while IFS=',' read m f; do
+    if [ ${#PIDS[@]} -lt "$THREADS" ]; then
+        pipe=`mktemp -p $TMPOUT pipeXXX`
+        start_thread $m $f > $pipe &
+        pid=$!
+        PIDS+=($pid)
+        PIPES+=([$pid]=$pipe)
+    else
+        sleep 1
+    fi
+    declare -a newpids
+    newpids=()
+    for p in ${PIDS[@]}; do
+        ps -p $p &> /dev/null
+        if [ "$?" -ne "0" ]; then
+            cat ${PIPES[$p]} >> "$LOGFILE"
+            rm -f ${PIPES[$p]}
+            unset PIPES[$p]
+            wait $p
+        else
+            newpids+=($p)
+        fi
+    done
+    PIDS=(${newpids[@]})
 done < <("$DIR"/files.sh)
