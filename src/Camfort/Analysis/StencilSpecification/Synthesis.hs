@@ -48,7 +48,7 @@ import Language.Fortran.Util.Position
 
 import Data.Map hiding (map)
 
-a = FA.analysis0 unitAnnotation
+a = head $ FA.initAnalysis [unitAnnotation]
 s = SrcSpan (Position 0 0 0) (Position 0 0 0)
 
 -- Given a spec, an array variable, and a list of inductive variables, generate
