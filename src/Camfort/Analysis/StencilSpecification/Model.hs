@@ -232,7 +232,7 @@ cprodV :: [[Int]] -> [[Int]] -> [[Int]]
 cprodV xss yss = xss >>= (\xs -> yss >>= (\ys -> pairwisePerm xs ys))
 
 pairwisePerm :: [Int] -> [Int] -> [[Int]]
-pairwisePerm x y = sequence' . absorb . transpose $ [x, y]
+pairwisePerm x y = sequence . absorb . transpose $ [x, y]
   where absorb = map absorb'
         absorb' xs =
             if any (\x -> x == absoluteRep) xs
