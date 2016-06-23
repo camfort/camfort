@@ -30,7 +30,7 @@ import Control.Monad.Writer hiding (Product)
 import Camfort.Analysis.StencilSpecification.CheckBackend
 import qualified Camfort.Analysis.StencilSpecification.Grammar as Gram
 import Camfort.Analysis.StencilSpecification.Model
-import Camfort.Analysis.StencilSpecification.InferenceFrontend
+import Camfort.Analysis.StencilSpecification.InferenceFrontend hiding (LogLine)
 import Camfort.Analysis.StencilSpecification.InferenceBackend
 import Camfort.Analysis.StencilSpecification.Synthesis
 import Camfort.Analysis.StencilSpecification.Syntax
@@ -59,9 +59,9 @@ stencilChecking :: F.ProgramFile (FA.Analysis A) -> [String]
 stencilChecking pf = snd . runWriter $
   do -- Attempt to parse comments to specifications
      pf' <- annotateComments Gram.specParser pf
-     let results = let ?flowsGraph = flTo in descendBiM perBlockCheck pf'
+     let results = let ?flowsGraph = flTo in descendBiM perProgramUnitCheck pf'
      -- Format output
-     let a@(_, output) = evalState (runWriterT $ results) ([], [])
+     let a@(_, output) = evalState (runWriterT $ results) (([], Nothing), [])
      tell $ pprint output
   where
     pprint = map (\(span, spec) -> show span ++ "\t" ++ spec)
@@ -107,15 +107,18 @@ instance Linkable (FA.Analysis Annotation) where
       onPrev (\ann -> ann { stencilBlock = Just b }) ann
   link ann b = ann
 
+type LogLine = (FU.SrcSpan, String)
+type Checker a =
+    WriterT [LogLine]
+            (State ((RegionEnv, Maybe F.ProgramUnitName), [Variable])) a
 
 -- If the annotation contains an unconverted stencil specification syntax tree
 -- then convert it and return an updated annotation containing the AST
-parseCommentToAST :: FA.Analysis A -> FU.SrcSpan ->
-  WriterT [(FU.SrcSpan, String)] (State (RegionEnv, [Variable])) (FA.Analysis A)
+parseCommentToAST :: FA.Analysis A -> FU.SrcSpan -> Checker (FA.Analysis A)
 parseCommentToAST ann span =
   case stencilSpec (FA.prevAnnotation ann) of
     Just (Left stencilComment) -> do
-         (regionEnv, _) <- get
+         ((regionEnv, _), _) <- get
          let ?renv = regionEnv
           in case synToAst stencilComment of
                Left err   -> error $ show span ++ ": " ++ err
@@ -125,11 +128,10 @@ parseCommentToAST ann span =
 
 -- If the annotation contains an encapsulated region environment, extract it
 -- and add it to current region environment in scope
-updateRegionEnv :: FA.Analysis A -> WriterT [(FU.SrcSpan, String)]
-        (State (RegionEnv, [Variable])) ()
+updateRegionEnv :: FA.Analysis A -> Checker ()
 updateRegionEnv ann =
   case stencilSpec (FA.prevAnnotation ann) of
-    Just (Right (Left regionEnv)) -> modify $ ((++) regionEnv) *** id
+    Just (Right (Left regionEnv)) -> modify $ (((++) regionEnv) *** id) *** id
     _                             -> return ()
 
 -- Given a mapping from variables to inferred specifications
@@ -143,11 +145,18 @@ compareInferredToDeclared inferreds declareds =
       any (\inf -> eqByModel inf dec) (lookupAggregate inferreds name)
        ) names) declareds
 
-perBlockCheck ::
-      (?flowsGraph :: FAD.FlowsGraph A)
-   => F.Block (FA.Analysis A)
-   -> WriterT [(FU.SrcSpan, String)]
-        (State (RegionEnv, [Variable])) (F.Block (FA.Analysis A))
+
+-- Go into the program units first and record the module name when
+-- entering into a module
+perProgramUnitCheck :: (?flowsGraph :: FAD.FlowsGraph A)
+   => F.ProgramUnit (FA.Analysis A) -> Checker (F.ProgramUnit (FA.Analysis A))
+perProgramUnitCheck p@(F.PUModule {}) = do
+    modify $ (id *** (const (Just $ FA.puName p))) *** id
+    descendBiM perBlockCheck p
+perProgramUnitCheck p = descendBiM perBlockCheck p
+
+perBlockCheck :: (?flowsGraph :: FAD.FlowsGraph A)
+   => F.Block (FA.Analysis A) -> Checker (F.Block (FA.Analysis A))
 
 perBlockCheck b@(F.BlComment ann span _) = do
   ann' <- parseCommentToAST ann span

@@ -48,25 +48,25 @@ import Language.Fortran.Util.Position
 
 import Data.Map hiding (map)
 
-a = unitAnnotation
+a = FA.analysis0 unitAnnotation
 s = SrcSpan (Position 0 0 0) (Position 0 0 0)
 
 -- Given a spec, an array variable, and a list of inductive variables, generate
 -- a list of indexing expressions for the spec
-synthesise :: Specification -> F.Name -> [F.Name] -> [F.Expression Annotation]
+synthesise :: Specification -> F.Name -> [F.Name] -> [F.Expression (FA.Analysis A)]
 synthesise (Specification (Left (Exact spec))) v ixs =
   map toSubscriptExpr . toList . fromExact . model $ (Exact spec)
     where toSubscriptExpr (offs,_) = ixExprToSubscript v
                                     . map (uncurry offsetToIx) $ zip ixs offs
 synthesise _ _ _ = []
 
-ixExprToSubscript :: F.Name -> [F.Index Annotation] -> F.Expression Annotation
+ixExprToSubscript :: F.Name -> [F.Index (FA.Analysis A)] -> F.Expression (FA.Analysis A)
 ixExprToSubscript v es =
     F.ExpSubscript a s (F.ExpValue a s (F.ValVariable v)) (F.AList a s es)
 
 -- Make indexing expression for variable 'v' from an offset.
 -- essentially inverse to `ixToOffset` in StencilSpecification
-offsetToIx :: F.Name -> Int -> F.Index Annotation
+offsetToIx :: F.Name -> Int -> F.Index (FA.Analysis A)
 offsetToIx v o
   | o == 0    = F.IxSingle a s Nothing (F.ExpValue a s (F.ValVariable v))
   | o  > 0    = F.IxSingle a s Nothing (F.ExpBinary a s F.Addition

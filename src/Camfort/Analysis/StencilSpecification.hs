@@ -21,7 +21,7 @@ import Control.Monad.State.Lazy
 import Control.Monad.Writer hiding (Product)
 
 import qualified Camfort.Analysis.StencilSpecification.Grammar as Gram
-import Camfort.Analysis.StencilSpecification.CheckFrontend
+import Camfort.Analysis.StencilSpecification.CheckFrontend hiding (LogLine)
 import Camfort.Analysis.StencilSpecification.InferenceFrontend
 import Camfort.Analysis.StencilSpecification.Syntax
 import Camfort.Analysis.CommentAnnotator
