@@ -171,7 +171,7 @@ perBlockInfer mode b@(F.BlStatement _ span _ (F.StExpressionAssign _ _ lhs _))
         if all (flip isReflexiveOnVars ivs) subs
            then do genSpecsAndReport mode span ivs [b]
            else if mode == EvalMode then
-                  tell [(span , Right "EVALMDOE: LHS is an array subscript we \
+                  tell [(span , Right "EVALMODE: LHS is an array subscript we \
                                       \ can't handle (tag: LHSnotHandled)")]
                 else return ()
        -- Not an assign we are interested in
