@@ -87,17 +87,15 @@ spanLineCol (FU.SrcSpan l u) = (lineCol l, lineCol u)
 --------------------------------------------------
 
 check :: Filename -> F.ProgramFile Annotation -> String
-check filename =
+check filename pf =
     -- Append filename to any outputs
-    (\x -> if null x then "" else "\n" ++ filename ++ "\n" ++ x)
-    -- Collect output
-  . (intercalate "\n")
-    -- Applying checking mechanism
-  -- . (FAR.underRenaming (stencilChecking . FAB.analyseBBlocks))
-  . stencilChecking
-  . FAB.analyseBBlocks
-  . FAR.analyseRenames
-  . FA.initAnalysis
+    if null output then "" else "\n" ++ filename ++ "\n" ++ output
+    where
+     output  = intercalate "\n" results
+     -- Applying checking mechanism
+     results  = (stencilChecking nameMap) . FAB.analyseBBlocks $ pf'
+     nameMap = FAR.extractNameMap pf'
+     pf'      = FAR.analyseRenames . FA.initAnalysis $ pf
 
 -- Local variables:
 -- mode: haskell

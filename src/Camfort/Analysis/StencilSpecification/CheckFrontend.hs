@@ -53,13 +53,14 @@ import qualified Data.Set as S
 import Data.Maybe
 import Data.List
 
-
 -- Entry point
-stencilChecking :: F.ProgramFile (FA.Analysis A) -> [String]
-stencilChecking pf = snd . runWriter $
+stencilChecking :: FAR.NameMap -> F.ProgramFile (FA.Analysis A) -> [String]
+stencilChecking nameMap pf = snd . runWriter $
   do -- Attempt to parse comments to specifications
      pf' <- annotateComments Gram.specParser pf
-     let results = let ?flowsGraph = flTo in descendBiM perProgramUnitCheck pf'
+     let results = let ?flowsGraph = flTo in
+                    let ?nameMap = nameMap
+                      in descendBiM perProgramUnitCheck pf'
      -- Format output
      let a@(_, output) = evalState (runWriterT $ results) (([], Nothing), [])
      tell $ pprint output
@@ -140,22 +141,21 @@ updateRegionEnv ann =
 -- agrees with it, *up-to the model*
 compareInferredToDeclared :: [([F.Name], Specification)] -> SpecDecls -> Bool
 compareInferredToDeclared inferreds declareds =
-  all (\(names, dec) ->
+   all (\(names, dec) ->
     all (\name ->
       any (\inf -> eqByModel inf dec) (lookupAggregate inferreds name)
        ) names) declareds
 
-
 -- Go into the program units first and record the module name when
 -- entering into a module
-perProgramUnitCheck :: (?flowsGraph :: FAD.FlowsGraph A)
+perProgramUnitCheck :: (?nameMap :: FAR.NameMap, ?flowsGraph :: FAD.FlowsGraph A)
    => F.ProgramUnit (FA.Analysis A) -> Checker (F.ProgramUnit (FA.Analysis A))
 perProgramUnitCheck p@(F.PUModule {}) = do
     modify $ (id *** (const (Just $ FA.puName p))) *** id
     descendBiM perBlockCheck p
 perProgramUnitCheck p = descendBiM perBlockCheck p
 
-perBlockCheck :: (?flowsGraph :: FAD.FlowsGraph A)
+perBlockCheck :: (?nameMap :: FAR.NameMap, ?flowsGraph :: FAD.FlowsGraph A)
    => F.Block (FA.Analysis A) -> Checker (F.Block (FA.Analysis A))
 
 perBlockCheck b@(F.BlComment ann span _) = do
@@ -170,7 +170,9 @@ perBlockCheck b@(F.BlComment ann span _) = do
         -- Create list of relative indices
         (_, ivs) <- get
         -- Do inference
-        let inferred = fst . runWriter $ genSpecifications ivs [s]
+        let realName v = v `fromMaybe` (v `M.lookup` ?nameMap)
+        let correctNames = map (\(names, spec) -> (map realName names, spec))
+        let inferred = correctNames . fst . runWriter $ genSpecifications ivs [s]
         -- Model and compare the current and specified stencil specs
         if compareInferredToDeclared inferred specDecls
           then tell [ (span, "Correct.") ]
@@ -181,8 +183,8 @@ perBlockCheck b@(F.BlComment ann span _) = do
       _ -> return $ b'
 
       (F.BlDo ann span _ mDoSpec body) -> do
-        -- Stub, collect stencils inside 'do' block
-        return $ b'
+          -- Stub, collect stencils inside 'do' block
+          return $ b'
       _ -> return $ b'
     _ -> return b'
 
