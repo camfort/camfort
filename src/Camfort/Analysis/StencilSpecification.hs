@@ -49,16 +49,15 @@ import Data.List
 
 -- Top-level of specification inference
 infer :: InferMode -> Filename -> F.ProgramFile Annotation -> String
-infer mode filename =
+infer mode filename pf =
     -- Append filename to any outputs
-      (\x -> if null x then "" else "\n" ++ filename ++ "\n" ++ x)
-    -- Form inference output
-    . concatMap (formatSpec M.empty)
-    -- Call main inference procedure, under renaming
-    . stencilInference mode
-    . FAB.analyseBBlocks
-    . FAR.analyseRenames
-    . FA.initAnalysis
+    if null output then "" else "\n" ++ filename ++ "\n" ++ output
+    where
+      output = concatMap (formatSpec nameMap) $ results
+      results = stencilInference mode . FAB.analyseBBlocks $ pf'
+      nameMap = FAR.extractNameMap pf'
+      pf'     = FAR.analyseRenames. FA.initAnalysis $ pf
+
 
 -- Format inferred specifications
 formatSpec :: FAR.NameMap -> LogLine -> String
@@ -94,7 +93,7 @@ check filename =
     -- Collect output
   . (intercalate "\n")
     -- Applying checking mechanism
-    --(FAR.underRenaming (stencilChecking . FAB.analyseBBlocks))
+  -- . (FAR.underRenaming (stencilChecking . FAB.analyseBBlocks))
   . stencilChecking
   . FAB.analyseBBlocks
   . FAR.analyseRenames

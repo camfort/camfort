@@ -23,7 +23,7 @@
 
 module Camfort.Analysis.StencilSpecification.InferenceFrontend where
 
-import Control.Monad.State.Lazy
+import Control.Monad.State.Strict
 import Control.Monad.Reader
 import Control.Monad.Writer hiding (Product)
 
@@ -49,6 +49,7 @@ import qualified Data.Map as M
 import qualified Data.Set as S
 import Data.Maybe
 import Data.List
+import Debug.Trace
 
 type Variable = String
 
@@ -80,7 +81,7 @@ stencilInference mode pf@(F.ProgramFile cm_pus others) =
 
     perPU pu | Just _ <- FA.bBlocks $ F.getAnnotation pu =
          let ?flowsGraph = flTo
-         in runInferer cycs2 (F.getName pu) tenv (descendBiM (perBlockInfer mode) pu)
+         in runInferer cycs2 (FA.puName pu) tenv (descendBiM (perBlockInfer mode) pu)
     perPU _ = []
 
     -- perform reaching definitions analysis
@@ -129,7 +130,6 @@ findVarFlowCycles' pf = cycs2
                      , ms      <- maybeToList $ M.lookup m flMap
                      , n `S.member` ms && n /= m ]
 
-
 {- *** 1 . Core inference over blocks -}
 
 genSpecsAndReport :: (?flowsGraph :: FAD.FlowsGraph A)
@@ -141,11 +141,11 @@ genSpecsAndReport mode span ivs blocks =
    tell [ (span, Left specs) ]
    if mode == EvalMode
     then do
-      tell [ (span, Right "EVALMODE: TICK assign to relative array subscript (tag: tickAssign)") ]
-      mapM_ (\evalInfo -> tell [ (span, Right evalInfo) ]) evalInfos
-      mapM_ (\spec -> if show spec == ""
-                      then tell [ (span, Right "EVALMODE: Cannot make spec (tag: emptySpec)") ]
-                      else return ()) specs
+        tell [ (span, Right "EVALMODE: TICK assign to relative array subscript (tag: tickAssign)") ]
+        mapM_ (\evalInfo -> tell [ (span, Right evalInfo) ]) evalInfos
+        mapM_ (\spec -> if show spec == ""
+                        then tell [ (span, Right "EVALMODE: Cannot make spec (tag: emptySpec)") ]
+                        else return ()) specs
     else return ()
 
 -- Traverse Blocks in the AST and infer stencil specifications
@@ -156,12 +156,12 @@ perBlockInfer mode b@(F.BlStatement _ span _ (F.StExpressionAssign _ _ lhs _))
   | mode == AssignMode || mode == CombinedMode || mode == EvalMode = do
     ivs <- get
     case lhs of
-       F.ExpSubscript _ _ (F.ExpValue _ _ (F.ValVariable v)) subs ->
+       F.ExpSubscript _ _ (F.ExpValue _ _ (F.ValVariable _)) subs ->
         -- Left-hand side is a subscript-by relative index
         -- or by a range
         if all (flip isRelativeOnVars ivs) (F.aStrip subs)
-         then genSpecsAndReport mode span ivs [b]
-         else return ()
+           then do genSpecsAndReport mode span ivs [b]
+           else return ()
        -- Not an assign we are interested in
        _ -> return ()
     return b
@@ -197,7 +197,7 @@ genSpecifications ivs = do
               . M.map (indicesToSpec ivs)
               . M.unionsWith (++)
               . flip evalState []
-              . mapM (genSubscripts ivs True)
+              . mapM (genSubscripts True)
 
         filterMaybe :: [(a, Maybe b)] -> [(a, b)]
         filterMaybe [] = []
@@ -217,13 +217,13 @@ genSpecifications ivs = do
 -- induction variables) that flow to this block
 -- The State monad provides a list of the visited nodes so far
 genSubscripts :: (?flowsGraph :: FAD.FlowsGraph A)
-  => [Variable] -> Bool
+  => Bool
   -> F.Block (FA.Analysis A)
   -> State [Int] (M.Map Variable [[F.Index (FA.Analysis A)]])
-genSubscripts ivs False
+genSubscripts False
   (F.BlStatement _ _ _ (F.StExpressionAssign _ _ (F.ExpSubscript {}) _))
     = return M.empty
-genSubscripts ivs top block = do
+genSubscripts top block = do
     visited <- get
     case (FA.insLabel $ F.getAnnotation block) of
 
@@ -235,8 +235,8 @@ genSubscripts ivs top block = do
         else do
           put $ node : visited
           let blocksFlowingIn = mapMaybe (lab ?flowsGraph) $ pre ?flowsGraph node
-          dependencies <- mapM (genSubscripts ivs False) blocksFlowingIn
-          return $ M.unionsWith (++) (genRHSsubscripts ivs block : dependencies)
+          dependencies <- mapM (genSubscripts False) blocksFlowingIn
+          return $ M.unionsWith (++) (genRHSsubscripts block : dependencies)
 
       Nothing -> error $ "Missing a label for: " ++ show block
 
@@ -244,21 +244,19 @@ genSubscripts ivs top block = do
 -- return as a map from (program) variables to a list of relative indices and
 -- a flag marking whether there are any duplicate indices
 genRHSsubscripts ::
-     [Variable]
-  -> F.Block (FA.Analysis A)
+     F.Block (FA.Analysis A)
   -> M.Map Variable [[F.Index (FA.Analysis A)]]
-genRHSsubscripts ivs b =
-    collect [ (v, e)
-      | F.ExpSubscript _ _ (F.ExpValue _ _ (F.ValVariable v)) subs <- FA.rhsExprs b
+genRHSsubscripts b =
+    collect [ (FA.varName exp, e)
+      | F.ExpSubscript _ _ exp subs <- FA.rhsExprs b
+      , isVariableExpr exp
       , let e = F.aStrip subs
       , not (null e) ]
 
-getInductionVar :: Maybe (F.DoSpecification a) -> [Variable]
-getInductionVar (Just (F.DoSpecification _ _ (
-                        F.StExpressionAssign _ _ (
-                          F.ExpValue _ _ (F.ValVariable v)) _) _ _)) = [v]
+getInductionVar :: Maybe (F.DoSpecification (FA.Analysis A)) -> [Variable]
+getInductionVar (Just (F.DoSpecification _ _ (F.StExpressionAssign _ _ e _) _ _))
+  | isVariableExpr e = [FA.varName e]
 getInductionVar _ = []
-
 
 isStencilDo :: F.Block (FA.Analysis A) -> Bool
 isStencilDo b@(F.BlDo _ span _ mDoSpec body) =
@@ -287,7 +285,7 @@ padZeros ixss = let m = maximum (map length ixss)
 -- Convert list of indexing expressions to a spec
 indicesToSpec :: (Data a, Eq a)
               => [Variable]
-              -> [[F.Index a]]
+              -> [[F.Index (FA.Analysis a)]]
               -> Writer EvalLog (Maybe Specification)
 indicesToSpec ivs ixs = do
   rixs <- toListsOfRelativeIndices ivs $ ixs
@@ -328,7 +326,7 @@ relativeIxsToSpec ivs ixs =
     if isEmpty exactSpec then Nothing else Just exactSpec
     where exactSpec = inferFromIndicesWithoutLinearity . fromLists $ ixs
 
-toListsOfRelativeIndices :: Data a => [Variable] -> [[F.Index a]] -> Writer EvalLog [[Int]]
+toListsOfRelativeIndices :: Data a => [Variable] -> [[F.Index (FA.Analysis a)]] -> Writer EvalLog [[Int]]
 toListsOfRelativeIndices ivs =
     (fmap padZeros) . consistentIVSuse . ignoreNonNeighbour . map (map (ixToOffset ivs))
     where ignoreNonNeighbour = map (map (maybe ("", 0) id))
@@ -337,7 +335,7 @@ toListsOfRelativeIndices ivs =
 -- into their translation offset:2
 -- e.g., for the expression a(i+1,j-1) then this function gets
 -- passed expr = i + 1   (returning +1) and expr = j - 1 (returning -1)
-ixToOffset :: Data a => [Variable] -> F.Index a -> Maybe (Variable, Int)
+ixToOffset :: Data a => [Variable] -> F.Index (FA.Analysis a) -> Maybe (Variable, Int)
 
 -- Range with stride = 1 and no explicit bounds count as reflexive indexing
 ixToOffset ivs (F.IxRange _ _ Nothing Nothing Nothing) = Just ("", 0)
@@ -349,48 +347,54 @@ ixToOffset ivs (F.IxSingle _ _ _ exp) = expToOffset ivs exp
 ixToOffset _ _ = Nothing -- If the indexing expression is a range
 
 
-isRelativeOnVars :: Data a => F.Index a -> [Variable] -> Bool
+isRelativeOnVars :: Data a => F.Index (FA.Analysis a) -> [Variable] -> Bool
 isRelativeOnVars exp vs = ixToOffset vs exp /= Nothing
                        && ixToOffset vs exp /= Just ("", absoluteRep)
 
 
-expToOffset :: forall a . Data a => [Variable] -> F.Expression a -> Maybe (Variable, Int)
-expToOffset ivs (F.ExpValue _ _ (F.ValVariable v))
-  | v `elem` ivs = Just (v, 0)
-  | otherwise    = Just ("", absoluteRep)
+expToOffset :: forall a. Data a => [Variable] -> F.Expression (FA.Analysis a) -> Maybe (Variable, Int)
+expToOffset ivs e@(F.ExpValue _ _ (F.ValVariable _))
+    | FA.varName e `elem` ivs = Just (FA.varName e, 0)
+    | otherwise                 = Just ("", absoluteRep)
+
 expToOffset ivs (F.ExpBinary _ _ F.Addition
-                                 (F.ExpValue _ _ (F.ValVariable v))
-                                 (F.ExpValue _ _ (F.ValInteger offs)))
-    | v `elem` ivs = Just $ (v, read offs)
+                 e@(F.ExpValue _ _ (F.ValVariable _))
+                   (F.ExpValue _ _ (F.ValInteger offs)))
+    | FA.varName e `elem` ivs = Just $ (FA.varName e, read offs)
+
 expToOffset ivs (F.ExpBinary _ _ F.Addition
-                                 (F.ExpValue _ _ (F.ValInteger offs))
-                                 (F.ExpValue _ _ (F.ValVariable v)))
-    | v `elem` ivs = Just $ (v, read offs)
+                  (F.ExpValue _ _ (F.ValInteger offs))
+                e@(F.ExpValue _ _ (F.ValVariable _)))
+    | FA.varName e `elem` ivs = Just $ (FA.varName e, read offs)
+
 expToOffset ivs (F.ExpBinary _ _ F.Subtraction
-                                 (F.ExpValue _ _ (F.ValVariable v))
-                                 (F.ExpValue _ _ (F.ValInteger offs)))
-   | v `elem` ivs = Just $ (v, if x < 0 then abs x else (- x))
+                 e@(F.ExpValue _ _ (F.ValVariable _))
+                   (F.ExpValue _ _ (F.ValInteger offs)))
+   | FA.varName e `elem` ivs = Just $ (FA.varName e, if x < 0 then abs x else (- x))
                      where x = read offs
 
-expToOffset ivs e@(F.ExpBinary {}) = Just $ (v, absoluteRep)
+expToOffset ivs e | isUnaryOrBinaryExpr e = Just $ (v, absoluteRep)
   where
     -- Record when there is a relative index, but that is not a neighbourhood
     -- index by our definitions
     v = if null ivs' then "" else head ivs'
     -- set of all induction variables involved in this expression
-    ivs' = [i | (F.ValVariable i) <- universeBi e :: [F.Value a], i `elem` ivs]
-
-expToOffset ivs e@(F.ExpUnary {}) = Just $ (v, absoluteRep)
-  where
-    -- Record when there is a relative index, but that is not a neighbourhood
-    -- index by our definitions
-    v = if null ivs' then "" else head ivs'
-    -- set of all induction variables involved in this expression
-    ivs' = [i | (F.ValVariable i) <- universeBi e :: [F.Value a], i `elem` ivs]
-
+    ivs' = [i | e@(F.ExpValue _ _ (F.ValVariable {})) <- universeBi e :: [F.Expression (FA.Analysis a)]
+                , let i = FA.varName e
+                , i `elem` ivs]
 expToOffset ivs e = Just ("", absoluteRep)
 
 --------------------------------------------------
+
+-- Helper predicates
+isUnaryOrBinaryExpr :: F.Expression a -> Bool
+isUnaryOrBinaryExpr (F.ExpUnary {})  = True
+isUnaryOrBinaryExpr (F.ExpBinary {}) = True
+isUnaryOrBinaryExpr _                = False
+
+isVariableExpr :: F.Expression a -> Bool
+isVariableExpr (F.ExpValue _ _ (F.ValVariable _)) = True
+isVariableExpr _                                  = False
 
 -- Although type analysis isn't necessary anymore (Forpar does it
 -- internally) I'm going to leave this infrastructure in-place in case

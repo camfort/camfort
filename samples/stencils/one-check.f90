@@ -3,8 +3,9 @@ program one
 
   integer :: i, j
   integer, parameter :: imax = 3, jmax = 3
-  
-  real, dimension(0:imax, 0:jmax) :: a, b 
+
+  real :: e
+  real, dimension(0:imax, 0:jmax) :: a, b
 
   ! Setup some region specs for the file
   
@@ -48,8 +49,9 @@ program one
   do j = 1, (jmax-1)
      != stencil irreflexive(dims=2), r2 :: a
      b(0, j) = (a(0, 0) + a(0,j-1) + a(0,j+1) + a(1,0))/4.0
-     != stencil r2 :: a     
-     b(imax, j) = (a(imax, j) + a(imax, j-1) + a(imax, j+1) + a(imax-1,j))/4.0
+     != stencil r2 :: a
+     e = a(imax, j) + a(imax, j-1)
+     b(imax, j) = (e + a(imax, j+1) + a(imax-1,j))/4.0
   end do
 
   ! corners

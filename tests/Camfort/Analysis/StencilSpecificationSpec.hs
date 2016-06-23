@@ -180,13 +180,19 @@ spec =
     let file = "tests/Camfort/Analysis/StencilSpecification/example2.f"
     program <- runIO $ readForparseSrcDir file []
 
-    describe "integration test on inference for example2.f"
-       $ it "stencil infer" $
+    describe "integration test on inference for example2.f" $ do
+      it "stencil infer" $
          (callAndSummarise (infer AssignMode) program)
            `shouldBe`
            "\ntests/Camfort/Analysis/StencilSpecification/example2.f\n\
-            \((20,8),(21,48)) \tstencil readOnce, (centered(depth=1, dim=1)) \
+            \((22,8),(23,48)) \tstencil readOnce, (centered(depth=1, dim=1)) \
                                      \+ (centered(depth=1, dim=2)) :: a\n"
+
+      it "stencil check" $
+         (callAndSummarise check program)
+           `shouldBe`
+           "\ntests/Camfort/Analysis/StencilSpecification/example2.f\n\
+            \((22,12),(22,44)) \tCorrect.\n"
 
 
 
