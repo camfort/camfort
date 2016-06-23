@@ -14,6 +14,7 @@ import Camfort.Analysis.Annotations
 import qualified Language.Fortran.AST as F
 import Language.Fortran.Util.Position
 
+import Data.Bits
 import Data.List
 import Data.Map hiding (map)
 
@@ -22,11 +23,50 @@ import Test.QuickCheck
 import Test.Hspec.QuickCheck
 
 spec :: Spec
-spec =
+spec = do
   describe "Stencils - Model" $ do
     describe "Test soundness of model 1" $ modelHasLeftInverse
     describe "Test soundness of model 2" $ modelHasApproxLeftInverse variations2
     describe "Test soundness of model 3" $ modelHasApproxLeftInverse variations3
+
+  describe "Consistency of model with paper" $ do
+    describe "Quickcheck" $ it "" $ property $ propPairwisePerm
+
+    describe "Manual for absolute rep" $ do
+      it "Check absolute rep (0)" $
+                   (sort $ pp           [1,2,absoluteRep] [5,1,7])
+        `shouldBe` (sort $ pairwisePerm [1,2,absoluteRep] [5,1,7])
+
+      it "Check absolute rep (1)" $
+                   (sort $ pp           [1,absoluteRep] [5,1])
+        `shouldBe` (sort $ pairwisePerm [1,absoluteRep] [5,1])
+
+      it "Check absolute rep (2)" $
+                   (sort $ pp           [absoluteRep,2,absoluteRep] [absoluteRep,1,7])
+        `shouldBe` (sort $ pairwisePerm [absoluteRep,2,absoluteRep] [absoluteRep,1,7])
+
+
+propPairwisePerm :: [Int] -> [Int] -> Bool
+propPairwisePerm x y = if (length x == length y && length x < 16)
+                         then (sort . nub $ pp x y)
+                           == (sort . nub $ pairwisePerm x y)
+                         else True
+
+pp :: [Int] -> [Int] -> [[Int]]
+pp x y = nub $
+ let n = length x
+ in map (\i ->
+     map (\k ->
+          ((x !! k) `times` (not (testBit i k))
+   `plus` ((y !! k) `times` testBit i k))
+          ) [0..(n-1)]
+       ) [0 :: Int .. ((2^n)-1)]
+    where times x True = x
+          times x False | x == absoluteRep = x
+                        | otherwise = 0
+          plus x y | x == absoluteRep || y == absoluteRep = absoluteRep
+                   | otherwise = x + y
+
 
 variations :: [([(Int, Int)], Syn.Result Spatial)]
 variations =
