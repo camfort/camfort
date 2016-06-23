@@ -239,14 +239,5 @@ pairwisePerm x y = sequence' . absorb . transpose $ [x, y]
             then [absoluteRep]
             else xs
 
-sequence' :: [[a]] -> [[a]]
-sequence' [] = [[]]
-sequence' ([x1]:xs) =
-  concat $ [(\x' -> concat $ map (\xs' -> [x' : xs']) (sequence' xs)) x1]
-
-sequence' ([x1,x2]:xs) =
-  concat $ [(\x' -> concat $ map (\xs' -> [x' : xs']) (sequence' xs)) x1,
-            (\x' -> concat $ map (\xs' -> [x' : xs']) (sequence' xs)) x2]
-
 maximum1 [] = 0
 maximum1 xs = maximum xs
