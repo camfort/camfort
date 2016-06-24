@@ -61,16 +61,20 @@ function check_threads() {
 }
 
 while IFS=',' read m f; do
-    if [ ${#PIDS[@]} -lt "$THREADS" ]; then
-        pipe=`mktemp -p $TMPOUT pipeXXX`
-        start_thread $m $f > $pipe &
-        pid=$!
-        PIDS+=($pid)
-        PIPES+=([$pid]=$pipe)
-    else
-        sleep 1
-    fi
-    check_threads
+    started=0
+    while [ $started == 0 ]; do
+        if [ ${#PIDS[@]} -lt "$THREADS" ]; then
+            pipe=`mktemp -p $TMPOUT pipeXXX`
+            start_thread $m $f > $pipe &
+            pid=$!
+            PIDS+=($pid)
+            PIPES+=([$pid]=$pipe)
+            started=1
+        else
+            sleep 1
+        fi
+        check_threads
+    done
 done < <("$DIR"/files.sh)
 
 wait
