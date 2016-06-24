@@ -6,6 +6,11 @@ THREADS=8
 ##################################################
 
 DIR=`dirname "$0"`
+declare -g -i TOTAL COUNT
+TOTAL=`"$DIR"/files.sh | wc -l`
+COUNT=0
+declare -g FMT
+FMT="%0${#TOTAL}d"
 
 declare -g -i STIME ETIME
 STIME=`date +%s`
@@ -31,16 +36,21 @@ declare -a PIDS
 echo "%%% begin run $DATE" > "$LOGFILE"
 
 function start_thread() {
+    m="$1"
+    f="$2"
+    c=$3
+    r=`printf "$FMT" $((TOTAL - c))`
     [ -z "${MODULES[$m]}" ] && MODULES+=([$m]=yes)
-    echo "[PID=$BASHPID] Starting stencils-infer MOD=$m FILE=\"$f\"..." >&2
+    echo "[PID=$BASHPID REM=$r] Starting stencils-infer MOD=$m FILE=\"$f\"..." >&2
     echo "%%% begin stencils-infer MOD=$m FILE=\"$f\""
     lines=`wc -l "$f" | cut -f 1 -d ' '`
     echo "LineCount: $lines"
     echo "StartTime: `date --rfc-3339=seconds`"
+    echo "Progress: $c / $TOTAL"
     "$TIME" stack exec camfort -- stencils-infer "$f" "$TMPOUT" -m Eval 2>&1
     echo "EndTime: `date --rfc-3339=seconds`"
     echo "%%% end stencils-infer MOD=$m FILE=\"$f\""
-    echo "[PID=$BASHPID] Ending stencils-infer MOD=$m FILE=\"$f\"" >&2
+    echo "[PID=$BASHPID REM=$r] Ending stencils-infer MOD=$m FILE=\"$f\"" >&2
 }
 
 function check_threads() {
@@ -65,7 +75,8 @@ while IFS=',' read m f; do
     while [ $started == 0 ]; do
         if [ ${#PIDS[@]} -lt "$THREADS" ]; then
             pipe=`mktemp -p $TMPOUT pipeXXX`
-            start_thread $m $f > $pipe &
+            COUNT=$((COUNT + 1))
+            start_thread $m $f $COUNT > $pipe &
             pid=$!
             PIDS+=($pid)
             PIPES+=([$pid]=$pipe)
