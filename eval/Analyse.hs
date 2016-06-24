@@ -18,15 +18,15 @@ type ModAnalysis = M.Map String Analysis
 -- analysis to this point.
 countKeys :: Analysis -> S.ByteString -> Analysis
 countKeys a l
-  | get a "atLeast" > 0 && get curA "atMost" > 0 ||
-    get curA "atLeast" > 0 && get a "atMost" > 0 = M.insertWith (+) "boundedBoth" n a'
-  | otherwise                                    = a'
+  | (get a "atLeast" > 0 && get curA "atMost" > 0) ||
+    (get curA "atLeast" > 0 && get a "atMost" > 0) = M.insertWith (+) "boundedBoth" n a'
+  | otherwise                                      = a'
   where
-    a'      = a `M.union` curA
+    a'      = M.unionWith (+) a curA
     curA    = M.fromList [ (k, if l =~ re k then n else 0) | k <- keywords ]
     re k    = "[^A-Za-z]" ++ k ++ "[^A-Za-z]"
     get a k = 0 `fromMaybe` M.lookup k a
-    n       = numVars l
+    n       = numVars l -- note that this will treat an EVALMODE line as having 1 variable
 
 -- Group by source span and variable in order to group multiple lines
 -- that happen to pertain to the same expression (e.g. for boundedBoth).
@@ -37,15 +37,18 @@ analyseExec (e1:es) = M.singleton modName . M.unionsWith (+) . map eachGroup $ g
     gs = groupBy srcSpanAndVars . filter (=~ "\\)[[:space:]]*(stencil|EVALMODE)") $ es
     modName = drop 4 . S.unpack . (=~ "MOD=([^ ]*)") $ e1
 
+eachGroup :: [S.ByteString] -> Analysis
+eachGroup []       = M.empty
+eachGroup g@(g0:_) = foldl' countKeys (M.singleton "numStencilSpecs" nvars) g
+  where nvars = if g0 =~ "EVALMODE" then 0 else numVars g0
+
 -- helper functions
 srcSpan :: S.ByteString -> S.ByteString
-srcSpan = (=~ "^\\([^[:space]]*\\)")
+srcSpan = (=~ "^\\([^[:space:]]*\\)")
 vars :: S.ByteString -> S.ByteString
 vars = (=~ ":: .*$")
 srcSpanAndVars l1 l2 = srcSpan l1 == srcSpan l2 && vars l1 == vars l2
 numVars = (1 +) . S.length . S.filter (== ',') . vars
-eachGroup :: [S.ByteString] -> Analysis
-eachGroup = foldl' countKeys M.empty
 
 -- Extract one set of text that occurs between "%%% begin" and "%%% end",
 -- returning the remainder if present.
@@ -135,6 +138,47 @@ test1 = map S.pack [
     , "0inputs+0outputs (0major+15984minor)pagefaults 0swaps"
     , "EndTime: 2016-06-24 11:23:46+01:00"
     , "%%% end stencils-infer MOD=um FILE=\"/home/mrd45/um/trunk/src/io_services/server/stash/ios_server_coupler.F90\""
+  ]
+
+test2 = map S.pack [
+      "%%% begin stencils-infer MOD=um FILE=\"/home/mrd45/um/trunk/src/scm/initialise/initqlcf.F90\""
+    , "LineCount: 210"
+    , "StartTime: 2016-06-24 12:28:13+01:00"
+    , "Progress: 46 / 2533"
+    , "CamFort 0.775 - Cambridge Fortran Infrastructure."
+    , "Inferring stencil specs for \"/home/mrd45/um/trunk/src/scm/initialise/initqlcf.F90\""
+    , ""
+    , "Output of the analysis:"
+    , ""
+    , "/home/mrd45/um/trunk/src/scm/initialise/initqlcf.F90"
+    , "((126,5),(126,18))      EVALMODE: assign to relative array subscript (tag: tickAssign)"
+    , "((131,9),(131,66))      stencil readOnce, reflexive(dims=1,2) :: q, wqsat"
+    , "((131,9),(131,66))      EVALMODE: assign to relative array subscript (tag: tickAssign)"
+    , "((132,9),(132,36))      stencil reflexive(dims=1,2) :: ocf"
+    , "((132,9),(132,36))      EVALMODE: assign to relative array subscript (tag: tickAssign)"
+    , "((136,9),(136,42))      stencil readOnce, reflexive(dims=1,2) :: q, wqsat"
+    , "((136,9),(136,42))      EVALMODE: assign to relative array subscript (tag: tickAssign)"
+    , "((137,9),(137,42))      stencil readOnce, reflexive(dims=1,2) :: ocf"
+    , "((137,9),(137,42))      EVALMODE: assign to relative array subscript (tag: tickAssign)"
+    , "((146,9),(146,22))      EVALMODE: assign to relative array subscript (tag: tickAssign)"
+    , "((148,9),(148,22))      EVALMODE: assign to relative array subscript (tag: tickAssign)"
+    , "((195,5),(195,19))      EVALMODE: assign to relative array subscript (tag: tickAssign)"
+    , "((196,5),(196,19))      EVALMODE: assign to relative array subscript (tag: tickAssign)"
+    , "((199,7),(199,20))      stencil reflexive(dims=1,2) :: ocf"
+    , "((199,7),(199,20))      stencil readOnce, reflexive(dims=1,2) :: q"
+    , "((199,7),(199,20))      stencil reflexive(dims=1,2) :: t, wqsat"
+    , "((199,7),(199,20))      EVALMODE: assign to relative array subscript (tag: tickAssign)"
+    , "((201,7),(201,20))      stencil reflexive(dims=1,2) :: ocf"
+    , "((201,7),(201,20))      stencil readOnce, reflexive(dims=1,2) :: q"
+    , "((201,7),(201,20))      stencil reflexive(dims=1,2) :: t, wqsat"
+    , "((201,7),(201,20))      EVALMODE: assign to relative array subscript (tag: tickAssign)"
+    , "((275,11),(275,54))     stencil atLeast, readOnce, reflexive(dims=1,2,3) :: p"
+    , "((275,11),(275,54))     stencil atMost, readOnce, (forward(depth=2, dim=3)) :: p"
+    , ""
+    , "1.23user 0.03system 0:01.83elapsed 69%CPU (0avgtext+0avgdata 76092maxresident)k"
+    , "0inputs+0outputs (0major+15975minor)pagefaults 0swaps"
+    , "EndTime: 2016-06-24 12:28:15+01:00"
+    , "%%% end stencils-infer MOD=um FILE=\"/home/mrd45/um/trunk/src/scm/initialise/initqlcf.F90\""
   ]
 
 -- Local variables:
