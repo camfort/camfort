@@ -170,5 +170,14 @@ library
                         GenericPretty >= 1.2,
                         fortran-src,
                         filepath,
-                        fgl >= 5.5,
-                        bytestring >= 0.10
+                        bytestring >= 0.10,
+                        fgl >= 5.5
+
+executable analyse
+  main-is: Analyse.hs
+  hs-source-dirs:       eval
+  build-depends:
+                        base < 5,
+                        containers >= 0.5.0.0,
+                        bytestring >= 0.10,
+                        regex-pcre >= 0.94.4
