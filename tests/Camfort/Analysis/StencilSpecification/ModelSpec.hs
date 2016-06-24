@@ -56,9 +56,9 @@ pp :: [Int] -> [Int] -> [[Int]]
 pp x y = nub $
  let n = length x
  in map (\i ->
-     map (\k ->
-          ((x !! k) `times` (not (testBit i k))
-   `plus` ((y !! k) `times` testBit i k))
+     map (\j ->
+          ((x !! j) `times` (not (testBit i j))
+   `plus` ((y !! j) `times` testBit i j))
           ) [0..(n-1)]
        ) [0 :: Int .. ((2^n)-1)]
     where times x True = x

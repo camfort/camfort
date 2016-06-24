@@ -157,11 +157,6 @@ toSpec1D dim l u
     | l == 1 && u > 0 =
         Exact $ Spatial NonLinear [dim] [] (Sum [Product [Forward u dim]])
 
-    -- from the above constraints above, l and u are neither 0, 1 or -1.
-    -- Represents a non-continguous region
-    | l==u = upperBound $ Spatial NonLinear [] [] (Sum [Product
-                            [if l > 0 then Forward u dim else Backward u dim]])
-
     | l < 0 && u > 0 && (abs l == u) =
         Exact $ Spatial NonLinear [] [] (Sum [Product [Centered u dim]])
 
