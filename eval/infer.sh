@@ -40,8 +40,9 @@ function start_thread() {
     f="$2"
     c=$3
     r=`printf "$FMT" $((TOTAL - c))`
+    p=`printf "%05d" $BASHPID`
     [ -z "${MODULES[$m]}" ] && MODULES+=([$m]=yes)
-    echo "[PID=$BASHPID REM=$r] Starting stencils-infer MOD=$m FILE=\"$f\"..." >&2
+    echo "[PID=$p REM=$r] Starting stencils-infer MOD=$m FILE=\"$f\"..." >&2
     echo "%%% begin stencils-infer MOD=$m FILE=\"$f\""
     lines=`wc -l "$f" | cut -f 1 -d ' '`
     echo "LineCount: $lines"
@@ -50,7 +51,7 @@ function start_thread() {
     "$TIME" stack exec camfort -- stencils-infer "$f" "$TMPOUT" -m Eval 2>&1
     echo "EndTime: `date --rfc-3339=seconds`"
     echo "%%% end stencils-infer MOD=$m FILE=\"$f\""
-    echo "[PID=$BASHPID REM=$r] Ending stencils-infer MOD=$m FILE=\"$f\"" >&2
+    echo "[PID=$p REM=$r] Ending stencils-infer MOD=$m FILE=\"$f\"" >&2
 }
 
 function check_threads() {
