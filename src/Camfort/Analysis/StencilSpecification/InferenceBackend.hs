@@ -166,7 +166,7 @@ toSpec1D dim l u
     -- Represents a non-contiguous region
     | otherwise =
         upperBound $ Spatial NonLinear [] [] (Sum [Product
-                        [if l > 0 then Forward u dim else Backward u dim]])
+                        [if l > 0 then Forward u dim else Backward (abs l) dim]])
 
 {- Normalise a span into the form (lower, upper) based on the first index -}
 normaliseSpan :: Span (Vec n Int) -> Span (Vec n Int)
