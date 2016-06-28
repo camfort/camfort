@@ -135,5 +135,5 @@ modelHasLeftInverse = mapM_ check (zip variations [0..])
 modelHasApproxLeftInverse vars = mapM_ check (zip vars [(0 :: Int)..])
   where check ((ixs, dims, spec), n) =
           it ("("++show n++")") $ mdl' `shouldBe` (fmap sort ixs)
-            where mdl = let ?dimensionality = dims in mkModel spec
+            where mdl = let ?globalDimensionality = dims in mkModel spec
                   mdl' = fmap (sort . map fst . toList) mdl

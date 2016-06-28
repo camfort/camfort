@@ -46,7 +46,7 @@ import Debug.Trace
 -- False = multiplicity 1, True = multiplicity > 1
 
 model :: Result Spatial -> Result (Multiset [Int])
-model s = let ?dimensionality = dimensionality s
+model s = let ?globalDimensionality = dimensionality s
           in mkModel s
 
 -- Is an inferred specification equal to a declared specification,
@@ -56,7 +56,7 @@ eqByModel :: Specification -> Specification -> Bool
 eqByModel infered declared =
     let d1 = dimensionality infered
         d2 = dimensionality declared
-    in let ?dimensionality = d1 `max` d2
+    in let ?globalDimensionality = d1 `max` d2
        in let modelInf = mkModel infered
               modelDec = mkModel declared
           in case (modelInf, modelDec) of
@@ -87,9 +87,9 @@ class Model spec where
    type Domain spec
 
    -- generate model for the specification, where the implicit
-   -- parameter ?dimensionality is the global dimensionality
+   -- parameter ?globalDimensionality is the global dimensionality
    -- for the spec (not just the local maximum dimensionality)
-   mkModel :: (?dimensionality :: Int) => spec -> Domain spec
+   mkModel :: (?globalDimensionality :: Int) => spec -> Domain spec
 
    -- Return the maximum dimension specified in the spec
    -- giving the dimensionality for that specification
@@ -152,16 +152,19 @@ instance Model Spatial where
        where
          indices = Set.difference (Set.union reflIxs model) irreflIxs
 
-         reflIxs   = fromList [mkSingleEntry 0 d ?dimensionality | d <- refls]
-         irreflIxs = fromList [mkSingleEntryNeg 0 d ?dimensionality | d <- irrefls]
+         reflIxs   = fromList [mkSingleEntry 0 d ?globalDimensionality
+                                | d <- refls]
+         irreflIxs = fromList [mkSingleEntryNeg 0 d ?globalDimensionality
+                                | d <- irrefls]
 
          mdl = mkModel s
          model = case absoluteIxs of
                    [] -> mdl
                    _  -> fromList $ cprodV (toList mdl) absoluteIxs
 
-         absoluteIxs = [mkSingleEntry absoluteRep d ?dimensionality | d <- unspecifiedDims ]
-         unspecifiedDims = (DL.\\) [1 .. ?dimensionality] (sort $ dimensions spec)
+         absoluteIxs = [mkSingleEntry absoluteRep d ?globalDimensionality
+                         | d <- unspecifiedDims ]
+         unspecifiedDims = (DL.\\) [1 .. ?globalDimensionality] (sort $ dimensions spec)
 
     dimensionality (Spatial _ irrefls refls s) =
               maximum1 refls
@@ -183,13 +186,13 @@ instance Model Region where
    type Domain Region = Set [Int]
 
    mkModel (Forward dep dim) =
-     fromList [mkSingleEntry i dim ?dimensionality | i <- [0..dep]]
+     fromList [mkSingleEntry i dim ?globalDimensionality | i <- [0..dep]]
 
    mkModel (Backward dep dim) =
-     fromList [mkSingleEntry i dim ?dimensionality | i <- [(-dep)..0]]
+     fromList [mkSingleEntry i dim ?globalDimensionality | i <- [(-dep)..0]]
 
    mkModel (Centered dep dim) =
-     fromList [mkSingleEntry i dim ?dimensionality | i <- [(-dep)..dep]]
+     fromList [mkSingleEntry i dim ?globalDimensionality | i <- [(-dep)..dep]]
 
    dimensionality (Forward  _ d) = d
    dimensionality (Backward _ d) = d
