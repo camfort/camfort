@@ -18,6 +18,7 @@
 module Camfort.Helpers where
 
 import Data.List (elemIndices, group, sort, nub)
+import qualified Data.ByteString.Char8 as B
 import System.Directory
 import Language.Fortran
 
@@ -29,7 +30,7 @@ spanLineCol (l, u) = (lineCol l, lineCol u)
 
 type Filename = String
 type Directory = String
-type SourceText = String
+type SourceText = B.ByteString
 type FileOrDir = String
 
 -- Filename and directory related helpers

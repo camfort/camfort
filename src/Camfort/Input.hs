@@ -26,6 +26,8 @@ Handles input of code base (files and directories)
 
 module Camfort.Input where
 
+-- FIXME: Did enough to get this module to compile, it's not optimised to use ByteString.
+import qualified Data.ByteString.Char8 as B
 import qualified Language.Fortran.Parser as Fortran
 import Language.Fortran.PreProcess
 import Language.Fortran
@@ -147,7 +149,7 @@ doRefactor rFun inSrc excludes outSrc = do
   --let outFiles = filter (\f -not ((take (length $ d ++ "out") f) == (d ++ "out"))) (map fst ps')
   putStrLn report
   let outFiles = map fst ps'
-  let outData = zip3 outFiles (map Fortran.snd3 ps ++ (repeat "")) (map snd ps')
+  let outData = zip3 outFiles (map (B.pack . Fortran.snd3) ps) (map snd ps')
   outputFiles inSrc outSrc outData
 
 -- Temporarily for the units-of-measure glue code
@@ -167,7 +169,7 @@ doRefactor' rFun inSrc excludes outSrc = do
     let newASTs' = map (\(a,b) -> a b) (zip (map convertSyntaxBack inputs) newASTs)
     let outputs = zip outFiles newASTs'
     putStrLn report
-    outputFiles' inSrc outSrc outputs
+    outputFiles' inSrc outSrc (map (fmap B.pack) outputs)
   where
     modifyAST (f, inp, ast) =
       let ast' = map (fmap (const ())) ast
@@ -179,7 +181,7 @@ doRefactor' rFun inSrc excludes outSrc = do
 
 {-| Read files from a direcotry, excluding those listed
     by the second parameter -}
-readParseSrcDir :: FileOrDir -> [Filename] -> IO [(Filename, SourceText, Program A)]
+readParseSrcDir :: FileOrDir -> [Filename] -> IO [(Filename, String, Program A)]
 readParseSrcDir inp excludes = do
     isdir <- isDirectory inp
     files <- if isdir then do
@@ -208,7 +210,7 @@ rGetDirContents d = do
 isFortran x = elem (fileExt x) [".f", ".f90", ".f77", ".cmn", ".inc"]
 
 {-| Read a specific file, and parse it -}
-readParseSrcFile :: Filename -> IO (Filename, SourceText, Program A)
+readParseSrcFile :: Filename -> IO (Filename, String, Program A)
 readParseSrcFile f = do
     putStrLn f
     inp <- readFile f
@@ -254,6 +256,6 @@ fooTrans p = transformBi f p
 doFooTrans f = do inp <- readFile f
                   p <- parse f
                   let p' = fooTrans $ (map (fmap (const unitAnnotation)) p)
-                  let out = reprint inp f p'
+                  let out = reprint (B.pack inp) f p'
                   writeFile (f ++ ".out") out
                   return $ (out, p')
