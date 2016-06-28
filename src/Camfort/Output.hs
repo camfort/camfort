@@ -42,6 +42,8 @@ import Camfort.Transformation.Syntax
 import System.FilePath
 import System.Directory
 
+-- FIXME: Did enough to get this module to compile, it's not optimised to use ByteString.
+import qualified Data.ByteString.Char8 as B
 import Data.Text hiding (zip,foldl,map,concatMap,take,drop,length,last,head,tail,replicate,concat)
 import qualified Data.Text as Text
 import Data.Map.Lazy hiding (map, foldl)
@@ -109,7 +111,7 @@ outputFiles' inp outp pdata =
           mapM_ (\(f, output) -> let f' = changeDir outp inSrc f
                                  in do checkDir f'
                                        putStrLn $ "Writing " ++ f'
-                                       writeFile f' output) pdata
+                                       B.writeFile f' output) pdata
      else
          if inIsDir || length pdata > 1 then
              error $ "Error: attempting to output multiple files, but the given output destination " ++
@@ -119,7 +121,7 @@ outputFiles' inp outp pdata =
                     putStrLn $ "Writing refactored file to: " ++ outp
                     let (f, output) = head pdata
                     putStrLn $ "Writing " ++ outp
-                    writeFile outp output
+                    B.writeFile outp output
 
 {-| changeDir is used to change the directory of a filename string.
     If the filename string has no directory then this is an identity  -}
@@ -413,29 +415,33 @@ instance Tagged p => Indentor (p Annotation) where
 
 -- Start of GLORIOUS REFACTORING ALGORITHM!
 
+-- FIXME: Use ByteString! (Or Data.Text, at least)
+
 {-| -}
 reprint :: SourceText -> Filename -> Program Annotation -> String
-reprint ""    f p = let ?variant = DefaultPP in foldl (\a b -> a ++ "\n" ++ printMaster b) "" p
-reprint input f p = let input' = Prelude.lines input
-                        start = SrcLoc f 1 0
-                        end = SrcLoc f (Prelude.length input') (1 + (Prelude.length $ Prelude.last input'))
-                        (pn, cursorn) = runIdentity $ evalStateT (reprintC start input' (toZipper p)) 0
-                        (_, inpn) = takeBounds (start, cursorn) input'
-                        (pe, _) = takeBounds (cursorn, end) inpn
-                     in pn ++ pe
+reprint input f p
+  | B.null input = let ?variant = DefaultPP in foldl (\a b -> a ++ "\n" ++ printMaster b) "" p
+  | otherwise = pn ++ pe
+  where input' = map B.unpack $ B.lines input
+        len = Prelude.length input'
+        start = SrcLoc f 1 0
+        end = SrcLoc f len (1 + (Prelude.length $ Prelude.last input'))
+        (pn, cursorn) = runIdentity $ evalStateT (reprintC start input' (toZipper p)) 0
+        (_, inpn) = takeBounds (start, cursorn) input'
+        (pe, _) = takeBounds (cursorn, end) inpn
 
 reprintC :: Monad m => SrcLoc -> [String] -> Zipper a -> StateT Int m (String, SrcLoc)
-reprintC cursor inp z =
-                        do (p1, cursor', flag) <- query (refactoring inp cursor) z
+reprintC cursor inp z = do
+  (p1, cursor', flag) <- query (refactoring inp cursor) z
 
-                           (_, inp')       <- return $ takeBounds (cursor, cursor') inp
-                           (p2, cursor'')  <- if flag then return ("", cursor')
-                                                      else enterDown cursor' inp' z
+  (_, inp')       <- return $ takeBounds (cursor, cursor') inp
+  (p2, cursor'')  <- if flag then return ("", cursor')
+                             else enterDown cursor' inp' z
 
-                           (_, inp'')      <- return $ takeBounds (cursor', cursor'') inp'
-                           (p3, cursor''') <- enterRight cursor'' inp'' z
+  (_, inp'')      <- return $ takeBounds (cursor', cursor'') inp'
+  (p3, cursor''') <- enterRight cursor'' inp'' z
 
-                           return (p1 ++ p2 ++ p3, cursor''')
+  return (p1 ++ p2 ++ p3, cursor''')
 
 enterDown cursor inp z = case (down' z) of
                              Just dz -> reprintC cursor inp dz

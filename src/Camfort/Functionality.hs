@@ -55,9 +55,8 @@ import Camfort.Input
 import Data.Data
 import Data.List (foldl', nub, (\\), elemIndices, intersperse, intercalate)
 
-import qualified Data.ByteString as BS
-import Data.Text (unpack)
-import Data.Text.Encoding (decodeUtf8With)
+import qualified Data.ByteString.Char8 as B
+import Data.Text.Encoding (encodeUtf8, decodeUtf8With)
 import Data.Text.Encoding.Error (replace)
 
 -- FORPAR related imports
@@ -232,8 +231,5 @@ callAndSummarise aFun ps = do
 ----
 
 -- | Read file using ByteString library and deal with any weird characters.
-flexReadFile :: String -> IO String
-flexReadFile path = do
-  bs <- BS.readFile path
-  let text = decodeUtf8With (replace ' ') bs
-  return $ unpack text
+flexReadFile :: String -> IO B.ByteString
+flexReadFile = fmap (encodeUtf8 . decodeUtf8With (replace ' ')) . B.readFile

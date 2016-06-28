@@ -48,6 +48,7 @@ import Control.Monad.Reader
 import Control.Monad.Identity
 import Control.Arrow (first, second)
 import Data.Generics.Uniplate.Operations
+import qualified Data.ByteString.Char8 as B
 
 import Camfort.Helpers
 import Camfort.Input
@@ -74,7 +75,7 @@ import qualified Language.Fortran.Parser.Fortran77 as F77 -- temp
 
 -- testparse "test1.f"
 testparse f = do
-  inp <- readFile f
+  inp <- B.readFile f
   return $ forparse inp f
   where
     forparse :: SourceText -> Filename -> ProgramFile ()
