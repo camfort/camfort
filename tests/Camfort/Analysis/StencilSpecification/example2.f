@@ -22,8 +22,12 @@
 != stencil readOnce, centered(depth=1, dim=2)*r :: a
              x = a(i-1,j) + a(i,j) + a(i+1,j)
              b(i,j) = (x + a(i,j-1) + a(i,j+1)) / 5.0
+! No specification should be inferred here
+             b(0,0) = a(i, j)
             end if
  4       continue
+!= stencil readOnce, backward(depth=1, dim=1) :: a
+      b(i,0) = (a(i,0) + a(i-1,0))/2.0
  3    continue
 
       b(i,j) = a(i,j)

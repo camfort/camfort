@@ -168,7 +168,7 @@ perBlockInfer mode b@(F.BlStatement _ span _ (F.StExpressionAssign _ _ lhs _))
        Just subs ->
         -- Left-hand side is a subscript-by relative index
         -- or by a range
-        if all (flip isReflexiveOnVars ivs) subs
+        if all (flip isReflexiveOnVars ivs) subs && not (all isConstantIndex subs)
            then do genSpecsAndReport mode span ivs [b]
            else if mode == EvalMode then
                   tell [(span , Right "EVALMODE: LHS is an array subscript we \
@@ -370,6 +370,11 @@ isReflexiveOnVars (F.IxSingle _ _ _ e@(F.ExpValue _ _ (F.ValVariable _))) ivs =
 -- Allow constants
 isReflexiveOnVars (F.IxSingle _ _ _ e@(F.ExpValue _ _ _)) ivs = True
 isReflexiveOnVars _ _ = False
+
+isConstantIndex :: Data a => F.Index (FA.Analysis a) -> Bool
+isConstantIndex (F.IxSingle _ _ _ e@(F.ExpValue _ _ (F.ValVariable _))) = False
+isConstantIndex (F.IxSingle _ _ _ e@(F.ExpValue _ _ _))                 = True
+isConstantIndex _                                                       = False
 
 isRelativeOnVars :: Data a => F.Index (FA.Analysis a) -> [Variable] -> Bool
 isRelativeOnVars exp vs = ixToOffset vs exp /= Nothing
