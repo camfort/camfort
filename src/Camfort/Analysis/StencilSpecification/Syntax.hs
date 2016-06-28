@@ -316,8 +316,8 @@ instance RegionRig (Result Spatial) where
   sum s s'                      = sum s' s
 
   prod (Exact s) (Exact s') =
-    -- If any of the spatial regions has non continguous behaviour
-    -- due to irreflexivity then changed the offending spec into a bound
+    -- If both of the spatial regions has non continguous behaviour
+    -- due to irreflexivity then change the offending spec into a bound
     if null (nonContig s) || null (nonContig s')
     -- Usual case
     then Exact (prod s s')
@@ -349,10 +349,10 @@ nonContig (Spatial _ irrefl _ (Sum ss)) =
 
 instance RegionRig RegionSum where
   prod (Sum ss) (Sum ss') =
-   Sum $ -- Take the cross product of list of summed specifications
+   Sum $ nub $ -- Take the cross product of list of summed specifications
      do (Product spec) <- ss
         (Product spec') <- ss'
-        return $ Product $ sort $ spec ++ spec'
+        return $ Product $ nub $ sort $ spec ++ spec'
   sum (Sum ss) (Sum ss') = Sum $ normalise $ ss ++ ss'
   zero = Sum []
   one = Sum [Product []]

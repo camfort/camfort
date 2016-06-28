@@ -150,12 +150,18 @@ instance Model Spatial where
         Linear    -> DM.fromList . map (,False) . toList $ indices
         NonLinear -> DM.fromList . map (,True) . toList $ indices
        where
-         indices = Set.difference (Set.union reflIxs model) irreflIxs
+         indices = Set.filter irreflsMatch (Set.union reflIxs model)
+         irreflsMatch ix = not (any (\d -> ix !! (d-1) == 0) irrefls)
 
          reflIxs   = fromList [mkSingleEntry 0 d ?globalDimensionality
                                 | d <- refls]
-         irreflIxs = fromList [mkSingleEntryNeg 0 d ?globalDimensionality
-                                | d <- irrefls]
+         -- Mark those indices as irreflexive why contain 0 in every
+         -- other dimension or contain `absoluteRep` in every dimension
+         -- (which is provided by mkSingleEntryNeg).
+         irreflIxs = fromList $ [mkSingleEntryNeg 0 d ?globalDimensionality
+                                  | d <- irrefls]
+                             ++ [mkSingleEntry 0 d ?globalDimensionality
+                                  | d <- irrefls]
 
          mdl = mkModel s
          model = case absoluteIxs of

@@ -82,6 +82,9 @@ variations =
   , ([ (1,1), (0,1), (1,0), (0,0) ],
     Exact $ Spatial NonLinear [] [] (Sum [Product [Forward 1 1, Forward 1 2]]))
 
+  , ([ (-1, 1), (0, 1) ],
+    Exact $ Spatial NonLinear [2] [] (Sum [Product [Backward 1 1, Forward 1 2]]))
+
   , ([ (-1,0), (0,0) ],
     Exact $ Spatial NonLinear [] [2] (Sum [Product [Backward 1 1]]))
 

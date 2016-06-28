@@ -239,10 +239,7 @@ centeredFwd = [ Cons 1 (Cons 0 Nil), Cons 0 (Cons 1 Nil), Cons 0 (Cons (-1) Nil)
               ] :: [ Vec (S (S Z)) Int ]
 
 -- Examples of unusal patterns
-fivepointErr = [ Cons (-1) (Cons 0 Nil), Cons 0 (Cons (-1) Nil)
-               , Cons 1 (Cons 0 Nil), Cons 0 (Cons 1 Nil), Cons 0 (Cons 0 Nil)
-               , Cons 1 (Cons 1 Nil)
-               ] :: [ Vec (S (S Z)) Int ]
+fivepointErr = [ Cons (-1) (Cons 0 Nil), Cons 0 (Cons (-1) Nil) , Cons 1 (Cons 0 Nil), Cons 0 (Cons 1 Nil), Cons 0 (Cons 0 Nil) , Cons 1 (Cons 1 Nil) ] :: [ Vec (S (S Z)) Int ]
 
 {- Construct arbtirary vectors and test up to certain sizes -}
 instance Arbitrary a => Arbitrary (Vec Z a) where
@@ -295,7 +292,7 @@ variations =
     )
    -- Stencil which is non-contiguous in one direction
   , ( [ [0, 4], [1, 4] ]
-    , Bound (Just (Spatial Linear [] [] (Sum [Product [Forward 1 1]])))
+    , Bound (Just (Spatial Linear [2] [] (Sum [Product [Forward 1 1]])))
             (Just (Spatial Linear [] [] (Sum [Product [Forward 1 1, Forward 4 2]])))
     )
    -- Stencil which has non-relative indices in one dimension

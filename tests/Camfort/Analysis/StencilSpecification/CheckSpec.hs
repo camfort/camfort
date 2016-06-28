@@ -73,10 +73,18 @@ spec = describe "Stencils - Check" $ do
          Exact (Spatial NonLinear [2] [1]
                   (Sum [Product [Centered 1 3]])))])
 
-  it "parse and convert stencil requiring distribution" $
+  it "parse and convert stencil requiring distribution (5)" $
       (parseAndConvert "!= stencil atleast, reflexive(dims=1,2), readonce, (forward(depth=1, dim=1) * ((centered(depth=1, dim=2)) + backward(depth=3, dim=4))) :: frob")
       `shouldBe`
         (Right $ Right $ [(["frob"], Specification $ Left $
          Bound (Just $ Spatial Linear [] [1,2]
                   (Sum [Product [Forward 1 1, Centered 1 2],
                         Product [Forward 1 1, Backward 3 4]])) Nothing)])
+
+  it "parse and convert stencil with irreflexivity on a product(6)" $
+     let ?dimensionality = 2 in
+      ((extract $
+        parseAndConvert "!= stencil irreflexive(dims=2), forward(depth=1, dim=2)*backward(depth=1,dim=1) :: x, y, z")
+      `eqByModel`
+      (Specification $ Left $ Exact (Spatial NonLinear [2] []
+                                    (Sum [Product [Forward 1 2, Backward 1 1]]))))

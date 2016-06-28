@@ -65,10 +65,11 @@ inferFromIndicesWithoutLinearity (VL ixs) =
 -- Generate the reflexivity and irreflexivity information
 genModifiers :: IsNatural n => [Span (Vec n Int)] -> Spatial -> Spatial
 genModifiers sps (Spatial lin _ _ s) =
-  Spatial lin irrefls (refls \\ overlapped) s
+  Spatial lin irrefls refls' s
     where
+      refls'           = refls \\ overlapped
       (refls, irrefls) = reflexivity sps
-      overlapped = reflsC ++ reflsF ++ reflsB
+      overlapped       = reflsC ++ reflsF ++ reflsB
       reflsC = [d | (Centered _ d)  <- universeBi s::[Region],
                                  d' <- refls, d == d']
 
@@ -117,10 +118,8 @@ fromRegionsToSpec :: IsNatural n => [Span (Vec n Int)] -> Result Spatial
 fromRegionsToSpec sps = onResult (genModifiers sps) result
   where
     onResult f (Exact s) = Exact (f s)
-    -- Don't give reflexive/irreflexive modifiers to an upper bound
-    -- Don't give irreflexive modifiers to a lower bound
-    onResult f (Bound l u) =
-         Bound (fmap ((\s -> s { modIrreflexives = []}) . f) l) u
+    -- Don't give reflexive modifiers to an upper bound
+    onResult f (Bound l u) = Bound (fmap f l) u
 
     result = foldr (\x y -> sum (toSpecND x) y) zero sps
 
