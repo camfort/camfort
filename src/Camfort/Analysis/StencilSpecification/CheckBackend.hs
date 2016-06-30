@@ -65,15 +65,15 @@ instance SynToAst SYN.Specification (Either RegionEnv SpecDecls) where
      return $ Right $ [(vars, spec')]
 
   synToAst (SYN.RegionDec rvar region) = do
-     spec' <- synToAst $ Just region
+     spec' <- synToAst $ region
      return $ Left [(rvar, spec')]
 
 -- Convert temporal or spatial specifications
 instance SynToAst SYN.Spec Specification where
   synToAst (SYN.Spatial mods r) = do
-    (modLinear, modIrrefl, modRefl, approx) <- synToAst mods
+    (modLinear, modIrrefl, approx) <- synToAst mods
     r' <- synToAst r
-    let s' = Spatial modLinear modIrrefl modRefl r'
+    let s' = Spatial modLinear modIrrefl r'
     return $ Specification $ Left $
        case approx of
         Just SYN.AtMost  -> Bound Nothing (Just s')
@@ -84,9 +84,8 @@ instance SynToAst SYN.Spec Specification where
      return $ Specification $ Right $ Dependency vars mutual
 
 -- Convert region definitions into the DNF-form used internally
-instance SynToAst (Maybe SYN.Region) RegionSum where
-  synToAst Nothing  = return $ Sum []
-  synToAst (Just r) = dnf r
+instance SynToAst (SYN.Region) RegionSum where
+  synToAst = dnf
 
 -- Convert a grammar syntax to Disjunctive Normal Form AST
 dnf :: (?renv :: RegionEnv) => SYN.Region -> Either ErrorMsg RegionSum
@@ -114,8 +113,8 @@ dnf (SYN.Var v)            =
 
 -- Convert modifier list to modifier info
 instance SynToAst [SYN.Mod]
-                  (Linearity, [Dimension], [Dimension], Maybe SYN.Mod) where
-  synToAst mods = return (linearity, irrefls, refls, approx)
+                  (Linearity, [Dimension], Maybe SYN.Mod) where
+  synToAst mods = return (linearity, irrefls, approx)
     where
       linearity = if SYN.ReadOnce `elem` mods then Linear else NonLinear
 
@@ -127,10 +126,6 @@ instance SynToAst [SYN.Mod]
       isApprox SYN.AtMost  = Just SYN.AtMost
       isApprox SYN.AtLeast = Just SYN.AtLeast
       isApprox _           = Nothing
-
-      refls = fromMaybe [] (find' isRefl mods)
-      isRefl (SYN.Reflexive ds) = Just ds
-      isRefl _                  = Nothing
 
 find' :: Eq a => (a -> Maybe b) -> [a] -> Maybe b
 find' p [] = Nothing

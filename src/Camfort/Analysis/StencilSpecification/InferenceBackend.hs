@@ -64,27 +64,13 @@ inferFromIndicesWithoutLinearity (VL ixs) =
 
 -- Generate the reflexivity and irreflexivity information
 genModifiers :: IsNatural n => [Span (Vec n Int)] -> Spatial -> Spatial
-genModifiers sps (Spatial lin _ _ s) =
-  Spatial lin irrefls refls' s
-    where
-      refls'           = refls \\ overlapped
-      (refls, irrefls) = reflexivity sps
-      overlapped       = reflsC ++ reflsF ++ reflsB
-      reflsC = [d | (Centered _ d)  <- universeBi s::[Region],
-                                 d' <- refls, d == d']
-
-      reflsF = [d | (Forward  _ d)  <- universeBi s::[Region],
-                                 d' <- refls, d == d']
-
-      reflsB = [d | (Backward  _ d)  <- universeBi s::[Region],
-                                  d' <- refls, d == d']
+genModifiers sps (Spatial lin _ s) = Spatial lin (irreflexivity sps) s
 
 -- For a list of region spans, calculate which dimensions do
 -- have a region cross their origin and which do not. Return
 -- a pair of lists for each respectively
-reflexivity :: forall n . IsNatural n
-            => [Span (Vec n Int)] -> ([Dimension], [Dimension])
-reflexivity spans = (refls, irrefls \\ onlyAbs)
+irreflexivity :: forall n . IsNatural n => [Span (Vec n Int)] -> [Dimension]
+irreflexivity spans = irrefls \\ onlyAbs
   where refls   = reflexiveDims spans
         irrefls = [1..(fromNat (Proxy :: (Proxy n)))] \\ refls
 
@@ -139,32 +125,32 @@ toSpecND = toSpecPerDim 1
 toSpec1D :: Dimension -> Int -> Int -> Result Spatial
 toSpec1D dim l u
     | l == absoluteRep || u == absoluteRep =
-        Exact $ Spatial NonLinear [dim] [] (Sum [Product []])
+        Exact $ Spatial NonLinear [] (Sum [Product []])
 
     | l == 0 && u == 0 =
-        Exact $ Spatial NonLinear [] [] (Sum [Product []])
+        Exact $ Spatial NonLinear [] (Sum [Product [Centered 0 dim]])
 
     | l < 0 && u == 0 =
-        Exact $ Spatial NonLinear [] [] (Sum [Product [Backward (abs l) dim]])
+        Exact $ Spatial NonLinear [] (Sum [Product [Backward (abs l) dim]])
 
     | l < 0 && u == (-1) =
-        Exact $ Spatial NonLinear [dim] [] (Sum [Product [Backward (abs l) dim]])
+        Exact $ Spatial NonLinear [dim] (Sum [Product [Backward (abs l) dim]])
 
     | l == 0 && u > 0 =
-        Exact $ Spatial NonLinear [] [] (Sum [Product [Forward u dim]])
+        Exact $ Spatial NonLinear [] (Sum [Product [Forward u dim]])
 
     | l == 1 && u > 0 =
-        Exact $ Spatial NonLinear [dim] [] (Sum [Product [Forward u dim]])
+        Exact $ Spatial NonLinear [dim] (Sum [Product [Forward u dim]])
 
     | l < 0 && u > 0 && (abs l == u) =
-        Exact $ Spatial NonLinear [] [] (Sum [Product [Centered u dim]])
+        Exact $ Spatial NonLinear [] (Sum [Product [Centered u dim]])
 
     | l < 0 && u > 0 && (abs l /= u) =
-        Exact $ Spatial NonLinear [] [] (Sum [Product [Backward (abs l) dim],
-                                             Product [Forward u dim]])
+        Exact $ Spatial NonLinear [] (Sum [Product [Backward (abs l) dim],
+                                           Product [Forward u dim]])
     -- Represents a non-contiguous region
     | otherwise =
-        upperBound $ Spatial NonLinear [] [] (Sum [Product
+        upperBound $ Spatial NonLinear [] (Sum [Product
                         [if l > 0 then Forward u dim else Backward (abs l) dim]])
 
 {- Normalise a span into the form (lower, upper) based on the first index -}

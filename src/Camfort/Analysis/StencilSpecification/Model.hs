@@ -145,38 +145,17 @@ instance Model a => Model (Maybe a) where
 instance Model Spatial where
     type Domain Spatial = Multiset [Int]
 
-    mkModel spec@(Spatial lin irrefls refls s) =
+    mkModel spec@(Spatial lin irrefls s) =
       case lin of
         Linear    -> DM.fromList . map (,False) . toList $ indices
         NonLinear -> DM.fromList . map (,True) . toList $ indices
        where
-         indices = Set.filter irreflsMatch (Set.union reflIxs model)
+         indices = Set.filter irreflsMatch (mkModel s)
          irreflsMatch ix = not (any (\d -> ix !! (d-1) == 0) irrefls)
 
-         reflIxs   = fromList [mkSingleEntry 0 d ?globalDimensionality
-                                | d <- refls]
-         -- Mark those indices as irreflexive why contain 0 in every
-         -- other dimension or contain `absoluteRep` in every dimension
-         -- (which is provided by mkSingleEntryNeg).
-         irreflIxs = fromList $ [mkSingleEntryNeg 0 d ?globalDimensionality
-                                  | d <- irrefls]
-                             ++ [mkSingleEntry 0 d ?globalDimensionality
-                                  | d <- irrefls]
+    dimensionality (Spatial _ irrefls s) = dimensionality s
 
-         mdl = mkModel s
-         model = case absoluteIxs of
-                   [] -> mdl
-                   _  -> fromList $ cprodV (toList mdl) absoluteIxs
-
-         absoluteIxs = [mkSingleEntry absoluteRep d ?globalDimensionality
-                         | d <- unspecifiedDims ]
-         unspecifiedDims = (DL.\\) [1 .. ?globalDimensionality] (sort $ dimensions spec)
-
-    dimensionality (Spatial _ irrefls refls s) =
-              maximum1 refls
-        `max` dimensionality s
-
-    dimensions (Spatial _ _ refls s) = refls ++ (dimensions s)
+    dimensions (Spatial _ _ s) = dimensions s
 
 
 instance Model RegionSum where
@@ -192,13 +171,13 @@ instance Model Region where
    type Domain Region = Set [Int]
 
    mkModel (Forward dep dim) =
-     fromList [mkSingleEntry i dim ?globalDimensionality | i <- [0..dep]]
+     fromList [mkSingleEntryNeg i dim ?globalDimensionality | i <- [0..dep]]
 
    mkModel (Backward dep dim) =
-     fromList [mkSingleEntry i dim ?globalDimensionality | i <- [(-dep)..0]]
+     fromList [mkSingleEntryNeg i dim ?globalDimensionality | i <- [(-dep)..0]]
 
    mkModel (Centered dep dim) =
-     fromList [mkSingleEntry i dim ?globalDimensionality | i <- [(-dep)..dep]]
+     fromList [mkSingleEntryNeg i dim ?globalDimensionality | i <- [(-dep)..dep]]
 
    dimensionality (Forward  _ d) = d
    dimensionality (Backward _ d) = d
@@ -208,25 +187,23 @@ instance Model Region where
    dimensions (Backward _ d) = [d]
    dimensions (Centered _ d) = [d]
 
--- | mkSingleEntry offset dimension dimensionality -> relative index vector
--- | precondition: dimensionality >= dimension
-mkSingleEntry :: Int -> Int -> Int -> [Int]
-mkSingleEntry i 0 ds = error $ "Dimensions are 1-indexed"
-mkSingleEntry i 1 ds = [i] ++ take (ds - 1) (repeat 0)
-mkSingleEntry i d ds = 0 : mkSingleEntry i (d - 1) (ds - 1)
-
 mkSingleEntryNeg :: Int -> Int -> Int -> [Int]
-mkSingleEntryNeg i 0 ds = error $ "Dimensions are 1-indexed"
-mkSingleEntryNeg i 1 ds = [i] ++ take (ds - 1) (repeat absoluteRep)
-mkSingleEntryNeg i d ds = absoluteRep : mkSingleEntry i (d - 1) (ds - 1)
-
+mkSingleEntryNeg i 0 ds = error "Dimensions are 1-indexed"
+mkSingleEntryNeg i 1 ds = i : replicate (ds - 1) absoluteRep
+mkSingleEntryNeg i d ds = absoluteRep : mkSingleEntryNeg i (d - 1) (ds - 1)
 
 instance Model RegionProd where
    type Domain RegionProd = Set [Int]
 
-   mkModel (Product []) = Set.empty
-   mkModel (Product ss) =
-      fromList $ cprodVs $ map (toList . mkModel) ss
+   mkModel (Product [])  = Set.empty
+   mkModel (Product [s])  = mkModel s
+   mkModel p@(Product ss)  = cleanedProduct
+     where
+       cleanedProduct = fromList $ DL.filter keepPred product
+       product = cprodVs $ map (toList . mkModel) ss
+       dims = dimensions p
+       keepPred el = DL.foldr (\pr acc -> nonProdP pr && acc) True (zip [(1::Int)..] el)
+       nonProdP (i,el) = i `notElem` dims || el /= absoluteRep
 
    dimensionality (Product ss) =
       maximum1 (map dimensionality ss)
@@ -238,15 +215,10 @@ cprodVs :: [[[Int]]] -> [[Int]]
 cprodVs = foldr1 cprodV
 
 cprodV :: [[Int]] -> [[Int]] -> [[Int]]
-cprodV xss yss = xss >>= (\xs -> yss >>= (\ys -> pairwisePerm xs ys))
+cprodV xss yss = xss >>= (\xs -> yss >>= pairwisePerm xs)
 
 pairwisePerm :: [Int] -> [Int] -> [[Int]]
-pairwisePerm x y = sequence . absorb . transpose $ [x, y]
-  where absorb = map absorb'
-        absorb' xs =
-            if any (\x -> x == absoluteRep) xs
-            then [absoluteRep]
-            else xs
+pairwisePerm x y = sequence . transpose $ [x, y]
 
 maximum1 [] = 0
 maximum1 xs = maximum xs
