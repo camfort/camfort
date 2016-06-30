@@ -164,9 +164,10 @@ spec =
         (indicesToSpec' ["i", "j"] [[offsetToIx "i" 1, offsetToIx "j" 1],
                                   [offsetToIx "i" 0, offsetToIx "j" 0]])
          `shouldBe` (Just $ Specification $ Left $ Bound
-                       (Just $ Spatial Linear [] (Sum [Product []]))
                        (Just $ Spatial Linear []
-                            (Sum [Product [Forward 1 1, Forward 1 2]])))
+                         (Sum [Product [Centered 0 1, Centered 0 2]]))
+                       (Just $ Spatial Linear []
+                         (Sum [Product [Forward 1 1, Forward 1 2]])))
 
       it "inconsistent" $
         (indicesToSpec' ["i", "j"] [[offsetToIx "i" 1, offsetToIx "j" 1],
