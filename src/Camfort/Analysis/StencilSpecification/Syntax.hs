@@ -24,13 +24,16 @@
 module Camfort.Analysis.StencilSpecification.Syntax where
 
 import Camfort.Helpers
+
+import Prelude hiding (sum)
+
 import Data.Data
 import Data.Generics.Uniplate.Data
 import Data.List hiding (sum)
-import Prelude hiding (sum)
 import Data.Function
 import Data.Maybe
 import Debug.Trace
+import Control.Applicative
 
 {-  Contains the syntax representation for stencil specifications -}
 
@@ -226,23 +229,6 @@ regionPlus (Backward dep dim) (Forward dep' dim')
 regionPlus x y | x == y          = Just x
 regionPlus x y                   = Nothing
 
--- If there are two region lists which are equal modulo an entry in
--- one which is `Forward d dim` and `Backward d dim` in the other
-equalModuloFwdBwd :: [Region] -> [Region] -> Maybe [Region]
-equalModuloFwdBwd [] xs = Just xs
-equalModuloFwdBwd xs [] = Just xs
-equalModuloFwdBwd (Forward d dim : rs) (Backward d' dim' : rs')
-    | d == d' && dim == dim' && rs == rs' = Just (Centered d dim : rs)
-    | otherwise                           = Nothing
-
-equalModuloFwdBwd (Backward d dim : rs) (Forward d' dim' :rs')
-    = equalModuloFwdBwd (Forward d' dim' : rs') (Backward d dim : rs)
-
-equalModuloFwdBwd (r:rs) (r':rs')
-    | r == r'   = do rs'' <- equalModuloFwdBwd rs rs'
-                     return $ r : rs''
-    | otherwise = Nothing
-
 instance PartialMonoid RegionProd where
    emptyM = Product []
 
@@ -274,29 +260,44 @@ instance PartialMonoid RegionProd where
 interchangeReflexive :: [Region] -> [Region] -> Maybe ([Region], [Region])
 interchangeReflexive a b =
   if (all isReflexive a) || (all isReflexive b)
-  then interchangeReflexive' (sortBy cmpDims a) (sortBy cmpDims b)
+  then      interchangeReflexive' (sortBy cmpDims a) (sortBy cmpDims b)
+        <|> interchangeReflexive' (sortBy cmpDims b) (sortBy cmpDims a)
   else Nothing
    where isReflexive (Centered 0 d) = True
-         isReflexive _ = False
+         isReflexive _              = False
          cmpDims = compare `on` getDimension
 
 interchangeReflexive' [] [] = Just ([], [])
 interchangeReflexive' (r@(Forward d dim) : rs) (Centered 0 dim' : rs')
   | dim == dim' = do (rsA, rsB) <- interchangeReflexive' rs rs'
                      return $ (r:rsA, rsB)
+
 interchangeReflexive' (r@(Backward d dim) : rs) (Centered 0 dim' : rs')
   | dim == dim' = do (rsA, rsB) <- interchangeReflexive' rs rs'
                      return $ (r:rsA, rsB)
+
 interchangeReflexive' (r@(Centered d dim) : rs) (Centered 0 dim' : rs')
   | dim == dim' = do (rsA, rsB) <- interchangeReflexive' rs rs'
                      return $ (r:rsA, rsB)
-interchangeReflexive' r1@(Centered 0 dim' : rs') r2@(Forward d dim : rs) =
-  interchangeReflexive' r2 r1
-interchangeReflexive' r1@(Centered 0 dim' : rs') r2@(Backward d dim : rs) =
-  interchangeReflexive' r2 r1
-interchangeReflexive' r1@(Centered 0 dim' : rs') r2@(Centered d dim : rs) =
-  interchangeReflexive' r2 r1
+
 interchangeReflexive' _ _ = Nothing
+
+-- If there are two region lists which are equal modulo an entry in
+-- one which is `Forward d dim` and `Backward d dim` in the other
+equalModuloFwdBwd :: [Region] -> [Region] -> Maybe [Region]
+equalModuloFwdBwd [] xs = Just xs
+equalModuloFwdBwd xs [] = Just xs
+equalModuloFwdBwd (Forward d dim : rs) (Backward d' dim' : rs')
+    | d == d' && dim == dim' && rs == rs' = Just (Centered d dim : rs)
+
+equalModuloFwdBwd (Backward d dim : rs) (Forward d' dim' :rs')
+    = equalModuloFwdBwd (Forward d' dim' : rs') (Backward d dim : rs)
+
+equalModuloFwdBwd (r:rs) (r':rs')
+    | r == r'   = do rs'' <- equalModuloFwdBwd rs rs'
+                     return $ r : rs''
+equalModuloFwdBwd _ _ = Nothing
+
 
 -- Operations on region specifications form a semiring
 --  where `sum` is the additive, and `prod` is the multiplicative
