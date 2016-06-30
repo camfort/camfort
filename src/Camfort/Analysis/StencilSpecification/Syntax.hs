@@ -100,7 +100,6 @@ data Temporal = Dependency [String] Bool
 -- Comprises some modifiers on spatial specifications:
 --         * linearity
 --         * irreflexivity
---         * reflexivity
 -- with the region, which is a regionSum
 --
 -- Regions are in disjunctive normal form (with respect to
@@ -109,7 +108,6 @@ data Temporal = Dependency [String] Bool
 data Spatial =
    Spatial { modLinearity    :: Linearity,
              modIrreflexives :: [Dimension],
-             modReflexives   :: [Dimension],
              region          :: RegionSum }
   deriving (Eq, Data, Typeable)
 
@@ -230,6 +228,8 @@ regionPlus x y                   = Nothing
 -- one which is `Forward d dim` and `Backward d dim` in the other
 equalModuloFwdBwd :: [Region] -> [Region] -> Maybe (Region, [Region])
 equalModuloFwdBwd [] [] = Nothing
+equalModuloFwdBwd [] _  = Nothing
+equalModuloFwdBwd _  [] = Nothing
 equalModuloFwdBwd
   (Forward d dim : rs) (Backward d' dim' :rs')
     | d == d' && dim == dim' && rs == rs' = Just (Centered d dim, rs)
@@ -293,21 +293,18 @@ instance RegionRig Linearity where
   isUnit _      = False
 
 instance RegionRig Spatial where
-  sum (Spatial lin  irdim  rdim  s)
-      (Spatial lin' irdim' rdim' s') =
-    Spatial (sum lin lin') (nub $ irdim ++ irdim') (nub $ rdim ++ rdim')
-            (sum s s')
+  sum (Spatial lin  irdim  s)
+      (Spatial lin' irdim' s') =
+    Spatial (sum lin lin') (nub $ irdim ++ irdim') (sum s s')
 
-  prod (Spatial lin  irdim  rdim  s)
-       (Spatial lin' irdim' rdim' s') =
-    Spatial (prod lin lin') (nub $ irdim ++ irdim') (nub $ rdim ++ rdim')
-            (prod s s')
+  prod (Spatial lin  irdim  s)
+       (Spatial lin' irdim' s') =
+    Spatial (prod lin lin') (nub $ irdim ++ irdim') (prod s s')
 
-  one = Spatial one [] [] one
-  zero = Spatial zero [] [] zero
+  one = Spatial one [] one
+  zero = Spatial zero [] zero
 
-  isUnit (Spatial _ irrefl refl ss) =
-      irrefl == [] && refl == [] && isUnit ss
+  isUnit (Spatial _ irrefl ss) = null irrefl && isUnit ss
 
 instance RegionRig (Result Spatial) where
   sum (Exact s) (Exact s')      = Exact (sum s s')
@@ -341,7 +338,7 @@ instance RegionRig (Result Spatial) where
   isUnit (Bound x y) = isUnit x && isUnit y
 
 
-nonContig (Spatial _ irrefl _ (Sum ss)) =
+nonContig (Spatial _ irrefl (Sum ss)) =
   filter (\d ->
      any (\(Product sp) ->
         any (\s -> getDimension s == d) sp) ss) irrefl
@@ -382,17 +379,14 @@ instance {-# OVERLAPS #-} Show (Result Spatial) where
 
 -- Pretty print spatial specs
 instance Show Spatial where
-  show (Spatial modLin modIrrefl modRefl region) =
-    intercalate ", " . catMaybes $ [lin, refl, irefl, sregion]
+  show (Spatial modLin modIrrefl region) =
+    intercalate ", " . catMaybes $ [lin, irefl, sregion]
     where
       -- Map "empty" spec to Nothing here
       sregion = case show region of
                   "empty" -> Nothing
                   xs      -> Just xs
       -- Individual actions to show modifiers
-      refl = case modRefl of
-                []       -> Nothing
-                ds       -> Just $ "reflexive(dims=" ++ showL ds ++ ")"
       irefl = case modIrrefl of
                 []       -> Nothing
                 ds       -> Just $ "irreflexive(dims=" ++ showL ds ++ ")"
@@ -424,7 +418,9 @@ instance Show RegionProd where
 instance Show Region where
    show (Forward dep dim)   = showRegion "forward" (show dep) (show dim)
    show (Backward dep dim)  = showRegion "backward" (show dep) (show dim)
-   show (Centered dep dim)  = showRegion "centered" (show dep) (show dim)
+   show (Centered dep dim)
+     | dep == 0 = "reflexive(dim=" ++ show dim ++ ")"
+     | otherwise = showRegion "centered" (show dep) (show dim)
 
 -- Helper for showing regions
 showRegion typ depS dimS = typ ++ "(depth=" ++ depS ++ ", dim=" ++ dimS ++")"

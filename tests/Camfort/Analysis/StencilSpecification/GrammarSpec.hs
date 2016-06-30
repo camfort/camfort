@@ -12,19 +12,22 @@ spec =
     it "basic unmodified stencil" $
       parse "!= stencil r1 + r2 :: a"
       `shouldBe`
-        Right (SpecDec (Spatial [] (Just $ Or (Var "r1") (Var "r2"))) ["a"])
+        Right (SpecDec (Spatial [] (Or (Var "r1") (Var "r2"))) ["a"])
 
+{- Should no longer be possible
     it "just reflexive stencil" $
       parse "!= stencil reflexive(dims=1,2) :: a"
       `shouldBe`
         Right (SpecDec (Spatial [Reflexive [1, 2]] Nothing) ["a"])
+-}
 
 
     it "basic modified stencil (1)" $
       parse "      != stencil readonce, r1 + r2 :: a"
       `shouldBe`
-        Right (SpecDec (Spatial [ReadOnce] (Just $ Or (Var "r1") (Var "r2"))) ["a"])
+        Right (SpecDec (Spatial [ReadOnce] (Or (Var "r1") (Var "r2"))) ["a"])
 
+{- Should no longer be possible
     it "basic monfieid stencil (2)" $
       parse "!= stencil atleast, reflexive(dims=1,2), \
              \       forward(depth=1, dim=1) :: x"
@@ -37,6 +40,7 @@ spec =
       `shouldBe`
         Right (SpecDec (Spatial [AtLeast, Irreflexive [1], Reflexive [2]]
                                (Just $ Forward 1 1)) ["frob"])
+-}
 
     it "region defn" $
       parse "!= region r = forward(depth=1, dim=1) + backward(depth=2, dim=2)"
@@ -48,6 +52,7 @@ spec =
       `shouldBe`
        Right (SpecDec (Temporal ["a","b","c","foo"] True) ["foo", "bar"])
 
+{- Should no longer be possible
     it "complex stencil" $
       parse "!= stencil atleast, reflexive(dims=1,2), readonce, \
             \ (forward(depth=1, dim=1) + r) * backward(depth=3, dim=4) \
@@ -70,6 +75,7 @@ spec =
         (Left $ ProbablyAnnotation $
               "Conflicting modifiers: stencil marked as both\
               \ irreflexive and reflexive in dimensions = 2")
+-}
 
 
 parse = specParser

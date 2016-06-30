@@ -25,29 +25,26 @@ spec = describe "Stencils - Check" $ do
       (parseAndConvert "!= stencil forward(depth=1, dim=1) :: x")
       `shouldBe`
         (Right $ Right $ [(["x"], Specification $ Left $
-         Exact (Spatial NonLinear [] []
-                  (Sum [Product [Forward 1 1]])))])
+         Exact (Spatial NonLinear [] (Sum [Product [Forward 1 1]])))])
 
   it "parse and convert simple exact stencil (2)" $
       (parseAndConvert "!= stencil forward(depth=1, dim=1) :: x, y, z")
       `shouldBe`
         (Right $ Right $ [(["x","y","z"], Specification $ Left $
-         Exact (Spatial NonLinear [] []
-                  (Sum [Product [Forward 1 1]])))])
+         Exact (Spatial NonLinear [] (Sum [Product [Forward 1 1]])))])
 
   it "parse and convert simple exact stencil with irreflexive (2a)" $
       (parseAndConvert "!= stencil irreflexive(dims=2), centered(depth=1, dim=2) :: x, y, z")
       `shouldBe`
         (Right $ Right $ [(["x","y","z"], Specification $ Left $
-         Exact (Spatial NonLinear [2] []
-                  (Sum [Product [Centered 1 2]])))])
+         Exact (Spatial NonLinear [2] (Sum [Product [Centered 1 2]])))])
 
   it "parse and convert simple exact stencil with irreflexive (2b)" $
      let ?dimensionality = 2 in
       ((extract $
         parseAndConvert "!= stencil irreflexive(dims=2), centered(depth=1, dim=2) :: x, y, z")
       `eqByModel`
-      (Specification $ Left $ Exact (Spatial NonLinear [2] []
+      (Specification $ Left $ Exact (Spatial NonLinear [2]
                                     (Sum [Product [Centered 1 2]]))))
        `shouldBe` True
 
@@ -56,28 +53,29 @@ spec = describe "Stencils - Check" $ do
       (parseAndConvert "!= stencil atmost, forward(depth=1, dim=1) :: x")
       `shouldBe`
         (Right $ Right $ [(["x"], Specification $ Left $
-         Bound Nothing (Just $ Spatial NonLinear [] []
+         Bound Nothing (Just $ Spatial NonLinear []
                   (Sum [Product [Forward 1 1]])))])
 
   it "parse and convert simple lower bounded stencil (4)" $
       (parseAndConvert "!= stencil atleast, backward(depth=2, dim=1) :: x")
       `shouldBe`
         (Right $ Right $ [(["x"], Specification $ Left $
-         Bound (Just $ Spatial NonLinear [] []
+         Bound (Just $ Spatial NonLinear []
                   (Sum [Product [Backward 2 1]])) Nothing)])
 
+{- This is no longer applicable
   it "parse and convert modified bounded stencil (4)" $
       (parseAndConvert "!= stencil reflexive(dims=1), irreflexive(dims=2), centered(depth=1, dim=3) :: x")
       `shouldBe`
         (Right $ Right $ [(["x"], Specification $ Left $
-         Exact (Spatial NonLinear [2] [1]
-                  (Sum [Product [Centered 1 3]])))])
+         Exact (Spatial NonLinear [2] (Sum [Product [Centered 1 3]])))])
+-}
 
   it "parse and convert stencil requiring distribution (5)" $
-      (parseAndConvert "!= stencil atleast, reflexive(dims=1,2), readonce, (forward(depth=1, dim=1) * ((centered(depth=1, dim=2)) + backward(depth=3, dim=4))) :: frob")
+      (parseAndConvert "!= stencil atleast, readonce, (forward(depth=1, dim=1) * ((centered(depth=1, dim=2)) + backward(depth=3, dim=4))) :: frob")
       `shouldBe`
         (Right $ Right $ [(["frob"], Specification $ Left $
-         Bound (Just $ Spatial Linear [] [1,2]
+         Bound (Just $ Spatial Linear []
                   (Sum [Product [Forward 1 1, Centered 1 2],
                         Product [Forward 1 1, Backward 3 4]])) Nothing)])
 
@@ -86,5 +84,5 @@ spec = describe "Stencils - Check" $ do
       ((extract $
         parseAndConvert "!= stencil irreflexive(dims=2), forward(depth=1, dim=2)*backward(depth=1,dim=1) :: x, y, z")
       `eqByModel`
-      (Specification $ Left $ Exact (Spatial NonLinear [2] []
+      (Specification $ Left $ Exact (Spatial NonLinear [2]
                                     (Sum [Product [Forward 1 2, Backward 1 1]]))))

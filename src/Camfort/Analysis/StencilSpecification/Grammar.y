@@ -59,6 +59,7 @@ REGION ::                            { Region }
 : forward  '(' depth '=' num dim '=' num ')' { Forward  (read $5) (read $8) }
 | backward '(' depth '=' num dim '=' num ')' { Backward (read $5) (read $8) }
 | centered '(' depth '=' num dim '=' num ')' { Centered (read $5) (read $8) }
+| reflexive '(' dim '=' num ')'              { Centered 0 (read $5) }
 | REGION '+' REGION                  { Or $1 $3 }
 | REGION '*' REGION                  { And $1 $3 }
 | '(' REGION ')'                     { $2 }
@@ -67,12 +68,10 @@ REGION ::                            { Region }
 SPECDEC :: { Spec }
 : dependency '(' VARS ')'        { Temporal $3 False }
 | dependency '(' VARS ')' mutual { Temporal $3 True }
-| APPROXMODS MODS REGION         { Spatial ($1 ++ $2) (Just $3) }
-| APPROXMODS MODS                { Spatial ($1 ++ $2) Nothing }
-| MODS                           { Spatial $1 Nothing }
-| MODS REGION                    { Spatial $1 (Just $2) }
-| APPROXMOD REGION               { Spatial [$1] (Just $2) }
-| REGION                         { Spatial [] (Just $1) }
+| APPROXMODS MODS REGION         { Spatial ($1 ++ $2) $3 }
+| MODS REGION                    { Spatial $1 $2 }
+| APPROXMOD REGION               { Spatial [$1] $2 }
+| REGION                         { Spatial [] $1 }
 
 MODS :: { [Mod] }
 : MOD MODS { $1 : $2 }
@@ -80,7 +79,6 @@ MODS :: { [Mod] }
 
 MOD :: { Mod }
 : readOnce                          { ReadOnce }
-| reflexive '(' dims '=' DIMS ')'   { Reflexive $5 }
 | irreflexive '(' dims '=' DIMS ')' { Irreflexive $5 }
 
 -- Even though multiple approx mods is not allowed
@@ -119,7 +117,7 @@ data Region
   deriving (Show, Eq, Ord, Typeable, Data)
 
 data Spec
-  = Spatial [Mod] (Maybe Region)
+  = Spatial [Mod] Region
   | Temporal [String] Bool
   deriving (Show, Eq, Ord, Typeable, Data)
 
@@ -128,7 +126,6 @@ data Mod
   | AtMost
   | Irreflexive [Int]
   | ReadOnce
-  | Reflexive [Int]
   deriving (Show, Eq, Ord, Typeable, Data)
 
 --------------------------------------------------
@@ -215,9 +212,6 @@ modValidate (SpecDec (Spatial mods r) vars) =
 
   where    modValidate' [] = return $ []
 
-           modValidate' (Reflexive ds : Reflexive ds' : xs)
-             = failWith "Duplicate 'reflexive' modifier; use at most one."
-
            modValidate' (Irreflexive ds : Irreflexive ds' : xs)
              = failWith "Duplicate 'irreflexive' modifier; use at most one."
 
@@ -234,21 +228,9 @@ modValidate (SpecDec (Spatial mods r) vars) =
              = failWith $ "Conflicting modifiers: cannot use 'atLeast' and "
                      ++ "'atMost' together"
 
-           modValidate' (Irreflexive ds : xs)
-             = case inconsistentReflexives ds xs of
-                 [] ->  do xs' <- modValidate' xs
-                           return $ Irreflexive ds : xs'
-                 ds' -> failWith $ "Conflicting modifiers: stencil marked as "
-                                ++ "both irreflexive and reflexive in "
-                                ++ "dimensions = " ++ showL ds'
            modValidate' (x : xs)
              = do xs' <- modValidate' xs
                   return $ x : xs'
-
-           -- Find reflexive dimenions which overlap with the first parameter
-           inconsistentReflexives ds [] = []
-           inconsistentReflexives ds (Reflexive ds' : _) = intersect ds ds'
-           inconsistentReflexives ds (m : ms) = inconsistentReflexives ds ms
 modValidate x = return x
 
 happyError :: [ Token ] -> Either AnnotationParseError a
