@@ -28,7 +28,9 @@ import Data.Data
 import Data.Generics.Uniplate.Data
 import Data.List hiding (sum)
 import Prelude hiding (sum)
+import Data.Function
 import Data.Maybe
+import Debug.Trace
 
 {-  Contains the syntax representation for stencil specifications -}
 
@@ -226,20 +228,19 @@ regionPlus x y                   = Nothing
 
 -- If there are two region lists which are equal modulo an entry in
 -- one which is `Forward d dim` and `Backward d dim` in the other
-equalModuloFwdBwd :: [Region] -> [Region] -> Maybe (Region, [Region])
-equalModuloFwdBwd [] [] = Nothing
-equalModuloFwdBwd [] _  = Nothing
-equalModuloFwdBwd _  [] = Nothing
-equalModuloFwdBwd
-  (Forward d dim : rs) (Backward d' dim' :rs')
-    | d == d' && dim == dim' && rs == rs' = Just (Centered d dim, rs)
+equalModuloFwdBwd :: [Region] -> [Region] -> Maybe [Region]
+equalModuloFwdBwd [] xs = Just xs
+equalModuloFwdBwd xs [] = Just xs
+equalModuloFwdBwd (Forward d dim : rs) (Backward d' dim' : rs')
+    | d == d' && dim == dim' && rs == rs' = Just (Centered d dim : rs)
     | otherwise                           = Nothing
-equalModuloFwdBwd
-  (Backward d dim : rs) (Forward d' dim' :rs')
+
+equalModuloFwdBwd (Backward d dim : rs) (Forward d' dim' :rs')
     = equalModuloFwdBwd (Forward d' dim' : rs') (Backward d dim : rs)
+
 equalModuloFwdBwd (r:rs) (r':rs')
-    | r == r'   = do (cr, rs'') <- equalModuloFwdBwd rs rs'
-                     return (cr, r : rs'')
+    | r == r'   = do rs'' <- equalModuloFwdBwd rs rs'
+                     return $ r : rs''
     | otherwise = Nothing
 
 instance PartialMonoid RegionProd where
@@ -251,10 +252,51 @@ instance PartialMonoid RegionProd where
        regionPlus s s' >>= (\sCombined -> return $ Product [sCombined])
    appendM (Product ss) (Product ss')
        | ss == ss' = Just $ Product ss
-       | otherwise = case equalModuloFwdBwd ss ss' of
-                       Just (s, ss') -> Just $ Product (sort $ s : ss')
-                       Nothing       -> Nothing
+       | otherwise =
+         case interchangeReflexive ss ss' of
+           Just (ss0, ss1) ->
+               case equalModuloFwdBwd ss0 ss1 of
+                 Just ss'' -> return $ Product $ sort ss''
+                 Nothing   -> return $ Product $ sort (ss0 ++ ss1)
+           Nothing -> case equalModuloFwdBwd ss ss' of
+                        Just ss'' -> return $ Product $ sort ss''
+                        Nothing   -> Nothing
 
+--Based on equations:
+-- Forward n d + Reflexive d = Forward n d
+-- Backward n d + Reflexive d = Backward n d
+-- Centered n d + Reflexive d = Centered n d
+-- which extends to products with a specialised interchange law:
+--  (Forward n d * Forward m d') + (Reflexive d * Reflexive d')
+--  = (Forward n d + Reflexive d) * (Forward m d' + Reflexive d')
+-- (and so on for n-ary cases and Backward and Centered).
+
+interchangeReflexive :: [Region] -> [Region] -> Maybe ([Region], [Region])
+interchangeReflexive a b =
+  if (all isReflexive a) || (all isReflexive b)
+  then interchangeReflexive' (sortBy cmpDims a) (sortBy cmpDims b)
+  else Nothing
+   where isReflexive (Centered 0 d) = True
+         isReflexive _ = False
+         cmpDims = compare `on` getDimension
+
+interchangeReflexive' [] [] = Just ([], [])
+interchangeReflexive' (r@(Forward d dim) : rs) (Centered 0 dim' : rs')
+  | dim == dim' = do (rsA, rsB) <- interchangeReflexive' rs rs'
+                     return $ (r:rsA, rsB)
+interchangeReflexive' (r@(Backward d dim) : rs) (Centered 0 dim' : rs')
+  | dim == dim' = do (rsA, rsB) <- interchangeReflexive' rs rs'
+                     return $ (r:rsA, rsB)
+interchangeReflexive' (r@(Centered d dim) : rs) (Centered 0 dim' : rs')
+  | dim == dim' = do (rsA, rsB) <- interchangeReflexive' rs rs'
+                     return $ (r:rsA, rsB)
+interchangeReflexive' r1@(Centered 0 dim' : rs') r2@(Forward d dim : rs) =
+  interchangeReflexive' r2 r1
+interchangeReflexive' r1@(Centered 0 dim' : rs') r2@(Backward d dim : rs) =
+  interchangeReflexive' r2 r1
+interchangeReflexive' r1@(Centered 0 dim' : rs') r2@(Centered d dim : rs) =
+  interchangeReflexive' r2 r1
+interchangeReflexive' _ _ = Nothing
 
 -- Operations on region specifications form a semiring
 --  where `sum` is the additive, and `prod` is the multiplicative
@@ -309,7 +351,7 @@ instance RegionRig Spatial where
 instance RegionRig (Result Spatial) where
   sum (Exact s) (Exact s')      = Exact (sum s s')
   sum (Exact s) (Bound l u)     = Bound (sum (Just s) l) (sum (Just s) u)
-  sum (Bound l u) (Bound l' u') = Bound (sum l l') (sum (sum l u') (sum l' u))
+  sum (Bound l u) (Bound l' u') = Bound (sum l l') (sum u u')
   sum s s'                      = sum s' s
 
   prod (Exact s) (Exact s') =
