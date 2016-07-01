@@ -177,8 +177,8 @@ library
 executable analyse
   main-is: Analyse.hs
   hs-source-dirs:       eval
-  build-depends:
-                        base < 5,
-                        containers >= 0.5.0.0,
-                        bytestring >= 0.10,
-                        regex-pcre >= 0.94.4
+  build-depends: base < 5,
+                 bytestring >= 0.10,
+                 containers >= 0.5.0.0,
+                 regex-base >= 0.93.2,
+                 regex-pcre >= 0.94.4

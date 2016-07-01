@@ -1,16 +1,19 @@
 import Text.Regex.PCRE ((=~))
+import Text.Regex.Base
 import System.Environment
 import qualified Data.ByteString.Char8 as S
-import Data.Maybe (fromMaybe)
+import Data.Maybe
 import Data.List (unfoldr, groupBy, foldl')
 import Data.Function (on)
 import qualified Data.Map as M
 
-keywords = [ "readOnce", "reflexive", "irreflexive", "forward", "backward", "centered"
-           , "nonNeighbour", "emptySpec", "inconsistentIV", "tickAssign", "LHSnotHandled" ]
+keywords = [ "readOnce", "reflexive", "irreflexive", "forward", "backward", "centered", "atLeast", "atMost"
+           , "nonNeighbour", "emptySpec", "inconsistentIV", "LHSnotHandled" ]
 
 dimKeyword :: Int -> String
-dimKeyword n = "dim_"++show n
+dimKeyword n = "dims"++show n
+depthKeyword :: Int -> String
+depthKeyword n = "depth"++show n
 
 type Analysis = M.Map String Int
 type ModAnalysis = M.Map String Analysis
@@ -19,16 +22,22 @@ type ModAnalysis = M.Map String Analysis
 countByVars :: Analysis -> S.ByteString -> Analysis
 countByVars a l = M.unionsWith (+) $ [a, keysA] ++ map snd (filter fst counts)
   where
-    counts  = [bBoth]
-    bBoth   = ((get a "atLeast" > 0 && get keysA "atMost" > 0) ||
-               (get keysA "atLeast" > 0 && get a "atMost" > 0),   {- ==> -} M.singleton "boundedBoth" n)
-    keysA   = M.fromList [ (k, n) | k <- ["atMost" , "atLeast"], l =~ re k ]
+    counts  = [ ((get a "atLeast" > 0 && get keysA "atMost" > 0) ||
+                (get keysA "atLeast" > 0 && get a "atMost" > 0),   {- ==> -} M.singleton "boundedBoth" n)
+              , ( get keysA "reflexive" > 0 &&                     {- ==> -}
+                  M.size keysA == 1                            ,   {- ==> -} M.singleton "justReflexive" n )
+              , ( ndims > 0                                    ,   {- ==> -} M.singleton (dimKeyword ndims) n)
+              , ( isJust mdep                                  ,   {- ==> -} M.singleton (depthKeyword (fromJust mdep)) n)
+              ]
+    keysA   = M.fromList [ (k, n) | k <- keywords, l =~ re k  ] -- try each keyword
     re k    = "[^A-Za-z]" ++ k ++ "[^A-Za-z]" -- form a regular expression from a keyword
     get m k = 0 `fromMaybe` M.lookup k m -- convenience function
     n       = numVars l -- note that this will treat an EVALMODE line as having 1 variable
+    ndims   = numDims l
+    mdep    = depth l
 
 -- Count interesting stuff in a given line, and given the group's
--- analysis to this point.
+-- analysis to this point, grouped by span.
 countBySpan :: Analysis -> S.ByteString -> Analysis
 countBySpan a l = M.unionsWith (+) $ [a, keysA] ++ map snd (filter fst counts)
   where
@@ -36,14 +45,12 @@ countBySpan a l = M.unionsWith (+) $ [a, keysA] ++ map snd (filter fst counts)
                                                   {- ==> -}               ("numStencilSpecs", n)] )
               , ( get a "numStencilSpecs" > 0 &&  {- ==> -}
                   get keysA "tickAssign" > 0      {- ==> -} , M.singleton "tickAssignSuccess" 1 )
-              , ( nd > 0                          {- ==> -} , M.singleton (dimKeyword nd) n )
-              , ( get keysA "reflexive" > 0 &&    {- ==> -}
-                  M.size keysA == 1               {- ==> -} , M.singleton "justReflexive" n ) ]
-    keysA   = M.fromList [ (k, n) | k <- keywords, l =~ re k  ] -- try each keyword
+
+              ]
+    keysA   = M.fromList [ (k, n) | k <- ["tickAssign"], l =~ re k  ] -- try each keyword
     re k    = "[^A-Za-z]" ++ k ++ "[^A-Za-z]" -- form a regular expression from a keyword
     get m k = 0 `fromMaybe` M.lookup k m -- convenience function
     n       = numVars l -- note that this will treat an EVALMODE line as having 1 variable
-    nd      = numDims l
 
 -- Look at each group that shares a source span, then each group that shares a source span and vars.
 eachGroup :: [S.ByteString] -> Analysis
@@ -77,6 +84,8 @@ numDims s
   | otherwise  = (1 +) . S.length . S.filter (== ',') $ match
   where
     match = s =~ "\\(dims=[^\\)]*\\)"
+depth :: S.ByteString -> Maybe Int
+depth = fmap fst . S.readInt . S.concat . mrSubList . (=~ "depth=([0-9]*)")
 
 -- Extract one set of text that occurs between "%%% begin" and "%%% end",
 -- returning the remainder if present.
@@ -221,7 +230,7 @@ test2 = map S.pack [
     , "%%% end stencils-infer MOD=um FILE=\"/home/mrd45/um/trunk/src/scm/initialise/initqlcf.F90\""
   ]
 
-test2out = M.fromList [("um",M.fromList [("atLeast",1),("atMost",1),("boundedBoth",1),("dim_2",14),("dim_3",1),("forward",1),("justReflexive",7),("numStencilLines",12),("numStencilSpecs",16),("readOnce",9),("reflexive",15),("tickAssign",11),("tickAssignSuccess",6)])]
+test2out = M.fromList [("um",M.fromList [("atLeast",1),("atMost",1),("boundedBoth",1),("depth2",1),("dims2",14),("dims3",1),("forward",1),("justReflexive",7),("numStencilLines",12),("numStencilSpecs",16),("parseOk",1),("readOnce",9),("reflexive",15),("tickAssign",11),("tickAssignSuccess",6)])]
 
 runTests = do
   print $ runTest test2 == test2out
