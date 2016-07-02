@@ -157,20 +157,24 @@ perBlockCheck b@(F.BlComment ann span _) = do
     -- Comment contains a specification and an associated block
     (Just (Right (Right specDecls)), Just block) ->
      case block of
-      s@(F.BlStatement ann span _ (F.StExpressionAssign _ _ _ rhs)) -> do
-        -- Create list of relative indices
-        (_, ivs) <- get
-        -- Do inference
-        let realName v = v `fromMaybe` (v `M.lookup` ?nameMap)
-        let correctNames = map (\(names, spec) -> (map realName names, spec))
-        let inferred = correctNames . fst . runWriter $ genSpecifications ivs [s]
-        -- Model and compare the current and specified stencil specs
-        if compareInferredToDeclared inferred specDecls
-          then tell [ (span, "Correct.") ]
-          else tell [ (span, "Not well specified:\n\t\t  expecting: "
-                           ++ pprintSpecDecls specDecls
-                           ++ "\t\t  inferred:    " ++ pprintSpecDecls inferred) ]
-        return $ b'
+      s@(F.BlStatement ann span _ (F.StExpressionAssign _ _ lhs rhs)) ->
+       case isArraySubscript lhs of
+         Just subs -> do
+            -- Create list of relative indices
+            (_, ivs) <- get
+            -- Do inference
+            let realName v   = v `fromMaybe` (v `M.lookup` ?nameMap)
+            let lhsN         = maybe [] id (neighbourIndex ivs subs)
+            let correctNames = map (\(names, spec) -> (map realName names, spec))
+            let inferred = correctNames . fst . runWriter $ genSpecifications ivs lhsN [s]
+            -- Model and compare the current and specified stencil specs
+            if compareInferredToDeclared inferred specDecls
+              then tell [ (span, "Correct.") ]
+              else tell [ (span, "Not well specified:\n\t\t  expecting: "
+                              ++ pprintSpecDecls specDecls
+                              ++ "\t\t  inferred:    " ++ pprintSpecDecls inferred) ]
+            return $ b'
+         Nothing -> return $ b'
       _ -> return $ b'
 
       (F.BlDo ann span _ mDoSpec body) -> do

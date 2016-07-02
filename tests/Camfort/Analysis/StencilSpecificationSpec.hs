@@ -161,8 +161,10 @@ spec =
 
     describe ("Inconsistent induction variable usage") $ do
       it "consistent" $
-        (indicesToSpec' ["i", "j"] [[offsetToIx "i" 1, offsetToIx "j" 1],
-                                  [offsetToIx "i" 0, offsetToIx "j" 0]])
+        (indicesToSpec' ["i", "j"]
+                        [Neighbour "i" 0, Neighbour "j" 0]
+                        [[offsetToIx "i" 1, offsetToIx "j" 1],
+                         [offsetToIx "i" 0, offsetToIx "j" 0]])
          `shouldBe` (Just $ Specification $ Left $ Bound
                        (Just $ Spatial Linear []
                          (Sum [Product [Centered 0 1, Centered 0 2]]))
@@ -170,8 +172,10 @@ spec =
                          (Sum [Product [Forward 1 1, Forward 1 2]])))
 
       it "inconsistent" $
-        (indicesToSpec' ["i", "j"] [[offsetToIx "i" 1, offsetToIx "j" 1],
-                                  [offsetToIx "j" 0, offsetToIx "i" 0]])
+        (indicesToSpec' ["i", "j"]
+                        [Neighbour "i" 0, Neighbour "j" 0]
+                        [[offsetToIx "i" 1, offsetToIx "j" 1],
+                         [offsetToIx "j" 0, offsetToIx "i" 0]])
          `shouldBe` Nothing
 
     -------------------------
@@ -260,13 +264,15 @@ test2DSpecVariation (input, expectation) =
     it ("format=" ++ show input) $ do
 
        -- Test inference
-       (indicesToSpec' ["i", "j"] (map fromFormatToIx input))
+       (indicesToSpec' ["i", "j"]
+                       [Neighbour "i" 0, Neighbour "j" 0]
+                       (map fromFormatToIx input))
           `shouldBe` Just expectedSpec
   where
     expectedSpec = Specification . Left $ expectation
     fromFormatToIx [ri,rj] = [ offsetToIx "i" ri, offsetToIx "j" rj ]
 
-indicesToSpec' ivs = fst . runWriter . (indicesToSpec ivs)
+indicesToSpec' ivs lhs = fst . runWriter . (indicesToSpec ivs lhs)
 
 variations =
   [ ( [ [0,0] ]
@@ -311,7 +317,9 @@ test3DSpecVariation (input, expectation) =
     it ("format=" ++ show input) $ do
 
       -- Test inference
-      (indicesToSpec' ["i", "j", "k"] (map fromFormatToIx input))
+      (indicesToSpec' ["i", "j", "k"]
+                      [Neighbour "i" 0, Neighbour "j" 0, Neighbour "k" 0]
+                      (map fromFormatToIx input))
            `shouldBe` Just expectedSpec
 
   where
@@ -334,7 +342,7 @@ variations3D =
 
 prop_extract_synth_inverse :: F.Name -> Int -> Bool
 prop_extract_synth_inverse v o =
-     ixToOffset [v] (offsetToIx v o) == Just (v, o)
+     ixToNeighbour [v] (offsetToIx v o) == Neighbour v o
 
 -- Local variables:
 -- mode: haskell

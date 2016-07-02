@@ -43,6 +43,7 @@ import qualified Language.Fortran.Analysis.DataFlow as FAD
 import qualified Language.Fortran.Util.Position as FU
 
 import Data.Data
+import Data.Foldable
 import Data.Generics.Uniplate.Operations
 import Data.Graph.Inductive.Graph hiding (isEmpty)
 import qualified Data.Map as M
@@ -133,20 +134,22 @@ findVarFlowCycles' pf = cycs2
 {- *** 1 . Core inference over blocks -}
 
 genSpecsAndReport :: (?flowsGraph :: FAD.FlowsGraph A)
-  => InferMode -> FU.SrcSpan -> [Variable] -> [F.Block (FA.Analysis A)]
+  => InferMode -> FU.SrcSpan -> [Variable] -> [Neighbour]
+  -> [F.Block (FA.Analysis A)]
   -> Inferer ()
-genSpecsAndReport mode span ivs blocks =
- let (specs, evalInfos) = runWriter $ genSpecifications ivs blocks
- in do
-   tell [ (span, Left specs) ]
-   if mode == EvalMode
-    then do
-        tell [ (span, Right "EVALMODE: assign to relative array subscript (tag: tickAssign)") ]
-        mapM_ (\evalInfo -> tell [ (span, Right evalInfo) ]) evalInfos
-        mapM_ (\spec -> if show spec == ""
-                        then tell [ (span, Right "EVALMODE: Cannot make spec (tag: emptySpec)") ]
-                        else return ()) specs
-    else return ()
+genSpecsAndReport mode span ivs lhs blocks = do
+    let (specs, evalInfos) = runWriter $ genSpecifications ivs lhs blocks
+    tell [ (span, Left specs) ]
+    if mode == EvalMode
+     then do
+      tell [ (span, Right "EVALMODE: assign to relative array subscript\
+                           \ (tag: tickAssign)") ]
+      mapM_ (\evalInfo -> tell [ (span, Right evalInfo) ]) evalInfos
+      mapM_ (\spec -> if show spec == ""
+                      then tell [ (span, Right "EVALMODE: Cannot make spec\
+                                               \ (tag: emptySpec)") ]
+                      else return ()) specs
+     else return ()
 
 -- Match expressions which are array subscripts, returning Just of their
 -- index expressions, else Nothing
@@ -167,12 +170,13 @@ perBlockInfer mode b@(F.BlStatement _ span _ (F.StExpressionAssign _ _ lhs _))
     case isArraySubscript lhs of
        Just subs ->
         -- Left-hand side is a subscript-by relative index or by a range
-        if all (flip isReflexiveOnVars ivs) subs && not (all isConstantIndex subs)
-           then do genSpecsAndReport mode span ivs [b]
-           else if mode == EvalMode then
-                  tell [(span , Right "EVALMODE: LHS is an array subscript we \
-                                      \ can't handle (tag: LHSnotHandled)")]
-                else return ()
+        case neighbourIndex ivs subs of
+          Just lhs -> genSpecsAndReport mode span ivs lhs [b]
+          Nothing  -> if mode == EvalMode
+                      then tell [(span , Right "EVALMODE: LHS is an array \
+                                         \subscript we  can't handle \
+                                         \(tag: LHSnotHandled)")]
+                      else return ()
        -- Not an assign we are interested in
        _ -> return ()
     return b
@@ -184,7 +188,7 @@ perBlockInfer mode b@(F.BlDo _ span _ mDoSpec body) = do
     ivs <- get
 
     if (mode == DoMode || mode == CombinedMode) && isStencilDo b
-     then genSpecsAndReport mode span ivs body
+     then genSpecsAndReport mode span ivs [] body
      else return ()
 
     -- descend into the body of the do-statement
@@ -200,17 +204,17 @@ perBlockInfer mode b = do
 
 genSpecifications :: (?flowsGraph :: FAD.FlowsGraph A) =>
                      [Variable]
+                  -> [Neighbour]
                   -> [F.Block (FA.Analysis A)]
                   -> Writer EvalLog [([Variable], Specification)]
-genSpecifications ivs = do
+genSpecifications ivs lhs blocks = do
     fmap (splitUpperAndLower . groupKeyBy . (maybe [] id) . sequence . map strength)
-  . sequence . map strength . specs
+  . sequence . map strength . specs $ subscripts
     where
       specs = M.toList
-            . M.map (indicesToSpec ivs)
+            . M.map (indicesToSpec ivs lhs)
             . M.unionsWith (++)
-            . flip evalState []
-            . mapM (genSubscripts True)
+      subscripts = evalState (mapM (genSubscripts True) blocks) []
 
       strength :: Monad m => (a, m b) -> m (a, b)
       strength (a, mb) = mb >>= (\b -> return (a, b))
@@ -275,7 +279,7 @@ isStencilDo b@(F.BlDo _ span _ mDoSpec body) =
  case getInductionVar mDoSpec of
     [] -> False
     [ivar] -> length exprs > 0 &&
-               and [ all (\sub -> sub `isRelativeOnVars` [ivar]) subs' |
+               and [ all (\sub -> sub `isNeighbour` [ivar]) subs' |
                F.ExpSubscript _ _ _ subs <- exprs
                , let subs' = F.aStrip subs
                , not (null subs') ]
@@ -295,110 +299,116 @@ padZeros ixss = let m = maximum (map length ixss)
 -- Convert list of indexing expressions to a spec
 indicesToSpec :: (Data a, Eq a)
               => [Variable]
+              -> [Neighbour]
               -> [[F.Index (FA.Analysis a)]]
               -> Writer EvalLog (Maybe Specification)
-indicesToSpec ivs ixs = do
-  rixs <- toListsOfRelativeIndices ivs $ ixs
-  -- As an optimisation, do duplicate check in front-end first
-  -- so that duplicate indices don't get passed into the main engine
-  let (rixs', mult) = hasDuplicates rixs
-  return $ fmap (setLinearity (fromBool mult)) . relativeIxsToSpec ivs $ rixs'
+indicesToSpec ivs lhs ixs = do
+  -- Convert indices to neighbourhood representation
+  let rhses = map (map (ixToNeighbour ivs)) ixs
+  -- Check that induction variables are used consistently on lhs and rhses
+  if not (consistentIVSuse lhs rhses)
+    then do tell ["EVALMODE: Inconsistent IV use (tag: inconsistentIV)"]
+            return Nothing
+    else
+      -- For the EvalMode, if there are any non-neighbourhood relative
+      -- subscripts detected then add this to the eval log
+      if hasNonNeighbourhoodRelatives rhses
+      then do tell ["EVALMODE: Non-neighbour relative subscripts\
+                    \ (tag: nonNeighbour)"]
+              return Nothing
+      else do
+        let offsets  = map (fromJust . mapM neighbourToOffset) rhses
+        let offsets' = padZeros offsets
+        -- As an optimisation, do duplicate check in front-end first
+        -- so that duplicate indices don't get passed into the main engine
+        let (offsets'', mult) = hasDuplicates offsets'
+        let spec = relativeIxsToSpec ivs offsets''
+        return $ fmap (setLinearity (fromBool mult)) spec
+  where hasNonNeighbourhoodRelatives xs = or (map (any ((==) NonNeighbour)) xs)
 
-consistentIVSuse :: [[(Variable, Int)]] -> Writer EvalLog [[Int]]
-consistentIVSuse offsets = do
-  -- For the EvalMode, if there are any non-neighbourhood relative
-  -- subscripts detected then add this to the eval log
-  if hasNonNeighbourhoodRelatives offsets
-    then tell ["EVALMODE: Non-neighbour relative subscripts (tag: nonNeighbour)"]
-    else return ()
-  if consistent
-    then return $ map (map snd) offsets
-    else do tell ["EVALMODE: Inconsistent IV use (tag: inconsistentIV)"]
-            return []
+-- Check that induction variables are used consistently
+consistentIVSuse :: [Neighbour] -> [[Neighbour]] -> Bool
+consistentIVSuse lhs rhses = consistent /= Nothing
+    where cmp (Neighbour v i) (Neighbour v' _) | v == v' = Just $ Neighbour v i
+          cmp (Neighbour {} ) _                          = Nothing
+          cmp _ (Neighbour {})                           = Nothing
+          cmp _ _                                        = Just $ Constant
+          consistent = foldrM (\a b -> mapM (uncurry cmp) $ zip a b) lhs rhses
 
-    where consistent = sequence vars /= Nothing
-          vars = foldr (\a b -> map (uncurry cmp) $ zip a b)
-                       (repeat (Just ""))
-                       (map (map (Just . fst)) offsets)
-
-          hasNonNeighbourhoodRelatives :: [[(Variable, Int)]] -> Bool
-          hasNonNeighbourhoodRelatives xs =
-               or (map (any (\(v, i) -> not (null v) && i == absoluteRep)) xs)
-
-cmp (Just "") (Just v) = Just v
-cmp (Just v) (Just "") = Just v
-cmp (Just v) (Just w)  = if v == w then Just v else Nothing
-cmp _ _                = Nothing
-
--- Convert list of relative indices to a spec
+-- Convert list of relative offsets to a spec
 relativeIxsToSpec :: [Variable] -> [[Int]] -> Maybe Specification
 relativeIxsToSpec ivs ixs =
     if isEmpty exactSpec then Nothing else Just exactSpec
     where exactSpec = inferFromIndicesWithoutLinearity . fromLists $ ixs
 
-toListsOfRelativeIndices :: Data a => [Variable] -> [[F.Index (FA.Analysis a)]] -> Writer EvalLog [[Int]]
-toListsOfRelativeIndices ivs =
-    (fmap padZeros) . consistentIVSuse . ignoreNonNeighbour . map (map (ixToOffset ivs))
-    where ignoreNonNeighbour = map (map (maybe ("", 0) id))
+isNeighbour :: Data a => F.Index (FA.Analysis a) -> [Variable] -> Bool
+isNeighbour exp vs = ixToNeighbour vs exp /= Constant
+                  && ixToNeighbour vs exp /= NonNeighbour
 
--- Convert indexing expressions that are translations
--- into their translation offset:2
+-- Given a list of induction variables and a list of indices
+-- map them to a list of constant or neighbourhood indices
+-- if any are non neighbourhood then return Nothi ng
+neighbourIndex :: Data a =>
+     [Variable] -> [F.Index (FA.Analysis a)] -> Maybe [Neighbour]
+neighbourIndex ivs ixs =
+  if all ((/=) NonNeighbour) neighbours
+  then Just neighbours
+  else Nothing
+    where neighbours = map (ixToNeighbour ivs) ixs
+
+-- Representation for indices as either:
+--   * neighbour indices
+--   * constant
+--   * non neighbour index
+data Neighbour = Neighbour Variable Int | Constant | NonNeighbour deriving Eq
+
+neighbourToOffset :: Neighbour -> Maybe Int
+neighbourToOffset (Neighbour _ o) = Just o
+neighbourToOffset Constant        = Just absoluteRep
+neighbourToOffset _               = Nothing
+
+-- Given a list of induction variables and an index, compute
+-- its Neighbour representation
 -- e.g., for the expression a(i+1,j-1) then this function gets
 -- passed expr = i + 1   (returning +1) and expr = j - 1 (returning -1)
-ixToOffset :: Data a => [Variable] -> F.Index (FA.Analysis a) -> Maybe (Variable, Int)
 
+ixToNeighbour :: Data a => [Variable] -> F.Index (FA.Analysis a) -> Neighbour
 -- Range with stride = 1 and no explicit bounds count as reflexive indexing
-ixToOffset ivs (F.IxRange _ _ Nothing Nothing Nothing) = Just ("", 0)
-ixToOffset ivs (F.IxRange _ _ Nothing Nothing
-                  (Just (F.ExpValue _ _ (F.ValInteger "1")))) =
-    Just ("", 0)
+ixToNeighbour ivs (F.IxRange _ _ Nothing Nothing Nothing)        = Neighbour "" 0
+ixToNeighbour ivs (F.IxRange _ _ Nothing Nothing
+                  (Just (F.ExpValue _ _ (F.ValInteger "1")))) = Neighbour "" 0
 
-ixToOffset ivs (F.IxSingle _ _ _ exp) = expToOffset ivs exp
-ixToOffset _ _ = Nothing -- If the indexing expression is a range
+ixToNeighbour ivs (F.IxSingle _ _ _ exp)  = expToNeighbour ivs exp
+ixToNeighbour _ _ = NonNeighbour -- indexing expression is a range
 
+-- Given a list of induction variables and an expression, compute its
+-- Neighbour representation
+expToNeighbour :: forall a. Data a
+            => [Variable] -> F.Expression (FA.Analysis a) -> Neighbour
 
-isReflexiveOnVars :: Data a => F.Index (FA.Analysis a) -> [Variable] -> Bool
-isReflexiveOnVars (F.IxRange _ _ Nothing Nothing Nothing) ivs = True
-isReflexiveOnVars (F.IxRange _ _ Nothing Nothing
-                 (Just (F.ExpValue _ _ (F.ValInteger "1")))) ivs = True
-isReflexiveOnVars (F.IxSingle _ _ _ e@(F.ExpValue _ _ (F.ValVariable _))) ivs =
-    FA.varName e `elem` ivs
--- Allow constants
-isReflexiveOnVars (F.IxSingle _ _ _ e@(F.ExpValue _ _ _)) ivs = True
-isReflexiveOnVars _ _ = False
+expToNeighbour ivs e@(F.ExpValue _ _ (F.ValVariable _))
+    | FA.varName e `elem` ivs = Neighbour (FA.varName e) 0
 
-isConstantIndex :: Data a => F.Index (FA.Analysis a) -> Bool
-isConstantIndex (F.IxSingle _ _ _ e@(F.ExpValue _ _ (F.ValVariable _))) = False
-isConstantIndex (F.IxSingle _ _ _ e@(F.ExpValue _ _ _))                 = True
-isConstantIndex _                                                       = False
+expToNeighbour ivs e@(F.ExpValue {}) = Constant
 
-isRelativeOnVars :: Data a => F.Index (FA.Analysis a) -> [Variable] -> Bool
-isRelativeOnVars exp vs = ixToOffset vs exp /= Nothing
-                       && ixToOffset vs exp /= Just ("", absoluteRep)
-
-
-expToOffset :: forall a. Data a => [Variable] -> F.Expression (FA.Analysis a) -> Maybe (Variable, Int)
-expToOffset ivs e@(F.ExpValue _ _ (F.ValVariable _))
-    | FA.varName e `elem` ivs = Just (FA.varName e, 0)
-    | otherwise                 = Just ("", absoluteRep)
-
-expToOffset ivs (F.ExpBinary _ _ F.Addition
+expToNeighbour ivs (F.ExpBinary _ _ F.Addition
                  e@(F.ExpValue _ _ (F.ValVariable _))
                    (F.ExpValue _ _ (F.ValInteger offs)))
-    | FA.varName e `elem` ivs = Just $ (FA.varName e, read offs)
+    | FA.varName e `elem` ivs = Neighbour (FA.varName e) (read offs)
 
-expToOffset ivs (F.ExpBinary _ _ F.Addition
+expToNeighbour ivs (F.ExpBinary _ _ F.Addition
                   (F.ExpValue _ _ (F.ValInteger offs))
                 e@(F.ExpValue _ _ (F.ValVariable _)))
-    | FA.varName e `elem` ivs = Just $ (FA.varName e, read offs)
+    | FA.varName e `elem` ivs = Neighbour (FA.varName e) (read offs)
 
-expToOffset ivs (F.ExpBinary _ _ F.Subtraction
+expToNeighbour ivs (F.ExpBinary _ _ F.Subtraction
                  e@(F.ExpValue _ _ (F.ValVariable _))
                    (F.ExpValue _ _ (F.ValInteger offs)))
-   | FA.varName e `elem` ivs = Just $ (FA.varName e, if x < 0 then abs x else (- x))
-                     where x = read offs
+   | FA.varName e `elem` ivs =
+         Neighbour (FA.varName e) (if x < 0 then abs x else (- x))
+             where x = read offs
 
-expToOffset ivs e | isUnaryOrBinaryExpr e = Just $ (v, absoluteRep)
+{-expToNeighbour ivs e | isUnaryOrBinaryExpr e = Right v
   where
     -- Record when there is a relative index, but that is not a neighbourhood
     -- index by our definitions
@@ -406,8 +416,8 @@ expToOffset ivs e | isUnaryOrBinaryExpr e = Just $ (v, absoluteRep)
     -- set of all induction variables involved in this expression
     ivs' = [i | e@(F.ExpValue _ _ (F.ValVariable {})) <- universeBi e :: [F.Expression (FA.Analysis a)]
                 , let i = FA.varName e
-                , i `elem` ivs]
-expToOffset ivs e = Just ("", absoluteRep)
+                , i `elem` ivs] -}
+expToNeighbour ivs e = NonNeighbour
 
 --------------------------------------------------
 
