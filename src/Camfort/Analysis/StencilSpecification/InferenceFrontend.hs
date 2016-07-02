@@ -202,19 +202,24 @@ perBlockInfer mode b = do
     mapM_ (descendBiM (perBlockInfer mode)) $ children b
     return b
 
-genSpecifications :: (?flowsGraph :: FAD.FlowsGraph A) =>
-                     [Variable]
-                  -> [Neighbour]
-                  -> [F.Block (FA.Analysis A)]
-                  -> Writer EvalLog [([Variable], Specification)]
+genSpecifications :: (?flowsGraph :: FAD.FlowsGraph A)
+  => [Variable]
+  -> [Neighbour]
+  -> [F.Block (FA.Analysis A)]
+  -> Writer EvalLog [([Variable], Specification)]
 genSpecifications ivs lhs blocks = do
-    fmap (splitUpperAndLower . groupKeyBy . (maybe [] id) . sequence . map strength)
-  . sequence . map strength . specs $ subscripts
+    let subscripts = evalState (mapM (genSubscripts True) blocks) []
+    varToMaybeSpecs <- sequence . map strength . mkSpecs $ subscripts
+    let maybeVarToSpecs = sequence . map strength $ varToMaybeSpecs
+    case maybeVarToSpecs of
+      Just varToSpecs -> do
+         let varsToSpecs = groupKeyBy varToSpecs
+         return $ splitUpperAndLower varsToSpecs
+      Nothing -> do
+         tell ["EVALMODE: Empty specification (tag: emptySpec)"]
+         return []
     where
-      specs = M.toList
-            . M.map (indicesToSpec ivs lhs)
-            . M.unionsWith (++)
-      subscripts = evalState (mapM (genSubscripts True) blocks) []
+      mkSpecs = M.toList . M.map (indicesToSpec ivs lhs) . M.unionsWith (++)
 
       strength :: Monad m => (a, m b) -> m (a, b)
       strength (a, mb) = mb >>= (\b -> return (a, b))
