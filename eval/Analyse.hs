@@ -1,46 +1,75 @@
 import Text.Regex.PCRE ((=~))
+import Text.Regex.Base
 import System.Environment
 import qualified Data.ByteString.Char8 as S
-import Data.Maybe (fromMaybe)
+import Data.Maybe
 import Data.List (unfoldr, groupBy, foldl')
-import Data.Ord (comparing)
 import Data.Function (on)
 import qualified Data.Map as M
 
-keywords = [ "readOnce", "reflexive", "irreflexive", "forward", "backward", "centered"
-           , "atMost" , "atLeast", "boundedBoth", "nonNeighbour", "emptySpec"
-           , "inconsistentIV", "tickAssign", "LHSnotHandled" ]
+keywords = [ "readOnce", "reflexive", "irreflexive", "forward", "backward", "centered", "atLeast", "atMost"
+           , "nonNeighbour", "emptySpec", "inconsistentIV", "LHSnotHandled" ]
+
+dimKeyword :: Int -> String
+dimKeyword n = "dims"++show n
+depthKeyword :: Int -> String
+depthKeyword n = "depth"++show n
 
 type Analysis = M.Map String Int
 type ModAnalysis = M.Map String Analysis
 
--- Count interesting stuff in a given line, and given the group's
--- analysis to this point.
-countKeys :: Analysis -> S.ByteString -> Analysis
-countKeys a l
-  | (get a "atLeast" > 0 && get curA "atMost" > 0) ||
-    (get curA "atLeast" > 0 && get a "atMost" > 0) = M.insertWith (+) "boundedBoth" n a'
-  | otherwise                                      = a'
+-- Alongside countBySpan, also do some counts grouped by spans and variables.
+countByVars :: Analysis -> S.ByteString -> Analysis
+countByVars a l = M.unionsWith (+) $ [a, keysA] ++ map snd (filter fst counts)
   where
-    a'      = M.unionWith (+) a curA
-    curA    = M.fromList [ (k, if l =~ re k then n else 0) | k <- keywords ]
-    re k    = "[^A-Za-z]" ++ k ++ "[^A-Za-z]"
-    get a k = 0 `fromMaybe` M.lookup k a
+    counts  = [ ((get a "atLeast" > 0 && get keysA "atMost" > 0) ||
+                (get keysA "atLeast" > 0 && get a "atMost" > 0),   {- ==> -} M.singleton "boundedBoth" n)
+              , ( get keysA "reflexive" > 0 &&                     {- ==> -}
+                  M.size keysA == 1                            ,   {- ==> -} M.singleton "justReflexive" n )
+              , ( ndims > 0                                    ,   {- ==> -} M.singleton (dimKeyword ndims) n)
+              , ( isJust mdep                                  ,   {- ==> -} M.singleton (depthKeyword (fromJust mdep)) n)
+              ]
+    keysA   = M.fromList [ (k, n) | k <- keywords, l =~ re k  ] -- try each keyword
+    re k    = "[^A-Za-z]" ++ k ++ "[^A-Za-z]" -- form a regular expression from a keyword
+    get m k = 0 `fromMaybe` M.lookup k m -- convenience function
     n       = numVars l -- note that this will treat an EVALMODE line as having 1 variable
+    ndims   = numDims l
+    mdep    = depth l
+
+-- Count interesting stuff in a given line, and given the group's
+-- analysis to this point, grouped by span.
+countBySpan :: Analysis -> S.ByteString -> Analysis
+countBySpan a l = M.unionsWith (+) $ [a, keysA] ++ map snd (filter fst counts)
+  where
+    counts  = [ ( l =~ "stencil "                 {- ==> -} , M.fromList [("numStencilLines", 1),
+                                                  {- ==> -}               ("numStencilSpecs", n)] )
+              , ( get a "numStencilSpecs" > 0 &&  {- ==> -}
+                  get keysA "tickAssign" > 0      {- ==> -} , M.singleton "tickAssignSuccess" 1 )
+
+              ]
+    keysA   = M.fromList [ (k, n) | k <- ["tickAssign"], l =~ re k  ] -- try each keyword
+    re k    = "[^A-Za-z]" ++ k ++ "[^A-Za-z]" -- form a regular expression from a keyword
+    get m k = 0 `fromMaybe` M.lookup k m -- convenience function
+    n       = numVars l -- note that this will treat an EVALMODE line as having 1 variable
+
+-- Look at each group that shares a source span, then each group that shares a source span and vars.
+eachGroup :: [S.ByteString] -> Analysis
+eachGroup g = M.unionsWith (+) $ a':map (foldl' countByVars M.empty) gbv
+  where
+    a'  = foldl' countBySpan M.empty g
+    gbv = groupBy ((==) `on` vars) (filter (not . S.null . vars) g)
 
 -- Group by source span and variable in order to group multiple lines
 -- that happen to pertain to the same expression (e.g. for boundedBoth).
 analyseExec :: [S.ByteString] -> ModAnalysis
 analyseExec [] = M.empty
-analyseExec (e1:es) = M.singleton modName . M.unionsWith (+) . map eachGroup $ gs
+analyseExec (e1:es)
+  | any (=~ "Lexing failed") es = M.singleton modName $ M.fromList [("lexFailed", 1), ("lexOrParseFailed", 1)]
+  | any (=~ "Parsing failed") es = M.singleton modName $ M.fromList [("parseFailed", 1), ("lexOrParseFailed", 1)]
+  | otherwise = M.singleton modName . M.unionsWith (+) . (M.singleton "parseOk" 1:) . map eachGroup $ gs
   where
-    gs = groupBy srcSpanAndVars . filter (=~ "\\)[[:space:]]*(stencil|EVALMODE)") $ es
+    gs = groupBy ((==) `on` srcSpan) . filter (=~ "\\)[[:space:]]*(stencil|EVALMODE)") $ es
     modName = drop 4 . S.unpack . (=~ "MOD=([^ ]*)") $ e1
-
-eachGroup :: [S.ByteString] -> Analysis
-eachGroup []       = M.empty
-eachGroup g@(g0:_) = foldl' countKeys (M.singleton "numStencilSpecs" nvars) g
-  where nvars = if g0 =~ "EVALMODE" then 0 else numVars g0
 
 -- helper functions
 srcSpan :: S.ByteString -> S.ByteString
@@ -49,6 +78,14 @@ vars :: S.ByteString -> S.ByteString
 vars = (=~ ":: .*$")
 srcSpanAndVars l1 l2 = srcSpan l1 == srcSpan l2 && vars l1 == vars l2
 numVars = (1 +) . S.length . S.filter (== ',') . vars
+numDims :: S.ByteString -> Int
+numDims s
+  | S.null match = 0
+  | otherwise  = (1 +) . S.length . S.filter (== ',') $ match
+  where
+    match = s =~ "\\(dims=[^\\)]*\\)"
+depth :: S.ByteString -> Maybe Int
+depth = fmap fst . S.readInt . S.concat . mrSubList . (=~ "depth=([0-9]*)")
 
 -- Extract one set of text that occurs between "%%% begin" and "%%% end",
 -- returning the remainder if present.
@@ -76,11 +113,23 @@ main = do
   let ma = M.unionsWith (M.unionWith (+)) $ map analyseExec execs
   args <- getArgs
   case args of
-    []     -> putStrLn . prettyOutput $ ma
     "-R":_ -> print ma
+    _      -> putStrLn . prettyOutput $ ma
   return ()
 
 runTest = M.unionsWith (M.unionWith (+)) . map analyseExec . unfoldr oneExec
+
+test0 = map S.pack [
+      "%%% begin stencils-infer MOD=samples FILE=\"/home/mrd45/src/corpus/samples/weird/w1.f\""
+    , "CamFort 0.775 - Cambridge Fortran Infrastructure."
+    , "Inferring stencil specs for \"/home/mrd45/src/corpus/samples/weird/w1.f\""
+    , ""
+    , "Output of the analysis:"
+    , "((38,9),(38,32))         stencil readOnce, reflexive(dims=1) :: real"
+    , "((38,9),(38,32))         EVALMODE: Non-neighbour relative subscripts (tag: nonNeighbour)"
+    , "((42,9),(42,32))         stencil readOnce, reflexive :: x"
+    , "%%% end stencils-infer MOD=samples FILE=\"/home/mrd45/src/corpus/samples/weird/w1.f\""
+    ]
 
 test1 = map S.pack [
       "%%% begin stencils-infer MOD=samples FILE=\"/home/mrd45/src/corpus/samples/weird/w1.f\""
@@ -181,7 +230,11 @@ test2 = map S.pack [
     , "%%% end stencils-infer MOD=um FILE=\"/home/mrd45/um/trunk/src/scm/initialise/initqlcf.F90\""
   ]
 
+test2out = M.fromList [("um",M.fromList [("atLeast",1),("atMost",1),("boundedBoth",1),("depth2",1),("dims2",14),("dims3",1),("forward",1),("justReflexive",7),("numStencilLines",12),("numStencilSpecs",16),("parseOk",1),("readOnce",9),("reflexive",15),("tickAssign",11),("tickAssignSuccess",6)])]
+
+runTests = do
+  print $ runTest test2 == test2out
+
 -- Local variables:
 -- mode: haskell
--- haskell-program-name: "stack repl camfort:exe:analyse"
 -- End:
