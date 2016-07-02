@@ -166,8 +166,7 @@ perBlockInfer mode b@(F.BlStatement _ span _ (F.StExpressionAssign _ _ lhs _))
     ivs <- get
     case isArraySubscript lhs of
        Just subs ->
-        -- Left-hand side is a subscript-by relative index
-        -- or by a range
+        -- Left-hand side is a subscript-by relative index or by a range
         if all (flip isReflexiveOnVars ivs) subs && not (all isConstantIndex subs)
            then do genSpecsAndReport mode span ivs [b]
            else if mode == EvalMode then
@@ -204,26 +203,23 @@ genSpecifications :: (?flowsGraph :: FAD.FlowsGraph A) =>
                   -> [F.Block (FA.Analysis A)]
                   -> Writer EvalLog [([Variable], Specification)]
 genSpecifications ivs = do
-  fmap (splitUpperAndLower . groupKeyBy . filterMaybe) . sequenceListSnd . specs
-  where specs = M.toList
-              . M.map (indicesToSpec ivs)
-              . M.unionsWith (++)
-              . flip evalState []
-              . mapM (genSubscripts True)
+    fmap (splitUpperAndLower . groupKeyBy . (maybe [] id) . sequence . map strength)
+  . sequence . map strength . specs
+    where
+      specs = M.toList
+            . M.map (indicesToSpec ivs)
+            . M.unionsWith (++)
+            . flip evalState []
+            . mapM (genSubscripts True)
 
-        filterMaybe :: [(a, Maybe b)] -> [(a, b)]
-        filterMaybe [] = []
-        filterMaybe ((a, Nothing):xs) = filterMaybe xs
-        filterMaybe ((a, Just b):xs) = (a, b) : filterMaybe xs
+      strength :: Monad m => (a, m b) -> m (a, b)
+      strength (a, mb) = mb >>= (\b -> return (a, b))
 
-        sequenceListSnd :: Monad m => [(a, m b)] -> m [(a, b)]
-        sequenceListSnd = sequence . map (\(a, mb) -> mb >>= (\b -> return (a, b)))
-
-        splitUpperAndLower = concatMap splitUpperAndLower'
-        splitUpperAndLower' (vs, Specification (Left (Bound (Just l) (Just u))))
-          = [(vs, Specification (Left (Bound (Just l) Nothing))),
-             (vs, Specification (Left (Bound Nothing (Just u))))]
-        splitUpperAndLower' x = [x]
+      splitUpperAndLower = concatMap splitUpperAndLower'
+      splitUpperAndLower' (vs, Specification (Left (Bound (Just l) (Just u)))) =
+         [(vs, Specification (Left (Bound (Just l) Nothing))),
+          (vs, Specification (Left (Bound Nothing (Just u))))]
+      splitUpperAndLower' x = [x]
 
 -- Generate all subscripting expressions (that are translations on
 -- induction variables) that flow to this block
