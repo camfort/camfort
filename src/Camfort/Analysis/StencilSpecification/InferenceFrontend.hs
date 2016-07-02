@@ -381,7 +381,7 @@ neighbourToOffset _               = Nothing
 
 ixToNeighbour :: Data a => [Variable] -> F.Index (FA.Analysis a) -> Neighbour
 -- Range with stride = 1 and no explicit bounds count as reflexive indexing
-ixToNeighbour ivs (F.IxRange _ _ Nothing Nothing Nothing)        = Neighbour "" 0
+ixToNeighbour ivs (F.IxRange _ _ Nothing Nothing Nothing)     = Neighbour "" 0
 ixToNeighbour ivs (F.IxRange _ _ Nothing Nothing
                   (Just (F.ExpValue _ _ (F.ValInteger "1")))) = Neighbour "" 0
 
@@ -420,11 +420,6 @@ expToNeighbour ivs e = NonNeighbour
 --------------------------------------------------
 
 -- Helper predicates
-isUnaryOrBinaryExpr :: F.Expression a -> Bool
-isUnaryOrBinaryExpr (F.ExpUnary {})  = True
-isUnaryOrBinaryExpr (F.ExpBinary {}) = True
-isUnaryOrBinaryExpr _                = False
-
 isVariableExpr :: F.Expression a -> Bool
 isVariableExpr (F.ExpValue _ _ (F.ValVariable _)) = True
 isVariableExpr _                                  = False
