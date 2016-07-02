@@ -317,14 +317,21 @@ indicesToSpec ivs lhs ixs = do
                     \ (tag: nonNeighbour)"]
               return Nothing
       else do
-        let offsets  = map (fromJust . mapM neighbourToOffset) rhses
-        let offsets' = padZeros offsets
+        let offsets  = padZeros $ map (fromJust . mapM neighbourToOffset) rhses
         -- As an optimisation, do duplicate check in front-end first
         -- so that duplicate indices don't get passed into the main engine
-        let (offsets'', mult) = hasDuplicates offsets'
+        let (offsets', mult) = hasDuplicates offsets
+        let offsets'' = relativise lhs offsets'
         let spec = relativeIxsToSpec ivs offsets''
         return $ fmap (setLinearity (fromBool mult)) spec
   where hasNonNeighbourhoodRelatives xs = or (map (any ((==) NonNeighbour)) xs)
+
+-- Given a list of the neighbourhood representation for the LHS, of size n
+-- and a list of size-n lists of offsets, relativise the offsets
+relativise :: [Neighbour] -> [[Int]] -> [[Int]]
+relativise neigh = map (map (uncurry relativize') . zip neigh)
+  where relativize' (Neighbour _ i) j = j - i
+        relativize' _               j = j
 
 -- Check that induction variables are used consistently
 consistentIVSuse :: [Neighbour] -> [[Neighbour]] -> Bool
@@ -408,15 +415,6 @@ expToNeighbour ivs (F.ExpBinary _ _ F.Subtraction
          Neighbour (FA.varName e) (if x < 0 then abs x else (- x))
              where x = read offs
 
-{-expToNeighbour ivs e | isUnaryOrBinaryExpr e = Right v
-  where
-    -- Record when there is a relative index, but that is not a neighbourhood
-    -- index by our definitions
-    v = if null ivs' then "" else head ivs'
-    -- set of all induction variables involved in this expression
-    ivs' = [i | e@(F.ExpValue _ _ (F.ValVariable {})) <- universeBi e :: [F.Expression (FA.Analysis a)]
-                , let i = FA.varName e
-                , i `elem` ivs] -}
 expToNeighbour ivs e = NonNeighbour
 
 --------------------------------------------------

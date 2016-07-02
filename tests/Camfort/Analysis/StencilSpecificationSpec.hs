@@ -150,7 +150,11 @@ spec =
                                                       , Centered 1 2 ] ]))
 
     describe "2D stencil verification" $
-      mapM_ test2DSpecVariation variations
+      mapM_ (test2DSpecVariation (Neighbour "i" 0) (Neighbour "j" 0)) variations
+
+    describe "2D stencil verification relative" $
+      mapM_ (\(a, b, x, y) -> test2DSpecVariation a b (x, y)) variationsRel
+
 
     describe "3D stencil verification" $
       mapM_ test3DSpecVariation variations3D
@@ -260,12 +264,12 @@ instance (Arbitrary (Vec n a), Arbitrary a) => Arbitrary (Vec (S n) a) where
                    xs <- arbitrary
                    return $ Cons x xs
 
-test2DSpecVariation (input, expectation) =
+test2DSpecVariation a b (input, expectation) =
     it ("format=" ++ show input) $ do
 
        -- Test inference
        (indicesToSpec' ["i", "j"]
-                       [Neighbour "i" 0, Neighbour "j" 0]
+                       [a, b]
                        (map fromFormatToIx input))
           `shouldBe` Just expectedSpec
   where
@@ -307,9 +311,35 @@ variations =
     , Bound (Just (Spatial Linear [2] (Sum [Product [Forward 1 1]])))
             (Just (Spatial Linear [] (Sum [Product [Forward 1 1, Forward 4 2]])))
     )
-   -- Stencil which has non-relative indices in one dimension
-  , ( [ [0, absoluteRep], [1, absoluteRep] ]
+  ]
+
+variationsRel =
+  [   -- Stencil which has non-relative indices in one dimension
+    (Neighbour "i" 0, Constant, [ [0, absoluteRep], [1, absoluteRep] ]
     , Exact $ Spatial Linear [] (Sum [Product [Forward 1 1]])
+    )
+  , (Neighbour "i" 1, Neighbour "j" 0, [ [0,0] ]
+    , Exact $ Spatial Linear [1] (Sum [Product [ Backward 1 1, Centered 0 2 ]])
+    )
+  , (Neighbour "i" 0, Neighbour "j" 1, [ [0,1] ]
+    , Exact $ Spatial Linear [] (Sum [Product [Centered 0 1, Centered 0 2]])
+    )
+  , (Neighbour "i" 1, Neighbour "j" (-1), [ [1,0], [0,0], [0,0] ]
+    , Exact $ Spatial NonLinear [2] (Sum [Product [Forward 1 2, Backward 1 1]])
+    )
+  , (Neighbour "i" 0, Neighbour "j" (-1), [ [0,1], [0,0] ]
+    , Exact $ Spatial Linear [2] (Sum [Product [Forward 2 2, Centered 0 1]])
+    )
+  -- [0,1] [0,0] [0,-1]
+  , (Neighbour "i" 1, Neighbour "j" 0, [ [1,1], [1,0], [1,-1] ]
+    , Exact $ Spatial Linear [] (Sum [Product [Centered 0 1, Centered 1 2]])
+    )
+  , (Neighbour "i" 1, Neighbour "j" 0, [ [-2,0], [-1,0] ]
+    , Bound (Just (Spatial Linear [1] (Sum [Product [Centered 0 2]])))
+            (Just (Spatial Linear [] (Sum [Product [Backward 3 1, Centered 0 2]]))))
+
+  , (Constant, Neighbour "j" 0, [ [absoluteRep,1], [absoluteRep,0], [absoluteRep,-1] ]
+    , Exact $ Spatial Linear [] (Sum [Product [Centered 1 2]])
     )
   ]
 
@@ -335,8 +365,8 @@ variations3D =
   , ( [ [1,1,0], [0,1,0] ]
     ,  Exact $ Spatial Linear [2] (Sum [Product [Forward 1 1, Forward 1 2, Centered 0 3]])
     )
-  , ( [ [-1,absoluteRep,-1], [0,absoluteRep,-1], [-1,absoluteRep,0], [0,absoluteRep,0] ]
-    ,  Exact $ Spatial Linear [] (Sum [Product [Backward 1 1, Backward 1 3]])
+  , ( [ [-1,0,-1], [0,0,-1], [-1,0,0], [0,0,0] ]
+    ,  Exact $ Spatial Linear [] (Sum [Product [Backward 1 1, Backward 1 3, Centered 0 2]])
     )
   ]
 

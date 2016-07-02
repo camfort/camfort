@@ -68,6 +68,8 @@ ixExprToSubscript v es =
 -- essentially inverse to `ixToOffset` in StencilSpecification
 offsetToIx :: F.Name -> Int -> F.Index (FA.Analysis A)
 offsetToIx v o
+  | o == absoluteRep
+              = F.IxSingle a s Nothing (F.ExpValue a s (F.ValInteger "0"))
   | o == 0    = F.IxSingle a s Nothing (F.ExpValue a s (F.ValVariable v))
   | o  > 0    = F.IxSingle a s Nothing (F.ExpBinary a s F.Addition
                                  (F.ExpValue a s (F.ValVariable v))
