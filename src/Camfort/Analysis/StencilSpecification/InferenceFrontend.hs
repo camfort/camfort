@@ -328,6 +328,13 @@ indicesToSpec ivs lhs ixs = do
               return Nothing
       else do
         let offsets  = padZeros $ map (fromJust . mapM neighbourToOffset) rhses
+
+        -- Relativize the offsets based on the lhs
+        let offsets' = relativise lhs offsets
+        if offsets /= offsets'
+          then   tell ["EVALMODE: Relativized spec (tag: relativized)"]
+          else return()
+
         let spec = relativeIxsToSpec ivs offsets'
         return $ fmap (setLinearity (fromBool mult)) spec
   where hasNonNeighbourhoodRelatives xs = or (map (any ((==) NonNeighbour)) xs)
