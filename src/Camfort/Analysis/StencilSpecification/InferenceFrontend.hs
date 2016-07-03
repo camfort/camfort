@@ -328,6 +328,9 @@ indicesToSpec ivs lhs ixs = do
               return Nothing
       else do
         let offsets  = padZeros $ map (fromJust . mapM neighbourToOffset) rhses
+        tell ["EVALMODE: dimensionality=" ++ show (case offsets of
+                                                    [] -> 0
+                                                    _  -> length (head offsets))]
 
         -- Relativize the offsets based on the lhs
         let offsets' = relativise lhs offsets
