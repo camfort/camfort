@@ -315,7 +315,7 @@ variations =
 
 variationsRel =
   [   -- Stencil which has non-relative indices in one dimension
-    (Neighbour "i" 0, Constant, [ [0, absoluteRep], [1, absoluteRep] ]
+    (Neighbour "i" 0, Constant (F.ValInteger "0"), [ [0, absoluteRep], [1, absoluteRep] ]
     , Exact $ Spatial Linear [] (Sum [Product [Forward 1 1]])
     )
   , (Neighbour "i" 1, Neighbour "j" 0, [ [0,0] ]
@@ -338,7 +338,7 @@ variationsRel =
     , Bound (Just (Spatial Linear [1] (Sum [Product [Centered 0 2]])))
             (Just (Spatial Linear [] (Sum [Product [Backward 3 1, Centered 0 2]]))))
 
-  , (Constant, Neighbour "j" 0, [ [absoluteRep,1], [absoluteRep,0], [absoluteRep,-1] ]
+  , (Constant (F.ValInteger "0"), Neighbour "j" 0, [ [absoluteRep,1], [absoluteRep,0], [absoluteRep,-1] ]
     , Exact $ Spatial Linear [] (Sum [Product [Centered 1 2]])
     )
   ]
