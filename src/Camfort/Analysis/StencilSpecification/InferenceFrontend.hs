@@ -174,7 +174,7 @@ perBlockInfer mode b@(F.BlStatement _ span _ (F.StExpressionAssign _ _ lhs _))
           Just lhs -> genSpecsAndReport mode span ivs lhs [b]
           Nothing  -> if mode == EvalMode
                       then tell [(span , Right "EVALMODE: LHS is an array \
-                                         \subscript we  can't handle \
+                                         \subscript we can't handle \
                                          \(tag: LHSnotHandled)")]
                       else return ()
        -- Not an assign we are interested in
@@ -210,14 +210,14 @@ genSpecifications :: (?flowsGraph :: FAD.FlowsGraph A)
 genSpecifications ivs lhs blocks = do
     let subscripts = evalState (mapM (genSubscripts True) blocks) []
     varToMaybeSpecs <- sequence . map strength . mkSpecs $ subscripts
-    let maybeVarToSpecs = sequence . map strength $ varToMaybeSpecs
-    case maybeVarToSpecs of
-      Just varToSpecs -> do
-         let varsToSpecs = groupKeyBy varToSpecs
-         return $ splitUpperAndLower varsToSpecs
-      Nothing -> do
+    let varToSpecs = catMaybes . map strength $ varToMaybeSpecs
+    case varToSpecs of
+      [] -> do
          tell ["EVALMODE: Empty specification (tag: emptySpec)"]
          return []
+      _ -> do
+         let varsToSpecs = groupKeyBy varToSpecs
+         return $ splitUpperAndLower varsToSpecs
     where
       mkSpecs = M.toList . M.map (indicesToSpec ivs lhs) . M.unionsWith (++)
 
@@ -308,10 +308,14 @@ indicesToSpec :: (Data a, Eq a)
               -> [[F.Index (FA.Analysis a)]]
               -> Writer EvalLog (Maybe Specification)
 indicesToSpec ivs lhs ixs = do
-  -- Convert indices to neighbourhood representation
+   -- Convert indices to neighbourhood representation
   let rhses = map (map (ixToNeighbour ivs)) ixs
+  -- As an optimisation, do duplicate check in front-end first
+  -- so that duplicate indices don't get passed into the main engine
+  let (rhses', mult) = hasDuplicates rhses
+
   -- Check that induction variables are used consistently on lhs and rhses
-  if not (consistentIVSuse lhs rhses)
+  if not (consistentIVSuse lhs rhses')
     then do tell ["EVALMODE: Inconsistent IV use (tag: inconsistentIV)"]
             return Nothing
     else
@@ -323,11 +327,8 @@ indicesToSpec ivs lhs ixs = do
               return Nothing
       else do
         let offsets  = padZeros $ map (fromJust . mapM neighbourToOffset) rhses
-        -- As an optimisation, do duplicate check in front-end first
-        -- so that duplicate indices don't get passed into the main engine
-        let (offsets', mult) = hasDuplicates offsets
-        let offsets'' = relativise lhs offsets'
-        let spec = relativeIxsToSpec ivs offsets''
+        let offsets' = relativise lhs offsets
+        let spec = relativeIxsToSpec ivs offsets'
         return $ fmap (setLinearity (fromBool mult)) spec
   where hasNonNeighbourhoodRelatives xs = or (map (any ((==) NonNeighbour)) xs)
 
