@@ -7,8 +7,8 @@ import Data.List (unfoldr, groupBy, foldl')
 import Data.Function (on)
 import qualified Data.Map as M
 
-keywords = [ "readOnce", "reflexive", "irreflexive", "forward", "backward", "centered", "atLeast", "atMost"
-           , "nonNeighbour", "emptySpec", "inconsistentIV", "LHSnotHandled" ]
+varKeywords = [ "readOnce", "reflexive", "irreflexive", "forward", "backward", "centered", "atLeast", "atMost" ]
+spanKeywords = [ "tickAssign", "LHSnotHandled", "nonNeighbour", "emptySpec", "inconsistentIV" ]
 
 dimKeyword :: Int -> String
 dimKeyword n = "dims"++show n
@@ -29,7 +29,7 @@ countByVars a l = M.unionsWith (+) $ [a, keysA] ++ map snd (filter fst counts)
               , ( ndims > 0                                    ,   {- ==> -} M.singleton (dimKeyword ndims) n)
               , ( isJust mdep                                  ,   {- ==> -} M.singleton (depthKeyword (fromJust mdep)) n)
               ]
-    keysA   = M.fromList [ (k, n) | k <- keywords, l =~ re k  ] -- try each keyword
+    keysA   = M.fromList [ (k, n) | k <- varKeywords, l =~ re k  ] -- try each keyword
     re k    = "[^A-Za-z]" ++ k ++ "[^A-Za-z]" -- form a regular expression from a keyword
     get m k = 0 `fromMaybe` M.lookup k m -- convenience function
     n       = numVars l -- note that this will treat an EVALMODE line as having 1 variable
@@ -47,7 +47,7 @@ countBySpan a l = M.unionsWith (+) $ [a, keysA] ++ map snd (filter fst counts)
                   get keysA "tickAssign" > 0      {- ==> -} , M.singleton "tickAssignSuccess" 1 )
 
               ]
-    keysA   = M.fromList [ (k, n) | k <- ["tickAssign"], l =~ re k  ] -- try each keyword
+    keysA   = M.fromList [ (k, n) | k <- spanKeywords, l =~ re k  ] -- try each keyword
     re k    = "[^A-Za-z]" ++ k ++ "[^A-Za-z]" -- form a regular expression from a keyword
     get m k = 0 `fromMaybe` M.lookup k m -- convenience function
     n       = numVars l -- note that this will treat an EVALMODE line as having 1 variable
@@ -182,6 +182,7 @@ test1 = map S.pack [
     , "((136,3),(136,37))       EVALMODE: assign to relative array subscript (tag: tickAssign)"
     , "((137,3),(138,59))       stencil readOnce, reflexive(dims=1) :: grid_point_end, grid_point_start"
     , "((137,3),(138,59))       EVALMODE: assign to relative array subscript (tag: tickAssign)"
+    , "((147,7),(147,78))       EVALMODE: LHS is an array subscript we  can't handle (tag: LHSnotHandled)"
     , ""
     , "1.33user 0.04system 0:02.08elapsed 66%CPU (0avgtext+0avgdata 75672maxresident)k"
     , "0inputs+0outputs (0major+15984minor)pagefaults 0swaps"
