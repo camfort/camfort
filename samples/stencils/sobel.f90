@@ -15,7 +15,7 @@ do j=1, jmax-1
         & - a(i+1,j-1)              &
         & + a(i-1,j+1) + 2*a(i,j+1) + a(i+1,j+1)
 
-    b(i,j) = sqrt(gx*gx+gy*gy)
+     b(i,j) = sqrt(gx*gx+gy*gy)
    enddo
 enddo
 

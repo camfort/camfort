@@ -410,8 +410,9 @@ ixToNeighbour _ _ = NonNeighbour -- indexing expression is a range
 expToNeighbour :: forall a. Data a
             => [Variable] -> F.Expression (FA.Analysis a) -> Neighbour
 
-expToNeighbour ivs e@(F.ExpValue _ _ (F.ValVariable _))
+expToNeighbour ivs e@(F.ExpValue _ _ v@(F.ValVariable _))
     | FA.varName e `elem` ivs = Neighbour (FA.varName e) 0
+    | otherwise               = Constant (fmap (const ()) v)
 
 expToNeighbour ivs (F.ExpValue _ _ val) = Constant (fmap (const ()) val)
 
