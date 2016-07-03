@@ -178,6 +178,7 @@ executable analyse
   main-is: Analyse.hs
   hs-source-dirs:       eval
   build-depends: base < 5,
+                 array >= 0.5.1,
                  bytestring >= 0.10,
                  containers >= 0.5.0.0,
                  regex-base >= 0.93.2,
