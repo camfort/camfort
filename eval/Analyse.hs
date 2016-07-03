@@ -8,7 +8,7 @@ import Data.Function (on)
 import qualified Data.Map as M
 
 varKeywords = [ "readOnce", "reflexive", "irreflexive", "forward", "backward", "centered", "atLeast", "atMost" ]
-spanKeywords = [ "tickAssign", "LHSnotHandled", "nonNeighbour", "emptySpec", "inconsistentIV" ]
+spanKeywords = [ "tickAssign", "LHSnotHandled", "nonNeighbour", "emptySpec", "inconsistentIV", "relativized" ]
 
 dimName :: Int -> String
 dimName n = "dims"++show n

@@ -174,7 +174,7 @@ perBlockInfer mode b@(F.BlStatement _ span _ (F.StExpressionAssign _ _ lhs _))
           Just lhs -> genSpecsAndReport mode span ivs lhs [b]
           Nothing  -> if mode == EvalMode
                       then tell [(span , Right "EVALMODE: LHS is an array \
-                                         \subscript we  can't handle \
+                                         \subscript we can't handle \
                                          \(tag: LHSnotHandled)")]
                       else return ()
        -- Not an assign we are interested in
@@ -210,14 +210,14 @@ genSpecifications :: (?flowsGraph :: FAD.FlowsGraph A)
 genSpecifications ivs lhs blocks = do
     let subscripts = evalState (mapM (genSubscripts True) blocks) []
     varToMaybeSpecs <- sequence . map strength . mkSpecs $ subscripts
-    let maybeVarToSpecs = sequence . map strength $ varToMaybeSpecs
-    case maybeVarToSpecs of
-      Just varToSpecs -> do
-         let varsToSpecs = groupKeyBy varToSpecs
-         return $ splitUpperAndLower varsToSpecs
-      Nothing -> do
+    let varToSpecs = catMaybes . map strength $ varToMaybeSpecs
+    case varToSpecs of
+      [] -> do
          tell ["EVALMODE: Empty specification (tag: emptySpec)"]
          return []
+      _ -> do
+         let varsToSpecs = groupKeyBy varToSpecs
+         return $ splitUpperAndLower varsToSpecs
     where
       mkSpecs = M.toList . M.map (indicesToSpec ivs lhs) . M.unionsWith (++)
 
@@ -308,10 +308,15 @@ indicesToSpec :: (Data a, Eq a)
               -> [[F.Index (FA.Analysis a)]]
               -> Writer EvalLog (Maybe Specification)
 indicesToSpec ivs lhs ixs = do
-  -- Convert indices to neighbourhood representation
+   -- Convert indices to neighbourhood representation
   let rhses = map (map (ixToNeighbour ivs)) ixs
+
+  -- As an optimisation, do duplicate check in front-end first
+  -- so that duplicate indices don't get passed into the main engine
+  let (rhses', mult) = hasDuplicates rhses
+
   -- Check that induction variables are used consistently on lhs and rhses
-  if not (consistentIVSuse lhs rhses)
+  if not (consistentIVSuse lhs rhses')
     then do tell ["EVALMODE: Inconsistent IV use (tag: inconsistentIV)"]
             return Nothing
     else
@@ -323,11 +328,14 @@ indicesToSpec ivs lhs ixs = do
               return Nothing
       else do
         let offsets  = padZeros $ map (fromJust . mapM neighbourToOffset) rhses
-        -- As an optimisation, do duplicate check in front-end first
-        -- so that duplicate indices don't get passed into the main engine
-        let (offsets', mult) = hasDuplicates offsets
-        let offsets'' = relativise lhs offsets'
-        let spec = relativeIxsToSpec ivs offsets''
+
+        -- Relativize the offsets based on the lhs
+        let offsets' = relativise lhs offsets
+        if offsets /= offsets'
+          then   tell ["EVALMODE: Relativized spec (tag: relativized)"]
+          else return()
+
+        let spec = relativeIxsToSpec ivs offsets'
         return $ fmap (setLinearity (fromBool mult)) spec
   where hasNonNeighbourhoodRelatives xs = or (map (any ((==) NonNeighbour)) xs)
 
@@ -342,9 +350,9 @@ relativise neigh = map (map (uncurry relativize') . zip neigh)
 consistentIVSuse :: [Neighbour] -> [[Neighbour]] -> Bool
 consistentIVSuse lhs rhses = consistent /= Nothing
     where cmp (Neighbour v i) (Neighbour v' _) | v == v' = Just $ Neighbour v i
-          cmp (Neighbour {} ) _                          = Nothing
-          cmp _ (Neighbour {})                           = Nothing
-          cmp _ _                                        = Just $ Constant
+          cmp (Neighbour {} ) _              = Nothing
+          cmp _ (Neighbour {})               = Nothing
+          cmp _ _                            = Just $ Constant (F.ValInteger "")
           consistent = foldrM (\a b -> mapM (uncurry cmp) $ zip a b) lhs rhses
 
 -- Convert list of relative offsets to a spec
@@ -354,8 +362,10 @@ relativeIxsToSpec ivs ixs =
     where exactSpec = inferFromIndicesWithoutLinearity . fromLists $ ixs
 
 isNeighbour :: Data a => F.Index (FA.Analysis a) -> [Variable] -> Bool
-isNeighbour exp vs = ixToNeighbour vs exp /= Constant
-                  && ixToNeighbour vs exp /= NonNeighbour
+isNeighbour exp vs =
+    case (ixToNeighbour vs exp) of
+        Neighbour _ _ -> True
+        _             -> False
 
 -- Given a list of induction variables and a list of indices
 -- map them to a list of constant or neighbourhood indices
@@ -372,11 +382,13 @@ neighbourIndex ivs ixs =
 --   * neighbour indices
 --   * constant
 --   * non neighbour index
-data Neighbour = Neighbour Variable Int | Constant | NonNeighbour deriving Eq
+data Neighbour = Neighbour Variable Int
+               | Constant (F.Value ())
+               | NonNeighbour deriving Eq
 
 neighbourToOffset :: Neighbour -> Maybe Int
 neighbourToOffset (Neighbour _ o) = Just o
-neighbourToOffset Constant        = Just absoluteRep
+neighbourToOffset (Constant _)    = Just absoluteRep
 neighbourToOffset _               = Nothing
 
 -- Given a list of induction variables and an index, compute
@@ -401,7 +413,7 @@ expToNeighbour :: forall a. Data a
 expToNeighbour ivs e@(F.ExpValue _ _ (F.ValVariable _))
     | FA.varName e `elem` ivs = Neighbour (FA.varName e) 0
 
-expToNeighbour ivs e@(F.ExpValue {}) = Constant
+expToNeighbour ivs (F.ExpValue _ _ val) = Constant (fmap (const ()) val)
 
 expToNeighbour ivs (F.ExpBinary _ _ F.Addition
                  e@(F.ExpValue _ _ (F.ValVariable _))
