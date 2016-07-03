@@ -3,8 +3,9 @@ import Text.Regex.Base
 import System.Environment
 import qualified Data.ByteString.Char8 as S
 import Data.Maybe
-import Data.List (unfoldr, groupBy, foldl')
+import Data.List (unfoldr, groupBy, foldl', nub)
 import Data.Function (on)
+import Data.Array
 import qualified Data.Map as M
 
 varKeywords = [ "readOnce", "reflexive", "irreflexive", "forward", "backward", "centered", "atLeast", "atMost" ]
@@ -16,8 +17,12 @@ depthName :: Int -> String
 depthName n = "depth"++show n
 regionOpsName :: Int -> String
 regionOpsName n = "regionOps"++ show n
+plusOpsName :: Int -> String
 plusOpsName n = "plusOps" ++ show n
+mulOpsName :: Int -> String
 mulOpsName n = "mulOps" ++ show n
+dimDistName :: Int -> String
+dimDistName n = "dimDist" ++ show n
 
 type Analysis = M.Map String Int
 type ModAnalysis = M.Map String Analysis
@@ -35,6 +40,7 @@ countByVars a l = M.unionsWith (+) $ [a, keysA] ++ map snd (filter fst counts)
               , ( regOps >= 0                                  ,   {- ==> -} M.singleton (regionOpsName regOps) n)
               , ( plusOps >= 0                                 ,   {- ==> -} M.singleton (plusOpsName plusOps) n)
               , ( mulOps >= 0                                  ,   {- ==> -} M.singleton (mulOpsName mulOps) n)
+              , ( dimDist > 0                                  ,   {- ==> -} M.singleton (dimDistName dimDist) n)
               ]
     keysA   = M.fromList [ (k, n) | k <- varKeywords, l =~ re k  ] -- try each keyword
     re k    = "[^A-Za-z]" ++ k ++ "[^A-Za-z]" -- form a regular expression from a keyword
@@ -45,6 +51,7 @@ countByVars a l = M.unionsWith (+) $ [a, keysA] ++ map snd (filter fst counts)
     regOps  = countRegionOps l
     plusOps = countPlusOps l
     mulOps  = countMulOps l
+    dimDist = countDimDist l
 
 -- Count interesting stuff in a given line, and given the group's
 -- analysis to this point, grouped by span.
@@ -102,6 +109,14 @@ countMulOps :: S.ByteString -> Int
 countMulOps = S.length . S.filter (`elem` "*")
 countPlusOps :: S.ByteString -> Int
 countPlusOps = S.length . S.filter (`elem` "+")
+countDimDist :: S.ByteString -> Int
+countDimDist l = length . nub . filter (>0) $ (dimList ++ dimsList)
+  where
+    matchToInt = fromMaybe 0 . fmap fst . S.readInt
+    -- search for "dim=n"
+    dimList    = map (matchToInt . (! 1)) (getAllTextMatches (l =~ "dim=([0-9]*)" :: AllTextMatches [] (Array Int S.ByteString)))
+    -- search for "(dims=n,n,...)"
+    dimsList   = map matchToInt . concatMap (S.split ',') . mrSubList $ l =~ "\\(dims=([^\\)]*)\\)"
 
 -- Extract one set of text that occurs between "%%% begin" and "%%% end",
 -- returning the remainder if present.
@@ -198,7 +213,7 @@ test1 = map S.pack [
     , "((136,3),(136,37))       EVALMODE: assign to relative array subscript (tag: tickAssign)"
     , "((137,3),(138,59))       stencil readOnce, reflexive(dims=1) :: grid_point_end, grid_point_start"
     , "((137,3),(138,59))       EVALMODE: assign to relative array subscript (tag: tickAssign)"
-    , "((139,24),(141,48))      stencil readOnce, (reflexive(dim=1))*(centered(depth=1, dim=2)) + (reflexive(dim=2))*(centered(depth=1, dim=1)) :: p"
+    , "((139,24),(141,48))      stencil readOnce, irreflexive(dims=1,2,3), (reflexive(dim=1))*(centered(depth=1, dim=2)) + (reflexive(dim=2))*(centered(depth=1, dim=1)) :: p"
     , "((139,24),(141,48))      stencil readOnce, (reflexive(dim=1))*(reflexive(dim=2)) :: rhs"
     , "((147,7),(147,78))       EVALMODE: LHS is an array subscript we  can't handle (tag: LHSnotHandled)"
     , ""
