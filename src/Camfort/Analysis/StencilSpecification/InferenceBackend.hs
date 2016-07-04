@@ -31,11 +31,13 @@ import Data.Generics.Uniplate.Operations
 import Data.List hiding (sum)
 import Data.Data
 import Control.Arrow ((***))
-import Camfort.Analysis.StencilSpecification.Model
+import Data.Function
 
+import Camfort.Analysis.StencilSpecification.Model
 import Camfort.Helpers
 import Camfort.Helpers.Vec
 
+import Debug.Trace
 import Unsafe.Coerce
 
 import Camfort.Analysis.StencilSpecification.Syntax
@@ -62,7 +64,29 @@ inferFromIndicesWithoutLinearity (VL ixs) =
         infer :: (IsNatural n, Permutable n) => [Vec n Int] -> Result Spatial
         infer = simplify . fromRegionsToSpec . inferMinimalVectorRegions
 
-simplify = id
+simplify :: Result Spatial -> Result Spatial
+simplify = fmap simplifySpatial
+
+simplifySpatial :: Spatial -> Spatial
+simplifySpatial (Spatial lin (Sum ps)) = Spatial lin (Sum ps')
+   where ps' = order (reducor ps normaliseNoSort size)
+         order = sort . (map (Product . sort . unProd))
+         size :: [RegionProd] -> Int
+         size = foldr (+) 0 . map (length . unProd)
+
+-- Given a list, a list->list transofmer, a size function
+-- find the minimal transformed list by applying the transformer
+-- to every permutation of the list and when a smaller list is found
+-- iteratively apply to permutations on the smaller list
+reducor :: [a] -> ([a] -> [a]) -> ([a] -> Int) -> [a]
+reducor xs f size = reducor' (permutations xs)
+    where
+      reducor' [y] = f y
+      reducor' (y:ys) =
+          if (size y' < size y)
+            then reducor' (permutations y')
+            else reducor' ys
+        where y' = f y
 
 fromRegionsToSpec :: IsNatural n => [Span (Vec n Int)] -> Result Spatial
 fromRegionsToSpec sps = foldr (\x y -> sum (toSpecND x) y) zero sps
