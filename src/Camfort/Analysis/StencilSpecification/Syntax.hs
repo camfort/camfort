@@ -299,12 +299,12 @@ distAndOverlaps' (Centered d dim refl : rs) (Centered d' dim' refl' : rs')
 -- C+F
 distAndOverlaps' (Forward d dim refl : rs) (Centered d' dim' refl' : rs')
   | rs == rs' && dim == dim' && d <= d' && d' /= 0
-      = Just (Forward d' dim (refl || refl') : rs)
+      = Just (Centered d' dim (refl || refl') : rs)
 
 -- C+B
 distAndOverlaps' (Backward d dim refl : rs) (Centered d' dim' refl' : rs')
   | rs == rs' && dim == dim' && d <= d' && d' /= 0
-      = Just (Forward d' dim (refl || refl') : rs)
+      = Just (Centered d' dim (refl || refl') : rs)
 
 -- F+B
 distAndOverlaps' (Forward d dim reflx : rs) (Backward d' dim' reflx' : rs')
