@@ -69,33 +69,33 @@ pp x y =
 variations :: [([[Int]], Syn.Result Spatial)]
 variations =
   [ ([ [1], [0] ],
-    Exact $ Spatial NonLinear [] (Sum [Product [Forward 1 1]]))
+    Exact $ Spatial NonLinear (Sum [Product [Forward 1 1 True]]))
 
   , ([ [absoluteRep,1], [absoluteRep,0] ],
-    Exact $ Spatial NonLinear [] (Sum [Product [Forward 1 2]]))
+    Exact $ Spatial NonLinear (Sum [Product [Forward 1 2 True]]))
 
   , ([ [1,1], [0,1], [1,0], [0,0] ],
-    Exact $ Spatial NonLinear [] (Sum [Product [Forward 1 1, Forward 1 2]]))
+    Exact $ Spatial NonLinear (Sum [Product [Forward 1 1 True, Forward 1 2 True]]))
 
   , ([ [-1, 1], [0, 1] ],
-    Exact $ Spatial NonLinear [2] (Sum [Product [Backward 1 1, Forward 1 2]]))
+    Exact $ Spatial NonLinear (Sum [Product [Backward 1 1 True, Forward 1 2 False]]))
 
   , ([ [-1], [0] ],
-    Exact $ Spatial NonLinear [] (Sum [Product [Backward 1 1]]))
+    Exact $ Spatial NonLinear (Sum [Product [Backward 1 1 True]]))
 
   , ([ [absoluteRep,-1], [absoluteRep,0] ],
-    Exact $ Spatial NonLinear [] (Sum [Product [Backward 1 2]]))
+    Exact $ Spatial NonLinear (Sum [Product [Backward 1 2 True]]))
 
   , ([ [-1,-1], [0,-1], [-1,0], [0,0] ],
-    Exact $ Spatial NonLinear [] (Sum [Product [Backward 1 1, Backward 1 2]]))
+    Exact $ Spatial NonLinear (Sum [Product [Backward 1 1 True, Backward 1 2 True]]))
 
   , ( [ [0,-1], [1,-1], [0,0], [1,0], [1,1], [0,1], [2,-1], [2,0], [2,1] ],
-    Exact $ Spatial NonLinear []
-              (Sum [Product [ Forward 2 1, Centered 1 2 ] ] ))
+    Exact $ Spatial NonLinear
+              (Sum [Product [ Forward 2 1 True, Centered 1 2 True ] ] ))
 
   , ( [ [-1,0], [-1,1], [0,0], [0,1], [1,1], [1,0], [-1,2], [0,2], [1,2] ],
-    Exact $ Spatial NonLinear []
-              (Sum [Product [ Forward 2 2, Centered 1 1 ] ] ))
+    Exact $ Spatial NonLinear
+              (Sum [Product [ Forward 2 2 True, Centered 1 1 True ] ] ))
  ]
 
 variations2 :: [(Syn.Result [[Int]], Int, Syn.Result Spatial)]
@@ -103,13 +103,13 @@ variations2 =
   [
   -- Stencil which has some absolute component (not represented in the spec)
     (Exact [ [0, absoluteRep], [1, absoluteRep] ], 2,
-    Exact $ Spatial NonLinear [] (Sum [Product [Forward 1 1]]))
+    Exact $ Spatial NonLinear (Sum [Product [Forward 1 1 True]]))
 
  -- Spec on bounds
  ,  (Bound Nothing (Just $ [ [0, absoluteRep], [1, absoluteRep],
                              [2, absoluteRep] ]), 2,
      Bound Nothing
-           (Just $ Spatial NonLinear [] (Sum [Product [Forward 2 1]])))
+           (Just $ Spatial NonLinear (Sum [Product [Forward 2 1 True]])))
  ]
 
 variations3 :: [(Syn.Result [[Int]], Int, Syn.Result Spatial)]
@@ -121,7 +121,7 @@ variations3 =
                              [0, absoluteRep, 1], [1, absoluteRep, 1],
                              [2, absoluteRep, 1]]), 3,
      Bound Nothing
-           (Just $ Spatial NonLinear [] (Sum [Product [Forward 1 3, Forward 2 1]])))
+           (Just $ Spatial NonLinear (Sum [Product [Forward 1 3 True, Forward 2 1 True]])))
   ]
 
 modelHasLeftInverse = mapM_ check (zip variations [0..])

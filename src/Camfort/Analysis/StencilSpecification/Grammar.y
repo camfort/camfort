@@ -56,14 +56,18 @@ REGIONDEC :: { (String, Region) }
 : region id '=' REGION { ($2, $4) }
 
 REGION ::                            { Region }
-: forward  '(' depth '=' num dim '=' num ')' { Forward  (read $5) (read $8) }
-| backward '(' depth '=' num dim '=' num ')' { Backward (read $5) (read $8) }
-| centered '(' depth '=' num dim '=' num ')' { Centered (read $5) (read $8) }
-| reflexive '(' dim '=' num ')'              { Centered 0 (read $5) }
+: forward  '(' depth '=' num dim '=' num REFL ')' { Forward  (read $5) (read $8) $9}
+| backward '(' depth '=' num dim '=' num REFL ')' { Backward (read $5) (read $8) $9}
+| centered '(' depth '=' num dim '=' num REFL ')' { Centered (read $5) (read $8) $9}
+| reflexive '(' dim '=' num ')'                   { Centered 0 (read $5) True }
 | REGION '+' REGION                  { Or $1 $3 }
 | REGION '*' REGION                  { And $1 $3 }
 | '(' REGION ')'                     { $2 }
 | id                                 { Var $1 }
+
+REFL :: { Bool }
+ : irreflexive  { False }
+ | {- empty -}  { True  }
 
 SPECDEC :: { Spec }
 : dependency '(' VARS ')'        { Temporal $3 False }
@@ -79,7 +83,6 @@ MODS :: { [Mod] }
 
 MOD :: { Mod }
 : readOnce                          { ReadOnce }
-| irreflexive '(' dims '=' DIMS ')' { Irreflexive $5 }
 
 -- Even though multiple approx mods is not allowed
 -- allow them to be parsed so that the validator can
@@ -108,9 +111,9 @@ data Specification
   deriving (Show, Eq, Ord, Typeable, Data)
 
 data Region
-  = Forward Int Int
-  | Backward Int Int
-  | Centered Int Int
+  = Forward Int Int Bool
+  | Backward Int Int Bool
+  | Centered Int Int Bool
   | Or Region Region
   | And Region Region
   | Var String
@@ -124,7 +127,6 @@ data Spec
 data Mod
   = AtLeast
   | AtMost
-  | Irreflexive [Int]
   | ReadOnce
   deriving (Show, Eq, Ord, Typeable, Data)
 
@@ -211,9 +213,6 @@ modValidate (SpecDec (Spatial mods r) vars) =
      return $ SpecDec (Spatial mods' r) vars
 
   where    modValidate' [] = return $ []
-
-           modValidate' (Irreflexive ds : Irreflexive ds' : xs)
-             = failWith "Duplicate 'irreflexive' modifier; use at most one."
 
            modValidate' (AtLeast : AtLeast : xs)
              = failWith "Duplicate 'atLeast' modifier; use at most one."

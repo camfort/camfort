@@ -112,7 +112,6 @@ data Temporal = Dependency [String] Bool
 --    i.e., (A * B) U (C * D)...
 data Spatial =
    Spatial { modLinearity    :: Linearity,
-             modIrreflexives :: [Dimension],
              region          :: RegionSum }
   deriving (Eq, Data, Typeable)
 
@@ -148,37 +147,38 @@ data Linearity = Linear | NonLinear deriving (Eq, Data, Typeable)
 
 type Dimension  = Int -- spatial dimensions are 1 indexed
 type Depth      = Int
+type IsRefl     = Bool
 
 -- Individual regions
 data Region where
-    Forward  :: Depth -> Dimension -> Region
-    Backward :: Depth -> Dimension -> Region
-    Centered :: Depth -> Dimension -> Region
+    Forward  :: Depth -> Dimension -> IsRefl -> Region
+    Backward :: Depth -> Dimension -> IsRefl -> Region
+    Centered :: Depth -> Dimension -> IsRefl -> Region
   deriving (Eq, Data, Typeable)
 
 getDimension :: Region -> Dimension
-getDimension (Forward _ dim) = dim
-getDimension (Backward _ dim) = dim
-getDimension (Centered _ dim) = dim
+getDimension (Forward _ dim _) = dim
+getDimension (Backward _ dim _) = dim
+getDimension (Centered _ dim _) = dim
 
 -- An (arbitrary) ordering on regions for the sake of normalisation
 instance Ord Region where
-  (Forward dep dim) <= (Forward dep' dim')
+  (Forward dep dim _) <= (Forward dep' dim' _)
     | dep == dep' = dim <= dim'
     | otherwise   = dep <= dep'
 
-  (Backward dep dim) <= (Backward dep' dim')
+  (Backward dep dim _) <= (Backward dep' dim' _)
     | dep == dep' = dim <= dim'
     | otherwise   = dep <= dep'
 
-  (Centered dep dim) <= (Centered dep' dim')
+  (Centered dep dim _) <= (Centered dep' dim' _)
     | dep == dep' = dim <= dim'
     | otherwise   = dep <= dep'
 
-  -- Order in the way defined above: Forward <: Backward <: Centered <: Constant
-  (Forward _ _ ) <= _               = True
-  (Backward _ _) <= (Centered _ _)  = True
-  _              <= _               = False
+  -- Order in the way defined above: Forward <: Backward <: Centered
+  (Forward _ _ _)  <= _                = True
+  (Backward _ _ _) <= (Centered _ _ _) = True
+  _                <= _                = False
 
 -- Product of specifications
 newtype RegionProd = Product [Region]
@@ -222,10 +222,10 @@ specPlus (Specification (Right (Dependency vs1 m1)))
 specPlus _ _ = Nothing
 
 regionPlus :: Region -> Region -> Maybe Region
-regionPlus (Forward dep dim) (Backward dep' dim')
-    | dep == dep' && dim == dim' = Just $ Centered dep dim
-regionPlus (Backward dep dim) (Forward dep' dim')
-    | dep == dep' && dim == dim' = Just $ Centered dep dim
+regionPlus (Forward dep dim reflx) (Backward dep' dim' reflx')
+    | dep == dep' && dim == dim' = Just $ Centered dep dim (reflx || reflx')
+regionPlus (Backward dep dim reflx) (Forward dep' dim' reflx')
+    | dep == dep' && dim == dim' = Just $ Centered dep dim (reflx || reflx')
 regionPlus x y | x == y          = Just x
 regionPlus x y                   = Nothing
 
@@ -239,7 +239,7 @@ instance PartialMonoid RegionProd where
    appendM (Product ss) (Product ss')
        | ss == ss' = Just $ Product ss
        | otherwise =
-         case interchangeReflexive ss ss' of
+         case absorbReflexive ss ss' of
            Just (ss0, ss1) ->
                case equalModuloFwdBwd ss0 ss1 of
                  Just ss'' -> return $ Product $ sort ss''
@@ -252,46 +252,36 @@ instance PartialMonoid RegionProd where
 -- Forward n d + Reflexive d = Forward n d
 -- Backward n d + Reflexive d = Backward n d
 -- Centered n d + Reflexive d = Centered n d
--- which extends to products with a specialised interchange law:
---  (Forward n d * Forward m d') + (Reflexive d * Reflexive d')
---  = (Forward n d + Reflexive d) * (Forward m d' + Reflexive d')
 -- (and so on for n-ary cases and Backward and Centered).
 
-interchangeReflexive :: [Region] -> [Region] -> Maybe ([Region], [Region])
-interchangeReflexive a b =
-  if (all isReflexive a) || (all isReflexive b)
-  then      interchangeReflexive' (sortBy cmpDims a) (sortBy cmpDims b)
-        <|> interchangeReflexive' (sortBy cmpDims b) (sortBy cmpDims a)
-  else Nothing
-   where isReflexive (Centered 0 d) = True
-         isReflexive _              = False
-         cmpDims = compare `on` getDimension
+absorbReflexive :: [Region] -> [Region] -> Maybe ([Region], [Region])
+absorbReflexive a b =
+      absorbReflexive' (sortBy cmpDims a) (sortBy cmpDims b)
+  <|> absorbReflexive' (sortBy cmpDims b) (sortBy cmpDims a)
+  where cmpDims = compare `on` getDimension
 
-interchangeReflexive' [] [] = Just ([], [])
-interchangeReflexive' (r@(Forward d dim) : rs) (Centered 0 dim' : rs')
-  | dim == dim' = do (rsA, rsB) <- interchangeReflexive' rs rs'
-                     return $ (r:rsA, rsB)
+absorbReflexive' [] [] = Just ([], [])
+absorbReflexive' (Forward d dim reflx : rs) [Centered 0 dim' _]
+  | dim == dim' = Just ((Forward d dim True):rs, [])
 
-interchangeReflexive' (r@(Backward d dim) : rs) (Centered 0 dim' : rs')
-  | dim == dim' = do (rsA, rsB) <- interchangeReflexive' rs rs'
-                     return $ (r:rsA, rsB)
+absorbReflexive' (Backward d dim reflx : rs) [Centered 0 dim' _]
+  | dim == dim' = Just ((Backward d dim True):rs, [])
 
-interchangeReflexive' (r@(Centered d dim) : rs) (Centered 0 dim' : rs')
-  | dim == dim' = do (rsA, rsB) <- interchangeReflexive' rs rs'
-                     return $ (r:rsA, rsB)
+absorbReflexive' (Centered d dim reflx : rs) [Centered 0 dim' _]
+  | dim == dim' = Just ((Centered d dim True):rs, [])
 
-interchangeReflexive' _ _ = Nothing
+absorbReflexive' _ _ = Nothing
 
 -- If there are two region lists which are equal modulo an entry in
 -- one which is `Forward d dim` and `Backward d dim` in the other
 equalModuloFwdBwd :: [Region] -> [Region] -> Maybe [Region]
 equalModuloFwdBwd [] xs = Just xs
 equalModuloFwdBwd xs [] = Just xs
-equalModuloFwdBwd (Forward d dim : rs) (Backward d' dim' : rs')
-    | d == d' && dim == dim' && rs == rs' = Just (Centered d dim : rs)
+equalModuloFwdBwd (Forward d dim reflx : rs) (Backward d' dim' reflx' : rs')
+    | d == d' && dim == dim' && rs == rs' = Just (Centered d dim (reflx || reflx') : rs)
 
-equalModuloFwdBwd (Backward d dim : rs) (Forward d' dim' :rs')
-    = equalModuloFwdBwd (Forward d' dim' : rs') (Backward d dim : rs)
+equalModuloFwdBwd rs@(Backward {} : _) rs'@(Forward {} : _)
+    = equalModuloFwdBwd rs' rs
 
 equalModuloFwdBwd (r:rs) (r':rs')
     | r == r'   = do rs'' <- equalModuloFwdBwd rs rs'
@@ -336,18 +326,16 @@ instance RegionRig Linearity where
   isUnit _      = False
 
 instance RegionRig Spatial where
-  sum (Spatial lin  irdim  s)
-      (Spatial lin' irdim' s') =
-    Spatial (sum lin lin') (nub $ irdim ++ irdim') (sum s s')
+  sum (Spatial lin  s) (Spatial lin' s') =
+    Spatial (sum lin lin') (sum s s')
 
-  prod (Spatial lin  irdim  s)
-       (Spatial lin' irdim' s') =
-    Spatial (prod lin lin') (nub $ irdim ++ irdim') (prod s s')
+  prod (Spatial lin  s) (Spatial lin' s') =
+    Spatial (prod lin lin') (prod s s')
 
-  one = Spatial one [] one
-  zero = Spatial zero [] zero
+  one = Spatial one one
+  zero = Spatial zero zero
 
-  isUnit (Spatial _ irrefl ss) = null irrefl && isUnit ss
+  isUnit (Spatial _ ss) = isUnit ss
 
 instance RegionRig (Result Spatial) where
   sum (Exact s) (Exact s')      = Exact (sum s s')
@@ -355,22 +343,8 @@ instance RegionRig (Result Spatial) where
   sum (Bound l u) (Bound l' u') = Bound (sum l l') (sum u u')
   sum s s'                      = sum s' s
 
-  prod (Exact s) (Exact s') =
-    -- If both of the spatial regions has non continguous behaviour
-    -- due to irreflexivity then change the offending spec into a bound
-    if null (nonContig s) || null (nonContig s')
-    -- Usual case
-    then Exact (prod s s')
-    else prod as as'
-      where as = mkBoundIfNonContig s
-            as' = mkBoundIfNonContig s'
-            mkBoundIfNonContig s =
-             if null (nonContig s)
-             then Exact s
-             else Bound Nothing
-                   (Just $ s { modIrreflexives = modIrreflexives s \\ nonContig s })
-
-  prod (Exact s) (Bound l u)    = Bound (prod (Just s) l) (prod (Just s) u)
+  prod (Exact s) (Exact s')      = Exact (prod s s')
+  prod (Exact s) (Bound l u)     = Bound (prod (Just s) l) (prod (Just s) u)
   prod (Bound l u) (Bound l' u') = Bound (prod l l') (prod (prod l u') (prod l' u))
   prod s s'                      = prod s' s
 
@@ -379,13 +353,6 @@ instance RegionRig (Result Spatial) where
 
   isUnit (Exact s) = isUnit s
   isUnit (Bound x y) = isUnit x && isUnit y
-
-
-nonContig (Spatial _ irrefl (Sum ss)) =
-  filter (\d ->
-     any (\(Product sp) ->
-        any (\s -> getDimension s == d) sp) ss) irrefl
-
 
 instance RegionRig RegionSum where
   prod (Sum ss) (Sum ss') =
@@ -422,17 +389,13 @@ instance {-# OVERLAPS #-} Show (Result Spatial) where
 
 -- Pretty print spatial specs
 instance Show Spatial where
-  show (Spatial modLin modIrrefl region) =
-    intercalate ", " . catMaybes $ [lin, irefl, sregion]
+  show (Spatial modLin region) =
+    intercalate ", " . catMaybes $ [lin, sregion]
     where
       -- Map "empty" spec to Nothing here
       sregion = case show region of
                   "empty" -> Nothing
                   xs      -> Just xs
-      -- Individual actions to show modifiers
-      irefl = case modIrrefl of
-                []       -> Nothing
-                ds       -> Just $ "irreflexive(dims=" ++ showL ds ++ ")"
       lin = case modLin of
                 NonLinear -> Nothing
                 Linear    -> Just "readOnce"
@@ -459,14 +422,17 @@ instance Show RegionProd where
        intercalate "*" . (map (\s -> "(" ++ show s ++ ")")) $ ss
 
 instance Show Region where
-   show (Forward dep dim)   = showRegion "forward" (show dep) (show dim)
-   show (Backward dep dim)  = showRegion "backward" (show dep) (show dim)
-   show (Centered dep dim)
+   show (Forward dep dim reflx)   = showRegion "forward" dep dim reflx
+   show (Backward dep dim reflx)  = showRegion "backward" dep dim reflx
+   show (Centered dep dim reflx)
      | dep == 0 = "reflexive(dim=" ++ show dim ++ ")"
-     | otherwise = showRegion "centered" (show dep) (show dim)
+     | otherwise = showRegion "centered" dep dim reflx
 
 -- Helper for showing regions
-showRegion typ depS dimS = typ ++ "(depth=" ++ depS ++ ", dim=" ++ dimS ++")"
+showRegion typ depS dimS reflx = typ ++ "(depth=" ++ show depS
+                               ++ ", dim=" ++ show dimS
+                               ++ (if reflx then "" else ", irreflexive")
+                               ++ ")"
 
 -- Helper for reassociating an association list, grouping the keys together that
 -- have matching values

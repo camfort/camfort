@@ -71,9 +71,9 @@ instance SynToAst SYN.Specification (Either RegionEnv SpecDecls) where
 -- Convert temporal or spatial specifications
 instance SynToAst SYN.Spec Specification where
   synToAst (SYN.Spatial mods r) = do
-    (modLinear, modIrrefl, approx) <- synToAst mods
+    (modLinear, approx) <- synToAst mods
     r' <- synToAst r
-    let s' = Spatial modLinear modIrrefl r'
+    let s' = Spatial modLinear r'
     return $ Specification $ Left $
        case approx of
         Just SYN.AtMost  -> Bound Nothing (Just s')
@@ -103,9 +103,9 @@ dnf (SYN.Or r1 r2) = do
     r2' <- dnf r2
     return $ Sum $ unSum r1' ++ unSum r2'
 -- Region conversion
-dnf (SYN.Forward dep dim)  = return $ Sum [Product [Forward dep dim]]
-dnf (SYN.Backward dep dim) = return $ Sum [Product [Backward dep dim]]
-dnf (SYN.Centered dep dim) = return $ Sum [Product [Centered dep dim]]
+dnf (SYN.Forward dep dim reflx)  = return $ Sum [Product [Forward dep dim reflx]]
+dnf (SYN.Backward dep dim reflx) = return $ Sum [Product [Backward dep dim reflx]]
+dnf (SYN.Centered dep dim reflx) = return $ Sum [Product [Centered dep dim reflx]]
 dnf (SYN.Var v)            =
     case lookup v ?renv of
       Nothing -> Left $ "Error: region " ++ v ++ " is not in scope."
@@ -113,14 +113,10 @@ dnf (SYN.Var v)            =
 
 -- Convert modifier list to modifier info
 instance SynToAst [SYN.Mod]
-                  (Linearity, [Dimension], Maybe SYN.Mod) where
-  synToAst mods = return (linearity, irrefls, approx)
+                  (Linearity, Maybe SYN.Mod) where
+  synToAst mods = return (linearity, approx)
     where
       linearity = if SYN.ReadOnce `elem` mods then Linear else NonLinear
-
-      irrefls = fromMaybe [] (find' isIrrefl mods)
-      isIrrefl (SYN.Irreflexive ds) = Just ds
-      isIrrefl _                    = Nothing
 
       approx = find' isApprox mods
       isApprox SYN.AtMost  = Just SYN.AtMost
