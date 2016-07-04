@@ -110,12 +110,6 @@ foldPair f (a:(b:xs)) = case f a b of
                           Just c  -> foldPair f (c : xs)
 
 
--- Helper function, reduces a list two elements at a time with a partial operation
-foldL :: (a -> a -> [a]) -> [a] -> [a]
-foldL f [] = []
-foldL f [a] = [a]
-foldL f (a:(b:xs)) = a : b : (foldL f (f a b ++ xs))
-
 class PartialMonoid x where
   -- Satisfies equations:
    --   pmappend x pmempty = Just x

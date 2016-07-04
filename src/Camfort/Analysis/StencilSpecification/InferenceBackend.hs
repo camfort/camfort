@@ -166,13 +166,13 @@ spanBoundingBox a b = boundingBox' (normaliseSpan a) (normaliseSpan b)
     (i.e., (lower1, upper1) (lower2, upper2) where lower2 = upper1 + 1)
     then compose together returning Just of the new span. Otherwise Nothing -}
 composeConsecutiveSpans :: Span (Vec n Int)
-                        -> Span (Vec n Int) -> Maybe (Span (Vec n Int))
-composeConsecutiveSpans (Nil, Nil) (Nil, Nil) = Just (Nil, Nil)
+                        -> Span (Vec n Int) -> [Span (Vec n Int)]
+composeConsecutiveSpans (Nil, Nil) (Nil, Nil) = [(Nil, Nil)]
 composeConsecutiveSpans (Cons l1 ls1, Cons u1 us1) (Cons l2 ls2, Cons u2 us2)
     | (ls1 == ls2) && (us1 == us2) && (u1 + 1 == l2)
-      = Just (Cons l1 ls1, Cons u2 us2)
+      = [(Cons l1 ls1, Cons u2 us2)]
     | otherwise
-      = Nothing
+      = []
 
 {-| |inferMinimalVectorRegions| a key part of the algorithm, from a list of
     n-dimensional relative indices it infers a list of (possibly overlapping)
@@ -209,11 +209,20 @@ allRegionPermutations =
                                       in (map fst ixP, unPerm)) . transpose
 
       coalesceRegions :: [Span (Vec n Int)] -> [Span (Vec n Int)]
-      coalesceRegions  = nub . foldPair composeConsecutiveSpans . sortByFst
+      coalesceRegions  = nub . foldL composeConsecutiveSpans . sortByFst
 
       unpermuteIndices :: [([Span (Vec n Int)], Vec n Int -> Vec n Int)]
                        -> [[Span (Vec n Int)]]
       unpermuteIndices = nub . map (\(rs, unPerm) -> map (unPerm *** unPerm) rs)
+
+-- Helper function, reduces a list two elements at a time with a non-determistic operation
+foldL :: (a -> a -> [a]) -> [a] -> [a]
+foldL f [] = []
+foldL f [a] = [a]
+foldL f (a:(b:xs)) = case f a b of
+                       [] -> a : foldL f (b : xs)
+                       cs -> foldL f (cs ++ xs)
+
 
 
 

@@ -92,19 +92,19 @@ spec =
       shouldBe (composeConsecutiveSpans
                   (Cons 1 (Cons 0 Nil), Cons 1 (Cons 0 Nil))
                   (Cons 2 (Cons 0 Nil), Cons 2 (Cons 0 Nil)))
-               (Just (Cons 1 (Cons 0 Nil), Cons 2 (Cons 0 Nil)))
+               ([(Cons 1 (Cons 0 Nil), Cons 2 (Cons 0 Nil))])
 
     it "composeRegions failing on (1,0)-(2,0) span and (4,0)-(5,0) span" $
       shouldBe (composeConsecutiveSpans
                   (Cons 1 (Cons 0 Nil), Cons 2 (Cons 0 Nil))
                   (Cons 4 (Cons 0 Nil), Cons 5 (Cons 0 Nil)))
-               Nothing
+               []
 
     it "composeRegions failing on (1,0)-(2,0) span and (3,1)-(3,1) span" $
       shouldBe (composeConsecutiveSpans
                   (Cons 1 (Cons 0 Nil), Cons 2 (Cons 0 Nil))
                   (Cons 3 (Cons 1 Nil), Cons 3 (Cons 1 Nil)))
-               Nothing
+               []
 
     it "five point stencil 2D" $
       -- Sort the expected value for the sake of easy equality
