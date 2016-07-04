@@ -25,27 +25,27 @@ spec = describe "Stencils - Check" $ do
       (parseAndConvert "!= stencil forward(depth=1, dim=1) :: x")
       `shouldBe`
         (Right $ Right $ [(["x"], Specification $ Left $
-         Exact (Spatial NonLinear [] (Sum [Product [Forward 1 1]])))])
+         Exact (Spatial NonLinear (Sum [Product [Forward 1 1 True]])))])
 
   it "parse and convert simple exact stencil (2)" $
       (parseAndConvert "!= stencil forward(depth=1, dim=1) :: x, y, z")
       `shouldBe`
         (Right $ Right $ [(["x","y","z"], Specification $ Left $
-         Exact (Spatial NonLinear [] (Sum [Product [Forward 1 1]])))])
+         Exact (Spatial NonLinear (Sum [Product [Forward 1 1 True]])))])
 
   it "parse and convert simple exact stencil with irreflexive (2a)" $
-      (parseAndConvert "!= stencil irreflexive(dims=2), centered(depth=1, dim=2) :: x, y, z")
+      (parseAndConvert "!= stencil centered(depth=1, dim=2, irreflexive) :: x, y, z")
       `shouldBe`
         (Right $ Right $ [(["x","y","z"], Specification $ Left $
-         Exact (Spatial NonLinear [2] (Sum [Product [Centered 1 2]])))])
+         Exact (Spatial NonLinear (Sum [Product [Centered 1 2 False]])))])
 
   it "parse and convert simple exact stencil with irreflexive (2b)" $
      let ?dimensionality = 2 in
       ((extract $
-        parseAndConvert "!= stencil irreflexive(dims=2), centered(depth=1, dim=2) :: x, y, z")
+        parseAndConvert "!= stencil centered(depth=1, dim=2, irreflexive) :: x, y, z")
       `eqByModel`
-      (Specification $ Left $ Exact (Spatial NonLinear [2]
-                                    (Sum [Product [Centered 1 2]]))))
+      (Specification $ Left $ Exact (Spatial NonLinear
+                                    (Sum [Product [Centered 1 2 False]]))))
        `shouldBe` True
 
 
@@ -53,15 +53,15 @@ spec = describe "Stencils - Check" $ do
       (parseAndConvert "!= stencil atmost, forward(depth=1, dim=1) :: x")
       `shouldBe`
         (Right $ Right $ [(["x"], Specification $ Left $
-         Bound Nothing (Just $ Spatial NonLinear []
-                  (Sum [Product [Forward 1 1]])))])
+         Bound Nothing (Just $ Spatial NonLinear
+                  (Sum [Product [Forward 1 1 True]])))])
 
   it "parse and convert simple lower bounded stencil (4)" $
       (parseAndConvert "!= stencil atleast, backward(depth=2, dim=1) :: x")
       `shouldBe`
         (Right $ Right $ [(["x"], Specification $ Left $
-         Bound (Just $ Spatial NonLinear []
-                  (Sum [Product [Backward 2 1]])) Nothing)])
+         Bound (Just $ Spatial NonLinear
+                  (Sum [Product [Backward 2 1 True]])) Nothing)])
 
 {- This is no longer applicable
   it "parse and convert modified bounded stencil (4)" $
@@ -75,14 +75,14 @@ spec = describe "Stencils - Check" $ do
       (parseAndConvert "!= stencil atleast, readonce, (forward(depth=1, dim=1) * ((centered(depth=1, dim=2)) + backward(depth=3, dim=4))) :: frob")
       `shouldBe`
         (Right $ Right $ [(["frob"], Specification $ Left $
-         Bound (Just $ Spatial Linear []
-                  (Sum [Product [Forward 1 1, Centered 1 2],
-                        Product [Forward 1 1, Backward 3 4]])) Nothing)])
+         Bound (Just $ Spatial Linear
+                  (Sum [Product [Forward 1 1 True, Centered 1 2 True],
+                        Product [Forward 1 1 True, Backward 3 4 True]])) Nothing)])
 
   it "parse and convert stencil with irreflexivity on a product(6)" $
      let ?dimensionality = 2 in
       ((extract $
-        parseAndConvert "!= stencil irreflexive(dims=2), forward(depth=1, dim=2)*backward(depth=1,dim=1) :: x, y, z")
+        parseAndConvert "!= stencil forward(depth=1, dim=2, irreflexive)*backward(depth=1,dim=1) :: x, y, z")
       `eqByModel`
-      (Specification $ Left $ Exact (Spatial NonLinear [2]
-                                    (Sum [Product [Forward 1 2, Backward 1 1]]))))
+      (Specification $ Left $ Exact (Spatial NonLinear
+                                    (Sum [Product [Forward 1 2 False, Backward 1 1 True]]))))

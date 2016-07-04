@@ -31,9 +31,9 @@ the specification checking and program synthesis features.
 module Camfort.Analysis.StencilSpecification.Model where
 
 import Camfort.Analysis.StencilSpecification.Syntax
-import Data.Set hiding (map,foldl')
+import Data.Set hiding (map,foldl',(\\))
 import qualified Data.Set as Set
-import Data.List hiding ((\\))
+import Data.List
 import qualified Data.List as DL
 import qualified Data.Map as DM
 
@@ -145,17 +145,16 @@ instance Model a => Model (Maybe a) where
 instance Model Spatial where
     type Domain Spatial = Multiset [Int]
 
-    mkModel spec@(Spatial lin irrefls s) =
+    mkModel spec@(Spatial lin s) =
       case lin of
         Linear    -> DM.fromList . map (,False) . toList $ indices
         NonLinear -> DM.fromList . map (,True) . toList $ indices
        where
-         indices = Set.filter irreflsMatch (mkModel s)
-         irreflsMatch ix = not (any (\d -> ix !! (d-1) == 0) irrefls)
+         indices = mkModel s
 
-    dimensionality (Spatial _ irrefls s) = dimensionality s
+    dimensionality (Spatial _ s) = dimensionality s
 
-    dimensions (Spatial _ _ s) = dimensions s
+    dimensions (Spatial _ s)     = dimensions s
 
 
 instance Model RegionSum where
@@ -170,22 +169,25 @@ instance Model RegionSum where
 instance Model Region where
    type Domain Region = Set [Int]
 
-   mkModel (Forward dep dim) =
-     fromList [mkSingleEntryNeg i dim ?globalDimensionality | i <- [0..dep]]
+   mkModel (Forward dep dim reflx) = fromList
+     [mkSingleEntryNeg i dim ?globalDimensionality | i <- [i0..dep]]
+       where i0 = if reflx then 0 else 1
 
-   mkModel (Backward dep dim) =
-     fromList [mkSingleEntryNeg i dim ?globalDimensionality | i <- [(-dep)..0]]
+   mkModel (Backward dep dim reflx) = fromList
+     [mkSingleEntryNeg i dim ?globalDimensionality | i <- [(-dep)..i0]]
+       where i0 = if reflx then 0 else 1
 
-   mkModel (Centered dep dim) =
-     fromList [mkSingleEntryNeg i dim ?globalDimensionality | i <- [(-dep)..dep]]
+   mkModel (Centered dep dim reflx) = fromList
+     [mkSingleEntryNeg i dim ?globalDimensionality | i <- [(-dep)..dep] \\ i0]
+       where i0 = if reflx then [] else [0]
 
-   dimensionality (Forward  _ d) = d
-   dimensionality (Backward _ d) = d
-   dimensionality (Centered _ d) = d
+   dimensionality (Forward  _ d _) = d
+   dimensionality (Backward _ d _) = d
+   dimensionality (Centered _ d _) = d
 
-   dimensions (Forward _ d)  = [d]
-   dimensions (Backward _ d) = [d]
-   dimensions (Centered _ d) = [d]
+   dimensions (Forward _ d _)  = [d]
+   dimensions (Backward _ d _) = [d]
+   dimensions (Centered _ d _) = [d]
 
 mkSingleEntryNeg :: Int -> Int -> Int -> [Int]
 mkSingleEntryNeg i 0 ds = error "Dimensions are 1-indexed"

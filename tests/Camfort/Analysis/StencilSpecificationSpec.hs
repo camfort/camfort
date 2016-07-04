@@ -92,19 +92,19 @@ spec =
       shouldBe (composeConsecutiveSpans
                   (Cons 1 (Cons 0 Nil), Cons 1 (Cons 0 Nil))
                   (Cons 2 (Cons 0 Nil), Cons 2 (Cons 0 Nil)))
-               (Just (Cons 1 (Cons 0 Nil), Cons 2 (Cons 0 Nil)))
+               ([(Cons 1 (Cons 0 Nil), Cons 2 (Cons 0 Nil))])
 
     it "composeRegions failing on (1,0)-(2,0) span and (4,0)-(5,0) span" $
       shouldBe (composeConsecutiveSpans
                   (Cons 1 (Cons 0 Nil), Cons 2 (Cons 0 Nil))
                   (Cons 4 (Cons 0 Nil), Cons 5 (Cons 0 Nil)))
-               Nothing
+               []
 
     it "composeRegions failing on (1,0)-(2,0) span and (3,1)-(3,1) span" $
       shouldBe (composeConsecutiveSpans
                   (Cons 1 (Cons 0 Nil), Cons 2 (Cons 0 Nil))
                   (Cons 3 (Cons 1 Nil), Cons 3 (Cons 1 Nil)))
-               Nothing
+               []
 
     it "five point stencil 2D" $
       -- Sort the expected value for the sake of easy equality
@@ -124,30 +124,33 @@ spec =
       it "five point stencil 2D" $
         (inferFromIndices $ VL fivepoint)
         `shouldBe`
-         (exactSp $ Spatial Linear [] (Sum [ Product [ Centered 0 1, Centered 1 2 ]
-                                           , Product [ Centered 0 2, Centered 1 1 ]
-                                           ]))
+         (exactSp $ Spatial Linear
+                     (Sum [ Product [ Centered 0 1 True, Centered 1 2 True]
+                          , Product [ Centered 0 2 True, Centered 1 1 True]
+                          ]))
 
       it "seven point stencil 2D" $
         (inferFromIndices $ VL sevenpoint)
         `shouldBe`
-          (exactSp $ Spatial Linear [] (Sum [ Product [ Centered 0 1, Centered 0 2, Centered 1 3 ]
-                                            , Product [ Centered 0 1, Centered 0 3, Centered 1 2 ]
-                                            , Product [ Centered 0 2, Centered 0 3, Centered 1 1 ]
-                                            ]))
+          (exactSp $ Spatial Linear
+                       (Sum [ Product [ Centered 0 1 True, Centered 0 2 True, Centered 1 3 True]
+                            , Product [ Centered 0 1 True, Centered 0 3 True, Centered 1 2 True]
+                            , Product [ Centered 0 2 True, Centered 0 3 True, Centered 1 1 True]
+                            ]))
 
       it "five point stencil 2D with blip" $
          (inferFromIndices $ VL fivepointErr)
          `shouldBe`
-          (exactSp $ Spatial Linear [] (Sum [ Product [ Forward 1 1, Forward 1 2 ],
-                                              Product [ Centered 0 1, Centered 1 2 ],
-                                              Product [ Centered 0 2, Centered 1 1 ] ]))
+          (exactSp $ Spatial Linear
+                         (Sum [ Product [ Forward 1 1 True, Forward 1 2 True],
+                                Product [ Centered 0 1 True, Centered 1 2 True],
+                                Product [ Centered 0 2 True, Centered 1 1 True] ]))
 
       it "centered forward" $
          (inferFromIndices $ VL centeredFwd)
          `shouldBe`
-          (exactSp $ Spatial Linear [] (Sum [ Product [ Forward 1 1
-                                                      , Centered 1 2 ] ]))
+          (exactSp $ Spatial Linear (Sum [ Product [ Forward 1 1 True
+                                                  , Centered 1 2 True] ]))
 
     describe "2D stencil verification" $
       mapM_ (test2DSpecVariation (Neighbour "i" 0) (Neighbour "j" 0)) variations
@@ -169,11 +172,10 @@ spec =
                         [Neighbour "i" 0, Neighbour "j" 0]
                         [[offsetToIx "i" 1, offsetToIx "j" 1],
                          [offsetToIx "i" 0, offsetToIx "j" 0]])
-         `shouldBe` (Just $ Specification $ Left $ Bound
-                       (Just $ Spatial Linear []
-                         (Sum [Product [Centered 0 1, Centered 0 2]]))
-                       (Just $ Spatial Linear []
-                         (Sum [Product [Forward 1 1, Forward 1 2]])))
+         `shouldBe` (Just $ Specification $ Left $ Exact
+                       (Spatial Linear
+                         (Sum [Product [Forward 1 1 False, Forward 1 2 False],
+                               Product [Centered 0 1 True, Centered 0 2 True]])))
 
       it "inconsistent" $
         (indicesToSpec' ["i", "j"]
@@ -280,66 +282,66 @@ indicesToSpec' ivs lhs = fst . runWriter . (indicesToSpec ivs lhs)
 
 variations =
   [ ( [ [0,0] ]
-    , Exact $ Spatial Linear [] (Sum [Product [ Centered 0 1, Centered 0 2 ]])
+    , Exact $ Spatial Linear (Sum [Product [ Centered 0 1 True, Centered 0 2 True]])
     )
   , ( [ [1,0] ]
-    , Exact $ Spatial Linear [1] (Sum [Product [Forward 1 1, Centered 0 2]])
+    , Exact $ Spatial Linear (Sum [Product [Forward 1 1 False, Centered 0 2 True]])
     )
   , ( [ [1,0], [0,0], [0,0] ]
-    , Exact $ Spatial NonLinear [] (Sum [Product [Forward 1 1, Centered 0 2]])
+    , Exact $ Spatial NonLinear (Sum [Product [Forward 1 1 True, Centered 0 2 True]])
     )
   , ( [ [0,1], [0,0] ]
-    , Exact $ Spatial Linear [] (Sum [Product [Forward 1 2, Centered 0 1]])
+    , Exact $ Spatial Linear (Sum [Product [Forward 1 2 True, Centered 0 1 True]])
     )
   , ( [ [1,1], [0,1], [1,0], [0,0] ]
-    , Exact $ Spatial Linear [] (Sum [Product [Forward 1 1, Forward 1 2]])
+    , Exact $ Spatial Linear (Sum [Product [Forward 1 1 True, Forward 1 2 True]])
     )
   , ( [ [-1,0], [0,0] ]
-    , Exact $ Spatial Linear [] (Sum [Product [Backward 1 1, Centered 0 2]])
+    , Exact $ Spatial Linear (Sum [Product [Backward 1 1 True, Centered 0 2 True]])
     )
   , ( [ [0,-1], [0,0], [0,-1] ]
-    , Exact $ Spatial NonLinear [] (Sum [Product [Backward 1 2, Centered 0 1]])
+    , Exact $ Spatial NonLinear (Sum [Product [Backward 1 2 True, Centered 0 1 True]])
     )
   , ( [ [-1,-1], [0,-1], [-1,0], [0,0], [0, -1] ]
-    , Exact $ Spatial NonLinear [] (Sum [Product [Backward 1 1, Backward 1 2]])
+    , Exact $ Spatial NonLinear (Sum [Product [Backward 1 1 True, Backward 1 2 True]])
     )
   , ( [ [0,-1], [1,-1], [0,0], [1,0], [1,1], [0,1] ]
-    , Exact $ Spatial Linear [] $ Sum [ Product [ Forward 1 1 , Centered 1 2 ] ]
+    , Exact $ Spatial Linear $ Sum [ Product [ Forward 1 1 True, Centered 1 2 True] ]
     )
    -- Stencil which is non-contiguous in one direction
   , ( [ [0, 4], [1, 4] ]
-    , Bound (Just (Spatial Linear [2] (Sum [Product [Forward 1 1]])))
-            (Just (Spatial Linear [] (Sum [Product [Forward 1 1, Forward 4 2]])))
+    , Bound (Just (Spatial Linear (Sum [Product [Forward 1 1 True]])))
+            (Just (Spatial Linear (Sum [Product [Forward 1 1 True, Forward 4 2 True]])))
     )
   ]
 
 variationsRel =
   [   -- Stencil which has non-relative indices in one dimension
     (Neighbour "i" 0, Constant (F.ValInteger "0"), [ [0, absoluteRep], [1, absoluteRep] ]
-    , Exact $ Spatial Linear [] (Sum [Product [Forward 1 1]])
+    , Exact $ Spatial Linear (Sum [Product [Forward 1 1 True]])
     )
   , (Neighbour "i" 1, Neighbour "j" 0, [ [0,0] ]
-    , Exact $ Spatial Linear [1] (Sum [Product [ Backward 1 1, Centered 0 2 ]])
+    , Exact $ Spatial Linear (Sum [Product [ Backward 1 1 False, Centered 0 2 True]])
     )
   , (Neighbour "i" 0, Neighbour "j" 1, [ [0,1] ]
-    , Exact $ Spatial Linear [] (Sum [Product [Centered 0 1, Centered 0 2]])
+    , Exact $ Spatial Linear (Sum [Product [Centered 0 1 True, Centered 0 2 True]])
     )
   , (Neighbour "i" 1, Neighbour "j" (-1), [ [1,0], [0,0], [0,0] ]
-    , Exact $ Spatial NonLinear [2] (Sum [Product [Forward 1 2, Backward 1 1]])
+    , Exact $ Spatial NonLinear (Sum [Product [Forward 1 2 False, Backward 1 1 True]])
     )
   , (Neighbour "i" 0, Neighbour "j" (-1), [ [0,1], [0,0] ]
-    , Exact $ Spatial Linear [2] (Sum [Product [Forward 2 2, Centered 0 1]])
+    , Exact $ Spatial Linear (Sum [Product [Forward 2 2 False, Centered 0 1 True]])
     )
   -- [0,1] [0,0] [0,-1]
   , (Neighbour "i" 1, Neighbour "j" 0, [ [1,1], [1,0], [1,-1] ]
-    , Exact $ Spatial Linear [] (Sum [Product [Centered 0 1, Centered 1 2]])
+    , Exact $ Spatial Linear (Sum [Product [Centered 0 1 True, Centered 1 2 True]])
     )
   , (Neighbour "i" 1, Neighbour "j" 0, [ [-2,0], [-1,0] ]
-    , Bound (Just (Spatial Linear [1] (Sum [Product [Centered 0 2]])))
-            (Just (Spatial Linear [] (Sum [Product [Backward 3 1, Centered 0 2]]))))
+    , Bound (Just (Spatial Linear (Sum [Product [Centered 0 2 True]])))
+            (Just (Spatial Linear (Sum [Product [Backward 3 1 True, Centered 0 2 True]]))))
 
   , (Constant (F.ValInteger "0"), Neighbour "j" 0, [ [absoluteRep,1], [absoluteRep,0], [absoluteRep,-1] ]
-    , Exact $ Spatial Linear [] (Sum [Product [Centered 1 2]])
+    , Exact $ Spatial Linear (Sum [Product [Centered 1 2 True]])
     )
   ]
 
@@ -360,13 +362,13 @@ test3DSpecVariation (input, expectation) =
 
 variations3D =
   [ ( [ [-1,0,-1], [0,0,-1], [-1,0,0], [0,0,0] ]
-    ,  Exact $ Spatial Linear [] (Sum [Product [Backward 1 1, Backward 1 3, Centered 0 2]])
+    ,  Exact $ Spatial Linear (Sum [Product [Backward 1 1 True, Backward 1 3 True, Centered 0 2 True]])
     )
   , ( [ [1,1,0], [0,1,0] ]
-    ,  Exact $ Spatial Linear [2] (Sum [Product [Forward 1 1, Forward 1 2, Centered 0 3]])
+    ,  Exact $ Spatial Linear (Sum [Product [Forward 1 1 True, Forward 1 2 False, Centered 0 3 True]])
     )
   , ( [ [-1,0,-1], [0,0,-1], [-1,0,0], [0,0,0] ]
-    ,  Exact $ Spatial Linear [] (Sum [Product [Backward 1 1, Backward 1 3, Centered 0 2]])
+    ,  Exact $ Spatial Linear (Sum [Product [Backward 1 1 True, Backward 1 3 True, Centered 0 2 True]])
     )
   ]
 

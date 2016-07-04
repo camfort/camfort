@@ -109,6 +109,7 @@ foldPair f (a:(b:xs)) = case f a b of
                           Nothing -> a : (foldPair f (b : xs))
                           Just c  -> foldPair f (c : xs)
 
+
 class PartialMonoid x where
   -- Satisfies equations:
    --   pmappend x pmempty = Just x
@@ -124,4 +125,3 @@ normalise = nub . reduce . sort
 
 normaliseBy :: Ord t => (t -> t -> Maybe t) -> [t] -> [t]
 normaliseBy plus = nub . (foldPair plus) . sort
-

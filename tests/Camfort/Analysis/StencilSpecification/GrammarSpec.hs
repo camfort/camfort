@@ -45,7 +45,7 @@ spec =
     it "region defn" $
       parse "!= region r = forward(depth=1, dim=1) + backward(depth=2, dim=2)"
       `shouldBe`
-        Right (RegionDec "r" (Or (Forward 1 1) (Backward 2 2)))
+        Right (RegionDec "r" (Or (Forward 1 1 True) (Backward 2 2 True)))
 
     it "temporal" $
       parse "!= stencil dependency(a,b,c,foo), mutual :: foo, bar"

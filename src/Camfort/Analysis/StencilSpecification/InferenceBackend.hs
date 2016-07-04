@@ -62,10 +62,6 @@ inferFromIndicesWithoutLinearity (VL ixs) =
         infer :: (IsNatural n, Permutable n) => [Vec n Int] -> Result Spatial
         infer = fromRegionsToSpec . inferMinimalVectorRegions
 
--- Generate the reflexivity and irreflexivity information
-genModifiers :: IsNatural n => [Span (Vec n Int)] -> Spatial -> Spatial
-genModifiers sps (Spatial lin _ s) = Spatial lin (irreflexivity sps) s
-
 -- For a list of region spans, calculate which dimensions do
 -- have a region cross their origin and which do not. Return
 -- a pair of lists for each respectively
@@ -99,15 +95,8 @@ reflexiveDims = nub . concatMap (reflexiveDims' 1)
       | l <= 0 && u >= 0 = d : reflexiveDims' (d + 1) (ls, us)
       | otherwise = reflexiveDims' (d + 1) (ls, us)
 
-
 fromRegionsToSpec :: IsNatural n => [Span (Vec n Int)] -> Result Spatial
-fromRegionsToSpec sps = onResult (genModifiers sps) result
-  where
-    onResult f (Exact s) = Exact (f s)
-    -- Don't give reflexive modifiers to an upper bound
-    onResult f (Bound l u) = Bound (fmap f l) u
-
-    result = foldr (\x y -> sum (toSpecND x) y) zero sps
+fromRegionsToSpec sps = foldr (\x y -> sum (toSpecND x) y) zero sps
 
 -- toSpecND converts an n-dimensional region into an exact
 -- spatial specification or a bound of spatial specifications
@@ -125,33 +114,33 @@ toSpecND = toSpecPerDim 1
 toSpec1D :: Dimension -> Int -> Int -> Result Spatial
 toSpec1D dim l u
     | l == absoluteRep || u == absoluteRep =
-        Exact $ Spatial NonLinear [] (Sum [Product []])
+        Exact $ Spatial NonLinear (Sum [Product []])
 
     | l == 0 && u == 0 =
-        Exact $ Spatial NonLinear [] (Sum [Product [Centered 0 dim]])
+        Exact $ Spatial NonLinear (Sum [Product [Centered 0 dim True]])
 
     | l < 0 && u == 0 =
-        Exact $ Spatial NonLinear [] (Sum [Product [Backward (abs l) dim]])
+        Exact $ Spatial NonLinear (Sum [Product [Backward (abs l) dim True]])
 
     | l < 0 && u == (-1) =
-        Exact $ Spatial NonLinear [dim] (Sum [Product [Backward (abs l) dim]])
+        Exact $ Spatial NonLinear (Sum [Product [Backward (abs l) dim False]])
 
     | l == 0 && u > 0 =
-        Exact $ Spatial NonLinear [] (Sum [Product [Forward u dim]])
+        Exact $ Spatial NonLinear (Sum [Product [Forward u dim True]])
 
     | l == 1 && u > 0 =
-        Exact $ Spatial NonLinear [dim] (Sum [Product [Forward u dim]])
+        Exact $ Spatial NonLinear (Sum [Product [Forward u dim False]])
 
     | l < 0 && u > 0 && (abs l == u) =
-        Exact $ Spatial NonLinear [] (Sum [Product [Centered u dim]])
+        Exact $ Spatial NonLinear (Sum [Product [Centered u dim True]])
 
     | l < 0 && u > 0 && (abs l /= u) =
-        Exact $ Spatial NonLinear [] (Sum [Product [Backward (abs l) dim],
-                                           Product [Forward u dim]])
+        Exact $ Spatial NonLinear (Sum [Product [Backward (abs l) dim True],
+                                        Product [Forward  u       dim True]])
     -- Represents a non-contiguous region
     | otherwise =
-        upperBound $ Spatial NonLinear [] (Sum [Product
-                        [if l > 0 then Forward u dim else Backward (abs l) dim]])
+        upperBound $ Spatial NonLinear (Sum [Product
+                        [if l > 0 then Forward u dim True else Backward (abs l) dim True]])
 
 {- Normalise a span into the form (lower, upper) based on the first index -}
 normaliseSpan :: Span (Vec n Int) -> Span (Vec n Int)
@@ -177,13 +166,13 @@ spanBoundingBox a b = boundingBox' (normaliseSpan a) (normaliseSpan b)
     (i.e., (lower1, upper1) (lower2, upper2) where lower2 = upper1 + 1)
     then compose together returning Just of the new span. Otherwise Nothing -}
 composeConsecutiveSpans :: Span (Vec n Int)
-                        -> Span (Vec n Int) -> Maybe (Span (Vec n Int))
-composeConsecutiveSpans (Nil, Nil) (Nil, Nil) = Just (Nil, Nil)
+                        -> Span (Vec n Int) -> [Span (Vec n Int)]
+composeConsecutiveSpans (Nil, Nil) (Nil, Nil) = [(Nil, Nil)]
 composeConsecutiveSpans (Cons l1 ls1, Cons u1 us1) (Cons l2 ls2, Cons u2 us2)
     | (ls1 == ls2) && (us1 == us2) && (u1 + 1 == l2)
-      = Just (Cons l1 ls1, Cons u2 us2)
+      = [(Cons l1 ls1, Cons u2 us2)]
     | otherwise
-      = Nothing
+      = []
 
 {-| |inferMinimalVectorRegions| a key part of the algorithm, from a list of
     n-dimensional relative indices it infers a list of (possibly overlapping)
@@ -220,11 +209,19 @@ allRegionPermutations =
                                       in (map fst ixP, unPerm)) . transpose
 
       coalesceRegions :: [Span (Vec n Int)] -> [Span (Vec n Int)]
-      coalesceRegions  = nub . foldPair composeConsecutiveSpans . sortByFst
+      coalesceRegions  = nub . foldL composeConsecutiveSpans . sortByFst
 
       unpermuteIndices :: [([Span (Vec n Int)], Vec n Int -> Vec n Int)]
                        -> [[Span (Vec n Int)]]
       unpermuteIndices = nub . map (\(rs, unPerm) -> map (unPerm *** unPerm) rs)
+
+-- Helper function, reduces a list two elements at a time with a non-determistic operation
+foldL :: (a -> a -> [a]) -> [a] -> [a]
+foldL f [] = []
+foldL f [a] = [a]
+foldL f (a:(b:xs)) = case f a b of
+                       [] -> a : foldL f (b : xs)
+                       cs -> foldL f (cs ++ xs)
 
 {-| Collapses the regions into a small set by looking for potential overlaps
     and eliminating those that overlap -}
