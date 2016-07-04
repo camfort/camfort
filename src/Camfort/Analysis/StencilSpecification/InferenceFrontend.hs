@@ -63,8 +63,8 @@ instance Default InferMode where
     defaultValue = AssignMode
 
 -- The inferer returns information as a LogLine
-type EvalLog = [String]
-type LogLine = (FU.SrcSpan, Either [([Variable], Specification)] String)
+type EvalLog = [(String, Variable)]
+type LogLine = (FU.SrcSpan, Either [([Variable], Specification)] (String,Variable))
 -- The core of the inferer works within this monad
 type Inferer = WriterT [LogLine] (ReaderT (Cycles, F.ProgramUnitName, TypeEnv A) (State [Variable]))
 type Cycles = [(F.Name, F.Name)]
@@ -142,12 +142,12 @@ genSpecsAndReport mode span ivs lhs blocks = do
     tell [ (span, Left specs) ]
     if mode == EvalMode
      then do
-      tell [ (span, Right "EVALMODE: assign to relative array subscript\
-                           \ (tag: tickAssign)") ]
+      tell [ (span, Right ("EVALMODE: assign to relative array subscript\
+                           \ (tag: tickAssign)","")) ]
       mapM_ (\evalInfo -> tell [ (span, Right evalInfo) ]) evalInfos
       mapM_ (\spec -> if show spec == ""
-                      then tell [ (span, Right "EVALMODE: Cannot make spec\
-                                               \ (tag: emptySpec)") ]
+                      then tell [ (span, Right ("EVALMODE: Cannot make spec\
+                                               \ (tag: emptySpec)","")) ]
                       else return ()) specs
      else return ()
 
@@ -173,9 +173,9 @@ perBlockInfer mode b@(F.BlStatement _ span _ (F.StExpressionAssign _ _ lhs _))
         case neighbourIndex ivs subs of
           Just lhs -> genSpecsAndReport mode span ivs lhs [b]
           Nothing  -> if mode == EvalMode
-                      then tell [(span , Right "EVALMODE: LHS is an array \
+                      then tell [(span , Right ("EVALMODE: LHS is an array \
                                          \subscript we can't handle \
-                                         \(tag: LHSnotHandled)")]
+                                         \(tag: LHSnotHandled)",""))]
                       else return ()
        -- Not an assign we are interested in
        _ -> return ()
@@ -213,13 +213,15 @@ genSpecifications ivs lhs blocks = do
     let varToSpecs = catMaybes . map strength $ varToMaybeSpecs
     case varToSpecs of
       [] -> do
-         tell ["EVALMODE: Empty specification (tag: emptySpec)"]
+         tell [("EVALMODE: Empty specification (tag: emptySpec)", "")]
          return []
       _ -> do
          let varsToSpecs = groupKeyBy varToSpecs
          return $ splitUpperAndLower varsToSpecs
     where
-      mkSpecs = M.toList . M.map (indicesToSpec ivs lhs) . M.unionsWith (++)
+      mkSpecs = M.toList
+              . M.mapWithKey (\v -> indicesToSpec v ivs lhs)
+              . M.unionsWith (++)
 
       strength :: Monad m => (a, m b) -> m (a, b)
       strength (a, mb) = mb >>= (\b -> return (a, b))
@@ -303,11 +305,12 @@ padZeros ixss = let m = maximum (map length ixss)
 
 -- Convert list of indexing expressions to a spec
 indicesToSpec :: (Data a, Eq a)
-              => [Variable]
+              => Variable
+              -> [Variable]
               -> [Neighbour]
               -> [[F.Index (FA.Analysis a)]]
               -> Writer EvalLog (Maybe Specification)
-indicesToSpec ivs lhs ixs = do
+indicesToSpec a ivs lhs ixs = do
    -- Convert indices to neighbourhood representation
   let rhses = map (map (ixToNeighbour ivs)) ixs
 
@@ -317,25 +320,25 @@ indicesToSpec ivs lhs ixs = do
 
   -- Check that induction variables are used consistently on lhs and rhses
   if not (consistentIVSuse lhs rhses')
-    then do tell ["EVALMODE: Inconsistent IV use (tag: inconsistentIV)"]
+    then do tell [("EVALMODE: Inconsistent IV use (tag: inconsistentIV)", "")]
             return Nothing
     else
       -- For the EvalMode, if there are any non-neighbourhood relative
       -- subscripts detected then add this to the eval log
       if hasNonNeighbourhoodRelatives rhses
-      then do tell ["EVALMODE: Non-neighbour relative subscripts\
-                    \ (tag: nonNeighbour)"]
+      then do tell [("EVALMODE: Non-neighbour relative subscripts\
+                    \ (tag: nonNeighbour)","")]
               return Nothing
       else do
         let offsets  = padZeros $ map (fromJust . mapM neighbourToOffset) rhses
-        tell ["EVALMODE: dimensionality=" ++ show (case offsets of
+        tell [("EVALMODE: dimensionality=" ++ show (case offsets of
                                                     [] -> 0
-                                                    _  -> length (head offsets))]
+                                                    _  -> length (head offsets)), a)]
 
         -- Relativize the offsets based on the lhs
         let offsets' = relativise lhs offsets
         if offsets /= offsets'
-          then   tell ["EVALMODE: Relativized spec (tag: relativized)"]
+          then   tell [("EVALMODE: Relativized spec (tag: relativized)", "")]
           else return()
 
         let spec = relativeIxsToSpec ivs offsets'

@@ -278,7 +278,7 @@ test2DSpecVariation a b (input, expectation) =
     expectedSpec = Specification . Left $ expectation
     fromFormatToIx [ri,rj] = [ offsetToIx "i" ri, offsetToIx "j" rj ]
 
-indicesToSpec' ivs lhs = fst . runWriter . (indicesToSpec ivs lhs)
+indicesToSpec' ivs lhs = fst . runWriter . (indicesToSpec "a" ivs lhs)
 
 variations =
   [ ( [ [0,0] ]
