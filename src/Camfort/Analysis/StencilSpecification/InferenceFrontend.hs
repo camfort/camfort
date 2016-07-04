@@ -330,36 +330,54 @@ indicesToSpec a ivs lhs ixs = do
                     \ (tag: nonNeighbour)","")]
               return Nothing
       else do
-        let offsets  = padZeros $ map (fromJust . mapM neighbourToOffset) rhses
-        tell [("EVALMODE: dimensionality=" ++ show (case offsets of
-                                                    [] -> 0
-                                                    _  -> length (head offsets)), a)]
-
         -- Relativize the offsets based on the lhs
-        let offsets' = relativise lhs offsets
-        if offsets /= offsets'
-          then   tell [("EVALMODE: Relativized spec (tag: relativized)", "")]
-          else return()
+        let rhses' = relativise lhs rhses
+        if rhses /= rhses'
+          then  tell [("EVALMODE: Relativized spec (tag: relativized)", "")]
+          else return ()
 
-        let spec = relativeIxsToSpec ivs offsets'
+        let offsets  = padZeros $ map (fromJust . mapM neighbourToOffset) rhses'
+        tell [("EVALMODE: dimensionality=" ++
+                 show (case offsets of [] -> 0
+                                       _  -> length (head offsets)), a)]
+
+
+        let spec = relativeIxsToSpec ivs offsets
         return $ fmap (setLinearity (fromBool mult)) spec
   where hasNonNeighbourhoodRelatives xs = or (map (any ((==) NonNeighbour)) xs)
 
 -- Given a list of the neighbourhood representation for the LHS, of size n
 -- and a list of size-n lists of offsets, relativise the offsets
-relativise :: [Neighbour] -> [[Int]] -> [[Int]]
-relativise neigh = map (map (uncurry relativize') . zip neigh)
-  where relativize' (Neighbour _ i) j = j - i
-        relativize' _               j = j
+relativise :: [Neighbour] -> [[Neighbour]] -> [[Neighbour]]
+relativise lhs rhses = foldr relativiseRHS rhses lhs
+    where
+      relativiseRHS (Neighbour lhsIV i) rhses =
+          map (map (relativiseBy lhsIV i)) rhses
+      relativiseRHS _ rhses = rhses
+
+      relativiseBy v i (Neighbour u j) | v == u = Neighbour u (j - i)
+      relativiseBy _ _ x = x
 
 -- Check that induction variables are used consistently
 consistentIVSuse :: [Neighbour] -> [[Neighbour]] -> Bool
-consistentIVSuse lhs rhses = consistent /= Nothing
-    where cmp (Neighbour v i) (Neighbour v' _) | v == v' = Just $ Neighbour v i
-          cmp (Neighbour {} ) _              = Nothing
-          cmp _ (Neighbour {})               = Nothing
-          cmp _ _                            = Just $ Constant (F.ValInteger "")
-          consistent = foldrM (\a b -> mapM (uncurry cmp) $ zip a b) lhs rhses
+consistentIVSuse lhs [] = True
+consistentIVSuse lhs rhses =
+  consistentRHS /= Nothing && (all consistentWithLHS (fromJust consistentRHS))
+    where
+      cmp (Neighbour v i) (Neighbour v' _) | v == v' = Just $ Neighbour v i
+      cmp (Neighbour {} ) _              = Nothing
+      cmp _ (Neighbour {})               = Nothing
+      cmp _ _                            = Just $ Constant (F.ValInteger "")
+      consistentRHS = foldrM (\a b -> mapM (uncurry cmp) $ zip a b) (head rhses) (tail rhses)
+      -- If there is an induction variable on the RHS, then it also occurs on
+      -- the LHS
+      consistentWithLHS :: Neighbour -> Bool
+      consistentWithLHS (Neighbour rv _) = any (matchesIV rv) lhs
+      consistentWithLHS _                = True
+
+      matchesIV :: Variable -> Neighbour -> Bool
+      matchesIV v (Neighbour v' _) | v == v' = True
+      matchesIV _ _                          = False
 
 -- Convert list of relative offsets to a spec
 relativeIxsToSpec :: [Variable] -> [[Int]] -> Maybe Specification
