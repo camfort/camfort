@@ -72,14 +72,10 @@ REFL :: { Bool }
 SPECDEC :: { Spec }
 : dependency '(' VARS ')'        { Temporal $3 False }
 | dependency '(' VARS ')' mutual { Temporal $3 True }
-| APPROXMODS MODS REGION         { Spatial ($1 ++ $2) $3 }
-| MODS REGION                    { Spatial $1 $2 }
+| APPROXMODS MOD REGION         { Spatial ($1 ++ [$2]) $3 }
+| MOD REGION                    { Spatial [$1] $2 }
 | APPROXMOD REGION               { Spatial [$1] $2 }
 | REGION                         { Spatial [] $1 }
-
-MODS :: { [Mod] }
-: MOD MODS { $1 : $2 }
-| MOD      { [$1] }
 
 MOD :: { Mod }
 : readOnce                          { ReadOnce }
@@ -94,10 +90,6 @@ APPROXMODS :: { [Mod] }
 APPROXMOD :: { Mod }
 : atMost                    { AtMost }
 | atLeast                   { AtLeast }
-
-DIMS :: { [Int] }
-: num ',' DIMS { read $1 : $3 }
-| num          { [read $1] }
 
 VARS :: { [String] }
 : id VARS { $1 : $2 }

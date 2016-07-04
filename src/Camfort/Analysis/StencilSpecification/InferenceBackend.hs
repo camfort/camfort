@@ -136,7 +136,7 @@ toSpec1D dim l u
 
     | l < 0 && u > 0 && (abs l /= u) =
         Exact $ Spatial NonLinear (Sum [Product [Backward (abs l) dim True],
-                                       Product  [Forward u dim True]])
+                                        Product [Forward  u       dim True]])
     -- Represents a non-contiguous region
     | otherwise =
         upperBound $ Spatial NonLinear (Sum [Product
@@ -222,9 +222,6 @@ foldL f [a] = [a]
 foldL f (a:(b:xs)) = case f a b of
                        [] -> a : foldL f (b : xs)
                        cs -> foldL f (cs ++ xs)
-
-
-
 
 {-| Collapses the regions into a small set by looking for potential overlaps
     and eliminating those that overlap -}
