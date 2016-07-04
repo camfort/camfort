@@ -365,7 +365,7 @@ consistentIVSuse lhs rhses =
   consistentRHS /= Nothing && (all consistentWithLHS (fromJust consistentRHS))
     where
       cmp (Neighbour v i) (Neighbour v' _) | v == v' = Just $ Neighbour v i
-      cmp (Neighbour {} ) _              = Nothing
+      cmp (Neighbour {})  _              = Nothing
       cmp _ (Neighbour {})               = Nothing
       cmp _ _                            = Just $ Constant (F.ValInteger "")
       consistentRHS = foldrM (\a b -> mapM (uncurry cmp) $ zip a b) (head rhses) (tail rhses)
@@ -457,11 +457,27 @@ expToNeighbour ivs (F.ExpBinary _ _ F.Subtraction
          Neighbour (FA.varName e) (if x < 0 then abs x else (- x))
              where x = read offs
 
-expToNeighbour ivs e = NonNeighbour
+expToNeighbour ivs e =
+  -- Record when there is some kind of relative index on an inducion variable
+  -- but that is not a neighbourhood index by our definitions
+  if null ivs' then Constant (F.ValInteger "0") else NonNeighbour
+  where
+    -- set of all induction variables involved in this expression
+    ivs' = [i | e@(F.ExpValue _ _ (F.ValVariable {}))
+                 <- universeBi e :: [F.Expression (FA.Analysis a)]
+                , let i = FA.varName e
+                , i `elem` ivs]
+
+expToNeighbour ivs e = Constant (F.ValInteger "0")
 
 --------------------------------------------------
 
 -- Helper predicates
+isUnaryOrBinaryExpr :: F.Expression a -> Bool
+isUnaryOrBinaryExpr (F.ExpUnary {})  = True
+isUnaryOrBinaryExpr (F.ExpBinary {}) = True
+isUnaryOrBinaryExpr _                = False
+
 isVariableExpr :: F.Expression a -> Bool
 isVariableExpr (F.ExpValue _ _ (F.ValVariable _)) = True
 isVariableExpr _                                  = False
