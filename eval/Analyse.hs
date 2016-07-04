@@ -1,3 +1,4 @@
+import Text.Printf (printf)
 import Text.Regex.PCRE ((=~))
 import Text.Regex.Base
 import System.Environment
@@ -23,6 +24,8 @@ mulOpsName :: Int -> String
 mulOpsName n = "mulOps" ++ show n
 dimDistName :: Int -> String
 dimDistName n = "dimDist" ++ show n
+dimTagName :: Int -> String
+dimTagName n = "dimTag" ++ show n
 
 type Analysis = M.Map String Int
 type ModAnalysis = M.Map String Analysis
@@ -33,7 +36,7 @@ countByVars a l = M.unionsWith (+) $ [a, keysA] ++ map snd (filter fst counts)
   where
     counts  = [ ((get a "atLeast" > 0 && get keysA "atMost" > 0) ||
                 (get keysA "atLeast" > 0 && get a "atMost" > 0),   {- ==> -} M.singleton "boundedBoth" n)
-              , ( get keysA "reflexive" > 0 &&                     {- ==> -}
+              , ( get keysA "reflexive" > 0 &&
                   M.size keysA == 1                            ,   {- ==> -} M.singleton "justReflexive" n )
               , ( ndims > 0                                    ,   {- ==> -} M.singleton (dimName ndims) n)
               , ( isJust mdep                                  ,   {- ==> -} M.singleton (depthName (fromJust mdep)) n)
@@ -53,21 +56,23 @@ countByVars a l = M.unionsWith (+) $ [a, keysA] ++ map snd (filter fst counts)
     mulOps  = countMulOps l
     dimDist = countDimDist l
 
+
 -- Count interesting stuff in a given line, and given the group's
 -- analysis to this point, grouped by span.
 countBySpan :: Analysis -> S.ByteString -> Analysis
 countBySpan a l = M.unionsWith (+) $ [a, keysA] ++ map snd (filter fst counts)
   where
-    counts  = [ ( l =~ "stencil "                 {- ==> -} , M.fromList [("numStencilLines", 1),
-                                                  {- ==> -}               ("numStencilSpecs", n)] )
-              , ( get a "numStencilSpecs" > 0 &&  {- ==> -}
-                  get keysA "tickAssign" > 0      {- ==> -} , M.singleton "tickAssignSuccess" 1 )
-
+    counts  = [ ( l =~ "stencil "                , {- ==> -} M.fromList [("numStencilLines", 1),
+                                                                         ("numStencilSpecs", n)] )
+              , ( get a "numStencilSpecs" > 0 &&
+                  get keysA "tickAssign" > 0     , {- ==> -} M.singleton "tickAssignSuccess" 1 )
+              , ( isJust mDimTag                 , {- ==> -} M.singleton (dimTagName (fromJust mDimTag)) n)
               ]
     keysA   = M.fromList [ (k, n) | k <- spanKeywords, l =~ re k  ] -- try each keyword
     re k    = "[^A-Za-z]" ++ k ++ "[^A-Za-z]" -- form a regular expression from a keyword
     get m k = 0 `fromMaybe` M.lookup k m -- convenience function
     n       = numVars l -- note that this will treat an EVALMODE line as having 1 variable
+    mDimTag = countDimTag l
 
 -- Look at each group that shares a source span, then each group that shares a source span and vars.
 eachGroup :: [S.ByteString] -> Analysis
@@ -117,6 +122,8 @@ countDimDist l = length . nub . filter (>0) $ (dimList ++ dimsList)
     dimList    = map (matchToInt . (! 1)) (getAllTextMatches (l =~ "dim=([0-9]*)" :: AllTextMatches [] (Array Int S.ByteString)))
     -- search for "(dims=n,n,...)"
     dimsList   = map matchToInt . concatMap (S.split ',') . mrSubList $ l =~ "\\(dims=([^\\)]*)\\)"
+countDimTag :: S.ByteString -> Maybe Int
+countDimTag = fmap fst . S.readInt . S.concat . mrSubList . (=~ "dimensionality=([0-9]*)")
 
 -- Extract one set of text that occurs between "%%% begin" and "%%% end",
 -- returning the remainder if present.
@@ -132,9 +139,22 @@ prettyOutput :: ModAnalysis -> String
 prettyOutput = unlines . prettyOutput'
 prettyOutput' :: ModAnalysis -> [String]
 prettyOutput' ma = concat [ ("corpus module: " ++ m):map (replicate 4 ' ' ++) (prettyAnal a) | (m, a) <- M.toList ma ] ++
-                          ( "overall":map (replicate 4 ' ' ++) (prettyAnal combined) )
-  where combined = M.unionsWith (+) $ M.elems ma
+                          ( "overall":map (replicate 4 ' ' ++) (prettyAnal combined) ) ++
+                          ( map (replicate 4 ' '++) [
+                              printf "numStencilSpecs (%d) <= forward (%d) + backward (%d) + centered (%d) + reflexive (%d) = %d"
+                                     numStencilSpecs forward backward centered reflexive numSpeced
+                              ] )
+  where
+    combined = M.unionsWith (+) $ M.elems ma
+    get = fromMaybe 0 . flip M.lookup combined
+    numStencilSpecs = get "numStencilSpecs"
+    forward = get "forward"
+    backward = get "backward"
+    centered = get "centered"
+    reflexive = get "reflexive"
+    numSpeced = forward + backward + centered + reflexive
 prettyAnal a = [ k ++ ": " ++ show v | (k, v) <- M.toList a ]
+
 
 main :: IO ()
 main = do
@@ -216,6 +236,7 @@ test1 = map S.pack [
     , "((139,24),(141,48))      stencil readOnce, irreflexive(dims=1,2,3), (reflexive(dim=1))*(centered(depth=1, dim=2)) + (reflexive(dim=2))*(centered(depth=1, dim=1)) :: p"
     , "((139,24),(141,48))      stencil readOnce, (reflexive(dim=1))*(reflexive(dim=2)) :: rhs"
     , "((147,7),(147,78))       EVALMODE: LHS is an array subscript we  can't handle (tag: LHSnotHandled)"
+    , "((148,10),(148,68))      EVALMODE: dimensionality=1"
     , ""
     , "1.33user 0.04system 0:02.08elapsed 66%CPU (0avgtext+0avgdata 75672maxresident)k"
     , "0inputs+0outputs (0major+15984minor)pagefaults 0swaps"
