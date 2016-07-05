@@ -23,4 +23,9 @@ c     Label 1 should get same spec as this line
       c(:) = d(:)
       c(:) = a(0,:)
 
+c No spec here
+      do i=1,imax
+        c(i) = d(:)
+      end do
+
       end
