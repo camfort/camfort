@@ -168,66 +168,59 @@ spec =
 
     describe ("Inconsistent induction variable usage tests") $ do
       it "consistent (1) a(i,j) = b(i+1,j+1) + b(i,j)" $
-        (indicesToSpec' ["i", "j"]
-                        [Neighbour "i" 0, Neighbour "j" 0]
-                        [[offsetToIx "i" 1, offsetToIx "j" 1],
-                         [offsetToIx "i" 0, offsetToIx "j" 0]])
+        (indicesToSpec' [Neighbour "i" 0, Neighbour "j" 0]
+                        [[offsetToIxIJ "i" 1, offsetToIxIJ "j" 1],
+                         [offsetToIxIJ "i" 0, offsetToIxIJ "j" 0]])
          `shouldBe` (Just $ Specification $ Left $ Exact
                        (Spatial Linear
                          (Sum [Product [Forward 1 1 False, Forward 1 2 False],
                                Product [Centered 0 1 True, Centered 0 2 True]])))
       it "consistent (2) a(i,c,j) = b(i,j+1) + b(i,j) \
                         \:: forward(depth=1,dim=2)*reflexive(dim=1)" $
-        (indicesToSpec' ["i", "j"]
-                        [Neighbour "i" 0, Constant (F.ValInteger "0"), Neighbour "j" 0]
-                        [[offsetToIx "i" 0, offsetToIx "j" 1],
-                         [offsetToIx "i" 0, offsetToIx "j" 0]])
+        (indicesToSpec' [Neighbour "i" 0, Constant (F.ValInteger "0"), Neighbour "j" 0]
+                        [[offsetToIxIJ "i" 0, offsetToIxIJ "j" 1],
+                         [offsetToIxIJ "i" 0, offsetToIxIJ "j" 0]])
          `shouldBe` (Just $ Specification $ Left $ Exact
                        (Spatial Linear
                          (Sum [Product [Forward 1 2 True, Centered 0 1 True]])))
 
       it "consistent (3) a(i+1,c,j) = b(j,i+1) + b(j,i) \
                         \:: backward(depth=1,dim=2)*reflexive(dim=1)" $
-        (indicesToSpec' ["i", "j"]
-                        [Neighbour "i" 1, Constant (F.ValInteger "0"), Neighbour "j" 0]
-                        [[offsetToIx "j" 0, offsetToIx "i" 1],
-                         [offsetToIx "j" 0, offsetToIx "i" 0]])
+        (indicesToSpec' [Neighbour "i" 1, Constant (F.ValInteger "0"), Neighbour "j" 0]
+                        [[offsetToIxIJ "j" 0, offsetToIxIJ "i" 1],
+                         [offsetToIxIJ "j" 0, offsetToIxIJ "i" 0]])
          `shouldBe` (Just $ Specification $ Left $ Exact
                        (Spatial Linear
                          (Sum [Product [Backward 1 2 True, Centered 0 1 True]])))
 
       it "consistent (4) a(i+1,j) = b(0,i+1) + b(0,i) \
                          \:: backward(depth=1,dim=2)" $
-        (indicesToSpec' ["i", "j"]
-                        [Neighbour "i" 1, Neighbour "j" 0]
-                        [[offsetToIx "j" absoluteRep, offsetToIx "i" 1],
-                         [offsetToIx "j" absoluteRep, offsetToIx "i" 0]])
+        (indicesToSpec' [Neighbour "i" 1, Neighbour "j" 0]
+                        [[offsetToIxIJ "j" absoluteRep, offsetToIxIJ "i" 1],
+                         [offsetToIxIJ "j" absoluteRep, offsetToIxIJ "i" 0]])
          `shouldBe` (Just $ Specification $ Left $ Exact
                        (Spatial Linear
                          (Sum [Product [Backward 1 2 True]])))
 
       it "consistent (5) a(i) = b(i,i+1) \
                         \:: reflexive(dim=1)*forward(depth=1,dim=2,irreflexive)" $
-        (indicesToSpec' ["i", "j"]
-                        [Neighbour "i" 0]
-                        [[offsetToIx "i" 0, offsetToIx "i" 1]])
+        (indicesToSpec' [Neighbour "i" 0]
+                        [[offsetToIxIJ "i" 0, offsetToIxIJ "i" 1]])
          `shouldBe` (Just $ Specification $ Left $ Exact
                        (Spatial Linear
                          (Sum [Product [Forward 1 2 False,
                                         Centered 0 1 True]])))
 
       it "inconsistent (1) RHS" $
-        (indicesToSpec' ["i", "j"]
-                        [Neighbour "i" 0, Neighbour "j" 0]
-                        [[offsetToIx "i" 1, offsetToIx "j" 1],
-                         [offsetToIx "j" 0, offsetToIx "i" 0]])
+        (indicesToSpec' [Neighbour "i" 0, Neighbour "j" 0]
+                        [[offsetToIxIJ "i" 1, offsetToIxIJ "j" 1],
+                         [offsetToIxIJ "j" 0, offsetToIxIJ "i" 0]])
          `shouldBe` Nothing
 
       it "inconsistent (2) RHS to LHS" $
-        (indicesToSpec' ["i", "j"]
-                        [Neighbour "i" 0]
-                        [[offsetToIx "i" 1, offsetToIx "j" 1],
-                         [offsetToIx "j" 0, offsetToIx "i" 0]])
+        (indicesToSpec' [Neighbour "i" 0]
+                        [[offsetToIxIJ "i" 1, offsetToIxIJ "j" 1],
+                         [offsetToIxIJ "j" 0, offsetToIxIJ "i" 0]])
          `shouldBe` Nothing
 
     -------------------------
@@ -275,7 +268,7 @@ spec =
             "\ntests/Camfort/Analysis/StencilSpecification/example4.f\n\
              \((6,8),(6,33)) \tstencil (reflexive(dim=1)) :: x\n"
 
-
+offsetToIxIJ = offsetToIxWithIVs ["i","j"]
 exactSp = Specification . Left . Exact
 
 {- Properties of `spanBoundingBox`: idempotent and associative -}
@@ -338,15 +331,14 @@ test2DSpecVariation a b (input, expectation) =
     it ("format=" ++ show input) $ do
 
        -- Test inference
-       (indicesToSpec' ["i", "j"]
-                       [a, b]
+       (indicesToSpec' [a, b]
                        (map fromFormatToIx input))
           `shouldBe` Just expectedSpec
   where
     expectedSpec = Specification . Left $ expectation
-    fromFormatToIx [ri,rj] = [ offsetToIx "i" ri, offsetToIx "j" rj ]
+    fromFormatToIx [ri,rj] = [ offsetToIxIJ "i" ri, offsetToIxIJ "j" rj ]
 
-indicesToSpec' ivs lhs = fst . runWriter . (indicesToSpec "a" ivs lhs)
+indicesToSpec' lhs = fst . runWriter . (indicesToSpec "a" lhs)
 
 variations =
   [ ( [ [0,0] ]
@@ -417,15 +409,16 @@ test3DSpecVariation (input, expectation) =
     it ("format=" ++ show input) $ do
 
       -- Test inference
-      (indicesToSpec' ["i", "j", "k"]
-                      [Neighbour "i" 0, Neighbour "j" 0, Neighbour "k" 0]
+      (indicesToSpec' [Neighbour "i" 0, Neighbour "j" 0, Neighbour "k" 0]
                       (map fromFormatToIx input))
            `shouldBe` Just expectedSpec
 
   where
     expectedSpec = Specification . Left $ expectation
     fromFormatToIx [ri,rj,rk] =
-      [offsetToIx "i" ri, offsetToIx "j" rj, offsetToIx "k" rk]
+      [offsetToIxWithIVs ["i","j","k"] "i" ri,
+       offsetToIxWithIVs ["i","j","k"] "j" rj,
+       offsetToIxWithIVs ["i","j","k"] "k" rk]
 
 
 variations3D =
@@ -442,7 +435,7 @@ variations3D =
 
 prop_extract_synth_inverse :: F.Name -> Int -> Bool
 prop_extract_synth_inverse v o =
-     ixToNeighbour [v] (offsetToIx v o) == Neighbour v o
+     ixToNeighbour (offsetToIxWithIVs [v] v o) == Neighbour v o
 
 -- Local variables:
 -- mode: haskell
