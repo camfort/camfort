@@ -77,7 +77,7 @@ runInferer ivmap cycles puName tenv =
 stencilInference :: FAR.NameMap -> InferMode -> F.ProgramFile (FA.Analysis A) -> [LogLine]
 stencilInference nameMap mode pf@(F.ProgramFile _ _) = concatMap perPU (universeBi cm_pus')
   where
-    pf'@(F.ProgramFile cm_pus' _) = fillInductionVarsOfIndices pf
+    pf'@(F.ProgramFile cm_pus' _) = FAB.analyseBBlocks $ fillInductionVarsOfIndices pf
 
     -- Run inference per program unit, placing the flowsmap in scope
     perPU :: F.ProgramUnit (FA.Analysis A) -> [LogLine]
@@ -138,14 +138,10 @@ fillInductionVarsOfIndices = transformBi perBlock
         transform = transformBi
 
         perIndex :: (F.Index (FA.Analysis A) -> F.Index (FA.Analysis A))
-        perIndex x = (show (ixsspan x) ++ " l= " ++ show (FA.insLabel (F.getAnnotation y))) `trace` y
+        perIndex x = (show $ ixsspan x) `trace` F.setAnnotation (a { FA.insLabel = Just i }) x
           where
-            y   = F.setAnnotation (a { FA.insLabel = Just i, FA.prevAnnotation = pa' }) x
             a   = F.getAnnotation x
-            pa  = FA.prevAnnotation a
-            pa' = pa { indices = ["HI!"] }
-            --ivs = S.toList (S.empty `fromMaybe` IM.lookup i ivMap)
-            --pa' = pa { indices = ivs }
+
 
 -- | Return list of variable names that flow into themselves via a 2-cycle
 findVarFlowCycles :: Data a => F.ProgramFile a -> [(F.Name, F.Name)]
@@ -258,7 +254,7 @@ genSpecifications :: (?flowsGraph :: FAD.FlowsGraph A)
   -> Writer EvalLog [([Variable], Specification)]
 genSpecifications ivs lhs blocks = do
     let subscripts = evalState (mapM (genSubscripts True) blocks) []
-    varToMaybeSpecs <- ("subs# = " ++ show (length subscripts)) `trace` (sequence . map strength . mkSpecs $ subscripts)
+    varToMaybeSpecs <- sequence . map strength . mkSpecs $ subscripts
     let varToSpecs = catMaybes . map strength $ varToMaybeSpecs
     case varToSpecs of
       [] -> do
@@ -298,7 +294,6 @@ genSubscripts top block = do
     case (FA.insLabel $ F.getAnnotation block) of
 
       Just node ->
-       ("in node = " ++ show node) `trace`
         if node `elem` visited
         -- This dependency has already been visited during this traversal
         then return $ M.empty
@@ -307,9 +302,6 @@ genSubscripts top block = do
           put $ node : visited
           let blocksFlowingIn = mapMaybe (lab ?flowsGraph) $ pre ?flowsGraph node
           dependencies <- mapM (genSubscripts False) blocksFlowingIn
-          --DEL ((show (map (FA.insLabel . F.getAnnotation) blocksFlowingIn)) ++
-          --   ("\n dep# = " ++ (show $ map (M.map (map (map (ixToNeighbour ivs)))) dependencies)))
-          --   `trace`
           return $ M.unionsWith (++) (genRHSsubscripts block : dependencies)
 
       Nothing -> error $ "Missing a label for: " ++ show block
@@ -321,7 +313,7 @@ genRHSsubscripts ::
      F.Block (FA.Analysis A)
   -> M.Map Variable [[F.Index (FA.Analysis A)]]
 genRHSsubscripts b =
-    collect [ (show e) `trace` (FA.varName exp, e)
+    collect [ (FA.varName exp, e)
       | F.ExpSubscript _ _ exp subs <- FA.rhsExprs b
       , isVariableExpr exp
       , let e = F.aStrip subs
@@ -481,12 +473,11 @@ neighbourToOffset _               = Nothing
 ixToNeighbour :: FAD.InductionVarMapByASTBlock
               -> F.Index (FA.Analysis Annotation) -> Neighbour
 -- Range with stride = 1 and no explicit bounds count as reflexive indexing
-ixToNeighbour ivmap f = (show (ixsspan f) ++ " ivslist = " ++ show ivsList ++ " ins = " ++ show insl) `trace` ixToNeighbour' ivsList f
+ixToNeighbour ivmap f = ixToNeighbour' ivsList f
   where
-    --ivsList = indices . FA.prevAnnotation . F.getAnnotation $ f
     insl = FA.insLabel . F.getAnnotation $ f
     ivsList = S.toList $ fromMaybe S.empty $
-                IM.lookup (fromJustMsg (show (ixsspan f) ++ " get IVs associated to labelled index " ++ show insl) (FA.insLabel (F.getAnnotation f))) ivmap
+                IM.lookup (fromJustMsg (show (ixsspan f) ++ " get IVs associated to labelled index " ++ show insl) insl) ivmap
 
 ixToNeighbour' ivs (F.IxRange _ _ Nothing Nothing Nothing)     = Neighbour "" 0
 ixToNeighbour' ivs (F.IxRange _ _ Nothing Nothing
@@ -502,7 +493,7 @@ expToNeighbour :: forall a. Data a
 
 expToNeighbour ivs e@(F.ExpValue _ _ v@(F.ValVariable _))
     | FA.varName e `elem` ivs = Neighbour (FA.varName e) 0
-    | otherwise               = ("BLEKC : " ++ show (FA.varName e) ++ " ivs = " ++ show ivs) `trace` Constant (fmap (const ()) v)
+    | otherwise               = Constant (fmap (const ()) v)
 
 expToNeighbour ivs (F.ExpValue _ _ val) = Constant (fmap (const ()) val)
 
