@@ -252,6 +252,18 @@ spec =
            "\ntests/Camfort/Analysis/StencilSpecification/example2.f\n\
             \((22,12),(22,44)) \tCorrect.\n"
 
+    let file = "tests/Camfort/Analysis/StencilSpecification/example3.f"
+    program <- runIO $ readForparseSrcDir file []
+
+    describe "integration test on inference for example3.f" $ do
+      it "stencil infer" $
+         (callAndSummarise (infer AssignMode) program)
+           `shouldBe`
+            "\ntests/Camfort/Analysis/StencilSpecification/example3.f\n\
+             \((15,2),(15,20)) \tstencil readOnce, (reflexive(dim=3)) :: a\n\
+             \((20,8),(20,26)) \tstencil readOnce, (reflexive(dim=3)) :: a\n\
+             \((23,7),(23,17)) \tstencil readOnce, (reflexive(dim=1)) :: d\n\
+             \((24,7),(24,19)) \tstencil readOnce, (reflexive(dim=2)) :: a\n"
 
 
 exactSp = Specification . Left . Exact

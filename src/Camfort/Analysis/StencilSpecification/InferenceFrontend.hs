@@ -356,6 +356,8 @@ relativise lhs rhses = foldr relativiseRHS rhses lhs
       relativiseRHS _ rhses = rhses
 
       relativiseBy v i (Neighbour u j) | v == u = Neighbour u (j - i)
+      -- RHS is a range, map it to constant
+      relativiseBy v i (Neighbour "" j)         = Constant (F.ValInteger "")
       relativiseBy _ _ x = x
 
 -- Check that induction variables are used consistently
@@ -365,6 +367,10 @@ consistentIVSuse lhs rhses =
   consistentRHS /= Nothing && (all consistentWithLHS (fromJust consistentRHS))
     where
       cmp (Neighbour v i) (Neighbour v' _) | v == v' = Just $ Neighbour v i
+      -- Handles index range cases
+      cmp (Neighbour v i) (Neighbour v' _) | v == "" = Just $ Constant (F.ValInteger "")
+      cmp (Neighbour v i) (Neighbour v' _) | v' == "" = Just $ Constant (F.ValInteger "")
+      -- Cases for constants or non neighbour indices
       cmp (Neighbour {})  _              = Nothing
       cmp _ (Neighbour {})               = Nothing
       cmp _ _                            = Just $ Constant (F.ValInteger "")
@@ -377,6 +383,8 @@ consistentIVSuse lhs rhses =
 
       matchesIV :: Variable -> Neighbour -> Bool
       matchesIV v (Neighbour v' _) | v == v' = True
+      matchesIV v (Neighbour v' _) | v == "" = True
+      matchesIV v (Neighbour v' _) | v' == "" = True
       matchesIV _ _                          = False
 
 -- Convert list of relative offsets to a spec
