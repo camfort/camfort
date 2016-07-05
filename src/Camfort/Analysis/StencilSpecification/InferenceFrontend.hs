@@ -41,6 +41,7 @@ import qualified Language.Fortran.Analysis.Renaming as FAR
 import qualified Language.Fortran.Analysis.BBlocks as FAB
 import qualified Language.Fortran.Analysis.DataFlow as FAD
 import qualified Language.Fortran.Util.Position as FU
+import qualified Language.Fortran.Util.SecondParameter as FUS
 
 import Data.Data
 import Data.Foldable
@@ -289,12 +290,12 @@ genSubscripts False (F.BlStatement _ _ _ (F.StExpressionAssign _ _ e _))
     -- Don't pull dependencies through arrays
     = return M.empty
 
-genSubscripts top block = do
+genSubscripts top block = "gensub" `trace` do
     visited <- get
     case (FA.insLabel $ F.getAnnotation block) of
 
       Just node ->
-        if node `elem` visited
+        (show (FUS.getSecondParameter block)) `trace` if node `elem` visited
         -- This dependency has already been visited during this traversal
         then return $ M.empty
         -- Fresh dependency
