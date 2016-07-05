@@ -25,7 +25,7 @@ import Data.Generics.Uniplate.Operations
 import Control.Arrow
 import Control.Monad.State.Strict
 import Control.Monad.Reader
-import Control.Monad.Writer hiding (Product)
+import Control.Monad.Writer.Strict hiding (Product)
 
 import Camfort.Analysis.StencilSpecification.CheckBackend
 import qualified Camfort.Analysis.StencilSpecification.Grammar as Gram
@@ -78,7 +78,7 @@ stencilChecking nameMap pf = snd . runWriter $
 
      let results = let ?flowsGraph = flTo in
                     let ?nameMap = nameMap
-                      in descendBiM perProgramUnitCheck pf'
+                      in "gogo" `trace` descendBiM perProgramUnitCheck pf'
      -- Format output
      let a@(_, output) = evalState (runWriterT $ results) (([], Nothing), [])
      tell $ pprint output
@@ -144,21 +144,22 @@ perProgramUnitCheck :: (?nameMap :: FAR.NameMap, ?flowsGraph :: FAD.FlowsGraph A
 perProgramUnitCheck p@(F.PUModule {}) = do
     modify $ (id *** (const (Just $ FA.puName p))) *** id
     descendBiM perBlockCheck p
-perProgramUnitCheck p = descendBiM perBlockCheck p
+perProgramUnitCheck p = "prog unit" `trace` descendBiM perBlockCheck p
 
 perBlockCheck :: (?nameMap :: FAR.NameMap, ?flowsGraph :: FAD.FlowsGraph A)
    => F.Block (FA.Analysis A) -> Checker (F.Block (FA.Analysis A))
 
 perBlockCheck b@(F.BlComment ann span _) = do
+  traceShowM "in comment"
   ann' <- parseCommentToAST ann span
   updateRegionEnv ann'
   let b' = F.setAnnotation ann' b
   case (stencilSpec $ FA.prevAnnotation ann', stencilBlock $ FA.prevAnnotation ann') of
     -- Comment contains a specification and an associated block
     (Just (Right (Right specDecls)), Just block) ->
-     case block of
+     "in a comment" `trace` case block of
       s@(F.BlStatement ann span _ (F.StExpressionAssign _ _ lhs rhs)) ->
-       case isArraySubscript lhs of
+       "in a block" `trace` case isArraySubscript lhs of
          Just subs -> do
             -- Create list of relative indices
             (_, ivs) <- get
@@ -166,7 +167,7 @@ perBlockCheck b@(F.BlComment ann span _) = do
             let realName v   = v `fromMaybe` (v `M.lookup` ?nameMap)
             let lhsN         = maybe [] id (neighbourIndex ivs subs)
             let correctNames = map (\(names, spec) -> (map realName names, spec))
-            let inferred = correctNames . fst . runWriter $ genSpecifications ivs lhsN [s]
+            let inferred = (show (span, ivs)) `trace` (correctNames . fst . runWriter $ genSpecifications ivs lhsN [s])
             -- Model and compare the current and specified stencil specs
             if compareInferredToDeclared inferred specDecls
               then tell [ (span, "Correct.") ]
@@ -187,6 +188,7 @@ perBlockCheck b@(F.BlDo ann span _ mDoSpec body) = do
    let localIvs = getInductionVar mDoSpec
    -- introduce any induction variables into the induction variable state
    modify $ id *** union localIvs
+   traceShowM $ "in do with IVs = " ++ show localIvs
    -- descend into the body of the do-statement
    mapM_ (descendBiM perBlockCheck) body
    -- Remove any induction variable from the state
@@ -194,6 +196,7 @@ perBlockCheck b@(F.BlDo ann span _ mDoSpec body) = do
    return b
 
 perBlockCheck b = do
+  traceShowM "other"
   updateRegionEnv . F.getAnnotation $ b
   -- Go inside child blocks
   mapM_ (descendBiM perBlockCheck) $ children b
