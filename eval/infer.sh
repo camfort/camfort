@@ -1,9 +1,12 @@
 #!/bin/bash
 
 TIME=/usr/bin/time
-THREADS=8
+THREADS=4
+CLOC=cloc
 
 ##################################################
+
+[ -z "`which cloc`" ] && echo "Please install the 'cloc' program." && exit 1
 
 DIR=`dirname "$0"`
 declare -g -i TOTAL COUNT
@@ -44,7 +47,7 @@ function start_thread() {
     [ -z "${MODULES[$m]}" ] && MODULES+=([$m]=yes)
     echo "[PID=$p REM=$r] Starting stencils-infer MOD=$m FILE=\"$f\"..." >&2
     echo "%%% begin stencils-infer MOD=$m FILE=\"$f\""
-    lines=`wc -l "$f" | cut -f 1 -d ' '`
+    lines=`$CLOC --progress-rate=0 --quiet --csv "$f" | tail -1 | cut -f 5 -d,`
     echo "LineCount: $lines"
     echo "StartTime: `date --rfc-3339=seconds`"
     echo "Progress: $c / $TOTAL"
