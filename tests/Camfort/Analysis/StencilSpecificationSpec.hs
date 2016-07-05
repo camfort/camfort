@@ -7,7 +7,7 @@
 
 module Camfort.Analysis.StencilSpecificationSpec (spec) where
 
-import Control.Monad.Writer hiding (Sum, Product)
+import Control.Monad.Writer.Strict hiding (Sum, Product)
 import Data.List
 
 import Camfort.Functionality
@@ -244,7 +244,7 @@ spec =
            "\ntests/Camfort/Analysis/StencilSpecification/example2.f\n\
             \((24,8),(24,53)) \tstencil readOnce, (reflexive(dim=1))*(centered(depth=1, dim=2)) \
                                      \+ (reflexive(dim=2))*(centered(depth=1, dim=1)) :: a\n\
-            \((30,7),(30,38)) \tstencil readOnce, (backward(depth=1, dim=1)) :: a\n"
+            \((32,7),(32,26)) \tstencil readOnce, (backward(depth=1, dim=1)) :: a\n"
 
       it "stencil check" $
          (callAndSummarise check program)
@@ -264,6 +264,16 @@ spec =
              \((20,8),(20,26)) \tstencil readOnce, (reflexive(dim=3)) :: a\n\
              \((23,7),(23,17)) \tstencil readOnce, (reflexive(dim=1)) :: d\n\
              \((24,7),(24,19)) \tstencil readOnce, (reflexive(dim=2)) :: a\n"
+
+    let file = "tests/Camfort/Analysis/StencilSpecification/example4.f"
+    program <- runIO $ readForparseSrcDir file []
+
+    describe "integration test on inference for example4.f" $ do
+      it "stencil infer" $
+         (callAndSummarise (infer AssignMode) program)
+           `shouldBe`
+            "\ntests/Camfort/Analysis/StencilSpecification/example4.f\n\
+             \((6,8),(6,33)) \tstencil (reflexive(dim=1)) :: x\n"
 
 
 exactSp = Specification . Left . Exact
