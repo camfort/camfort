@@ -75,20 +75,19 @@ runInferer ivmap cycles puName tenv =
   flip evalState ivmap . flip runReaderT (cycles, puName, tenv) . execWriterT
 
 stencilInference :: InferMode -> F.ProgramFile (FA.Analysis A) -> [LogLine]
-stencilInference mode pf@(F.ProgramFile cm_pus others) =
- concatMap perPU (universeBi cm_pus')
+stencilInference mode pf@(F.ProgramFile cm_pus _) = concatMap perPU (universeBi cm_pus')
   where
+    (F.ProgramFile cm_pus' _) = fillInductionVarsOfIndices ivMap pf
+
     -- Run inference per program unit, placing the flowsmap in scope
     perPU :: F.ProgramUnit (FA.Analysis A) -> [LogLine]
 
     perPU pu | Just _ <- FA.bBlocks $ F.getAnnotation pu =
          let ?flowsGraph = flTo
-         in runInferer ivmap cycs2 (FA.puName pu) tenv (descendBiM (perBlockInfer mode) pu)
+         in runInferer ivMap cycs2 (FA.puName pu) tenv (descendBiM (perBlockInfer mode) pu)
     perPU _ = []
 
-    cm_pus' = transformBi labelIndexWithBlock cmpus
-
-    ivmap = FAD.genInductionVarMapByASTBlock beMap gr
+    ivMap = FAD.genInductionVarMapByASTBlock beMap gr
     -- perform reaching definitions analysis
     rd    = FAD.reachingDefinitions dm gr
     -- create graph of definition "flows"
@@ -114,6 +113,36 @@ stencilInference mode pf@(F.ProgramFile cm_pus others) =
     -- get map of variable name ==> { defining AST-Block-IDs }
     dm    = FAD.genDefMap bm
     tenv  = FAT.inferTypes pf
+
+-- | Fills out the insLabel and the indices values of F.Index
+-- AST-nodes based upon the F.Block AST-node that it is contained
+-- within most directly.
+fillInductionVarsOfIndices :: FAD.InductionVarMapByASTBlock -> F.ProgramFile (FA.Analysis A) -> F.ProgramFile (FA.Analysis A)
+fillInductionVarsOfIndices ivMap = transformBi perBlock
+  where
+    perBlock :: F.Block (FA.Analysis A) -> F.Block (FA.Analysis A)
+    perBlock (F.BlStatement a s e st)    = F.BlStatement a s (mfill i e) (fill i st)               where i = FA.insLabel a
+    perBlock (F.BlIf a s e1 e2 bss)      = F.BlIf a s (mfill i e1) (mmfill i e2) bss               where i = FA.insLabel a
+    perBlock (F.BlCase a s e1 e2 is bss) = F.BlCase a s (mfill i e1) (fill i e2) (mmfill i is) bss where i = FA.insLabel a
+    perBlock (F.BlDo a s e1 e2 bs)       = F.BlDo a s (mfill i e1) (mfill i e2) bs                 where i = FA.insLabel a
+    perBlock (F.BlDoWhile a s e1 e2 bs)  = F.BlDoWhile a s (mfill i e1) (fill i e2) bs             where i = FA.insLabel a
+    perBlock b                           = b
+
+    mfill i  = fmap (fill i)
+    mmfill i = fmap (fmap (fill i))
+
+    fill :: forall f. (Data (f (FA.Analysis A))) => Maybe Int -> f (FA.Analysis A) -> f (FA.Analysis A)
+    fill Nothing  = id
+    fill (Just i) = transform perIndex
+      where
+        transform :: (F.Index (FA.Analysis A) -> F.Index (FA.Analysis A)) -> f (FA.Analysis A) -> f (FA.Analysis A)
+        transform = transformBi
+
+        perIndex x = F.setAnnotation (a { FA.insLabel = Just i, FA.prevAnnotation = pa' }) x
+          where
+            a   = F.getAnnotation x
+            pa  = FA.prevAnnotation a
+            pa' = pa { indices = S.toList (S.empty `fromMaybe` IM.lookup i ivMap) }
 
 -- | Return list of variable names that flow into themselves via a 2-cycle
 findVarFlowCycles :: Data a => F.ProgramFile a -> [(F.Name, F.Name)]
