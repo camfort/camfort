@@ -371,11 +371,14 @@ consistentIVSuse lhs [] = True
 consistentIVSuse lhs rhses =
   consistentRHS /= Nothing && (all consistentWithLHS (fromJust consistentRHS))
     where
-      cmp (Neighbour v i) (Neighbour v' _) | v == v' = Just $ Neighbour v i
+      cmp (Neighbour v i) (Neighbour v' _) | v == v'   = Just $ Neighbour v i
+                                           | otherwise = Nothing
       -- Cases for constants or non neighbour indices
-      cmp (Neighbour {})  _              = Nothing
-      cmp _ (Neighbour {})               = Nothing
-      cmp _ _                            = Just $ Constant (F.ValInteger "")
+      cmp n@(Neighbour {})  (Constant _)   = Just n
+      cmp (Constant _) n@(Neighbour {})    = Just n
+      cmp (NonNeighbour {}) (Neighbour {}) = Nothing
+      cmp (Neighbour {}) (NonNeighbour{})  = Nothing
+      cmp _ _                              = Just $ Constant (F.ValInteger "")
       consistentRHS = foldrM (\a b -> mapM (uncurry cmp) $ zip a b) (head rhses) (tail rhses)
       -- If there is an induction variable on the RHS, then it also occurs on
       -- the LHS

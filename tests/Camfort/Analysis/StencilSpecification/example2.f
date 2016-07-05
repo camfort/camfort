@@ -34,4 +34,12 @@
 
       b(i,j) = a(i,j)
 
+      do i=1, imax
+         do j=1, jmx
+           x = a(1,j+1) + a(1,j-1)
+           a(i,j) = a(i,1) + a(i+1 ,1) + a(i-1,1) + a(1,j) + x
+           a(i,j) = a(i,j) + a(1,1)
+         end do
+      end do
+
       end

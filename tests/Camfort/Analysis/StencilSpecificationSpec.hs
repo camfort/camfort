@@ -216,6 +216,15 @@ spec =
                          (Sum [Product [Forward 1 2 False,
                                         Centered 0 1 True]])))
 
+      it "consistent (6) a(i) = b(i) + b(0) \
+                        \:: reflexive(dim=1)" $
+        (indicesToSpec' ["i", "j"]
+                        [Neighbour "i" 0]
+                        [[offsetToIx "i" 0], [offsetToIx "i" absoluteRep]])
+         `shouldBe` (Just $ Specification $ Left $ Exact
+                       (Spatial Linear
+                         (Sum [Product [Centered 0 1 True]])))
+
       it "inconsistent (1) RHS" $
         (indicesToSpec' ["i", "j"]
                         [Neighbour "i" 0, Neighbour "j" 0]
@@ -244,7 +253,10 @@ spec =
            "\ntests/Camfort/Analysis/StencilSpecification/example2.f\n\
             \((24,8),(24,53)) \tstencil readOnce, (reflexive(dim=1))*(centered(depth=1, dim=2)) \
                                      \+ (reflexive(dim=2))*(centered(depth=1, dim=1)) :: a\n\
-            \((32,7),(32,26)) \tstencil readOnce, (backward(depth=1, dim=1)) :: a\n"
+            \((32,7),(32,26)) \tstencil readOnce, (backward(depth=1, dim=1)) :: a\n\
+            \((40,8),(40,62)) \tstencil readOnce, (centered(depth=1, dim=1)) \
+                                                \+ (centered(depth=1, dim=2)) :: a\n\
+            \((41,8),(41,35)) \tstencil readOnce, (reflexive(dim=1))*(reflexive(dim=2)) :: a\n"
 
       it "stencil check" $
          (callAndSummarise check program)
