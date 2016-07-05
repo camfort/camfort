@@ -140,9 +140,10 @@ fillInductionVarsOfIndices = transformBi perBlock
         perIndex :: (F.Index (FA.Analysis A) -> F.Index (FA.Analysis A))
         perIndex x = (show (ixsspan x) ++ " l= " ++ show (FA.insLabel (F.getAnnotation y))) `trace` y
           where
-            y   = F.setAnnotation (a { FA.insLabel = Just i}) x
+            y   = F.setAnnotation (a { FA.insLabel = Just i, FA.prevAnnotation = pa' }) x
             a   = F.getAnnotation x
             pa  = FA.prevAnnotation a
+            pa' = pa { indices = ["HI!"] }
             --ivs = S.toList (S.empty `fromMaybe` IM.lookup i ivMap)
             --pa' = pa { indices = ivs }
 
@@ -320,7 +321,7 @@ genRHSsubscripts ::
      F.Block (FA.Analysis A)
   -> M.Map Variable [[F.Index (FA.Analysis A)]]
 genRHSsubscripts b =
-    collect [ (FA.varName exp, e)
+    collect [ (show e) `trace` (FA.varName exp, e)
       | F.ExpSubscript _ _ exp subs <- FA.rhsExprs b
       , isVariableExpr exp
       , let e = F.aStrip subs
