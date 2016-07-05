@@ -325,18 +325,18 @@ indicesToSpec a ivs lhs ixs = do
     else
       -- For the EvalMode, if there are any non-neighbourhood relative
       -- subscripts detected then add this to the eval log
-      if hasNonNeighbourhoodRelatives rhses
+      if hasNonNeighbourhoodRelatives rhses'
       then do tell [("EVALMODE: Non-neighbour relative subscripts\
                     \ (tag: nonNeighbour)","")]
               return Nothing
       else do
         -- Relativize the offsets based on the lhs
-        let rhses' = relativise lhs rhses
-        if rhses /= rhses'
+        let rhses'' = relativise lhs rhses'
+        if rhses' /= rhses''
           then  tell [("EVALMODE: Relativized spec (tag: relativized)", "")]
           else return ()
 
-        let offsets  = padZeros $ map (fromJust . mapM neighbourToOffset) rhses'
+        let offsets  = padZeros $ map (fromJust . mapM neighbourToOffset) rhses''
         tell [("EVALMODE: dimensionality=" ++
                  show (case offsets of [] -> 0
                                        _  -> length (head offsets)), a)]

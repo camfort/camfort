@@ -326,7 +326,7 @@ distAndOverlaps' (Backward d dim reflx : rs) (Centered 0 dim' True : rs')
     | rs == rs' && dim == dim'
       = Just (Backward d dim True : rs)
 
--- B+!B
+-- IRREFL B+!B
 distAndOverlaps' p1@(Backward d1 dim1 refl1 : Backward d2 dim2 refl2 : rs)
                  p2@(Backward d1' dim1' refl1' : Backward d2' dim2' refl2' : rs')
     | rs == rs' && dim1 == dim1' && dim2 == dim2'
@@ -337,7 +337,7 @@ distAndOverlaps' p1@(Backward d1 dim1 refl1 : Backward d2 dim2 refl2 : rs)
       && d1 == d2' && d2 == d1' && refl1 == not refl2' && refl2 == not refl1'
       = Just $ [Backward d1 dim1 True, Backward d2 dim2 True] ++ rs
 
--- C+!C
+-- IRREFL C+!C
 distAndOverlaps' p1@(Centered d1 dim1 refl1 : Centered d2 dim2 refl2 : rs)
                  p2@(Centered d1' dim1' refl1' : Centered d2' dim2' refl2' : rs')
     | rs == rs' && dim1 == dim1' && dim2 == dim2'
@@ -348,7 +348,7 @@ distAndOverlaps' p1@(Centered d1 dim1 refl1 : Centered d2 dim2 refl2 : rs)
       && d1 == d2' && d2 == d1' && refl1 == not refl2' && refl2 == not refl1'
       = Just $ [Centered d1 dim1 True, Centered d2 dim2 True] ++ rs
 
--- F+!F
+-- IRREFL F+!F
 distAndOverlaps' p1@(Forward d1 dim1 refl1 : Forward d2 dim2 refl2 : rs)
                  p2@(Forward d1' dim1' refl1' : Forward d2' dim2' refl2' : rs')
     | rs == rs' && dim1 == dim1' && dim2 == dim2'
