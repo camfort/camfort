@@ -9,7 +9,7 @@ import Test.Hspec
 
 import Data.Data
 import Data.Generics.Uniplate.Data
-import Control.Monad.Writer.Lazy
+import Control.Monad.Writer.Strict
 
 import Language.Fortran.AST
 import Language.Fortran.Util.Position

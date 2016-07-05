@@ -13,7 +13,7 @@ samplesBase = "tests" </> "Camfort" </> "Transformation" </> "samples"
 
 data Example = Example FilePath FilePath
 
-examples = 
+examples =
   [ Example "toArgs.f90" "toArgs.expected.f90"
   , Example "toArgs2.f90" "toArgs2.expected.f90"
   ]
@@ -39,4 +39,4 @@ spec =
       expected <- runIO $ readExpected "toArgs.expected.f90"
       actual <- runIO $ readActual "toArgs.f90"
       it "it eliminates common statement" $
-        actual `shouldBe` expected
+        (actual++"\n") `shouldBe` expected

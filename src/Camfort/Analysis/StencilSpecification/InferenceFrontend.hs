@@ -25,7 +25,7 @@ module Camfort.Analysis.StencilSpecification.InferenceFrontend where
 
 import Control.Monad.State.Strict
 import Control.Monad.Reader
-import Control.Monad.Writer hiding (Product)
+import Control.Monad.Writer.Strict hiding (Product)
 
 import Camfort.Analysis.StencilSpecification.InferenceBackend
 import Camfort.Analysis.StencilSpecification.Syntax
@@ -164,21 +164,26 @@ isArraySubscript _ = Nothing
 perBlockInfer :: (?flowsGraph :: FAD.FlowsGraph A)
     => InferMode -> F.Block (FA.Analysis A) -> Inferer (F.Block (FA.Analysis A))
 
-perBlockInfer mode b@(F.BlStatement _ span _ (F.StExpressionAssign _ _ lhs _))
+perBlockInfer mode b@(F.BlStatement _ span _ stmnt)
   | mode == AssignMode || mode == CombinedMode || mode == EvalMode = do
-    ivs <- get
-    case isArraySubscript lhs of
-       Just subs ->
-        -- Left-hand side is a subscript-by relative index or by a range
-        case neighbourIndex ivs subs of
-          Just lhs -> genSpecsAndReport mode span ivs lhs [b]
-          Nothing  -> if mode == EvalMode
-                      then tell [(span , Right ("EVALMODE: LHS is an array \
-                                         \subscript we can't handle \
-                                         \(tag: LHSnotHandled)",""))]
-                      else return ()
-       -- Not an assign we are interested in
-       _ -> return ()
+    -- On all StExpressionAssigns that occur in stmt....
+    flip mapM [lhs | (F.StExpressionAssign _ _ lhs _)
+                      <- universe stmnt :: [F.Statement (FA.Analysis A)]]
+    -- ... apply the following:
+      (\lhs -> do
+         ivs <- get
+         case isArraySubscript lhs of
+           Just subs ->
+             -- Left-hand side is a subscript-by relative index or by a range
+             case neighbourIndex ivs subs of
+               Just lhs -> genSpecsAndReport mode span ivs lhs [b]
+               Nothing  -> if mode == EvalMode
+                           then tell [(span , Right ("EVALMODE: LHS is an array \
+                                              \subscript we can't handle \
+                                              \(tag: LHSnotHandled)",""))]
+                           else return ()
+           -- Not an assign we are interested in
+           _ -> return ())
     return b
 
 perBlockInfer mode b@(F.BlDo _ span _ mDoSpec body) = do

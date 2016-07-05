@@ -27,7 +27,7 @@ module Camfort.Analysis.CommentAnnotator ( annotateComments
                                          , failWith
                                          ) where
 
-import Control.Monad.Writer.Lazy (Writer(..), tell)
+import Control.Monad.Writer.Strict (Writer(..), tell)
 import Data.Generics.Uniplate.Operations
 import Data.Data (Data)
 

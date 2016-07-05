@@ -124,7 +124,7 @@ analyses =
      ("stencils-check", (stencilsCheck, "stencil spec checking"))]
 
 -- * Usage and about information
-version = 0.775
+version = 0.776
 introMsg = "CamFort " ++ show version ++ " - Cambridge Fortran Infrastructure."
 usage = "Usage: camfort <MODE> <INPUT> [OUTPUT] [OPTIONS...]\n"
 menu =
