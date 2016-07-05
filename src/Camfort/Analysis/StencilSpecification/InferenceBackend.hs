@@ -31,11 +31,13 @@ import Data.Generics.Uniplate.Operations
 import Data.List hiding (sum)
 import Data.Data
 import Control.Arrow ((***))
-import Camfort.Analysis.StencilSpecification.Model
+import Data.Function
 
+import Camfort.Analysis.StencilSpecification.Model
 import Camfort.Helpers
 import Camfort.Helpers.Vec
 
+import Debug.Trace
 import Unsafe.Coerce
 
 import Camfort.Analysis.StencilSpecification.Syntax
@@ -50,7 +52,7 @@ inferFromIndices (VL ixs) =
       where
         (ixs', mult) = hasDuplicates ixs
         infer :: (IsNatural n, Permutable n) => [Vec n Int] -> Result Spatial
-        infer = fromRegionsToSpec . inferMinimalVectorRegions
+        infer = simplify . fromRegionsToSpec . inferMinimalVectorRegions
 
 -- Same as inferFromIndices but don't do any linearity checking
 -- (defaults to NonLinear). This is used when the front-end does
@@ -60,40 +62,31 @@ inferFromIndicesWithoutLinearity (VL ixs) =
     Specification . Left . infer $ ixs
       where
         infer :: (IsNatural n, Permutable n) => [Vec n Int] -> Result Spatial
-        infer = fromRegionsToSpec . inferMinimalVectorRegions
+        infer = simplify . fromRegionsToSpec . inferMinimalVectorRegions
 
--- For a list of region spans, calculate which dimensions do
--- have a region cross their origin and which do not. Return
--- a pair of lists for each respectively
-irreflexivity :: forall n . IsNatural n => [Span (Vec n Int)] -> [Dimension]
-irreflexivity spans = irrefls \\ onlyAbs
-  where refls   = reflexiveDims spans
-        irrefls = [1..(fromNat (Proxy :: (Proxy n)))] \\ refls
+simplify :: Result Spatial -> Result Spatial
+simplify = fmap simplifySpatial
 
-        -- Find dimensions that are always constant, remove these from irrefls
-        onlyAbs = common $ map (onlyAbs' 1) spans
-        onlyAbs' :: Int -> Span (Vec m Int) -> [Dimension]
-        onlyAbs' d (Nil, Nil) = []
-        onlyAbs' d (Cons l ls, Cons u us)
-          |   l == absoluteRep
-           && u == absoluteRep = d : onlyAbs' (d + 1) (ls, us)
-          | otherwise = onlyAbs' (d + 1) (ls, us)
-        common [] = []
-        common [x] = x
-        common (x : (y : xs)) | x == y = common (y : xs)
-                              | otherwise = []
+simplifySpatial :: Spatial -> Spatial
+simplifySpatial (Spatial lin (Sum ps)) = Spatial lin (Sum ps')
+   where ps' = order (reducor ps normaliseNoSort size)
+         order = sort . (map (Product . sort . unProd))
+         size :: [RegionProd] -> Int
+         size = foldr (+) 0 . map (length . unProd)
 
--- For a list or region spans, calculate which dimensions have
--- a region cross the origin, i.e., which dimensions have reflexive
--- access
-reflexiveDims :: [Span (Vec n Int)] -> [Dimension]
-reflexiveDims = nub . concatMap (reflexiveDims' 1)
-  where
-    reflexiveDims' :: Int -> Span (Vec n Int) -> [Dimension]
-    reflexiveDims' d (Nil, Nil) = []
-    reflexiveDims' d (Cons l ls, Cons u us)
-      | l <= 0 && u >= 0 = d : reflexiveDims' (d + 1) (ls, us)
-      | otherwise = reflexiveDims' (d + 1) (ls, us)
+-- Given a list, a list->list transofmer, a size function
+-- find the minimal transformed list by applying the transformer
+-- to every permutation of the list and when a smaller list is found
+-- iteratively apply to permutations on the smaller list
+reducor :: [a] -> ([a] -> [a]) -> ([a] -> Int) -> [a]
+reducor xs f size = reducor' (permutations xs)
+    where
+      reducor' [y] = f y
+      reducor' (y:ys) =
+          if (size y' < size y)
+            then reducor' (permutations y')
+            else reducor' ys
+        where y' = f y
 
 fromRegionsToSpec :: IsNatural n => [Span (Vec n Int)] -> Result Spatial
 fromRegionsToSpec sps = foldr (\x y -> sum (toSpecND x) y) zero sps
@@ -150,6 +143,7 @@ normaliseSpan (a@(Cons l1 ls1), b@(Cons u1 us1))
     | l1 <= u1  = (a, b)
     | otherwise = (b, a)
 
+-- DEPRECATED
 {- `spanBoundingBox` creates a span which is a bounding box over two spans -}
 spanBoundingBox :: Span (Vec n Int) -> Span (Vec n Int) -> Span (Vec n Int)
 spanBoundingBox a b = boundingBox' (normaliseSpan a) (normaliseSpan b)

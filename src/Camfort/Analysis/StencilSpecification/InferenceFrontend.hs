@@ -63,8 +63,8 @@ instance Default InferMode where
     defaultValue = AssignMode
 
 -- The inferer returns information as a LogLine
-type EvalLog = [String]
-type LogLine = (FU.SrcSpan, Either [([Variable], Specification)] String)
+type EvalLog = [(String, Variable)]
+type LogLine = (FU.SrcSpan, Either [([Variable], Specification)] (String,Variable))
 -- The core of the inferer works within this monad
 type Inferer = WriterT [LogLine] (ReaderT (Cycles, F.ProgramUnitName, TypeEnv A) (State [Variable]))
 type Cycles = [(F.Name, F.Name)]
@@ -142,12 +142,12 @@ genSpecsAndReport mode span ivs lhs blocks = do
     tell [ (span, Left specs) ]
     if mode == EvalMode
      then do
-      tell [ (span, Right "EVALMODE: assign to relative array subscript\
-                           \ (tag: tickAssign)") ]
+      tell [ (span, Right ("EVALMODE: assign to relative array subscript\
+                           \ (tag: tickAssign)","")) ]
       mapM_ (\evalInfo -> tell [ (span, Right evalInfo) ]) evalInfos
       mapM_ (\spec -> if show spec == ""
-                      then tell [ (span, Right "EVALMODE: Cannot make spec\
-                                               \ (tag: emptySpec)") ]
+                      then tell [ (span, Right ("EVALMODE: Cannot make spec\
+                                               \ (tag: emptySpec)","")) ]
                       else return ()) specs
      else return ()
 
@@ -173,9 +173,9 @@ perBlockInfer mode b@(F.BlStatement _ span _ (F.StExpressionAssign _ _ lhs _))
         case neighbourIndex ivs subs of
           Just lhs -> genSpecsAndReport mode span ivs lhs [b]
           Nothing  -> if mode == EvalMode
-                      then tell [(span , Right "EVALMODE: LHS is an array \
+                      then tell [(span , Right ("EVALMODE: LHS is an array \
                                          \subscript we can't handle \
-                                         \(tag: LHSnotHandled)")]
+                                         \(tag: LHSnotHandled)",""))]
                       else return ()
        -- Not an assign we are interested in
        _ -> return ()
@@ -213,13 +213,15 @@ genSpecifications ivs lhs blocks = do
     let varToSpecs = catMaybes . map strength $ varToMaybeSpecs
     case varToSpecs of
       [] -> do
-         tell ["EVALMODE: Empty specification (tag: emptySpec)"]
+         tell [("EVALMODE: Empty specification (tag: emptySpec)", "")]
          return []
       _ -> do
          let varsToSpecs = groupKeyBy varToSpecs
          return $ splitUpperAndLower varsToSpecs
     where
-      mkSpecs = M.toList . M.map (indicesToSpec ivs lhs) . M.unionsWith (++)
+      mkSpecs = M.toList
+              . M.mapWithKey (\v -> indicesToSpec v ivs lhs)
+              . M.unionsWith (++)
 
       strength :: Monad m => (a, m b) -> m (a, b)
       strength (a, mb) = mb >>= (\b -> return (a, b))
@@ -303,11 +305,12 @@ padZeros ixss = let m = maximum (map length ixss)
 
 -- Convert list of indexing expressions to a spec
 indicesToSpec :: (Data a, Eq a)
-              => [Variable]
+              => Variable
+              -> [Variable]
               -> [Neighbour]
               -> [[F.Index (FA.Analysis a)]]
               -> Writer EvalLog (Maybe Specification)
-indicesToSpec ivs lhs ixs = do
+indicesToSpec a ivs lhs ixs = do
    -- Convert indices to neighbourhood representation
   let rhses = map (map (ixToNeighbour ivs)) ixs
 
@@ -317,46 +320,70 @@ indicesToSpec ivs lhs ixs = do
 
   -- Check that induction variables are used consistently on lhs and rhses
   if not (consistentIVSuse lhs rhses')
-    then do tell ["EVALMODE: Inconsistent IV use (tag: inconsistentIV)"]
+    then do tell [("EVALMODE: Inconsistent IV use (tag: inconsistentIV)", "")]
             return Nothing
     else
       -- For the EvalMode, if there are any non-neighbourhood relative
       -- subscripts detected then add this to the eval log
-      if hasNonNeighbourhoodRelatives rhses
-      then do tell ["EVALMODE: Non-neighbour relative subscripts\
-                    \ (tag: nonNeighbour)"]
+      if hasNonNeighbourhoodRelatives rhses'
+      then do tell [("EVALMODE: Non-neighbour relative subscripts\
+                    \ (tag: nonNeighbour)","")]
               return Nothing
       else do
-        let offsets  = padZeros $ map (fromJust . mapM neighbourToOffset) rhses
-        tell ["EVALMODE: dimensionality=" ++ show (case offsets of
-                                                    [] -> 0
-                                                    _  -> length (head offsets))]
-
         -- Relativize the offsets based on the lhs
-        let offsets' = relativise lhs offsets
-        if offsets /= offsets'
-          then   tell ["EVALMODE: Relativized spec (tag: relativized)"]
-          else return()
+        let rhses'' = relativise lhs rhses'
+        if rhses' /= rhses''
+          then  tell [("EVALMODE: Relativized spec (tag: relativized)", "")]
+          else return ()
 
-        let spec = relativeIxsToSpec ivs offsets'
+        let offsets  = padZeros $ map (fromJust . mapM neighbourToOffset) rhses''
+        tell [("EVALMODE: dimensionality=" ++
+                 show (case offsets of [] -> 0
+                                       _  -> length (head offsets)), a)]
+
+
+        let spec = relativeIxsToSpec ivs offsets
         return $ fmap (setLinearity (fromBool mult)) spec
   where hasNonNeighbourhoodRelatives xs = or (map (any ((==) NonNeighbour)) xs)
 
 -- Given a list of the neighbourhood representation for the LHS, of size n
 -- and a list of size-n lists of offsets, relativise the offsets
-relativise :: [Neighbour] -> [[Int]] -> [[Int]]
-relativise neigh = map (map (uncurry relativize') . zip neigh)
-  where relativize' (Neighbour _ i) j = j - i
-        relativize' _               j = j
+relativise :: [Neighbour] -> [[Neighbour]] -> [[Neighbour]]
+relativise lhs rhses = foldr relativiseRHS rhses lhs
+    where
+      relativiseRHS (Neighbour lhsIV i) rhses =
+          map (map (relativiseBy lhsIV i)) rhses
+      relativiseRHS _ rhses = rhses
+
+      relativiseBy v i (Neighbour u j) | v == u = Neighbour u (j - i)
+      -- RHS is a range, map it to constant
+      relativiseBy v i (Neighbour "" j)         = Constant (F.ValInteger "")
+      relativiseBy _ _ x = x
 
 -- Check that induction variables are used consistently
 consistentIVSuse :: [Neighbour] -> [[Neighbour]] -> Bool
-consistentIVSuse lhs rhses = consistent /= Nothing
-    where cmp (Neighbour v i) (Neighbour v' _) | v == v' = Just $ Neighbour v i
-          cmp (Neighbour {} ) _              = Nothing
-          cmp _ (Neighbour {})               = Nothing
-          cmp _ _                            = Just $ Constant (F.ValInteger "")
-          consistent = foldrM (\a b -> mapM (uncurry cmp) $ zip a b) lhs rhses
+consistentIVSuse lhs [] = True
+consistentIVSuse lhs rhses =
+  consistentRHS /= Nothing && (all consistentWithLHS (fromJust consistentRHS))
+    where
+      cmp (Neighbour v i) (Neighbour v' _) | v == v' = Just $ Neighbour v i
+      -- Cases for constants or non neighbour indices
+      cmp (Neighbour {})  _              = Nothing
+      cmp _ (Neighbour {})               = Nothing
+      cmp _ _                            = Just $ Constant (F.ValInteger "")
+      consistentRHS = foldrM (\a b -> mapM (uncurry cmp) $ zip a b) (head rhses) (tail rhses)
+      -- If there is an induction variable on the RHS, then it also occurs on
+      -- the LHS
+      consistentWithLHS :: Neighbour -> Bool
+      consistentWithLHS (Neighbour rv _) = any (matchesIV rv) lhs
+      consistentWithLHS _                = True
+
+      matchesIV :: Variable -> Neighbour -> Bool
+      matchesIV v (Neighbour v' _) | v == v' = True
+      -- All RHS to contain index ranges
+      matchesIV v (Neighbour v' _) | v == "" = True
+      matchesIV v (Neighbour v' _) | v' == "" = True
+      matchesIV _ _                          = False
 
 -- Convert list of relative offsets to a spec
 relativeIxsToSpec :: [Variable] -> [[Int]] -> Maybe Specification
@@ -436,11 +463,27 @@ expToNeighbour ivs (F.ExpBinary _ _ F.Subtraction
          Neighbour (FA.varName e) (if x < 0 then abs x else (- x))
              where x = read offs
 
-expToNeighbour ivs e = NonNeighbour
+expToNeighbour ivs e =
+  -- Record when there is some kind of relative index on an inducion variable
+  -- but that is not a neighbourhood index by our definitions
+  if null ivs' then Constant (F.ValInteger "0") else NonNeighbour
+  where
+    -- set of all induction variables involved in this expression
+    ivs' = [i | e@(F.ExpValue _ _ (F.ValVariable {}))
+                 <- universeBi e :: [F.Expression (FA.Analysis a)]
+                , let i = FA.varName e
+                , i `elem` ivs]
+
+expToNeighbour ivs e = Constant (F.ValInteger "0")
 
 --------------------------------------------------
 
 -- Helper predicates
+isUnaryOrBinaryExpr :: F.Expression a -> Bool
+isUnaryOrBinaryExpr (F.ExpUnary {})  = True
+isUnaryOrBinaryExpr (F.ExpBinary {}) = True
+isUnaryOrBinaryExpr _                = False
+
 isVariableExpr :: F.Expression a -> Bool
 isVariableExpr (F.ExpValue _ _ (F.ValVariable _)) = True
 isVariableExpr _                                  = False

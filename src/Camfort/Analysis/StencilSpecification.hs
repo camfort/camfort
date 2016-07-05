@@ -61,8 +61,11 @@ infer mode filename pf =
 
 -- Format inferred specifications
 formatSpec :: FAR.NameMap -> LogLine -> String
-formatSpec nm (span, Right evalInfo) =
-  show (spanLineCol span) ++ " \t" ++ evalInfo ++ "\n"
+formatSpec nm (span, Right (evalInfo,name)) =
+     show (spanLineCol span) ++ " \t" ++ evalInfo
+  ++ (if name /= "" then " :: " ++ realName name else "") ++ "\n"
+  where
+    realName v               = v `fromMaybe` (v `M.lookup` nm)
 formatSpec nm (span, Left []) = ""
 formatSpec nm (span, Left specs) =
   (intercalate "\n" $ map (\s -> loc ++ " \t" ++ doSpec s) specs) ++ "\n"

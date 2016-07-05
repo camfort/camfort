@@ -181,7 +181,7 @@ instance Ord Region where
   _                <= _                = False
 
 -- Product of specifications
-newtype RegionProd = Product [Region]
+newtype RegionProd = Product {unProd :: [Region]}
   deriving (Eq, Data, Typeable)
 
 -- Sum of product specifications
@@ -241,10 +241,10 @@ instance PartialMonoid RegionProd where
        | otherwise =
          case absorbReflexive ss ss' of
            Just (ss0, ss1) ->
-               case equalModuloFwdBwd ss0 ss1 of
+               case distAndOverlaps ss0 ss1 of
                  Just ss'' -> return $ Product $ sort ss''
                  Nothing   -> return $ Product $ sort (ss0 ++ ss1)
-           Nothing -> case equalModuloFwdBwd ss ss' of
+           Nothing -> case distAndOverlaps ss ss' of
                         Just ss'' -> return $ Product $ sort ss''
                         Nothing   -> Nothing
 
@@ -272,21 +272,100 @@ absorbReflexive' (Centered d dim reflx : rs) [Centered 0 dim' _]
 
 absorbReflexive' _ _ = Nothing
 
--- If there are two region lists which are equal modulo an entry in
--- one which is `Forward d dim` and `Backward d dim` in the other
-equalModuloFwdBwd :: [Region] -> [Region] -> Maybe [Region]
-equalModuloFwdBwd [] xs = Just xs
-equalModuloFwdBwd xs [] = Just xs
-equalModuloFwdBwd (Forward d dim reflx : rs) (Backward d' dim' reflx' : rs')
-    | d == d' && dim == dim' && rs == rs' = Just (Centered d dim (reflx || reflx') : rs)
+-- Implements a combination of (+DIST), (+COMM), and (OVERLAPS)
+distAndOverlaps :: [Region] -> [Region] -> Maybe [Region]
+distAndOverlaps x y =
+  -- (+COMM)
+  distAndOverlaps' x y <|> distAndOverlaps' y x
 
-equalModuloFwdBwd rs@(Backward {} : _) rs'@(Forward {} : _)
-    = equalModuloFwdBwd rs' rs
+distAndOverlaps' [] xs = Just xs
+distAndOverlaps' xs [] = Just xs
 
-equalModuloFwdBwd (r:rs) (r':rs')
-    | r == r'   = do rs'' <- equalModuloFwdBwd rs rs'
+-- F+F
+distAndOverlaps' (Forward d dim refl : rs) (Forward d' dim' refl' : rs')
+  | rs == rs' && dim == dim'
+      = Just (Forward (max d d') dim (refl || refl') : rs)
+
+-- B+B
+distAndOverlaps' (Backward d dim refl : rs) (Backward d' dim' refl' : rs')
+  | rs == rs' && dim == dim'
+      = Just (Backward (max d d') dim (refl || refl') : rs)
+
+-- C+C
+distAndOverlaps' (Centered d dim refl : rs) (Centered d' dim' refl' : rs')
+  | rs == rs' && dim == dim' && d /= 0 && d' /= 0
+      = Just (Centered (max d d') dim (refl || refl') : rs)
+
+-- C+F
+distAndOverlaps' (Forward d dim refl : rs) (Centered d' dim' refl' : rs')
+  | rs == rs' && dim == dim' && d <= d' && d' /= 0
+      = Just (Centered d' dim (refl || refl') : rs)
+
+-- C+B
+distAndOverlaps' (Backward d dim refl : rs) (Centered d' dim' refl' : rs')
+  | rs == rs' && dim == dim' && d <= d' && d' /= 0
+      = Just (Centered d' dim (refl || refl') : rs)
+
+-- F+B
+distAndOverlaps' (Forward d dim reflx : rs) (Backward d' dim' reflx' : rs')
+    | rs == rs' && d == d' && dim == dim'
+      = Just (Centered d dim (reflx || reflx') : rs)
+
+-- C+R
+distAndOverlaps' (Centered d dim reflx : rs) (Centered 0 dim' True : rs')
+    | rs == rs' && dim == dim'
+      = Just (Centered d dim True : rs)
+
+-- F+R
+distAndOverlaps' (Forward d dim reflx : rs) (Centered 0 dim' True : rs')
+    | rs == rs' && dim == dim'
+      = Just (Forward d dim True : rs)
+
+-- B+R
+distAndOverlaps' (Backward d dim reflx : rs) (Centered 0 dim' True : rs')
+    | rs == rs' && dim == dim'
+      = Just (Backward d dim True : rs)
+
+-- IRREFL B+!B
+distAndOverlaps' p1@(Backward d1 dim1 refl1 : Backward d2 dim2 refl2 : rs)
+                 p2@(Backward d1' dim1' refl1' : Backward d2' dim2' refl2' : rs')
+    | rs == rs' && dim1 == dim1' && dim2 == dim2'
+      && d1 == d1' && d2 == d2' && refl1 == not refl1' && refl2 == not refl2'
+      = Just $ [Backward d1 dim1 True, Backward d2 dim2 True] ++ rs
+
+    | rs == rs' && dim1 == dim2' && dim2 == dim1'
+      && d1 == d2' && d2 == d1' && refl1 == not refl2' && refl2 == not refl1'
+      = Just $ [Backward d1 dim1 True, Backward d2 dim2 True] ++ rs
+
+-- IRREFL C+!C
+distAndOverlaps' p1@(Centered d1 dim1 refl1 : Centered d2 dim2 refl2 : rs)
+                 p2@(Centered d1' dim1' refl1' : Centered d2' dim2' refl2' : rs')
+    | rs == rs' && dim1 == dim1' && dim2 == dim2'
+      && d1 == d1' && d2 == d2' && refl1 == not refl1' && refl2 == not refl2'
+      = Just $ [Centered d1 dim1 True, Centered d2 dim2 True] ++ rs
+
+    | rs == rs' && dim1 == dim2' && dim2 == dim1'
+      && d1 == d2' && d2 == d1' && refl1 == not refl2' && refl2 == not refl1'
+      = Just $ [Centered d1 dim1 True, Centered d2 dim2 True] ++ rs
+
+-- IRREFL F+!F
+distAndOverlaps' p1@(Forward d1 dim1 refl1 : Forward d2 dim2 refl2 : rs)
+                 p2@(Forward d1' dim1' refl1' : Forward d2' dim2' refl2' : rs')
+    | rs == rs' && dim1 == dim1' && dim2 == dim2'
+      && d1 == d1' && d2 == d2' && refl1 == not refl1' && refl2 == not refl2'
+      = Just $ [Forward d1 dim1 True, Forward d2 dim2 True] ++ rs
+
+    | rs == rs' && dim1 == dim2' && dim2 == dim1'
+      && d1 == d2' && d2 == d1' && refl1 == not refl2' && refl2 == not refl1'
+      = Just $ [Forward d1 dim1 True, Forward d2 dim2 True] ++ rs
+
+-- push any remaining idempotence through dist
+-- distAndOverlaps(r*s + r*s') = r*(distAndOverlaps (s + s'))
+distAndOverlaps' (r:rs) (r':rs')
+    | r == r'   = do rs'' <- distAndOverlaps rs rs'
                      return $ r : rs''
-equalModuloFwdBwd _ _ = Nothing
+
+distAndOverlaps' _ _ = Nothing
 
 
 -- Operations on region specifications form a semiring

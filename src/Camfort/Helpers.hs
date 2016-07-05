@@ -123,5 +123,10 @@ normalise :: (Ord t, PartialMonoid t) => [t] -> [t]
 normalise = nub . reduce . sort
   where reduce = foldPair appendM
 
+normaliseNoSort :: (Ord t, PartialMonoid t) => [t] -> [t]
+normaliseNoSort = nub . reduce
+  where reduce = foldPair appendM
+
 normaliseBy :: Ord t => (t -> t -> Maybe t) -> [t] -> [t]
 normaliseBy plus = nub . (foldPair plus) . sort
+
