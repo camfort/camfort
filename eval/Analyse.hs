@@ -8,6 +8,7 @@ import Data.List (unfoldr, groupBy, foldl', nub)
 import Data.Function (on)
 import Data.Array
 import qualified Data.Map as M
+import Control.Monad
 
 varKeywords = [ "readOnce", "reflexive", "irreflexive", "forward", "backward", "centered", "atLeast", "atMost" ]
 spanKeywords = [ "tickAssign", "LHSnotHandled", "nonNeighbour", "emptySpec", "inconsistentIV", "relativized" ]
@@ -88,10 +89,12 @@ analyseExec [] = M.empty
 analyseExec (e1:es)
   | any (=~ "Lexing failed") es = M.singleton modName $ M.fromList [("lexFailed", 1), ("lexOrParseFailed", 1)]
   | any (=~ "Parsing failed") es = M.singleton modName $ M.fromList [("parseFailed", 1), ("lexOrParseFailed", 1)]
-  | otherwise = M.singleton modName . M.unionsWith (+) . (M.singleton "parseOk" 1:) . map eachGroup $ gs
+  | otherwise = M.singleton modName . M.unionsWith (+) . (parseOk:) . map eachGroup $ gs
   where
     gs = groupBy ((==) `on` srcSpan) . filter (=~ "\\)[[:space:]]*(stencil|EVALMODE)") $ es
     modName = drop 4 . S.unpack . (=~ "MOD=([^ ]*)") $ e1
+    lineCount = msum (es >>= map (fmap fst . S.readInt) . mrSubList . (=~ "LineCount: ([0-9]*)"))
+    parseOk = M.fromList (("parseOk", 1):case lineCount of Just n -> [("linesParsed", n)]; _ -> [])
 
 -- helper functions
 srcSpan :: S.ByteString -> S.ByteString
