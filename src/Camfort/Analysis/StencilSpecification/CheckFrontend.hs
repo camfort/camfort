@@ -49,6 +49,7 @@ import qualified Language.Fortran.Util.Position as FU
 
 import Data.Graph.Inductive.Graph hiding (isEmpty)
 import qualified Data.Map as M
+import qualified Data.IntMap as IM
 import qualified Data.Set as S
 import Data.Maybe
 import Data.List
@@ -75,12 +76,14 @@ stencilChecking nameMap pf = snd . runWriter $
      let rd    = FAD.reachingDefinitions dm gr
      -- create graph of definition "flows"
      let flTo =  FAD.genFlowsToGraph bm dm gr rd
-
+     -- identify every loop by its back-edge
+     let beMap = FAD.genBackEdgeMap (FAD.dominators gr) gr
+     let ivmap = FAD.genInductionVarMapByASTBlock beMap gr
      let results = let ?flowsGraph = flTo in
                     let ?nameMap = nameMap
                       in "gogo" `trace` descendBiM perProgramUnitCheck pf'
      -- Format output
-     let a@(_, output) = evalState (runWriterT $ results) (([], Nothing), [])
+     let a@(_, output) = evalState (runWriterT $ results) (([], Nothing), ivmap)
      tell $ pprint output
 
 -- Helper for transforming the 'previous' annotation
@@ -90,7 +93,7 @@ onPrev f ann = ann { FA.prevAnnotation = f (FA.prevAnnotation ann) }
 -- Instances for embedding parsed specifications into the AST
 instance ASTEmbeddable (FA.Analysis Annotation) Gram.Specification where
   annotateWithAST ann ast =
-    onPrev (\ann -> ann { stencilSpec = Just $ Left ast }) ann
+    "DOING ANNOTATE" `trace` onPrev (\ann -> ann { stencilSpec = Just $ Left ast }) ann
 
 instance Linkable (FA.Analysis Annotation) where
   link ann (b@(F.BlDo {})) =
@@ -102,7 +105,7 @@ instance Linkable (FA.Analysis Annotation) where
 type LogLine = (FU.SrcSpan, String)
 type Checker a =
     WriterT [LogLine]
-            (State ((RegionEnv, Maybe F.ProgramUnitName), [Variable])) a
+            (State ((RegionEnv, Maybe F.ProgramUnitName), FAD.InductionVarMapByASTBlock)) a
 
 -- If the annotation contains an unconverted stencil specification syntax tree
 -- then convert it and return an updated annotation containing the AST
@@ -147,27 +150,30 @@ perProgramUnitCheck p@(F.PUModule {}) = do
 perProgramUnitCheck p = "prog unit" `trace` descendBiM perBlockCheck p
 
 perBlockCheck :: (?nameMap :: FAR.NameMap, ?flowsGraph :: FAD.FlowsGraph A)
-   => F.Block (FA.Analysis A) -> Checker (F.Block (FA.Analysis A))
+   =>  F.Block (FA.Analysis A) -> Checker (F.Block (FA.Analysis A))
 
 perBlockCheck b@(F.BlComment ann span _) = do
-  traceShowM "in comment"
   ann' <- parseCommentToAST ann span
+  traceShowM $ show span ++ "in comment, ann' = " ++ show ((stencilSpec $ FA.prevAnnotation ann'))
   updateRegionEnv ann'
   let b' = F.setAnnotation ann' b
   case (stencilSpec $ FA.prevAnnotation ann', stencilBlock $ FA.prevAnnotation ann') of
     -- Comment contains a specification and an associated block
     (Just (Right (Right specDecls)), Just block) ->
-     "in a comment" `trace` case block of
+     ("in a comment with " ++ take 30 (show block)) `trace` case block of
       s@(F.BlStatement ann span _ (F.StExpressionAssign _ _ lhs rhs)) ->
        "in a block" `trace` case isArraySubscript lhs of
          Just subs -> do
             -- Create list of relative indices
-            (_, ivs) <- get
+            (_, ivmap) <- get
+            --let label = fromJustMsg "getting label of block in inference" (FA.insLabel ann)
+            --let ivs = S.toList $ fromMaybe S.empty (IM.lookup label ivmap)
+
             -- Do inference
             let realName v   = v `fromMaybe` (v `M.lookup` ?nameMap)
-            let lhsN         = maybe [] id (neighbourIndex ivs subs)
+            let lhsN         = maybe [] id (neighbourIndex ivmap subs)
             let correctNames = map (\(names, spec) -> (map realName names, spec))
-            let inferred = (show (span, ivs)) `trace` (correctNames . fst . runWriter $ genSpecifications ivs lhsN [s])
+            let inferred = correctNames . fst . runWriter $ genSpecifications ivmap lhsN [s]
             -- Model and compare the current and specified stencil specs
             if compareInferredToDeclared inferred specDecls
               then tell [ (span, "Correct.") ]
@@ -185,14 +191,14 @@ perBlockCheck b@(F.BlComment ann span _) = do
     _ -> return b'
 
 perBlockCheck b@(F.BlDo ann span _ mDoSpec body) = do
-   let localIvs = getInductionVar mDoSpec
+   --let localIvs = getInductionVar mDoSpec
    -- introduce any induction variables into the induction variable state
-   modify $ id *** union localIvs
-   traceShowM $ "in do with IVs = " ++ show localIvs
+   --modify $ id *** union localIvs
+   --traceShowM $ "in do with IVs = " ++ show localIvs
    -- descend into the body of the do-statement
    mapM_ (descendBiM perBlockCheck) body
    -- Remove any induction variable from the state
-   modify $ id *** (\\ localIvs)
+   --modify $ id *** (\\ localIvs)
    return b
 
 perBlockCheck b = do

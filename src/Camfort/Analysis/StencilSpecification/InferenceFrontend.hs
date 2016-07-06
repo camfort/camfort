@@ -41,16 +41,17 @@ import qualified Language.Fortran.Analysis.Renaming as FAR
 import qualified Language.Fortran.Analysis.BBlocks as FAB
 import qualified Language.Fortran.Analysis.DataFlow as FAD
 import qualified Language.Fortran.Util.Position as FU
+import qualified Language.Fortran.Util.SecondParameter as FUS
 
 import Data.Data
 import Data.Foldable
 import Data.Generics.Uniplate.Operations
 import Data.Graph.Inductive.Graph hiding (isEmpty)
 import qualified Data.Map as M
+import qualified Data.IntMap as IM
 import qualified Data.Set as S
 import Data.Maybe
 import Data.List
-import Debug.Trace
 
 type Variable = String
 
@@ -66,36 +67,30 @@ instance Default InferMode where
 type EvalLog = [(String, Variable)]
 type LogLine = (FU.SrcSpan, Either [([Variable], Specification)] (String,Variable))
 -- The core of the inferer works within this monad
-type Inferer = WriterT [LogLine] (ReaderT (Cycles, F.ProgramUnitName, TypeEnv A) (State [Variable]))
+type Inferer = WriterT [LogLine] (ReaderT (Cycles, F.ProgramUnitName, TypeEnv A) (State FAD.InductionVarMapByASTBlock))
 type Cycles = [(F.Name, F.Name)]
 
-runInferer :: Cycles -> F.ProgramUnitName -> TypeEnv A -> Inferer a -> [LogLine]
-runInferer cycles puName tenv =
-  flip evalState [] . flip runReaderT (cycles, puName, tenv) . execWriterT
+runInferer :: FAD.InductionVarMapByASTBlock -> Cycles -> F.ProgramUnitName -> TypeEnv A -> Inferer a -> [LogLine]
+runInferer ivmap cycles puName tenv =
+  flip evalState ivmap . flip runReaderT (cycles, puName, tenv) . execWriterT
 
-stencilInference :: InferMode -> F.ProgramFile (FA.Analysis A) -> [LogLine]
-stencilInference mode pf@(F.ProgramFile cm_pus others) =
- concatMap perPU (universeBi cm_pus)
+stencilInference :: FAR.NameMap -> InferMode -> F.ProgramFile (FA.Analysis A) -> [LogLine]
+stencilInference nameMap mode pf@(F.ProgramFile cm_pus _) = concatMap perPU (universeBi cm_pus)
   where
     -- Run inference per program unit, placing the flowsmap in scope
     perPU :: F.ProgramUnit (FA.Analysis A) -> [LogLine]
 
     perPU pu | Just _ <- FA.bBlocks $ F.getAnnotation pu =
          let ?flowsGraph = flTo
-         in runInferer cycs2 (FA.puName pu) tenv (descendBiM (perBlockInfer mode) pu)
+         in runInferer ivMap [] (FA.puName pu) tenv (descendBiM (perBlockInfer mode) pu)
     perPU _ = []
 
+    ivMap = FAD.genInductionVarMapByASTBlock beMap gr
     -- perform reaching definitions analysis
     rd    = FAD.reachingDefinitions dm gr
     -- create graph of definition "flows"
     flTo =  FAD.genFlowsToGraph bm dm gr rd
-    -- VarFlowsToMap: A -> { B, C } indicates that A contributes to B, C
-    flMap = FAD.genVarFlowsToMap dm flTo
-    -- find 2-cycles: A -> B -> A
-    cycs2 = [ (n, m) | (n, ns) <- M.toList flMap
-                    , m       <- S.toList ns
-                    , ms      <- maybeToList $ M.lookup m flMap
-                    , n `S.member` ms && n /= m ]
+
     -- identify every loop by its back-edge
     beMap = FAD.genBackEdgeMap (FAD.dominators gr) gr
 
@@ -107,9 +102,14 @@ stencilInference mode pf@(F.ProgramFile cm_pus others) =
     sgr   = FAB.genSuperBBGr bbm
     -- extract the supergraph itself
     gr    = FAB.superBBGrGraph sgr
+
     -- get map of variable name ==> { defining AST-Block-IDs }
     dm    = FAD.genDefMap bm
     tenv  = FAT.inferTypes pf
+
+ixsspan :: F.Index (FA.Analysis A)  -> FU.SrcSpan
+ixsspan  (F.IxRange _ sp _ _ _) = sp
+ixsspan (F.IxSingle _ sp _ _ ) = sp
 
 -- | Return list of variable names that flow into themselves via a 2-cycle
 findVarFlowCycles :: Data a => F.ProgramFile a -> [(F.Name, F.Name)]
@@ -134,11 +134,12 @@ findVarFlowCycles' pf = cycs2
 {- *** 1 . Core inference over blocks -}
 
 genSpecsAndReport :: (?flowsGraph :: FAD.FlowsGraph A)
-  => InferMode -> FU.SrcSpan -> [Variable] -> [Neighbour]
+  => InferMode -> FU.SrcSpan -> [Neighbour]
   -> [F.Block (FA.Analysis A)]
   -> Inferer ()
-genSpecsAndReport mode span ivs lhs blocks = do
-    let (specs, evalInfos) = runWriter $ genSpecifications ivs lhs blocks
+genSpecsAndReport mode span lhs blocks = do
+    ivmap <- get
+    let (specs, evalInfos) = runWriter $ genSpecifications ivmap lhs blocks
     tell [ (span, Left specs) ]
     if mode == EvalMode
      then do
@@ -160,23 +161,28 @@ isArraySubscript (F.ExpSubscript _ _ (F.ExpValue _ _ (F.ValVariable _)) subs) =
 isArraySubscript (F.ExpDataRef _ _ _ e) = isArraySubscript e
 isArraySubscript _ = Nothing
 
+fromJustMsg msg (Just x) = x
+fromJustMsg msg Nothing = error msg
+
 -- Traverse Blocks in the AST and infer stencil specifications
 perBlockInfer :: (?flowsGraph :: FAD.FlowsGraph A)
     => InferMode -> F.Block (FA.Analysis A) -> Inferer (F.Block (FA.Analysis A))
 
-perBlockInfer mode b@(F.BlStatement _ span _ stmnt)
+perBlockInfer mode b@(F.BlStatement ann span _ stmnt)
   | mode == AssignMode || mode == CombinedMode || mode == EvalMode = do
     -- On all StExpressionAssigns that occur in stmt....
     flip mapM [lhs | (F.StExpressionAssign _ _ lhs _)
                       <- universe stmnt :: [F.Statement (FA.Analysis A)]]
     -- ... apply the following:
       (\lhs -> do
-         ivs <- get
+         --let label = fromJustMsg "getting label of block in inference" (FA.insLabel ann)
+         --let ivs = S.toList $ fromMaybe S.empty (IM.lookup label ivmap)
+         ivmap <- get
          case isArraySubscript lhs of
            Just subs ->
              -- Left-hand side is a subscript-by relative index or by a range
-             case neighbourIndex ivs subs of
-               Just lhs -> genSpecsAndReport mode span ivs lhs [b]
+             case neighbourIndex ivmap subs of
+               Just lhs -> genSpecsAndReport mode span lhs [b]
                Nothing  -> if mode == EvalMode
                            then tell [(span , Right ("EVALMODE: LHS is an array \
                                               \subscript we can't handle \
@@ -186,20 +192,17 @@ perBlockInfer mode b@(F.BlStatement _ span _ stmnt)
            _ -> return ())
     return b
 
-perBlockInfer mode b@(F.BlDo _ span _ mDoSpec body) = do
-    let localIvs = getInductionVar mDoSpec
+perBlockInfer mode b@(F.BlDo ann span _ mDoSpec body) = do
+    --let localIvs = getInductionVar mDoSpec
     -- introduce any induction variables into the induction variable state
-    modify $ union localIvs
-    ivs <- get
 
     if (mode == DoMode || mode == CombinedMode) && isStencilDo b
-     then genSpecsAndReport mode span ivs [] body
-     else return ()
+      then genSpecsAndReport mode span [] body
+      else return ()
 
     -- descend into the body of the do-statement
-    mapM_ (descendBiM (perBlockInfer mode)) body
+    mapM_ (descendBiM (perBlockInfer  mode)) body
     -- Remove any induction variable from the state
-    modify $ (\\ localIvs)
     return b
 
 perBlockInfer mode b = do
@@ -208,7 +211,7 @@ perBlockInfer mode b = do
     return b
 
 genSpecifications :: (?flowsGraph :: FAD.FlowsGraph A)
-  => [Variable]
+  => FAD.InductionVarMapByASTBlock
   -> [Neighbour]
   -> [F.Block (FA.Analysis A)]
   -> Writer EvalLog [([Variable], Specification)]
@@ -225,7 +228,7 @@ genSpecifications ivs lhs blocks = do
          return $ splitUpperAndLower varsToSpecs
     where
       mkSpecs = M.toList
-              . M.mapWithKey (\v -> indicesToSpec v ivs lhs)
+              . M.mapWithKey (\v -> indicesToSpec ivs v lhs)
               . M.unionsWith (++)
 
       strength :: Monad m => (a, m b) -> m (a, b)
@@ -253,12 +256,12 @@ genSubscripts top block = do
     visited <- get
     case (FA.insLabel $ F.getAnnotation block) of
 
-      Just node ->
-        if node `elem` visited
-        -- This dependency has already been visited during this traversal
-        then return $ M.empty
-        -- Fresh dependency
-        else do
+      Just node
+        | node `elem` visited ->
+          -- This dependency has already been visited during this traversal
+          return $ M.empty
+        | otherwise -> do
+          -- Fresh dependency
           put $ node : visited
           let blocksFlowingIn = mapMaybe (lab ?flowsGraph) $ pre ?flowsGraph node
           dependencies <- mapM (genSubscripts False) blocksFlowingIn
@@ -277,7 +280,7 @@ genRHSsubscripts b =
       | F.ExpSubscript _ _ exp subs <- FA.rhsExprs b
       , isVariableExpr exp
       , let e = F.aStrip subs
-      , not (null e) ]
+      , not (null e)]
 
 getInductionVar :: Maybe (F.DoSpecification (FA.Analysis A)) -> [Variable]
 getInductionVar (Just (F.DoSpecification _ _ (F.StExpressionAssign _ _ e _) _ _))
@@ -309,13 +312,12 @@ padZeros ixss = let m = maximum (map length ixss)
                 in map (\ixs -> ixs ++ replicate (m - length ixs) 0) ixss
 
 -- Convert list of indexing expressions to a spec
-indicesToSpec :: (Data a, Eq a)
-              => Variable
-              -> [Variable]
+indicesToSpec :: FAD.InductionVarMapByASTBlock
+              -> Variable
               -> [Neighbour]
-              -> [[F.Index (FA.Analysis a)]]
+              -> [[F.Index (FA.Analysis Annotation)]]
               -> Writer EvalLog (Maybe Specification)
-indicesToSpec a ivs lhs ixs = do
+indicesToSpec ivs a lhs ixs = do
    -- Convert indices to neighbourhood representation
   let rhses = map (map (ixToNeighbour ivs)) ixs
 
@@ -347,7 +349,7 @@ indicesToSpec a ivs lhs ixs = do
                                        _  -> length (head offsets)), a)]
 
 
-        let spec = relativeIxsToSpec ivs offsets
+        let spec = relativeIxsToSpec offsets
         return $ fmap (setLinearity (fromBool mult)) spec
   where hasNonNeighbourhoodRelatives xs = or (map (any ((==) NonNeighbour)) xs)
 
@@ -394,22 +396,22 @@ consistentIVSuse lhs rhses =
       matchesIV _ _                          = False
 
 -- Convert list of relative offsets to a spec
-relativeIxsToSpec :: [Variable] -> [[Int]] -> Maybe Specification
-relativeIxsToSpec ivs ixs =
+relativeIxsToSpec :: [[Int]] -> Maybe Specification
+relativeIxsToSpec ixs =
     if isEmpty exactSpec then Nothing else Just exactSpec
     where exactSpec = inferFromIndicesWithoutLinearity . fromLists $ ixs
 
 isNeighbour :: Data a => F.Index (FA.Analysis a) -> [Variable] -> Bool
 isNeighbour exp vs =
-    case (ixToNeighbour vs exp) of
+    case (ixToNeighbour' vs exp) of
         Neighbour _ _ -> True
         _             -> False
 
 -- Given a list of induction variables and a list of indices
 -- map them to a list of constant or neighbourhood indices
 -- if any are non neighbourhood then return Nothi ng
-neighbourIndex :: Data a =>
-     [Variable] -> [F.Index (FA.Analysis a)] -> Maybe [Neighbour]
+neighbourIndex :: FAD.InductionVarMapByASTBlock
+               -> [F.Index (FA.Analysis Annotation)] -> Maybe [Neighbour]
 neighbourIndex ivs ixs =
   if all ((/=) NonNeighbour) neighbours
   then Just neighbours
@@ -422,7 +424,7 @@ neighbourIndex ivs ixs =
 --   * non neighbour index
 data Neighbour = Neighbour Variable Int
                | Constant (F.Value ())
-               | NonNeighbour deriving Eq
+               | NonNeighbour deriving (Eq, Show)
 
 neighbourToOffset :: Neighbour -> Maybe Int
 neighbourToOffset (Neighbour _ o) = Just o
@@ -434,14 +436,21 @@ neighbourToOffset _               = Nothing
 -- e.g., for the expression a(i+1,j-1) then this function gets
 -- passed expr = i + 1   (returning +1) and expr = j - 1 (returning -1)
 
-ixToNeighbour :: Data a => [Variable] -> F.Index (FA.Analysis a) -> Neighbour
+ixToNeighbour :: FAD.InductionVarMapByASTBlock
+              -> F.Index (FA.Analysis Annotation) -> Neighbour
 -- Range with stride = 1 and no explicit bounds count as reflexive indexing
-ixToNeighbour ivs (F.IxRange _ _ Nothing Nothing Nothing)     = Neighbour "" 0
-ixToNeighbour ivs (F.IxRange _ _ Nothing Nothing
+ixToNeighbour ivmap f = ixToNeighbour' ivsList f
+  where
+    insl = FA.insLabel . F.getAnnotation $ f
+    ivsList = S.toList $ fromMaybe S.empty $
+                IM.lookup (fromJustMsg (show (ixsspan f) ++ " get IVs associated to labelled index " ++ show insl) insl) ivmap
+
+ixToNeighbour' ivs (F.IxRange _ _ Nothing Nothing Nothing)     = Neighbour "" 0
+ixToNeighbour' ivs (F.IxRange _ _ Nothing Nothing
                   (Just (F.ExpValue _ _ (F.ValInteger "1")))) = Neighbour "" 0
 
-ixToNeighbour ivs (F.IxSingle _ _ _ exp)  = expToNeighbour ivs exp
-ixToNeighbour _ _ = NonNeighbour -- indexing expression is a range
+ixToNeighbour' ivs (F.IxSingle _ _ _ exp)  = expToNeighbour ivs exp
+ixToNeighbour' _ _ = NonNeighbour -- indexing expression is a range
 
 -- Given a list of induction variables and an expression, compute its
 -- Neighbour representation

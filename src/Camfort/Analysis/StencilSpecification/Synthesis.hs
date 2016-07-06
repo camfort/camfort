@@ -45,10 +45,10 @@ import qualified Language.Fortran.Analysis.BBlocks as FAB
 import qualified Language.Fortran.Analysis.DataFlow as FAD
 
 import Language.Fortran.Util.Position
-
 import Data.Map hiding (map)
 
-a = head $ FA.initAnalysis [unitAnnotation]
+type Variable = String
+a = (head $ FA.initAnalysis [unitAnnotation]) { FA.insLabel = Just 0 }
 s = SrcSpan (Position 0 0 0) (Position 0 0 0)
 
 -- Given a spec, an array variable, and a list of inductive variables, generate
@@ -77,3 +77,8 @@ offsetToIx v o
   | otherwise = F.IxSingle a s Nothing (F.ExpBinary a s F.Subtraction
                                  (F.ExpValue a s (F.ValVariable v))
                                  (F.ExpValue a s (F.ValInteger $ show (abs o))))
+
+offsetToIxWithIVs :: [Variable] -> F.Name -> Int -> F.Index (FA.Analysis A)
+offsetToIxWithIVs ivs v o = F.setAnnotation a' ix
+  where a'  = a { FA.prevAnnotation = (FA.prevAnnotation a) {indices = ivs} }
+        ix  = offsetToIx v o

@@ -151,7 +151,7 @@ lexer :: String -> Either AnnotationParseError [ Token ]
 lexer input | length (stripLeadingWhiteSpace input) >= 2 =
   case stripLeadingWhiteSpace input of
     -- Check the leading character is '=' for specification
-    '!':'=':input' ->
+    '=':input' ->
            -- First test to see if the input looks like an actual
            -- specification of either a stencil or region
            if (input' `hasPrefix` "stencil" || input' `hasPrefix` "region")

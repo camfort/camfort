@@ -54,9 +54,9 @@ infer mode filename pf =
     if null output then "" else "\n" ++ filename ++ "\n" ++ output
     where
       output = concatMap (formatSpec nameMap) $ results
-      results = stencilInference mode . FAB.analyseBBlocks $ pf'
+      results = stencilInference nameMap mode . FAB.analyseBBlocks $ pf'
       nameMap = FAR.extractNameMap pf'
-      pf'     = FAR.analyseRenames. FA.initAnalysis $ pf
+      pf'     = FAR.analyseRenames . FA.initAnalysis $ pf
 
 
 -- Format inferred specifications
