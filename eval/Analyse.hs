@@ -87,14 +87,15 @@ eachGroup g = M.unionsWith (+) $ a':map (foldl' countByVars M.empty) gbv
 analyseExec :: [S.ByteString] -> ModAnalysis
 analyseExec [] = M.empty
 analyseExec (e1:es)
-  | any (=~ "Lexing failed") es = M.singleton modName $ M.fromList [("lexFailed", 1), ("lexOrParseFailed", 1)]
-  | any (=~ "Parsing failed") es = M.singleton modName $ M.fromList [("parseFailed", 1), ("lexOrParseFailed", 1)]
+  | any (=~ "Lexing failed") es = M.singleton modName . M.fromList $ [("lexFailed", 1), ("lexOrParseFailed", 1)] ++ linesTotal
+  | any (=~ "Parsing failed") es = M.singleton modName . M.fromList $ [("parseFailed", 1), ("lexOrParseFailed", 1)] ++ linesTotal
   | otherwise = M.singleton modName . M.unionsWith (+) . (parseOk:) . map eachGroup $ gs
   where
-    gs = groupBy ((==) `on` srcSpan) . filter (=~ "\\)[[:space:]]*(stencil|EVALMODE)") $ es
-    modName = drop 4 . S.unpack . (=~ "MOD=([^ ]*)") $ e1
-    lineCount = msum (es >>= map (fmap fst . S.readInt) . mrSubList . (=~ "LineCount: ([0-9]*)"))
-    parseOk = M.fromList (("parseOk", 1):case lineCount of Just n -> [("linesParsed", n)]; _ -> [])
+    gs         = groupBy ((==) `on` srcSpan) . filter (=~ "\\)[[:space:]]*(stencil|EVALMODE)") $ es
+    modName    = drop 4 . S.unpack . (=~ "MOD=([^ ]*)") $ e1
+    lineCount  = msum (es >>= map (fmap fst . S.readInt) . mrSubList . (=~ "LineCount: ([0-9]*)"))
+    linesTotal = case lineCount of Just n -> [("linesTotal", n)]; _ -> []
+    parseOk    = M.fromList (("parseOk", 1):(case lineCount of Just n -> [("linesParsed", n)]; _ -> []) ++ linesTotal)
 
 -- helper functions
 srcSpan :: S.ByteString -> S.ByteString
