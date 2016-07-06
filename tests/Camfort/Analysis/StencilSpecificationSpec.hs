@@ -23,7 +23,8 @@ import qualified Language.Fortran.AST as F
 import Language.Fortran.Util.Position
 
 import Data.Map.Strict (toList)
-
+import qualified Data.IntMap as IM
+import qualified Data.Set as S
 
 import Test.Hspec
 import Test.QuickCheck
@@ -346,7 +347,8 @@ test2DSpecVariation a b (input, expectation) =
     expectedSpec = Specification . Left $ expectation
     fromFormatToIx [ri,rj] = [ offsetToIx "i" ri, offsetToIx "j" rj ]
 
-indicesToSpec' ivs lhs = fst . runWriter . (indicesToSpec "a" ivs lhs)
+indicesToSpec' ivs lhs = fst . runWriter . (indicesToSpec ivmap "a" lhs)
+  where ivmap = IM.singleton 0 (S.fromList ivs)
 
 variations =
   [ ( [ [0,0] ]
@@ -442,7 +444,7 @@ variations3D =
 
 prop_extract_synth_inverse :: F.Name -> Int -> Bool
 prop_extract_synth_inverse v o =
-     ixToNeighbour [v] (offsetToIx v o) == Neighbour v o
+     ixToNeighbour' [v] (offsetToIx v o) == Neighbour v o
 
 -- Local variables:
 -- mode: haskell
