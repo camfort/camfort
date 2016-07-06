@@ -426,7 +426,7 @@ instance RegionRig (Result Spatial) where
 
   prod (Exact s) (Exact s')      = Exact (prod s s')
   prod (Exact s) (Bound l u)     = Bound (prod (Just s) l) (prod (Just s) u)
-  prod (Bound l u) (Bound l' u') = Bound (prod l l') (prod (prod l u') (prod l' u))
+  prod (Bound l u) (Bound l' u') = Bound (prod l l') (prod u u') -- (prod l u') (prod l' u))
   prod s s'                      = prod s' s
 
   one  = Exact one
