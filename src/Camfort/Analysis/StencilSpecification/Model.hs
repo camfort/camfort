@@ -210,7 +210,14 @@ instance Model RegionProd where
    dimensionality (Product ss) =
       maximum1 (map dimensionality ss)
    dimensions (Product ss) =
-      concatMap dimensions ss
+      nub $ concatMap dimensions ss
+
+tensor n s t = cleanedProduct
+   where
+       cleanedProduct = fromList $ DL.filter keepPred product
+       product = cprodV s t
+       keepPred el = DL.foldr (\pr acc -> nonProdP pr && acc) True (zip [(1::Int)..] el)
+       nonProdP (i,el) = i `notElem` [1..n] || el /= absoluteRep
 
 -- Cartesian product on list of vectors4
 cprodVs :: [[[Int]]] -> [[Int]]
