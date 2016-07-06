@@ -52,7 +52,6 @@ import qualified Data.IntMap as IM
 import qualified Data.Set as S
 import Data.Maybe
 import Data.List
-import Debug.Trace
 
 type Variable = String
 
@@ -196,19 +195,14 @@ perBlockInfer mode b@(F.BlStatement ann span _ stmnt)
 perBlockInfer mode b@(F.BlDo ann span _ mDoSpec body) = do
     --let localIvs = getInductionVar mDoSpec
     -- introduce any induction variables into the induction variable state
-    --DEL modify $ union localIvs
-    --DEL ivs <- get
-    -- DEL let label = fromJustMsg "getting label of block in inference" (FA.insLabel ann)
-    -- DEL let ivs = fromMaybe S.empty (IM.lookup label ivmap)
 
     if (mode == DoMode || mode == CombinedMode) && isStencilDo b
-     then genSpecsAndReport mode span [] body
-     else return ()
+      then genSpecsAndReport mode span [] body
+      else return ()
 
     -- descend into the body of the do-statement
     mapM_ (descendBiM (perBlockInfer  mode)) body
     -- Remove any induction variable from the state
-    --DEL modify $ (\\ localIvs)
     return b
 
 perBlockInfer mode b = do
@@ -258,16 +252,16 @@ genSubscripts False (F.BlStatement _ _ _ (F.StExpressionAssign _ _ e _))
     -- Don't pull dependencies through arrays
     = return M.empty
 
-genSubscripts top block = "gensub" `trace` do
+genSubscripts top block = do
     visited <- get
     case (FA.insLabel $ F.getAnnotation block) of
 
-      Just node ->
-        (show (FUS.getSecondParameter block)) `trace` if node `elem` visited
-        -- This dependency has already been visited during this traversal
-        then return $ M.empty
-        -- Fresh dependency
-        else do
+      Just node
+        | node `elem` visited ->
+          -- This dependency has already been visited during this traversal
+          return $ M.empty
+        | otherwise -> do
+          -- Fresh dependency
           put $ node : visited
           let blocksFlowingIn = mapMaybe (lab ?flowsGraph) $ pre ?flowsGraph node
           dependencies <- mapM (genSubscripts False) blocksFlowingIn
