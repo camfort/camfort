@@ -107,10 +107,6 @@ stencilInference nameMap mode pf@(F.ProgramFile cm_pus _) = concatMap perPU (uni
     dm    = FAD.genDefMap bm
     tenv  = FAT.inferTypes pf
 
-ixsspan :: F.Index (FA.Analysis A)  -> FU.SrcSpan
-ixsspan  (F.IxRange _ sp _ _ _) = sp
-ixsspan (F.IxSingle _ sp _ _ ) = sp
-
 -- | Return list of variable names that flow into themselves via a 2-cycle
 findVarFlowCycles :: Data a => F.ProgramFile a -> [(F.Name, F.Name)]
 findVarFlowCycles = FAR.underRenaming (findVarFlowCycles' . FAB.analyseBBlocks)
@@ -175,8 +171,6 @@ perBlockInfer mode b@(F.BlStatement ann span _ stmnt)
                       <- universe stmnt :: [F.Statement (FA.Analysis A)]]
     -- ... apply the following:
       (\lhs -> do
-         --let label = fromJustMsg "getting label of block in inference" (FA.insLabel ann)
-         --let ivs = S.toList $ fromMaybe S.empty (IM.lookup label ivmap)
          ivmap <- get
          case isArraySubscript lhs of
            Just subs ->
@@ -184,8 +178,8 @@ perBlockInfer mode b@(F.BlStatement ann span _ stmnt)
              case neighbourIndex ivmap subs of
                Just lhs -> genSpecsAndReport mode span lhs [b]
                Nothing  -> if mode == EvalMode
-                           then tell [(span , Right ("EVALMODE: LHS is an array \
-                                              \subscript we can't handle \
+                           then tell [(span , Right ("EVALMODE: LHS is an array\
+                                              \ subscript we can't handle \
                                               \(tag: LHSnotHandled)",""))]
                            else return ()
            -- Not an assign we are interested in
@@ -193,7 +187,6 @@ perBlockInfer mode b@(F.BlStatement ann span _ stmnt)
     return b
 
 perBlockInfer mode b@(F.BlDo ann span _ mDoSpec body) = do
-    --let localIvs = getInductionVar mDoSpec
     -- introduce any induction variables into the induction variable state
 
     if (mode == DoMode || mode == CombinedMode) && isStencilDo b
@@ -442,8 +435,15 @@ ixToNeighbour :: FAD.InductionVarMapByASTBlock
 ixToNeighbour ivmap f = ixToNeighbour' ivsList f
   where
     insl = FA.insLabel . F.getAnnotation $ f
-    ivsList = S.toList $ fromMaybe S.empty $
-                IM.lookup (fromJustMsg (show (ixsspan f) ++ " get IVs associated to labelled index " ++ show insl) insl) ivmap
+    errorMsg = show (ixsspan f)
+            ++ " get IVs associated to labelled index "
+            ++ show insl
+    insl' = fromJustMsg errorMsg insl
+    ivsList = S.toList $ fromMaybe S.empty $ IM.lookup insl'  ivmap
+    -- For debugging purposes
+    ixsspan :: F.Index (FA.Analysis A)  -> FU.SrcSpan
+    ixsspan  (F.IxRange _ sp _ _ _) = sp
+    ixsspan (F.IxSingle _ sp _ _ ) = sp
 
 ixToNeighbour' ivs (F.IxRange _ _ Nothing Nothing Nothing)     = Neighbour "" 0
 ixToNeighbour' ivs (F.IxRange _ _ Nothing Nothing
