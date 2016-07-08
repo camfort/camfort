@@ -41,10 +41,10 @@ countByVars a l = M.unionsWith (+) $ [a, keysA] ++ map snd (filter fst counts)
                   M.size keysA == 1                            ,   {- ==> -} M.singleton "justReflexive" n )
               , ( ndims > 0                                    ,   {- ==> -} M.singleton (dimName ndims) n)
               , ( isJust mdep                                  ,   {- ==> -} M.singleton (depthName (fromJust mdep)) n)
-              , ( regOps >= 0                                  ,   {- ==> -} M.singleton (regionOpsName regOps) n)
-              , ( plusOps >= 0                                 ,   {- ==> -} M.singleton (plusOpsName plusOps) n)
-              , ( mulOps >= 0                                  ,   {- ==> -} M.singleton (mulOpsName mulOps) n)
-              , ( dimDist > 0                                  ,   {- ==> -} M.singleton (dimDistName dimDist) n)
+              , ( regOps >= 0 && isSten                        ,   {- ==> -} M.singleton (regionOpsName regOps) n)
+              , ( plusOps >= 0 && isSten                       ,   {- ==> -} M.singleton (plusOpsName plusOps) n)
+              , ( mulOps >= 0 && isSten                        ,   {- ==> -} M.singleton (mulOpsName mulOps) n)
+              , ( dimDist > 0 && isSten                        ,   {- ==> -} M.singleton (dimDistName dimDist) n)
               ]
     keysA   = M.fromList [ (k, n) | k <- varKeywords, l =~ re k  ] -- try each keyword
     re k    = "[^A-Za-z]" ++ k ++ "[^A-Za-z]" -- form a regular expression from a keyword
@@ -56,7 +56,7 @@ countByVars a l = M.unionsWith (+) $ [a, keysA] ++ map snd (filter fst counts)
     plusOps = countPlusOps l
     mulOps  = countMulOps l
     dimDist = countDimDist l
-
+    isSten  = l =~ "\\)[[:space:]]*stencil "
 
 -- Count interesting stuff in a given line, and given the group's
 -- analysis to this point, grouped by span.
