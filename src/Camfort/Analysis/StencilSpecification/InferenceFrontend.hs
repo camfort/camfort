@@ -70,21 +70,40 @@ type LogLine = (FU.SrcSpan, Either [([Variable], Specification)] (String,Variabl
 type Inferer = WriterT [LogLine] (ReaderT (Cycles, F.ProgramUnitName, TypeEnv A) (State FAD.InductionVarMapByASTBlock))
 type Cycles = [(F.Name, F.Name)]
 
-runInferer :: FAD.InductionVarMapByASTBlock -> Cycles -> F.ProgramUnitName -> TypeEnv A -> Inferer a -> [LogLine]
+runInferer :: FAD.InductionVarMapByASTBlock
+           -> Cycles
+           -> F.ProgramUnitName
+           -> TypeEnv A
+           -> Inferer a
+           -> (a, [LogLine])
 runInferer ivmap cycles puName tenv =
-  flip evalState ivmap . flip runReaderT (cycles, puName, tenv) . execWriterT
+  flip evalState ivmap . flip runReaderT (cycles, puName, tenv) . runWriterT
 
-stencilInference :: InferMode -> F.ProgramFile (FA.Analysis A) -> [LogLine]
-stencilInference mode pf@(F.ProgramFile cm_pus _) = concatMap perPU (universeBi cm_pus)
+stencilInference :: InferMode
+                 -> F.ProgramFile (FA.Analysis A)
+                 -> (F.ProgramFile (FA.Analysis A), [LogLine])
+stencilInference mode pf@(F.ProgramFile cm_pus blocks) =
+    (F.ProgramFile cm_pus' blocks', log1 ++ log2)
   where
+    (cm_pus', log1) = runWriter (transformBiM perPU cm_pus)
+    (blocks', log2) = runInferer ivMap [] F.NamelessBlockData tenv blocksInf
+    blocksInf       = let ?flowsGraph = flTo
+                      in descendBiM (perBlockInfer mode) blocks
+
     -- Run inference per program unit, placing the flowsmap in scope
-    perPU :: F.ProgramUnit (FA.Analysis A) -> [LogLine]
+    perPU :: F.ProgramUnit (FA.Analysis A)
+          -> Writer [LogLine] (F.ProgramUnit (FA.Analysis A))
 
     perPU pu | Just _ <- FA.bBlocks $ F.getAnnotation pu =
          let ?flowsGraph = flTo
-         in runInferer ivMap [] (FA.puName pu) tenv (descendBiM (perBlockInfer mode) pu)
-    perPU _ = []
+         in do
+              let pum = descendBiM (perBlockInfer mode) pu
+              let (pu', log) = runInferer ivMap [] (FA.puName pu) tenv pum
+              tell log
+              return pu'
+    perPU pu = return pu
 
+    -- induction variable map
     ivMap = FAD.genInductionVarMapByASTBlock beMap gr
     -- perform reaching definitions analysis
     rd    = FAD.reachingDefinitions dm gr

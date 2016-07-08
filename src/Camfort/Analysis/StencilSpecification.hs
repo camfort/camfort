@@ -48,13 +48,17 @@ import Data.List
 --------------------------------------------------
 
 -- Top-level of specification inference
-infer :: InferMode -> Filename -> F.ProgramFile Annotation -> String
+infer :: InferMode -> Filename
+      -> F.ProgramFile Annotation
+      -> (String, F.ProgramFile Annotation)
 infer mode filename pf =
     -- Append filename to any outputs
-    if null output then "" else "\n" ++ filename ++ "\n" ++ output
+    if null output
+       then ("", fmap FA.prevAnnotation pf'')
+       else ("\n" ++ filename ++ "\n" ++ output, fmap FA.prevAnnotation pf'')
     where
       output = concatMap (formatSpec nameMap) $ results
-      results = stencilInference mode . FAB.analyseBBlocks $ pf'
+      (pf'', results) = stencilInference mode . FAB.analyseBBlocks $ pf'
       nameMap = FAR.extractNameMap pf'
       pf'     = FAR.analyseRenames . FA.initAnalysis $ pf
 

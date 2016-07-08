@@ -249,7 +249,7 @@ spec =
 
     describe "integration test on inference for example2.f" $ do
       it "stencil infer" $
-         (callAndSummarise (infer AssignMode) program)
+         (fst $ callAndSummarise (infer AssignMode) program)
            `shouldBe`
            "\ntests/Camfort/Analysis/StencilSpecification/example2.f\n\
             \((24,8),(24,53)) \tstencil readOnce, (reflexive(dim=1))*(centered(depth=1, dim=2)) \
@@ -260,7 +260,7 @@ spec =
             \((41,8),(41,35)) \tstencil readOnce, (reflexive(dim=1))*(reflexive(dim=2)) :: a\n"
 
       it "stencil check" $
-         (callAndSummarise check program)
+         (fst $ callAndSummarise (\f p -> (check f p, p)) program)
            `shouldBe`
            "\ntests/Camfort/Analysis/StencilSpecification/example2.f\n\
             \((22,12),(22,44)) \tCorrect.\n"
@@ -270,7 +270,7 @@ spec =
 
     describe "integration test on inference for example3.f" $ do
       it "stencil infer" $
-         (callAndSummarise (infer AssignMode) program)
+         (fst $ callAndSummarise (infer AssignMode) program)
            `shouldBe`
             "\ntests/Camfort/Analysis/StencilSpecification/example3.f\n\
              \((15,2),(15,20)) \tstencil readOnce, (reflexive(dim=3)) :: a\n\
@@ -283,7 +283,7 @@ spec =
 
     describe "integration test on inference for example4.f" $ do
       it "stencil infer" $
-         (callAndSummarise (infer AssignMode) program)
+         (fst $ callAndSummarise (infer AssignMode) program)
            `shouldBe`
             "\ntests/Camfort/Analysis/StencilSpecification/example4.f\n\
              \((6,8),(6,33)) \tstencil (reflexive(dim=1)) :: x\n"

@@ -144,18 +144,18 @@ unitCriticals inSrc excludes outSrc opt = do
         in doAnalysisReport' (mapM LU.inferCriticalVariables)
               inSrc excludes outSrc
 
-stencilsInf inSrc excludes _ opt = do
+stencilsInf inSrc excludes outSrc opt = do
   putStrLn $ "Inferring stencil specs for " ++ show inSrc ++ "\n"
-  doAnalysisSummaryForpar (Stencils.infer (getOption opt)) inSrc excludes
+  doAnalysisSummaryForpar (Stencils.infer (getOption opt)) inSrc excludes (Just outSrc)
 
 stencilsCheck inSrc excludes _ _ = do
   putStrLn $ "Checking stencil specs for " ++ show inSrc ++ "\n"
-  doAnalysisSummaryForpar (Stencils.check) inSrc excludes
+  doAnalysisSummaryForpar (\f p -> (Stencils.check f p, p)) inSrc excludes Nothing
 
 stencilsVarFlowCycles inSrc excludes _ _ = do
   putStrLn $ "Inferring var flow cycles for " ++ show inSrc ++ "\n"
   let flowAnalysis = intercalate ", " . map show . Stencils.findVarFlowCycles
-  doAnalysisSummaryForpar (const flowAnalysis) inSrc excludes
+  doAnalysisSummaryForpar (\_ p -> (flowAnalysis p , p)) inSrc excludes Nothing
 
 --------------------------------------------------
 -- Forpar wrappers
@@ -168,14 +168,13 @@ doRefactorForpar rFun inSrc excludes outSrc = do
     then putStrLn $ "Excluding " ++ (concat $ intersperse "," excludes)
            ++ " from " ++ inSrc ++ "/"
     else return ()
-----
     ps <- readForparseSrcDir inSrc excludes
     let (report, ps') = rFun (map (\(f, inp, ast) -> (f, ast)) ps)
-    --let outFiles = filter (\f -not ((take (length $ d ++ "out") f) == (d ++ "out"))) (map fst ps')
+    --let outFiles = filter (\f -> not ((take (length $ d ++ "out") f) == (d ++ "out"))) (map fst ps')
     let outFiles = map fst ps'
     putStrLn report
-    -- outputFiles inSrc outSrc (zip3 outFiles (map Fortran.snd3 ps ++ (repeat "")) (map snd ps'))
-----
+  where snd3 (a, b, c) = b
+
 
 {-| Performs an analysis which reports to the user,
      but does not output any files -}
@@ -213,20 +212,21 @@ readForparseSrcFile f = do
     return $ (f, inp, fmap (const unitAnnotation) ast)
 ----
 
-doAnalysisSummaryForpar :: (Monoid s, Show' s) => (Filename -> A.ProgramFile A -> s)
-                        -> FileOrDir -> [Filename] -> IO ()
-doAnalysisSummaryForpar aFun inSrc excludes = do
+doAnalysisSummaryForpar :: (Monoid s, Show' s) => (Filename -> A.ProgramFile A -> (s, A.ProgramFile A))
+                        -> FileOrDir -> [Filename] -> Maybe FileOrDir -> IO ()
+doAnalysisSummaryForpar aFun inSrc excludes outSrc = do
   if excludes /= [] && excludes /= [""]
     then putStrLn $ "Excluding " ++ (concat $ intersperse "," excludes)
                                  ++ " from " ++ inSrc ++ "/"
     else return ()
   ps <- readForparseSrcDir inSrc excludes
-  let out = callAndSummarise aFun ps
+  let (out, ps') = callAndSummarise aFun ps
   putStrLn "Output of the analysis:"
   putStrLn . show' $ out
 
 callAndSummarise aFun ps = do
-  foldl' (\n (f, _, ps) -> n `mappend` aFun f ps) mempty ps
+  foldl' (\(n, pss) (f, _, ps) -> let (n', ps') = aFun f ps
+                                  in (n `mappend` n', ps' : pss)) (mempty, []) ps
 
 ----
 
