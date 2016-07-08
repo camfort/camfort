@@ -74,8 +74,8 @@ runInferer :: FAD.InductionVarMapByASTBlock -> Cycles -> F.ProgramUnitName -> Ty
 runInferer ivmap cycles puName tenv =
   flip evalState ivmap . flip runReaderT (cycles, puName, tenv) . execWriterT
 
-stencilInference :: FAR.NameMap -> InferMode -> F.ProgramFile (FA.Analysis A) -> [LogLine]
-stencilInference nameMap mode pf@(F.ProgramFile cm_pus _) = concatMap perPU (universeBi cm_pus)
+stencilInference :: InferMode -> F.ProgramFile (FA.Analysis A) -> [LogLine]
+stencilInference mode pf@(F.ProgramFile cm_pus _) = concatMap perPU (universeBi cm_pus)
   where
     -- Run inference per program unit, placing the flowsmap in scope
     perPU :: F.ProgramUnit (FA.Analysis A) -> [LogLine]
