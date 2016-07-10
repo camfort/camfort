@@ -72,56 +72,54 @@ instance {-# OVERLAPS #-} (Show' a, Show' b) => Show' (a, b) where
 instance {-# OVERLAPPABLE #-} (Show a) => Show' a where
       show' = show
 
+class OutputFiles t where
+   {-| Given a directory and list of triples of filenames, with their source
+       text (if it exists) and their AST, write these to the directory -}
+  mkOutputText :: FileOrDir -> t -> SourceText
+  outputFile   :: t -> Filename
 
-{-| Given a directory and list of triples of filenames, with their source text (if it exists) and
-   their AST, write these to the director -}
-outputFiles :: FileOrDir -> FileOrDir -> [(Filename, SourceText, Program Annotation)] -> IO ()
-outputFiles inp outp pdata =
-  do outIsDir <- isDirectory outp
-     inIsDir  <- isDirectory inp
-     if outIsDir then
-       do createDirectoryIfMissing True outp
+  outputFiles :: FileOrDir -> FileOrDir -> [t] -> IO ()
+  outputFiles inp outp pdata = do
+      outIsDir <- isDirectory outp
+      inIsDir  <- isDirectory inp
+      inIsFile <- doesFileExist inp
+      if outIsDir then do
+          createDirectoryIfMissing True outp
           putStrLn $ "Writing refactored files to directory: " ++ outp ++ "/"
           isdir <- isDirectory inp
           let inSrc = if isdir then inp else getDir inp
-          mapM_ (\(f, input, ast') -> let f' = changeDir outp inSrc f
-                                      in do checkDir f'
-                                            putStrLn $ "Writing " ++ f'
-                                            writeFile f' (reprint input f' ast')) pdata
-     else
-         if inIsDir || length pdata > 1 then
-             error $ "Error: attempting to output multiple files, but the given output destination " ++
-                       "is a single file. \n" ++ "Please specify an output directory"
-         else let outSrc = getDir outp
-              in do createDirectoryIfMissing True outSrc
-                    putStrLn $ "Writing refactored file to: " ++ outp
-                    let (f, input, ast') = head pdata
-                    putStrLn $ "Writing " ++ outp
-                    writeFile outp (reprint input outp ast')
+          mapM_ (\x -> let f' = changeDir outp inSrc (outputFile x)
+                       in do checkDir f'
+                             putStrLn $ "Writing " ++ f'
+                             B.writeFile f' (mkOutputText outp x)) pdata
+       else
+         if inIsDir || length pdata > 1
+         then  error $ "Error: attempting to output multiple files, but the \
+                         \given output destination is a single file. \n\
+                         \Please specify an output directory"
+         else
+           if inIsFile -- Input was just a file, then output just a file
+           then do
+             putStrLn $ "Writing refactored file to: " ++ outp
+             putStrLn $ "Writing " ++ outp
+             B.writeFile outp (mkOutputText outp (head pdata))
 
-outputFiles' :: FileOrDir -> FileOrDir -> [(Filename, SourceText)] -> IO ()
-outputFiles' inp outp pdata =
-  do outIsDir <- isDirectory outp
-     inIsDir  <- isDirectory inp
-     if outIsDir then
-       do createDirectoryIfMissing True outp
-          putStrLn $ "Writing refactored files to directory: " ++ outp ++ "/"
-          isdir <- isDirectory inp
-          let inSrc = if isdir then inp else getDir inp
-          mapM_ (\(f, output) -> let f' = changeDir outp inSrc f
-                                 in do checkDir f'
-                                       putStrLn $ "Writing " ++ f'
-                                       B.writeFile f' output) pdata
-     else
-         if inIsDir || length pdata > 1 then
-             error $ "Error: attempting to output multiple files, but the given output destination " ++
-                       "is a single file. \n" ++ "Please specify an output directory"
-         else let outSrc = getDir outp
-              in do createDirectoryIfMissing True outSrc
-                    putStrLn $ "Writing refactored file to: " ++ outp
-                    let (f, output) = head pdata
-                    putStrLn $ "Writing " ++ outp
-                    B.writeFile outp output
+            else let outSrc = getDir outp
+               in do createDirectoryIfMissing True outSrc
+                     putStrLn $ "Writing refactored file to: " ++ outp
+                     putStrLn $ "Writing " ++ outp
+                     B.writeFile outp (mkOutputText outp (head pdata))
+
+-- When the new source text is already provided
+instance OutputFiles (Filename, SourceText) where
+  mkOutputText _ (_, output) = output
+  outputFile (f, _) = f
+
+-- When there is a file to be reprinted (for refactoring)
+instance OutputFiles (Filename, SourceText, Program Annotation) where
+  mkOutputText f' (f, input, ast') = B.pack $ reprint input f' ast'
+  outputFile (f, _, _) = f
+
 
 {-| changeDir is used to change the directory of a filename string.
     If the filename string has no directory then this is an identity  -}

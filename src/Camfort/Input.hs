@@ -169,7 +169,7 @@ doRefactor' rFun inSrc excludes outSrc = do
     let newASTs' = map (\(a,b) -> a b) (zip (map convertSyntaxBack inputs) newASTs)
     let outputs = zip outFiles newASTs'
     putStrLn report
-    outputFiles' inSrc outSrc (map (fmap B.pack) outputs)
+    outputFiles inSrc outSrc (map (fmap B.pack) outputs)
   where
     modifyAST (f, inp, ast) =
       let ast' = map (fmap (const ())) ast
