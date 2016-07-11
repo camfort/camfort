@@ -13,7 +13,7 @@ import Test.Hspec.QuickCheck
 
 spec :: Spec
 spec = describe "Unit specifications" $ do
-         describe "Integration tests" integration
+         describe "Integration tests of infer and synthesise" integration
 
 
 integration = do
@@ -39,7 +39,7 @@ doIntegration c fname expInfer = do
    let [(fname1, program1)] = map modifyAST ps
    let (report, ps') = let ?solver = Custom
                            ?assumeLiterals = Unitless
-                       in inferUnits (fname, program1)
+                       in synthesiseUnits (fname, program1)
    it ("(" ++ show c ++ ") - " ++ fname ++ " infer") $
       report `shouldBe` expInfer
 

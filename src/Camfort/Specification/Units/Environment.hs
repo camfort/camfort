@@ -15,18 +15,23 @@
 -}
 {-# LANGUAGE TemplateHaskell, ImplicitParams, DeriveDataTypeable #-}
 
+
 {- Provides various data types and type class instances for the Units extension -}
 
 module Camfort.Specification.Units.Environment where
-
 
 import qualified Data.Label
 import Data.Label.Mono (Lens)
 import Data.Label.Monadic hiding (modify)
 import Control.Monad.State.Strict hiding (gets)
 import Language.Fortran
-import Data.Matrix
+
+
+import Data.Char
 import Data.Data
+import Data.List
+import Data.Matrix
+
 
 type EqualityConstrained = Bool
 
@@ -105,9 +110,93 @@ emptyUnitEnv = UnitEnv { _report              = [],
 
 Data.Label.mkLabels [''UnitEnv]
 
+{- HELPERS -}
+
+-- Update a list state by consing
+infix 2 <<
+(<<) :: MonadState f m => Lens (->) f [o] -> o -> m ()
+(<<) lens o = lens =. (o:)
+
+-- Update a list state by appending
+infix 2 <<++
+(<<++) lens o = lens =. (++ [o])
+
+
+-- *** Operations on unit environments
+addCol :: UnitVarCategory -> State UnitEnv Int
+addCol category =
+  do (matrix, vector) <- gets linearSystem
+     let m = ncols matrix + 1
+     linearSystem =: (extendTo 0 0 m matrix, vector)
+     unitVarCats <<++ category
+     tmpColsAdded << m
+     return m
+
+addRow :: State UnitEnv Int
+addRow = addRow' (Unitful [])
+
+addRow' :: UnitConstant -> State UnitEnv Int
+addRow' uc =
+  do (matrix, vector) <- gets linearSystem
+     let n = nrows matrix + 1
+     linearSystem =: (extendTo 0 n 0 matrix, vector ++ [uc])
+     tmpRowsAdded << n
+     return n
+
+liftUnitEnv :: (Matrix Rational -> Matrix Rational) -> UnitEnv -> UnitEnv
+liftUnitEnv f = Data.Label.modify linearSystem $ \(matrix, vector) -> (f matrix, vector)
+
+extractUnit :: Attr a -> [State UnitEnv UnitConstant]
+extractUnit attr = case attr of
+                     MeasureUnit _ unit -> [convertUnit unit]
+                     _ -> []
+
+convertUnit :: MeasureUnitSpec a -> State UnitEnv UnitConstant
+convertUnit (UnitProduct _ units) = convertUnits units
+convertUnit (UnitQuotient _ units1 units2) = liftM2 (-) (convertUnits units1) (convertUnits units2)
+convertUnit (UnitNone _) = return $ Unitful []
+
+convertUnits :: [(MeasureUnit, Fraction a)] -> State UnitEnv UnitConstant
+convertUnits units =
+  foldl (+) (Unitful []) `liftM` sequence [convertSingleUnit unit (fromFraction f) | (unit, f) <- units]
+
+convertSingleUnit :: MeasureUnit -> Rational -> State UnitEnv UnitConstant
+convertSingleUnit unit f =
+  do denv <- gets derivedUnitEnv
+     let uc f' = Unitful [(unit, f')]
+     case lookup unit denv of
+       Just uc' -> return $ uc' * (fromRational f)
+       Nothing  -> derivedUnitEnv << (unit, uc 1) >> return (uc f)
+
+fromFraction :: Fraction a -> Rational
+fromFraction (IntegerConst _ n) = fromInteger $ read n
+fromFraction (FractionConst _ p q) = fromInteger (read p) / fromInteger (read q)
+fromFraction (NullFraction _) = 1
+
+
 resetTemps :: State UnitEnv ()
 resetTemps = do tmpRowsAdded =: []
                 tmpColsAdded =: []
+
+--------------------------------------------
+-- Lookup helpers
+
+lookupCaseInsensitive :: String -> [(String, a)] -> Maybe a
+lookupCaseInsensitive x m = let x' = map toUpper x in (find (\(k, v) -> (map toUpper k) == x') m) >>= (return . snd)
+
+lookupWithoutSrcSpan :: Variable -> [(VarBinder, a)] -> Maybe a
+lookupWithoutSrcSpan v env = snd `fmap` find f env
+  where
+    f (VarBinder (w, _), _) = map toUpper w == v'
+    v'   = map toUpper v
+
+lookupWithSrcSpan :: Variable -> SrcSpan -> [(VarBinder, a)] -> Maybe a
+lookupWithSrcSpan v s env = snd `fmap` find f env
+  where
+    f (VarBinder (w, t), _) = map toUpper w == v' && s == t
+    v'   = map toUpper v
+
+---------------------------------------------
 
 trim = filter $ \(unit, r) -> r /= 0
 
