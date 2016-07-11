@@ -17,36 +17,28 @@ spec = describe "Unit specifications" $ do
 
 
 integration = do
-   let file1 = "tests/Camfort/Specification/Units/ex1.f90"
-   ps <- runIO $ readParseSrcDir file1 []
+   doIntegration 0 "ex1.f90"
+      "ex1.f90: Added 0 non-unitless annotation: \n\
+      \ex1.f90: checked/inferred 9 user variables\n"
+
+   doIntegration 1 "ex2.f90"
+      "ex2.f90: Added 1 non-unitless annotation: m / s**2\n\
+      \ex2.f90: checked/inferred 4 user variables\n"
+
+   doIntegration 2 "ex3.f90"
+      "ex3.f90: Added 1 non-unitless annotation: m / s**2\n\
+      \ex3.f90: checked/inferred 6 user variables\n"
+
+doIntegration c fname expInfer = do
+   let file = "tests/Camfort/Specification/Units/" ++ fname
+   ps <- runIO $ readParseSrcDir file []
    let [(fname1, program1)] = map modifyAST ps
    let (report, ps') = let ?solver = Custom
                            ?assumeLiterals = Unitless
-                       in inferUnits ("ex1.f90", program1)
-   it "(0) - ex1.f90 infer" $
-      report
-       `shouldBe`
-         "ex1.f90: Added 0 non-unitless annotation: \n\
-         \ex1.f90: checked/inferred 9 user variables\n"
+                       in inferUnits (fname, program1)
+   it ("(" ++ show c ++ ") - " ++ fname ++ " infer") $
+      report `shouldBe` expInfer
 
-   expect1 <- runIO $ readFile "tests/Camfort/Specification/Units/ex1.exp.f90"
-   it "(0) ex1.f90 comapre out" $
-       (snd . head $ mkOutputFile ps [ps']) `shouldBe` expect1
-
-------
-
-   let file2 = "tests/Camfort/Specification/Units/ex2.f90"
-   ps <- runIO $ readParseSrcDir file2 []
-   let [(fname2, program2)] = map modifyAST ps
-   let (report, ps') = let ?solver = Custom
-                           ?assumeLiterals = Unitless
-                       in inferUnits ("ex2.f90", program2)
-   it "(1) - ex2.f90 infer" $
-      report
-        `shouldBe`
-         "ex2.f90: Added 1 non-unitless annotation: m / s**2\n\
-         \ex2.f90: checked/inferred 4 user variables\n"
-
-   expect2 <- runIO $ readFile "tests/Camfort/Specification/Units/ex2.exp.f90"
-   it "(0) ex2.f90 comapre out" $
-       (snd . head $ mkOutputFile ps [ps']) `shouldBe` expect2
+   expect <- runIO $ readFile $ "tests/Camfort/Specification/Units/exp." ++ fname
+   it ("(" ++ show c ++ ") - " ++ fname ++ " comapare expected out") $
+       (snd . head $ mkOutputFile ps [ps']) `shouldBe` expect
