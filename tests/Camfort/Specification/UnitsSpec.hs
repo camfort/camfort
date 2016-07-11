@@ -29,6 +29,10 @@ integration = do
       "ex3.f90: Added 1 non-unitless annotation: m / s**2\n\
       \ex3.f90: checked/inferred 6 user variables\n"
 
+   doIntegration 2 "param.f90"
+      "param.f90: Added 2 non-unitless annotation: m / s\n\
+      \param.f90: checked/inferred 5 user variables\n"
+
 doIntegration c fname expInfer = do
    let file = "tests/Camfort/Specification/Units/" ++ fname
    ps <- runIO $ readParseSrcDir file []
