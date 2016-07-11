@@ -44,7 +44,14 @@ import Camfort.Transformation.Syntax
 -- *************************************
 
 insertUnit :: (?num :: Int) => [UnitVarCategory] -> [Int] -> LinearSystem -> Type Annotation -> Int -> State UnitEnv (Type Annotation)
-insertUnit ucats badCols system (BaseType aa tt attrs kind len) uv =
+insertUnit ucats badCols system (BaseType aa tt attrs kind len) uv = undefined
+
+makeUnitSpec = undefined
+
+insertUnitsInBlock :: Block Annotation -> State UnitEnv (Block Annotation)
+insertUnitsInBlock x = undefined -- transformBiM insertUnits x
+
+{-
   do let unit = lookupUnit ucats badCols system uv
      u <- (insertUnitAttribute unit attrs)
      return $ BaseType aa tt u kind len
@@ -55,8 +62,6 @@ insertUnit ucats badCols system (ArrayT dims aa tt attrs kind len) uv =
      return $ ArrayT dims aa tt u kind len
 
 
-insertUnitsInBlock :: Block Annotation -> State UnitEnv (Block Annotation)
-insertUnitsInBlock x = transformBiM insertUnits x
 
 
 lookupUnit :: [UnitVarCategory] -> [Int] -> LinearSystem -> Col -> Maybe UnitConstant
@@ -149,3 +154,4 @@ toFraction r
   | otherwise = FractionConst unitAnnotation (show p) (show q)
   where p = numerator r
         q = denominator r
+-}

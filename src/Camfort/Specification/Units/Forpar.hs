@@ -174,7 +174,7 @@ instance Show Constraint where
           u (ParametricUse (s,i,j)) = s ++ "[" ++ show i ++ "," ++ show j ++ "]"
           u (UnitName s)            = s
           u (Undetermined s)        = "?" ++ s
-          u Unitless                = "1"
+          u UnitlessI                = "1"
           u (UnitMul u1 u2)         = u u1 ++ "*" ++ u u2
           u (UnitPow u1 p1)         = u u1 ++ if p1 `approxEq` 1
                                               then ""
@@ -262,7 +262,7 @@ simplifyUnits = rewrite rw
     rw (UnitMul u1 u2) | u1 == u2                            = Just $ UnitPow u1 2
     rw (UnitPow (UnitPow u1 p1) p2)                          = Just $ UnitPow u1 (p1 * p2)
     rw (UnitMul (UnitPow u1 p1) (UnitPow u2 p2)) | u1 == u2  = Just $ UnitPow u1 (p1 + p2)
-    rw (UnitPow _ p) | p `approxEq` 0                        = Just Unitless
+    rw (UnitPow _ p) | p `approxEq` 0                        = Just UnitlessI
     rw u                                                     = Nothing
 
 flattenUnits :: UnitInfo -> [UnitInfo]

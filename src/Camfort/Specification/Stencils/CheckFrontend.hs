@@ -147,7 +147,7 @@ perProgramUnitCheck :: (?nameMap :: FAR.NameMap, ?flowsGraph :: FAD.FlowsGraph A
 perProgramUnitCheck p@(F.PUModule {}) = do
     modify $ (id *** (const (Just $ FA.puName p))) *** id
     descendBiM perBlockCheck p
-perProgramUnitCheck p = "prog unit" `trace` descendBiM perBlockCheck p
+perProgramUnitCheck p = descendBiM perBlockCheck p
 
 perBlockCheck :: (?nameMap :: FAR.NameMap, ?flowsGraph :: FAD.FlowsGraph A)
    =>  F.Block (FA.Analysis A) -> Checker (F.Block (FA.Analysis A))

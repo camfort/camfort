@@ -24,25 +24,46 @@ import qualified Data.Label
 import Data.Label.Mono (Lens)
 import Data.Label.Monadic hiding (modify)
 import Control.Monad.State.Strict hiding (gets)
-import Language.Fortran
 
+import qualified Language.Fortran.AST as F
+import qualified Language.Fortran.Util.Position as FU
 
 import Data.Char
 import Data.Data
 import Data.List
 import Data.Matrix
 
+data UnitInfo
+  = Parametric (String, Int)
+  | ParametricUse (String, Int, Int) -- identify particular instantiation of parameters
+  | UnitName String
+  | Undetermined String
+  | UnitlessI
+  | UnitMul UnitInfo UnitInfo
+  | UnitPow UnitInfo Double
+  deriving (Show, Eq, Ord, Data, Typeable)
 
 type EqualityConstrained = Bool
 
 data Solver = LAPACK | Custom deriving (Show, Read, Eq, Data)
 data AssumeLiterals = Poly | Unitless | Mixed deriving (Show, Read, Eq, Data)
 
-{- Represents a constant unit expression (i.e. one without unit variables) for the RHSs of the Gaussian matrix.
-    e.g. Unitful [("a", 2/3), ("b",2)] represents the linear term  2/3 log a + 2 log b
+-- *****************
+--  Syntax
+--
+-- *****************
+
+{- Represents a constant unit expression (i.e. one without unit variables)
+   for the RHSs of the Gaussian matrix.
+    e.g. Unitful [("a", 2/3), ("b",2)]
+         represents the linear term  2/3 log a + 2 log b
          UnitlessC marks unitless i.e., 1
 -}
-data UnitConstant = Unitful [(MeasureUnit, Rational)] | UnitlessC Rational deriving (Eq, Show)
+data UnitConstant =
+       Unitful [(F.Name, Rational)]
+     | UnitlessC Rational
+    deriving (Eq, Show, Data)
+
 
 -- Column of the Guassian matrix associated with a variable
 newtype VarCol = VarCol Col deriving (Eq, Show)
@@ -51,16 +72,20 @@ newtype VarCol = VarCol Col deriving (Eq, Show)
 --   e.g., for a(i,k) we have a map from 'a' to its column paired with
 --       a two element list of the columns for 'i' and 'j'
 
-newtype VarBinder = VarBinder (Variable, SrcSpan) deriving Show
+newtype VarBinder = VarBinder (F.Name, FU.SrcSpan) deriving Show
 type VarColEnv = [(VarBinder, (VarCol, [VarCol]))]
 
-data UnitVarCategory = Literal EqualityConstrained | Temporary | Variable | Argument | Magic deriving (Eq, Show)
+data UnitVarCategory =
+    Literal EqualityConstrained
+  | Temporary
+  | Variable
+  | Argument
+  | Magic
+  deriving (Eq, Show)
 
+type DerivedUnitEnv = [(F.Name, UnitConstant)]
 
-
-type DerivedUnitEnv = [(MeasureUnit, UnitConstant)]
-
-type ProcedureNames = (String, Maybe Variable, [Variable])
+type ProcedureNames = (String, Maybe F.Name, [F.Name])
 type Procedure = (Maybe VarCol, [VarCol])
 type ProcedureEnv = [(String, Procedure)]
 
@@ -69,7 +94,7 @@ type LinearSystem = (Matrix Rational, [UnitConstant])
 type Row = Int
 type Col = Int
 
-type DebugInfo = [(Col, (SrcSpan, String))]
+type DebugInfo = [(Col, (FU.SrcSpan, String))]
 
 data UnitEnv = UnitEnv {
   _report              :: [String],
@@ -87,7 +112,8 @@ data UnitEnv = UnitEnv {
   _success             :: Bool,
   -- This part of the state is just for some evaluation metrics
   _evUnitsAdded        :: (Int, [String]),
-  _evCriticals         :: [Int]
+  _evCriticals         :: [Int],
+  _puname              :: Maybe F.ProgramUnitName
 } deriving Show
 
 emptyUnitEnv = UnitEnv { _report              = [],
@@ -105,12 +131,47 @@ emptyUnitEnv = UnitEnv { _report              = [],
                          _success             = True,
                          ---
                          _evUnitsAdded        = (0, []),
-                         _evCriticals         = []
+                         _evCriticals         = [],
+                         _puname              = Nothing
                        }
 
 Data.Label.mkLabels [''UnitEnv]
 
-{- HELPERS -}
+-- *******************
+--  Syntax transformers
+
+unitMult :: UnitConstant -> UnitConstant -> UnitConstant
+unitMult (Unitful us) (Unitful us') = Unitful (us ++ us')
+unitMult (UnitlessC r) (Unitful us) = Unitful (map (\(n, u) -> (n, r * u)) us)
+unitMult (Unitful us) (UnitlessC r) = Unitful (map (\(n, u) -> (n, u * r)) us)
+unitMult (UnitlessC r) (UnitlessC r') = UnitlessC (r * r')
+
+unitScalarMult :: Rational -> UnitConstant -> UnitConstant
+unitScalarMult r (UnitlessC r') = UnitlessC (r * r')
+unitScalarMult r (Unitful us)   = Unitful (map (\(n, u) -> (n, r * u)) us)
+
+convertUnit :: UnitInfo -> State UnitEnv UnitConstant
+convertUnit p@(Parametric {})    = error $ "Can't use parametric yet: " ++ show p
+convertUnit p@(ParametricUse {}) = error $ "Can't use parameteric yet" ++ show p
+convertUnit (UnitName u) = do
+  denv <- gets derivedUnitEnv
+  case lookup u denv of
+    Just uc -> return uc
+    Nothing -> do let u1 = Unitful [(u, 1)]
+                  derivedUnitEnv << (u, u1)
+                  return $ u1
+convertUnit (Undetermined s) = return $ Unitful []
+convertUnit UnitlessI        = return $ UnitlessC 1
+convertUnit (UnitMul u1 u2)  = do
+   u1' <- convertUnit u1
+   u2' <- convertUnit u2
+   return $ unitMult u1' u2'
+convertUnit (UnitPow u r) = do
+   u' <- convertUnit u
+   return $ unitScalarMult (toRational r) u'
+
+-- ******************
+-- Helpers
 
 -- Update a list state by consing
 infix 2 <<
@@ -146,34 +207,6 @@ addRow' uc =
 liftUnitEnv :: (Matrix Rational -> Matrix Rational) -> UnitEnv -> UnitEnv
 liftUnitEnv f = Data.Label.modify linearSystem $ \(matrix, vector) -> (f matrix, vector)
 
-extractUnit :: Attr a -> [State UnitEnv UnitConstant]
-extractUnit attr = case attr of
-                     MeasureUnit _ unit -> [convertUnit unit]
-                     _ -> []
-
-convertUnit :: MeasureUnitSpec a -> State UnitEnv UnitConstant
-convertUnit (UnitProduct _ units) = convertUnits units
-convertUnit (UnitQuotient _ units1 units2) = liftM2 (-) (convertUnits units1) (convertUnits units2)
-convertUnit (UnitNone _) = return $ Unitful []
-
-convertUnits :: [(MeasureUnit, Fraction a)] -> State UnitEnv UnitConstant
-convertUnits units =
-  foldl (+) (Unitful []) `liftM` sequence [convertSingleUnit unit (fromFraction f) | (unit, f) <- units]
-
-convertSingleUnit :: MeasureUnit -> Rational -> State UnitEnv UnitConstant
-convertSingleUnit unit f =
-  do denv <- gets derivedUnitEnv
-     let uc f' = Unitful [(unit, f')]
-     case lookup unit denv of
-       Just uc' -> return $ uc' * (fromRational f)
-       Nothing  -> derivedUnitEnv << (unit, uc 1) >> return (uc f)
-
-fromFraction :: Fraction a -> Rational
-fromFraction (IntegerConst _ n) = fromInteger $ read n
-fromFraction (FractionConst _ p q) = fromInteger (read p) / fromInteger (read q)
-fromFraction (NullFraction _) = 1
-
-
 resetTemps :: State UnitEnv ()
 resetTemps = do tmpRowsAdded =: []
                 tmpColsAdded =: []
@@ -184,13 +217,13 @@ resetTemps = do tmpRowsAdded =: []
 lookupCaseInsensitive :: String -> [(String, a)] -> Maybe a
 lookupCaseInsensitive x m = let x' = map toUpper x in (find (\(k, v) -> (map toUpper k) == x') m) >>= (return . snd)
 
-lookupWithoutSrcSpan :: Variable -> [(VarBinder, a)] -> Maybe a
+lookupWithoutSrcSpan :: F.Name -> [(VarBinder, a)] -> Maybe a
 lookupWithoutSrcSpan v env = snd `fmap` find f env
   where
     f (VarBinder (w, _), _) = map toUpper w == v'
     v'   = map toUpper v
 
-lookupWithSrcSpan :: Variable -> SrcSpan -> [(VarBinder, a)] -> Maybe a
+lookupWithSrcSpan :: F.Name -> FU.SrcSpan -> [(VarBinder, a)] -> Maybe a
 lookupWithSrcSpan v s env = snd `fmap` find f env
   where
     f (VarBinder (w, t), _) = map toUpper w == v' && s == t

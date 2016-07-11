@@ -235,22 +235,3 @@ parse f =
 fileExt x = let ix = elemIndices '.' x
             in if (length ix == 0) then ""
                else Prelude.drop (Prelude.last ix) x
-
-
--- * Simple examples
-
-{-|  A simple, sample transformation using the 'transformBi' function -}
-fooTrans p = transformBi f p
-                where f :: Fortran A1 -> Fortran A1
-                      f p@(Call x sp e as) = Label True sp "10" p
-                      f p@(Assg x sp e1 e2) = Label True sp "5" p
-                      f p = p
-
-{-| Parse a file and apply the 'fooTrans' transformation, outputting to the
-    filename + .out -}
-doFooTrans f = do inp <- readFile f
-                  p <- parse f
-                  let p' = fooTrans $ (map (fmap (const unitAnnotation)) p)
-                  let out = reprint (B.pack inp) f p'
-                  writeFile (f ++ ".out") out
-                  return $ (out, p')

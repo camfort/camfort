@@ -20,15 +20,14 @@ import Data.Data
 import Data.Char
 import Data.Generics.Uniplate.Operations
 
-import Language.Fortran
-import Language.Fortran.Pretty
-
 import Camfort.Analysis.Annotations hiding (Unitless)
 import Camfort.Specification.Units.Environment
 import Camfort.Specification.Units.Synthesis
 import Camfort.Transformation.Syntax
 
 {-| DEPRECATED: Provide functionality for stripping out unit annotations -}
+
+{-
 removeUnitsInBlock :: Block Annotation -> Block Annotation
 removeUnitsInBlock = transformBi deleteUnits
 
@@ -48,3 +47,4 @@ deleteUnit (BaseType aa tt attrs kind len) =
   BaseType aa tt (filter (not . isUnit) attrs) kind len
 deleteUnit (ArrayT dims aa tt attrs kind len) =
   ArrayT dims aa tt (filter (not . isUnit) attrs) kind len
+-}

@@ -44,13 +44,13 @@ import Data.Label.Monadic hiding (modify)
 import Control.Monad.State.Strict hiding (gets)
 import Control.Monad
 
-import Language.Fortran
-import Language.Fortran.Pretty
-
 import Camfort.Analysis.Annotations hiding (Unitless)
 import Camfort.Specification.Units.Environment
 import Camfort.Specification.Units.SyntaxConversion
 import Camfort.Transformation.Syntax
+
+import qualified Language.Fortran.AST as F
+import qualified Language.Fortran.Util.Position as FU
 
 -- *************************************
 --   Debugging and testing functions
@@ -123,10 +123,11 @@ showExpr cats vars procs debugInfo c =
                                     Nothing -> show c `D.trace` error "Literal fail"
                Magic     -> ""
 
-showSrcLoc loc = show (srcLine loc) ++ ":" ++ show (srcColumn loc)
-showSrcSpan (start, end) = "(" ++ showSrcLoc start ++ " - " ++ showSrcLoc end ++ ")"
+lineCol :: FU.Position -> (Int, Int)
+lineCol p  = (fromIntegral $ FU.posLine p, fromIntegral $ FU.posColumn p)
 
-showSrcFile (start, _) = srcFilename start
+showSrcLoc loc = show (lineCol loc) ++ ":" ++ show (lineCol loc)
+showSrcSpan (FU.SrcSpan l u) = "(" ++ showSrcLoc l ++ " - " ++ showSrcLoc u ++ ")"
 
 showExprLines cats vars procs debugInfo c =
              case (cats !! (c - 1)) of
@@ -180,7 +181,7 @@ lookupProcByCols penv cols =
                                     | otherwise = lookupEnv j penv
                        lookupEnv j ((p, (Nothing, _)):penv) = lookupEnv j penv
 
-lookupVarsByCols :: VarColEnv -> [Int] -> [Variable]
+lookupVarsByCols :: VarColEnv -> [Int] -> [F.Name]
 lookupVarsByCols uenv cols = mapMaybe (\j -> lookupEnv j uenv) cols
                  where lookupEnv j [] = Nothing
                        lookupEnv j ((VarBinder (v, _), (VarCol i, _)):uenv)

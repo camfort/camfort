@@ -43,8 +43,7 @@ import Data.Label.Monadic hiding (modify)
 import Control.Monad.State.Strict hiding (gets)
 import Control.Monad
 
-import Language.Fortran
-import Language.Fortran.Pretty
+import qualified Language.Fortran.Util.Position as FU
 
 import Camfort.Analysis.Annotations hiding (Unitless)
 import Camfort.Specification.Units.Debug
@@ -58,6 +57,9 @@ import Camfort.Transformation.Syntax
 --   Gaussian Elimination (Main)
 --
 -- *************************************
+
+-- TOOD : fortran_src implement pretty print
+pprint _ = ""
 
 {-| Print debug information for non-zero coefficients from the Gaussian matrix -}
 debugInfoForNonZeros :: [Rational] -> State UnitEnv String
@@ -120,30 +122,63 @@ reportInconsistency (m, v) ns = do
   debugs <- gets debugInfo
 
   -- helper functions
-  let srcLineCompare = compare `on` (srcLine . fst . fst)
+  let srcLineCompare = compare `on` (fst . lineCol . (\(FU.SrcSpan l _) -> l) . fst)
   let nonZeroVectorIndices = V.toList . V.map (+1) . V.findIndices (/= 0)
 
   -- examine all row numbers given to us as the parameter
   vs <- fmap (sortBy srcLineCompare . concat) . forM ns $ \ n -> do
-    -- find out column indices of interest in the row
-    let colsOfInterest = nonZeroVectorIndices (getRow n m)
+      -- find out column indices of interest in the row
+      let colsOfInterest = nonZeroVectorIndices (getRow n m)
 
-    -- for each index of interest in the row, see what other rows also use it
-    vs <- forM colsOfInterest $ \ i -> do
-      let rowsOfInterest = nub . (i:) . nonZeroVectorIndices $ getCol i m
-      -- lookup debug info for those row indices of interest
-      let colDebugs = mapMaybe (flip lookup debugs) $ rowsOfInterest
-      -- also lookup VarBinder info for i and convert it to same format
-      let vs = map (\ (VarBinder (v, s)) -> (s, v)) $ lookupVarBindersByCols uvarEnv [i]
-      return $ vs ++ colDebugs
+      -- for each index of interest in the row, see what other rows also use it
+      vs <- forM colsOfInterest $ \ i -> do
+        let rowsOfInterest = nub . (i:) . nonZeroVectorIndices $ getCol i m
+        -- lookup debug info for those row indices of interest
+        let colDebugs = mapMaybe (flip lookup debugs) $ rowsOfInterest
+        -- also lookup VarBinder info for i and convert it to same format
+        let vs = map (\ (VarBinder (v, s)) -> (s, v)) $ lookupVarBindersByCols uvarEnv [i]
+        return $ vs ++ colDebugs
 
-    -- flatten it out
-    return (concat vs)
+      -- flatten it out
+      return (concat vs)
 
   report <<++ "Caused by at least one of the following terms:"
-  forM_ (nub vs) $ \ ((s1, _), str) -> do
+  forM_ (nub vs) $ \ (s1@(FU.SrcSpan l _), str) -> do
     unless (all (\ x -> isNumber x || x == '.' || x == '-') str) $
-      report <<++ "line " ++ show (srcLine s1) ++ ": " ++ str
+      report <<++ "line " ++ show (lineCol l) ++ ": " ++ str
+
+
+{-| reduceRows is a core part of the polymorphic unit checking for procedures.
+
+   It is essentially an "optimisation" of the Gaussian matrix (not in the sense
+   of performance), that elimiantes rows in the system such that there are as
+   few variables as possible. Within a function, assuming everything is
+   consistent, then this should generate a linear constraint between the
+   parameters and the return as a single row in the matrix. This is then used by
+   the interprocedural constraints to hookup call-sites with definitions (in a
+   parametrically polymorphic way- i.e. lambda abstraction is polymorphic in its
+   units, different to say ML).
+-}
+
+
+reduceRows :: Col -> LinearSystem -> LinearSystem
+reduceRows m (matrix, vector)
+  | m > ncols matrix = (matrix, vector)
+  | otherwise =
+    case (find (\n -> matrix ! (n, m) /= 0) [1..nrows matrix]) of
+      Just r1 ->
+        case (find (\n -> matrix ! (n, m) /= 0) [(r1 + 1)..nrows matrix]) of
+          Just r2 -> -- Found two rows with non-zero coeffecicients
+                     -- in this column
+            case (elimRow (matrix, vector) (Just r1) m r2) of
+              -- Eliminate the row and cut the system down
+              Ok (matrix', vector') -> reduceRows m (cutSystem r2 (matrix', vector'))
+              Bad _ _ _             -> reduceRows (m+1) (matrix, vector)
+
+          Nothing -> -- If there are no two rows with non-zero coeffecieints
+                     -- in column m then move onto the next column
+                     reduceRows (m+1) (matrix, vector)
+      Nothing -> reduceRows (m+1) (matrix, vector)
 
 solveSystemM :: (?solver :: Solver, ?debug :: Bool) => String -> State UnitEnv Bool
 solveSystemM adjective = do
@@ -383,7 +418,8 @@ addUnitlessResult2SameArgIntrinsic name =
 -- mustEqual - used for saying that two units must be the same- returns one of the variables
 --             (choice doesn't matter, but left is chosen).
 --             Returns the unit variables equaled upon
-mustEqual :: (?assumeLiterals :: AssumeLiterals) => Bool -> VarCol -> VarCol -> State UnitEnv VarCol
+mustEqual :: (?assumeLiterals :: AssumeLiterals)
+          => Bool -> VarCol -> VarCol -> State UnitEnv VarCol
 mustEqual flagAsUnitlessIfLit (VarCol uv1) (VarCol uv2) =
   do n <- addRow
      modify $ liftUnitEnv $ incrElem (-1) (n, uv1) . incrElem 1 (n, uv2)

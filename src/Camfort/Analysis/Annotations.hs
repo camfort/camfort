@@ -31,6 +31,8 @@ import Language.Haskell.ParseMonad
 
 import Language.Fortran
 import Camfort.Analysis.IntermediateReps
+
+import Camfort.Specification.Units.Environment
 import qualified Camfort.Specification.Stencils.Syntax as StencilSpec
 import qualified Camfort.Specification.Stencils.Grammar as StencilComment
 
@@ -49,16 +51,6 @@ data LoopType = Functor ReduceType
                | Gather ReduceType ReduceType AccessPatternType
                | Scatter ReduceType AccessPatternType
 
-data UnitInfo
-  = Parametric (String, Int)
-  | ParametricUse (String, Int, Int) -- identify particular instantiation of parameters
-  | UnitName String
-  | Undetermined String
-  | Unitless
-  | UnitMul UnitInfo UnitInfo
-  | UnitPow UnitInfo Double
-  deriving (Show, Eq, Ord, Data, Typeable)
-
 {- classify :: Fortran Annotation -> Fortran Annotation
  classify x = -}
 
@@ -75,6 +67,7 @@ data Annotation = A { indices        :: [Variable],
                       -- used to indicate when a node is newly introduced
                       newNode        :: Bool,
                       unitInfo       :: Maybe UnitInfo,
+                      unitSpec       :: Maybe (UnitInfo, Maybe (F.Block (FA.Analysis Annotation))),
                       stencilSpec    :: Maybe
                         -- If defined, either an unprocessed syntax tree
                         (Either StencilComment.Specification
@@ -93,5 +86,18 @@ liveIn = fst . lives
 pRefactored :: Annotation -> Bool
 pRefactored = isJust . refactored
 
-unitAnnotation =
-    A [] ([], []) empty empty 0 0 Nothing [] False Nothing Nothing Nothing
+unitAnnotation = A
+  { indices       = []
+   , lives        = ([], [])
+   , arrsRead     = empty
+   , arrsWrite    = empty
+   , unitVar      = 0
+   , number       = 0
+   , refactored   = Nothing
+   , successorStmts = []
+   , newNode      = False
+   , unitInfo     = Nothing
+   , unitSpec     = Nothing
+   , stencilSpec  = Nothing
+   , stencilBlock = Nothing
+ }

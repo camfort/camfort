@@ -35,8 +35,8 @@ integration = do
 
 doIntegration c fname expInfer = do
    let file = "tests/Camfort/Specification/Units/" ++ fname
-   ps <- runIO $ readParseSrcDir file []
-   let [(fname1, program1)] = map modifyAST ps
+   ps <- runIO $ readForparseSrcDir file []
+   let [(fname1, _, program1)] = ps
    let (report, ps') = let ?solver = Custom
                            ?assumeLiterals = Unitless
                        in synthesiseUnits (fname, program1)

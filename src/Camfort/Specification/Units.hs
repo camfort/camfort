@@ -56,39 +56,37 @@ import Camfort.Specification.Units.SyntaxConversion
 import Camfort.Specification.Units.Environment -- Provides the types and data accessors used in this module
 import Camfort.Specification.Units.Solve -- Solvers for the Gaussian matrix
 
-import Language.Fortran
-import Language.Fortran.Pretty
+import qualified Language.Fortran.Analysis.Renaming as FAR
+import qualified Language.Fortran.Analysis.BBlocks as FAB
+import qualified Language.Fortran.Analysis as FA
+import qualified Language.Fortran.AST as F
 import Camfort.Transformation.Syntax
 
 -- For debugging and development purposes
 import qualified Debug.Trace as D
 
 -- Helper that is require before running any of the units operations
-modifyAST (f, inp, ast) =
-      let ast' = map (fmap (const ())) ast
-          ast'' = convertSyntax f inp ast'
-          ast''' = map (fmap (const unitAnnotation)) ast''
-      in (f, ast''')
+modifyAST (f, inp, ast) = (f, ast)
 
 {- START HERE! Two main functions of this file: inferUnits and removeUnits -}
 
 removeUnits ::
-    (Filename, Program Annotation) -> (Report, (Filename, Program Annotation))
-removeUnits (fname, x) =
-    let ?criticals = False
-    in ("", (fname, map (descendBi removeUnitsInBlock) x))
+    (Filename, F.ProgramFile Annotation) -> (Report, (Filename, F.ProgramFile Annotation))
+removeUnits (fname, x) = undefined
+  {-  let ?criticals = False
+    in ("", (fname, map (descendBi removeUnitsInBlock) x)) -}
 
 
 -- *************************************
 --   Unit inference (top - level)
 -- *************************************
 
--- Infer one possible set of critical variables for a program
+{-| Infer one possible set of critical variables for a program -}
 inferCriticalVariables ::
        (?solver :: Solver, ?assumeLiterals :: AssumeLiterals)
-    => (Filename, Program Annotation)
-    -> (Report, (Filename, Program Annotation))
-inferCriticalVariables (fname, x) = (r, (fname, x))
+    => (Filename, F.ProgramFile Annotation)
+    -> (Report, (Filename, F.ProgramFile Annotation))
+inferCriticalVariables (fname, pf) = (r, (fname, pf))
   where
     -- Format report
     r = concat [fname ++ ": " ++ r ++ "\n" | r <- Data.Label.get report env]
@@ -99,10 +97,11 @@ inferCriticalVariables (fname, x) = (r, (fname, x))
               ?debug     = False
           in  execState infer emptyUnitEnv
 
+    pf' = FAR.analyseRenames . FA.initAnalysis $ pf
     -- Core infer procedure
     infer :: (?criticals :: Bool, ?debug :: Bool) => State UnitEnv ()
     infer = do
-        doInferUnits x
+        doInferUnits . FAB.analyseBBlocks $ pf'
         vars <- criticalVars
         case vars of
           [] -> do report <<++ "No critical variables. Appropriate annotations."
@@ -110,12 +109,12 @@ inferCriticalVariables (fname, x) = (r, (fname, x))
                             ++ (concat $ intersperse "," vars)
         ifDebug debugGaussian
 
--- Infer/check the unspecified units for a program
+{-| Infer/check the unspecified units for a program -}
 inferUnits ::
        (?solver :: Solver, ?assumeLiterals :: AssumeLiterals)
-    => (Filename, Program Annotation)
-    -> (Report, (Filename, Program Annotation))
-inferUnits (fname, x) = (r, (fname, y))
+    => (Filename, F.ProgramFile Annotation)
+    -> (Report, (Filename, F.ProgramFile Annotation))
+inferUnits (fname, pf) = (r, (fname, pf))
   where
     -- Format report
     r = concat [fname ++ ": " ++ r ++ "\n" | r <- Data.Label.get report env]
@@ -123,17 +122,19 @@ inferUnits (fname, x) = (r, (fname, y))
     -- Count number of checked and inferred variables
     n = countVariables (_varColEnv env) (_debugInfo env) (_procedureEnv env)
                                     (fst $ _linearSystem env) (_unitVarCats env)
-    -- Apply inferences
-    (y, env) = let ?criticals = False
-                   ?debug     = False
-               in runState (doInferUnits x) emptyUnitEnv
 
--- Synthesis unspecified units for a program (after checking)
+    pf' = FAB.analyseBBlocks . FAR.analyseRenames . FA.initAnalysis $ pf
+    -- Apply inferences
+    env = let ?criticals = False
+              ?debug     = False
+          in execState (doInferUnits pf') emptyUnitEnv
+
+{-| Synthesis unspecified units for a program (after checking) -}
 synthesiseUnits ::
        (?solver :: Solver, ?assumeLiterals :: AssumeLiterals)
-    => (Filename, Program Annotation)
-    -> (Report, (Filename, Program Annotation))
-synthesiseUnits (fname, x) = (r, (fname, y))
+    => (Filename, F.ProgramFile Annotation)
+    -> (Report, (Filename, F.ProgramFile Annotation))
+synthesiseUnits (fname, pf) = (r, (fname, fmap FA.prevAnnotation pf3))
   where
     -- Format report
     r = concat [fname ++ ": " ++ r ++ "\n" | r <- Data.Label.get report env]
@@ -142,21 +143,22 @@ synthesiseUnits (fname, x) = (r, (fname, y))
     n = countVariables (_varColEnv env) (_debugInfo env) (_procedureEnv env)
                                     (fst $ _linearSystem env) (_unitVarCats env)
     -- Apply inference and synthesis
-    (y, env) = runState inferAndSynthesise emptyUnitEnv
+    pf' = FAB.analyseBBlocks . FAR.analyseRenames . FA.initAnalysis $ pf
+    (pf3, env) = runState inferAndSynthesise emptyUnitEnv
     inferAndSynthesise =
         let ?criticals = False
             ?debug     = False
         in do
-          doInferUnits x
+          doInferUnits pf'
           succeeded <- gets success
           if succeeded
             then do
-              p <- mapM (descendBiM insertUnitsInBlock) x
+              p <- descendBiM insertUnitsInBlock pf'
               (n, added) <- gets evUnitsAdded
               report <<++ ("Added " ++ (show n) ++ " non-unitless annotation: "
-                        ++ (concat $ intersperse "," $ added))
+                        ++ (concat $ intersperse " ," $ added))
               return p
-            else return x
+            else return pf'
 
 -- Count number of variables for which a spec has been checked
 countVariables vars debugs procs matrix ucats =
@@ -169,6 +171,7 @@ countVariables vars debugs procs matrix ucats =
                                            _  -> True
                              _        -> False) [1..ncols matrix]
 
+-- Critical variables analysis
 criticalVars :: State UnitEnv [String]
 criticalVars = do uvarenv     <- gets varColEnv
                   (matrix, _) <- gets linearSystem

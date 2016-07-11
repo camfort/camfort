@@ -29,6 +29,7 @@ module Camfort.Output where
 import Camfort.Helpers
 import Camfort.Traverse
 
+import qualified Language.Fortran.AST as F
 import qualified Language.Fortran.Parser as Fortran
 import Language.Fortran.PreProcess
 import Language.Fortran
@@ -115,8 +116,16 @@ instance OutputFiles (Filename, SourceText) where
   mkOutputText _ (_, output) = output
   outputFile (f, _) = f
 
+data PR a = PR (Program a) deriving Data
+
 -- When there is a file to be reprinted (for refactoring)
 instance OutputFiles (Filename, SourceText, Program Annotation) where
+  mkOutputText f' (f, input, ast') = B.pack $ reprint input f' (PR ast')
+    where
+  outputFile (f, _, _) = f
+
+-- When there is a file to be reprinted (for refactoring)
+instance OutputFiles (Filename, SourceText, F.ProgramFile Annotation) where
   mkOutputText f' (f, input, ast') = B.pack $ reprint input f' ast'
   outputFile (f, _, _) = f
 
@@ -416,10 +425,13 @@ instance Tagged p => Indentor (p Annotation) where
 -- FIXME: Use ByteString! (Or Data.Text, at least)
 
 {-| -}
-reprint :: SourceText -> Filename -> Program Annotation -> String
-reprint input f p
-  | B.null input = let ?variant = DefaultPP in foldl (\a b -> a ++ "\n" ++ printMaster b) "" p
-  | otherwise = pn ++ pe
+reprint :: (Data (p Annotation)) -- (PrintMaster (p Annotation) DefaultPP, 
+        => SourceText -> Filename -> p Annotation -> String
+reprint input f p =
+  -- If the inupt is null then switch into pretty printer
+  -- | B.null input = let ?variant = DefaultPP in printMaster p
+  -- | otherwise = 
+    pn ++ pe
   where input' = map B.unpack $ B.lines input
         len = Prelude.length input'
         start = SrcLoc f 1 0

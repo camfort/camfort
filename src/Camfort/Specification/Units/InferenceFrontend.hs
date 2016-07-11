@@ -24,7 +24,7 @@ TODO:
 -}
 
 
-{-# LANGUAGE ScopedTypeVariables, ImplicitParams, DoAndIfThenElse #-}
+{-# LANGUAGE ScopedTypeVariables, ImplicitParams, DoAndIfThenElse, ConstraintKinds #-}
 
 module Camfort.Specification.Units.InferenceFrontend where
 
@@ -39,10 +39,18 @@ import Data.Generics.Uniplate.Operations
 import Data.Label.Monadic hiding (modify)
 import Control.Monad.State.Strict hiding (gets)
 import Control.Monad
+import GHC.Prim
 
-import Language.Fortran
-import Language.Fortran.Pretty
+import qualified Language.Fortran.AST as F
+import qualified Language.Fortran.Analysis as FA
+import qualified Language.Fortran.Analysis.Types as FAT
+import qualified Language.Fortran.Analysis.Renaming as FAR
+import qualified Language.Fortran.Analysis.BBlocks as FAB
+import qualified Language.Fortran.Analysis.DataFlow as FAD
+import qualified Language.Fortran.Util.Position as FU
+import qualified Language.Fortran.Util.SecondParameter as FUS
 
+import Camfort.Analysis.CommentAnnotator
 import Camfort.Analysis.Annotations hiding (Unitless)
 import Camfort.Analysis.Types
 import Camfort.Specification.Units.Debug
@@ -52,166 +60,108 @@ import Camfort.Specification.Units.Solve
 import Camfort.Specification.Units.SyntaxConversion
 import Camfort.Transformation.Syntax
 
+type Params = (?criticals      :: Bool,
+               ?solver         :: Solver,
+               ?debug          :: Bool,
+               ?assumeLiterals :: AssumeLiterals)
+
+plumb f x = do { f x ; return x }
+
 -- Core procedure for inferring units
 doInferUnits ::
-       (?criticals :: Bool, ?solver :: Solver, ?debug :: Bool,
-        ?assumeLiterals :: AssumeLiterals)
-    => Program Annotation -> State UnitEnv (Program Annotation)
+    Params => F.ProgramFile (FA.Analysis A)
+           -> State UnitEnv ()
 doInferUnits x = do
-    mapM perProgInfer x
+    descendBiM perProgramUnit x
     --
     ifDebug (report <<++ "Finished inferring prog units")
     ifDebug debugGaussian
     --
     inferInterproceduralUnits x
-    return x
+    return ()
 
--- For a program unit, infer its units
-perProgInfer ::
+-- Check units per program unit, with special handling of functions and subroutines
+-- which need adding to the set of constraints
+perProgramUnit ::
        (?criticals :: Bool, ?solver :: Solver, ?debug :: Bool,
         ?assumeLiterals :: AssumeLiterals)
-    => ProgUnit Annotation -> State UnitEnv ()
-perProgInfer p =
-  do -- infer units for *root* program unit
-     inferPUnit p
-     -- infer units for the *children* program units
-     -- (so that the parent scope is processed first)
-     mapM_ perProgInfer $ ((children p)::[ProgUnit Annotation])
-
-  where
-    -- Infer the units for the *root* program unit (not children)
-     inferPUnit :: ProgUnit Annotation -> State UnitEnv ()
-     inferPUnit (Main x sp n a b _) =
-                perBlockInfer b Nothing
-
-     inferPUnit (Sub x sp t (SubName _ n) (Arg _ a _) b) =
-                perBlockInfer b (Just (n, Nothing, argNames a))
-
-     inferPUnit (Function _ _ _ (SubName _ n) (Arg _ a _) r b) =
-                perBlockInfer b (Just (n, Just (resultName n r), argNames a))
-
-     inferPUnit (Module x sp (SubName _ n) _ _ d ds) =
-                transformBiM (inferDecl (Just (n, Nothing, []))) d >> return ()
-
-     inferPUnit x = return ()
-
-     argNames :: ArgName a -> [Variable]
-     argNames (ArgName _ n) = [n]
-     argNames (ASeq _ n1 n2) = argNames n1 ++ argNames n2
-     argNames (NullArg _) = []
-
-     resultName :: Variable -> Maybe (VarName a) -> Variable
-     resultName n Nothing = n
-     resultName _ (Just (VarName _ r)) = r
-
-perBlockInfer :: (?solver :: Solver, ?criticals :: Bool, ?debug :: Bool,
-                  ?assumeLiterals :: AssumeLiterals)
-    => Block Annotation -> Maybe ProcedureNames -> State UnitEnv ()
-perBlockInfer x proc = do
+    => F.ProgramUnit (FA.Analysis A)
+    -> State UnitEnv (F.ProgramUnit (FA.Analysis A))
+perProgramUnit p@(F.PUMain _ _ _ body subprogs) = do
     resetTemps
-    enterDecls x proc
-    addProcedure proc
-    descendBiM handleStmt x
+    descendBiM perBlock body
+    descendBiM perProgramUnit subprogs
+    return p
 
-    case proc of
-        Just _ -> do {- not ?criticals -> -}
-          -- Intermediate solve for procedures (subroutines & functions)
-          ifDebug (report <<++ "Pre doing row reduce")
-          consistent <- solveSystemM ""
-          success =: consistent
+perProgramUnit p@(F.PUModule _ _ _ body subprogs) = do
+    resetTemps
+    puname =: (Just $ FA.puName p)
+    descendBiM perBlock p
+    descendBiM perProgramUnit subprogs
+    return p
 
-          linearSystem =. reduceRows 1
-          ifDebug (report <<++ "Post doing reduce")
-          ifDebug (debugGaussian)
-          return ()
-        _ -> return ()
+perProgramUnit p@(F.PUSubroutine ann span rec name args body subprogs) = do
+    resetTemps
+    addProcedure rec name Nothing args body subprogs
+    return p
+
+perProgramUnit p@(F.PUFunction ann span retTy rec name args result
+                                                     body subprogs) = do
+    resetTemps
+    addProcedure rec name (Just name) args body subprogs
+    return p
+
+perProgramUnit p = do
+    resetTemps
+    descendBiM perBlock p
+    return p
+
+addProcedure :: Params
+    => Bool -- Recursive or not
+    -> F.Name
+    -> Maybe F.Name -- Maybe return name
+    -> (Maybe (F.AList F.Expression (FA.Analysis A))) -- Arguments
+    -> [F.Block (FA.Analysis A)] -- Body
+    -> (Maybe [F.ProgramUnit (FA.Analysis A)])
+    -> State UnitEnv ()
+addProcedure rec name rname args body subprogs = do
+    descendBiM perBlock body
+    descendBiM perProgramUnit subprogs
+    uenv <- gets varColEnv
+    resultVar <- case rname of
+                   Just rname ->
+                     case (lookupWithoutSrcSpan rname uenv) of
+                        Just (uvar, _) -> return $ Just uvar
+                        Nothing        -> do m <- addCol Variable
+                                             return $ (Just (VarCol m))
+                   Nothing -> return Nothing
+
+    let argVars = fromMaybe [] (fmap (map (lookupUnitByName uenv) . F.aStrip) args)
+    procedureEnv << (name, (resultVar, argVars))
+    if rec
+      then do descendBiM perBlock body
+              return ()
+      else return ()
+    -- Intermediate solve for procedures (subroutines & functions)
+    ifDebug (report <<++ "Pre doing row reduce")
+    consistent <- solveSystemM ""
+    success =: consistent
+
+    linearSystem =. reduceRows 1
+    ifDebug (report <<++ "Post doing reduce")
+    ifDebug (debugGaussian)
+    return ()
   where
-    handleStmt :: Fortran Annotation -> State UnitEnv (Fortran Annotation)
-    handleStmt x = do inferStmtUnits x
-                      return x
+    lookupUnitByName uenv ve@(F.ExpValue _ _ (F.ValVariable _)) =
+        maybe (VarCol 1) fst $ lookupWithoutSrcSpan v uenv
+          where v = FA.varName ve
 
-{-| reduceRows is a core part of the polymorphic unit checking for procedures.
+-- STUB!
+updateUnitEnv :: FA.Analysis A -> State UnitEnv ()
+updateUnitEnv _ = return ()
 
-               It is essentially an "optimisation" of the Gaussian matrix (not in the sense of performance),
-               that elimiantes rows in the system such that there are as few variables as possible. Within
-               a function, assuming everything is consistent, then this should generate a linear constraint
-               between the parameters and the return as a single row in the matrix. This is then used by the
-               interprocedural constraints to hookup call-sites with definitions (in a parametrically polymorphic
-               way- i.e. lambda abstraction is polymorphic in its units, different to say ML).
--}
-reduceRows :: Col -> LinearSystem -> LinearSystem
-reduceRows m (matrix, vector)
-    | m > ncols matrix = (matrix, vector)
-    | otherwise = case (find (\n -> matrix ! (n, m) /= 0) [1..nrows matrix]) of
-                    Just r1 -> case (find (\n -> matrix ! (n, m) /= 0) [(r1 + 1)..nrows matrix]) of
-                                 Just r2 -> -- Found two rows with non-zero coeffecicients in this column
-                                            case (elimRow (matrix, vector) (Just r1) m r2) of
-                                                 -- Eliminate the row and cut the system down
-                                                 Ok (matrix', vector') -> reduceRows m (cutSystem r2 (matrix', vector'))
-                                                 Bad _ _ _             -> reduceRows (m+1) (matrix, vector)
+{- OLD RELEVANT CODE
 
-                                 Nothing -> -- If there are no two rows with non-zero coeffecieints in colum m
-                                            -- then move onto the next column
-                                            reduceRows (m+1) (matrix, vector)
-                    Nothing -> reduceRows (m+1) (matrix, vector)
-
-
-addProcedure :: Maybe ProcedureNames -> State UnitEnv ()
-addProcedure Nothing = return ()
-addProcedure (Just (name, resultName, argNames)) =
-      do uenv <- gets varColEnv
-         resultVar <- case resultName of
-                        Just rname -> case (lookupWithoutSrcSpan rname uenv) of
-                                        Just (uvar, _) -> return $ Just uvar
-                                        Nothing        -> do m <- addCol Variable
-                                                             return $ Just (VarCol m)
-                        Nothing    -> return Nothing
-         let argVars = fmap (lookupUnitByName uenv) argNames
-         procedureEnv << (name, (resultVar, argVars))
-        where
-          lookupUnitByName uenv v = maybe (VarCol 1) fst $ lookupWithoutSrcSpan v uenv
-
--- ***************************************
---
--- *  Unit inference (main, over all AST)
---
--- ***************************************
-
-enterDecls :: (?assumeLiterals :: AssumeLiterals) => Block Annotation -> Maybe ProcedureNames -> State UnitEnv (Block Annotation)
-enterDecls x proc = transformBiM (inferDecl proc) x
-
-processVar :: (?assumeLiterals :: AssumeLiterals) =>
-              [UnitConstant] -> Maybe ProcedureNames ->
-              (Expr Annotation, Expr Annotation) -> Type Annotation ->
-              State UnitEnv (Expr Annotation, Expr Annotation)
-processVar units proc exps@(Var a s names, e) typ =
-    do
-       let (VarName _ v, es) = head names
-       system <- gets linearSystem
-       let m = ncols (fst system) + 1
-       unitVarCats <<++ (unitVarCat v proc)
-       extendConstraints units
-       ms <- case toArrayType typ es of
-               ArrayT _ bounds _ _ _ _ -> mapM (const $ fmap VarCol $ addCol Variable) bounds
-               _                       -> return []
-       varColEnv << (VarBinder (v, s), (VarCol m, ms))
-
-       uv <- gets varColEnv
-       -- If the declaration has a null expression, do not create a unifying variable
-       case e of
-              NullExpr _ _ -> return ()
-              _            -> do uv <- inferExprUnits e
-                                 mustEqual False (VarCol m) uv
-                                 return ()
-       return exps
-
-unitVarCat :: Variable -> Maybe ProcedureNames -> UnitVarCategory
-unitVarCat v proc | Just (n, r, args) <- proc, v `elem` args = Argument
-                  | otherwise                                = Variable
-
-
-{-| inferDecl - extract and record information from explicit unit declarations -}
-inferDecl :: (?assumeLiterals :: AssumeLiterals) => Maybe ProcedureNames -> Decl Annotation -> State UnitEnv (Decl Annotation)
 inferDecl proc decl@(Decl a s d typ) =
       do let BaseType _ _ attrs _ _ = arrayElementType typ
          units <- sequence $ concatMap extractUnit attrs
@@ -229,7 +179,113 @@ inferDecl proc x@(MeasureUnitDef a s d) =
              denv <- gets derivedUnitEnv
              when (isJust $ lookup name denv) $ error "Recursive unit-of-measure definition"
              derivedUnitEnv << (name, unit)
-inferDecl _ x = return x
+-}
+
+perBlock :: (?solver :: Solver, ?criticals :: Bool, ?debug :: Bool,
+                  ?assumeLiterals :: AssumeLiterals)
+    => F.Block (FA.Analysis A) -> State UnitEnv (F.Block (FA.Analysis A))
+perBlock b@(F.BlComment ann span _) = do
+    updateUnitEnv ann
+    case unitSpec (FA.prevAnnotation ann) of
+      Just (units, maybeBlock) -> do
+         unitsConverted <- convertUnit units
+         case maybeBlock of
+           Just block ->
+             case block of
+              bl@(F.BlStatement ann span _ (F.StDeclaration _ _ _ _ decls)) ->
+                mapM_ (processVar [unitsConverted]) (getNamesAndInits decls)
+           Nothing -> return ()
+      Nothing -> return ()
+    return b
+
+  where
+    getNamesAndInits x =
+        [(FA.varName e, i, s) | (F.DeclVariable _ _ e@(F.ExpValue _ s (F.ValVariable _)) _ i) <-
+                    (universeBi (F.aStrip x) :: [F.Declarator (FA.Analysis A)])]
+     ++ [(FA.varName e, i, s) | (F.DeclArray _ _ e@(F.ExpValue _ s (F.ValVariable _)) _ _ i) <-
+                    (universeBi (F.aStrip x) :: [F.Declarator (FA.Analysis A)])]
+     -- TODO: generate constraints for indices
+    dimDeclarators x = concat
+         [F.aStrip dims | (F.DeclArray _ _ _ dims _ _) <-
+                    (universeBi (F.aStrip x) :: [F.Declarator (FA.Analysis A)])]
+
+    processVar units (v, initExpr, span) = do
+      system <- gets linearSystem
+      let m = ncols (fst system) + 1
+      unitVarCats <<++ Variable -- TODO: check how much we need this: (unitVarCat v proc)
+      extendConstraints units
+      varColEnv << (VarBinder (v, span), (VarCol m, []))
+      uv <- gets varColEnv
+      -- If the declaration has a null expression, do not create a unifying variable
+      case initExpr of
+          Nothing -> return ()
+          Just e  -> do
+            uv <- perExpr e
+            mustEqual False (VarCol m) uv
+            return ()
+
+{- TODO: investigate
+    unitVarCat :: Variable -> Maybe ProcedureNames -> UnitVarCategory
+    unitVarCat v proc | Just (n, r, args) <- proc, v `elem` args = Argument
+                  | otherwise                                = Variable
+-}
+
+perBlock b@(F.BlStatement _ _ _ s) = do
+    perStatement s
+    return b
+
+perBlock b = do
+    mapM_ perDoSpecification (universeBi b)
+    mapM_ perExpr (universeBi b)
+    descendBiM (plumb perBlock) b
+    return b
+
+perDoSpecification ::
+    Params => F.DoSpecification (FA.Analysis A) -> State UnitEnv ()
+perDoSpecification (F.DoSpecification _ _
+                      st@(F.StExpressionAssign _ _ ei e0) en step) = do
+   uiv <- perExpr ei
+   e0v <- perExpr e0
+   env <- perExpr en
+   mustEqual True uiv e0v
+   mustEqual True e0v env
+   case step of
+     Nothing    -> return ()
+     Just stepE -> do stepv <- perExpr stepE
+                      mustEqual True env stepv
+                      return ()
+
+-- TODO: see if we need to insert anymore statement-specific constraints here
+perStatement :: (?solver :: Solver, ?criticals :: Bool, ?debug :: Bool,
+                  ?assumeLiterals :: AssumeLiterals)
+    => F.Statement (FA.Analysis A) -> State UnitEnv ()
+perStatement (F.StExpressionAssign _ _ e1 e2) = do
+    uv1 <- perExpr e1
+    uv2 <- perExpr e2
+    mustEqual False uv1 uv2
+    return ()
+
+perStatement (F.StPointerAssign _ _ e1 e2) = do
+    uv1 <- perExpr e1
+    uv2 <- perExpr e2
+    mustEqual False uv1 uv2
+    return ()
+
+perStatement (F.StCall _ _ e@(F.ExpValue _ _ (F.ValVariable _)) args) = do
+    uvs <- fromMaybe (return []) (fmap (mapM perArgument . F.aStrip) args)
+    calls << (FA.varName e, (Nothing, uvs))
+
+perStatement s = do
+    mapM_ perDoSpecification (universeBi s)
+    descendBiM (plumb perExpr) s
+    return ()
+
+
+-- ***************************************
+--
+-- *  Unit inference (main, over all AST)
+--
+-- ***************************************
 
 extendConstraints :: [UnitConstant] -> State UnitEnv ()
 extendConstraints units =
@@ -243,7 +299,8 @@ extendConstraints units =
            tmpRowsAdded << n
            return ()
 
-inferInterproceduralUnits :: (?solver :: Solver, ?criticals :: Bool, ?debug :: Bool, ?assumeLiterals :: AssumeLiterals) => Program Annotation -> State UnitEnv ()
+inferInterproceduralUnits ::
+    Params => F.ProgramFile (FA.Analysis A) -> State UnitEnv ()
 inferInterproceduralUnits x =
   do --reorderColumns
      if ?criticals then reorderVarCols else return ()
@@ -259,7 +316,9 @@ inferInterproceduralUnits x =
      else
          return ()
 
-inferInterproceduralUnits' :: (?solver :: Solver, ?criticals :: Bool, ?debug :: Bool) => Program Annotation -> Bool -> LinearSystem -> State UnitEnv (Program Annotation)
+inferInterproceduralUnits' ::
+    Params => F.ProgramFile (FA.Analysis A) -> Bool -> LinearSystem
+           -> State UnitEnv (F.ProgramFile (FA.Analysis A))
 inferInterproceduralUnits' x haveAssumedLiterals system1 =
   do addInterproceduralConstraints x
      consistent <- solveSystemM "inconsistent"
@@ -369,7 +428,8 @@ assumeLiteralUnits' m =
            n' <- addRow
            modify $ liftUnitEnv $ setElem 1 (n', m)
 
-addInterproceduralConstraints :: (?debug :: Bool) => Program Annotation -> State UnitEnv ()
+addInterproceduralConstraints ::
+    (?debug :: Bool) => F.ProgramFile (FA.Analysis A) -> State UnitEnv ()
 addInterproceduralConstraints x =
   do
     cs <- gets calls
@@ -451,41 +511,34 @@ addInterproceduralConstraints x =
     decodeResult (Just _) Nothing = error "Subroutine used as a function!"
     decodeResult Nothing (Just _) = error "Function used as a subroutine!"
 
-
-inferLiteral e = do uv@(VarCol uvn) <- anyUnits (Literal (?assumeLiterals /= Mixed))
-                    debugInfo << (uvn, (srcSpan e, pprint e))
-                    return uv
-
-
 data BinOpKind = AddOp | MulOp | DivOp | PowerOp | LogicOp | RelOp
-binOpKind :: BinOp a -> BinOpKind
-binOpKind (Plus _)  = AddOp
-binOpKind (Minus _) = AddOp
-binOpKind (Mul _)   = MulOp
-binOpKind (Div _)   = DivOp
-binOpKind (Or _)    = LogicOp
-binOpKind (And _)   = LogicOp
-binOpKind (Concat _)= AddOp
-binOpKind (Power _) = PowerOp
-binOpKind (RelEQ _) = RelOp
-binOpKind (RelNE _) = RelOp
-binOpKind (RelLT _) = RelOp
-binOpKind (RelLE _) = RelOp
-binOpKind (RelGT _) = RelOp
-binOpKind (RelGE _) = RelOp
+binOpKind :: F.BinaryOp -> BinOpKind
+binOpKind F.Addition         = AddOp
+binOpKind F.Subtraction      = AddOp
+binOpKind F.Multiplication   = MulOp
+binOpKind F.Division         = DivOp
+binOpKind F.Exponentiation   = PowerOp
+binOpKind F.Concatenation    = AddOp
+binOpKind F.GT               = RelOp
+binOpKind F.GTE              = RelOp
+binOpKind F.LT               = RelOp
+binOpKind F.LTE              = RelOp
+binOpKind F.EQ               = RelOp
+binOpKind F.NE               = RelOp
+binOpKind F.Or               = LogicOp
+binOpKind F.And              = LogicOp
+binOpKind F.Equivalent       = RelOp
+binOpKind F.NotEquivalent    = RelOp
+binOpKind (F.BinCustom _)    = RelOp
 
 (<**>) :: Maybe a -> Maybe a -> Maybe a
 Nothing <**> x = x
 (Just x) <**> y = (Just x)
 
 
-inferExprUnits :: (?assumeLiterals :: AssumeLiterals) => Expr Annotation -> State UnitEnv VarCol
-inferExprUnits e@(Con _ _ _)    = inferLiteral e
-inferExprUnits e@(ConL _ _ _ _) = inferLiteral e
-inferExprUnits e@(ConS _ _ _)   = inferLiteral e
-inferExprUnits ve@(Var _ _ names) =
- do uenv <- gets varColEnv
-    penv <- gets procedureEnv
+{- OLD
+    uenv <- gets varColEnv
+    case lookupWithoutSrcSpan v uenv of
     let (VarName _ v, args) = head names
 
     case lookupWithoutSrcSpan v uenv of
@@ -516,160 +569,104 @@ inferExprUnits ve@(Var _ _ names) =
                             return uv
 
               Nothing -> error $ "\n" ++ (showSrcFile . srcSpan $ ve) ++ ": undefined variable " ++ v ++ " at " ++ (showSrcSpan . srcSpan $ ve)
-  where inferArgUnits = sequence [mapM inferExprUnits exprs | (_, exprs) <- names, not (nullExpr exprs)]
-        inferArgUnits' uvs = sequence [(inferExprUnits expr) >>= (\uv' -> mustEqual True uv' uv) | ((_, exprs), uv) <- zip names uvs, expr <- exprs, not (nullExpr [expr])]
+  where inferArgUnits = sequence [mapM perExpr exprs | (_, exprs) <- names]
+        inferArgUnits' uvs = sequence [(perExpr expr) >>= (\uv' -> mustEqual True uv' uv) | ((_, exprs), uv) <- zip names uvs, expr <- exprs, not (nullF.Expression [expr])]
 
-        nullExpr []                  = False
-        nullExpr [NullExpr _ _]      = True
-        nullExpr ((NullExpr _ _):xs) = nullExpr xs
-        nullExpr _                   = False
-
-        justArgUnits [NullExpr _ _] _ = []  -- zero-argument function call
+        justArgUnits [NullF.Expression _ _] _ = []  -- zero-argument function call
         justArgUnits _ uvs = head uvs
-inferExprUnits e@(Bin _ _ op e1 e2) = do uv1 <- inferExprUnits e1
-                                         uv2 <- inferExprUnits e2
-                                         (VarCol n) <- case binOpKind op of
-                                                               AddOp   -> mustEqual True uv1 uv2
-                                                               MulOp   -> mustAddUp uv1 uv2 1 1
-                                                               DivOp   -> mustAddUp uv1 uv2 1 (-1)
-                                                               PowerOp -> powerUnits uv1 e2
-                                                               LogicOp -> mustEqual True uv1 uv2
-                                                               RelOp   -> do mustEqual True uv1 uv2
-                                                                             return $ VarCol 1
-                                         debugInfo << (n, (srcSpan e, pprint e))
-                                         return (VarCol n)
-inferExprUnits (Unary _ _ _ e) = inferExprUnits e
-inferExprUnits (CallExpr _ _ e1 (ArgList _ e2)) = do uv <- anyUnits Temporary
-                                                     inferExprUnits e1
-                                                     inferExprUnits e2
-                                                     error "CallExpr not implemented"
-                                                     return uv
--- inferExprUnits (NullExpr .... Shouldn't occur very often as adds unnnecessary cruft
-inferExprUnits (NullExpr _ _) = anyUnits Temporary
+        -}
 
-inferExprUnits (Null _ _) = return $ VarCol 1
-inferExprUnits (ESeq _ _ e1 e2) = do inferExprUnits e1
-                                     inferExprUnits e2
-                                     return $ error "ESeq units wanted"
-inferExprUnits (Bound _ _ e1 e2) = do uv1 <- inferExprUnits e1
-                                      uv2 <- inferExprUnits e2
-                                      mustEqual False uv1 uv2
-inferExprUnits (Sqrt _ _ e) = do uv <- inferExprUnits e
-                                 sqrtUnits uv
-inferExprUnits (ArrayCon _ _ (e:exprs)) =
-  do uv <- inferExprUnits e
-     mapM_ (\e' -> do { uv' <- inferExprUnits e'; mustEqual True uv uv'}) exprs
-     return uv
-inferExprUnits (AssgExpr _ _ _ e) = inferExprUnits e
+-- TODO, create unit vars for every index and make sure consistent
+perIndex :: Params => F.Name -> F.Index (FA.Analysis A) -> State UnitEnv ()
+perIndex v (F.IxSingle _ _ _ e) = return ()
+ {-
+  uenv <- gets varColEnv
+  arrV <- case lookpuWithoutSrcSpan v env
+           Nothing -> do
+              uv@(ValCol uvn) <- anyUnits Temporary
+              return uv
+           Just (uv, uvs) ->
+-}
 
-inferExprSeqUnits :: (?assumeLiterals :: AssumeLiterals) => Expr Annotation -> State UnitEnv [VarCol]
-inferExprSeqUnits (ESeq _ _ e1 e2) = liftM2 (++) (inferExprSeqUnits e1) (inferExprSeqUnits e2)
-inferExprSeqUnits e = (:[]) `liftM` inferExprUnits e
+perExpr :: Params => F.Expression (FA.Analysis A) -> State UnitEnv VarCol
+perExpr e@(F.ExpValue _ _ (F.ValVariable n)) = do
+    let v = FA.varName e
+    uenv <- gets varColEnv
+    case lookupWithoutSrcSpan v uenv of
+      Nothing -> do
+          uv@(VarCol uvn) <- anyUnits Temporary
+          return uv
+      -- TODO, check what it means when uvs is defined
+      Just (uv, uvs) -> return uv
 
-handleExpr :: (?assumeLiterals :: AssumeLiterals) => Expr Annotation -> State UnitEnv (Expr Annotation)
-handleExpr x = do inferExprUnits x
-                  return x
+perExpr e@(F.ExpValue _ span v) = perLiteral v
+  where
+    perLiteral :: Params => F.Value (FA.Analysis A) -> State UnitEnv VarCol
+    perLiteral val = do
+      uv@(VarCol uvn) <- anyUnits (Literal (?assumeLiterals /= Mixed))
+      debugInfo << (uvn, (span, show val))
+      return uv
 
-inferForHeaderUnits :: (?assumeLiterals :: AssumeLiterals) => (Variable, Expr Annotation, Expr Annotation, Expr Annotation) -> State UnitEnv ()
-inferForHeaderUnits (v, e1, e2, e3) =
-  do uenv <- gets varColEnv
-     case (lookupWithoutSrcSpan v uenv) of
-       Just (uv, []) -> do uv1 <- inferExprUnits e1
-                           mustEqual True uv uv1
-                           uv2 <- inferExprUnits e2
-                           mustEqual True uv uv2
-                           uv3 <- inferExprUnits e3
-                           mustEqual True uv uv3
-                           return ()
-       Nothing -> report <<++ "Ill-formed Fortran code. Variable '" ++ v ++ "' is not declared."
+perExpr e@(F.ExpBinary _ _ op e1 e2) = do
+    uv1 <- perExpr e1
+    uv2 <- perExpr e2
+    (VarCol n) <- case binOpKind op of
+                    AddOp   -> mustEqual True uv1 uv2
+                    MulOp   -> mustAddUp uv1 uv2 1 1
+                    DivOp   -> mustAddUp uv1 uv2 1 (-1)
+                    PowerOp -> powerUnits uv1 e2
+                    LogicOp -> mustEqual True uv1 uv2
+                    RelOp   -> do mustEqual True uv1 uv2
+                                  return $ VarCol 1
+    debugInfo << (n, (FU.getSpan e, pprint e))
+    return (VarCol n)
+  where
+    pprint e = "" -- TODO pprint
 
-inferSpecUnits :: (?assumeLiterals :: AssumeLiterals) => [Spec Annotation] -> State UnitEnv ()
-inferSpecUnits = mapM_ $ descendBiM handleExpr
+perExpr (F.ExpUnary _ _ _ e) = perExpr e
+perExpr (F.ExpSubscript _ _ e alist) = do
+    descendBiM (plumb (perIndex (FA.varName e))) alist
+    perExpr e
 
-{-| inferStmtUnits, does what it says on the tin -}
-inferStmtUnits :: (?assumeLiterals :: AssumeLiterals) => Fortran Annotation -> State UnitEnv ()
-inferStmtUnits e@(Assg _ _ e1 e2) =
-  do uv1 <- inferExprUnits e1
-     uv2 <- inferExprUnits e2
-     mustEqual False uv1 uv2
-     return ()
+perExpr f@(F.ExpFunctionCall _ _ e@(F.ExpValue _ _ (F.ValVariable _)) args) = do
+    uv <- anyUnits Temporary
+    argsU <- fromMaybe (return []) (fmap (mapM perArgument . F.aStrip) args)
+    calls << (FA.varName e, (Just uv, argsU))
+    return uv
 
-inferStmtUnits (DoWhile _ _ _ f)   = inferStmtUnits f
-inferStmtUnits (For _ _ _ (NullExpr _ _) _ _ s)   = inferStmtUnits s
-inferStmtUnits (For _ _ (VarName _ v) e1 e2 e3 s) =
-  do inferForHeaderUnits (v, e1, e2, e3)
-     inferStmtUnits s
+perExpr f@(F.ExpDataRef _ _ e1 e2) = do
+    perExpr e2
+    perExpr e1
+perExpr f@(F.ExpImpliedDo _ _ exprs spec) = do
+    perDoSpecification spec
+    uv <- anyUnits Temporary
+    exprsU <- mapM perExpr (F.aStrip exprs)
+    mapM_ (mustEqual True uv) exprsU
+    return uv
+perExpr f@(F.ExpInitialisation _ _ exprs) = do
+    uv <- anyUnits Temporary
+    exprsU <- mapM perExpr (F.aStrip exprs)
+    mapM_ (mustEqual True uv) exprsU
+    return uv
+perExpr f@(F.ExpReturnSpec _ _ e) = do
+    perExpr e
 
-inferStmtUnits (FSeq _ _ s1 s2) = mapM_ inferStmtUnits [s1, s2]
-inferStmtUnits (If _ _ e1 s1 elseifs ms2) =
-  do inferExprUnits e1
-     inferStmtUnits s1
-     sequence [inferExprUnits e >> inferStmtUnits s | (e, s) <- elseifs]
-     case ms2 of
-           Just s2 -> inferStmtUnits s2
-           Nothing -> return ()
-inferStmtUnits (Allocate _ _ e1 e2) = mapM_ inferExprUnits [e1, e2]
-inferStmtUnits (Backspace _ _ specs) = inferSpecUnits specs
-inferStmtUnits (Call _ _ (Var _ _ [(VarName _ v, [])]) (ArgList _ e2)) =
-  do uvs <- case e2 of
-              NullExpr _ _ -> return []
-              _ -> inferExprSeqUnits e2
-     calls << (v, (Nothing, uvs))
-inferStmtUnits (Call _ _ e1 (ArgList _ e2)) = mapM_ inferExprUnits [e1, e2]
-inferStmtUnits (Open _ _ specs) = inferSpecUnits specs
-inferStmtUnits (Close _ _ specs) = inferSpecUnits specs
-inferStmtUnits (Continue _ _) = return ()
-inferStmtUnits (Cycle _ _ _) = return ()
-inferStmtUnits (Deallocate _ _ exprs e) =
-  do mapM_ inferExprUnits exprs
-     inferExprUnits e
-     return ()
-inferStmtUnits (Endfile _ _ specs) = inferSpecUnits specs
-inferStmtUnits (Exit _ _ _) = return ()
-inferStmtUnits (Forall _ _ (header, e) s) =
-  do mapM_ inferForHeaderUnits header
-     inferExprUnits e
-     inferStmtUnits s
-inferStmtUnits (Goto _ _ _) = return ()
-inferStmtUnits (Nullify _ _ exprs) = mapM_ inferExprUnits exprs
-inferStmtUnits (Inquire _ _ specs exprs) =
-  do inferSpecUnits specs
-     mapM_ inferExprUnits exprs
-inferStmtUnits (Rewind _ _ specs) = inferSpecUnits specs
-inferStmtUnits (Stop _ _ e) =
-  do inferExprUnits e
-     return ()
-inferStmtUnits (Where _ _ e s s') =
-  do inferExprUnits e
-     inferStmtUnits s
-     case s' of
-       Nothing -> return ()
-       Just s' -> inferStmtUnits s'
-inferStmtUnits (Write _ _ specs exprs) =
-  do inferSpecUnits specs
-     mapM_ inferExprUnits exprs
-inferStmtUnits (PointerAssg _ _ e1 e2) =
-  do uv1 <- inferExprUnits e1
-     uv2 <- inferExprUnits e2
-     mustEqual False uv1 uv2
-     return ()
-inferStmtUnits (Return _ _ e) =
-  do inferExprUnits e
-     return ()
-inferStmtUnits (Label _ _ _ s) = inferStmtUnits s
-inferStmtUnits (Print _ _ e exprs) = mapM_ inferExprUnits (e:exprs)
-inferStmtUnits (ReadS _ _ specs exprs) =
-  do inferSpecUnits specs
-     mapM_ inferExprUnits exprs
-inferStmtUnits (TextStmt _ _ _) = return ()
-inferStmtUnits (NullStmt _ _) = return ()
+perArgument :: Params =>
+    F.Argument (FA.Analysis A) -> State UnitEnv VarCol
+perArgument (F.Argument _ _ _ expr) = perExpr expr
 
-
+handleExpression :: Params
+    => F.Expression (FA.Analysis A)
+    -> State UnitEnv (F.Expression (FA.Analysis A))
+handleExpression x = do
+    perExpr x
+    return x
 
 -- TODO: error handling in powerUnits
+powerUnits :: Params
+           => VarCol -> F.Expression (FA.Analysis A) -> State UnitEnv VarCol
 
-powerUnits :: (?assumeLiterals :: AssumeLiterals) => VarCol -> Expr Annotation -> State UnitEnv VarCol
-powerUnits (VarCol uv) (Con _ _ powerString) =
+powerUnits (VarCol uv) (F.ExpValue _ _ (F.ValInteger powerString)) =
   case fmap (fromInteger . fst) $ listToMaybe $ reads powerString of
     Just power -> do
       m <- addCol Temporary
@@ -677,8 +674,7 @@ powerUnits (VarCol uv) (Con _ _ powerString) =
       modify $ liftUnitEnv $ incrElem (-1) (n, m) . incrElem power (n, uv)
       return $ VarCol m
     Nothing -> mustEqual False (VarCol uv) (VarCol 1)
-
 powerUnits uv e =
   do mustEqual False uv (VarCol 1)
-     uv <- inferExprUnits e
+     uv <- perExpr e
      mustEqual False uv (VarCol 1)

@@ -134,14 +134,14 @@ units inSrc excludes outSrc opt = do
     putStrLn $ "Inferring units for " ++ show inSrc ++ "\n"
     let ?solver = getOption opt :: Solver
      in let ?assumeLiterals = getOption opt :: AssumeLiterals
-        in doRefactor' (mapM LU.inferUnits) inSrc excludes outSrc
+        in doRefactorForpar (mapM LU.inferUnits) inSrc excludes outSrc
 
 unitCriticals inSrc excludes outSrc opt = do
     putStrLn $ "Infering critical variables for units inference in directory "
              ++ show inSrc ++ "\n"
     let ?solver = getOption opt :: Solver
      in let ?assumeLiterals = getOption opt :: AssumeLiterals
-        in doAnalysisReport' (mapM LU.inferCriticalVariables)
+        in doAnalysisReportForpar (mapM LU.inferCriticalVariables)
               inSrc excludes outSrc
 
 stencilsInf inSrc excludes outSrc opt = do
@@ -174,6 +174,9 @@ doRefactorForpar rFun inSrc excludes outSrc = do
     let outFiles = map fst ps'
     putStrLn report
   where snd3 (a, b, c) = b
+
+
+
 
 
 {-| Performs an analysis which reports to the user,
