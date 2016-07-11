@@ -21,14 +21,14 @@
 {-# LANGUAGE PatternGuards #-}
 {-# LANGUAGE ScopedTypeVariables #-}
 
-module Camfort.Analysis.StencilSpecification.InferenceFrontend where
+module Camfort.Specification.Stencils.InferenceFrontend where
 
 import Control.Monad.State.Strict
 import Control.Monad.Reader
 import Control.Monad.Writer.Strict hiding (Product)
 
-import Camfort.Analysis.StencilSpecification.InferenceBackend
-import Camfort.Analysis.StencilSpecification.Syntax
+import Camfort.Specification.Stencils.InferenceBackend
+import Camfort.Specification.Stencils.Syntax
 import Camfort.Analysis.Loops (collect)
 import Camfort.Analysis.Annotations
 import Camfort.Helpers.Vec

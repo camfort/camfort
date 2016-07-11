@@ -1,14 +1,14 @@
 {-# LANGUAGE TypeFamilies #-}
 {-# LANGUAGE ImplicitParams #-}
 
-module Camfort.Analysis.StencilSpecification.ModelSpec (spec) where
+module Camfort.Specification.Stencils.ModelSpec (spec) where
 
 import Camfort.Helpers.Vec
-import Camfort.Analysis.StencilSpecification
-import Camfort.Analysis.StencilSpecification.Synthesis
-import Camfort.Analysis.StencilSpecification.Model
-import Camfort.Analysis.StencilSpecification.Syntax hiding (Spec)
-import qualified Camfort.Analysis.StencilSpecification.Syntax as Syn
+import Camfort.Specification.Stencils
+import Camfort.Specification.Stencils.Synthesis
+import Camfort.Specification.Stencils.Model
+import Camfort.Specification.Stencils.Syntax hiding (Spec)
+import qualified Camfort.Specification.Stencils.Syntax as Syn
 
 import Camfort.Analysis.Annotations
 import qualified Language.Fortran.AST as F

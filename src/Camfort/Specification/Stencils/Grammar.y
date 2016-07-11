@@ -1,6 +1,6 @@
 { -- -*- Mode: Haskell -*-
 {-# LANGUAGE DeriveDataTypeable, PatternGuards #-}
-module Camfort.Analysis.StencilSpecification.Grammar
+module Camfort.Specification.Stencils.Grammar
 ( specParser, Specification(..), Region(..), Spec(..), Mod(..), lexer ) where
 
 import Data.Char (isLetter, isNumber, isAlphaNum, toLower, isAlpha, isSpace)
@@ -10,7 +10,7 @@ import Data.Data
 import Debug.Trace
 
 import Camfort.Analysis.CommentAnnotator
-import Camfort.Analysis.StencilSpecification.Syntax (showL)
+import Camfort.Specification.Stencils.Syntax (showL)
 
 }
 

@@ -21,7 +21,7 @@
 {-# LANGUAGE GADTs #-}
 {-# LANGUAGE KindSignatures #-}
 
-module Camfort.Analysis.StencilSpecification.Syntax where
+module Camfort.Specification.Stencils.Syntax where
 
 import Camfort.Helpers
 

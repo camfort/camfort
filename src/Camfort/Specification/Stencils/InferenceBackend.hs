@@ -24,7 +24,7 @@
 {-# LANGUAGE ScopedTypeVariables #-}
 {-# LANGUAGE PolyKinds #-}
 
-module Camfort.Analysis.StencilSpecification.InferenceBackend where
+module Camfort.Specification.Stencils.InferenceBackend where
 
 import Prelude hiding (sum)
 import Data.Generics.Uniplate.Operations
@@ -33,14 +33,14 @@ import Data.Data
 import Control.Arrow ((***))
 import Data.Function
 
-import Camfort.Analysis.StencilSpecification.Model
+import Camfort.Specification.Stencils.Model
 import Camfort.Helpers
 import Camfort.Helpers.Vec
 
 import Debug.Trace
 import Unsafe.Coerce
 
-import Camfort.Analysis.StencilSpecification.Syntax
+import Camfort.Specification.Stencils.Syntax
 
 {- Spans are a pair of a lower and upper bound -}
 type Span a = (a, a)

@@ -18,7 +18,7 @@
 {-# LANGUAGE MultiParamTypeClasses #-}
 {-# LANGUAGE ImplicitParams #-}
 
-module Camfort.Analysis.StencilSpecification.CheckFrontend where
+module Camfort.Specification.Stencils.CheckFrontend where
 
 import Data.Data
 import Data.Generics.Uniplate.Operations
@@ -27,13 +27,13 @@ import Control.Monad.State.Strict
 import Control.Monad.Reader
 import Control.Monad.Writer.Strict hiding (Product)
 
-import Camfort.Analysis.StencilSpecification.CheckBackend
-import qualified Camfort.Analysis.StencilSpecification.Grammar as Gram
-import Camfort.Analysis.StencilSpecification.Model
-import Camfort.Analysis.StencilSpecification.InferenceFrontend hiding (LogLine)
-import Camfort.Analysis.StencilSpecification.InferenceBackend
-import Camfort.Analysis.StencilSpecification.Synthesis
-import Camfort.Analysis.StencilSpecification.Syntax
+import Camfort.Specification.Stencils.CheckBackend
+import qualified Camfort.Specification.Stencils.Grammar as Gram
+import Camfort.Specification.Stencils.Model
+import Camfort.Specification.Stencils.InferenceFrontend hiding (LogLine)
+import Camfort.Specification.Stencils.InferenceBackend
+import Camfort.Specification.Stencils.Synthesis
+import Camfort.Specification.Stencils.Syntax
 import Camfort.Analysis.Loops (collect)
 import Camfort.Analysis.Annotations
 import Camfort.Analysis.CommentAnnotator

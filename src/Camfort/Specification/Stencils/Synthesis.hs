@@ -18,7 +18,7 @@
 {-# LANGUAGE FlexibleContexts #-}
 {-# LANGUAGE TupleSections #-}
 
-module Camfort.Analysis.StencilSpecification.Synthesis where
+module Camfort.Specification.Stencils.Synthesis where
 
 import Data.Data
 import Data.Generics.Uniplate.Operations
@@ -26,9 +26,9 @@ import Control.Monad.State.Lazy
 import Control.Monad.Reader
 import Control.Monad.Writer hiding (Product)
 
-import Camfort.Analysis.StencilSpecification.InferenceBackend
-import Camfort.Analysis.StencilSpecification.Syntax
-import Camfort.Analysis.StencilSpecification.Model
+import Camfort.Specification.Stencils.InferenceBackend
+import Camfort.Specification.Stencils.Syntax
+import Camfort.Specification.Stencils.Model
 
 import Camfort.Analysis.Loops (collect)
 import Camfort.Analysis.Annotations

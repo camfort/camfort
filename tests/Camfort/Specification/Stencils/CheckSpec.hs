@@ -1,13 +1,13 @@
 {-# LANGUAGE ImplicitParams #-}
 
-module Camfort.Analysis.StencilSpecification.CheckSpec (spec) where
+module Camfort.Specification.Stencils.CheckSpec (spec) where
 
 import Camfort.Analysis.CommentAnnotator
-import Camfort.Analysis.StencilSpecification.Model
-import Camfort.Analysis.StencilSpecification.CheckBackend
-import Camfort.Analysis.StencilSpecification.CheckFrontend
-import qualified Camfort.Analysis.StencilSpecification.Grammar as SYN
-import Camfort.Analysis.StencilSpecification.Syntax
+import Camfort.Specification.Stencils.Model
+import Camfort.Specification.Stencils.CheckBackend
+import Camfort.Specification.Stencils.CheckFrontend
+import qualified Camfort.Specification.Stencils.Grammar as SYN
+import Camfort.Specification.Stencils.Syntax
 
 import Test.Hspec hiding (Spec)
 import qualified Test.Hspec as Test

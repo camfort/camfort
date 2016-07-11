@@ -5,19 +5,19 @@
 {-# LANGUAGE RankNTypes #-}
 {-# LANGUAGE UndecidableInstances #-}
 
-module Camfort.Analysis.StencilSpecificationSpec (spec) where
+module Camfort.Specification.StencilsSpec (spec) where
 
 import Control.Monad.Writer.Strict hiding (Sum, Product)
 import Data.List
 
 import Camfort.Functionality
 import Camfort.Helpers.Vec
-import Camfort.Analysis.StencilSpecification
-import Camfort.Analysis.StencilSpecification.Synthesis
-import Camfort.Analysis.StencilSpecification.Model
-import Camfort.Analysis.StencilSpecification.InferenceBackend
-import Camfort.Analysis.StencilSpecification.InferenceFrontend
-import Camfort.Analysis.StencilSpecification.Syntax hiding (Spec)
+import Camfort.Specification.Stencils
+import Camfort.Specification.Stencils.Synthesis
+import Camfort.Specification.Stencils.Model
+import Camfort.Specification.Stencils.InferenceBackend
+import Camfort.Specification.Stencils.InferenceFrontend
+import Camfort.Specification.Stencils.Syntax hiding (Spec)
 import Camfort.Analysis.Annotations
 import qualified Language.Fortran.AST as F
 import Language.Fortran.Util.Position
@@ -244,14 +244,14 @@ spec =
     -- Some integration tests
     -------------------------
 
-    let file = "tests/Camfort/Analysis/StencilSpecification/example2.f"
+    let file = "tests/Camfort/Specification/Stencils/example2.f"
     program <- runIO $ readForparseSrcDir file []
 
     describe "integration test on inference for example2.f" $ do
       it "stencil infer" $
          (fst $ callAndSummarise (infer AssignMode) program)
            `shouldBe`
-           "\ntests/Camfort/Analysis/StencilSpecification/example2.f\n\
+           "\ntests/Camfort/Specification/Stencils/example2.f\n\
             \((24,8),(24,53)) \tstencil readOnce, (reflexive(dim=1))*(centered(depth=1, dim=2)) \
                                      \+ (reflexive(dim=2))*(centered(depth=1, dim=1)) :: a\n\
             \((32,7),(32,26)) \tstencil readOnce, (backward(depth=1, dim=1)) :: a\n\
@@ -262,30 +262,30 @@ spec =
       it "stencil check" $
          (fst $ callAndSummarise (\f p -> (check f p, p)) program)
            `shouldBe`
-           "\ntests/Camfort/Analysis/StencilSpecification/example2.f\n\
+           "\ntests/Camfort/Specification/Stencils/example2.f\n\
             \((22,12),(22,44)) \tCorrect.\n"
 
-    let file = "tests/Camfort/Analysis/StencilSpecification/example3.f"
+    let file = "tests/Camfort/Specification/Stencils/example3.f"
     program <- runIO $ readForparseSrcDir file []
 
     describe "integration test on inference for example3.f" $ do
       it "stencil infer" $
          (fst $ callAndSummarise (infer AssignMode) program)
            `shouldBe`
-            "\ntests/Camfort/Analysis/StencilSpecification/example3.f\n\
+            "\ntests/Camfort/Specification/Stencils/example3.f\n\
              \((15,2),(15,20)) \tstencil readOnce, (reflexive(dim=3)) :: a\n\
              \((20,8),(20,26)) \tstencil readOnce, (reflexive(dim=3)) :: a\n\
              \((23,7),(23,17)) \tstencil readOnce, (reflexive(dim=1)) :: d\n\
              \((24,7),(24,19)) \tstencil readOnce, (reflexive(dim=2)) :: a\n"
 
-    let file = "tests/Camfort/Analysis/StencilSpecification/example4.f"
+    let file = "tests/Camfort/Specification/Stencils/example4.f"
     program <- runIO $ readForparseSrcDir file []
 
     describe "integration test on inference for example4.f" $ do
       it "stencil infer" $
          (fst $ callAndSummarise (infer AssignMode) program)
            `shouldBe`
-            "\ntests/Camfort/Analysis/StencilSpecification/example4.f\n\
+            "\ntests/Camfort/Specification/Stencils/example4.f\n\
              \((6,8),(6,33)) \tstencil (reflexive(dim=1)) :: x\n"
 
 

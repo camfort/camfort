@@ -44,31 +44,31 @@ executable camfort
                         Camfort.Analysis.CommentAnnotator
                         Camfort.Analysis.IntermediateReps
                         Camfort.Analysis.Loops
-                        Camfort.Analysis.LVA
-                        Camfort.Analysis.StencilSpecification.CheckBackend
-                        Camfort.Analysis.StencilSpecification.CheckFrontend
-                        Camfort.Analysis.StencilSpecification.InferenceBackend
-                        Camfort.Analysis.StencilSpecification.InferenceFrontend
-                        Camfort.Analysis.StencilSpecification.Model
-                        Camfort.Analysis.StencilSpecification.Syntax
-                        Camfort.Analysis.StencilSpecification.Grammar
-                        Camfort.Analysis.StencilSpecification.Synthesis
-                        Camfort.Analysis.StencilSpecification
+                        Camfort.Analysis.LVA			
                         Camfort.Analysis.Syntax
                         Camfort.Analysis.Types
-                        Camfort.Transformation.CommonBlockElim
-                        Camfort.Transformation.CommonBlockElimToCalls
-                        Camfort.Transformation.DeadCode
-                        Camfort.Transformation.DerivedTypeIntro
-                        Camfort.Transformation.EquivalenceElim
-                        Camfort.Transformation.Syntax
+                        Camfort.Specification.Stencils.CheckBackend
+                        Camfort.Specification.Stencils.CheckFrontend
+                        Camfort.Specification.Stencils.InferenceBackend
+                        Camfort.Specification.Stencils.InferenceFrontend
+                        Camfort.Specification.Stencils.Model
+                        Camfort.Specification.Stencils.Syntax
+                        Camfort.Specification.Stencils.Grammar
+                        Camfort.Specification.Stencils.Synthesis
+                        Camfort.Specification.Stencils
                         Camfort.Specification.Units
                         Camfort.Specification.Units.Parser
                         Camfort.Specification.Units.SyntaxConversion
                         Camfort.Specification.Units.Forpar
                         Camfort.Specification.Units.Environment
                         Camfort.Specification.Units.Solve
-                        Camfort.Specification.Units.SolveHMatrix
+                        Camfort.Specification.Units.SolveHMatrix			
+                        Camfort.Transformation.CommonBlockElim
+                        Camfort.Transformation.CommonBlockElimToCalls
+                        Camfort.Transformation.DeadCode
+                        Camfort.Transformation.DerivedTypeIntro
+                        Camfort.Transformation.EquivalenceElim
+                        Camfort.Transformation.Syntax
                         Camfort.Helpers
                         Camfort.Helpers.Vec
                         Camfort.Functionality
@@ -117,30 +117,30 @@ library
                         Camfort.Analysis.IntermediateReps
                         Camfort.Analysis.Loops
                         Camfort.Analysis.LVA
-                        Camfort.Analysis.StencilSpecification.CheckBackend
-                        Camfort.Analysis.StencilSpecification.CheckFrontend
-                        Camfort.Analysis.StencilSpecification.InferenceFrontend
-                        Camfort.Analysis.StencilSpecification.InferenceBackend
-                        Camfort.Analysis.StencilSpecification.Model
-                        Camfort.Analysis.StencilSpecification.Syntax
-                        Camfort.Analysis.StencilSpecification.Grammar
-                        Camfort.Analysis.StencilSpecification.Synthesis
-                        Camfort.Analysis.StencilSpecification
                         Camfort.Analysis.Syntax
                         Camfort.Analysis.Types
-                        Camfort.Transformation.CommonBlockElim
-                        Camfort.Transformation.CommonBlockElimToCalls
-                        Camfort.Transformation.DeadCode
-                        Camfort.Transformation.DerivedTypeIntro
-                        Camfort.Transformation.EquivalenceElim
-                        Camfort.Transformation.Syntax
+                        Camfort.Specification.Stencils.CheckBackend
+                        Camfort.Specification.Stencils.CheckFrontend
+                        Camfort.Specification.Stencils.InferenceBackend
+                        Camfort.Specification.Stencils.InferenceFrontend
+                        Camfort.Specification.Stencils.Model
+                        Camfort.Specification.Stencils.Syntax
+                        Camfort.Specification.Stencils.Grammar
+                        Camfort.Specification.Stencils.Synthesis
+                        Camfort.Specification.Stencils
                         Camfort.Specification.Units
                         Camfort.Specification.Units.Parser
                         Camfort.Specification.Units.SyntaxConversion
                         Camfort.Specification.Units.Forpar
                         Camfort.Specification.Units.Environment
                         Camfort.Specification.Units.Solve
-                        Camfort.Specification.Units.SolveHMatrix
+                        Camfort.Specification.Units.SolveHMatrix			
+                        Camfort.Transformation.CommonBlockElim
+                        Camfort.Transformation.CommonBlockElimToCalls
+                        Camfort.Transformation.DeadCode
+                        Camfort.Transformation.DerivedTypeIntro
+                        Camfort.Transformation.EquivalenceElim
+                        Camfort.Transformation.Syntax
                         Camfort.Helpers
                         Camfort.Helpers.Vec
                         Camfort.Functionality

@@ -14,16 +14,16 @@
    limitations under the License.
 -}
 
-module Camfort.Analysis.StencilSpecification
+module Camfort.Specification.Stencils
  (InferMode, infer, check, findVarFlowCycles) where
 
 import Control.Monad.State.Lazy
 import Control.Monad.Writer hiding (Product)
 
-import qualified Camfort.Analysis.StencilSpecification.Grammar as Gram
-import Camfort.Analysis.StencilSpecification.CheckFrontend hiding (LogLine)
-import Camfort.Analysis.StencilSpecification.InferenceFrontend
-import Camfort.Analysis.StencilSpecification.Syntax
+import qualified Camfort.Specification.Stencils.Grammar as Gram
+import Camfort.Specification.Stencils.CheckFrontend hiding (LogLine)
+import Camfort.Specification.Stencils.InferenceFrontend
+import Camfort.Specification.Stencils.Syntax
 import Camfort.Analysis.CommentAnnotator
 import Camfort.Analysis.Annotations
 -- These two are redefined here for ForPar ASTs

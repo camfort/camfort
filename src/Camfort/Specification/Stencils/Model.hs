@@ -28,9 +28,9 @@ the specification checking and program synthesis features.
 {-# LANGUAGE FlexibleInstances #-}
 {-# LANGUAGE ImplicitParams #-}
 
-module Camfort.Analysis.StencilSpecification.Model where
+module Camfort.Specification.Stencils.Model where
 
-import Camfort.Analysis.StencilSpecification.Syntax
+import Camfort.Specification.Stencils.Syntax
 import Data.Set hiding (map,foldl',(\\))
 import qualified Data.Set as Set
 import Data.List

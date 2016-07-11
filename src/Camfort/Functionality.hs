@@ -66,7 +66,7 @@ import qualified Language.Fortran.AST as A
 import Language.Fortran.Analysis.Renaming
   (renameAndStrip, analyseRenames, unrename, NameMap)
 import Language.Fortran.Analysis(initAnalysis)
-import qualified Camfort.Analysis.StencilSpecification as Stencils
+import qualified Camfort.Specification.Stencils as Stencils
 
 -- CamFort optional flags
 data Flag = Version

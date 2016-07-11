@@ -18,7 +18,7 @@
              TupleSections, FunctionalDependencies #-}
 {-# LANGUAGE ImplicitParams #-}
 
-module Camfort.Analysis.StencilSpecification.CheckBackend where
+module Camfort.Specification.Stencils.CheckBackend where
 
 import Data.Data
 import Data.Maybe
@@ -28,10 +28,10 @@ import Control.Monad.State.Lazy
 import Control.Monad.Reader
 import Control.Monad.Writer hiding (Product,Sum)
 
-import Camfort.Analysis.StencilSpecification.InferenceBackend
-import Camfort.Analysis.StencilSpecification.Syntax
-import Camfort.Analysis.StencilSpecification.Model
-import qualified Camfort.Analysis.StencilSpecification.Grammar as SYN
+import Camfort.Specification.Stencils.InferenceBackend
+import Camfort.Specification.Stencils.Syntax
+import Camfort.Specification.Stencils.Model
+import qualified Camfort.Specification.Stencils.Grammar as SYN
 
 import Camfort.Analysis.Loops (collect)
 import Camfort.Analysis.Annotations

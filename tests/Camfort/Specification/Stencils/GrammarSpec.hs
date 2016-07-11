@@ -1,7 +1,7 @@
-module Camfort.Analysis.StencilSpecification.GrammarSpec (spec) where
+module Camfort.Specification.Stencils.GrammarSpec (spec) where
 
 import Camfort.Analysis.CommentAnnotator
-import Camfort.Analysis.StencilSpecification.Grammar
+import Camfort.Specification.Stencils.Grammar
 
 import Test.Hspec hiding (Spec)
 import qualified Test.Hspec as Test

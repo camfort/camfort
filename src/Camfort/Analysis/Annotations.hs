@@ -31,8 +31,8 @@ import Language.Haskell.ParseMonad
 
 import Language.Fortran
 import Camfort.Analysis.IntermediateReps
-import qualified Camfort.Analysis.StencilSpecification.Syntax as StencilSpec
-import qualified Camfort.Analysis.StencilSpecification.Grammar as StencilComment
+import qualified Camfort.Specification.Stencils.Syntax as StencilSpec
+import qualified Camfort.Specification.Stencils.Grammar as StencilComment
 
 import qualified Language.Fortran.AST as F
 import qualified Language.Fortran.Analysis as FA
