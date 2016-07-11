@@ -17,10 +17,6 @@
 
   Units of measure extension to Fortran
 
-  Files: Units.hs
-         UnitsEnvironment.hs
-
-
 TODO:
  * Deal with variable shadowing in "contained" functions.
  * Better errors with line number info
@@ -52,6 +48,7 @@ import Camfort.Output
 import Camfort.Analysis.Annotations hiding (Unitless)
 import Camfort.Analysis.Syntax
 import Camfort.Analysis.Types
+import Camfort.Specification.Units.SyntaxConversion
 import Camfort.Specification.Units.Environment -- Provides the types and data accessors used in this module
 import Camfort.Specification.Units.Solve -- Solvers for the Gaussian matrix
 
@@ -73,47 +70,72 @@ infix 2 <<
 infix 2 <<++
 (<<++) lens o = lens =. (++ [o])
 
+-- Helper that is require before running any of the units operations
+modifyAST (f, inp, ast) =
+      let ast' = map (fmap (const ())) ast
+          ast'' = convertSyntax f inp ast'
+          ast''' = map (fmap (const unitAnnotation)) ast''
+      in (f, ast''')
+
 {- START HERE! Two main functions of this file: inferUnits and removeUnits -}
 
-removeUnits :: (Filename, Program Annotation) -> (Report, (Filename, Program Annotation))
-removeUnits (fname, x) = let ?criticals = False in ("", (fname, map (descendBi removeUnitsInBlock) x))
+removeUnits ::
+    (Filename, Program Annotation) -> (Report, (Filename, Program Annotation))
+removeUnits (fname, x) =
+    let ?criticals = False
+    in ("", (fname, map (descendBi removeUnitsInBlock) x))
 
 
 -- *************************************
 --   Unit inference (top - level)
 -- *************************************
 
+-- Infer one possible set of critical variables for a program
+inferCriticalVariables ::
+       (?solver :: Solver, ?assumeLiterals :: AssumeLiterals)
+    => (Filename, Program Annotation)
+    -> (Report, (Filename, Program Annotation))
+inferCriticalVariables (fname, x) = (r, (fname, x))
+  where
+    -- Format report
+    r = concat [fname ++ ": " ++ r ++ "\n" | r <- Data.Label.get report env]
 
-inferCriticalVariables :: (?solver :: Solver, ?assumeLiterals :: AssumeLiterals) =>
-                          (Filename, Program Annotation) -> (Report, (Filename, Program Annotation))
-inferCriticalVariables (fname, x) =
-    let ?criticals = True
-        ?debug = False
-    in  let infer = do doInferUnits x
-                       vars <- criticalVars
-                       case vars of
-                         [] -> do report <<++ "No critical variables. Appropriate annotations."
-                         _  -> do report <<++ "Critical variables: " ++ (concat $ intersperse "," vars)
-                       ifDebug debugGaussian
+    -- Run the infer procedure with empty unit environment, retunring
+    -- the updated unit environment, matching variables to their units
+    env = let ?criticals = True
+              ?debug     = False
+          in  execState infer emptyUnitEnv
 
+    -- Core infer procedure
+    infer :: (?criticals :: Bool, ?debug :: Bool) => State UnitEnv ()
+    infer = do
+        doInferUnits x
+        vars <- criticalVars
+        case vars of
+          [] -> do report <<++ "No critical variables. Appropriate annotations."
+          _  -> do report <<++ "Critical variables: "
+                            ++ (concat $ intersperse "," vars)
+        ifDebug debugGaussian
 
+-- Infer and synthesis the unspecified units for a program
+inferUnits ::
+       (?solver :: Solver, ?assumeLiterals :: AssumeLiterals)
+    => (Filename, Program Annotation)
+    -> (Report, (Filename, Program Annotation))
+inferUnits (fname, x) = (r, (fname, y))
+  where
+    -- Format report
+    r = concat [fname ++ ": " ++ r ++ "\n" | r <- Data.Label.get report env]
+        ++ fname ++ ": checked/inferred " ++ show n ++ " user variables\n"
+    -- Count number of checked and inferred variables
+    n = countVariables (_varColEnv env) (_debugInfo env) (_procedureEnv env)
+                                    (fst $ _linearSystem env) (_unitVarCats env)
+    -- Apply inferences
+    (y, env) = let ?criticals = False
+                   ?debug     = False
+               in runState (doInferUnits x) emptyUnitEnv
 
-            (_, env) = runState infer emptyUnitEnv
-            r = concat [fname ++ ": " ++ r ++ "\n" | r <- Data.Label.get report env]
-        in (r, (fname, x))
-
-inferUnits :: (?solver :: Solver, ?assumeLiterals :: AssumeLiterals) => (Filename, Program Annotation) -> (Report, (Filename, Program Annotation))
-inferUnits (fname, x) =
-    let ?criticals = False
-        ?debug = False
-    in let (y, env) = runState (doInferUnits x) emptyUnitEnv
-           r = concat [fname ++ ": " ++ r ++ "\n" | r <- Data.Label.get report env]
-               ++ fname ++ ": checked/inferred "
-               ++ (show $ countVariables (_varColEnv env) (_debugInfo env) (_procedureEnv env) (fst $ _linearSystem env) (_unitVarCats env))
-               ++ " user variables\n"
-       in (r, (fname, y))
-
-
+-- Count number of variables for which a spec has been checked
 countVariables vars debugs procs matrix ucats =
     length $ filter (\c -> case (ucats !! (c - 1)) of
                              Variable -> case (lookupVarsByCols vars [c]) of
@@ -124,33 +146,57 @@ countVariables vars debugs procs matrix ucats =
                                            _  -> True
                              _        -> False) [1..ncols matrix]
 
-doInferUnits :: (?criticals :: Bool, ?solver :: Solver, ?debug :: Bool, ?assumeLiterals :: AssumeLiterals) => Program Annotation -> State UnitEnv (Program Annotation)
-doInferUnits x = do mapM inferProgUnits x
-                    ifDebug (report <<++ "Finished inferring prog units")
-                    ifDebug debugGaussian
-                    inferInterproceduralUnits x
-                    succeeded <- gets success
-                    p <- if (?criticals || (not succeeded))
-                                      then  return x -- don't insert unit annotations
-                                      else  mapM (descendBiM insertUnitsInBlock) x
-                    (n, added) <- gets evUnitsAdded
-                    if (?criticals || (not succeeded)) then return () else report <<++ ("Added " ++ (show n) ++ " non-unitless annotation: " ++ (concat $ intersperse "," $ added))
-                    return p
+-- Core procedure for inferring units
+doInferUnits ::
+       (?criticals :: Bool, ?solver :: Solver, ?debug :: Bool,
+        ?assumeLiterals :: AssumeLiterals)
+    => Program Annotation -> State UnitEnv (Program Annotation)
+doInferUnits x = do
+    mapM perProgInfer x
+    --
+    ifDebug (report <<++ "Finished inferring prog units")
+    ifDebug debugGaussian
+    --
+    inferInterproceduralUnits x
+    succeeded <- gets success
+    p <- if (?criticals || (not succeeded))
+           then  return x -- don't insert unit annotations
+           else  mapM (descendBiM insertUnitsInBlock) x
+    if (?criticals || (not succeeded))
+       then return ()
+       else do
+           (n, added) <- gets evUnitsAdded
+           report <<++ ("Added " ++ (show n) ++ " non-unitless annotation: "
+                    ++ (concat $ intersperse "," $ added))
+    return p
 
-inferProgUnits :: (?criticals :: Bool, ?solver :: Solver, ?debug :: Bool, ?assumeLiterals :: AssumeLiterals) => ProgUnit Annotation -> State UnitEnv ()
-inferProgUnits p =
+-- For a program unit, infer its units
+perProgInfer ::
+       (?criticals :: Bool, ?solver :: Solver, ?debug :: Bool,
+        ?assumeLiterals :: AssumeLiterals)
+    => ProgUnit Annotation -> State UnitEnv ()
+perProgInfer p =
   do -- infer units for *root* program unit
      inferPUnit p
-     -- infer units for the *children* program units (so that the parent scope is processed first)
-     mapM_ inferProgUnits $ ((children p)::[ProgUnit Annotation])
+     -- infer units for the *children* program units
+     -- (so that the parent scope is processed first)
+     mapM_ perProgInfer $ ((children p)::[ProgUnit Annotation])
 
   where
     -- Infer the units for the *root* program unit (not children)
      inferPUnit :: ProgUnit Annotation -> State UnitEnv ()
-     inferPUnit (Main x sp n a b _)                       = inferBlockUnits b Nothing
-     inferPUnit (Sub x sp t (SubName _ n) (Arg _ a _) b)  = inferBlockUnits b (Just (n, Nothing, argNames a))
-     inferPUnit (Function _ _ _ (SubName _ n) (Arg _ a _) r b) = inferBlockUnits b (Just (n, Just (resultName n r), argNames a))
-     inferPUnit (Module x sp (SubName _ n) _ _ d ds)       = transformBiM (inferDecl (Just (n, Nothing, []))) d >> return ()
+     inferPUnit (Main x sp n a b _) =
+                perBlockInfer b Nothing
+
+     inferPUnit (Sub x sp t (SubName _ n) (Arg _ a _) b) =
+                perBlockInfer b (Just (n, Nothing, argNames a))
+
+     inferPUnit (Function _ _ _ (SubName _ n) (Arg _ a _) r b) =
+                perBlockInfer b (Just (n, Just (resultName n r), argNames a))
+
+     inferPUnit (Module x sp (SubName _ n) _ _ d ds) =
+                transformBiM (inferDecl (Just (n, Nothing, []))) d >> return ()
+
      inferPUnit x = return ()
 
      argNames :: ArgName a -> [Variable]
@@ -163,30 +209,31 @@ inferProgUnits p =
      resultName _ (Just (VarName _ r)) = r
 
 
-inferBlockUnits :: (?solver :: Solver, ?criticals :: Bool, ?debug :: Bool, ?assumeLiterals :: AssumeLiterals) => Block Annotation -> Maybe ProcedureNames -> State UnitEnv ()
-inferBlockUnits x proc = do resetTemps
-                            enterDecls x proc
-                            addProcedure proc
-                            descendBiM handleStmt x
+perBlockInfer :: (?solver :: Solver, ?criticals :: Bool, ?debug :: Bool,
+                  ?assumeLiterals :: AssumeLiterals)
+    => Block Annotation -> Maybe ProcedureNames -> State UnitEnv ()
+perBlockInfer x proc = do
+    resetTemps
+    enterDecls x proc
+    addProcedure proc
+    descendBiM handleStmt x
 
-                            case proc of
-                              Just _ -> {- not ?criticals -> -}
-                                         do -- Intermediate solve for procedures (subroutines & functions)
-                                            ifDebug (report <<++ "Pre doing row reduce")
-                                            consistent <- solveSystemM ""
-                                            success =: consistent
+    case proc of
+        Just _ -> do {- not ?criticals -> -}
+          -- Intermediate solve for procedures (subroutines & functions)
+          ifDebug (report <<++ "Pre doing row reduce")
+          consistent <- solveSystemM ""
+          success =: consistent
 
-                                            linearSystem =. reduceRows 1
-                                            ifDebug (report <<++ "Post doing reduce")
-                                            ifDebug (debugGaussian)
-                                            return ()
-                              _     -> return ()
-                            -- return x
-
-                         where
-                           handleStmt :: Fortran Annotation -> State UnitEnv (Fortran Annotation)
-                           handleStmt x = do inferStmtUnits x
-                                             return x
+          linearSystem =. reduceRows 1
+          ifDebug (report <<++ "Post doing reduce")
+          ifDebug (debugGaussian)
+          return ()
+        _ -> return ()
+  where
+    handleStmt :: Fortran Annotation -> State UnitEnv (Fortran Annotation)
+    handleStmt x = do inferStmtUnits x
+                      return x
 
 {-| reduceRows is a core part of the polymorphic unit checking for procedures.
 

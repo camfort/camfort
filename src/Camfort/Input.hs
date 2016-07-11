@@ -35,6 +35,7 @@ import Language.Fortran
 import Data.Monoid
 import Data.Generics.Uniplate.Operations
 import Camfort.Analysis.Annotations
+import Camfort.Specification.Units (modifyAST)
 import Camfort.Specification.Units.Environment
 import Camfort.Specification.Units.SyntaxConversion
 
@@ -125,12 +126,6 @@ doAnalysisReport' rFun inSrc excludes outSrc = do
   putStr "\n"
   let (report, ps') = rFun (map modifyAST ps)
   putStrLn report
-  where
-    modifyAST (f, inp, ast) =
-      let ast' = map (fmap (const ())) ast
-          ast'' = convertSyntax f inp ast'
-          ast''' = map (fmap (const unitAnnotation)) ast''
-      in (f, ast''')
 
 {-| Performs a refactoring provided by its first parameter, on the directory
     of the second, excluding files listed by third,
@@ -163,19 +158,19 @@ doRefactor' rFun inSrc excludes outSrc = do
     else return ()
     ps <- readParseSrcDir inSrc excludes
     let (report, ps') = rFun (map modifyAST ps)
-    let outFiles = map fst ps'
-    let newASTs = map (map (fmap (const ()))) (map snd ps')
-    let inputs = map Fortran.snd3 ps
-    let newASTs' = map (\(a,b) -> a b) (zip (map convertSyntaxBack inputs) newASTs)
-    let outputs = zip outFiles newASTs'
+    let outputs = mkOutputFile ps ps'
     putStrLn report
     outputFiles inSrc outSrc (map (fmap B.pack) outputs)
+
+mkOutputFile :: [(Filename, String, Program A)]
+             -> [(Filename, Program A)]
+             -> [(Filename, String)]
+mkOutputFile ps ps' = zip outFiles newASTs'
   where
-    modifyAST (f, inp, ast) =
-      let ast' = map (fmap (const ())) ast
-          ast'' = convertSyntax f inp ast'
-          ast''' = map (fmap (const unitAnnotation)) ast''
-      in (f, ast''')
+    outFiles = map fst ps'
+    newASTs' = map (\(a,b) -> a b) (zip (map convertSyntaxBack inputs) newASTs)
+    newASTs  = map (map (fmap (const ()))) (map snd ps')
+    inputs   = map Fortran.snd3 ps
 
 -- * Source directory and file handling
 
