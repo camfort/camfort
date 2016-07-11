@@ -17,7 +17,7 @@
 {-# LANGUAGE PatternGuards #-}
 {-# LANGUAGE FlexibleInstances #-}
 
-module Camfort.Extensions.UnitSyntaxConversion ( convertSyntax
+module Camfort.Specification.Units.SyntaxConversion ( convertSyntax
                                                , convertSyntaxBack ) where
 
 import Prelude hiding (getLine)
@@ -31,7 +31,7 @@ import GHC.Exts (sortWith)
 
 import qualified Language.Fortran as LF
 
-import Camfort.Extensions.UnitParser
+import Camfort.Specification.Units.Parser
 
 import Debug.Trace
 

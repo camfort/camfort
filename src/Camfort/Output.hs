@@ -60,7 +60,7 @@ import Debug.Trace
 import Control.Monad.Trans.State.Lazy
 import Text.Printf
 
-import Camfort.Extensions.UnitsEnvironment
+import Camfort.Specification.Units.Environment
 
 -- Custom 'Show' which on strings is the identity
 class Show' s where

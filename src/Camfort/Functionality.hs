@@ -43,10 +43,11 @@ import Camfort.Transformation.CommonBlockElimToCalls
 import Camfort.Transformation.EquivalenceElim
 import Camfort.Transformation.DerivedTypeIntro
 
-import Camfort.Extensions.Units as LU
-import Camfort.Extensions.UnitSyntaxConversion
-import Camfort.Extensions.UnitsEnvironment
-import Camfort.Extensions.UnitsSolve
+import Camfort.Specification.Units as LU
+import Camfort.Specification.Units.SyntaxConversion
+import Camfort.Specification.Units.Environment
+import Camfort.Specification.Units.Solve
+import Camfort.Specification.Units.Forpar
 
 import Camfort.Helpers
 import Camfort.Output
@@ -65,7 +66,6 @@ import qualified Language.Fortran.AST as A
 import Language.Fortran.Analysis.Renaming
   (renameAndStrip, analyseRenames, unrename, NameMap)
 import Language.Fortran.Analysis(initAnalysis)
-import Camfort.Extensions.UnitsForpar
 import qualified Camfort.Analysis.StencilSpecification as Stencils
 
 -- CamFort optional flags

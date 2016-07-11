@@ -15,7 +15,7 @@
 -}
 {-# LANGUAGE FlexibleContexts #-}
 
-module Camfort.Extensions.UnitsSolveHMatrix
+module Camfort.Specification.Units.SolveHMatrix
   ( rref, rrefMatrices, convertToHMatrix, convertFromHMatrix, isInconsistentRREF
   , dispf, Units, lu, rank, takeRows )
 where
@@ -36,7 +36,7 @@ import qualified Data.Matrix as Old (nrows, ncols, toList, Matrix, fromList)
 import Foreign.Storable (Storable)
 import Data.List (findIndex, nub, sort, (\\))
 import Data.Maybe (fromMaybe)
-import Camfort.Extensions.UnitsEnvironment (LinearSystem, UnitConstant(..))
+import Camfort.Specification.Units.Environment (LinearSystem, UnitConstant(..))
 import Language.Fortran (MeasureUnit)
 
 -- | Returns True iff the given matrix in reduced row echelon form

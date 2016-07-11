@@ -35,8 +35,8 @@ import Language.Fortran
 import Data.Monoid
 import Data.Generics.Uniplate.Operations
 import Camfort.Analysis.Annotations
-import Camfort.Extensions.UnitsEnvironment
-import Camfort.Extensions.UnitSyntaxConversion
+import Camfort.Specification.Units.Environment
+import Camfort.Specification.Units.SyntaxConversion
 
 import Language.Haskell.ParseMonad
 import qualified Language.Haskell.Syntax as LHS

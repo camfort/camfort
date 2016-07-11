@@ -17,7 +17,7 @@
 
 {- Provides various data types and type class instances for the Units extension -}
 
-module Camfort.Extensions.UnitsEnvironment where
+module Camfort.Specification.Units.Environment where
 
 
 import qualified Data.Label

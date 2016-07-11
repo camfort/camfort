@@ -30,7 +30,7 @@ TODO:
 
 {-# LANGUAGE ScopedTypeVariables, ImplicitParams, DoAndIfThenElse, PatternGuards #-}
 
-module Camfort.Extensions.Units where
+module Camfort.Specification.Units where
 
 import Data.Ratio
 import Data.Maybe
@@ -52,8 +52,8 @@ import Camfort.Output
 import Camfort.Analysis.Annotations hiding (Unitless)
 import Camfort.Analysis.Syntax
 import Camfort.Analysis.Types
-import Camfort.Extensions.UnitsEnvironment -- Provides the types and data accessors used in this module
-import Camfort.Extensions.UnitsSolve -- Solvers for the Gaussian matrix
+import Camfort.Specification.Units.Environment -- Provides the types and data accessors used in this module
+import Camfort.Specification.Units.Solve -- Solvers for the Gaussian matrix
 
 import Language.Fortran
 import Language.Fortran.Pretty

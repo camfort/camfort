@@ -1,14 +1,14 @@
 { -- -*- Mode: Haskell -*-
-module Camfort.Extensions.UnitParser ( unitParser
+module Camfort.Specification.Units.Parser ( unitParser
                                      , UnitStatement(..)
                                      , UnitOfMeasure(..)
-                                     , UnitPower(..) 
+                                     , UnitPower(..)
                                      ) where
 
 import Data.Char (isLetter, isNumber, isAlphaNum, toLower)
 }
 
-%monad { Maybe } { >>= } { return } 
+%monad { Maybe } { >>= } { return }
 %name parseUnit UNIT
 %tokentype { Token }
 
@@ -67,16 +67,16 @@ NUM :: { String }
 
 {
 
-data UnitStatement = 
+data UnitStatement =
    UnitAssignment (Maybe String) UnitOfMeasure
  | UnitAlias String UnitOfMeasure
 
 instance Show UnitStatement where
-  show (UnitAssignment (Just s) uom) = "= unit (" ++ show uom ++ ") :: " ++ s 
+  show (UnitAssignment (Just s) uom) = "= unit (" ++ show uom ++ ") :: " ++ s
   show (UnitAssignment Nothing uom) = "= unit (" ++ show uom ++ ")"
   show (UnitAlias s uom) = "= unit :: " ++ s ++ " = " ++ show uom
 
-data UnitOfMeasure = 
+data UnitOfMeasure =
    Unitless
  | UnitBasic String
  | UnitProduct UnitOfMeasure UnitOfMeasure
@@ -98,7 +98,7 @@ instance Show UnitPower where
   show (UnitPowerInteger i) = show i
   show (UnitPowerRational i1 i2) = show i1 ++ "/" ++ show i2
 
-data Token = 
+data Token =
    TUnit
  | TDoubleColon
  | TExponentiation
@@ -117,7 +117,7 @@ lexer _ = Nothing
 
 addToTokens :: Token -> String -> Maybe [ Token ]
 addToTokens tok rest = do
- tokens <- lexer' rest 
+ tokens <- lexer' rest
  return $ tok : tokens
 
 lexer' :: String -> Maybe [ Token ]
@@ -136,7 +136,7 @@ lexer' (x:xs)
  | isNumber x = aux isNumber TNum
  | otherwise = Nothing
  where
-   aux p cons = 
+   aux p cons =
      let (target, rest) = span p xs
      in lexer' rest >>= (\tokens -> return $ cons (x:target) : tokens)
 lexer' _ = Nothing

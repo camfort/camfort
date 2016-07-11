@@ -19,7 +19,7 @@ TODO:
 {-# LANGUAGE FlexibleContexts #-}
 {-# LANGUAGE PatternGuards #-}
 
-module Camfort.Extensions.UnitsForpar
+module Camfort.Specification.Units.Forpar
   ( runUnits
   , UnitState(..)
   , inferUnits
@@ -56,9 +56,9 @@ import Camfort.Output
 import Camfort.Analysis.Annotations
 import Camfort.Analysis.Syntax
 import Camfort.Analysis.Types
-import Camfort.Extensions.UnitsEnvironment hiding (Unitless)
-import Camfort.Extensions.UnitsSolve -- Solvers for the Gaussian matrix
-import qualified Camfort.Extensions.UnitParser as P
+import Camfort.Specification.Units.Environment hiding (Unitless)
+import Camfort.Specification.Units.Solve -- Solvers for the Gaussian matrix
+import qualified Camfort.Specification.Units.Parser as P
 
 import Language.Fortran.AST
 import Language.Fortran.Util.Position

@@ -15,7 +15,7 @@
 -}
 {-# LANGUAGE ImplicitParams, BangPatterns #-}
 
-module Camfort.Extensions.UnitsSolve where
+module Camfort.Specification.Units.Solve where
 
 import Data.Ratio
 import Data.List
@@ -27,8 +27,8 @@ import qualified Debug.Trace as D
 
 
 import Language.Fortran
-import Camfort.Extensions.UnitsEnvironment
-import Camfort.Extensions.UnitsSolveHMatrix
+import Camfort.Specification.Units.Environment
+import Camfort.Specification.Units.SolveHMatrix
 
 -- Top-level, select the solver
 solveSystem :: (?solver :: Solver) => LinearSystem -> Consistency LinearSystem

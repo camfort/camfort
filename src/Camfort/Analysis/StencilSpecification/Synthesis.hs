@@ -32,7 +32,6 @@ import Camfort.Analysis.StencilSpecification.Model
 
 import Camfort.Analysis.Loops (collect)
 import Camfort.Analysis.Annotations
-import Camfort.Extensions.UnitsForpar (parameterise)
 import Camfort.Helpers.Vec
 -- These two are redefined here for ForPar ASTs
 import Camfort.Helpers hiding (lineCol, spanLineCol)
