@@ -18,7 +18,7 @@
 {-# LANGUAGE FlexibleInstances #-}
 
 module Camfort.Specification.Units.SyntaxConversion ( convertSyntax
-                                               , convertSyntaxBack ) where
+                                               , convertSyntaxBack, toUnitInfo ) where
 
 import Prelude hiding (getLine)
 import Data.List (isPrefixOf, isInfixOf, find, (\\), intercalate)
@@ -26,12 +26,14 @@ import Data.Char (isSpace, toLower)
 import Data.Generics.Uniplate.Data
 import Data.Generics.Uniplate.Operations
 import Data.Maybe (fromJust)
+import Data.Ratio
 
 import GHC.Exts (sortWith)
 
 import qualified Language.Fortran as LF
 
 import Camfort.Analysis.CommentAnnotator
+import Camfort.Specification.Units.Environment hiding (Unitless)
 import Camfort.Specification.Units.Parser
 
 import Debug.Trace
@@ -256,6 +258,24 @@ parse fn src = map (t 0) $ lines src
         (unitParser $ tail line, genSrcLoc col (length line))
       | otherwise = (Left NotAnnotation, genSrcLoc 0 0)
     genSrcLoc c len l = (LF.SrcLoc fn l c, LF.SrcLoc fn c (c + len))
+
+-- Convert parser units to UnitInfo
+
+toUnitInfo :: UnitOfMeasure -> UnitInfo
+toUnitInfo (UnitProduct u1 u2) =
+    UnitMul (toUnitInfo u1) (toUnitInfo u2)
+toUnitInfo (UnitQuotient u1 u2) =
+    UnitMul (toUnitInfo u1) (UnitPow (toUnitInfo u2) (-1))
+toUnitInfo (UnitExponentiation u1 p) =
+    UnitPow (toUnitInfo u1) (toDouble p)
+  where
+    toDouble :: UnitPower -> Double
+    toDouble (UnitPowerInteger i) = fromInteger i
+    toDouble (UnitPowerRational x y) = fromRational (x % y)
+toUnitInfo (UnitBasic str) =
+    UnitName str
+toUnitInfo (Unitless) =
+    UnitlessI
 
 -- Convert new units of measure to old units of measure
 fromNewUnitStatements :: UnitStatement

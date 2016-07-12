@@ -29,6 +29,8 @@ import qualified Language.Fortran.AST as F
 import qualified Language.Fortran.Analysis as FA
 import qualified Language.Fortran.Util.Position as FU
 
+import Camfort.Specification.Units.Parser
+
 import Data.Char
 import Data.Data
 import Data.List
@@ -99,8 +101,8 @@ type DebugInfo = [(Col, (FU.SrcSpan, String))]
 
 data UnitAnnotation a = UnitAnnotation {
    prevAnnotation :: a,
+   unitSpec       :: Maybe UnitStatement,
    unitInfo       :: Maybe UnitInfo,
-   unitSpec       :: Maybe UnitInfo,
    unitBlock      :: Maybe (F.Block (FA.Analysis (UnitAnnotation a))) }
   deriving (Data, Typeable, Show)
 

@@ -1,4 +1,6 @@
 { -- -*- Mode: Haskell -*-
+
+{-# LANGUAGE DeriveDataTypeable #-}
 module Camfort.Specification.Units.Parser ( unitParser
                                      , UnitStatement(..)
                                      , UnitOfMeasure(..)
@@ -6,6 +8,7 @@ module Camfort.Specification.Units.Parser ( unitParser
                                      ) where
 
 import Camfort.Analysis.CommentAnnotator
+import Data.Data
 import Data.Char (isLetter, isNumber, isAlphaNum, toLower)
 }
 
@@ -41,6 +44,7 @@ VARIABLE_ANNOTATION :: { Maybe String }
 UEXP :: { UnitOfMeasure }
 : UEXP_LEVEL1   { $1 }
 | one           { Unitless }
+| '(' one ')'   { Unitless }
 | '(' ')'       { Unitless }
 
 UEXP_LEVEL1 :: { UnitOfMeasure }
@@ -71,6 +75,7 @@ NUM :: { String }
 data UnitStatement =
    UnitAssignment (Maybe String) UnitOfMeasure
  | UnitAlias String UnitOfMeasure
+  deriving Data
 
 instance Show UnitStatement where
   show (UnitAssignment (Just s) uom) = "= unit (" ++ show uom ++ ") :: " ++ s
@@ -83,6 +88,7 @@ data UnitOfMeasure =
  | UnitProduct UnitOfMeasure UnitOfMeasure
  | UnitQuotient UnitOfMeasure UnitOfMeasure
  | UnitExponentiation UnitOfMeasure UnitPower
+  deriving Data
 
 instance Show UnitOfMeasure where
   show Unitless = "1"
@@ -94,6 +100,7 @@ instance Show UnitOfMeasure where
 data UnitPower =
    UnitPowerInteger Integer
  | UnitPowerRational Integer Integer
+ deriving Data
 
 instance Show UnitPower where
   show (UnitPowerInteger i) = show i

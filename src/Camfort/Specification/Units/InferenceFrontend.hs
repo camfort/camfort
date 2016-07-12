@@ -79,8 +79,9 @@ onPrev f ann = ann { FA.prevAnnotation = f (FA.prevAnnotation ann) }
 -- Instances for embedding parsed specifications into the AST
 instance ASTEmbeddable (FA.Analysis (UnitAnnotation A)) Parser.UnitStatement where
   annotateWithAST ann ast =
-    "DOING ANNOTATE" `D.trace` onPrev (\ann -> ann { unitSpec = Nothing }) ann
+    "DOING ANNOTATE" `D.trace` onPrev (\ann -> ann { unitSpec = Just $ ast }) ann
 
+-- Link annotaiton comments to declaration statements
 instance Linkable (FA.Analysis (UnitAnnotation A)) where
   link ann (b@(F.BlStatement _ _ _ (F.StDeclaration {}))) =
       onPrev (\ann -> ann { unitBlock = Just b }) ann
@@ -208,11 +209,12 @@ perBlock :: (?solver :: Solver, ?criticals :: Bool, ?debug :: Bool,
 perBlock b@(F.BlComment ann span _) = do
     updateUnitEnv ann
     case (unitSpec (FA.prevAnnotation ann), unitBlock (FA.prevAnnotation ann)) of
-      (Just units, Just block) -> do
+      (Just (Parser.UnitAssignment var unitsAST), Just block) -> do
+         let units = toUnitInfo unitsAST
          unitsConverted <- convertUnit units
          case block of
               bl@(F.BlStatement ann span _ (F.StDeclaration _ _ _ _ decls)) ->
-                mapM_ (processVar [unitsConverted]) (getNamesAndInits decls)
+                mapM_ (processVar var [unitsConverted]) (getNamesAndInits decls)
               _ -> return ()
       _ -> return ()
     return b
@@ -228,7 +230,7 @@ perBlock b@(F.BlComment ann span _) = do
          [F.aStrip dims | (F.DeclArray _ _ _ dims _ _) <-
                     (universeBi (F.aStrip x) :: [F.Declarator (FA.Analysis (UnitAnnotation A))])]
 
-    processVar units (v, initExpr, span) = do
+    processVar (Just dvar) units (v, initExpr, span) | dvar == v = do
       system <- gets linearSystem
       let m = ncols (fst system) + 1
       unitVarCats <<++ Variable -- TODO: check how much we need this: (unitVarCat v proc)
@@ -242,6 +244,7 @@ perBlock b@(F.BlComment ann span _) = do
             uv <- perExpr e
             mustEqual False (VarCol m) uv
             return ()
+    processVar _ units (v, initExpr, span) | otherwise = return ()
 
 {- TODO: investigate
     unitVarCat :: Variable -> Maybe ProcedureNames -> UnitVarCategory
