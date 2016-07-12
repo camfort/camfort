@@ -35,6 +35,8 @@ import Data.Maybe
 import Debug.Trace
 import Control.Applicative
 
+type Variable = String
+
 {-  Contains the syntax representation for stencil specifications -}
 
 {- *** 0. Representations -}

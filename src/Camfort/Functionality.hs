@@ -61,7 +61,7 @@ import Data.Text.Encoding.Error (replace)
 
 -- FORPAR related imports
 import qualified Language.Fortran.Parser.Any as FP
-import qualified Language.Fortran.AST as A
+import qualified Language.Fortran.AST as F
 import Language.Fortran.Analysis.Renaming
   (renameAndStrip, analyseRenames, unrename, NameMap)
 import Language.Fortran.Analysis(initAnalysis)
@@ -129,20 +129,25 @@ equivalences inSrc excludes outSrc _ = do
     doRefactor (mapM refactorEquivalences) inSrc excludes outSrc
 
 {- Units feature -}
-units inSrc excludes outSrc opt = do
+unitsCheck inSrc excludes outSrc opt = do
+    putStrLn $ "Checking units for " ++ show inSrc ++ "\n"
+    let ?solver = getOption opt :: Solver
+     in let ?assumeLiterals = getOption opt :: AssumeLiterals
+        in doRefactorForpar (mapM LU.inferUnits) inSrc excludes outSrc
+
+unitsInfer inSrc excludes outSrc opt = do
     putStrLn $ "Inferring units for " ++ show inSrc ++ "\n"
     let ?solver = getOption opt :: Solver
      in let ?assumeLiterals = getOption opt :: AssumeLiterals
         in doRefactorForpar (mapM LU.inferUnits) inSrc excludes outSrc
 
-{- Units feature -}
 unitsSynth inSrc excludes outSrc opt = do
-    putStrLn $ "Inferring units for " ++ show inSrc ++ "\n"
+    putStrLn $ "Synthesising units for " ++ show inSrc ++ "\n"
     let ?solver = getOption opt :: Solver
      in let ?assumeLiterals = getOption opt :: AssumeLiterals
         in doRefactorForpar (mapM LU.synthesiseUnits) inSrc excludes outSrc
 
-unitCriticals inSrc excludes outSrc opt = do
+unitsCriticals inSrc excludes outSrc opt = do
     putStrLn $ "Infering critical variables for units inference in directory "
              ++ show inSrc ++ "\n"
     let ?solver = getOption opt :: Solver
@@ -150,13 +155,18 @@ unitCriticals inSrc excludes outSrc opt = do
         in doAnalysisReportForpar (mapM LU.inferCriticalVariables)
               inSrc excludes outSrc
 
-stencilsInf inSrc excludes outSrc opt = do
-   putStrLn $ "Inferring stencil specs for " ++ show inSrc ++ "\n"
-   doAnalysisSummaryForpar (Stencils.infer (getOption opt)) inSrc excludes (Just outSrc)
-
+{- Stencils feature -}
 stencilsCheck inSrc excludes _ _ = do
    putStrLn $ "Checking stencil specs for " ++ show inSrc ++ "\n"
    doAnalysisSummaryForpar (\f p -> (Stencils.check f p, p)) inSrc excludes Nothing
+
+stencilsInfer inSrc excludes outSrc opt = do
+   putStrLn $ "Infering stencil specs for " ++ show inSrc ++ "\n"
+   doAnalysisSummaryForpar (Stencils.infer (getOption opt)) inSrc excludes (Just outSrc)
+
+stencilsSynth inSrc excludes outSrc opt = do
+   putStrLn $ "Synthesising stencil specs for " ++ show inSrc ++ "\n"
+   doRefactorForpar (Stencils.synth (getOption opt)) inSrc excludes outSrc
 
 stencilsVarFlowCycles inSrc excludes _ _ = do
    putStrLn $ "Inferring var flow cycles for " ++ show inSrc ++ "\n"
@@ -166,8 +176,8 @@ stencilsVarFlowCycles inSrc excludes _ _ = do
 --------------------------------------------------
 -- Forpar wrappers
 
-doRefactorForpar :: ([(Filename, A.ProgramFile A)]
-                 -> (String, [(Filename, A.ProgramFile Annotation)]))
+doRefactorForpar :: ([(Filename, F.ProgramFile A)]
+                 -> (String, [(Filename, F.ProgramFile Annotation)]))
                  -> FileOrDir -> [Filename] -> FileOrDir -> IO ()
 doRefactorForpar rFun inSrc excludes outSrc = do
     if excludes /= [] && excludes /= [""]
@@ -184,8 +194,8 @@ doRefactorForpar rFun inSrc excludes outSrc = do
   where snd3 (a, b, c) = b
 
 mkOutputFileForpar :: [(Filename, SourceText, a)]
-                   -> [(Filename, A.ProgramFile Annotation)]
-                   -> [(Filename, SourceText, A.ProgramFile Annotation)]
+                   -> [(Filename, F.ProgramFile Annotation)]
+                   -> [(Filename, SourceText, F.ProgramFile Annotation)]
 mkOutputFileForpar ps ps' = zip3 (map fst ps') (map snd3 ps) (map snd ps')
   where
     snd3 (a, b, c) = b
@@ -195,7 +205,7 @@ mkOutputFileForpar ps ps' = zip3 (map fst ps') (map snd3 ps) (map snd ps')
 
 {-| Performs an analysis which reports to the user,
      but does not output any files -}
-doAnalysisReportForpar :: ([(Filename, A.ProgramFile A)] -> (String, t1))
+doAnalysisReportForpar :: ([(Filename, F.ProgramFile A)] -> (String, t1))
                        -> FileOrDir -> [Filename] -> t -> IO ()
 doAnalysisReportForpar rFun inSrc excludes outSrc = do
   if excludes /= [] && excludes /= [""]
@@ -211,7 +221,7 @@ doAnalysisReportForpar rFun inSrc excludes outSrc = do
 
 -- * Source directory and file handling
 readForparseSrcDir :: FileOrDir -> [Filename]
-                   -> IO [(Filename, SourceText, A.ProgramFile A)]
+                   -> IO [(Filename, SourceText, F.ProgramFile A)]
 readForparseSrcDir inp excludes = do
     isdir <- isDirectory inp
     files <- if isdir
@@ -222,14 +232,14 @@ readForparseSrcDir inp excludes = do
 ----
 
 {-| Read a specific file, and parse it -}
-readForparseSrcFile :: Filename -> IO (Filename, SourceText, A.ProgramFile A)
+readForparseSrcFile :: Filename -> IO (Filename, SourceText, F.ProgramFile A)
 readForparseSrcFile f = do
     inp <- flexReadFile f
     let ast = FP.fortranParser inp f
     return $ (f, inp, fmap (const unitAnnotation) ast)
 ----
 
-doAnalysisSummaryForpar :: (Monoid s, Show' s) => (Filename -> A.ProgramFile A -> (s, A.ProgramFile A))
+doAnalysisSummaryForpar :: (Monoid s, Show' s) => (Filename -> F.ProgramFile A -> (s, F.ProgramFile A))
                         -> FileOrDir -> [Filename] -> Maybe FileOrDir -> IO ()
 doAnalysisSummaryForpar aFun inSrc excludes outSrc = do
   if excludes /= [] && excludes /= [""]

@@ -104,9 +104,7 @@ refactorings =
        "common block elimination (to parameter passing)")),
      ("equivalence", (equivalences, "equivalence elimination")),
      ("dataType", (typeStructuring, "derived data type introduction")),
-     ("dead", (dead, "dead-code elimination")),
-     ("units", (units, "unit-of-measure inference")),
-     ("units-synth", (unitsSynth, "unit-of-measure synthesise specs.")) ]
+     ("dead", (dead, "dead-code elimination"))]
 
 {-| List of analses provided by CamFort -}
 analyses :: [(String
@@ -118,11 +116,15 @@ analyses =
      ("lva", (lvaA, "live-variable analysis")),
      ("loops", (loops, "loop information")),
      ("count", (countVarDecls, "count variable declarations")),
-     ("criticalUnits", (unitCriticals,
-         "calculate the critical variables for units-of-measure inference")),
      ("ast", (ast, "print the raw AST -- for development purposes")),
-     ("stencils-infer", (stencilsInf, "stencil spec inference")),
-     ("stencils-check", (stencilsCheck, "stencil spec checking"))]
+     ("stencils-check", (stencilsCheck, "stencil spec checking")),
+     ("stencils-infer", (stencilsInfer, "stencil spec inference")),
+     ("stencils-synth", (stencilsSynth, "stencil spec synthesis")),
+     ("units-criticals", (unitsCriticals,
+         "calculate the critical variables for units-of-measure inference")),
+     ("units-check", (unitsCheck, "unit-of-measure checking")),
+     ("units-infer", (unitsInfer, "unit-of-measure inference")),
+     ("units-synth", (unitsSynth, "unit-of-measure synthesise specs.")) ]
 
 -- * Usage and about information
 version = 0.776

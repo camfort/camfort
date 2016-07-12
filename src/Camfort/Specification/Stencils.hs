@@ -15,7 +15,7 @@
 -}
 
 module Camfort.Specification.Stencils
- (InferMode, infer, check, findVarFlowCycles) where
+ (InferMode, infer, check, synth, findVarFlowCycles) where
 
 import Control.Monad.State.Lazy
 import Control.Monad.Writer hiding (Product)
@@ -24,6 +24,7 @@ import qualified Camfort.Specification.Stencils.Grammar as Gram
 import Camfort.Specification.Stencils.CheckFrontend hiding (LogLine)
 import Camfort.Specification.Stencils.InferenceFrontend
 import Camfort.Specification.Stencils.Syntax
+import Camfort.Specification.Stencils.Synthesis
 import Camfort.Analysis.CommentAnnotator
 import Camfort.Analysis.Annotations
 -- These two are redefined here for ForPar ASTs
@@ -57,37 +58,34 @@ infer mode filename pf =
        then ("", fmap FA.prevAnnotation pf'')
        else ("\n" ++ filename ++ "\n" ++ output, fmap FA.prevAnnotation pf'')
     where
-      output = concatMap (formatSpec nameMap) $ results
-      (pf'', results) = stencilInference mode . FAB.analyseBBlocks $ pf'
+      output = concatMap (formatSpec Nothing nameMap) $ results
+      (pf'', results) = (stencilInference nameMap mode) . FAB.analyseBBlocks $ pf'
       nameMap = FAR.extractNameMap pf'
       pf'     = FAR.analyseRenames . FA.initAnalysis $ pf
 
+--------------------------------------------------
+--         Stencil specification synthesis      --
+--------------------------------------------------
 
--- Format inferred specifications
-formatSpec :: FAR.NameMap -> LogLine -> String
-formatSpec nm (span, Right (evalInfo,name)) =
-     show (spanLineCol span) ++ " \t" ++ evalInfo
-  ++ (if name /= "" then " :: " ++ realName name else "") ++ "\n"
+-- Top-level of specification synthesis
+synth :: InferMode
+      -> [(Filename, F.ProgramFile A)]
+      -> (String, [(Filename, F.ProgramFile Annotation)])
+synth mode ps = foldr buildOutput ("", []) ps
   where
-    realName v               = v `fromMaybe` (v `M.lookup` nm)
-formatSpec nm (span, Left []) = ""
-formatSpec nm (span, Left specs) =
-  (intercalate "\n" $ map (\s -> loc ++ " \t" ++ doSpec s) specs) ++ "\n"
+    buildOutput (f, pf) (r, pfs) = (r ++ r', (f, pf') : pfs)
+      where (r', pf') = synthPF mode f pf
+
+synthPF :: InferMode -> Filename
+      -> F.ProgramFile Annotation
+      -> (String, F.ProgramFile Annotation)
+synthPF mode filename pf =
+    -- Append filename to any outputs
+    ("", fmap FA.prevAnnotation pf'')
     where
-      loc                      = show (spanLineCol span)
-      commaSep                 = intercalate ", "
-      doSpec (arrayVar, spec)  =
-             show (fixSpec spec) ++ " :: " ++ commaSep (map realName arrayVar)
-      realName v               = v `fromMaybe` (v `M.lookup` nm)
-      fixSpec (Specification (Right (Dependency vs b))) =
-          Specification (Right (Dependency (map realName vs) b))
-      fixSpec s                = s
-
-lineCol :: FU.Position -> (Int, Int)
-lineCol p  = (fromIntegral $ FU.posLine p, fromIntegral $ FU.posColumn p)
-
-spanLineCol :: FU.SrcSpan -> ((Int, Int), (Int, Int))
-spanLineCol (FU.SrcSpan l u) = (lineCol l, lineCol u)
+      (pf'', _) = (stencilInference nameMap Synth) . FAB.analyseBBlocks $ pf'
+      nameMap = FAR.extractNameMap pf'
+      pf'     = FAR.analyseRenames . FA.initAnalysis $ pf
 
 --------------------------------------------------
 --         Stencil specification checking       --

@@ -21,6 +21,9 @@
 module Camfort.Specification.Stencils.Synthesis where
 
 import Data.Data
+import Data.List
+import Data.Maybe
+import qualified Data.Map as M
 import Data.Generics.Uniplate.Operations
 import Control.Monad.State.Lazy
 import Control.Monad.Reader
@@ -42,11 +45,44 @@ import qualified Language.Fortran.Analysis.Types as FAT
 import qualified Language.Fortran.Analysis.Renaming as FAR
 import qualified Language.Fortran.Analysis.BBlocks as FAB
 import qualified Language.Fortran.Analysis.DataFlow as FAD
+import qualified Language.Fortran.Util.Position as FU
 
 import Language.Fortran.Util.Position
 import Data.Map hiding (map)
 
-type Variable = String
+-- Format inferred specifications
+formatSpec :: Maybe String -> FAR.NameMap -> (FU.SrcSpan, Either [([Variable], Specification)] (String,Variable)) -> String
+formatSpec prefix nm (span, Right (evalInfo,name)) =
+     prefix'
+  ++ evalInfo
+  ++ (if name /= "" then " :: " ++ realName name else "") ++ "\n"
+  where
+    prefix' = case prefix of
+                Nothing -> show (spanLineCol span) ++ " \t"
+                Just pr -> pr
+    realName v               = v `fromMaybe` (v `M.lookup` nm)
+formatSpec prefix nm (span, Left []) = ""
+formatSpec prefix nm (span, Left specs) =
+  (intercalate "\n" $ map (\s -> prefix' ++ doSpec s) specs) ++ "\n"
+    where
+      prefix' = case prefix of
+                   Nothing -> show (spanLineCol span) ++ " \t"
+                   Just pr -> pr
+      commaSep                 = intercalate ", "
+      doSpec (arrayVar, spec)  =
+             show (fixSpec spec) ++ " :: " ++ commaSep (map realName arrayVar)
+      realName v               = v `fromMaybe` (v `M.lookup` nm)
+      fixSpec (Specification (Right (Dependency vs b))) =
+          Specification (Right (Dependency (map realName vs) b))
+      fixSpec s                = s
+
+lineCol :: FU.Position -> (Int, Int)
+lineCol p  = (fromIntegral $ FU.posLine p, fromIntegral $ FU.posColumn p)
+
+spanLineCol :: FU.SrcSpan -> ((Int, Int), (Int, Int))
+spanLineCol (FU.SrcSpan l u) = (lineCol l, lineCol u)
+
+------------------------
 a = (head $ FA.initAnalysis [unitAnnotation]) { FA.insLabel = Just 0 }
 s = SrcSpan (Position 0 0 0) (Position 0 0 0)
 

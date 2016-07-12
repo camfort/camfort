@@ -20,6 +20,7 @@
 {-# LANGUAGE DeriveDataTypeable #-}
 {-# LANGUAGE PatternGuards #-}
 {-# LANGUAGE ScopedTypeVariables #-}
+{-# LANGUAGE ConstraintKinds #-}
 
 module Camfort.Specification.Stencils.InferenceFrontend where
 
@@ -29,10 +30,12 @@ import Control.Monad.Writer.Strict hiding (Product)
 
 import Camfort.Specification.Stencils.InferenceBackend
 import Camfort.Specification.Stencils.Syntax
+import qualified Camfort.Specification.Stencils.Synthesis as Synth
 import Camfort.Analysis.Loops (collect)
 import Camfort.Analysis.Annotations
 import Camfort.Helpers.Vec
 import Camfort.Input
+import qualified Camfort.Output as O
 
 import qualified Language.Fortran.AST as F
 import qualified Language.Fortran.Analysis as FA
@@ -53,11 +56,10 @@ import qualified Data.Set as S
 import Data.Maybe
 import Data.List
 
-type Variable = String
 
 -- Define modes of interaction with the inference
 data InferMode =
-  DoMode | AssignMode | CombinedMode | EvalMode
+  DoMode | AssignMode | CombinedMode | EvalMode | Synth
   deriving (Eq, Show, Data, Read)
 
 instance Default InferMode where
@@ -70,6 +72,8 @@ type LogLine = (FU.SrcSpan, Either [([Variable], Specification)] (String,Variabl
 type Inferer = WriterT [LogLine] (ReaderT (Cycles, F.ProgramUnitName, TypeEnv A) (State FAD.InductionVarMapByASTBlock))
 type Cycles = [(F.Name, F.Name)]
 
+type Params = (?flowsGraph :: FAD.FlowsGraph A, ?nameMap :: FAR.NameMap)
+
 runInferer :: FAD.InductionVarMapByASTBlock
            -> Cycles
            -> F.ProgramUnitName
@@ -79,15 +83,17 @@ runInferer :: FAD.InductionVarMapByASTBlock
 runInferer ivmap cycles puName tenv =
   flip evalState ivmap . flip runReaderT (cycles, puName, tenv) . runWriterT
 
-stencilInference :: InferMode
+stencilInference :: FAR.NameMap
+                 -> InferMode
                  -> F.ProgramFile (FA.Analysis A)
                  -> (F.ProgramFile (FA.Analysis A), [LogLine])
-stencilInference mode pf@(F.ProgramFile cm_pus blocks) =
+stencilInference nameMap mode pf@(F.ProgramFile cm_pus blocks) =
     (F.ProgramFile cm_pus' blocks', log1 ++ log2)
   where
     (cm_pus', log1) = runWriter (transformBiM perPU cm_pus)
     (blocks', log2) = runInferer ivMap [] F.NamelessBlockData tenv blocksInf
     blocksInf       = let ?flowsGraph = flTo
+                          ?nameMap    = nameMap
                       in descendBiM (perBlockInfer mode) blocks
 
     -- Run inference per program unit, placing the flowsmap in scope
@@ -96,6 +102,7 @@ stencilInference mode pf@(F.ProgramFile cm_pus blocks) =
 
     perPU pu | Just _ <- FA.bBlocks $ F.getAnnotation pu =
          let ?flowsGraph = flTo
+             ?nameMap    = nameMap
          in do
               let pum = descendBiM (perBlockInfer mode) pu
               let (pu', log) = runInferer ivMap [] (FA.puName pu) tenv pum
@@ -148,24 +155,25 @@ findVarFlowCycles' pf = cycs2
 
 {- *** 1 . Core inference over blocks -}
 
-genSpecsAndReport :: (?flowsGraph :: FAD.FlowsGraph A)
+genSpecsAndReport :: Params
   => InferMode -> FU.SrcSpan -> [Neighbour]
   -> [F.Block (FA.Analysis A)]
-  -> Inferer ()
+  -> Inferer [([Variable], Specification)]
 genSpecsAndReport mode span lhs blocks = do
     ivmap <- get
     let (specs, evalInfos) = runWriter $ genSpecifications ivmap lhs blocks
     tell [ (span, Left specs) ]
     if mode == EvalMode
-     then do
-      tell [ (span, Right ("EVALMODE: assign to relative array subscript\
-                           \ (tag: tickAssign)","")) ]
-      mapM_ (\evalInfo -> tell [ (span, Right evalInfo) ]) evalInfos
-      mapM_ (\spec -> if show spec == ""
-                      then tell [ (span, Right ("EVALMODE: Cannot make spec\
-                                               \ (tag: emptySpec)","")) ]
-                      else return ()) specs
-     else return ()
+      then do
+         tell [ (span, Right ("EVALMODE: assign to relative array subscript\
+                              \ (tag: tickAssign)","")) ]
+         mapM_ (\evalInfo -> tell [ (span, Right evalInfo) ]) evalInfos
+         mapM_ (\spec -> if show spec == ""
+                          then tell [ (span, Right ("EVALMODE: Cannot make spec\
+                                                   \ (tag: emptySpec)","")) ]
+                          else return ()) specs
+         return specs
+      else return []
 
 -- Match expressions which are array subscripts, returning Just of their
 -- index expressions, else Nothing
@@ -180,14 +188,15 @@ fromJustMsg msg (Just x) = x
 fromJustMsg msg Nothing = error msg
 
 -- Traverse Blocks in the AST and infer stencil specifications
-perBlockInfer :: (?flowsGraph :: FAD.FlowsGraph A)
+perBlockInfer :: Params
     => InferMode -> F.Block (FA.Analysis A) -> Inferer (F.Block (FA.Analysis A))
 
-perBlockInfer mode b@(F.BlStatement ann span _ stmnt)
-  | mode == AssignMode || mode == CombinedMode || mode == EvalMode = do
+perBlockInfer mode b@(F.BlStatement ann span@(FU.SrcSpan lp up) _ stmnt)
+  | mode == AssignMode || mode == CombinedMode || mode == EvalMode || mode == Synth = do
     -- On all StExpressionAssigns that occur in stmt....
-    flip mapM [lhs | (F.StExpressionAssign _ _ lhs _)
-                      <- universe stmnt :: [F.Statement (FA.Analysis A)]]
+    let lhses = [lhs | (F.StExpressionAssign _ _ lhs _)
+                           <- universe stmnt :: [F.Statement (FA.Analysis A)]]
+    specs <- flip mapM lhses
     -- ... apply the following:
       (\lhs -> do
          ivmap <- get
@@ -197,20 +206,30 @@ perBlockInfer mode b@(F.BlStatement ann span _ stmnt)
              case neighbourIndex ivmap subs of
                Just lhs -> genSpecsAndReport mode span lhs [b]
                Nothing  -> if mode == EvalMode
-                           then tell [(span , Right ("EVALMODE: LHS is an array\
-                                              \ subscript we can't handle \
-                                              \(tag: LHSnotHandled)",""))]
-                           else return ()
+                           then do
+                             tell [(span , Right ("EVALMODE: LHS is an array\
+                                                 \ subscript we can't handle \
+                                                 \(tag: LHSnotHandled)",""))]
+                             return []
+                           else return []
            -- Not an assign we are interested in
-           _ -> return ())
-    return b
+           _ -> return [])
+    if mode == Synth
+      then
+        let specComment = Synth.formatSpec (Just "!= ") ?nameMap (span, Left (concat specs))
+            tabs  = take (FU.posColumn lp  - 1) (repeat ' ')
+            loc   = fst $ O.srcSpanToSrcLocs span
+            span' = FU.SrcSpan (lp {FU.posColumn = 0}) (lp {FU.posColumn = 0})
+            ann'  = ann { FA.prevAnnotation = (FA.prevAnnotation ann) { refactored = Just loc } }
+        in return $ F.BlComment ann' span' specComment
+      else return b
 
 perBlockInfer mode b@(F.BlDo ann span _ mDoSpec body) = do
     -- introduce any induction variables into the induction variable state
 
     if (mode == DoMode || mode == CombinedMode) && isStencilDo b
       then genSpecsAndReport mode span [] body
-      else return ()
+      else return []
 
     -- descend into the body of the do-statement
     mapM_ (descendBiM (perBlockInfer  mode)) body
@@ -222,7 +241,7 @@ perBlockInfer mode b = do
     mapM_ (descendBiM (perBlockInfer mode)) $ children b
     return b
 
-genSpecifications :: (?flowsGraph :: FAD.FlowsGraph A)
+genSpecifications :: Params
   => FAD.InductionVarMapByASTBlock
   -> [Neighbour]
   -> [F.Block (FA.Analysis A)]
@@ -255,7 +274,7 @@ genSpecifications ivs lhs blocks = do
 -- Generate all subscripting expressions (that are translations on
 -- induction variables) that flow to this block
 -- The State monad provides a list of the visited nodes so far
-genSubscripts :: (?flowsGraph :: FAD.FlowsGraph A)
+genSubscripts :: Params
   => Bool
   -> F.Block (FA.Analysis A)
   -> State [Int] (M.Map Variable [[F.Index (FA.Analysis A)]])
