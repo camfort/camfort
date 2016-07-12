@@ -134,7 +134,8 @@ data UnitEnv = UnitEnv {
   -- This part of the state is just for some evaluation metrics
   _evUnitsAdded        :: (Int, [String]),
   _evCriticals         :: [Int],
-  _puname              :: Maybe F.ProgramUnitName
+  _puname              :: Maybe F.ProgramUnitName,
+  _hasDeclaration      :: [F.Name]
 } deriving Show
 
 emptyUnitEnv = UnitEnv { _report              = [],
@@ -153,7 +154,8 @@ emptyUnitEnv = UnitEnv { _report              = [],
                          ---
                          _evUnitsAdded        = (0, []),
                          _evCriticals         = [],
-                         _puname              = Nothing
+                         _puname              = Nothing,
+                         _hasDeclaration      = []
                        }
 
 Data.Label.mkLabels [''UnitEnv]

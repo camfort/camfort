@@ -204,7 +204,7 @@ perBlock b@(F.BlComment ann span _) = do
          unitsConverted <- convertUnit units
          case block of
               bl@(F.BlStatement ann span _ (F.StDeclaration _ _ _ _ decls)) ->
-                mapM_ (processVar var [unitsConverted]) (getNamesAndInits decls)
+                mapM_ (processVar' var [unitsConverted]) (getNamesAndInits decls)
               _ -> return ()
       -- Found a derived unit declaration
       (Just (Parser.UnitAlias name unitsAST), _) -> do
@@ -214,6 +214,9 @@ perBlock b@(F.BlComment ann span _) = do
     return b
 
   where
+    processVar' varReal unitC (var, init, span) = do
+       hasDeclaration <<++ var
+       processVar varReal unitC (var, init, span)
     learnDerivedUnit (name, spec) =
           do denv <- gets derivedUnitEnv
              when (isJust $ lookup name denv) $ error "Redeclared unit of measure"

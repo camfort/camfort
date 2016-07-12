@@ -57,21 +57,27 @@ perBlock :: Params => Bool -> F.Block A1 -> State UnitEnv (F.Block A1)
 perBlock inferReport s@(F.BlStatement a span@(FU.SrcSpan lp up) _
                                d@(F.StDeclaration _ _ _ _ decls)) = do
     vColEnv <- gets varColEnv
-    -- Find all units associated to this declaration
-    units <- mapM (\d -> findUnit d vColEnv) (getNames (F.aStrip decls))
-    -- Create comments for each
-    let unitDecls = mapMaybe (fmap mkComment) units
-
+    let declNames = getNames (F.aStrip decls)
     if inferReport
       -- If we are just producing an inference report
       -- Then add to report and return the original statement
       then do
+        -- Find all units associated to this declaration
+        units <- mapM (\d -> findUnit d vColEnv) declNames
         mapM (\u -> fromMaybe (return ()) (fmap (\u -> report <<++ mkReport u) u)) units
         return s
-      else
-      -- Otherwise, replace this node with a comment node
-      -- which will get output by the reprint algorithm (along
-      -- with the original statement node)
+
+      else do
+        -- Otherwise, replace this node with a comment node
+        -- which will get output by the reprint algorithm (along
+        -- with the original statement node) *IFF* we haven't
+        -- already got a declaration here
+        hasDec <- gets hasDeclaration
+        let findUnitIfUndec d | d `elem` hasDec = Nothing
+                              | otherwise       = Just $ findUnit d vColEnv
+        units <- sequence $ mapMaybe findUnitIfUndec declNames
+        -- Create comments for each
+        let unitDecls = mapMaybe (fmap mkComment) units
         return $ (F.BlComment a' span0 (intercalate "\n" unitDecls))
     where
      -- Helper for making a report
