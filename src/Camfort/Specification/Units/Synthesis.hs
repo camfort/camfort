@@ -23,6 +23,7 @@ import Data.Function
 import Data.List
 import Data.Matrix
 import Data.Maybe
+import Data.Ratio (numerator, denominator)
 import qualified Data.Map as M
 import Data.Generics.Uniplate.Operations
 import Data.Label.Monadic hiding (modify)
@@ -128,9 +129,10 @@ pprintUnitConstant (Unitful ucs)  =
         ucs' = sortBy (compare `on` snd) ucs
         pprintPow n 1 = n
         pprintPow n r = n ++ "**" ++ show' r
-        show' r = if length (show r) >= 1
-                    then "(" ++ show r ++ ")"
-                    else show r
+        show' r =
+          if denominator r == 1
+          then show $ numerator r
+          else '(' : (show $ numerator r) ++ '/' : (show $ denominator r) ++ ")"
 
 lookupUnit :: Col -> State UnitEnv (Maybe UnitConstant)
 lookupUnit m = do
