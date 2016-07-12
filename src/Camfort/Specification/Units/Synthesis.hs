@@ -48,14 +48,9 @@ type A1 = FA.Analysis (UnitAnnotation A)
 type Params = ?nameMap :: FAR.NameMap
 
 synthesiseUnits :: Params => F.ProgramFile A1 -> State UnitEnv (F.ProgramFile A1)
-synthesiseUnits pf = descendBiM perBlocks pf
+synthesiseUnits pf = transformBiM perBlock pf
 
-perBlocks :: Params => [F.Block A1] -> State UnitEnv [F.Block A1]
-perBlocks bs = do
-    bss <- mapM perBlock bs
-    return $ concat bss
-
-perBlock :: Params => F.Block A1 -> State UnitEnv [F.Block A1]
+perBlock :: Params => F.Block A1 -> State UnitEnv (F.Block A1)
 -- Found a declaration to which we might want to insert a comment
 perBlock s@(F.BlStatement a span@(FU.SrcSpan lp up) _ d@(F.StDeclaration _ _ _ _ decls)) = do
     vColEnv <- gets varColEnv
@@ -64,15 +59,14 @@ perBlock s@(F.BlStatement a span@(FU.SrcSpan lp up) _ d@(F.StDeclaration _ _ _ _
     -- Create comments for each
     let unitDecls = mapMaybe (fmap mkComment) units
     -- Append to declaration
-    return $ unitDecls ++ [s]
+    return $ (F.BlComment a' span0 (intercalate "\n" unitDecls))
   where
     realName v = v `fromMaybe` (v `M.lookup` ?nameMap)
     -- Make a comment specification
-    mkComment (var, unit) = F.BlComment a' span0
-                              (tabs ++ "!= unit "
-                                    ++ pprintUnitConstant unit
-                                    ++ " :: " ++ realName var)
-    tabs =  take (FU.posColumn lp) (repeat ' ')
+    mkComment (var, unit) = tabs ++ "!= unit "
+                                 ++ "(" ++ pprintUnitConstant unit  ++ ")"
+                                 ++ " :: " ++ realName var
+    tabs =  take (FU.posColumn lp  - 1) (repeat ' ')
     span0 = FU.SrcSpan (lp {FU.posColumn = 0}) (lp {FU.posColumn = 0})
     ap = (prevAnnotation (FA.prevAnnotation a)) { refactored = Just loc }
     a' = a { FA.prevAnnotation = (FA.prevAnnotation a) { prevAnnotation = ap } }
@@ -90,7 +84,7 @@ perBlock s@(F.BlStatement a span@(FU.SrcSpan lp up) _ d@(F.StDeclaration _ _ _ _
      ++ [FA.varName e | (F.DeclArray _ _ e@(F.ExpValue {}) _ _ _)
            <- universeBi ds :: [F.Declarator A1]]
 
-perBlock b = sequence [descendBiM perBlocks b]
+perBlock b = return b
 
 -- Turn the internal representation into a user-readable spec
 pprintUnitConstant :: UnitConstant -> String

@@ -7,7 +7,7 @@ program energy
  integer :: i = 0
  integer :: j = i
   
- != unit (kg m** (2) / s** (2)) :: potential_energy
+ != unit (kg m**2 / s**2) :: potential_energy
  real :: potential_energy
  
  potential_energy = mass * gravity * height

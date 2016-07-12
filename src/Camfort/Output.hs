@@ -158,7 +158,7 @@ refactoringForPar inp cursor =
                      (p0, _)  = takeBounds (cursor, lb') inp
                  in (p0 ++ comment ++ "\n", ub, True)
          else ("", cursor, False)
-      where leftOne (SrcLoc f l c) = SrcLoc f l (c-1)
+      where leftOne (SrcLoc f l c) = SrcLoc f (l-1) (c-1)
     outputComments _ _ _ = return ("", cursor, False)
 
 
