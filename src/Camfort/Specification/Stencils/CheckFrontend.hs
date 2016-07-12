@@ -159,15 +159,12 @@ perBlockCheck b@(F.BlComment ann span _) = do
   case (stencilSpec $ FA.prevAnnotation ann', stencilBlock $ FA.prevAnnotation ann') of
     -- Comment contains a specification and an associated block
     (Just (Right (Right specDecls)), Just block) ->
-     ("in a comment with " ++ take 30 (show block)) `trace` case block of
+     case block of
       s@(F.BlStatement ann span _ (F.StExpressionAssign _ _ lhs rhs)) ->
-       "in a block" `trace` case isArraySubscript lhs of
+       case isArraySubscript lhs of
          Just subs -> do
             -- Create list of relative indices
             (_, ivmap) <- get
-            --let label = fromJustMsg "getting label of block in inference" (FA.insLabel ann)
-            --let ivs = S.toList $ fromMaybe S.empty (IM.lookup label ivmap)
-
             -- Do inference
             let realName v   = v `fromMaybe` (v `M.lookup` ?nameMap)
             let lhsN         = maybe [] id (neighbourIndex ivmap subs)
@@ -190,18 +187,12 @@ perBlockCheck b@(F.BlComment ann span _) = do
     _ -> return b'
 
 perBlockCheck b@(F.BlDo ann span _ mDoSpec body) = do
-   --let localIvs = getInductionVar mDoSpec
-   -- introduce any induction variables into the induction variable state
-   --modify $ id *** union localIvs
-   --traceShowM $ "in do with IVs = " ++ show localIvs
    -- descend into the body of the do-statement
    mapM_ (descendBiM perBlockCheck) body
    -- Remove any induction variable from the state
-   --modify $ id *** (\\ localIvs)
    return b
 
 perBlockCheck b = do
-  traceShowM "other"
   updateRegionEnv . F.getAnnotation $ b
   -- Go inside child blocks
   mapM_ (descendBiM perBlockCheck) $ children b
