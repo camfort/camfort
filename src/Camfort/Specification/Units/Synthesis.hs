@@ -65,7 +65,7 @@ perBlock inferReport s@(F.BlStatement a span@(FU.SrcSpan lp up) _
       -- If we are just producing an inference report
       -- Then add to report and return the original statement
       then do
-        report <<++ intercalate "\n" (mapMaybe (fmap mkReport) units)
+        mapM (\u -> fromMaybe (return ()) (fmap (\u -> report <<++ mkReport u) u)) units
         return s
       else
       -- Otherwise, replace this node with a comment node
