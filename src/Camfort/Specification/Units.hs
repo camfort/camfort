@@ -106,11 +106,13 @@ inferCriticalVariables (fname, pf) = (r, (fname, pf))
     -- the updated unit environment, matching variables to their units
     env = let ?criticals = True
               ?debug     = False
+              ?nameMap   = nameMap
           in  execState infer emptyUnitEnv
 
     pf' = FAR.analyseRenames . FA.initAnalysis $ (fmap mkUnitAnnotation pf)
+    nameMap = FAR.extractNameMap pf'
     -- Core infer procedure
-    infer :: (?criticals :: Bool, ?debug :: Bool) => State UnitEnv ()
+    infer :: (?criticals :: Bool, ?debug :: Bool, ?nameMap :: FAR.NameMap) => State UnitEnv ()
     infer = do
         doInferUnits . FAB.analyseBBlocks $ pf'
         vars <- criticalVars
@@ -136,9 +138,11 @@ inferUnits (fname, pf) = (r, (fname, pf))
                                     (fst $ _linearSystem env) (_unitVarCats env)
 
     pf' = FAB.analyseBBlocks . FAR.analyseRenames . FA.initAnalysis $ (fmap mkUnitAnnotation pf)
+    nameMap = FAR.extractNameMap pf'
     -- Apply inferences
     env = let ?criticals = False
-              ?debug     = False
+              ?debug     = True
+              ?nameMap   = nameMap
           in execState (doInferUnits pf') emptyUnitEnv
 
 {-| Synthesis unspecified units for a program (after checking) -}
@@ -157,9 +161,11 @@ synthesiseUnits (fname, pf) = (r, (fname, fmap (prevAnnotation . FA.prevAnnotati
     -- Apply inference and synthesis
     pf' = FAB.analyseBBlocks . FAR.analyseRenames . FA.initAnalysis $ (fmap mkUnitAnnotation pf)
     (pf3, env) = runState inferAndSynthesise emptyUnitEnv
+    nameMap = FAR.extractNameMap pf'
     inferAndSynthesise =
         let ?criticals = False
             ?debug     = False
+            ?nameMap   = nameMap
         in do
           doInferUnits pf'
           succeeded <- gets success

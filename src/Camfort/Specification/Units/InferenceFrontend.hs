@@ -34,6 +34,7 @@ import Data.Char
 import Data.Function
 import Data.List
 import Data.Matrix
+import qualified Data.Map as M
 import Data.Maybe
 import Data.Ratio
 import Data.Generics.Uniplate.Operations
@@ -68,7 +69,8 @@ import qualified Debug.Trace as D
 type Params = (?criticals      :: Bool,
                ?solver         :: Solver,
                ?debug          :: Bool,
-               ?assumeLiterals :: AssumeLiterals)
+               ?assumeLiterals :: AssumeLiterals,
+               ?nameMap        :: FAR.NameMap)
 
 plumb f x = do { f x ; return x }
 
@@ -79,11 +81,13 @@ onPrev f ann = ann { FA.prevAnnotation = f (FA.prevAnnotation ann) }
 -- Instances for embedding parsed specifications into the AST
 instance ASTEmbeddable (FA.Analysis (UnitAnnotation A)) Parser.UnitStatement where
   annotateWithAST ann ast =
-    "DOING ANNOTATE" `D.trace` onPrev (\ann -> ann { unitSpec = Just $ ast }) ann
+  --  "DOING ANNOTATE" `D.trace`
+    onPrev (\ann -> ann { unitSpec = Just ast }) ann
 
 -- Link annotaiton comments to declaration statements
 instance Linkable (FA.Analysis (UnitAnnotation A)) where
   link ann (b@(F.BlStatement _ _ _ (F.StDeclaration {}))) =
+   --  "DOING LINK" `D.trace`
       onPrev (\ann -> ann { unitBlock = Just b }) ann
   link ann b = ann
 
@@ -104,9 +108,7 @@ doInferUnits pf = do
 
 -- Check units per program unit, with special handling of functions and subroutines
 -- which need adding to the set of constraints
-perProgramUnit ::
-       (?criticals :: Bool, ?solver :: Solver, ?debug :: Bool,
-        ?assumeLiterals :: AssumeLiterals)
+perProgramUnit :: Params
     => F.ProgramUnit (FA.Analysis (UnitAnnotation A))
     -> State UnitEnv (F.ProgramUnit (FA.Analysis (UnitAnnotation A)))
 perProgramUnit p@(F.PUMain _ _ _ body subprogs) = do
@@ -203,13 +205,14 @@ inferDecl proc x@(MeasureUnitDef a s d) =
              derivedUnitEnv << (name, unit)
 -}
 
-perBlock :: (?solver :: Solver, ?criticals :: Bool, ?debug :: Bool,
-                  ?assumeLiterals :: AssumeLiterals)
-    => F.Block (FA.Analysis (UnitAnnotation A)) -> State UnitEnv (F.Block (FA.Analysis (UnitAnnotation A)))
+perBlock :: Params
+         => F.Block (FA.Analysis (UnitAnnotation A))
+         -> State UnitEnv (F.Block (FA.Analysis (UnitAnnotation A)))
 perBlock b@(F.BlComment ann span _) = do
     updateUnitEnv ann
     case (unitSpec (FA.prevAnnotation ann), unitBlock (FA.prevAnnotation ann)) of
       (Just (Parser.UnitAssignment var unitsAST), Just block) -> do
+         D.traceM $ "IN BLOCK - " ++ show span ++ " -- " ++ (dbgUnitAnnotation (FA.prevAnnotation ann))
          let units = toUnitInfo unitsAST
          unitsConverted <- convertUnit units
          case block of
@@ -220,6 +223,7 @@ perBlock b@(F.BlComment ann span _) = do
     return b
 
   where
+    realName v = v `fromMaybe` (v `M.lookup` ?nameMap)
     getNamesAndInits x =
         [(FA.varName e, i, s) | (F.DeclVariable _ _ e@(F.ExpValue _ s (F.ValVariable _)) _ i) <-
                     (universeBi (F.aStrip x) :: [F.Declarator (FA.Analysis (UnitAnnotation A))])]
@@ -230,7 +234,7 @@ perBlock b@(F.BlComment ann span _) = do
          [F.aStrip dims | (F.DeclArray _ _ _ dims _ _) <-
                     (universeBi (F.aStrip x) :: [F.Declarator (FA.Analysis (UnitAnnotation A))])]
 
-    processVar (Just dvar) units (v, initExpr, span) | dvar == v = do
+    processVar (Just dvar) units (v, initExpr, span) | dvar == realName v = do
       system <- gets linearSystem
       let m = ncols (fst system) + 1
       unitVarCats <<++ Variable -- TODO: check how much we need this: (unitVarCat v proc)
@@ -244,7 +248,7 @@ perBlock b@(F.BlComment ann span _) = do
             uv <- perExpr e
             mustEqual False (VarCol m) uv
             return ()
-    processVar _ units (v, initExpr, span) | otherwise = return ()
+    processVar dvar units (v, initExpr, span) | otherwise = return ()
 
 {- TODO: investigate
     unitVarCat :: Variable -> Maybe ProcedureNames -> UnitVarCategory
@@ -278,8 +282,7 @@ perDoSpecification (F.DoSpecification _ _
                       return ()
 
 -- TODO: see if we need to insert anymore statement-specific constraints here
-perStatement :: (?solver :: Solver, ?criticals :: Bool, ?debug :: Bool,
-                  ?assumeLiterals :: AssumeLiterals)
+perStatement :: Params
     => F.Statement (FA.Analysis (UnitAnnotation A)) -> State UnitEnv ()
 perStatement (F.StExpressionAssign _ _ e1 e2) = do
     uv1 <- perExpr e1

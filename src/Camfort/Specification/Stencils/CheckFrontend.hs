@@ -81,7 +81,7 @@ stencilChecking nameMap pf = snd . runWriter $
      let ivmap = FAD.genInductionVarMapByASTBlock beMap gr
      let results = let ?flowsGraph = flTo in
                     let ?nameMap = nameMap
-                      in "gogo" `trace` descendBiM perProgramUnitCheck pf'
+                      in descendBiM perProgramUnitCheck pf'
      -- Format output
      let a@(_, output) = evalState (runWriterT $ results) (([], Nothing), ivmap)
      tell $ pprint output
@@ -93,7 +93,7 @@ onPrev f ann = ann { FA.prevAnnotation = f (FA.prevAnnotation ann) }
 -- Instances for embedding parsed specifications into the AST
 instance ASTEmbeddable (FA.Analysis Annotation) Gram.Specification where
   annotateWithAST ann ast =
-    "DOING ANNOTATE" `trace` onPrev (\ann -> ann { stencilSpec = Just $ Left ast }) ann
+    onPrev (\ann -> ann { stencilSpec = Just $ Left ast }) ann
 
 instance Linkable (FA.Analysis Annotation) where
   link ann (b@(F.BlDo {})) =

@@ -106,6 +106,15 @@ data UnitAnnotation a = UnitAnnotation {
    unitBlock      :: Maybe (F.Block (FA.Analysis (UnitAnnotation a))) }
   deriving (Data, Typeable, Show)
 
+dbgUnitAnnotation (UnitAnnotation _ x y z) =
+  "{ unitSpec = " ++ show x ++ ", unitInfo = " ++ show y ++ ", unitBlock = " ++
+     (case z of
+        Nothing -> "Nothing"
+        Just (F.BlStatement _ span _ (F.StDeclaration {}))  -> "Just {decl}@" ++ show span
+        Just (F.BlStatement _ span _ _) -> "Just {stmt}@" ++ show span
+        Just _ -> "Just ...")
+   ++ "}"
+
 mkUnitAnnotation :: a -> UnitAnnotation a
 mkUnitAnnotation a = UnitAnnotation a Nothing Nothing Nothing
 
