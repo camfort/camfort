@@ -215,9 +215,8 @@ synthesiseUnits (fname, pf) = (r, (fname, fmap (prevAnnotation . FA.prevAnnotati
           if succeeded
             then do
               p <- US.synthesiseUnits False pf'
-              (n, added) <- gets evUnitsAdded
-              report <<++ ("Added " ++ (show n) ++ " annotations: "
-                        ++ (concat $ intersperse " ," $ added))
+              (n, _) <- gets evUnitsAdded
+              report <<++ ("Added " ++ (show n) ++ " annotations")
               return p
             else return pf'
 
