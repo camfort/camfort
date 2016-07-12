@@ -224,7 +224,7 @@ perBlockInfer mode b@(F.BlStatement ann span@(FU.SrcSpan lp up) _ stmnt)
         in return $ F.BlComment ann' span' specComment
       else return b
 
-perBlockInfer mode b@(F.BlDo ann span _ mDoSpec body) = do
+perBlockInfer mode b@(F.BlDo ann span x mDoSpec body) = do
     -- introduce any induction variables into the induction variable state
 
     if (mode == DoMode || mode == CombinedMode) && isStencilDo b
@@ -232,9 +232,9 @@ perBlockInfer mode b@(F.BlDo ann span _ mDoSpec body) = do
       else return []
 
     -- descend into the body of the do-statement
-    mapM_ (descendBiM (perBlockInfer  mode)) body
+    body' <- mapM (descendBiM (perBlockInfer  mode)) body
     -- Remove any induction variable from the state
-    return b
+    return $ F.BlDo ann span x mDoSpec body'
 
 perBlockInfer mode b = do
     -- Go inside child blocks
