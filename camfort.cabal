@@ -79,7 +79,9 @@ executable camfort
                         Camfort.Helpers.Vec
                         Camfort.Functionality
                         Camfort.Input
-                        Camfort.Output		
+                        Camfort.Output
+                        Camfort.Reprint
+                        Camfort.PrettyPrint
                         Camfort.Traverse
                         Main
 
@@ -157,7 +159,9 @@ library
                         Camfort.Helpers.Vec
                         Camfort.Functionality
                         Camfort.Input
-                        Camfort.Output	
+                        Camfort.Output
+                        Camfort.Reprint
+                        Camfort.PrettyPrint
                         Camfort.Traverse
   other-modules:
 
