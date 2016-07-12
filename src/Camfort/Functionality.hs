@@ -135,6 +135,13 @@ units inSrc excludes outSrc opt = do
      in let ?assumeLiterals = getOption opt :: AssumeLiterals
         in doRefactorForpar (mapM LU.inferUnits) inSrc excludes outSrc
 
+{- Units feature -}
+unitsSynth inSrc excludes outSrc opt = do
+    putStrLn $ "Inferring units for " ++ show inSrc ++ "\n"
+    let ?solver = getOption opt :: Solver
+     in let ?assumeLiterals = getOption opt :: AssumeLiterals
+        in doRefactorForpar (mapM LU.synthesiseUnits) inSrc excludes outSrc
+
 unitCriticals inSrc excludes outSrc opt = do
     putStrLn $ "Infering critical variables for units inference in directory "
              ++ show inSrc ++ "\n"
@@ -144,17 +151,17 @@ unitCriticals inSrc excludes outSrc opt = do
               inSrc excludes outSrc
 
 stencilsInf inSrc excludes outSrc opt = do
-  putStrLn $ "Inferring stencil specs for " ++ show inSrc ++ "\n"
-  doAnalysisSummaryForpar (Stencils.infer (getOption opt)) inSrc excludes (Just outSrc)
+   putStrLn $ "Inferring stencil specs for " ++ show inSrc ++ "\n"
+   doAnalysisSummaryForpar (Stencils.infer (getOption opt)) inSrc excludes (Just outSrc)
 
 stencilsCheck inSrc excludes _ _ = do
-  putStrLn $ "Checking stencil specs for " ++ show inSrc ++ "\n"
-  doAnalysisSummaryForpar (\f p -> (Stencils.check f p, p)) inSrc excludes Nothing
+   putStrLn $ "Checking stencil specs for " ++ show inSrc ++ "\n"
+   doAnalysisSummaryForpar (\f p -> (Stencils.check f p, p)) inSrc excludes Nothing
 
 stencilsVarFlowCycles inSrc excludes _ _ = do
-  putStrLn $ "Inferring var flow cycles for " ++ show inSrc ++ "\n"
-  let flowAnalysis = intercalate ", " . map show . Stencils.findVarFlowCycles
-  doAnalysisSummaryForpar (\_ p -> (flowAnalysis p , p)) inSrc excludes Nothing
+   putStrLn $ "Inferring var flow cycles for " ++ show inSrc ++ "\n"
+   let flowAnalysis = intercalate ", " . map show . Stencils.findVarFlowCycles
+   doAnalysisSummaryForpar (\_ p -> (flowAnalysis p , p)) inSrc excludes Nothing
 
 --------------------------------------------------
 -- Forpar wrappers

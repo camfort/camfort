@@ -497,7 +497,7 @@ Nothing <**> x = x
        x -> case lookupCaseInsensitive v penv of
               Just (Just uv, argUnits) ->
                    if (null args) then inferArgUnits' argUnits >> return uv
-                   else  do uv <- anyUnits Temporary
+                   else  do uv <- anyUnits Tempgit orary
                             uvs <- inferArgUnits
                             let uvs' = justArgUnits args uvs
                             calls << (v, (Just uv, uvs'))

@@ -67,7 +67,6 @@ data UnitConstant =
      | UnitlessC Rational
     deriving (Eq, Show, Data)
 
-
 -- Column of the Guassian matrix associated with a variable
 newtype VarCol = VarCol Col deriving (Eq, Show)
 

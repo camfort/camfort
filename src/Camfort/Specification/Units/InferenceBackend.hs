@@ -79,15 +79,14 @@ errorMessage row unit rowCoeffs =
  let ?num = 0 in
     do uvarEnv <- gets varColEnv
        debugs <- gets debugInfo
-       u <- makeUnitSpec unit
-       let unitStr = pprint u
+       let unitStr = pprintUnitConstant unit
        let varCols = map (+1) (findIndices (\n -> n /= 0) rowCoeffs)
        if varCols == [] then
            case unit of
              Unitful xs | length xs > 1 ->
                      do let xs' = map (\(v, r) -> (v, r * (-1))) (tail xs)
-                        uR <- makeUnitSpec (Unitful $ xs')
-                        uL <- makeUnitSpec (Unitful [head xs])
+                        let uR = pprintUnitConstant (Unitful $ xs')
+                        let uL = pprintUnitConstant (Unitful [head xs])
                         success =: False
                         conflictInfo <- debugInfoForNonZeros rowCoeffs
                         return $
@@ -99,7 +98,7 @@ errorMessage row unit rowCoeffs =
                 with unitless -}
              Unitful xs | length xs == 1 ->
                           do let xs' = map (\(v, r) -> (v, r * (-1))) xs
-                             uL <- makeUnitSpec (Unitful xs')
+                             let uL = pprintUnitConstant (Unitful xs')
                              let unitStrL = pprint uL
                              ifDebug debugGaussian
                              conflictInfo <- debugInfoForNonZeros rowCoeffs

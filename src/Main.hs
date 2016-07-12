@@ -105,7 +105,8 @@ refactorings =
      ("equivalence", (equivalences, "equivalence elimination")),
      ("dataType", (typeStructuring, "derived data type introduction")),
      ("dead", (dead, "dead-code elimination")),
-     ("units", (units, "unit-of-measure inference")) ]
+     ("units", (units, "unit-of-measure inference")),
+     ("units-synth", (unitsSynth, "unit-of-measure synthesise specs.")) ]
 
 {-| List of analses provided by CamFort -}
 analyses :: [(String

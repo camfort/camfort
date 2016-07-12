@@ -14,63 +14,112 @@
    limitations under the License.
 -}
 
-{-# LANGUAGE ImplicitParams, DoAndIfThenElse #-}
+{-# LANGUAGE ImplicitParams, DoAndIfThenElse, ConstraintKinds #-}
 
-module Camfort.Specification.Units.Synthesis where
+module Camfort.Specification.Units.Synthesis
+                (synthesiseUnits, pprintUnitConstant) where
 
-import Data.Data
-import Data.Char
 import Data.Function
-import Data.Matrix
 import Data.List
 import Data.Matrix
-import Data.Ratio
+import Data.Maybe
+import qualified Data.Map as M
 import Data.Generics.Uniplate.Operations
 import Data.Label.Monadic hiding (modify)
 import Control.Monad.State.Strict hiding (gets)
 import Control.Monad
 
-import Language.Fortran
-import Language.Fortran.Pretty
+import qualified Language.Fortran.AST as F
+import qualified Language.Fortran.Analysis as FA
+import qualified Language.Fortran.Analysis.Renaming as FAR
+import qualified Language.Fortran.Util.Position as FU
 
+import qualified Camfort.Output as O (srcSpanToSrcLocs)
 import Camfort.Analysis.Annotations hiding (Unitless)
 import Camfort.Specification.Units.Environment
 import Camfort.Specification.Units.SyntaxConversion
-import Camfort.Transformation.Syntax
 
 -- *************************************
 --   Insert unit declarations into code
 --
 -- *************************************
 
-insertUnit :: (?num :: Int) => [UnitVarCategory] -> [Int] -> LinearSystem -> Type Annotation -> Int -> State UnitEnv (Type Annotation)
-insertUnit ucats badCols system (BaseType aa tt attrs kind len) uv = undefined
+type A1 = FA.Analysis (UnitAnnotation A)
+type Params = ?nameMap :: FAR.NameMap
 
-makeUnitSpec = undefined
+synthesiseUnits :: Params => F.ProgramFile A1 -> State UnitEnv (F.ProgramFile A1)
+synthesiseUnits pf = descendBiM perBlocks pf
 
-insertUnitsInBlock :: Block Annotation -> State UnitEnv (Block Annotation)
-insertUnitsInBlock x = undefined -- transformBiM insertUnits x
+perBlocks :: Params => [F.Block A1] -> State UnitEnv [F.Block A1]
+perBlocks bs = do
+    bss <- mapM perBlock bs
+    return $ concat bss
 
-{-
-  do let unit = lookupUnit ucats badCols system uv
-     u <- (insertUnitAttribute unit attrs)
-     return $ BaseType aa tt u kind len
+perBlock :: Params => F.Block A1 -> State UnitEnv [F.Block A1]
+-- Found a declaration to which we might want to insert a comment
+perBlock s@(F.BlStatement a span@(FU.SrcSpan lp up) _ d@(F.StDeclaration _ _ _ _ decls)) = do
+    vColEnv <- gets varColEnv
+    -- Find all units associated to this declaration
+    units <- mapM (\d -> findUnit d vColEnv) (getNames (F.aStrip decls))
+    -- Create comments for each
+    let unitDecls = mapMaybe (fmap mkComment) units
+    -- Append to declaration
+    return $ unitDecls ++ [s]
+  where
+    realName v = v `fromMaybe` (v `M.lookup` ?nameMap)
+    -- Make a comment specification
+    mkComment (var, unit) = F.BlComment a' span0
+                              (tabs ++ "!= unit "
+                                    ++ pprintUnitConstant unit
+                                    ++ " :: " ++ realName var)
+    tabs =  take (FU.posColumn lp) (repeat ' ')
+    span0 = FU.SrcSpan (lp {FU.posColumn = 0}) (lp {FU.posColumn = 0})
+    ap = (prevAnnotation (FA.prevAnnotation a)) { refactored = Just loc }
+    a' = a { FA.prevAnnotation = (FA.prevAnnotation a) { prevAnnotation = ap } }
+    loc  = fst $ O.srcSpanToSrcLocs span
+    findUnit v colEnv =
+       case lookupWithoutSrcSpan v colEnv of
+         Just (VarCol m, _) -> do u <- lookupUnit m
+                                  case u of
+                                    Nothing -> return Nothing
+                                    Just u  -> return $ Just (v, u)
+         Nothing            -> return $ Nothing
+    getNames ds =
+        [FA.varName e | (F.DeclVariable _ _ e@(F.ExpValue {}) _ _)
+           <- universeBi ds :: [F.Declarator A1]]
+     ++ [FA.varName e | (F.DeclArray _ _ e@(F.ExpValue {}) _ _ _)
+           <- universeBi ds :: [F.Declarator A1]]
 
-insertUnit ucats badCols system (ArrayT dims aa tt attrs kind len) uv =
-  do let unit = lookupUnit ucats badCols system uv
-     u <- insertUnitAttribute unit attrs
-     return $ ArrayT dims aa tt u kind len
+perBlock b = sequence [descendBiM perBlocks b]
 
+-- Turn the internal representation into a user-readable spec
+pprintUnitConstant :: UnitConstant -> String
+pprintUnitConstant (UnitlessC 1) = "1"
+pprintUnitConstant (UnitlessC r) = "1**(" ++ show r ++")"
+pprintUnitConstant (Unitful ucs)  =
+     intercalate " " (map (uncurry pprintPow) ucsPos)
+  ++ (if not (null ucsNeg') then " / " else "")
+  ++ intercalate " " (map (uncurry pprintPow) ucsNeg')
+  where ucsNeg' = map (\(n, r) -> (n, abs r)) ucsNeg
+        (ucsNeg, ucsPos) = break ((>0) . snd) ucs'
+        ucs' = sortBy (compare `on` snd) ucs
+        pprintPow n 1 = n
+        pprintPow n r = n ++ "**" ++ show' r
+        show' r = if length (show r) >= 1
+                    then "(" ++ show r ++ ")"
+                    else show r
 
-
-
-lookupUnit :: [UnitVarCategory] -> [Int] -> LinearSystem -> Col -> Maybe UnitConstant
-lookupUnit ucats badCols system@(matrix, vector) m =
-  let -- m is the column corresopnding to the variable for which we are looking up the unit
-      n = find (\n -> matrix ! (n, m) /= 0) [1 .. nrows matrix]
-      defaultUnit = if ucats !! (m - 1) == Argument then Nothing else Just (Unitful [])
-  in maybe defaultUnit (lookupUnit' ucats badCols system m) n
-
+lookupUnit :: Col -> State UnitEnv (Maybe UnitConstant)
+lookupUnit m = do
+    -- m is the column corresopnding to the variable for which
+    -- we are looking up the unit
+    system@(matrix, vector)  <- gets linearSystem
+    ucats   <- gets unitVarCats
+    badCols <- gets underdeterminedCols
+    vColEnv <- gets varColEnv
+    let n = find (\n -> matrix ! (n, m) /= 0) [1 .. nrows matrix]
+    let defaultUnit = if ucats !! (m - 1) == Argument then Nothing else Just (Unitful [])
+    return $ maybe defaultUnit (lookupUnit' ucats badCols system m) n
 
 lookupUnit' :: [UnitVarCategory] -> [Int] -> LinearSystem -> Int -> Int -> Maybe UnitConstant
 lookupUnit' ucats badCols (matrix, vector) m n
@@ -82,9 +131,8 @@ lookupUnit' ucats badCols (matrix, vector) m n
         significant m' = m' /= m && matrix ! (n, m') /= 0 && ucats !! (m' - 1) == Argument
         ms' = filter (\m -> matrix ! (n, m) /= 0) [1 .. ncols matrix]
 
-insertUnits :: Decl Annotation -> State UnitEnv (Decl Annotation)
-insertUnits decl@(Decl a sp@(s1, s2) d t) | not (pRefactored a || hasUnits t) =
-  do system  <- gets linearSystem
+
+{- OLD CODE
      ucats   <- gets unitVarCats
      badCols <- gets underdeterminedCols
      vColEnv <- gets varColEnv

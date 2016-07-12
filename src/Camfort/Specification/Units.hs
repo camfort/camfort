@@ -52,7 +52,7 @@ import Camfort.Input
 import Camfort.Specification.Units.Debug
 import Camfort.Specification.Units.InferenceBackend
 import Camfort.Specification.Units.InferenceFrontend
-import Camfort.Specification.Units.Synthesis
+import qualified Camfort.Specification.Units.Synthesis as US
 import Camfort.Specification.Units.Strip
 
 import Camfort.Specification.Units.SyntaxConversion
@@ -171,7 +171,7 @@ synthesiseUnits (fname, pf) = (r, (fname, fmap (prevAnnotation . FA.prevAnnotati
           succeeded <- gets success
           if succeeded
             then do
-              p <- descendBiM insertUnitsInBlock pf'
+              p <- US.synthesiseUnits pf'
               (n, added) <- gets evUnitsAdded
               report <<++ ("Added " ++ (show n) ++ " non-unitless annotation: "
                         ++ (concat $ intersperse " ," $ added))
