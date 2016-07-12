@@ -48,6 +48,7 @@ executable camfort
                         Camfort.Analysis.LVA			
                         Camfort.Analysis.Syntax
                         Camfort.Analysis.Types
+                        Camfort.Specification.Stencils.Annotation			
                         Camfort.Specification.Stencils.CheckBackend
                         Camfort.Specification.Stencils.CheckFrontend
                         Camfort.Specification.Stencils.InferenceBackend
@@ -127,6 +128,7 @@ library
                         Camfort.Analysis.LVA
                         Camfort.Analysis.Syntax
                         Camfort.Analysis.Types
+                        Camfort.Specification.Stencils.Annotation			
                         Camfort.Specification.Stencils.CheckBackend
                         Camfort.Specification.Stencils.CheckFrontend
                         Camfort.Specification.Stencils.InferenceBackend

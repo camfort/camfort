@@ -29,6 +29,7 @@ import Control.Monad.Writer.Strict hiding (Product)
 
 import Camfort.Specification.Stencils.CheckBackend
 import qualified Camfort.Specification.Stencils.Grammar as Gram
+import Camfort.Specification.Stencils.Annotation
 import Camfort.Specification.Stencils.Model
 import Camfort.Specification.Stencils.InferenceFrontend hiding (LogLine)
 import Camfort.Specification.Stencils.InferenceBackend
@@ -85,22 +86,6 @@ stencilChecking nameMap pf = snd . runWriter $
      -- Format output
      let a@(_, output) = evalState (runWriterT $ results) (([], Nothing), ivmap)
      tell $ pprint output
-
--- Helper for transforming the 'previous' annotation
-onPrev :: (a -> a) -> FA.Analysis a -> FA.Analysis a
-onPrev f ann = ann { FA.prevAnnotation = f (FA.prevAnnotation ann) }
-
--- Instances for embedding parsed specifications into the AST
-instance ASTEmbeddable (FA.Analysis Annotation) Gram.Specification where
-  annotateWithAST ann ast =
-    onPrev (\ann -> ann { stencilSpec = Just $ Left ast }) ann
-
-instance Linkable (FA.Analysis Annotation) where
-  link ann (b@(F.BlDo {})) =
-      onPrev (\ann -> ann { stencilBlock = Just b }) ann
-  link ann (b@(F.BlStatement _ _ _ (F.StExpressionAssign {}))) =
-      onPrev (\ann -> ann { stencilBlock = Just b }) ann
-  link ann b = ann
 
 type LogLine = (FU.SrcSpan, String)
 type Checker a =

@@ -28,8 +28,12 @@ import Control.Monad.State.Strict
 import Control.Monad.Reader
 import Control.Monad.Writer.Strict hiding (Product)
 
+import Camfort.Analysis.CommentAnnotator
+
 import Camfort.Specification.Stencils.InferenceBackend
 import Camfort.Specification.Stencils.Syntax
+import Camfort.Specification.Stencils.Annotation
+import qualified Camfort.Specification.Stencils.Grammar as Gram
 import qualified Camfort.Specification.Stencils.Synthesis as Synth
 import Camfort.Analysis.Loops (collect)
 import Camfort.Analysis.Annotations
@@ -65,11 +69,19 @@ data InferMode =
 instance Default InferMode where
     defaultValue = AssignMode
 
+data InferState = IS {
+     ivMap :: FAD.InductionVarMapByASTBlock,
+     hasSpec :: [(FU.SrcSpan, Variable)] }
+
+
 -- The inferer returns information as a LogLine
 type EvalLog = [(String, Variable)]
 type LogLine = (FU.SrcSpan, Either [([Variable], Specification)] (String,Variable))
 -- The core of the inferer works within this monad
-type Inferer = WriterT [LogLine] (ReaderT (Cycles, F.ProgramUnitName, TypeEnv A) (State FAD.InductionVarMapByASTBlock))
+type Inferer = WriterT [LogLine]
+                 (ReaderT (Cycles, F.ProgramUnitName, TypeEnv A)
+                    (State InferState))
+
 type Cycles = [(F.Name, F.Name)]
 
 type Params = (?flowsGraph :: FAD.FlowsGraph A, ?nameMap :: FAR.NameMap)
@@ -81,15 +93,27 @@ runInferer :: FAD.InductionVarMapByASTBlock
            -> Inferer a
            -> (a, [LogLine])
 runInferer ivmap cycles puName tenv =
-  flip evalState ivmap . flip runReaderT (cycles, puName, tenv) . runWriterT
+    flip evalState (IS ivmap [])
+  . flip runReaderT (cycles, puName, tenv)
+  . runWriterT
 
 stencilInference :: FAR.NameMap
                  -> InferMode
                  -> F.ProgramFile (FA.Analysis A)
                  -> (F.ProgramFile (FA.Analysis A), [LogLine])
-stencilInference nameMap mode pf@(F.ProgramFile cm_pus blocks) =
+stencilInference nameMap mode pf =
     (F.ProgramFile cm_pus' blocks', log1 ++ log2)
   where
+    -- Parse specification annotations and include them into the syntax tree
+    -- that way if generate specifications at the same place we can
+    -- decide whether to synthesise or not
+
+    -- TODO: might want to output log0 somehow (though it doesn't fit LogLine)
+    (pf'@(F.ProgramFile cm_pus blocks), log0) =
+         if mode == Synth
+          then runWriter (annotateComments Gram.specParser pf)
+          else (pf, [])
+
     (cm_pus', log1) = runWriter (transformBiM perPU cm_pus)
     (blocks', log2) = runInferer ivMap [] F.NamelessBlockData tenv blocksInf
     blocksInf       = let ?flowsGraph = flTo
@@ -121,9 +145,9 @@ stencilInference nameMap mode pf@(F.ProgramFile cm_pus blocks) =
     beMap = FAD.genBackEdgeMap (FAD.dominators gr) gr
 
     -- get map of AST-Block-ID ==> corresponding AST-Block
-    bm    = FAD.genBlockMap pf
+    bm    = FAD.genBlockMap pf'
     -- get map of program unit ==> basic block graph
-    bbm   = FAB.genBBlockMap pf
+    bbm   = FAB.genBBlockMap pf'
     -- build the supergraph of global dependency
     sgr   = FAB.genSuperBBGr bbm
     -- extract the supergraph itself
@@ -160,7 +184,7 @@ genSpecsAndReport :: Params
   -> [F.Block (FA.Analysis A)]
   -> Inferer [([Variable], Specification)]
 genSpecsAndReport mode span lhs blocks = do
-    ivmap <- get
+    (IS ivmap _) <- get
     let (specs, evalInfos) = runWriter $ genSpecifications ivmap lhs blocks
     tell [ (span, Left specs) ]
     if mode == EvalMode
@@ -191,15 +215,33 @@ fromJustMsg msg Nothing = error msg
 perBlockInfer :: Params
     => InferMode -> F.Block (FA.Analysis A) -> Inferer (F.Block (FA.Analysis A))
 
+perBlockInfer Synth b@(F.BlComment ann span _) = do
+  -- If we have a comment that is actually a specification then record that
+  -- this has been assigned so that we don't generate extra specifications
+  -- that overlap with user-given oones
+  ann' <- return $ FA.prevAnnotation ann
+  -- Check if we have a spec
+  case (stencilSpec ann', stencilBlock ann') of
+    -- Comment contains an (uncoverted) specification and an associated block
+    (Just (Left (Gram.SpecDec _  vars)), Just block) ->
+     -- Is the block an assignment
+     case block of
+      s@(F.BlStatement _ span _ assg@(F.StExpressionAssign _ _ _ _)) -> do
+         -- Then update the list of spans+vars that have specifications
+         state <- get
+         put (state { hasSpec = hasSpec state ++ zip (repeat span) vars })
+    _ -> return ()
+  return b
+
 perBlockInfer mode b@(F.BlStatement ann span@(FU.SrcSpan lp up) _ stmnt)
   | mode == AssignMode || mode == CombinedMode || mode == EvalMode || mode == Synth = do
     -- On all StExpressionAssigns that occur in stmt....
     let lhses = [lhs | (F.StExpressionAssign _ _ lhs _)
                            <- universe stmnt :: [F.Statement (FA.Analysis A)]]
+    (IS ivmap hasSpec) <- get
     specs <- flip mapM lhses
     -- ... apply the following:
       (\lhs -> do
-         ivmap <- get
          case isArraySubscript lhs of
            Just subs ->
              -- Left-hand side is a subscript-by relative index or by a range
@@ -216,7 +258,14 @@ perBlockInfer mode b@(F.BlStatement ann span@(FU.SrcSpan lp up) _ stmnt)
            _ -> return [])
     if mode == Synth && not (null specs)
       then
-        let specComment = Synth.formatSpec (Just (tabs ++ "!= ")) ?nameMap (span, Left (concat specs))
+        let specComment = Synth.formatSpec (Just (tabs ++ "!= ")) ?nameMap (span, Left (concat specs'))
+            specs' = map (mapMaybe noSpecAlready) specs
+            noSpecAlready (vars, spec) =
+               if null vars'
+               then Nothing
+               else Just (vars', spec)
+               where vars' = filter (\v -> not ((span, realName v) `elem` hasSpec)) vars
+            realName v = v `fromMaybe` (v `M.lookup` ?nameMap)
             tabs  = take (FU.posColumn lp  - 1) (repeat ' ')
             loc   = fst $ O.srcSpanToSrcLocs span
             span' = FU.SrcSpan (lp {FU.posColumn = 0}) (lp {FU.posColumn = 0})
