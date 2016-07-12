@@ -106,6 +106,12 @@ doInferUnits pf = do
     inferInterproceduralUnits pf'
     return ()
 
+-- ***************************************
+--
+-- *  Unit inference (main, over all AST)
+--
+-- ***************************************
+
 -- Check units per program unit, with special handling of functions and subroutines
 -- which need adding to the set of constraints
 perProgramUnit :: Params
@@ -256,8 +262,11 @@ perBlock b = do
     descendBiM (plumb perBlock) b
     return b
 
+-- Do specifications (e.g. i = 1, n, s) enforces an equality constraint on the
+-- units between each component (all must have the same unit)
 perDoSpecification ::
-    Params => F.DoSpecification (FA.Analysis (UnitAnnotation A)) -> State UnitEnv ()
+     Params
+  => F.DoSpecification (FA.Analysis (UnitAnnotation A)) -> State UnitEnv ()
 perDoSpecification (F.DoSpecification _ _
                       st@(F.StExpressionAssign _ _ ei e0) en step) = do
    uiv <- perExpr ei
@@ -272,8 +281,9 @@ perDoSpecification (F.DoSpecification _ _
                       return ()
 
 -- TODO: see if we need to insert anymore statement-specific constraints here
-perStatement :: Params
-    => F.Statement (FA.Analysis (UnitAnnotation A)) -> State UnitEnv ()
+perStatement ::
+     Params
+   => F.Statement (FA.Analysis (UnitAnnotation A)) -> State UnitEnv ()
 perStatement (F.StExpressionAssign _ _ e1 e2) = do
     uv1 <- perExpr e1
     uv2 <- perExpr e2
@@ -295,24 +305,6 @@ perStatement s = do
     descendBiM (plumb perExpr) s
     return ()
 
-
--- ***************************************
---
--- *  Unit inference (main, over all AST)
---
--- ***************************************
-
-extendConstraints :: [UnitConstant] -> State UnitEnv ()
-extendConstraints units =
-        do (matrix, vector) <- gets linearSystem
-           let n = nrows matrix + 1
-               m = ncols matrix + 1
-           linearSystem =: case units of
-                             [] -> do (extendTo 0 0 m matrix, vector)
-                             _ -> (setElem 1 (n, m) $ extendTo 0 n m matrix, vector ++ [last units])
-           tmpColsAdded << m
-           tmpRowsAdded << n
-           return ()
 
 inferInterproceduralUnits ::
     Params => F.ProgramFile (FA.Analysis (UnitAnnotation A)) -> State UnitEnv ()
@@ -351,78 +343,6 @@ inferInterproceduralUnits' x haveAssumedLiterals system1 =
                                              then return x
                                              else do system3 <- gets linearSystem
                                                      inferInterproceduralUnits' x True system3
-
-
-class UpdateColInfo t where
-    updateColInfo :: Col -> Col -> t -> t
-
-instance UpdateColInfo VarCol where
-    updateColInfo x n (VarCol y) | y == x = VarCol n
-                                       | y == n = VarCol x
-                                       | otherwise = VarCol y
-
-instance UpdateColInfo VarColEnv where
-    updateColInfo _ _ [] = []
-    updateColInfo x n ((v, (uv, uvs)):ys) = (v, (updateColInfo x n uv, map (updateColInfo x n) uvs)) : (updateColInfo x n ys)
-
-instance UpdateColInfo Procedure where
-    updateColInfo x n (Nothing, ps) = (Nothing, map (updateColInfo x n) ps)
-    updateColInfo x n (Just p, ps) = (Just $ updateColInfo x n p, map (updateColInfo x n) ps)
-
-instance UpdateColInfo ProcedureEnv where
-    updateColInfo x n = map (\(s, p) -> (s, updateColInfo x n p))
-
-instance UpdateColInfo (Int, a) where
-    updateColInfo x n (y, s) | y == x = (n, s)
-                             | y == n = (x, s)
-                             | otherwise = (y, s)
-
-instance UpdateColInfo Int where
-    updateColInfo x n y | y == x = x
-                        | y == n = n
-                        | otherwise = y
-
-swapUnitVarCats x n xs = swapUnitVarCats' x n xs xs 1
-swapUnitVarCats' x n [] ys c = []
-swapUnitVarCats' x n (z:zs) ys c | c == x = (ys !! (n - 1)) : (swapUnitVarCats' x n zs ys (c + 1))
-                                 | c == n = (ys !! (x - 1)) : (swapUnitVarCats' x n zs ys (c + 1))
-                                 | otherwise = z : (swapUnitVarCats' x n zs ys (c + 1))
-
-swapCols :: Int -> Int -> State UnitEnv ()
-swapCols x n = do --report <<++ ("Pre swap - " ++ (show x) ++ " <-> " ++ (show n))
-                  --debugGaussian
-                  varColEnv   =. updateColInfo x n
-                  procedureEnv =. updateColInfo x n
-                  calls        =. updateColInfo x n
-                  unitVarCats  =. swapUnitVarCats x n
-                  linearSystem =. (\(m, v) -> (switchCols x n m, v))
-                  debugInfo    =. map (updateColInfo x n)
-                  tmpColsAdded =. map (updateColInfo x n)
-                  --report <<++ "Post swap"
-                  --debugGaussian
-                  return ()
-
-
-{-| reorderVarCols puts any variable columns to the end of the Gaussian matrix (along with the associated information) -}
-reorderVarCols :: State UnitEnv ()
-reorderVarCols = do ucats <- gets unitVarCats
-                    (matrix, _) <- gets linearSystem
-                    reorderVarCols' (ncols matrix) 1
-                   where   correctEnd :: Int -> State UnitEnv Int
-                           correctEnd 0   = return 0
-                           correctEnd end = do ucats <- gets unitVarCats
-                                               case (ucats !! (end - 1)) of
-                                                  Variable -> correctEnd (end - 1)
-                                                  _        -> return $ end
-
-                           reorderVarCols' :: Int -> Int -> State UnitEnv ()
-                           reorderVarCols' end c | c >= end = return ()
-                           reorderVarCols' end c = do ucats <- gets unitVarCats
-                                                      case (ucats !! (c - 1)) of
-                                                        Variable -> do end' <- correctEnd end
-                                                                       swapCols end' c
-                                                                       reorderVarCols' (end' - 1) (c+1)
-                                                        _        -> reorderVarCols' end (c+1)
 
 assumeLiteralUnits :: (?solver :: Solver, ?debug :: Bool) => State UnitEnv Bool
 assumeLiteralUnits =
