@@ -76,6 +76,9 @@ perBlock inferReport s@(F.BlStatement a span@(FU.SrcSpan lp up) _
         let findUnitIfUndec d | d `elem` hasDec = Nothing
                               | otherwise       = Just $ findUnit d vColEnv
         units <- sequence $ mapMaybe findUnitIfUndec declNames
+        -- count
+        (n, ad) <- gets evUnitsAdded
+        evUnitsAdded =: (n + (length units), ad)
         -- Create comments for each
         let unitDecls = mapMaybe (fmap mkComment) units
         return $ (F.BlComment a' span0 (intercalate "\n" unitDecls))
