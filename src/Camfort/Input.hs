@@ -35,9 +35,6 @@ import Language.Fortran
 import Data.Monoid
 import Data.Generics.Uniplate.Operations
 import Camfort.Analysis.Annotations
-import Camfort.Specification.Units (modifyAST)
-import Camfort.Specification.Units.Environment
-import Camfort.Specification.Units.SyntaxConversion
 
 import Language.Haskell.ParseMonad
 import qualified Language.Haskell.Syntax as LHS
@@ -124,7 +121,7 @@ doAnalysisReport' rFun inSrc excludes outSrc = do
   else return ()
   ps <- readParseSrcDir inSrc excludes
   putStr "\n"
-  let (report, ps') = rFun (map modifyAST ps)
+  let (report, ps') = rFun (map (\(a, b, c) -> (a, c)) ps)
   putStrLn report
 
 {-| Performs a refactoring provided by its first parameter, on the directory
@@ -146,31 +143,6 @@ doRefactor rFun inSrc excludes outSrc = do
   let outFiles = map fst ps'
   let outData = zip3 outFiles (map (B.pack . Fortran.snd3) ps) (map snd ps')
   outputFiles inSrc outSrc outData
-
--- Temporarily for the units-of-measure glue code
-doRefactor' :: ([(Filename, Program A)]
-            -> (String, [(Filename, Program Annotation)]))
-            -> FileOrDir -> [Filename] -> FileOrDir -> IO ()
-doRefactor' rFun inSrc excludes outSrc = do
-    if excludes /= [] && excludes /= [""]
-    then putStrLn $ "Excluding " ++ (concat $ intersperse "," excludes)
-                                 ++ " from " ++ inSrc ++ "/"
-    else return ()
-    ps <- readParseSrcDir inSrc excludes
-    let (report, ps') = rFun (map modifyAST ps)
-    let outputs = mkOutputFile ps ps'
-    putStrLn report
-    outputFiles inSrc outSrc (map (fmap B.pack) outputs)
-
-mkOutputFile :: [(Filename, String, Program A)]
-             -> [(Filename, Program A)]
-             -> [(Filename, String)]
-mkOutputFile ps ps' = zip outFiles newASTs'
-  where
-    outFiles = map fst ps'
-    newASTs' = map (\(a,b) -> a b) (zip (map convertSyntaxBack inputs) newASTs)
-    newASTs  = map (map (fmap (const ()))) (map snd ps')
-    inputs   = map Fortran.snd3 ps
 
 -- * Source directory and file handling
 

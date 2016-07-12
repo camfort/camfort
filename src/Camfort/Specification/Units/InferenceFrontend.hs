@@ -24,7 +24,8 @@ TODO:
 -}
 
 
-{-# LANGUAGE ScopedTypeVariables, ImplicitParams, DoAndIfThenElse, ConstraintKinds #-}
+{-# LANGUAGE ScopedTypeVariables, ImplicitParams, DoAndIfThenElse, ConstraintKinds,
+             MultiParamTypeClasses #-}
 
 module Camfort.Specification.Units.InferenceFrontend where
 
@@ -39,6 +40,7 @@ import Data.Generics.Uniplate.Operations
 import Data.Label.Monadic hiding (modify)
 import Control.Monad.State.Strict hiding (gets)
 import Control.Monad
+import Control.Monad.Writer.Strict
 import GHC.Prim
 
 import qualified Language.Fortran.AST as F
@@ -58,7 +60,10 @@ import Camfort.Specification.Units.Environment
 import Camfort.Specification.Units.InferenceBackend
 import Camfort.Specification.Units.Solve
 import Camfort.Specification.Units.SyntaxConversion
+import qualified Camfort.Specification.Units.Parser as Parser
 import Camfort.Transformation.Syntax
+
+import qualified Debug.Trace as D
 
 type Params = (?criticals      :: Bool,
                ?solver         :: Solver,
@@ -67,17 +72,33 @@ type Params = (?criticals      :: Bool,
 
 plumb f x = do { f x ; return x }
 
+-- Helper for transforming the 'previous' annotation
+onPrev :: (a -> a) -> FA.Analysis a -> FA.Analysis a
+onPrev f ann = ann { FA.prevAnnotation = f (FA.prevAnnotation ann) }
+
+-- Instances for embedding parsed specifications into the AST
+instance ASTEmbeddable (FA.Analysis (UnitAnnotation A)) Parser.UnitStatement where
+  annotateWithAST ann ast =
+    "DOING ANNOTATE" `D.trace` onPrev (\ann -> ann { unitSpec = Nothing }) ann
+
+instance Linkable (FA.Analysis (UnitAnnotation A)) where
+  link ann (b@(F.BlStatement _ _ _ (F.StDeclaration {}))) =
+      onPrev (\ann -> ann { unitBlock = Just b }) ann
+  link ann b = ann
+
 -- Core procedure for inferring units
 doInferUnits ::
-    Params => F.ProgramFile (FA.Analysis A)
+    Params => F.ProgramFile (FA.Analysis (UnitAnnotation A))
            -> State UnitEnv ()
-doInferUnits x = do
-    descendBiM perProgramUnit x
+doInferUnits pf = do
+    (pf', parserReport) <- return $ runWriter (annotateComments Parser.unitParser pf)
+    report <<++ (intercalate "\n" parserReport)
+    descendBiM perProgramUnit pf'
     --
     ifDebug (report <<++ "Finished inferring prog units")
     ifDebug debugGaussian
     --
-    inferInterproceduralUnits x
+    inferInterproceduralUnits pf'
     return ()
 
 -- Check units per program unit, with special handling of functions and subroutines
@@ -85,8 +106,8 @@ doInferUnits x = do
 perProgramUnit ::
        (?criticals :: Bool, ?solver :: Solver, ?debug :: Bool,
         ?assumeLiterals :: AssumeLiterals)
-    => F.ProgramUnit (FA.Analysis A)
-    -> State UnitEnv (F.ProgramUnit (FA.Analysis A))
+    => F.ProgramUnit (FA.Analysis (UnitAnnotation A))
+    -> State UnitEnv (F.ProgramUnit (FA.Analysis (UnitAnnotation A)))
 perProgramUnit p@(F.PUMain _ _ _ body subprogs) = do
     resetTemps
     descendBiM perBlock body
@@ -120,9 +141,9 @@ addProcedure :: Params
     => Bool -- Recursive or not
     -> F.Name
     -> Maybe F.Name -- Maybe return name
-    -> (Maybe (F.AList F.Expression (FA.Analysis A))) -- Arguments
-    -> [F.Block (FA.Analysis A)] -- Body
-    -> (Maybe [F.ProgramUnit (FA.Analysis A)])
+    -> (Maybe (F.AList F.Expression (FA.Analysis (UnitAnnotation A)))) -- Arguments
+    -> [F.Block (FA.Analysis (UnitAnnotation A))] -- Body
+    -> (Maybe [F.ProgramUnit (FA.Analysis (UnitAnnotation A))])
     -> State UnitEnv ()
 addProcedure rec name rname args body subprogs = do
     descendBiM perBlock body
@@ -157,7 +178,7 @@ addProcedure rec name rname args body subprogs = do
           where v = FA.varName ve
 
 -- STUB!
-updateUnitEnv :: FA.Analysis A -> State UnitEnv ()
+updateUnitEnv :: FA.Analysis (UnitAnnotation A) -> State UnitEnv ()
 updateUnitEnv _ = return ()
 
 {- OLD RELEVANT CODE
@@ -183,31 +204,29 @@ inferDecl proc x@(MeasureUnitDef a s d) =
 
 perBlock :: (?solver :: Solver, ?criticals :: Bool, ?debug :: Bool,
                   ?assumeLiterals :: AssumeLiterals)
-    => F.Block (FA.Analysis A) -> State UnitEnv (F.Block (FA.Analysis A))
+    => F.Block (FA.Analysis (UnitAnnotation A)) -> State UnitEnv (F.Block (FA.Analysis (UnitAnnotation A)))
 perBlock b@(F.BlComment ann span _) = do
     updateUnitEnv ann
-    case unitSpec (FA.prevAnnotation ann) of
-      Just (units, maybeBlock) -> do
+    case (unitSpec (FA.prevAnnotation ann), unitBlock (FA.prevAnnotation ann)) of
+      (Just units, Just block) -> do
          unitsConverted <- convertUnit units
-         case maybeBlock of
-           Just block ->
-             case block of
+         case block of
               bl@(F.BlStatement ann span _ (F.StDeclaration _ _ _ _ decls)) ->
                 mapM_ (processVar [unitsConverted]) (getNamesAndInits decls)
-           Nothing -> return ()
-      Nothing -> return ()
+              _ -> return ()
+      _ -> return ()
     return b
 
   where
     getNamesAndInits x =
         [(FA.varName e, i, s) | (F.DeclVariable _ _ e@(F.ExpValue _ s (F.ValVariable _)) _ i) <-
-                    (universeBi (F.aStrip x) :: [F.Declarator (FA.Analysis A)])]
+                    (universeBi (F.aStrip x) :: [F.Declarator (FA.Analysis (UnitAnnotation A))])]
      ++ [(FA.varName e, i, s) | (F.DeclArray _ _ e@(F.ExpValue _ s (F.ValVariable _)) _ _ i) <-
-                    (universeBi (F.aStrip x) :: [F.Declarator (FA.Analysis A)])]
+                    (universeBi (F.aStrip x) :: [F.Declarator (FA.Analysis (UnitAnnotation A))])]
      -- TODO: generate constraints for indices
     dimDeclarators x = concat
          [F.aStrip dims | (F.DeclArray _ _ _ dims _ _) <-
-                    (universeBi (F.aStrip x) :: [F.Declarator (FA.Analysis A)])]
+                    (universeBi (F.aStrip x) :: [F.Declarator (FA.Analysis (UnitAnnotation A))])]
 
     processVar units (v, initExpr, span) = do
       system <- gets linearSystem
@@ -241,7 +260,7 @@ perBlock b = do
     return b
 
 perDoSpecification ::
-    Params => F.DoSpecification (FA.Analysis A) -> State UnitEnv ()
+    Params => F.DoSpecification (FA.Analysis (UnitAnnotation A)) -> State UnitEnv ()
 perDoSpecification (F.DoSpecification _ _
                       st@(F.StExpressionAssign _ _ ei e0) en step) = do
    uiv <- perExpr ei
@@ -258,7 +277,7 @@ perDoSpecification (F.DoSpecification _ _
 -- TODO: see if we need to insert anymore statement-specific constraints here
 perStatement :: (?solver :: Solver, ?criticals :: Bool, ?debug :: Bool,
                   ?assumeLiterals :: AssumeLiterals)
-    => F.Statement (FA.Analysis A) -> State UnitEnv ()
+    => F.Statement (FA.Analysis (UnitAnnotation A)) -> State UnitEnv ()
 perStatement (F.StExpressionAssign _ _ e1 e2) = do
     uv1 <- perExpr e1
     uv2 <- perExpr e2
@@ -300,7 +319,7 @@ extendConstraints units =
            return ()
 
 inferInterproceduralUnits ::
-    Params => F.ProgramFile (FA.Analysis A) -> State UnitEnv ()
+    Params => F.ProgramFile (FA.Analysis (UnitAnnotation A)) -> State UnitEnv ()
 inferInterproceduralUnits x =
   do --reorderColumns
      if ?criticals then reorderVarCols else return ()
@@ -317,8 +336,8 @@ inferInterproceduralUnits x =
          return ()
 
 inferInterproceduralUnits' ::
-    Params => F.ProgramFile (FA.Analysis A) -> Bool -> LinearSystem
-           -> State UnitEnv (F.ProgramFile (FA.Analysis A))
+    Params => F.ProgramFile (FA.Analysis (UnitAnnotation A)) -> Bool -> LinearSystem
+           -> State UnitEnv (F.ProgramFile (FA.Analysis (UnitAnnotation A)))
 inferInterproceduralUnits' x haveAssumedLiterals system1 =
   do addInterproceduralConstraints x
      consistent <- solveSystemM "inconsistent"
@@ -429,7 +448,7 @@ assumeLiteralUnits' m =
            modify $ liftUnitEnv $ setElem 1 (n', m)
 
 addInterproceduralConstraints ::
-    (?debug :: Bool) => F.ProgramFile (FA.Analysis A) -> State UnitEnv ()
+    (?debug :: Bool) => F.ProgramFile (FA.Analysis (UnitAnnotation A)) -> State UnitEnv ()
 addInterproceduralConstraints x =
   do
     cs <- gets calls
@@ -577,7 +596,7 @@ Nothing <**> x = x
         -}
 
 -- TODO, create unit vars for every index and make sure consistent
-perIndex :: Params => F.Name -> F.Index (FA.Analysis A) -> State UnitEnv ()
+perIndex :: Params => F.Name -> F.Index (FA.Analysis (UnitAnnotation A)) -> State UnitEnv ()
 perIndex v (F.IxSingle _ _ _ e) = return ()
  {-
   uenv <- gets varColEnv
@@ -588,7 +607,7 @@ perIndex v (F.IxSingle _ _ _ e) = return ()
            Just (uv, uvs) ->
 -}
 
-perExpr :: Params => F.Expression (FA.Analysis A) -> State UnitEnv VarCol
+perExpr :: Params => F.Expression (FA.Analysis (UnitAnnotation A)) -> State UnitEnv VarCol
 perExpr e@(F.ExpValue _ _ (F.ValVariable n)) = do
     let v = FA.varName e
     uenv <- gets varColEnv
@@ -601,7 +620,7 @@ perExpr e@(F.ExpValue _ _ (F.ValVariable n)) = do
 
 perExpr e@(F.ExpValue _ span v) = perLiteral v
   where
-    perLiteral :: Params => F.Value (FA.Analysis A) -> State UnitEnv VarCol
+    perLiteral :: Params => F.Value (FA.Analysis (UnitAnnotation A)) -> State UnitEnv VarCol
     perLiteral val = do
       uv@(VarCol uvn) <- anyUnits (Literal (?assumeLiterals /= Mixed))
       debugInfo << (uvn, (span, show val))
@@ -652,19 +671,19 @@ perExpr f@(F.ExpReturnSpec _ _ e) = do
     perExpr e
 
 perArgument :: Params =>
-    F.Argument (FA.Analysis A) -> State UnitEnv VarCol
+    F.Argument (FA.Analysis (UnitAnnotation A)) -> State UnitEnv VarCol
 perArgument (F.Argument _ _ _ expr) = perExpr expr
 
 handleExpression :: Params
-    => F.Expression (FA.Analysis A)
-    -> State UnitEnv (F.Expression (FA.Analysis A))
+    => F.Expression (FA.Analysis (UnitAnnotation A))
+    -> State UnitEnv (F.Expression (FA.Analysis (UnitAnnotation A)))
 handleExpression x = do
     perExpr x
     return x
 
 -- TODO: error handling in powerUnits
 powerUnits :: Params
-           => VarCol -> F.Expression (FA.Analysis A) -> State UnitEnv VarCol
+           => VarCol -> F.Expression (FA.Analysis (UnitAnnotation A)) -> State UnitEnv VarCol
 
 powerUnits (VarCol uv) (F.ExpValue _ _ (F.ValInteger powerString)) =
   case fmap (fromInteger . fst) $ listToMaybe $ reads powerString of

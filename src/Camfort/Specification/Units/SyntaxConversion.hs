@@ -31,6 +31,7 @@ import GHC.Exts (sortWith)
 
 import qualified Language.Fortran as LF
 
+import Camfort.Analysis.CommentAnnotator
 import Camfort.Specification.Units.Parser
 
 import Debug.Trace
@@ -64,8 +65,8 @@ processSource src =
     parse s =
       case dropWhile isSpace s of
         '!':xs -> unitParser xs
-        _ -> Nothing
-    p (Just UnitAssignment{}, _) = False
+        _ -> Left NotAnnotation
+    p (Right UnitAssignment{}, _) = False
     p _ = True
 
 gatherUnitInformation :: LF.Program () -> [ (String, UnitOfMeasure) ]
@@ -222,38 +223,38 @@ cluster f = filterCluster . cluster' . addIndex . parse f
 filterCluster (annotations, aliases) =
   (filter (not . null . fst) annotations, aliases)
 
-cluster' :: [ (Maybe UnitStatement, SrcSpan) ]
+cluster' :: [ (Either AnnotationParseError UnitStatement, SrcSpan) ]
          -> ( [ ([ UnitStatement ], TargetIndex) ],
               [ (UnitStatement, SrcSpan) ])
 cluster' [] = ([], [])
-cluster' ((Nothing,s):xs) =
+cluster' ((Left _,s):xs) =
   let (fs,sn) = cluster' xs
   in (([],getLine s):fs, sn)
-cluster' ((Just x@UnitAssignment{}, s):xs) =
+cluster' ((Right x@UnitAssignment{}, s):xs) =
   case cluster' xs of
     ([], as) -> ([ ([ x ], (getLine s) + 1) ], as)
     ((h:t), as) -> ((x:fst h, snd h):t, as)
-cluster' ((Just x@UnitAlias{}, s):xs) =
+cluster' ((Right x@UnitAlias{}, s):xs) =
   case cluster' xs of
     (as, []) -> (([],getLine s):as, [ (x,s) ])
     (as, xs) -> (([],getLine s):as, (x,s):xs)
 
-addIndex :: [ (Maybe UnitStatement, Line -> SrcSpan) ]
-         -> [ (Maybe UnitStatement, SrcSpan) ]
+addIndex :: [ (Either AnnotationParseError UnitStatement, Line -> SrcSpan) ]
+         -> [ (Either AnnotationParseError UnitStatement, SrcSpan) ]
 addIndex xs = map f (zip xs [1..(length xs)])
   where
     f ((us,toSrcLoc),i) = (us, toSrcLoc i)
 
 parse :: String
       -> String
-      -> [ (Maybe UnitStatement, Line -> SrcSpan) ]
+      -> [ (Either AnnotationParseError UnitStatement, Line -> SrcSpan) ]
 parse fn src = map (t 0) $ lines src
   where
     t col line
       | isPrefixOf " " line = t (col + 1) (tail line)
       | isPrefixOf "!" line =
         (unitParser $ tail line, genSrcLoc col (length line))
-      | otherwise = (Nothing, genSrcLoc 0 0)
+      | otherwise = (Left NotAnnotation, genSrcLoc 0 0)
     genSrcLoc c len l = (LF.SrcLoc fn l c, LF.SrcLoc fn c (c + len))
 
 -- Convert new units of measure to old units of measure

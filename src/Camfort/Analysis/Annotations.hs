@@ -66,8 +66,6 @@ data Annotation = A { indices        :: [Variable],
                       successorStmts :: [Int],
                       -- used to indicate when a node is newly introduced
                       newNode        :: Bool,
-                      unitInfo       :: Maybe UnitInfo,
-                      unitSpec       :: Maybe (UnitInfo, Maybe (F.Block (FA.Analysis Annotation))),
                       stencilSpec    :: Maybe
                         -- If defined, either an unprocessed syntax tree
                         (Either StencilComment.Specification
@@ -96,8 +94,6 @@ unitAnnotation = A
    , refactored   = Nothing
    , successorStmts = []
    , newNode      = False
-   , unitInfo     = Nothing
-   , unitSpec     = Nothing
    , stencilSpec  = Nothing
    , stencilBlock = Nothing
  }

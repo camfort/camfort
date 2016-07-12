@@ -26,7 +26,8 @@ TODO:
 
 {-# LANGUAGE ScopedTypeVariables, ImplicitParams, DoAndIfThenElse, PatternGuards #-}
 
-module Camfort.Specification.Units where
+module Camfort.Specification.Units(Solver, removeUnits,
+                                inferUnits, synthesiseUnits, inferCriticalVariables)  where
 
 
 import Data.Data
@@ -37,8 +38,9 @@ import qualified Data.Label
 import Data.Label.Monadic hiding (modify)
 import Data.Function
 import Data.Matrix
-import Control.Monad.State.Strict hiding (gets)
 import Data.Generics.Uniplate.Operations
+import Control.Monad.State.Strict hiding (gets)
+import Control.Monad.Identity
 
 import Camfort.Helpers
 import Camfort.Output
@@ -46,6 +48,7 @@ import Camfort.Analysis.Annotations hiding (Unitless)
 import Camfort.Analysis.Syntax
 import Camfort.Analysis.Types
 
+import Camfort.Input
 import Camfort.Specification.Units.Debug
 import Camfort.Specification.Units.InferenceBackend
 import Camfort.Specification.Units.InferenceFrontend
@@ -53,8 +56,10 @@ import Camfort.Specification.Units.Synthesis
 import Camfort.Specification.Units.Strip
 
 import Camfort.Specification.Units.SyntaxConversion
-import Camfort.Specification.Units.Environment -- Provides the types and data accessors used in this module
-import Camfort.Specification.Units.Solve -- Solvers for the Gaussian matrix
+-- Provides the types and data accessors used in this module
+import Camfort.Specification.Units.Environment
+-- Solvers for the Gaussian matrix
+import Camfort.Specification.Units.Solve
 
 import qualified Language.Fortran.Analysis.Renaming as FAR
 import qualified Language.Fortran.Analysis.BBlocks as FAB
@@ -65,8 +70,13 @@ import Camfort.Transformation.Syntax
 -- For debugging and development purposes
 import qualified Debug.Trace as D
 
--- Helper that is require before running any of the units operations
-modifyAST (f, inp, ast) = (f, ast)
+------------------------------------------------
+-- Set the default options for the inference
+
+instance Default Solver where
+    defaultValue = Custom
+instance Default AssumeLiterals where
+    defaultValue = Poly
 
 {- START HERE! Two main functions of this file: inferUnits and removeUnits -}
 
@@ -79,6 +89,7 @@ removeUnits (fname, x) = undefined
 
 -- *************************************
 --   Unit inference (top - level)
+--
 -- *************************************
 
 {-| Infer one possible set of critical variables for a program -}
@@ -97,7 +108,7 @@ inferCriticalVariables (fname, pf) = (r, (fname, pf))
               ?debug     = False
           in  execState infer emptyUnitEnv
 
-    pf' = FAR.analyseRenames . FA.initAnalysis $ pf
+    pf' = FAR.analyseRenames . FA.initAnalysis $ (fmap mkUnitAnnotation pf)
     -- Core infer procedure
     infer :: (?criticals :: Bool, ?debug :: Bool) => State UnitEnv ()
     infer = do
@@ -119,11 +130,12 @@ inferUnits (fname, pf) = (r, (fname, pf))
     -- Format report
     r = concat [fname ++ ": " ++ r ++ "\n" | r <- Data.Label.get report env]
         ++ fname ++ ": checked/inferred " ++ show n ++ " user variables\n"
+
     -- Count number of checked and inferred variables
     n = countVariables (_varColEnv env) (_debugInfo env) (_procedureEnv env)
                                     (fst $ _linearSystem env) (_unitVarCats env)
 
-    pf' = FAB.analyseBBlocks . FAR.analyseRenames . FA.initAnalysis $ pf
+    pf' = FAB.analyseBBlocks . FAR.analyseRenames . FA.initAnalysis $ (fmap mkUnitAnnotation pf)
     -- Apply inferences
     env = let ?criticals = False
               ?debug     = False
@@ -134,7 +146,7 @@ synthesiseUnits ::
        (?solver :: Solver, ?assumeLiterals :: AssumeLiterals)
     => (Filename, F.ProgramFile Annotation)
     -> (Report, (Filename, F.ProgramFile Annotation))
-synthesiseUnits (fname, pf) = (r, (fname, fmap FA.prevAnnotation pf3))
+synthesiseUnits (fname, pf) = (r, (fname, fmap (prevAnnotation . FA.prevAnnotation) pf3))
   where
     -- Format report
     r = concat [fname ++ ": " ++ r ++ "\n" | r <- Data.Label.get report env]
@@ -143,7 +155,7 @@ synthesiseUnits (fname, pf) = (r, (fname, fmap FA.prevAnnotation pf3))
     n = countVariables (_varColEnv env) (_debugInfo env) (_procedureEnv env)
                                     (fst $ _linearSystem env) (_unitVarCats env)
     -- Apply inference and synthesis
-    pf' = FAB.analyseBBlocks . FAR.analyseRenames . FA.initAnalysis $ pf
+    pf' = FAB.analyseBBlocks . FAR.analyseRenames . FA.initAnalysis $ (fmap mkUnitAnnotation pf)
     (pf3, env) = runState inferAndSynthesise emptyUnitEnv
     inferAndSynthesise =
         let ?criticals = False

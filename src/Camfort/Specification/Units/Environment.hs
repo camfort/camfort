@@ -26,6 +26,7 @@ import Data.Label.Monadic hiding (modify)
 import Control.Monad.State.Strict hiding (gets)
 
 import qualified Language.Fortran.AST as F
+import qualified Language.Fortran.Analysis as FA
 import qualified Language.Fortran.Util.Position as FU
 
 import Data.Char
@@ -95,6 +96,16 @@ type Row = Int
 type Col = Int
 
 type DebugInfo = [(Col, (FU.SrcSpan, String))]
+
+data UnitAnnotation a = UnitAnnotation {
+   prevAnnotation :: a,
+   unitInfo       :: Maybe UnitInfo,
+   unitSpec       :: Maybe UnitInfo,
+   unitBlock      :: Maybe (F.Block (FA.Analysis (UnitAnnotation a))) }
+  deriving (Data, Typeable, Show)
+
+mkUnitAnnotation :: a -> UnitAnnotation a
+mkUnitAnnotation a = UnitAnnotation a Nothing Nothing Nothing
 
 data UnitEnv = UnitEnv {
   _report              :: [String],

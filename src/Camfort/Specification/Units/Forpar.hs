@@ -98,34 +98,34 @@ instance Default AssumeLiterals where
 
 -- | Annotate variable declarations based on unit declarations in
 -- comments (must occur before variable renaming stage).
-annotateDeclarations :: ProgramFile A -> ProgramFile A
+annotateDeclarations :: ProgramFile (UnitAnnotation A) -> ProgramFile (UnitAnnotation A)
 annotateDeclarations = descendBi annotPU
 
-annotPU :: ProgramUnit A -> ProgramUnit A
+annotPU :: ProgramUnit (UnitAnnotation A) -> ProgramUnit (UnitAnnotation A)
 annotPU = descendBi annotBS -- find and replace the beginning of block lists
 
-annotBS :: [Block A] -> [Block A]
+annotBS :: [Block (UnitAnnotation A)] -> [Block (UnitAnnotation A)]
 annotBS bs = bs'
   where
     (_, bs') = mapAccumL fBlocks [] bs
     fBlocks uenv bl@(BlComment _ _ cmtStr) = case P.unitParser cmtStr of
-      Nothing -> (uenv, bl)
-      Just us -> (us:uenv, bl)
+      Left _ -> (uenv, bl)
+      Right us -> (us:uenv, bl)
     fBlocks uenv bl@(BlStatement _ _ _ StDeclaration{}) = (uenv, bl')
       where
         bl'    = transformBi fE bl
         find n = fromMaybe (Undetermined n) undefined -- n `lookup` uenv
-        fE (ExpValue a@A{ unitInfo = Nothing } s (ValVariable n)) = ExpValue (a { unitInfo = Just (find n) }) s (ValVariable n)
+        fE (ExpValue a@UnitAnnotation{ unitInfo = Nothing } s (ValVariable n)) = ExpValue (a { unitInfo = Just (find n) }) s (ValVariable n)
         fE e                                                      = e
     fBlocks uenv bl = (uenv, bl)
 
 --------------------------------------------------
 
 -- | Mark function and subroutine parameters as "Parametric" unit
-parameterise :: ProgramFile A -> ProgramFile A
+parameterise :: ProgramFile (UnitAnnotation A) -> ProgramFile (UnitAnnotation A)
 parameterise = transformBi fPU
   where
-    fPU :: ProgramUnit A -> ProgramUnit A
+    fPU :: ProgramUnit (UnitAnnotation A) -> ProgramUnit (UnitAnnotation A)
     fPU pu
       | Nothing      <- params               = pu
       | Just params' <- params, null params' = pu
@@ -149,10 +149,10 @@ parameterise = transformBi fPU
 
 --------------------------------------------------
 
-markUndetermined :: ProgramFile A -> ProgramFile A
+markUndetermined :: ProgramFile (UnitAnnotation A) -> ProgramFile (UnitAnnotation A)
 markUndetermined = transformBi fE
   where
-    fE (ExpValue (a@A{ unitInfo = Nothing }) s (ValVariable n)) =
+    fE (ExpValue (a@UnitAnnotation{ unitInfo = Nothing }) s (ValVariable n)) =
         ExpValue (a { unitInfo = Just (Undetermined n) }) s (ValVariable n)
     fE e                                                        = e
 
@@ -161,7 +161,7 @@ markUndetermined = transformBi fE
 test f = mapM_ (print . simplifyConstraints)
        . extractConstraints
        . markUndetermined
-       . parameterise =<< fmap (const unitAnnotation) `fmap` testparse f
+       . parameterise =<< fmap (const (mkUnitAnnotation unitAnnotation)) `fmap` testparse f
 
 data Constraint = C [(Double, [UnitInfo])] -- polynomial summing to 0
   deriving (Eq, Ord, Data, Typeable)
@@ -188,12 +188,12 @@ execConstrainer = execWriter . flip runStateT [1..]
 getUniqNum :: Constrainer Int
 getUniqNum = get >>= \ (n:ns) -> put ns >> return n
 
-extractConstraints :: ProgramFile A -> [Constraint]
+extractConstraints :: ProgramFile (UnitAnnotation A) -> [Constraint]
 extractConstraints pf = execConstrainer $
   descendBiM (fmap fromJust . fS_PF) pf
   -- descendBiM fS_PF =<< transformBiM fE_PF pf
 
-fS_PF :: Statement A -> Constrainer (Maybe (Statement A))
+fS_PF :: Statement (UnitAnnotation A) -> Constrainer (Maybe (Statement (UnitAnnotation A)))
 fS_PF st@StExpressionAssign{} = do
   st'@(StExpressionAssign a s e1 e2) <- transformBiM ((fromJust  `fmap`) . fE) st
   let r = rexpr e2
@@ -218,7 +218,7 @@ fS_PF st = Just `fmap` transformBiM ((fromJust `fmap`) . fE) st
 
 -- might be useful to have unique names generated for undetermined units?
 
-fE :: Expression A -> Constrainer (Maybe (Expression A))
+fE :: Expression (UnitAnnotation A) -> Constrainer (Maybe (Expression (UnitAnnotation A)))
 fE e@(ExpValue _ _ (ValInteger i)) = return . Just $ setUI (Just (Undetermined i)) e
 fE e@(ExpValue _ _ (ValReal i)) = return . Just $ setUI (Just (Undetermined i)) e
 fE (ExpValue a s v@(ValVariable n)) = return . Just $ ExpValue (a { unitInfo = unitInfo a }) s v
@@ -251,7 +251,7 @@ setUI ui x = setAnnotation ((getAnnotation x) { unitInfo = ui }) x
 
 --------------------------------------------------
 
-extractUnitInfo pf = [ (n, ui) | ExpValue (A{ unitInfo = ui }) _ (ValVariable n) <- universeBi pf ]
+--extractUnitInfo pf = [ (n, ui) | ExpValue (UnitAnnotation{ unitInfo = ui }) _ (ValVariable n) <- universeBi pf ]
 
 --------------------------------------------------
 
@@ -284,7 +284,7 @@ epsilon = 0.001 -- arbitrary
 inferUnits :: (Filename, ProgramFile Annotation) ->
               UnitsM (Report, (Filename, ProgramFile Annotation))
 inferUnits (fn, p) = do
-  let types = inferTypes p
+  let types = inferTypes (fmap mkUnitAnnotation p)
   undefined
 
 expressions :: Data a => ProgramFile a -> [Expression a]

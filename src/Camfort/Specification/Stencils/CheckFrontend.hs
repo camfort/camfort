@@ -154,7 +154,6 @@ perBlockCheck :: (?nameMap :: FAR.NameMap, ?flowsGraph :: FAD.FlowsGraph A)
 
 perBlockCheck b@(F.BlComment ann span _) = do
   ann' <- parseCommentToAST ann span
-  traceShowM $ show span ++ "in comment, ann' = " ++ show ((stencilSpec $ FA.prevAnnotation ann'))
   updateRegionEnv ann'
   let b' = F.setAnnotation ann' b
   case (stencilSpec $ FA.prevAnnotation ann', stencilBlock $ FA.prevAnnotation ann') of

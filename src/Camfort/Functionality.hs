@@ -43,11 +43,10 @@ import Camfort.Transformation.CommonBlockElimToCalls
 import Camfort.Transformation.EquivalenceElim
 import Camfort.Transformation.DerivedTypeIntro
 
-import Camfort.Specification.Units as LU
+import qualified Camfort.Specification.Units as LU
 import Camfort.Specification.Units.SyntaxConversion
 import Camfort.Specification.Units.Environment
 import Camfort.Specification.Units.Solve
-import Camfort.Specification.Units.Forpar
 
 import Camfort.Helpers
 import Camfort.Output

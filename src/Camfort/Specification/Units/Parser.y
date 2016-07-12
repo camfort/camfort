@@ -5,10 +5,11 @@ module Camfort.Specification.Units.Parser ( unitParser
                                      , UnitPower(..)
                                      ) where
 
+import Camfort.Analysis.CommentAnnotator
 import Data.Char (isLetter, isNumber, isAlphaNum, toLower)
 }
 
-%monad { Maybe } { >>= } { return }
+%monad { Either AnnotationParseError } { >>= } { return }
 %name parseUnit UNIT
 %tokentype { Token }
 
@@ -111,17 +112,17 @@ data Token =
  | TNum String
  deriving (Show)
 
-lexer :: String -> Maybe [ Token ]
+lexer :: String -> Either AnnotationParseError [ Token ]
 lexer ('=':xs) = lexer' xs
-lexer _ = Nothing
+lexer _ = Left NotAnnotation
 
-addToTokens :: Token -> String -> Maybe [ Token ]
+addToTokens :: Token -> String -> Either AnnotationParseError [ Token ]
 addToTokens tok rest = do
  tokens <- lexer' rest
  return $ tok : tokens
 
-lexer' :: String -> Maybe [ Token ]
-lexer' [] = Just []
+lexer' :: String -> Either AnnotationParseError [ Token ]
+lexer' [] = Right []
 lexer' (' ':xs) = lexer' xs
 lexer' ('\t':xs) = lexer' xs
 lexer' (':':':':xs) = addToTokens TDoubleColon xs
@@ -134,19 +135,19 @@ lexer' (')':xs) = addToTokens TRightPar xs
 lexer' (x:xs)
  | isLetter x = aux (\c -> isAlphaNum c || c `elem` ['\'','_','-']) TId
  | isNumber x = aux isNumber TNum
- | otherwise = Nothing
+ | otherwise = Left NotAnnotation
  where
    aux p cons =
      let (target, rest) = span p xs
      in lexer' rest >>= (\tokens -> return $ cons (x:target) : tokens)
-lexer' _ = Nothing
+lexer' _ = Left NotAnnotation
 
-unitParser :: String -> Maybe UnitStatement
+unitParser :: String -> Either AnnotationParseError UnitStatement
 unitParser src = do
  tokens <- lexer $ map toLower src
  parseUnit tokens
 
-happyError :: [ Token ] -> Maybe a
-happyError _ = Nothing
+happyError :: [ Token ] -> Either AnnotationParseError a
+happyError t = failWith $ "Could not parse specification at: " ++ show t
 
 }
