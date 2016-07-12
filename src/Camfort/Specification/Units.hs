@@ -80,6 +80,7 @@ instance Default AssumeLiterals where
 
 {- START HERE! Two main functions of this file: inferUnits and removeUnits -}
 
+-- Deprecated
 removeUnits ::
     (Filename, F.ProgramFile Annotation) -> (Report, (Filename, F.ProgramFile Annotation))
 removeUnits (fname, x) = undefined
@@ -131,7 +132,7 @@ checkUnits (fname, pf) = (r, (fname, pf))
   where
     -- Format report
     r = concat [fname ++ ": " ++ r ++ "\n" | r <- Data.Label.get report env]
-        ++ fname ++ ": checked/inferred " ++ show n ++ " user variables\n"
+        ++ fname ++ ": checked " ++ show n ++ " user variables\n"
 
     -- Count number of checked and inferred variables
     n = countVariables (_varColEnv env) (_debugInfo env) (_procedureEnv env)
@@ -141,7 +142,7 @@ checkUnits (fname, pf) = (r, (fname, pf))
     nameMap = FAR.extractNameMap pf'
     -- Apply inferences
     env = let ?criticals = False
-              ?debug     = True
+              ?debug     = False
               ?nameMap   = nameMap
           in execState (doInferUnits pf') emptyUnitEnv
 
@@ -165,7 +166,7 @@ inferUnits (fname, pf) = (r, (fname, pf))
     nameMap = FAR.extractNameMap pf'
     -- Apply inferences
     env = let ?criticals = False
-              ?debug     = True
+              ?debug     = False
               ?nameMap   = nameMap
           in execState (doInferUnits pf') emptyUnitEnv
 
