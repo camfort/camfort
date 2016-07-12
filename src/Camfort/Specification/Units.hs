@@ -162,7 +162,8 @@ inferUnits ::
 inferUnits (fname, pf) = (r, (fname, pf))
   where
     -- Format report
-    r = concat [fname ++ ": " ++ r ++ "\n" | r <- Data.Label.get report env, not (null r)]
+    r = fname ++ ":\n" ++
+        concat [ r ++ "\n" | r <- Data.Label.get report env, not (null r)]
         ++ fname ++ ": checked/inferred " ++ show n ++ " user variables\n"
 
     -- Count number of checked and inferred variables
