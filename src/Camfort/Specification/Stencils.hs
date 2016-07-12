@@ -58,7 +58,10 @@ infer mode filename pf =
        then ("", fmap FA.prevAnnotation pf'')
        else ("\n" ++ filename ++ "\n" ++ output, fmap FA.prevAnnotation pf'')
     where
-      output = concatMap (formatSpec Nothing nameMap) $ results
+      output = (intercalate "\n")
+             . (filter (not . white))
+             . map (formatSpec Nothing nameMap) $ results
+      white = all (\x -> (x == ' ') || (x == '\t'))
       (pf'', results) = (stencilInference nameMap mode) . FAB.analyseBBlocks $ pf'
       nameMap = FAR.extractNameMap pf'
       pf'     = FAR.analyseRenames . FA.initAnalysis $ pf
