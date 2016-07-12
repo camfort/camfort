@@ -47,44 +47,73 @@ import Camfort.Specification.Units.SyntaxConversion
 type A1 = FA.Analysis (UnitAnnotation A)
 type Params = ?nameMap :: FAR.NameMap
 
-synthesiseUnits :: Params => F.ProgramFile A1 -> State UnitEnv (F.ProgramFile A1)
-synthesiseUnits pf = transformBiM perBlock pf
+-- Run this after checking/inference
+synthesiseUnits :: Params => Bool -> F.ProgramFile A1 -> State UnitEnv (F.ProgramFile A1)
+synthesiseUnits inferReport pf = transformBiM (perBlock inferReport) pf
 
-perBlock :: Params => F.Block A1 -> State UnitEnv (F.Block A1)
+perBlock :: Params => Bool -> F.Block A1 -> State UnitEnv (F.Block A1)
 -- Found a declaration to which we might want to insert a comment
-perBlock s@(F.BlStatement a span@(FU.SrcSpan lp up) _ d@(F.StDeclaration _ _ _ _ decls)) = do
+perBlock inferReport s@(F.BlStatement a span@(FU.SrcSpan lp up) _
+                               d@(F.StDeclaration _ _ _ _ decls)) = do
     vColEnv <- gets varColEnv
     -- Find all units associated to this declaration
     units <- mapM (\d -> findUnit d vColEnv) (getNames (F.aStrip decls))
     -- Create comments for each
     let unitDecls = mapMaybe (fmap mkComment) units
-    -- Append to declaration
-    return $ (F.BlComment a' span0 (intercalate "\n" unitDecls))
-  where
-    realName v = v `fromMaybe` (v `M.lookup` ?nameMap)
-    -- Make a comment specification
-    mkComment (var, unit) = tabs ++ "!= unit "
-                                 ++ "(" ++ pprintUnitConstant unit  ++ ")"
-                                 ++ " :: " ++ realName var
-    tabs =  take (FU.posColumn lp  - 1) (repeat ' ')
-    span0 = FU.SrcSpan (lp {FU.posColumn = 0}) (lp {FU.posColumn = 0})
-    ap = (prevAnnotation (FA.prevAnnotation a)) { refactored = Just loc }
-    a' = a { FA.prevAnnotation = (FA.prevAnnotation a) { prevAnnotation = ap } }
-    loc  = fst $ O.srcSpanToSrcLocs span
-    findUnit v colEnv =
-       case lookupWithoutSrcSpan v colEnv of
-         Just (VarCol m, _) -> do u <- lookupUnit m
-                                  case u of
-                                    Nothing -> return Nothing
-                                    Just u  -> return $ Just (v, u)
-         Nothing            -> return $ Nothing
-    getNames ds =
-        [FA.varName e | (F.DeclVariable _ _ e@(F.ExpValue {}) _ _)
-           <- universeBi ds :: [F.Declarator A1]]
-     ++ [FA.varName e | (F.DeclArray _ _ e@(F.ExpValue {}) _ _ _)
-           <- universeBi ds :: [F.Declarator A1]]
 
-perBlock b = return b
+    if inferReport
+      -- If we are just producing an inference report
+      -- Then add to report and return the original statement
+      then do
+        report <<++ intercalate "\n" (mapMaybe (fmap mkReport) units)
+        return s
+      else
+      -- Otherwise, replace this node with a comment node
+      -- which will get output by the reprint algorithm (along
+      -- with the original statement node)
+        return $ (F.BlComment a' span0 (intercalate "\n" unitDecls))
+    where
+     -- Helper for making a report
+     mkReport (var, unit) = show (spanLineCol span) ++ "\t" ++ mkInfo (var, unit)
+
+     -- Helper for building unit specification
+     mkInfo   (var, unit) = "unit (" ++ pprintUnitConstant unit  ++ ")"
+                                    ++ " :: " ++ realName var
+     -- Helper for building unit spec annotation comment
+     mkComment (var, unit) = tabs ++ "!= " ++ mkInfo (var, unit)
+
+     -- Calculate tab space sbased on start of declaration line
+     tabs =  take (FU.posColumn lp  - 1) (repeat ' ')
+     -- Create a zero-length span for the new comment node
+     span0 = FU.SrcSpan (lp {FU.posColumn = 0}) (lp {FU.posColumn = 0})
+
+     -- Create new annotation which labesl this as a refactored node
+     ap = (prevAnnotation (FA.prevAnnotation a)) { refactored = Just loc }
+     a' = a {FA.prevAnnotation = (FA.prevAnnotation a) { prevAnnotation = ap }}
+
+     -- Start source loc
+     loc  = fst $ O.srcSpanToSrcLocs span
+
+     -- Helper for calculating the real names (not gensymed ones)
+     realName v = v `fromMaybe` (v `M.lookup` ?nameMap)
+
+     -- Lookup the unit for a variable
+     findUnit v colEnv =
+        case lookupWithoutSrcSpan v colEnv of
+          Just (VarCol m, _) -> do u <- lookupUnit m
+                                   case u of
+                                     Nothing -> return Nothing
+                                     Just u  -> return $ Just (v, u)
+          Nothing            -> return $ Nothing
+
+     -- All names being declared by this declaration statement
+     getNames ds =
+          [FA.varName e | (F.DeclVariable _ _ e@(F.ExpValue {}) _ _)
+             <- universeBi ds :: [F.Declarator A1]]
+       ++ [FA.varName e | (F.DeclArray _ _ e@(F.ExpValue {}) _ _ _)
+             <- universeBi ds :: [F.Declarator A1]]
+
+perBlock _ b = return b
 
 -- Turn the internal representation into a user-readable spec
 pprintUnitConstant :: UnitConstant -> String
@@ -124,6 +153,12 @@ lookupUnit' ucats badCols (matrix, vector) m n
   where ms = filter significant [1 .. ncols matrix]
         significant m' = m' /= m && matrix ! (n, m') /= 0 && ucats !! (m' - 1) == Argument
         ms' = filter (\m -> matrix ! (n, m) /= 0) [1 .. ncols matrix]
+
+lineCol :: FU.Position -> (Int, Int)
+lineCol p  = (fromIntegral $ FU.posLine p, fromIntegral $ FU.posColumn p)
+
+spanLineCol :: FU.SrcSpan -> ((Int, Int), (Int, Int))
+spanLineCol (FU.SrcSpan l u) = (lineCol l, lineCol u)
 
 
 {- OLD CODE

@@ -51,19 +51,24 @@ import Language.Fortran.Util.Position
 import Data.Map hiding (map)
 
 -- Format inferred specifications
-formatSpec :: Maybe String -> FAR.NameMap -> (FU.SrcSpan, Either [([Variable], Specification)] (String,Variable)) -> String
+formatSpec ::
+    Maybe String
+ -> FAR.NameMap
+ -> (FU.SrcSpan, Either [([Variable], Specification)] (String,Variable))
+ -> String
 formatSpec prefix nm (span, Right (evalInfo,name)) =
      prefix'
   ++ evalInfo
   ++ (if name /= "" then " :: " ++ realName name else "") ++ "\n"
   where
+    realName v = v `fromMaybe` (v `M.lookup` nm)
     prefix' = case prefix of
                 Nothing -> show (spanLineCol span) ++ " \t"
                 Just pr -> pr
-    realName v               = v `fromMaybe` (v `M.lookup` nm)
+
 formatSpec prefix nm (span, Left []) = ""
 formatSpec prefix nm (span, Left specs) =
-  (intercalate "\n" $ map (\s -> prefix' ++ doSpec s) specs) 
+  (intercalate "\n" $ map (\s -> prefix' ++ doSpec s) specs)
     where
       prefix' = case prefix of
                    Nothing -> show (spanLineCol span) ++ " \t"

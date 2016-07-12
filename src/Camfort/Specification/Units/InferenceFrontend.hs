@@ -27,7 +27,7 @@ TODO:
 {-# LANGUAGE ScopedTypeVariables, ImplicitParams, DoAndIfThenElse, ConstraintKinds,
              MultiParamTypeClasses #-}
 
-module Camfort.Specification.Units.InferenceFrontend where
+module Camfort.Specification.Units.InferenceFrontend (doInferUnits) where
 
 import Data.Data
 import Data.Char

@@ -24,10 +24,13 @@ TODO:
 -}
 
 
-{-# LANGUAGE ScopedTypeVariables, ImplicitParams, DoAndIfThenElse, PatternGuards #-}
+{-# LANGUAGE ScopedTypeVariables, ImplicitParams, DoAndIfThenElse,
+             PatternGuards, ConstraintKinds #-}
 
-module Camfort.Specification.Units(Solver, removeUnits, checkUnits,
-                                inferUnits, synthesiseUnits, inferCriticalVariables)  where
+module Camfort.Specification.Units
+          (Solver, removeUnits, checkUnits
+                 , inferUnits, synthesiseUnits
+                 , inferCriticalVariables)  where
 
 
 import Data.Data
@@ -93,9 +96,11 @@ removeUnits (fname, x) = undefined
 --
 -- *************************************
 
+type Params = (?solver :: Solver, ?assumeLiterals :: AssumeLiterals)
+
 {-| Infer one possible set of critical variables for a program -}
 inferCriticalVariables ::
-       (?solver :: Solver, ?assumeLiterals :: AssumeLiterals)
+       Params
     => (Filename, F.ProgramFile Annotation)
     -> (Report, (Filename, F.ProgramFile Annotation))
 inferCriticalVariables (fname, pf) = (r, (fname, pf))
@@ -125,13 +130,13 @@ inferCriticalVariables (fname, pf) = (r, (fname, pf))
 
 {-| Check units-of-measure for a program -}
 checkUnits ::
-       (?solver :: Solver, ?assumeLiterals :: AssumeLiterals)
+       Params
     => (Filename, F.ProgramFile Annotation)
     -> (Report, (Filename, F.ProgramFile Annotation))
 checkUnits (fname, pf) = (r, (fname, pf))
   where
     -- Format report
-    r = concat [fname ++ ": " ++ r ++ "\n" | r <- Data.Label.get report env]
+    r = concat [fname ++ ": " ++ r ++ "\n" | r <- Data.Label.get report env, not (null r)]
         ++ fname ++ ": checked " ++ show n ++ " user variables\n"
 
     -- Count number of checked and inferred variables
@@ -149,36 +154,46 @@ checkUnits (fname, pf) = (r, (fname, pf))
 {-| Check and infer units-of-measure for a program
      This produces an output of all the unit information for a program -}
 inferUnits ::
-       (?solver :: Solver, ?assumeLiterals :: AssumeLiterals)
+       Params
     => (Filename, F.ProgramFile Annotation)
     -> (Report, (Filename, F.ProgramFile Annotation))
 inferUnits (fname, pf) = (r, (fname, pf))
   where
     -- Format report
-    r = concat [fname ++ ": " ++ r ++ "\n" | r <- Data.Label.get report env]
+    r = concat [fname ++ ": " ++ r ++ "\n" | r <- Data.Label.get report env, not (null r)]
         ++ fname ++ ": checked/inferred " ++ show n ++ " user variables\n"
 
     -- Count number of checked and inferred variables
     n = countVariables (_varColEnv env) (_debugInfo env) (_procedureEnv env)
                                     (fst $ _linearSystem env) (_unitVarCats env)
-
-    pf' = FAB.analyseBBlocks . FAR.analyseRenames . FA.initAnalysis $ (fmap mkUnitAnnotation pf)
+    -- Apply inference and synthesis
+    (_, env) = runState inferAndSynthesise emptyUnitEnv
+    inferAndSynthesise =
+        let ?criticals = False
+            ?debug     = False
+            ?nameMap   = nameMap
+        in do
+          doInferUnits pf'
+          succeeded <- gets success
+          if succeeded
+            then US.synthesiseUnits True pf'
+            else return pf'
+    pf' = FAB.analyseBBlocks
+        . FAR.analyseRenames
+        . FA.initAnalysis
+        . fmap mkUnitAnnotation $ pf
     nameMap = FAR.extractNameMap pf'
-    -- Apply inferences
-    env = let ?criticals = False
-              ?debug     = False
-              ?nameMap   = nameMap
-          in execState (doInferUnits pf') emptyUnitEnv
+
 
 {-| Synthesis unspecified units for a program (after checking) -}
 synthesiseUnits ::
-       (?solver :: Solver, ?assumeLiterals :: AssumeLiterals)
+       Params
     => (Filename, F.ProgramFile Annotation)
     -> (Report, (Filename, F.ProgramFile Annotation))
 synthesiseUnits (fname, pf) = (r, (fname, fmap (prevAnnotation . FA.prevAnnotation) pf3))
   where
     -- Format report
-    r = concat [fname ++ ": " ++ r ++ "\n" | r <- Data.Label.get report env]
+    r = concat [fname ++ ": " ++ r ++ "\n" | r <- Data.Label.get report env, not (null r)]
         ++ fname ++ ": checked/inferred " ++ show n ++ " user variables\n"
     -- Count number of checked and inferred variables
     n = countVariables (_varColEnv env) (_debugInfo env) (_procedureEnv env)
@@ -196,7 +211,7 @@ synthesiseUnits (fname, pf) = (r, (fname, fmap (prevAnnotation . FA.prevAnnotati
           succeeded <- gets success
           if succeeded
             then do
-              p <- US.synthesiseUnits pf'
+              p <- US.synthesiseUnits False pf'
               (n, added) <- gets evUnitsAdded
               report <<++ ("Added " ++ (show n) ++ " non-unitless annotation: "
                         ++ (concat $ intersperse " ," $ added))
