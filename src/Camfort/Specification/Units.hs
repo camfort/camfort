@@ -26,7 +26,7 @@ TODO:
 
 {-# LANGUAGE ScopedTypeVariables, ImplicitParams, DoAndIfThenElse, PatternGuards #-}
 
-module Camfort.Specification.Units(Solver, removeUnits,
+module Camfort.Specification.Units(Solver, removeUnits, checkUnits,
                                 inferUnits, synthesiseUnits, inferCriticalVariables)  where
 
 
@@ -122,7 +122,31 @@ inferCriticalVariables (fname, pf) = (r, (fname, pf))
                             ++ (concat $ intersperse "," vars)
         ifDebug debugGaussian
 
-{-| Infer/check the unspecified units for a program -}
+{-| Check units-of-measure for a program -}
+checkUnits ::
+       (?solver :: Solver, ?assumeLiterals :: AssumeLiterals)
+    => (Filename, F.ProgramFile Annotation)
+    -> (Report, (Filename, F.ProgramFile Annotation))
+checkUnits (fname, pf) = (r, (fname, pf))
+  where
+    -- Format report
+    r = concat [fname ++ ": " ++ r ++ "\n" | r <- Data.Label.get report env]
+        ++ fname ++ ": checked/inferred " ++ show n ++ " user variables\n"
+
+    -- Count number of checked and inferred variables
+    n = countVariables (_varColEnv env) (_debugInfo env) (_procedureEnv env)
+                                    (fst $ _linearSystem env) (_unitVarCats env)
+
+    pf' = FAB.analyseBBlocks . FAR.analyseRenames . FA.initAnalysis $ (fmap mkUnitAnnotation pf)
+    nameMap = FAR.extractNameMap pf'
+    -- Apply inferences
+    env = let ?criticals = False
+              ?debug     = True
+              ?nameMap   = nameMap
+          in execState (doInferUnits pf') emptyUnitEnv
+
+{-| Check and infer units-of-measure for a program
+     This produces an output of all the unit information for a program -}
 inferUnits ::
        (?solver :: Solver, ?assumeLiterals :: AssumeLiterals)
     => (Filename, F.ProgramFile Annotation)

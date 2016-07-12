@@ -133,7 +133,7 @@ unitsCheck inSrc excludes outSrc opt = do
     putStrLn $ "Checking units for " ++ show inSrc ++ "\n"
     let ?solver = getOption opt :: Solver
      in let ?assumeLiterals = getOption opt :: AssumeLiterals
-        in doRefactorForpar (mapM LU.inferUnits) inSrc excludes outSrc
+        in doRefactorForpar (mapM LU.checkUnits) inSrc excludes outSrc
 
 unitsInfer inSrc excludes outSrc opt = do
     putStrLn $ "Inferring units for " ++ show inSrc ++ "\n"
