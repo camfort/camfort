@@ -111,7 +111,7 @@ inferCriticalVariables (fname, pf) = (r, (fname, pf))
     -- Run the infer procedure with empty unit environment, retunring
     -- the updated unit environment, matching variables to their units
     env = let ?criticals = True
-              ?debug     = False
+              ?debug     = True
               ?nameMap   = nameMap
           in  execState infer emptyUnitEnv
 

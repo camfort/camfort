@@ -90,7 +90,9 @@ compilerOpts argv =
   where header = introMsg ++ usage ++ menu ++ "\nOptions:"
 
 -- * Which modes do not require an output
-outputNotRequired = ["criticalUnits", "count", "stencils-infer", "stencils-check", "units-infer", "units-check"]
+outputNotRequired = ["count"
+                  , "stencils-infer", "stencils-check"
+                  , "units-infer", "units-check", "units-criticals"]
 
 functionality = analyses ++ refactorings
 
