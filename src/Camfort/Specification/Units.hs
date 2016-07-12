@@ -36,6 +36,8 @@ module Camfort.Specification.Units
 import Data.Data
 import Data.Char (isNumber)
 import Data.List
+import Data.Maybe
+import qualified Data.Map as M
 import Data.Label.Mono (Lens)
 import qualified Data.Label
 import Data.Label.Monadic hiding (modify)
@@ -111,7 +113,7 @@ inferCriticalVariables (fname, pf) = (r, (fname, pf))
     -- Run the infer procedure with empty unit environment, retunring
     -- the updated unit environment, matching variables to their units
     env = let ?criticals = True
-              ?debug     = True
+              ?debug     = False
               ?nameMap   = nameMap
           in  execState infer emptyUnitEnv
 
@@ -121,7 +123,7 @@ inferCriticalVariables (fname, pf) = (r, (fname, pf))
     infer :: (?criticals :: Bool, ?debug :: Bool, ?nameMap :: FAR.NameMap) => State UnitEnv ()
     infer = do
         doInferUnits . FAB.analyseBBlocks $ pf'
-        vars <- criticalVars
+        vars <- criticalVars nameMap
         case vars of
           [] -> do report <<++ "No critical variables. Appropriate annotations."
           _  -> do report <<++ "Critical variables: "
@@ -230,23 +232,29 @@ countVariables vars debugs procs matrix ucats =
                              _        -> False) [1..ncols matrix]
 
 -- Critical variables analysis
-criticalVars :: State UnitEnv [String]
-criticalVars = do uvarenv     <- gets varColEnv
-                  (matrix, _) <- gets linearSystem
-                  ucats       <- gets unitVarCats
-                  dbgs        <- gets debugInfo
-                  -- debugGaussian
-                  let cv1 = criticalVars' uvarenv ucats matrix 1 dbgs
-                  let cv2 = [] -- criticalVars
-                  return (cv1 ++ cv2)
+criticalVars :: FAR.NameMap -> State UnitEnv [String]
+criticalVars nameMap = do
+    uvarenv     <- gets varColEnv
+    (matrix, _) <- gets linearSystem
+    ucats       <- gets unitVarCats
+    dbgs        <- gets debugInfo
+    -- debugGaussian
+    let cv1 = criticalVars' uvarenv ucats matrix 1 dbgs
+    let cv2 = [] -- criticalVars
+    return (map realName (cv1 ++ cv2))
+      where realName v = v `fromMaybe` (v `M.lookup` nameMap)
 
-criticalVars' :: VarColEnv -> [UnitVarCategory] -> Matrix Rational -> Row -> DebugInfo -> [String]
+criticalVars' :: VarColEnv
+              -> [UnitVarCategory]
+              -> Matrix Rational
+              -> Row
+              -> DebugInfo -> [String]
 criticalVars' varenv ucats matrix i dbgs =
   let m = firstNonZeroCoeff matrix ucats
   in
     if (i == nrows matrix) then
-       if (m i) /= (ncols matrix) then
-          lookupVarsByColsFilterByArg matrix varenv ucats [((m i) + 1)..(ncols matrix)] dbgs
+       if (m i) /= (ncols matrix)
+       then lookupVarsByColsFilterByArg matrix varenv ucats [((m i) + 1)..(ncols matrix)] dbgs
        else []
     else
         if (m (i + 1)) /= ((m i) + 1)

@@ -221,11 +221,12 @@ perBlock b@(F.BlComment ann span _) = do
              denv <- gets derivedUnitEnv
              when (isJust $ lookup name denv) $ error "Recursive unit-of-measure definition"
              derivedUnitEnv << (name, unit)
-
+    -- Note we get the real names here since we are working with a user-specified
+    -- variable which is associated to this decl
     getNamesAndInits x =
-        [(FA.varName e, i, s) | (F.DeclVariable _ _ e@(F.ExpValue _ s (F.ValVariable _)) _ i) <-
+        [(v, i, s) | (F.DeclVariable _ _ e@(F.ExpValue _ s (F.ValVariable v)) _ i) <-
                     (universeBi (F.aStrip x) :: [F.Declarator A1])]
-     ++ [(FA.varName e, i, s) | (F.DeclArray _ _ e@(F.ExpValue _ s (F.ValVariable _)) _ _ i) <-
+     ++ [(v, i, s) | (F.DeclArray _ _ e@(F.ExpValue _ s (F.ValVariable v)) _ _ i) <-
                     (universeBi (F.aStrip x) :: [F.Declarator A1])]
      -- TODO: generate constraints for indices
     dimDeclarators x = concat
@@ -253,7 +254,7 @@ processVar :: Params
            -> [UnitConstant]
            -> (F.Name, Maybe (F.Expression A1), FU.SrcSpan)
            -> State UnitEnv ()
-processVar (Just dvar) units (v, initExpr, span) | dvar == realName v = do
+processVar (Just dvar) units (v, initExpr, span) | dvar == v = do
       system <- gets linearSystem
       let m = ncols (fst system) + 1
       unitVarCats <<++ Variable -- TODO: check how much we need this: (unitVarCat v proc)
