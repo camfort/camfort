@@ -235,7 +235,7 @@ countVariables vars debugs procs matrix ucats =
 criticalVars :: FAR.NameMap -> State UnitEnv [String]
 criticalVars nameMap = do
     uvarenv     <- gets varColEnv
-    (matrix, _) <- gets linearSystem
+    (matrix, vector) <- gets linearSystem
     ucats       <- gets unitVarCats
     dbgs        <- gets debugInfo
     -- debugGaussian
@@ -253,10 +253,13 @@ criticalVars' varenv ucats matrix i dbgs =
   let m = firstNonZeroCoeff matrix ucats
   in
     if (i == nrows matrix) then
-       if (m i) /= (ncols matrix)
-       then lookupVarsByColsFilterByArg matrix varenv ucats [((m i) + 1)..(ncols matrix)] dbgs
-       else []
+      if (m i) /= (ncols matrix)
+      then lookups [((m i) + 1)..(ncols matrix)] dbgs
+      else []
     else
-        if (m (i + 1)) /= ((m i) + 1)
-        then (lookupVarsByColsFilterByArg matrix varenv ucats [((m i) + 1)..(m (i + 1) - 1)] dbgs) ++ (criticalVars' varenv ucats matrix (i + 1) dbgs)
-        else criticalVars' varenv ucats matrix (i + 1) dbgs
+      if (m (i + 1)) /= ((m i) + 1)
+      then (lookups [((m i) + 1)..(m (i + 1) - 1)] dbgs)
+        ++ (criticalVars' varenv ucats matrix (i + 1) dbgs)
+      else criticalVars' varenv ucats matrix (i + 1) dbgs
+  where
+    lookups = lookupVarsByColsFilterByArg matrix varenv ucats

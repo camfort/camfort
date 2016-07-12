@@ -224,9 +224,9 @@ perBlock b@(F.BlComment ann span _) = do
     -- Note we get the real names here since we are working with a user-specified
     -- variable which is associated to this decl
     getNamesAndInits x =
-        [(v, i, s) | (F.DeclVariable _ _ e@(F.ExpValue _ s (F.ValVariable v)) _ i) <-
+        [(FA.varName e, i, s) | (F.DeclVariable _ _ e@(F.ExpValue _ s (F.ValVariable v)) _ i) <-
                     (universeBi (F.aStrip x) :: [F.Declarator A1])]
-     ++ [(v, i, s) | (F.DeclArray _ _ e@(F.ExpValue _ s (F.ValVariable v)) _ _ i) <-
+     ++ [(FA.varName e, i, s) | (F.DeclArray _ _ e@(F.ExpValue _ s (F.ValVariable v)) _ _ i) <-
                     (universeBi (F.aStrip x) :: [F.Declarator A1])]
      -- TODO: generate constraints for indices
     dimDeclarators x = concat
@@ -254,7 +254,7 @@ processVar :: Params
            -> [UnitConstant]
            -> (F.Name, Maybe (F.Expression A1), FU.SrcSpan)
            -> State UnitEnv ()
-processVar (Just dvar) units (v, initExpr, span) | dvar == v = do
+processVar (Just dvar) units (v, initExpr, span) | dvar == (realName v) = do
       system <- gets linearSystem
       let m = ncols (fst system) + 1
       unitVarCats <<++ Variable -- TODO: check how much we need this: (unitVarCat v proc)
@@ -294,8 +294,17 @@ perStatement ::
      Params
    => F.Statement A1 -> State UnitEnv ()
 perStatement (F.StDeclaration _ span spec atr decls) = do
-    mapM_ (\(v, i, s) -> processVar (Just v) [] (v, i, s)) (getNamesAndInits decls)
+    uenv <- gets varColEnv
+    mapM_ (\(v, i, s) -> if notAlreadyDeclared uenv v
+                           then processVar (Just (realName v)) [] (v, i, s)
+                           else return ())  (getNamesAndInits decls)
   where
+    -- Variable may have been declared already due to link with comment
+    notAlreadyDeclared uenv v =
+      case lookupWithoutSrcSpan v uenv of
+        Nothing -> True
+        Just _  -> False
+
     getNamesAndInits x =
         [(FA.varName e, i, s) |
            (F.DeclVariable _ _ e@(F.ExpValue _ s (F.ValVariable _)) _ i)
@@ -544,7 +553,7 @@ perIndex v (F.IxSingle _ _ _ e) = return ()
 -}
 
 perExpr :: Params => F.Expression A1 -> State UnitEnv VarCol
-perExpr e@(F.ExpValue _ _ (F.ValVariable n)) = do
+perExpr e@(F.ExpValue _ _ (F.ValVariable _)) = do
     let v = FA.varName e
     uenv <- gets varColEnv
     case lookupWithoutSrcSpan v uenv of
