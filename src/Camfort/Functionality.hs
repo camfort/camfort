@@ -171,10 +171,18 @@ doRefactorForpar rFun inSrc excludes outSrc = do
     ps <- readForparseSrcDir inSrc excludes
     let (report, ps') = rFun (map (\(f, inp, ast) -> (f, ast)) ps)
     --let outFiles = filter (\f -> not ((take (length $ d ++ "out") f) == (d ++ "out"))) (map fst ps')
-    let outFiles = map fst ps'
+    --let outFiles = map fst ps'
     putStrLn report
+    let outputs = mkOutputFileForpar ps ps'
+    outputFiles inSrc outSrc outputs
   where snd3 (a, b, c) = b
 
+mkOutputFileForpar :: [(Filename, SourceText, a)]
+                   -> [(Filename, A.ProgramFile Annotation)]
+                   -> [(Filename, SourceText, A.ProgramFile Annotation)]
+mkOutputFileForpar ps ps' = zip3 (map fst ps') (map snd3 ps) (map snd ps')
+  where
+    snd3 (a, b, c) = b
 
 
 

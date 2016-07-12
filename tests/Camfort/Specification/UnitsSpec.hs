@@ -2,8 +2,11 @@
 
 module Camfort.Specification.UnitsSpec (spec) where
 
+import qualified Data.ByteString.Char8 as B
+
 import Camfort.Input
 import Camfort.Functionality
+import Camfort.Output
 import Camfort.Specification.Units
 import Camfort.Specification.Units.Environment
 
@@ -45,4 +48,5 @@ doIntegration c fname expInfer = do
 
    expect <- runIO $ readFile $ "tests/Camfort/Specification/Units/exp." ++ fname
    it ("(" ++ show c ++ ") - " ++ fname ++ " comapare expected out") $
-       (snd . head $ mkOutputFile ps [ps']) `shouldBe` expect
+       (B.unpack $ mkOutputText ("exp." ++ fname) (head $ mkOutputFileForpar ps [ps']))
+          `shouldBe` expect

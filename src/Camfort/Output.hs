@@ -425,12 +425,12 @@ instance Tagged p => Indentor (p Annotation) where
 -- FIXME: Use ByteString! (Or Data.Text, at least)
 
 {-| -}
-reprint :: (Data (p Annotation)) -- (PrintMaster (p Annotation) DefaultPP, 
+reprint :: (Data (p Annotation)) -- (PrintMaster (p Annotation) DefaultPP,
         => SourceText -> Filename -> p Annotation -> String
 reprint input f p =
   -- If the inupt is null then switch into pretty printer
   -- | B.null input = let ?variant = DefaultPP in printMaster p
-  -- | otherwise = 
+  -- | otherwise =
     pn ++ pe
   where input' = map B.unpack $ B.lines input
         len = Prelude.length input'

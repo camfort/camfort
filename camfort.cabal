@@ -30,6 +30,7 @@ test-suite spec
                         fortran-src >= 0.1,
                         uniplate >= 1.6.10,
                         mtl >= 2.1,
+                        bytestring >= 0.10,			
                         camfort
 
 source-repository head
@@ -78,7 +79,7 @@ executable camfort
                         Camfort.Helpers.Vec
                         Camfort.Functionality
                         Camfort.Input
-                        Camfort.Output
+                        Camfort.Output		
                         Camfort.Traverse
                         Main
 
@@ -156,7 +157,7 @@ library
                         Camfort.Helpers.Vec
                         Camfort.Functionality
                         Camfort.Input
-                        Camfort.Output
+                        Camfort.Output	
                         Camfort.Traverse
   other-modules:
 
