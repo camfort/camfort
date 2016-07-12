@@ -55,7 +55,7 @@ import qualified Data.IntMap as IM
 import qualified Data.Set as S
 import Data.Maybe
 import Data.List
-
+import Debug.Trace
 
 -- Define modes of interaction with the inference
 data InferMode =
@@ -173,7 +173,7 @@ genSpecsAndReport mode span lhs blocks = do
                                                    \ (tag: emptySpec)","")) ]
                           else return ()) specs
          return specs
-      else return []
+      else return specs
 
 -- Match expressions which are array subscripts, returning Just of their
 -- index expressions, else Nothing
@@ -214,9 +214,9 @@ perBlockInfer mode b@(F.BlStatement ann span@(FU.SrcSpan lp up) _ stmnt)
                            else return []
            -- Not an assign we are interested in
            _ -> return [])
-    if mode == Synth
+    if mode == Synth && not (null specs)
       then
-        let specComment = Synth.formatSpec (Just "!= ") ?nameMap (span, Left (concat specs))
+        let specComment = Synth.formatSpec (Just (tabs ++ "!= ")) ?nameMap (span, Left (concat specs))
             tabs  = take (FU.posColumn lp  - 1) (repeat ' ')
             loc   = fst $ O.srcSpanToSrcLocs span
             span' = FU.SrcSpan (lp {FU.posColumn = 0}) (lp {FU.posColumn = 0})

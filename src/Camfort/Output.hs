@@ -154,9 +154,10 @@ refactoringForPar inp cursor =
     outputComments inp cursor e@(F.BlComment ann span comment) = return $
        if (pRefactored ann)
          then    let (lb, ub) = srcSpanToSrcLocs span
-                     lb' = leftOne lb
+                     lb'      = leftOne lb
                      (p0, _)  = takeBounds (cursor, lb') inp
-                 in (p0 ++ comment ++ "\n", ub, True)
+                     nl       = if comment == [] then "" else "\n"
+                 in (p0 ++ comment ++ nl, ub, True)
          else ("", cursor, False)
       where leftOne (SrcLoc f l c) = SrcLoc f (l-1) (c-1)
     outputComments _ _ _ = return ("", cursor, False)
