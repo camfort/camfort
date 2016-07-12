@@ -180,49 +180,39 @@ addProcedure rec name rname args body subprogs = do
         maybe (VarCol 1) fst $ lookupWithoutSrcSpan v uenv
           where v = FA.varName ve
 
--- STUB!
-updateUnitEnv :: FA.Analysis (UnitAnnotation A) -> State UnitEnv ()
-updateUnitEnv _ = return ()
-
-{- OLD RELEVANT CODE
-
-inferDecl proc decl@(Decl a s d typ) =
-      do let BaseType _ _ attrs _ _ = arrayElementType typ
-         units <- sequence $ concatMap extractUnit attrs
-         mapM_ (\(e1, e2, multiplier) -> processVar units proc (e1, e2) typ) d
-         return $ decl
-
-inferDecl proc x@(MeasureUnitDef a s d) =
-   do mapM learnDerivedUnit d
-      return x
-     where
-        learnDerivedUnit (name, spec) =
-          do denv <- gets derivedUnitEnv
-             when (isJust $ lookup name denv) $ error "Redeclared unit of measure"
-             unit <- convertUnit spec
-             denv <- gets derivedUnitEnv
-             when (isJust $ lookup name denv) $ error "Recursive unit-of-measure definition"
-             derivedUnitEnv << (name, unit)
--}
-
+-- Check units per block
 perBlock :: Params
          => F.Block (FA.Analysis (UnitAnnotation A))
          -> State UnitEnv (F.Block (FA.Analysis (UnitAnnotation A)))
 perBlock b@(F.BlComment ann span _) = do
-    updateUnitEnv ann
+
+    --D.traceM $ "IN BLOCK - " ++ show span ++ " -- " ++ (dbgUnitAnnotation (FA.prevAnnotation ann))
+
     case (unitSpec (FA.prevAnnotation ann), unitBlock (FA.prevAnnotation ann)) of
+      -- Found a unit comment associated to a block
       (Just (Parser.UnitAssignment var unitsAST), Just block) -> do
-         D.traceM $ "IN BLOCK - " ++ show span ++ " -- " ++ (dbgUnitAnnotation (FA.prevAnnotation ann))
          let units = toUnitInfo unitsAST
          unitsConverted <- convertUnit units
          case block of
               bl@(F.BlStatement ann span _ (F.StDeclaration _ _ _ _ decls)) ->
                 mapM_ (processVar var [unitsConverted]) (getNamesAndInits decls)
               _ -> return ()
+      -- Found a derived unit declaration
+      (Just (Parser.UnitAlias name unitsAST), _) -> do
+         let unitInfo = toUnitInfo unitsAST
+         learnDerivedUnit (name, unitInfo)
       _ -> return ()
     return b
 
   where
+    learnDerivedUnit (name, spec) =
+          do denv <- gets derivedUnitEnv
+             when (isJust $ lookup name denv) $ error "Redeclared unit of measure"
+             unit <- convertUnit spec
+             denv <- gets derivedUnitEnv
+             when (isJust $ lookup name denv) $ error "Recursive unit-of-measure definition"
+             derivedUnitEnv << (name, unit)
+
     realName v = v `fromMaybe` (v `M.lookup` ?nameMap)
     getNamesAndInits x =
         [(FA.varName e, i, s) | (F.DeclVariable _ _ e@(F.ExpValue _ s (F.ValVariable _)) _ i) <-
