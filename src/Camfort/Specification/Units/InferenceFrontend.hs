@@ -84,13 +84,11 @@ onPrev f ann = ann { FA.prevAnnotation = f (FA.prevAnnotation ann) }
 -- Instances for embedding parsed specifications into the AST
 instance ASTEmbeddable A1 Parser.UnitStatement where
   annotateWithAST ann ast =
-  --  "DOING ANNOTATE" `D.trace`
     onPrev (\ann -> ann { unitSpec = Just ast }) ann
 
 -- Link annotaiton comments to declaration statements
 instance Linkable A1 where
   link ann (b@(F.BlStatement _ _ _ (F.StDeclaration {}))) =
-   --  "DOING LINK" `D.trace`
       onPrev (\ann -> ann { unitBlock = Just b }) ann
   link ann b = ann
 
@@ -161,7 +159,6 @@ addProcedure :: Params
     -> State UnitEnv ()
 addProcedure rec name rname args body span = do
     -- Do just the declarations first
-    D.traceShowM (rname, length args)
     mapM_ perStatement [s | s@(F.StDeclaration {}) <- universeBi body :: [F.Statement A1]]
     --descendBiM perBlock body
     uenv <- gets varColEnv
@@ -175,8 +172,7 @@ addProcedure rec name rname args body span = do
                    Nothing -> return Nothing
 
     let argVars = fromMaybe [] (fmap (map (lookupUnitByName uenv) . F.aStrip) args)
-    D.traceShowM ("argVars ", argVars)
-    D.traceShowM ("resultVar ", resultVar)
+
     procedureEnv << (name, (resultVar, argVars))
     descendBiM perBlock body
     if rec
@@ -194,7 +190,7 @@ addProcedure rec name rname args body span = do
     return ()
   where
     lookupUnitByName uenv ve@(F.ExpValue _ _ (F.ValVariable _)) =
-        let y = maybe (VarCol 1) fst $ lookupWithoutSrcSpan v uenv in ("got pvar " ++ show y) `D.trace` y
+        maybe (VarCol 1) fst $ lookupWithoutSrcSpan v uenv
           where v = FA.varName ve
 
 
@@ -203,8 +199,6 @@ perBlock :: Params
          => F.Block A1
          -> State UnitEnv (F.Block A1)
 perBlock b@(F.BlComment ann span _) = do
-
-    --D.traceM $ "IN BLOCK - " ++ show span ++ " -- " ++ (dbgUnitAnnotation (FA.prevAnnotation ann))
 
     case (unitSpec (FA.prevAnnotation ann), unitBlock (FA.prevAnnotation ann)) of
       -- Found a unit comment associated to a block
@@ -326,7 +320,6 @@ perStatement (F.StDeclaration _ span spec atr decls) = do
               <- (universeBi (F.aStrip x) :: [F.Declarator A1])]
 
 perStatement (F.StExpressionAssign _ span e1 e2) = do
-    D.traceM $ "assign " ++ show span
     uv1 <- perExpr e1
     uv2 <- perExpr e2
     mustEqual False uv1 uv2
@@ -418,16 +411,12 @@ addInterproceduralConstraints x =
   do
     cs <- gets calls
     penv <- gets procedureEnv
-    -- D.traceM $ " calls " ++ show cs
-    -- D.traceM $ " penv " ++ show penv
     mapM_ (addCall penv) cs
   where
     addCall penv (name, (result, args)) =
       do case lookup name penv of
-           Just (r, as) ->  --("looking up call to " ++ show name ++ " with r = " ++ show result ++ " args = " ++ show args)
-                            -- `D.trace`
-                              let (r1, r2) = decodeResult result r
-                              in handleArgs (args ++ r1) (as ++ r2)
+           Just (r, as) -> let (r1, r2) = decodeResult result r
+                           in handleArgs (args ++ r1) (as ++ r2)
            Nothing      -> return ()
 
     handleArgs actualVars dummyVars =
@@ -585,7 +574,6 @@ perExpr :: Params => F.Expression A1 -> State UnitEnv VarCol
 perExpr e@(F.ExpValue _ span (F.ValVariable _)) = do
     let v = FA.varName e
     uenv <- gets varColEnv
-    --D.traceM $ "looking up " ++ v  ++ " at " ++ show span
     case lookupWithoutSrcSpan v uenv of
       Nothing ->
         case lookupWithoutSrcSpanRealName (realName v) uenv of
@@ -625,9 +613,7 @@ perExpr (F.ExpSubscript _ _ e alist) = do
 
 perExpr f@(F.ExpFunctionCall _ span e@(F.ExpValue _ _ (F.ValVariable vReal)) args) = do
     uv <- anyUnits Temporary
-    --D.traceM $ "call at - " ++ show span ++ " - " ++ show (length args)
     argsU <- fromMaybe (return []) (fmap (mapM perArgument . F.aStrip) args)
-    --D.traceM $ "args U " ++ show argsU
     calls << (vReal, (Just uv, argsU))
     return uv
 
