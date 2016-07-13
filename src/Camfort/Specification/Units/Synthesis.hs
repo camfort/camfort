@@ -129,10 +129,13 @@ pprintUnitConstant :: UnitConstant -> String
 pprintUnitConstant (UnitlessC 1) = "1"
 pprintUnitConstant (UnitlessC r) = "1**(" ++ show r ++")"
 pprintUnitConstant (Unitful ucs)  =
-     intercalate " " (map (uncurry pprintPow) ucsPos)
+     numeratorU
   ++ (if not (null ucsNeg') then " / " else "")
-  ++ intercalate " " (map (uncurry pprintPow) ucsNeg')
-  where ucsNeg' = map (\(n, r) -> (n, abs r)) ucsNeg
+  ++ denominatorU
+  where numeratorU = if (null ucsPos) then "1" else numeratorA
+        numeratorA = intercalate " " (map (uncurry pprintPow) ucsPos)
+        denominatorU = intercalate " " (map (uncurry pprintPow) ucsNeg')
+        ucsNeg' = map (\(n, r) -> (n, abs r)) ucsNeg
         (ucsNeg, ucsPos) = break ((>0) . snd) ucs'
         ucs' = sortBy (compare `on` snd) ucs
         pprintPow n 1 = n
