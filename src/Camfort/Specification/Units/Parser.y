@@ -9,6 +9,7 @@ module Camfort.Specification.Units.Parser ( unitParser
 
 import Camfort.Analysis.CommentAnnotator
 import Data.Data
+import Data.List
 import Data.Char (isLetter, isNumber, isAlphaNum, toLower)
 }
 
@@ -21,6 +22,7 @@ import Data.Char (isLetter, isNumber, isAlphaNum, toLower)
  id    { TId $$ }
  one   { TNum "1" }
  num   { TNum $$ }
+ ','   { TComma }
  '-'   { TMinus }
  '**'  { TExponentiation }
  '/'   { TDivision }
@@ -37,9 +39,13 @@ UNIT :: { UnitStatement }
 : unit UEXP VARIABLE_ANNOTATION { UnitAssignment $3 $2 }
 | unit '::' id '=' UEXP { UnitAlias $3 $5 }
 
-VARIABLE_ANNOTATION :: { Maybe String }
-: '::' id { Just $2 }
+VARIABLE_ANNOTATION :: { Maybe [String] }
+: '::' IDS { Just $2 }
 | {-EMPTY-} { Nothing }
+
+IDS :: { [String] }
+: id ',' IDS   { $1 : $3 }
+| id           { [$1] }
 
 UEXP :: { UnitOfMeasure }
 : UEXP_LEVEL1   { $1 }
@@ -49,7 +55,7 @@ UEXP :: { UnitOfMeasure }
 
 UEXP_LEVEL1 :: { UnitOfMeasure }
 : UEXP_LEVEL1 UEXP_LEVEL2             { UnitProduct $1 $2 }
-| UEXP_LEVEL1 '/' UEXP_LEVEL2         { UnitQuotient $1 $3 }
+| UEXP '/' UEXP_LEVEL2         { UnitQuotient $1 $3 }
 | UEXP_LEVEL2                         { $1 }
 
 UEXP_LEVEL2 :: { UnitOfMeasure }
@@ -73,12 +79,12 @@ NUM :: { String }
 {
 
 data UnitStatement =
-   UnitAssignment (Maybe String) UnitOfMeasure
+   UnitAssignment (Maybe [String]) UnitOfMeasure
  | UnitAlias String UnitOfMeasure
   deriving Data
 
 instance Show UnitStatement where
-  show (UnitAssignment (Just s) uom) = "= unit (" ++ show uom ++ ") :: " ++ s
+  show (UnitAssignment (Just ss) uom) = "= unit (" ++ show uom ++ ") :: " ++ (intercalate "," ss)
   show (UnitAssignment Nothing uom) = "= unit (" ++ show uom ++ ")"
   show (UnitAlias s uom) = "= unit :: " ++ s ++ " = " ++ show uom
 
@@ -108,6 +114,7 @@ instance Show UnitPower where
 
 data Token =
    TUnit
+ | TComma
  | TDoubleColon
  | TExponentiation
  | TDivision
@@ -130,10 +137,14 @@ addToTokens tok rest = do
 
 lexer' :: String -> Either AnnotationParseError [ Token ]
 lexer' [] = Right []
+lexer' ['\n']  = Right []
+lexer' ['\r', '\n']  = Right []
+lexer' ['\r']  = Right [] -- windows
 lexer' (' ':xs) = lexer' xs
 lexer' ('\t':xs) = lexer' xs
 lexer' (':':':':xs) = addToTokens TDoubleColon xs
 lexer' ('*':'*':xs) = addToTokens TExponentiation xs
+lexer' (',':xs) = addToTokens TComma xs
 lexer' ('/':xs) = addToTokens TDivision xs
 lexer' ('-':xs) = addToTokens TMinus xs
 lexer' ('=':xs) = addToTokens TEqual xs
@@ -142,12 +153,11 @@ lexer' (')':xs) = addToTokens TRightPar xs
 lexer' (x:xs)
  | isLetter x = aux (\c -> isAlphaNum c || c `elem` ['\'','_','-']) TId
  | isNumber x = aux isNumber TNum
- | otherwise = Left NotAnnotation
+ | otherwise = failWith $ "Not valid unit syntax at " ++ show (x:xs)
  where
    aux p cons =
      let (target, rest) = span p xs
      in lexer' rest >>= (\tokens -> return $ cons (x:target) : tokens)
-lexer' _ = Left NotAnnotation
 
 unitParser :: String -> Either AnnotationParseError UnitStatement
 unitParser src = do
