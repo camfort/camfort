@@ -60,7 +60,6 @@ import Camfort.Specification.Units.Debug
 import Camfort.Specification.Units.Environment
 import Camfort.Specification.Units.InferenceBackend
 import Camfort.Specification.Units.Solve
-import Camfort.Specification.Units.SyntaxConversion
 import qualified Camfort.Specification.Units.Parser as Parser
 import Camfort.Transformation.Syntax
 
@@ -200,15 +199,15 @@ perBlock :: Params
          => F.Block A1
          -> State UnitEnv (F.Block A1)
 perBlock b@(F.BlComment ann span _) = do
-
     case (unitSpec (FA.prevAnnotation ann), unitBlock (FA.prevAnnotation ann)) of
       -- Found a unit comment associated to a block
-      (Just (Parser.UnitAssignment var unitsAST), Just block) -> do
+      (Just (Parser.UnitAssignment (Just vars) unitsAST), Just block) -> do
          let units = toUnitInfo unitsAST
          unitsConverted <- convertUnit units
          case block of
               bl@(F.BlStatement ann span _ (F.StDeclaration _ _ _ _ decls)) ->
-                mapM_ (processVar' var [unitsConverted]) (getNamesAndInits decls)
+                flip mapM_ vars (\var -> 
+                  mapM_ (processVar' (Just var) [unitsConverted]) (getNamesAndInits decls))
               _ -> return ()
       -- Found a derived unit declaration
       (Just (Parser.UnitAlias name unitsAST), _) -> do

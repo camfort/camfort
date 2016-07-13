@@ -38,7 +38,6 @@ import qualified Language.Fortran.Util.Position as FU
 import qualified Camfort.Output as O (srcSpanToSrcLocs)
 import Camfort.Analysis.Annotations hiding (Unitless)
 import Camfort.Specification.Units.Environment
-import Camfort.Specification.Units.SyntaxConversion
 
 -- *************************************
 --   Insert unit declarations into code

@@ -44,7 +44,6 @@ import Camfort.Transformation.EquivalenceElim
 import Camfort.Transformation.DerivedTypeIntro
 
 import qualified Camfort.Specification.Units as LU
-import Camfort.Specification.Units.SyntaxConversion
 import Camfort.Specification.Units.Environment
 import Camfort.Specification.Units.Solve
 

@@ -46,7 +46,6 @@ import Control.Monad
 
 import Camfort.Analysis.Annotations hiding (Unitless)
 import Camfort.Specification.Units.Environment
-import Camfort.Specification.Units.SyntaxConversion
 import Camfort.Transformation.Syntax
 
 import qualified Language.Fortran.AST as F

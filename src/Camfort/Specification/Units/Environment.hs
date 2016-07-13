@@ -30,11 +30,13 @@ import qualified Language.Fortran.Analysis as FA
 import qualified Language.Fortran.Util.Position as FU
 
 import Camfort.Specification.Units.Parser
+import qualified Camfort.Specification.Units.Parser as P
 
 import Data.Char
 import Data.Data
 import Data.List
 import Data.Matrix
+import Data.Ratio
 
 data UnitInfo
   = Parametric (String, Int)
@@ -192,6 +194,24 @@ convertUnit (UnitMul u1 u2)  = do
 convertUnit (UnitPow u r) = do
    u' <- convertUnit u
    return $ unitScalarMult (toRational r) u'
+
+-- Convert parser units to UnitInfo
+
+toUnitInfo :: UnitOfMeasure -> UnitInfo
+toUnitInfo (UnitProduct u1 u2) =
+    UnitMul (toUnitInfo u1) (toUnitInfo u2)
+toUnitInfo (UnitQuotient u1 u2) =
+    UnitMul (toUnitInfo u1) (UnitPow (toUnitInfo u2) (-1))
+toUnitInfo (UnitExponentiation u1 p) =
+    UnitPow (toUnitInfo u1) (toDouble p)
+  where
+    toDouble :: UnitPower -> Double
+    toDouble (UnitPowerInteger i) = fromInteger i
+    toDouble (UnitPowerRational x y) = fromRational (x % y)
+toUnitInfo (UnitBasic str) =
+    UnitName str
+toUnitInfo (P.Unitless) =
+    UnitlessI
 
 -- ******************
 -- Helpers

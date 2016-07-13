@@ -66,8 +66,7 @@ executable camfort
                         Camfort.Specification.Units.Parser
                         Camfort.Specification.Units.Solve
                         Camfort.Specification.Units.SolveHMatrix
-                        Camfort.Specification.Units.Strip			
-                        Camfort.Specification.Units.SyntaxConversion
+                        Camfort.Specification.Units.Strip
                         Camfort.Specification.Units.Synthesis
                         Camfort.Transformation.CommonBlockElim
                         Camfort.Transformation.CommonBlockElimToCalls
@@ -105,7 +104,6 @@ executable camfort
                         directory >= 1.2,
                         language-fortran >= 0.5.1,
                         transformers >= 0.4,
-                        vector >= 0.1,
                         GenericPretty >= 1.2,
                         QuickCheck >= 2.8,
                         fortran-src,
@@ -147,8 +145,7 @@ library
                         Camfort.Specification.Units.Parser
                         Camfort.Specification.Units.Solve
                         Camfort.Specification.Units.SolveHMatrix
-                        Camfort.Specification.Units.Strip			
-                        Camfort.Specification.Units.SyntaxConversion
+                        Camfort.Specification.Units.Strip
                         Camfort.Specification.Units.Synthesis
                         Camfort.Transformation.CommonBlockElim
                         Camfort.Transformation.CommonBlockElimToCalls

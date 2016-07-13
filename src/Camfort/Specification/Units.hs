@@ -60,7 +60,6 @@ import Camfort.Specification.Units.InferenceFrontend
 import qualified Camfort.Specification.Units.Synthesis as US
 import Camfort.Specification.Units.Strip
 
-import Camfort.Specification.Units.SyntaxConversion
 -- Provides the types and data accessors used in this module
 import Camfort.Specification.Units.Environment
 -- Solvers for the Gaussian matrix

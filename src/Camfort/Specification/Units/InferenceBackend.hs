@@ -49,7 +49,6 @@ import Camfort.Analysis.Annotations hiding (Unitless)
 import Camfort.Specification.Units.Debug
 import Camfort.Specification.Units.Environment
 import Camfort.Specification.Units.Solve
-import Camfort.Specification.Units.SyntaxConversion
 import Camfort.Specification.Units.Synthesis
 import Camfort.Transformation.Syntax
 
