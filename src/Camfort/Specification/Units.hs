@@ -115,20 +115,21 @@ inferCriticalVariables (fname, pf) = (r, (fname, pf))
     env = let ?criticals = True
               ?debug     = False
               ?nameMap   = nameMap
-          in  execState infer emptyUnitEnv
+              ?argumentDecls = False
+          in  flip execState emptyUnitEnv
+              (do
+                 doInferUnits . FAB.analyseBBlocks $ pf'
+                 vars <- criticalVars nameMap
+                 case vars of
+                   [] -> report <<++ "No critical variables. Appropriate annotations."
+                   _  -> report <<++ "Critical variables: "
+                                ++ (concat $ intersperse "," vars)
+                 ifDebug debugGaussian)
 
     pf' = FAR.analyseRenames . FA.initAnalysis $ (fmap mkUnitAnnotation pf)
     nameMap = FAR.extractNameMap pf'
     -- Core infer procedure
-    infer :: (?criticals :: Bool, ?debug :: Bool, ?nameMap :: FAR.NameMap) => State UnitEnv ()
-    infer = do
-        doInferUnits . FAB.analyseBBlocks $ pf'
-        vars <- criticalVars nameMap
-        case vars of
-          [] -> do report <<++ "No critical variables. Appropriate annotations."
-          _  -> do report <<++ "Critical variables: "
-                            ++ (concat $ intersperse "," vars)
-        ifDebug debugGaussian
+    --infer :: (Params, ?argumentDecls :: Bool) => State UnitEnv ()
 
 {-| Check units-of-measure for a program -}
 checkUnits ::
@@ -151,6 +152,7 @@ checkUnits (fname, pf) = (r, (fname, pf))
     env = let ?criticals = False
               ?debug     = False
               ?nameMap   = nameMap
+              ?argumentDecls = False
           in execState (doInferUnits pf') emptyUnitEnv
 
 {-| Check and infer units-of-measure for a program
@@ -175,6 +177,7 @@ inferUnits (fname, pf) = (r, (fname, pf))
         let ?criticals = False
             ?debug     = False
             ?nameMap   = nameMap
+            ?argumentDecls = False
         in do
           doInferUnits pf'
           succeeded <- gets success
@@ -209,6 +212,7 @@ synthesiseUnits (fname, pf) = (r, (fname, fmap (prevAnnotation . FA.prevAnnotati
         let ?criticals = False
             ?debug     = False
             ?nameMap   = nameMap
+            ?argumentDecls = False
         in do
           doInferUnits pf'
           succeeded <- gets success

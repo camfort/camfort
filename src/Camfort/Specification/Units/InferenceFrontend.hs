@@ -71,7 +71,8 @@ type Params = (?criticals      :: Bool,
                ?solver         :: Solver,
                ?debug          :: Bool,
                ?assumeLiterals :: AssumeLiterals,
-               ?nameMap        :: FAR.NameMap)
+               ?nameMap        :: FAR.NameMap,
+               ?argumentDecls  :: Bool)
 
 realName :: (?nameMap :: FAR.NameMap) => F.Name -> F.Name
 realName v = v `fromMaybe` (v `M.lookup` ?nameMap)
@@ -99,7 +100,7 @@ doInferUnits ::
 doInferUnits pf = do
     (pf', parserReport) <- return $ runWriter (annotateComments Parser.unitParser pf)
     report <<++ (intercalate "\n" parserReport)
-    descendBiM perProgramUnit pf'
+    let ?argumentDecls = False in descendBiM perProgramUnit pf'
     --
     ifDebug (report <<++ "Finished inferring prog units")
     ifDebug debugGaussian
@@ -159,7 +160,7 @@ addProcedure :: Params
     -> State UnitEnv ()
 addProcedure rec name rname args body span = do
     -- Do just the declarations first
-    mapM_ perStatement [s | s@(F.StDeclaration {}) <- universeBi body :: [F.Statement A1]]
+    let ?argumentDecls = True in mapM_ perStatement [s | s@(F.StDeclaration {}) <- universeBi body :: [F.Statement A1]]
     --descendBiM perBlock body
     uenv <- gets varColEnv
     resultVar <- case rname of
@@ -263,7 +264,7 @@ processVar :: Params
 processVar (Just dvar) units (v, initExpr, span) | dvar == (realName v) = do
       system <- gets linearSystem
       let m = ncols (fst system) + 1
-      unitVarCats <<++ Variable -- TODO: check how much we need this: (unitVarCat v proc)
+      unitVarCats <<++ (if ?argumentDecls then Argument else Variable) -- TODO: check how much we need this: (unitVarCat v proc)
       extendConstraints units
       varColEnv << (VarBinder (v, span), (VarCol m, []))
       uv <- gets varColEnv
