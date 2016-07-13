@@ -97,6 +97,7 @@ executable camfort
                         syz >= 0.2,
                         syb >= 0.4,
                         matrix >=0.2.2,
+                        vector >= 0.1,			
                         hmatrix >= 0.15,
                         mtl >= 2.1,
                         text >= 0.11.2.3,
