@@ -453,14 +453,19 @@ addInterproceduralConstraints x =
            do  let -- Get list of columns with non-zero coefficients to the right of the focus
                    ms = filter (\m -> matrix ! (n, m) /= 0) [m .. ncols matrix]
 
-                   -- Get the list of columns to which the non-zero coeffecients are paired by 'dummyToActual' relation.
+                   -- Get the list of columns to which the non-zero coeffecients
+                   -- are paired by 'dummyToActual' relation.
                    m's = mapMaybe (flip lookup dummyToActual) ms
-                   pairs = --if (length m's == 1) then -- i.e. there is not a direct relationship between variable and return
+                   pairs = --if (length m's == 1) then -- i.e. there is not a
+                           --  --direct relationship between variable and return
                            --    zip ms (repeat (head m's))
                            --else
                                (zip ms m's)
 
-               ifDebug(report <<++ ("ms = " ++ show ms ++ ", m's' = " ++ show m's ++ ", their zip = " ++ show pairs ++ " dA = " ++ show dummyToActual))
+               ifDebug (report <<++ ("ms = " ++ show ms ++ ", m's' = "
+                               ++ show m's
+                               ++ ", their zip = " ++ show pairs
+                               ++ " dA = " ++ show dummyToActual))
 
                if (True) -- length m's == length ms)
                  then do { newRow <- addRow' $ vector !! (n - 1);
@@ -471,7 +476,8 @@ addInterproceduralConstraints x =
              return ()
 
     -- Copy the row
-    handleArgPair matrix n newRow (m, m') = do modify $ liftUnitEnv $ setElem (matrix ! (n, m)) (newRow, m')
+    handleArgPair matrix n newRow (m, m') = do
+        modify $ liftUnitEnv $ setElem (matrix ! (n, m)) (newRow, m')
 
     decodeResult (Just r1) (Just r2) = ([r1], [r2])
     decodeResult Nothing Nothing = ([], [])
