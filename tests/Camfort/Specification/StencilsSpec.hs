@@ -257,13 +257,13 @@ spec =
             \((32,7),(32,26)) \tstencil readOnce, (backward(depth=1, dim=1)) :: a\n\
             \((40,8),(40,62)) \tstencil readOnce, (centered(depth=1, dim=1)) \
                                                 \+ (centered(depth=1, dim=2)) :: a\n\
-            \((41,8),(41,35)) \tstencil readOnce, (reflexive(dim=1))*(reflexive(dim=2)) :: a\n"
+            \((41,8),(41,35)) \tstencil readOnce, (reflexive(dim=1))*(reflexive(dim=2)) :: a"
 
       it "stencil check" $
          (fst $ callAndSummarise (\f p -> (check f p, p)) program)
            `shouldBe`
            "\ntests/Camfort/Specification/Stencils/example2.f\n\
-            \((22,12),(22,44)) \tCorrect.\n"
+            \(24:8,24:53)\tCorrect.\n(32:7,32:26)\tCorrect."
 
     let file = "tests/Camfort/Specification/Stencils/example3.f"
     program <- runIO $ readForparseSrcDir file []
@@ -286,7 +286,7 @@ spec =
          (fst $ callAndSummarise (infer AssignMode) program)
            `shouldBe`
             "\ntests/Camfort/Specification/Stencils/example4.f\n\
-             \((6,8),(6,33)) \tstencil (reflexive(dim=1)) :: x\n"
+             \((6,8),(6,33)) \tstencil (reflexive(dim=1)) :: x"
 
 
 exactSp = Specification . Left . Exact
