@@ -92,7 +92,7 @@ compilerOpts argv =
 -- * Which modes do not require an output
 outputNotRequired = ["count"
                   , "stencils-infer", "stencils-check"
-                  , "units-infer", "units-check", "units-criticals"]
+                  , "units-infer", "units-check", "units-suggest"]
 
 functionality = analyses ++ refactorings
 
@@ -122,8 +122,8 @@ analyses =
      ("stencils-check", (stencilsCheck, "stencil spec checking")),
      ("stencils-infer", (stencilsInfer, "stencil spec inference")),
      ("stencils-synth", (stencilsSynth, "stencil spec synthesis")),
-     ("units-criticals", (unitsCriticals,
-         "calculate the critical variables for units-of-measure inference")),
+     ("units-suggest", (unitsCriticals,
+         "suggest variables to annotate for units-of-measure for maximum coverage")),
      ("units-check", (unitsCheck, "unit-of-measure checking")),
      ("units-infer", (unitsInfer, "unit-of-measure inference")),
      ("units-synth", (unitsSynth, "unit-of-measure synthesise specs.")) ]
