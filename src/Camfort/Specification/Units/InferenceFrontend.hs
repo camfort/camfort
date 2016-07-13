@@ -135,13 +135,15 @@ perProgramUnit p@(F.PUModule _ _ _ body subprogs) = do
 
 perProgramUnit p@(F.PUSubroutine ann span rec name args body subprogs) = do
     resetTemps
-    addProcedure rec name Nothing args body subprogs
+    addProcedure rec name Nothing args body span
+    descendBiM perProgramUnit subprogs
     return p
 
 perProgramUnit p@(F.PUFunction ann span retTy rec name args result
                                                      body subprogs) = do
     resetTemps
-    addProcedure rec name (Just name) args body subprogs
+    addProcedure rec name (Just name) args body span
+    descendBiM perProgramUnit subprogs
     return p
 
 perProgramUnit p = do
@@ -155,22 +157,28 @@ addProcedure :: Params
     -> Maybe F.Name -- Maybe return name
     -> (Maybe (F.AList F.Expression A1)) -- Arguments
     -> [F.Block A1] -- Body
-    -> (Maybe [F.ProgramUnit A1])
+    -> FU.SrcSpan
     -> State UnitEnv ()
-addProcedure rec name rname args body subprogs = do
-    descendBiM perBlock body
-    descendBiM perProgramUnit subprogs
+addProcedure rec name rname args body span = do
+    -- Do just the declarations first
+    D.traceShowM (rname, length args)
+    mapM_ perStatement [s | s@(F.StDeclaration {}) <- universeBi body :: [F.Statement A1]]
+    --descendBiM perBlock body
     uenv <- gets varColEnv
     resultVar <- case rname of
                    Just rname ->
-                     case (lookupWithoutSrcSpan rname uenv) of
+                     case (lookupWithoutSrcSpanRealName rname uenv) of
                         Just (uvar, _) -> return $ Just uvar
                         Nothing        -> do m <- addCol Variable
+                                             varColEnv << (VarBinder (rname, span), (VarCol m, []))
                                              return $ (Just (VarCol m))
                    Nothing -> return Nothing
 
     let argVars = fromMaybe [] (fmap (map (lookupUnitByName uenv) . F.aStrip) args)
+    D.traceShowM ("argVars ", argVars)
+    D.traceShowM ("resultVar ", resultVar)
     procedureEnv << (name, (resultVar, argVars))
+    descendBiM perBlock body
     if rec
       then do descendBiM perBlock body
               return ()
@@ -186,8 +194,9 @@ addProcedure rec name rname args body subprogs = do
     return ()
   where
     lookupUnitByName uenv ve@(F.ExpValue _ _ (F.ValVariable _)) =
-        maybe (VarCol 1) fst $ lookupWithoutSrcSpan v uenv
+        let y = maybe (VarCol 1) fst $ lookupWithoutSrcSpan v uenv in ("got pvar " ++ show y) `D.trace` y
           where v = FA.varName ve
+
 
 -- Check units per block
 perBlock :: Params
@@ -316,7 +325,8 @@ perStatement (F.StDeclaration _ span spec atr decls) = do
            (F.DeclArray _ _ e@(F.ExpValue _ s (F.ValVariable _)) _ _ i)
               <- (universeBi (F.aStrip x) :: [F.Declarator A1])]
 
-perStatement (F.StExpressionAssign _ _ e1 e2) = do
+perStatement (F.StExpressionAssign _ span e1 e2) = do
+    D.traceM $ "assign " ++ show span
     uv1 <- perExpr e1
     uv2 <- perExpr e2
     mustEqual False uv1 uv2
@@ -328,9 +338,16 @@ perStatement (F.StPointerAssign _ _ e1 e2) = do
     mustEqual False uv1 uv2
     return ()
 
-perStatement (F.StCall _ _ e@(F.ExpValue _ _ (F.ValVariable _)) args) = do
+perStatement (F.StCall _ _ e@(F.ExpValue _ _ (F.ValVariable vReal)) args) = do
     uvs <- fromMaybe (return []) (fmap (mapM perArgument . F.aStrip) args)
-    calls << (FA.varName e, (Nothing, uvs))
+    case (lookup (map toUpper vReal) intrinsicsDict) of
+       Just fun -> fun vReal
+       Nothing  -> return ()
+    uv@(VarCol uvn) <- anyUnits Temporary
+    --uvs <- inferArgUnits
+    --let uvs' = justArgUnits args uvs
+    calls << (vReal, (Just uv, uvs))
+
 
 perStatement s = do
     mapM_ perDoSpecification (universeBi s)
@@ -400,14 +417,17 @@ addInterproceduralConstraints ::
 addInterproceduralConstraints x =
   do
     cs <- gets calls
-    mapM_ addCall cs
+    penv <- gets procedureEnv
+    -- D.traceM $ " calls " ++ show cs
+    -- D.traceM $ " penv " ++ show penv
+    mapM_ (addCall penv) cs
   where
-    addCall (name, (result, args)) =
-      do penv <- gets procedureEnv
-         case lookup name penv of
-           Just (r, as) ->
-                             let (r1, r2) = decodeResult result r
-                             in handleArgs (args ++ r1) (as ++ r2)
+    addCall penv (name, (result, args)) =
+      do case lookup name penv of
+           Just (r, as) ->  --("looking up call to " ++ show name ++ " with r = " ++ show result ++ " args = " ++ show args)
+                            -- `D.trace`
+                              let (r1, r2) = decodeResult result r
+                              in handleArgs (args ++ r1) (as ++ r2)
            Nothing      -> return ()
 
     handleArgs actualVars dummyVars =
@@ -562,15 +582,17 @@ perIndex v (F.IxSingle _ _ _ e) = return ()
 -}
 
 perExpr :: Params => F.Expression A1 -> State UnitEnv VarCol
-perExpr e@(F.ExpValue _ _ (F.ValVariable _)) = do
+perExpr e@(F.ExpValue _ span (F.ValVariable _)) = do
     let v = FA.varName e
     uenv <- gets varColEnv
+    --D.traceM $ "looking up " ++ v  ++ " at " ++ show span
     case lookupWithoutSrcSpan v uenv of
-      Nothing -> do
-          uv@(VarCol uvn) <- anyUnits Temporary
-          return uv
-      -- TODO, check what it means when uvs is defined
-      Just (uv, uvs) -> return uv
+      Nothing ->
+        case lookupWithoutSrcSpanRealName (realName v) uenv of
+           Nothing -> do uv@(VarCol uvn) <- anyUnits Temporary
+                         return uv
+           Just (uv, _) -> return uv
+      Just (uv, _) -> return uv
 
 perExpr e@(F.ExpValue _ span v) = perLiteral v
   where
@@ -601,10 +623,12 @@ perExpr (F.ExpSubscript _ _ e alist) = do
     descendBiM (plumb (perIndex (FA.varName e))) alist
     perExpr e
 
-perExpr f@(F.ExpFunctionCall _ _ e@(F.ExpValue _ _ (F.ValVariable _)) args) = do
+perExpr f@(F.ExpFunctionCall _ span e@(F.ExpValue _ _ (F.ValVariable vReal)) args) = do
     uv <- anyUnits Temporary
+    --D.traceM $ "call at - " ++ show span ++ " - " ++ show (length args)
     argsU <- fromMaybe (return []) (fmap (mapM perArgument . F.aStrip) args)
-    calls << (FA.varName e, (Just uv, argsU))
+    --D.traceM $ "args U " ++ show argsU
+    calls << (vReal, (Just uv, argsU))
     return uv
 
 perExpr f@(F.ExpDataRef _ _ e1 e2) = do
@@ -651,3 +675,8 @@ powerUnits uv e =
   do mustEqual False uv (VarCol 1)
      uv <- perExpr e
      mustEqual False uv (VarCol 1)
+
+lookupWithoutSrcSpanRealName :: Params => F.Name -> [(VarBinder, a)] -> Maybe a
+lookupWithoutSrcSpanRealName v env = snd `fmap` find f env
+      where
+        f (VarBinder (w, _), _) = (map toUpper (realName w)) == map toUpper v
