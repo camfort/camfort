@@ -7,16 +7,13 @@
 We recommend using Stack (http://www.haskellstack.org) to build Camfort. 
 
  1. Install Stack following the instructions here: http://docs.haskellstack.org/en/stable/README/#how-to-install
- 2. Checkout the latest version of language-fortran
  3. Checkout the latest version of camfort
- 4. Checkout the latest version of fortran-src
  5. Build using Stack
 
 ```
-git clone git@github.com:camfort/language-fortran.git
 git clone git@github.com:camfort/camfort.git
-git clone git@github.com:camfort/fortran-src.git
 cd camfort
+stack setup
 stack build
 stack install      # install binary
 stack exec camfort # run camfort
