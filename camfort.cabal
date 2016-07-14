@@ -1,7 +1,7 @@
 name:                   camfort
-version:                0.775
+version:                0.800
 synopsis:               CamFort - Cambridge Fortran infrastructure
-description:            CamFort is a tool for the analysis, transformation, and extension of Fortran code base.
+description:            CamFort is a tool for the analysis, transformation, verification of Fortran code.
 
 copyright:              2012-2016 University of Cambridge
 author:                 Dominic Orchard, Matthew Danish, Mistral Contrastin, Andrew Rice, Oleg Oshmyan
@@ -106,7 +106,7 @@ executable camfort
                         transformers >= 0.4,
                         GenericPretty >= 1.2,
                         QuickCheck >= 2.8,
-                        fortran-src,
+                        fortran-src >= 0.1,
                         filepath,
                         fgl >= 5.5,
                         bytestring >= 0.10
@@ -184,7 +184,7 @@ library
                         transformers >= 0.4,
                         vector >= 0.1,
                         GenericPretty >= 1.2,
-                        fortran-src,
+                        fortran-src >= 0.1,
                         filepath,
                         bytestring >= 0.10,
                         fgl >= 5.5

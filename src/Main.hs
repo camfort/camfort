@@ -129,7 +129,7 @@ analyses =
      ("units-synth", (unitsSynth, "unit-of-measure synthesise specs.")) ]
 
 -- * Usage and about information
-version = 0.776
+version = 0.800
 introMsg = "CamFort " ++ show version ++ " - Cambridge Fortran Infrastructure."
 usage = "Usage: camfort <MODE> <INPUT> [OUTPUT] [OPTIONS...]\n"
 menu =
