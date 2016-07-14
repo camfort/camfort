@@ -9,11 +9,13 @@ We recommend using Stack (http://www.haskellstack.org) to build Camfort.
  1. Install Stack following the instructions here: http://docs.haskellstack.org/en/stable/README/#how-to-install
  2. Checkout the latest version of language-fortran
  3. Checkout the latest version of camfort
- 4. Build using Stack
+ 4. Checkout the latest version of fortran-src
+ 5. Build using Stack
 
 ```
 git clone git@github.com:dorchard/language-fortran.git
 git clone git@github.com:camfort/camfort.git
+git clone git@github.com:camfort/fortran-src.git
 cd camfort
 stack build
 stack install      # install binary
@@ -63,30 +65,35 @@ packages in the sandbox and none of ~/.cabal or system Haskell packages.
 ## Usage
 
 ```
-CamFort - Cambridge Fortran Infrastructure.
+CamFort 0.800 - Cambridge Fortran Infrastructure.
 Usage: camfort <MODE> <INPUT> [OUTPUT] [OPTIONS...]
 Refactor functions:
-	common         	 [common block elimination]
-	commonArg      	 [common block elimination (to parameter passing)]
-	equivalence    	 [equivalence elimination]
-	dataType       	 [derived data type introduction]
-	dead           	 [dead-code elimination]
-	units          	 [unit-of-measure inference]
-	removeUnits    	 [unit-of-measure removal]
+	common         	 [common block elimination] 
+	commonArg      	 [common block elimination (to parameter passing)] 
+	equivalence    	 [equivalence elimination] 
+	dataType       	 [derived data type introduction] 
+	dead           	 [dead-code elimination] 
 
 Analysis functions:
-	asts           	 [blank analysis, outputs analysis files with AST information]
-	lva            	 [live-variable analysis]
-	loops          	 [loop information]
-	count          	 [count variable declarations]
-	criticalUnits  	 [calculate the critical variables for units-of-measure inference]
-	ast            	 [print the raw AST -- for development purposes]
+	asts           	 [blank analysis, outputs analysis files with AST information] 
+	lva            	 [live-variable analysis] 
+	loops          	 [loop information] 
+	count          	 [count variable declarations] 
+	ast            	 [print the raw AST -- for development purposes] 
+	stencils-check 	 [stencil spec checking] 
+	stencils-infer 	 [stencil spec inference] 
+	stencils-synth 	 [stencil spec synthesis] 
+	units-suggest  	 [suggest variables to annotate for units-of-measure for maximum coverage] 
+	units-check    	 [unit-of-measure checking] 
+	units-infer    	 [unit-of-measure inference] 
+	units-synth    	 [unit-of-measure synthesise specs.] 
 
 Options:
-  -v, -?    --version            show version number
-  -e FILES  --exclude=FILES      files to exclude (comma separated list, no spaces)
-  -s ID     --units-solver=ID    units-of-measure solver. ID = Custom or LAPACK
-  -l ID     --units-literals=ID  units-of-measure literals mode. ID = Unitless, Poly, or Mixed
+  -v, -?    --version                    show version number
+  -e FILES  --exclude=FILES              files to exclude (comma separated list, no spaces)
+  -s ID     --units-solver=ID            units-of-measure solver. ID = Custom or LAPACK
+  -l ID     --units-literals=ID          units-of-measure literals mode. ID = Unitless, Poly, or Mixed
+  -m ID     --stencil-inference-mode=ID  stencil specification inference mode. ID = Do, Assign, or Both
 ```
 
 ### Troubleshooting
