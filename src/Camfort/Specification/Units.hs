@@ -55,6 +55,7 @@ import Camfort.Analysis.Types
 
 import Camfort.Input
 import Camfort.Specification.Units.Debug
+import Camfort.Specification.Units.Monad
 import Camfort.Specification.Units.InferenceBackend
 import Camfort.Specification.Units.InferenceFrontend
 import qualified Camfort.Specification.Units.Synthesis as US
@@ -173,11 +174,18 @@ inferUnits (fname, pf) = (r, (fname, pf))
     -- Apply inference and synthesis
     (_, env) = runState inferAndSynthesise emptyUnitEnv
     inferAndSynthesise =
-        let ?criticals = False
-            ?debug     = False
-            ?nameMap   = nameMap
+        let ?criticals     = False
+            ?debug         = False
+            ?nameMap       = nameMap
             ?argumentDecls = False
         in do
+          let uOpts          = UnitOpts { uoCriticals      = False
+                                        , uoDebug          = True
+                                        , uoLiterals       = LitPoly
+                                        , uoNameMap        = nameMap
+                                        , uoArgumentDecls  = False }
+          let (_, logs) = execUnitSolver uOpts $ solveProgramFile pf' -- testing
+          D.traceM logs
           doInferUnits pf'
           succeeded <- gets success
           if succeeded

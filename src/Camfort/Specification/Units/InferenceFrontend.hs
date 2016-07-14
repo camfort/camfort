@@ -30,10 +30,8 @@ TODO:
 {-# LANGUAGE ConstraintKinds #-}
 {-# LANGUAGE MultiParamTypeClasses #-}
 {-# LANGUAGE TypeSynonymInstances #-}
-{-# LANGUAGE FlexibleInstances #-}
-{-# LANGUAGE FlexibleContexts #-}
 
-module Camfort.Specification.Units.InferenceFrontend (doInferUnits) where
+module Camfort.Specification.Units.InferenceFrontend (doInferUnits, solveProgramFile) where
 
 import Data.Data
 import Data.Char
@@ -48,6 +46,7 @@ import Data.Label.Monadic hiding (modify)
 import Control.Monad.State.Strict hiding (gets)
 import Control.Monad
 import Control.Monad.Writer.Strict
+import Control.Monad.RWS.Strict hiding (gets)
 import GHC.Prim
 
 import qualified Language.Fortran.AST as F
@@ -63,13 +62,151 @@ import Camfort.Analysis.CommentAnnotator
 import Camfort.Analysis.Annotations hiding (Unitless)
 import Camfort.Analysis.Types
 import Camfort.Specification.Units.Debug
+import Camfort.Specification.Units.Monad
 import Camfort.Specification.Units.Environment
 import Camfort.Specification.Units.InferenceBackend
 import Camfort.Specification.Units.Solve
 import qualified Camfort.Specification.Units.Parser as Parser
+import qualified Camfort.Specification.Units.Parser as P
 import Camfort.Transformation.Syntax
 
 import qualified Debug.Trace as D
+
+--------------------------------------------------
+
+type UA = FA.Analysis (UnitAnnotation A)
+-- Instances for embedding parsed specifications into the AST
+instance ASTEmbeddable UA P.UnitStatement where
+  annotateWithAST ann ast =
+    onPrev (\ann -> ann { unitSpec = Just ast }) ann
+
+-- Link annotation comments to declaration statements
+instance Linkable UA where
+  link ann (b@(F.BlStatement _ _ _ (F.StDeclaration {}))) =
+      onPrev (\ann -> ann { unitBlock = Just b }) ann
+  link ann b = ann
+
+-- Helper for transforming the 'previous' annotation
+onPrev :: (a -> a) -> FA.Analysis a -> FA.Analysis a
+onPrev f ann = ann { FA.prevAnnotation = f (FA.prevAnnotation ann) }
+
+modifyAnnotation :: F.Annotated f => (a -> a) -> f a -> f a
+modifyAnnotation f x = F.setAnnotation (f (F.getAnnotation x)) x
+
+--------------------------------------------------
+
+solveProgramFile :: F.ProgramFile UA -> UnitSolver ()
+solveProgramFile pf = do
+  -- Parse unit annotations found in comments and link to their
+  -- corresponding statements in the AST.
+  let (linkedPF, parserReport) = runWriter $ annotateComments P.unitParser pf
+  -- Send the output of the parser to the logger.
+  mapM_ tell parserReport
+
+  insertGivenUnits linkedPF
+  insertParametricUnits linkedPF
+  insertUndeterminedUnits linkedPF
+  annotPF <- annotateAllVariables linkedPF
+
+  debug <- uoDebug `fmap` ask
+  when debug $ do
+    vum <- usVarUnitMap `fmap` get
+    tell . unlines $ [ "  " ++ show info ++ " :: " ++ n | (n, info) <- M.toList vum ]
+    tell "\n\n"
+    uam <- usUnitAliasMap `fmap` get
+    tell . unlines $ [ "  " ++ n ++ " = " ++ show info | (n, info) <- M.toList uam ]
+
+  return ()
+
+--------------------------------------------------
+
+puName :: F.ProgramUnit UA -> F.Name
+puName pu
+  | F.Named n <- FA.puName pu = n
+  | otherwise               = "_nameless"
+
+varName :: F.Expression UA -> F.Name
+varName = FA.varName
+
+setUnitInfo :: UnitInfo -> F.Expression UA -> F.Expression UA
+setUnitInfo info = modifyAnnotation (onPrev (\ ua -> ua { unitInfo = Just info }))
+
+--------------------------------------------------
+
+-- Seek out any parameters to functions or subroutines that do not
+-- already have units, and insert parametric units for them into the
+-- map of variables to UnitInfo.
+insertParametricUnits :: F.ProgramFile UA -> UnitSolver ()
+insertParametricUnits = mapM_ paramPU . universeBi
+  where
+    paramPU pu = do
+      forM_ indexedParams $ \ (i, param) -> do
+        -- Insert a parametric unit if the variable does not already have a unit.
+        modifyVarUnitMap $ M.insertWith (curry snd) param (Parametric (fname, i))
+      where
+        fname = puName pu
+        indexedParams
+          | F.PUFunction _ _ _ _ _ (Just paList) (Just r) _ _ <- pu = zip [0..] $ varName r : map varName (F.aStrip paList)
+          | F.PUFunction _ _ _ _ _ (Just paList) _ _ _        <- pu = zip [0..] $ fname     : map varName (F.aStrip paList)
+          | F.PUSubroutine _ _ _ _ (Just paList) _ _          <- pu = zip [1..] $ map varName (F.aStrip paList)
+          | otherwise                                               = []
+
+--------------------------------------------------
+
+-- Any remaining variables with unknown units are given unit
+-- Undetermined with a unique name (in this case, taken from the
+-- unique name of the variable as provided by the Renamer).
+insertUndeterminedUnits :: F.ProgramFile UA -> UnitSolver ()
+insertUndeterminedUnits pf = forM_ (nub [ varName v | v@(F.ExpValue _ _ (F.ValVariable _)) <- universeBi pf ]) $ \ vname ->
+  -- Insert an undetermined unit if the variable does not already have a unit.
+  modifyVarUnitMap $ M.insertWith (curry snd) vname (Undetermined vname)
+
+--------------------------------------------------
+
+-- Any units provided by the programmer through comment annotations
+-- will be incorporated into the VarUnitMap.
+insertGivenUnits :: F.ProgramFile UA -> UnitSolver ()
+insertGivenUnits pf = mapM_ checkComment [ b | b@(F.BlComment {}) <- universeBi pf ]
+  where
+    -- Look through each comment that has some kind of unit annotation within it.
+    checkComment :: F.Block UA -> UnitSolver ()
+    checkComment (F.BlComment a _ _)
+      -- Look at unit assignment between variable and spec.
+      | Just (P.UnitAssignment (Just vars) unitsAST) <- mSpec
+      , Just b                                       <- mBlock = insertUnitAssignments (toUnitInfo unitsAST) b vars
+      -- Add a new unit alias.
+      | Just (P.UnitAlias name unitsAST)             <- mSpec  = modifyUnitAliasMap (M.insert name (toUnitInfo unitsAST))
+      | otherwise                                              = return ()
+      where
+        mSpec  = unitSpec (FA.prevAnnotation a)
+        mBlock = unitBlock (FA.prevAnnotation a)
+
+    -- Figure out the unique names of the referenced variables and
+    -- then insert unit info under each of those names.
+    insertUnitAssignments info (F.BlStatement _ _ _ (F.StDeclaration _ _ _ _ decls)) varRealNames = do
+      -- figure out the 'unique name' of the varRealName that was found in the comment
+      -- FIXME: account for module renaming
+      -- FIXME: might be more efficient to allow access to variable renaming environ at this program point
+      nameMap <- uoNameMap `fmap` ask
+      let m = M.fromList [ (varUniqueName, info) | e@(F.ExpValue _ _ (F.ValVariable _)) <- universeBi decls
+                                                 , varRealName <- varRealNames
+                                                 , let varUniqueName = varName e
+                                                 , maybe False (== varRealName) (varUniqueName `M.lookup` nameMap) ]
+      modifyVarUnitMap $ M.unionWith const m
+
+--------------------------------------------------
+
+-- Take the unit information from the VarUnitMap and use it to
+-- annotate every variable expression in the AST.
+annotateAllVariables :: F.ProgramFile UA -> UnitSolver (F.ProgramFile UA)
+annotateAllVariables pf = do
+  varUnitMap <- usVarUnitMap `fmap` get
+  let annotateExp e@(F.ExpValue _ _ (F.ValVariable _))
+        | Just info <- M.lookup (varName e) varUnitMap = setUnitInfo info e
+      annotateExp e = e
+  return $ transformBi annotateExp pf
+
+--------------------------------------------------
 
 type A1 = FA.Analysis (UnitAnnotation A)
 type Params = (?criticals      :: Bool,
@@ -83,20 +220,7 @@ realName :: (?nameMap :: FAR.NameMap) => F.Name -> F.Name
 realName v = v `fromMaybe` (v `M.lookup` ?nameMap)
 plumb f x = do { f x ; return x }
 
--- Helper for transforming the 'previous' annotation
-onPrev :: (a -> a) -> FA.Analysis a -> FA.Analysis a
-onPrev f ann = ann { FA.prevAnnotation = f (FA.prevAnnotation ann) }
 
--- Instances for embedding parsed specifications into the AST
-instance ASTEmbeddable A1 Parser.UnitStatement where
-  annotateWithAST ann ast =
-    onPrev (\ann -> ann { unitSpec = Just ast }) ann
-
--- Link annotaiton comments to declaration statements
-instance Linkable A1 where
-  link ann (b@(F.BlStatement _ _ _ (F.StDeclaration {}))) =
-      onPrev (\ann -> ann { unitBlock = Just b }) ann
-  link ann b = ann
 
 -- Core procedure for inferring units
 doInferUnits ::
