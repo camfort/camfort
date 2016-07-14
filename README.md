@@ -13,7 +13,7 @@ We recommend using Stack (http://www.haskellstack.org) to build Camfort.
  5. Build using Stack
 
 ```
-git clone git@github.com:dorchard/language-fortran.git
+git clone git@github.com:camfort/language-fortran.git
 git clone git@github.com:camfort/camfort.git
 git clone git@github.com:camfort/fortran-src.git
 cd camfort
