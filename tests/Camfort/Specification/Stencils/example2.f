@@ -5,7 +5,7 @@
       parameter (imax = 3, jmax = 3)
       real a(0:imax,0:jmax), b(0:imax,0:jmax), c, x
 
-c= region r1 = centered(depth=1, dim=1)
+c= region :: r1 = centered(depth=1, dim=1)
 
 c some kind of setup
       do 1 i = 0, imax
@@ -18,7 +18,7 @@ c compute mean
       do 3 i = 1, (imax-1)
          do 4 j = 1, (jmax-1)
             if (.true.) then
-c= region r2 = centered(depth=1, dim=2)
+c= region :: r2 = centered(depth=1, dim=2)
                x = a(i-1,j) + a(i,j) + a(i+1,j) + abs(0)
 c= stencil readOnce, (reflexive(dim=1))*r2 + (reflexive(dim=2))*r1 :: a               
              b(i,j) = (x + a(i,j-1) + a(i,j+1)) / 5.0

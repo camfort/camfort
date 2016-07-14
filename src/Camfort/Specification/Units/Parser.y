@@ -55,7 +55,7 @@ UEXP :: { UnitOfMeasure }
 
 UEXP_LEVEL1 :: { UnitOfMeasure }
 : UEXP_LEVEL1 UEXP_LEVEL2             { UnitProduct $1 $2 }
-| UEXP '/' UEXP_LEVEL2         { UnitQuotient $1 $3 }
+| UEXP '/' UEXP_LEVEL2                { UnitQuotient $1 $3 }
 | UEXP_LEVEL2                         { $1 }
 
 UEXP_LEVEL2 :: { UnitOfMeasure }

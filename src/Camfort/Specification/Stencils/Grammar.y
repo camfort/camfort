@@ -53,7 +53,7 @@ SPEC :: { Specification }
 | stencil SPECDEC '::' VARS { SpecDec $2 $4 }
 
 REGIONDEC :: { (String, Region) }
-: region id '=' REGION { ($2, $4) }
+: region '::' id '=' REGION { ($3, $5) }
 
 REGION ::                            { Region }
 : forward  '(' depth '=' num dim '=' num REFL ')' { Forward  (read $5) (read $8) $9}
