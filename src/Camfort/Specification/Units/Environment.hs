@@ -39,14 +39,19 @@ import Data.Matrix
 import Data.Ratio
 
 data UnitInfo
-  = Parametric (String, Int)
+  = Parametric (String, Int)         -- a parameter identified by PU name and argument position
   | ParametricUse (String, Int, Int) -- identify particular instantiation of parameters
-  | UnitName String
-  | Undetermined String
-  | UnitlessI
+  | UnitName String                  -- a unit
+  | Undetermined String              -- variable with undetermined units (assumed to have unique name)
+  | UndeterminedLit Int              -- uniquely identified literal with undetermined units
+  | UnitlessLit                      -- a unitless literal
   | UnitMul UnitInfo UnitInfo
   | UnitPow UnitInfo Double
+  | UnitEq UnitInfo UnitInfo         -- the two units must be compatible
+  | UnitConj [UnitInfo]              -- conjunction
   deriving (Show, Eq, Ord, Data, Typeable)
+
+type Constraints = [UnitInfo] -- should all be UnitEq
 
 type EqualityConstrained = Bool
 
@@ -186,7 +191,7 @@ convertUnit (UnitName u) = do
                   derivedUnitEnv << (u, u1)
                   return $ u1
 convertUnit (Undetermined s) = return $ Unitful []
-convertUnit UnitlessI        = return $ UnitlessC 1
+convertUnit UnitlessLit      = return $ UnitlessC 1
 convertUnit (UnitMul u1 u2)  = do
    u1' <- convertUnit u1
    u2' <- convertUnit u2
@@ -211,7 +216,7 @@ toUnitInfo (UnitExponentiation u1 p) =
 toUnitInfo (UnitBasic str) =
     UnitName str
 toUnitInfo (P.Unitless) =
-    UnitlessI
+    UnitlessLit
 
 -- ******************
 -- Helpers

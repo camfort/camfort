@@ -184,7 +184,7 @@ inferUnits (fname, pf) = (r, (fname, pf))
                                         , uoLiterals       = LitPoly
                                         , uoNameMap        = nameMap
                                         , uoArgumentDecls  = False }
-          let (_, logs) = execUnitSolver uOpts $ solveProgramFile pf' -- testing
+          let (_, logs) = evalUnitSolver uOpts $ solveProgramFile pf' -- testing
           D.traceM logs
           doInferUnits pf'
           succeeded <- gets success

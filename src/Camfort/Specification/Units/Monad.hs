@@ -18,11 +18,12 @@
 
 {- | Defines the monad for the units-of-measure modules -}
 module Camfort.Specification.Units.Monad
-  ( UnitSolver, UnitOpts(..), UnitLogs, UnitState(..), LiteralsOpt(..)
-  , modifyVarUnitMap, modifyUnitAliasMap
+  ( UnitSolver, UnitOpts(..), UnitLogs, UnitState(..), LiteralsOpt(..), UnitException(..)
+  , modifyVarUnitMap, modifyUnitAliasMap, modifyTemplateMap
   , runUnitSolver, evalUnitSolver, execUnitSolver ) where
 
 import Control.Monad.RWS.Strict
+import Control.Monad.Trans.Except
 import Data.Data
 import qualified Data.Map as M
 import qualified Language.Fortran.Analysis.Renaming as FAR
@@ -30,7 +31,12 @@ import qualified Language.Fortran.AST as F
 import Camfort.Specification.Units.Environment (UnitInfo)
 
 -- | The monad
-type UnitSolver a = RWS UnitOpts UnitLogs UnitState a
+type UnitSolver a = ExceptT UnitException (RWS UnitOpts UnitLogs UnitState) a
+
+--------------------------------------------------
+
+data UnitException = UEIncompatible UnitInfo UnitInfo
+  deriving (Show, Data, Eq, Ord)
 
 --------------------------------------------------
 
@@ -50,15 +56,21 @@ type UnitLogs = String
 
 --------------------------------------------------
 
-type VarUnitMap = M.Map F.Name UnitInfo
+type VarUnitMap   = M.Map F.Name UnitInfo
 type UnitAliasMap = M.Map String UnitInfo
+type TemplateMap  = M.Map F.Name [UnitInfo]
+
 data UnitState = UnitState
   { usVarUnitMap   :: VarUnitMap
-  , usUnitAliasMap :: UnitAliasMap }
+  , usUnitAliasMap :: UnitAliasMap
+  , usTemplateMap  :: TemplateMap
+  , usLitNums      :: Int }
   deriving (Show, Data, Eq, Ord)
 
 unitState0 = UnitState { usVarUnitMap   = M.empty
-                       , usUnitAliasMap = M.empty }
+                       , usUnitAliasMap = M.empty
+                       , usTemplateMap  = M.empty
+                       , usLitNums      = 0 }
 
 modifyVarUnitMap :: (VarUnitMap -> VarUnitMap) -> UnitSolver ()
 modifyVarUnitMap f = modify (\ s -> s { usVarUnitMap = f (usVarUnitMap s) })
@@ -66,11 +78,16 @@ modifyVarUnitMap f = modify (\ s -> s { usVarUnitMap = f (usVarUnitMap s) })
 modifyUnitAliasMap :: (UnitAliasMap -> UnitAliasMap) -> UnitSolver ()
 modifyUnitAliasMap f = modify (\ s -> s { usUnitAliasMap = f (usUnitAliasMap s) })
 
+modifyTemplateMap :: (TemplateMap -> TemplateMap) -> UnitSolver ()
+modifyTemplateMap f = modify (\ s -> s { usTemplateMap = f (usTemplateMap s) })
+
 --------------------------------------------------
 
-runUnitSolver :: UnitOpts -> UnitSolver a -> (a, UnitState, UnitLogs)
-runUnitSolver o m = runRWS m o unitState0
-evalUnitSolver :: UnitOpts -> UnitSolver a -> (a, UnitLogs)
-evalUnitSolver o m = evalRWS m o unitState0
-execUnitSolver :: UnitOpts -> UnitSolver a -> (UnitState, UnitLogs)
-execUnitSolver o m = execRWS m o unitState0
+runUnitSolver :: UnitOpts -> UnitSolver a -> (Either UnitException a, UnitState, UnitLogs)
+runUnitSolver o m = runRWS (runExceptT m) o unitState0
+evalUnitSolver :: UnitOpts -> UnitSolver a -> (Either UnitException a, UnitLogs)
+evalUnitSolver o m = (ea, l) where (ea, _, l) = runUnitSolver o m
+execUnitSolver :: UnitOpts -> UnitSolver a -> Either UnitException (UnitState, UnitLogs)
+execUnitSolver o m = case runUnitSolver o m of
+  (Left e, _, _)  -> Left e
+  (Right _, s, l) -> Right (s, l)

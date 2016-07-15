@@ -45,6 +45,7 @@ import Data.Generics.Uniplate.Operations
 import Data.Label.Monadic hiding (modify)
 import Control.Monad.State.Strict hiding (gets)
 import Control.Monad
+import Control.Monad.Trans.Except
 import Control.Monad.Writer.Strict
 import Control.Monad.RWS.Strict hiding (gets)
 import GHC.Prim
@@ -103,10 +104,16 @@ solveProgramFile pf = do
   -- Send the output of the parser to the logger.
   mapM_ tell parserReport
 
-  insertGivenUnits linkedPF
+  insertGivenUnits linkedPF -- also obtains all unit alias definitions
   insertParametricUnits linkedPF
   insertUndeterminedUnits linkedPF
   annotPF <- annotateAllVariables linkedPF
+
+  -- (FIXME: is it necessary?) repeat until fixed point:
+  propPF <- propagateUnits annotPF
+  let consWithoutTemplates = extractConstraints propPF
+  cons <- applyTemplates consWithoutTemplates
+  -- end repeat
 
   debug <- uoDebug `fmap` ask
   when debug $ do
@@ -115,6 +122,7 @@ solveProgramFile pf = do
     tell "\n\n"
     uam <- usUnitAliasMap `fmap` get
     tell . unlines $ [ "  " ++ n ++ " = " ++ show info | (n, info) <- M.toList uam ]
+    tell . unlines $ map (\ (UnitEq u1 u2) -> "  ***Constraint: " ++ show (flattenUnits u1) ++ " === " ++ show (flattenUnits u2) ++ "\n") cons
 
   return ()
 
@@ -128,7 +136,7 @@ puName pu
 varName :: F.Expression UA -> F.Name
 varName = FA.varName
 
-setUnitInfo :: UnitInfo -> F.Expression UA -> F.Expression UA
+setUnitInfo :: F.Annotated f => UnitInfo -> f UA -> f UA
 setUnitInfo info = modifyAnnotation (onPrev (\ ua -> ua { unitInfo = Just info }))
 
 --------------------------------------------------
@@ -206,6 +214,141 @@ annotateAllVariables pf = do
       annotateExp e = e
   return $ transformBi annotateExp pf
 
+--------------------------------------------------
+
+applyTemplates :: Constraints -> UnitSolver Constraints
+-- postcondition: returned constraints lack all Parametric constructors
+applyTemplates cons = do
+  let instances = nub [ (name, i) | ParametricUse (name, _, i) <- universeBi cons ]
+  temps <- foldM substInstance [] instances
+  aliasMap <- usUnitAliasMap `fmap` get
+  let aliases = [ UnitEq (UnitName name) def | (name, def) <- M.toList aliasMap ]
+  return . filter (not . isParametric) $ cons ++ temps ++ aliases
+
+substInstance output (name, callId) = do
+  tmap <- usTemplateMap `fmap` get
+  return . instantiate (name, callId) . (output ++) $ [] `fromMaybe` M.lookup name tmap
+
+instantiate (name, callId) = transformBi $ \ info -> case info of
+  Parametric (name, position) -> ParametricUse (name, position, callId)
+  _                           -> info
+
+extractConstraints :: F.ProgramFile UA -> Constraints
+extractConstraints pf = [ info | info@(UnitEq {}) <- universeBi pf ]
+
+isParametric :: UnitInfo -> Bool
+isParametric info = not (null [ () | Parametric _ <- universeBi info ])
+
+--------------------------------------------------
+
+propagateUnits :: F.ProgramFile UA -> UnitSolver (F.ProgramFile UA)
+-- precondition: all variables have already been annotated
+propagateUnits = transformBiM propagatePU <=< transformBiM propagateStatement <=< transformBiM propagateExp
+
+propagateExp :: F.Expression UA -> UnitSolver (F.Expression UA)
+propagateExp e = case e of
+  F.ExpValue _ _ (F.ValVariable _)       -> return e -- all variables should already be annotated
+  F.ExpValue _ _ (F.ValInteger _)        -> flip setUnitInfo e `fmap` genUndeterminedLit
+  F.ExpValue _ _ (F.ValReal _)           -> flip setUnitInfo e `fmap` genUndeterminedLit
+  F.ExpBinary _ _ F.Multiplication e1 e2 -> setF2 UnitMul (getUnitInfo e1) (getUnitInfo e2)
+  F.ExpBinary _ _ F.Division e1 e2       -> setF2 UnitMul (getUnitInfo e1) (flip UnitPow (-1) `fmap` getUnitInfo e2)
+  F.ExpBinary _ _ F.Addition e1 e2       -> setF2 UnitEq  (getUnitInfo e1) (getUnitInfo e2)
+-- flip maybeSetUnitInfo e `fmap` assertCompatible (getUnitInfo e1) (getUnitInfo e2)
+  F.ExpBinary _ _ F.Subtraction e1 e2    -> setF2 UnitEq  (getUnitInfo e1) (getUnitInfo e2)
+  F.ExpFunctionCall {}                   -> propagateFunctionCall e
+  _                                      -> tell ("propagateExp: unhandled: " ++ show e) >> return e
+  where
+    setF2 f u1 u2 = return $ maybeSetUnitInfoF2 f u1 u2 e
+
+propagateFunctionCall :: F.Expression UA -> UnitSolver (F.Expression UA)
+propagateFunctionCall e@(F.ExpFunctionCall a s f Nothing)                     = do
+  (info, _)     <- callHelper f []
+  return . setUnitInfo info $ F.ExpFunctionCall a s f Nothing
+propagateFunctionCall e@(F.ExpFunctionCall a s f (Just (F.AList a' s' args))) = do
+  (info, args') <- callHelper f args
+  return . setUnitInfo info $ F.ExpFunctionCall a s f (Just (F.AList a' s' args'))
+
+propagateStatement :: F.Statement UA -> UnitSolver (F.Statement UA)
+propagateStatement stmt = case stmt of
+  F.StExpressionAssign _ _ e1 e2               -> do
+    return $ maybeSetUnitInfoF2 UnitEq (getUnitInfo e1) (getUnitInfo e2) stmt
+  F.StCall a s sub (Just (F.AList a' s' args)) -> do
+    (_, args') <- callHelper sub args
+    return $ F.StCall a s sub (Just (F.AList a' s' args'))
+  _                                            -> return stmt
+
+propagatePU :: F.ProgramUnit UA -> UnitSolver (F.ProgramUnit UA)
+propagatePU pu = modifyTemplateMap (M.insert name cons) >> return (setUnitInfo (UnitConj cons) pu)
+  where
+    cons = [ con | con@(UnitEq {}) <- universeBi pu, containsParametric name con ]
+    name = puName pu
+
+containsParametric :: Data from => String -> from -> Bool
+containsParametric name x = not (null [ () | Parametric (name', _) <- universeBi x, name == name' ])
+
+callHelper :: F.Expression UA -> [F.Argument UA] -> UnitSolver (UnitInfo, [F.Argument UA])
+callHelper nexp args = do
+  let name = varName nexp
+  callId <- genCallId
+  let eachArg i arg@(F.Argument _ _ _ e)
+        | Just u <- getUnitInfo e = setUnitInfo (UnitEq u (ParametricUse (name, i, callId))) arg
+        | otherwise               = arg
+  let args' = zipWith eachArg [1..] args
+
+  let info = ParametricUse (name, 0, callId)
+  return (info, args')
+
+genCallId :: UnitSolver Int
+genCallId = do
+  st <- get
+  let callId = usLitNums st
+  put $ st { usLitNums = callId + 1 }
+  return callId
+
+genUndeterminedLit :: UnitSolver UnitInfo
+genUndeterminedLit = do
+  s <- get
+  let i = usLitNums s
+  put $ s { usLitNums = i + 1 }
+  return $ UndeterminedLit i
+
+getUnitInfo :: F.Annotated f => f UA -> Maybe UnitInfo
+getUnitInfo = fmap flattenUnitEq . unitInfo . FA.prevAnnotation . F.getAnnotation
+
+flattenUnitEq :: UnitInfo -> UnitInfo
+flattenUnitEq (UnitEq u _) = u
+flattenUnitEq u            = u
+
+maybeSetUnitInfo :: F.Annotated f => Maybe UnitInfo -> f UA -> f UA
+maybeSetUnitInfo Nothing e = e
+maybeSetUnitInfo (Just u) e = setUnitInfo u e
+
+maybeSetUnitInfoF2 :: F.Annotated f => (a -> b -> UnitInfo) -> Maybe a -> Maybe b -> f UA -> f UA
+maybeSetUnitInfoF2 f (Just u1) (Just u2) e = setUnitInfo (f u1 u2) e
+maybeSetUnitInfoF2 _ _ _ e = e
+
+-- assertCompatible :: Maybe UnitInfo -> Maybe UnitInfo -> UnitSolver (Maybe UnitInfo)
+-- assertCompatible Nothing (Just u)    = return $ Just u
+-- assertCompatible (Just u) Nothing    = return $ Just u
+-- assertCompatible (Just u1) (Just u2) = assertCompatible' u1 u2
+-- assertCompatible _ _                 = return Nothing
+
+-- assertCompatible' u1 u2 = case (u1, u2) of
+--   (UnitName n1, UnitName n2) | n1 == n2 -> return $ Just u1
+--   _ -> throwE (UEIncompatible u1 u2)
+
+
+-- instead, annotate with constraint
+-- x + y means that unit(x) = unit(y)
+-- x = y means that unit(x) = unit(y)
+-- x = f(y) means that unit(x) = unit(f_use,0) and unit(y) = unit(f_use,1)
+
+
+--------------------------------------------------
+
+
+
+--------------------------------------------------
 --------------------------------------------------
 
 type A1 = FA.Analysis (UnitAnnotation A)

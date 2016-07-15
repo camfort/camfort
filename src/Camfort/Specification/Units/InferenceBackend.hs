@@ -30,7 +30,9 @@ TODO:
 {-# LANGUAGE TypeSynonymInstances #-}
 {-# LANGUAGE FlexibleInstances #-}
 
-module Camfort.Specification.Units.InferenceBackend where
+module Camfort.Specification.Units.InferenceBackend
+-- ( rref, rrefMatrices, isInconsistentRREF, dispf, lu, rank, takeRows )
+where
 
 
 import qualified Data.Vector as V
@@ -46,7 +48,9 @@ import Data.Generics.Uniplate.Operations
 import Data.Label.Monadic hiding (modify)
 import Control.Monad.State.Strict hiding (gets)
 import Control.Monad
-
+import Control.Monad.ST
+import Control.Arrow (first, second)
+import qualified Data.Map as M
 import qualified Language.Fortran.Util.Position as FU
 
 import Camfort.Analysis.Annotations hiding (Unitless)
@@ -55,6 +59,180 @@ import Camfort.Specification.Units.Environment
 import Camfort.Specification.Units.Solve
 import Camfort.Specification.Units.Synthesis
 import Camfort.Transformation.Syntax
+import Numeric.LinearAlgebra (
+    atIndex, (<>), (><), rank, (?), toLists, toList, fromLists, fromList, rows, cols,
+    takeRows, takeColumns, dropRows, dropColumns, subMatrix, diag, build, fromBlocks,
+    ident, flatten, lu, dispf
+  )
+import qualified Numeric.LinearAlgebra as H
+import Numeric.LinearAlgebra.Devel (
+    newMatrix, writeMatrix, runSTMatrix
+  )
+import Foreign.Storable (Storable)
+
+--------------------------------------------------
+--------------------------------------------------
+
+-- simplifyConstraints (C poly) = C $ map (second (concatMap flattenUnits)) poly
+simplifyConstraints = map (\ (UnitEq u1 u2) -> (flattenUnits u1, flattenUnits u2))
+
+simplifyUnits :: UnitInfo -> UnitInfo
+simplifyUnits = rewrite rw
+  where
+    rw (UnitMul (UnitMul u1 u2) u3)                          = Just $ UnitMul u1 (UnitMul u2 u3)
+    rw (UnitMul u1 u2) | u1 == u2                            = Just $ UnitPow u1 2
+    rw (UnitPow (UnitPow u1 p1) p2)                          = Just $ UnitPow u1 (p1 * p2)
+    rw (UnitMul (UnitPow u1 p1) (UnitPow u2 p2)) | u1 == u2  = Just $ UnitPow u1 (p1 + p2)
+    rw (UnitPow _ p) | p `approxEq` 0                        = Just UnitlessLit
+    rw (UnitMul UnitlessLit u)                               = Just u
+    rw (UnitMul u UnitlessLit)                               = Just u
+    rw u                                                     = Nothing
+
+flattenUnits :: UnitInfo -> [UnitInfo]
+flattenUnits = map (uncurry UnitPow)
+             . M.toList . M.filter (not . approxEq 0)
+             . M.fromListWith (+)
+             . map (first simplifyUnits)
+             . flatten
+  where
+    flatten (UnitMul u1 u2) = flatten u1 ++ flatten u2
+    flatten (UnitPow u p)   = map (second (p*)) $ flatten u
+    flatten u               = [(u, 1)]
+
+approxEq a b = abs (b - a) < epsilon
+epsilon = 0.001 -- arbitrary
+
+--------------------------------------------------
+
+-- | Returns True iff the given matrix in reduced row echelon form
+-- represents an inconsistent system of linear equations
+isInconsistentRREF a = a @@> (rows a - 1, cols a - 1) == 1 && rank (takeColumns (cols a - 1) (dropRows (rows a - 1) a))== 0
+
+-- | Returns given matrix transformed into Reduced Row Echelon Form
+rref :: H.Matrix Double -> H.Matrix Double
+rref a = snd $ rrefMatrices' a 0 0 []
+
+-- | List of matrices that when multiplied transform input into
+-- Reduced Row Echelon Form
+rrefMatrices :: H.Matrix Double -> [H.Matrix Double]
+rrefMatrices a = fst $ rrefMatrices' a 0 0 []
+
+-- | Single matrix that transforms input into Reduced Row Echelon form
+-- when multiplied to the original.
+rrefMatrix :: H.Matrix Double -> H.Matrix Double
+rrefMatrix a = foldr (<>) (ident (rows a)) . fst $ rrefMatrices' a 0 0 []
+
+-- worker function
+-- invariant: the matrix a is in rref except within the submatrix (j-k,j) to (n,n)
+rrefMatrices' a j k mats
+  -- Base cases:
+  | j - k == n            = (mats, a)
+  | j     == m            = (mats, a)
+
+  -- When we haven't yet found the first non-zero number in the row, but we really need one:
+  | a @@> (j - k, j) == 0 = case findIndex (/= 0) below of
+    -- this column is all 0s below current row, must move onto the next column
+    Nothing -> rrefMatrices' a (j + 1) (k + 1) mats
+    -- we've found a row that has a non-zero element that can be swapped into this row
+    Just i' -> rrefMatrices' (swapMat <> a) j k (swapMat:mats)
+      where i       = j - k + i'
+            swapMat = elemRowSwap n i (j - k)
+
+  -- We have found a non-zero cell at (j - k, j), so transform it into
+  -- a 1 if needed using elemRowMult, and then clear out any lingering
+  -- non-zero values that might appear in the same column, using
+  -- elemRowAdd:
+  | otherwise             = rrefMatrices' a2 (j + 1) k mats2
+  where
+    n     = rows a
+    m     = cols a
+    below = getColumnBelow a (j - k, j)
+
+    -- scale the row if the cell is not already equal to 1
+    erm    = elemRowMult n (j - k) (recip (a @@> (j - k, j)))
+    (a1, mats1) = if a @@> (j - k, j) /= 1 then
+                    (erm <> a, erm:mats)
+                  else (a, mats)
+
+    -- Locate any non-zero values in the same column as (j - k, j) and
+    -- cancel them out. Optimisation: instead of constructing a
+    -- separate elemRowAdd matrix for each cancellation that are then
+    -- multiplied together, simply build a single matrix that cancels
+    -- all of them out at the same time, using the ST Monad.
+    findAdds i m ms = (new <> m, new:ms)
+      where
+        new = runSTMatrix $ do
+          new <- newMatrix 0 n n
+          sequence [ writeMatrix new i' i' 1 | i' <- [0 .. (n - 1)] ]
+          let f i | i >= n            = return ()
+                  | i == j - k        = f (i + 1)
+                  | a @@> (i, j) == 0 = f (i + 1)
+                  | otherwise         = writeMatrix new i (j - k) (- (a @@> (i, j)))
+                                        >> f (i + 1)
+          f 0
+          return new
+    (a2, mats2) = findAdds 0 a1 mats1
+
+-- Get a list of values that occur below (i, j) in the matrix a.
+getColumnBelow a (i, j) = concat . H.toLists $ subMatrix (i, j) (n - i, 1) a
+  where n = rows a
+
+-- 'Elementary row operation' matrices
+elemRowMult n i k = diag (H.fromList (replicate i 1.0 ++ [k] ++ replicate (n - i - 1) 1.0))
+
+
+elemRowAdd :: Int -> Int -> Int -> Double -> H.Matrix Double
+elemRowAdd n i j k = runSTMatrix $ do
+      m <- newMatrix 0 n n
+      sequence [ writeMatrix m i' i' 1 | i' <- [0 .. (n - 1)] ]
+      writeMatrix m i j k
+      return m
+
+elemRowAdd_spec n i j k
+  | i < 0 || i >= n = undefined
+  | j < 0 || j >= n = undefined
+  | otherwise       = build n n f
+  where
+    f (i', j') | i == i' && j == j' = k
+               | i' == j'           = 1
+               | otherwise          = 0
+
+elemRowSwap n i j
+  | i == j          = ident n
+  | i > j           = elemRowSwap n j i
+  | otherwise       = extractRows ([0..i-1] ++ [j] ++ [i+1..j-1] ++ [i] ++ [j+1..n-1]) $ ident n
+
+
+--------------------------------------------------
+
+-- Worker functions:
+
+toDouble :: Rational -> Double
+toDouble = fromRational
+
+fromDouble :: Double -> Rational
+fromDouble = toRational
+
+findInconsistentRows :: H.Matrix Double -> H.Matrix Double -> [Int]
+findInconsistentRows coA augA = [0..(rows augA - 1)] \\ consistent
+  where
+    consistent = head (filter (tryRows coA augA) (pset ( [0..(rows augA - 1)])) ++ [[]])
+
+    -- Rouché–Capelli theorem is that if the rank of the coefficient
+    -- matrix is not equal to the rank of the augmented matrix then
+    -- the system of linear equations is inconsistent.
+    tryRows coA augA ns = (rank coA' == rank augA')
+      where
+        coA'  = extractRows ns coA
+        augA' = extractRows ns augA
+
+    pset = filterM (const [True, False])
+
+extractRows = flip (?) -- hmatrix 0.17 changed interface
+m @@> i = m `atIndex` i
+
+--------------------------------------------------
+--------------------------------------------------
 
 -- *************************************
 --   Gaussian Elimination (Main)
