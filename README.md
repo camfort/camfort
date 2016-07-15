@@ -19,6 +19,12 @@ stack install      # install binary
 stack exec camfort # run camfort
 ```
 
+If you want to build a version for profiling then you can use
+
+```
+stack build --enable-executable-profiling --enable-library-profiling --ghc-options="-fprof-auto -rtsopts"
+```
+
 Please note that at this time we have been unable to compile Camfort on Windows due to a problem with the hmatrix dependency. 
 
 ### Using Cabal
