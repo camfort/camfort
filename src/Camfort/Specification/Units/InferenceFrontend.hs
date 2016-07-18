@@ -280,11 +280,10 @@ propagateExp e = fmap uoLiterals ask >>= \ lm -> case e of
   F.ExpValue _ _ (F.ValReal _)           -> flip setUnitInfo e `fmap` genUndeterminedLit
   F.ExpBinary _ _ F.Multiplication e1 e2 -> setF2 UnitMul (getUnitInfoMul lm e1) (getUnitInfoMul lm e2)
   F.ExpBinary _ _ F.Division e1 e2       -> setF2 UnitMul (getUnitInfoMul lm e1) (flip UnitPow (-1) `fmap` (getUnitInfoMul lm e2))
-  F.ExpBinary _ _ F.Addition e1 e2       -> setF2 UnitEq  (getUnitInfo e1) (getUnitInfo e2)
-  F.ExpBinary _ _ F.Subtraction e1 e2    -> setF2 UnitEq  (getUnitInfo e1) (getUnitInfo e2)
   F.ExpBinary _ _ F.Exponentiation e1 e2 -> setF2 UnitPow (getUnitInfo e1) (constantExpression e2)
+  F.ExpBinary _ _ o e1 e2 | isOp AddOp o -> setF2 UnitEq  (getUnitInfo e1) (getUnitInfo e2)
+                          | isOp RelOp o -> setF2 UnitEq  (getUnitInfo e1) (getUnitInfo e2)
   F.ExpFunctionCall {}                   -> propagateFunctionCall e
-  -- FIXME: relational ops
   _                                      -> tell ("propagateExp: unhandled: " ++ show e) >> return e
   where
     setF2 f u1 u2 = return $ maybeSetUnitInfoF2 f u1 u2 e
@@ -383,6 +382,27 @@ constantExpression _                                 = Nothing
 -- x = y means that unit(x) = unit(y)
 -- x = f(y) means that unit(x) = unit(f_use,0) and unit(y) = unit(f_use,1)
 
+isOp op = (== op) . binOpKind
+
+data BinOpKind = AddOp | MulOp | DivOp | PowerOp | LogicOp | RelOp deriving Eq
+binOpKind :: F.BinaryOp -> BinOpKind
+binOpKind F.Addition         = AddOp
+binOpKind F.Subtraction      = AddOp
+binOpKind F.Multiplication   = MulOp
+binOpKind F.Division         = DivOp
+binOpKind F.Exponentiation   = PowerOp
+binOpKind F.Concatenation    = AddOp
+binOpKind F.GT               = RelOp
+binOpKind F.GTE              = RelOp
+binOpKind F.LT               = RelOp
+binOpKind F.LTE              = RelOp
+binOpKind F.EQ               = RelOp
+binOpKind F.NE               = RelOp
+binOpKind F.Or               = LogicOp
+binOpKind F.And              = LogicOp
+binOpKind F.Equivalent       = RelOp
+binOpKind F.NotEquivalent    = RelOp
+binOpKind (F.BinCustom _)    = RelOp
 
 
 --------------------------------------------------
@@ -802,26 +822,6 @@ addInterproceduralConstraints x =
     decodeResult Nothing Nothing = ([], [])
     decodeResult (Just _) Nothing = error "Subroutine used as a function!"
     decodeResult Nothing (Just _) = error "Function used as a subroutine!"
-
-data BinOpKind = AddOp | MulOp | DivOp | PowerOp | LogicOp | RelOp
-binOpKind :: F.BinaryOp -> BinOpKind
-binOpKind F.Addition         = AddOp
-binOpKind F.Subtraction      = AddOp
-binOpKind F.Multiplication   = MulOp
-binOpKind F.Division         = DivOp
-binOpKind F.Exponentiation   = PowerOp
-binOpKind F.Concatenation    = AddOp
-binOpKind F.GT               = RelOp
-binOpKind F.GTE              = RelOp
-binOpKind F.LT               = RelOp
-binOpKind F.LTE              = RelOp
-binOpKind F.EQ               = RelOp
-binOpKind F.NE               = RelOp
-binOpKind F.Or               = LogicOp
-binOpKind F.And              = LogicOp
-binOpKind F.Equivalent       = RelOp
-binOpKind F.NotEquivalent    = RelOp
-binOpKind (F.BinCustom _)    = RelOp
 
 (<**>) :: Maybe a -> Maybe a -> Maybe a
 Nothing <**> x = x
