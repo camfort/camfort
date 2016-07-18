@@ -101,10 +101,7 @@ removeUnits (fname, x) = undefined
 type Params = (?solver :: Solver, ?assumeLiterals :: AssumeLiterals)
 
 {-| Infer one possible set of critical variables for a program -}
-inferCriticalVariables ::
-       Params
-    => (Filename, F.ProgramFile Annotation)
-    -> (Report, (Filename, F.ProgramFile Annotation))
+inferCriticalVariables :: (Filename, F.ProgramFile Annotation) -> (Report, (Filename, F.ProgramFile Annotation))
 inferCriticalVariables (fname, pf)
   | Right vars <- eVars = (okReport vars, (fname, pf))
   | Left exc   <- eVars = (errReport exc, (fname, pf))
@@ -119,8 +116,8 @@ inferCriticalVariables (fname, pf)
 
     errReport exc = fname ++ ": " ++ show exc ++ "\n" ++ logs
 
-    uOpts = UnitOpts { uoCriticals      = True
-                     , uoDebug          = False
+    -- run inference
+    uOpts = UnitOpts { uoDebug          = False
                      , uoLiterals       = LitMixed
                      , uoNameMap        = nameMap
                      , uoArgumentDecls  = False }
@@ -177,8 +174,7 @@ inferUnits (fname, pf) = (r, (fname, pf))
             ?nameMap       = nameMap
             ?argumentDecls = False
         in do
-          let uOpts          = UnitOpts { uoCriticals      = False
-                                        , uoDebug          = True
+          let uOpts          = UnitOpts { uoDebug          = True
                                         , uoLiterals       = LitMixed
                                         , uoNameMap        = nameMap
                                         , uoArgumentDecls  = False }

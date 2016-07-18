@@ -43,8 +43,7 @@ data UnitException = UEIncompatible UnitInfo UnitInfo
 data LiteralsOpt = LitPoly | LitUnitless | LitMixed deriving (Show, Read, Eq, Ord, Data)
 
 data UnitOpts = UnitOpts
-  { uoCriticals      :: Bool
-  , uoDebug          :: Bool
+  { uoDebug          :: Bool
   , uoLiterals       :: LiteralsOpt
   , uoNameMap        :: FAR.NameMap
   , uoArgumentDecls  :: Bool }
