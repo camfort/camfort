@@ -118,13 +118,6 @@ epsilon = 0.001 -- arbitrary
 
 --------------------------------------------------
 
-testcons = [ UnitEq (UnitName "kg") (UnitName "m")
-           , UnitEq (Determined "x") (UnitName "m")
-           , UnitEq (Determined "y") (UnitName "kg")]
-
-
-testex1 = [UnitEq (UnitMul (UnitMul (UnitName "kg") (UnitPow (UnitName "m") 2.0)) (UnitPow (UnitPow (UnitName "s") 2.0) (-1.0))) (UnitMul (UnitMul (UnitName "kg") (UnitMul (UnitName "m") (UnitPow (UnitPow (UnitName "s") 2.0) (-1.0)))) (UnitName "m")),UnitEq (UnitMul (UnitMul (UnitName "kg") (UnitPow (UnitName "m") 2.0)) (UnitPow (UnitPow (UnitName "s") 2.0) (-1.0))) (UnitMul (UnitMul UnitlessLit (UnitName "kg")) (ParametricUse ("energy_square9",0,21))),UnitEq (UnitName "speed") (ParametricUse ("energy_square9",1,21)),UnitEq (UnitMul (UnitMul (UnitName "kg") (UnitPow (UnitName "m") 2.0)) (UnitPow (UnitPow (UnitName "s") 2.0) (-1.0))) (UnitMul (UnitMul (UnitName "kg") (UnitPow (UnitName "m") 2.0)) (UnitPow (UnitPow (UnitName "s") 2.0) (-1.0))),UnitEq (UnitMul (UnitMul (UnitName "kg") (UnitPow (UnitName "m") 2.0)) (UnitPow (UnitPow (UnitName "s") 2.0) (-1.0))) (UnitMul (UnitMul (UnitName "kg") (UnitPow (UnitName "m") 2.0)) (UnitPow (UnitPow (UnitName "s") 2.0) (-1.0))),UnitEq (Determined "energy_gravity2") (UnitMul (UnitName "m") (UnitPow (UnitPow (UnitName "s") 2.0) (-1.0))),UnitEq (Determined "energy_half5") UnitlessLit,UnitEq (Determined "energy_height3") (UnitName "m"),UnitEq (Determined "energy_kinetic_energy7") (UnitMul (UnitMul (UnitName "kg") (UnitPow (UnitName "m") 2.0)) (UnitPow (UnitPow (UnitName "s") 2.0) (-1.0))),UnitEq (Determined "energy_mass1") (UnitName "kg"),UnitEq (Determined "energy_potential_energy4") (UnitMul (UnitMul (UnitName "kg") (UnitPow (UnitName "m") 2.0)) (UnitPow (UnitPow (UnitName "s") 2.0) (-1.0))),UnitEq (Determined "energy_total_energy8") (UnitMul (UnitMul (UnitName "kg") (UnitPow (UnitName "m") 2.0)) (UnitPow (UnitPow (UnitName "s") 2.0) (-1.0))),UnitEq (Determined "energy_velocity6") (UnitName "speed"),UnitEq (ParametricUse ("energy_square9",0,21)) (UnitMul (ParametricUse ("energy_square9",1,21)) (ParametricUse ("energy_square9",1,21))),UnitEq (UnitName "speed") (UnitMul (UnitName "m") (UnitPow (UnitName "s") (-1.0)))]
-
 -- Convert a set of constraints into a matrix of co-efficients, and a
 -- reverse mapping of column numbers to units.
 constraintsToMatrix :: Constraints -> (H.Matrix Double, [Int], A.Array Int UnitInfo)
