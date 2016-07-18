@@ -19,7 +19,7 @@
 {- | Defines the monad for the units-of-measure modules -}
 module Camfort.Specification.Units.Monad
   ( UnitSolver, UnitOpts(..), UnitLogs, UnitState(..), LiteralsOpt(..), UnitException(..)
-  , modifyVarUnitMap, modifyUnitAliasMap, modifyTemplateMap
+  , whenDebug, modifyVarUnitMap, modifyUnitAliasMap, modifyTemplateMap
   , runUnitSolver, evalUnitSolver, execUnitSolver ) where
 
 import Control.Monad.RWS.Strict
@@ -49,6 +49,9 @@ data UnitOpts = UnitOpts
   , uoNameMap        :: FAR.NameMap
   , uoArgumentDecls  :: Bool }
   deriving (Show, Read, Data, Eq, Ord)
+
+whenDebug :: UnitSolver () -> UnitSolver ()
+whenDebug m = fmap uoDebug ask >>= \ d -> when d m
 
 --------------------------------------------------
 

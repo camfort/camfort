@@ -31,7 +31,9 @@ TODO:
 {-# LANGUAGE MultiParamTypeClasses #-}
 {-# LANGUAGE TypeSynonymInstances #-}
 
-module Camfort.Specification.Units.InferenceFrontend (doInferUnits, solveProgramFile) where
+module Camfort.Specification.Units.InferenceFrontend
+  (doInferUnits, solveProgramFile, runInference, criticalVariables)
+where
 
 import Data.Data
 import Data.Char
@@ -94,6 +96,28 @@ onPrev f ann = ann { FA.prevAnnotation = f (FA.prevAnnotation ann) }
 
 modifyAnnotation :: F.Annotated f => (a -> a) -> f a -> f a
 modifyAnnotation f x = F.setAnnotation (f (F.getAnnotation x)) x
+
+--------------------------------------------------
+
+-- | Run a units inference function (criticalVariables, inferVariables, inconsistentConstraints)
+runInference :: (Constraints -> a) -> F.ProgramFile UA -> UnitSolver a
+runInference f pf = do
+  -- Parse unit annotations found in comments and link to their
+  -- corresponding statements in the AST.
+  let (linkedPF, parserReport) = runWriter $ annotateComments P.unitParser pf
+  -- Send the output of the parser to the logger.
+  mapM_ tell parserReport
+
+  insertGivenUnits linkedPF -- also obtains all unit alias definitions
+  insertParametricUnits linkedPF
+  insertUndeterminedUnits linkedPF
+  annotPF <- annotateAllVariables linkedPF
+
+  propPF <- propagateUnits annotPF
+  consWithoutTemplates <- extractConstraints propPF
+  cons <- applyTemplates consWithoutTemplates
+
+  return $ f cons
 
 --------------------------------------------------
 
@@ -284,7 +308,7 @@ propagateExp e = fmap uoLiterals ask >>= \ lm -> case e of
   F.ExpBinary _ _ o e1 e2 | isOp AddOp o -> setF2 UnitEq  (getUnitInfo e1) (getUnitInfo e2)
                           | isOp RelOp o -> setF2 UnitEq  (getUnitInfo e1) (getUnitInfo e2)
   F.ExpFunctionCall {}                   -> propagateFunctionCall e
-  _                                      -> tell ("propagateExp: unhandled: " ++ show e) >> return e
+  _                                      -> whenDebug (tell ("propagateExp: unhandled: " ++ show e)) >> return e
   where
     setF2 f u1 u2 = return $ maybeSetUnitInfoF2 f u1 u2 e
 

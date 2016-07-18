@@ -105,31 +105,29 @@ inferCriticalVariables ::
        Params
     => (Filename, F.ProgramFile Annotation)
     -> (Report, (Filename, F.ProgramFile Annotation))
-inferCriticalVariables (fname, pf) = (r, (fname, pf))
+inferCriticalVariables (fname, pf)
+  | Right vars <- eVars = (okReport vars, (fname, pf))
+  | Left exc   <- eVars = (errReport exc, (fname, pf))
   where
     -- Format report
-    r = concat [fname ++ ": " ++ r ++ "\n" | r <- Data.Label.get report env]
+    okReport vars = fname ++ ": " ++ varReport vars ++ "\n" ++ logs
+    varReport     = intercalate ", " . map showVar
 
-    -- Run the infer procedure with empty unit environment, retunring
-    -- the updated unit environment, matching variables to their units
-    env = let ?criticals = True
-              ?debug     = False
-              ?nameMap   = nameMap
-              ?argumentDecls = False
-          in  flip execState emptyUnitEnv
-              (do
-                 doInferUnits . FAB.analyseBBlocks $ pf'
-                 vars <- criticalVars nameMap
-                 case vars of
-                   [] -> report <<++ "No critical variables. Appropriate annotations."
-                   _  -> report <<++ "Critical variables: "
-                                ++ (concat $ intersperse "," vars)
-                 ifDebug debugGaussian)
+    showVar (Undetermined v)    = v `fromMaybe` M.lookup v nameMap
+    showVar (UndeterminedLit _) = "<literal>" -- FIXME
+    showVar _                   = "<bad>"
 
-    pf' = FAR.analyseRenames . FA.initAnalysis $ (fmap mkUnitAnnotation pf)
+    errReport exc = fname ++ ": " ++ show exc ++ "\n" ++ logs
+
+    uOpts = UnitOpts { uoCriticals      = True
+                     , uoDebug          = False
+                     , uoLiterals       = LitMixed
+                     , uoNameMap        = nameMap
+                     , uoArgumentDecls  = False }
+    (eVars, logs) = evalUnitSolver uOpts $ runInference criticalVariables pf'
+
+    pf' = FAR.analyseRenames . FA.initAnalysis . fmap mkUnitAnnotation $ pf
     nameMap = FAR.extractNameMap pf'
-    -- Core infer procedure
-    --infer :: (Params, ?argumentDecls :: Bool) => State UnitEnv ()
 
 {-| Check units-of-measure for a program -}
 checkUnits ::
