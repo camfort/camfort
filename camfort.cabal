@@ -63,6 +63,7 @@ executable camfort
                         Camfort.Specification.Units.InferenceFrontend
                         Camfort.Specification.Units.InferenceBackend
                         Camfort.Specification.Units.Environment
+                        Camfort.Specification.Units.Monad
                         Camfort.Specification.Units.Parser
                         Camfort.Specification.Units.Solve
                         Camfort.Specification.Units.SolveHMatrix
@@ -142,6 +143,7 @@ library
                         Camfort.Specification.Units.InferenceFrontend
                         Camfort.Specification.Units.InferenceBackend
                         Camfort.Specification.Units.Environment
+                        Camfort.Specification.Units.Monad
                         Camfort.Specification.Units.Parser
                         Camfort.Specification.Units.Solve
                         Camfort.Specification.Units.SolveHMatrix

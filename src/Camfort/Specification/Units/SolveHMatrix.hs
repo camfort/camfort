@@ -197,7 +197,7 @@ unitAToUcs unitA units =
   flip map (toLists unitA) (Unitful . filter ((/= 0) . snd) . zip units . map fromDouble)
 
 findInconsistentRows :: Matrix Double -> Matrix Double -> [Int]
-findInconsistentRows coA augA = [0..(rows augA - 1)] \\ consistent
+findInconsistentRows coA augA = trace (show augA) $ [0..(rows augA - 1)] \\ consistent
   where
     consistent = head (filter (tryRows coA augA) (pset ( [0..(rows augA - 1)])) ++ [[]])
 

@@ -72,6 +72,7 @@ import qualified Camfort.Specification.Units.Parser as P
 import Camfort.Transformation.Syntax
 
 import qualified Debug.Trace as D
+import qualified Numeric.LinearAlgebra as H
 
 --------------------------------------------------
 
@@ -111,7 +112,7 @@ solveProgramFile pf = do
 
   -- (FIXME: is it necessary?) repeat until fixed point:
   propPF <- propagateUnits annotPF
-  let consWithoutTemplates = extractConstraints propPF
+  consWithoutTemplates <- extractConstraints propPF
   cons <- applyTemplates consWithoutTemplates
   -- end repeat
 
@@ -123,7 +124,19 @@ solveProgramFile pf = do
     uam <- usUnitAliasMap `fmap` get
     tell . unlines $ [ "  " ++ n ++ " = " ++ show info | (n, info) <- M.toList uam ]
     tell . unlines $ map (\ (UnitEq u1 u2) -> "  ***Constraint: " ++ show (flattenUnits u1) ++ " === " ++ show (flattenUnits u2) ++ "\n") cons
-
+    tell $ show cons
+    let (unsolvedM, inconsists, colA) = constraintsToMatrix cons
+    let solvedM = rref unsolvedM
+    tell "\n--------------------------------------------------\n"
+    tell $ show colA
+    tell "\n--------------------------------------------------\n"
+    tell $ show unsolvedM
+    tell "\n--------------------------------------------------\n"
+    tell . show $ (H.takeRows (H.rank solvedM) solvedM)
+    tell "\n--------------------------------------------------\n"
+    tell $ "Rank: " ++ show (H.rank solvedM) ++ "\n"
+    tell $ "Is inconsistent RREF? " ++ show (isInconsistentRREF solvedM) ++ "\n"
+    tell $ "Inconsistent rows: " ++ show inconsists ++ "\n"
   return ()
 
 --------------------------------------------------
@@ -216,31 +229,43 @@ annotateAllVariables pf = do
 
 --------------------------------------------------
 
+-- Convert all parametric templates into actual uses, via substitution
 applyTemplates :: Constraints -> UnitSolver Constraints
 -- postcondition: returned constraints lack all Parametric constructors
 applyTemplates cons = do
   let instances = nub [ (name, i) | ParametricUse (name, _, i) <- universeBi cons ]
   temps <- foldM substInstance [] instances
   aliasMap <- usUnitAliasMap `fmap` get
-  let aliases = [ UnitEq (UnitName name) def | (name, def) <- M.toList aliasMap ]
-  return . filter (not . isParametric) $ cons ++ temps ++ aliases
+  let aliases = [ UnitEq (UnitAlias name) def | (name, def) <- M.toList aliasMap ]
+  let transAlias (UnitName a) | a `M.member` aliasMap = UnitAlias a
+      transAlias u                                    = u
+  return . transformBi transAlias . filter (not . isParametric) $ cons ++ temps ++ aliases
 
+-- look up Parametric template and apply it to everything
+substInstance :: [UnitInfo] -> (F.Name, Int) -> UnitSolver [UnitInfo]
 substInstance output (name, callId) = do
   tmap <- usTemplateMap `fmap` get
   return . instantiate (name, callId) . (output ++) $ [] `fromMaybe` M.lookup name tmap
 
+-- Convert a parametric template into a particular use
 instantiate (name, callId) = transformBi $ \ info -> case info of
   Parametric (name, position) -> ParametricUse (name, position, callId)
   _                           -> info
 
-extractConstraints :: F.ProgramFile UA -> Constraints
-extractConstraints pf = [ info | info@(UnitEq {}) <- universeBi pf ]
+-- Gather all constraints from the AST, as well as from the varUnitMap
+extractConstraints :: F.ProgramFile UA -> UnitSolver Constraints
+extractConstraints pf = do
+  varUnitMap <- usVarUnitMap `fmap` get
+  return $ [ info | info@(UnitEq {}) <- universeBi pf ] ++
+           [ UnitEq (Determined v) u | (v, u) <- M.toList varUnitMap ]
 
+-- Does the UnitInfo contain any Parametric elements?
 isParametric :: UnitInfo -> Bool
 isParametric info = not (null [ () | Parametric _ <- universeBi info ])
 
 --------------------------------------------------
 
+-- Decorate the AST with unit info
 propagateUnits :: F.ProgramFile UA -> UnitSolver (F.ProgramFile UA)
 -- precondition: all variables have already been annotated
 propagateUnits = transformBiM propagatePU <=< transformBiM propagateStatement <=< transformBiM propagateExp
@@ -253,9 +278,10 @@ propagateExp e = case e of
   F.ExpBinary _ _ F.Multiplication e1 e2 -> setF2 UnitMul (getUnitInfo e1) (getUnitInfo e2)
   F.ExpBinary _ _ F.Division e1 e2       -> setF2 UnitMul (getUnitInfo e1) (flip UnitPow (-1) `fmap` getUnitInfo e2)
   F.ExpBinary _ _ F.Addition e1 e2       -> setF2 UnitEq  (getUnitInfo e1) (getUnitInfo e2)
--- flip maybeSetUnitInfo e `fmap` assertCompatible (getUnitInfo e1) (getUnitInfo e2)
   F.ExpBinary _ _ F.Subtraction e1 e2    -> setF2 UnitEq  (getUnitInfo e1) (getUnitInfo e2)
+  F.ExpBinary _ _ F.Exponentiation e1 e2 -> setF2 UnitPow (getUnitInfo e1) (constantExpression e2)
   F.ExpFunctionCall {}                   -> propagateFunctionCall e
+  -- FIXME: relational ops
   _                                      -> tell ("propagateExp: unhandled: " ++ show e) >> return e
   where
     setF2 f u1 u2 = return $ maybeSetUnitInfoF2 f u1 u2 e
@@ -327,6 +353,12 @@ maybeSetUnitInfoF2 :: F.Annotated f => (a -> b -> UnitInfo) -> Maybe a -> Maybe 
 maybeSetUnitInfoF2 f (Just u1) (Just u2) e = setUnitInfo (f u1 u2) e
 maybeSetUnitInfoF2 _ _ _ e = e
 
+constantExpression :: F.Expression a -> Maybe Double
+constantExpression (F.ExpValue _ _ (F.ValInteger i)) = Just $ read i
+constantExpression (F.ExpValue _ _ (F.ValReal r))    = Just $ read r
+-- FIXME: expand...
+constantExpression _                                 = Nothing
+
 -- assertCompatible :: Maybe UnitInfo -> Maybe UnitInfo -> UnitSolver (Maybe UnitInfo)
 -- assertCompatible Nothing (Just u)    = return $ Just u
 -- assertCompatible (Just u) Nothing    = return $ Just u
@@ -342,9 +374,6 @@ maybeSetUnitInfoF2 _ _ _ e = e
 -- x + y means that unit(x) = unit(y)
 -- x = y means that unit(x) = unit(y)
 -- x = f(y) means that unit(x) = unit(f_use,0) and unit(y) = unit(f_use,1)
-
-
---------------------------------------------------
 
 
 

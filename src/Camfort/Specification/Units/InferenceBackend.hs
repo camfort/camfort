@@ -36,6 +36,7 @@ where
 
 
 import qualified Data.Vector as V
+import Data.Tuple
 import Data.Data
 import Data.Char
 import Data.Maybe
@@ -51,6 +52,7 @@ import Control.Monad
 import Control.Monad.ST
 import Control.Arrow (first, second)
 import qualified Data.Map as M
+import qualified Data.Array as A
 import qualified Language.Fortran.Util.Position as FU
 
 import Camfort.Analysis.Annotations hiding (Unitless)
@@ -66,7 +68,7 @@ import Numeric.LinearAlgebra (
   )
 import qualified Numeric.LinearAlgebra as H
 import Numeric.LinearAlgebra.Devel (
-    newMatrix, writeMatrix, runSTMatrix
+    newMatrix, readMatrix, writeMatrix, runSTMatrix
   )
 import Foreign.Storable (Storable)
 
@@ -89,8 +91,9 @@ simplifyUnits = rewrite rw
     rw u                                                     = Nothing
 
 flattenUnits :: UnitInfo -> [UnitInfo]
-flattenUnits = map (uncurry UnitPow)
-             . M.toList . M.filter (not . approxEq 0)
+flattenUnits = map (uncurry UnitPow) . M.toList
+             . M.filterWithKey (\ u _ -> u /= UnitlessLit)
+             . M.filter (not . approxEq 0)
              . M.fromListWith (+)
              . map (first simplifyUnits)
              . flatten
@@ -101,6 +104,67 @@ flattenUnits = map (uncurry UnitPow)
 
 approxEq a b = abs (b - a) < epsilon
 epsilon = 0.001 -- arbitrary
+
+--------------------------------------------------
+
+testcons = [ UnitEq (UnitName "kg") (UnitName "m")
+           , UnitEq (Determined "x") (UnitName "m")
+           , UnitEq (Determined "y") (UnitName "kg")]
+
+
+testex1 = [UnitEq (UnitMul (UnitMul (UnitName "kg") (UnitPow (UnitName "m") 2.0)) (UnitPow (UnitPow (UnitName "s") 2.0) (-1.0))) (UnitMul (UnitMul (UnitName "kg") (UnitMul (UnitName "m") (UnitPow (UnitPow (UnitName "s") 2.0) (-1.0)))) (UnitName "m")),UnitEq (UnitMul (UnitMul (UnitName "kg") (UnitPow (UnitName "m") 2.0)) (UnitPow (UnitPow (UnitName "s") 2.0) (-1.0))) (UnitMul (UnitMul UnitlessLit (UnitName "kg")) (ParametricUse ("energy_square9",0,21))),UnitEq (UnitName "speed") (ParametricUse ("energy_square9",1,21)),UnitEq (UnitMul (UnitMul (UnitName "kg") (UnitPow (UnitName "m") 2.0)) (UnitPow (UnitPow (UnitName "s") 2.0) (-1.0))) (UnitMul (UnitMul (UnitName "kg") (UnitPow (UnitName "m") 2.0)) (UnitPow (UnitPow (UnitName "s") 2.0) (-1.0))),UnitEq (UnitMul (UnitMul (UnitName "kg") (UnitPow (UnitName "m") 2.0)) (UnitPow (UnitPow (UnitName "s") 2.0) (-1.0))) (UnitMul (UnitMul (UnitName "kg") (UnitPow (UnitName "m") 2.0)) (UnitPow (UnitPow (UnitName "s") 2.0) (-1.0))),UnitEq (Determined "energy_gravity2") (UnitMul (UnitName "m") (UnitPow (UnitPow (UnitName "s") 2.0) (-1.0))),UnitEq (Determined "energy_half5") UnitlessLit,UnitEq (Determined "energy_height3") (UnitName "m"),UnitEq (Determined "energy_kinetic_energy7") (UnitMul (UnitMul (UnitName "kg") (UnitPow (UnitName "m") 2.0)) (UnitPow (UnitPow (UnitName "s") 2.0) (-1.0))),UnitEq (Determined "energy_mass1") (UnitName "kg"),UnitEq (Determined "energy_potential_energy4") (UnitMul (UnitMul (UnitName "kg") (UnitPow (UnitName "m") 2.0)) (UnitPow (UnitPow (UnitName "s") 2.0) (-1.0))),UnitEq (Determined "energy_total_energy8") (UnitMul (UnitMul (UnitName "kg") (UnitPow (UnitName "m") 2.0)) (UnitPow (UnitPow (UnitName "s") 2.0) (-1.0))),UnitEq (Determined "energy_velocity6") (UnitName "speed"),UnitEq (ParametricUse ("energy_square9",0,21)) (UnitMul (ParametricUse ("energy_square9",1,21)) (ParametricUse ("energy_square9",1,21))),UnitEq (UnitName "speed") (UnitMul (UnitName "m") (UnitPow (UnitName "s") (-1.0)))]
+
+-- Convert a set of constraints into a matrix of co-efficients, and a
+-- reverse mapping of column numbers to units.
+constraintsToMatrix :: Constraints -> (H.Matrix Double, [Int], A.Array Int UnitInfo)
+constraintsToMatrix cons = (augM, inconsists, A.listArray (0, length colElems - 1) colElems)
+  where
+    -- convert each constraint into the form (lhs, rhs)
+    consPairs = flattenConstraints cons
+    -- ensure terms are on the correct side of the = sign
+    shiftedCons = map shiftTerms consPairs
+    lhs = map fst shiftedCons
+    rhs = map snd shiftedCons
+    (lhsM, lhsCols) = flattenedToMatrix lhs
+    (rhsM, rhsCols) = flattenedToMatrix rhs
+    colElems = A.elems lhsCols ++ A.elems rhsCols
+    augM = fromBlocks [[lhsM, rhsM]]
+    inconsists = findInconsistentRows lhsM augM
+
+-- [[UnitInfo]] is a list of flattened constraints
+flattenedToMatrix :: [[UnitInfo]] -> (H.Matrix Double, A.Array Int UnitInfo)
+flattenedToMatrix cons = (m, A.array (0, numCols - 1) (map swap uniqUnits))
+  where
+    m = runSTMatrix $ do
+          m <- newMatrix 0 numRows numCols
+          -- loop through all constraints
+          forM_ (zip cons [0..]) $ \ (ups, row) -> do
+            -- write co-efficients for the lhs of the constraint
+            forM_ ups $ \ (UnitPow u k) -> do
+              case M.lookup u colMap of
+                Just col -> readMatrix m row col >>= (writeMatrix m row col . (+k))
+                _        -> return ()
+          return m
+    -- identify and enumerate every unit uniquely
+    uniqUnits = flip zip [0..] . map head . group . sort $ [ u | UnitPow u _ <- concat cons ]
+    -- map units to their unique column number
+    colMap    = M.fromList uniqUnits
+    numRows = length cons
+    numCols = M.size colMap
+
+negateCons = map (\ (UnitPow u k) -> UnitPow u (-k))
+
+--------------------------------------------------
+
+flattenConstraints :: Constraints -> [([UnitInfo], [UnitInfo])]
+flattenConstraints = map (\ (UnitEq u1 u2) -> (flattenUnits u1, flattenUnits u2))
+
+shiftTerms :: ([UnitInfo], [UnitInfo]) -> ([UnitInfo], [UnitInfo])
+shiftTerms (lhs, rhs) = (lhsOk ++ negateCons rhsShift, rhsOk ++ negateCons lhsShift)
+  where
+    (lhsOk, lhsShift) = partition (not . isUnitName) lhs
+    (rhsOk, rhsShift) = partition isUnitName rhs
+    isUnitName (UnitPow (UnitName _) _) = True; isUnitName _ = False
 
 --------------------------------------------------
 

@@ -42,6 +42,8 @@ data UnitInfo
   = Parametric (String, Int)         -- a parameter identified by PU name and argument position
   | ParametricUse (String, Int, Int) -- identify particular instantiation of parameters
   | UnitName String                  -- a unit
+  | UnitAlias String
+  | Determined String                -- variable with determined units (assumed to have unique name)
   | Undetermined String              -- variable with undetermined units (assumed to have unique name)
   | UndeterminedLit Int              -- uniquely identified literal with undetermined units
   | UnitlessLit                      -- a unitless literal
