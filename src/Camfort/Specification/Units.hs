@@ -165,39 +165,26 @@ inferUnits ::
        Params
     => (Filename, F.ProgramFile Annotation)
     -> (Report, (Filename, F.ProgramFile Annotation))
-inferUnits (fname, pf) = (r, (fname, pf))
+inferUnits (fname, pf)
+  | Right vars <- eVars = (okReport vars, (fname, pf))
+  | Left exc   <- eVars = (errReport exc, (fname, pf))
   where
     -- Format report
-    r = fname ++ ":\n" ++
-        concat [ r ++ "\n" | r <- Data.Label.get report env, not (null r)]
-        ++ fname ++ ": checked/inferred " ++ show n ++ " user variables\n"
+    okReport vars = fname ++ ": " ++ varReport vars ++ "\n" ++ logs
+    varReport     = intercalate ", " . map showVar
 
-    -- Count number of checked and inferred variables
-    n = countVariables (_varColEnv env) (_debugInfo env) (_procedureEnv env)
-                                    (fst $ _linearSystem env) (_unitVarCats env)
-    -- Apply inference and synthesis
-    (_, env) = runState inferAndSynthesise emptyUnitEnv
-    inferAndSynthesise =
-        let ?criticals     = False
-            ?debug         = False
-            ?nameMap       = nameMap
-            ?argumentDecls = False
-        in do
-          let uOpts          = UnitOpts { uoDebug          = True
-                                        , uoLiterals       = LitMixed
-                                        , uoNameMap        = nameMap
-                                        , uoArgumentDecls  = False }
-          let (_, logs) = evalUnitSolver uOpts $ solveProgramFile pf' -- testing
-          D.traceM logs
-          doInferUnits pf'
-          succeeded <- gets success
-          if succeeded
-            then US.synthesiseUnits True pf'
-            else return pf'
-    pf' = FAB.analyseBBlocks
-        . FAR.analyseRenames
-        . FA.initAnalysis
-        . fmap mkUnitAnnotation $ pf
+    showVar (v, info) = (v `fromMaybe` M.lookup v nameMap) ++ " :: " ++ show info
+
+    errReport exc = fname ++ ": " ++ show exc ++ "\n" ++ logs
+
+    -- run inference
+    uOpts = UnitOpts { uoDebug          = False
+                     , uoLiterals       = LitMixed
+                     , uoNameMap        = nameMap
+                     , uoArgumentDecls  = False }
+    (eVars, logs) = evalUnitSolver uOpts $ runInference inferVariables pf'
+
+    pf' = FAR.analyseRenames . FA.initAnalysis . fmap mkUnitAnnotation $ pf
     nameMap = FAR.extractNameMap pf'
 
 
@@ -244,4 +231,3 @@ countVariables vars debugs procs matrix ucats =
                                            [] -> False
                                            _  -> True
                              _        -> False) [1..ncols matrix]
-
