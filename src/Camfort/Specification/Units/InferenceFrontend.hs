@@ -136,9 +136,10 @@ solveProgramFile pf = do
     tell "\n--------------------------------------------------\n"
     tell $ "Rank: " ++ show (H.rank solvedM) ++ "\n"
     tell $ "Is inconsistent RREF? " ++ show (isInconsistentRREF solvedM) ++ "\n"
-    tell $ "Inconsistent rows: " ++ show inconsists ++ "\n"
-    tell "\n--------------------------------------------------\n"
+    tell $ "Inconsistent rows: " ++ show (inconsistentConstraints cons) ++ "\n"
+    tell "--------------------------------------------------\n"
     tell $ "Critical Variables: " ++ show (criticalVariables cons) ++ "\n"
+    tell $ "Infer Variables: " ++ show (inferVariables cons) ++ "\n"
   return ()
 
 --------------------------------------------------

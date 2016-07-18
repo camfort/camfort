@@ -39,14 +39,11 @@ spec = do
         map shiftTerms (flattenConstraints testCons3) `shouldBe` testCons3_shifted
     describe "Consistency" $ do
       it "testCons1" $ do
-        let (_, inconsists, _) = constraintsToMatrix testCons1
-        inconsists `shouldNotSatisfy` null
+        inconsistentConstraints testCons1 `shouldBe` Just [UnitEq (UnitName "kg") (UnitName "m")]
       it "testCons2" $ do
-        let (_, inconsists, _) = constraintsToMatrix testCons2
-        inconsists `shouldSatisfy` null
+        inconsistentConstraints testCons2 `shouldBe` Nothing
       it "testCons3" $ do
-        let (_, inconsists, _) = constraintsToMatrix testCons3
-        inconsists `shouldSatisfy` null
+        inconsistentConstraints testCons3 `shouldBe` Nothing
     describe "Critical Variables" $ do
       it "testCons2" $ do
         criticalVariables testCons2 `shouldSatisfy` null
@@ -54,6 +51,11 @@ spec = do
         criticalVariables testCons3 `shouldBe` [Undetermined "c",Undetermined "e"]
       it "testCons4" $ do
         criticalVariables testCons4 `shouldBe` [Undetermined "simple2_a22"]
+      it "testCons5" $ do
+        criticalVariables testCons5 `shouldSatisfy` null
+    describe "Infer Variables" $ do
+      it "testCons5" $ do
+        inferVariables testCons5 `shouldBe` [("simple2_a11",UnitMul (UnitPow (UnitName "m") 2.0) (UnitPow (UnitName "s") (-4.0)))]
 
 -- describe "Unit specifications" $ do
 --   describe "Integration tests of infer and synthesise" integration
@@ -150,3 +152,10 @@ testCons4 = [UnitEq (Undetermined "simple2_a11") (ParametricUse ("simple2_sqr3",
             ,UnitEq (Determined "simple2_a11") (Undetermined "simple2_a11")
             ,UnitEq (Determined "simple2_a22") (Undetermined "simple2_a22")
             ,UnitEq (ParametricUse ("simple2_sqr3",0,0)) (UnitMul (ParametricUse ("simple2_sqr3",1,0)) (ParametricUse ("simple2_sqr3",1,0)))]
+
+testCons5 = [UnitEq (Undetermined "simple2_a11") (ParametricUse ("simple2_sqr3",0,0))
+            ,UnitEq (UnitAlias "accel") (ParametricUse ("simple2_sqr3",1,0))
+            ,UnitEq (Determined "simple2_a11") (Undetermined "simple2_a11")
+            ,UnitEq (Determined "simple2_a22") (UnitAlias "accel")
+            ,UnitEq (ParametricUse ("simple2_sqr3",0,0)) (UnitMul (ParametricUse ("simple2_sqr3",1,0)) (ParametricUse ("simple2_sqr3",1,0)))
+            ,UnitEq (UnitAlias "accel") (UnitMul (UnitName "m") (UnitPow (UnitName "s") (-2.0)))]

@@ -76,6 +76,19 @@ import qualified Debug.Trace as D
 --------------------------------------------------
 --------------------------------------------------
 
+-- | Returns just the list of constraints that were identified as
+-- being possible candidates for inconsistency, if there is a problem.
+inconsistentConstraints :: Constraints -> Maybe Constraints
+inconsistentConstraints cons
+  | null inconsists = Nothing
+  | otherwise       = Just [ con | (con, i) <- zip cons [0..], i `elem` inconsists ]
+  where
+    (unsolvedM, inconsists, colA) = constraintsToMatrix cons
+
+--------------------------------------------------
+
+-- | Identifies the variables that need to be annotated in order for
+-- inference or checking to work.
 criticalVariables :: Constraints -> [UnitInfo]
 criticalVariables cons = filter (not . isUnitName) $ map (colA A.!) criticalIndices
   where
@@ -84,6 +97,20 @@ criticalVariables cons = filter (not . isUnitName) $ map (colA A.!) criticalIndi
     uncriticalIndices             = concatMap (maybeToList . findIndex (/= 0)) $ H.toLists solvedM
     criticalIndices               = A.indices colA \\ uncriticalIndices
     isUnitName (UnitName _)       = True; isUnitName _ = False
+
+--------------------------------------------------
+
+-- | Returns list of formerly-undetermined variables and their units.
+inferVariables :: Constraints -> [(String, UnitInfo)]
+inferVariables cons = [ (var, foldl1 UnitMul infos)
+                      | ([UnitPow (Undetermined var) k], infos) <- map (partition (not . isUnitName)) ups
+                      , k `approxEq` 1 ]
+  where
+    (unsolvedM, inconsists, colA)       = constraintsToMatrix cons
+    solvedM                             = rref unsolvedM
+    cols                                = A.elems colA
+    ups                                 = map (concatMap flattenUnits . zipWith UnitPow cols) (H.toLists solvedM)
+    isUnitName (UnitPow (UnitName _) _) = True; isUnitName _ = False
 
 --------------------------------------------------
 
