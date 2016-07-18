@@ -15,6 +15,7 @@
 -}
 {-# LANGUAGE ScopedTypeVariables #-}
 {-# LANGUAGE ImplicitParams #-}
+{-# LANGUAGE FlexibleContexts #-}
 
 module Camfort.Transformation.EquivalenceElim where
 

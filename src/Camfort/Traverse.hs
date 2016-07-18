@@ -45,11 +45,6 @@ import Data.Monoid
 
 import Debug.Trace
 
-instance Monoid x => Monad ((,) x) where
-    return a = (mempty, a)
-    (x, a) >>= k = let (x', b) = k a
-                   in (mappend x x', b)
-
 -- Data-type generic comonad-style traversal
 
 extendBi :: (Biplate (from a) (to a), RComonad to) => (to a -> a) -> (from a) -> (from a)

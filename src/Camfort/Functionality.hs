@@ -20,6 +20,8 @@
 {-# LANGUAGE ImplicitParams #-}
 {-# LANGUAGE DoAndIfThenElse #-}
 {-# LANGUAGE DeriveDataTypeable #-}
+{-# LANGUAGE TypeSynonymInstances #-}
+{-# LANGUAGE FlexibleInstances #-}
 
 module Camfort.Functionality where
 

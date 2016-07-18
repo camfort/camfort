@@ -24,7 +24,11 @@ TODO:
 -}
 
 
-{-# LANGUAGE ScopedTypeVariables, ImplicitParams, DoAndIfThenElse #-}
+{-# LANGUAGE DoAndIfThenElse #-}
+{-# LANGUAGE ScopedTypeVariables #-}
+{-# LANGUAGE ImplicitParams #-}
+{-# LANGUAGE TypeSynonymInstances #-}
+{-# LANGUAGE FlexibleInstances #-}
 
 module Camfort.Specification.Units.InferenceBackend where
 
