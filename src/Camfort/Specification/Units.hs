@@ -181,7 +181,7 @@ inferUnits (fname, pf) = (r, (fname, pf))
         in do
           let uOpts          = UnitOpts { uoCriticals      = False
                                         , uoDebug          = True
-                                        , uoLiterals       = LitPoly
+                                        , uoLiterals       = LitMixed
                                         , uoNameMap        = nameMap
                                         , uoArgumentDecls  = False }
           let (_, logs) = evalUnitSolver uOpts $ solveProgramFile pf' -- testing

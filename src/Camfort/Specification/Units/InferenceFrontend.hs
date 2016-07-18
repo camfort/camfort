@@ -274,12 +274,12 @@ propagateUnits :: F.ProgramFile UA -> UnitSolver (F.ProgramFile UA)
 propagateUnits = transformBiM propagatePU <=< transformBiM propagateStatement <=< transformBiM propagateExp
 
 propagateExp :: F.Expression UA -> UnitSolver (F.Expression UA)
-propagateExp e = case e of
+propagateExp e = fmap uoLiterals ask >>= \ lm -> case e of
   F.ExpValue _ _ (F.ValVariable _)       -> return e -- all variables should already be annotated
   F.ExpValue _ _ (F.ValInteger _)        -> flip setUnitInfo e `fmap` genUndeterminedLit
   F.ExpValue _ _ (F.ValReal _)           -> flip setUnitInfo e `fmap` genUndeterminedLit
-  F.ExpBinary _ _ F.Multiplication e1 e2 -> setF2 UnitMul (getUnitInfo e1) (getUnitInfo e2)
-  F.ExpBinary _ _ F.Division e1 e2       -> setF2 UnitMul (getUnitInfo e1) (flip UnitPow (-1) `fmap` getUnitInfo e2)
+  F.ExpBinary _ _ F.Multiplication e1 e2 -> setF2 UnitMul (getUnitInfoMul lm e1) (getUnitInfoMul lm e2)
+  F.ExpBinary _ _ F.Division e1 e2       -> setF2 UnitMul (getUnitInfoMul lm e1) (flip UnitPow (-1) `fmap` (getUnitInfoMul lm e2))
   F.ExpBinary _ _ F.Addition e1 e2       -> setF2 UnitEq  (getUnitInfo e1) (getUnitInfo e2)
   F.ExpBinary _ _ F.Subtraction e1 e2    -> setF2 UnitEq  (getUnitInfo e1) (getUnitInfo e2)
   F.ExpBinary _ _ F.Exponentiation e1 e2 -> setF2 UnitPow (getUnitInfo e1) (constantExpression e2)
@@ -343,6 +343,11 @@ genUndeterminedLit = do
 
 getUnitInfo :: F.Annotated f => f UA -> Maybe UnitInfo
 getUnitInfo = fmap flattenUnitEq . unitInfo . FA.prevAnnotation . F.getAnnotation
+
+getUnitInfoMul LitPoly e          = getUnitInfo e
+getUnitInfoMul _ e
+  | isJust (constantExpression e) = Just UnitlessLit
+  | otherwise                     = getUnitInfo e
 
 flattenUnitEq :: UnitInfo -> UnitInfo
 flattenUnitEq (UnitEq u _) = u
