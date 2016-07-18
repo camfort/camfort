@@ -87,7 +87,6 @@ criticalVariables cons = filter (not . isUnitName) $ map (colA A.!) criticalIndi
 
 --------------------------------------------------
 
--- simplifyConstraints (C poly) = C $ map (second (concatMap flattenUnits)) poly
 simplifyConstraints = map (\ (UnitEq u1 u2) -> (flattenUnits u1, flattenUnits u2))
 
 simplifyUnits :: UnitInfo -> UnitInfo
@@ -132,16 +131,16 @@ constraintsToMatrix :: Constraints -> (H.Matrix Double, [Int], A.Array Int UnitI
 constraintsToMatrix cons = (augM, inconsists, A.listArray (0, length colElems - 1) colElems)
   where
     -- convert each constraint into the form (lhs, rhs)
-    consPairs = flattenConstraints cons
-    -- ensure terms are on the correct side of the = sign
-    shiftedCons = map shiftTerms consPairs
-    lhs = map fst shiftedCons
-    rhs = map snd shiftedCons
+    consPairs       = flattenConstraints cons
+    -- ensure terms are on the correct side of the equal sign
+    shiftedCons     = map shiftTerms consPairs
+    lhs             = map fst shiftedCons
+    rhs             = map snd shiftedCons
     (lhsM, lhsCols) = flattenedToMatrix lhs
     (rhsM, rhsCols) = flattenedToMatrix rhs
-    colElems = A.elems lhsCols ++ A.elems rhsCols
-    augM = fromBlocks [[lhsM, rhsM]]
-    inconsists = findInconsistentRows lhsM augM
+    colElems        = A.elems lhsCols ++ A.elems rhsCols
+    augM            = if rows rhsM == 0 || cols rhsM == 0 then lhsM else fromBlocks [[lhsM, rhsM]]
+    inconsists      = findInconsistentRows lhsM augM
 
 -- [[UnitInfo]] is a list of flattened constraints
 flattenedToMatrix :: [[UnitInfo]] -> (H.Matrix Double, A.Array Int UnitInfo)

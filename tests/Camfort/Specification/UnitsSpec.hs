@@ -52,6 +52,8 @@ spec = do
         criticalVariables testCons2 `shouldSatisfy` null
       it "testCons3" $ do
         criticalVariables testCons3 `shouldBe` [Undetermined "c",Undetermined "e"]
+      it "testCons4" $ do
+        criticalVariables testCons4 `shouldBe` [Undetermined "simple2_a22"]
 
 -- describe "Unit specifications" $ do
 --   describe "Integration tests of infer and synthesise" integration
@@ -142,3 +144,9 @@ testCons3 = [ UnitEq (Undetermined "a") (Undetermined "e")
 testCons3_shifted = [([UnitPow (Undetermined "a") 1.0,UnitPow (Undetermined "e") (-1.0)],[])
                     ,([UnitPow (Undetermined "a") 1.0,UnitPow (Determined "d") (-1.0),UnitPow (Undetermined "b") (-1.0),UnitPow (Undetermined "c") (-1.0)],[])
                     ,([UnitPow (Determined "d") 1.0],[UnitPow (UnitName "m") 1.0])]
+
+testCons4 = [UnitEq (Undetermined "simple2_a11") (ParametricUse ("simple2_sqr3",0,0))
+            ,UnitEq (Undetermined "simple2_a22") (ParametricUse ("simple2_sqr3",1,0))
+            ,UnitEq (Determined "simple2_a11") (Undetermined "simple2_a11")
+            ,UnitEq (Determined "simple2_a22") (Undetermined "simple2_a22")
+            ,UnitEq (ParametricUse ("simple2_sqr3",0,0)) (UnitMul (ParametricUse ("simple2_sqr3",1,0)) (ParametricUse ("simple2_sqr3",1,0)))]

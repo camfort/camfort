@@ -31,6 +31,8 @@ test-suite spec
                         uniplate >= 1.6.10,
                         mtl >= 2.1,
                         bytestring >= 0.10,			
+                        array >= 0.4,
+                        hmatrix >= 0.15,
                         camfort
 
 source-repository head
