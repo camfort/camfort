@@ -71,8 +71,20 @@ import Numeric.LinearAlgebra.Devel (
     newMatrix, readMatrix, writeMatrix, runSTMatrix
   )
 import Foreign.Storable (Storable)
+import qualified Debug.Trace as D
 
 --------------------------------------------------
+--------------------------------------------------
+
+criticalVariables :: Constraints -> [UnitInfo]
+criticalVariables cons = filter (not . isUnitName) $ map (colA A.!) criticalIndices
+  where
+    (unsolvedM, inconsists, colA) = constraintsToMatrix cons
+    solvedM                       = rref unsolvedM
+    uncriticalIndices             = concatMap (maybeToList . findIndex (/= 0)) $ H.toLists solvedM
+    criticalIndices               = A.indices colA \\ uncriticalIndices
+    isUnitName (UnitName _)       = True; isUnitName _ = False
+
 --------------------------------------------------
 
 -- simplifyConstraints (C poly) = C $ map (second (concatMap flattenUnits)) poly

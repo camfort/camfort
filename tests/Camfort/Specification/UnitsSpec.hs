@@ -10,6 +10,15 @@ import Camfort.Output
 import Camfort.Specification.Units
 import Camfort.Specification.Units.InferenceBackend
 import Camfort.Specification.Units.Environment
+import Data.List
+import Data.Maybe
+import qualified Data.Array as A
+import qualified Numeric.LinearAlgebra as H
+import Numeric.LinearAlgebra (
+    atIndex, (<>), (><), rank, (?), toLists, toList, fromLists, fromList, rows, cols,
+    takeRows, takeColumns, dropRows, dropColumns, subMatrix, diag, build, fromBlocks,
+    ident, flatten, lu, dispf, Matrix
+  )
 
 import Test.Hspec
 import Test.QuickCheck
@@ -26,6 +35,8 @@ spec = do
         map shiftTerms (flattenConstraints testCons1) `shouldBe` testCons1_shifted
       it "testCons2" $ do
         map shiftTerms (flattenConstraints testCons2) `shouldBe` testCons2_shifted
+      it "testCons3" $ do
+        map shiftTerms (flattenConstraints testCons3) `shouldBe` testCons3_shifted
     describe "Consistency" $ do
       it "testCons1" $ do
         let (_, inconsists, _) = constraintsToMatrix testCons1
@@ -33,6 +44,14 @@ spec = do
       it "testCons2" $ do
         let (_, inconsists, _) = constraintsToMatrix testCons2
         inconsists `shouldSatisfy` null
+      it "testCons3" $ do
+        let (_, inconsists, _) = constraintsToMatrix testCons3
+        inconsists `shouldSatisfy` null
+    describe "Critical Variables" $ do
+      it "testCons2" $ do
+        criticalVariables testCons2 `shouldSatisfy` null
+      it "testCons3" $ do
+        criticalVariables testCons3 `shouldBe` [Undetermined "c",Undetermined "e"]
 
 -- describe "Unit specifications" $ do
 --   describe "Integration tests of infer and synthesise" integration
@@ -115,3 +134,11 @@ testCons2_shifted = [([],[UnitPow (UnitName "m") 1.0,UnitPow (UnitName "s") (-1.
                     ,([UnitPow (ParametricUse ("simple1_sqr6",1,0)) 1.0,UnitPow (ParametricUse ("simple1_mul7",2,1)) (-1.0)],[])
                     ,([UnitPow (ParametricUse ("simple1_mul7",0,1)) 1.0,UnitPow (ParametricUse ("simple1_mul7",1,1)) (-1.0),UnitPow (ParametricUse ("simple1_mul7",2,1)) (-1.0)],[])
                     ,([UnitPow (UnitAlias "accel") 1.0],[UnitPow (UnitName "m") 1.0,UnitPow (UnitName "s") (-2.0)])]
+
+testCons3 = [ UnitEq (Undetermined "a") (Undetermined "e")
+            , UnitEq (Undetermined "a") (UnitMul (Undetermined "b") (UnitMul (Undetermined "c") (Determined "d")))
+            , UnitEq (Determined "d") (UnitName "m") ]
+
+testCons3_shifted = [([UnitPow (Undetermined "a") 1.0,UnitPow (Undetermined "e") (-1.0)],[])
+                    ,([UnitPow (Undetermined "a") 1.0,UnitPow (Determined "d") (-1.0),UnitPow (Undetermined "b") (-1.0),UnitPow (Undetermined "c") (-1.0)],[])
+                    ,([UnitPow (Determined "d") 1.0],[UnitPow (UnitName "m") 1.0])]
