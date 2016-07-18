@@ -71,14 +71,16 @@ data UnitState = UnitState
   , usVarUnitMap   :: VarUnitMap
   , usUnitAliasMap :: UnitAliasMap
   , usTemplateMap  :: TemplateMap
-  , usLitNums      :: Int }
+  , usLitNums      :: Int
+  , usConstraints  :: [UnitInfo] }
   deriving (Show, Data)
 
 unitState0 pf = UnitState { usProgramFile  = pf
                           , usVarUnitMap   = M.empty
                           , usUnitAliasMap = M.empty
                           , usTemplateMap  = M.empty
-                          , usLitNums      = 0 }
+                          , usLitNums      = 0
+                          , usConstraints  = [] }
 
 modifyVarUnitMap :: (VarUnitMap -> VarUnitMap) -> UnitSolver ()
 modifyVarUnitMap f = modify (\ s -> s { usVarUnitMap = f (usVarUnitMap s) })

@@ -121,7 +121,7 @@ inferCriticalVariables (fname, pf)
                      , uoLiterals       = LitMixed
                      , uoNameMap        = nameMap
                      , uoArgumentDecls  = False }
-    (eVars, state, logs) = runUnitSolver uOpts pf' $ runInference criticalVariables
+    (eVars, state, logs) = runUnitSolver uOpts pf' $ runCriticalVariables
 
     pf' = FAR.analyseRenames . FA.initAnalysis . fmap mkUnitAnnotation $ pf
     nameMap = FAR.extractNameMap pf'
@@ -149,7 +149,7 @@ checkUnits (fname, pf)
                      , uoLiterals       = LitMixed
                      , uoNameMap        = nameMap
                      , uoArgumentDecls  = False }
-    (eCons, state, logs) = runUnitSolver uOpts pf' $ runInference inconsistentConstraints
+    (eCons, state, logs) = runUnitSolver uOpts pf' $ runInconsistentConstraints
 
     pf' = FAR.analyseRenames . FA.initAnalysis . fmap mkUnitAnnotation $ pf
     nameMap = FAR.extractNameMap pf'
@@ -182,7 +182,7 @@ inferUnits (fname, pf)
                      , uoLiterals       = LitMixed
                      , uoNameMap        = nameMap
                      , uoArgumentDecls  = False }
-    (eVars, state, logs) = runUnitSolver uOpts pf' $ runInference inferVariables
+    (eVars, state, logs) = runUnitSolver uOpts pf' $ runInferVariables
 
     pf' = FAR.analyseRenames . FA.initAnalysis . fmap mkUnitAnnotation $ pf
     nameMap = FAR.extractNameMap pf'

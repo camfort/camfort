@@ -32,7 +32,8 @@ TODO:
 {-# LANGUAGE TypeSynonymInstances #-}
 
 module Camfort.Specification.Units.InferenceFrontend
-  (doInferUnits, solveProgramFile, runInference, criticalVariables)
+  ( doInferUnits, solveProgramFile, initInference
+  , runCriticalVariables, runInferVariables, runInconsistentConstraints )
 where
 
 import Data.Data
@@ -98,9 +99,9 @@ modifyAnnotation f x = F.setAnnotation (f (F.getAnnotation x)) x
 
 --------------------------------------------------
 
--- | Run a units inference function (criticalVariables, inferVariables, inconsistentConstraints)
-runInference :: (Constraints -> a) -> UnitSolver a
-runInference f = do
+-- | Prepare to run an inference function (criticalVariables, inferVariables, inconsistentConstraints)
+initInference :: UnitSolver ()
+initInference = do
   pf <- usProgramFile `fmap` get
   -- Parse unit annotations found in comments and link to their
   -- corresponding statements in the AST.
@@ -113,11 +114,28 @@ runInference f = do
   insertUndeterminedUnits linkedPF
   annotPF <- annotateAllVariables linkedPF
 
-  propPF <- propagateUnits annotPF
+  propPF               <- propagateUnits annotPF
   consWithoutTemplates <- extractConstraints propPF
-  cons <- applyTemplates consWithoutTemplates
+  cons                 <- applyTemplates consWithoutTemplates
 
-  return $ f cons
+  modify $ \ s -> s { usConstraints = cons }
+
+--------------------------------------------------
+
+runCriticalVariables :: UnitSolver [UnitInfo]
+runCriticalVariables = do
+  cons <- usConstraints `fmap` get
+  return $ criticalVariables cons
+
+runInferVariables :: UnitSolver [(String, UnitInfo)]
+runInferVariables = do
+  cons <- usConstraints `fmap` get
+  return $ inferVariables cons
+
+runInconsistentConstraints :: UnitSolver (Maybe Constraints)
+runInconsistentConstraints = do
+  cons <- usConstraints `fmap` get
+  return $ inconsistentConstraints cons
 
 --------------------------------------------------
 
