@@ -127,28 +127,37 @@ inferCriticalVariables (fname, pf)
     nameMap = FAR.extractNameMap pf'
 
 {-| Check units-of-measure for a program -}
-checkUnits ::
-       Params
-    => (Filename, F.ProgramFile Annotation)
-    -> (Report, (Filename, F.ProgramFile Annotation))
-checkUnits (fname, pf) = (r, (fname, pf))
+checkUnits :: (Filename, F.ProgramFile Annotation) -> (Report, (Filename, F.ProgramFile Annotation))
+checkUnits (fname, pf)
+  | Right mCons <- eCons = (okReport mCons, (fname, pf))
+  | Left exc    <- eCons = (errReport exc, (fname, pf))
   where
     -- Format report
-    r = concat [fname ++ ": " ++ r ++ "\n" | r <- Data.Label.get report env, not (null r)]
-        ++ fname ++ ": checked " ++ show n ++ " user variables\n"
+    okReport Nothing = fname ++ ": Consistent.\n" ++ logs
+    -- FIXME: better unit pretty printer
+    okReport (Just cons) = fname ++ ": " ++ show cons ++ "\n" ++ logs
+    varReport     = intercalate ", " . map showVar
 
-    -- Count number of checked and inferred variables
-    n = countVariables (_varColEnv env) (_debugInfo env) (_procedureEnv env)
-                                    (fst $ _linearSystem env) (_unitVarCats env)
+    showVar (Undetermined v)    = v `fromMaybe` M.lookup v nameMap
+    showVar (UndeterminedLit _) = "<literal>" -- FIXME
+    showVar _                   = "<bad>"
 
-    pf' = FAB.analyseBBlocks . FAR.analyseRenames . FA.initAnalysis $ (fmap mkUnitAnnotation pf)
+    errReport exc = fname ++ ": " ++ show exc ++ "\n" ++ logs
+
+    -- run inference
+    uOpts = UnitOpts { uoDebug          = False
+                     , uoLiterals       = LitMixed
+                     , uoNameMap        = nameMap
+                     , uoArgumentDecls  = False }
+    (eCons, logs) = evalUnitSolver uOpts $ runInference inconsistentConstraints pf'
+
+    pf' = FAR.analyseRenames . FA.initAnalysis . fmap mkUnitAnnotation $ pf
     nameMap = FAR.extractNameMap pf'
-    -- Apply inferences
-    env = let ?criticals = False
-              ?debug     = False
-              ?nameMap   = nameMap
-              ?argumentDecls = False
-          in execState (doInferUnits pf') emptyUnitEnv
+
+    -- FIXME:
+    -- Count number of checked and inferred variables
+    -- n = countVariables (_varColEnv env) (_debugInfo env) (_procedureEnv env)
+    --                                 (fst $ _linearSystem env) (_unitVarCats env)
 
 {-| Check and infer units-of-measure for a program
      This produces an output of all the unit information for a program -}
@@ -236,35 +245,3 @@ countVariables vars debugs procs matrix ucats =
                                            _  -> True
                              _        -> False) [1..ncols matrix]
 
--- Critical variables analysis
-criticalVars :: FAR.NameMap -> State UnitEnv [String]
-criticalVars nameMap = do
-    uvarenv     <- gets varColEnv
-    (matrix, vector) <- gets linearSystem
-    ucats       <- gets unitVarCats
-    dbgs        <- gets debugInfo
-    -- debugGaussian
-    let cv1 = criticalVars' uvarenv ucats matrix 1 dbgs
-    let cv2 = [] -- criticalVars
-    return (map realName (cv1 ++ cv2))
-      where realName v = v `fromMaybe` (v `M.lookup` nameMap)
-
-criticalVars' :: VarColEnv
-              -> [UnitVarCategory]
-              -> Matrix Rational
-              -> Row
-              -> DebugInfo -> [String]
-criticalVars' varenv ucats matrix i dbgs =
-  let m = firstNonZeroCoeff matrix ucats
-  in
-    if (i == nrows matrix) then
-      if (m i) /= (ncols matrix)
-      then lookups [((m i) + 1)..(ncols matrix)] dbgs
-      else []
-    else
-      if (m (i + 1)) /= ((m i) + 1)
-      then (lookups [((m i) + 1)..(m (i + 1) - 1)] dbgs)
-        ++ (criticalVars' varenv ucats matrix (i + 1) dbgs)
-      else criticalVars' varenv ucats matrix (i + 1) dbgs
-  where
-    lookups = lookupVarsByColsFilterByArg matrix varenv ucats
