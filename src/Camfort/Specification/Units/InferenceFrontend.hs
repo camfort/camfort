@@ -78,7 +78,6 @@ import qualified Numeric.LinearAlgebra as H
 
 --------------------------------------------------
 
-type UA = FA.Analysis (UnitAnnotation A)
 -- Instances for embedding parsed specifications into the AST
 instance ASTEmbeddable UA P.UnitStatement where
   annotateWithAST ann ast =
@@ -100,8 +99,9 @@ modifyAnnotation f x = F.setAnnotation (f (F.getAnnotation x)) x
 --------------------------------------------------
 
 -- | Run a units inference function (criticalVariables, inferVariables, inconsistentConstraints)
-runInference :: (Constraints -> a) -> F.ProgramFile UA -> UnitSolver a
-runInference f pf = do
+runInference :: (Constraints -> a) -> UnitSolver a
+runInference f = do
+  pf <- usProgramFile `fmap` get
   -- Parse unit annotations found in comments and link to their
   -- corresponding statements in the AST.
   let (linkedPF, parserReport) = runWriter $ annotateComments P.unitParser pf
