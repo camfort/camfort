@@ -19,7 +19,7 @@
 {- | Defines the monad for the units-of-measure modules -}
 module Camfort.Specification.Units.Monad
   ( UA, UnitSolver, UnitOpts(..), UnitLogs, UnitState(..), LiteralsOpt(..), UnitException(..)
-  , whenDebug, modifyVarUnitMap, modifyUnitAliasMap, modifyTemplateMap
+  , whenDebug, modifyVarUnitMap, modifyUnitAliasMap, modifyTemplateMap, modifyProgramFile, modifyProgramFileM
   , runUnitSolver, evalUnitSolver, execUnitSolver ) where
 
 import Control.Monad.RWS.Strict
@@ -90,6 +90,15 @@ modifyUnitAliasMap f = modify (\ s -> s { usUnitAliasMap = f (usUnitAliasMap s) 
 
 modifyTemplateMap :: (TemplateMap -> TemplateMap) -> UnitSolver ()
 modifyTemplateMap f = modify (\ s -> s { usTemplateMap = f (usTemplateMap s) })
+
+modifyProgramFile :: (F.ProgramFile UA -> F.ProgramFile UA) -> UnitSolver ()
+modifyProgramFile f = modify (\ s -> s { usProgramFile = f (usProgramFile s) })
+
+modifyProgramFileM :: (F.ProgramFile UA -> UnitSolver (F.ProgramFile UA)) -> UnitSolver ()
+modifyProgramFileM f = do
+  pf <- fmap usProgramFile get
+  pf' <- f pf
+  modify (\ s -> s { usProgramFile = pf' })
 
 --------------------------------------------------
 
