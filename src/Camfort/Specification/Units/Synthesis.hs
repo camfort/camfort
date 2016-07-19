@@ -38,6 +38,7 @@ import qualified Language.Fortran.Util.Position as FU
 import qualified Camfort.Output as O (srcSpanToSrcLocs)
 import Camfort.Analysis.Annotations hiding (Unitless)
 import Camfort.Specification.Units.Environment
+import qualified Debug.Trace as D
 
 -- *************************************
 --   Insert unit declarations into code
@@ -96,7 +97,7 @@ perBlock inferReport s@(F.BlStatement a span@(FU.SrcSpan lp up) _
      -- Create a zero-length span for the new comment node
      span0 = FU.SrcSpan (lp {FU.posColumn = 0}) (lp {FU.posColumn = 0})
 
-     -- Create new annotation which labesl this as a refactored node
+     -- Create new annotation which labels this as a refactored node
      ap = (prevAnnotation (FA.prevAnnotation a)) { refactored = Just loc }
      a' = a {FA.prevAnnotation = (FA.prevAnnotation a) { prevAnnotation = ap }}
 

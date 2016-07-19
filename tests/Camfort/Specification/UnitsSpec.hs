@@ -21,19 +21,19 @@ spec = describe "Unit specifications" $ do
 
 integration = do
    doIntegration 0 "ex1.f90"
-      "ex1.f90: Added 0 non-unitless annotation: \n\
+      "ex1.f90: Added 0 annotations\n\
       \ex1.f90: checked/inferred 9 user variables\n"
 
    doIntegration 1 "ex2.f90"
-      "ex2.f90: Added 1 non-unitless annotation: m / s**2\n\
+      "ex2.f90: Added 1 annotations\n\
       \ex2.f90: checked/inferred 4 user variables\n"
 
    doIntegration 2 "ex3.f90"
-      "ex3.f90: Added 1 non-unitless annotation: m / s**2\n\
+      "ex3.f90: Added 3 annotations\n\
       \ex3.f90: checked/inferred 6 user variables\n"
 
    doIntegration 2 "param.f90"
-      "param.f90: Added 2 non-unitless annotation: m / s\n\
+      "param.f90: Added 2 annotations\n\
       \param.f90: checked/inferred 5 user variables\n"
 
 doIntegration c fname expInfer = do
@@ -48,5 +48,5 @@ doIntegration c fname expInfer = do
 
    expect <- runIO $ readFile $ "tests/Camfort/Specification/Units/exp." ++ fname
    it ("(" ++ show c ++ ") - " ++ fname ++ " comapare expected out") $
-       (B.unpack $ mkOutputText ("exp." ++ fname) (head $ mkOutputFileForpar ps [ps']))
+       ((B.unpack $ mkOutputText ("exp." ++ fname) (head $ mkOutputFileForpar ps [ps'])) ++ "\n")
           `shouldBe` expect
