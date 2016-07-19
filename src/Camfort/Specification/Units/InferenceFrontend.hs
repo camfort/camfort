@@ -119,6 +119,7 @@ initInference = do
   cons                 <- applyTemplates consWithoutTemplates
 
   modify $ \ s -> s { usConstraints = cons }
+  debugLogging
 
 --------------------------------------------------
 
@@ -157,9 +158,11 @@ solveProgramFile pf = do
   consWithoutTemplates <- extractConstraints propPF
   cons <- applyTemplates consWithoutTemplates
   -- end repeat
+  return ()
 
-  debug <- uoDebug `fmap` ask
-  when debug $ do
+debugLogging :: UnitSolver ()
+debugLogging = whenDebug $ do
+    cons <- usConstraints `fmap` get
     vum <- usVarUnitMap `fmap` get
     tell . unlines $ [ "  " ++ show info ++ " :: " ++ n | (n, info) <- M.toList vum ]
     tell "\n\n"
@@ -182,7 +185,6 @@ solveProgramFile pf = do
     tell "--------------------------------------------------\n"
     tell $ "Critical Variables: " ++ show (criticalVariables cons) ++ "\n"
     tell $ "Infer Variables: " ++ show (inferVariables cons) ++ "\n"
-  return ()
 
 --------------------------------------------------
 
