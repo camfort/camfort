@@ -212,7 +212,7 @@ perBlock b@(F.BlComment ann span _) = do
          unitsConverted <- convertUnit units
          case block of
               bl@(F.BlStatement ann span _ (F.StDeclaration _ _ _ _ decls)) ->
-                flip mapM_ vars (\var -> 
+                flip mapM_ vars (\var ->
                   mapM_ (processVar' (Just var) [unitsConverted]) (getNamesAndInits decls))
               _ -> return ()
       -- Found a derived unit declaration
@@ -224,7 +224,7 @@ perBlock b@(F.BlComment ann span _) = do
 
   where
     processVar' varReal unitC (var, init, span) = do
-       hasDeclaration <<++ var
+       if (Just (realName var) == varReal) then hasDeclaration <<++ var else return ()
        processVar varReal unitC (var, init, span)
     learnDerivedUnit (name, spec) =
           do denv <- gets derivedUnitEnv
