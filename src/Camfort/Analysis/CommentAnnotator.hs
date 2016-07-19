@@ -53,7 +53,7 @@ annotateComments :: forall a ast . (Data a, Linkable a, ASTEmbeddable a ast)
                                  -> Logger (ProgramFile a)
 annotateComments parse pf = do
     pf' <- transformBiM (writeAST parse) pf
-    return $ transformBi linkBlocks pf'
+    return $ descendBi linkBlocks pf'
   where
     writeAST :: (Data a, ASTEmbeddable a ast)
              => AnnotationParser ast -> Block a -> Logger (Block a)
