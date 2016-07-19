@@ -2,67 +2,14 @@
 
 ## Installation & Building
 
-### Using Stack
-
-We recommend using Stack (http://www.haskellstack.org) to build Camfort. 
-
- 1. Install Stack following the instructions here: http://docs.haskellstack.org/en/stable/README/#how-to-install
- 3. Checkout the latest version of camfort
- 5. Build using Stack
-
-```
-git clone git@github.com:camfort/camfort.git
-cd camfort
-stack setup
-stack build
-stack install      # install binary
-stack exec camfort # run camfort
-```
-
-Please note that at this time we have been unable to compile Camfort on Windows due to a problem with the hmatrix dependency. 
-
-### Using Cabal
-
-Cabal does not automatically install the build tools. If you wonder why
-checkout haskell/cabal#220.
-
-```
-$ cabal install alex happy
-```
-
-Install the native packages needed for `hmatrix` dependency
-
-```
-sudo apt-get install libgsl0-dev liblapack-dev libatlas-base-dev
-```
-
-### For general usage
-
-```
-$ cabal install camfort
-```
-
-### For development
-
-```
-$ cabal sandbox init
-$ cabal install --only-dependencies
-$ cabal exec bash
-```
-
-This spawns a new shell with only the packages within the sandbox available.
-
-```
-$ ghc Main.hs -o camfort
-```
-
-This generates a camfort executable in the root directory using only the
-packages in the sandbox and none of ~/.cabal or system Haskell packages.
+Please see the
+[installation guide](https://github.com/camfort/camfort/wiki/Installation-Guide)
+in the wiki.
 
 ## Usage
 
 ```
-CamFort 0.800 - Cambridge Fortran Infrastructure.
+CamFort 0.801 - Cambridge Fortran Infrastructure.
 Usage: camfort <MODE> <INPUT> [OUTPUT] [OPTIONS...]
 Refactor functions:
 	common         	 [common block elimination] 

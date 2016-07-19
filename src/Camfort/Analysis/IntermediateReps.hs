@@ -15,6 +15,7 @@
 -}
 {-# LANGUAGE ImplicitParams #-}
 {-# LANGUAGE DeriveDataTypeable #-}
+{-# LANGUAGE FlexibleInstances #-}
 
 module Camfort.Analysis.IntermediateReps where
 

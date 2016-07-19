@@ -77,7 +77,7 @@ instance {-# OVERLAPPABLE #-} (Show a) => Show' a where
       show' = show
 
 class OutputFiles t where
-   {-| Given a directory and list of triples of filenames, with their source
+  {-| Given a directory and list of triples of filenames, with their source
        text (if it exists) and their AST, write these to the directory -}
   mkOutputText :: FileOrDir -> t -> SourceText
   outputFile   :: t -> Filename

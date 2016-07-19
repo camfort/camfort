@@ -1,5 +1,5 @@
 name:                   camfort
-version:                0.800
+version:                0.801
 synopsis:               CamFort - Cambridge Fortran infrastructure
 description:            CamFort is a tool for the analysis, transformation, verification of Fortran code.
 
@@ -85,7 +85,7 @@ executable camfort
                         Main
 
   build-depends:        base < 5,
-                        ghc-prim == 0.4.0.0,
+                        ghc-prim >= 0.4.0.0,
                         containers >= 0.5.0.0,
                         template-haskell >=2.4,
                         generic-deriving >=1.5.5,
@@ -164,7 +164,7 @@ library
   other-modules:
 
   build-depends:        base < 5,
-                        ghc-prim == 0.4.0.0,
+                        ghc-prim >= 0.4.0.0,
                         containers >= 0.5.0.0,
                         template-haskell >=2.4,
                         generic-deriving >=1.5.5,

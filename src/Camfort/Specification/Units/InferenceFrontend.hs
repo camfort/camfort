@@ -24,8 +24,14 @@ TODO:
 -}
 
 
-{-# LANGUAGE ScopedTypeVariables, ImplicitParams, DoAndIfThenElse, ConstraintKinds,
-             MultiParamTypeClasses #-}
+{-# LANGUAGE ScopedTypeVariables #-}
+{-# LANGUAGE ImplicitParams #-}
+{-# LANGUAGE DoAndIfThenElse #-}
+{-# LANGUAGE ConstraintKinds #-}
+{-# LANGUAGE MultiParamTypeClasses #-}
+{-# LANGUAGE TypeSynonymInstances #-}
+{-# LANGUAGE FlexibleInstances #-}
+{-# LANGUAGE FlexibleContexts #-}
 
 module Camfort.Specification.Units.InferenceFrontend (doInferUnits) where
 
