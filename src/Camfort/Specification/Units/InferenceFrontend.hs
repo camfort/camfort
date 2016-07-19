@@ -303,8 +303,7 @@ instantiate (name, callId) = transformBi $ \ info -> case info of
 extractConstraints :: F.ProgramFile UA -> UnitSolver Constraints
 extractConstraints pf = do
   varUnitMap <- usVarUnitMap `fmap` get
-  return $ [ info | info@(UnitEq {}) <- universeBi pf ] ++
-           [ UnitEq (Determined v) u | (v, u) <- M.toList varUnitMap ]
+  return $ [ info | info@(UnitEq {}) <- universeBi pf ]
 
 -- Does the UnitInfo contain any Parametric elements?
 isParametric :: UnitInfo -> Bool
