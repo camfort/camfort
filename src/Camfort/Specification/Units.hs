@@ -108,21 +108,31 @@ inferCriticalVariables (fname, pf)
   | Left exc   <- eVars = (errReport exc, (fname, pf))
   where
     -- Format report
-    okReport vars = fname ++ ": " ++ varReport vars ++ "\n" ++ logs
+    okReport vars = logs ++ "\n\n" ++ unlines [ fname ++ ": " ++ expReport ei | ei <- expInfo ]
+      where
+        names = map showVar vars
+        expInfo = [ e | s@(F.StDeclaration {})               <- universeBi pfUA :: [F.Statement UA]
+                      , e@(F.ExpValue _ _ (F.ValVariable _)) <- universeBi s    :: [F.Expression UA]
+                      , FA.varName e `elem` names ]
+
+    expReport e = showSrcSpan (getSpan e) ++ " " ++ fromMaybe v (M.lookup v nameMap)
+      where v = FA.varName e
+
     varReport     = intercalate ", " . map showVar
 
-    showVar (UnitVar v)     = v `fromMaybe` M.lookup v nameMap
-    showVar (UnitLiteral _) = "<literal>" -- FIXME
+    showVar (UnitVar v)     = v
+    showVar (UnitLiteral _) = "<literal>"
     showVar _               = "<bad>"
 
     errReport exc = fname ++ ": " ++ show exc ++ "\n" ++ logs
 
     -- run inference
-    uOpts = UnitOpts { uoDebug          = True
+    uOpts = UnitOpts { uoDebug          = False
                      , uoLiterals       = LitMixed
                      , uoNameMap        = nameMap
                      , uoArgumentDecls  = False }
     (eVars, state, logs) = runUnitSolver uOpts pf' $ initInference >> runCriticalVariables
+    pfUA = usProgramFile state
 
     pf' = FAR.analyseRenames . FA.initAnalysis . fmap mkUnitAnnotation $ pf
     nameMap = FAR.extractNameMap pf'
@@ -187,9 +197,7 @@ inferUnits (fname, pf)
                      , uoLiterals       = LitMixed
                      , uoNameMap        = nameMap
                      , uoArgumentDecls  = False }
-    (eVars, state, logs) = runUnitSolver uOpts pf' $ do
-      initInference
-      runInferVariables
+    (eVars, state, logs) = runUnitSolver uOpts pf' $ initInference >> runInferVariables
 
     pfUA = usProgramFile state
 
