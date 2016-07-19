@@ -68,7 +68,7 @@ packages in the sandbox and none of ~/.cabal or system Haskell packages.
 ## Usage
 
 ```
-CamFort 0.800 - Cambridge Fortran Infrastructure.
+CamFort 0.801 - Cambridge Fortran Infrastructure.
 Usage: camfort <MODE> <INPUT> [OUTPUT] [OPTIONS...]
 Refactor functions:
 	common         	 [common block elimination] 
