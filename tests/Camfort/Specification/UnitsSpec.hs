@@ -48,14 +48,14 @@ spec = do
       it "testCons2" $ do
         criticalVariables testCons2 `shouldSatisfy` null
       it "testCons3" $ do
-        criticalVariables testCons3 `shouldBe` [Undetermined "c",Undetermined "e"]
+        criticalVariables testCons3 `shouldBe` [UnitVar "c",UnitVar "e"]
       it "testCons4" $ do
-        criticalVariables testCons4 `shouldBe` [Undetermined "simple2_a22"]
+        criticalVariables testCons4 `shouldBe` [UnitVar "simple2_a22"]
       it "testCons5" $ do
         criticalVariables testCons5 `shouldSatisfy` null
     describe "Infer Variables" $ do
       it "testCons5" $ do
-        inferVariables testCons5 `shouldBe` [("simple2_a11",UnitMul (UnitPow (UnitName "m") 2.0) (UnitPow (UnitName "s") (-4.0)))]
+        inferVariables testCons5 `shouldBe` testCons5_infer
 
 -- describe "Unit specifications" $ do
 --   describe "Integration tests of infer and synthesise" integration
@@ -96,66 +96,69 @@ doIntegration c fname expInfer = do
 --------------------------------------------------
 
 testCons1 = [ UnitEq (UnitName "kg") (UnitName "m")
-            , UnitEq (Determined "x") (UnitName "m")
-            , UnitEq (Determined "y") (UnitName "kg")]
+            , UnitEq (UnitVar "x") (UnitName "m")
+            , UnitEq (UnitVar "y") (UnitName "kg")]
 
 testCons1_flattened = [([UnitPow (UnitName "kg") 1.0],[UnitPow (UnitName "m") 1.0])
-                      ,([UnitPow (Determined "x") 1.0],[UnitPow (UnitName "m") 1.0])
-                      ,([UnitPow (Determined "y") 1.0],[UnitPow (UnitName "kg") 1.0])]
+                      ,([UnitPow (UnitVar "x") 1.0],[UnitPow (UnitName "m") 1.0])
+                      ,([UnitPow (UnitVar "y") 1.0],[UnitPow (UnitName "kg") 1.0])]
 
 testCons1_shifted = [([],[UnitPow (UnitName "m") 1.0,UnitPow (UnitName "kg") (-1.0)])
-                    ,([UnitPow (Determined "x") 1.0],[UnitPow (UnitName "m") 1.0])
-                    ,([UnitPow (Determined "y") 1.0],[UnitPow (UnitName "kg") 1.0])]
+                    ,([UnitPow (UnitVar "x") 1.0],[UnitPow (UnitName "m") 1.0])
+                    ,([UnitPow (UnitVar "y") 1.0],[UnitPow (UnitName "kg") 1.0])]
 
 --------------------------------------------------
 
 testCons2 = [UnitEq (UnitMul (UnitName "m") (UnitPow (UnitName "s") (-1.0))) (UnitMul (UnitName "m") (UnitPow (UnitName "s") (-1.0)))
             ,UnitEq (UnitName "m") (UnitMul (UnitMul (UnitName "m") (UnitPow (UnitName "s") (-1.0))) (UnitName "s"))
-            ,UnitEq (UnitAlias "accel") (UnitMul (UnitName "m") (UnitPow (ParametricUse ("simple1_sqr6",0,0)) (-1.0)))
-            ,UnitEq (UnitName "s") (ParametricUse ("simple1_sqr6",1,0))
-            ,UnitEq (Determined "simple1_a5") (UnitAlias "accel")
-            ,UnitEq (Determined "simple1_t4") (UnitName "s")
-            ,UnitEq (Determined "simple1_v3") (UnitMul (UnitName "m") (UnitPow (UnitName "s") (-1.0)))
-            ,UnitEq (Determined "simple1_x1") (UnitName "m")
-            ,UnitEq (Determined "simple1_y2") (UnitName "m")
-            ,UnitEq (ParametricUse ("simple1_sqr6",0,0)) (ParametricUse ("simple1_mul7",0,1))
-            ,UnitEq (ParametricUse ("simple1_sqr6",1,0)) (ParametricUse ("simple1_mul7",1,1))
-            ,UnitEq (ParametricUse ("simple1_sqr6",1,0)) (ParametricUse ("simple1_mul7",2,1))
-            ,UnitEq (ParametricUse ("simple1_mul7",0,1)) (UnitMul (ParametricUse ("simple1_mul7",1,1)) (ParametricUse ("simple1_mul7",2,1)))
+            ,UnitEq (UnitAlias "accel") (UnitMul (UnitName "m") (UnitPow (UnitParamUse ("simple1_sqr6",0,0)) (-1.0)))
+            ,UnitEq (UnitName "s") (UnitParamUse ("simple1_sqr6",1,0))
+            ,UnitEq (UnitVar "simple1_a5") (UnitAlias "accel")
+            ,UnitEq (UnitVar "simple1_t4") (UnitName "s")
+            ,UnitEq (UnitVar "simple1_v3") (UnitMul (UnitName "m") (UnitPow (UnitName "s") (-1.0)))
+            ,UnitEq (UnitVar "simple1_x1") (UnitName "m")
+            ,UnitEq (UnitVar "simple1_y2") (UnitName "m")
+            ,UnitEq (UnitParamUse ("simple1_sqr6",0,0)) (UnitParamUse ("simple1_mul7",0,1))
+            ,UnitEq (UnitParamUse ("simple1_sqr6",1,0)) (UnitParamUse ("simple1_mul7",1,1))
+            ,UnitEq (UnitParamUse ("simple1_sqr6",1,0)) (UnitParamUse ("simple1_mul7",2,1))
+            ,UnitEq (UnitParamUse ("simple1_mul7",0,1)) (UnitMul (UnitParamUse ("simple1_mul7",1,1)) (UnitParamUse ("simple1_mul7",2,1)))
             ,UnitEq (UnitAlias "accel") (UnitMul (UnitName "m") (UnitPow (UnitName "s") (-2.0)))]
 
 testCons2_shifted = [([],[UnitPow (UnitName "m") 1.0,UnitPow (UnitName "s") (-1.0),UnitPow (UnitName "m") (-1.0),UnitPow (UnitName "s") 1.0])
                     ,([],[UnitPow (UnitName "m") 1.0,UnitPow (UnitName "m") (-1.0)])
-                    ,([UnitPow (UnitAlias "accel") 1.0,UnitPow (ParametricUse ("simple1_sqr6",0,0)) 1.0],[UnitPow (UnitName "m") 1.0])
-                    ,([UnitPow (ParametricUse ("simple1_sqr6",1,0)) (-1.0)],[UnitPow (UnitName "s") (-1.0)])
-                    ,([UnitPow (Determined "simple1_a5") 1.0,UnitPow (UnitAlias "accel") (-1.0)],[])
-                    ,([UnitPow (Determined "simple1_t4") 1.0],[UnitPow (UnitName "s") 1.0])
-                    ,([UnitPow (Determined "simple1_v3") 1.0],[UnitPow (UnitName "m") 1.0,UnitPow (UnitName "s") (-1.0)])
-                    ,([UnitPow (Determined "simple1_x1") 1.0],[UnitPow (UnitName "m") 1.0])
-                    ,([UnitPow (Determined "simple1_y2") 1.0],[UnitPow (UnitName "m") 1.0])
-                    ,([UnitPow (ParametricUse ("simple1_sqr6",0,0)) 1.0,UnitPow (ParametricUse ("simple1_mul7",0,1)) (-1.0)],[])
-                    ,([UnitPow (ParametricUse ("simple1_sqr6",1,0)) 1.0,UnitPow (ParametricUse ("simple1_mul7",1,1)) (-1.0)],[])
-                    ,([UnitPow (ParametricUse ("simple1_sqr6",1,0)) 1.0,UnitPow (ParametricUse ("simple1_mul7",2,1)) (-1.0)],[])
-                    ,([UnitPow (ParametricUse ("simple1_mul7",0,1)) 1.0,UnitPow (ParametricUse ("simple1_mul7",1,1)) (-1.0),UnitPow (ParametricUse ("simple1_mul7",2,1)) (-1.0)],[])
+                    ,([UnitPow (UnitAlias "accel") 1.0,UnitPow (UnitParamUse ("simple1_sqr6",0,0)) 1.0],[UnitPow (UnitName "m") 1.0])
+                    ,([UnitPow (UnitParamUse ("simple1_sqr6",1,0)) (-1.0)],[UnitPow (UnitName "s") (-1.0)])
+                    ,([UnitPow (UnitVar "simple1_a5") 1.0,UnitPow (UnitAlias "accel") (-1.0)],[])
+                    ,([UnitPow (UnitVar "simple1_t4") 1.0],[UnitPow (UnitName "s") 1.0])
+                    ,([UnitPow (UnitVar "simple1_v3") 1.0],[UnitPow (UnitName "m") 1.0,UnitPow (UnitName "s") (-1.0)])
+                    ,([UnitPow (UnitVar "simple1_x1") 1.0],[UnitPow (UnitName "m") 1.0])
+                    ,([UnitPow (UnitVar "simple1_y2") 1.0],[UnitPow (UnitName "m") 1.0])
+                    ,([UnitPow (UnitParamUse ("simple1_sqr6",0,0)) 1.0,UnitPow (UnitParamUse ("simple1_mul7",0,1)) (-1.0)],[])
+                    ,([UnitPow (UnitParamUse ("simple1_sqr6",1,0)) 1.0,UnitPow (UnitParamUse ("simple1_mul7",1,1)) (-1.0)],[])
+                    ,([UnitPow (UnitParamUse ("simple1_sqr6",1,0)) 1.0,UnitPow (UnitParamUse ("simple1_mul7",2,1)) (-1.0)],[])
+                    ,([UnitPow (UnitParamUse ("simple1_mul7",0,1)) 1.0,UnitPow (UnitParamUse ("simple1_mul7",1,1)) (-1.0),UnitPow (UnitParamUse ("simple1_mul7",2,1)) (-1.0)],[])
                     ,([UnitPow (UnitAlias "accel") 1.0],[UnitPow (UnitName "m") 1.0,UnitPow (UnitName "s") (-2.0)])]
 
-testCons3 = [ UnitEq (Undetermined "a") (Undetermined "e")
-            , UnitEq (Undetermined "a") (UnitMul (Undetermined "b") (UnitMul (Undetermined "c") (Determined "d")))
-            , UnitEq (Determined "d") (UnitName "m") ]
+testCons3 = [ UnitEq (UnitVar "a") (UnitVar "e")
+            , UnitEq (UnitVar "a") (UnitMul (UnitVar "b") (UnitMul (UnitVar "c") (UnitVar "d")))
+            , UnitEq (UnitVar "d") (UnitName "m") ]
 
-testCons3_shifted = [([UnitPow (Undetermined "a") 1.0,UnitPow (Undetermined "e") (-1.0)],[])
-                    ,([UnitPow (Undetermined "a") 1.0,UnitPow (Determined "d") (-1.0),UnitPow (Undetermined "b") (-1.0),UnitPow (Undetermined "c") (-1.0)],[])
-                    ,([UnitPow (Determined "d") 1.0],[UnitPow (UnitName "m") 1.0])]
+testCons3_shifted = [([UnitPow (UnitVar "a") 1.0,UnitPow (UnitVar "e") (-1.0)],[])
+                    ,([UnitPow (UnitVar "a") 1.0,UnitPow (UnitVar "b") (-1.0),UnitPow (UnitVar "c") (-1.0),UnitPow (UnitVar "d") (-1.0)],[])
+                    ,([UnitPow (UnitVar "d") 1.0],[UnitPow (UnitName "m") 1.0])]
 
-testCons4 = [UnitEq (Undetermined "simple2_a11") (ParametricUse ("simple2_sqr3",0,0))
-            ,UnitEq (Undetermined "simple2_a22") (ParametricUse ("simple2_sqr3",1,0))
-            ,UnitEq (Determined "simple2_a11") (Undetermined "simple2_a11")
-            ,UnitEq (Determined "simple2_a22") (Undetermined "simple2_a22")
-            ,UnitEq (ParametricUse ("simple2_sqr3",0,0)) (UnitMul (ParametricUse ("simple2_sqr3",1,0)) (ParametricUse ("simple2_sqr3",1,0)))]
+testCons4 = [UnitEq (UnitVar "simple2_a11") (UnitParamUse ("simple2_sqr3",0,0))
+            ,UnitEq (UnitVar "simple2_a22") (UnitParamUse ("simple2_sqr3",1,0))
+            ,UnitEq (UnitVar "simple2_a11") (UnitVar "simple2_a11")
+            ,UnitEq (UnitVar "simple2_a22") (UnitVar "simple2_a22")
+            ,UnitEq (UnitParamUse ("simple2_sqr3",0,0)) (UnitMul (UnitParamUse ("simple2_sqr3",1,0)) (UnitParamUse ("simple2_sqr3",1,0)))]
 
-testCons5 = [UnitEq (Undetermined "simple2_a11") (ParametricUse ("simple2_sqr3",0,0))
-            ,UnitEq (UnitAlias "accel") (ParametricUse ("simple2_sqr3",1,0))
-            ,UnitEq (Determined "simple2_a11") (Undetermined "simple2_a11")
-            ,UnitEq (Determined "simple2_a22") (UnitAlias "accel")
-            ,UnitEq (ParametricUse ("simple2_sqr3",0,0)) (UnitMul (ParametricUse ("simple2_sqr3",1,0)) (ParametricUse ("simple2_sqr3",1,0)))
+testCons5 = [UnitEq (UnitVar "simple2_a11") (UnitParamUse ("simple2_sqr3",0,0))
+            ,UnitEq (UnitAlias "accel") (UnitParamUse ("simple2_sqr3",1,0))
+            ,UnitEq (UnitVar "simple2_a11") (UnitVar "simple2_a11")
+            ,UnitEq (UnitVar "simple2_a22") (UnitAlias "accel")
+            ,UnitEq (UnitParamUse ("simple2_sqr3",0,0)) (UnitMul (UnitParamUse ("simple2_sqr3",1,0)) (UnitParamUse ("simple2_sqr3",1,0)))
             ,UnitEq (UnitAlias "accel") (UnitMul (UnitName "m") (UnitPow (UnitName "s") (-2.0)))]
+
+testCons5_infer = [("simple2_a11",UnitMul (UnitPow (UnitName "m") 2.0) (UnitPow (UnitName "s") (-4.0)))
+                  ,("simple2_a22",UnitMul (UnitPow (UnitName "m") 1.0) (UnitPow (UnitName "s") (-2.0)))]
