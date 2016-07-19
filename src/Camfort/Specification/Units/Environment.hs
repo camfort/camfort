@@ -82,7 +82,11 @@ instance Show UnitInfo where
 data Constraint
   = ConEq   UnitInfo UnitInfo        -- an equality constraint
   | ConConj [Constraint]             -- conjunction of constraints
-  deriving (Show, Eq, Ord, Data, Typeable)
+  deriving (Eq, Ord, Data, Typeable)
+
+instance Show Constraint where
+  show (ConEq u1 u2) = show u1 ++ " === " ++ show u2
+  show (ConConj cs) = intercalate " && " (map show cs)
 
 type Constraints = [Constraint]
 

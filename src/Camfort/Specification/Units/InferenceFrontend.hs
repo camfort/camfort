@@ -33,7 +33,8 @@ TODO:
 
 module Camfort.Specification.Units.InferenceFrontend
   ( doInferUnits, solveProgramFile, initInference
-  , runCriticalVariables, runInferVariables, runInconsistentConstraints )
+  , runCriticalVariables, runInferVariables, runInconsistentConstraints
+  , getConstraint )
 where
 
 import Data.Data
