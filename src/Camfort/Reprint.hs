@@ -36,58 +36,60 @@ import Language.Fortran
 -}
 import Camfort.Analysis.Syntax
 
-type Query a = a -> StateT SrcLoc m (String, Bool)
+type Query m a = a -> StateT SrcLoc m (String, Bool)
 
 -- Start of GLORIOUS REFACTORING ALGORITHM!
 -- FIXME: Use ByteString! (Or Data.Text, at least)
 
-reprint :: (Data (p Annotation), PrettyPrint (p Annotation))
-        => (forall a . Typeable a => [String] -> SrcLoc -> Query a)
-        -> SourceText -> Filename -> p Annotation -> String
+reprint :: (Monad m, Data (p Annotation), PrettyPrint (p Annotation))
+        => (forall b . Typeable b => [String] -> Query m b)
+        -> SourceText -> Filename -> p Annotation -> m String
 reprint refactoring input f p
   -- If the inupt is null then switch into pretty printer
-  | B.null input = prettyPrint p
+  | B.null input = return $ prettyPrint p
   -- Otherwise go with the normal algorithm
-  | otherwise =
-    pn ++ pe
-  where input' = map B.unpack $ B.lines input
-        len = Prelude.length input'
-        start = SrcLoc f 1 0
-        end = SrcLoc f len (1 + (Prelude.length $ Prelude.last input'))
-        (pn, cursorn) = evalState (reprintC refactoring start input' (toZipper p)) 0
-        (_, inpn) = takeBounds (start, cursorn) input'
-        (pe, _) = takeBounds (cursorn, end) inpn
+  | otherwise = do
+      let input' = map B.unpack $ B.lines input
+      let len    = Prelude.length input'
+      let start  = SrcLoc f 1 0
+      let end    = SrcLoc f len (1 + (Prelude.length $ Prelude.last input'))
+      (pn, cursorn) <- runStateT (reprintC refactoring input' (toZipper p)) start
+      let (_, inpn) = takeBounds (start, cursorn) input'
+      let (pe, _)   = takeBounds (cursorn, end) inpn
+      return $ pn ++ pe
 
-reprintC :: (forall b . (Typeable b) => [String] -> SrcLoc -> Query b)
-         -> SrcLoc -> [String] -> Zipper a -> State Int (String, SrcLoc)
-reprintC refactoring cursor inp z = do
-  (p1, cursor', flag) <- query (refactoring inp cursor) z
-
-  (_, inp')       <- return $ takeBounds (cursor, cursor') inp
-  (p2, cursor'')  <- if flag then return ("", cursor')
-                             else enterDown refactoring cursor' inp' z
-
-  (_, inp'')      <- return $ takeBounds (cursor', cursor'') inp'
-  (p3, cursor''') <- enterRight refactoring cursor'' inp'' z
-
-  return (p1 ++ p2 ++ p3, cursor''')
+reprintC :: Monad m
+         => (forall b . (Typeable b) => [String] -> Query m b)
+         -> [String] -> Zipper a -> StateT SrcLoc m String
+reprintC refactoring inp z = do
+  cursor     <- get
+  (p1, flag) <- query (refactoring inp) z
+  cursor'    <- get
+  (_, inp')  <- return $ takeBounds (cursor, cursor') inp
+  p2         <- if flag then return ""
+                        else enterDown refactoring inp' z
+  cursor''   <- get
+  (_, inp'') <- return $ takeBounds (cursor', cursor'') inp'
+  p3         <- enterRight refactoring inp'' z
+  return $ p1 ++ p2 ++ p3
 
 enterDown, enterRight ::
-             (forall b . (Typeable b) => [String] -> SrcLoc -> Query b)
-          -> SrcLoc -> [String] -> Zipper a -> State Int (String, SrcLoc)
-enterDown refactoring cursor inp z =
+              Monad m
+           => (forall b . (Typeable b) => [String] -> Query m b)
+           -> [String] -> Zipper a -> StateT SrcLoc m String
+enterDown refactoring inp z =
   case (down' z) of
     -- Go to children
-    Just dz -> reprintC refactoring cursor inp dz
+    Just dz -> reprintC refactoring inp dz
     -- No children
-    Nothing -> return $ ("", cursor)
+    Nothing -> return $ ""
 
-enterRight refactoring cursor inp z =
+enterRight refactoring inp z =
   case (right z) of
     -- Go to right sibling
-    Just rz -> reprintC refactoring cursor inp rz
+    Just rz -> reprintC refactoring inp rz
     -- No right sibling
-    Nothing -> return $ ("", cursor)
+    Nothing -> return $ ""
 
 takeBounds :: (SrcLoc, SrcLoc) -> [String] -> (String, [String])
 takeBounds (l, u) inp = takeBounds' (lineCol l, lineCol u) [] inp
