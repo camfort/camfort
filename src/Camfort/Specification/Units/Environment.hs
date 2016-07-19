@@ -29,7 +29,6 @@ import qualified Language.Fortran.AST as F
 import qualified Language.Fortran.Analysis as FA
 import qualified Language.Fortran.Util.Position as FU
 
-import Camfort.Specification.Units.Parser
 import qualified Camfort.Specification.Units.Parser as P
 
 import Data.Char
@@ -37,6 +36,8 @@ import Data.Data
 import Data.List
 import Data.Matrix
 import Data.Ratio
+
+import Text.Printf
 
 data UnitInfo
   = UnitParamAbs (String, Int)       -- an abstract parameter identified by PU name and argument position
@@ -49,7 +50,34 @@ data UnitInfo
   | UnitVar String                   -- variable with undetermined units (assumed to have unique name)
   | UnitMul UnitInfo UnitInfo        -- two units multiplied
   | UnitPow UnitInfo Double          -- a unit raised to a constant power
-  deriving (Show, Eq, Ord, Data, Typeable)
+  deriving (Eq, Ord, Data, Typeable)
+
+instance Show UnitInfo where
+  show u = case u of
+    UnitParamAbs (f, i)    -> printf "#<ParamAbs %s[%d]>" f i
+    UnitParamUse (f, i, j) -> printf "#<ParamUse %s[%d,%d]>" f i j
+    UnitLiteral i          -> printf "#<Literal id=%d>" i
+    UnitlessLit            -> "1"
+    UnitlessVar            -> "1"
+    UnitName name          -> name
+    UnitAlias name         -> name
+    UnitVar var            -> printf "#<Var %s>" var
+    UnitMul u1 (UnitPow u2 k)
+      | k < 0              -> maybeParen u1 ++ " / " ++ show (UnitPow u2 (-k))
+    UnitMul u1 u2          -> maybeParenS u1 ++ " " ++ maybeParenS u2
+    UnitPow u 1            -> show u
+    UnitPow u 0            -> "1"
+    UnitPow u k            -> printf "%s**%s" (maybeParen u) kStr
+      where kStr | k < 0     = printf "(%f)" k
+                 | otherwise = show k
+    where
+      maybeParen x | all isAlphaNum s = s
+                   | otherwise        = "(" ++ s ++ ")"
+        where s = show x
+      maybeParenS x | all isUnitMulOk s = s
+                    | otherwise         = "(" ++ s ++ ")"
+        where s = show x
+      isUnitMulOk c = isSpace c || isAlphaNum c || c `elem` "*."
 
 data Constraint
   = ConEq   UnitInfo UnitInfo        -- an equality constraint
@@ -112,7 +140,7 @@ type DebugInfo = [(Col, (FU.SrcSpan, String))]
 
 data UnitAnnotation a = UnitAnnotation {
    prevAnnotation :: a,
-   unitSpec       :: Maybe UnitStatement,
+   unitSpec       :: Maybe P.UnitStatement,
    unitConstraint :: Maybe Constraint,
    unitInfo       :: Maybe UnitInfo,
    unitBlock      :: Maybe (F.Block (FA.Analysis (UnitAnnotation a))) }
@@ -208,18 +236,18 @@ convertUnit (UnitPow u r) = do
 
 -- Convert parser units to UnitInfo
 
-toUnitInfo :: UnitOfMeasure -> UnitInfo
-toUnitInfo (UnitProduct u1 u2) =
+toUnitInfo :: P.UnitOfMeasure -> UnitInfo
+toUnitInfo (P.UnitProduct u1 u2) =
     UnitMul (toUnitInfo u1) (toUnitInfo u2)
-toUnitInfo (UnitQuotient u1 u2) =
+toUnitInfo (P.UnitQuotient u1 u2) =
     UnitMul (toUnitInfo u1) (UnitPow (toUnitInfo u2) (-1))
-toUnitInfo (UnitExponentiation u1 p) =
+toUnitInfo (P.UnitExponentiation u1 p) =
     UnitPow (toUnitInfo u1) (toDouble p)
   where
-    toDouble :: UnitPower -> Double
-    toDouble (UnitPowerInteger i) = fromInteger i
-    toDouble (UnitPowerRational x y) = fromRational (x % y)
-toUnitInfo (UnitBasic str) =
+    toDouble :: P.UnitPower -> Double
+    toDouble (P.UnitPowerInteger i) = fromInteger i
+    toDouble (P.UnitPowerRational x y) = fromRational (x % y)
+toUnitInfo (P.UnitBasic str) =
     UnitName str
 toUnitInfo (P.Unitless) =
     UnitlessLit
