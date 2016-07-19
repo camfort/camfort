@@ -110,9 +110,9 @@ inferCriticalVariables (fname, pf)
     okReport vars = fname ++ ": " ++ varReport vars ++ "\n" ++ logs
     varReport     = intercalate ", " . map showVar
 
-    showVar (Undetermined v) = v `fromMaybe` M.lookup v nameMap
-    showVar (LiteralValue _) = "<literal>" -- FIXME
-    showVar _                = "<bad>"
+    showVar (UnitVar v)     = v `fromMaybe` M.lookup v nameMap
+    showVar (UnitLiteral _) = "<literal>" -- FIXME
+    showVar _               = "<bad>"
 
     errReport exc = fname ++ ": " ++ show exc ++ "\n" ++ logs
 
@@ -138,9 +138,9 @@ checkUnits (fname, pf)
     okReport (Just cons) = fname ++ ": " ++ show cons ++ "\n" ++ logs
     varReport     = intercalate ", " . map showVar
 
-    showVar (Undetermined v) = v `fromMaybe` M.lookup v nameMap
-    showVar (LiteralValue _) = "<literal>" -- FIXME
-    showVar _                = "<bad>"
+    showVar (UnitVar v)     = v `fromMaybe` M.lookup v nameMap
+    showVar (UnitLiteral _) = "<literal>" -- FIXME
+    showVar _               = "<bad>"
 
     errReport exc = fname ++ ": " ++ show exc ++ "\n" ++ logs
 

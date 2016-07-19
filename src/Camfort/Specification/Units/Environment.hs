@@ -39,18 +39,17 @@ import Data.Matrix
 import Data.Ratio
 
 data UnitInfo
-  = Parametric (String, Int)         -- a parameter identified by PU name and argument position
-  | ParametricUse (String, Int, Int) -- identify particular instantiation of parameters
-  | LiteralValue Int                 -- uniquely identified literal with undetermined units
-  | UnitName String                  -- a unit
-  | UnitAlias String
-  | Determined String                -- variable with determined units (assumed to have unique name)
-  | Undetermined String              -- variable with undetermined units (assumed to have unique name)
+  = UnitParamAbs (String, Int)       -- an abstract parameter identified by PU name and argument position
+  | UnitParamUse (String, Int, Int)  -- identify particular instantiation of parameters
+  | UnitLiteral Int                  -- literal with undetermined but uniquely identified units
   | UnitlessLit                      -- a unitless literal
-  | UnitMul UnitInfo UnitInfo
-  | UnitPow UnitInfo Double
-  | UnitEq UnitInfo UnitInfo         -- the two units must be compatible
-  | UnitConj [UnitInfo]              -- conjunction
+  | UnitName String                  -- a basic unit
+  | UnitAlias String                 -- the name of a unit alias
+  | UnitVar String                   -- variable with undetermined units (assumed to have unique name)
+  | UnitMul UnitInfo UnitInfo        -- two units multiplied
+  | UnitPow UnitInfo Double          -- a unit raised to a constant power
+  | UnitEq UnitInfo UnitInfo         -- the fact that the two units must be compatible
+  | UnitConj [UnitInfo]              -- conjunction of two unit facts
   deriving (Show, Eq, Ord, Data, Typeable)
 
 type Constraints = [UnitInfo] -- should all be UnitEq
@@ -183,8 +182,8 @@ unitScalarMult r (UnitlessC r') = UnitlessC (r * r')
 unitScalarMult r (Unitful us)   = Unitful (map (\(n, u) -> (n, r * u)) us)
 
 convertUnit :: UnitInfo -> State UnitEnv UnitConstant
-convertUnit p@(Parametric {})    = error $ "Can't use parametric yet: " ++ show p
-convertUnit p@(ParametricUse {}) = error $ "Can't use parameteric yet" ++ show p
+convertUnit p@(UnitParamAbs {}) = error $ "Can't use parametric yet: " ++ show p
+convertUnit p@(UnitParamUse {}) = error $ "Can't use parameteric yet" ++ show p
 convertUnit (UnitName u) = do
   denv <- gets derivedUnitEnv
   case lookup u denv of
@@ -192,7 +191,7 @@ convertUnit (UnitName u) = do
     Nothing -> do let u1 = Unitful [(u, 1)]
                   derivedUnitEnv << (u, u1)
                   return $ u1
-convertUnit (Undetermined s) = return $ Unitful []
+convertUnit (UnitVar s)      = return $ Unitful []
 convertUnit UnitlessLit      = return $ UnitlessC 1
 convertUnit (UnitMul u1 u2)  = do
    u1' <- convertUnit u1

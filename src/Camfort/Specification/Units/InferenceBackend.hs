@@ -103,7 +103,7 @@ criticalVariables cons = filter (not . isUnitName) $ map (colA A.!) criticalIndi
 -- | Returns list of formerly-undetermined variables and their units.
 inferVariables :: Constraints -> [(String, UnitInfo)]
 inferVariables cons = [ (var, foldl1 UnitMul infos)
-                      | ([UnitPow (Undetermined var) k], infos) <- map (partition (not . isUnitName)) ups
+                      | ([UnitPow (UnitVar var) k], infos) <- map (partition (not . isUnitName)) ups
                       , k `approxEq` 1 ]
   where
     (unsolvedM, inconsists, colA)       = constraintsToMatrix cons
@@ -185,10 +185,10 @@ flattenedToMatrix cons = (m, A.array (0, numCols - 1) (map swap uniqUnits))
 
 negateCons = map (\ (UnitPow u k) -> UnitPow u (-k))
 
-colSort (LiteralValue i) (LiteralValue j) = compare i j
-colSort (LiteralValue _) _                = LT
-colSort _ (LiteralValue _)                = GT
-colSort x y                               = compare x y
+colSort (UnitLiteral i) (UnitLiteral j) = compare i j
+colSort (UnitLiteral _) _               = LT
+colSort _ (UnitLiteral _)               = GT
+colSort x y                             = compare x y
 
 --------------------------------------------------
 

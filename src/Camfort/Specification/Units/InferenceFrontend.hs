@@ -99,7 +99,7 @@ modifyAnnotation f x = F.setAnnotation (f (F.getAnnotation x)) x
 
 --------------------------------------------------
 
--- | Prepare to run an inference function (criticalVariables, inferVariables, inconsistentConstraints)
+-- | Prepare to run an inference function.
 initInference :: UnitSolver ()
 initInference = do
   pf <- usProgramFile `fmap` get
@@ -111,7 +111,7 @@ initInference = do
 
   insertGivenUnits linkedPF -- also obtains all unit alias definitions
   insertParametricUnits linkedPF
-  insertUndeterminedUnits linkedPF
+  insertUnitVarUnits linkedPF
   annotPF <- annotateAllVariables linkedPF
 
   propPF               <- propagateUnits annotPF
@@ -122,6 +122,7 @@ initInference = do
   debugLogging
 
 --------------------------------------------------
+-- Inference functions
 
 runCriticalVariables :: UnitSolver [UnitInfo]
 runCriticalVariables = do
@@ -150,7 +151,7 @@ solveProgramFile pf = do
 
   insertGivenUnits linkedPF -- also obtains all unit alias definitions
   insertParametricUnits linkedPF
-  insertUndeterminedUnits linkedPF
+  insertUnitVarUnits linkedPF
   annotPF <- annotateAllVariables linkedPF
 
   -- (FIXME: is it necessary?) repeat until fixed point:
@@ -210,7 +211,7 @@ insertParametricUnits = mapM_ paramPU . universeBi
     paramPU pu = do
       forM_ indexedParams $ \ (i, param) -> do
         -- Insert a parametric unit if the variable does not already have a unit.
-        modifyVarUnitMap $ M.insertWith (curry snd) param (Parametric (fname, i))
+        modifyVarUnitMap $ M.insertWith (curry snd) param (UnitParamAbs (fname, i))
       where
         fname = puName pu
         indexedParams
@@ -222,12 +223,12 @@ insertParametricUnits = mapM_ paramPU . universeBi
 --------------------------------------------------
 
 -- Any remaining variables with unknown units are given unit
--- Undetermined with a unique name (in this case, taken from the
+-- UnitVar with a unique name (in this case, taken from the
 -- unique name of the variable as provided by the Renamer).
-insertUndeterminedUnits :: F.ProgramFile UA -> UnitSolver ()
-insertUndeterminedUnits pf = forM_ (nub [ varName v | v@(F.ExpValue _ _ (F.ValVariable _)) <- universeBi pf ]) $ \ vname ->
+insertUnitVarUnits :: F.ProgramFile UA -> UnitSolver ()
+insertUnitVarUnits pf = forM_ (nub [ varName v | v@(F.ExpValue _ _ (F.ValVariable _)) <- universeBi pf ]) $ \ vname ->
   -- Insert an undetermined unit if the variable does not already have a unit.
-  modifyVarUnitMap $ M.insertWith (curry snd) vname (Undetermined vname)
+  modifyVarUnitMap $ M.insertWith (curry snd) vname (UnitVar vname)
 
 --------------------------------------------------
 
@@ -280,7 +281,7 @@ annotateAllVariables pf = do
 applyTemplates :: Constraints -> UnitSolver Constraints
 -- postcondition: returned constraints lack all Parametric constructors
 applyTemplates cons = do
-  let instances = nub [ (name, i) | ParametricUse (name, _, i) <- universeBi cons ]
+  let instances = nub [ (name, i) | UnitParamUse (name, _, i) <- universeBi cons ]
   temps <- foldM substInstance [] instances
   aliasMap <- usUnitAliasMap `fmap` get
   let aliases = [ UnitEq (UnitAlias name) def | (name, def) <- M.toList aliasMap ]
@@ -296,8 +297,8 @@ substInstance output (name, callId) = do
 
 -- Convert a parametric template into a particular use
 instantiate (name, callId) = transformBi $ \ info -> case info of
-  Parametric (name, position) -> ParametricUse (name, position, callId)
-  _                           -> info
+  UnitParamAbs (name, position) -> UnitParamUse (name, position, callId)
+  _                             -> info
 
 -- Gather all constraints from the AST, as well as from the varUnitMap
 extractConstraints :: F.ProgramFile UA -> UnitSolver Constraints
@@ -307,7 +308,7 @@ extractConstraints pf = do
 
 -- Does the UnitInfo contain any Parametric elements?
 isParametric :: UnitInfo -> Bool
-isParametric info = not (null [ () | Parametric _ <- universeBi info ])
+isParametric info = not (null [ () | UnitParamAbs _ <- universeBi info ])
 
 --------------------------------------------------
 
@@ -319,8 +320,8 @@ propagateUnits = transformBiM propagatePU <=< transformBiM propagateStatement <=
 propagateExp :: F.Expression UA -> UnitSolver (F.Expression UA)
 propagateExp e = fmap uoLiterals ask >>= \ lm -> case e of
   F.ExpValue _ _ (F.ValVariable _)       -> return e -- all variables should already be annotated
-  F.ExpValue _ _ (F.ValInteger _)        -> flip setUnitInfo e `fmap` genLiteralValue
-  F.ExpValue _ _ (F.ValReal _)           -> flip setUnitInfo e `fmap` genLiteralValue
+  F.ExpValue _ _ (F.ValInteger _)        -> flip setUnitInfo e `fmap` genUnitLiteral
+  F.ExpValue _ _ (F.ValReal _)           -> flip setUnitInfo e `fmap` genUnitLiteral
   F.ExpBinary _ _ F.Multiplication e1 e2 -> setF2 UnitMul (getUnitInfoMul lm e1) (getUnitInfoMul lm e2)
   F.ExpBinary _ _ F.Division e1 e2       -> setF2 UnitMul (getUnitInfoMul lm e1) (flip UnitPow (-1) `fmap` (getUnitInfoMul lm e2))
   F.ExpBinary _ _ F.Exponentiation e1 e2 -> setF2 UnitPow (getUnitInfo e1) (constantExpression e2)
@@ -355,18 +356,18 @@ propagatePU pu = modifyTemplateMap (M.insert name cons) >> return (setUnitInfo (
     name = puName pu
 
 containsParametric :: Data from => String -> from -> Bool
-containsParametric name x = not (null [ () | Parametric (name', _) <- universeBi x, name == name' ])
+containsParametric name x = not (null [ () | UnitParamAbs (name', _) <- universeBi x, name == name' ])
 
 callHelper :: F.Expression UA -> [F.Argument UA] -> UnitSolver (UnitInfo, [F.Argument UA])
 callHelper nexp args = do
   let name = varName nexp
   callId <- genCallId
   let eachArg i arg@(F.Argument _ _ _ e)
-        | Just u <- getUnitInfo e = setUnitInfo (UnitEq u (ParametricUse (name, i, callId))) arg
+        | Just u <- getUnitInfo e = setUnitInfo (UnitEq u (UnitParamUse (name, i, callId))) arg
         | otherwise               = arg
   let args' = zipWith eachArg [1..] args
 
-  let info = ParametricUse (name, 0, callId)
+  let info = UnitParamUse (name, 0, callId)
   return (info, args')
 
 genCallId :: UnitSolver Int
@@ -376,12 +377,12 @@ genCallId = do
   put $ st { usLitNums = callId + 1 }
   return callId
 
-genLiteralValue :: UnitSolver UnitInfo
-genLiteralValue = do
+genUnitLiteral :: UnitSolver UnitInfo
+genUnitLiteral = do
   s <- get
   let i = usLitNums s
   put $ s { usLitNums = i + 1 }
-  return $ LiteralValue i
+  return $ UnitLiteral i
 
 getUnitInfo :: F.Annotated f => f UA -> Maybe UnitInfo
 getUnitInfo = fmap flattenUnitEq . unitInfo . FA.prevAnnotation . F.getAnnotation
