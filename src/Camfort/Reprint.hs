@@ -31,13 +31,18 @@ import Data.Data
 import Control.Monad.Trans.State.Lazy
 
 import Language.Fortran
+{- data SrcLoc
+  = SrcLoc {srcFilename :: String, srcLine :: Int, srcColumn :: Int}
+-}
 import Camfort.Analysis.Syntax
+
+type Query a = a -> StateT SrcLoc m (String, Bool)
 
 -- Start of GLORIOUS REFACTORING ALGORITHM!
 -- FIXME: Use ByteString! (Or Data.Text, at least)
 
 reprint :: (Data (p Annotation), PrettyPrint (p Annotation))
-        => (forall a . Typeable a => [String] -> SrcLoc -> a -> State Int (String, SrcLoc, Bool))
+        => (forall a . Typeable a => [String] -> SrcLoc -> Query a)
         -> SourceText -> Filename -> p Annotation -> String
 reprint refactoring input f p
   -- If the inupt is null then switch into pretty printer
@@ -53,7 +58,7 @@ reprint refactoring input f p
         (_, inpn) = takeBounds (start, cursorn) input'
         (pe, _) = takeBounds (cursorn, end) inpn
 
-reprintC :: (forall b . (Typeable b) => [String] -> SrcLoc -> b -> State Int (String, SrcLoc, Bool))
+reprintC :: (forall b . (Typeable b) => [String] -> SrcLoc -> Query b)
          -> SrcLoc -> [String] -> Zipper a -> State Int (String, SrcLoc)
 reprintC refactoring cursor inp z = do
   (p1, cursor', flag) <- query (refactoring inp cursor) z
@@ -68,16 +73,23 @@ reprintC refactoring cursor inp z = do
   return (p1 ++ p2 ++ p3, cursor''')
 
 enterDown, enterRight ::
-             (forall b . (Typeable b) => [String] -> SrcLoc -> b -> State Int (String, SrcLoc, Bool))
+             (forall b . (Typeable b) => [String] -> SrcLoc -> Query b)
           -> SrcLoc -> [String] -> Zipper a -> State Int (String, SrcLoc)
-enterDown refactoring cursor inp z = case (down' z) of
-                             Just dz -> reprintC refactoring cursor inp dz
-                             Nothing -> return $ ("", cursor)
+enterDown refactoring cursor inp z =
+  case (down' z) of
+    -- Go to children
+    Just dz -> reprintC refactoring cursor inp dz
+    -- No children
+    Nothing -> return $ ("", cursor)
 
-enterRight refactoring cursor inp z = case (right z) of
-                             Just rz -> reprintC refactoring cursor inp rz
-                             Nothing -> return $ ("", cursor)
+enterRight refactoring cursor inp z =
+  case (right z) of
+    -- Go to right sibling
+    Just rz -> reprintC refactoring cursor inp rz
+    -- No right sibling
+    Nothing -> return $ ("", cursor)
 
+takeBounds :: (SrcLoc, SrcLoc) -> [String] -> (String, [String])
 takeBounds (l, u) inp = takeBounds' (lineCol l, lineCol u) [] inp
 takeBounds' ((ll, lc), (ul, uc)) tk inp  =
     if (ll == ul && lc == uc) || (ll > ul) then (Prelude.reverse tk, inp)
