@@ -32,7 +32,7 @@ TODO:
 {-# LANGUAGE TypeSynonymInstances #-}
 
 module Camfort.Specification.Units.InferenceFrontend
-  ( doInferUnits, solveProgramFile, initInference
+  ( doInferUnits, initInference
   , runCriticalVariables, runInferVariables, runInconsistentConstraints
   , getConstraint )
 where
@@ -141,26 +141,6 @@ runInconsistentConstraints = do
   return $ inconsistentConstraints cons
 
 --------------------------------------------------
-
-solveProgramFile :: F.ProgramFile UA -> UnitSolver ()
-solveProgramFile pf = do
-  -- Parse unit annotations found in comments and link to their
-  -- corresponding statements in the AST.
-  let (linkedPF, parserReport) = runWriter $ annotateComments P.unitParser pf
-  -- Send the output of the parser to the logger.
-  mapM_ tell parserReport
-
-  insertGivenUnits linkedPF -- also obtains all unit alias definitions
-  insertParametricUnits linkedPF
-  insertUnitVarUnits linkedPF
-  annotPF <- annotateAllVariables linkedPF
-
-  -- (FIXME: is it necessary?) repeat until fixed point:
-  propPF <- propagateUnits annotPF
-  consWithoutTemplates <- extractConstraints propPF
-  cons <- applyTemplates consWithoutTemplates
-  -- end repeat
-  return ()
 
 debugLogging :: UnitSolver ()
 debugLogging = whenDebug $ do

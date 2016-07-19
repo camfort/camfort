@@ -131,11 +131,11 @@ inferCriticalVariables (fname, pf)
                      , uoLiterals       = LitMixed
                      , uoNameMap        = nameMap
                      , uoArgumentDecls  = False }
-    (eVars, state, logs) = runUnitSolver uOpts pf' $ initInference >> runCriticalVariables
-    pfUA = usProgramFile state
+    (eVars, state, logs) = runUnitSolver uOpts pfRenamed $ initInference >> runCriticalVariables
+    pfUA = usProgramFile state -- the program file after units analysis is done
 
-    pf' = FAR.analyseRenames . FA.initAnalysis . fmap mkUnitAnnotation $ pf
-    nameMap = FAR.extractNameMap pf'
+    pfRenamed = FAR.analyseRenames . FA.initAnalysis . fmap mkUnitAnnotation $ pf
+    nameMap = FAR.extractNameMap pfRenamed
 
 {-| Check units-of-measure for a program -}
 checkUnits :: (Filename, F.ProgramFile Annotation) -> (Report, (Filename, F.ProgramFile Annotation))
@@ -144,9 +144,17 @@ checkUnits (fname, pf)
   | Left exc    <- eCons = (errReport exc, (fname, pf))
   where
     -- Format report
-    okReport Nothing = fname ++ ": Consistent.\n" ++ logs
-    -- FIXME: better unit pretty printer
-    okReport (Just cons) = fname ++ ": " ++ show cons ++ "\n" ++ logs
+    okReport Nothing = fname ++ ": Consistent. " ++ show nVars ++ " variables checked.\n" ++ logs
+    okReport (Just cons) = logs ++ "\n\n" ++ fname ++ ": Inconsistent:\n" ++
+                           unlines [ fname ++ ": " ++ srcSpan con ++ " constraint " ++ show con | con <- cons ]
+      where
+        srcSpan con | Just ss <- findCon con = showSrcSpan ss ++ " "
+                    | otherwise              = ""
+
+    findCon :: Constraint -> Maybe SrcSpan
+    findCon con = listToMaybe $ [ getSpan x | x <- universeBi pfUA :: [F.Statement UA], getConstraint x == Just con ] ++
+                                [ getSpan x | x <- universeBi pfUA :: [F.Expression UA], getConstraint x == Just con ]
+
     varReport     = intercalate ", " . map showVar
 
     showVar (UnitVar v)     = v `fromMaybe` M.lookup v nameMap
@@ -160,15 +168,16 @@ checkUnits (fname, pf)
                      , uoLiterals       = LitMixed
                      , uoNameMap        = nameMap
                      , uoArgumentDecls  = False }
-    (eCons, state, logs) = runUnitSolver uOpts pf' $ initInference >> runInconsistentConstraints
+    (eCons, state, logs) = runUnitSolver uOpts pfRenamed $ initInference >> runInconsistentConstraints
+    pfUA :: F.ProgramFile UA
+    pfUA = usProgramFile state -- the program file after units analysis is done
 
-    pf' = FAR.analyseRenames . FA.initAnalysis . fmap mkUnitAnnotation $ pf
-    nameMap = FAR.extractNameMap pf'
+    -- number of 'real' variables checked, e.g. not parametric
+    nVars = M.size . M.filter (not . isParametricUnit) $ usVarUnitMap state
+    isParametricUnit u = case u of UnitParamAbs {} -> True; UnitParamUse {} -> True; _ -> False
 
-    -- FIXME:
-    -- Count number of checked and inferred variables
-    -- n = countVariables (_varColEnv env) (_debugInfo env) (_procedureEnv env)
-    --                                 (fst $ _linearSystem env) (_unitVarCats env)
+    pfRenamed = FAR.analyseRenames . FA.initAnalysis . fmap mkUnitAnnotation $ pf
+    nameMap = FAR.extractNameMap pfRenamed
 
 {-| Check and infer units-of-measure for a program
      This produces an output of all the unit information for a program -}
@@ -197,12 +206,12 @@ inferUnits (fname, pf)
                      , uoLiterals       = LitMixed
                      , uoNameMap        = nameMap
                      , uoArgumentDecls  = False }
-    (eVars, state, logs) = runUnitSolver uOpts pf' $ initInference >> runInferVariables
+    (eVars, state, logs) = runUnitSolver uOpts pfRenamed $ initInference >> runInferVariables
 
-    pfUA = usProgramFile state
+    pfUA = usProgramFile state -- the program file after units analysis is done
 
-    pf' = FAR.analyseRenames . FA.initAnalysis . fmap mkUnitAnnotation $ pf
-    nameMap = FAR.extractNameMap pf'
+    pfRenamed = FAR.analyseRenames . FA.initAnalysis . fmap mkUnitAnnotation $ pf
+    nameMap = FAR.extractNameMap pfRenamed
 
 
 {-| Synthesis unspecified units for a program (after checking) -}
@@ -219,24 +228,24 @@ synthesiseUnits (fname, pf) = (r, (fname, fmap (prevAnnotation . FA.prevAnnotati
     n = countVariables (_varColEnv env) (_debugInfo env) (_procedureEnv env)
                                     (fst $ _linearSystem env) (_unitVarCats env)
     -- Apply inference and synthesis
-    pf' = FAB.analyseBBlocks . FAR.analyseRenames . FA.initAnalysis $ (fmap mkUnitAnnotation pf)
+    pfRenamed = FAB.analyseBBlocks . FAR.analyseRenames . FA.initAnalysis $ (fmap mkUnitAnnotation pf)
     (pf3, env) = runState inferAndSynthesise emptyUnitEnv
-    nameMap = FAR.extractNameMap pf'
+    nameMap = FAR.extractNameMap pfRenamed
     inferAndSynthesise =
         let ?criticals = False
             ?debug     = False
             ?nameMap   = nameMap
             ?argumentDecls = False
         in do
-          doInferUnits pf'
+          doInferUnits pfRenamed
           succeeded <- gets success
           if succeeded
             then do
-              p <- US.synthesiseUnits False pf'
+              p <- US.synthesiseUnits False pfRenamed
               (n, _) <- gets evUnitsAdded
               report <<++ ("Added " ++ (show n) ++ " annotations")
               return p
-            else return pf'
+            else return pfRenamed
 
 -- Count number of variables for which a spec has been checked
 countVariables vars debugs procs matrix ucats =
