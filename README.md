@@ -9,7 +9,7 @@ in the wiki.
 ## Usage
 
 ```
-CamFort 0.801 - Cambridge Fortran Infrastructure.
+CamFort 0.802 - Cambridge Fortran Infrastructure.
 Usage: camfort <MODE> <INPUT> [OUTPUT] [OPTIONS...]
 Refactor functions:
 	common         	 [common block elimination] 
