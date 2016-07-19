@@ -22,8 +22,8 @@ import Data.Generics.Zipper
 
 import Camfort.PrettyPrint
 import Camfort.Analysis.Annotations
-import Camfort.Helpers
 import Camfort.Traverse
+import Camfort.Helpers
 
 import qualified Data.ByteString.Char8 as B
 import Data.Functor.Identity
@@ -36,68 +36,65 @@ import Language.Fortran
 -}
 import Camfort.Analysis.Syntax
 
-type Query m a = a -> StateT SrcLoc m (String, Bool)
-
--- Start of GLORIOUS REFACTORING ALGORITHM!
--- FIXME: Use ByteString! (Or Data.Text, at least)
+--type SourceText    = B.ByteString
+type NoChildReprint = Bool
+type Refactoring m =
+    forall b . Typeable b => SourceText -> b -> StateT SrcLoc m (SourceText, NoChildReprint)
 
 reprint :: (Monad m, Data (p Annotation), PrettyPrint (p Annotation))
-        => (forall b . Typeable b => [String] -> Query m b)
-        -> SourceText -> Filename -> p Annotation -> m String
+        => Refactoring m -> SourceText -> Filename -> p Annotation -> m SourceText
 reprint refactoring input f p
   -- If the inupt is null then switch into pretty printer
   | B.null input = return $ prettyPrint p
   -- Otherwise go with the normal algorithm
   | otherwise = do
-      let input' = map B.unpack $ B.lines input
-      let len    = Prelude.length input'
-      let start  = SrcLoc f 1 0
-      let end    = SrcLoc f len (1 + (Prelude.length $ Prelude.last input'))
-      (pn, cursorn) <- runStateT (reprintC refactoring input' (toZipper p)) start
-      let (_, inpn) = takeBounds (start, cursorn) input'
-      let (pe, _)   = takeBounds (cursorn, end) inpn
-      return $ pn ++ pe
+      let numLines = length (B.lines input)
+      let lastCol  = 1 + (B.length $ last (B.lines input))
+      let startLoc = SrcLoc f 1 0
+      let endLoc   = SrcLoc f numLines lastCol
+      (output, cursorn) <- runStateT (reprintC refactoring input (toZipper p)) startLoc
+      let (_, input')  = takeBounds (startLoc, cursorn) input
+      let (output', _) = takeBounds (cursorn, endLoc) input'
+      return $ B.concat [output, output']
 
 reprintC :: Monad m
-         => (forall b . (Typeable b) => [String] -> Query m b)
-         -> [String] -> Zipper a -> StateT SrcLoc m String
+         => Refactoring m -> SourceText -> Zipper a -> StateT SrcLoc m SourceText
 reprintC refactoring inp z = do
   cursor     <- get
-  (p1, flag) <- query (refactoring inp) z
+  (p1, dontReprintChildren) <- query (refactoring inp) z
   cursor'    <- get
   (_, inp')  <- return $ takeBounds (cursor, cursor') inp
-  p2         <- if flag then return ""
-                        else enterDown refactoring inp' z
+  p2         <- if dontReprintChildren
+                   then return B.empty
+                   else enterDown refactoring inp' z
   cursor''   <- get
   (_, inp'') <- return $ takeBounds (cursor', cursor'') inp'
   p3         <- enterRight refactoring inp'' z
-  return $ p1 ++ p2 ++ p3
+  return $ B.concat [p1, p2, p3]
 
 enterDown, enterRight ::
               Monad m
-           => (forall b . (Typeable b) => [String] -> Query m b)
-           -> [String] -> Zipper a -> StateT SrcLoc m String
+           => Refactoring m -> SourceText -> Zipper a -> StateT SrcLoc m SourceText
 enterDown refactoring inp z =
   case (down' z) of
     -- Go to children
     Just dz -> reprintC refactoring inp dz
     -- No children
-    Nothing -> return $ ""
+    Nothing -> return $ B.empty
 
 enterRight refactoring inp z =
   case (right z) of
     -- Go to right sibling
     Just rz -> reprintC refactoring inp rz
     -- No right sibling
-    Nothing -> return $ ""
+    Nothing -> return $ B.empty
 
-takeBounds :: (SrcLoc, SrcLoc) -> [String] -> (String, [String])
-takeBounds (l, u) inp = takeBounds' (lineCol l, lineCol u) [] inp
+takeBounds :: (SrcLoc, SrcLoc) -> SourceText -> (SourceText, SourceText)
+takeBounds (l, u) inp = takeBounds' (lineCol l, lineCol u) B.empty inp
 takeBounds' ((ll, lc), (ul, uc)) tk inp  =
-    if (ll == ul && lc == uc) || (ll > ul) then (Prelude.reverse tk, inp)
-    else case inp of []             -> (Prelude.reverse tk, inp)
-                     ([]:[])        -> (Prelude.reverse tk, inp)
-                     ([]:ys)        -> takeBounds' ((ll+1, 0), (ul, uc)) ('\n':tk) ys
-                     ((x:xs):ys)    -> takeBounds' ((ll, lc+1), (ul, uc)) (x:tk) (xs:ys)
-
--- End of GLORIOUS REFACTORING ALGORITHM
+    if (ll == ul && lc == uc) || (ll > ul) then (B.reverse tk, inp)
+    else
+      case B.uncons inp of
+         Nothing         -> (B.reverse tk, inp)
+         Just ('\n', ys) -> takeBounds' ((ll+1, 0), (ul, uc)) (B.cons '\n' tk) ys
+         Just (x, xs)    -> takeBounds' ((ll, lc+1), (ul, uc)) (B.cons x tk) xs
