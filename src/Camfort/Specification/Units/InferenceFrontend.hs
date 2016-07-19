@@ -318,8 +318,8 @@ propagateUnits = transformBiM propagatePU <=< transformBiM propagateStatement <=
 propagateExp :: F.Expression UA -> UnitSolver (F.Expression UA)
 propagateExp e = fmap uoLiterals ask >>= \ lm -> case e of
   F.ExpValue _ _ (F.ValVariable _)       -> return e -- all variables should already be annotated
-  F.ExpValue _ _ (F.ValInteger _)        -> flip setUnitInfo e `fmap` genUndeterminedLit
-  F.ExpValue _ _ (F.ValReal _)           -> flip setUnitInfo e `fmap` genUndeterminedLit
+  F.ExpValue _ _ (F.ValInteger _)        -> flip setUnitInfo e `fmap` genLiteralValue
+  F.ExpValue _ _ (F.ValReal _)           -> flip setUnitInfo e `fmap` genLiteralValue
   F.ExpBinary _ _ F.Multiplication e1 e2 -> setF2 UnitMul (getUnitInfoMul lm e1) (getUnitInfoMul lm e2)
   F.ExpBinary _ _ F.Division e1 e2       -> setF2 UnitMul (getUnitInfoMul lm e1) (flip UnitPow (-1) `fmap` (getUnitInfoMul lm e2))
   F.ExpBinary _ _ F.Exponentiation e1 e2 -> setF2 UnitPow (getUnitInfo e1) (constantExpression e2)
@@ -375,12 +375,12 @@ genCallId = do
   put $ st { usLitNums = callId + 1 }
   return callId
 
-genUndeterminedLit :: UnitSolver UnitInfo
-genUndeterminedLit = do
+genLiteralValue :: UnitSolver UnitInfo
+genLiteralValue = do
   s <- get
   let i = usLitNums s
   put $ s { usLitNums = i + 1 }
-  return $ UndeterminedLit i
+  return $ LiteralValue i
 
 getUnitInfo :: F.Annotated f => f UA -> Maybe UnitInfo
 getUnitInfo = fmap flattenUnitEq . unitInfo . FA.prevAnnotation . F.getAnnotation

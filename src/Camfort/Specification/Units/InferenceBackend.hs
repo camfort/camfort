@@ -177,13 +177,18 @@ flattenedToMatrix cons = (m, A.array (0, numCols - 1) (map swap uniqUnits))
                 _        -> return ()
           return m
     -- identify and enumerate every unit uniquely
-    uniqUnits = flip zip [0..] . map head . group . sort $ [ u | UnitPow u _ <- concat cons ]
+    uniqUnits = flip zip [0..] . map head . group . sortBy colSort $ [ u | UnitPow u _ <- concat cons ]
     -- map units to their unique column number
     colMap    = M.fromList uniqUnits
-    numRows = length cons
-    numCols = M.size colMap
+    numRows   = length cons
+    numCols   = M.size colMap
 
 negateCons = map (\ (UnitPow u k) -> UnitPow u (-k))
+
+colSort (LiteralValue i) (LiteralValue j) = compare i j
+colSort (LiteralValue _) _                = LT
+colSort _ (LiteralValue _)                = GT
+colSort x y                               = compare x y
 
 --------------------------------------------------
 

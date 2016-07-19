@@ -110,18 +110,18 @@ inferCriticalVariables (fname, pf)
     okReport vars = fname ++ ": " ++ varReport vars ++ "\n" ++ logs
     varReport     = intercalate ", " . map showVar
 
-    showVar (Undetermined v)    = v `fromMaybe` M.lookup v nameMap
-    showVar (UndeterminedLit _) = "<literal>" -- FIXME
-    showVar _                   = "<bad>"
+    showVar (Undetermined v) = v `fromMaybe` M.lookup v nameMap
+    showVar (LiteralValue _) = "<literal>" -- FIXME
+    showVar _                = "<bad>"
 
     errReport exc = fname ++ ": " ++ show exc ++ "\n" ++ logs
 
     -- run inference
-    uOpts = UnitOpts { uoDebug          = False
+    uOpts = UnitOpts { uoDebug          = True
                      , uoLiterals       = LitMixed
                      , uoNameMap        = nameMap
                      , uoArgumentDecls  = False }
-    (eVars, state, logs) = runUnitSolver uOpts pf' $ runCriticalVariables
+    (eVars, state, logs) = runUnitSolver uOpts pf' $ initInference >> runCriticalVariables
 
     pf' = FAR.analyseRenames . FA.initAnalysis . fmap mkUnitAnnotation $ pf
     nameMap = FAR.extractNameMap pf'
@@ -138,9 +138,9 @@ checkUnits (fname, pf)
     okReport (Just cons) = fname ++ ": " ++ show cons ++ "\n" ++ logs
     varReport     = intercalate ", " . map showVar
 
-    showVar (Undetermined v)    = v `fromMaybe` M.lookup v nameMap
-    showVar (UndeterminedLit _) = "<literal>" -- FIXME
-    showVar _                   = "<bad>"
+    showVar (Undetermined v) = v `fromMaybe` M.lookup v nameMap
+    showVar (LiteralValue _) = "<literal>" -- FIXME
+    showVar _                = "<bad>"
 
     errReport exc = fname ++ ": " ++ show exc ++ "\n" ++ logs
 
@@ -149,7 +149,7 @@ checkUnits (fname, pf)
                      , uoLiterals       = LitMixed
                      , uoNameMap        = nameMap
                      , uoArgumentDecls  = False }
-    (eCons, state, logs) = runUnitSolver uOpts pf' $ runInconsistentConstraints
+    (eCons, state, logs) = runUnitSolver uOpts pf' $ initInference >> runInconsistentConstraints
 
     pf' = FAR.analyseRenames . FA.initAnalysis . fmap mkUnitAnnotation $ pf
     nameMap = FAR.extractNameMap pf'
@@ -182,7 +182,7 @@ inferUnits (fname, pf)
                      , uoLiterals       = LitMixed
                      , uoNameMap        = nameMap
                      , uoArgumentDecls  = False }
-    (eVars, state, logs) = runUnitSolver uOpts pf' $ runInferVariables
+    (eVars, state, logs) = runUnitSolver uOpts pf' $ initInference >> runInferVariables
 
     pf' = FAR.analyseRenames . FA.initAnalysis . fmap mkUnitAnnotation $ pf
     nameMap = FAR.extractNameMap pf'
