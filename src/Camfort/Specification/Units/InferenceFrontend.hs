@@ -83,12 +83,12 @@ import qualified Numeric.LinearAlgebra as H
 -- Instances for embedding parsed specifications into the AST
 instance ASTEmbeddable UA P.UnitStatement where
   annotateWithAST ann ast =
-    onPrev (\ann -> ann { unitSpec = Just ast }) ann
+    onPrev (\ ann -> ann { unitSpec = Just ast }) ann
 
 -- Link annotation comments to declaration statements
 instance Linkable UA where
   link ann (b@(F.BlStatement _ _ _ (F.StDeclaration {}))) =
-      onPrev (\ann -> ann { unitBlock = Just b }) ann
+      onPrev (\ ann -> ann { unitBlock = Just b }) ann
   link ann b = ann
 
 -- Helper for transforming the 'previous' annotation
@@ -109,18 +109,20 @@ initInference = do
   let (linkedPF, parserReport) = runWriter $ annotateComments P.unitParser pf
   -- Send the output of the parser to the logger.
   mapM_ tell parserReport
-
   insertGivenUnits linkedPF -- also obtains all unit alias definitions
   insertParametricUnits linkedPF
   insertUnitVarUnits linkedPF
   annotPF <- annotateAllVariables linkedPF
-
   propPF               <- propagateUnits annotPF
   consWithoutTemplates <- extractConstraints propPF
   cons                 <- applyTemplates consWithoutTemplates
 
-  modify $ \ s -> s { usConstraints = cons }
+  modify $ \ s -> s { usConstraints = cons, usProgramFile = cleanLinks propPF }
   debugLogging
+
+-- Remove traces of CommentAnnotator, since it confuses uniplate searches...
+cleanLinks :: F.ProgramFile UA -> F.ProgramFile UA
+cleanLinks = transformBi (\ a -> a { unitBlock = Nothing, unitSpec = Nothing } :: UnitAnnotation A)
 
 --------------------------------------------------
 -- Inference functions

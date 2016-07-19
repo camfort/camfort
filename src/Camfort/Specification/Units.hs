@@ -71,6 +71,7 @@ import qualified Language.Fortran.Analysis.BBlocks as FAB
 import qualified Language.Fortran.Analysis as FA
 import qualified Language.Fortran.AST as F
 import Language.Fortran.Util.Position
+import Language.Fortran.Util.Position
 import Camfort.Transformation.Syntax
 
 -- For debugging and development purposes
