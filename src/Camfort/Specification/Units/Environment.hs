@@ -43,6 +43,7 @@ data UnitInfo
   | UnitParamUse (String, Int, Int)  -- identify particular instantiation of parameters
   | UnitLiteral Int                  -- literal with undetermined but uniquely identified units
   | UnitlessLit                      -- a unitless literal
+  | UnitlessVar                      -- a unitless variable
   | UnitName String                  -- a basic unit
   | UnitAlias String                 -- the name of a unit alias
   | UnitVar String                   -- variable with undetermined units (assumed to have unique name)
