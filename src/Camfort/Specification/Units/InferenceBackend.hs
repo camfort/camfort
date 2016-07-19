@@ -114,7 +114,7 @@ inferVariables cons = [ (var, if null units then UnitlessVar else foldl1 UnitMul
 
 --------------------------------------------------
 
-simplifyConstraints = map (\ (UnitEq u1 u2) -> (flattenUnits u1, flattenUnits u2))
+simplifyConstraints = map (\ (ConEq u1 u2) -> (flattenUnits u1, flattenUnits u2))
 
 simplifyUnits :: UnitInfo -> UnitInfo
 simplifyUnits = rewrite rw
@@ -193,7 +193,7 @@ colSort x y                             = compare x y
 --------------------------------------------------
 
 flattenConstraints :: Constraints -> [([UnitInfo], [UnitInfo])]
-flattenConstraints = map (\ (UnitEq u1 u2) -> (flattenUnits u1, flattenUnits u2))
+flattenConstraints = map (\ (ConEq u1 u2) -> (flattenUnits u1, flattenUnits u2))
 
 shiftTerms :: ([UnitInfo], [UnitInfo]) -> ([UnitInfo], [UnitInfo])
 shiftTerms (lhs, rhs) = (lhsOk ++ negateCons rhsShift, rhsOk ++ negateCons lhsShift)

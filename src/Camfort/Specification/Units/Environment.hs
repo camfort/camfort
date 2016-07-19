@@ -52,8 +52,8 @@ data UnitInfo
   deriving (Show, Eq, Ord, Data, Typeable)
 
 data Constraint
-  = UnitEq UnitInfo UnitInfo    -- an equality constraint
-  | ConConj [Constraint]        -- conjunction of constraints
+  = ConEq   UnitInfo UnitInfo        -- an equality constraint
+  | ConConj [Constraint]             -- conjunction of constraints
   deriving (Show, Eq, Ord, Data, Typeable)
 
 type Constraints = [Constraint]

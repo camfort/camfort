@@ -169,7 +169,7 @@ debugLogging = whenDebug $ do
     tell "\n\n"
     uam <- usUnitAliasMap `fmap` get
     tell . unlines $ [ "  " ++ n ++ " = " ++ show info | (n, info) <- M.toList uam ]
-    tell . unlines $ map (\ (UnitEq u1 u2) -> "  ***Constraint: " ++ show (flattenUnits u1) ++ " === " ++ show (flattenUnits u2) ++ "\n") cons
+    tell . unlines $ map (\ (ConEq u1 u2) -> "  ***Constraint: " ++ show (flattenUnits u1) ++ " === " ++ show (flattenUnits u2) ++ "\n") cons
     tell $ show cons
     let (unsolvedM, inconsists, colA) = constraintsToMatrix cons
     let solvedM = rref unsolvedM
@@ -287,7 +287,7 @@ applyTemplates cons = do
   let instances = nub [ (name, i) | UnitParamUse (name, _, i) <- universeBi cons ]
   temps <- foldM substInstance [] instances
   aliasMap <- usUnitAliasMap `fmap` get
-  let aliases = [ UnitEq (UnitAlias name) def | (name, def) <- M.toList aliasMap ]
+  let aliases = [ ConEq (UnitAlias name) def | (name, def) <- M.toList aliasMap ]
   let transAlias (UnitName a) | a `M.member` aliasMap = UnitAlias a
       transAlias u                                    = u
   return . transformBi transAlias . filter (not . isParametric) $ cons ++ temps ++ aliases
@@ -307,8 +307,8 @@ instantiate (name, callId) = transformBi $ \ info -> case info of
 extractConstraints :: F.ProgramFile UA -> UnitSolver Constraints
 extractConstraints pf = do
   varUnitMap <- usVarUnitMap `fmap` get
-  return $ [ con | con@(UnitEq {}) <- universeBi pf ] ++
-           [ UnitEq (UnitVar v) u | (v, u) <- M.toList varUnitMap ]
+  return $ [ con | con@(ConEq {}) <- universeBi pf ] ++
+           [ ConEq (UnitVar v) u | (v, u) <- M.toList varUnitMap ]
 
 -- Does the constraint contain any Parametric elements?
 isParametric :: Constraint -> Bool
@@ -329,8 +329,8 @@ propagateExp e = fmap uoLiterals ask >>= \ lm -> case e of
   F.ExpBinary _ _ F.Multiplication e1 e2 -> setF2 UnitMul (getUnitInfoMul lm e1) (getUnitInfoMul lm e2)
   F.ExpBinary _ _ F.Division e1 e2       -> setF2 UnitMul (getUnitInfoMul lm e1) (flip UnitPow (-1) `fmap` (getUnitInfoMul lm e2))
   F.ExpBinary _ _ F.Exponentiation e1 e2 -> setF2 UnitPow (getUnitInfo e1) (constantExpression e2)
-  F.ExpBinary _ _ o e1 e2 | isOp AddOp o -> setF2C UnitEq  (getUnitInfo e1) (getUnitInfo e2)
-                          | isOp RelOp o -> setF2C UnitEq  (getUnitInfo e1) (getUnitInfo e2)
+  F.ExpBinary _ _ o e1 e2 | isOp AddOp o -> setF2C ConEq  (getUnitInfo e1) (getUnitInfo e2)
+                          | isOp RelOp o -> setF2C ConEq  (getUnitInfo e1) (getUnitInfo e2)
   F.ExpFunctionCall {}                   -> propagateFunctionCall e
   _                                      -> whenDebug (tell ("propagateExp: unhandled: " ++ show e)) >> return e
   where
@@ -348,7 +348,7 @@ propagateFunctionCall e@(F.ExpFunctionCall a s f (Just (F.AList a' s' args))) = 
 propagateStatement :: F.Statement UA -> UnitSolver (F.Statement UA)
 propagateStatement stmt = case stmt of
   F.StExpressionAssign _ _ e1 e2               -> do
-    return $ maybeSetUnitConstraintF2 UnitEq (getUnitInfo e1) (getUnitInfo e2) stmt
+    return $ maybeSetUnitConstraintF2 ConEq (getUnitInfo e1) (getUnitInfo e2) stmt
   F.StCall a s sub (Just (F.AList a' s' args)) -> do
     (_, args') <- callHelper sub args
     return $ F.StCall a s sub (Just (F.AList a' s' args'))
@@ -357,7 +357,7 @@ propagateStatement stmt = case stmt of
 propagatePU :: F.ProgramUnit UA -> UnitSolver (F.ProgramUnit UA)
 propagatePU pu = modifyTemplateMap (M.insert name cons) >> return (setConstraint (ConConj cons) pu)
   where
-    cons = [ con | con@(UnitEq {}) <- universeBi pu, containsParametric name con ]
+    cons = [ con | con@(ConEq {}) <- universeBi pu, containsParametric name con ]
     name = puName pu
 
 containsParametric :: Data from => String -> from -> Bool
@@ -368,7 +368,7 @@ callHelper nexp args = do
   let name = varName nexp
   callId <- genCallId
   let eachArg i arg@(F.Argument _ _ _ e)
-        | Just u <- getUnitInfo e = setConstraint (UnitEq u (UnitParamUse (name, i, callId))) arg
+        | Just u <- getUnitInfo e = setConstraint (ConEq u (UnitParamUse (name, i, callId))) arg
         | otherwise               = arg
   let args' = zipWith eachArg [1..] args
 
