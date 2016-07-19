@@ -29,7 +29,7 @@ import qualified Data.Map as M
 import qualified Language.Fortran.Analysis as FA
 import qualified Language.Fortran.Analysis.Renaming as FAR
 import qualified Language.Fortran.AST as F
-import Camfort.Specification.Units.Environment (UnitInfo, UnitAnnotation)
+import Camfort.Specification.Units.Environment (UnitInfo, UnitAnnotation, Constraints(..))
 import Camfort.Analysis.Annotations (Annotation, A)
 
 -- | The monad
@@ -62,7 +62,7 @@ type UnitLogs = String
 
 type VarUnitMap   = M.Map F.Name UnitInfo
 type UnitAliasMap = M.Map String UnitInfo
-type TemplateMap  = M.Map F.Name [UnitInfo]
+type TemplateMap  = M.Map F.Name Constraints
 
 type UA = FA.Analysis (UnitAnnotation A)
 
@@ -72,7 +72,7 @@ data UnitState = UnitState
   , usUnitAliasMap :: UnitAliasMap
   , usTemplateMap  :: TemplateMap
   , usLitNums      :: Int
-  , usConstraints  :: [UnitInfo] }
+  , usConstraints  :: Constraints }
   deriving (Show, Data)
 
 unitState0 pf = UnitState { usProgramFile  = pf

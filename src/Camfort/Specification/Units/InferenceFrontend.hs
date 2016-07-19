@@ -51,7 +51,7 @@ import Control.Monad
 import Control.Monad.Trans.Except
 import Control.Monad.Writer.Strict
 import Control.Monad.RWS.Strict hiding (gets)
-import GHC.Prim
+import GHC.Prim hiding (Constraint)
 
 import qualified Language.Fortran.AST as F
 import qualified Language.Fortran.Analysis as FA
@@ -200,6 +200,9 @@ varName = FA.varName
 setUnitInfo :: F.Annotated f => UnitInfo -> f UA -> f UA
 setUnitInfo info = modifyAnnotation (onPrev (\ ua -> ua { unitInfo = Just info }))
 
+setConstraint :: F.Annotated f => Constraint -> f UA -> f UA
+setConstraint c = modifyAnnotation (onPrev (\ ua -> ua { unitConstraint = Just c }))
+
 --------------------------------------------------
 
 -- Seek out any parameters to functions or subroutines that do not
@@ -290,7 +293,7 @@ applyTemplates cons = do
   return . transformBi transAlias . filter (not . isParametric) $ cons ++ temps ++ aliases
 
 -- look up Parametric template and apply it to everything
-substInstance :: [UnitInfo] -> (F.Name, Int) -> UnitSolver [UnitInfo]
+substInstance :: Constraints -> (F.Name, Int) -> UnitSolver Constraints
 substInstance output (name, callId) = do
   tmap <- usTemplateMap `fmap` get
   return . instantiate (name, callId) . (output ++) $ [] `fromMaybe` M.lookup name tmap
@@ -304,10 +307,11 @@ instantiate (name, callId) = transformBi $ \ info -> case info of
 extractConstraints :: F.ProgramFile UA -> UnitSolver Constraints
 extractConstraints pf = do
   varUnitMap <- usVarUnitMap `fmap` get
-  return $ [ info | info@(UnitEq {}) <- universeBi pf ]
+  return $ [ con | con@(UnitEq {}) <- universeBi pf ] ++
+           [ UnitEq (UnitVar v) u | (v, u) <- M.toList varUnitMap ]
 
--- Does the UnitInfo contain any Parametric elements?
-isParametric :: UnitInfo -> Bool
+-- Does the constraint contain any Parametric elements?
+isParametric :: Constraint -> Bool
 isParametric info = not (null [ () | UnitParamAbs _ <- universeBi info ])
 
 --------------------------------------------------
@@ -325,12 +329,13 @@ propagateExp e = fmap uoLiterals ask >>= \ lm -> case e of
   F.ExpBinary _ _ F.Multiplication e1 e2 -> setF2 UnitMul (getUnitInfoMul lm e1) (getUnitInfoMul lm e2)
   F.ExpBinary _ _ F.Division e1 e2       -> setF2 UnitMul (getUnitInfoMul lm e1) (flip UnitPow (-1) `fmap` (getUnitInfoMul lm e2))
   F.ExpBinary _ _ F.Exponentiation e1 e2 -> setF2 UnitPow (getUnitInfo e1) (constantExpression e2)
-  F.ExpBinary _ _ o e1 e2 | isOp AddOp o -> setF2 UnitEq  (getUnitInfo e1) (getUnitInfo e2)
-                          | isOp RelOp o -> setF2 UnitEq  (getUnitInfo e1) (getUnitInfo e2)
+  F.ExpBinary _ _ o e1 e2 | isOp AddOp o -> setF2C UnitEq  (getUnitInfo e1) (getUnitInfo e2)
+                          | isOp RelOp o -> setF2C UnitEq  (getUnitInfo e1) (getUnitInfo e2)
   F.ExpFunctionCall {}                   -> propagateFunctionCall e
   _                                      -> whenDebug (tell ("propagateExp: unhandled: " ++ show e)) >> return e
   where
-    setF2 f u1 u2 = return $ maybeSetUnitInfoF2 f u1 u2 e
+    setF2 f u1 u2  = return $ maybeSetUnitInfoF2 f u1 u2 e
+    setF2C f u1 u2 = return $ maybeSetUnitConstraintF2 f u1 u2 e
 
 propagateFunctionCall :: F.Expression UA -> UnitSolver (F.Expression UA)
 propagateFunctionCall e@(F.ExpFunctionCall a s f Nothing)                     = do
@@ -343,14 +348,14 @@ propagateFunctionCall e@(F.ExpFunctionCall a s f (Just (F.AList a' s' args))) = 
 propagateStatement :: F.Statement UA -> UnitSolver (F.Statement UA)
 propagateStatement stmt = case stmt of
   F.StExpressionAssign _ _ e1 e2               -> do
-    return $ maybeSetUnitInfoF2 UnitEq (getUnitInfo e1) (getUnitInfo e2) stmt
+    return $ maybeSetUnitConstraintF2 UnitEq (getUnitInfo e1) (getUnitInfo e2) stmt
   F.StCall a s sub (Just (F.AList a' s' args)) -> do
     (_, args') <- callHelper sub args
     return $ F.StCall a s sub (Just (F.AList a' s' args'))
   _                                            -> return stmt
 
 propagatePU :: F.ProgramUnit UA -> UnitSolver (F.ProgramUnit UA)
-propagatePU pu = modifyTemplateMap (M.insert name cons) >> return (setUnitInfo (UnitConj cons) pu)
+propagatePU pu = modifyTemplateMap (M.insert name cons) >> return (setConstraint (ConConj cons) pu)
   where
     cons = [ con | con@(UnitEq {}) <- universeBi pu, containsParametric name con ]
     name = puName pu
@@ -363,7 +368,7 @@ callHelper nexp args = do
   let name = varName nexp
   callId <- genCallId
   let eachArg i arg@(F.Argument _ _ _ e)
-        | Just u <- getUnitInfo e = setUnitInfo (UnitEq u (UnitParamUse (name, i, callId))) arg
+        | Just u <- getUnitInfo e = setConstraint (UnitEq u (UnitParamUse (name, i, callId))) arg
         | otherwise               = arg
   let args' = zipWith eachArg [1..] args
 
@@ -385,16 +390,15 @@ genUnitLiteral = do
   return $ UnitLiteral i
 
 getUnitInfo :: F.Annotated f => f UA -> Maybe UnitInfo
-getUnitInfo = fmap flattenUnitEq . unitInfo . FA.prevAnnotation . F.getAnnotation
+getUnitInfo = unitInfo . FA.prevAnnotation . F.getAnnotation
+
+getConstraint :: F.Annotated f => f UA -> Maybe Constraint
+getConstraint = unitConstraint . FA.prevAnnotation . F.getAnnotation
 
 getUnitInfoMul LitPoly e          = getUnitInfo e
 getUnitInfoMul _ e
   | isJust (constantExpression e) = Just UnitlessLit
   | otherwise                     = getUnitInfo e
-
-flattenUnitEq :: UnitInfo -> UnitInfo
-flattenUnitEq (UnitEq u _) = u
-flattenUnitEq u            = u
 
 maybeSetUnitInfo :: F.Annotated f => Maybe UnitInfo -> f UA -> f UA
 maybeSetUnitInfo Nothing e = e
@@ -403,6 +407,10 @@ maybeSetUnitInfo (Just u) e = setUnitInfo u e
 maybeSetUnitInfoF2 :: F.Annotated f => (a -> b -> UnitInfo) -> Maybe a -> Maybe b -> f UA -> f UA
 maybeSetUnitInfoF2 f (Just u1) (Just u2) e = setUnitInfo (f u1 u2) e
 maybeSetUnitInfoF2 _ _ _ e = e
+
+maybeSetUnitConstraintF2 :: F.Annotated f => (a -> b -> Constraint) -> Maybe a -> Maybe b -> f UA -> f UA
+maybeSetUnitConstraintF2 f (Just u1) (Just u2) e = setConstraint (f u1 u2) e
+maybeSetUnitConstraintF2 _ _ _ e = e
 
 constantExpression :: F.Expression a -> Maybe Double
 constantExpression (F.ExpValue _ _ (F.ValInteger i)) = Just $ read i

@@ -49,11 +49,14 @@ data UnitInfo
   | UnitVar String                   -- variable with undetermined units (assumed to have unique name)
   | UnitMul UnitInfo UnitInfo        -- two units multiplied
   | UnitPow UnitInfo Double          -- a unit raised to a constant power
-  | UnitEq UnitInfo UnitInfo         -- the fact that the two units must be compatible
-  | UnitConj [UnitInfo]              -- conjunction of two unit facts
   deriving (Show, Eq, Ord, Data, Typeable)
 
-type Constraints = [UnitInfo] -- should all be UnitEq
+data Constraint
+  = UnitEq UnitInfo UnitInfo    -- an equality constraint
+  | ConConj [Constraint]        -- conjunction of constraints
+  deriving (Show, Eq, Ord, Data, Typeable)
+
+type Constraints = [Constraint]
 
 type EqualityConstrained = Bool
 
@@ -110,13 +113,14 @@ type DebugInfo = [(Col, (FU.SrcSpan, String))]
 data UnitAnnotation a = UnitAnnotation {
    prevAnnotation :: a,
    unitSpec       :: Maybe UnitStatement,
+   unitConstraint :: Maybe Constraint,
    unitInfo       :: Maybe UnitInfo,
    unitBlock      :: Maybe (F.Block (FA.Analysis (UnitAnnotation a))) }
   deriving (Data, Typeable, Show)
 
-dbgUnitAnnotation (UnitAnnotation _ x y z) =
-  "{ unitSpec = " ++ show x ++ ", unitInfo = " ++ show y ++ ", unitBlock = " ++
-     (case z of
+dbgUnitAnnotation (UnitAnnotation _ s c i b) =
+  "{ unitSpec = " ++ show s ++ ", unitConstraint = " ++ show c ++ ", unitInfo = " ++ show i ++ ", unitBlock = " ++
+     (case b of
         Nothing -> "Nothing"
         Just (F.BlStatement _ span _ (F.StDeclaration {}))  -> "Just {decl}@" ++ show span
         Just (F.BlStatement _ span _ _) -> "Just {stmt}@" ++ show span
@@ -124,7 +128,7 @@ dbgUnitAnnotation (UnitAnnotation _ x y z) =
    ++ "}"
 
 mkUnitAnnotation :: a -> UnitAnnotation a
-mkUnitAnnotation a = UnitAnnotation a Nothing Nothing Nothing
+mkUnitAnnotation a = UnitAnnotation a Nothing Nothing Nothing Nothing
 
 data UnitEnv = UnitEnv {
   _report              :: [String],
