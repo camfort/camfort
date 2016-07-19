@@ -70,6 +70,7 @@ import qualified Language.Fortran.Analysis.Renaming as FAR
 import qualified Language.Fortran.Analysis.BBlocks as FAB
 import qualified Language.Fortran.Analysis as FA
 import qualified Language.Fortran.AST as F
+import Language.Fortran.Util.Position
 import Camfort.Transformation.Syntax
 
 -- For debugging and development purposes
@@ -170,10 +171,14 @@ inferUnits (fname, pf)
   | Left exc   <- eVars = (errReport exc, (fname, pf))
   where
     -- Format report
-    okReport vars = fname ++ ": " ++ varReport vars ++ "\n" ++ logs
-    varReport     = intercalate ", " . map showVar
+    okReport vars = logs ++ "\n\n" ++ unlines [ fname ++ ": " ++ expReport ei | ei <- expInfo ]
+      where
+        expInfo = [ (e, u) | s@(F.StDeclaration {})               <- universeBi pfUA :: [F.Statement UA]
+                           , e@(F.ExpValue _ _ (F.ValVariable _)) <- universeBi s    :: [F.Expression UA]
+                           , u <- maybeToList (FA.varName e `lookup` vars) ]
 
-    showVar (v, info) = (v `fromMaybe` M.lookup v nameMap) ++ " :: " ++ show info
+    expReport (e, u) = showSrcSpan (getSpan e) ++ " unit " ++ show u ++ " :: " ++ (v `fromMaybe` M.lookup v nameMap)
+      where v = FA.varName e
 
     errReport exc = fname ++ ": " ++ show exc ++ "\n" ++ logs
 
@@ -182,7 +187,11 @@ inferUnits (fname, pf)
                      , uoLiterals       = LitMixed
                      , uoNameMap        = nameMap
                      , uoArgumentDecls  = False }
-    (eVars, state, logs) = runUnitSolver uOpts pf' $ initInference >> runInferVariables
+    (eVars, state, logs) = runUnitSolver uOpts pf' $ do
+      initInference
+      runInferVariables
+
+    pfUA = usProgramFile state
 
     pf' = FAR.analyseRenames . FA.initAnalysis . fmap mkUnitAnnotation $ pf
     nameMap = FAR.extractNameMap pf'
