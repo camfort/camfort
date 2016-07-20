@@ -30,10 +30,6 @@ import qualified Language.Fortran.Analysis as FA
 
 {- *** Routines for associating annotations to ASTs -}
 
--- Helper for transforming the 'previous' annotation
-onPrev :: (a -> a) -> FA.Analysis a -> FA.Analysis a
-onPrev f ann = ann { FA.prevAnnotation = f (FA.prevAnnotation ann) }
-
 -- Instances for embedding parsed specifications into the AST
 instance ASTEmbeddable (FA.Analysis Annotation) Gram.Specification where
   annotateWithAST ann ast =

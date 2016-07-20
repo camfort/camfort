@@ -13,8 +13,8 @@
    See the License for the specific language governing permissions and
    limitations under the License.
 -}
-{-# LANGUAGE DeriveDataTypeable, ScopedTypeVariables #-}
-
+{-# LANGUAGE DeriveDataTypeable #-}
+{-# LANGUAGE ScopedTypeVariables #-}
 
 {- | Defines the monad for the units-of-measure modules -}
 module Camfort.Specification.Units.Monad
@@ -32,7 +32,9 @@ import qualified Language.Fortran.Analysis as FA
 import qualified Language.Fortran.Analysis.Renaming as FAR
 import qualified Language.Fortran.AST as F
 import Camfort.Specification.Units.Environment (UnitInfo, UnitAnnotation, Constraints(..))
-import Camfort.Analysis.Annotations (Annotation, A)
+import Camfort.Analysis.Annotations (Annotation, A, UA)
+
+--------------------------------------------------
 
 -- | The monad
 type UnitSolver a = ExceptT UnitException (RWS UnitOpts UnitLogs UnitState) a
@@ -66,8 +68,6 @@ type VarUnitMap   = M.Map F.Name UnitInfo
 type GivenVarSet  = S.Set F.Name
 type UnitAliasMap = M.Map String UnitInfo
 type TemplateMap  = M.Map F.Name Constraints
-
-type UA = FA.Analysis (UnitAnnotation A)
 
 data UnitState = UnitState
   { usProgramFile  :: F.ProgramFile UA

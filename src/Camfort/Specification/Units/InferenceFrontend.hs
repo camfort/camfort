@@ -84,23 +84,6 @@ import qualified Numeric.LinearAlgebra as H
 
 --------------------------------------------------
 
--- Instances for embedding parsed specifications into the AST
-instance ASTEmbeddable UA P.UnitStatement where
-  annotateWithAST ann ast =
-    onPrev (\ ann -> ann { unitSpec = Just ast }) ann
-
--- Link annotation comments to declaration statements
-instance Linkable UA where
-  link ann (b@(F.BlStatement _ _ _ (F.StDeclaration {}))) =
-      onPrev (\ ann -> ann { unitBlock = Just b }) ann
-  link ann b = ann
-
--- Helper for transforming the 'previous' annotation
-onPrev :: (a -> a) -> FA.Analysis a -> FA.Analysis a
-onPrev f ann = ann { FA.prevAnnotation = f (FA.prevAnnotation ann) }
-
-modifyAnnotation :: F.Annotated f => (a -> a) -> f a -> f a
-modifyAnnotation f x = F.setAnnotation (f (F.getAnnotation x)) x
 
 --------------------------------------------------
 
