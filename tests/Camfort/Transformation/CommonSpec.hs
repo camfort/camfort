@@ -39,4 +39,4 @@ spec =
       expected <- runIO $ readExpected "toArgs.expected.f90"
       actual <- runIO $ readActual "toArgs.f90"
       it "it eliminates common statement" $
-        (actual++"\n") `shouldBe` expected
+        actual `shouldBe` expected

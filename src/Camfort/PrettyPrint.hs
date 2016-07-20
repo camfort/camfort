@@ -50,10 +50,10 @@ import Control.Monad.Trans.State.Lazy
 import Text.Printf
 
 class PrettyPrint p where
-  prettyPrint :: p -> String
+  prettyPrint :: p -> SourceText
 
 instance (PrintMaster (Program Annotation) DefaultPP) => PrettyPrint (Program Annotation) where
-  prettyPrint p = let ?variant = DefaultPP in printMaster p
+  prettyPrint p = let ?variant = DefaultPP in B.pack $ printMaster p
 
 -- Define new pretty printing version for HTML output
 data HTMLPP = HTMLPP

@@ -62,8 +62,10 @@ import Data.Char
 import Data.Generics.Zipper
 import Data.Maybe
 import Debug.Trace
-import Control.Monad.Trans.State.Lazy
 import Text.Printf
+
+import Control.Monad.Trans.Class
+import Control.Monad.Trans.State.Lazy
 
 
 -- Custom 'Show' which on strings is the identity
@@ -126,13 +128,13 @@ instance PrettyPrint (PR Annotation) where
 
 -- When there is a file to be reprinted (for refactoring)
 instance OutputFiles (Filename, SourceText, Program Annotation) where
-  mkOutputText f' (f, input, ast') = B.pack $ reprint refactoringLF input f' (PR ast')
+  mkOutputText f' (f, input, ast') = evalState (reprint refactoringLF (PR ast') input) 0
     where
   outputFile (f, _, _) = f
 
 -- When there is a file to be reprinted (for refactoring)
 instance OutputFiles (Filename, SourceText, F.ProgramFile Annotation) where
-  mkOutputText f' (f, input, ast') = B.pack $ reprint refactoringForPar input f' ast'
+  mkOutputText f' (f, input, ast') = runIdentity $ reprint refactoringForPar ast' input
   outputFile (f, _, _) = f
 
 srcSpanToSrcLocs :: FU.SrcSpan -> (SrcLoc, SrcLoc)
@@ -144,23 +146,24 @@ srcSpanToSrcLocs (FU.SrcSpan lpos upos) = (toSrcLoc lpos, toSrcLoc upos)
 
 instance (PrettyPrint (F.ProgramFile Annotation)) where
    -- STUB
-   prettyPrint _ = ""
+   prettyPrint _ = B.empty
 
-refactoringForPar :: (Typeable a) => [String] -> SrcLoc -> a -> State Int (String, SrcLoc, Bool)
-refactoringForPar inp cursor =
-    (\_ -> return ("", cursor, False)) `extQ` (outputComments inp cursor)
+refactoringForPar :: (Typeable a) =>  a -> SourceText -> StateT SrcLoc Identity (SourceText, Bool)
+refactoringForPar z inp =
+    ((\_ -> return (B.empty, False)) `extQ` (flip outputComments inp)) $ z
   where
-    outputComments :: [String] -> SrcLoc -> F.Block Annotation -> State Int (String, SrcLoc, Bool)
-    outputComments inp cursor e@(F.BlComment ann span comment) = return $
+    outputComments :: F.Block Annotation -> SourceText -> StateT SrcLoc Identity (SourceText, Bool)
+    outputComments e@(F.BlComment ann span comment) inp = do
+       cursor <- get
        if (pRefactored ann)
          then    let (lb, ub) = srcSpanToSrcLocs span
                      lb'      = leftOne lb
                      (p0, _)  = takeBounds (cursor, lb') inp
-                     nl       = if comment == [] then "" else "\n"
-                 in (p0 ++ comment ++ nl, ub, True)
-         else ("", cursor, False)
+                     nl       = if comment == [] then B.empty else B.pack "\n"
+                 in put ub >> return (B.concat [p0, B.pack comment, nl], True)
+         else return (B.empty, False)
       where leftOne (SrcLoc f l c) = SrcLoc f (l-1) (c-1)
-    outputComments _ _ _ = return ("", cursor, False)
+    outputComments _ _ = return (B.empty, False)
 
 
 {-| changeDir is used to change the directory of a filename string.
@@ -186,89 +189,103 @@ outputAnalysisFiles src asts files = do
   (uses generic query extension - remember extQ is non-symmetric)
 -}
 
-refactoringLF :: (Typeable a, Monad m) => [String] -> SrcLoc -> a -> StateT Int m (String, SrcLoc, Bool)
-refactoringLF inp cursor = ((((\_ -> return ("", cursor, False))
-                              `extQ` (refactorUses inp cursor))
-                                 `extQ` (refactorDecl inp cursor))
-                                    `extQ` (refactorArgName inp cursor))
-                                       `extQ` (refactorFortran inp cursor)
+refactoringLF :: (Typeable a) =>  a -> SourceText -> StateT SrcLoc (State Int) (SourceText, Bool)
+refactoringLF = flip $ \inp -> ((((\_ -> return (B.empty, False))
+                              `extQ` (refactorUses inp))
+                                 `extQ` (refactorDecl inp))
+                                    `extQ` (refactorArgName inp))
+                                       `extQ` (refactorFortran inp)
 
 
-refactorFortran :: Monad m => [String] -> SrcLoc -> Fortran Annotation -> StateT Int m (String, SrcLoc, Bool)
-refactorFortran inp cursor e =  return $
-       if (pRefactored $ tag e) then
+refactorFortran :: Monad m => SourceText -> Fortran Annotation -> StateT SrcLoc m (SourceText, Bool)
+refactorFortran inp e = do
+    cursor <- get
+    if (pRefactored $ tag e) then
           let (lb, ub) = srcSpan e
               (p0, _) = takeBounds (cursor, lb) inp
-              outE = pprint e
-              lnl = case e of (NullStmt _ _) -> (if ((p0 /= []) && (Prelude.last p0 /= '\n')) then "\n" else "")
-                              _              -> ""
-              lnl2 = if ((p0 /= []) && (Prelude.last p0 /= '\n')) then "\n" else ""
-              textOut = if p0 == "\n" then outE else (p0 ++ lnl2 ++ outE ++ lnl)
-          in (textOut, ub, True)
-       else ("", cursor, False)
+              outE = B.pack $ pprint e
+              lnl = case e of (NullStmt _ _) -> (if ((p0 /= B.empty) && (B.last p0 /= '\n')) then B.pack "\n" else B.empty)
+                              _              -> B.empty
+              lnl2 = if ((p0 /= B.empty) && (B.last p0 /= '\n')) then B.pack "\n" else B.empty
+              textOut = if p0 == (B.pack "\n") then outE else B.concat [p0, lnl2, outE, lnl]
+          in put ub >> return (textOut, True)
+    else return (B.empty, False)
 
 
-refactorDecl :: Monad m => [String] -> SrcLoc -> Decl Annotation -> StateT Int m (String, SrcLoc, Bool)
-refactorDecl inp cursor d =
+refactorDecl :: SourceText -> Decl Annotation -> StateT SrcLoc (State Int) (SourceText, Bool)
+refactorDecl inp d = do
+    cursor <- get
     if (pRefactored $ tag d) then
        let (lb, ub) = srcSpan d
            (p0, _) = takeBounds (cursor, lb) inp
-           textOut = p0 ++ (pprint d)
+           textOut = p0 `B.append` (B.pack $ pprint d)
        in do textOut' <- -- The following compensates new lines with removed lines
                          case d of
                            (NullDecl _ _) ->
-                              do added <- get
+                              do added <- lift get
                                  let diff = linesCovered ub lb
                                  -- remove empty newlines here if extra lines have been added
                                  let (text, removed) = if added <= diff
                                                          then removeNewLines textOut added
                                                          else removeNewLines textOut diff
-                                 put (added - removed)
+                                 lift $ put (added - removed)
                                  return text
                            otherwise -> return textOut
-             return (textOut', ub, True)
-    else return ("", cursor, False)
+             put ub
+             return (textOut', True)
+    else return (B.empty, False)
 
-refactorArgName :: Monad m => [String] -> SrcLoc -> ArgName Annotation -> m (String, SrcLoc, Bool)
-refactorArgName inp cursor a = return $
-        case (refactored $ tag a) of
-            Just lb -> let (p0, _) = takeBounds (cursor, lb) inp
-                       in (p0 ++ pprint a, lb, True)
-            Nothing -> ("", cursor, False)
+refactorArgName :: Monad m => SourceText -> ArgName Annotation -> StateT SrcLoc m (SourceText, Bool)
+refactorArgName inp a = do
+    cursor <- get
+    case (refactored $ tag a) of
+        Just lb -> do
+            let (p0, _) = takeBounds (cursor, lb) inp
+            put lb
+            return (p0 `B.append` (B.pack $ pprint a), True)
+        Nothing -> return (B.empty, False)
 
-refactorUses :: Monad m => [String] -> SrcLoc -> Uses Annotation -> StateT Int m (String, SrcLoc, Bool)
-refactorUses inp cursor u =
+refactorUses :: SourceText -> Uses Annotation -> StateT SrcLoc (State Int) (SourceText, Bool)
+refactorUses inp u = do
+    cursor <- get
     let ?variant = HTMLPP in
         case (refactored $ tag u) of
            Just lb -> let (p0, _) = takeBounds (cursor, lb) inp
-                          syntax  = printSlave u
-                       in do added <- get
-                             if (newNode $ tag u) then put (added + (countLines syntax))
+                          syntax  = B.pack $ printSlave u
+                       in do added <- lift get
+                             if (newNode $ tag u) then lift $ put (added + (countLines syntax))
                                                   else return ()
-                             return (p0 ++ syntax, toCol0 lb, True)
-           Nothing -> return ("", cursor, False)
+                             put $ toCol0 lb
+                             return (p0 `B.append` syntax, True)
+           Nothing -> return (B.empty, False)
 
-countLines []        = 0
-countLines ('\n':xs) = 1 + countLines xs
-countLines (x:xs)    = countLines xs
+countLines xs =
+  case B.uncons xs of
+    Nothing -> 0
+    Just ('\n', xs) -> 1 + countLines xs
+    Just (x, xs)    -> countLines xs
 
 {- 'removeNewLines xs n' removes at most 'n' new lines characters from the input string
     xs, returning the new string and the number of new lines that were removed. Note
     that the number of new lines removed might actually be less than 'n'- but in principle
     this should not happen with the usaage in 'refactorDecl' -}
 
-removeNewLines [] n = ([], 0)
-
 removeNewLines xs 0 = (xs, 0)
-
 -- Deal with CR LF in the same way as just LF
-removeNewLines ('\r':('\n':('\r':('\n':xs)))) n = let (xs', n') = removeNewLines ('\r':'\n':xs) (n - 1)
-                                                   in (xs', n' + 1)
+removeNewLines xs n =
+    case unpackFst (B.splitAt 4 xs) of
+       ("\r\n\r\n", xs) -> (xs', n' + 1)
+           where (xs', n') = removeNewLines ((B.pack "\r\n") `B.append` xs) (n - 1)
+       _ ->
+         case unpackFst (B.splitAt 2 xs) of
+           ("\n\n", xs)     -> (xs', n' + 1)
+               where (xs', n') = removeNewLines ((B.pack "\n") `B.append` xs) (n - 1)
+           _ ->
+            case B.uncons xs of
+                Nothing -> (xs, 0)
+                Just (x, xs) -> (B.cons x xs', n)
+                    where (xs', n') = removeNewLines xs n
 
-removeNewLines ('\n':('\n':xs)) n = let (xs', n') = removeNewLines ('\n':xs) (n - 1)
-                                     in (xs', n' + 1)
-removeNewLines (x:xs) n = let (xs', n') = removeNewLines xs n
-                          in (x:xs', n)
-
+unpackFst (x, y) = (B.unpack x, y)
 --removeNewLines ('\n':xs) 0 = let (xs', n') = removeNewLines xs 0
 --                             in ('\n':xs', 0)

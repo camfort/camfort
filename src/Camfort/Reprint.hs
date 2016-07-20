@@ -22,8 +22,8 @@ import Data.Generics.Zipper
 
 import Camfort.PrettyPrint
 import Camfort.Analysis.Annotations
-import Camfort.Helpers
 import Camfort.Traverse
+import Camfort.Helpers
 
 import qualified Data.ByteString.Char8 as B
 import Data.Functor.Identity
@@ -31,59 +31,110 @@ import Data.Data
 import Control.Monad.Trans.State.Lazy
 
 import Language.Fortran
+{- data SrcLoc
+  = SrcLoc {srcFilename :: String, srcLine :: Int, srcColumn :: Int}
+-}
 import Camfort.Analysis.Syntax
 
--- Start of GLORIOUS REFACTORING ALGORITHM!
--- FIXME: Use ByteString! (Or Data.Text, at least)
+--type SourceText    = B.ByteString
+type Refactored = Bool
 
-reprint :: (Data (p Annotation), PrettyPrint (p Annotation))
-        => (forall a . Typeable a => [String] -> SrcLoc -> a -> State Int (String, SrcLoc, Bool))
-        -> SourceText -> Filename -> p Annotation -> String
-reprint refactoring input f p
+-- A refactoring takes a 'Typeable' value
+-- into a stateful SourceText (ByteString) transformer,
+-- which returns a pair of a stateful computation of an updated SourceText
+-- paired with a boolean flag denoting whether a refactoring has been
+-- performed.  The state contains a SrcLoc which is the "cursor"
+-- within the original source text. The incoming value corresponds to
+-- the position of the first character in the input SourceText. The
+-- outgoing value is a cursor ahead of the incoming one which shows
+-- the amount of SourceText that is consumed by the refactoring.
+
+type Refactoring m =
+    forall b .
+     Typeable b => b -> SourceText -> StateT SrcLoc m (SourceText, Refactored)
+
+-- The reprint algorithm takes a refactoring (parameteric in
+-- some monad m) and turns an arbitrary pretty-printable type 'p'
+-- into a monadic SourceText transformer.
+
+reprint :: (Monad m, Data p, PrettyPrint p)
+        => Refactoring m -> p -> SourceText -> m SourceText
+reprint refactoring tree input
   -- If the inupt is null then switch into pretty printer
-  | B.null input = prettyPrint p
+  | B.null input = return $ prettyPrint tree
   -- Otherwise go with the normal algorithm
-  | otherwise =
-    pn ++ pe
-  where input' = map B.unpack $ B.lines input
-        len = Prelude.length input'
-        start = SrcLoc f 1 0
-        end = SrcLoc f len (1 + (Prelude.length $ Prelude.last input'))
-        (pn, cursorn) = evalState (reprintC refactoring start input' (toZipper p)) 0
-        (_, inpn) = takeBounds (start, cursorn) input'
-        (pe, _) = takeBounds (cursorn, end) inpn
+  | otherwise = do
+      -- Create an initial cursor at the start of the file
+      let cursor0 = SrcLoc "" 1 0
+      -- Enter the top-node of a zipper for 'tree'
+      -- setting the cursor at the start of the file
+      (output, cursorn) <- runStateT (enter refactoring (toZipper tree) input) cursor0
+      -- Remove from the input the portion covered by the main algorithm
+      -- leaving the rest of the file not covered within the bounds of
+      -- the tree
+      let (_, remaining)  = takeBounds (cursor0, cursorn) input
+      return $ output `B.append` remaining
 
-reprintC :: (forall b . (Typeable b) => [String] -> SrcLoc -> b -> State Int (String, SrcLoc, Bool))
-         -> SrcLoc -> [String] -> Zipper a -> State Int (String, SrcLoc)
-reprintC refactoring cursor inp z = do
-  (p1, cursor', flag) <- query (refactoring inp cursor) z
+-- The enter, enterDown, enterRight each take a refactoring
+-- and a zipper producing a stateful SourceText transformer with SrcLoc state.
 
-  (_, inp')       <- return $ takeBounds (cursor, cursor') inp
-  (p2, cursor'')  <- if flag then return ("", cursor')
-                             else enterDown refactoring cursor' inp' z
+enter, enterDown, enterRight
+  :: Monad m
+  => Refactoring m -> Zipper a -> SourceText -> StateT SrcLoc m SourceText
 
-  (_, inp'')      <- return $ takeBounds (cursor', cursor'') inp'
-  (p3, cursor''') <- enterRight refactoring cursor'' inp'' z
+-- `enter` applies the generic refactoring to the current context
+-- of the zipper
+enter refactoring z inp = do
 
-  return (p1 ++ p2 ++ p3, cursor''')
+  -- Part 1.
+  -- Apply a refactoring
+  cursor     <- get
+  (p1, refactored) <- query (flip refactoring inp) z
 
-enterDown, enterRight ::
-             (forall b . (Typeable b) => [String] -> SrcLoc -> b -> State Int (String, SrcLoc, Bool))
-          -> SrcLoc -> [String] -> Zipper a -> State Int (String, SrcLoc)
-enterDown refactoring cursor inp z = case (down' z) of
-                             Just dz -> reprintC refactoring cursor inp dz
-                             Nothing -> return $ ("", cursor)
+  -- Part 2.
+  -- Cut out the portion of source text consumed by the refactoring
+  cursor'    <- get
+  (_, inp')  <- return $ takeBounds (cursor, cursor') inp
+  -- If a refactoring was not output,
+  -- Enter the children of the current context
+  p2         <- if refactored
+                   then return B.empty
+                   else enterDown refactoring z inp'
 
-enterRight refactoring cursor inp z = case (right z) of
-                             Just rz -> reprintC refactoring cursor inp rz
-                             Nothing -> return $ ("", cursor)
+  -- Part 3.
+  -- Cut out the portion of source text consumed by the children
+  -- then enter the right sibling of the current context
+  cursor''   <- get
+  (_, inp'') <- return $ takeBounds (cursor', cursor'') inp'
+  p3         <- enterRight refactoring z inp''
 
-takeBounds (l, u) inp = takeBounds' (lineCol l, lineCol u) [] inp
+  -- Conat the output for the current context, children, and right sibling
+  return $ B.concat [p1, p2, p3]
+
+-- `enterDown` navigates to the children of the current context
+enterDown refactoring z inp =
+  case (down' z) of
+    -- Go to children
+    Just dz -> enter refactoring dz inp
+    -- No children
+    Nothing -> return $ B.empty
+
+-- `enterRight` navigates to the right sibling of the current context
+enterRight refactoring z inp =
+  case (right z) of
+    -- Go to right sibling
+    Just rz -> enter refactoring rz inp
+    -- No right sibling
+    Nothing -> return $ B.empty
+
+-- Given a lower-bound and upper-bound pair of SrcLocs, split the
+-- incoming SourceText based on the distance between the SrcLoc pairs
+takeBounds :: (SrcLoc, SrcLoc) -> SourceText -> (SourceText, SourceText)
+takeBounds (l, u) inp = takeBounds' (lineCol l, lineCol u) B.empty inp
 takeBounds' ((ll, lc), (ul, uc)) tk inp  =
-    if (ll == ul && lc == uc) || (ll > ul) then (Prelude.reverse tk, inp)
-    else case inp of []             -> (Prelude.reverse tk, inp)
-                     ([]:[])        -> (Prelude.reverse tk, inp)
-                     ([]:ys)        -> takeBounds' ((ll+1, 0), (ul, uc)) ('\n':tk) ys
-                     ((x:xs):ys)    -> takeBounds' ((ll, lc+1), (ul, uc)) (x:tk) (xs:ys)
-
--- End of GLORIOUS REFACTORING ALGORITHM
+    if (ll == ul && lc == uc) || (ll > ul) then (B.reverse tk, inp)
+    else
+      case B.uncons inp of
+         Nothing         -> (B.reverse tk, inp)
+         Just ('\n', ys) -> takeBounds' ((ll+1, 0), (ul, uc)) (B.cons '\n' tk) ys
+         Just (x, xs)    -> takeBounds' ((ll, lc+1), (ul, uc)) (B.cons x tk) xs
