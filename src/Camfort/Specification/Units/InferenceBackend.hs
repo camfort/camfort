@@ -23,8 +23,8 @@
 
 module Camfort.Specification.Units.InferenceBackend
   ( inconsistentConstraints, criticalVariables, inferVariables
-  -- mainly for debugging:
-  , flattenUnits, constraintsToMatrix, rref, isInconsistentRREF )
+  -- mainly for debugging and testing:
+  , shiftTerms, flattenConstraints, flattenUnits, constraintsToMatrix, rref, isInconsistentRREF )
 where
 
 import Data.Tuple (swap)
