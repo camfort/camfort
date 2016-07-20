@@ -41,9 +41,8 @@ import Data.Data
 import Data.Char
 import Data.Maybe
 import Data.Function
-import Data.Matrix
+import Data.Matrix hiding (rref)
 import Data.List
-import Data.Matrix
 import Data.Ratio
 import Data.Generics.Uniplate.Operations
 import Data.Label.Monadic hiding (modify)
@@ -288,14 +287,14 @@ elemRowAdd n i j k = runSTMatrix $ do
       writeMatrix m i j k
       return m
 
-elemRowAdd_spec n i j k
-  | i < 0 || i >= n = undefined
-  | j < 0 || j >= n = undefined
-  | otherwise       = build n n f
-  where
-    f (i', j') | i == i' && j == j' = k
-               | i' == j'           = 1
-               | otherwise          = 0
+-- elemRowAdd_spec n i j k
+--   | i < 0 || i >= n = undefined
+--   | j < 0 || j >= n = undefined
+--   | otherwise       = build n n f
+--   where
+--     f (i', j') | i == i' && j == j' = k
+--                | i' == j'           = 1
+--                | otherwise          = 0
 
 elemRowSwap n i j
   | i == j          = ident n

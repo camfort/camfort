@@ -25,11 +25,14 @@ TODO:
 
 
 {-# LANGUAGE ScopedTypeVariables #-}
+{-# LANGUAGE PatternGuards #-}
 {-# LANGUAGE ImplicitParams #-}
 {-# LANGUAGE DoAndIfThenElse #-}
 {-# LANGUAGE ConstraintKinds #-}
 {-# LANGUAGE MultiParamTypeClasses #-}
 {-# LANGUAGE TypeSynonymInstances #-}
+{-# LANGUAGE FlexibleInstances #-}
+{-# LANGUAGE FlexibleContexts #-}
 
 module Camfort.Specification.Units.InferenceFrontend
   ( doInferUnits, initInference
@@ -41,7 +44,7 @@ import Data.Data
 import Data.Char
 import Data.Function
 import Data.List
-import Data.Matrix
+import Data.Matrix hiding (rref)
 import qualified Data.Map as M
 import Data.Maybe
 import Data.Ratio
