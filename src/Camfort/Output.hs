@@ -128,13 +128,13 @@ instance PrettyPrint (PR Annotation) where
 
 -- When there is a file to be reprinted (for refactoring)
 instance OutputFiles (Filename, SourceText, Program Annotation) where
-  mkOutputText f' (f, input, ast') = evalState (reprint refactoringLF input f' (PR ast')) 0
+  mkOutputText f' (f, input, ast') = evalState (reprint refactoringLF (PR ast') input) 0
     where
   outputFile (f, _, _) = f
 
 -- When there is a file to be reprinted (for refactoring)
 instance OutputFiles (Filename, SourceText, F.ProgramFile Annotation) where
-  mkOutputText f' (f, input, ast') = runIdentity $ reprint refactoringForPar input f' ast'
+  mkOutputText f' (f, input, ast') = runIdentity $ reprint refactoringForPar ast' input
   outputFile (f, _, _) = f
 
 srcSpanToSrcLocs :: FU.SrcSpan -> (SrcLoc, SrcLoc)
@@ -148,12 +148,12 @@ instance (PrettyPrint (F.ProgramFile Annotation)) where
    -- STUB
    prettyPrint _ = B.empty
 
-refactoringForPar :: (Typeable a) => SourceText -> a -> StateT SrcLoc Identity (SourceText, Bool)
-refactoringForPar inp =
-    (\_ -> return (B.empty, False)) `extQ` (outputComments inp)
+refactoringForPar :: (Typeable a) =>  a -> SourceText -> StateT SrcLoc Identity (SourceText, Bool)
+refactoringForPar z inp =
+    ((\_ -> return (B.empty, False)) `extQ` (flip outputComments inp)) $ z
   where
-    outputComments :: SourceText -> F.Block Annotation -> StateT SrcLoc Identity (SourceText, Bool)
-    outputComments inp e@(F.BlComment ann span comment) = do
+    outputComments :: F.Block Annotation -> SourceText -> StateT SrcLoc Identity (SourceText, Bool)
+    outputComments e@(F.BlComment ann span comment) inp = do
        cursor <- get
        if (pRefactored ann)
          then    let (lb, ub) = srcSpanToSrcLocs span
@@ -189,8 +189,8 @@ outputAnalysisFiles src asts files = do
   (uses generic query extension - remember extQ is non-symmetric)
 -}
 
-refactoringLF :: (Typeable a) => SourceText -> a -> StateT SrcLoc (State Int) (SourceText, Bool)
-refactoringLF inp = ((((\_ -> return (B.empty, False))
+refactoringLF :: (Typeable a) =>  a -> SourceText -> StateT SrcLoc (State Int) (SourceText, Bool)
+refactoringLF = flip $ \inp -> ((((\_ -> return (B.empty, False))
                               `extQ` (refactorUses inp))
                                  `extQ` (refactorDecl inp))
                                     `extQ` (refactorArgName inp))
