@@ -13,6 +13,7 @@
    See the License for the specific language governing permissions and
    limitations under the License.
 -}
+
 {-# LANGUAGE DeriveDataTypeable #-}
 {-# LANGUAGE ScopedTypeVariables #-}
 
@@ -21,11 +22,12 @@ module Camfort.Specification.Units.Monad
   ( UA, UnitSolver, UnitOpts(..), UnitLogs, UnitState(..), LiteralsOpt(..), UnitException(..)
   , whenDebug, modifyVarUnitMap, modifyGivenVarSet, modifyUnitAliasMap
   , modifyTemplateMap, modifyProgramFile, modifyProgramFileM
-  , runUnitSolver, evalUnitSolver, execUnitSolver ) where
+  , runUnitSolver, evalUnitSolver, execUnitSolver )
+where
 
 import Control.Monad.RWS.Strict
 import Control.Monad.Trans.Except
-import Data.Data
+import Data.Data (Data)
 import qualified Data.Map as M
 import qualified Data.Set as S
 import qualified Language.Fortran.Analysis as FA
@@ -55,6 +57,7 @@ data UnitOpts = UnitOpts
   , uoArgumentDecls  :: Bool }
   deriving (Show, Read, Data, Eq, Ord)
 
+-- | Only run the argument if debugging mode enabled.
 whenDebug :: UnitSolver () -> UnitSolver ()
 whenDebug m = fmap uoDebug ask >>= \ d -> when d m
 
@@ -110,6 +113,7 @@ modifyProgramFileM f = do
 
 --------------------------------------------------
 
+-- | Run the unit solver monad.
 runUnitSolver :: UnitOpts -> F.ProgramFile UA -> UnitSolver a -> (Either UnitException a, UnitState, UnitLogs)
 runUnitSolver o pf m = runRWS (runExceptT m) o (unitState0 pf)
 evalUnitSolver :: UnitOpts -> F.ProgramFile UA -> UnitSolver a -> (Either UnitException a, UnitLogs)

@@ -17,7 +17,6 @@
 {- This module collects together stubs that connect analysis/transformations
    with the input -> output procedures -}
 
-{-# LANGUAGE ImplicitParams #-}
 {-# LANGUAGE DoAndIfThenElse #-}
 {-# LANGUAGE DeriveDataTypeable #-}
 {-# LANGUAGE TypeSynonymInstances #-}
@@ -47,7 +46,6 @@ import Camfort.Transformation.DerivedTypeIntro
 
 import qualified Camfort.Specification.Units as LU
 import Camfort.Specification.Units.Environment
-import Camfort.Specification.Units.Solve
 
 import Camfort.Helpers
 import Camfort.Output
@@ -132,29 +130,20 @@ equivalences inSrc excludes outSrc _ = do
 {- Units feature -}
 unitsCheck inSrc excludes outSrc opt = do
     putStrLn $ "Checking units for " ++ show inSrc ++ "\n"
-    let ?solver = getOption opt :: Solver
-     in let ?assumeLiterals = getOption opt :: AssumeLiterals
-        in doAnalysisReportForpar (mapM LU.checkUnits) inSrc excludes outSrc
+    doAnalysisReportForpar (mapM LU.checkUnits) inSrc excludes outSrc
 
 unitsInfer inSrc excludes outSrc opt = do
     putStrLn $ "Inferring units for " ++ show inSrc ++ "\n"
-    let ?solver = getOption opt :: Solver
-     in let ?assumeLiterals = getOption opt :: AssumeLiterals
-        in doAnalysisReportForpar (mapM LU.inferUnits) inSrc excludes outSrc
+    doAnalysisReportForpar (mapM LU.inferUnits) inSrc excludes outSrc
 
 unitsSynth inSrc excludes outSrc opt = do
     putStrLn $ "Synthesising units for " ++ show inSrc ++ "\n"
-    let ?solver = getOption opt :: Solver
-     in let ?assumeLiterals = getOption opt :: AssumeLiterals
-        in doRefactorForpar (mapM LU.synthesiseUnits) inSrc excludes outSrc
+    doRefactorForpar (mapM LU.synthesiseUnits) inSrc excludes outSrc
 
 unitsCriticals inSrc excludes outSrc opt = do
     putStrLn $ "Infering critical variables for units inference in directory "
              ++ show inSrc ++ "\n"
-    let ?solver = getOption opt :: Solver
-     in let ?assumeLiterals = getOption opt :: AssumeLiterals
-        in doAnalysisReportForpar (mapM LU.inferCriticalVariables)
-              inSrc excludes outSrc
+    doAnalysisReportForpar (mapM LU.inferCriticalVariables) inSrc excludes outSrc
 
 {- Stencils feature -}
 stencilsCheck inSrc excludes _ _ = do

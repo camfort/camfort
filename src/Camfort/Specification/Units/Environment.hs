@@ -13,7 +13,7 @@
    See the License for the specific language governing permissions and
    limitations under the License.
 -}
-{-# LANGUAGE TemplateHaskell, ImplicitParams, DeriveDataTypeable #-}
+{-# LANGUAGE TemplateHaskell, DeriveDataTypeable #-}
 
 
 {- Provides various data types and type class instances for the Units extension -}
@@ -351,6 +351,3 @@ data Consistency a = Ok a | Bad a Int (UnitConstant, [Rational]) deriving Show
 efmap :: (a -> a) -> Consistency a -> Consistency a
 efmap f (Ok x)      = Ok (f x)
 efmap f (Bad x l msg) = Bad x l msg
-
-ifDebug :: (?debug :: Bool, Monad m) => m a -> m ()
-ifDebug e = if ?debug then e >> return () else return ()

@@ -61,15 +61,11 @@ executable camfort
                         Camfort.Specification.Stencils.Synthesis
                         Camfort.Specification.Stencils
                         Camfort.Specification.Units
-                        Camfort.Specification.Units.Debug
                         Camfort.Specification.Units.InferenceFrontend
                         Camfort.Specification.Units.InferenceBackend
                         Camfort.Specification.Units.Environment
                         Camfort.Specification.Units.Monad
                         Camfort.Specification.Units.Parser
-                        Camfort.Specification.Units.Solve
-                        Camfort.Specification.Units.SolveHMatrix
-                        Camfort.Specification.Units.Strip
                         Camfort.Specification.Units.Synthesis
                         Camfort.Transformation.CommonBlockElim
                         Camfort.Transformation.CommonBlockElimToCalls
@@ -138,15 +134,11 @@ library
                         Camfort.Specification.Stencils.Synthesis
                         Camfort.Specification.Stencils
                         Camfort.Specification.Units
-                        Camfort.Specification.Units.Debug
                         Camfort.Specification.Units.InferenceFrontend
                         Camfort.Specification.Units.InferenceBackend
                         Camfort.Specification.Units.Environment
                         Camfort.Specification.Units.Monad
                         Camfort.Specification.Units.Parser
-                        Camfort.Specification.Units.Solve
-                        Camfort.Specification.Units.SolveHMatrix
-                        Camfort.Specification.Units.Strip
                         Camfort.Specification.Units.Synthesis
                         Camfort.Transformation.CommonBlockElim
                         Camfort.Transformation.CommonBlockElimToCalls
