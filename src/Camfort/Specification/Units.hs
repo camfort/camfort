@@ -215,39 +215,39 @@ inferUnits (fname, pf)
     pfRenamed = FAR.analyseRenames . FA.initAnalysis . fmap mkUnitAnnotation $ pf
     nameMap = FAR.extractNameMap pfRenamed
 
-
 {-| Synthesis unspecified units for a program (after checking) -}
 synthesiseUnits ::
        Params
     => (Filename, F.ProgramFile Annotation)
     -> (Report, (Filename, F.ProgramFile Annotation))
-synthesiseUnits (fname, pf) = (r, (fname, fmap (prevAnnotation . FA.prevAnnotation) pf3))
+synthesiseUnits (fname, pf)
+  | Right vars <- eVars = (okReport vars, (fname, pfFinal))
+  | Left exc   <- eVars = (errReport exc, (fname, pfFinal))
   where
     -- Format report
-    r = concat [fname ++ ": " ++ r ++ "\n" | r <- Data.Label.get report env, not (null r)]
-        ++ fname ++ ": checked/inferred " ++ show n ++ " user variables\n"
-    -- Count number of checked and inferred variables
-    n = countVariables (_varColEnv env) (_debugInfo env) (_procedureEnv env)
-                                    (fst $ _linearSystem env) (_unitVarCats env)
-    -- Apply inference and synthesis
-    pfRenamed = FAB.analyseBBlocks . FAR.analyseRenames . FA.initAnalysis $ (fmap mkUnitAnnotation pf)
-    (pf3, env) = runState inferAndSynthesise emptyUnitEnv
+    okReport vars = logs ++ "\n\n" ++ unlines [ fname ++ ": " ++ expReport ei | ei <- expInfo ]
+      where
+        expInfo = [ (e, u) | s@(F.StDeclaration {})               <- universeBi pfUA :: [F.Statement UA]
+                           , e@(F.ExpValue _ _ (F.ValVariable _)) <- universeBi s    :: [F.Expression UA]
+                           , u <- maybeToList (FA.varName e `lookup` vars) ]
+
+    expReport (e, u) = showSrcSpan (getSpan e) ++ " unit " ++ show u ++ " :: " ++ (v `fromMaybe` M.lookup v nameMap)
+      where v = FA.varName e
+
+    errReport exc = fname ++ ": " ++ show exc ++ "\n" ++ logs
+
+    -- run inference
+    uOpts = UnitOpts { uoDebug          = False
+                     , uoLiterals       = LitMixed
+                     , uoNameMap        = nameMap
+                     , uoArgumentDecls  = False }
+    (eVars, state, logs) = runUnitSolver uOpts pfRenamed $ initInference >> runInferVariables >>= US.runSynthesis
+
+    pfUA = usProgramFile state -- the program file after units analysis is done
+    pfFinal = fmap prevAnnotation . fmap FA.prevAnnotation $ pfUA -- strip annotations
+
+    pfRenamed = FAR.analyseRenames . FA.initAnalysis . fmap mkUnitAnnotation $ pf
     nameMap = FAR.extractNameMap pfRenamed
-    inferAndSynthesise =
-        let ?criticals = False
-            ?debug     = False
-            ?nameMap   = nameMap
-            ?argumentDecls = False
-        in do
-          doInferUnits pfRenamed
-          succeeded <- gets success
-          if succeeded
-            then do
-              p <- US.synthesiseUnits False pfRenamed
-              (n, _) <- gets evUnitsAdded
-              report <<++ ("Added " ++ (show n) ++ " annotations")
-              return p
-            else return pfRenamed
 
 -- Count number of variables for which a spec has been checked
 countVariables vars debugs procs matrix ucats =
