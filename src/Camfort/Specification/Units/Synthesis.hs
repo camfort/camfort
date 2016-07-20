@@ -25,6 +25,7 @@ import Data.Matrix
 import Data.Maybe
 import Data.Ratio (numerator, denominator)
 import qualified Data.Map as M
+import qualified Data.Set as S
 import Data.Generics.Uniplate.Operations
 import Data.Label.Monadic hiding (modify)
 import Control.Monad.State.Strict hiding (gets)

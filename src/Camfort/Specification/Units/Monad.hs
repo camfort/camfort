@@ -18,14 +18,16 @@
 
 {- | Defines the monad for the units-of-measure modules -}
 module Camfort.Specification.Units.Monad
-  ( UA, UnitSolver, UnitOpts(..), UnitLogs, UnitState(..), LiteralsOpt(..), UnitException(..)
-  , whenDebug, modifyVarUnitMap, modifyUnitAliasMap, modifyTemplateMap, modifyProgramFile, modifyProgramFileM
+  ( UnitSolver, UnitOpts(..), UnitLogs, UnitState(..), LiteralsOpt(..), UnitException(..)
+  , whenDebug, modifyVarUnitMap, modifyGivenVarSet, modifyUnitAliasMap
+  , modifyTemplateMap, modifyProgramFile, modifyProgramFileM
   , runUnitSolver, evalUnitSolver, execUnitSolver ) where
 
 import Control.Monad.RWS.Strict
 import Control.Monad.Trans.Except
 import Data.Data
 import qualified Data.Map as M
+import qualified Data.Set as S
 import qualified Language.Fortran.Analysis as FA
 import qualified Language.Fortran.Analysis.Renaming as FAR
 import qualified Language.Fortran.AST as F
@@ -61,6 +63,7 @@ type UnitLogs = String
 --------------------------------------------------
 
 type VarUnitMap   = M.Map F.Name UnitInfo
+type GivenVarSet  = S.Set F.Name
 type UnitAliasMap = M.Map String UnitInfo
 type TemplateMap  = M.Map F.Name Constraints
 
@@ -69,6 +72,7 @@ type UA = FA.Analysis (UnitAnnotation A)
 data UnitState = UnitState
   { usProgramFile  :: F.ProgramFile UA
   , usVarUnitMap   :: VarUnitMap
+  , usGivenVarSet  :: GivenVarSet
   , usUnitAliasMap :: UnitAliasMap
   , usTemplateMap  :: TemplateMap
   , usLitNums      :: Int
@@ -77,6 +81,7 @@ data UnitState = UnitState
 
 unitState0 pf = UnitState { usProgramFile  = pf
                           , usVarUnitMap   = M.empty
+                          , usGivenVarSet  = S.empty
                           , usUnitAliasMap = M.empty
                           , usTemplateMap  = M.empty
                           , usLitNums      = 0
@@ -84,6 +89,9 @@ unitState0 pf = UnitState { usProgramFile  = pf
 
 modifyVarUnitMap :: (VarUnitMap -> VarUnitMap) -> UnitSolver ()
 modifyVarUnitMap f = modify (\ s -> s { usVarUnitMap = f (usVarUnitMap s) })
+
+modifyGivenVarSet :: (GivenVarSet -> GivenVarSet) -> UnitSolver ()
+modifyGivenVarSet f = modify (\ s -> s { usGivenVarSet = f (usGivenVarSet s) })
 
 modifyUnitAliasMap :: (UnitAliasMap -> UnitAliasMap) -> UnitSolver ()
 modifyUnitAliasMap f = modify (\ s -> s { usUnitAliasMap = f (usUnitAliasMap s) })

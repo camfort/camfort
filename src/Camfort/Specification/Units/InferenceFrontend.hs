@@ -46,6 +46,7 @@ import Data.Function
 import Data.List
 import Data.Matrix hiding (rref)
 import qualified Data.Map as M
+import qualified Data.Set as S
 import Data.Maybe
 import Data.Ratio
 import Data.Generics.Uniplate.Operations
@@ -251,6 +252,7 @@ insertGivenUnits pf = mapM_ checkComment [ b | b@(F.BlComment {}) <- universeBi 
                                                  , let varUniqueName = varName e
                                                  , maybe False (== varRealName) (varUniqueName `M.lookup` nameMap) ]
       modifyVarUnitMap $ M.unionWith const m
+      modifyGivenVarSet . S.union . S.fromList . M.keys $ m
 
 --------------------------------------------------
 
