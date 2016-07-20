@@ -31,12 +31,15 @@ import Data.Data
 import Control.Monad.Trans.State.Lazy
 
 import Language.Fortran
-{- data SrcLoc
-  = SrcLoc {srcFilename :: String, srcLine :: Int, srcColumn :: Int}
--}
 import Camfort.Analysis.Syntax
 
---type SourceText    = B.ByteString
+{-
+Reminder:
+ -- type SourceText    = B.ByteString
+ -- data SrcLoc
+       = SrcLoc {srcFilename :: String, srcLine :: Int, srcColumn :: Int}
+-}
+
 type Refactored = Bool
 
 -- A refactoring takes a 'Typeable' value
