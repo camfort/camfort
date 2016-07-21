@@ -69,7 +69,7 @@ inferCriticalVariables (fname, pf)
   where
     -- Format report
     okReport []   = logs ++ "\n\n" ++ "No additional annotations are necessary.\n"
-    oKReport vars = logs ++ "\n\n" ++ unlines [ fname ++ ": " ++ expReport ei | ei <- expInfo ]
+    okReport vars = logs ++ "\n\n" ++ unlines [ fname ++ ": " ++ expReport ei | ei <- expInfo ]
       where
         names = map showVar vars
         expInfo = [ e | s@(F.StDeclaration {})               <- universeBi pfUA :: [F.Statement UA]
