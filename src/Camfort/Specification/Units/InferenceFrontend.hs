@@ -64,21 +64,51 @@ initInference = do
   -- Send the output of the parser to the logger.
   mapM_ tell parserReport
 
-  insertGivenUnits -- also obtains all unit alias definitions
+  -- The following insert* functions examine the AST and insert
+  -- mappings into the tables stored in the UnitState.
+
+  -- First, find all given unit annotations and insert them into our
+  -- mappings.  Also obtain all unit alias definitions.
+  insertGivenUnits
+
+  -- For function or subroutine parameters (or return variables) that
+  -- are not given explicit units, give them a parametric polymorphic
+  -- unit.
   insertParametricUnits
+
+  -- Any other variables get assigned a unique undetermined unit named
+  -- after the variable. This assumes that all variables have unique
+  -- names, which the renaming module already has assured.
   insertUndeterminedUnits
+
+  -- Now take the information that we have gathered and annotate the
+  -- variable expressions within the AST with it.
   annotateAllVariables
 
+  -- With the variable expressions annotated, we now propagate the
+  -- information throughout the AST, giving units to as many
+  -- expressions as possible, and also constraints wherever
+  -- appropriate.
   propagateUnits
-  consWithoutTemplates <- extractConstraints
-  cons                 <- applyTemplates consWithoutTemplates
 
+  -- Gather up all of the constraints that we identified in the AST.
+  -- These constraints will include parametric polymorphic units that
+  -- have not yet been instantiated into their particular uses.
+  abstractCons <- extractConstraints
+
+  -- Eliminate all parametric polymorphic units by copying them for
+  -- each specific use cases and substituting a unique call-site
+  -- identifier that distinguishes each use-case from the others.
+  cons <- applyTemplates abstractCons
+
+  -- Remove any traces of CommentAnnotator, since the annotations can
+  -- cause generic operations traversing the AST to get confused.
   modifyProgramFile cleanLinks
+
   modify $ \ s -> s { usConstraints = cons }
 
   debugLogging
 
--- Remove traces of CommentAnnotator, since it confuses uniplate searches...
 cleanLinks :: F.ProgramFile UA -> F.ProgramFile UA
 cleanLinks = transformBi (\ a -> a { unitBlock = Nothing, unitSpec = Nothing } :: UnitAnnotation A)
 
