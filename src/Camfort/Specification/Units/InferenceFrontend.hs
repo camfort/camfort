@@ -232,7 +232,7 @@ propagateExp e = fmap uoLiterals ask >>= \ lm -> case e of
   _                                      -> whenDebug (tell ("propagateExp: unhandled: " ++ show e)) >> return e
   where
     setF2 f u1 u2  = return $ maybeSetUnitInfoF2 f u1 u2 e
-    setF2C f u1 u2 = return $ maybeSetUnitConstraintF2 f u1 u2 e
+    setF2C f u1 u2 = return . maybeSetUnitInfo u1 $ maybeSetUnitConstraintF2 f u1 u2 e
 
 propagateFunctionCall :: F.Expression UA -> UnitSolver (F.Expression UA)
 propagateFunctionCall e@(F.ExpFunctionCall a s f Nothing)                     = do
