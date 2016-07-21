@@ -144,6 +144,7 @@ checkUnits (fname, pf)
     This produces an output of all the unit information for a program -}
 inferUnits :: (Filename, F.ProgramFile Annotation) -> (Report, (Filename, F.ProgramFile Annotation))
 inferUnits (fname, pf)
+  | Right []   <- eVars = checkUnits (fname, pf)
   | Right vars <- eVars = (okReport vars, (fname, pf))
   | Left exc   <- eVars = (errReport exc, (fname, pf))
   where
@@ -174,6 +175,7 @@ inferUnits (fname, pf)
 {-| Synthesis unspecified units for a program (after checking) -}
 synthesiseUnits :: (Filename, F.ProgramFile Annotation) -> (Report, (Filename, F.ProgramFile Annotation))
 synthesiseUnits (fname, pf)
+  | Right []   <- eVars = checkUnits (fname, pf)
   | Right vars <- eVars = (okReport vars, (fname, pfFinal))
   | Left exc   <- eVars = (errReport exc, (fname, pfFinal))
   where

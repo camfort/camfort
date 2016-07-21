@@ -81,9 +81,11 @@ criticalVariables cons = filter (not . isUnitName) $ map (colA A.!) criticalIndi
 
 -- | Returns list of formerly-undetermined variables and their units.
 inferVariables :: Constraints -> [(String, UnitInfo)]
-inferVariables cons = [ (var, if null units then UnitlessVar else foldl1 UnitMul units)
+inferVariables cons
+  | null inconsists = [ (var, if null units then UnitlessVar else foldl1 UnitMul units)
                       | ([UnitPow (UnitVar var) k], units) <- map (partition (not . isUnitName)) unitPows
                       , k `approxEq` 1 ]
+  | otherwise       = []
   where
     (unsolvedM, inconsists, colA)       = constraintsToMatrix cons
     solvedM                             = rref unsolvedM
