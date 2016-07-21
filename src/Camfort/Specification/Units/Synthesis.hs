@@ -100,7 +100,7 @@ insertSpacing :: Int -> String -> String
 insertSpacing n = (replicate n ' ' ++)
 
 -- Pretty print a unit declaration.
-showUnitDecl nameMap (e, u) = "unit " ++ show u ++ " :: " ++ (v `fromMaybe` M.lookup v nameMap)
+showUnitDecl nameMap (e, u) = "unit(" ++ show u ++ ") :: " ++ (v `fromMaybe` M.lookup v nameMap)
   where v = FA.varName e
 
 --------------------------------------------------
