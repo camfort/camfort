@@ -85,6 +85,8 @@ initInference = do
   -- variable expressions within the AST with it.
   annotateAllVariables
 
+  annotateLiterals
+
   -- With the variable expressions annotated, we now propagate the
   -- information throughout the AST, giving units to as many
   -- expressions as possible, and also constraints wherever
@@ -218,6 +220,70 @@ annotateAllVariables = modifyProgramFileM $ \ pf -> do
 
 --------------------------------------------------
 
+-- | Give units to literals based upon the rules of the Literals mode.
+--
+-- LitUnitless: All literals are unitless.
+-- LitPoly:     All literals are polymorphic.
+-- LitMixed:    Literals that are operands to MulOp or DivOp are unitless;
+--              literals that are operands to AddOp or RelOp are polymorphic
+--              inside of the context of functions/subroutines, and
+--              monomorphic outside that context. All other literals are
+--              regarded as unitless.
+annotateLiterals :: UnitSolver ()
+annotateLiterals = modifyProgramFileM (transformBiM annotateLiteralsPU)
+
+annotateLiteralsPU :: F.ProgramUnit UA -> UnitSolver (F.ProgramUnit UA)
+annotateLiteralsPU pu = do
+  mode <- asks uoLiterals
+  case mode of
+    LitUnitless                 -> modifyPUBlocksM (transformBiM expUnitless) pu
+    LitMixed
+      | F.PUFunction {}   <- pu -> modifyPUBlocksM (expMixed genParamLit (return UnitlessLit)) pu
+      | F.PUSubroutine {} <- pu -> modifyPUBlocksM (expMixed genParamLit (return UnitlessLit)) pu
+      | otherwise               -> modifyPUBlocksM (expMixed genUnitLiteral (return UnitlessLit)) pu
+    LitPoly                     -> modifyPUBlocksM (transformBiM (withLiterals genParamLit)) pu
+  where
+    -- Two mutually recursive, top-down functions inspecting the AST
+    -- for the two cases of Mixed-mode literals.
+    -- expMixed :: F.Expression UA -> UnitSolver (F.Expression UA)
+    expMixed addCase otherCase = descendBiM seekExp
+      where
+        seekExp e = case e :: F.Expression UA of
+          F.ExpBinary a s o e1 e2
+            | isOp AddOp o || isOp RelOp o -> liftM2 (F.ExpBinary a s o) (paramIfLit e1) (paramIfLit e2)
+          F.ExpValue _ _ (F.ValReal _)     -> flip setUnitInfo e `fmap` otherCase
+          F.ExpValue _ _ (F.ValInteger _)  -> flip setUnitInfo e `fmap` otherCase
+          _                                -> descendM seekExp e
+
+        paramIfLit e
+          | isLiteral e = flip setUnitInfo e `fmap` addCase
+          | otherwise   = descendM seekExp e
+
+    -- Set all literals to unitless.
+    expUnitless e
+      | isLiteral e = return $ setUnitInfo UnitlessLit e
+      | otherwise   = return e
+
+    -- Set all literals to the result of given monadic computation.
+    withLiterals m e
+      | isLiteral e = flip setUnitInfo e `fmap` m
+      | otherwise   = return e
+
+-- helper
+modifyPUBlocksM :: Monad m => ([F.Block a] -> m [F.Block a]) -> F.ProgramUnit a -> m (F.ProgramUnit a)
+modifyPUBlocksM f pu = case pu of
+  F.PUMain a s n b pus                    -> flip fmap (f b) $ \ b' -> F.PUMain a s n b' pus
+  F.PUModule a s n b pus                  -> flip fmap (f b) $ \ b' -> F.PUModule a s n b' pus
+  F.PUSubroutine a s r n p b subs         -> flip fmap (f b) $ \ b' -> F.PUSubroutine a s r n p b' subs
+  F.PUFunction   a s r rec n p res b subs -> flip fmap (f b) $ \ b' -> F.PUFunction a s r rec n p res b' subs
+  F.PUBlockData  a s n b                  -> flip fmap (f b) $ \ b' -> F.PUBlockData  a s n b'
+
+isLiteral (F.ExpValue _ _ (F.ValReal _)) = True
+isLiteral (F.ExpValue _ _ (F.ValInteger _)) = True
+isLiteral _ = False
+
+--------------------------------------------------
+
 -- | Convert all parametric templates into actual uses, via substitution.
 applyTemplates :: Constraints -> UnitSolver Constraints
 -- postcondition: returned constraints lack all Parametric constructors
@@ -239,6 +305,7 @@ substInstance output (name, callId) = do
 -- | Convert a parametric template into a particular use
 instantiate (name, callId) = transformBi $ \ info -> case info of
   UnitParamAbs (name, position) -> UnitParamUse (name, position, callId)
+  UnitParamLitAbs litId         -> UnitParamLitUse (litId, callId)
   _                             -> info
 
 -- | Gather all constraints from the AST, as well as from the varUnitMap
@@ -251,7 +318,7 @@ extractConstraints = do
 
 -- | Does the constraint contain any Parametric elements?
 isParametric :: Constraint -> Bool
-isParametric info = not (null [ () | UnitParamAbs _ <- universeBi info ])
+isParametric info = not . null $ [ () | UnitParamAbs _ <- universeBi info ] ++ [ () | UnitParamLitAbs _ <- universeBi info ]
 
 --------------------------------------------------
 
@@ -265,8 +332,8 @@ propagateUnits = modifyProgramFileM $ transformBiM propagatePU        <=<
 propagateExp :: F.Expression UA -> UnitSolver (F.Expression UA)
 propagateExp e = fmap uoLiterals ask >>= \ lm -> case e of
   F.ExpValue _ _ (F.ValVariable _)       -> return e -- all variables should already be annotated
-  F.ExpValue _ _ (F.ValInteger _)        -> flip setUnitInfo e `fmap` genUnitLiteral
-  F.ExpValue _ _ (F.ValReal _)           -> flip setUnitInfo e `fmap` genUnitLiteral
+  F.ExpValue _ _ (F.ValInteger _)        -> return e -- all literal numbers should already be annotated
+  F.ExpValue _ _ (F.ValReal _)           -> return e -- all literal numbers should already be annotated
   F.ExpBinary _ _ F.Multiplication e1 e2 -> setF2 UnitMul (getUnitInfoMul lm e1) (getUnitInfoMul lm e2)
   F.ExpBinary _ _ F.Division e1 e2       -> setF2 UnitMul (getUnitInfoMul lm e1) (flip UnitPow (-1) `fmap` (getUnitInfoMul lm e2))
   F.ExpBinary _ _ F.Exponentiation e1 e2 -> setF2 UnitPow (getUnitInfo e1) (constantExpression e2)
@@ -323,7 +390,7 @@ callHelper nexp args = do
   let info = UnitParamUse (name, 0, callId)
   return (info, args')
 
--- | Generate a unique identifier for each call-site.
+-- | Generate a unique identifier for a call-site.
 genCallId :: UnitSolver Int
 genCallId = do
   st <- get
@@ -331,13 +398,21 @@ genCallId = do
   put $ st { usLitNums = callId + 1 }
   return callId
 
--- | Generate a unique identifier for each literal encountered in the code.
+-- | Generate a unique identifier for a literal encountered in the code.
 genUnitLiteral :: UnitSolver UnitInfo
 genUnitLiteral = do
   s <- get
   let i = usLitNums s
   put $ s { usLitNums = i + 1 }
   return $ UnitLiteral i
+
+-- | Generate a unique identifier for a polymorphic literal encountered in the code.
+genParamLit :: UnitSolver UnitInfo
+genParamLit = do
+  s <- get
+  let i = usLitNums s
+  put $ s { usLitNums = i + 1 }
+  return $ UnitParamLitAbs i
 
 --------------------------------------------------
 
@@ -385,6 +460,12 @@ maybeSetUnitInfoF2 _ _ _ e                 = e
 maybeSetUnitConstraintF2 :: F.Annotated f => (a -> b -> Constraint) -> Maybe a -> Maybe b -> f UA -> f UA
 maybeSetUnitConstraintF2 f (Just u1) (Just u2) e = setConstraint (f u1 u2) e
 maybeSetUnitConstraintF2 _ _ _ e                 = e
+
+fmapUnitInfo :: F.Annotated f => (UnitInfo -> UnitInfo) -> f UA -> f UA
+fmapUnitInfo f x
+  | Just u <- getUnitInfo x = setUnitInfo (f u) x
+  | otherwise               = x
+
 
 --------------------------------------------------
 

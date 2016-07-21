@@ -42,6 +42,8 @@ import Text.Printf
 data UnitInfo
   = UnitParamAbs (String, Int)       -- an abstract parameter identified by PU name and argument position
   | UnitParamUse (String, Int, Int)  -- identify particular instantiation of parameters
+  | UnitParamLitAbs Int              -- a literal with abstract, polymorphic units, uniquely identified
+  | UnitParamLitUse (Int, Int)       -- a particular instantiation of a polymorphic literal
   | UnitLiteral Int                  -- literal with undetermined but uniquely identified units
   | UnitlessLit                      -- a unitless literal
   | UnitlessVar                      -- a unitless variable
@@ -55,7 +57,9 @@ data UnitInfo
 instance Show UnitInfo where
   show u = case u of
     UnitParamAbs (f, i)    -> printf "#<ParamAbs %s[%d]>" f i
-    UnitParamUse (f, i, j) -> printf "#<ParamUse %s[%d,%d]>" f i j
+    UnitParamUse (f, i, j) -> printf "#<ParamUse %s[%d] callId=%d>" f i j
+    UnitParamLitAbs i      -> printf "#<ParamLitAbs litId=%d>" i
+    UnitParamLitUse (i, j) -> printf "#<ParamLitUse litId=%d callId=%d]>" i j
     UnitLiteral i          -> printf "#<Literal id=%d>" i
     UnitlessLit            -> "1"
     UnitlessVar            -> "1"
