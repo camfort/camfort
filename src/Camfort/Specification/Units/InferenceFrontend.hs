@@ -362,13 +362,24 @@ propagateStatement stmt = case stmt of
   F.StCall a s sub (Just (F.AList a' s' args)) -> do
     (_, args') <- callHelper sub args
     return $ F.StCall a s sub (Just (F.AList a' s' args'))
+  F.StDeclaration {}                           -> transformBiM propagateDeclarator stmt
   _                                            -> return stmt
 
+propagateDeclarator :: F.Declarator UA -> UnitSolver (F.Declarator UA)
+propagateDeclarator decl = case decl of
+  F.DeclVariable _ _ e1 _ (Just e2) -> do
+    return $ maybeSetUnitConstraintF2 ConEq (getUnitInfo e1) (getUnitInfo e2) decl
+  F.DeclArray _ _ e1 _ _ (Just e2)  -> do
+    return $ maybeSetUnitConstraintF2 ConEq (getUnitInfo e1) (getUnitInfo e2) decl
+  _                                 -> return decl
+
 propagatePU :: F.ProgramUnit UA -> UnitSolver (F.ProgramUnit UA)
-propagatePU pu = modifyTemplateMap (M.insert name cons) >> return (setConstraint (ConConj cons) pu)
-  where
-    cons = [ con | con@(ConEq {}) <- universeBi pu, containsParametric name con ]
-    name = puName pu
+propagatePU pu = do
+  let name = puName pu
+  let cons = [ con | con@(ConEq {}) <- universeBi pu, containsParametric name con ]
+
+  modifyTemplateMap (M.insert name cons)
+  return (setConstraint (ConConj cons) pu)
 
 --------------------------------------------------
 
