@@ -63,7 +63,7 @@ initInference = do
   mapM_ tell parserReport
   insertGivenUnits linkedPF -- also obtains all unit alias definitions
   insertParametricUnits linkedPF
-  insertUnitVarUnits linkedPF
+  insertUndeterminedUnits linkedPF
   annotPF <- annotateAllVariables linkedPF
   propPF               <- propagateUnits annotPF
   consWithoutTemplates <- extractConstraints propPF
@@ -124,8 +124,8 @@ insertParametricUnits = mapM_ paramPU . universeBi
 -- | Any remaining variables with unknown units are given unit
 -- UnitVar with a unique name (in this case, taken from the
 -- unique name of the variable as provided by the Renamer).
-insertUnitVarUnits :: F.ProgramFile UA -> UnitSolver ()
-insertUnitVarUnits pf = forM_ (nub [ varName v | v@(F.ExpValue _ _ (F.ValVariable _)) <- universeBi pf ]) $ \ vname ->
+insertUndeterminedUnits :: F.ProgramFile UA -> UnitSolver ()
+insertUndeterminedUnits pf = forM_ (nub [ varName v | v@(F.ExpValue _ _ (F.ValVariable _)) <- universeBi pf ]) $ \ vname ->
   -- Insert an undetermined unit if the variable does not already have a unit.
   modifyVarUnitMap $ M.insertWith (curry snd) vname (UnitVar vname)
 

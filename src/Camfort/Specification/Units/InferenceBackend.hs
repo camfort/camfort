@@ -30,7 +30,7 @@ where
 import Data.Tuple (swap)
 import Data.Maybe (maybeToList)
 import Data.List ((\\), findIndex, partition, sortBy, group)
-import Data.Generics.Uniplate.Operations
+import Data.Generics.Uniplate.Operations (rewrite)
 import Control.Monad
 import Control.Monad.State.Strict
 import Control.Monad.ST
