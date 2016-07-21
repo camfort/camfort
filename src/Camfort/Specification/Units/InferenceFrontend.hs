@@ -55,21 +55,27 @@ import qualified Numeric.LinearAlgebra as H -- for debugging
 -- | Prepare to run an inference function.
 initInference :: UnitSolver ()
 initInference = do
-  pf <- usProgramFile `fmap` get
+  pf <- gets usProgramFile
   -- Parse unit annotations found in comments and link to their
   -- corresponding statements in the AST.
   let (linkedPF, parserReport) = runWriter $ annotateComments P.unitParser pf
+  modifyProgramFile $ const linkedPF
+
   -- Send the output of the parser to the logger.
   mapM_ tell parserReport
-  insertGivenUnits linkedPF -- also obtains all unit alias definitions
-  insertParametricUnits linkedPF
-  insertUndeterminedUnits linkedPF
-  annotPF <- annotateAllVariables linkedPF
-  propPF               <- propagateUnits annotPF
-  consWithoutTemplates <- extractConstraints propPF
+
+  insertGivenUnits -- also obtains all unit alias definitions
+  insertParametricUnits
+  insertUndeterminedUnits
+  annotateAllVariables
+
+  propagateUnits
+  consWithoutTemplates <- extractConstraints
   cons                 <- applyTemplates consWithoutTemplates
 
-  modify $ \ s -> s { usConstraints = cons, usProgramFile = cleanLinks propPF }
+  modifyProgramFile cleanLinks
+  modify $ \ s -> s { usConstraints = cons }
+
   debugLogging
 
 -- Remove traces of CommentAnnotator, since it confuses uniplate searches...
@@ -104,8 +110,8 @@ runInconsistentConstraints = do
 -- | Seek out any parameters to functions or subroutines that do not
 -- already have units, and insert parametric units for them into the
 -- map of variables to UnitInfo.
-insertParametricUnits :: F.ProgramFile UA -> UnitSolver ()
-insertParametricUnits = mapM_ paramPU . universeBi
+insertParametricUnits :: UnitSolver ()
+insertParametricUnits = gets usProgramFile >>= (mapM_ paramPU . universeBi)
   where
     paramPU pu = do
       forM_ indexedParams $ \ (i, param) -> do
@@ -124,17 +130,22 @@ insertParametricUnits = mapM_ paramPU . universeBi
 -- | Any remaining variables with unknown units are given unit
 -- UnitVar with a unique name (in this case, taken from the
 -- unique name of the variable as provided by the Renamer).
-insertUndeterminedUnits :: F.ProgramFile UA -> UnitSolver ()
-insertUndeterminedUnits pf = forM_ (nub [ varName v | v@(F.ExpValue _ _ (F.ValVariable _)) <- universeBi pf ]) $ \ vname ->
-  -- Insert an undetermined unit if the variable does not already have a unit.
-  modifyVarUnitMap $ M.insertWith (curry snd) vname (UnitVar vname)
+insertUndeterminedUnits :: UnitSolver ()
+insertUndeterminedUnits = do
+  pf <- gets usProgramFile
+  let vars = nub [ varName v | v@(F.ExpValue _ _ (F.ValVariable _)) <- universeBi pf ]
+  forM_ vars $ \ vname ->
+    -- Insert an undetermined unit if the variable does not already have a unit.
+    modifyVarUnitMap $ M.insertWith (curry snd) vname (UnitVar vname)
 
 --------------------------------------------------
 
 -- | Any units provided by the programmer through comment annotations
 -- will be incorporated into the VarUnitMap.
-insertGivenUnits :: F.ProgramFile UA -> UnitSolver ()
-insertGivenUnits pf = mapM_ checkComment [ b | b@(F.BlComment {}) <- universeBi pf ]
+insertGivenUnits :: UnitSolver ()
+insertGivenUnits = do
+  pf <- gets usProgramFile
+  mapM_ checkComment [ b | b@(F.BlComment {}) <- universeBi pf ]
   where
     -- Look through each comment that has some kind of unit annotation within it.
     checkComment :: F.Block UA -> UnitSolver ()
@@ -167,8 +178,8 @@ insertGivenUnits pf = mapM_ checkComment [ b | b@(F.BlComment {}) <- universeBi 
 
 -- | Take the unit information from the VarUnitMap and use it to
 -- annotate every variable expression in the AST.
-annotateAllVariables :: F.ProgramFile UA -> UnitSolver (F.ProgramFile UA)
-annotateAllVariables pf = do
+annotateAllVariables :: UnitSolver ()
+annotateAllVariables = modifyProgramFileM $ \ pf -> do
   varUnitMap <- usVarUnitMap `fmap` get
   let annotateExp e@(F.ExpValue _ _ (F.ValVariable _))
         | Just info <- M.lookup (varName e) varUnitMap = setUnitInfo info e
@@ -201,9 +212,10 @@ instantiate (name, callId) = transformBi $ \ info -> case info of
   _                             -> info
 
 -- | Gather all constraints from the AST, as well as from the varUnitMap
-extractConstraints :: F.ProgramFile UA -> UnitSolver Constraints
-extractConstraints pf = do
-  varUnitMap <- usVarUnitMap `fmap` get
+extractConstraints :: UnitSolver Constraints
+extractConstraints = do
+  pf         <- gets usProgramFile
+  varUnitMap <- gets usVarUnitMap
   return $ [ con | con@(ConEq {}) <- universeBi pf ] ++
            [ ConEq (UnitVar v) u | (v, u) <- M.toList varUnitMap ]
 
@@ -214,9 +226,11 @@ isParametric info = not (null [ () | UnitParamAbs _ <- universeBi info ])
 --------------------------------------------------
 
 -- | Decorate the AST with unit info.
-propagateUnits :: F.ProgramFile UA -> UnitSolver (F.ProgramFile UA)
+propagateUnits :: UnitSolver ()
 -- precondition: all variables have already been annotated
-propagateUnits = transformBiM propagatePU <=< transformBiM propagateStatement <=< transformBiM propagateExp
+propagateUnits = modifyProgramFileM $ transformBiM propagatePU        <=<
+                                      transformBiM propagateStatement <=<
+                                      transformBiM propagateExp
 
 propagateExp :: F.Expression UA -> UnitSolver (F.Expression UA)
 propagateExp e = fmap uoLiterals ask >>= \ lm -> case e of
@@ -231,7 +245,9 @@ propagateExp e = fmap uoLiterals ask >>= \ lm -> case e of
   F.ExpFunctionCall {}                   -> propagateFunctionCall e
   _                                      -> whenDebug (tell ("propagateExp: unhandled: " ++ show e)) >> return e
   where
+    -- shorter names for convenience functions
     setF2 f u1 u2  = return $ maybeSetUnitInfoF2 f u1 u2 e
+    -- remember, not only set a constraint, but also give a unit!
     setF2C f u1 u2 = return . maybeSetUnitInfo u1 $ maybeSetUnitConstraintF2 f u1 u2 e
 
 propagateFunctionCall :: F.Expression UA -> UnitSolver (F.Expression UA)
@@ -329,16 +345,16 @@ setConstraint c = modifyAnnotation (onPrev (\ ua -> ua { unitConstraint = Just c
 
 -- Various helper functions for setting the UnitInfo or Constraint of a piece of AST
 maybeSetUnitInfo :: F.Annotated f => Maybe UnitInfo -> f UA -> f UA
-maybeSetUnitInfo Nothing e = e
+maybeSetUnitInfo Nothing e  = e
 maybeSetUnitInfo (Just u) e = setUnitInfo u e
 
 maybeSetUnitInfoF2 :: F.Annotated f => (a -> b -> UnitInfo) -> Maybe a -> Maybe b -> f UA -> f UA
 maybeSetUnitInfoF2 f (Just u1) (Just u2) e = setUnitInfo (f u1 u2) e
-maybeSetUnitInfoF2 _ _ _ e = e
+maybeSetUnitInfoF2 _ _ _ e                 = e
 
 maybeSetUnitConstraintF2 :: F.Annotated f => (a -> b -> Constraint) -> Maybe a -> Maybe b -> f UA -> f UA
 maybeSetUnitConstraintF2 f (Just u1) (Just u2) e = setConstraint (f u1 u2) e
-maybeSetUnitConstraintF2 _ _ _ e = e
+maybeSetUnitConstraintF2 _ _ _ e                 = e
 
 --------------------------------------------------
 
