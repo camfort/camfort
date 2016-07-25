@@ -150,7 +150,7 @@ insertParametricUnits = gets usProgramFile >>= (mapM_ paramPU . universeBi)
     paramPU pu = do
       forM_ indexedParams $ \ (i, param) -> do
         -- Insert a parametric unit if the variable does not already have a unit.
-        modifyVarUnitMap $ M.insertWith (curry snd) param (UnitParamAbs (fname, i))
+        modifyVarUnitMap $ M.insertWith (curry snd) param (UnitParamPosAbs (fname, i))
       where
         fname = puName pu
         indexedParams
@@ -279,7 +279,7 @@ annotateLiteralsPU pu = do
 applyTemplates :: Constraints -> UnitSolver Constraints
 -- postcondition: returned constraints lack all Parametric constructors
 applyTemplates cons = do
-  let instances = nub [ (name, i) | UnitParamUse (name, _, i) <- universeBi cons ]
+  let instances = nub [ (name, i) | UnitParamPosUse (name, _, i) <- universeBi cons ]
   temps <- foldM substInstance [] instances
   aliasMap <- usUnitAliasMap `fmap` get
   let aliases = [ ConEq (UnitAlias name) def | (name, def) <- M.toList aliasMap ]
@@ -295,7 +295,7 @@ substInstance output (name, callId) = do
 
 -- | Convert a parametric template into a particular use
 instantiate (name, callId) = transformBi $ \ info -> case info of
-  UnitParamAbs (name, position)  -> UnitParamUse (name, position, callId)
+  UnitParamPosAbs (name, position)  -> UnitParamPosUse (name, position, callId)
   UnitParamLitAbs litId          -> UnitParamLitUse (litId, callId)
   UnitParamVarAbs (fname, vname) -> UnitParamVarUse (fname, vname, callId)
   _                              -> info
@@ -310,7 +310,7 @@ extractConstraints = do
 
 -- | Does the constraint contain any Parametric elements?
 isParametric :: Constraint -> Bool
-isParametric info = not . null $ [ () | UnitParamAbs _ <- universeBi info ] ++
+isParametric info = not . null $ [ () | UnitParamPosAbs _ <- universeBi info ] ++
                                  [ () | UnitParamVarAbs _ <- universeBi info ] ++
                                  [ () | UnitParamLitAbs _ <- universeBi info ]
 
@@ -379,7 +379,7 @@ propagatePU pu = do
 
 -- | Check if x contains an abstract parametric reference under the given name.
 containsParametric :: Data from => String -> from -> Bool
-containsParametric name x = not (null [ () | UnitParamAbs (name', _) <- universeBi x, name == name' ])
+containsParametric name x = not (null [ () | UnitParamPosAbs (name', _) <- universeBi x, name == name' ])
 
 -- | Coalesce various function and subroutine call common code.
 callHelper :: F.Expression UA -> [F.Argument UA] -> UnitSolver (UnitInfo, [F.Argument UA])
@@ -388,11 +388,11 @@ callHelper nexp args = do
   callId <- genCallId -- every call-site gets its own unique identifier
   let eachArg i arg@(F.Argument _ _ _ e)
         -- add site-specific parametric constraints to each argument
-        | Just u <- getUnitInfo e = setConstraint (ConEq u (UnitParamUse (name, i, callId))) arg
+        | Just u <- getUnitInfo e = setConstraint (ConEq u (UnitParamPosUse (name, i, callId))) arg
         | otherwise               = arg
   let args' = zipWith eachArg [1..] args
   -- build a site-specific parametric unit for use on a return variable, if any
-  let info = UnitParamUse (name, 0, callId)
+  let info = UnitParamPosUse (name, 0, callId)
   return (info, args')
 
 -- | Generate a unique identifier for a call-site.

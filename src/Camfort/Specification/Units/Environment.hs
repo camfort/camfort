@@ -40,26 +40,26 @@ import Data.Ratio
 import Text.Printf
 
 data UnitInfo
-  = UnitParamAbs (String, Int)       -- an abstract parameter identified by PU name and argument position
-  | UnitParamUse (String, Int, Int)  -- identify particular instantiation of parameters
-  | UnitParamVarAbs (String, String) -- an abstract parameter identified by PU name and variable name
+  = UnitParamPosAbs (String, Int)         -- an abstract parameter identified by PU name and argument position
+  | UnitParamPosUse (String, Int, Int)    -- identify particular instantiation of parameters
+  | UnitParamVarAbs (String, String)      -- an abstract parameter identified by PU name and variable name
   | UnitParamVarUse (String, String, Int) -- a particular instantiation of above
-  | UnitParamLitAbs Int              -- a literal with abstract, polymorphic units, uniquely identified
-  | UnitParamLitUse (Int, Int)       -- a particular instantiation of a polymorphic literal
-  | UnitLiteral Int                  -- literal with undetermined but uniquely identified units
-  | UnitlessLit                      -- a unitless literal
-  | UnitlessVar                      -- a unitless variable
-  | UnitName String                  -- a basic unit
-  | UnitAlias String                 -- the name of a unit alias
-  | UnitVar String                   -- variable with undetermined units (assumed to have unique name)
-  | UnitMul UnitInfo UnitInfo        -- two units multiplied
-  | UnitPow UnitInfo Double          -- a unit raised to a constant power
+  | UnitParamLitAbs Int                   -- a literal with abstract, polymorphic units, uniquely identified
+  | UnitParamLitUse (Int, Int)            -- a particular instantiation of a polymorphic literal
+  | UnitLiteral Int                       -- literal with undetermined but uniquely identified units
+  | UnitlessLit                           -- a unitless literal
+  | UnitlessVar                           -- a unitless variable
+  | UnitName String                       -- a basic unit
+  | UnitAlias String                      -- the name of a unit alias
+  | UnitVar String                        -- variable with undetermined units (assumed to have unique name)
+  | UnitMul UnitInfo UnitInfo             -- two units multiplied
+  | UnitPow UnitInfo Double               -- a unit raised to a constant power
   deriving (Eq, Ord, Data, Typeable)
 
 instance Show UnitInfo where
   show u = case u of
-    UnitParamAbs (f, i)       -> printf "#<ParamAbs %s[%d]>" f i
-    UnitParamUse (f, i, j)    -> printf "#<ParamUse %s[%d] callId=%d>" f i j
+    UnitParamPosAbs (f, i)    -> printf "#<ParamPosAbs %s[%d]>" f i
+    UnitParamPosUse (f, i, j) -> printf "#<ParamPosUse %s[%d] callId=%d>" f i j
     UnitParamVarAbs (f, v)    -> printf "#<ParamVarAbs %s.%s>" f v
     UnitParamVarUse (f, v, j) -> printf "#<ParamVarUse %s.%s callId=%d>" f v j
     UnitParamLitAbs i         -> printf "#<ParamLitAbs litId=%d>" i
@@ -227,8 +227,6 @@ unitScalarMult r (UnitlessC r') = UnitlessC (r * r')
 unitScalarMult r (Unitful us)   = Unitful (map (\(n, u) -> (n, r * u)) us)
 
 convertUnit :: UnitInfo -> State UnitEnv UnitConstant
-convertUnit p@(UnitParamAbs {}) = error $ "Can't use parametric yet: " ++ show p
-convertUnit p@(UnitParamUse {}) = error $ "Can't use parameteric yet" ++ show p
 convertUnit (UnitName u) = do
   denv <- gets derivedUnitEnv
   case lookup u denv of

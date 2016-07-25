@@ -135,7 +135,9 @@ checkUnits (fname, pf)
 
     -- number of 'real' variables checked, e.g. not parametric
     nVars = M.size . M.filter (not . isParametricUnit) $ usVarUnitMap state
-    isParametricUnit u = case u of UnitParamAbs {} -> True; UnitParamUse {} -> True; _ -> False
+    isParametricUnit u = case u of UnitParamPosAbs {} -> True; UnitParamPosUse {} -> True
+                                   UnitParamVarAbs {} -> True; UnitParamVarUse {} -> True
+                                   _ -> False
 
     pfRenamed = FAR.analyseRenames . FA.initAnalysis . fmap mkUnitAnnotation $ pf
     nameMap = FAR.extractNameMap pfRenamed
