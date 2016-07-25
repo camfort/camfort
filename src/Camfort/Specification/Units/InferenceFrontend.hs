@@ -224,11 +224,8 @@ annotateAllVariables = modifyProgramFileM $ \ pf -> do
 --
 -- LitUnitless: All literals are unitless.
 -- LitPoly:     All literals are polymorphic.
--- LitMixed:    Literals that are operands to MulOp or DivOp are unitless;
---              literals that are operands to AddOp or RelOp are polymorphic
---              inside of the context of functions/subroutines, and
---              monomorphic outside that context. All other literals are
---              regarded as unitless.
+-- LitMixed:    The literal "0" or "0.0" is fully parametric polymorphic.
+--              All other literals are monomorphic, possibly unitless.
 annotateLiterals :: UnitSolver ()
 annotateLiterals = modifyProgramFileM (transformBiM annotateLiteralsPU)
 
@@ -236,28 +233,17 @@ annotateLiteralsPU :: F.ProgramUnit UA -> UnitSolver (F.ProgramUnit UA)
 annotateLiteralsPU pu = do
   mode <- asks uoLiterals
   case mode of
-    LitUnitless                 -> modifyPUBlocksM (transformBiM expUnitless) pu
-    LitMixed
-      | F.PUFunction {}   <- pu -> modifyPUBlocksM (expMixed genParamLit (return UnitlessLit)) pu
-      | F.PUSubroutine {} <- pu -> modifyPUBlocksM (expMixed genParamLit (return UnitlessLit)) pu
-      | otherwise               -> modifyPUBlocksM (expMixed genUnitLiteral (return UnitlessLit)) pu
-    LitPoly                     -> modifyPUBlocksM (transformBiM (withLiterals genParamLit)) pu
+    LitUnitless -> modifyPUBlocksM (transformBiM expUnitless) pu
+    LitPoly     -> modifyPUBlocksM (transformBiM (withLiterals genParamLit)) pu
+    LitMixed    -> modifyPUBlocksM (transformBiM expMixed) pu
   where
-    -- Two mutually recursive, top-down functions inspecting the AST
-    -- for the two cases of Mixed-mode literals.
-    -- expMixed :: F.Expression UA -> UnitSolver (F.Expression UA)
-    expMixed addCase otherCase = descendBiM seekExp
-      where
-        seekExp e = case e :: F.Expression UA of
-          F.ExpBinary a s o e1 e2
-            | isOp AddOp o || isOp RelOp o -> liftM2 (F.ExpBinary a s o) (paramIfLit e1) (paramIfLit e2)
-          F.ExpValue _ _ (F.ValReal _)     -> flip setUnitInfo e `fmap` otherCase
-          F.ExpValue _ _ (F.ValInteger _)  -> flip setUnitInfo e `fmap` otherCase
-          _                                -> descendM seekExp e
-
-        paramIfLit e
-          | isLiteral e = flip setUnitInfo e `fmap` addCase
-          | otherwise   = descendM seekExp e
+    -- Follow the LitMixed rules.
+    expMixed e = case e of
+      F.ExpValue _ _ (F.ValInteger i) | read i == (0 :: Int) -> withLiterals genParamLit e
+                                      | otherwise            -> withLiterals genUnitLiteral e
+      F.ExpValue _ _ (F.ValReal i) | read i == (0 :: Double) -> withLiterals genParamLit e
+                                   | otherwise               -> withLiterals genUnitLiteral e
+      _                                                      -> return e
 
     -- Set all literals to unitless.
     expUnitless e
