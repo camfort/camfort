@@ -39,6 +39,7 @@ import Data.Ratio
 
 import Text.Printf
 
+-- | Description of the unit of an expression.
 data UnitInfo
   = UnitParamPosAbs (String, Int)         -- an abstract parameter identified by PU name and argument position
   | UnitParamPosUse (String, Int, Int)    -- identify particular instantiation of parameters
@@ -87,24 +88,20 @@ instance Show UnitInfo where
         where s = show x
       isUnitMulOk c = isSpace c || isAlphaNum c || c `elem` "*."
 
+-- | A relation between UnitInfos
 data Constraint
   = ConEq   UnitInfo UnitInfo        -- an equality constraint
   | ConConj [Constraint]             -- conjunction of constraints
   deriving (Eq, Ord, Data, Typeable)
+type Constraints = [Constraint]
 
 instance Show Constraint where
   show (ConEq u1 u2) = show u1 ++ " === " ++ show u2
   show (ConConj cs) = intercalate " && " (map show cs)
 
-type Constraints = [Constraint]
-
-type EqualityConstrained = Bool
-
-data Solver = LAPACK | Custom deriving (Show, Read, Eq, Data)
-data AssumeLiterals = Poly | Unitless | Mixed deriving (Show, Read, Eq, Data)
-
 --------------------------------------------------
 
+-- The annotation on the AST used for solving units.
 data UnitAnnotation a = UnitAnnotation {
    prevAnnotation :: a,
    unitSpec       :: Maybe P.UnitStatement,
@@ -126,8 +123,8 @@ mkUnitAnnotation :: a -> UnitAnnotation a
 mkUnitAnnotation a = UnitAnnotation a Nothing Nothing Nothing Nothing
 
 --------------------------------------------------
--- Convert parser units to UnitInfo
 
+-- | Convert parser units to UnitInfo
 toUnitInfo :: P.UnitOfMeasure -> UnitInfo
 toUnitInfo (P.UnitProduct u1 u2) =
     UnitMul (toUnitInfo u1) (toUnitInfo u2)

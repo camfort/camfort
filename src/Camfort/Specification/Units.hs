@@ -61,9 +61,11 @@ import qualified Debug.Trace as D
 --
 -- *************************************
 
+inferCriticalVariables, checkUnits, inferUnits, synthesiseUnits
+  :: UnitOpts -> (Filename, F.ProgramFile Annotation) -> (Report, (Filename, F.ProgramFile Annotation))
+
 {-| Infer one possible set of critical variables for a program -}
-inferCriticalVariables :: (Filename, F.ProgramFile Annotation) -> (Report, (Filename, F.ProgramFile Annotation))
-inferCriticalVariables (fname, pf)
+inferCriticalVariables uo (fname, pf)
   | Right vars <- eVars = (okReport vars, (fname, pf))
   | Left exc   <- eVars = (errReport exc, (fname, pf))
   where
@@ -88,10 +90,7 @@ inferCriticalVariables (fname, pf)
     errReport exc = fname ++ ": " ++ show exc ++ "\n" ++ logs
 
     -- run inference
-    uOpts = UnitOpts { uoDebug          = False
-                     , uoLiterals       = LitMixed
-                     , uoNameMap        = nameMap
-                     , uoArgumentDecls  = False }
+    uOpts = uo { uoNameMap = nameMap }
     (eVars, state, logs) = runUnitSolver uOpts pfRenamed $ initInference >> runCriticalVariables
     pfUA = usProgramFile state -- the program file after units analysis is done
 
@@ -99,8 +98,7 @@ inferCriticalVariables (fname, pf)
     nameMap = FAR.extractNameMap pfRenamed
 
 {-| Check units-of-measure for a program -}
-checkUnits :: (Filename, F.ProgramFile Annotation) -> (Report, (Filename, F.ProgramFile Annotation))
-checkUnits (fname, pf)
+checkUnits uo (fname, pf)
   | Right mCons <- eCons = (okReport mCons, (fname, pf))
   | Left exc    <- eCons = (errReport exc, (fname, pf))
   where
@@ -125,10 +123,7 @@ checkUnits (fname, pf)
     errReport exc = fname ++ ": " ++ show exc ++ "\n" ++ logs
 
     -- run inference
-    uOpts = UnitOpts { uoDebug          = False
-                     , uoLiterals       = LitMixed
-                     , uoNameMap        = nameMap
-                     , uoArgumentDecls  = False }
+    uOpts = uo { uoNameMap = nameMap }
     (eCons, state, logs) = runUnitSolver uOpts pfRenamed $ initInference >> runInconsistentConstraints
     pfUA :: F.ProgramFile UA
     pfUA = usProgramFile state -- the program file after units analysis is done
@@ -144,9 +139,8 @@ checkUnits (fname, pf)
 
 {-| Check and infer units-of-measure for a program
     This produces an output of all the unit information for a program -}
-inferUnits :: (Filename, F.ProgramFile Annotation) -> (Report, (Filename, F.ProgramFile Annotation))
-inferUnits (fname, pf)
-  | Right []   <- eVars = checkUnits (fname, pf)
+inferUnits uo (fname, pf)
+  | Right []   <- eVars = checkUnits uo (fname, pf)
   | Right vars <- eVars = (okReport vars, (fname, pf))
   | Left exc   <- eVars = (errReport exc, (fname, pf))
   where
@@ -163,10 +157,7 @@ inferUnits (fname, pf)
     errReport exc = fname ++ ": " ++ show exc ++ "\n" ++ logs
 
     -- run inference
-    uOpts = UnitOpts { uoDebug          = False
-                     , uoLiterals       = LitMixed
-                     , uoNameMap        = nameMap
-                     , uoArgumentDecls  = False }
+    uOpts = uo { uoNameMap = nameMap }
     (eVars, state, logs) = runUnitSolver uOpts pfRenamed $ initInference >> runInferVariables
 
     pfUA = usProgramFile state -- the program file after units analysis is done
@@ -175,9 +166,8 @@ inferUnits (fname, pf)
     nameMap = FAR.extractNameMap pfRenamed
 
 {-| Synthesis unspecified units for a program (after checking) -}
-synthesiseUnits :: (Filename, F.ProgramFile Annotation) -> (Report, (Filename, F.ProgramFile Annotation))
-synthesiseUnits (fname, pf)
-  | Right []   <- eVars = checkUnits (fname, pf)
+synthesiseUnits uo (fname, pf)
+  | Right []   <- eVars = checkUnits uo (fname, pf)
   | Right vars <- eVars = (okReport vars, (fname, pfFinal))
   | Left exc   <- eVars = (errReport exc, (fname, pfFinal))
   where
@@ -194,10 +184,7 @@ synthesiseUnits (fname, pf)
     errReport exc = fname ++ ": " ++ show exc ++ "\n" ++ logs
 
     -- run inference
-    uOpts = UnitOpts { uoDebug          = False
-                     , uoLiterals       = LitMixed
-                     , uoNameMap        = nameMap
-                     , uoArgumentDecls  = False }
+    uOpts = uo { uoNameMap = nameMap }
     (eVars, state, logs) = runUnitSolver uOpts pfRenamed $ initInference >> runInferVariables >>= runSynthesis
 
     pfUA = usProgramFile state -- the program file after units analysis is done

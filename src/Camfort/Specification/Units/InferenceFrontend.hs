@@ -399,8 +399,8 @@ callHelper nexp args = do
 genCallId :: UnitSolver Int
 genCallId = do
   st <- get
-  let callId = usLitNums st
-  put $ st { usLitNums = callId + 1 }
+  let callId = usCallIds st
+  put $ st { usCallIds = callId + 1 }
   return callId
 
 -- | Generate a unique identifier for a literal encountered in the code.
