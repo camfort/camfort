@@ -85,6 +85,8 @@ initInference = do
   -- variable expressions within the AST with it.
   annotateAllVariables
 
+  -- Annotate the literals within the program based upon the
+  -- Literals-mode option.
   annotateLiterals
 
   -- With the variable expressions annotated, we now propagate the
@@ -159,16 +161,32 @@ insertParametricUnits = gets usProgramFile >>= (mapM_ paramPU . universeBi)
 
 --------------------------------------------------
 
--- | Any remaining variables with unknown units are given unit
--- UnitVar with a unique name (in this case, taken from the
--- unique name of the variable as provided by the Renamer).
+-- | Any remaining variables with unknown units are given unit UnitVar
+-- with a unique name (in this case, taken from the unique name of the
+-- variable as provided by the Renamer), or UnitParamVarAbs if the
+-- variables are inside of a function or subroutine.
 insertUndeterminedUnits :: UnitSolver ()
 insertUndeterminedUnits = do
   pf <- gets usProgramFile
-  let vars = nub [ varName v | v@(F.ExpValue _ _ (F.ValVariable _)) <- universeBi pf ]
-  forM_ vars $ \ vname ->
-    -- Insert an undetermined unit if the variable does not already have a unit.
-    modifyVarUnitMap $ M.insertWith (curry snd) vname (UnitVar vname)
+  forM_ (universeBi pf) $ \ pu -> case pu of
+    F.PUFunction {}   -> modifyPUBlocksM (transformBiM (toParamVar (puName pu))) pu
+    F.PUSubroutine {} -> modifyPUBlocksM (transformBiM (toParamVar (puName pu))) pu
+    _                 -> modifyPUBlocksM (transformBiM toUnitVar) pu
+
+  where
+    toParamVar :: String -> F.Expression UA -> UnitSolver (F.Expression UA)
+    toParamVar fname v@(F.ExpValue _ _ (F.ValVariable _)) = do
+      let vname = varName v
+      modifyVarUnitMap $ M.insertWith (curry snd) vname (UnitParamVarAbs (fname, vname))
+      return v
+    toParamVar _ e = return e
+
+    toUnitVar :: F.Expression UA -> UnitSolver (F.Expression UA)
+    toUnitVar v@(F.ExpValue _ _ (F.ValVariable _)) = do
+      let vname = varName v
+      modifyVarUnitMap $ M.insertWith (curry snd) vname (UnitVar vname)
+      return v
+    toUnitVar e = return e
 
 --------------------------------------------------
 
@@ -255,19 +273,6 @@ annotateLiteralsPU pu = do
       | isLiteral e = flip setUnitInfo e `fmap` m
       | otherwise   = return e
 
--- helper
-modifyPUBlocksM :: Monad m => ([F.Block a] -> m [F.Block a]) -> F.ProgramUnit a -> m (F.ProgramUnit a)
-modifyPUBlocksM f pu = case pu of
-  F.PUMain a s n b pus                    -> flip fmap (f b) $ \ b' -> F.PUMain a s n b' pus
-  F.PUModule a s n b pus                  -> flip fmap (f b) $ \ b' -> F.PUModule a s n b' pus
-  F.PUSubroutine a s r n p b subs         -> flip fmap (f b) $ \ b' -> F.PUSubroutine a s r n p b' subs
-  F.PUFunction   a s r rec n p res b subs -> flip fmap (f b) $ \ b' -> F.PUFunction a s r rec n p res b' subs
-  F.PUBlockData  a s n b                  -> flip fmap (f b) $ \ b' -> F.PUBlockData  a s n b'
-
-isLiteral (F.ExpValue _ _ (F.ValReal _)) = True
-isLiteral (F.ExpValue _ _ (F.ValInteger _)) = True
-isLiteral _ = False
-
 --------------------------------------------------
 
 -- | Convert all parametric templates into actual uses, via substitution.
@@ -290,9 +295,10 @@ substInstance output (name, callId) = do
 
 -- | Convert a parametric template into a particular use
 instantiate (name, callId) = transformBi $ \ info -> case info of
-  UnitParamAbs (name, position) -> UnitParamUse (name, position, callId)
-  UnitParamLitAbs litId         -> UnitParamLitUse (litId, callId)
-  _                             -> info
+  UnitParamAbs (name, position)  -> UnitParamUse (name, position, callId)
+  UnitParamLitAbs litId          -> UnitParamLitUse (litId, callId)
+  UnitParamVarAbs (fname, vname) -> UnitParamVarUse (fname, vname, callId)
+  _                              -> info
 
 -- | Gather all constraints from the AST, as well as from the varUnitMap
 extractConstraints :: UnitSolver Constraints
@@ -304,7 +310,9 @@ extractConstraints = do
 
 -- | Does the constraint contain any Parametric elements?
 isParametric :: Constraint -> Bool
-isParametric info = not . null $ [ () | UnitParamAbs _ <- universeBi info ] ++ [ () | UnitParamLitAbs _ <- universeBi info ]
+isParametric info = not . null $ [ () | UnitParamAbs _ <- universeBi info ] ++
+                                 [ () | UnitParamVarAbs _ <- universeBi info ] ++
+                                 [ () | UnitParamLitAbs _ <- universeBi info ]
 
 --------------------------------------------------
 
@@ -463,6 +471,19 @@ fmapUnitInfo f x
   | Just u <- getUnitInfo x = setUnitInfo (f u) x
   | otherwise               = x
 
+-- Operate only on the blocks of a program unit, not the contained sub-programunits.
+modifyPUBlocksM :: Monad m => ([F.Block a] -> m [F.Block a]) -> F.ProgramUnit a -> m (F.ProgramUnit a)
+modifyPUBlocksM f pu = case pu of
+  F.PUMain a s n b pus                    -> flip fmap (f b) $ \ b' -> F.PUMain a s n b' pus
+  F.PUModule a s n b pus                  -> flip fmap (f b) $ \ b' -> F.PUModule a s n b' pus
+  F.PUSubroutine a s r n p b subs         -> flip fmap (f b) $ \ b' -> F.PUSubroutine a s r n p b' subs
+  F.PUFunction   a s r rec n p res b subs -> flip fmap (f b) $ \ b' -> F.PUFunction a s r rec n p res b' subs
+  F.PUBlockData  a s n b                  -> flip fmap (f b) $ \ b' -> F.PUBlockData  a s n b'
+
+-- Is it a literal, literally?
+isLiteral (F.ExpValue _ _ (F.ValReal _)) = True
+isLiteral (F.ExpValue _ _ (F.ValInteger _)) = True
+isLiteral _ = False
 
 --------------------------------------------------
 
