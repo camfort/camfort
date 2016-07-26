@@ -12,6 +12,7 @@ import Data.Generics.Uniplate.Data
 import Control.Monad.Writer.Strict
 
 import Language.Fortran.AST
+import Language.Fortran.ParserMonad
 import Language.Fortran.Util.Position
 
 import Camfort.Analysis.CommentAnnotator
@@ -53,7 +54,7 @@ instance Linkable A where
 -- Some helper functions
 varGen x = ExpValue ea p (ValVariable x)
 intGen i = ExpValue ea p (ValInteger (show i))
-wrapBlocks bs = ProgramFile [ ([], pu) ] []
+wrapBlocks bs = ProgramFile (MetaInfo { miVersion = Fortran90 }) [ ([], pu) ] []
   where
     pu = PUModule ea p "my_module" bs Nothing
 
