@@ -1,5 +1,3 @@
-{-# LANGUAGE ImplicitParams #-}
-
 module Camfort.Specification.UnitsSpec (spec) where
 
 import qualified Data.ByteString.Char8 as B
