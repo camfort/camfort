@@ -36,6 +36,7 @@ import Camfort.Analysis.Annotations
 import Camfort.Analysis.Types
 import Camfort.Analysis.Loops
 import Camfort.Analysis.LVA
+import Camfort.Analysis.Simple
 import Camfort.Analysis.Syntax
 
 import Camfort.Transformation.DeadCode
@@ -91,9 +92,9 @@ typeStructuring inSrc excludes outSrc _ = do
     putStrLn $ "Introducing derived data types in " ++ show inSrc ++ "\n"
     doRefactor typeStruct inSrc excludes outSrc
 
-ast d _ f _ = do
-    (_, _, p) <- readParseSrcFile (d ++ "/" ++ f)
-    putStrLn $ show p
+ast d excludes f _ = do
+    xs <- readForparseSrcDir (d ++ "/" ++ f) excludes
+    putStrLn $ show (map (\(_, _, p) -> p) xs)
 
 asts inSrc excludes _ _ = do
     putStrLn $ "Do a basic analysis and output the HTML files "
@@ -103,11 +104,7 @@ asts inSrc excludes _ _ = do
 
 countVarDecls inSrc excludes _ _ = do
     putStrLn $ "Counting variable declarations in " ++ show inSrc ++ "\n"
-    doAnalysisSummary countVariableDeclarations inSrc excludes
-
-loops inSrc excludes _ _ = do
-    putStrLn $ "Analysing loops for " ++ show inSrc ++ "\n"
-    doAnalysis loopAnalyse inSrc excludes
+    doAnalysisSummaryForpar countVariableDeclarations inSrc excludes Nothing
 
 lvaA inSrc excludes _ _ = do
     putStrLn $ "Analysing loops for " ++ show inSrc ++ "\n"

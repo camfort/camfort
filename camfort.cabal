@@ -39,7 +39,7 @@ test-suite spec
                         fortran-src >= 0.1,
                         uniplate >= 1.6.10,
                         mtl >= 2.1,
-                        bytestring >= 0.10,			
+                        bytestring >= 0.10,
                         array >= 0.4,
                         hmatrix >= 0.15,
                         camfort
@@ -56,10 +56,11 @@ executable camfort
                         Camfort.Analysis.CommentAnnotator
                         Camfort.Analysis.IntermediateReps
                         Camfort.Analysis.Loops
-                        Camfort.Analysis.LVA			
+                        Camfort.Analysis.LVA
+                        Camfort.Analysis.Simple
                         Camfort.Analysis.Syntax
                         Camfort.Analysis.Types
-                        Camfort.Specification.Stencils.Annotation			
+                        Camfort.Specification.Stencils.Annotation
                         Camfort.Specification.Stencils.CheckBackend
                         Camfort.Specification.Stencils.CheckFrontend
                         Camfort.Specification.Stencils.InferenceBackend
@@ -104,7 +105,7 @@ executable camfort
                         syz >= 0.2,
                         syb >= 0.4,
                         matrix >=0.2.2,
-                        vector >= 0.1,			
+                        vector >= 0.1,
                         hmatrix >= 0.15,
                         mtl >= 2.1,
                         text >= 0.11.2.3,
@@ -114,7 +115,7 @@ executable camfort
                         transformers >= 0.4,
                         GenericPretty >= 1.2,
                         QuickCheck >= 2.8,
-                        fortran-src >= 0.1,
+                        fortran-src >= 0.1.0.2,
                         filepath,
                         fgl >= 5.5,
                         bytestring >= 0.10
@@ -130,9 +131,10 @@ library
                         Camfort.Analysis.IntermediateReps
                         Camfort.Analysis.Loops
                         Camfort.Analysis.LVA
+                        Camfort.Analysis.Simple
                         Camfort.Analysis.Syntax
                         Camfort.Analysis.Types
-                        Camfort.Specification.Stencils.Annotation			
+                        Camfort.Specification.Stencils.Annotation
                         Camfort.Specification.Stencils.CheckBackend
                         Camfort.Specification.Stencils.CheckFrontend
                         Camfort.Specification.Stencils.InferenceBackend
@@ -186,7 +188,7 @@ library
                         transformers >= 0.4,
                         vector >= 0.1,
                         GenericPretty >= 1.2,
-                        fortran-src >= 0.1,
+                        fortran-src >= 0.1.0.2,
                         filepath,
                         bytestring >= 0.10,
                         fgl >= 5.5

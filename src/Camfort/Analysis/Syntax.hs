@@ -307,10 +307,6 @@ instance Monoid Int where
     mempty = 0
     mappend = (+)
 
-{-| Counts the number of declarations (of variables) in a whole program -}
-countVariableDeclarations :: Program Annotation -> Int
-countVariableDeclarations x = sum [length xs | (Decl _ _ xs _) <- (universeBi x)::[Decl Annotation]]
-
 
 {-| Numbers all the statements in a program unit (successively) which is useful for analysis output -}
 numberStmts :: ProgUnit Annotation -> ProgUnit Annotation
