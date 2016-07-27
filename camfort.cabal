@@ -21,6 +21,15 @@ test-suite spec
   type:                 exitcode-stdio-1.0
   main-is:              Spec.hs
   hs-source-dirs:       tests
+  other-modules:        Camfort.Analysis.CommentAnnotatorSpec
+                        Camfort.Helpers.VecSpec
+                        Camfort.Specification.Stencils.CheckSpec
+                        Camfort.Specification.Stencils.GrammarSpec
+                        Camfort.Specification.Stencils.ModelSpec
+                        Camfort.Specification.StencilsSpec
+                        Camfort.Specification.UnitsSpec
+                        Camfort.Transformation.CommonSpec
+
   build-depends:        base < 5,
                         containers >= 0.5,
                         filepath >= 1.4,
