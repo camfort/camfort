@@ -61,9 +61,11 @@ import qualified Debug.Trace as D
 --
 -- *************************************
 
+inferCriticalVariables, checkUnits, inferUnits, synthesiseUnits
+  :: UnitOpts -> (Filename, F.ProgramFile Annotation) -> (Report, (Filename, F.ProgramFile Annotation))
+
 {-| Infer one possible set of critical variables for a program -}
-inferCriticalVariables :: (Filename, F.ProgramFile Annotation) -> (Report, (Filename, F.ProgramFile Annotation))
-inferCriticalVariables (fname, pf)
+inferCriticalVariables uo (fname, pf)
   | Right vars <- eVars = (okReport vars, (fname, pf))
   | Left exc   <- eVars = (errReport exc, (fname, pf))
   where
@@ -76,7 +78,7 @@ inferCriticalVariables (fname, pf)
                       , e@(F.ExpValue _ _ (F.ValVariable _)) <- universeBi s    :: [F.Expression UA]
                       , FA.varName e `elem` names ]
 
-    expReport e = showSrcSpan (FU.getSpan e) ++ " " ++ fromMaybe v (M.lookup v nameMap)
+    expReport e = showSrcSpan (FU.getSpan e) ++ " " ++ unrename nameMap v
       where v = FA.varName e
 
     varReport     = intercalate ", " . map showVar
@@ -88,10 +90,7 @@ inferCriticalVariables (fname, pf)
     errReport exc = fname ++ ": " ++ show exc ++ "\n" ++ logs
 
     -- run inference
-    uOpts = UnitOpts { uoDebug          = False
-                     , uoLiterals       = LitMixed
-                     , uoNameMap        = nameMap
-                     , uoArgumentDecls  = False }
+    uOpts = uo { uoNameMap = nameMap }
     (eVars, state, logs) = runUnitSolver uOpts pfRenamed $ initInference >> runCriticalVariables
     pfUA = usProgramFile state -- the program file after units analysis is done
 
@@ -99,22 +98,26 @@ inferCriticalVariables (fname, pf)
     nameMap = FAR.extractNameMap pfRenamed
 
 {-| Check units-of-measure for a program -}
-checkUnits :: (Filename, F.ProgramFile Annotation) -> (Report, (Filename, F.ProgramFile Annotation))
-checkUnits (fname, pf)
+checkUnits uo (fname, pf)
   | Right mCons <- eCons = (okReport mCons, (fname, pf))
   | Left exc    <- eCons = (errReport exc, (fname, pf))
   where
     -- Format report
     okReport Nothing = fname ++ ": Consistent. " ++ show nVars ++ " variables checked.\n" ++ logs
     okReport (Just cons) = logs ++ "\n\n" ++ fname ++ ": Inconsistent:\n" ++
-                           unlines [ fname ++ ": " ++ srcSpan con ++ " constraint " ++ show con | con <- cons ]
+                           unlines [ fname ++ ": " ++ srcSpan con ++ " constraint " ++ show (unrename nameMap con) | con <- cons ]
       where
         srcSpan con | Just ss <- findCon con = showSrcSpan ss ++ " "
                     | otherwise              = ""
 
+    -- Find a given constraint within the annotated AST. FIXME: optimise
     findCon :: Constraint -> Maybe FU.SrcSpan
-    findCon con = listToMaybe $ [ FU.getSpan x | x <- universeBi pfUA :: [F.Statement UA], getConstraint x == Just con ] ++
-                                [ FU.getSpan x | x <- universeBi pfUA :: [F.Expression UA], getConstraint x == Just con ]
+    findCon con = listToMaybe $ [ FU.getSpan x | x <- universeBi pfUA :: [F.Expression UA], getConstraint x `eq` con ] ++
+                                [ FU.getSpan x | x <- universeBi pfUA :: [F.Statement UA] , getConstraint x `eq` con ] ++
+                                [ FU.getSpan x | x <- universeBi pfUA :: [F.Declarator UA], getConstraint x `eq` con ] ++
+                                [ FU.getSpan x | x <- universeBi pfUA :: [F.Argument UA]  , getConstraint x `eq` con ]
+      where eq Nothing _    = False
+            eq (Just c1) c2 = conParamEq c1 c2
 
     varReport     = intercalate ", " . map showVar
 
@@ -125,26 +128,24 @@ checkUnits (fname, pf)
     errReport exc = fname ++ ": " ++ show exc ++ "\n" ++ logs
 
     -- run inference
-    uOpts = UnitOpts { uoDebug          = False
-                     , uoLiterals       = LitMixed
-                     , uoNameMap        = nameMap
-                     , uoArgumentDecls  = False }
+    uOpts = uo { uoNameMap = nameMap }
     (eCons, state, logs) = runUnitSolver uOpts pfRenamed $ initInference >> runInconsistentConstraints
     pfUA :: F.ProgramFile UA
     pfUA = usProgramFile state -- the program file after units analysis is done
 
     -- number of 'real' variables checked, e.g. not parametric
     nVars = M.size . M.filter (not . isParametricUnit) $ usVarUnitMap state
-    isParametricUnit u = case u of UnitParamAbs {} -> True; UnitParamUse {} -> True; _ -> False
+    isParametricUnit u = case u of UnitParamPosAbs {} -> True; UnitParamPosUse {} -> True
+                                   UnitParamVarAbs {} -> True; UnitParamVarUse {} -> True
+                                   _ -> False
 
     pfRenamed = FAR.analyseRenames . FA.initAnalysis . fmap mkUnitAnnotation $ pf
     nameMap = FAR.extractNameMap pfRenamed
 
 {-| Check and infer units-of-measure for a program
     This produces an output of all the unit information for a program -}
-inferUnits :: (Filename, F.ProgramFile Annotation) -> (Report, (Filename, F.ProgramFile Annotation))
-inferUnits (fname, pf)
-  | Right []   <- eVars = checkUnits (fname, pf)
+inferUnits uo (fname, pf)
+  | Right []   <- eVars = checkUnits uo (fname, pf)
   | Right vars <- eVars = (okReport vars, (fname, pf))
   | Left exc   <- eVars = (errReport exc, (fname, pf))
   where
@@ -155,16 +156,13 @@ inferUnits (fname, pf)
                            , e@(F.ExpValue _ _ (F.ValVariable _)) <- universeBi s    :: [F.Expression UA]
                            , u <- maybeToList (FA.varName e `lookup` vars) ]
 
-    expReport (e, u) = showSrcSpan (FU.getSpan e) ++ " unit " ++ show u ++ " :: " ++ (v `fromMaybe` M.lookup v nameMap)
+    expReport (e, u) = showSrcSpan (FU.getSpan e) ++ " unit " ++ show u ++ " :: " ++ unrename nameMap v
       where v = FA.varName e
 
     errReport exc = fname ++ ": " ++ show exc ++ "\n" ++ logs
 
     -- run inference
-    uOpts = UnitOpts { uoDebug          = False
-                     , uoLiterals       = LitMixed
-                     , uoNameMap        = nameMap
-                     , uoArgumentDecls  = False }
+    uOpts = uo { uoNameMap = nameMap }
     (eVars, state, logs) = runUnitSolver uOpts pfRenamed $ initInference >> runInferVariables
 
     pfUA = usProgramFile state -- the program file after units analysis is done
@@ -173,9 +171,8 @@ inferUnits (fname, pf)
     nameMap = FAR.extractNameMap pfRenamed
 
 {-| Synthesis unspecified units for a program (after checking) -}
-synthesiseUnits :: (Filename, F.ProgramFile Annotation) -> (Report, (Filename, F.ProgramFile Annotation))
-synthesiseUnits (fname, pf)
-  | Right []   <- eVars = checkUnits (fname, pf)
+synthesiseUnits uo (fname, pf)
+  | Right []   <- eVars = checkUnits uo (fname, pf)
   | Right vars <- eVars = (okReport vars, (fname, pfFinal))
   | Left exc   <- eVars = (errReport exc, (fname, pfFinal))
   where
@@ -192,10 +189,7 @@ synthesiseUnits (fname, pf)
     errReport exc = fname ++ ": " ++ show exc ++ "\n" ++ logs
 
     -- run inference
-    uOpts = UnitOpts { uoDebug          = False
-                     , uoLiterals       = LitMixed
-                     , uoNameMap        = nameMap
-                     , uoArgumentDecls  = False }
+    uOpts = uo { uoNameMap = nameMap }
     (eVars, state, logs) = runUnitSolver uOpts pfRenamed $ initInference >> runInferVariables >>= runSynthesis
 
     pfUA = usProgramFile state -- the program file after units analysis is done
@@ -205,6 +199,8 @@ synthesiseUnits (fname, pf)
     nameMap = FAR.extractNameMap pfRenamed
 
 --------------------------------------------------
+
+unrename nameMap = transformBi $ \ x -> x `fromMaybe` M.lookup x nameMap
 
 showSrcLoc :: FU.Position -> String
 showSrcLoc loc = show (lineCol loc) ++ ":" ++ show (lineCol loc)

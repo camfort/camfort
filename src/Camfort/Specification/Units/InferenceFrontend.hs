@@ -64,21 +64,55 @@ initInference = do
   -- Send the output of the parser to the logger.
   mapM_ tell parserReport
 
-  insertGivenUnits -- also obtains all unit alias definitions
+  -- The following insert* functions examine the AST and insert
+  -- mappings into the tables stored in the UnitState.
+
+  -- First, find all given unit annotations and insert them into our
+  -- mappings.  Also obtain all unit alias definitions.
+  insertGivenUnits
+
+  -- For function or subroutine parameters (or return variables) that
+  -- are not given explicit units, give them a parametric polymorphic
+  -- unit.
   insertParametricUnits
+
+  -- Any other variables get assigned a unique undetermined unit named
+  -- after the variable. This assumes that all variables have unique
+  -- names, which the renaming module already has assured.
   insertUndeterminedUnits
+
+  -- Now take the information that we have gathered and annotate the
+  -- variable expressions within the AST with it.
   annotateAllVariables
 
-  propagateUnits
-  consWithoutTemplates <- extractConstraints
-  cons                 <- applyTemplates consWithoutTemplates
+  -- Annotate the literals within the program based upon the
+  -- Literals-mode option.
+  annotateLiterals
 
+  -- With the variable expressions annotated, we now propagate the
+  -- information throughout the AST, giving units to as many
+  -- expressions as possible, and also constraints wherever
+  -- appropriate.
+  propagateUnits
+
+  -- Gather up all of the constraints that we identified in the AST.
+  -- These constraints will include parametric polymorphic units that
+  -- have not yet been instantiated into their particular uses.
+  abstractCons <- extractConstraints
+
+  -- Eliminate all parametric polymorphic units by copying them for
+  -- each specific use cases and substituting a unique call-site
+  -- identifier that distinguishes each use-case from the others.
+  cons <- applyTemplates abstractCons
+
+  -- Remove any traces of CommentAnnotator, since the annotations can
+  -- cause generic operations traversing the AST to get confused.
   modifyProgramFile cleanLinks
+
   modify $ \ s -> s { usConstraints = cons }
 
   debugLogging
 
--- Remove traces of CommentAnnotator, since it confuses uniplate searches...
 cleanLinks :: F.ProgramFile UA -> F.ProgramFile UA
 cleanLinks = transformBi (\ a -> a { unitBlock = Nothing, unitSpec = Nothing } :: UnitAnnotation A)
 
@@ -116,7 +150,7 @@ insertParametricUnits = gets usProgramFile >>= (mapM_ paramPU . universeBi)
     paramPU pu = do
       forM_ indexedParams $ \ (i, param) -> do
         -- Insert a parametric unit if the variable does not already have a unit.
-        modifyVarUnitMap $ M.insertWith (curry snd) param (UnitParamAbs (fname, i))
+        modifyVarUnitMap $ M.insertWith (curry snd) param (UnitParamPosAbs (fname, i))
       where
         fname = puName pu
         indexedParams
@@ -127,16 +161,32 @@ insertParametricUnits = gets usProgramFile >>= (mapM_ paramPU . universeBi)
 
 --------------------------------------------------
 
--- | Any remaining variables with unknown units are given unit
--- UnitVar with a unique name (in this case, taken from the
--- unique name of the variable as provided by the Renamer).
+-- | Any remaining variables with unknown units are given unit UnitVar
+-- with a unique name (in this case, taken from the unique name of the
+-- variable as provided by the Renamer), or UnitParamVarAbs if the
+-- variables are inside of a function or subroutine.
 insertUndeterminedUnits :: UnitSolver ()
 insertUndeterminedUnits = do
   pf <- gets usProgramFile
-  let vars = nub [ varName v | v@(F.ExpValue _ _ (F.ValVariable _)) <- universeBi pf ]
-  forM_ vars $ \ vname ->
-    -- Insert an undetermined unit if the variable does not already have a unit.
-    modifyVarUnitMap $ M.insertWith (curry snd) vname (UnitVar vname)
+  forM_ (universeBi pf) $ \ pu -> case pu of
+    F.PUFunction {}   -> modifyPUBlocksM (transformBiM (toParamVar (puName pu))) pu
+    F.PUSubroutine {} -> modifyPUBlocksM (transformBiM (toParamVar (puName pu))) pu
+    _                 -> modifyPUBlocksM (transformBiM toUnitVar) pu
+
+  where
+    toParamVar :: String -> F.Expression UA -> UnitSolver (F.Expression UA)
+    toParamVar fname v@(F.ExpValue _ _ (F.ValVariable _)) = do
+      let vname = varName v
+      modifyVarUnitMap $ M.insertWith (curry snd) vname (UnitParamVarAbs (fname, vname))
+      return v
+    toParamVar _ e = return e
+
+    toUnitVar :: F.Expression UA -> UnitSolver (F.Expression UA)
+    toUnitVar v@(F.ExpValue _ _ (F.ValVariable _)) = do
+      let vname = varName v
+      modifyVarUnitMap $ M.insertWith (curry snd) vname (UnitVar vname)
+      return v
+    toUnitVar e = return e
 
 --------------------------------------------------
 
@@ -188,11 +238,48 @@ annotateAllVariables = modifyProgramFileM $ \ pf -> do
 
 --------------------------------------------------
 
+-- | Give units to literals based upon the rules of the Literals mode.
+--
+-- LitUnitless: All literals are unitless.
+-- LitPoly:     All literals are polymorphic.
+-- LitMixed:    The literal "0" or "0.0" is fully parametric polymorphic.
+--              All other literals are monomorphic, possibly unitless.
+annotateLiterals :: UnitSolver ()
+annotateLiterals = modifyProgramFileM (transformBiM annotateLiteralsPU)
+
+annotateLiteralsPU :: F.ProgramUnit UA -> UnitSolver (F.ProgramUnit UA)
+annotateLiteralsPU pu = do
+  mode <- asks uoLiterals
+  case mode of
+    LitUnitless -> modifyPUBlocksM (transformBiM expUnitless) pu
+    LitPoly     -> modifyPUBlocksM (transformBiM (withLiterals genParamLit)) pu
+    LitMixed    -> modifyPUBlocksM (transformBiM expMixed) pu
+  where
+    -- Follow the LitMixed rules.
+    expMixed e = case e of
+      F.ExpValue _ _ (F.ValInteger i) | read i == (0 :: Int) -> withLiterals genParamLit e
+                                      | otherwise            -> withLiterals genUnitLiteral e
+      F.ExpValue _ _ (F.ValReal i) | read i == (0 :: Double) -> withLiterals genParamLit e
+                                   | otherwise               -> withLiterals genUnitLiteral e
+      _                                                      -> return e
+
+    -- Set all literals to unitless.
+    expUnitless e
+      | isLiteral e = return $ setUnitInfo UnitlessLit e
+      | otherwise   = return e
+
+    -- Set all literals to the result of given monadic computation.
+    withLiterals m e
+      | isLiteral e = flip setUnitInfo e `fmap` m
+      | otherwise   = return e
+
+--------------------------------------------------
+
 -- | Convert all parametric templates into actual uses, via substitution.
 applyTemplates :: Constraints -> UnitSolver Constraints
 -- postcondition: returned constraints lack all Parametric constructors
 applyTemplates cons = do
-  let instances = nub [ (name, i) | UnitParamUse (name, _, i) <- universeBi cons ]
+  let instances = nub [ (name, i) | UnitParamPosUse (name, _, i) <- universeBi cons ]
   temps <- foldM substInstance [] instances
   aliasMap <- usUnitAliasMap `fmap` get
   let aliases = [ ConEq (UnitAlias name) def | (name, def) <- M.toList aliasMap ]
@@ -208,8 +295,10 @@ substInstance output (name, callId) = do
 
 -- | Convert a parametric template into a particular use
 instantiate (name, callId) = transformBi $ \ info -> case info of
-  UnitParamAbs (name, position) -> UnitParamUse (name, position, callId)
-  _                             -> info
+  UnitParamPosAbs (name, position)  -> UnitParamPosUse (name, position, callId)
+  UnitParamLitAbs litId          -> UnitParamLitUse (litId, callId)
+  UnitParamVarAbs (fname, vname) -> UnitParamVarUse (fname, vname, callId)
+  _                              -> info
 
 -- | Gather all constraints from the AST, as well as from the varUnitMap
 extractConstraints :: UnitSolver Constraints
@@ -221,7 +310,9 @@ extractConstraints = do
 
 -- | Does the constraint contain any Parametric elements?
 isParametric :: Constraint -> Bool
-isParametric info = not (null [ () | UnitParamAbs _ <- universeBi info ])
+isParametric info = not . null $ [ () | UnitParamPosAbs _ <- universeBi info ] ++
+                                 [ () | UnitParamVarAbs _ <- universeBi info ] ++
+                                 [ () | UnitParamLitAbs _ <- universeBi info ]
 
 --------------------------------------------------
 
@@ -235,8 +326,8 @@ propagateUnits = modifyProgramFileM $ transformBiM propagatePU        <=<
 propagateExp :: F.Expression UA -> UnitSolver (F.Expression UA)
 propagateExp e = fmap uoLiterals ask >>= \ lm -> case e of
   F.ExpValue _ _ (F.ValVariable _)       -> return e -- all variables should already be annotated
-  F.ExpValue _ _ (F.ValInteger _)        -> flip setUnitInfo e `fmap` genUnitLiteral
-  F.ExpValue _ _ (F.ValReal _)           -> flip setUnitInfo e `fmap` genUnitLiteral
+  F.ExpValue _ _ (F.ValInteger _)        -> return e -- all literal numbers should already be annotated
+  F.ExpValue _ _ (F.ValReal _)           -> return e -- all literal numbers should already be annotated
   F.ExpBinary _ _ F.Multiplication e1 e2 -> setF2 UnitMul (getUnitInfoMul lm e1) (getUnitInfoMul lm e2)
   F.ExpBinary _ _ F.Division e1 e2       -> setF2 UnitMul (getUnitInfoMul lm e1) (flip UnitPow (-1) `fmap` (getUnitInfoMul lm e2))
   F.ExpBinary _ _ F.Exponentiation e1 e2 -> setF2 UnitPow (getUnitInfo e1) (constantExpression e2)
@@ -245,9 +336,9 @@ propagateExp e = fmap uoLiterals ask >>= \ lm -> case e of
   F.ExpFunctionCall {}                   -> propagateFunctionCall e
   _                                      -> whenDebug (tell ("propagateExp: unhandled: " ++ show e)) >> return e
   where
-    -- shorter names for convenience functions
+    -- Shorter names for convenience functions.
     setF2 f u1 u2  = return $ maybeSetUnitInfoF2 f u1 u2 e
-    -- remember, not only set a constraint, but also give a unit!
+    -- Remember, not only set a constraint, but also give a unit!
     setF2C f u1 u2 = return . maybeSetUnitInfo u1 $ maybeSetUnitConstraintF2 f u1 u2 e
 
 propagateFunctionCall :: F.Expression UA -> UnitSolver (F.Expression UA)
@@ -265,19 +356,31 @@ propagateStatement stmt = case stmt of
   F.StCall a s sub (Just (F.AList a' s' args)) -> do
     (_, args') <- callHelper sub args
     return $ F.StCall a s sub (Just (F.AList a' s' args'))
+  F.StDeclaration {}                           -> transformBiM propagateDeclarator stmt
   _                                            -> return stmt
 
+propagateDeclarator :: F.Declarator UA -> UnitSolver (F.Declarator UA)
+propagateDeclarator decl = case decl of
+  F.DeclVariable _ _ e1 _ (Just e2) -> do
+    return $ maybeSetUnitConstraintF2 ConEq (getUnitInfo e1) (getUnitInfo e2) decl
+  F.DeclArray _ _ e1 _ _ (Just e2)  -> do
+    return $ maybeSetUnitConstraintF2 ConEq (getUnitInfo e1) (getUnitInfo e2) decl
+  _                                 -> return decl
+
 propagatePU :: F.ProgramUnit UA -> UnitSolver (F.ProgramUnit UA)
-propagatePU pu = modifyTemplateMap (M.insert name cons) >> return (setConstraint (ConConj cons) pu)
-  where
-    cons = [ con | con@(ConEq {}) <- universeBi pu, containsParametric name con ]
-    name = puName pu
+propagatePU pu = do
+  let name = puName pu
+  let cons = [ con | con@(ConEq {}) <- universeBi pu, containsParametric name con ]
+
+  modifyTemplateMap (M.insert name cons)
+  return (setConstraint (ConConj cons) pu)
 
 --------------------------------------------------
 
 -- | Check if x contains an abstract parametric reference under the given name.
 containsParametric :: Data from => String -> from -> Bool
-containsParametric name x = not (null [ () | UnitParamAbs (name', _) <- universeBi x, name == name' ])
+containsParametric name x = not . null $ [ () | UnitParamPosAbs (name', _) <- universeBi x, name == name' ] ++
+                                         [ () | UnitParamVarAbs (name', _) <- universeBi x, name == name' ]
 
 -- | Coalesce various function and subroutine call common code.
 callHelper :: F.Expression UA -> [F.Argument UA] -> UnitSolver (UnitInfo, [F.Argument UA])
@@ -286,28 +389,36 @@ callHelper nexp args = do
   callId <- genCallId -- every call-site gets its own unique identifier
   let eachArg i arg@(F.Argument _ _ _ e)
         -- add site-specific parametric constraints to each argument
-        | Just u <- getUnitInfo e = setConstraint (ConEq u (UnitParamUse (name, i, callId))) arg
+        | Just u <- getUnitInfo e = setConstraint (ConEq u (UnitParamPosUse (name, i, callId))) arg
         | otherwise               = arg
   let args' = zipWith eachArg [1..] args
   -- build a site-specific parametric unit for use on a return variable, if any
-  let info = UnitParamUse (name, 0, callId)
+  let info = UnitParamPosUse (name, 0, callId)
   return (info, args')
 
--- | Generate a unique identifier for each call-site.
+-- | Generate a unique identifier for a call-site.
 genCallId :: UnitSolver Int
 genCallId = do
   st <- get
-  let callId = usLitNums st
-  put $ st { usLitNums = callId + 1 }
+  let callId = usCallIds st
+  put $ st { usCallIds = callId + 1 }
   return callId
 
--- | Generate a unique identifier for each literal encountered in the code.
+-- | Generate a unique identifier for a literal encountered in the code.
 genUnitLiteral :: UnitSolver UnitInfo
 genUnitLiteral = do
   s <- get
   let i = usLitNums s
   put $ s { usLitNums = i + 1 }
   return $ UnitLiteral i
+
+-- | Generate a unique identifier for a polymorphic literal encountered in the code.
+genParamLit :: UnitSolver UnitInfo
+genParamLit = do
+  s <- get
+  let i = usLitNums s
+  put $ s { usLitNums = i + 1 }
+  return $ UnitParamLitAbs i
 
 --------------------------------------------------
 
@@ -355,6 +466,25 @@ maybeSetUnitInfoF2 _ _ _ e                 = e
 maybeSetUnitConstraintF2 :: F.Annotated f => (a -> b -> Constraint) -> Maybe a -> Maybe b -> f UA -> f UA
 maybeSetUnitConstraintF2 f (Just u1) (Just u2) e = setConstraint (f u1 u2) e
 maybeSetUnitConstraintF2 _ _ _ e                 = e
+
+fmapUnitInfo :: F.Annotated f => (UnitInfo -> UnitInfo) -> f UA -> f UA
+fmapUnitInfo f x
+  | Just u <- getUnitInfo x = setUnitInfo (f u) x
+  | otherwise               = x
+
+-- Operate only on the blocks of a program unit, not the contained sub-programunits.
+modifyPUBlocksM :: Monad m => ([F.Block a] -> m [F.Block a]) -> F.ProgramUnit a -> m (F.ProgramUnit a)
+modifyPUBlocksM f pu = case pu of
+  F.PUMain a s n b pus                    -> flip fmap (f b) $ \ b' -> F.PUMain a s n b' pus
+  F.PUModule a s n b pus                  -> flip fmap (f b) $ \ b' -> F.PUModule a s n b' pus
+  F.PUSubroutine a s r n p b subs         -> flip fmap (f b) $ \ b' -> F.PUSubroutine a s r n p b' subs
+  F.PUFunction   a s r rec n p res b subs -> flip fmap (f b) $ \ b' -> F.PUFunction a s r rec n p res b' subs
+  F.PUBlockData  a s n b                  -> flip fmap (f b) $ \ b' -> F.PUBlockData  a s n b'
+
+-- Is it a literal, literally?
+isLiteral (F.ExpValue _ _ (F.ValReal _)) = True
+isLiteral (F.ExpValue _ _ (F.ValInteger _)) = True
+isLiteral _ = False
 
 --------------------------------------------------
 

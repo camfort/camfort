@@ -79,7 +79,7 @@ type EvalLog = [(String, Variable)]
 type LogLine = (FU.SrcSpan, Either [([Variable], Specification)] (String,Variable))
 -- The core of the inferer works within this monad
 type Inferer = WriterT [LogLine]
-                 (ReaderT (Cycles, F.ProgramUnitName, TypeEnv A)
+                 (ReaderT (Cycles, F.ProgramUnitName)
                     (State InferState))
 
 type Cycles = [(F.Name, F.Name)]
@@ -89,12 +89,11 @@ type Params = (?flowsGraph :: FAD.FlowsGraph A, ?nameMap :: FAR.NameMap)
 runInferer :: FAD.InductionVarMapByASTBlock
            -> Cycles
            -> F.ProgramUnitName
-           -> TypeEnv A
            -> Inferer a
            -> (a, [LogLine])
-runInferer ivmap cycles puName tenv =
+runInferer ivmap cycles puName =
     flip evalState (IS ivmap [])
-  . flip runReaderT (cycles, puName, tenv)
+  . flip runReaderT (cycles, puName)
   . runWriterT
 
 stencilInference :: FAR.NameMap
@@ -102,20 +101,20 @@ stencilInference :: FAR.NameMap
                  -> F.ProgramFile (FA.Analysis A)
                  -> (F.ProgramFile (FA.Analysis A), [LogLine])
 stencilInference nameMap mode pf =
-    (F.ProgramFile cm_pus' blocks', log1 ++ log2)
+    (F.ProgramFile mi cm_pus' blocks', log1 ++ log2)
   where
     -- Parse specification annotations and include them into the syntax tree
     -- that way if generate specifications at the same place we can
     -- decide whether to synthesise or not
 
     -- TODO: might want to output log0 somehow (though it doesn't fit LogLine)
-    (pf'@(F.ProgramFile cm_pus blocks), log0) =
+    (pf'@(F.ProgramFile mi cm_pus blocks), log0) =
          if mode == Synth
           then runWriter (annotateComments Gram.specParser pf)
           else (pf, [])
 
     (cm_pus', log1) = runWriter (transformBiM perPU cm_pus)
-    (blocks', log2) = runInferer ivMap [] F.NamelessBlockData tenv blocksInf
+    (blocks', log2) = runInferer ivMap [] F.NamelessBlockData blocksInf
     blocksInf       = let ?flowsGraph = flTo
                           ?nameMap    = nameMap
                       in descendBiM (perBlockInfer mode) blocks
@@ -129,7 +128,7 @@ stencilInference nameMap mode pf =
              ?nameMap    = nameMap
          in do
               let pum = descendBiM (perBlockInfer mode) pu
-              let (pu', log) = runInferer ivMap [] (FA.puName pu) tenv pum
+              let (pu', log) = runInferer ivMap [] (FA.puName pu) pum
               tell log
               return pu'
     perPU pu = return pu
@@ -155,7 +154,6 @@ stencilInference nameMap mode pf =
 
     -- get map of variable name ==> { defining AST-Block-IDs }
     dm    = FAD.genDefMap bm
-    tenv  = FAT.inferTypes pf
 
 -- | Return list of variable names that flow into themselves via a 2-cycle
 findVarFlowCycles :: Data a => F.ProgramFile a -> [(F.Name, F.Name)]
@@ -591,17 +589,6 @@ isUnaryOrBinaryExpr _                = False
 isVariableExpr :: F.Expression a -> Bool
 isVariableExpr (F.ExpValue _ _ (F.ValVariable _)) = True
 isVariableExpr _                                  = False
-
--- Although type analysis isn't necessary anymore (Forpar does it
--- internally) I'm going to leave this infrastructure in-place in case
--- it might be useful later.
-type TypeEnv a = M.Map FAT.TypeScope (M.Map String FA.IDType)
-isArrayType :: TypeEnv A -> F.ProgramUnitName -> String -> Bool
-isArrayType tenv name v = fromMaybe False $ do
-  tmap <- M.lookup (FAT.Local name) tenv `mplus` M.lookup FAT.Global tenv
-  idty <- M.lookup v tmap
-  cty  <- FA.idCType idty
-  return $ cty == FA.CTArray
 
 -- Penelope's first code, 20/03/2016.
 -- iii././//////////////////////. mvnmmmmmmmmmu
