@@ -79,7 +79,7 @@ type EvalLog = [(String, Variable)]
 type LogLine = (FU.SrcSpan, Either [([Variable], Specification)] (String,Variable))
 -- The core of the inferer works within this monad
 type Inferer = WriterT [LogLine]
-                 (ReaderT (Cycles, F.ProgramUnitName, TypeEnv A)
+                 (ReaderT (Cycles, F.ProgramUnitName, FAT.TypeEnv)
                     (State InferState))
 
 type Cycles = [(F.Name, F.Name)]
@@ -89,7 +89,7 @@ type Params = (?flowsGraph :: FAD.FlowsGraph A, ?nameMap :: FAR.NameMap)
 runInferer :: FAD.InductionVarMapByASTBlock
            -> Cycles
            -> F.ProgramUnitName
-           -> TypeEnv A
+           -> FAT.TypeEnv
            -> Inferer a
            -> (a, [LogLine])
 runInferer ivmap cycles puName tenv =
@@ -155,7 +155,7 @@ stencilInference nameMap mode pf =
 
     -- get map of variable name ==> { defining AST-Block-IDs }
     dm    = FAD.genDefMap bm
-    tenv  = FAT.inferTypes pf
+    (_, tenv)  = FAT.analyseTypes pf
 
 -- | Return list of variable names that flow into themselves via a 2-cycle
 findVarFlowCycles :: Data a => F.ProgramFile a -> [(F.Name, F.Name)]
@@ -591,17 +591,6 @@ isUnaryOrBinaryExpr _                = False
 isVariableExpr :: F.Expression a -> Bool
 isVariableExpr (F.ExpValue _ _ (F.ValVariable _)) = True
 isVariableExpr _                                  = False
-
--- Although type analysis isn't necessary anymore (Forpar does it
--- internally) I'm going to leave this infrastructure in-place in case
--- it might be useful later.
-type TypeEnv a = M.Map FAT.TypeScope (M.Map String FA.IDType)
-isArrayType :: TypeEnv A -> F.ProgramUnitName -> String -> Bool
-isArrayType tenv name v = fromMaybe False $ do
-  tmap <- M.lookup (FAT.Local name) tenv `mplus` M.lookup FAT.Global tenv
-  idty <- M.lookup v tmap
-  cty  <- FA.idCType idty
-  return $ cty == FA.CTArray
 
 -- Penelope's first code, 20/03/2016.
 -- iii././//////////////////////. mvnmmmmmmmmmu
