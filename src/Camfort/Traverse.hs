@@ -53,6 +53,7 @@ instance Monoid x => Monad ((,) x) where
                    in (mappend x x', b)
 #endif
 
+
 -- Data-type generic comonad-style traversal
 
 extendBi :: (Biplate (from a) (to a), RComonad to) => (to a -> a) -> (from a) -> (from a)

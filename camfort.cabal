@@ -64,6 +64,7 @@ executable camfort
                         Camfort.PrettyPrint
                         Camfort.Traverse
                         Main
+
   build-depends:        base >= 4.6 && < 5,
                         ghc-prim >= 0.4.0.0,
                         containers >= 0.5.0.0,
@@ -134,6 +135,7 @@ library
                         Camfort.Reprint
                         Camfort.PrettyPrint
                         Camfort.Traverse
+
   build-depends:        base >= 4.6 && < 5,
                         ghc-prim >= 0.4.0.0,
                         containers >= 0.5.0.0,
