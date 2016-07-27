@@ -30,7 +30,7 @@ import Data.List (nub)
 import qualified Data.Map as M
 import qualified Data.IntMap as IM
 import qualified Data.Set as S
-import Data.Maybe (isJust, fromMaybe)
+import Data.Maybe (isJust, fromMaybe, catMaybes)
 import Data.Generics.Uniplate.Operations
 import Control.Monad
 import Control.Monad.State.Strict
@@ -149,16 +149,21 @@ insertParametricUnits :: UnitSolver ()
 insertParametricUnits = gets usProgramFile >>= (mapM_ paramPU . universeBi)
   where
     paramPU pu = do
-      forM_ indexedParams $ \ (i, param) -> do
+      forM_ (indexedParams pu) $ \ (i, param) -> do
         -- Insert a parametric unit if the variable does not already have a unit.
         modifyVarUnitMap $ M.insertWith (curry snd) param (UnitParamPosAbs (fname, i))
       where
         fname = puName pu
-        indexedParams
-          | F.PUFunction _ _ _ _ _ (Just paList) (Just r) _ _ <- pu = zip [0..] $ varName r : map varName (F.aStrip paList)
-          | F.PUFunction _ _ _ _ _ (Just paList) _ _ _        <- pu = zip [0..] $ fname     : map varName (F.aStrip paList)
-          | F.PUSubroutine _ _ _ _ (Just paList) _ _          <- pu = zip [1..] $ map varName (F.aStrip paList)
-          | otherwise                                               = []
+
+-- | Return the list of parameters paired with its positional index.
+indexedParams :: F.ProgramUnit UA -> [(Int, String)]
+indexedParams pu
+  | F.PUFunction _ _ _ _ _ (Just paList) (Just r) _ _ <- pu = zip [0..] $ varName r : map varName (F.aStrip paList)
+  | F.PUFunction _ _ _ _ _ (Just paList) _ _ _        <- pu = zip [0..] $ fname     : map varName (F.aStrip paList)
+  | F.PUSubroutine _ _ _ _ (Just paList) _ _          <- pu = zip [1..] $ map varName (F.aStrip paList)
+  | otherwise                                               = []
+  where
+    fname = puName pu
 
 --------------------------------------------------
 
@@ -306,8 +311,12 @@ substInstance output (name, callId) = do
   -- set of templates.
   modify $ \ s -> s { usCallIdRemap = IM.empty }
 
+  -- If any new instances are discovered, also process them.
+  let instances = nub [ (name, i) | UnitParamPosUse (name, _, i) <- universeBi template ]
+  template' <- foldM substInstance [] instances
+
   -- Convert any remaining abstract parametric units into concrete ones.
-  return . instantiate (name, callId) $ output ++ template
+  return . instantiate (name, callId) $ output ++ template ++ template'
 
 -- | If given a usage of a parametric unit, rewrite the callId field
 -- to follow an existing mapping in the usCallIdRemap state field, or
@@ -414,8 +423,22 @@ propagateDeclarator decl = case decl of
 propagatePU :: F.ProgramUnit UA -> UnitSolver (F.ProgramUnit UA)
 propagatePU pu = do
   let name = puName pu
-  let cons = [ con | con@(ConEq {}) <- universeBi pu, containsParametric name con ]
+  let bodyCons = [ con | con@(ConEq {}) <- universeBi pu ] -- Constraints within the PU.
 
+  varMap <- gets usVarUnitMap
+
+  -- If any of the function/subroutine parameters was given an
+  -- explicit unit annotation, then create a constraint between that
+  -- explicit unit and the UnitParamPosAbs corresponding to the
+  -- parameter. This way all other uses of the parameter get linked to
+  -- the explicit unit annotation as well.
+  givenCons <- fmap catMaybes . forM (indexedParams pu) $ \ (i, param) -> do
+    case M.lookup param varMap of
+      Just (UnitParamPosAbs {}) -> return Nothing
+      Just u                    -> return . Just . ConEq u $ UnitParamPosAbs (name, i)
+      _                         -> return Nothing
+
+  let cons = givenCons ++ bodyCons
   modifyTemplateMap (M.insert name cons)
   return (setConstraint (ConConj cons) pu)
 
