@@ -34,7 +34,6 @@ import Data.Generics.Uniplate.Operations
 
 import Camfort.Analysis.Annotations
 import Camfort.Analysis.Types
-import Camfort.Analysis.Loops
 import Camfort.Analysis.LVA
 import Camfort.Analysis.Simple
 import Camfort.Analysis.Syntax

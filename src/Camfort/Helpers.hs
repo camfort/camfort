@@ -21,6 +21,12 @@ import Data.List (elemIndices, group, sort, nub)
 import qualified Data.ByteString.Char8 as B
 import System.Directory
 import Language.Fortran
+import Data.List (union)
+import qualified Data.Map.Lazy as Map hiding (map, (\\))
+
+-- collect: from an association list to a map with list-based bins for matching keys
+collect :: (Eq a, Ord k) => [(k, a)] -> Map.Map k [a]
+collect = Map.fromListWith union . map (fmap (:[]))
 
 lineCol :: SrcLoc -> (Int, Int)
 lineCol s = (srcLine s, srcColumn s)

@@ -270,10 +270,7 @@ outputAnn t visible i astString =
      "<u>show ast</u></div><div id='a" ++ (show $ number t) ++ "src' " ++
      "style='background:#fff;display:none;width:600px;overflow:wrap;'>" ++ (astString) ++ "</div></div>" ++ "<p><table>" ++
      row ["lives: (in) ",    showList $ (map show) $ fst $ lives t, "(out)", showList $ (map show) $ snd $ lives t] ++
-     row ["indices:",  showList $ indices t] ++
      row ["successors:", showList $ (map show) (successorStmts t)] ++
-     row ["arrays R:", showExps (assocs $ arrsRead t)] ++
-     row ["arrays W:", showExps (assocs $ arrsWrite t)] ++
      "</table></p></div><br />\n\r\n"
          where
            listToPair x       = "(" ++ listToPair' x ++ ")"

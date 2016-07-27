@@ -33,7 +33,6 @@ import Camfort.Specification.Stencils.Syntax
 import Camfort.Specification.Stencils.Model
 import qualified Camfort.Specification.Stencils.Grammar as SYN
 
-import Camfort.Analysis.Loops (collect)
 import Camfort.Analysis.Annotations
 import Camfort.Helpers.Vec
 -- These two are redefined here for ForPar ASTs

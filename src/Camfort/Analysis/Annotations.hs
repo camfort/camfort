@@ -58,10 +58,7 @@ data LoopType = Functor ReduceType
 
 type A = Annotation
 
-data Annotation = A { indices        :: [Variable],
-                      lives          :: ([Access],[Access]),
-                      arrsRead       :: Map Variable [[Expr ()]],
-                      arrsWrite      :: Map Variable [[Expr ()]],
+data Annotation = A { lives          :: ([Access],[Access]),
                       unitVar        :: Int,
                       number         :: Int,
                       refactored     :: Maybe SrcLoc,
@@ -87,10 +84,7 @@ pRefactored :: Annotation -> Bool
 pRefactored = isJust . refactored
 
 unitAnnotation = A
-  { indices       = []
-   , lives        = ([], [])
-   , arrsRead     = empty
-   , arrsWrite    = empty
+  { lives        = ([], [])
    , unitVar      = 0
    , number       = 0
    , refactored   = Nothing

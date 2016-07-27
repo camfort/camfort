@@ -55,7 +55,6 @@ executable camfort
                         Camfort.Analysis.CallGraph
                         Camfort.Analysis.CommentAnnotator
                         Camfort.Analysis.IntermediateReps
-                        Camfort.Analysis.Loops
                         Camfort.Analysis.LVA
                         Camfort.Analysis.Simple
                         Camfort.Analysis.Syntax
@@ -129,7 +128,6 @@ library
                         Camfort.Analysis.CallGraph
                         Camfort.Analysis.CommentAnnotator
                         Camfort.Analysis.IntermediateReps
-                        Camfort.Analysis.Loops
                         Camfort.Analysis.LVA
                         Camfort.Analysis.Simple
                         Camfort.Analysis.Syntax

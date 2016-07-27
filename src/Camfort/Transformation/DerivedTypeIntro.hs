@@ -35,7 +35,6 @@ import Language.Fortran
 
 import Camfort.Analysis.Annotations
 import Camfort.Analysis.IntermediateReps
-import Camfort.Analysis.Loops
 import Camfort.Analysis.Syntax
 import Camfort.Transformation.Syntax
 import Camfort.Analysis.Types

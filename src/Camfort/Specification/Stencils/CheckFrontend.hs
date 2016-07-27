@@ -35,7 +35,6 @@ import Camfort.Specification.Stencils.InferenceFrontend hiding (LogLine)
 import Camfort.Specification.Stencils.InferenceBackend
 import Camfort.Specification.Stencils.Synthesis
 import Camfort.Specification.Stencils.Syntax
-import Camfort.Analysis.Loops (collect)
 import Camfort.Analysis.Annotations
 import Camfort.Analysis.CommentAnnotator
 import Camfort.Helpers

@@ -33,7 +33,6 @@ import Camfort.Specification.Stencils.InferenceBackend
 import Camfort.Specification.Stencils.Syntax
 import Camfort.Specification.Stencils.Model
 
-import Camfort.Analysis.Loops (collect)
 import Camfort.Analysis.Annotations
 import Camfort.Helpers.Vec
 -- These two are redefined here for ForPar ASTs
@@ -119,6 +118,5 @@ offsetToIx v o
                                  (F.ExpValue a s (F.ValInteger $ show (abs o))))
 
 offsetToIxWithIVs :: [Variable] -> F.Name -> Int -> F.Index (FA.Analysis A)
-offsetToIxWithIVs ivs v o = F.setAnnotation a' ix
-  where a'  = a { FA.prevAnnotation = (FA.prevAnnotation a) {indices = ivs} }
-        ix  = offsetToIx v o
+offsetToIxWithIVs ivs v o = F.setAnnotation a ix
+  where ix  = offsetToIx v o
