@@ -78,7 +78,7 @@ inferCriticalVariables uo (fname, pf)
                       , e@(F.ExpValue _ _ (F.ValVariable _)) <- universeBi s    :: [F.Expression UA]
                       , FA.varName e `elem` names ]
 
-    expReport e = showSrcSpan (FU.getSpan e) ++ " " ++ fromMaybe v (M.lookup v nameMap)
+    expReport e = showSrcSpan (FU.getSpan e) ++ " " ++ unrename nameMap v
       where v = FA.varName e
 
     varReport     = intercalate ", " . map showVar
@@ -105,7 +105,7 @@ checkUnits uo (fname, pf)
     -- Format report
     okReport Nothing = fname ++ ": Consistent. " ++ show nVars ++ " variables checked.\n" ++ logs
     okReport (Just cons) = logs ++ "\n\n" ++ fname ++ ": Inconsistent:\n" ++
-                           unlines [ fname ++ ": " ++ srcSpan con ++ " constraint " ++ show con | con <- cons ]
+                           unlines [ fname ++ ": " ++ srcSpan con ++ " constraint " ++ show (unrename nameMap con) | con <- cons ]
       where
         srcSpan con | Just ss <- findCon con = showSrcSpan ss ++ " "
                     | otherwise              = ""
@@ -156,7 +156,7 @@ inferUnits uo (fname, pf)
                            , e@(F.ExpValue _ _ (F.ValVariable _)) <- universeBi s    :: [F.Expression UA]
                            , u <- maybeToList (FA.varName e `lookup` vars) ]
 
-    expReport (e, u) = showSrcSpan (FU.getSpan e) ++ " unit " ++ show u ++ " :: " ++ (v `fromMaybe` M.lookup v nameMap)
+    expReport (e, u) = showSrcSpan (FU.getSpan e) ++ " unit " ++ show u ++ " :: " ++ unrename nameMap v
       where v = FA.varName e
 
     errReport exc = fname ++ ": " ++ show exc ++ "\n" ++ logs
@@ -199,6 +199,8 @@ synthesiseUnits uo (fname, pf)
     nameMap = FAR.extractNameMap pfRenamed
 
 --------------------------------------------------
+
+unrename nameMap = transformBi $ \ x -> x `fromMaybe` M.lookup x nameMap
 
 showSrcLoc :: FU.Position -> String
 showSrcLoc loc = show (lineCol loc) ++ ":" ++ show (lineCol loc)
