@@ -110,9 +110,14 @@ checkUnits uo (fname, pf)
         srcSpan con | Just ss <- findCon con = showSrcSpan ss ++ " "
                     | otherwise              = ""
 
+    -- Find a given constraint within the annotated AST. FIXME: optimise
     findCon :: Constraint -> Maybe FU.SrcSpan
-    findCon con = listToMaybe $ [ FU.getSpan x | x <- universeBi pfUA :: [F.Statement UA], getConstraint x == Just con ] ++
-                                [ FU.getSpan x | x <- universeBi pfUA :: [F.Expression UA], getConstraint x == Just con ]
+    findCon con = listToMaybe $ [ FU.getSpan x | x <- universeBi pfUA :: [F.Expression UA], getConstraint x `eq` con ] ++
+                                [ FU.getSpan x | x <- universeBi pfUA :: [F.Statement UA] , getConstraint x `eq` con ] ++
+                                [ FU.getSpan x | x <- universeBi pfUA :: [F.Declarator UA], getConstraint x `eq` con ] ++
+                                [ FU.getSpan x | x <- universeBi pfUA :: [F.Argument UA]  , getConstraint x `eq` con ]
+      where eq Nothing _    = False
+            eq (Just c1) c2 = conParamEq c1 c2
 
     varReport     = intercalate ", " . map showVar
 

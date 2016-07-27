@@ -101,6 +101,30 @@ instance Show Constraint where
 
 --------------------------------------------------
 
+-- | Constraint 'parametric' equality: treat all uses of a parametric
+-- abstractions as equivalent to the abstraction.
+conParamEq :: Constraint -> Constraint -> Bool
+conParamEq (ConEq lhs1 rhs1) (ConEq lhs2 rhs2) = (unitParamEq lhs1 lhs2 && unitParamEq rhs1 rhs2) ||
+                                                 (unitParamEq rhs1 lhs2 && unitParamEq lhs1 rhs2)
+conParamEq (ConConj cs1) (ConConj cs2) = and $ zipWith conParamEq cs1 cs2
+conParamEq _ _ = False
+
+-- | Unit 'parametric' equality: treat all uses of a parametric
+-- abstractions as equivalent to the abstraction.
+unitParamEq :: UnitInfo -> UnitInfo -> Bool
+unitParamEq (UnitParamLitAbs i)           (UnitParamLitUse (i', _))     = i == i'
+unitParamEq (UnitParamLitUse (i', _))     (UnitParamLitAbs i)           = i == i'
+unitParamEq (UnitParamVarAbs (f, i))      (UnitParamVarUse (f', i', _)) = (f, i) == (f', i')
+unitParamEq (UnitParamVarUse (f', i', _)) (UnitParamVarAbs (f, i))      = (f, i) == (f', i')
+unitParamEq (UnitParamPosAbs (f, i))      (UnitParamPosUse (f', i', _)) = (f, i) == (f', i')
+unitParamEq (UnitParamPosUse (f', i', _)) (UnitParamPosAbs (f, i))      = (f, i) == (f', i')
+unitParamEq (UnitMul u1 u2)               (UnitMul u1' u2')             = unitParamEq u1 u1' && unitParamEq u2 u2' ||
+                                                                          unitParamEq u1 u2' && unitParamEq u2 u1'
+unitParamEq (UnitPow u p)                 (UnitPow u' p')               = unitParamEq u u' && p == p'
+unitParamEq u1 u2 = u1 == u2
+
+--------------------------------------------------
+
 -- The annotation on the AST used for solving units.
 data UnitAnnotation a = UnitAnnotation {
    prevAnnotation :: a,

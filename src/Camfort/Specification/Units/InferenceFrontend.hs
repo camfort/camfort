@@ -336,9 +336,9 @@ propagateExp e = fmap uoLiterals ask >>= \ lm -> case e of
   F.ExpFunctionCall {}                   -> propagateFunctionCall e
   _                                      -> whenDebug (tell ("propagateExp: unhandled: " ++ show e)) >> return e
   where
-    -- shorter names for convenience functions
+    -- Shorter names for convenience functions.
     setF2 f u1 u2  = return $ maybeSetUnitInfoF2 f u1 u2 e
-    -- remember, not only set a constraint, but also give a unit!
+    -- Remember, not only set a constraint, but also give a unit!
     setF2C f u1 u2 = return . maybeSetUnitInfo u1 $ maybeSetUnitConstraintF2 f u1 u2 e
 
 propagateFunctionCall :: F.Expression UA -> UnitSolver (F.Expression UA)
