@@ -13,256 +13,193 @@
    See the License for the specific language governing permissions and
    limitations under the License.
 -}
+
 {-
 
   Units of measure extension to Fortran
 
-TODO:
- * Deal with variable shadowing in "contained" functions.
- * Better errors with line number info
-
 -}
 
-
-{-# LANGUAGE ScopedTypeVariables, ImplicitParams, DoAndIfThenElse,
-             PatternGuards, ConstraintKinds #-}
+{-# LANGUAGE ScopedTypeVariables #-}
+{-# LANGUAGE PatternGuards #-}
 
 module Camfort.Specification.Units
-          (Solver, removeUnits, checkUnits
-                 , inferUnits, synthesiseUnits
-                 , inferCriticalVariables)  where
+  (checkUnits, inferUnits, synthesiseUnits, inferCriticalVariables)
+where
 
-
-import Data.Data
-import Data.Char (isNumber)
-import Data.List
-import Data.Maybe
 import qualified Data.Map as M
-import Data.Label.Mono (Lens)
-import qualified Data.Label
-import Data.Label.Monadic hiding (modify)
-import Data.Function
-import Data.Matrix
+import Data.Char (isNumber)
+import Data.List (intercalate)
+import Data.Maybe (fromMaybe, maybeToList, listToMaybe)
 import Data.Generics.Uniplate.Operations
-import Control.Monad.State.Strict hiding (gets)
-import Control.Monad.Identity
+import Control.Monad.State.Strict
 
-import Camfort.Helpers
+import Camfort.Helpers hiding (lineCol)
 import Camfort.Output
-import Camfort.Analysis.Annotations hiding (Unitless)
+import Camfort.Analysis.Annotations
 import Camfort.Analysis.Syntax
 import Camfort.Analysis.Types
-
 import Camfort.Input
-import Camfort.Specification.Units.Debug
-import Camfort.Specification.Units.InferenceBackend
-import Camfort.Specification.Units.InferenceFrontend
-import qualified Camfort.Specification.Units.Synthesis as US
-import Camfort.Specification.Units.Strip
 
 -- Provides the types and data accessors used in this module
 import Camfort.Specification.Units.Environment
--- Solvers for the Gaussian matrix
-import Camfort.Specification.Units.Solve
+import Camfort.Specification.Units.Monad
+import Camfort.Specification.Units.InferenceBackend
+import Camfort.Specification.Units.InferenceFrontend
+import Camfort.Specification.Units.Synthesis (runSynthesis)
 
 import qualified Language.Fortran.Analysis.Renaming as FAR
-import qualified Language.Fortran.Analysis.BBlocks as FAB
 import qualified Language.Fortran.Analysis as FA
 import qualified Language.Fortran.AST as F
-import Camfort.Transformation.Syntax
+import qualified Language.Fortran.Util.Position as FU
 
 -- For debugging and development purposes
 import qualified Debug.Trace as D
-
-------------------------------------------------
--- Set the default options for the inference
-
-instance Default Solver where
-    defaultValue = Custom
-instance Default AssumeLiterals where
-    defaultValue = Poly
-
-{- START HERE! Two main functions of this file: inferUnits and removeUnits -}
-
--- Deprecated
-removeUnits ::
-    (Filename, F.ProgramFile Annotation) -> (Report, (Filename, F.ProgramFile Annotation))
-removeUnits (fname, x) = undefined
-  {-  let ?criticals = False
-    in ("", (fname, map (descendBi removeUnitsInBlock) x)) -}
-
 
 -- *************************************
 --   Unit inference (top - level)
 --
 -- *************************************
 
-type Params = (?solver :: Solver, ?assumeLiterals :: AssumeLiterals)
+inferCriticalVariables, checkUnits, inferUnits, synthesiseUnits
+  :: UnitOpts -> (Filename, F.ProgramFile Annotation) -> (Report, (Filename, F.ProgramFile Annotation))
 
 {-| Infer one possible set of critical variables for a program -}
-inferCriticalVariables ::
-       Params
-    => (Filename, F.ProgramFile Annotation)
-    -> (Report, (Filename, F.ProgramFile Annotation))
-inferCriticalVariables (fname, pf) = (r, (fname, pf))
+inferCriticalVariables uo (fname, pf)
+  | Right vars <- eVars = (okReport vars, (fname, pf))
+  | Left exc   <- eVars = (errReport exc, (fname, pf))
   where
     -- Format report
-    r = concat [fname ++ ": " ++ r ++ "\n" | r <- Data.Label.get report env]
+    okReport []   = logs ++ "\n\n" ++ "No additional annotations are necessary.\n"
+    okReport vars = logs ++ "\n\n" ++ unlines [ fname ++ ": " ++ expReport ei | ei <- expInfo ]
+      where
+        names = map showVar vars
+        expInfo = [ e | s@(F.StDeclaration {})               <- universeBi pfUA :: [F.Statement UA]
+                      , e@(F.ExpValue _ _ (F.ValVariable _)) <- universeBi s    :: [F.Expression UA]
+                      , FA.varName e `elem` names ]
 
-    -- Run the infer procedure with empty unit environment, retunring
-    -- the updated unit environment, matching variables to their units
-    env = let ?criticals = True
-              ?debug     = False
-              ?nameMap   = nameMap
-              ?argumentDecls = False
-          in  flip execState emptyUnitEnv
-              (do
-                 doInferUnits . FAB.analyseBBlocks $ pf'
-                 vars <- criticalVars nameMap
-                 case vars of
-                   [] -> report <<++ "No critical variables. Appropriate annotations."
-                   _  -> report <<++ "Critical variables: "
-                                ++ (concat $ intersperse "," vars)
-                 ifDebug debugGaussian)
+    expReport e = showSrcSpan (FU.getSpan e) ++ " " ++ fromMaybe v (M.lookup v nameMap)
+      where v = FA.varName e
 
-    pf' = FAR.analyseRenames . FA.initAnalysis $ (fmap mkUnitAnnotation pf)
-    nameMap = FAR.extractNameMap pf'
-    -- Core infer procedure
-    --infer :: (Params, ?argumentDecls :: Bool) => State UnitEnv ()
+    varReport     = intercalate ", " . map showVar
+
+    showVar (UnitVar v)     = v
+    showVar (UnitLiteral _) = "<literal>"
+    showVar _               = "<bad>"
+
+    errReport exc = fname ++ ": " ++ show exc ++ "\n" ++ logs
+
+    -- run inference
+    uOpts = uo { uoNameMap = nameMap }
+    (eVars, state, logs) = runUnitSolver uOpts pfRenamed $ initInference >> runCriticalVariables
+    pfUA = usProgramFile state -- the program file after units analysis is done
+
+    pfRenamed = FAR.analyseRenames . FA.initAnalysis . fmap mkUnitAnnotation $ pf
+    nameMap = FAR.extractNameMap pfRenamed
 
 {-| Check units-of-measure for a program -}
-checkUnits ::
-       Params
-    => (Filename, F.ProgramFile Annotation)
-    -> (Report, (Filename, F.ProgramFile Annotation))
-checkUnits (fname, pf) = (r, (fname, pf))
+checkUnits uo (fname, pf)
+  | Right mCons <- eCons = (okReport mCons, (fname, pf))
+  | Left exc    <- eCons = (errReport exc, (fname, pf))
   where
     -- Format report
-    r = concat [fname ++ ": " ++ r ++ "\n" | r <- Data.Label.get report env, not (null r)]
-        ++ fname ++ ": checked " ++ show n ++ " user variables\n"
+    okReport Nothing = fname ++ ": Consistent. " ++ show nVars ++ " variables checked.\n" ++ logs
+    okReport (Just cons) = logs ++ "\n\n" ++ fname ++ ": Inconsistent:\n" ++
+                           unlines [ fname ++ ": " ++ srcSpan con ++ " constraint " ++ show con | con <- cons ]
+      where
+        srcSpan con | Just ss <- findCon con = showSrcSpan ss ++ " "
+                    | otherwise              = ""
 
-    -- Count number of checked and inferred variables
-    n = countVariables (_varColEnv env) (_debugInfo env) (_procedureEnv env)
-                                    (fst $ _linearSystem env) (_unitVarCats env)
+    findCon :: Constraint -> Maybe FU.SrcSpan
+    findCon con = listToMaybe $ [ FU.getSpan x | x <- universeBi pfUA :: [F.Statement UA], getConstraint x == Just con ] ++
+                                [ FU.getSpan x | x <- universeBi pfUA :: [F.Expression UA], getConstraint x == Just con ]
 
-    pf' = FAB.analyseBBlocks . FAR.analyseRenames . FA.initAnalysis $ (fmap mkUnitAnnotation pf)
-    nameMap = FAR.extractNameMap pf'
-    -- Apply inferences
-    env = let ?criticals = False
-              ?debug     = False
-              ?nameMap   = nameMap
-              ?argumentDecls = False
-          in execState (doInferUnits pf') emptyUnitEnv
+    varReport     = intercalate ", " . map showVar
+
+    showVar (UnitVar v)     = v `fromMaybe` M.lookup v nameMap
+    showVar (UnitLiteral _) = "<literal>" -- FIXME
+    showVar _               = "<bad>"
+
+    errReport exc = fname ++ ": " ++ show exc ++ "\n" ++ logs
+
+    -- run inference
+    uOpts = uo { uoNameMap = nameMap }
+    (eCons, state, logs) = runUnitSolver uOpts pfRenamed $ initInference >> runInconsistentConstraints
+    pfUA :: F.ProgramFile UA
+    pfUA = usProgramFile state -- the program file after units analysis is done
+
+    -- number of 'real' variables checked, e.g. not parametric
+    nVars = M.size . M.filter (not . isParametricUnit) $ usVarUnitMap state
+    isParametricUnit u = case u of UnitParamPosAbs {} -> True; UnitParamPosUse {} -> True
+                                   UnitParamVarAbs {} -> True; UnitParamVarUse {} -> True
+                                   _ -> False
+
+    pfRenamed = FAR.analyseRenames . FA.initAnalysis . fmap mkUnitAnnotation $ pf
+    nameMap = FAR.extractNameMap pfRenamed
 
 {-| Check and infer units-of-measure for a program
-     This produces an output of all the unit information for a program -}
-inferUnits ::
-       Params
-    => (Filename, F.ProgramFile Annotation)
-    -> (Report, (Filename, F.ProgramFile Annotation))
-inferUnits (fname, pf) = (r, (fname, pf))
+    This produces an output of all the unit information for a program -}
+inferUnits uo (fname, pf)
+  | Right []   <- eVars = checkUnits uo (fname, pf)
+  | Right vars <- eVars = (okReport vars, (fname, pf))
+  | Left exc   <- eVars = (errReport exc, (fname, pf))
   where
     -- Format report
-    r = fname ++ ":\n" ++
-        concat [ r ++ "\n" | r <- Data.Label.get report env, not (null r)]
-        ++ fname ++ ": checked/inferred " ++ show n ++ " user variables\n"
+    okReport vars = logs ++ "\n\n" ++ unlines [ fname ++ ": " ++ expReport ei | ei <- expInfo ]
+      where
+        expInfo = [ (e, u) | s@(F.StDeclaration {})               <- universeBi pfUA :: [F.Statement UA]
+                           , e@(F.ExpValue _ _ (F.ValVariable _)) <- universeBi s    :: [F.Expression UA]
+                           , u <- maybeToList (FA.varName e `lookup` vars) ]
 
-    -- Count number of checked and inferred variables
-    n = countVariables (_varColEnv env) (_debugInfo env) (_procedureEnv env)
-                                    (fst $ _linearSystem env) (_unitVarCats env)
-    -- Apply inference and synthesis
-    (_, env) = runState inferAndSynthesise emptyUnitEnv
-    inferAndSynthesise =
-        let ?criticals = False
-            ?debug     = False
-            ?nameMap   = nameMap
-            ?argumentDecls = False
-        in do
-          doInferUnits pf'
-          succeeded <- gets success
-          if succeeded
-            then US.synthesiseUnits True pf'
-            else return pf'
-    pf' = FAB.analyseBBlocks
-        . FAR.analyseRenames
-        . FA.initAnalysis
-        . fmap mkUnitAnnotation $ pf
-    nameMap = FAR.extractNameMap pf'
+    expReport (e, u) = showSrcSpan (FU.getSpan e) ++ " unit " ++ show u ++ " :: " ++ (v `fromMaybe` M.lookup v nameMap)
+      where v = FA.varName e
 
+    errReport exc = fname ++ ": " ++ show exc ++ "\n" ++ logs
+
+    -- run inference
+    uOpts = uo { uoNameMap = nameMap }
+    (eVars, state, logs) = runUnitSolver uOpts pfRenamed $ initInference >> runInferVariables
+
+    pfUA = usProgramFile state -- the program file after units analysis is done
+
+    pfRenamed = FAR.analyseRenames . FA.initAnalysis . fmap mkUnitAnnotation $ pf
+    nameMap = FAR.extractNameMap pfRenamed
 
 {-| Synthesis unspecified units for a program (after checking) -}
-synthesiseUnits ::
-       Params
-    => (Filename, F.ProgramFile Annotation)
-    -> (Report, (Filename, F.ProgramFile Annotation))
-synthesiseUnits (fname, pf) = (r, (fname, fmap (prevAnnotation . FA.prevAnnotation) pf3))
+synthesiseUnits uo (fname, pf)
+  | Right []   <- eVars = checkUnits uo (fname, pf)
+  | Right vars <- eVars = (okReport vars, (fname, pfFinal))
+  | Left exc   <- eVars = (errReport exc, (fname, pfFinal))
   where
     -- Format report
-    r = concat [fname ++ ": " ++ r ++ "\n" | r <- Data.Label.get report env, not (null r)]
-        ++ fname ++ ": checked/inferred " ++ show n ++ " user variables\n"
-    -- Count number of checked and inferred variables
-    n = countVariables (_varColEnv env) (_debugInfo env) (_procedureEnv env)
-                                    (fst $ _linearSystem env) (_unitVarCats env)
-    -- Apply inference and synthesis
-    pf' = FAB.analyseBBlocks . FAR.analyseRenames . FA.initAnalysis $ (fmap mkUnitAnnotation pf)
-    (pf3, env) = runState inferAndSynthesise emptyUnitEnv
-    nameMap = FAR.extractNameMap pf'
-    inferAndSynthesise =
-        let ?criticals = False
-            ?debug     = False
-            ?nameMap   = nameMap
-            ?argumentDecls = False
-        in do
-          doInferUnits pf'
-          succeeded <- gets success
-          if succeeded
-            then do
-              p <- US.synthesiseUnits False pf'
-              (n, _) <- gets evUnitsAdded
-              report <<++ ("Added " ++ (show n) ++ " annotations")
-              return p
-            else return pf'
+    okReport vars = logs ++ "\n\n" ++ unlines [ fname ++ ": " ++ expReport ei | ei <- expInfo ]
+      where
+        expInfo = [ (e, u) | s@(F.StDeclaration {})               <- universeBi pfUA :: [F.Statement UA]
+                           , e@(F.ExpValue _ _ (F.ValVariable _)) <- universeBi s    :: [F.Expression UA]
+                           , u <- maybeToList (FA.varName e `lookup` vars) ]
 
--- Count number of variables for which a spec has been checked
-countVariables vars debugs procs matrix ucats =
-    length $ filter (\c -> case (ucats !! (c - 1)) of
-                             Variable -> case (lookupVarsByCols vars [c]) of
-                                           [] -> False
-                                           _  -> True
-                             Argument -> case (lookupVarsByCols vars [c]) of
-                                           [] -> False
-                                           _  -> True
-                             _        -> False) [1..ncols matrix]
+    expReport (e, u) = showSrcSpan (FU.getSpan e) ++ " unit " ++ show u ++ " :: " ++ (v `fromMaybe` M.lookup v nameMap)
+      where v = FA.varName e
 
--- Critical variables analysis
-criticalVars :: FAR.NameMap -> State UnitEnv [String]
-criticalVars nameMap = do
-    uvarenv     <- gets varColEnv
-    (matrix, vector) <- gets linearSystem
-    ucats       <- gets unitVarCats
-    dbgs        <- gets debugInfo
-    -- debugGaussian
-    let cv1 = criticalVars' uvarenv ucats matrix 1 dbgs
-    let cv2 = [] -- criticalVars
-    return (map realName (cv1 ++ cv2))
-      where realName v = v `fromMaybe` (v `M.lookup` nameMap)
+    errReport exc = fname ++ ": " ++ show exc ++ "\n" ++ logs
 
-criticalVars' :: VarColEnv
-              -> [UnitVarCategory]
-              -> Matrix Rational
-              -> Row
-              -> DebugInfo -> [String]
-criticalVars' varenv ucats matrix i dbgs =
-  let m = firstNonZeroCoeff matrix ucats
-  in
-    if (i == nrows matrix) then
-      if (m i) /= (ncols matrix)
-      then lookups [((m i) + 1)..(ncols matrix)] dbgs
-      else []
-    else
-      if (m (i + 1)) /= ((m i) + 1)
-      then (lookups [((m i) + 1)..(m (i + 1) - 1)] dbgs)
-        ++ (criticalVars' varenv ucats matrix (i + 1) dbgs)
-      else criticalVars' varenv ucats matrix (i + 1) dbgs
-  where
-    lookups = lookupVarsByColsFilterByArg matrix varenv ucats
+    -- run inference
+    uOpts = uo { uoNameMap = nameMap }
+    (eVars, state, logs) = runUnitSolver uOpts pfRenamed $ initInference >> runInferVariables >>= runSynthesis
+
+    pfUA = usProgramFile state -- the program file after units analysis is done
+    pfFinal = fmap prevAnnotation . fmap FA.prevAnnotation $ pfUA -- strip annotations
+
+    pfRenamed = FAR.analyseRenames . FA.initAnalysis . fmap mkUnitAnnotation $ pf
+    nameMap = FAR.extractNameMap pfRenamed
+
+--------------------------------------------------
+
+showSrcLoc :: FU.Position -> String
+showSrcLoc loc = show (lineCol loc) ++ ":" ++ show (lineCol loc)
+
+showSrcSpan :: FU.SrcSpan -> String
+showSrcSpan (FU.SrcSpan l u) = "(" ++ showSrcLoc l ++ " - " ++ showSrcLoc u ++ ")"
+
+lineCol :: FU.Position -> (Int, Int)
+lineCol p  = (fromIntegral $ FU.posLine p, fromIntegral $ FU.posColumn p)

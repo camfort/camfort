@@ -73,13 +73,13 @@ options =
          "show version number"
      , Option ['e']     ["exclude"] (ReqArg Excludes "FILES")
          "files to exclude (comma separated list, no spaces)"
-     , Option ['s']     ["units-solver"]  (ReqArg (Solver . read) "ID")
-         "units-of-measure solver. ID = Custom or LAPACK"
      , Option ['l']     ["units-literals"] (ReqArg (Literals . read) "ID")
          "units-of-measure literals mode. ID = Unitless, Poly, or Mixed"
      , Option ['m']     ["stencil-inference-mode"]
                 (ReqArg (StencilInferMode . read . (++ "Mode")) "ID")
                 "stencil specification inference mode. ID = Do, Assign, or Both"
+     , Option []        ["debug"] (NoArg Debug)
+         "enable debug mode"
      ]
 
 compilerOpts :: [String] -> IO ([Flag], [String])

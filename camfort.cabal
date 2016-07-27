@@ -40,6 +40,8 @@ test-suite spec
                         uniplate >= 1.6.10,
                         mtl >= 2.1,
                         bytestring >= 0.10,			
+                        array >= 0.4,
+                        hmatrix >= 0.15,
                         camfort
 
 source-repository head
@@ -68,14 +70,11 @@ executable camfort
                         Camfort.Specification.Stencils.Synthesis
                         Camfort.Specification.Stencils
                         Camfort.Specification.Units
-                        Camfort.Specification.Units.Debug
                         Camfort.Specification.Units.InferenceFrontend
                         Camfort.Specification.Units.InferenceBackend
                         Camfort.Specification.Units.Environment
+                        Camfort.Specification.Units.Monad
                         Camfort.Specification.Units.Parser
-                        Camfort.Specification.Units.Solve
-                        Camfort.Specification.Units.SolveHMatrix
-                        Camfort.Specification.Units.Strip
                         Camfort.Specification.Units.Synthesis
                         Camfort.Transformation.CommonBlockElim
                         Camfort.Transformation.CommonBlockElimToCalls
@@ -123,9 +122,6 @@ executable camfort
 library
   hs-source-dirs:       src
 
-
---  ghc-options:          -package mtl-2.1.3.1
-
   build-tools:          alex, happy
 
   exposed-modules:      Camfort.Analysis.Annotations
@@ -147,14 +143,11 @@ library
                         Camfort.Specification.Stencils.Synthesis
                         Camfort.Specification.Stencils
                         Camfort.Specification.Units
-                        Camfort.Specification.Units.Debug
                         Camfort.Specification.Units.InferenceFrontend
                         Camfort.Specification.Units.InferenceBackend
                         Camfort.Specification.Units.Environment
+                        Camfort.Specification.Units.Monad
                         Camfort.Specification.Units.Parser
-                        Camfort.Specification.Units.Solve
-                        Camfort.Specification.Units.SolveHMatrix
-                        Camfort.Specification.Units.Strip
                         Camfort.Specification.Units.Synthesis
                         Camfort.Transformation.CommonBlockElim
                         Camfort.Transformation.CommonBlockElimToCalls
