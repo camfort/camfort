@@ -18,6 +18,7 @@
 {-# LANGUAGE ScopedTypeVariables #-}
 {-# LANGUAGE DeriveGeneric #-}
 {-# LANGUAGE RankNTypes #-}
+{-# LANGUAGE CPP #-}
 
 module Camfort.Traverse where
 
@@ -45,6 +46,12 @@ import Data.Monoid
 
 import Debug.Trace
 
+#if __GLASGOW_HASKELL__ < 800
+instance Monoid x => Monad ((,) x) where
+    return a = (mempty, a)
+    (x, a) >>= k = let (x', b) = k a
+                   in (mappend x x', b)
+#endif
 -- Data-type generic comonad-style traversal
 
 extendBi :: (Biplate (from a) (to a), RComonad to) => (to a -> a) -> (from a) -> (from a)
