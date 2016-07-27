@@ -89,7 +89,8 @@ getExcludes xs = getOption xs
 -- * Wrappers on all of the features
 typeStructuring inSrc excludes outSrc _ = do
     putStrLn $ "Introducing derived data types in " ++ show inSrc ++ "\n"
-    doRefactor typeStruct inSrc excludes outSrc
+    report <- doRefactor typeStruct inSrc excludes outSrc
+    putStrLn report
 
 ast d excludes f _ = do
     xs <- readForparseSrcDir (d ++ "/" ++ f) excludes
@@ -111,19 +112,23 @@ lvaA inSrc excludes _ _ = do
 
 dead inSrc excludes outSrc _ = do
     putStrLn $ "Eliminating dead code in " ++ show inSrc ++ "\n"
-    doRefactor ((mapM (deadCode False))) inSrc excludes outSrc
+    report <- doRefactor ((mapM (deadCode False))) inSrc excludes outSrc
+    putStrLn report
 
 commonToArgs inSrc excludes outSrc _ = do
     putStrLn $ "Refactoring common blocks in " ++ show inSrc ++ "\n"
-    doRefactor (commonElimToCalls inSrc) inSrc excludes outSrc
+    report <- doRefactor (commonElimToCalls inSrc) inSrc excludes outSrc
+    putStrLn report
 
 common inSrc excludes outSrc _ = do
     putStrLn $ "Refactoring common blocks in " ++ show inSrc ++ "\n"
-    doRefactor (commonElimToModules inSrc) inSrc excludes outSrc
+    report <- doRefactor (commonElimToModules inSrc) inSrc excludes outSrc
+    putStrLn report
 
 equivalences inSrc excludes outSrc _ = do
     putStrLn $ "Refactoring equivalences blocks in " ++ show inSrc ++ "\n"
-    doRefactor (mapM refactorEquivalences) inSrc excludes outSrc
+    report <- doRefactor (mapM refactorEquivalences) inSrc excludes outSrc
+    putStrLn report
 
 {- Units feature -}
 optsToUnitOpts :: [Flag] -> UnitOpts

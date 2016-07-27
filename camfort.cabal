@@ -29,6 +29,7 @@ test-suite spec
                         Camfort.Specification.StencilsSpec
                         Camfort.Specification.UnitsSpec
                         Camfort.Transformation.CommonSpec
+                        Camfort.Transformation.EquivalenceElimSpec
 
   build-depends:        base < 5,
                         containers >= 0.5,

@@ -129,7 +129,7 @@ doAnalysisReport' rFun inSrc excludes outSrc = do
     output to the directory specified by the fourth parameter -}
 doRefactor :: ([(Filename, Program A)]
            -> (String, [(Filename, Program Annotation)]))
-           -> FileOrDir -> [Filename] -> FileOrDir -> IO ()
+           -> FileOrDir -> [Filename] -> FileOrDir -> IO String
 doRefactor rFun inSrc excludes outSrc = do
   if excludes /= [] && excludes /= [""]
   then putStrLn $ "Excluding " ++ (concat $ intersperse "," excludes)
@@ -139,10 +139,10 @@ doRefactor rFun inSrc excludes outSrc = do
   ps <- readParseSrcDir inSrc excludes
   let (report, ps') = rFun (map (\(f, inp, ast) -> (f, ast)) ps)
   --let outFiles = filter (\f -not ((take (length $ d ++ "out") f) == (d ++ "out"))) (map fst ps')
-  putStrLn report
   let outFiles = map fst ps'
   let outData = zip3 outFiles (map (B.pack . Fortran.snd3) ps) (map snd ps')
   outputFiles inSrc outSrc outData
+  return report
 
 -- * Source directory and file handling
 
