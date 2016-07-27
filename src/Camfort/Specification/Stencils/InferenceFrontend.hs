@@ -79,7 +79,7 @@ type EvalLog = [(String, Variable)]
 type LogLine = (FU.SrcSpan, Either [([Variable], Specification)] (String,Variable))
 -- The core of the inferer works within this monad
 type Inferer = WriterT [LogLine]
-                 (ReaderT (Cycles, F.ProgramUnitName, FAT.TypeEnv)
+                 (ReaderT (Cycles, F.ProgramUnitName)
                     (State InferState))
 
 type Cycles = [(F.Name, F.Name)]
@@ -89,12 +89,11 @@ type Params = (?flowsGraph :: FAD.FlowsGraph A, ?nameMap :: FAR.NameMap)
 runInferer :: FAD.InductionVarMapByASTBlock
            -> Cycles
            -> F.ProgramUnitName
-           -> FAT.TypeEnv
            -> Inferer a
            -> (a, [LogLine])
-runInferer ivmap cycles puName tenv =
+runInferer ivmap cycles puName =
     flip evalState (IS ivmap [])
-  . flip runReaderT (cycles, puName, tenv)
+  . flip runReaderT (cycles, puName)
   . runWriterT
 
 stencilInference :: FAR.NameMap
@@ -115,7 +114,7 @@ stencilInference nameMap mode pf =
           else (pf, [])
 
     (cm_pus', log1) = runWriter (transformBiM perPU cm_pus)
-    (blocks', log2) = runInferer ivMap [] F.NamelessBlockData tenv blocksInf
+    (blocks', log2) = runInferer ivMap [] F.NamelessBlockData blocksInf
     blocksInf       = let ?flowsGraph = flTo
                           ?nameMap    = nameMap
                       in descendBiM (perBlockInfer mode) blocks
@@ -129,7 +128,7 @@ stencilInference nameMap mode pf =
              ?nameMap    = nameMap
          in do
               let pum = descendBiM (perBlockInfer mode) pu
-              let (pu', log) = runInferer ivMap [] (FA.puName pu) tenv pum
+              let (pu', log) = runInferer ivMap [] (FA.puName pu) pum
               tell log
               return pu'
     perPU pu = return pu
@@ -155,7 +154,6 @@ stencilInference nameMap mode pf =
 
     -- get map of variable name ==> { defining AST-Block-IDs }
     dm    = FAD.genDefMap bm
-    (_, tenv)  = FAT.analyseTypes pf
 
 -- | Return list of variable names that flow into themselves via a 2-cycle
 findVarFlowCycles :: Data a => F.ProgramFile a -> [(F.Name, F.Name)]
