@@ -21,7 +21,8 @@
 module Camfort.Specification.Units.Monad
   ( UA, UnitSolver, UnitOpts(..), unitOpts0, UnitLogs, UnitState(..), LiteralsOpt(..), UnitException
   , whenDebug, modifyVarUnitMap, modifyGivenVarSet, modifyUnitAliasMap
-  , modifyTemplateMap, modifyProgramFile, modifyProgramFileM
+  , VarUnitMap, GivenVarSet, UnitAliasMap, TemplateMap, CallIdMap
+  , modifyTemplateMap, modifyProgramFile, modifyProgramFileM, modifyCallIdRemapM
   , runUnitSolver, evalUnitSolver, execUnitSolver )
 where
 
@@ -31,6 +32,7 @@ import Data.Char (toLower)
 import Data.Data (Data)
 import Data.List (find, isPrefixOf)
 import qualified Data.Map as M
+import qualified Data.IntMap as IM
 import qualified Data.Set as S
 import qualified Language.Fortran.Analysis as FA
 import qualified Language.Fortran.Analysis.Renaming as FAR
@@ -98,6 +100,8 @@ type GivenVarSet  = S.Set F.Name
 type UnitAliasMap = M.Map String UnitInfo
 -- | Function/subroutine name -> associated, parametric polymorphic constraints
 type TemplateMap  = M.Map F.Name Constraints
+-- | Map of CallId to CallId
+type CallIdMap    = IM.IntMap Int
 
 -- | Working state for the monad
 data UnitState = UnitState
@@ -108,6 +112,7 @@ data UnitState = UnitState
   , usTemplateMap  :: TemplateMap
   , usLitNums      :: Int
   , usCallIds      :: Int
+  , usCallIdRemap  :: CallIdMap
   , usConstraints  :: Constraints }
   deriving (Show, Data)
 
@@ -118,6 +123,7 @@ unitState0 pf = UnitState { usProgramFile  = pf
                           , usTemplateMap  = M.empty
                           , usLitNums      = 0
                           , usCallIds      = 0
+                          , usCallIdRemap  = IM.empty
                           , usConstraints  = [] }
 
 -- helper functions
@@ -141,6 +147,13 @@ modifyProgramFileM f = do
   pf <- fmap usProgramFile get
   pf' <- f pf
   modify (\ s -> s { usProgramFile = pf' })
+
+modifyCallIdRemapM :: (CallIdMap -> UnitSolver (a, CallIdMap)) -> UnitSolver a
+modifyCallIdRemapM f = do
+  idMap <- gets usCallIdRemap
+  (x, idMap') <- f idMap
+  modify (\ s -> s { usCallIdRemap = idMap' })
+  return x
 
 --------------------------------------------------
 
