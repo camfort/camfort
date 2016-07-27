@@ -14,7 +14,7 @@ in the wiki.
 ## Usage
 
 For detailed information please check
-[the wiki](https://github.com/camfort/camfort/wiki/Home.md).
+[the wiki](https://github.com/camfort/camfort/wiki).
 
 ## Contributing
 
