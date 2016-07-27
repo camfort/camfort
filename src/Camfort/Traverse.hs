@@ -46,8 +46,7 @@ import Data.Monoid
 
 import Debug.Trace
 
-#if __GLASGOW_HASKELL__ >= 800
-#else
+#if __GLASGOW_HASKELL__ < 800
 instance Monoid x => Monad ((,) x) where
     return a = (mempty, a)
     (x, a) >>= k = let (x', b) = k a

@@ -14,40 +14,12 @@ stability:              experimental
 build-type:             Simple
 category:               Language, tools
 
-cabal-version:          >= 1.8
-tested-with:            GHC >= 7.10.1
-
-test-suite spec
-  type:                 exitcode-stdio-1.0
-  main-is:              Spec.hs
-  hs-source-dirs:       tests
-  other-modules:        Camfort.Analysis.CommentAnnotatorSpec
-                        Camfort.Helpers.VecSpec
-                        Camfort.Specification.Stencils.CheckSpec
-                        Camfort.Specification.Stencils.GrammarSpec
-                        Camfort.Specification.Stencils.ModelSpec
-                        Camfort.Specification.StencilsSpec
-                        Camfort.Specification.UnitsSpec
-                        Camfort.Transformation.CommonSpec
-                        Camfort.Transformation.EquivalenceElimSpec
-
-  build-depends:        base < 5,
-                        containers >= 0.5,
-                        filepath >= 1.4,
-                        directory >= 1.2,
-                        hspec >= 2.2,
-                        QuickCheck >= 2.8,
-                        fortran-src >= 0.1,
-                        uniplate >= 1.6.10,
-                        mtl >= 2.1,
-                        bytestring >= 0.10,
-                        array >= 0.4,
-                        hmatrix >= 0.15,
-                        camfort
+cabal-version:          >= 1.18
+tested-with:            GHC >= 7.8
 
 source-repository head
   type: git
-  location: https://github.com/dorchard/camfort
+  location: https://github.com/camfort/camfort
 
 executable camfort
   main-is: Main.hs
@@ -92,8 +64,7 @@ executable camfort
                         Camfort.PrettyPrint
                         Camfort.Traverse
                         Main
-
-  build-depends:        base < 5,
+  build-depends:        base >= 4.6 && < 5,
                         ghc-prim >= 0.4.0.0,
                         containers >= 0.5.0.0,
                         template-haskell >=2.4,
@@ -119,12 +90,11 @@ executable camfort
                         filepath,
                         fgl >= 5.5,
                         bytestring >= 0.10
+  default-language: Haskell2010
 
 library
   hs-source-dirs:       src
-
   build-tools:          alex, happy
-
   exposed-modules:      Camfort.Analysis.Annotations
                         Camfort.Analysis.CallGraph
                         Camfort.Analysis.CommentAnnotator
@@ -164,9 +134,7 @@ library
                         Camfort.Reprint
                         Camfort.PrettyPrint
                         Camfort.Traverse
-  other-modules:
-
-  build-depends:        base < 5,
+  build-depends:        base >= 4.6 && < 5,
                         ghc-prim >= 0.4.0.0,
                         containers >= 0.5.0.0,
                         template-haskell >=2.4,
@@ -191,13 +159,43 @@ library
                         filepath,
                         bytestring >= 0.10,
                         fgl >= 5.5
+  default-language: Haskell2010
 
-executable analyse
+executable camfort-analyse
   main-is: Analyse.hs
   hs-source-dirs:       eval
-  build-depends: base < 5,
+  build-depends: base >= 4.6 && < 5,
                  array >= 0.5.1,
                  bytestring >= 0.10,
                  containers >= 0.5.0.0,
                  regex-base >= 0.93.2,
                  regex-pcre >= 0.94.4
+  default-language: Haskell2010
+
+test-suite spec
+  type:                 exitcode-stdio-1.0
+  main-is:              Spec.hs
+  hs-source-dirs:       tests
+  other-modules:        Camfort.Analysis.CommentAnnotatorSpec
+                        Camfort.Helpers.VecSpec
+                        Camfort.Specification.Stencils.CheckSpec
+                        Camfort.Specification.Stencils.GrammarSpec
+                        Camfort.Specification.Stencils.ModelSpec
+                        Camfort.Specification.StencilsSpec
+                        Camfort.Specification.UnitsSpec
+                        Camfort.Transformation.CommonSpec
+                        Camfort.Transformation.EquivalenceElimSpec
+  build-depends:        base >= 4.6 && < 5,
+                        containers >= 0.5,
+                        filepath >= 1.4,
+                        directory >= 1.2,
+                        hspec >= 2.2,
+                        QuickCheck >= 2.8,
+                        fortran-src >= 0.1.0.2,
+                        uniplate >= 1.6.10,
+                        mtl >= 2.1,
+                        bytestring >= 0.10,			
+                        array >= 0.4,
+                        hmatrix >= 0.15,
+                        camfort
+  default-language: Haskell2010

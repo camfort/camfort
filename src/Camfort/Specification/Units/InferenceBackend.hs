@@ -58,6 +58,7 @@ import qualified Debug.Trace as D
 -- | Returns just the list of constraints that were identified as
 -- being possible candidates for inconsistency, if there is a problem.
 inconsistentConstraints :: Constraints -> Maybe Constraints
+inconsistentConstraints [] = Nothing
 inconsistentConstraints cons
   | null inconsists = Nothing
   | otherwise       = Just [ con | (con, i) <- zip cons [0..], i `elem` inconsists ]
@@ -69,6 +70,7 @@ inconsistentConstraints cons
 -- | Identifies the variables that need to be annotated in order for
 -- inference or checking to work.
 criticalVariables :: Constraints -> [UnitInfo]
+criticalVariables [] = []
 criticalVariables cons = filter (not . isUnitName) $ map (colA A.!) criticalIndices
   where
     (unsolvedM, inconsists, colA) = constraintsToMatrix cons
@@ -81,6 +83,7 @@ criticalVariables cons = filter (not . isUnitName) $ map (colA A.!) criticalIndi
 
 -- | Returns list of formerly-undetermined variables and their units.
 inferVariables :: Constraints -> [(String, UnitInfo)]
+inferVariables [] = []
 inferVariables cons
   | null inconsists = [ (var, if null units then UnitlessVar else foldl1 UnitMul units)
                       | ([UnitPow (UnitVar var) k], units) <- map (partition (not . isUnitName)) unitPows

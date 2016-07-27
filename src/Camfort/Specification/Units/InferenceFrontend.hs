@@ -28,8 +28,9 @@ where
 import Data.Data (Data)
 import Data.List (nub)
 import qualified Data.Map as M
+import qualified Data.IntMap as IM
 import qualified Data.Set as S
-import Data.Maybe (isJust, fromMaybe)
+import Data.Maybe (isJust, fromMaybe, catMaybes)
 import Data.Generics.Uniplate.Operations
 import Control.Monad
 import Control.Monad.State.Strict
@@ -148,16 +149,21 @@ insertParametricUnits :: UnitSolver ()
 insertParametricUnits = gets usProgramFile >>= (mapM_ paramPU . universeBi)
   where
     paramPU pu = do
-      forM_ indexedParams $ \ (i, param) -> do
+      forM_ (indexedParams pu) $ \ (i, param) -> do
         -- Insert a parametric unit if the variable does not already have a unit.
         modifyVarUnitMap $ M.insertWith (curry snd) param (UnitParamPosAbs (fname, i))
       where
         fname = puName pu
-        indexedParams
-          | F.PUFunction _ _ _ _ _ (Just paList) (Just r) _ _ <- pu = zip [0..] $ varName r : map varName (F.aStrip paList)
-          | F.PUFunction _ _ _ _ _ (Just paList) _ _ _        <- pu = zip [0..] $ fname     : map varName (F.aStrip paList)
-          | F.PUSubroutine _ _ _ _ (Just paList) _ _          <- pu = zip [1..] $ map varName (F.aStrip paList)
-          | otherwise                                               = []
+
+-- | Return the list of parameters paired with its positional index.
+indexedParams :: F.ProgramUnit UA -> [(Int, String)]
+indexedParams pu
+  | F.PUFunction _ _ _ _ _ (Just paList) (Just r) _ _ <- pu = zip [0..] $ varName r : map varName (F.aStrip paList)
+  | F.PUFunction _ _ _ _ _ (Just paList) _ _ _        <- pu = zip [0..] $ fname     : map varName (F.aStrip paList)
+  | F.PUSubroutine _ _ _ _ (Just paList) _ _          <- pu = zip [1..] $ map varName (F.aStrip paList)
+  | otherwise                                               = []
+  where
+    fname = puName pu
 
 --------------------------------------------------
 
@@ -290,23 +296,70 @@ applyTemplates cons = do
 -- | Look up Parametric template and apply it to everything.
 substInstance :: Constraints -> (F.Name, Int) -> UnitSolver Constraints
 substInstance output (name, callId) = do
-  tmap <- usTemplateMap `fmap` get
-  return . instantiate (name, callId) . (output ++) $ [] `fromMaybe` M.lookup name tmap
+  tmap <- gets usTemplateMap
+
+  -- Look up the templates associated with the given function or
+  -- subroutine name. And then transform the templates by generating
+  -- new callIds for any constraints created by function or subroutine
+  -- calls contained within the templates.
+  --
+  -- The reason for this is because functions called by functions can
+  -- be used in a parametric polymorphic way.
+  template <- transformBiM callIdRemap $ [] `fromMaybe` M.lookup name tmap
+
+  -- Reset the usCallIdRemap field so that it is ready for the next
+  -- set of templates.
+  modify $ \ s -> s { usCallIdRemap = IM.empty }
+
+  -- If any new instances are discovered, also process them.
+  let instances = nub [ (name, i) | UnitParamPosUse (name, _, i) <- universeBi template ]
+  template' <- foldM substInstance [] instances
+
+  -- Convert any remaining abstract parametric units into concrete ones.
+  return . instantiate (name, callId) $ output ++ template ++ template'
+
+-- | If given a usage of a parametric unit, rewrite the callId field
+-- to follow an existing mapping in the usCallIdRemap state field, or
+-- generate a new callId and add it to the usCallIdRemap state field.
+callIdRemap :: UnitInfo -> UnitSolver UnitInfo
+callIdRemap info = modifyCallIdRemapM $ \ idMap -> case info of
+    UnitParamPosUse (n, p, i)
+      | Just i' <- IM.lookup i idMap -> return (UnitParamPosUse (n, p, i'), idMap)
+      | otherwise                    -> genCallId >>= \ i' ->
+                                          return (UnitParamPosUse (n, p, i'), IM.insert i i' idMap)
+    UnitParamVarUse (n, v, i)
+      | Just i' <- IM.lookup i idMap -> return (UnitParamVarUse (n, v, i'), idMap)
+      | otherwise                    -> genCallId >>= \ i' ->
+                                          return (UnitParamVarUse (n, v, i'), IM.insert i i' idMap)
+    UnitParamLitUse (l, i)
+      | Just i' <- IM.lookup i idMap -> return (UnitParamLitUse (l, i'), idMap)
+      | otherwise                    -> genCallId >>= \ i' ->
+                                          return (UnitParamLitUse (l, i'), IM.insert i i' idMap)
+    _                         -> return (info, idMap)
+
 
 -- | Convert a parametric template into a particular use
 instantiate (name, callId) = transformBi $ \ info -> case info of
-  UnitParamPosAbs (name, position)  -> UnitParamPosUse (name, position, callId)
-  UnitParamLitAbs litId          -> UnitParamLitUse (litId, callId)
-  UnitParamVarAbs (fname, vname) -> UnitParamVarUse (fname, vname, callId)
-  _                              -> info
+  UnitParamPosAbs (name, position) -> UnitParamPosUse (name, position, callId)
+  UnitParamLitAbs litId            -> UnitParamLitUse (litId, callId)
+  UnitParamVarAbs (fname, vname)   -> UnitParamVarUse (fname, vname, callId)
+  _                                -> info
 
--- | Gather all constraints from the AST, as well as from the varUnitMap
+-- | Gather all constraints from the main blocks of the AST, as well as from the varUnitMap
 extractConstraints :: UnitSolver Constraints
 extractConstraints = do
   pf         <- gets usProgramFile
   varUnitMap <- gets usVarUnitMap
-  return $ [ con | con@(ConEq {}) <- universeBi pf ] ++
+  return $ [ con | b <- mainBlocks pf, con@(ConEq {}) <- universeBi b ] ++
            [ ConEq (UnitVar v) u | (v, u) <- M.toList varUnitMap ]
+
+-- | A list of blocks considered to be part of the 'main' program.
+mainBlocks :: F.ProgramFile UA -> [F.Block UA]
+mainBlocks = concatMap getBlocks . universeBi
+  where
+    getBlocks (F.PUMain _ _ _ bs _)   = bs
+    getBlocks (F.PUModule _ _ _ bs _) = bs
+    getBlocks _                       = []
 
 -- | Does the constraint contain any Parametric elements?
 isParametric :: Constraint -> Bool
@@ -370,8 +423,22 @@ propagateDeclarator decl = case decl of
 propagatePU :: F.ProgramUnit UA -> UnitSolver (F.ProgramUnit UA)
 propagatePU pu = do
   let name = puName pu
-  let cons = [ con | con@(ConEq {}) <- universeBi pu, containsParametric name con ]
+  let bodyCons = [ con | con@(ConEq {}) <- universeBi pu ] -- Constraints within the PU.
 
+  varMap <- gets usVarUnitMap
+
+  -- If any of the function/subroutine parameters was given an
+  -- explicit unit annotation, then create a constraint between that
+  -- explicit unit and the UnitParamPosAbs corresponding to the
+  -- parameter. This way all other uses of the parameter get linked to
+  -- the explicit unit annotation as well.
+  givenCons <- fmap catMaybes . forM (indexedParams pu) $ \ (i, param) -> do
+    case M.lookup param varMap of
+      Just (UnitParamPosAbs {}) -> return Nothing
+      Just u                    -> return . Just . ConEq u $ UnitParamPosAbs (name, i)
+      _                         -> return Nothing
+
+  let cons = givenCons ++ bodyCons
   modifyTemplateMap (M.insert name cons)
   return (setConstraint (ConConj cons) pu)
 
@@ -523,6 +590,8 @@ binOpKind (F.BinCustom _)    = RelOp
 
 debugLogging :: UnitSolver ()
 debugLogging = whenDebug $ do
+    (tell . unlines . map (\ (ConEq u1 u2) -> "  ***AbsConstraint: " ++ show (flattenUnits u1) ++ " === " ++ show (flattenUnits u2) ++ "\n")) =<< extractConstraints
+    pf <- gets usProgramFile
     cons <- usConstraints `fmap` get
     vum <- usVarUnitMap `fmap` get
     tell . unlines $ [ "  " ++ show info ++ " :: " ++ n | (n, info) <- M.toList vum ]
@@ -530,7 +599,15 @@ debugLogging = whenDebug $ do
     uam <- usUnitAliasMap `fmap` get
     tell . unlines $ [ "  " ++ n ++ " = " ++ show info | (n, info) <- M.toList uam ]
     tell . unlines $ map (\ (ConEq u1 u2) -> "  ***Constraint: " ++ show (flattenUnits u1) ++ " === " ++ show (flattenUnits u2) ++ "\n") cons
-    tell $ show cons
+    tell $ show cons ++ "\n\n"
+    forM_ (universeBi pf) $ \ pu -> case pu of
+      F.PUFunction {}
+        | Just (ConConj cons) <- getConstraint pu ->
+          whenDebug . tell . unlines $ (puName pu ++ ":"):map (\ (ConEq u1 u2) -> "    constraint: " ++ show (flattenUnits u1) ++ " === " ++ show (flattenUnits u2)) cons
+      F.PUSubroutine {}
+        | Just (ConConj cons) <- getConstraint pu ->
+          whenDebug . tell . unlines $ (puName pu ++ ":"):map (\ (ConEq u1 u2) -> "    constraint: " ++ show (flattenUnits u1) ++ " === " ++ show (flattenUnits u2)) cons
+      _ -> return ()
     let (unsolvedM, inconsists, colA) = constraintsToMatrix cons
     let solvedM = rref unsolvedM
     tell "\n--------------------------------------------------\n"
