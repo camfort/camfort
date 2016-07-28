@@ -3,16 +3,24 @@ module Camfort.Specification.UnitsSpec (spec) where
 
 import qualified Data.ByteString.Char8 as B
 
+import Language.Fortran.Parser.Any
+import qualified Language.Fortran.Analysis as FA
+import qualified Language.Fortran.Analysis.Renaming as FAR
 import Camfort.Input
 import Camfort.Functionality
 import Camfort.Output
+import Camfort.Analysis.Annotations
 import Camfort.Specification.Units
+import Camfort.Specification.Units.Monad
+import Camfort.Specification.Units.InferenceFrontend
 import Camfort.Specification.Units.InferenceBackend
 import Camfort.Specification.Units.Environment
 import Data.List
 import Data.Maybe
+import Data.Either
 import qualified Data.Array as A
 import qualified Numeric.LinearAlgebra as H
+import qualified Data.Map as M
 import Numeric.LinearAlgebra (
     atIndex, (<>), (><), rank, (?), toLists, toList, fromLists, fromList, rows, cols,
     takeRows, takeColumns, dropRows, dropColumns, subMatrix, diag, build, fromBlocks,
@@ -23,8 +31,56 @@ import Test.Hspec
 import Test.QuickCheck
 import Test.Hspec.QuickCheck
 
+runFrontendInit litMode pf = usConstraints state
+  where
+    pf' = FA.initAnalysis . fmap mkUnitAnnotation . fmap (const unitAnnotation) $ pf
+    uOpts = unitOpts0 { uoNameMap = M.empty, uoDebug = False, uoLiterals = litMode }
+    (_, state, logs) = runUnitSolver uOpts pf' initInference
+
+runUnits litMode pf m = (r, usConstraints state)
+  where
+    pf' = FA.initAnalysis . fmap mkUnitAnnotation . fmap (const unitAnnotation) $ pf
+    uOpts = unitOpts0 { uoNameMap = M.empty, uoDebug = False, uoLiterals = litMode }
+    (r, state, logs) = runUnitSolver uOpts pf' $ initInference >> m
+
+runUnits' litMode pf m = (state, logs)
+  where
+    pf' = FA.initAnalysis . fmap mkUnitAnnotation . fmap (const unitAnnotation) $ pf
+    uOpts = unitOpts0 { uoNameMap = M.empty, uoDebug = True, uoLiterals = litMode }
+    (r, state, logs) = runUnitSolver uOpts pf' $ initInference >> m
+
+runUnitsRenamed' litMode pf m = (state, logs)
+  where
+    pf' = FAR.analyseRenames . FA.initAnalysis . fmap mkUnitAnnotation . fmap (const unitAnnotation) $ pf
+    uOpts = unitOpts0 { uoNameMap = FAR.extractNameMap pf', uoDebug = True, uoLiterals = litMode }
+    (r, state, logs) = runUnitSolver uOpts pf' $ initInference >> m
+
 spec :: Spec
 spec = do
+  describe "Unit Inference Frontend" $ do
+    describe "Literal Mode" $ do
+      it "litTest1 Mixed" $ do
+        head (fromJust (head (rights [fst (runUnits LitMixed litTest1 runInconsistentConstraints)]))) `shouldSatisfy`
+          conParamEq (ConEq (UnitName "a") (UnitMul (UnitName "a") (UnitVar "j")))
+      it "litTest1 Poly" $ do
+        head (fromJust (head (rights [fst (runUnits LitPoly litTest1 runInconsistentConstraints)]))) `shouldSatisfy`
+          conParamEq (ConEq (UnitName "a") (UnitMul (UnitName "a") (UnitVar "j")))
+      it "litTest1 Unitless" $ do
+        head (fromJust (head (rights [fst (runUnits LitUnitless litTest1 runInconsistentConstraints)]))) `shouldSatisfy`
+          conParamEq (ConEq (UnitName "a") (UnitVar "k"))
+    describe "Polymorphic functions" $ do
+      it "squarePoly1" $ do
+        show (sort (head (rights [fst (runUnits LitMixed squarePoly1 runInferVariables)]))) `shouldBe`
+          show (sort [("a",UnitName "m"),("b", UnitName "s"),("x",UnitPow (UnitName "m") 2.0),("y",UnitPow (UnitName "s") 2.0)])
+    describe "Recursive functions" $ do
+      it "Recursive Addition is OK" $ do
+        show (sort (head (rights [fst (runUnits LitMixed recursive1 runInferVariables)]))) `shouldBe`
+          show (sort [("y",UnitName "m"),("z", UnitName "m")])
+    describe "Recursive functions" $ do
+      it "Recursive Multiplication is not OK" $ do
+        head (fromJust (head (rights [fst (runUnits LitMixed recursive2 runInconsistentConstraints)]))) `shouldSatisfy`
+          conParamEq (ConEq (UnitParamPosAbs ("recur", 0)) (UnitParamPosAbs ("recur", 2)))
+
   describe "Unit Inference Backend" $ do
     describe "Flatten constraints" $ do
       it "testCons1" $ do
@@ -125,3 +181,73 @@ testCons5 = [ConEq (UnitVar "simple2_a11") (UnitParamPosUse ("simple2_sqr3",0,0)
 
 testCons5_infer = [("simple2_a11",UnitMul (UnitPow (UnitName "m") 2.0) (UnitPow (UnitName "s") (-4.0)))
                   ,("simple2_a22",UnitMul (UnitPow (UnitName "m") 1.0) (UnitPow (UnitName "s") (-2.0)))]
+
+--------------------------------------------------
+
+litTest1 = flip fortranParser "litTest1.f90" . B.pack $ unlines
+    [ "program main"
+    , "  != unit(a) :: x"
+    , "  real :: x, j, k"
+    , ""
+    , "  j = 1 + 1"
+    , "  k = j * j"
+    , "  x = x + k"
+    , "  x = x * j ! inconsistent"
+    , "end program main" ]
+
+squarePoly1 = flip fortranParser "squarePoly1.f90" . B.pack $ unlines
+    [ "! Demonstrates parametric polymorphism through functions-calling-functions."
+    , "program squarePoly"
+    , "  implicit none"
+    , "  real :: x"
+    , "  real :: y"
+    , "  != unit(m) :: a"
+    , "  real :: a"
+    , "  != unit(s) :: b"
+    , "  real :: b"
+    , "  x = squareP(a)"
+    , "  y = squareP(b)"
+    , "  contains"
+    , "  real function square(n)"
+    , "    real :: n"
+    , "    square = n * n"
+    , "  end function"
+    , "  real function squareP(m)"
+    , "    real :: m"
+    , "    squareP = square(m)"
+    , "  end function"
+    , "end program" ]
+
+recursive1 = flip fortranParser "recursive1.f90" . B.pack $ unlines
+    [ "program main"
+    , "  != unit(m) :: y"
+    , "  integer :: x = 5, y = 2, z"
+    , "  z = recur(x,y)"
+    , "  print *, y"
+    , "contains"
+    , "  real recursive function recur(n, b) result(r)"
+    , "    integer :: n, b"
+    , "    if (n .EQ. 0) then"
+    , "       r = b"
+    , "    else"
+    , "       r = b + recur(n - 1, b)"
+    , "    end if"
+    , "  end function recur"
+    , "end program main" ]
+
+recursive2 = flip fortranParser "recursive2.f90" . B.pack $ unlines
+    [ "program main"
+    , "  != unit(m) :: y"
+    , "  integer :: x = 5, y = 2, z"
+    , "  z = recur(x,y)"
+    , "  print *, y"
+    , "contains"
+    , "  real recursive function recur(n, b) result(r)"
+    , "    integer :: n, b"
+    , "    if (n .EQ. 0) then"
+    , "       r = b"
+    , "    else"
+    , "       r = b * recur(n - 1, b) ! inconsistent"
+    , "    end if"
+    , "  end function recur"
+    , "end program main" ]
