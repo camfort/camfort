@@ -307,12 +307,7 @@ applyTemplates cons = do
 -- polymorphic calls that are uncovered, unless they are recursive
 -- calls that have already been seen in the current call stack.
 substInstance :: [F.Name] -> Constraints -> (F.Name, Int) -> UnitSolver Constraints
-substInstance callStack output (name, callId)
-  -- Detected recursion: we do not support polymorphic-unit recursion,
-  -- ergo all subsequent recursive calls are assumed to have the same
-  -- unit-assignments as the first call.
-  | name `elem` callStack = return output
-  | otherwise             = do
+substInstance callStack output (name, callId) = do
   tmap <- gets usTemplateMap
 
   -- Look up the templates associated with the given function or
@@ -328,9 +323,15 @@ substInstance callStack output (name, callId)
   -- set of templates.
   modify $ \ s -> s { usCallIdRemap = IM.empty }
 
-  -- If any new instances are discovered, also process them.
+  -- If any new instances are discovered, also process them, unless recursive.
   let instances = nub [ (name, i) | UnitParamPosUse (name, _, i) <- universeBi template ]
-  template' <- foldM (substInstance (name:callStack)) [] instances
+  template' <- if name `elem` callStack then
+                 -- Detected recursion: we do not support polymorphic-unit recursion,
+                 -- ergo all subsequent recursive calls are assumed to have the same
+                 -- unit-assignments as the first call.
+                 return []
+               else
+                 foldM (substInstance (name:callStack)) [] instances
 
   -- Convert any remaining abstract parametric units into concrete ones.
   return . instantiate (name, callId) $ output ++ template ++ template'
