@@ -223,10 +223,11 @@ insertGivenUnits = do
       -- FIXME: account for module renaming
       -- FIXME: might be more efficient to allow access to variable renaming environ at this program point
       nameMap <- uoNameMap `fmap` ask
+      let lookupName n = fromMaybe n (n `M.lookup` nameMap)
       let m = M.fromList [ (varUniqueName, info) | e@(F.ExpValue _ _ (F.ValVariable _)) <- universeBi decls
                                                  , varRealName <- varRealNames
                                                  , let varUniqueName = varName e
-                                                 , maybe False (== varRealName) (varUniqueName `M.lookup` nameMap) ]
+                                                 , varRealName == lookupName varUniqueName ]
       modifyVarUnitMap $ M.unionWith const m
       modifyGivenVarSet . S.union . S.fromList . M.keys $ m
 
