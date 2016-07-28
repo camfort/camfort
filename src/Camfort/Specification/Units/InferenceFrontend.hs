@@ -285,17 +285,33 @@ annotateLiteralsPU pu = do
 applyTemplates :: Constraints -> UnitSolver Constraints
 -- postcondition: returned constraints lack all Parametric constructors
 applyTemplates cons = do
+  -- Get a list of the instances of parametric polymorphism from the constraints.
   let instances = nub [ (name, i) | UnitParamPosUse (name, _, i) <- universeBi cons ]
-  temps <- foldM substInstance [] instances
+  -- Work through the instances, expanding their templates, and
+  -- substituting the callId into the abstract parameters.
+  concreteCons <- foldM (substInstance []) [] instances
+
+  -- Also include aliases in the final set of constraints, where
+  -- aliases are implemented by simply asserting that they are equal
+  -- to their definition.
   aliasMap <- usUnitAliasMap `fmap` get
   let aliases = [ ConEq (UnitAlias name) def | (name, def) <- M.toList aliasMap ]
   let transAlias (UnitName a) | a `M.member` aliasMap = UnitAlias a
       transAlias u                                    = u
-  return . transformBi transAlias . filter (not . isParametric) $ cons ++ temps ++ aliases
 
--- | Look up Parametric template and apply it to everything.
-substInstance :: Constraints -> (F.Name, Int) -> UnitSolver Constraints
-substInstance output (name, callId) = do
+  return . transformBi transAlias . filter (not . isParametric) $ cons ++ concreteCons ++ aliases
+
+-- | Look up the Parametric templates for a given function or
+-- subroutine, and do the substitutions. Process any additional
+-- polymorphic calls that are uncovered, unless they are recursive
+-- calls that have already been seen in the current call stack.
+substInstance :: [F.Name] -> Constraints -> (F.Name, Int) -> UnitSolver Constraints
+substInstance callStack output (name, callId)
+  -- Detected recursion: we do not support polymorphic-unit recursion,
+  -- ergo all subsequent recursive calls are assumed to have the same
+  -- unit-assignments as the first call.
+  | name `elem` callStack = return output
+  | otherwise             = do
   tmap <- gets usTemplateMap
 
   -- Look up the templates associated with the given function or
@@ -313,7 +329,7 @@ substInstance output (name, callId) = do
 
   -- If any new instances are discovered, also process them.
   let instances = nub [ (name, i) | UnitParamPosUse (name, _, i) <- universeBi template ]
-  template' <- foldM substInstance [] instances
+  template' <- foldM (substInstance (name:callStack)) [] instances
 
   -- Convert any remaining abstract parametric units into concrete ones.
   return . instantiate (name, callId) $ output ++ template ++ template'
@@ -344,6 +360,8 @@ instantiate (name, callId) = transformBi $ \ info -> case info of
   UnitParamLitAbs litId            -> UnitParamLitUse (litId, callId)
   UnitParamVarAbs (fname, vname)   -> UnitParamVarUse (fname, vname, callId)
   _                                -> info
+
+--------------------------------------------------
 
 -- | Gather all constraints from the main blocks of the AST, as well as from the varUnitMap
 extractConstraints :: UnitSolver Constraints
