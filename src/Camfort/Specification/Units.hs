@@ -107,7 +107,7 @@ checkUnits uo (fname, pf)
     okReport (Just cons) = logs ++ "\n" ++ fname ++ ": Inconsistent:\n" ++ reportErrors cons
 
     reportErrors cons = unlines [ reportError con | con <- cons ]
-    reportError con = "  " ++ srcSpan con
+    reportError con = " - at " ++ srcSpan con
                       ++ pprintConstr (orient (unrename nameMap con))
                       ++ additionalInfo con
       where
@@ -115,12 +115,13 @@ checkUnits uo (fname, pf)
         additionalInfo con =
            if null (errorInfo con)
            then ""
-           else "\n" ++ pad 2 ++ "where\n" ++ unlines (errorInfo con)
+           else "\n    instead" ++ unlines (mapNotFirst (pad 10) (errorInfo con))
         -- Create additional info about inconsistencies involving variables
         errorInfo con =
-            [pad 4 ++ (unrename nameMap v) ++ " === " ++ pprintUnitInfo (unrename nameMap u)
+            [" '" ++ (unrename nameMap v) ++ "' is '" ++ pprintUnitInfo (unrename nameMap u) ++ "'"
               | UnitVar v <- universeBi con
-                , u <- findUnitConstrFor con v ]
+              ,         u <- findUnitConstrFor con v ]
+        -- Find unit information for variable constraints
         findUnitConstrFor con v = mapMaybe (\con' -> if con == con'
                                                      then Nothing
                                                      else constrainedTo v con')
@@ -129,10 +130,14 @@ checkUnits uo (fname, pf)
         constrainedTo v (ConEq u (UnitVar v')) | v == v' = Just u
         constrainedTo _ _ = Nothing
 
+        mapNotFirst f [] = []
+        mapNotFirst f (x : xs) =  x : (map f xs)
+
         orient (ConEq u (UnitVar v)) = ConEq (UnitVar v) u
         orient c = c
 
-        pad o = replicate (3 + o + length (srcSpan con)) ' '
+        pad o = (++) (replicate o ' ') 
+
         srcSpan con | Just ss <- findCon con = showSrcSpan ss ++ " "
                     | otherwise              = ""
 
