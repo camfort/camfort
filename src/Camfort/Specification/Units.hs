@@ -27,7 +27,7 @@ module Camfort.Specification.Units
   (checkUnits, inferUnits, synthesiseUnits, inferCriticalVariables)
 where
 
-import qualified Data.Map as M
+import qualified Data.Map.Strict as M
 import Data.Char (isNumber)
 import Data.List (intercalate)
 import Data.Maybe (fromMaybe, maybeToList, listToMaybe)

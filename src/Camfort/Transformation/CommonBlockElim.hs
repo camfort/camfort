@@ -24,7 +24,7 @@ import Debug.Trace
 import Data.Data
 import Data.List
 import Data.Ord
-import qualified Data.Map as Data.Map
+import qualified Data.Map
 import Data.Generics.Uniplate.Operations
 
 import Language.Fortran

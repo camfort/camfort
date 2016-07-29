@@ -35,7 +35,7 @@ import Control.Monad
 import Control.Monad.State.Strict
 import Control.Monad.ST
 import Control.Arrow (first, second)
-import qualified Data.Map as M
+import qualified Data.Map.Strict as M
 import qualified Data.Array as A
 
 import Camfort.Analysis.Annotations

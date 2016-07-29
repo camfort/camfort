@@ -20,7 +20,7 @@ import Data.Maybe
 import Data.Either
 import qualified Data.Array as A
 import qualified Numeric.LinearAlgebra as H
-import qualified Data.Map as M
+import qualified Data.Map.Strict as M
 import Numeric.LinearAlgebra (
     atIndex, (<>), (><), rank, (?), toLists, toList, fromLists, fromList, rows, cols,
     takeRows, takeColumns, dropRows, dropColumns, subMatrix, diag, build, fromBlocks,
