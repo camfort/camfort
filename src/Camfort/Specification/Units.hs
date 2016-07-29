@@ -103,8 +103,8 @@ checkUnits uo (fname, pf)
   | Left exc    <- eCons = (errReport exc, (fname, pf))
   where
     -- Format report
-    okReport Nothing = logs ++ "\n" ++ fname ++ ": Consistent. " ++ show nVars ++ " variables checked.\n"
-    okReport (Just cons) = logs ++ "\n" ++ fname ++ ": Inconsistent:\n" ++ reportErrors cons
+    okReport Nothing = logs ++ "\n" ++ fname ++ "\t: Consistent. " ++ show nVars ++ " variables checked."
+    okReport (Just cons) = logs ++ "\n" ++ fname ++ "\t: Inconsistent:\n" ++ reportErrors cons
 
     reportErrors cons = unlines [ reportError con | con <- cons ]
     reportError con = " - at " ++ srcSpan con
@@ -115,7 +115,7 @@ checkUnits uo (fname, pf)
         additionalInfo con =
            if null (errorInfo con)
            then ""
-           else "\n    instead" ++ unlines (mapNotFirst (pad 10) (errorInfo con))
+           else "\n    instead" ++ intercalate "\n" (mapNotFirst (pad 10) (errorInfo con))
         -- Create additional info about inconsistencies involving variables
         errorInfo con =
             [" '" ++ (unrename nameMap v) ++ "' is '" ++ pprintUnitInfo (unrename nameMap u) ++ "'"
@@ -136,7 +136,7 @@ checkUnits uo (fname, pf)
         orient (ConEq u (UnitVar v)) = ConEq (UnitVar v) u
         orient c = c
 
-        pad o = (++) (replicate o ' ') 
+        pad o = (++) (replicate o ' ')
 
         srcSpan con | Just ss <- findCon con = showSrcSpan ss ++ " "
                     | otherwise              = ""
@@ -156,7 +156,7 @@ checkUnits uo (fname, pf)
     showVar (UnitLiteral _) = "<literal>" -- FIXME
     showVar _               = "<bad>"
 
-    errReport exc = logs ++ "\n" ++ fname ++ ": " ++ show exc
+    errReport exc = logs ++ "\n" ++ fname ++ ":\t " ++ show exc
 
     -- run inference
     uOpts = uo { uoNameMap = nameMap }
@@ -191,7 +191,7 @@ inferUnits uo (fname, pf)
     expReport (e, u) = "  " ++ showSrcSpan (FU.getSpan e) ++ " unit " ++ show u ++ " :: " ++ unrename nameMap v
       where v = FA.varName e
 
-    errReport exc = logs ++ "\n" ++ fname ++ ": " ++ show exc 
+    errReport exc = logs ++ "\n" ++ fname ++ ":\t" ++ show exc
 
     -- run inference
     uOpts = uo { uoNameMap = nameMap }
@@ -218,7 +218,7 @@ synthesiseUnits uo (fname, pf)
     expReport (e, u) = "  " ++ showSrcSpan (FU.getSpan e) ++ " unit " ++ show u ++ " :: " ++ (v `fromMaybe` M.lookup v nameMap)
       where v = FA.varName e
 
-    errReport exc = logs ++ "\n" ++ fname ++ ": " ++ show exc
+    errReport exc = logs ++ "\n" ++ fname ++ ":\t" ++ show exc
 
     -- run inference
     uOpts = uo { uoNameMap = nameMap }
