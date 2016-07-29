@@ -1,10 +1,5 @@
 program energy
-  != unit kg :: mass
-  != unit m/s**2 :: gravity
-  != unit m :: height
-  real, parameter :: mass = 3.00, gravity = .81, height = 4.20
-
-  != unit kg m**2/s**2 :: potential_energy
+  real, parameter :: mass = 3.00, gravity = 0.81, height = 4.20
   real :: potential_energy
  
   potential_energy = mass * gravity * height

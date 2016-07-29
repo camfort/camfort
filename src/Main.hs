@@ -36,7 +36,6 @@ import Data.Maybe
 {-| The entry point to CamFort. Displays user information, and
     handlers which functionality is being requested -}
 main = do
-  putStrLn introMsg
   args <- getArgs
 
   if length args >= 2 then
@@ -59,9 +58,11 @@ main = do
            fun inp (excluded_files opts) outp opts
          Nothing -> putStrLn fullUsageInfo
 
-  else if length args == 1
-       then putStrLn $ usage ++ "Please specify an input file/directory"
-       else putStrLn fullUsageInfo
+  else do
+    putStrLn introMsg
+    if length args == 1
+     then putStrLn $ usage ++ "Please specify an input file/directory"
+     else putStrLn fullUsageInfo
 
 -- * Options for CamFort  and information on the different modes
 
