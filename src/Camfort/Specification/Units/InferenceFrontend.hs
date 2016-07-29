@@ -39,6 +39,7 @@ import Control.Monad.Trans.Except
 import Control.Monad.RWS.Strict
 
 import qualified Language.Fortran.AST as F
+import Language.Fortran.Parser.Utils (readReal, readInteger)
 import qualified Language.Fortran.Analysis as FA
 
 import Camfort.Analysis.CommentAnnotator (annotateComments)
@@ -264,11 +265,11 @@ annotateLiteralsPU pu = do
   where
     -- Follow the LitMixed rules.
     expMixed e = case e of
-      F.ExpValue _ _ (F.ValInteger i) | read i == (0 :: Int) -> withLiterals genParamLit e
-                                      | otherwise            -> withLiterals genUnitLiteral e
-      F.ExpValue _ _ (F.ValReal i) | read i == (0 :: Double) -> withLiterals genParamLit e
-                                   | otherwise               -> withLiterals genUnitLiteral e
-      _                                                      -> return e
+      F.ExpValue _ _ (F.ValInteger i) | readInteger i == Just 0 -> withLiterals genParamLit e
+                                      | otherwise               -> withLiterals genUnitLiteral e
+      F.ExpValue _ _ (F.ValReal i) | readReal i == Just 0       -> withLiterals genParamLit e
+                                   | otherwise                  -> withLiterals genUnitLiteral e
+      _                                                         -> return e
 
     -- Set all literals to unitless.
     expUnitless e
@@ -575,12 +576,50 @@ isLiteral _ = False
 
 --------------------------------------------------
 
+-- Fortran semantics for interpretation of constant expressions
+-- involving numeric literals.
+data FNum = FReal Double | FInt Integer
+fnumToDouble (FReal x) = x
+fnumToDouble (FInt x)  = fromIntegral x
+
+fAdd, fSub, fMul, fDiv :: FNum -> FNum -> FNum
+fAdd (FReal x) fy      = FReal $ x + fnumToDouble fy
+fAdd fx (FReal y)      = FReal $ fnumToDouble fx + y
+fAdd (FInt x) (FInt y) = FInt  $ x + y
+fSub (FReal x) fy      = FReal $ x - fnumToDouble fy
+fSub fx (FReal y)      = FReal $ fnumToDouble fx - y
+fSub (FInt x) (FInt y) = FInt  $ x - y
+fMul (FReal x) fy      = FReal $ x * fnumToDouble fy
+fMul fx (FReal y)      = FReal $ fnumToDouble fx * y
+fMul (FInt x) (FInt y) = FInt  $ x * y
+fDiv (FReal x) fy      = FReal $ x / fnumToDouble fy
+fDiv fx (FReal y)      = FReal $ fnumToDouble fx / y
+fDiv (FInt x) (FInt y) = FInt  $ x `quot` y  -- Haskell quot truncates towards zero, like Fortran
+fPow (FReal x) fy      = FReal $ x ** fnumToDouble fy
+fPow fx (FReal y)      = FReal $ fnumToDouble fx ** y
+fPow (FInt x) (FInt y)
+  | y >= 0             = FInt  $ x ^ y
+  | otherwise          = FReal $ fromIntegral x ^^ y
+
+fDivMaybe mx my
+  | Just y <- my,
+    fnumToDouble y == 0.0 = Nothing
+  | otherwise             = liftM2 fDiv mx my
+
 -- | Statically computes if the expression is a constant value.
 constantExpression :: F.Expression a -> Maybe Double
-constantExpression (F.ExpValue _ _ (F.ValInteger i)) = Just $ read i
-constantExpression (F.ExpValue _ _ (F.ValReal r))    = Just $ read r
--- FIXME: expand...
-constantExpression _                                 = Nothing
+constantExpression e = fnumToDouble `fmap` ce e
+  where
+    ce e = case e of
+      (F.ExpValue _ _ (F.ValInteger i))        -> FInt `fmap` readInteger i
+      (F.ExpValue _ _ (F.ValReal r))           -> FReal `fmap` readReal r
+      (F.ExpBinary _ _ F.Addition e1 e2)       -> liftM2 fAdd (ce e1) (ce e2)
+      (F.ExpBinary _ _ F.Subtraction e1 e2)    -> liftM2 fSub (ce e1) (ce e2)
+      (F.ExpBinary _ _ F.Multiplication e1 e2) -> liftM2 fMul (ce e1) (ce e2)
+      (F.ExpBinary _ _ F.Division e1 e2)       -> fDivMaybe (ce e1) (ce e2)
+      (F.ExpBinary _ _ F.Exponentiation e1 e2) -> liftM2 fPow (ce e1) (ce e2)
+      -- FIXME: expand...
+      _                                        -> Nothing
 
 -- | Asks the question: is the operator within the given category?
 isOp :: BinOpKind -> F.BinaryOp -> Bool
