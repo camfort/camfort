@@ -106,13 +106,11 @@ class OutputFiles t where
          else
            if inIsFile -- Input was just a file, then output just a file
            then do
-             putStrLn $ "Writing refactored file to: " ++ outp
              putStrLn $ "Writing " ++ outp
              B.writeFile outp (mkOutputText outp (head pdata))
 
             else let outSrc = getDir outp
                in do createDirectoryIfMissing True outSrc
-                     putStrLn $ "Writing refactored file to: " ++ outp
                      putStrLn $ "Writing " ++ outp
                      B.writeFile outp (mkOutputText outp (head pdata))
 

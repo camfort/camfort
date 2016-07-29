@@ -88,7 +88,7 @@ getExcludes xs = getOption xs
 
 -- * Wrappers on all of the features
 typeStructuring inSrc excludes outSrc _ = do
-    putStrLn $ "Introducing derived data types in " ++ inSrc ++ "\n"
+    putStrLn $ "Introducing derived data types in " ++ inSrc
     report <- doRefactor typeStruct inSrc excludes outSrc
     putStrLn report
 
@@ -98,35 +98,35 @@ ast d excludes f _ = do
 
 asts inSrc excludes _ _ = do
     putStrLn $ "Do a basic analysis and output the HTML files "
-            ++ "with AST information for " ++ inSrc ++ "\n"
+            ++ "with AST information for " ++ inSrc
     let astAnalysis = (map numberStmts) . map (fmap (const unitAnnotation))
     doAnalysis astAnalysis inSrc excludes
 
 countVarDecls inSrc excludes _ _ = do
-    putStrLn $ "Counting variable declarations in " ++ inSrc ++ "\n"
+    putStrLn $ "Counting variable declarations in " ++ inSrc
     doAnalysisSummaryForpar countVariableDeclarations inSrc excludes Nothing
 
 lvaA inSrc excludes _ _ = do
-    putStrLn $ "Analysing loops for " ++ inSrc ++ "\n"
+    putStrLn $ "Analysing loops for " ++ inSrc
     doAnalysis lva inSrc excludes
 
 dead inSrc excludes outSrc _ = do
-    putStrLn $ "Eliminating dead code in " ++ inSrc ++ "\n"
+    putStrLn $ "Eliminating dead code in " ++ inSrc
     report <- doRefactor ((mapM (deadCode False))) inSrc excludes outSrc
     putStrLn report
 
 commonToArgs inSrc excludes outSrc _ = do
-    putStrLn $ "Refactoring common blocks in " ++ inSrc ++ "\n"
+    putStrLn $ "Refactoring common blocks in " ++ inSrc
     report <- doRefactor (commonElimToCalls inSrc) inSrc excludes outSrc
     putStrLn report
 
 common inSrc excludes outSrc _ = do
-    putStrLn $ "Refactoring common blocks in " ++ inSrc ++ "\n"
+    putStrLn $ "Refactoring common blocks in " ++ inSrc
     report <- doRefactor (commonElimToModules inSrc) inSrc excludes outSrc
     putStrLn report
 
 equivalences inSrc excludes outSrc _ = do
-    putStrLn $ "Refactoring equivalences blocks in " ++ inSrc ++ "\n"
+    putStrLn $ "Refactoring equivalences blocks in " ++ inSrc
     report <- doRefactor (mapM refactorEquivalences) inSrc excludes outSrc
     putStrLn report
 
@@ -135,37 +135,37 @@ optsToUnitOpts :: [Flag] -> UnitOpts
 optsToUnitOpts = foldl' (\ o f -> case f of Literals m -> o { uoLiterals = m }; Debug -> o { uoDebug = True }) unitOpts0
 
 unitsCheck inSrc excludes outSrc opt = do
-    putStrLn $ "Checking units for " ++ inSrc ++ "\n"
+    putStrLn $ "Checking units for " ++ inSrc
     doAnalysisReportForpar (mapM (LU.checkUnits (optsToUnitOpts opt))) inSrc excludes outSrc
 
 unitsInfer inSrc excludes outSrc opt = do
-    putStrLn $ "Inferring units for " ++ inSrc ++ "\n"
+    putStrLn $ "Inferring units for " ++ inSrc
     doAnalysisReportForpar (mapM (LU.inferUnits (optsToUnitOpts opt))) inSrc excludes outSrc
 
 unitsSynth inSrc excludes outSrc opt = do
-    putStrLn $ "Synthesising units for " ++ inSrc ++ "\n"
+    putStrLn $ "Synthesising units for " ++ inSrc
     doRefactorForpar (mapM (LU.synthesiseUnits (optsToUnitOpts opt))) inSrc excludes outSrc
 
 unitsCriticals inSrc excludes outSrc opt = do
     putStrLn $ "Suggesting variables to annotate with unit specifications in "
-             ++ inSrc ++ "\n"
+             ++ inSrc
     doAnalysisReportForpar (mapM (LU.inferCriticalVariables (optsToUnitOpts opt))) inSrc excludes outSrc
 
 {- Stencils feature -}
 stencilsCheck inSrc excludes _ _ = do
-   putStrLn $ "Checking stencil specs for " ++ inSrc ++ "\n"
+   putStrLn $ "Checking stencil specs for " ++ inSrc
    doAnalysisSummaryForpar (\f p -> (Stencils.check f p, p)) inSrc excludes Nothing
 
 stencilsInfer inSrc excludes outSrc opt = do
-   putStrLn $ "Infering stencil specs for " ++ inSrc ++ "\n"
+   putStrLn $ "Infering stencil specs for " ++ inSrc
    doAnalysisSummaryForpar (Stencils.infer (getOption opt)) inSrc excludes (Just outSrc)
 
 stencilsSynth inSrc excludes outSrc opt = do
-   putStrLn $ "Synthesising stencil specs for " ++ inSrc ++ "\n"
+   putStrLn $ "Synthesising stencil specs for " ++ inSrc
    doRefactorForpar (Stencils.synth (getOption opt)) inSrc excludes outSrc
 
 stencilsVarFlowCycles inSrc excludes _ _ = do
-   putStrLn $ "Inferring var flow cycles for " ++ inSrc ++ "\n"
+   putStrLn $ "Inferring var flow cycles for " ++ inSrc
    let flowAnalysis = intercalate ", " . map show . Stencils.findVarFlowCycles
    doAnalysisSummaryForpar (\_ p -> (flowAnalysis p , p)) inSrc excludes Nothing
 
@@ -243,7 +243,6 @@ doAnalysisSummaryForpar aFun inSrc excludes outSrc = do
     else return ()
   ps <- readForparseSrcDir inSrc excludes
   let (out, ps') = callAndSummarise aFun ps
-  putStrLn "Output of the analysis:"
   putStrLn . show' $ out
 
 callAndSummarise aFun ps = do

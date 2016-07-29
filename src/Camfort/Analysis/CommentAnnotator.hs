@@ -30,6 +30,7 @@ module Camfort.Analysis.CommentAnnotator ( annotateComments
 import Control.Monad.Writer.Strict (Writer(..), tell)
 import Data.Generics.Uniplate.Operations
 import Data.Data (Data)
+import Debug.Trace
 
 
 import Language.Fortran.AST
@@ -67,7 +68,7 @@ annotateComments parse pf = do
     {-| Link all comment blocks to first non-comment block in the list. |-}
     linkBlocks :: (Data a, Linkable a) => [ Block a ] -> [ Block a ]
     linkBlocks [ ] = [ ]
-    linkBlocks [ x ] = [ x ]
+    --linkBlocks [ x ] = [ x ]
     linkBlocks blocks@(b:bs)
       | BlComment{} <- b =
         let (comments, rest) = span isComment blocks
@@ -75,7 +76,7 @@ annotateComments parse pf = do
              then comments
              else let (bs, bs') = linkMultiple comments rest
                   in bs ++ linkBlocks bs'
-      | otherwise = b : linkBlocks bs
+      | otherwise = (descendBi linkBlocks b) : linkBlocks bs
       where
         isComment BlComment{} = True
         isComment _ = False

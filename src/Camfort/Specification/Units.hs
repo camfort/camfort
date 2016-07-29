@@ -70,8 +70,8 @@ inferCriticalVariables uo (fname, pf)
   | Left exc   <- eVars = (errReport exc, (fname, pf))
   where
     -- Format report
-    okReport []   = logs ++ "\n\n" ++ "No additional annotations are necessary.\n"
-    okReport vars = logs ++ "\n\n" ++ unlines [ fname ++ ": " ++ expReport ei | ei <- expInfo ]
+    okReport []   = logs ++ fname ++ ":\n" ++ "No additional annotations are necessary.\n"
+    okReport vars = logs ++ fname ++ ":\n" ++ unlines [ "  " ++ expReport ei | ei <- expInfo ]
       where
         names = map showVar vars
         expInfo = [ e | s@(F.StDeclaration {})               <- universeBi pfUA :: [F.Statement UA]
@@ -87,7 +87,7 @@ inferCriticalVariables uo (fname, pf)
     showVar (UnitLiteral _) = "<literal>"
     showVar _               = "<bad>"
 
-    errReport exc = fname ++ ": " ++ show exc ++ "\n" ++ logs
+    errReport exc = fname ++ ":\n" ++ show exc ++ "\n" ++ logs
 
     -- run inference
     uOpts = uo { uoNameMap = nameMap }
@@ -202,11 +202,5 @@ synthesiseUnits uo (fname, pf)
 
 unrename nameMap = transformBi $ \ x -> x `fromMaybe` M.lookup x nameMap
 
-showSrcLoc :: FU.Position -> String
-showSrcLoc loc = show (lineCol loc) ++ ":" ++ show (lineCol loc)
-
 showSrcSpan :: FU.SrcSpan -> String
-showSrcSpan (FU.SrcSpan l u) = "(" ++ showSrcLoc l ++ " - " ++ showSrcLoc u ++ ")"
-
-lineCol :: FU.Position -> (Int, Int)
-lineCol p  = (fromIntegral $ FU.posLine p, fromIntegral $ FU.posColumn p)
+showSrcSpan (FU.SrcSpan l u) = show l

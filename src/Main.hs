@@ -37,7 +37,7 @@ import Data.Maybe
     handlers which functionality is being requested -}
 main = do
   args <- getArgs
-
+  putStrLn ""
   if length args >= 2 then
 
     let (func : (inp : _)) = args
