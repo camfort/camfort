@@ -80,9 +80,6 @@ formatSpec prefix nm (span, Left specs) =
           Specification (Right (Dependency (map realName vs) b))
       fixSpec s                = s
 
-lineCol :: FU.Position -> (Int, Int)
-lineCol p  = (fromIntegral $ FU.posLine p, fromIntegral $ FU.posColumn p)
-
 spanLineCol :: FU.SrcSpan -> ((Int, Int), (Int, Int))
 spanLineCol (FU.SrcSpan l u) = (lineCol l, lineCol u)
 

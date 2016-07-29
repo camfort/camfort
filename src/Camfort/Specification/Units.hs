@@ -70,8 +70,8 @@ inferCriticalVariables uo (fname, pf)
   | Left exc   <- eVars = (errReport exc, (fname, pf))
   where
     -- Format report
-    okReport []   = logs ++ fname ++ ":\n" ++ "No additional annotations are necessary.\n"
-    okReport vars = logs ++ fname ++ ":\n" ++ unlines [ "  " ++ expReport ei | ei <- expInfo ]
+    okReport []   = logs ++ "\n" ++ fname ++ ":\n" ++ "No additional annotations are necessary.\n"
+    okReport vars = logs ++ "\n" ++ fname ++ ":\n" ++ unlines [ "  " ++ expReport ei | ei <- expInfo ]
       where
         names = map showVar vars
         expInfo = [ e | s@(F.StDeclaration {})               <- universeBi pfUA :: [F.Statement UA]
@@ -104,8 +104,8 @@ checkUnits uo (fname, pf)
   where
     -- Format report
     okReport Nothing = fname ++ ": Consistent. " ++ show nVars ++ " variables checked.\n" ++ logs
-    okReport (Just cons) = logs ++ "\n\n" ++ fname ++ ": Inconsistent:\n" ++
-                           unlines [ fname ++ ": " ++ srcSpan con ++ " constraint " ++ show (unrename nameMap con) | con <- cons ]
+    okReport (Just cons) = logs ++ "\n" ++ fname ++ ": Inconsistent:\n" ++
+                           unlines [ "  " ++ srcSpan con ++ " constraint " ++ show (unrename nameMap con) | con <- cons ]
       where
         srcSpan con | Just ss <- findCon con = showSrcSpan ss ++ " "
                     | otherwise              = ""
@@ -150,13 +150,13 @@ inferUnits uo (fname, pf)
   | Left exc   <- eVars = (errReport exc, (fname, pf))
   where
     -- Format report
-    okReport vars = logs ++ "\n\n" ++ unlines [ fname ++ ": " ++ expReport ei | ei <- expInfo ]
+    okReport vars = logs ++ "\n" ++ fname ++ ":\n" ++ unlines [ expReport ei | ei <- expInfo ]
       where
         expInfo = [ (e, u) | s@(F.StDeclaration {})               <- universeBi pfUA :: [F.Statement UA]
                            , e@(F.ExpValue _ _ (F.ValVariable _)) <- universeBi s    :: [F.Expression UA]
                            , u <- maybeToList (FA.varName e `lookup` vars) ]
 
-    expReport (e, u) = showSrcSpan (FU.getSpan e) ++ " unit " ++ show u ++ " :: " ++ unrename nameMap v
+    expReport (e, u) = "  " ++ showSrcSpan (FU.getSpan e) ++ " unit " ++ show u ++ " :: " ++ unrename nameMap v
       where v = FA.varName e
 
     errReport exc = fname ++ ": " ++ show exc ++ "\n" ++ logs
@@ -177,13 +177,13 @@ synthesiseUnits uo (fname, pf)
   | Left exc   <- eVars = (errReport exc, (fname, pfFinal))
   where
     -- Format report
-    okReport vars = logs ++ "\n\n" ++ unlines [ fname ++ ": " ++ expReport ei | ei <- expInfo ]
+    okReport vars = logs ++ "\n" ++ fname ++ ":\n" ++ unlines [ expReport ei | ei <- expInfo ]
       where
         expInfo = [ (e, u) | s@(F.StDeclaration {})               <- universeBi pfUA :: [F.Statement UA]
                            , e@(F.ExpValue _ _ (F.ValVariable _)) <- universeBi s    :: [F.Expression UA]
                            , u <- maybeToList (FA.varName e `lookup` vars) ]
 
-    expReport (e, u) = showSrcSpan (FU.getSpan e) ++ " unit " ++ show u ++ " :: " ++ (v `fromMaybe` M.lookup v nameMap)
+    expReport (e, u) = "  " ++ showSrcSpan (FU.getSpan e) ++ " unit " ++ show u ++ " :: " ++ (v `fromMaybe` M.lookup v nameMap)
       where v = FA.varName e
 
     errReport exc = fname ++ ": " ++ show exc ++ "\n" ++ logs
