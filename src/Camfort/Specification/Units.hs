@@ -87,7 +87,7 @@ inferCriticalVariables uo (fname, pf)
     showVar (UnitLiteral _) = "<literal>"
     showVar _               = "<bad>"
 
-    errReport exc = fname ++ ":\n" ++ show exc ++ "\n" ++ logs
+    errReport exc = logs ++ "\n" ++ fname ++ ":\n" ++ show exc
 
     -- run inference
     uOpts = uo { uoNameMap = nameMap }
@@ -103,7 +103,7 @@ checkUnits uo (fname, pf)
   | Left exc    <- eCons = (errReport exc, (fname, pf))
   where
     -- Format report
-    okReport Nothing = fname ++ ": Consistent. " ++ show nVars ++ " variables checked.\n" ++ logs
+    okReport Nothing = logs ++ "\n" ++ fname ++ ": Consistent. " ++ show nVars ++ " variables checked.\n"
     okReport (Just cons) = logs ++ "\n" ++ fname ++ ": Inconsistent:\n" ++
                            unlines [ "  " ++ srcSpan con ++ " constraint " ++ show (unrename nameMap con) | con <- cons ]
       where
@@ -125,7 +125,7 @@ checkUnits uo (fname, pf)
     showVar (UnitLiteral _) = "<literal>" -- FIXME
     showVar _               = "<bad>"
 
-    errReport exc = fname ++ ": " ++ show exc ++ "\n" ++ logs
+    errReport exc = logs ++ "\n" ++ fname ++ ": " ++ show exc
 
     -- run inference
     uOpts = uo { uoNameMap = nameMap }
@@ -159,7 +159,7 @@ inferUnits uo (fname, pf)
     expReport (e, u) = "  " ++ showSrcSpan (FU.getSpan e) ++ " unit " ++ show u ++ " :: " ++ unrename nameMap v
       where v = FA.varName e
 
-    errReport exc = fname ++ ": " ++ show exc ++ "\n" ++ logs
+    errReport exc = logs ++ "\n" ++ fname ++ ": " ++ show exc 
 
     -- run inference
     uOpts = uo { uoNameMap = nameMap }
@@ -186,7 +186,7 @@ synthesiseUnits uo (fname, pf)
     expReport (e, u) = "  " ++ showSrcSpan (FU.getSpan e) ++ " unit " ++ show u ++ " :: " ++ (v `fromMaybe` M.lookup v nameMap)
       where v = FA.varName e
 
-    errReport exc = fname ++ ": " ++ show exc ++ "\n" ++ logs
+    errReport exc = logs ++ "\n" ++ fname ++ ": " ++ show exc
 
     -- run inference
     uOpts = uo { uoNameMap = nameMap }
