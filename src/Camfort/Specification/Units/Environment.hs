@@ -96,8 +96,16 @@ data Constraint
 type Constraints = [Constraint]
 
 instance Show Constraint where
-  show (ConEq u1 u2) = show u1 ++ " === " ++ show u2
+  show (ConEq u1 u2) = show u1 ++ " not equal to " ++ show u2
   show (ConConj cs) = intercalate " && " (map show cs)
+
+pprintConstr :: Constraint -> String
+pprintConstr (ConEq u1 u2) = pprintUnitInfo u1 ++ " not equal to " ++ pprintUnitInfo u2
+pprintConstr (ConConj cs) = intercalate " && " (map pprintConstr cs)
+
+pprintUnitInfo :: UnitInfo -> String
+pprintUnitInfo (UnitVar var) = printf "%s" var
+pprintUnitInfo ui = show ui
 
 --------------------------------------------------
 

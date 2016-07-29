@@ -104,9 +104,25 @@ checkUnits uo (fname, pf)
   where
     -- Format report
     okReport Nothing = logs ++ "\n" ++ fname ++ ": Consistent. " ++ show nVars ++ " variables checked.\n"
-    okReport (Just cons) = logs ++ "\n" ++ fname ++ ": Inconsistent:\n" ++
-                           unlines [ "  " ++ srcSpan con ++ " constraint " ++ show (unrename nameMap con) | con <- cons ]
+    okReport (Just cons) = logs ++ "\n" ++ fname ++ ": Inconsistent:\n" ++ reportErrors cons
+
+    reportErrors cons = unlines [ reportError con | con <- cons ]
+    reportError con = "  " ++ srcSpan con
+                      ++ pprintConstr (unrename nameMap con)
+                      ++ additionalInfo con
       where
+        -- Create additional info for errors
+        additionalInfo con =
+           if null (errorInfo con)
+           then ""
+           else "\n" ++ pad 2 ++ "where\n" ++ unlines (errorInfo con)
+        -- Create additional info about inconsistencies involving variables
+        errorInfo con =
+            [pad 4 ++ (unrename nameMap v) ++ " === " ++ pprintUnitInfo (unrename nameMap u)
+              | (v, Just u) <-
+                  [(v, M.lookup v varUnitMap) | UnitVar v <- universeBi con ]]
+
+        pad o = replicate (3 + o + length (srcSpan con)) ' '
         srcSpan con | Just ss <- findCon con = showSrcSpan ss ++ " "
                     | otherwise              = ""
 
@@ -130,6 +146,7 @@ checkUnits uo (fname, pf)
     -- run inference
     uOpts = uo { uoNameMap = nameMap }
     (eCons, state, logs) = runUnitSolver uOpts pfRenamed $ initInference >> runInconsistentConstraints
+    varUnitMap = usVarUnitMap state
     pfUA :: F.ProgramFile UA
     pfUA = usProgramFile state -- the program file after units analysis is done
 
