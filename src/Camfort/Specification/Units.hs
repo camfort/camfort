@@ -30,7 +30,7 @@ where
 import qualified Data.Map.Strict as M
 import Data.Char (isNumber)
 import Data.List (intercalate)
-import Data.Maybe (fromMaybe, maybeToList, listToMaybe)
+import Data.Maybe (fromMaybe, maybeToList, listToMaybe, mapMaybe)
 import Data.Generics.Uniplate.Operations
 import Control.Monad.State.Strict
 
@@ -108,7 +108,7 @@ checkUnits uo (fname, pf)
 
     reportErrors cons = unlines [ reportError con | con <- cons ]
     reportError con = "  " ++ srcSpan con
-                      ++ pprintConstr (unrename nameMap con)
+                      ++ pprintConstr (orient (unrename nameMap con))
                       ++ additionalInfo con
       where
         -- Create additional info for errors
@@ -119,8 +119,18 @@ checkUnits uo (fname, pf)
         -- Create additional info about inconsistencies involving variables
         errorInfo con =
             [pad 4 ++ (unrename nameMap v) ++ " === " ++ pprintUnitInfo (unrename nameMap u)
-              | (v, Just u) <-
-                  [(v, M.lookup v varUnitMap) | UnitVar v <- universeBi con ]]
+              | UnitVar v <- universeBi con
+                , u <- findUnitConstrFor con v ]
+        findUnitConstrFor con v = mapMaybe (\con' -> if con == con'
+                                                     then Nothing
+                                                     else constrainedTo v con')
+                                           (concat $ M.elems templateMap)
+        constrainedTo v (ConEq (UnitVar v') u) | v == v' = Just u
+        constrainedTo v (ConEq u (UnitVar v')) | v == v' = Just u
+        constrainedTo _ _ = Nothing
+
+        orient (ConEq u (UnitVar v)) = ConEq (UnitVar v) u
+        orient c = c
 
         pad o = replicate (3 + o + length (srcSpan con)) ' '
         srcSpan con | Just ss <- findCon con = showSrcSpan ss ++ " "
@@ -146,7 +156,7 @@ checkUnits uo (fname, pf)
     -- run inference
     uOpts = uo { uoNameMap = nameMap }
     (eCons, state, logs) = runUnitSolver uOpts pfRenamed $ initInference >> runInconsistentConstraints
-    varUnitMap = usVarUnitMap state
+    templateMap = usTemplateMap state
     pfUA :: F.ProgramFile UA
     pfUA = usProgramFile state -- the program file after units analysis is done
 
