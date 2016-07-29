@@ -30,7 +30,6 @@ import Camfort.Input
 import Camfort.Functionality
 
 import Data.Text (pack, unpack, split)
-import qualified Data.Map as M
 import Data.Maybe
 
 {-| The entry point to CamFort. Displays user information, and

@@ -31,8 +31,8 @@ import Control.Monad.Trans.Except
 import Data.Char (toLower)
 import Data.Data (Data)
 import Data.List (find, isPrefixOf)
-import qualified Data.Map as M
-import qualified Data.IntMap as IM
+import qualified Data.Map.Strict as M
+import qualified Data.IntMap.Strict as IM
 import qualified Data.Set as S
 import qualified Language.Fortran.Analysis as FA
 import qualified Language.Fortran.Analysis.Renaming as FAR
