@@ -39,6 +39,7 @@ import Control.Monad.Trans.Except
 import Control.Monad.RWS.Strict
 
 import qualified Language.Fortran.AST as F
+import Language.Fortran.Parser.Utils (readReal, readInteger)
 import qualified Language.Fortran.Analysis as FA
 
 import Camfort.Analysis.CommentAnnotator (annotateComments)
@@ -264,11 +265,11 @@ annotateLiteralsPU pu = do
   where
     -- Follow the LitMixed rules.
     expMixed e = case e of
-      F.ExpValue _ _ (F.ValInteger i) | read i == (0 :: Int) -> withLiterals genParamLit e
-                                      | otherwise            -> withLiterals genUnitLiteral e
-      F.ExpValue _ _ (F.ValReal i) | read i == (0 :: Double) -> withLiterals genParamLit e
-                                   | otherwise               -> withLiterals genUnitLiteral e
-      _                                                      -> return e
+      F.ExpValue _ _ (F.ValInteger i) | readInteger i == Just 0 -> withLiterals genParamLit e
+                                      | otherwise               -> withLiterals genUnitLiteral e
+      F.ExpValue _ _ (F.ValReal i) | readReal i == Just 0       -> withLiterals genParamLit e
+                                   | otherwise                  -> withLiterals genUnitLiteral e
+      _                                                         -> return e
 
     -- Set all literals to unitless.
     expUnitless e
@@ -577,8 +578,8 @@ isLiteral _ = False
 
 -- | Statically computes if the expression is a constant value.
 constantExpression :: F.Expression a -> Maybe Double
-constantExpression (F.ExpValue _ _ (F.ValInteger i)) = Just $ read i
-constantExpression (F.ExpValue _ _ (F.ValReal r))    = Just $ read r
+constantExpression (F.ExpValue _ _ (F.ValInteger i)) = fromIntegral `fmap` readInteger i
+constantExpression (F.ExpValue _ _ (F.ValReal r))    = readReal r
 -- FIXME: expand...
 constantExpression _                                 = Nothing
 
