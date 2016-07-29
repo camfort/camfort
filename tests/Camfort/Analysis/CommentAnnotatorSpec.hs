@@ -37,8 +37,8 @@ spec =
       let parser _ = Left $ ProbablyAnnotation "This is a warning."
                      :: Either AnnotationParseError String
       shouldBe (runWriter (annotateComments parser pf5))
-               (pf5e, [ "Error (1:1,1:1): This is a warning."
-                      , "Error (1:1,1:1): This is a warning." ])
+               (pf5e, [ "Error (1:1)-(1:1): This is a warning."
+                      , "Error (1:1)-(1:1): This is a warning." ])
 
 data A = A
   { annLink :: Maybe (Block A)
