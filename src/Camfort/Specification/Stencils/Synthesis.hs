@@ -80,9 +80,6 @@ formatSpec prefix nm (span, Left specs) =
           Specification (Right (Dependency (map realName vs) b))
       fixSpec s                = s
 
-spanLineCol :: FU.SrcSpan -> ((Int, Int), (Int, Int))
-spanLineCol (FU.SrcSpan l u) = (lineCol l, lineCol u)
-
 ------------------------
 a = (head $ FA.initAnalysis [unitAnnotation]) { FA.insLabel = Just 0 }
 s = SrcSpan (Position 0 0 0) (Position 0 0 0)
