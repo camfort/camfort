@@ -25,7 +25,6 @@ import Camfort.Specification.Stencils.Syntax (showL)
   irreflexive { TId "irreflexive" }
   atMost      { TId "atmost" }
   atLeast     { TId "atleast" }
-  dims        { TId "dims" }
   dim         { TId "dim" }
   depth       { TId "depth" }
   forward     { TId "forward" }
@@ -41,7 +40,6 @@ import Camfort.Specification.Stencils.Syntax (showL)
   '='         { TEqual }
   '('         { TLParen }
   ')'         { TRParen }
-  ','         { TComma }
 
 %left '+'
 %left '*'
@@ -55,19 +53,42 @@ SPEC :: { Specification }
 REGIONDEC :: { (String, Region) }
 : region '::' id '=' REGION { ($3, $5) }
 
-REGION ::                            { Region }
-: forward  '(' depth '=' num dim '=' num REFL ')' { Forward  (read $5) (read $8) $9}
-| backward '(' depth '=' num dim '=' num REFL ')' { Backward (read $5) (read $8) $9}
-| centered '(' depth '=' num dim '=' num REFL ')' { Centered (read $5) (read $8) $9}
-| reflexive '(' dim '=' num ')'                   { Centered 0 (read $5) True }
-| REGION '+' REGION                  { Or $1 $3 }
-| REGION '*' REGION                  { And $1 $3 }
-| '(' REGION ')'                     { $2 }
-| id                                 { Var $1 }
+REGION ::                       { Region }
+: forward  '(' REGION_ATTRS ')' { applyAttr Forward  $3 }
+| backward '(' REGION_ATTRS ')' { applyAttr Backward $3 }
+| centered '(' REGION_ATTRS ')' { applyAttr Centered $3 }
+| reflexive '(' dim '=' num ')' { Centered 0 (read $5) True }
+| REGION '+' REGION             { Or $1 $3 }
+| REGION '*' REGION             { And $1 $3 }
+| '(' REGION ')'                { $2 }
+| id                            { Var $1 }
+
+REGION_ATTRS :: { (Depth Int, Dim Int, Bool) }
+  : DEPTH DIM_REFL    { ($1, fst $2, snd $2) }
+  | DIM   DEPTH_REFL  { (fst $2, $1, snd $2) }
+  | REFL  DEPTH DIM   { ($2, $3, $1) }
+  | REFL  DIM DEPTH   { ($3, $2, $1) }
+
+DIM_REFL :: { (Dim Int, Bool) }
+DIM_REFL
+   : REFL DIM { ($2, $1) }
+   | DIM REFL { ($1, $2) }
+   | DIM      { ($1, True) }
+
+DEPTH_REFL :: { (Depth Int, Bool) }
+DEPTH_REFL
+   : DEPTH REFL { ($1, $2) }
+   | REFL DEPTH { ($2, $1) }
+   | DEPTH      { ($1, True) }
+
+DEPTH :: { Depth Int }
+DEPTH : depth '=' num { Depth $ read $3 }
+
+DIM :: { Dim Int }
+DIM : dim '=' num { Dim $ read $3 }
 
 REFL :: { Bool }
  : irreflexive  { False }
- | {- empty -}  { True  }
 
 SPECDEC :: { Spec }
 : dependency '(' VARS ')'        { Temporal $3 False }
@@ -96,6 +117,13 @@ VARS :: { [String] }
 | id      { [$1] }
 
 {
+newtype Depth a = Depth a
+newtype Dim a = Dim a
+
+applyAttr :: (Int -> Int -> Bool -> Region)
+          -> (Depth Int, Dim Int, Bool)
+          -> Region
+applyAttr constr (Depth d, Dim dim, irrefl) = constr d dim irrefl
 
 data Specification
   = RegionDec String Region

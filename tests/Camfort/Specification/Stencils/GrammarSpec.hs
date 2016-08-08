@@ -47,6 +47,16 @@ spec =
       `shouldBe`
         Right (RegionDec "r" (Or (Forward 1 1 True) (Backward 2 2 True)))
 
+    it "region defn syntactic permutation" $
+      parse "= region :: r = forward(dim=1,depth=1) + backward(depth=2, dim=2)"
+      `shouldBe`
+        Right (RegionDec "r" (Or (Forward 1 1 True) (Backward 2 2 True)))
+
+    it "region defn irreflx syntactic permutation" $
+      parse "= region :: r = forward(irreflexive,dim=1,depth=1) + backward(depth=2,irreflexive,dim=2)"
+      `shouldBe`
+        Right (RegionDec "r" (Or (Forward 1 1 False) (Backward 2 2 False)))
+
     it "temporal" $
       parse "= stencil dependency(a,b,c,foo), mutual :: foo, bar"
       `shouldBe`

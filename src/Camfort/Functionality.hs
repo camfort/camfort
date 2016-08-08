@@ -197,8 +197,6 @@ mkOutputFileForpar ps ps' = zip3 (map fst ps') (map snd3 ps) (map snd ps')
     snd3 (a, b, c) = b
 
 
-
-
 {-| Performs an analysis which reports to the user,
      but does not output any files -}
 doAnalysisReportForpar :: ([(Filename, F.ProgramFile A)] -> (String, t1))
