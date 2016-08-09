@@ -189,21 +189,7 @@ test-suite spec
                         array >= 0.4,
                         hmatrix >= 0.15,
                         camfort
-  extra-source-file:    tests/Camfort/Specification/Stencils/example2.f
-                        tests/Camfort/Specification/Stencils/example3.f
-                        tests/Camfort/Specification/Stencils/example4.f
-                        tests/Camfort/Specification/Units/ex1.f90
-                        tests/Camfort/Specification/Units/ex2.f90
-                        tests/Camfort/Specification/Units/ex3.f90
-                        tests/Camfort/Specification/Units/exp.ex1.f90
-                        tests/Camfort/Specification/Units/exp.ex2.f90
-                        tests/Camfort/Specification/Units/exp.ex3.f90
-                        tests/Camfort/Specification/Units/exp.param.f90
-                        tests/Camfort/Specification/Units/param.f90
-                        tests/Camfort/Transformation/samples/equiv.expected.f90
-                        tests/Camfort/Transformation/samples/equiv.f90
-                        tests/Camfort/Transformation/samples/toArgs.expected.f90
-                        tests/Camfort/Transformation/samples/toArgs.f90
-                        tests/Camfort/Transformation/samples/toArgs2.expected.f90
-                        tests/Camfort/Transformation/samples/toArgs2.f90
+  extra-source-file:    tests/Camfort/Specification/Stencils/*.f
+                        tests/Camfort/Specification/Units/*.f90
+                        tests/Camfort/Transformation/samples/*.f90
   default-language: Haskell2010
