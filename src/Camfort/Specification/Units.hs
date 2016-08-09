@@ -70,15 +70,19 @@ inferCriticalVariables uo (fname, pf)
   | Left exc   <- eVars = (errReport exc, (fname, pf))
   where
     -- Format report
-    okReport []   = logs ++ "\n" ++ fname ++ ":\n" ++ "No additional annotations are necessary.\n"
-    okReport vars = logs ++ "\n" ++ fname ++ ":\n" ++ unlines [ "  " ++ expReport ei | ei <- expInfo ]
+    okReport []   = logs ++ "\n" ++ fname ++ ":\n"
+                         ++ "No additional annotations are necessary.\n"
+    okReport vars = logs ++ "\n" ++ fname ++ ": "
+                         ++ show (length expInfo)
+                         ++ " variables suggested to be given a specification:\n"
+                         ++ unlines [ "  " ++ expReport ei | ei <- expInfo ]
       where
         names = map showVar vars
         expInfo = [ e | s@(F.StDeclaration {})               <- universeBi pfUA :: [F.Statement UA]
                       , e@(F.ExpValue _ _ (F.ValVariable _)) <- universeBi s    :: [F.Expression UA]
                       , FA.varName e `elem` names ]
 
-    expReport e = showSrcSpan (FU.getSpan e) ++ " " ++ unrename nameMap v
+    expReport e = showSrcSpan (FU.getSpan e) ++ " \t " ++ unrename nameMap v
       where v = FA.varName e
 
     varReport     = intercalate ", " . map showVar
