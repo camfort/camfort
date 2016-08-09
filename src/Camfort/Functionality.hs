@@ -219,7 +219,10 @@ readForparseSrcDir inp excludes = do
     isdir <- isDirectory inp
     files <- if isdir
              then do files <- rGetDirContents inp
-                     return $ (map (\y -> inp ++ "/" ++ y) files) \\ excludes
+                     -- Compute alternate list of excludes with the
+                     -- the directory appended
+                     let excludes' = excludes ++ map (\x -> inp ++ "/" ++ x) excludes
+                     return $ (map (\y -> inp ++ "/" ++ y) files) \\ excludes'
              else return [inp]
     mapM readForparseSrcFile files
 ----
