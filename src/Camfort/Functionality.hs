@@ -132,7 +132,9 @@ equivalences inSrc excludes outSrc _ = do
 
 {- Units feature -}
 optsToUnitOpts :: [Flag] -> UnitOpts
-optsToUnitOpts = foldl' (\ o f -> case f of Literals m -> o { uoLiterals = m }; Debug -> o { uoDebug = True }) unitOpts0
+optsToUnitOpts = foldl' (\ o f -> case f of Literals m -> o { uoLiterals = m }
+                                            Debug -> o { uoDebug = True }
+                                            _     -> o) unitOpts0
 
 unitsCheck inSrc excludes outSrc opt = do
     putStrLn $ "Checking units for " ++ inSrc
