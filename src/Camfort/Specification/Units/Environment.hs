@@ -20,9 +20,6 @@
 
 module Camfort.Specification.Units.Environment where
 
-import qualified Data.Label
-import Data.Label.Mono (Lens)
-import Data.Label.Monadic hiding (modify)
 import Control.Monad.State.Strict hiding (gets)
 
 import qualified Language.Fortran.AST as F
