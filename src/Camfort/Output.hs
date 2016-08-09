@@ -57,7 +57,6 @@ import Data.Generics
 import GHC.Generics
 import Data.List hiding (zip)
 import Data.Generics.Uniplate.Data
-import Generics.Deriving.Copoint
 import Data.Char
 import Data.Generics.Zipper
 import Data.Maybe

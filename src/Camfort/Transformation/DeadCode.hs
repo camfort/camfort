@@ -29,7 +29,6 @@ import Language.Fortran
 
 import Camfort.Helpers
 
-import Generics.Deriving.Copoint
 import GHC.Generics
 
 import Debug.Trace
@@ -55,4 +54,3 @@ elimDead flag x@(Assg a sp@(s1, s2) e1 e2) | (pRefactored a) == flag =
           else let report = "o" ++ (show . srcLineCol $ s1) ++ ": removed dead code\n"
                in (report, NullStmt (a { refactored = (Just s1) }) (dropLine sp))
 elimDead _ x = return x
-              

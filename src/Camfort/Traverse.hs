@@ -25,8 +25,6 @@ module Camfort.Traverse where
 import Camfort.Analysis.Annotations
 import Language.Fortran
 
-import Generics.Deriving.Base
-import Generics.Deriving.Copoint
 import GHC.Generics
 
 import Control.Monad.Trans.Writer.Lazy
