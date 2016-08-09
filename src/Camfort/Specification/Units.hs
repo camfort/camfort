@@ -61,28 +61,28 @@ import qualified Debug.Trace as D
 --
 -- *************************************
 
-inferCriticalVariables, checkUnits, inferUnits, synthesiseUnits
-  :: UnitOpts -> (Filename, F.ProgramFile Annotation) -> (Report, (Filename, F.ProgramFile Annotation))
+inferCriticalVariables
+  :: UnitOpts -> (Filename, F.ProgramFile Annotation) -> (Report, Int)
 
 {-| Infer one possible set of critical variables for a program -}
 inferCriticalVariables uo (fname, pf)
-  | Right vars <- eVars = (okReport vars, (fname, pf))
-  | Left exc   <- eVars = (errReport exc, (fname, pf))
+  | Right vars <- eVars = okReport vars
+  | Left exc   <- eVars = (errReport exc, -1)
   where
     -- Format report
-    okReport []   = logs ++ "\n" ++ fname ++ ":\n"
-                         ++ "No additional annotations are necessary.\n"
-    okReport vars = logs ++ "\n" ++ fname ++ ": "
+    okReport []   = (logs ++ "\n" ++ fname ++ ":\n"
+                         ++ "No additional annotations are necessary.\n", 0)
+    okReport vars = (logs ++ "\n" ++ fname ++ ": "
                          ++ show (length expInfo)
                          ++ " variable declarations suggested to be given a specification:\n"
-                         ++ unlines [ "\t" ++ expReport ei | ei <- expInfo ]
+                         ++ unlines [ "\t" ++ expReport ei | ei <- expInfo ], length expInfo)
       where
         names = map showVar vars
         expInfo = [ e | s@(F.StDeclaration {})               <- universeBi pfUA :: [F.Statement UA]
                       , e@(F.ExpValue _ _ (F.ValVariable _)) <- universeBi s    :: [F.Expression UA]
                       , FA.varName e `elem` names ]
 
-    expReport e = showSrcSpan (FU.getSpan e) ++ "\t" ++ unrename nameMap v
+    expReport e = "(" ++ showSrcSpan (FU.getSpan e) ++ ")\t" ++ unrename nameMap v
       where v = FA.varName e
 
     varReport     = intercalate ", " . map showVar
@@ -101,10 +101,12 @@ inferCriticalVariables uo (fname, pf)
     pfRenamed = FAR.analyseRenames . FA.initAnalysis . fmap mkUnitAnnotation $ pf
     nameMap = FAR.extractNameMap pfRenamed
 
+checkUnits, inferUnits
+            :: UnitOpts -> (Filename, F.ProgramFile Annotation) -> Report
 {-| Check units-of-measure for a program -}
 checkUnits uo (fname, pf)
-  | Right mCons <- eCons = (okReport mCons, (fname, pf))
-  | Left exc    <- eCons = (errReport exc, (fname, pf))
+  | Right mCons <- eCons = okReport mCons
+  | Left exc    <- eCons = errReport exc
   where
     -- Format report
     okReport Nothing = logs ++ "\n" ++ fname ++ "\t: Consistent. " ++ show nVars ++ " variables checked."
@@ -182,8 +184,8 @@ checkUnits uo (fname, pf)
     This produces an output of all the unit information for a program -}
 inferUnits uo (fname, pf)
   | Right []   <- eVars = checkUnits uo (fname, pf)
-  | Right vars <- eVars = (okReport vars, (fname, pf))
-  | Left exc   <- eVars = (errReport exc, (fname, pf))
+  | Right vars <- eVars = okReport vars
+  | Left exc   <- eVars = errReport exc
   where
     -- Format report
     okReport vars = logs ++ "\n" ++ fname ++ ":\n" ++ unlines [ expReport ei | ei <- expInfo ]
@@ -206,9 +208,12 @@ inferUnits uo (fname, pf)
     pfRenamed = FAR.analyseRenames . FA.initAnalysis . fmap mkUnitAnnotation $ pf
     nameMap = FAR.extractNameMap pfRenamed
 
+synthesiseUnits :: UnitOpts
+                -> (Filename, F.ProgramFile Annotation)
+                -> (Report, (Filename, F.ProgramFile Annotation))
 {-| Synthesis unspecified units for a program (after checking) -}
 synthesiseUnits uo (fname, pf)
-  | Right []   <- eVars = checkUnits uo (fname, pf)
+  | Right []   <- eVars = (checkUnits uo (fname, pf), (fname, pf))
   | Right vars <- eVars = (okReport vars, (fname, pfFinal))
   | Left exc   <- eVars = (errReport exc, (fname, pfFinal))
   where

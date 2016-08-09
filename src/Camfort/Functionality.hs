@@ -138,11 +138,11 @@ optsToUnitOpts = foldl' (\ o f -> case f of Literals m -> o { uoLiterals = m }
 
 unitsCheck inSrc excludes outSrc opt = do
     putStrLn $ "Checking units for '" ++ inSrc ++ "'"
-    doAnalysisReportForpar (mapM (LU.checkUnits (optsToUnitOpts opt))) inSrc excludes outSrc
+    doAnalysisReportForpar (concatMap (LU.checkUnits (optsToUnitOpts opt))) putStrLn inSrc excludes
 
 unitsInfer inSrc excludes outSrc opt = do
     putStrLn $ "Inferring units for '" ++ inSrc ++ "'"
-    doAnalysisReportForpar (mapM (LU.inferUnits (optsToUnitOpts opt))) inSrc excludes outSrc
+    doAnalysisReportForpar (concatMap (LU.inferUnits (optsToUnitOpts opt))) putStrLn inSrc excludes
 
 unitsSynth inSrc excludes outSrc opt = do
     putStrLn $ "Synthesising units for '" ++ inSrc ++ "'"
@@ -151,7 +151,7 @@ unitsSynth inSrc excludes outSrc opt = do
 unitsCriticals inSrc excludes outSrc opt = do
     putStrLn $ "Suggesting variables to annotate with unit specifications in '"
              ++ inSrc ++ "'"
-    doAnalysisReportForpar (mapM (LU.inferCriticalVariables (optsToUnitOpts opt))) inSrc excludes outSrc
+    doAnalysisReportForpar (mapM (LU.inferCriticalVariables (optsToUnitOpts opt))) (putStrLn . fst) inSrc excludes
 
 {- Stencils feature -}
 stencilsCheck inSrc excludes _ _ = do
@@ -201,17 +201,18 @@ mkOutputFileForpar ps ps' = zip3 (map fst ps') (map snd3 ps) (map snd ps')
 
 {-| Performs an analysis which reports to the user,
      but does not output any files -}
-doAnalysisReportForpar :: ([(Filename, F.ProgramFile A)] -> (String, t1))
-                       -> FileOrDir -> [Filename] -> t -> IO ()
-doAnalysisReportForpar rFun inSrc excludes outSrc = do
+doAnalysisReportForpar :: ([(Filename, F.ProgramFile A)] -> r)
+                       -> (r -> IO out)
+                       -> FileOrDir -> [Filename] -> IO out
+doAnalysisReportForpar rFun sFun inSrc excludes = do
   if excludes /= [] && excludes /= [""]
       then putStrLn $ "Excluding " ++ (concat $ intersperse "," excludes)
                     ++ " from " ++ inSrc ++ "/"
       else return ()
   ps <- readForparseSrcDir inSrc excludes
 ----
-  let (report, ps') = rFun (map (\(f, inp, ast) -> (f, ast)) ps)
-  putStrLn report
+  let report = rFun (map (\(f, inp, ast) -> (f, ast)) ps)
+  sFun report
 ----
 
 -- * Source directory and file handling
