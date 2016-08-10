@@ -73,14 +73,13 @@ inferCriticalVariables uo (fname, pf)
     okReport []   = (logs ++ "\n" ++ fname ++ ":\n"
                          ++ "No additional annotations are necessary.\n", 0)
     okReport vars = (logs ++ "\n" ++ fname ++ ": "
-                         ++ show (length expInfo)
+                         ++ show numVars
                          ++ " variable declarations suggested to be given a specification:\n"
-                         ++ unlines [ "\t" ++ expReport ei | ei <- expInfo ], length expInfo)
+                         ++ unlines [ "\t" ++ expReport ei | ei <- expInfo ], numVars)
       where
         names = map showVar vars
-        expInfo = [ e | s@(F.StDeclaration {})               <- universeBi pfUA :: [F.Statement UA]
-                      , e@(F.ExpValue _ _ (F.ValVariable _)) <- universeBi s    :: [F.Expression UA]
-                      , FA.varName e `elem` names ]
+        expInfo = filter ((`elem` names) . FA.varName) $ declVariables pfUA
+        numVars = length expInfo
 
     expReport e = "(" ++ showSrcSpan (FU.getSpan e) ++ ")\t" ++ unrename nameMap v
       where v = FA.varName e
@@ -190,8 +189,7 @@ inferUnits uo (fname, pf)
     -- Format report
     okReport vars = logs ++ "\n" ++ fname ++ ":\n" ++ unlines [ expReport ei | ei <- expInfo ]
       where
-        expInfo = [ (e, u) | s@(F.StDeclaration {})               <- universeBi pfUA :: [F.Statement UA]
-                           , e@(F.ExpValue _ _ (F.ValVariable _)) <- universeBi s    :: [F.Expression UA]
+        expInfo = [ (e, u) | e <- declVariables pfUA
                            , u <- maybeToList (FA.varName e `lookup` vars) ]
 
     expReport (e, u) = "  " ++ showSrcSpan (FU.getSpan e) ++ " unit " ++ show u ++ " :: " ++ unrename nameMap v
@@ -220,8 +218,7 @@ synthesiseUnits uo (fname, pf)
     -- Format report
     okReport vars = logs ++ "\n" ++ fname ++ ":\n" ++ unlines [ expReport ei | ei <- expInfo ]
       where
-        expInfo = [ (e, u) | s@(F.StDeclaration {})               <- universeBi pfUA :: [F.Statement UA]
-                           , e@(F.ExpValue _ _ (F.ValVariable _)) <- universeBi s    :: [F.Expression UA]
+        expInfo = [ (e, u) | e <- declVariables pfUA
                            , u <- maybeToList (FA.varName e `lookup` vars) ]
 
     expReport (e, u) = "  " ++ showSrcSpan (FU.getSpan e) ++ " unit " ++ show u ++ " :: " ++ (v `fromMaybe` M.lookup v nameMap)
@@ -245,3 +242,9 @@ unrename nameMap = transformBi $ \ x -> x `fromMaybe` M.lookup x nameMap
 
 showSrcSpan :: FU.SrcSpan -> String
 showSrcSpan (FU.SrcSpan l u) = show l
+
+declVariables :: F.ProgramFile UA -> [F.Expression UA]
+declVariables pf = flip mapMaybe (universeBi pf) $ \ d -> case d of
+  F.DeclVariable _ _ v@(F.ExpValue _ _ (F.ValVariable _)) _ _   -> Just v
+  F.DeclArray    _ _ v@(F.ExpValue _ _ (F.ValVariable _)) _ _ _ -> Just v
+  _                                                             -> Nothing
