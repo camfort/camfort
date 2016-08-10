@@ -179,7 +179,7 @@ test-suite spec
                         fortran-src >= 0.1.0.3,
                         uniplate >= 1.6.10,
                         mtl >= 2.1,
-                        bytestring >= 0.10,			
+                        bytestring >= 0.10,
                         array >= 0.4,
                         hmatrix >= 0.15,
                         camfort
