@@ -271,7 +271,7 @@ perBlockInfer mode b@(F.BlStatement ann span@(FU.SrcSpan lp up) _ stmnt)
         in return $ F.BlComment ann' span' specComment
       else return b
 
-perBlockInfer mode b@(F.BlDo ann span x mDoSpec body) = do
+perBlockInfer mode b@(F.BlDo ann span lab cname lab' mDoSpec body tlab) = do
     -- introduce any induction variables into the induction variable state
 
     if (mode == DoMode || mode == CombinedMode) && isStencilDo b
@@ -281,7 +281,7 @@ perBlockInfer mode b@(F.BlDo ann span x mDoSpec body) = do
     -- descend into the body of the do-statement
     body' <- mapM (descendBiM (perBlockInfer  mode)) body
     -- Remove any induction variable from the state
-    return $ F.BlDo ann span x mDoSpec body'
+    return $ F.BlDo ann span lab cname lab' mDoSpec body' tlab
 
 perBlockInfer mode b = do
     -- Go inside child blocks
@@ -366,7 +366,7 @@ getInductionVar (Just (F.DoSpecification _ _ (F.StExpressionAssign _ _ e _) _ _)
 getInductionVar _ = []
 
 isStencilDo :: F.Block (FA.Analysis A) -> Bool
-isStencilDo b@(F.BlDo _ span _ mDoSpec body) =
+isStencilDo b@(F.BlDo _ span _ _ _ mDoSpec body _) =
  -- Check to see if the body contains any affine use of the induction variable
  -- as a subscript
  case getInductionVar mDoSpec of

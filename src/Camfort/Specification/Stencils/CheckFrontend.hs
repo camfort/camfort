@@ -164,13 +164,13 @@ perBlockCheck b@(F.BlComment ann span _) = do
          Nothing -> return $ b'
       _ -> return $ b'
 
-      (F.BlDo ann span _ mDoSpec body) -> do
+      (F.BlDo ann span _ _ _ mDoSpec body _) -> do
            -- Stub, maybe collect stencils inside 'do' block
            return $ b'
       _ -> return $ b'
     _ -> return b'
 
-perBlockCheck b@(F.BlDo ann span _ mDoSpec body) = do
+perBlockCheck b@(F.BlDo ann span _ _ _ mDoSpec body _) = do
    -- descend into the body of the do-statement
    mapM_ (descendBiM perBlockCheck) body
    -- Remove any induction variable from the state
