@@ -408,6 +408,7 @@ propagateExp e = fmap uoLiterals ask >>= \ lm -> case e of
   F.ExpBinary _ _ o e1 e2 | isOp AddOp o -> setF2C ConEq  (getUnitInfo e1) (getUnitInfo e2)
                           | isOp RelOp o -> setF2C ConEq  (getUnitInfo e1) (getUnitInfo e2)
   F.ExpFunctionCall {}                   -> propagateFunctionCall e
+  F.ExpSubscript _ _ e1 _                -> return $ maybeSetUnitInfo (getUnitInfo e1) e
   _                                      -> whenDebug (tell ("propagateExp: unhandled: " ++ show e)) >> return e
   where
     -- Shorter names for convenience functions.
