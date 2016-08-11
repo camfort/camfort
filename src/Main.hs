@@ -113,9 +113,7 @@ analyses :: [(String
            , (FileOrDir -> [Filename] -> FileOrDir -> Options -> IO ()
            , String))]
 analyses =
-    [--("asts", (asts,
---        "blank analysis, outputs analysis files with AST information")),
---     ("lva", (lvaA, "live-variable analysis")),
+    [
      ("count", (countVarDecls, "count variable declarations")),
      ("ast", (ast, "print the raw AST -- for development purposes")),
      ("stencils-check", (stencilsCheck, "stencil spec checking")),

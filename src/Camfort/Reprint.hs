@@ -20,7 +20,6 @@ module Camfort.Reprint where
 
 import Data.Generics.Zipper
 
-import Camfort.PrettyPrint
 import Camfort.Analysis.Annotations
 import Camfort.Traverse
 import Camfort.Helpers
@@ -60,11 +59,11 @@ type Refactoring m =
 -- some monad m) and turns an arbitrary pretty-printable type 'p'
 -- into a monadic SourceText transformer.
 
-reprint :: (Monad m, Data p, PrettyPrint p)
+reprint :: (Monad m, Data p)
         => Refactoring m -> p -> SourceText -> m SourceText
 reprint refactoring tree input
   -- If the inupt is null then switch into pretty printer
-  | B.null input = return $ prettyPrint tree
+  | B.null input = error "Input was null" -- return $ pprint tree
   -- Otherwise go with the normal algorithm
   | otherwise = do
       -- Create an initial cursor at the start of the file

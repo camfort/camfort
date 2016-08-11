@@ -34,7 +34,6 @@ import Data.Generics.Uniplate.Operations
 
 import Camfort.Analysis.Annotations
 import Camfort.Analysis.Types
-import Camfort.Analysis.LVA
 import Camfort.Analysis.Simple
 import Camfort.Analysis.Syntax
 
@@ -96,19 +95,9 @@ ast d excludes f _ = do
     xs <- readForparseSrcDir (d ++ "/" ++ f) excludes
     putStrLn $ show (map (\(_, _, p) -> p) xs)
 
-asts inSrc excludes _ _ = do
-    putStrLn $ "Do a basic analysis and output the HTML files "
-            ++ "with AST information for '" ++ inSrc ++ "'"
-    let astAnalysis = (map numberStmts) . map (fmap (const unitAnnotation))
-    doAnalysis astAnalysis inSrc excludes
-
 countVarDecls inSrc excludes _ _ = do
     putStrLn $ "Counting variable declarations in '" ++ inSrc ++ "'"
     doAnalysisSummaryForpar countVariableDeclarations inSrc excludes Nothing
-
-lvaA inSrc excludes _ _ = do
-    putStrLn $ "Analysing loops for '" ++ inSrc ++ "'"
-    doAnalysis lva inSrc excludes
 
 dead inSrc excludes outSrc _ = do
     putStrLn $ "Eliminating dead code in '" ++ inSrc ++ "'"

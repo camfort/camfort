@@ -61,7 +61,6 @@ executable camfort
                         Camfort.Input
                         Camfort.Output
                         Camfort.Reprint
-                        Camfort.PrettyPrint
                         Camfort.Traverse
                         Main
 
@@ -130,7 +129,6 @@ library
                         Camfort.Input
                         Camfort.Output
                         Camfort.Reprint
-                        Camfort.PrettyPrint
                         Camfort.Traverse
 
   build-depends:        base >= 4.6 && < 5,

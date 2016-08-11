@@ -34,7 +34,6 @@ import Camfort.Traverse
 import qualified Language.Fortran as Fortran
 import Language.Fortran.PreProcess
 import Language.Fortran
-import Language.Fortran.Pretty
 
 import Data.Map.Lazy hiding (map, foldl)
 import qualified Data.ByteString.Char8 as B

@@ -63,23 +63,6 @@ getOption (x : xs) =
 
 -- * Builders for analysers and refactorings
 
-{-| Performs an analysis provided by its first parameter on the directory of its
-     second, excluding files listed by its third -}
-doAnalysis :: (Program A -> Program Annotation)
-           -> FileOrDir -> [Filename] -> IO ()
-doAnalysis aFun src excludes = do
-  if excludes /= [] && excludes /= [""]
-  then putStrLn $ "Excluding " ++ (concat $ intersperse "," excludes)
-                               ++ " from " ++ src ++ "/"
-  else return ()
-
-  ps <- readParseSrcDir src excludes
-
-  let inFiles = map Fortran.fst3 ps
-  let outFiles = filter (\f -> not ((take (length $ src ++ "out") f) == (src ++ "out"))) inFiles
-  let asts' = map (\(f, _, ps) -> aFun ps) ps
-  outputAnalysisFiles src asts' outFiles
-
 {-| Performs an analysis provided by its first parameter which generates
     information 's', which is then combined together (via a monoid) -}
 doAnalysisSummary :: (Monoid s, Show s)

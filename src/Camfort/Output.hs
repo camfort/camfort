@@ -35,12 +35,10 @@ import qualified Language.Fortran.Analysis as FA
 
 import qualified Language.Fortran.Parser as Fortran
 import Language.Fortran
-import Language.Fortran.Pretty
 import Language.Fortran.PreProcess
 
 import Camfort.Analysis.Annotations
 import Camfort.Analysis.Syntax
-import Camfort.PrettyPrint
 import Camfort.Reprint
 import Camfort.Transformation.Syntax
 
@@ -120,9 +118,6 @@ instance OutputFiles (Filename, SourceText) where
 
 data PR a = PR (Program a) deriving Data
 
-instance PrettyPrint (PR Annotation) where
-   prettyPrint (PR x) = prettyPrint x
-
 -- When there is a file to be reprinted (for refactoring)
 instance OutputFiles (Filename, SourceText, Program Annotation) where
   mkOutputText f' (f, input, ast') = evalState (reprint refactoringLF (PR ast') input) 0
@@ -140,10 +135,6 @@ srcSpanToSrcLocs (FU.SrcSpan lpos upos) = (toSrcLoc lpos, toSrcLoc upos)
     toSrcLoc pos = SrcLoc { srcFilename = ""
                           , srcLine     = FU.posLine pos
                           , srcColumn   = FU.posColumn pos }
-
-instance (PrettyPrint (F.ProgramFile Annotation)) where
-   -- STUB
-   prettyPrint _ = B.empty
 
 refactoringForPar :: (Typeable a) =>  a -> SourceText -> StateT SrcLoc Identity (SourceText, Bool)
 refactoringForPar z inp =
@@ -171,17 +162,6 @@ changeDir newDir oldDir oldFilename = newDir ++ (listDiffL oldDir oldFilename)
                                             listDiffL (x:xs) (y:ys) | x==y      = listDiffL xs ys
                                                                     | otherwise = ys
 
-{-| output pre-analysis ASTs into the directory with the given file names (the list of ASTs should match the
-    list of filenames) -}
-outputAnalysisFiles :: FileOrDir -> [Program Annotation] -> [Filename] -> IO ()
-outputAnalysisFiles src asts files = do
-  isdir <- isDirectory src
-  let src' = if isdir then src else dropFileName src
-  putStrLn $ "Writing analysis files to directory: " ++ src'
-  mapM (\(ast', f) -> writeFile (f ++ ".html") ((concatMap outputHTML) ast')) (zip asts files)
-  return ()
-
-
 {- Specifies how to do specific refactorings
   (uses generic query extension - remember extQ is non-symmetric)
 -}
@@ -195,7 +175,7 @@ refactoringLF = flip $ \inp -> ((((\_ -> return (B.empty, False))
 
 
 refactorFortran :: Monad m => SourceText -> Fortran Annotation -> StateT SrcLoc m (SourceText, Bool)
-refactorFortran inp e = do
+refactorFortran inp e = return (B.empty, False) {- do
     cursor <- get
     if (pRefactored $ tag e) then
           let (lb, ub) = srcSpan e
@@ -206,11 +186,11 @@ refactorFortran inp e = do
               lnl2 = if ((p0 /= B.empty) && (B.last p0 /= '\n')) then B.pack "\n" else B.empty
               textOut = if p0 == (B.pack "\n") then outE else B.concat [p0, lnl2, outE, lnl]
           in put ub >> return (textOut, True)
-    else return (B.empty, False)
+    else return (B.empty, False) -}
 
 
 refactorDecl :: SourceText -> Decl Annotation -> StateT SrcLoc (State Int) (SourceText, Bool)
-refactorDecl inp d = do
+refactorDecl inp d = return (B.empty, False) {-
     cursor <- get
     if (pRefactored $ tag d) then
        let (lb, ub) = srcSpan d
@@ -230,23 +210,22 @@ refactorDecl inp d = do
                            otherwise -> return textOut
              put ub
              return (textOut', True)
-    else return (B.empty, False)
+    else return (B.empty, False) -}
 
 refactorArgName :: Monad m => SourceText -> ArgName Annotation -> StateT SrcLoc m (SourceText, Bool)
-refactorArgName inp a = do
-    cursor <- get
+refactorArgName inp a = return (B.empty, False)
+{-    cursor <- get
     case (refactored $ tag a) of
         Just lb -> do
             let (p0, _) = takeBounds (cursor, lb) inp
             put lb
             return (p0 `B.append` (B.pack $ pprint a), True)
-        Nothing -> return (B.empty, False)
+        Nothing -> return (B.empty, False) -}
 
 refactorUses :: SourceText -> Uses Annotation -> StateT SrcLoc (State Int) (SourceText, Bool)
-refactorUses inp u = do
-    cursor <- get
-    let ?variant = HTMLPP in
-        case (refactored $ tag u) of
+refactorUses inp u = return (B.empty, False)
+{-    cursor <- get
+    case (refactored $ tag u) of
            Just lb -> let (p0, _) = takeBounds (cursor, lb) inp
                           syntax  = B.pack $ printSlave u
                        in do added <- lift get
@@ -254,7 +233,7 @@ refactorUses inp u = do
                                                   else return ()
                              put $ toCol0 lb
                              return (p0 `B.append` syntax, True)
-           Nothing -> return (B.empty, False)
+           Nothing -> return (B.empty, False) -}
 
 countLines xs =
   case B.uncons xs of

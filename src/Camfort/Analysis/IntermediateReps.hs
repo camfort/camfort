@@ -22,7 +22,6 @@ module Camfort.Analysis.IntermediateReps where
 import Data.Data
 
 import Language.Fortran
-import Language.Fortran.Pretty
 
 data AccessP p = VarA String | ArrayA String [Expr p] deriving (Eq, Typeable, Data)
 
@@ -34,7 +33,4 @@ accessToVarName (ArrayA v _) = v
 
 instance Show (AccessP ()) where
     show (VarA s) = s
-    show (ArrayA v es) = v ++ "(" ++ (showList (map pprint es)) ++ ")"
-                           where showList []  = ""
-                                 showList [x] = x
-                                 showList (x:xs) = x ++ ", " ++ showList xs
+    show (ArrayA v es) = v ++ "(...)"
