@@ -135,4 +135,3 @@ normaliseNoSort = nub . reduce
 
 normaliseBy :: Ord t => (t -> t -> Maybe t) -> [t] -> [t]
 normaliseBy plus = nub . (foldPair plus) . sort
-

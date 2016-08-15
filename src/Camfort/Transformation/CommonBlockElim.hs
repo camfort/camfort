@@ -28,7 +28,6 @@ import qualified Data.Map
 import Data.Generics.Uniplate.Operations
 
 import Language.Fortran
-import Language.Fortran.Pretty
 
 import Camfort.Helpers
 import Camfort.Traverse
@@ -290,6 +289,8 @@ mkRenamerCoercer (name1, vtys1) (name2, vtys2)
 
 allCoherentCommonsP :: [TLCommon A] -> (Report, Bool)
 allCoherentCommonsP commons = foldM (\p (c1, c2) -> (coherentCommonsP c1 c2) >>= (\p' -> return $ p && p')) True (pairs commons)
+
+pprint = error "Pretty printer not defined"
 
 coherentCommonsP :: TLCommon A -> TLCommon A -> (Report, Bool)
 coherentCommonsP (f1, (p1, (n1, vtys1))) (f2, (p2, (n2, vtys2))) =
