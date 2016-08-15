@@ -101,7 +101,7 @@ countVarDecls inSrc excludes _ _ = do
 
 dead inSrc excludes outSrc _ = do
     putStrLn $ "Eliminating dead code in '" ++ inSrc ++ "'"
-    report <- doRefactor ((mapM (deadCode False))) inSrc excludes outSrc
+    report <- doRefactorForpar ((mapM (deadCode False))) inSrc excludes outSrc
     putStrLn report
 
 commonToArgs inSrc excludes outSrc _ = do

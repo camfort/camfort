@@ -25,10 +25,8 @@ executable camfort
   main-is: Main.hs
   hs-source-dirs:       src
   other-modules:        Camfort.Analysis.Annotations
-                        Camfort.Analysis.CallGraph
                         Camfort.Analysis.CommentAnnotator
                         Camfort.Analysis.IntermediateReps
-                        Camfort.Analysis.LVA
                         Camfort.Analysis.Simple
                         Camfort.Analysis.Syntax
                         Camfort.Analysis.Types
@@ -93,10 +91,8 @@ library
   hs-source-dirs:       src
   build-tools:          alex, happy
   exposed-modules:      Camfort.Analysis.Annotations
-                        Camfort.Analysis.CallGraph
                         Camfort.Analysis.CommentAnnotator
                         Camfort.Analysis.IntermediateReps
-                        Camfort.Analysis.LVA
                         Camfort.Analysis.Simple
                         Camfort.Analysis.Syntax
                         Camfort.Analysis.Types
