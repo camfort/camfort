@@ -40,6 +40,7 @@ import qualified Camfort.Specification.Stencils.Grammar as StencilComment
 
 import qualified Language.Fortran.AST as F
 import qualified Language.Fortran.Analysis as FA
+import qualified Language.Fortran.Util.Position as FU
 
 type Report = String
 
@@ -58,10 +59,9 @@ data LoopType = Functor ReduceType
 
 type A = Annotation
 
-data Annotation = A { lives          :: ([Access],[Access]),
-                      unitVar        :: Int,
+data Annotation = A { unitVar        :: Int,
                       number         :: Int,
-                      refactored     :: Maybe SrcLoc,
+                      refactored     :: Maybe FU.SrcSpan, 
                       successorStmts :: [Int],
                       -- used to indicate when a node is newly introduced
                       newNode        :: Bool,
@@ -75,17 +75,13 @@ data Annotation = A { lives          :: ([Access],[Access]),
                     }
                    deriving (Eq, Show, Typeable, Data)
 
-liveOut = snd . lives
-liveIn = fst . lives
-
  -- Map Variable [[(Variable,Int)]],
 
 pRefactored :: Annotation -> Bool
 pRefactored = isJust . refactored
 
 unitAnnotation = A
-  { lives        = ([], [])
-   , unitVar      = 0
+  { unitVar      = 0
    , number       = 0
    , refactored   = Nothing
    , successorStmts = []

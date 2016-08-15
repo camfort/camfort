@@ -45,6 +45,7 @@ import Camfort.Analysis.Annotations
 import Camfort.Analysis.IntermediateReps
 import Camfort.Traverse
 import Language.Fortran
+import qualified Language.Fortran.Util.Position as FU
 
 -- import Language.Haskell.Syntax (SrcLoc(..))
 
@@ -78,6 +79,12 @@ toCol0 (SrcLoc f l c) = SrcLoc f l 0
 
 linesCovered :: SrcLoc -> SrcLoc -> Int
 linesCovered (SrcLoc _ l1 _) (SrcLoc _ l2 _) = l2 - l1 + 1
+
+dropLineF :: FU.SrcSpan -> FU.SrcSpan
+dropLineF (FU.SrcSpan s1 (FU.Position o l c)) =
+    FU.SrcSpan s1 (FU.Position o (l+1) 0)
+
+
 
 dropLine :: SrcSpan -> SrcSpan
 dropLine (s1, SrcLoc f l c) = (s1, SrcLoc f (l+1) 0)

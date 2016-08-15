@@ -44,6 +44,10 @@ import Camfort.Analysis.IntermediateReps
 import Camfort.Traverse
 import Language.Fortran
 
+import qualified Language.Fortran.AST as F
+import Language.Fortran.Util.FirstParameter
+import Language.Fortran.Util.SecondParameter
+
 -- * Comparison and ordering
 
 {-|  'AnnotationFree' is a data type that wraps other types and denotes terms
@@ -95,6 +99,11 @@ instance Eq (AnnotationFree (AccessP ())) where
 
 instance (Eq (AnnotationFree a), Eq (AnnotationFree b)) => Eq (AnnotationFree (a, b)) where
     (AnnotationFree (x, y)) == (AnnotationFree (x', y')) = ((af x) == (af x')) && ((af y) == (af y'))
+
+instance Eq a => Eq (AnnotationFree (F.Expression a)) where
+    (AnnotationFree x) == (AnnotationFree y) = x == y''
+        where y'' = setSecondParameter (getSecondParameter x) y'
+              y' = setFirstParameter (getFirstParameter x) y
 
 instance Eq (AnnotationFree (Expr a)) where
     -- Compute variable equality modulo annotations and spans
@@ -193,6 +202,11 @@ accesses f = nub $  [VarA (lower v) | (AssgExpr _ _ v _) <- (universeBi f)::[Exp
 varExprToVariable :: Expr a -> Maybe Variable
 varExprToVariable (Var _ _ ((VarName _ v, es):_)) = Just v
 varExprToVariable _                               = Nothing
+
+varExprToVariableF :: F.Expression a -> Maybe F.Name
+varExprToVariableF (F.ExpValue _ _ (F.ValVariable v)) = Just v
+varExprToVariableF _                                  = Nothing
+
 
 {-| Extracts an 'accessor' form a variable from a variable expression -}
 varExprToAccess :: Expr a -> Maybe Access
