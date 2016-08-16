@@ -8,7 +8,7 @@ before_install:
 - cd $TRAVIS_BUILD_DIR
 - stack setup
 script:
-- stack test
+- travis_wait 60 "stack test"
 - stack haddock
 after_success:
 - cp "$(stack exec -- which camfort)" camfort-Linux-x64
