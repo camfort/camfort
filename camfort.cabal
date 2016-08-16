@@ -26,7 +26,6 @@ executable camfort
   hs-source-dirs:       src
   other-modules:        Camfort.Analysis.Annotations
                         Camfort.Analysis.CommentAnnotator
-                        Camfort.Analysis.IntermediateReps
                         Camfort.Analysis.Simple
                         Camfort.Analysis.Syntax
                         Camfort.Analysis.Types
@@ -92,7 +91,6 @@ library
   build-tools:          alex, happy
   exposed-modules:      Camfort.Analysis.Annotations
                         Camfort.Analysis.CommentAnnotator
-                        Camfort.Analysis.IntermediateReps
                         Camfort.Analysis.Simple
                         Camfort.Analysis.Syntax
                         Camfort.Analysis.Types
