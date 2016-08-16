@@ -91,7 +91,7 @@ enter refactoring z inp = do
   -- Part 1.
   -- Apply a refactoring
   cursor     <- get
-  (p1, refactored) <- query (flip refactoring inp) z
+  (p1, refactored) <- query (`refactoring` inp) z
 
   -- Part 2.
   -- Cut out the portion of source text consumed by the refactoring
@@ -115,24 +115,24 @@ enter refactoring z inp = do
 
 -- `enterDown` navigates to the children of the current context
 enterDown refactoring z inp =
-  case (down' z) of
+  case down' z of
     -- Go to children
     Just dz -> enter refactoring dz inp
     -- No children
-    Nothing -> return $ B.empty
+    Nothing -> return B.empty
 
 -- `enterRight` navigates to the right sibling of the current context
 enterRight refactoring z inp =
-  case (right z) of
+  case right z of
     -- Go to right sibling
     Just rz -> enter refactoring rz inp
     -- No right sibling
-    Nothing -> return $ B.empty
+    Nothing -> return B.empty
 
 -- Given a lower-bound and upper-bound pair of FU.Positions, split the
 -- incoming SourceText based on the distanceF between the FU.Position pairs
 takeBounds :: (FU.Position, FU.Position) -> SourceText -> (SourceText, SourceText)
-takeBounds (l, u) inp = takeBounds' ((ll, lc), (ul, uc)) B.empty inp
+takeBounds (l, u) = takeBounds' ((ll, lc), (ul, uc)) B.empty
   where (FU.Position _ ll lc) = l
         (FU.Position _ ul uc) = u
 takeBounds' ((ll, lc), (ul, uc)) tk inp  =
