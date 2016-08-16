@@ -107,6 +107,17 @@ class OutputFiles t where
                      putStrLn $ "Writing " ++ outp
                      B.writeFile outp (mkOutputText outp (head pdata))
 
+{-| changeDir is used to change the directory of a filename string.
+    If the filename string has no directory then this is an identity  -}
+changeDir newDir oldDir oldFilename =
+    newDir ++ (listDiffL oldDir oldFilename)
+  where
+    listDiffL []     ys = ys
+    listDiffL xs     [] = []
+    listDiffL (x:xs) (y:ys)
+        | x==y      = listDiffL xs ys
+        | otherwise = ys
+
 -- When the new source text is already provided
 instance OutputFiles (Filename, SourceText) where
   mkOutputText _ (_, output) = output
@@ -114,12 +125,20 @@ instance OutputFiles (Filename, SourceText) where
 
 -- When there is a file to be reprinted (for refactoring)
 instance OutputFiles (Filename, SourceText, F.ProgramFile Annotation) where
-  mkOutputText f' (f, input, ast') = runIdentity $ reprint refactoringForPar ast' input
+  mkOutputText f' (f, input, ast') = runIdentity $ reprint refactoring ast' input
   outputFile (f, _, _) = f
 
-refactoringForPar :: (Typeable a) =>  a -> SourceText -> StateT FU.Position Identity (SourceText, Bool)
-refactoringForPar z inp =
-    ((\_ -> return (B.empty, False)) `extQ` (flip outputComments inp)) $ z
+{- Specifies how to do specific refactorings
+  (uses generic query extension - remember extQ is non-symmetric) -}
+
+refactoring :: (Typeable a) =>  a -> SourceText -> StateT FU.Position Identity (SourceText, Bool)
+refactoring z inp =
+          (\_ -> return (B.empty, False))
+   `extQ` (flip outputComments inp)
+   `extQ` (refactorUses inp)
+   `extQ` (refactorDecl inp)
+   `extQ` (refactorArgName inp)
+   `extQ` (refactorStatements inp) $ z
   where
     outputComments :: F.Block Annotation -> SourceText -> StateT FU.Position Identity (SourceText, Bool)
     outputComments e@(F.BlComment ann span comment) inp = do
@@ -135,33 +154,12 @@ refactoringForPar z inp =
     outputComments _ _ = return (B.empty, False)
 
 
-{-| changeDir is used to change the directory of a filename string.
-    If the filename string has no directory then this is an identity  -}
-changeDir newDir oldDir oldFilename =
-    newDir ++ (listDiffL oldDir oldFilename)
-  where
-    listDiffL []     ys = ys
-    listDiffL xs     [] = []
-    listDiffL (x:xs) (y:ys)
-        | x==y      = listDiffL xs ys
-        | otherwise = ys
-
-{- Specifies how to do specific refactorings
-  (uses generic query extension - remember extQ is non-symmetric) -}
-refactoringLF :: (Typeable a) => a -> SourceText -> StateT FU.Position (State Int) (SourceText, Bool)
-refactoringLF = flip $ \inp -> ((((\_ -> return (B.empty, False))
-                              `extQ` (refactorUses inp))
-                                 `extQ` (refactorDecl inp))
-                                    `extQ` (refactorArgName inp))
-                                       `extQ` (refactorStatements inp)
-
-
 refactorFortran :: Monad m
                 => SourceText
                 -> F.Statement A -> StateT (FU.Position) m (SourceText, Bool)
 refactorFortran inp e = do
     cursor <- get
-    if (pRefactored $ tag e) then
+    if (pRefactored $ F.getAnnotation e) then
           let (lb, ub) = srcSpan e
               (p0, _) = takeBounds (cursor, lb) inp
               outE = B.pack $ PP.pprint e
@@ -175,15 +173,16 @@ refactorFortran inp e = do
 
 
 refactorDecl :: SourceText -> F.Block A -> StateT FU.Position (State Int) (SourceText, Bool)
-refactorDecl inp d = return (B.empty, False) {-
+refactorDecl inp d = do
     cursor <- get
-    if (pRefactored $ tag d) then
-       let (lb, ub) = srcSpan d
+    if (pRefactored $ F.getAnnotation d) then
+       let (FU.SrcSpan lb ub) = FU.getSpan d
            (p0, _) = takeBounds (cursor, lb) inp
-           textOut = p0 `B.append` (B.pack $ pprint d)
+           textOut = p0 `B.append` (B.pack $ PP.pprint d)
        in do textOut' <- -- The following compensates new lines with removed lines
                          case d of
-                           (NullDecl _ _) ->
+                           -- TODO deal with null decl properly
+                           {- (NullDecl _ _) ->
                               do added <- lift get
                                  let diff = linesCovered ub lb
                                  -- remove empty newlines here if extra lines have been added
@@ -191,34 +190,39 @@ refactorDecl inp d = return (B.empty, False) {-
                                                          then removeNewLines textOut added
                                                          else removeNewLines textOut diff
                                  lift $ put (added - removed)
-                                 return text
+                                 return text -}
                            otherwise -> return textOut
              put ub
              return (textOut', True)
-    else return (B.empty, False) -}
+    else return (B.empty, False)
 
-refactorArgName :: Monad m => SourceText -> ArgName Annotation -> StateT FU.Position m (SourceText, Bool)
-refactorArgName inp a = return (B.empty, False)
-{-    cursor <- get
-    case (refactored $ tag a) of
+refactorArgName ::
+     Monad m
+  => SourceText -> F.Argument A -> StateT FU.Position m (SourceText, Bool)
+refactorArgName inp a = do
+    cursor <- get
+    case (refactored $ F.getAnnotation a) of
         Just lb -> do
             let (p0, _) = takeBounds (cursor, lb) inp
             put lb
-            return (p0 `B.append` (B.pack $ pprint a), True)
-        Nothing -> return (B.empty, False) -}
+            return (p0 `B.append` (B.pack $ PP.pprint a), True)
+        Nothing -> return (B.empty, False)
 
-refactorUses :: SourceText -> Uses Annotation -> StateT FU.Position (State Int) (SourceText, Bool)
-refactorUses inp u = return (B.empty, False)
-{-    cursor <- get
-    case (refactored $ tag u) of
-           Just lb -> let (p0, _) = takeBounds (cursor, lb) inp
-                          syntax  = B.pack $ printSlave u
-                       in do added <- lift get
-                             if (newNode $ tag u) then lift $ put (added + (countLines syntax))
-                                                  else return ()
-                             put $ toCol0 lb
-                             return (p0 `B.append` syntax, True)
-           Nothing -> return (B.empty, False) -}
+refactorUses :: SourceText -> F.Statement A -> StateT FU.Position (State Int) (SourceText, Bool)
+refactorUses inp u@(F.StUse {}) = do
+    cursor <- get
+    case (refactored $ F.getAnnotation u) of
+           Just lb -> do
+               let (p0, _) = takeBounds (cursor, lb) inp
+               let syntax  = B.pack $ PP.pprint u
+               added <- lift get
+               if (newNode $ F.getAnnotation u)
+                 then lift $ put (added + (countLines syntax))
+                 else return ()
+               put $ toCol0 lb
+               return (p0 `B.append` syntax, True)
+           Nothing -> return (B.empty, False)
+refactorUses inp s = return (B.empty, False)
 
 countLines xs =
   case B.uncons xs of
