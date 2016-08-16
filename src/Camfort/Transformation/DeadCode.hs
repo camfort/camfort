@@ -21,12 +21,14 @@
 module Camfort.Transformation.DeadCode where
 
 import Camfort.Analysis.Annotations
+import Camfort.Analysis.Syntax
+import Camfort.Transformation.Syntax
 import qualified Language.Fortran.Analysis.DataFlow as FAD
 import qualified Language.Fortran.Analysis.Renaming as FAR
 import qualified Language.Fortran.Analysis.BBlocks as FAB
-import qualified Language.Fortran as F
+import qualified Language.Fortran.AST as F
 import qualified Language.Fortran.Util.Position as FU
-import qualified Language.Analysis as FA
+import qualified Language.Fortran.Analysis as FA
 import Camfort.Helpers
 
 import qualified Data.IntMap as IM
@@ -44,11 +46,11 @@ import Debug.Trace
 -- but not through array-subscript assignmernts
 deadCode :: Bool -> (Filename, F.ProgramFile A)
                  -> (Report, (Filename, F.ProgramFile A))
-deadCode flag (fname, pf) = (fname, (report, pf'))
+deadCode flag (fname, pf) = (fname, (report, fmap FA.prevAnnotation pf'))
   where
-    (report, pf'') = deadCode' lva pf'
+    (report, pf'') = deadCode' flag lva pf'
     -- initialise analysis
-    pf'   = FAB.analyseBBLocks . FAR.analyseRenames . FA.initAnalysis $ pf
+    pf'   = FAB.analyseBBlocks . FAR.analyseRenames . FA.initAnalysis $ pf
     -- get map of program unit ==> basic block graph
     bbm   = FAB.genBBlockMap pf'
     -- build the supergraph of global dependency
@@ -58,7 +60,7 @@ deadCode flag (fname, pf) = (fname, (report, pf'))
     -- live variables
     lva   = FAD.liveVariableAnalysis gr
 
-deadCode' :: Bool -> InOutMap (S.Set Name)
+deadCode' :: Bool -> FAD.InOutMap (S.Set F.Name)
                   -> F.ProgramFile (FA.Analysis A)
                   -> (Report, (F.ProgramFile (FA.Analysis A)))
 deadCode' flag lva pf =
@@ -66,22 +68,24 @@ deadCode' flag lva pf =
       then (report, pf')
       else (report, pf') >>= (deadCode' flag lva)
   where
-    (report, pf') = mapM (transformBiM (perStmnt flag lva)) pf
+    (report, pf') = transformBiM (perStmt flag lva) pf
 
 -- Core of the transformation happens here on assignment statements
-perStmt :: Bool -> InOutMap (S.Set Name) -> F.Statement A -> (Report, F.Statement A)
-perStmt flag lva x@(F.StExpressionAssgign a sp@(FU.SrcSpan s1 s2) e1 e2)
-     | pRefactored a == flag =
+perStmt :: Bool
+        -> FAD.InOutMap (S.Set F.Name)
+        -> F.Statement (FA.Analysis A) -> (Report, F.Statement (FA.Analysis A))
+perStmt flag lva x@(F.StExpressionAssign a sp@(FU.SrcSpan s1 s2) e1 e2)
+     | pRefactored (FA.prevAnnotation a) == flag =
   fromMaybe ("", x) $
-    do id <- FA.insLabel a
-        (_, out) <- IM.lookup lva id
-        assignedName <- varExprToVariableF e1
-        if assignedName `S.elem` out
-          then Just x
-          else -- Dead assignment
-            Just (report, F.StExpressionAssgign a' sp e1 e2)
-              where report =  "o" ++ (show s1) ++ ": removed dead code\n"
-                    -- Set annotation to mark statement for elimination in
-                    -- the reprinter
-                    a' = a { refactored = (Just s1) }) (dropLineF sp)
+    do label <- FA.insLabel a
+       (_, out) <- IM.lookup label lva
+       assignedName <- varExprToVariable e1
+       if assignedName `S.member` out
+         then Nothing
+         else -- Dead assignment
+           Just (report, F.StExpressionAssign a' (dropLineF sp) e1 e2)
+             where report =  "o" ++ (show s1) ++ ": removed dead code\n"
+                   -- Set annotation to mark statement for elimination in
+                   -- the reprinter
+                   a' = onPrev (\ap -> ap {refactored = (Just s1)}) a
 perStmt _ _ x = return x
