@@ -1,10 +1,31 @@
-language: haskell
-ghc: [ "7.8" ]
 before_install:
-  - sudo apt-get install libgsl0-dev liblapack-dev libatlas-base-dev
-  - cabal install happy alex
-  - cabal install --only-dependencies
-install:
-  - cabal build exe:camfort
+- sudo apt-key adv --keyserver hkp://keyserver.ubuntu.com:80 --recv-keys 575159689BEFB442
+- echo 'deb http://download.fpcomplete.com/ubuntu precise main'|sudo tee /etc/apt/sources.list.d/fpco.list
+- sudo apt-get update -qq
+- sudo apt-get install stack -y -qq
+- cd ..
+- git clone https://github.com/camfort/fortran-src
+- cd $TRAVIS_BUILD_DIR
+- stack setup
 script:
-  - cabal test
+- stack test
+- stack haddock
+after_success:
+- cp "$(stack exec -- which camfort)" camfort-Linux-x64
+- tar -cvzf camfort-Linux-x64.tar.gz camfort-Linux-x64
+deploy:
+- provider: releases
+  api_key:
+    secure: inzRMEexZmzpIL+RqYEkepNOB7GZ0VbIHXpL/DfeOTRXw+gtxdzhjYyj95P5dAmo1S7j+MmwV69nXCwGl85QmjQakZyA9IRtiqLg+sS38mR2LoPitlOPf9QXtHyyAfTEWPG0yJviX6eamGblZ9S5NljW9DyoC7SIktWitOruYZo/EOaUNxoieaL1M/yj2bJEP5Bs6fm/Ejeln5kDFslaq3pOdqE/6fX+Kx9nVnEqcMDU0uHoIxQ/39NF2vQzaXj3+9aEzTyliit941rER59oNn5LxNw/KBn4ottlnHmGUR6WrBOBKG3ySupFCx+EbP8DCjCG4mfvpxhukA6dOanmzeJciuO5hVWnjxgNPVzHKbrBcgY8VSFlryaxKXcv2hOefogZKsR8Gd2m8MjKgOQf5LYuLzFJD0jKYCpWzKrIvyrB5Gt6Hg/GucYWNdzvejJRC7EI9xQp6JAPthiF5+iyc08XoNCEgNS40/m483NNYieZtg+FBEpyM9+2EoOcakQVpn+K+N7AA44KYMv+oIrqtDprYMMcU9XBfmW40LCD1/tq+IntwNs02dYuIvcZA4QDReaFL/oKVs5HOfpBbjuW3W+qfycqd2sBrSxyKX7QPCyCStOY46O6tzcTRDh9Xk+PA7DIDmjAxZzXLibcODhQmVtwkQvOaeUgb3oJD6L2lr4=
+  file: camfort-Linux-x64
+  on:
+    repo: camfort/camfort
+    tags: true
+- provider: hackage
+  username: madgen
+  file:
+  password:
+    secure: qiMRATsyCydo78H4YHxldAlardLTuvQ+EsTDqEr7JAh/AS08ycLpEK6n6zFEMl7Kngn3qLh2MtRAbwOisVl3E9CS7ZMvzQAYlDgOfVoaEXScXc3ODrUL92ftjo+5GSmkrYh5UB/xk+Sjyr+zMtYFm3O5QI7yv4nwny293V0InhZ0wiAc9P41vmNlKgUijso/T0Sj6jimbSicTKu2hKvaburPGsDm+RdXSTNz/uxhigxWJQH2jKnGNgbgmw8p7wbvrlo/UFoM6ARtlTxiE7rSJgt435EKt9+92KAEb6/XCKQSBFdUDCAYX37JluBGtgeAOp5zFtKuJWiS145ioZ51s4c6MjQpPX9eIhJfJAoSK97C4Zwb1JTu0+A4xi7JE5egqgGuj+mEPs05DAacvgZXAb6zS9mVvkrarTWr0ePOnFiJ/HgkMpOsj/ZzeKC3J7JYsmoKs9YMjvvGVCp6ulzc1x80Hr2+gXxFsWKQQcqsznI8ekBnkjovyzB67+cBRA0YtohPe+mO1rnoxZmVyedgmpZ9b9fPwPj8HH118Qrx5cBXg+qCbG7h6SOJauslZ+DVydSEbfW9ANsFu4RldPnk6JN6LOq2SSipukBY8c+Ac6MPJH1JQPYCftM5eII0hkWFyUWR1kIAVUeM75HnzpxBv3kK5Z0eA7uR5wyzudOnGl8=
+  on:
+    repo: camfort/camfort
+    tags: true
