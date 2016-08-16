@@ -24,7 +24,7 @@
 
 module Camfort.Transformation.Syntax where
 
--- tandard imports 
+-- tandard imports
 
 import Data.Char
 import Data.List
@@ -42,26 +42,11 @@ import Data.Typeable
 -- amFort specific functionality
 
 import Camfort.Analysis.Annotations
-import Camfort.Analysis.IntermediateReps
 import Camfort.Traverse
 import Language.Fortran
 import qualified Language.Fortran.Util.Position as FU
 
--- import Language.Haskell.Syntax (SrcLoc(..))
-
--- ODO: Needs fixing with the spans - need to pull apart and put back together
-
-reassociate :: Fortran Annotation -> Fortran Annotation
-reassociate (FSeq a1 sp1 (FSeq a2 sp2 a b) c) = FSeq a1 sp1 (reassociate a) (FSeq a2 sp2  (reassociate b) (reassociate c))
-reassociate t = t
-
--- reassociate :: Fortran Annotation -> Fortran Annotation
--- reassociate (FSeq a1 sp1 (FSeq a2 sp2 a b) c) = FSeq a1 sp1 (reassociate a) (FSeq a2 sp2  (reassociate b) (reassociate c))
--- reassociate t = t
-
-
 -- elpers to do with source locations and parsing
-
 refactorSpan :: SrcSpan -> SrcSpan
 refactorSpan (SrcLoc f ll cl, SrcLoc _ lu cu) = (SrcLoc f (lu+1) 0, SrcLoc f lu cu)
 
@@ -72,7 +57,8 @@ incLine (SrcLoc f l c) = SrcLoc f (l + 1) c
 decLine (SrcLoc f l c) = SrcLoc f (l - 1) c
 incCol (SrcLoc f l c) = SrcLoc f l (c + 1)
 decCol (SrcLoc f l c) = SrcLoc f l (c - 1)
-toCol0 (SrcLoc f l c) = SrcLoc f l 0
+
+toCol0 (FU.Position o l c) = FU.Position o l 0
 
 -- ropLine extends a span to the start of the next line
 -- his is particularly useful if a whole line is being redacted from a source file
@@ -106,29 +92,6 @@ nullSpan = (nullLoc, nullLoc)
 afterEnd :: SrcSpan -> SrcSpan
 afterEnd (_, SrcLoc f l c) = (SrcLoc f (l+1) 0, SrcLoc f (l+1) 0)
 
--- ariable renaming
+-- variable renaming
 
 caml (x:xs) = (toUpper x) : xs
-
-type Renamer = Data.Map.Map Variable Variable
-
-type RenamerCoercer = Maybe (Data.Map.Map Variable (Maybe Variable, Maybe (Type A, Type A)))
-                       -- Nothing represents an overall identity renamer/coercer for efficiency
-                       -- a Nothing for a variable represent a variable-level (renamer) identity 
-                       -- a Nothing for a type represents a type-level (coercer) identity
-
-applyRenaming :: (Typeable (t A), Data (t A)) => Renamer -> (t A) -> (t A)
-applyRenaming r = transformBi ((\vn@(VarName p v) -> case Data.Map.lookup v r of
-                                                        Nothing -> vn
-                                                        Just v' -> VarName p v')::(VarName A -> VarName A))
-
-class Renaming r where
-    hasRenaming :: Variable -> r -> Bool
-
-instance Renaming RenamerCoercer where
-    hasRenaming _ Nothing   = False
-    hasRenaming v (Just rc) = Data.Map.member v rc
-
--- sometimes we have a number of renamer coercers together
-instance Renaming [RenamerCoercer] where
-    hasRenaming v rcss = or (map (hasRenaming v) rcss)
