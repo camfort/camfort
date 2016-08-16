@@ -28,15 +28,15 @@ import qualified Data.ByteString.Char8 as B
 import Data.Functor.Identity
 import Data.Data
 import Control.Monad.Trans.State.Lazy
-
-import Language.Fortran
+import qualified Language.Fortran.Util.Position as FU
 import Camfort.Analysis.Syntax
 
 {-
 Reminder:
  -- type SourceText    = B.ByteString
- -- data SrcLoc
-       = SrcLoc {srcFilename :: String, srcLine :: Int, srcColumn :: Int}
+ -- data FU.Position = FU.Position { posAsbsoluteOffset :: Int,
+                                     posColumn :: Int,
+                                     posLine   :: Int }
 -}
 
 type Refactored = Bool
@@ -45,7 +45,7 @@ type Refactored = Bool
 -- into a stateful SourceText (ByteString) transformer,
 -- which returns a pair of a stateful computation of an updated SourceText
 -- paired with a boolean flag denoting whether a refactoring has been
--- performed.  The state contains a SrcLoc which is the "cursor"
+-- performed.  The state contains a FU.Position which is the "cursor"
 -- within the original source text. The incoming value corresponds to
 -- the position of the first character in the input SourceText. The
 -- outgoing value is a cursor ahead of the incoming one which shows
@@ -53,7 +53,7 @@ type Refactored = Bool
 
 type Refactoring m =
     forall b .
-     Typeable b => b -> SourceText -> StateT SrcLoc m (SourceText, Refactored)
+     Typeable b => b -> SourceText -> StateT FU.Position m (SourceText, Refactored)
 
 -- The reprint algorithm takes a refactoring (parameteric in
 -- some monad m) and turns an arbitrary pretty-printable type 'p'
@@ -67,7 +67,7 @@ reprint refactoring tree input
   -- Otherwise go with the normal algorithm
   | otherwise = do
       -- Create an initial cursor at the start of the file
-      let cursor0 = SrcLoc "" 1 0
+      let cursor0 = FU.Position 0 1 0
       -- Enter the top-node of a zipper for 'tree'
       -- setting the cursor at the start of the file
       (output, cursorn) <- runStateT (enter refactoring (toZipper tree) input) cursor0
@@ -78,11 +78,11 @@ reprint refactoring tree input
       return $ output `B.append` remaining
 
 -- The enter, enterDown, enterRight each take a refactoring
--- and a zipper producing a stateful SourceText transformer with SrcLoc state.
+-- and a zipper producing a stateful SourceText transformer with FU.Position state.
 
 enter, enterDown, enterRight
   :: Monad m
-  => Refactoring m -> Zipper a -> SourceText -> StateT SrcLoc m SourceText
+  => Refactoring m -> Zipper a -> SourceText -> StateT FU.Position m SourceText
 
 -- `enter` applies the generic refactoring to the current context
 -- of the zipper
@@ -129,9 +129,9 @@ enterRight refactoring z inp =
     -- No right sibling
     Nothing -> return $ B.empty
 
--- Given a lower-bound and upper-bound pair of SrcLocs, split the
--- incoming SourceText based on the distance between the SrcLoc pairs
-takeBounds :: (SrcLoc, SrcLoc) -> SourceText -> (SourceText, SourceText)
+-- Given a lower-bound and upper-bound pair of FU.Positions, split the
+-- incoming SourceText based on the distance between the FU.Position pairs
+takeBounds :: (FU.Position, FU.Position) -> SourceText -> (SourceText, SourceText)
 takeBounds (l, u) inp = takeBounds' (lineCol l, lineCol u) B.empty inp
 takeBounds' ((ll, lc), (ul, uc)) tk inp  =
     if (ll == ul && lc == uc) || (ll > ul) then (B.reverse tk, inp)

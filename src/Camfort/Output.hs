@@ -32,17 +32,14 @@ import Camfort.Traverse
 import qualified Language.Fortran.AST as F
 import qualified Language.Fortran.Util.Position as FU
 import qualified Language.Fortran.Analysis as FA
-
-import qualified Language.Fortran.Parser as Fortran
-import Language.Fortran
-import Language.Fortran.PreProcess
+import qualified Language.Fortran.PrettyPrint as PP
 
 import Camfort.Analysis.Annotations
 import Camfort.Analysis.Syntax
 import Camfort.Reprint
 import Camfort.Transformation.Syntax
-
 import Camfort.Specification.Units.Environment
+import qualified Language.Fortran.Util.Position as FU
 
 import System.FilePath
 import System.Directory
@@ -63,7 +60,6 @@ import Text.Printf
 
 import Control.Monad.Trans.Class
 import Control.Monad.Trans.State.Lazy
-
 
 -- Custom 'Show' which on strings is the identity
 class Show' s where
@@ -116,80 +112,69 @@ instance OutputFiles (Filename, SourceText) where
   mkOutputText _ (_, output) = output
   outputFile (f, _) = f
 
-data PR a = PR (Program a) deriving Data
-
--- When there is a file to be reprinted (for refactoring)
-instance OutputFiles (Filename, SourceText, Program Annotation) where
-  mkOutputText f' (f, input, ast') = evalState (reprint refactoringLF (PR ast') input) 0
-    where
-  outputFile (f, _, _) = f
-
 -- When there is a file to be reprinted (for refactoring)
 instance OutputFiles (Filename, SourceText, F.ProgramFile Annotation) where
   mkOutputText f' (f, input, ast') = runIdentity $ reprint refactoringForPar ast' input
   outputFile (f, _, _) = f
 
-srcSpanToSrcLocs :: FU.SrcSpan -> (SrcLoc, SrcLoc)
-srcSpanToSrcLocs (FU.SrcSpan lpos upos) = (toSrcLoc lpos, toSrcLoc upos)
-  where
-    toSrcLoc pos = SrcLoc { srcFilename = ""
-                          , srcLine     = FU.posLine pos
-                          , srcColumn   = FU.posColumn pos }
-
-refactoringForPar :: (Typeable a) =>  a -> SourceText -> StateT SrcLoc Identity (SourceText, Bool)
+refactoringForPar :: (Typeable a) =>  a -> SourceText -> StateT FU.Position Identity (SourceText, Bool)
 refactoringForPar z inp =
     ((\_ -> return (B.empty, False)) `extQ` (flip outputComments inp)) $ z
   where
-    outputComments :: F.Block Annotation -> SourceText -> StateT SrcLoc Identity (SourceText, Bool)
+    outputComments :: F.Block Annotation -> SourceText -> StateT FU.Position Identity (SourceText, Bool)
     outputComments e@(F.BlComment ann span comment) inp = do
        cursor <- get
        if (pRefactored ann)
-         then    let (lb, ub) = srcSpanToSrcLocs span
+         then    let (FU.SrcSpan lb ub) = span
                      lb'      = leftOne lb
                      (p0, _)  = takeBounds (cursor, lb') inp
                      nl       = if comment == [] then B.empty else B.pack "\n"
                  in put ub >> return (B.concat [p0, B.pack comment, nl], True)
          else return (B.empty, False)
-      where leftOne (SrcLoc f l c) = SrcLoc f (l-1) (c-1)
+      where leftOne (FU.Position f l c) = FU.Position f (l-1) (c-1)
     outputComments _ _ = return (B.empty, False)
 
 
 {-| changeDir is used to change the directory of a filename string.
     If the filename string has no directory then this is an identity  -}
-changeDir newDir oldDir oldFilename = newDir ++ (listDiffL oldDir oldFilename)
-                                      where listDiffL []     ys = ys
-                                            listDiffL xs     [] = []
-                                            listDiffL (x:xs) (y:ys) | x==y      = listDiffL xs ys
-                                                                    | otherwise = ys
+changeDir newDir oldDir oldFilename =
+    newDir ++ (listDiffL oldDir oldFilename)
+  where
+    listDiffL []     ys = ys
+    listDiffL xs     [] = []
+    listDiffL (x:xs) (y:ys)
+        | x==y      = listDiffL xs ys
+        | otherwise = ys
 
 {- Specifies how to do specific refactorings
-  (uses generic query extension - remember extQ is non-symmetric)
--}
-
-refactoringLF :: (Typeable a) =>  a -> SourceText -> StateT SrcLoc (State Int) (SourceText, Bool)
+  (uses generic query extension - remember extQ is non-symmetric) -}
+refactoringLF :: (Typeable a) => a -> SourceText -> StateT FU.Position (State Int) (SourceText, Bool)
 refactoringLF = flip $ \inp -> ((((\_ -> return (B.empty, False))
                               `extQ` (refactorUses inp))
                                  `extQ` (refactorDecl inp))
                                     `extQ` (refactorArgName inp))
-                                       `extQ` (refactorFortran inp)
+                                       `extQ` (refactorStatements inp)
 
 
-refactorFortran :: Monad m => SourceText -> Fortran Annotation -> StateT SrcLoc m (SourceText, Bool)
-refactorFortran inp e = return (B.empty, False) {- do
+refactorFortran :: Monad m
+                => SourceText
+                -> F.Statement A -> StateT (FU.Position) m (SourceText, Bool)
+refactorFortran inp e = do
     cursor <- get
     if (pRefactored $ tag e) then
           let (lb, ub) = srcSpan e
               (p0, _) = takeBounds (cursor, lb) inp
-              outE = B.pack $ pprint e
-              lnl = case e of (NullStmt _ _) -> (if ((p0 /= B.empty) && (B.last p0 /= '\n')) then B.pack "\n" else B.empty)
-                              _              -> B.empty
+              outE = B.pack $ PP.pprint e
+              -- TODO: check old NulLStmt handling
+              lnl = B.empty -- case e of (NullStmt _ _) -> (if ((p0 /= B.empty) && (B.last p0 /= '\n')) then B.pack "\n" else B.empty)
+                             -- _              -> B.empty
               lnl2 = if ((p0 /= B.empty) && (B.last p0 /= '\n')) then B.pack "\n" else B.empty
               textOut = if p0 == (B.pack "\n") then outE else B.concat [p0, lnl2, outE, lnl]
           in put ub >> return (textOut, True)
-    else return (B.empty, False) -}
+    else return (B.empty, False)
 
 
-refactorDecl :: SourceText -> Decl Annotation -> StateT SrcLoc (State Int) (SourceText, Bool)
+refactorDecl :: SourceText -> F.Block A -> StateT FU.Position (State Int) (SourceText, Bool)
 refactorDecl inp d = return (B.empty, False) {-
     cursor <- get
     if (pRefactored $ tag d) then
@@ -212,7 +197,7 @@ refactorDecl inp d = return (B.empty, False) {-
              return (textOut', True)
     else return (B.empty, False) -}
 
-refactorArgName :: Monad m => SourceText -> ArgName Annotation -> StateT SrcLoc m (SourceText, Bool)
+refactorArgName :: Monad m => SourceText -> ArgName Annotation -> StateT FU.Position m (SourceText, Bool)
 refactorArgName inp a = return (B.empty, False)
 {-    cursor <- get
     case (refactored $ tag a) of
@@ -222,7 +207,7 @@ refactorArgName inp a = return (B.empty, False)
             return (p0 `B.append` (B.pack $ pprint a), True)
         Nothing -> return (B.empty, False) -}
 
-refactorUses :: SourceText -> Uses Annotation -> StateT SrcLoc (State Int) (SourceText, Bool)
+refactorUses :: SourceText -> Uses Annotation -> StateT FU.Position (State Int) (SourceText, Bool)
 refactorUses inp u = return (B.empty, False)
 {-    cursor <- get
     case (refactored $ tag u) of
