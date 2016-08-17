@@ -6,11 +6,13 @@ before_install:
 - cd ..
 - git clone https://github.com/camfort/fortran-src
 - cd fortran-src
-- "ruby -e \"ENV['TRAVIS_TAG'] && system('git checkout $(git tag | tail -n1)')\""
+- echo $TRAVIS_TAG
+- "ruby -e \"ENV['TRAVIS_TAG'] =~ /v/ && system('git checkout $(git tag | tail -n1)')\""
 - cd $TRAVIS_BUILD_DIR
 - stack setup
 script:
-- "GHC_OPTIONS=\"--ghc-options=\"$(ruby -e 'print (ENV[%q|TRAVIS_TAG|] ? %q|-O3| : %q|-O0|)')\"\""
+- "GHC_OPTIONS=\"--ghc-options=\"$(ruby -e 'print (ENV[%q|TRAVIS_TAG|] =~ /v/ ? %q|-O3| : %q|-O0|)')\"\""
+- echo $GHC_OPTIONS
 - travis_wait 60 "stack test $GHC_OPTIONS"
 - stack haddock
 after_success:
