@@ -16,10 +16,7 @@
 {-# LANGUAGE ScopedTypeVariables #-}
 {-# LANGUAGE FlexibleInstances #-}
 {-# LANGUAGE MultiParamTypeClasses #-}
-{-# LANGUAGE KindSignatures #-}
-{-# LANGUAGE FlexibleContexts #-}
 {-# LANGUAGE GADTs #-}
-{-# LANGUAGE DeriveGeneric #-}
 {-# LANGUAGE FlexibleContexts #-}
 
 {-|
@@ -66,35 +63,29 @@ af = AnnotationFree
 unaf = annotationBound
 
 -- variable renaming helpers
-caml (x:xs) = (toUpper x) : xs
+caml (x:xs) = toUpper x : xs
 lower = map toLower
 
 -- Here begins varioous 'Eq' instances for instantiations of 'AnnotationFree'
 
 instance Eq (AnnotationFree a) => Eq (AnnotationFree [a]) where
     (AnnotationFree xs) == (AnnotationFree xs') =
-     if (length xs == length xs')
-     then foldl (\b -> \(x, x') -> ((af x) == (af x')) && b) True (zip xs xs')
+     if length xs == length xs'
+     then foldl (\b (x, x') -> (af x == af x') && b) True (zip xs xs')
      else False
-
-instance Eq (AnnotationFree Int) where
-    x == y = (unaf x) == (unaf y)
-
-instance Eq (AnnotationFree Char) where
-    x == y = (unaf x) == (unaf y)
 
 instance (Eq (AnnotationFree a), Eq (AnnotationFree b))
       => Eq (AnnotationFree (a, b)) where
 
     (AnnotationFree (x, y)) == (AnnotationFree (x', y')) =
-        ((af x) == (af x')) && ((af y) == (af y'))
+        (af x == af x') && (af y == af y')
 
 instance Eq a => Eq (AnnotationFree (F.Expression a)) where
     (AnnotationFree x) == (AnnotationFree y) = x == y''
         where y'' = setSecondParameter (getSecondParameter x) y'
               y' = setFirstParameter (getFirstParameter x) y
 
-instance Eq (AnnotationFree (F.BaseType)) where
+instance Eq (AnnotationFree F.BaseType) where
     (AnnotationFree x) == (AnnotationFree y) = x == y
 
 -- * Accessor functions for extracting various pieces of information
