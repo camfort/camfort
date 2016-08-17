@@ -14,8 +14,11 @@
    limitations under the License.
 -}
 
-{-# LANGUAGE GADTs, FlexibleContexts, FlexibleInstances,
-             TupleSections, FunctionalDependencies #-}
+{-# LANGUAGE GADTs #-}
+{-# LANGUAGE FlexibleContexts #-}
+{-# LANGUAGE FlexibleInstances #-}
+{-# LANGUAGE TupleSections #-}
+{-# LANGUAGE FunctionalDependencies #-}
 {-# LANGUAGE ImplicitParams #-}
 
 module Camfort.Specification.Stencils.CheckBackend where
@@ -60,10 +63,10 @@ class SynToAst s t | s -> t where
 instance SynToAst SYN.Specification (Either RegionEnv SpecDecls) where
   synToAst (SYN.SpecDec spec vars) = do
      spec' <- synToAst spec
-     return $ Right $ [(vars, spec')]
+     return $ Right [(vars, spec')]
 
   synToAst (SYN.RegionDec rvar region) = do
-     spec' <- synToAst $ region
+     spec' <- synToAst region
      return $ Left [(rvar, spec')]
 
 -- Convert temporal or spatial specifications
@@ -82,7 +85,7 @@ instance SynToAst SYN.Spec Specification where
      return $ Specification $ Right $ Dependency vars mutual
 
 -- Convert region definitions into the DNF-form used internally
-instance SynToAst (SYN.Region) RegionSum where
+instance SynToAst SYN.Region RegionSum where
   synToAst = dnf
 
 -- Convert a grammar syntax to Disjunctive Normal Form AST
@@ -107,7 +110,7 @@ dnf (SYN.Centered dep dim reflx) = return $ Sum [Product [Centered dep dim reflx
 dnf (SYN.Var v)            =
     case lookup v ?renv of
       Nothing -> Left $ "Error: region " ++ v ++ " is not in scope."
-      Just rs -> return $ rs
+      Just rs -> return rs
 
 -- Convert modifier list to modifier info
 instance SynToAst [SYN.Mod]

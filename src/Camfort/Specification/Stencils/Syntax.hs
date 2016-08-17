@@ -19,7 +19,6 @@
 {-# LANGUAGE DeriveDataTypeable #-}
 {-# LANGUAGE FlexibleInstances #-}
 {-# LANGUAGE GADTs #-}
-{-# LANGUAGE KindSignatures #-}
 
 module Camfort.Specification.Stencils.Syntax where
 
@@ -81,7 +80,7 @@ type SpecDecls = [([String], Specification)]
 pprintSpecDecls :: SpecDecls -> String
 pprintSpecDecls =
  concatMap (\(names, spec) ->
-            show spec ++ " :: " ++ (intercalate "," names) ++ "\n")
+            show spec ++ " :: " ++ intercalate "," names ++ "\n")
 
 lookupAggregate :: Eq a => [([a], b)] -> a -> [b]
 lookupAggregate [] _ = []
@@ -178,9 +177,9 @@ instance Ord Region where
     | otherwise   = dep <= dep'
 
   -- Order in the way defined above: Forward <: Backward <: Centered
-  (Forward _ _ _)  <= _                = True
-  (Backward _ _ _) <= (Centered _ _ _) = True
-  _                <= _                = False
+  Forward{}  <= _          = True
+  Backward{} <= Centered{} = True
+  _          <= _          = False
 
 -- Product of specifications
 newtype RegionProd = Product {unProd :: [Region]}
@@ -264,13 +263,13 @@ absorbReflexive a b =
 
 absorbReflexive' [] [] = Just ([], [])
 absorbReflexive' (Forward d dim reflx : rs) [Centered 0 dim' _]
-  | dim == dim' = Just ((Forward d dim True):rs, [])
+  | dim == dim' = Just (Forward d dim True:rs, [])
 
 absorbReflexive' (Backward d dim reflx : rs) [Centered 0 dim' _]
-  | dim == dim' = Just ((Backward d dim True):rs, [])
+  | dim == dim' = Just (Backward d dim True:rs, [])
 
 absorbReflexive' (Centered d dim reflx : rs) [Centered 0 dim' _]
-  | dim == dim' && d /= 0 = Just ((Centered d dim True):rs, [])
+  | dim == dim' && d /= 0 = Just (Centered d dim True:rs, [])
 
 absorbReflexive' _ _ = Nothing
 
@@ -446,7 +445,7 @@ instance RegionRig RegionSum where
   sum (Sum ss) (Sum ss') = Sum $ normalise $ ss ++ ss'
   zero = Sum []
   one = Sum [Product []]
-  isUnit s@(Sum ss) = s == zero || s == one || all ((==) (Product [])) ss
+  isUnit s@(Sum ss) = s == zero || s == one || all (== Product []) ss
 
 -- Show a list with ',' separator
 showL :: Show a => [a] -> String
@@ -497,12 +496,12 @@ instance Show RegionSum where
 
     show (Sum specs) =
       intercalate " + " ppspecs
-      where ppspecs = filter ((/=) "") $ map show specs
+      where ppspecs = filter (/= "") $ map show specs
 
 instance Show RegionProd where
     show (Product []) = ""
     show (Product ss)  =
-       intercalate "*" . (map (\s -> "(" ++ show s ++ ")")) $ ss
+       intercalate "*" . map (\s -> "(" ++ show s ++ ")") $ ss
 
 instance Show Region where
    show (Forward dep dim reflx)   = showRegion "forward" dep dim reflx

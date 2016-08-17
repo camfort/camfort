@@ -126,10 +126,10 @@ instance Model (Result Spatial) where
 
   mkModel = fmap mkModel
   dimensionality (Exact s) = dimensionality s
-  dimensionality (Bound l u) = (dimensionality l) `max` (dimensionality u)
+  dimensionality (Bound l u) = dimensionality l `max` dimensionality u
 
   dimensions (Exact s) = dimensions s
-  dimensions (Bound l u) = (dimensions l) ++ (dimensions u)
+  dimensions (Bound l u) = dimensions l ++ dimensions u
 
 -- Lifting of model to Maybe type
 instance Model a => Model (Maybe a) where
