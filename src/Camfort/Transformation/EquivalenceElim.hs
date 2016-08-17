@@ -21,13 +21,15 @@ module Camfort.Transformation.EquivalenceElim where
 
 import Data.Data
 import Data.List
-import Data.Map hiding (map)
+import qualified Data.Map as M
 import Data.Generics.Uniplate.Operations
 import Control.Monad.State.Lazy
 
 import qualified Language.Fortran.AST as F
-import Language.Fortran.Analysis.Types (analyseTypes, TypeEnv)
+import qualified Language.Fortran.Analysis.Types as FAT (analyseTypes, TypeEnv)
 import qualified Language.Fortran.Util.Position as FU
+import qualified Language.Fortran.Analysis.Renaming as FAR
+import qualified Language.Fortran.Analysis as FA
 
 import Camfort.Output
 import Camfort.Traverse
@@ -36,91 +38,101 @@ import Camfort.Helpers
 import Camfort.Analysis.Annotations
 import Camfort.Analysis.Syntax
 import Camfort.Transformation.DeadCode
+import Camfort.Transformation.Syntax
 
 import Debug.Trace
 
 type RfEqState = ([[F.Expression A]], Int, Report)
 
-refactorEquivalences :: (Filename, F.ProgramFile A) -> (Report, (Filename, F.ProgramFile A))
-refactorEquivalences (fname, p) =
+refactorEquivalences ::
+    (Filename, F.ProgramFile A) -> (Report, (Filename, F.ProgramFile A))
+refactorEquivalences (fname, pf) =
     let ?fname = fname
     in do
-       (typeEnv, p') <- analyseTypes p
-       p'' <- mapM (transformBiM (equivalences typeEnv)) p'
-       return p''
-       --deadCode True (fname, p')
-  where equivalences :: (?fname :: String) => TypeEnv -> F.Block Annotation -> (Report, F.Block Annotation)
-        equivalences tenv b = (report, b')
-           where
-             (b', (_, _, r)) = runState equiv ([], 0, "")
-             equiv = do b' <- transforBiM rmEquivalences b
-                        descendBiM (addCopy tenv) b'
+        let (pf'', typeEnv) = FAT.analyseTypes pf'
+        pf''' <- transformBiM (equivalences typeEnv) pf''
+        deadCode True (fname, fmap (FA.prevAnnotation) pf''')
+  where
+    -- initialise analysis
+    pf'   = FAR.analyseRenames . FA.initAnalysis $ pf
+    equivalences :: (?fname :: String) => FAT.TypeEnv -> F.Block Annotation -> (Report, F.Block Annotation)
+    equivalences tenv b = (report, b')
+      where
+         (b', (_, _, report)) = runState equiv ([], 0, "")
+         equiv = do b' <- transformBiM perStatementRmEquiv b
+                    descendBiM (addCopy tenv) b'
 
-addCopy :: (?fname :: String) => TypeEnv -> [F.Block A] -> State RfEqState [F.Block A]
+addCopy :: FAT.TypeEnv -> [F.Block A] -> State RfEqState [F.Block A]
 addCopy tenv stmts = do
     stmtss <- mapM (addCopyS tenv) stmts
     return $ concat stmtss
 
-addCopyS :: (?fname :: String) => TypeEnv -> F.Block A -> State RfEqState [F.Block A]
-addCopyS tenv x@(F.BlStatement a0 s0 lab (F.StExpressionAssign a sp@(SrcSpan s1 s2) e1 e2)) | not (pRefactored a) =
-   do eqs <- equivalents e1
-      if (length eqs > 1) then 
+addCopyS :: FAT.TypeEnv -> F.Block A -> State RfEqState [F.Block A]
+addCopyS tenv x@(F.BlStatement a0 s0 lab
+                 (F.StExpressionAssign a sp@(FU.SrcSpan s1 s2) e1 e2))
+  | not (pRefactored a) = do
+    eqs <- equivalents e1
+    if (length eqs <= 1)
+      then return [x]
+      else
+        let
+         a' = a { refactored = Just s1 }
+         sp' = refactorSpan sp
+         -- remove self from list
+         eqs' = deleteBy (\x -> \y -> (af x) == (af y)) e1 eqs
+         eqs'' = map mkCopy (zip [0..(length eqs')] eqs')
+         -- see if two expressions are variables and have the same type
+         equalTypes e e' = do
+           v1 <- varExprToVariable e
+           v2 <- varExprToVariable e'
+           t1 <- M.lookup v1 tenv
+           t2 <- M.lookup v2 tenv
+           if (t1 == t2) then Just t1 else Nothing
+         -- Create copy statements
+         mkCopy (n, e') = F.BlStatement a' sp' Nothing $
+            case equalTypes e1 e' of
+              -- Types not equal, so create a transfer
+              Nothing -> F.StExpressionAssign a' sp' e' call
+                where
+                  call = F.ExpFunctionCall a' sp' transf argst
+                  transf = F.ExpValue a' sp' (F.ValVariable "transfer")
+                  argst  = Just (F.AList a' sp' args)
+                  args   = map (F.Argument a' sp' Nothing) [e1, e']
+              -- Types are equal, simple a assignment
+              Just t -> F.StExpressionAssign a' sp' e' e1
+         -- Reporting
+         (FU.Position _ l c) = s1
+         reportF i = show (l + i, c) ++ ": addded copy due to refactored equivalence"
+         report n = concatMap reportF [n..(n + length eqs'')]
+        in do
+          -- Update refactoring state
+          (equivs, n, r) <- get
+          put (equivs, n + (length eqs'), r ++ (report n))
+          -- Sequence original assignment with new assignments
+          return $ x : eqs''
 
-       
-         let a' = a -- TODO: Put back - a { refactored = Just s1 }
-             sp' = refactorSpan 0 sp
-             eqs' = deleteBy (\x -> \y -> (af x) == (af y)) e1 eqs -- remove self from list
-
-             -- Create copy statements
-             mkCopy (n, e') = let sp' = refactorSpan n sp
-                              in F.BlStatement a0 s0 lab $ 
-                                case ((varExprToVariableF e1) >>= (\v1' -> varExprToVariableF e' >>= (\v' -> return $ eqType v1' v' tenv))) of
-                                 Nothing    -> F.StExpressionAssign a' sp' e' e1 -- could be an error
-                                 Just False -> F.StExpressionAssign a' sp' e' call
-                                                where call = F.ExpFunctionCall a' sp' transf argst
-                                                      transf = F.ExpValue a' sp' (F.ValVariable "transfer")
-                                                      argst = Just (F.AList a' sp' args)
-                                                      args = map (F.Argument a' sp' Nothing) [e1, e']
-                                 Just True  -> F.StExpressionAssign a' sp' e' e1
-             eqs'' = map mkCopy (zip [0..(length eqs')] eqs')
-
-             -- Reporting
-             l = posLine s1
-             c = posColumn s1
-             -- TODO put back pprint
---             reportF (e', i) = ?fname ++ show (l + i, c) ++ ": addded copy: " ++ (pprint e') ++ " due to refactored equivalence\n"
-             reportF (e', i) = ?fname ++ show (l + i, c) ++ ": addded copy due to refactored equivalence\n"
-             report n = concatMap reportF (zip eqs'' [n..(n + length eqs'')])
-
-         in do -- Update refactoring state
-               (equivs, n, r) <- get
-               put (equivs, n + (length eqs'), r ++ (report n))
-
-               -- Sequence original assignment with new assignments
-               return $ x : eqs''
-        else
-           return [x]
 addCopyS tenv x = do
    x' <- descendBiM (addCopy tenv) x
    return [x']
 
-perStatement :: (?fname :: String) => F.Statement A -> State RfEqState (F.Statement A)
-perStatement f@(F.StEquivalence a sp@(SrcSpan spL spU) equivs) = do
+perStatementRmEquiv :: F.Statement A -> State RfEqState (F.Statement A)
+perStatementRmEquiv f@(F.StEquivalence a sp@(FU.SrcSpan spL spU) equivs) = do
     (ess, n, r) <- get
-    put (((map F.aStrip) . F.aStrip $ equivs) ++ ess, n - 1, r ++ ?fname ++ (show spL) ++ ": removed equivalence \n")
+    let report = r ++ (show spL) ++ ": removed equivalence \n"
+    put (((map F.aStrip) . F.aStrip $ equivs) ++ ess, n - 1, report)
     let a' = a -- {refactored = (Just $ spL)} -- TODO UPDATE
-    return (F.StEquivalence a' (dropLineF sp) equivs)
-perStatement f = return f
+    return (F.StEquivalence a' (dropLine sp) equivs)
+perStatementRmEquiv f = return f
 
 -- 'equivalents e' returns a list of variables/memory cells
 -- that have been equivalenced with "e".
-equivalents :: (?fname :: String) => F.Expression A -> State RfEqState [F.Expression A]
-equivalents x = let inGroup x [] = []
-                    inGroup x (xs:xss) = if (AnnotationFree x `elem` (map AnnotationFree xs)) then xs
-                                         else inGroup x xss
-                in do (equivs, _, _) <- get
-                      return (inGroup x equivs)
-
-refactorSpan :: Int -> SrcSpan -> SrcSpan
-refactorSpan n (SrcSpan (Position ol ll cl) (Position ou lu cu)) =
-    SrcSpan (Position ol (lu+1+n) 0) (Position ou (lu+n) cu)
+equivalents :: F.Expression A -> State RfEqState [F.Expression A]
+equivalents x = do
+    (equivs, _, _) <- get
+    return (inGroup x equivs)
+  where
+    inGroup x [] = []
+    inGroup x (xs:xss) =
+        if (AnnotationFree x `elem` (map AnnotationFree xs))
+        then xs
+        else inGroup x xss
