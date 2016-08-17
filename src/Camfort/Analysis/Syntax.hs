@@ -41,7 +41,6 @@ import Data.Typeable
 -- CamFort specific functionality
 import Camfort.Analysis.Annotations
 import Camfort.Traverse
-import Language.Fortran
 
 import qualified Language.Fortran.AST as F
 import Language.Fortran.Util.FirstParameter
@@ -59,33 +58,15 @@ af = AnnotationFree
 {-| short-hand deconstructor for 'AnnotationFree' -}
 unaf = annotationBound
 
-{-| A helpful function, used by the 'Eq AnnotationFree' instance that
-     resets and source  location information -}
-eraseSrcLocs :: (Typeable (t a), Data (t a)) => t a -> t a
-eraseSrcLocs =
-    transformBi erase'
-  where
-    erase' :: SrcLoc -> SrcLoc
-    erase' _ = SrcLoc { srcFilename = "", srcLine = 0, srcColumn = 0 }
-
-{-| Sets the @SrcLoc@ information to have the filename "compact" which triggers a special
-  compact form of pretty printing in the @Show SrcLoc@ instances -}
-setCompactSrcLocs :: (Typeable (t a), Data (t a)) => t a -> t a
-setCompactSrcLocs =
-    transformBi cmpact'
-  where
-    cmpact' :: SrcLoc -> SrcLoc
-    cmpact' (SrcLoc _ l c) = SrcLoc { srcFilename = "compact", srcLine = l, srcColumn = c }
-
 lower = map toLower
 
 -- Here begins varioous 'Eq' instances for instantiations of 'AnnotationFree'
 
 instance Eq (AnnotationFree a) => Eq (AnnotationFree [a]) where
     (AnnotationFree xs) == (AnnotationFree xs') =
-               if (length xs == length xs')
-               then foldl (\b -> \(x, x') -> ((af x) == (af x')) && b) True (zip xs xs')
-               else False
+     if (length xs == length xs')
+     then foldl (\b -> \(x, x') -> ((af x) == (af x')) && b) True (zip xs xs')
+     else False
 
 instance Eq (AnnotationFree Int) where
     x == y = (unaf x) == (unaf y)
@@ -117,29 +98,3 @@ instance Monoid Int where
     mempty = 0
     mappend = (+)
 
--- * An embedded domain-specific language for describing syntax tree queries
-{-| 'QueryCmd' provides 'commands' of which pieces of syntax to find -}
-
-data QueryCmd t where
-    Exprs  :: QueryCmd (Expr Annotation)
-    Blocks :: QueryCmd (Block Annotation)
-    Decls  :: QueryCmd (Decl Annotation)
-    Vars   :: QueryCmd (Expr Annotation)
-
-{-| 'from' takes a command as its first parameter, a piece of syntax as its second, and
-     returns all pieces of syntax matching the query request.
-
-     For example: @from Decls x@ returns a list of all declarations in @x@, of type @[Decl Annotation]@
-     If @x@ is itself a declaration then this is returned as well (so be careful with recursive functions
-     over things defined in turns of 'from'. See 'topFrom' for a solution to this.
--}
-from :: forall t synTyp . (Data t, Data synTyp) => QueryCmd synTyp -> t -> [synTyp]
-from Vars x = [v | v@(Var _ _ _) <- (universeBi x)::[Expr Annotation]]
-from _ x = (universeBi x)::[synTyp]
-
-{-| 'topFrom' takes a command as first parameter, a piece of syntax as its second, and
-     returns all pieces of syntax matching the query request that are *children* of the current
-     piece of syntax. This means that it will not return itself. -}
-
-topFrom :: forall t synTyp . (Data t, Data synTyp) => QueryCmd synTyp -> t -> [synTyp]
-topFrom _ x = (childrenBi x)::[synTyp]
