@@ -33,15 +33,12 @@ import Data.Monoid
 import Data.Generics.Uniplate.Operations
 
 import Camfort.Analysis.Annotations
-import Camfort.Analysis.Types
 import Camfort.Analysis.Simple
 import Camfort.Analysis.Syntax
 
 import Camfort.Transformation.DeadCode
 import Camfort.Transformation.CommonBlockElim
-import Camfort.Transformation.CommonBlockElimToCalls
 import Camfort.Transformation.EquivalenceElim
-import Camfort.Transformation.DerivedTypeIntro
 
 import qualified Camfort.Specification.Units as LU
 import Camfort.Specification.Units.Environment
@@ -86,11 +83,6 @@ getExcludes :: Options -> String
 getExcludes xs = getOption xs
 
 -- * Wrappers on all of the features
-typeStructuring inSrc excludes outSrc _ = do
-    putStrLn $ "Introducing derived data types in '" ++ inSrc ++ "'"
-    report <- doRefactor typeStruct inSrc excludes outSrc
-    putStrLn report
-
 ast d excludes f _ = do
     xs <- readForparseSrcDir (d ++ "/" ++ f) excludes
     putStrLn $ show (map (\(_, _, p) -> p) xs)
@@ -102,11 +94,6 @@ countVarDecls inSrc excludes _ _ = do
 dead inSrc excludes outSrc _ = do
     putStrLn $ "Eliminating dead code in '" ++ inSrc ++ "'"
     report <- doRefactorForpar ((mapM (deadCode False))) inSrc excludes outSrc
-    putStrLn report
-
-commonToArgs inSrc excludes outSrc _ = do
-    putStrLn $ "Refactoring common blocks in '" ++ inSrc ++ "'"
-    report <- doRefactor (commonElimToCalls inSrc) inSrc excludes outSrc
     putStrLn report
 
 common inSrc excludes outSrc _ = do

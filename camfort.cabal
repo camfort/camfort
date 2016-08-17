@@ -47,7 +47,6 @@ executable camfort
                         Camfort.Specification.Units.Parser
                         Camfort.Specification.Units.Synthesis
                         Camfort.Transformation.CommonBlockElim
-                        Camfort.Transformation.CommonBlockElimToCalls
                         Camfort.Transformation.DeadCode
                         Camfort.Transformation.EquivalenceElim
                         Camfort.Transformation.Syntax
@@ -110,7 +109,6 @@ library
                         Camfort.Specification.Units.Parser
                         Camfort.Specification.Units.Synthesis
                         Camfort.Transformation.CommonBlockElim
-                        Camfort.Transformation.CommonBlockElimToCalls
                         Camfort.Transformation.DeadCode
                         Camfort.Transformation.EquivalenceElim
                         Camfort.Transformation.Syntax
