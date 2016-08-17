@@ -251,7 +251,7 @@ perBlockInfer mode b@(F.BlStatement ann span@(FU.SrcSpan lp up) _ stmnt)
                                                  \ subscript we can't handle \
                                                  \(tag: LHSnotHandled)",""))]
                              return []
-                           else return []s
+                           else return []
            -- Not an assign we are interested in
            _ -> return [])
     if mode == Synth && not (null specs)
