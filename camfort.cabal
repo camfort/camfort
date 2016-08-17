@@ -27,8 +27,6 @@ executable camfort
   other-modules:        Camfort.Analysis.Annotations
                         Camfort.Analysis.CommentAnnotator
                         Camfort.Analysis.Simple
-                        Camfort.Analysis.Syntax
-                        Camfort.Analysis.Types
                         Camfort.Specification.Stencils.Annotation
                         Camfort.Specification.Stencils.CheckBackend
                         Camfort.Specification.Stencils.CheckFrontend
@@ -49,8 +47,8 @@ executable camfort
                         Camfort.Transformation.CommonBlockElim
                         Camfort.Transformation.DeadCode
                         Camfort.Transformation.EquivalenceElim
-                        Camfort.Transformation.Syntax
                         Camfort.Helpers
+                        Camfort.Helpers.Syntax			
                         Camfort.Helpers.Vec
                         Camfort.Functionality
                         Camfort.Input
@@ -63,7 +61,6 @@ executable camfort
                         ghc-prim >= 0.3.1.0,
                         containers >= 0.5.0.0,
                         uniplate >= 1.6.10,
-                        haskell-src >= 1.0.1,
                         syz >= 0.2,
                         syb >= 0.4,
                         matrix >=0.2.2,
@@ -89,8 +86,6 @@ library
   exposed-modules:      Camfort.Analysis.Annotations
                         Camfort.Analysis.CommentAnnotator
                         Camfort.Analysis.Simple
-                        Camfort.Analysis.Syntax
-                        Camfort.Analysis.Types
                         Camfort.Specification.Stencils.Annotation
                         Camfort.Specification.Stencils.CheckBackend
                         Camfort.Specification.Stencils.CheckFrontend
@@ -111,8 +106,8 @@ library
                         Camfort.Transformation.CommonBlockElim
                         Camfort.Transformation.DeadCode
                         Camfort.Transformation.EquivalenceElim
-                        Camfort.Transformation.Syntax
                         Camfort.Helpers
+                        Camfort.Helpers.Syntax			
                         Camfort.Helpers.Vec
                         Camfort.Functionality
                         Camfort.Input
@@ -124,7 +119,6 @@ library
                         ghc-prim >= 0.3.1.0,
                         containers >= 0.5.0.0,
                         uniplate >= 1.6.10,
-                        haskell-src >= 1.0.1,
                         syz >= 0.2,
                         syb >= 0.4,
                         matrix >=0.2.2,

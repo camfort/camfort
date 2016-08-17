@@ -27,9 +27,6 @@ import Data.Maybe (isJust)
 import Data.Map.Lazy hiding (map)
 import Debug.Trace
 
-import Language.Haskell.ParseMonad
-
-import Language.Fortran
 import Camfort.Specification.Units.Environment
 import qualified Camfort.Specification.Units.Parser as P
 import Camfort.Analysis.CommentAnnotator
@@ -43,23 +40,21 @@ import qualified Language.Fortran.Util.Position as FU
 type Report = String
 
 type A = Annotation
-data Annotation = A { unitVar        :: Int,
-                      number         :: Int,
-                      refactored     :: Maybe FU.Position,
-                      -- used to indicate when a node is newly introduced
-                      newNode        :: Bool,
-                      stencilSpec    :: Maybe
-                        -- If defined, either an unprocessed syntax tree
-                        (Either StencilComment.Specification
-                          -- Or a parser AST of a RegionEnv or SpecDecls
-                          (Either StencilSpec.RegionEnv StencilSpec.SpecDecls)),
-                      stencilBlock   ::
-                        Maybe (F.Block (FA.Analysis Annotation))
-                    }
-                   deriving (Eq, Show, Typeable, Data)
+data Annotation =
+  A { unitVar        :: Int
+    , number         :: Int
+    , refactored     :: Maybe FU.Position
+    -- used to indicate when a node is newly introduced
+    , newNode        :: Bool
+    , stencilSpec    :: Maybe
+    -- If defined, either an unprocessed syntax tree
+         (Either StencilComment.Specification
+           -- Or a parser AST of a RegionEnv or SpecDecls
+           (Either StencilSpec.RegionEnv StencilSpec.SpecDecls))
+    , stencilBlock   :: Maybe (F.Block (FA.Analysis Annotation))
+    } deriving (Eq, Show, Typeable, Data)
 
- -- Map Variable [[(Variable,Int)]],
-
+-- Predicate on whether an AST has been refactored
 pRefactored :: Annotation -> Bool
 pRefactored = isJust . refactored
 
@@ -73,7 +68,6 @@ unitAnnotation = A
  }
 
 --------------------------------------------------
-
 -- Convenience name for a common annotation type.
 type UA = FA.Analysis (UnitAnnotation A)
 

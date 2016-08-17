@@ -13,16 +13,22 @@
    See the License for the specific language governing permissions and
    limitations under the License.
 -}
-{-# LANGUAGE ScopedTypeVariables, FlexibleInstances, MultiParamTypeClasses, KindSignatures,
-             FlexibleContexts, GADTs, DeriveGeneric #-}
+{-# LANGUAGE ScopedTypeVariables #-}
+{-# LANGUAGE FlexibleInstances #-}
+{-# LANGUAGE MultiParamTypeClasses #-}
+{-# LANGUAGE KindSignatures #-}
+{-# LANGUAGE FlexibleContexts #-}
+{-# LANGUAGE GADTs #-}
+{-# LANGUAGE DeriveGeneric #-}
+{-# LANGUAGE FlexibleContexts #-}
 
 {-|
 
-This module provides a number of helper functions for working with Fortran syntax that are useful
-between different analyses and transformations.
+This module provides a number of helper functions for working with Fortran
+syntax that are useful between different analyses and transformations.
 
 -}
-module Camfort.Analysis.Syntax where
+module Camfort.Helpers.Syntax where
 
 -- Standard imports
 import Data.Char
@@ -43,6 +49,7 @@ import Camfort.Analysis.Annotations
 import Camfort.Traverse
 
 import qualified Language.Fortran.AST as F
+import qualified Language.Fortran.Util.Position as FU
 import Language.Fortran.Util.FirstParameter
 import Language.Fortran.Util.SecondParameter
 
@@ -58,6 +65,8 @@ af = AnnotationFree
 {-| short-hand deconstructor for 'AnnotationFree' -}
 unaf = annotationBound
 
+-- variable renaming helpers
+caml (x:xs) = (toUpper x) : xs
 lower = map toLower
 
 -- Here begins varioous 'Eq' instances for instantiations of 'AnnotationFree'
@@ -85,6 +94,9 @@ instance Eq a => Eq (AnnotationFree (F.Expression a)) where
         where y'' = setSecondParameter (getSecondParameter x) y'
               y' = setFirstParameter (getFirstParameter x) y
 
+instance Eq (AnnotationFree (F.BaseType)) where
+    (AnnotationFree x) == (AnnotationFree y) = x == y
+
 -- * Accessor functions for extracting various pieces of information
 --    out of syntax trees
 {-| Extracts a string of the (root) variable name from a variable expression
@@ -98,3 +110,21 @@ instance Monoid Int where
     mempty = 0
     mappend = (+)
 
+-- SrcSpan helpers
+
+dropLine :: FU.SrcSpan -> FU.SrcSpan
+dropLine (FU.SrcSpan s1 (FU.Position o l c)) =
+    FU.SrcSpan s1 (FU.Position o (l+1) 0)
+
+linesCovered :: FU.Position -> FU.Position -> Int
+linesCovered (FU.Position _ l1 _) (FU.Position _ l2 _) = l2 - l1 + 1
+
+toCol0 (FU.Position o l c) = FU.Position o l 0
+
+refactorSpan :: FU.SrcSpan -> FU.SrcSpan
+refactorSpan = refactorSpanN 0
+
+refactorSpanN :: Int -> FU.SrcSpan -> FU.SrcSpan
+refactorSpanN n (FU.SrcSpan (FU.Position o ll cl)
+                            (FU.Position _ lu cu)) =
+    FU.SrcSpan (FU.Position o (lu+1+n) 0) (FU.Position o (lu+n) cu)
