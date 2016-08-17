@@ -21,7 +21,6 @@ module Camfort.Reprint where
 import Data.Generics.Zipper
 
 import Camfort.Analysis.Annotations
-import Camfort.Traverse
 import Camfort.Helpers
 import Camfort.Helpers.Syntax
 

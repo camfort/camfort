@@ -29,7 +29,7 @@ module Camfort.Input where
 import Camfort.Analysis.Annotations
 import Camfort.Helpers
 import Camfort.Output
-import Camfort.Traverse
+
 import qualified Language.Fortran.Parser.Any as FP
 import qualified Language.Fortran.AST as F
 

@@ -54,7 +54,6 @@ executable camfort
                         Camfort.Input
                         Camfort.Output
                         Camfort.Reprint
-                        Camfort.Traverse
                         Main
 
   build-depends:        base >= 4.6 && < 5,
@@ -112,7 +111,6 @@ library
                         Camfort.Input
                         Camfort.Output
                         Camfort.Reprint
-                        Camfort.Traverse
 
   build-depends:        base >= 4.6 && < 5,
                         ghc-prim >= 0.3.1.0,

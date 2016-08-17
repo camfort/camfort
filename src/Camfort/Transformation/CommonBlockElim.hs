@@ -37,7 +37,6 @@ import qualified Language.Fortran.ParserMonad as PM
 
 import Camfort.Helpers
 import Camfort.Helpers.Syntax
-import Camfort.Traverse
 import Camfort.Analysis.Annotations
 
 -- Typed common block representation

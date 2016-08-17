@@ -43,7 +43,6 @@ import Data.Typeable
 
 -- CamFort specific functionality
 import Camfort.Analysis.Annotations
-import Camfort.Traverse
 
 import qualified Language.Fortran.AST as F
 import qualified Language.Fortran.Util.Position as FU

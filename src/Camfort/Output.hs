@@ -26,9 +26,6 @@
 
 module Camfort.Output where
 
-import Camfort.Helpers
-import Camfort.Traverse
-
 import qualified Language.Fortran.AST as F
 import qualified Language.Fortran.Util.Position as FU
 import qualified Language.Fortran.Analysis as FA
@@ -38,6 +35,7 @@ import qualified Language.Fortran.ParserMonad as FPM
 
 import Camfort.Analysis.Annotations
 import Camfort.Reprint
+import Camfort.Helpers
 import Camfort.Helpers.Syntax
 import Camfort.Specification.Units.Environment
 
