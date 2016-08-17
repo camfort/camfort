@@ -93,36 +93,29 @@ instance Eq (AnnotationFree Int) where
 instance Eq (AnnotationFree Char) where
     x == y = (unaf x) == (unaf y)
 
-instance Eq (AnnotationFree (AccessP ())) where
-    x == y = (unaf x) == (unaf y)
+instance (Eq (AnnotationFree a), Eq (AnnotationFree b))
+      => Eq (AnnotationFree (a, b)) where
 
-instance (Eq (AnnotationFree a), Eq (AnnotationFree b)) => Eq (AnnotationFree (a, b)) where
-    (AnnotationFree (x, y)) == (AnnotationFree (x', y')) = ((af x) == (af x')) && ((af y) == (af y'))
+    (AnnotationFree (x, y)) == (AnnotationFree (x', y')) =
+        ((af x) == (af x')) && ((af y) == (af y'))
 
 instance Eq a => Eq (AnnotationFree (F.Expression a)) where
     (AnnotationFree x) == (AnnotationFree y) = x == y''
         where y'' = setSecondParameter (getSecondParameter x) y'
               y' = setFirstParameter (getFirstParameter x) y
 
-{-| Partial-ordering for expressions (constructors only so far), ignores annotations -}
-instance Eq p => Ord (Expr p) where
-    (Con _ _ c) <= (Con  _ _ c') = c <= c'
-    e <= e'                      = error "Ordering on expressions only for constructors so far"
-
--- * Accessor functions for extracting various pieces of information out of syntax trees
-
-
-{-| Extracts a string of the (root) variable name from a variable expression (if it is indeed a variable
-    expression -}
-varExprToVariableF :: F.Expression a -> Maybe F.Name
-varExprToVariableF (F.ExpValue _ _ (F.ValVariable v)) = Just v
-varExprToVariableF _                                  = Nothing
+-- * Accessor functions for extracting various pieces of information
+--    out of syntax trees
+{-| Extracts a string of the (root) variable name from a variable expression
+   (if it is indeed a variable expression -}
+varExprToVariable :: F.Expression a -> Maybe F.Name
+varExprToVariable (F.ExpValue _ _ (F.ValVariable v)) = Just v
+varExprToVariable _                                  = Nothing
 
 {-| Set a default monoid instances for Int -}
 instance Monoid Int where
     mempty = 0
     mappend = (+)
-
 
 -- * An embedded domain-specific language for describing syntax tree queries
 {-| 'QueryCmd' provides 'commands' of which pieces of syntax to find -}
@@ -131,7 +124,6 @@ data QueryCmd t where
     Exprs  :: QueryCmd (Expr Annotation)
     Blocks :: QueryCmd (Block Annotation)
     Decls  :: QueryCmd (Decl Annotation)
-    Locs   :: QueryCmd Access
     Vars   :: QueryCmd (Expr Annotation)
 
 {-| 'from' takes a command as its first parameter, a piece of syntax as its second, and
@@ -142,7 +134,6 @@ data QueryCmd t where
      over things defined in turns of 'from'. See 'topFrom' for a solution to this.
 -}
 from :: forall t synTyp . (Data t, Data synTyp) => QueryCmd synTyp -> t -> [synTyp]
-from Locs x = accesses x
 from Vars x = [v | v@(Var _ _ _) <- (universeBi x)::[Expr Annotation]]
 from _ x = (universeBi x)::[synTyp]
 
@@ -151,5 +142,4 @@ from _ x = (universeBi x)::[synTyp]
      piece of syntax. This means that it will not return itself. -}
 
 topFrom :: forall t synTyp . (Data t, Data synTyp) => QueryCmd synTyp -> t -> [synTyp]
-topFrom Locs x = accesses x
 topFrom _ x = (childrenBi x)::[synTyp]
