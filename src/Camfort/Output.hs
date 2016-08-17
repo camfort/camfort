@@ -33,13 +33,13 @@ import qualified Language.Fortran.AST as F
 import qualified Language.Fortran.Util.Position as FU
 import qualified Language.Fortran.Analysis as FA
 import qualified Language.Fortran.PrettyPrint as PP
+import qualified Language.Fortran.Util.Position as FU
+import qualified Language.Fortran.ParserMonad as FPM
 
 import Camfort.Analysis.Annotations
-import Camfort.Analysis.Syntax
 import Camfort.Reprint
-import Camfort.Transformation.Syntax
+import Camfort.Helpers.Syntax
 import Camfort.Specification.Units.Environment
-import qualified Language.Fortran.Util.Position as FU
 
 import System.FilePath
 import System.Directory
@@ -125,23 +125,30 @@ instance OutputFiles (Filename, SourceText) where
 
 -- When there is a file to be reprinted (for refactoring)
 instance OutputFiles (Filename, SourceText, F.ProgramFile Annotation) where
-  mkOutputText f' (f, input, ast') = runIdentity $ reprint refactoring ast' input
+  mkOutputText f' (f, input, ast'@(F.ProgramFile (F.MetaInfo version) _ _)) =
+      runIdentity $ reprint (refactoring version) ast' input
+
   outputFile (f, _, _) = f
 
 {- Specifies how to do specific refactorings
   (uses generic query extension - remember extQ is non-symmetric) -}
 
-refactoring :: (Typeable a) =>  a -> SourceText -> StateT FU.Position Identity (SourceText, Bool)
-refactoring z inp =
-          (\_ -> return (B.empty, False))
-   `extQ` (flip outputComments inp)
-   `extQ` (refactorUses inp)
-   `extQ` (refactorDecl inp)
-   `extQ` (refactorArgName inp)
-   `extQ` (refactorStatements inp) $ z
+refactoring :: (Typeable a) => FPM.FortranVersion -> a -> SourceText -> StateT FU.Position Identity (SourceText, Bool)
+refactoring v z inp =
+          (catchAll inp)
+   `extQ` (outputComments inp)
+   `extQ` (refactorings inp) $ z
   where
-    outputComments :: F.Block Annotation -> SourceText -> StateT FU.Position Identity (SourceText, Bool)
-    outputComments e@(F.BlComment ann span comment) inp = do
+    catchAll :: SourceText -> a -> StateT FU.Position Identity (SourceText, Bool)
+    catchAll _ _ = return (B.empty, False)
+    refactorings inp z =
+      mapStateT (\n -> Identity $ n `evalState` 0)
+         $ ((refactorUses v inp)
+     `extQ` (refactorDecl v inp)
+     `extQ` (refactorArgName v inp)
+     `extQ` (refactorStatements v inp) $ z)
+    outputComments :: SourceText -> F.Block Annotation -> StateT FU.Position Identity (SourceText, Bool)
+    outputComments inp e@(F.BlComment ann span comment) = do
        cursor <- get
        if (pRefactored ann)
          then    let (FU.SrcSpan lb ub) = span
@@ -154,15 +161,15 @@ refactoring z inp =
     outputComments _ _ = return (B.empty, False)
 
 
-refactorFortran :: Monad m
-                => SourceText
+refactorStatements :: Monad m
+                => FPM.FortranVersion -> SourceText
                 -> F.Statement A -> StateT (FU.Position) m (SourceText, Bool)
-refactorFortran inp e = do
+refactorStatements v inp e = do
     cursor <- get
     if (pRefactored $ F.getAnnotation e) then
-          let (lb, ub) = srcSpan e
+          let (FU.SrcSpan lb ub) = FU.getSpan e
               (p0, _) = takeBounds (cursor, lb) inp
-              outE = B.pack $ PP.pprint e
+              outE = B.pack $ PP.pprintAndRender v e Nothing
               -- TODO: check old NulLStmt handling
               lnl = B.empty -- case e of (NullStmt _ _) -> (if ((p0 /= B.empty) && (B.last p0 /= '\n')) then B.pack "\n" else B.empty)
                              -- _              -> B.empty
@@ -172,13 +179,13 @@ refactorFortran inp e = do
     else return (B.empty, False)
 
 
-refactorDecl :: SourceText -> F.Block A -> StateT FU.Position (State Int) (SourceText, Bool)
-refactorDecl inp d = do
+refactorDecl :: FPM.FortranVersion -> SourceText -> F.Block A -> StateT FU.Position (State Int) (SourceText, Bool)
+refactorDecl v inp d = do
     cursor <- get
     if (pRefactored $ F.getAnnotation d) then
        let (FU.SrcSpan lb ub) = FU.getSpan d
            (p0, _) = takeBounds (cursor, lb) inp
-           textOut = p0 `B.append` (B.pack $ PP.pprint d)
+           textOut = p0 `B.append` (B.pack $ PP.pprintAndRender v d Nothing)
        in do textOut' <- -- The following compensates new lines with removed lines
                          case d of
                            -- TODO deal with null decl properly
@@ -198,23 +205,23 @@ refactorDecl inp d = do
 
 refactorArgName ::
      Monad m
-  => SourceText -> F.Argument A -> StateT FU.Position m (SourceText, Bool)
-refactorArgName inp a = do
+  => FPM.FortranVersion -> SourceText -> F.Argument A -> StateT FU.Position m (SourceText, Bool)
+refactorArgName v inp a = do
     cursor <- get
     case (refactored $ F.getAnnotation a) of
         Just lb -> do
             let (p0, _) = takeBounds (cursor, lb) inp
             put lb
-            return (p0 `B.append` (B.pack $ PP.pprint a), True)
+            return (p0 `B.append` (B.pack $ PP.pprintAndRender v a Nothing), True)
         Nothing -> return (B.empty, False)
 
-refactorUses :: SourceText -> F.Statement A -> StateT FU.Position (State Int) (SourceText, Bool)
-refactorUses inp u@(F.StUse {}) = do
+refactorUses :: FPM.FortranVersion -> SourceText -> F.Statement A -> StateT FU.Position (State Int) (SourceText, Bool)
+refactorUses v inp u@(F.StUse {}) = do
     cursor <- get
     case (refactored $ F.getAnnotation u) of
            Just lb -> do
                let (p0, _) = takeBounds (cursor, lb) inp
-               let syntax  = B.pack $ PP.pprint u
+               let syntax  = B.pack $ PP.pprintAndRender v u Nothing
                added <- lift get
                if (newNode $ F.getAnnotation u)
                  then lift $ put (added + (countLines syntax))
@@ -222,7 +229,7 @@ refactorUses inp u@(F.StUse {}) = do
                put $ toCol0 lb
                return (p0 `B.append` syntax, True)
            Nothing -> return (B.empty, False)
-refactorUses inp s = return (B.empty, False)
+refactorUses v inp s = return (B.empty, False)
 
 countLines xs =
   case B.uncons xs of

@@ -98,7 +98,7 @@ doAnalysisReport rFun sFun inSrc excludes = do
     output to the directory specified by the fourth parameter -}
 doRefactor :: ([(Filename, F.ProgramFile A)]
                  -> (String, [(Filename, F.ProgramFile Annotation)]))
-                 -> FileOrDir -> [Filename] -> FileOrDir -> IO ()
+                 -> FileOrDir -> [Filename] -> FileOrDir -> IO String
 doRefactor rFun inSrc excludes outSrc = do
     if excludes /= [] && excludes /= [""]
     then putStrLn $ "Excluding " ++ (concat $ intersperse "," excludes)
@@ -108,9 +108,9 @@ doRefactor rFun inSrc excludes outSrc = do
     let (report, ps') = rFun (map (\(f, inp, ast) -> (f, ast)) ps)
     --let outFiles = filter (\f -> not ((take (length $ d ++ "out") f) == (d ++ "out"))) (map fst ps')
     --let outFiles = map fst ps'
-    putStrLn report
     let outputs = mkOutputFile ps ps'
     outputFiles inSrc outSrc outputs
+    return report
   where snd3 (a, b, c) = b
 
 mkOutputFile :: [(Filename, SourceText, a)]

@@ -265,7 +265,7 @@ perBlockInfer mode b@(F.BlStatement ann span@(FU.SrcSpan lp up) _ stmnt)
                where vars' = filter (\v -> not ((span, realName v) `elem` hasSpec)) vars
             realName v = v `fromMaybe` (v `M.lookup` ?nameMap)
             tabs  = take (FU.posColumn lp  - 1) (repeat ' ')
-            (FU.SrcPan loc _) = span
+            (FU.SrcSpan loc _) = span
             span' = FU.SrcSpan (lp {FU.posColumn = 0}) (lp {FU.posColumn = 0})
             ann'  = ann { FA.prevAnnotation = (FA.prevAnnotation ann) { refactored = Just loc } }
         in return $ F.BlComment ann' span' specComment

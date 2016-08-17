@@ -36,10 +36,9 @@ import qualified Language.Fortran.Util.Position as FU
 import qualified Language.Fortran.ParserMonad as PM
 
 import Camfort.Helpers
+import Camfort.Helpers.Syntax
 import Camfort.Traverse
 import Camfort.Analysis.Annotations
-import Camfort.Analysis.Syntax
-import Camfort.Transformation.Syntax
 
 -- Typed common block representation
 type TCommon p = (Maybe String, [(F.Name, F.BaseType)])

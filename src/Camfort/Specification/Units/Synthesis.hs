@@ -40,7 +40,6 @@ import qualified Language.Fortran.Util.Position as FU
 
 import qualified Camfort.Specification.Units.Parser as P
 import Camfort.Analysis.CommentAnnotator
-import qualified Camfort.Output as O (srcSpanToSrcLocs)
 import Camfort.Analysis.Annotations hiding (Unitless)
 import Camfort.Specification.Units.Environment
 import Camfort.Specification.Units.Monad
@@ -70,12 +69,10 @@ synthBlock vars bs b@(F.BlStatement a ss@(FU.SrcSpan lp up) _ (F.StDeclaration _
     e@(F.ExpValue _ _ (F.ValVariable _))
       | name `S.notMember` gvSet            -- not a member of the already-given variables
       , Just u <- lookup name vars -> do    -- and a unit has been inferred
-        -- Pick the start source loc from the existing decl.
-        let loc   = fst $ O.srcSpanToSrcLocs ss
         -- Create new annotation which labels this as a refactored node.
         let newA  = a { FA.prevAnnotation = (FA.prevAnnotation a) {
                            prevAnnotation = (prevAnnotation (FA.prevAnnotation a)) {
-                               refactored = Just loc } } }
+                               refactored = Just lp } } }
         -- Create a zero-length span for the new comment node.
         let newSS = FU.SrcSpan (lp {FU.posColumn = 0}) (lp {FU.posColumn = 0})
         -- Build the text of the comment with the unit annotation.

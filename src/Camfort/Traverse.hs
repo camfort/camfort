@@ -24,10 +24,10 @@ import Data.Generics.Zipper
 import Data.Generics.Aliases
 import Data.Generics.Str
 import Data.Generics.Uniplate.Operations
-
 import Data.Data
 import Data.Maybe
 import Data.Monoid
+import Control.Monad.Writer.Strict
 
 #if __GLASGOW_HASKELL__ < 800
 instance Monoid x => Monad ((,) x) where

@@ -34,11 +34,9 @@ import qualified Language.Fortran.Analysis as FA
 import Camfort.Output
 import Camfort.Traverse
 import Camfort.Helpers
-
+import Camfort.Helpers.Syntax
 import Camfort.Analysis.Annotations
-import Camfort.Analysis.Syntax
 import Camfort.Transformation.DeadCode
-import Camfort.Transformation.Syntax
 
 import Debug.Trace
 

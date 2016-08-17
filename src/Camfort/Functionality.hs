@@ -31,11 +31,12 @@ import System.IO
 
 import Data.Monoid
 import Data.Generics.Uniplate.Operations
+import Data.Data
+import Data.List (foldl', intercalate)
+import qualified Debug.Trace as D
 
 import Camfort.Analysis.Annotations
 import Camfort.Analysis.Simple
-import Camfort.Analysis.Syntax
-
 import Camfort.Transformation.DeadCode
 import Camfort.Transformation.CommonBlockElim
 import Camfort.Transformation.EquivalenceElim
@@ -44,6 +45,7 @@ import qualified Camfort.Specification.Units as LU
 import Camfort.Specification.Units.Environment
 import Camfort.Specification.Units.Monad
 
+import Camfort.Helpers.Syntax
 import Camfort.Helpers
 import Camfort.Output
 import Camfort.Input
@@ -54,8 +56,6 @@ import Language.Fortran.Analysis.Renaming
   (renameAndStrip, analyseRenames, unrename, NameMap)
 import Language.Fortran.Analysis(initAnalysis)
 import qualified Camfort.Specification.Stencils as Stencils
-
-import qualified Debug.Trace as D
 
 -- CamFort optional flags
 data Flag = Version
@@ -114,7 +114,8 @@ unitsInfer inSrc excludes outSrc opt = do
 
 unitsSynth inSrc excludes outSrc opt = do
     putStrLn $ "Synthesising units for '" ++ inSrc ++ "'"
-    doRefactor (mapM (LU.synthesiseUnits (optsToUnitOpts opt))) inSrc excludes outSrc
+    report <- doRefactor (mapM (LU.synthesiseUnits (optsToUnitOpts opt))) inSrc excludes outSrc
+    putStrLn report
 
 unitsCriticals inSrc excludes outSrc opt = do
     putStrLn $ "Suggesting variables to annotate with unit specifications in '"
@@ -132,10 +133,10 @@ stencilsInfer inSrc excludes outSrc opt = do
 
 stencilsSynth inSrc excludes outSrc opt = do
    putStrLn $ "Synthesising stencil specs for '" ++ inSrc ++ "'"
-   doRefactor (Stencils.synth (getOption opt)) inSrc excludes outSrc
+   report <- doRefactor (Stencils.synth (getOption opt)) inSrc excludes outSrc
+   putStrLn report
 
 stencilsVarFlowCycles inSrc excludes _ _ = do
    putStrLn $ "Inferring var flow cycles for '" ++ inSrc ++ "'"
    let flowAnalysis = intercalate ", " . map show . Stencils.findVarFlowCycles
    doAnalysisSummary (\_ p -> (flowAnalysis p , p)) inSrc excludes Nothing
-

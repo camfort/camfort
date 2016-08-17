@@ -21,8 +21,6 @@
 module Camfort.Transformation.DeadCode where
 
 import Camfort.Analysis.Annotations
-import Camfort.Analysis.Syntax
-import Camfort.Transformation.Syntax
 import qualified Language.Fortran.Analysis.DataFlow as FAD
 import qualified Language.Fortran.Analysis.Renaming as FAR
 import qualified Language.Fortran.Analysis.BBlocks as FAB
@@ -30,6 +28,7 @@ import qualified Language.Fortran.AST as F
 import qualified Language.Fortran.Util.Position as FU
 import qualified Language.Fortran.Analysis as FA
 import Camfort.Helpers
+import Camfort.Helpers.Syntax
 
 import qualified Data.IntMap as IM
 import qualified Data.Set as S
@@ -83,7 +82,7 @@ perStmt flag lva x@(F.StExpressionAssign a sp@(FU.SrcSpan s1 s2) e1 e2)
        if assignedName `S.member` out
          then Nothing
          else -- Dead assignment
-           Just (report, F.StExpressionAssign a' (dropLineF sp) e1 e2)
+           Just (report, F.StExpressionAssign a' (dropLine sp) e1 e2)
              where report =  "o" ++ (show s1) ++ ": removed dead code\n"
                    -- Set annotation to mark statement for elimination in
                    -- the reprinter
