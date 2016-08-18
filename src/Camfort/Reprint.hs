@@ -66,7 +66,7 @@ reprint refactoring tree input
   -- Otherwise go with the normal algorithm
   | otherwise = do
       -- Create an initial cursor at the start of the file
-      let cursor0 = FU.Position 0 1 0
+      let cursor0 = FU.Position 0 0 1
       -- Enter the top-node of a zipper for 'tree'
       -- setting the cursor at the start of the file
       (output, cursorn) <- runStateT (enter refactoring (toZipper tree) input) cursor0
@@ -132,8 +132,8 @@ enterRight refactoring z inp =
 -- incoming SourceText based on the distanceF between the FU.Position pairs
 takeBounds :: (FU.Position, FU.Position) -> SourceText -> (SourceText, SourceText)
 takeBounds (l, u) = takeBounds' ((ll, lc), (ul, uc)) B.empty
-  where (FU.Position _ ll lc) = l
-        (FU.Position _ ul uc) = u
+  where (FU.Position _ lc ll) = l
+        (FU.Position _ uc ul) = u
 takeBounds' ((ll, lc), (ul, uc)) tk inp  =
     if (ll == ul && lc == uc) || (ll > ul) then (B.reverse tk, inp)
     else

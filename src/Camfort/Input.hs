@@ -106,8 +106,6 @@ doRefactor rFun inSrc excludes outSrc = do
     else return ()
     ps <- readParseSrcDir inSrc excludes
     let (report, ps') = rFun (map (\(f, inp, ast) -> (f, ast)) ps)
-    --let outFiles = filter (\f -> not ((take (length $ d ++ "out") f) == (d ++ "out"))) (map fst ps')
-    --let outFiles = map fst ps'
     let outputs = mkOutputFile ps ps'
     outputFiles inSrc outSrc outputs
     return report
@@ -130,11 +128,12 @@ readParseSrcDir :: FileOrDir -> [Filename]
 readParseSrcDir inp excludes = do
     isdir <- isDirectory inp
     files <- if isdir
-             then do files <- rGetDirContents inp
-                     -- Compute alternate list of excludes with the
-                     -- the directory appended
-                     let excludes' = excludes ++ map (\x -> inp ++ "/" ++ x) excludes
-                     return $ (map (\y -> inp ++ "/" ++ y) files) \\ excludes'
+             then do
+               files <- rGetDirContents inp
+               -- Compute alternate list of excludes with the
+               -- the directory appended
+               let excludes' = excludes ++ map (\x -> inp ++ "/" ++ x) excludes
+               return $ (map (\y -> inp ++ "/" ++ y) files) \\ excludes'
              else return [inp]
     mapM readParseSrcFile files
 

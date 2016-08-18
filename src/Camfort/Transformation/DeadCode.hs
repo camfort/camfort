@@ -45,7 +45,7 @@ import Debug.Trace
 -- but not through array-subscript assignmernts
 deadCode :: Bool -> (Filename, F.ProgramFile A)
                  -> (Report, (Filename, F.ProgramFile A))
-deadCode flag (fname, pf) = (fname, (report, fmap FA.prevAnnotation pf'))
+deadCode flag (fname, pf) = (report, (fname, fmap FA.prevAnnotation pf'))
   where
     (report, pf'') = deadCode' flag lva pf'
     -- initialise analysis

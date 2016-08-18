@@ -103,18 +103,23 @@ instance Monoid Int where
 -- SrcSpan helpers
 
 dropLine :: FU.SrcSpan -> FU.SrcSpan
-dropLine (FU.SrcSpan s1 (FU.Position o l c)) =
-    FU.SrcSpan s1 (FU.Position o (l+1) 0)
+dropLine (FU.SrcSpan s1 (FU.Position o c l)) =
+    FU.SrcSpan s1 (FU.Position o 0 (l+1))
+
+deleteLine :: FU.SrcSpan -> FU.SrcSpan
+deleteLine (FU.SrcSpan (FU.Position ol cl ll) (FU.Position ou cu lu)) =
+    FU.SrcSpan (FU.Position ol (cl-1) ll) (FU.Position ou 0 (lu+1))
 
 linesCovered :: FU.Position -> FU.Position -> Int
-linesCovered (FU.Position _ l1 _) (FU.Position _ l2 _) = l2 - l1 + 1
+linesCovered (FU.Position _ _ l1) (FU.Position _ _ l2) = l2 - l1 + 1
 
-toCol0 (FU.Position o l c) = FU.Position o l 0
+toCol0 (FU.Position o c l) = FU.Position o 0 l
+incLineN n (FU.Position o c l) = FU.Position o c (l+n)
 
 refactorSpan :: FU.SrcSpan -> FU.SrcSpan
 refactorSpan = refactorSpanN 0
 
 refactorSpanN :: Int -> FU.SrcSpan -> FU.SrcSpan
-refactorSpanN n (FU.SrcSpan (FU.Position o ll cl)
-                            (FU.Position _ lu cu)) =
-    FU.SrcSpan (FU.Position o (lu+1+n) 0) (FU.Position o (lu+n) cu)
+refactorSpanN n (FU.SrcSpan (FU.Position o cl ll)
+                            (FU.Position _ cu lu)) =
+    FU.SrcSpan (FU.Position o cl (lu+1+n)) (FU.Position o cu (lu+n))

@@ -134,47 +134,74 @@ instance OutputFiles (Filename, SourceText, F.ProgramFile Annotation) where
 refactoring :: (Typeable a) => FPM.FortranVersion -> a -> SourceText -> StateT FU.Position Identity (SourceText, Bool)
 refactoring v z inp =
           (catchAll inp)
-   `extQ` (outputComments inp)
    `extQ` (refactorings inp) $ z
   where
     catchAll :: SourceText -> a -> StateT FU.Position Identity (SourceText, Bool)
     catchAll _ _ = return (B.empty, False)
     refactorings inp z =
       mapStateT (\n -> Identity $ n `evalState` 0)
-         $ ((refactorUses v inp)
-     `extQ` (refactorDecl v inp)
-     `extQ` (refactorArgName v inp)
-     `extQ` (refactorStatements v inp) $ z)
-    outputComments :: SourceText -> F.Block Annotation -> StateT FU.Position Identity (SourceText, Bool)
-    outputComments inp e@(F.BlComment ann span comment) = do
-       cursor <- get
-       if (pRefactored ann)
-         then    let (FU.SrcSpan lb ub) = span
-                     lb'      = leftOne lb
-                     (p0, _)  = takeBounds (cursor, lb') inp
-                     nl       = if comment == [] then B.empty else B.pack "\n"
-                 in put ub >> return (B.concat [p0, B.pack comment, nl], True)
-         else return (B.empty, False)
-      where leftOne (FU.Position f l c) = FU.Position f (l-1) (c-1)
-    outputComments _ _ = return (B.empty, False)
+         $ ((refactorBlocks v inp)
+--     `extQ` (refactorDecl v inp)
+     `extQ` (refactorArgName v inp) $ z)
 
-
-refactorStatements :: Monad m
-                => FPM.FortranVersion -> SourceText
-                -> F.Statement A -> StateT (FU.Position) m (SourceText, Bool)
-refactorStatements v inp e = do
+refactorBlocks :: FPM.FortranVersion
+               -> SourceText
+               -> F.Block Annotation
+               -> StateT FU.Position (State Int) (SourceText, Bool)
+-- Output comments
+refactorBlocks v inp e@(F.BlComment ann span comment) = do
     cursor <- get
-    if (pRefactored $ F.getAnnotation e) then
+    if (pRefactored ann)
+     then    let (FU.SrcSpan lb ub) = span
+                 lb'      = leftOne lb
+                 (p0, _)  = takeBounds (cursor, lb') inp
+                 nl       = if comment == [] then B.empty else B.pack "\n"
+             in put ub >> return (B.concat [p0, B.pack comment, nl], True)
+     else return (B.empty, False)
+  where leftOne (FU.Position f c l) = FU.Position f (c-1) (l-1)
+
+-- Refactor use statements
+refactorBlocks v inp b@(F.BlStatement _ _ _ u@(F.StUse {})) = do
+    cursor <- get
+    case (refactored $ F.getAnnotation u) of
+           Just lb -> do
+               let (p0, _) = takeBounds (cursor, lb) inp
+               let syntax  = B.pack $ PP.pprintAndRender v u Nothing
+               added <- lift get
+               if (newNode $ F.getAnnotation u)
+                 then lift $ put (added + (countLines syntax))
+                 else return ()
+               put $ toCol0 lb
+               return (p0 `B.append` syntax, True)
+           Nothing -> return (B.empty, False)
+
+refactorBlocks v inp b@(F.BlStatement _ _ _ s@(F.StEquivalence{})) =
+    refactorStatements v inp s
+
+refactorBlocks v inp b@(F.BlStatement {}) = refactorSyntax v inp b
+refactorBlocks _ _ _ = return (B.empty, False)
+
+refactorStatements :: Monad m => FPM.FortranVersion -> SourceText
+                   -> F.Statement A -> StateT (FU.Position) m (SourceText, Bool)
+refactorStatements = refactorSyntax
+
+refactorSyntax ::
+   (Typeable s, F.Annotated s, FU.Spanned (s A), PP.IndentablePretty (s A), Monad m)
+   => FPM.FortranVersion -> SourceText
+   -> s A -> StateT (FU.Position) m (SourceText, Bool)
+refactorSyntax v inp e = do
+    cursor <- get
+    let a = F.getAnnotation e
+    case refactored a of
+      Just (FU.Position _ rCol rLine) ->
           let (FU.SrcSpan lb ub) = FU.getSpan e
-              (p0, _) = takeBounds (cursor, lb) inp
-              outE = B.pack $ PP.pprintAndRender v e Nothing
-              -- TODO: check old NulLStmt handling
-              lnl = B.empty -- case e of (NullStmt _ _) -> (if ((p0 /= B.empty) && (B.last p0 /= '\n')) then B.pack "\n" else B.empty)
-                             -- _              -> B.empty
-              lnl2 = if ((p0 /= B.empty) && (B.last p0 /= '\n')) then B.pack "\n" else B.empty
-              textOut = if p0 == (B.pack "\n") then outE else B.concat [p0, lnl2, outE, lnl]
-          in put ub >> return (textOut, True)
-    else return (B.empty, False)
+              (pre, _) = takeBounds (cursor, lb) inp
+              indent = if newNode a then Just (rCol - 1) else Nothing
+              output = if deleteNode a
+                       then B.empty
+                       else B.pack $ PP.pprintAndRender v e indent
+          in put ub >> return (B.concat [pre, output], True)
+      Nothing -> return (B.empty, False)
 
 
 refactorDecl :: FPM.FortranVersion -> SourceText -> F.Block A -> StateT FU.Position (State Int) (SourceText, Bool)
@@ -212,22 +239,6 @@ refactorArgName v inp a = do
             put lb
             return (p0 `B.append` (B.pack $ PP.pprintAndRender v a Nothing), True)
         Nothing -> return (B.empty, False)
-
-refactorUses :: FPM.FortranVersion -> SourceText -> F.Statement A -> StateT FU.Position (State Int) (SourceText, Bool)
-refactorUses v inp u@(F.StUse {}) = do
-    cursor <- get
-    case (refactored $ F.getAnnotation u) of
-           Just lb -> do
-               let (p0, _) = takeBounds (cursor, lb) inp
-               let syntax  = B.pack $ PP.pprintAndRender v u Nothing
-               added <- lift get
-               if (newNode $ F.getAnnotation u)
-                 then lift $ put (added + (countLines syntax))
-                 else return ()
-               put $ toCol0 lb
-               return (p0 `B.append` syntax, True)
-           Nothing -> return (B.empty, False)
-refactorUses v inp s = return (B.empty, False)
 
 countLines xs =
   case B.uncons xs of

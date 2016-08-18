@@ -64,9 +64,9 @@ refactorEquivalences (fname, pf) = do
                     descendBiM (addCopysPerBlockGroup tenv) pf'
 
 addCopysPerBlockGroup :: FAT.TypeEnv -> [F.Block A1] -> State RmEqState [F.Block A1]
-addCopysPerBlockGroup tenv stmts = do
-    stmtss <- mapM (addCopysPerBlock tenv) stmts
-    return $ concat stmtss
+addCopysPerBlockGroup tenv blocks = do
+    blockss <- mapM (addCopysPerBlock tenv) blocks
+    return $ concat blockss
 
 addCopysPerBlock :: FAT.TypeEnv -> F.Block A1 -> State RmEqState [F.Block A1]
 addCopysPerBlock tenv x@(F.BlStatement a0 s0 lab
@@ -80,21 +80,26 @@ addCopysPerBlock tenv x@(F.BlStatement a0 s0 lab
       then return [x]
     -- If there are more than one, copy statements must be generated
       else do
+        (equivs, n, r) <- get
+
         -- Remove the destination from the equivalents
         let eqs' = deleteBy (\x -> \y -> (af x) == (af y)) dstE eqs
+
         -- Make copy statements
-        let (FU.SrcSpan sp' _) = refactorSpan sp
-        let copies = map (mkCopy tenv sp' dstE) eqs'
-        -- Update refactoring state
-        (equivs, n, r) <- get
+        let (FU.SrcSpan pos _) = refactorSpanN (n+(length eqs' - 1)) sp
+        let copies = map (mkCopy tenv pos dstE) eqs'
+
         -- Reporting
-        let (FU.Position _ l c) = s1
+        let (FU.Position _ c l) = s1
         let reportF i = (show $ l + i) ++ ":" ++ show c
                     ++ ": added copy due to refactored equivalence\n"
-        let report n = concatMap reportF [n..(n + length copies)]
+        let report n = concatMap reportF [n..(n + length copies - 1)]
+
+        -- Update refactoring state
         put (equivs, n + length eqs', r ++ report n)
         -- Sequence original assignment with new assignments
         return $ x : copies
+
 addCopysPerBlock tenv x = do
    x' <- descendBiM (addCopysPerBlockGroup tenv) x
    return [x']
@@ -111,7 +116,8 @@ equalTypes tenv e e' = do
 --    * A type environment to find out if a type cast is needed
 --    * A SrcPos where the copy statements are going to inserted at
 --    * The source expression
---    * The destinance expression
+--    * The number of copies to increment the line by
+--           paired with the destination expression
 mkCopy :: FAT.TypeEnv
        -> FU.Position
        -> F.Expression A1 -> F.Expression A1 -> F.Block A1
@@ -141,8 +147,8 @@ perStatementRmEquiv f@(F.StEquivalence a sp@(FU.SrcSpan spL spU) equivs) = do
     (ess, n, r) <- get
     let report = r ++ (show spL) ++ ": removed equivalence \n"
     put (((map F.aStrip) . F.aStrip $ equivs) ++ ess, n - 1, r ++ report)
-    let a' = onPrev (\ap -> ap {refactored = (Just $ spL)}) a
-    return (F.StEquivalence a' (dropLine sp) equivs)
+    let a' = onPrev (\ap -> ap {refactored = Just spL, deleteNode = True}) a
+    return (F.StEquivalence a' (deleteLine sp) equivs)
 perStatementRmEquiv f = return f
 
 -- 'equivalents e' returns a list of variables/memory cells
@@ -155,5 +161,5 @@ equivalentsToExpr x = do
     inGroup x [] = []
     inGroup x (xs:xss) =
         if (AnnotationFree x `elem` (map AnnotationFree xs))
-        then "Found an equivalence" `trace` xs
+        then xs
         else inGroup x xss

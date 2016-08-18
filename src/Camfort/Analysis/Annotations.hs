@@ -44,8 +44,12 @@ data Annotation =
   A { unitVar        :: Int
     , number         :: Int
     , refactored     :: Maybe FU.Position
-    -- used to indicate when a node is newly introduced
+    -- indicates when a node is newly introduced
     , newNode        :: Bool
+    -- indicates a node which is being deleted
+    , deleteNode    :: Bool
+    -- Stencil specification annotations
+    -- TODO: move these into their own annotation
     , stencilSpec    :: Maybe
     -- If defined, either an unprocessed syntax tree
          (Either StencilComment.Specification
@@ -63,6 +67,7 @@ unitAnnotation = A
    , number       = 0
    , refactored   = Nothing
    , newNode      = False
+   , deleteNode   = False
    , stencilSpec  = Nothing
    , stencilBlock = Nothing
  }
