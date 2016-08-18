@@ -46,6 +46,7 @@ type TCommon p = (Maybe String, [(F.Name, F.BaseType)])
 -- TODO: include column + line information
 type TLCommon p = (Filename, (String, TCommon p))
 
+type A1 = FA.Analysis Annotation
 type CommonState = State (Report, [TLCommon A])
 
 -- Top-level functions for eliminating common blocks in a set of files

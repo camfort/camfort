@@ -60,9 +60,9 @@ spec =
 
 
 expectedReport =
-  "equiv.f90\
-  \6:2     removed equivalence\
-  \14:2    addded copy:   y = transfer(x,y) due to refactored equivalence\
-  \15:2    addded copy:   z(2) = transfer(x,z(2)) due to refactored equivalence\
-  \o.f90\
+  "tests/Camfort/Transformation/samples/equiv.f9\n\
+  \6:2     removed equivalence\n\
+  \14:2    addded copy:   y = transfer(x,y) due to refactored equivalence\n\
+  \15:2    addded copy:   z(2) = transfer(x,z(2)) due to refactored equivalence\n\
+  \o.f90\n\
   \17:0    removed dead code"
