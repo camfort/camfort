@@ -51,7 +51,7 @@ inferFromIndices (VL ixs) =
     setLinearity (fromBool mult) (Specification . infer $ ixs')
       where
         (ixs', mult) = hasDuplicates ixs
-        infer :: (IsNatural n, Permutable n) => [Vec n Int] -> Result Spatial
+        infer :: (IsNatural n, Permutable n) => [Vec n Int] -> Approximation Spatial
         infer = simplify . fromRegionsToSpec . inferMinimalVectorRegions
 
 -- Same as inferFromIndices but don't do any linearity checking
@@ -61,10 +61,10 @@ inferFromIndicesWithoutLinearity :: VecList Int -> Specification
 inferFromIndicesWithoutLinearity (VL ixs) =
     Specification . infer $ ixs
       where
-        infer :: (IsNatural n, Permutable n) => [Vec n Int] -> Result Spatial
+        infer :: (IsNatural n, Permutable n) => [Vec n Int] -> Approximation Spatial
         infer = simplify . fromRegionsToSpec . inferMinimalVectorRegions
 
-simplify :: Result Spatial -> Result Spatial
+simplify :: Approximation Spatial -> Approximation Spatial
 simplify = fmap simplifySpatial
 
 simplifySpatial :: Spatial -> Spatial
@@ -88,23 +88,23 @@ reducor xs f size = reducor' (permutations xs)
             else reducor' ys
         where y' = f y
 
-fromRegionsToSpec :: IsNatural n => [Span (Vec n Int)] -> Result Spatial
+fromRegionsToSpec :: IsNatural n => [Span (Vec n Int)] -> Approximation Spatial
 fromRegionsToSpec sps = foldr (\x y -> sum (toSpecND x) y) zero sps
 
 -- toSpecND converts an n-dimensional region into an exact
 -- spatial specification or a bound of spatial specifications
-toSpecND :: Span (Vec n Int) -> Result Spatial
+toSpecND :: Span (Vec n Int) -> Approximation Spatial
 toSpecND = toSpecPerDim 1
   where
    -- convert the region one dimension at a time.
-   toSpecPerDim :: Int -> Span (Vec n Int) -> Result Spatial
+   toSpecPerDim :: Int -> Span (Vec n Int) -> Approximation Spatial
    toSpecPerDim d (Nil, Nil)             = one
    toSpecPerDim d (Cons l ls, Cons u us) =
      prod (toSpec1D d l u) (toSpecPerDim (d + 1) (ls, us))
 
 -- toSpec1D takes a dimension identifier, a lower and upper bound of a region in
 -- that dimension, and builds the simple directional spec.
-toSpec1D :: Dimension -> Int -> Int -> Result Spatial
+toSpec1D :: Dimension -> Int -> Int -> Approximation Spatial
 toSpec1D dim l u
     | l == absoluteRep || u == absoluteRep =
         Exact $ Spatial NonLinear (Sum [Product []])

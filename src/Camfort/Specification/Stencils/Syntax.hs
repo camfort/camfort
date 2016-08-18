@@ -41,21 +41,21 @@ type Variable = String
 {- *** 0. Representations -}
 
 -- Representation of an inference result, either exact or with some bound
-data Result a =
+data Approximation a =
   Exact a | Bound (Maybe a) (Maybe a)
    deriving (Eq, Data, Typeable, Show)
 
-fromExact :: Result a -> a
+fromExact :: Approximation a -> a
 fromExact (Exact a) = a
 fromExact _ = error "Exception: fromExact on a non-exact result"
 
-upperBound :: a -> Result a
+upperBound :: a -> Approximation a
 upperBound x = Bound Nothing (Just x)
 
-lowerBound :: a -> Result a
+lowerBound :: a -> Approximation a
 lowerBound x = Bound (Just x) Nothing
 
-instance Functor Result where
+instance Functor Approximation where
   fmap f (Exact x) = Exact (f x)
   fmap f (Bound x y) = Bound (fmap f x) (fmap f y)
 
@@ -91,7 +91,7 @@ lookupAggregate ((names, spec) : ss) name =
 
 -- Top-level of specifications: may be either spatial or temporal
 data Specification =
-  Specification (Result Spatial)
+  Specification (Approximation Spatial)
     deriving (Eq, Data, Typeable)
 
 -- **********************
@@ -128,7 +128,7 @@ setLinearity l (Specification (Bound sl su)) =
                          (su >>= \s -> return $ s { modLinearity = l }))
 setLinearity l s = s
 
-emptySpec = Specification (one :: Result Spatial)
+emptySpec = Specification (one :: Approximation Spatial)
 emptySpatialSpec = one :: Spatial
 
 -- `isEmpty` predicate on which specifications are vacuous or
@@ -407,7 +407,7 @@ instance RegionRig Spatial where
 
   isUnit (Spatial _ ss) = isUnit ss
 
-instance RegionRig (Result Spatial) where
+instance RegionRig (Approximation Spatial) where
   sum (Exact s) (Exact s')      = Exact (sum s s')
   sum (Exact s) (Bound l u)     = Bound (sum (Just s) l) (sum (Just s) u)
   sum (Bound l u) (Bound l' u') = Bound (sum l l') (sum u u')
@@ -448,7 +448,7 @@ showSumSpecs  = intercalate "+" . map show
 instance Show Specification where
   show (Specification sp) = "stencil " ++ show sp
 
-instance {-# OVERLAPS #-} Show (Result Spatial) where
+instance {-# OVERLAPS #-} Show (Approximation Spatial) where
   show (Exact s) = show s
   show (Bound Nothing Nothing) = "empty"
   show (Bound Nothing (Just s)) = "atMost, " ++ show s

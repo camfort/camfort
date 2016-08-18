@@ -45,7 +45,7 @@ import Debug.Trace
 -- the multiset representation is a Map to Bool giving
 -- False = multiplicity 1, True = multiplicity > 1
 
-model :: Result Spatial -> Result (Multiset [Int])
+model :: Approximation Spatial -> Approximation (Multiset [Int])
 model s = let ?globalDimensionality = dimensionality s
           in mkModel s
 
@@ -79,7 +79,7 @@ mkMultiset =
      where multi k x y = x || y
 
 instance Model Specification where
-   type Domain Specification = Result (Multiset [Int])
+   type Domain Specification = Approximation (Multiset [Int])
 
    mkModel (Specification s) = mkModel s
    mkModel _                 = error "Only spatial specs are modelled"
@@ -91,8 +91,8 @@ instance Model Specification where
    dimensions _                 = [0]
 
 -- Model a 'Result' of 'Spatial'
-instance Model (Result Spatial) where
-  type Domain (Result Spatial) = Result (Multiset [Int])
+instance Model (Approximation Spatial) where
+  type Domain (Approximation Spatial) = Approximation (Multiset [Int])
 
   mkModel = fmap mkModel
   dimensionality (Exact s) = dimensionality s

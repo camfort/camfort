@@ -66,7 +66,7 @@ pp x y =
           plus x y = x + y
 
 
-variations :: [([[Int]], Syn.Result Spatial)]
+variations :: [([[Int]], Syn.Approximation Spatial)]
 variations =
   [ ([ [1], [0] ],
     Exact $ Spatial NonLinear (Sum [Product [Forward 1 1 True]]))
@@ -98,7 +98,7 @@ variations =
               (Sum [Product [ Forward 2 2 True, Centered 1 1 True ] ] ))
  ]
 
-variations2 :: [(Syn.Result [[Int]], Int, Syn.Result Spatial)]
+variations2 :: [(Syn.Approximation [[Int]], Int, Syn.Approximation Spatial)]
 variations2 =
   [
   -- Stencil which has some absolute component (not represented in the spec)
@@ -112,7 +112,7 @@ variations2 =
            (Just $ Spatial NonLinear (Sum [Product [Forward 2 1 True]])))
  ]
 
-variations3 :: [(Syn.Result [[Int]], Int, Syn.Result Spatial)]
+variations3 :: [(Syn.Approximation [[Int]], Int, Syn.Approximation Spatial)]
 variations3 =
   [
  -- Spec on bounds
