@@ -76,8 +76,6 @@ formatSpec prefix nm (span, Left specs) =
       doSpec (arrayVar, spec)  =
              show (fixSpec spec) ++ " :: " ++ commaSep (map realName arrayVar)
       realName v               = v `fromMaybe` (v `M.lookup` nm)
-      fixSpec (Specification (Right (Dependency vs b))) =
-          Specification (Right (Dependency (map realName vs) b))
       fixSpec s                = s
 
 ------------------------
@@ -87,7 +85,7 @@ s = SrcSpan (Position 0 0 0) (Position 0 0 0)
 -- Given a spec, an array variable, and a list of inductive variables, generate
 -- a list of indexing expressions for the spec
 synthesise :: Specification -> F.Name -> [F.Name] -> [F.Expression (FA.Analysis A)]
-synthesise (Specification (Left (Exact spec))) v ixs =
+synthesise (Specification (Exact spec)) v ixs =
   map toSubscriptExpr . toList . fromExact . model $ (Exact spec)
     where toSubscriptExpr (offs,_) = ixExprToSubscript v
                                     . map (uncurry offsetToIx) $ zip ixs offs

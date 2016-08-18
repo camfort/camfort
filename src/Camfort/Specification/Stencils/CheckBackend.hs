@@ -75,7 +75,7 @@ instance SynToAst SYN.Spec Specification where
     (modLinear, approx) <- synToAst mods
     r' <- synToAst r
     let s' = Spatial modLinear r'
-    return $ Specification $ Left $
+    return $ Specification $
        case approx of
         Just SYN.AtMost  -> Bound Nothing (Just s')
         Just SYN.AtLeast -> Bound (Just s') Nothing

@@ -48,7 +48,7 @@ mkTrivialSpan a = (a, a)
 
 inferFromIndices :: VecList Int -> Specification
 inferFromIndices (VL ixs) =
-    setLinearity (fromBool mult) (Specification . Left . infer $ ixs')
+    setLinearity (fromBool mult) (Specification . infer $ ixs')
       where
         (ixs', mult) = hasDuplicates ixs
         infer :: (IsNatural n, Permutable n) => [Vec n Int] -> Result Spatial
@@ -59,7 +59,7 @@ inferFromIndices (VL ixs) =
 -- the linearity check first as an optimimsation.
 inferFromIndicesWithoutLinearity :: VecList Int -> Specification
 inferFromIndicesWithoutLinearity (VL ixs) =
-    Specification . Left . infer $ ixs
+    Specification . infer $ ixs
       where
         infer :: (IsNatural n, Permutable n) => [Vec n Int] -> Result Spatial
         infer = simplify . fromRegionsToSpec . inferMinimalVectorRegions

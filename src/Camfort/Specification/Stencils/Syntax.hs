@@ -91,14 +91,7 @@ lookupAggregate ((names, spec) : ss) name =
 
 -- Top-level of specifications: may be either spatial or temporal
 data Specification =
-  Specification (Either (Result Spatial) Temporal)
-    deriving (Eq, Data, Typeable)
-
--- ***********************
--- Temporal specifications:
---   Defines a list of variables which the subject
---   of the specification depends upon
-data Temporal = Dependency [String] Bool
+  Specification (Result Spatial)
     deriving (Eq, Data, Typeable)
 
 -- **********************
@@ -128,21 +121,20 @@ hasDuplicates :: Eq a => [a] -> ([a], Bool)
 hasDuplicates xs = (nub xs, nub xs /= xs)
 
 setLinearity :: Linearity -> Specification -> Specification
-setLinearity l (Specification (Left (Exact s))) =
-    Specification (Left (Exact (s { modLinearity = l })))
-setLinearity l (Specification (Left (Bound sl su))) =
-    Specification (Left (Bound (sl >>= \s -> return $ s { modLinearity = l })
-                               (su >>= \s -> return $ s { modLinearity = l })))
+setLinearity l (Specification (Exact s)) =
+    Specification (Exact (s { modLinearity = l }))
+setLinearity l (Specification (Bound sl su)) =
+    Specification (Bound (sl >>= \s -> return $ s { modLinearity = l })
+                         (su >>= \s -> return $ s { modLinearity = l }))
 setLinearity l s = s
 
-emptySpec = Specification . Left $ (one :: Result Spatial)
+emptySpec = Specification (one :: Result Spatial)
 emptySpatialSpec = one :: Spatial
 
 -- `isEmpty` predicate on which specifications are vacuous or
 -- functional empty (i.e., show not be displayed in an inference setting).
 isEmpty :: Specification -> Bool
-isEmpty (Specification (Right (Dependency [] _))) = True
-isEmpty (Specification (Left s)) = isUnit s
+isEmpty (Specification s) = isUnit s
 
 data Linearity = Linear | NonLinear deriving (Eq, Data, Typeable)
 
@@ -197,28 +189,24 @@ instance Ord RegionProd where
 
 specPlus :: Specification -> Specification -> Maybe Specification
 
-specPlus (Specification (Left (Bound (Just l) Nothing)))
-         (Specification (Left (Bound Nothing (Just u)))) =
-    Just $ Specification (Left (Bound (Just l) (Just u)))
+specPlus (Specification (Bound (Just l) Nothing))
+         (Specification (Bound Nothing (Just u))) =
+    Just $ Specification (Bound (Just l) (Just u))
 
-specPlus (Specification (Left (Bound Nothing (Just u))))
-         (Specification (Left (Bound (Just l) Nothing))) =
-    Just $ Specification (Left (Bound (Just l) (Just u)))
+specPlus (Specification (Bound Nothing (Just u)))
+         (Specification (Bound (Just l) Nothing)) =
+    Just $ Specification (Bound (Just l) (Just u))
 
-specPlus (Specification (Left (Bound (Just l1) Nothing)))
-         (Specification (Left (Bound (Just l2) Nothing))) =
-    Just $ Specification (Left (Bound (Just $ l1 `sum` l2) Nothing))
+specPlus (Specification (Bound (Just l1) Nothing))
+         (Specification (Bound (Just l2) Nothing)) =
+    Just $ Specification (Bound (Just $ l1 `sum` l2) Nothing)
 
-specPlus (Specification (Left (Bound Nothing (Just l1))))
-         (Specification (Left (Bound Nothing (Just l2)))) =
-    Just $ Specification (Left (Bound Nothing (Just $ l1 `sum` l2)))
+specPlus (Specification (Bound Nothing (Just l1)))
+         (Specification (Bound Nothing (Just l2))) =
+    Just $ Specification (Bound Nothing (Just $ l1 `sum` l2))
 
-specPlus (Specification (Left (Exact s1))) (Specification (Left (Exact s2))) =
-    Just $ Specification (Left (Exact $ s1 `sum` s2))
-
-specPlus (Specification (Right (Dependency vs1 m1)))
-         (Specification (Right (Dependency vs2 m2))) | m1 == m2=
-    Just $ Specification (Right (Dependency (vs1 ++ vs2) m1))
+specPlus (Specification (Exact s1)) (Specification (Exact s2)) =
+    Just $ Specification (Exact $ s1 `sum` s2)
 
 specPlus _ _ = Nothing
 
@@ -458,8 +446,7 @@ showSumSpecs  = intercalate "+" . map show
 
 -- Pretty print top-level specifications
 instance Show Specification where
-  show (Specification (Left sp)) = "stencil " ++ show sp
-  show (Specification (Right sp)) = "stencil " ++ show sp
+  show (Specification sp) = "stencil " ++ show sp
 
 instance {-# OVERLAPS #-} Show (Result Spatial) where
   show (Exact s) = show s
@@ -481,11 +468,6 @@ instance Show Spatial where
       lin = case modLin of
                 NonLinear -> Nothing
                 Linear    -> Just "readOnce"
-
--- Pretty print temporal specs
-instance Show Temporal where
-    show (Dependency vars mutual) =
-      "dependency (" ++ showL vars ++ ")" ++ if mutual then ", mutual" else ""
 
 -- Pretty print region sums
 instance Show RegionSum where

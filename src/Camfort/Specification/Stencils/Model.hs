@@ -81,14 +81,14 @@ mkMultiset =
 instance Model Specification where
    type Domain Specification = Result (Multiset [Int])
 
-   mkModel (Specification (Left s)) = mkModel s
-   mkModel _                        = error "Only spatial specs are modelled"
+   mkModel (Specification s) = mkModel s
+   mkModel _                 = error "Only spatial specs are modelled"
 
-   dimensionality (Specification (Left s)) = dimensionality s
-   dimensionality _                        = 0
+   dimensionality (Specification s) = dimensionality s
+   dimensionality _                 = 0
 
-   dimensions (Specification (Left s)) = dimensions s
-   dimensions _                        = [0]
+   dimensions (Specification s) = dimensions s
+   dimensions _                 = [0]
 
 -- Model a 'Result' of 'Spatial'
 instance Model (Result Spatial) where

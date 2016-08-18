@@ -24,19 +24,19 @@ spec = describe "Stencils - Check" $ do
   it "parse and convert simple exact stencil (1)" $
       (parseAndConvert "= stencil forward(depth=1, dim=1) :: x")
       `shouldBe`
-        (Right $ Right $ [(["x"], Specification $ Left $
+        (Right $ Right $ [(["x"], Specification $
          Exact (Spatial NonLinear (Sum [Product [Forward 1 1 True]])))])
 
   it "parse and convert simple exact stencil (2)" $
       (parseAndConvert "= stencil forward(depth=1, dim=1) :: x, y, z")
       `shouldBe`
-        (Right $ Right $ [(["x","y","z"], Specification $ Left $
+        (Right $ Right $ [(["x","y","z"], Specification $
          Exact (Spatial NonLinear (Sum [Product [Forward 1 1 True]])))])
 
   it "parse and convert simple exact stencil with irreflexive (2a)" $
       (parseAndConvert "= stencil centered(depth=1, dim=2, irreflexive) :: x, y, z")
       `shouldBe`
-        (Right $ Right $ [(["x","y","z"], Specification $ Left $
+        (Right $ Right $ [(["x","y","z"], Specification $
          Exact (Spatial NonLinear (Sum [Product [Centered 1 2 False]])))])
 
 {-
@@ -54,14 +54,14 @@ spec = describe "Stencils - Check" $ do
   it "parse and convert simple upper bounded stencil (3)" $
       (parseAndConvert "= stencil atmost, forward(depth=1, dim=1) :: x")
       `shouldBe`
-        (Right $ Right $ [(["x"], Specification $ Left $
+        (Right $ Right $ [(["x"], Specification $
          Bound Nothing (Just $ Spatial NonLinear
                   (Sum [Product [Forward 1 1 True]])))])
 
   it "parse and convert simple lower bounded stencil (4)" $
       (parseAndConvert "= stencil atleast, backward(depth=2, dim=1) :: x")
       `shouldBe`
-        (Right $ Right $ [(["x"], Specification $ Left $
+        (Right $ Right $ [(["x"], Specification $
          Bound (Just $ Spatial NonLinear
                   (Sum [Product [Backward 2 1 True]])) Nothing)])
 
@@ -76,7 +76,7 @@ spec = describe "Stencils - Check" $ do
   it "parse and convert stencil requiring distribution (5)" $
       (parseAndConvert "= stencil atleast, readonce, (forward(depth=1, dim=1) * ((centered(depth=1, dim=2)) + backward(depth=3, dim=4))) :: frob")
       `shouldBe`
-        (Right $ Right $ [(["frob"], Specification $ Left $
+        (Right $ Right $ [(["frob"], Specification $
          Bound (Just $ Spatial Linear
                   (Sum [Product [Forward 1 1 True, Centered 1 2 True],
                         Product [Forward 1 1 True, Backward 3 4 True]])) Nothing)])

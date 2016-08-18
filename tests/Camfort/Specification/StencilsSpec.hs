@@ -174,7 +174,7 @@ spec =
                         [Neighbour "i" 0, Neighbour "j" 0]
                         [[offsetToIx "i" 1, offsetToIx "j" 1],
                          [offsetToIx "i" 0, offsetToIx "j" 0]])
-         `shouldBe` (Just $ Specification $ Left $ Exact
+         `shouldBe` (Just $ Specification $ Exact
                        (Spatial Linear
                          (Sum [Product [Forward 1 1 False, Forward 1 2 False],
                                Product [Centered 0 1 True, Centered 0 2 True]])))
@@ -184,7 +184,7 @@ spec =
                         [Neighbour "i" 0, Constant (F.ValInteger "0"), Neighbour "j" 0]
                         [[offsetToIx "i" 0, offsetToIx "j" 1],
                          [offsetToIx "i" 0, offsetToIx "j" 0]])
-         `shouldBe` (Just $ Specification $ Left $ Exact
+         `shouldBe` (Just $ Specification $ Exact
                        (Spatial Linear
                          (Sum [Product [Forward 1 2 True, Centered 0 1 True]])))
 
@@ -194,7 +194,7 @@ spec =
                         [Neighbour "i" 1, Constant (F.ValInteger "0"), Neighbour "j" 0]
                         [[offsetToIx "j" 0, offsetToIx "i" 1],
                          [offsetToIx "j" 0, offsetToIx "i" 0]])
-         `shouldBe` (Just $ Specification $ Left $ Exact
+         `shouldBe` (Just $ Specification $ Exact
                        (Spatial Linear
                          (Sum [Product [Backward 1 2 True, Centered 0 1 True]])))
 
@@ -204,7 +204,7 @@ spec =
                         [Neighbour "i" 1, Neighbour "j" 0]
                         [[offsetToIx "j" absoluteRep, offsetToIx "i" 1],
                          [offsetToIx "j" absoluteRep, offsetToIx "i" 0]])
-         `shouldBe` (Just $ Specification $ Left $ Exact
+         `shouldBe` (Just $ Specification $ Exact
                        (Spatial Linear
                          (Sum [Product [Backward 1 2 True]])))
 
@@ -213,7 +213,7 @@ spec =
         (indicesToSpec' ["i", "j"]
                         [Neighbour "i" 0]
                         [[offsetToIx "i" 0, offsetToIx "i" 1]])
-         `shouldBe` (Just $ Specification $ Left $ Exact
+         `shouldBe` (Just $ Specification $ Exact
                        (Spatial Linear
                          (Sum [Product [Forward 1 2 False,
                                         Centered 0 1 True]])))
@@ -223,7 +223,7 @@ spec =
         (indicesToSpec' ["i", "j"]
                         [Neighbour "i" 0]
                         [[offsetToIx "i" 0], [offsetToIx "i" absoluteRep]])
-         `shouldBe` (Just $ Specification $ Left $ Exact
+         `shouldBe` (Just $ Specification $ Exact
                        (Spatial Linear
                          (Sum [Product [Centered 0 1 True]])))
 
@@ -290,7 +290,7 @@ spec =
              \(6:8)-(6:33) \tstencil (reflexive(dim=1)) :: x"
 
 
-exactSp = Specification . Left . Exact
+exactSp = Specification . Exact
 
 {- Properties of `spanBoundingBox`: idempotent and associative -}
 prop_spanBoundingIdem :: Natural n -> Span (Vec n Int) -> Bool
@@ -357,7 +357,7 @@ test2DSpecVariation a b (input, expectation) =
                        (map fromFormatToIx input))
           `shouldBe` Just expectedSpec
   where
-    expectedSpec = Specification . Left $ expectation
+    expectedSpec = Specification expectation
     fromFormatToIx [ri,rj] = [ offsetToIx "i" ri, offsetToIx "j" rj ]
 
 indicesToSpec' ivs lhs = fst . runWriter . (indicesToSpec ivmap "a" lhs)
@@ -438,7 +438,7 @@ test3DSpecVariation (input, expectation) =
            `shouldBe` Just expectedSpec
 
   where
-    expectedSpec = Specification . Left $ expectation
+    expectedSpec = Specification expectation
     fromFormatToIx [ri,rj,rk] =
       [offsetToIx "i" ri, offsetToIx "j" rj, offsetToIx "k" rk]
 
