@@ -27,7 +27,7 @@ readActual :: FilePath -> IO String
 readActual argumentFilename = do
   let argumentPath = samplesBase </> argumentFilename
   let outFile = argumentPath `addExtension` "out"
-  commonToArgs argumentPath [] outFile ()
+  common argumentPath [] outFile ()
   actual <- readFile outFile
   removeFile outFile
   return actual
