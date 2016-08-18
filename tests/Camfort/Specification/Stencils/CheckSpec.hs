@@ -39,6 +39,7 @@ spec = describe "Stencils - Check" $ do
         (Right $ Right $ [(["x","y","z"], Specification $ Left $
          Exact (Spatial NonLinear (Sum [Product [Centered 1 2 False]])))])
 
+{-
   it "parse and convert simple exact stencil with irreflexive (2b)" $
      let ?dimensionality = 2 in
       ((extract $
@@ -47,6 +48,7 @@ spec = describe "Stencils - Check" $ do
       (Specification $ Left $ Exact (Spatial NonLinear
                                     (Sum [Product [Centered 1 2 False]]))))
        `shouldBe` True
+-}
 
 
   it "parse and convert simple upper bounded stencil (3)" $
@@ -79,6 +81,7 @@ spec = describe "Stencils - Check" $ do
                   (Sum [Product [Forward 1 1 True, Centered 1 2 True],
                         Product [Forward 1 1 True, Backward 3 4 True]])) Nothing)])
 
+{-
   it "parse and convert stencil with irreflexivity on a product(6)" $
      let ?dimensionality = 2 in
       ((extract $
@@ -86,3 +89,4 @@ spec = describe "Stencils - Check" $ do
       `eqByModel`
       (Specification $ Left $ Exact (Spatial NonLinear
                                     (Sum [Product [Forward 1 2 False, Backward 1 1 True]]))))
+-}

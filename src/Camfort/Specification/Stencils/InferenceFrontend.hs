@@ -309,14 +309,28 @@ genSpecifications ivs lhs blocks = do
               . M.mapWithKey (\v -> indicesToSpec ivs v lhs)
               . M.unionsWith (++)
 
-      strength :: Monad m => (a, m b) -> m (a, b)
-      strength (a, mb) = mb >>= (\b -> return (a, b))
-
       splitUpperAndLower = concatMap splitUpperAndLower'
       splitUpperAndLower' (vs, Specification (Left (Bound (Just l) (Just u)))) =
          [(vs, Specification (Left (Bound (Just l) Nothing))),
           (vs, Specification (Left (Bound Nothing (Just u))))]
       splitUpperAndLower' x = [x]
+
+genOffsets :: Params
+  => FAD.InductionVarMapByASTBlock
+  -> [Neighbour]
+  -> [F.Block (FA.Analysis A)]
+  -> Writer EvalLog [(Variable, (Bool, [[Int]]))]
+genOffsets ivs lhs blocks = do
+    let subscripts = evalState (mapM (genSubscripts True) blocks) []
+    varToMaybeSpecs <- sequence . map strength . mkOffsets $ subscripts
+    return $ catMaybes . map strength $ varToMaybeSpecs
+  where
+    mkOffsets = M.toList
+              . M.mapWithKey (\v -> indicesToRelativisedOffsets ivs v lhs)
+              . M.unionsWith (++)
+
+strength :: Monad m => (a, m b) -> m (a, b)
+strength (a, mb) = mb >>= (\b -> return (a, b))
 
 -- Generate all subscripting expressions (that are translations on
 -- induction variables) that flow to this block
@@ -396,6 +410,18 @@ indicesToSpec :: FAD.InductionVarMapByASTBlock
               -> [[F.Index (FA.Analysis Annotation)]]
               -> Writer EvalLog (Maybe Specification)
 indicesToSpec ivs a lhs ixs = do
+  mMultOffsets <- indicesToRelativisedOffsets ivs a lhs ixs
+  return $ do
+    (mult, offsets) <- mMultOffsets
+    let spec = relativeIxsToSpec offsets
+    fmap (setLinearity (fromBool mult)) spec
+
+indicesToRelativisedOffsets :: FAD.InductionVarMapByASTBlock
+                            -> Variable
+                            -> [Neighbour]
+                            -> [[F.Index (FA.Analysis Annotation)]]
+                            -> Writer EvalLog (Maybe (Bool, [[Int]]))
+indicesToRelativisedOffsets ivs a lhs ixs = do
    -- Convert indices to neighbourhood representation
   let rhses = map (map (ixToNeighbour ivs)) ixs
 
@@ -423,13 +449,10 @@ indicesToSpec ivs a lhs ixs = do
 
         let offsets  = padZeros $ map (fromJust . mapM neighbourToOffset) rhses''
         tell [("EVALMODE: dimensionality=" ++
-                 show (case offsets of [] -> 0
-                                       _  -> length (head offsets)), a)]
-
-
-        let spec = relativeIxsToSpec offsets
-        return $ fmap (setLinearity (fromBool mult)) spec
+                 show (if null offsets then 0 else length . head $ offsets), a)]
+        return (Just $ (mult, offsets))
   where hasNonNeighbourhoodRelatives xs = or (map (any ((==) NonNeighbour)) xs)
+
 
 -- Given a list of the neighbourhood representation for the LHS, of size n
 -- and a list of size-n lists of offsets, relativise the offsets

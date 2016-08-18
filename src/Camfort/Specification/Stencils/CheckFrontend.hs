@@ -113,16 +113,13 @@ updateRegionEnv ann =
     Just (Right (Left regionEnv)) -> modify $ (((++) regionEnv) *** id) *** id
     _                             -> return ()
 
--- Given a mapping from variables to inferred specifications
--- an environment of specification delcarations, for each declared
--- specification check if there is a inferred specification that
--- agrees with it, *up-to the model*
-compareInferredToDeclared :: [([F.Name], Specification)] -> SpecDecls -> Bool
-compareInferredToDeclared inferreds declareds =
-   all (\(names, dec) ->
-    all (\name ->
-      any (\inf -> eqByModel inf dec) (lookupAggregate inferreds name)
-       ) names) declareds
+checkOffsetsAgainstSpec :: [(Variable, (Bool, [[Int]]))]
+                        -> [(Variable, Specification)]
+                        -> Bool
+checkOffsetsAgainstSpec offsetMaps declMaps =
+    all (\(var1, spec)->
+      all (\(var2, offsets) ->
+        var1 /= var2 || offsets `consistent` spec) offsetMaps) declMaps
 
 -- Go into the program units first and record the module name when
 -- entering into a module
@@ -152,14 +149,15 @@ perBlockCheck b@(F.BlComment ann span _) = do
             -- Do inference
             let realName v   = v `fromMaybe` (v `M.lookup` ?nameMap)
             let lhsN         = maybe [] id (neighbourIndex ivmap subs)
-            let correctNames = map (\(names, spec) -> (map realName names, spec))
-            let inferred = correctNames . fst . runWriter $ genSpecifications ivmap lhsN [s]
+            let correctNames = map (\(name, spec) -> (realName name, spec))
+            let relOffsets = correctNames . fst . runWriter $ genOffsets ivmap lhsN [s]
+            let expandedDecls =
+                  concatMap (\(vars,spec) -> map (flip (,) spec) vars) specDecls
             -- Model and compare the current and specified stencil specs
-            if compareInferredToDeclared inferred specDecls
+            if checkOffsetsAgainstSpec relOffsets expandedDecls
               then tell [ (span, "Correct.") ]
               else tell [ (span, "Not well specified:\n\t\t  expecting: "
-                              ++ pprintSpecDecls specDecls
-                              ++ "\t\t  inferred:    " ++ pprintSpecDecls inferred) ]
+                              ++ pprintSpecDecls specDecls) ]
             return $ b'
          Nothing -> return $ b'
 

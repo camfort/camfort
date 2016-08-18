@@ -49,38 +49,8 @@ model :: Result Spatial -> Result (Multiset [Int])
 model s = let ?globalDimensionality = dimensionality s
           in mkModel s
 
--- Is an inferred specification equal to a declared specification,
--- up to the mode? The first parameter must come from the inference and
--- the second from a user-given declaration
-eqByModel :: Specification -> Specification -> Bool
-eqByModel infered declared =
-    let d1 = dimensionality infered
-        d2 = dimensionality declared
-    in let ?globalDimensionality = d1 `max` d2
-       in let modelInf = mkModel infered
-              modelDec = mkModel declared
-          in case (modelInf, modelDec) of
-               -- Test approximations first
-
-               -- If only one bound is present in one model, but both are in the
-               -- other, then compare only the bounds present in both
-               (Bound (Just mdlLI) Nothing, Bound (Just mdlLD) _)
-                        -> mdlLD <= mdlLI
-               (Bound Nothing (Just mdlUI), Bound _ (Just mdlUD))
-                        -> mdlUI <= mdlUD
-               (Bound (Just mdlLI) (Just _), Bound (Just mdlLD) Nothing)
-                        -> mdlLD <= mdlLI
-               (Bound (Just _ ) (Just mdlUI), Bound Nothing (Just mdlUD))
-                        -> mdlUI <= mdlUD
-               (Exact s, Bound Nothing (Just mdlUD))
-                        -> s <= mdlUD
-               (Exact s, Bound (Just mdlLD) Nothing)
-                        -> mdlLD <= s
-               (Exact s, Bound (Just mdlLD) (Just mdlUD))
-                        -> (mdlLD <= s) && (s <= mdlUD)
-              -- Otherwise do the normal comparison
-               (x, y) -> x == y
-
+consistent :: (Bool, [[Int]]) -> Specification -> Bool
+consistent (mult, offsets) _ = True
 
 -- Recursive `Model` class implemented for all parts of the spec.
 class Model spec where
