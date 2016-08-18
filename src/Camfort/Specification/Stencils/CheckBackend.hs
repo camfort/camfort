@@ -81,9 +81,6 @@ instance SynToAst SYN.Spec Specification where
         Just SYN.AtLeast -> Bound (Just s') Nothing
         Nothing          -> Exact s'
 
-  synToAst (SYN.Temporal vars mutual) =
-     return $ Specification $ Right $ Dependency vars mutual
-
 -- Convert region definitions into the DNF-form used internally
 instance SynToAst SYN.Region RegionSum where
   synToAst = dnf

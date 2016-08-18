@@ -57,11 +57,6 @@ spec =
       `shouldBe`
         Right (RegionDec "r" (Or (Forward 1 1 False) (Backward 2 2 False)))
 
-    it "temporal" $
-      parse "= stencil dependency(a,b,c,foo), mutual :: foo, bar"
-      `shouldBe`
-       Right (SpecDec (Temporal ["a","b","c","foo"] True) ["foo", "bar"])
-
 {- Should no longer be possible
     it "complex stencil" $
       parse "= stencil atleast, reflexive(dims=1,2), readonce, \
