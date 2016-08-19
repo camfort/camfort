@@ -86,7 +86,7 @@ addCopysPerBlock tenv x@(F.BlStatement a0 s0 lab
         let eqs' = deleteBy (\x -> \y -> (af x) == (af y)) dstE eqs
 
         -- Make copy statements
-        let (FU.SrcSpan pos _) = refactorSpanN (n+(length eqs' - 1)) sp
+        let pos = afterAligned sp
         let copies = map (mkCopy tenv pos dstE) eqs'
 
         -- Reporting
@@ -104,10 +104,10 @@ addCopysPerBlock tenv x = do
    x' <- descendBiM (addCopysPerBlockGroup tenv) x
    return [x']
 
--- see if two expressions are variables and have the same type
+-- see if two expressions have the same type
 equalTypes tenv e e' = do
-    v1 <- varExprToVariable e
-    v2 <- varExprToVariable e'
+    v1 <- extractVariable e
+    v2 <- extractVariable e'
     t1 <- M.lookup v1 tenv
     t2 <- M.lookup v2 tenv
     if (t1 == t2) then Just t1 else Nothing
@@ -134,10 +134,13 @@ mkCopy tenv pos srcE dstE = FA.initAnalysis $
        -- Types are equal, simple a assignment
        Just t -> F.StExpressionAssign a sp dstE' srcE'
   where
-     sp    = FU.SrcSpan pos pos
+     -- Set position to be at col = 0
+     sp   = FU.SrcSpan (toCol0 pos) (toCol0 pos)
+     -- But store the aligned position in refactored so
+     -- that the reprint algorithm can add the appropriate indentation
+     a = unitAnnotation { refactored = Just pos, newNode = True }
      dstE' = FA.stripAnalysis dstE
      srcE' = FA.stripAnalysis srcE
-     a = unitAnnotation { refactored = Just pos, newNode = True }
 
 perBlockRmEquiv :: F.Block A1 -> State RmEqState (F.Block A1)
 perBlockRmEquiv b = transformBiM perStatementRmEquiv b

@@ -80,20 +80,27 @@ instance (Eq (AnnotationFree a), Eq (AnnotationFree b))
         (af x == af x') && (af y == af y')
 
 instance Eq a => Eq (AnnotationFree (F.Expression a)) where
-    (AnnotationFree x) == (AnnotationFree y) = x == y''
-        where y'' = setSecondParameter (getSecondParameter x) y'
-              y' = setFirstParameter (getFirstParameter x) y
+    (AnnotationFree x) == (AnnotationFree y) = x'' == y''
+        where x' = fmap (const ()) x
+              y' = fmap (const ()) y
+              y'' = transformBi setSpanConst y'
+              x'' = transformBi setSpanConst x'
+              setSpanConst :: FU.SrcSpan -> FU.SrcSpan
+              setSpanConst (FU.SrcSpan _ _) = FU.SrcSpan pos0 pos0
+                 where pos0 = FU.Position 0 0 0
 
 instance Eq (AnnotationFree F.BaseType) where
     (AnnotationFree x) == (AnnotationFree y) = x == y
 
 -- * Accessor functions for extracting various pieces of information
 --    out of syntax trees
-{-| Extracts a string of the (root) variable name from a variable expression
-   (if it is indeed a variable expression -}
-varExprToVariable :: F.Expression a -> Maybe F.Name
-varExprToVariable (F.ExpValue _ _ (F.ValVariable v)) = Just v
-varExprToVariable _                                  = Nothing
+{-| Extracts a string of the (root) variable name from an expression, 
+    e.g., extractVariable "v"    = Just v
+          extractVariable "v(i)" = Just v -}
+extractVariable :: F.Expression a -> Maybe F.Name
+extractVariable (F.ExpValue _ _ (F.ValVariable v)) = Just v
+extractVariable (F.ExpSubscript _ _ e _)           = extractVariable e
+extractVariable _                                  = Nothing
 
 {-| Set a default monoid instances for Int -}
 instance Monoid Int where
@@ -120,6 +127,10 @@ refactorSpan :: FU.SrcSpan -> FU.SrcSpan
 refactorSpan = refactorSpanN 0
 
 refactorSpanN :: Int -> FU.SrcSpan -> FU.SrcSpan
-refactorSpanN n (FU.SrcSpan (FU.Position o cl ll)
-                            (FU.Position _ cu lu)) =
-    FU.SrcSpan (FU.Position o cl (lu+1+n)) (FU.Position o cu (lu+n))
+refactorSpanN n (FU.SrcSpan (FU.Position o cA lA)
+                            (FU.Position _ cB lB)) =
+    FU.SrcSpan (FU.Position o cA (lB+n)) (FU.Position o cB (lB+n))
+
+afterAligned :: FU.SrcSpan -> FU.Position
+afterAligned (FU.SrcSpan (FU.Position o cA lA) (FU.Position _ cB lB)) =
+    FU.Position o cA (lB+1)

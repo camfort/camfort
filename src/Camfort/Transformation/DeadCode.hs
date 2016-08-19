@@ -78,7 +78,7 @@ perStmt flag lva x@(F.StExpressionAssign a sp@(FU.SrcSpan s1 s2) e1 e2)
   fromMaybe ("", x) $
     do label <- FA.insLabel a
        (_, out) <- IM.lookup label lva
-       assignedName <- varExprToVariable e1
+       assignedName <- extractVariable e1
        if assignedName `S.member` out
          then Nothing
          else -- Dead assignment

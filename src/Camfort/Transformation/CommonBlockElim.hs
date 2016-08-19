@@ -39,12 +39,19 @@ import Camfort.Helpers
 import Camfort.Helpers.Syntax
 import Camfort.Analysis.Annotations
 
--- Typed common block representation
-type TCommon p = (Maybe String, [(F.Name, F.BaseType)])
+-- Typed common-block representation
+-- Tuple of:
+--     * a (possible) common block name
+--     * map from names to their types
+type TCommon p = (Maybe F.Name, [(F.Name, F.BaseType)])
 
 -- Typed and "located" common block representation
+-- Right associated pairs tuple of:
+--     * current filename
+--     * current program unit name
+--     * Typed common-block representation
 -- TODO: include column + line information
-type TLCommon p = (Filename, (String, TCommon p))
+type TLCommon p = (Filename, (F.Name, TCommon p))
 
 type A1 = FA.Analysis Annotation
 type CommonState = State (Report, [TLCommon A])
