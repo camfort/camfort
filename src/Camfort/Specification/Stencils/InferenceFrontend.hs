@@ -576,8 +576,6 @@ expToNeighbour ivs e =
                 , let i = FA.varName e
                 , i `elem` ivs]
 
-expToNeighbour ivs e = Constant (F.ValInteger "0")
-
 --------------------------------------------------
 
 -- Helper predicates

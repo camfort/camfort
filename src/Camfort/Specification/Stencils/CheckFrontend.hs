@@ -162,7 +162,6 @@ perBlockCheck b@(F.BlComment ann span _) = do
                               ++ "\t\t  inferred:    " ++ pprintSpecDecls inferred) ]
             return $ b'
          Nothing -> return $ b'
-      _ -> return $ b'
 
       (F.BlDo ann span _ _ _ mDoSpec body _) -> do
            -- Stub, maybe collect stencils inside 'do' block
