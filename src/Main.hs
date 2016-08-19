@@ -102,10 +102,7 @@ refactorings :: [(String
                , String))]
 refactorings =
     [("common", (common, "common block elimination")),
-     ("commonArg", (commonToArgs,
-       "common block elimination (to parameter passing)")),
      ("equivalence", (equivalences, "equivalence elimination")),
-     ("dataType", (typeStructuring, "derived data type introduction")),
      ("dead", (dead, "dead-code elimination"))]
 
 {-| List of analses provided by CamFort -}
@@ -113,22 +110,21 @@ analyses :: [(String
            , (FileOrDir -> [Filename] -> FileOrDir -> Options -> IO ()
            , String))]
 analyses =
-    [--("asts", (asts,
---        "blank analysis, outputs analysis files with AST information")),
---     ("lva", (lvaA, "live-variable analysis")),
+    [
      ("count", (countVarDecls, "count variable declarations")),
      ("ast", (ast, "print the raw AST -- for development purposes")),
      ("stencils-check", (stencilsCheck, "stencil spec checking")),
      ("stencils-infer", (stencilsInfer, "stencil spec inference")),
      ("stencils-synth", (stencilsSynth, "stencil spec synthesis")),
      ("units-suggest", (unitsCriticals,
-         "suggest variables to annotate for units-of-measure for maximum coverage")),
+                                  "suggest variables to annotate with\
+                                  \units-of-measure for maximum coverage")),
      ("units-check", (unitsCheck, "unit-of-measure checking")),
      ("units-infer", (unitsInfer, "unit-of-measure inference")),
      ("units-synth", (unitsSynth, "unit-of-measure synthesise specs.")) ]
 
 -- * Usage and about information
-version = "0.805"
+version = "0.900"
 introMsg = "CamFort " ++ version ++ " - Cambridge Fortran Infrastructure."
 usage = "Usage: camfort <MODE> <INPUT> [OUTPUT] [OPTIONS...]\n"
 menu =

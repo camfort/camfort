@@ -12,6 +12,7 @@ import Data.List
 
 import Camfort.Functionality
 import Camfort.Helpers.Vec
+import Camfort.Input
 import Camfort.Specification.Stencils
 import Camfort.Specification.Stencils.Synthesis
 import Camfort.Specification.Stencils.Model
@@ -245,7 +246,7 @@ spec =
     -------------------------
 
     let file = "tests/Camfort/Specification/Stencils/example2.f"
-    program <- runIO $ readForparseSrcDir file []
+    program <- runIO $ readParseSrcDir file []
 
     describe "integration test on inference for example2.f" $ do
       it "stencil infer" $
@@ -263,10 +264,10 @@ spec =
          (fst $ callAndSummarise (\f p -> (check f p, p)) program)
            `shouldBe`
            "\ntests/Camfort/Specification/Stencils/example2.f\n\
-            \(24:8,24:53)\tCorrect.\n(32:7,32:26)\tCorrect."
+            \(24:8)-(24:53)\tCorrect.\n(32:7)-(32:26)\tCorrect."
 
     let file = "tests/Camfort/Specification/Stencils/example3.f"
-    program <- runIO $ readForparseSrcDir file []
+    program <- runIO $ readParseSrcDir file []
 
     -- describe "integration test on inference for example3.f" $ do
     --   it "stencil infer" $
@@ -279,7 +280,7 @@ spec =
     --          \(24:7)-(24,19) \tstencil readOnce, (reflexive(dim=2)) :: a\n"
 
     let file = "tests/Camfort/Specification/Stencils/example4.f"
-    program <- runIO $ readForparseSrcDir file []
+    program <- runIO $ readParseSrcDir file []
 
     describe "integration test on inference for example4.f" $ do
       it "stencil infer" $

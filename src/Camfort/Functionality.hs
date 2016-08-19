@@ -27,47 +27,36 @@ module Camfort.Functionality where
 import System.Console.GetOpt
 import System.Directory
 import System.Environment
+import System.FilePath
 import System.IO
 
 import Data.Monoid
 import Data.Generics.Uniplate.Operations
+import Data.Data
+import Data.List (foldl', intercalate)
+import qualified Debug.Trace as D
 
 import Camfort.Analysis.Annotations
-import Camfort.Analysis.Types
-import Camfort.Analysis.LVA
 import Camfort.Analysis.Simple
-import Camfort.Analysis.Syntax
-
 import Camfort.Transformation.DeadCode
 import Camfort.Transformation.CommonBlockElim
-import Camfort.Transformation.CommonBlockElimToCalls
 import Camfort.Transformation.EquivalenceElim
-import Camfort.Transformation.DerivedTypeIntro
 
 import qualified Camfort.Specification.Units as LU
 import Camfort.Specification.Units.Environment
 import Camfort.Specification.Units.Monad
 
+import Camfort.Helpers.Syntax
 import Camfort.Helpers
 import Camfort.Output
 import Camfort.Input
 
-import Data.Data
-import Data.List (foldl', nub, (\\), elemIndices, intersperse, intercalate)
-
-import qualified Data.ByteString.Char8 as B
-import Data.Text.Encoding (encodeUtf8, decodeUtf8With)
-import Data.Text.Encoding.Error (replace)
-
--- FORPAR related imports
 import qualified Language.Fortran.Parser.Any as FP
 import qualified Language.Fortran.AST as F
 import Language.Fortran.Analysis.Renaming
   (renameAndStrip, analyseRenames, unrename, NameMap)
 import Language.Fortran.Analysis(initAnalysis)
 import qualified Camfort.Specification.Stencils as Stencils
-
-import qualified Debug.Trace as D
 
 -- CamFort optional flags
 data Flag = Version
@@ -84,45 +73,28 @@ type Options = [Flag]
 instance Default String where
     defaultValue = ""
 getExcludes :: Options -> String
-getExcludes xs = getOption xs
+getExcludes = getOption
 
 -- * Wrappers on all of the features
-typeStructuring inSrc excludes outSrc _ = do
-    putStrLn $ "Introducing derived data types in '" ++ inSrc ++ "'"
-    report <- doRefactor typeStruct inSrc excludes outSrc
-    putStrLn report
-
 ast d excludes f _ = do
-    xs <- readForparseSrcDir (d ++ "/" ++ f) excludes
-    putStrLn $ show (map (\(_, _, p) -> p) xs)
-
-asts inSrc excludes _ _ = do
-    putStrLn $ "Do a basic analysis and output the HTML files "
-            ++ "with AST information for '" ++ inSrc ++ "'"
-    let astAnalysis = (map numberStmts) . map (fmap (const unitAnnotation))
-    doAnalysis astAnalysis inSrc excludes
+    xs <- readParseSrcDir (d ++ "/" ++ f) excludes
+    print (map (\(_, _, p) -> p) xs)
 
 countVarDecls inSrc excludes _ _ = do
     putStrLn $ "Counting variable declarations in '" ++ inSrc ++ "'"
-    doAnalysisSummaryForpar countVariableDeclarations inSrc excludes Nothing
-
-lvaA inSrc excludes _ _ = do
-    putStrLn $ "Analysing loops for '" ++ inSrc ++ "'"
-    doAnalysis lva inSrc excludes
+    doAnalysisSummary countVariableDeclarations inSrc excludes Nothing
 
 dead inSrc excludes outSrc _ = do
     putStrLn $ "Eliminating dead code in '" ++ inSrc ++ "'"
-    report <- doRefactor ((mapM (deadCode False))) inSrc excludes outSrc
-    putStrLn report
-
-commonToArgs inSrc excludes outSrc _ = do
-    putStrLn $ "Refactoring common blocks in '" ++ inSrc ++ "'"
-    report <- doRefactor (commonElimToCalls inSrc) inSrc excludes outSrc
+    report <- doRefactor (mapM (deadCode False)) inSrc excludes outSrc
     putStrLn report
 
 common inSrc excludes outSrc _ = do
     putStrLn $ "Refactoring common blocks in '" ++ inSrc ++ "'"
-    report <- doRefactor (commonElimToModules inSrc) inSrc excludes outSrc
+    isDir <- isDirectory inSrc
+    let dir = if isDir then inSrc ++ "/" else ""
+    let rfun = commonElimToModules (takeDirectory outSrc ++ "/")
+    report <- doRefactorAndCreate rfun inSrc excludes outSrc
     putStrLn report
 
 equivalences inSrc excludes outSrc _ = do
@@ -138,123 +110,44 @@ optsToUnitOpts = foldl' (\ o f -> case f of Literals m -> o { uoLiterals = m }
 
 unitsCheck inSrc excludes outSrc opt = do
     putStrLn $ "Checking units for '" ++ inSrc ++ "'"
-    doAnalysisReportForpar (concatMap (LU.checkUnits (optsToUnitOpts opt))) putStrLn inSrc excludes
+    let rfun = concatMap (LU.checkUnits (optsToUnitOpts opt))
+    doAnalysisReport rfun putStrLn inSrc excludes
 
 unitsInfer inSrc excludes outSrc opt = do
     putStrLn $ "Inferring units for '" ++ inSrc ++ "'"
-    doAnalysisReportForpar (concatMap (LU.inferUnits (optsToUnitOpts opt))) putStrLn inSrc excludes
+    let rfun = concatMap (LU.inferUnits (optsToUnitOpts opt))
+    doAnalysisReport rfun putStrLn inSrc excludes
 
 unitsSynth inSrc excludes outSrc opt = do
     putStrLn $ "Synthesising units for '" ++ inSrc ++ "'"
-    doRefactorForpar (mapM (LU.synthesiseUnits (optsToUnitOpts opt))) inSrc excludes outSrc
+    let rfun = mapM (LU.synthesiseUnits (optsToUnitOpts opt))
+    report <- doRefactor rfun inSrc excludes outSrc
+    putStrLn report
 
 unitsCriticals inSrc excludes outSrc opt = do
     putStrLn $ "Suggesting variables to annotate with unit specifications in '"
              ++ inSrc ++ "'"
-    doAnalysisReportForpar (mapM (LU.inferCriticalVariables (optsToUnitOpts opt))) (putStrLn . fst) inSrc excludes
+    let rfun = mapM (LU.inferCriticalVariables (optsToUnitOpts opt))
+    doAnalysisReport rfun (putStrLn . fst) inSrc excludes
 
 {- Stencils feature -}
 stencilsCheck inSrc excludes _ _ = do
    putStrLn $ "Checking stencil specs for '" ++ inSrc ++ "'"
-   doAnalysisSummaryForpar (\f p -> (Stencils.check f p, p)) inSrc excludes Nothing
+   let rfun = \f p -> (Stencils.check f p, p)
+   doAnalysisSummary rfun inSrc excludes Nothing
 
 stencilsInfer inSrc excludes outSrc opt = do
    putStrLn $ "Infering stencil specs for '" ++ inSrc ++ "'"
-   doAnalysisSummaryForpar (Stencils.infer (getOption opt)) inSrc excludes (Just outSrc)
+   let rfun = Stencils.infer (getOption opt)
+   doAnalysisSummary rfun inSrc excludes (Just outSrc)
 
 stencilsSynth inSrc excludes outSrc opt = do
    putStrLn $ "Synthesising stencil specs for '" ++ inSrc ++ "'"
-   doRefactorForpar (Stencils.synth (getOption opt)) inSrc excludes outSrc
+   let rfun = Stencils.synth (getOption opt)
+   report <- doRefactor rfun inSrc excludes outSrc
+   putStrLn report
 
 stencilsVarFlowCycles inSrc excludes _ _ = do
    putStrLn $ "Inferring var flow cycles for '" ++ inSrc ++ "'"
    let flowAnalysis = intercalate ", " . map show . Stencils.findVarFlowCycles
-   doAnalysisSummaryForpar (\_ p -> (flowAnalysis p , p)) inSrc excludes Nothing
-
---------------------------------------------------
--- Forpar wrappers
-
-doRefactorForpar :: ([(Filename, F.ProgramFile A)]
-                 -> (String, [(Filename, F.ProgramFile Annotation)]))
-                 -> FileOrDir -> [Filename] -> FileOrDir -> IO ()
-doRefactorForpar rFun inSrc excludes outSrc = do
-    if excludes /= [] && excludes /= [""]
-    then putStrLn $ "Excluding " ++ (concat $ intersperse "," excludes)
-           ++ " from " ++ inSrc ++ "/"
-    else return ()
-    ps <- readForparseSrcDir inSrc excludes
-    let (report, ps') = rFun (map (\(f, inp, ast) -> (f, ast)) ps)
-    --let outFiles = filter (\f -> not ((take (length $ d ++ "out") f) == (d ++ "out"))) (map fst ps')
-    --let outFiles = map fst ps'
-    putStrLn report
-    let outputs = mkOutputFileForpar ps ps'
-    outputFiles inSrc outSrc outputs
-  where snd3 (a, b, c) = b
-
-mkOutputFileForpar :: [(Filename, SourceText, a)]
-                   -> [(Filename, F.ProgramFile Annotation)]
-                   -> [(Filename, SourceText, F.ProgramFile Annotation)]
-mkOutputFileForpar ps ps' = zip3 (map fst ps') (map snd3 ps) (map snd ps')
-  where
-    snd3 (a, b, c) = b
-
-
-{-| Performs an analysis which reports to the user,
-     but does not output any files -}
-doAnalysisReportForpar :: ([(Filename, F.ProgramFile A)] -> r)
-                       -> (r -> IO out)
-                       -> FileOrDir -> [Filename] -> IO out
-doAnalysisReportForpar rFun sFun inSrc excludes = do
-  if excludes /= [] && excludes /= [""]
-      then putStrLn $ "Excluding " ++ (concat $ intersperse "," excludes)
-                    ++ " from " ++ inSrc ++ "/"
-      else return ()
-  ps <- readForparseSrcDir inSrc excludes
-----
-  let report = rFun (map (\(f, inp, ast) -> (f, ast)) ps)
-  sFun report
-----
-
--- * Source directory and file handling
-readForparseSrcDir :: FileOrDir -> [Filename]
-                   -> IO [(Filename, SourceText, F.ProgramFile A)]
-readForparseSrcDir inp excludes = do
-    isdir <- isDirectory inp
-    files <- if isdir
-             then do files <- rGetDirContents inp
-                     -- Compute alternate list of excludes with the
-                     -- the directory appended
-                     let excludes' = excludes ++ map (\x -> inp ++ "/" ++ x) excludes
-                     return $ (map (\y -> inp ++ "/" ++ y) files) \\ excludes'
-             else return [inp]
-    mapM readForparseSrcFile files
-----
-
-{-| Read a specific file, and parse it -}
-readForparseSrcFile :: Filename -> IO (Filename, SourceText, F.ProgramFile A)
-readForparseSrcFile f = do
-    inp <- flexReadFile f
-    let ast = FP.fortranParser inp f
-    return $ (f, inp, fmap (const unitAnnotation) ast)
-----
-
-doAnalysisSummaryForpar :: (Monoid s, Show' s) => (Filename -> F.ProgramFile A -> (s, F.ProgramFile A))
-                        -> FileOrDir -> [Filename] -> Maybe FileOrDir -> IO ()
-doAnalysisSummaryForpar aFun inSrc excludes outSrc = do
-  if excludes /= [] && excludes /= [""]
-    then putStrLn $ "Excluding " ++ (concat $ intersperse "," excludes)
-                                 ++ " from " ++ inSrc ++ "/"
-    else return ()
-  ps <- readForparseSrcDir inSrc excludes
-  let (out, ps') = callAndSummarise aFun ps
-  putStrLn . show' $ out
-
-callAndSummarise aFun ps = do
-  foldl' (\(n, pss) (f, _, ps) -> let (n', ps') = aFun f ps
-                                  in (n `mappend` n', ps' : pss)) (mempty, []) ps
-
-----
-
--- | Read file using ByteString library and deal with any weird characters.
-flexReadFile :: String -> IO B.ByteString
-flexReadFile = fmap (encodeUtf8 . decodeUtf8With (replace ' ')) . B.readFile
+   doAnalysisSummary (\_ p -> (flowAnalysis p , p)) inSrc excludes Nothing

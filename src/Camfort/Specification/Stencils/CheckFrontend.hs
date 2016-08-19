@@ -141,7 +141,7 @@ perBlockCheck b@(F.BlComment ann span _) = do
   updateRegionEnv ann'
   let b' = F.setAnnotation ann' b
   case (stencilSpec $ FA.prevAnnotation ann', stencilBlock $ FA.prevAnnotation ann') of
-    -- Comment contains a specification and an associated block
+    -- Comment contains a specification and an Associated block
     (Just (Right (Right specDecls)), Just block) ->
      case block of
       s@(F.BlStatement ann span _ (F.StExpressionAssign _ _ lhs rhs)) ->

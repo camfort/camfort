@@ -14,58 +14,39 @@
    limitations under the License.
 -}
 
-{-# LANGUAGE FlexibleInstances, UndecidableInstances, ImplicitParams, DoAndIfThenElse,
-             MultiParamTypeClasses, FlexibleContexts, KindSignatures, ScopedTypeVariables,
-             DeriveGeneric, DeriveDataTypeable #-}
+{-# LANGUAGE FlexibleInstances, UndecidableInstances,
+    DoAndIfThenElse, MultiParamTypeClasses, FlexibleContexts,
+    ScopedTypeVariables #-}
 
-{-
-
- Provides support for outputting source files and analysis information
-
--}
+{- Provides support for outputting source files and analysis information -}
 
 module Camfort.Output where
 
-import Camfort.Helpers
-import Camfort.Traverse
-
 import qualified Language.Fortran.AST as F
-import qualified Language.Fortran.Util.Position as FU
 import qualified Language.Fortran.Analysis as FA
-
-import qualified Language.Fortran.Parser as Fortran
-import Language.Fortran
-import Language.Fortran.Pretty
-import Language.Fortran.PreProcess
+import qualified Language.Fortran.PrettyPrint as PP
+import qualified Language.Fortran.Util.Position as FU
+import qualified Language.Fortran.ParserMonad as FPM
 
 import Camfort.Analysis.Annotations
-import Camfort.Analysis.Syntax
-import Camfort.PrettyPrint
 import Camfort.Reprint
-import Camfort.Transformation.Syntax
-
-import Camfort.Specification.Units.Environment
+import Camfort.Helpers
+import Camfort.Helpers.Syntax
 
 import System.FilePath
 import System.Directory
 
--- FIXME: Did enough to get this module to compile, it's not optimised to use ByteString.
 import qualified Data.ByteString.Char8 as B
-import Data.Map.Lazy hiding (map, foldl)
-import Data.Functor.Identity
 import Data.Generics
-import GHC.Generics
+import Data.Functor.Identity
 import Data.List hiding (zip)
 import Data.Generics.Uniplate.Data
-import Data.Char
 import Data.Generics.Zipper
-import Data.Maybe
 import Debug.Trace
-import Text.Printf
+import Control.Monad
 
 import Control.Monad.Trans.Class
 import Control.Monad.Trans.State.Lazy
-
 
 -- Custom 'Show' which on strings is the identity
 class Show' s where
@@ -82,6 +63,7 @@ class OutputFiles t where
        text (if it exists) and their AST, write these to the directory -}
   mkOutputText :: FileOrDir -> t -> SourceText
   outputFile   :: t -> Filename
+  isNewFile    :: t -> Bool
 
   outputFiles :: FileOrDir -> FileOrDir -> [t] -> IO ()
   outputFiles inp outp pdata = do
@@ -89,172 +71,144 @@ class OutputFiles t where
       inIsDir  <- isDirectory inp
       inIsFile <- doesFileExist inp
       if outIsDir then do
+          -- Output to a directory, create if missing
           createDirectoryIfMissing True outp
+          -- Report which directory the files are going to
           putStrLn $ "Writing refactored files to directory: " ++ outp ++ "/"
+          -- If the input was a directory then work out the path prefix
+          -- which needs to be replaced with the new directory path
           isdir <- isDirectory inp
           let inSrc = if isdir then inp else getDir inp
-          mapM_ (\x -> let f' = changeDir outp inSrc (outputFile x)
-                       in do checkDir f'
-                             putStrLn $ "Writing " ++ f'
-                             B.writeFile f' (mkOutputText outp x)) pdata
+          forM_ pdata (\x -> let f' = changeDir outp inSrc (outputFile x)
+                             in do checkDir f'
+                                   putStrLn $ "Writing " ++ f'
+                                   B.writeFile f' (mkOutputText outp x))
        else
-         if inIsDir || length pdata > 1
-         then  error $ "Error: attempting to output multiple files, but the \
-                         \given output destination is a single file. \n\
-                         \Please specify an output directory"
-         else
-           if inIsFile -- Input was just a file, then output just a file
-           then do
-             putStrLn $ "Writing " ++ outp
-             B.writeFile outp (mkOutputText outp (head pdata))
+          forM_ pdata (\x -> do
+                let out = if isNewFile x then outputFile x else outp
+                putStrLn $ "Writing " ++ out
+                B.writeFile out (mkOutputText outp x))
 
-            else let outSrc = getDir outp
-               in do createDirectoryIfMissing True outSrc
-                     putStrLn $ "Writing " ++ outp
-                     B.writeFile outp (mkOutputText outp (head pdata))
+
+{-| changeDir is used to change the directory of a filename string.
+    If the filename string has no directory then this is an identity  -}
+changeDir newDir oldDir oldFilename =
+    newDir ++ listDiffL oldDir oldFilename
+  where
+    listDiffL []     ys = ys
+    listDiffL xs     [] = []
+    listDiffL (x:xs) (y:ys)
+        | x==y      = listDiffL xs ys
+        | otherwise = ys
 
 -- When the new source text is already provided
 instance OutputFiles (Filename, SourceText) where
   mkOutputText _ (_, output) = output
   outputFile (f, _) = f
-
-data PR a = PR (Program a) deriving Data
-
-instance PrettyPrint (PR Annotation) where
-   prettyPrint (PR x) = prettyPrint x
-
--- When there is a file to be reprinted (for refactoring)
-instance OutputFiles (Filename, SourceText, Program Annotation) where
-  mkOutputText f' (f, input, ast') = evalState (reprint refactoringLF (PR ast') input) 0
-    where
-  outputFile (f, _, _) = f
+  isNewFile (_, inp) = B.null inp
 
 -- When there is a file to be reprinted (for refactoring)
 instance OutputFiles (Filename, SourceText, F.ProgramFile Annotation) where
-  mkOutputText f' (f, input, ast') = runIdentity $ reprint refactoringForPar ast' input
+  mkOutputText f' (f, input, ast@(F.ProgramFile (F.MetaInfo version) _ _)) =
+     -- If we are create a file, call the pretty printer directly
+     if B.null input
+      then B.pack $ PP.pprintAndRender version ast (Just 0)
+      -- Otherwise, applying the refactoring system with reprint
+      else runIdentity $ reprint (refactoring version) ast input
+
   outputFile (f, _, _) = f
-
-srcSpanToSrcLocs :: FU.SrcSpan -> (SrcLoc, SrcLoc)
-srcSpanToSrcLocs (FU.SrcSpan lpos upos) = (toSrcLoc lpos, toSrcLoc upos)
-  where
-    toSrcLoc pos = SrcLoc { srcFilename = ""
-                          , srcLine     = FU.posLine pos
-                          , srcColumn   = FU.posColumn pos }
-
-instance (PrettyPrint (F.ProgramFile Annotation)) where
-   -- STUB
-   prettyPrint _ = B.empty
-
-refactoringForPar :: (Typeable a) =>  a -> SourceText -> StateT SrcLoc Identity (SourceText, Bool)
-refactoringForPar z inp =
-    ((\_ -> return (B.empty, False)) `extQ` (flip outputComments inp)) $ z
-  where
-    outputComments :: F.Block Annotation -> SourceText -> StateT SrcLoc Identity (SourceText, Bool)
-    outputComments e@(F.BlComment ann span comment) inp = do
-       cursor <- get
-       if (pRefactored ann)
-         then    let (lb, ub) = srcSpanToSrcLocs span
-                     lb'      = leftOne lb
-                     (p0, _)  = takeBounds (cursor, lb') inp
-                     nl       = if comment == [] then B.empty else B.pack "\n"
-                 in put ub >> return (B.concat [p0, B.pack comment, nl], True)
-         else return (B.empty, False)
-      where leftOne (SrcLoc f l c) = SrcLoc f (l-1) (c-1)
-    outputComments _ _ = return (B.empty, False)
-
-
-{-| changeDir is used to change the directory of a filename string.
-    If the filename string has no directory then this is an identity  -}
-changeDir newDir oldDir oldFilename = newDir ++ (listDiffL oldDir oldFilename)
-                                      where listDiffL []     ys = ys
-                                            listDiffL xs     [] = []
-                                            listDiffL (x:xs) (y:ys) | x==y      = listDiffL xs ys
-                                                                    | otherwise = ys
-
-{-| output pre-analysis ASTs into the directory with the given file names (the list of ASTs should match the
-    list of filenames) -}
-outputAnalysisFiles :: FileOrDir -> [Program Annotation] -> [Filename] -> IO ()
-outputAnalysisFiles src asts files = do
-  isdir <- isDirectory src
-  let src' = if isdir then src else dropFileName src
-  putStrLn $ "Writing analysis files to directory: " ++ src'
-  mapM (\(ast', f) -> writeFile (f ++ ".html") ((concatMap outputHTML) ast')) (zip asts files)
-  return ()
-
+  isNewFile (_, inp, _) = B.null inp
 
 {- Specifies how to do specific refactorings
-  (uses generic query extension - remember extQ is non-symmetric)
--}
+  (uses generic query extension - remember extQ is non-symmetric) -}
 
-refactoringLF :: (Typeable a) =>  a -> SourceText -> StateT SrcLoc (State Int) (SourceText, Bool)
-refactoringLF = flip $ \inp -> ((((\_ -> return (B.empty, False))
-                              `extQ` (refactorUses inp))
-                                 `extQ` (refactorDecl inp))
-                                    `extQ` (refactorArgName inp))
-                                       `extQ` (refactorFortran inp)
+refactoring :: Typeable a
+            => FPM.FortranVersion
+            -> a -> SourceText -> StateT FU.Position Identity (SourceText, Bool)
+refactoring v z inp = catchAll inp `extQ` refactorings inp $ z
+  where
+    catchAll :: SourceText -> a -> StateT FU.Position Identity (SourceText, Bool)
+    catchAll _ _ = return (B.empty, False)
+    refactorings inp z =
+      mapStateT (\n -> Identity $ n `evalState` 0) (refactorBlocks v inp z)
 
-
-refactorFortran :: Monad m => SourceText -> Fortran Annotation -> StateT SrcLoc m (SourceText, Bool)
-refactorFortran inp e = do
+refactorBlocks :: FPM.FortranVersion
+               -> SourceText
+               -> F.Block Annotation
+               -> StateT FU.Position (State Int) (SourceText, Bool)
+-- Output comments
+refactorBlocks v inp e@(F.BlComment ann span comment) = do
     cursor <- get
-    if (pRefactored $ tag e) then
-          let (lb, ub) = srcSpan e
-              (p0, _) = takeBounds (cursor, lb) inp
-              outE = B.pack $ pprint e
-              lnl = case e of (NullStmt _ _) -> (if ((p0 /= B.empty) && (B.last p0 /= '\n')) then B.pack "\n" else B.empty)
-                              _              -> B.empty
-              lnl2 = if ((p0 /= B.empty) && (B.last p0 /= '\n')) then B.pack "\n" else B.empty
-              textOut = if p0 == (B.pack "\n") then outE else B.concat [p0, lnl2, outE, lnl]
-          in put ub >> return (textOut, True)
-    else return (B.empty, False)
+    if pRefactored ann
+     then    let (FU.SrcSpan lb ub) = span
+                 lb'      = leftOne lb
+                 (p0, _)  = takeBounds (cursor, lb') inp
+                 nl       = if null comment then B.empty else B.pack "\n"
+             in put ub >> return (B.concat [p0, B.pack comment, nl], True)
+     else return (B.empty, False)
+  where leftOne (FU.Position f c l) = FU.Position f (c-1) (l-1)
 
-
-refactorDecl :: SourceText -> Decl Annotation -> StateT SrcLoc (State Int) (SourceText, Bool)
-refactorDecl inp d = do
+-- Refactor use statements
+refactorBlocks v inp b@(F.BlStatement _ _ _ u@F.StUse{}) = do
     cursor <- get
-    if (pRefactored $ tag d) then
-       let (lb, ub) = srcSpan d
-           (p0, _) = takeBounds (cursor, lb) inp
-           textOut = p0 `B.append` (B.pack $ pprint d)
-       in do textOut' <- -- The following compensates new lines with removed lines
-                         case d of
-                           (NullDecl _ _) ->
-                              do added <- lift get
-                                 let diff = linesCovered ub lb
-                                 -- remove empty newlines here if extra lines have been added
-                                 let (text, removed) = if added <= diff
-                                                         then removeNewLines textOut added
-                                                         else removeNewLines textOut diff
-                                 lift $ put (added - removed)
-                                 return text
-                           otherwise -> return textOut
-             put ub
-             return (textOut', True)
-    else return (B.empty, False)
-
-refactorArgName :: Monad m => SourceText -> ArgName Annotation -> StateT SrcLoc m (SourceText, Bool)
-refactorArgName inp a = do
-    cursor <- get
-    case (refactored $ tag a) of
-        Just lb -> do
-            let (p0, _) = takeBounds (cursor, lb) inp
-            put lb
-            return (p0 `B.append` (B.pack $ pprint a), True)
-        Nothing -> return (B.empty, False)
-
-refactorUses :: SourceText -> Uses Annotation -> StateT SrcLoc (State Int) (SourceText, Bool)
-refactorUses inp u = do
-    cursor <- get
-    let ?variant = HTMLPP in
-        case (refactored $ tag u) of
-           Just lb -> let (p0, _) = takeBounds (cursor, lb) inp
-                          syntax  = B.pack $ printSlave u
-                       in do added <- lift get
-                             if (newNode $ tag u) then lift $ put (added + (countLines syntax))
-                                                  else return ()
-                             put $ toCol0 lb
-                             return (p0 `B.append` syntax, True)
+    case refactored $ F.getAnnotation u of
+           Just (FU.Position _ rCol rLine) -> do
+               let (FU.SrcSpan lb _) = FU.getSpan u
+               let (p0, _) = takeBounds (cursor, lb) inp
+               let out  = B.pack $ PP.pprintAndRender v b (Just (rCol -1))
+               added <- lift get
+               when (newNode $ F.getAnnotation u)
+                    (lift $ put $ added + countLines out)
+               put $ toCol0 lb
+               return (p0 `B.append` out, True)
            Nothing -> return (B.empty, False)
+
+-- Common blocks, equivalence statements, and declarations can all
+-- be refactored by the default refactoring
+refactorBlocks v inp b@(F.BlStatement _ _ _ s@F.StEquivalence{}) =
+    refactorStatements v inp s
+refactorBlocks v inp b@(F.BlStatement _ _ _ s@F.StCommon{}) =
+    refactorStatements v inp s
+refactorBlocks v inp b@(F.BlStatement _ _ _ s@F.StDeclaration{}) =
+    refactorStatements v inp s
+-- Arbitrary statements can be refactored *as blocks* (in order to
+-- get good indenting)
+refactorBlocks v inp b@F.BlStatement {} = refactorSyntax v inp b
+refactorBlocks _ _ _ = return (B.empty, False)
+
+-- Wrapper to fix the type of refactorSyntax to deal with statements
+refactorStatements :: FPM.FortranVersion -> SourceText
+                   -> F.Statement A -> StateT FU.Position (State Int) (SourceText, Bool)
+refactorStatements = refactorSyntax
+
+refactorSyntax ::
+   (Typeable s, F.Annotated s, FU.Spanned (s A), PP.IndentablePretty (s A))
+   => FPM.FortranVersion -> SourceText
+   -> s A -> StateT FU.Position (State Int) (SourceText, Bool)
+refactorSyntax v inp e = do
+    cursor <- get
+    let a = F.getAnnotation e
+    case refactored a of
+      Nothing -> return (B.empty, False)
+      Just (FU.Position _ rCol rLine) -> do
+        let (FU.SrcSpan lb ub) = FU.getSpan e
+        let (pre, _) = takeBounds (cursor, lb) inp
+        let indent = if newNode a then Just (rCol - 1) else Nothing
+        let output = if deleteNode a then B.empty
+                                     else B.pack $ PP.pprintAndRender v e indent
+        out <- if newNode a then do
+                  -- If a new node is begin created then
+                  numAdded <- lift get
+                  let diff = linesCovered ub lb
+                  -- remove empty newlines here if extra lines were added
+                  let (out, numRemoved) = if numAdded <= diff
+                                           then removeNewLines output numAdded
+                                           else removeNewLines output diff
+                  lift $ put (numAdded - numRemoved)
+                  return out
+                else return output
+        put ub
+        return (B.concat [pre, out], True)
 
 countLines xs =
   case B.uncons xs of
@@ -262,27 +216,26 @@ countLines xs =
     Just ('\n', xs) -> 1 + countLines xs
     Just (x, xs)    -> countLines xs
 
-{- 'removeNewLines xs n' removes at most 'n' new lines characters from the input string
-    xs, returning the new string and the number of new lines that were removed. Note
-    that the number of new lines removed might actually be less than 'n'- but in principle
-    this should not happen with the usaage in 'refactorDecl' -}
+{- 'removeNewLines xs n' removes at most 'n' new lines characters from
+the input string xs, returning the new string and the number of new
+lines that were removed. Note that the number of new lines removed
+might actually be less than 'n'- but in principle this should not
+happen with the usaage in 'refactorDecl' -}
 
 removeNewLines xs 0 = (xs, 0)
 -- Deal with CR LF in the same way as just LF
 removeNewLines xs n =
     case unpackFst (B.splitAt 4 xs) of
-       ("\r\n\r\n", xs) -> (xs', n' + 1)
-           where (xs', n') = removeNewLines ((B.pack "\r\n") `B.append` xs) (n - 1)
-       _ ->
-         case unpackFst (B.splitAt 2 xs) of
-           ("\n\n", xs)     -> (xs', n' + 1)
-               where (xs', n') = removeNewLines ((B.pack "\n") `B.append` xs) (n - 1)
-           _ ->
-            case B.uncons xs of
-                Nothing -> (xs, 0)
-                Just (x, xs) -> (B.cons x xs', n)
-                    where (xs', n') = removeNewLines xs n
+      ("\r\n\r\n", xs) -> (xs', n' + 1)
+          where (xs', n') = removeNewLines (B.pack "\r\n" `B.append` xs) (n - 1)
+      _ ->
+        case unpackFst (B.splitAt 2 xs) of
+          ("\n\n", xs)     -> (xs', n' + 1)
+              where (xs', n') = removeNewLines (B.pack "\n" `B.append` xs) (n - 1)
+          _ ->
+           case B.uncons xs of
+               Nothing -> (xs, 0)
+               Just (x, xs) -> (B.cons x xs', n)
+                   where (xs', n') = removeNewLines xs n
 
 unpackFst (x, y) = (B.unpack x, y)
---removeNewLines ('\n':xs) 0 = let (xs', n') = removeNewLines xs 0
---                             in ('\n':xs', 0)

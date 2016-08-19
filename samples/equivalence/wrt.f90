@@ -12,7 +12,7 @@ program wrt
 
   write (*,'(i8,A,A,A)') x, y, z(1), z(2)
 
-  x = 97 + 98 * (2**8)
+  x = 97 +    98 * (2**8)
 
   write (*,'(i8,A,A,A,A)') x, y, z(1), z(2), z(3)
 

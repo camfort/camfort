@@ -1,5 +1,5 @@
 name:                   camfort
-version:                0.805
+version:                0.900
 synopsis:               CamFort - Cambridge Fortran infrastructure
 description:            CamFort is a tool for the analysis, transformation, verification of Fortran code.
 
@@ -25,13 +25,8 @@ executable camfort
   main-is: Main.hs
   hs-source-dirs:       src
   other-modules:        Camfort.Analysis.Annotations
-                        Camfort.Analysis.CallGraph
                         Camfort.Analysis.CommentAnnotator
-                        Camfort.Analysis.IntermediateReps
-                        Camfort.Analysis.LVA
                         Camfort.Analysis.Simple
-                        Camfort.Analysis.Syntax
-                        Camfort.Analysis.Types
                         Camfort.Specification.Stencils.Annotation
                         Camfort.Specification.Stencils.CheckBackend
                         Camfort.Specification.Stencils.CheckFrontend
@@ -50,27 +45,21 @@ executable camfort
                         Camfort.Specification.Units.Parser
                         Camfort.Specification.Units.Synthesis
                         Camfort.Transformation.CommonBlockElim
-                        Camfort.Transformation.CommonBlockElimToCalls
                         Camfort.Transformation.DeadCode
-                        Camfort.Transformation.DerivedTypeIntro
                         Camfort.Transformation.EquivalenceElim
-                        Camfort.Transformation.Syntax
                         Camfort.Helpers
+                        Camfort.Helpers.Syntax
                         Camfort.Helpers.Vec
                         Camfort.Functionality
                         Camfort.Input
                         Camfort.Output
                         Camfort.Reprint
-                        Camfort.PrettyPrint
-                        Camfort.Traverse
                         Main
 
   build-depends:        base >= 4.6 && < 5,
                         ghc-prim >= 0.3.1.0,
                         containers >= 0.5.0.0,
                         uniplate >= 1.6.10,
-                        comonad >= 3,
-                        haskell-src >= 1.0.1,
                         syz >= 0.2,
                         syb >= 0.4,
                         matrix >=0.2.2,
@@ -80,7 +69,6 @@ executable camfort
                         text >= 0.11.2.3,
                         array >= 0.4,
                         directory >= 1.2,
-                        language-fortran >= 0.5.1,
                         transformers >= 0.4,
                         GenericPretty >= 1.2,
                         QuickCheck >= 2.8,
@@ -94,13 +82,8 @@ library
   hs-source-dirs:       src
   build-tools:          alex, happy
   exposed-modules:      Camfort.Analysis.Annotations
-                        Camfort.Analysis.CallGraph
                         Camfort.Analysis.CommentAnnotator
-                        Camfort.Analysis.IntermediateReps
-                        Camfort.Analysis.LVA
                         Camfort.Analysis.Simple
-                        Camfort.Analysis.Syntax
-                        Camfort.Analysis.Types
                         Camfort.Specification.Stencils.Annotation
                         Camfort.Specification.Stencils.CheckBackend
                         Camfort.Specification.Stencils.CheckFrontend
@@ -119,26 +102,20 @@ library
                         Camfort.Specification.Units.Parser
                         Camfort.Specification.Units.Synthesis
                         Camfort.Transformation.CommonBlockElim
-                        Camfort.Transformation.CommonBlockElimToCalls
                         Camfort.Transformation.DeadCode
-                        Camfort.Transformation.DerivedTypeIntro
                         Camfort.Transformation.EquivalenceElim
-                        Camfort.Transformation.Syntax
                         Camfort.Helpers
+                        Camfort.Helpers.Syntax
                         Camfort.Helpers.Vec
                         Camfort.Functionality
                         Camfort.Input
                         Camfort.Output
                         Camfort.Reprint
-                        Camfort.PrettyPrint
-                        Camfort.Traverse
 
   build-depends:        base >= 4.6 && < 5,
                         ghc-prim >= 0.3.1.0,
                         containers >= 0.5.0.0,
                         uniplate >= 1.6.10,
-                        comonad >= 3,
-                        haskell-src >= 1.0.1,
                         syz >= 0.2,
                         syb >= 0.4,
                         matrix >=0.2.2,
@@ -147,7 +124,6 @@ library
                         text >= 0.11.2.3,
                         array >= 0.4,
                         directory >= 1.2,
-                        language-fortran >= 0.5.1,
                         transformers >= 0.4,
                         vector >= 0.1,
                         GenericPretty >= 1.2,

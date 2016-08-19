@@ -1,7 +1,7 @@
-subroutine test(a,b, c,c1,c2,c3)
+subroutine test(a,b, c)
 
 integer :: c1, c2, c3
-
+COMMON /cmn/  c1, c2, c3
 
 real :: a, b, c
 

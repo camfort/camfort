@@ -13,26 +13,32 @@
    See the License for the specific language governing permissions and
    limitations under the License.
 -}
-{-# LANGUAGE TypeOperators, PolyKinds #-}
+{-# LANGUAGE TypeOperators #-}
+{-# LANGUAGE PolyKinds #-}
+{-# LANGUAGE FlexibleInstances #-}
+{-# LANGUAGE FlexibleContexts #-}
+{-# LANGUAGE CPP #-}
 
 module Camfort.Helpers where
 
+import GHC.Generics
+import Data.Generics.Zipper
+import Data.Generics.Aliases
+import Data.Generics.Str
+import Data.Generics.Uniplate.Operations
+import Data.Data
+import Data.Maybe
+import Data.Monoid
 import Data.List (elemIndices, group, sort, nub)
 import qualified Data.ByteString.Char8 as B
 import System.Directory
-import Language.Fortran
 import Data.List (union)
 import qualified Data.Map.Lazy as Map hiding (map, (\\))
+import Control.Monad.Writer.Strict
 
 -- collect: from an association list to a map with list-based bins for matching keys
 collect :: (Eq a, Ord k) => [(k, a)] -> Map.Map k [a]
 collect = Map.fromListWith union . map (fmap (:[]))
-
-lineCol :: SrcLoc -> (Int, Int)
-lineCol s = (srcLine s, srcColumn s)
-
-spanLineCol :: SrcSpan -> ((Int, Int), (Int, Int))
-spanLineCol (l, u) = (lineCol l, lineCol u)
 
 type Filename = String
 type Directory = String
@@ -57,9 +63,7 @@ checkDir f = case (elemIndices '/' f) of
 isDirectory :: FileOrDir -> IO Bool
 isDirectory s = doesDirectoryExist s
 
-
 -- Helpers
-
 fanout :: (a -> b) -> (a -> c) -> a -> (b, c)
 fanout f g x = (f x, g x)
 
@@ -136,3 +140,42 @@ normaliseNoSort = nub . reduce
 normaliseBy :: Ord t => (t -> t -> Maybe t) -> [t] -> [t]
 normaliseBy plus = nub . (foldPair plus) . sort
 
+#if __GLASGOW_HASKELL__ < 800
+instance Monoid x => Monad ((,) x) where
+    return a = (mempty, a)
+    (x, a) >>= k = let (x', b) = k a
+                   in (mappend x x', b)
+#endif
+
+-- Data-type generic reduce traversal
+reduceCollect :: (Data s, Data t, Uniplate t, Biplate t s) => (s -> Maybe a) -> t -> [a]
+reduceCollect k x = execWriter (transformBiM (\y -> do case k y of
+                                                         Just x -> tell [x]
+                                                         Nothing -> return ()
+                                                       return y) x)
+
+-- Data-type generic comonad-style traversal with zipper (contextual traversal)
+everywhere :: (Zipper a -> Zipper a) -> Zipper a -> Zipper a
+everywhere k z = everywhere' z
+  where
+    everywhere' = enterRight . enterDown . k
+
+    enterDown z =
+        case (down' z) of
+          Just dz -> let dz' = everywhere' dz
+                     in case (up $ dz') of
+                          Just uz -> uz
+                          Nothing -> dz'
+          Nothing -> z
+
+    enterRight z =
+         case (right z) of
+           Just rz -> let rz' = everywhere' rz
+                      in case (left $ rz') of
+                           Just lz -> lz
+                           Nothing -> rz'
+           Nothing -> z
+
+
+zfmap :: Data a => (a -> a) -> Zipper (d a) -> Zipper (d a)
+zfmap f x = zeverywhere (mkT f) x

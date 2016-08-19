@@ -32,7 +32,6 @@ import Data.Generics.Uniplate.Operations
 import Data.Data (Data)
 import Debug.Trace
 
-
 import Language.Fortran.AST
 import Language.Fortran.Util.Position
 

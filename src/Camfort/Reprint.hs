@@ -20,70 +20,69 @@ module Camfort.Reprint where
 
 import Data.Generics.Zipper
 
-import Camfort.PrettyPrint
 import Camfort.Analysis.Annotations
-import Camfort.Traverse
 import Camfort.Helpers
+import Camfort.Helpers.Syntax
 
 import qualified Data.ByteString.Char8 as B
 import Data.Functor.Identity
 import Data.Data
 import Control.Monad.Trans.State.Lazy
-
-import Language.Fortran
-import Camfort.Analysis.Syntax
+import qualified Language.Fortran.Util.Position as FU
 
 {-
 Reminder:
  -- type SourceText    = B.ByteString
- -- data SrcLoc
-       = SrcLoc {srcFilename :: String, srcLine :: Int, srcColumn :: Int}
+ -- data FU.Position = FU.Position { posAsbsoluteOffset :: Int,
+                                     posColumn :: Int,
+                                     posLine   :: Int }
 -}
 
-type Refactored = Bool
 
 -- A refactoring takes a 'Typeable' value
 -- into a stateful SourceText (ByteString) transformer,
 -- which returns a pair of a stateful computation of an updated SourceText
 -- paired with a boolean flag denoting whether a refactoring has been
--- performed.  The state contains a SrcLoc which is the "cursor"
+-- performed.  The state contains a FU.Position which is the "cursor"
 -- within the original source text. The incoming value corresponds to
 -- the position of the first character in the input SourceText. The
 -- outgoing value is a cursor ahead of the incoming one which shows
 -- the amount of SourceText that is consumed by the refactoring.
 
+type Refactored = Bool
 type Refactoring m =
-    forall b .
-     Typeable b => b -> SourceText -> StateT SrcLoc m (SourceText, Refactored)
+  forall b . Typeable b
+         => b -> SourceText -> StateT FU.Position m (SourceText, Refactored)
 
 -- The reprint algorithm takes a refactoring (parameteric in
 -- some monad m) and turns an arbitrary pretty-printable type 'p'
 -- into a monadic SourceText transformer.
 
-reprint :: (Monad m, Data p, PrettyPrint p)
+reprint :: (Monad m, Data p)
         => Refactoring m -> p -> SourceText -> m SourceText
 reprint refactoring tree input
-  -- If the inupt is null then switch into pretty printer
-  | B.null input = return $ prettyPrint tree
+  -- If the inupt is null then null is returned
+  | B.null input = return B.empty
   -- Otherwise go with the normal algorithm
   | otherwise = do
-      -- Create an initial cursor at the start of the file
-      let cursor0 = SrcLoc "" 1 0
-      -- Enter the top-node of a zipper for 'tree'
-      -- setting the cursor at the start of the file
-      (output, cursorn) <- runStateT (enter refactoring (toZipper tree) input) cursor0
-      -- Remove from the input the portion covered by the main algorithm
-      -- leaving the rest of the file not covered within the bounds of
-      -- the tree
-      let (_, remaining)  = takeBounds (cursor0, cursorn) input
-      return $ output `B.append` remaining
+   -- Create an initial cursor at the start of the file
+   let cursor0 = FU.Position 0 0 1
+   -- Enter the top-node of a zipper for 'tree'
+   -- setting the cursor at the start of the file
+   (out, cursorn) <- runStateT (enter refactoring (toZipper tree) input) cursor0
+   -- Remove from the input the portion covered by the main algorithm
+   -- leaving the rest of the file not covered within the bounds of
+   -- the tree
+   let (_, remaining)  = takeBounds (cursor0, cursorn) input
+   return $ out `B.append` remaining
 
--- The enter, enterDown, enterRight each take a refactoring
--- and a zipper producing a stateful SourceText transformer with SrcLoc state.
+-- The enter, enterDown, enterRight each take a refactoring and a
+-- zipper producing a stateful SourceText transformer with FU.Position
+-- state.
 
 enter, enterDown, enterRight
   :: Monad m
-  => Refactoring m -> Zipper a -> SourceText -> StateT SrcLoc m SourceText
+  => Refactoring m -> Zipper a -> SourceText -> StateT FU.Position m SourceText
 
 -- `enter` applies the generic refactoring to the current context
 -- of the zipper
@@ -92,7 +91,7 @@ enter refactoring z inp = do
   -- Part 1.
   -- Apply a refactoring
   cursor     <- get
-  (p1, refactored) <- query (flip refactoring inp) z
+  (p1, refactored) <- query (`refactoring` inp) z
 
   -- Part 2.
   -- Cut out the portion of source text consumed by the refactoring
@@ -116,28 +115,30 @@ enter refactoring z inp = do
 
 -- `enterDown` navigates to the children of the current context
 enterDown refactoring z inp =
-  case (down' z) of
+  case down' z of
     -- Go to children
     Just dz -> enter refactoring dz inp
     -- No children
-    Nothing -> return $ B.empty
+    Nothing -> return B.empty
 
 -- `enterRight` navigates to the right sibling of the current context
 enterRight refactoring z inp =
-  case (right z) of
+  case right z of
     -- Go to right sibling
     Just rz -> enter refactoring rz inp
     -- No right sibling
-    Nothing -> return $ B.empty
+    Nothing -> return B.empty
 
--- Given a lower-bound and upper-bound pair of SrcLocs, split the
--- incoming SourceText based on the distance between the SrcLoc pairs
-takeBounds :: (SrcLoc, SrcLoc) -> SourceText -> (SourceText, SourceText)
-takeBounds (l, u) inp = takeBounds' (lineCol l, lineCol u) B.empty inp
+-- Given a lower-bound and upper-bound pair of FU.Positions, split the
+-- incoming SourceText based on the distanceF between the FU.Position pairs
+takeBounds :: (FU.Position, FU.Position) -> SourceText -> (SourceText, SourceText)
+takeBounds (l, u) = takeBounds' ((ll, lc), (ul, uc)) B.empty
+  where (FU.Position _ lc ll) = l
+        (FU.Position _ uc ul) = u
 takeBounds' ((ll, lc), (ul, uc)) tk inp  =
     if (ll == ul && lc == uc) || (ll > ul) then (B.reverse tk, inp)
     else
       case B.uncons inp of
-         Nothing         -> (B.reverse tk, inp)
-         Just ('\n', ys) -> takeBounds' ((ll+1, 0), (ul, uc)) (B.cons '\n' tk) ys
-         Just (x, xs)    -> takeBounds' ((ll, lc+1), (ul, uc)) (B.cons x tk) xs
+       Nothing         -> (B.reverse tk, inp)
+       Just ('\n', ys) -> takeBounds' ((ll+1, 0), (ul, uc)) (B.cons '\n' tk) ys
+       Just (x, xs)    -> takeBounds' ((ll, lc+1), (ul, uc)) (B.cons x tk) xs

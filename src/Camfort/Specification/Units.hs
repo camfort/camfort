@@ -35,10 +35,9 @@ import Data.Generics.Uniplate.Operations
 import Control.Monad.State.Strict
 
 import Camfort.Helpers hiding (lineCol)
+import Camfort.Helpers.Syntax
 import Camfort.Output
 import Camfort.Analysis.Annotations
-import Camfort.Analysis.Syntax
-import Camfort.Analysis.Types
 import Camfort.Input
 
 -- Provides the types and data accessors used in this module
