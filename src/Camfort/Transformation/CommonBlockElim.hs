@@ -81,61 +81,63 @@ analyseCommons pfs = mapM perPF pfs
       pf''' <- transformBiM (perPU tenv fname) pf''
       return (fname, fmap FA.prevAnnotation pf''')
 
-    perPU :: FAT.TypeEnv -> Filename -> F.ProgramUnit A -> CommonState (F.ProgramUnit A)
+    perPU :: FAT.TypeEnv -> Filename -> F.ProgramUnit A1 -> CommonState (F.ProgramUnit A1)
     perPU tenv fname p = transformBiM (collectCommons tenv fname (F.getName p)) p
 
 collectCommons :: FAT.TypeEnv -> Filename -> F.ProgramUnitName
-               -> F.Block A -> CommonState (F.Block A)
+               -> F.Block A1 -> CommonState (F.Block A1)
 collectCommons tenv fname pname b =
     transformBiM commons b
   where
-    commons :: F.Statement A -> CommonState (F.Statement A)
+    commons :: F.Statement A1 -> CommonState (F.Statement A1)
     commons f@(F.StCommon a s@(FU.SrcSpan p1 _) cgrps) = do
         mapM commonGroups (F.aStrip cgrps)
-        -- TODO possibly use the end src pos instead as we don't use NULL anymore?
-        return $ F.StCommon (a { refactored = Just p1 }) s (F.AList a s [])
+        let a' = onPrev (\ap -> ap { refactored = Just p1, deleteNode = True }) a
+        return $ F.StCommon a' (deleteLine s) (F.AList a s [])
     commons f = return f
 
     punitName (F.Named s) = s
     punitName _ = ""
 
     -- Process a common group, adding blocks to the common state
-    commonGroups :: F.CommonGroup A -> CommonState ()
+    commonGroups :: F.CommonGroup A1 -> CommonState ()
     commonGroups (F.CommonGroup a (FU.SrcSpan p1 _) cname exprs) = do
       let r' = show p1 ++ ": removed common declaration\n"
       let info = (fname, (punitName pname,
                     (commonNameFromAST cname, map typeCommonExprs (F.aStrip exprs))))
       modify (\(r, infos) -> (r ++ r', (info : infos)))
 
-    typeCommonExprs :: F.Expression A -> (F.Name, F.BaseType)
+    typeCommonExprs :: F.Expression A1 -> (F.Name, F.BaseType)
     typeCommonExprs (F.ExpValue _ sp (F.ValVariable v)) =
       case M.lookup v tenv of
-        Just (FA.IDType (Just t) (Just (FA.CTVariable))) -> (v, t)
+--        Just (FA.IDType (Just t) (Just (FA.CTVariable))) -> (v, t)
+        Just (FA.IDType (Just t) _) -> (v, t)
         _ -> error $ "Variable '" ++ show v
                   ++ "' is of an unknown or higher-order type at: " ++ show sp
+                  ++ (show (M.lookup v tenv))
 
     typeCommonExprs e = error $ "Not expecting a non-variable expression \
                                 \in expression at: " ++ show (FU.getSpan e)
 
 
 {- Comparison functions for common block names and variables -}
-cmpTLConFName :: TLCommon A -> TLCommon A -> Ordering
+cmpTLConFName :: TLCommon a -> TLCommon a -> Ordering
 cmpTLConFName (f1, (_, _)) (f2, (_, _)) = compare f1 f2
 
-cmpTLConPName :: TLCommon A -> TLCommon A -> Ordering
+cmpTLConPName :: TLCommon a -> TLCommon a -> Ordering
 cmpTLConPName (_, (p1, _)) (_, (p2, _)) = compare p1 p2
 
-cmpTLConBNames :: TLCommon A -> TLCommon A -> Ordering
+cmpTLConBNames :: TLCommon a -> TLCommon a -> Ordering
 cmpTLConBNames (_, (_, c1)) (_, (_, c2)) = cmpTConBNames c1 c2
 
-cmpTConBNames :: TCommon A -> TCommon A -> Ordering
+cmpTConBNames :: TCommon a -> TCommon a -> Ordering
 cmpTConBNames (Nothing, _) (Nothing, _) = EQ
 cmpTConBNames (Nothing, _) (Just _, _)  = LT
 cmpTConBNames (Just _, _) (Nothing, _)  = GT
 cmpTConBNames (Just n, _) (Just n', _) = if (n < n') then LT
                                             else if (n > n') then GT else EQ
 
-cmpVarName :: TLCommon A -> TLCommon A -> Ordering
+cmpVarName :: TLCommon a -> TLCommon a -> Ordering
 cmpVarName (_, (_, (_, vtys1))) (_, (_, (_, vtys2))) =
   map fst vtys1 `compare` map fst vtys2
 
@@ -143,9 +145,6 @@ cmpVarName (_, (_, (_, vtys1))) (_, (_, (_, vtys2))) =
 -- How to decide which gets to be the "head" perhaps the one which triggers the *least* renaming (ooh!)
 --  (this is calculated by looking for the mode of the TLCommon (for a particular Common)
 --  (need to do gorouping, but sortBy is used already so... (IS THIS STABLE- does this matter?))
-
-onCommonBlock :: (TCommon A -> TCommon A) -> TLCommon A -> TLCommon A
-onCommonBlock f (fname, (pname, tcommon)) = (fname, (pname, f tcommon))
 
 commonName Nothing  = "Common"
 commonName (Just x) = x
@@ -175,17 +174,18 @@ groupSortCommonBlock commons = gccs
 mkTLCommonRenamers :: [TLCommon A] -> [(TLCommon A, RenamerCoercer)]
 mkTLCommonRenamers commons =
     case allCoherentCommonsP commons of
-      (r, False) -> error $ "Common blocks are incoherent!\n" ++ r -- (r, []) -- Incoherent commons
-      (_, True) -> let gccs = groupSortCommonBlock commons
-                   -- Find the "mode" common block and freshen the names for this, creating
-                   -- a renamer between this and every module
-                       gcrcs = map (\grp -> -- grp are block decls all for the same block
-                                        let (com, r) = freshenCommonNames (head (head grp))
-                                        in  map (\c -> (c, r)) (head grp) ++
-                                            map (\c -> (c, mkRenamerCoercerTLC c com)) (concat $ tail grp)) gccs
-                   -- Now re-sort based on the file and program unit
-                       gcrcs' = sortBy (cmpFst cmpTLConFName) (sortBy (cmpFst cmpTLConPName) (concat gcrcs))
-                   in gcrcs'
+      (r, False) -> error $ "Common blocks are incoherent!\n" ++ r
+      (_, True) -> commons'
+        where
+          gccs = groupSortCommonBlock commons
+          -- Find the "mode" common block and freshen the names for this, creating
+          -- a renamer between this and every module
+          gcrcs = map (\grp -> -- grp are block decls all for the same block
+                               let (com, r) = freshenCommonNames (head (head grp))
+                               in  map (\c -> (c, r)) (head grp) ++
+                                   map (\c -> (c, mkRenamerCoercerTLC c com)) (concat $ tail grp)) gccs
+          -- Now re-sort based on the file and program unit
+          commons' = sortBy (cmpFst cmpTLConFName) (sortBy (cmpFst cmpTLConPName) (concat gcrcs))
 
 
 type Renamer = M.Map F.Name F.Name
@@ -238,7 +238,7 @@ updateUseDecls fps tcs = map perPF fps
            let ?fname = fname in removeDecls v (map snd tcrs') p'
       where
         tcrs' = (lookups' fname) (lookups' fname tcrs)
-        pos = useSrcLoc p
+        pos = getUnitStartPosition p
         uses = mkUseStatementBlocks pos tcrs'
         p' = insertUses uses p
 
@@ -256,7 +256,7 @@ updateUseDecls fps tcs = map perPF fps
                    -- If no subname is available, use the filename
                   _             -> fname
         tcrs' = (lookups' pname) (lookups' fname tcrs)
-        pos = useSrcLoc p
+        pos = getUnitStartPosition p
         uses = mkUseStatementBlocks pos tcrs'
         p' = insertUses uses p
 
@@ -272,8 +272,9 @@ updateUseDecls fps tcs = map perPF fps
     -- statements)
     removeDecl :: [RenamerCoercer]
                -> F.Statement A -> State [F.Statement A] (F.Statement A)
-    removeDecl rcs d@(F.StDeclaration a s@(FU.SrcSpan p1 _) typ attr decls) =
-        modify (++ assgns) >> (return $ F.StDeclaration a' s typ attr decls')
+    removeDecl rcs d@(F.StDeclaration a s@(FU.SrcSpan p1 _) typ attr decls) = do
+        modify (++ assgns)
+        return $ F.StDeclaration a' (deleteLine s) typ attr decls'
       where
         (F.AList al sl declsA) = decls
         decls' = F.AList al' sl declsA'
@@ -281,7 +282,8 @@ updateUseDecls fps tcs = map perPF fps
         -- Update annotation if declarations are being added
         (a', al') = if (length declsA == length declsA')
                      then (a, al)
-                     else (a {refactored = Just p1}, al {refactored = Just pl1})
+                     else (a {refactored = Just p1, deleteNode = True}
+                         , al {refactored = Just pl1})
                        where (FU.SrcSpan pl1 _ ) = sl
 
         matchVar :: ([F.Statement A], [F.Declarator A]) -> F.Declarator A
@@ -324,15 +326,15 @@ addToProgramUnit v pu stmnts = descendBi (addAfterDecls (map toBlock stmnts)) pu
     toBlock stmnt =
       F.BlStatement (F.getAnnotation stmnt) (FU.getSpan stmnt) Nothing stmnt
 
-useSrcLoc :: F.ProgramUnit A -> FU.SrcSpan
-useSrcLoc (F.PUMain _ s _ [] _) = s
-useSrcLoc (F.PUMain _ _ _ bs _) = FU.getSpan (head bs)
-useSrcLoc (F.PUSubroutine _ s _ _ _ [] _) = s
-useSrcLoc (F.PUSubroutine _ _ _ _ _ bs _) = FU.getSpan (head bs)
-useSrcLoc (F.PUFunction _ s _ _ _ _ _ [] _) = s
-useSrcLoc (F.PUFunction _ _ _ _ _ _ _ bs _) = FU.getSpan (head bs)
-useSrcLoc (F.PUBlockData _ s _ []) = s
-useSrcLoc (F.PUBlockData _ _ _ bs) = FU.getSpan (head bs)
+getUnitStartPosition :: F.ProgramUnit A -> FU.SrcSpan
+getUnitStartPosition (F.PUMain _ s _ [] _) = s
+getUnitStartPosition (F.PUMain _ _ _ bs _) = FU.getSpan (head bs)
+getUnitStartPosition (F.PUSubroutine _ s _ _ _ [] _) = s
+getUnitStartPosition (F.PUSubroutine _ _ _ _ _ bs _) = FU.getSpan (head bs)
+getUnitStartPosition (F.PUFunction _ s _ _ _ _ _ [] _) = s
+getUnitStartPosition (F.PUFunction _ _ _ _ _ _ _ bs _) = FU.getSpan (head bs)
+getUnitStartPosition (F.PUBlockData _ s _ []) = s
+getUnitStartPosition (F.PUBlockData _ _ _ bs) = FU.getSpan (head bs)
 
 renamerToUse :: RenamerCoercer -> [(F.Name, F.Name)]
 renamerToUse Nothing = []
@@ -344,20 +346,21 @@ renamerToUse (Just m) = let entryToPair v (Nothing, _) = []
 mkUseStatementBlocks :: FU.SrcSpan -> [(TCommon A, RenamerCoercer)] -> [F.Block A]
 mkUseStatementBlocks s commonsInfo = map mkUseStmnt commonsInfo
   where
-    a = unitAnnotation { refactored = Just (toCol0 pos), newNode = True }
-    (FU.SrcSpan pos _) = s
-    mkUseStmnt x@((name, _), r) = F.BlStatement a s Nothing $
-       F.StUse a s useName F.Permissive useListA
-     where useName = F.ExpValue a s (F.ValVariable (commonName name))
+    a = unitAnnotation { refactored = Just pos, newNode = True }
+    (FU.SrcSpan pos pos') = s
+    s' = FU.SrcSpan (toCol0 pos) pos'
+    mkUseStmnt x@((name, _), r) = F.BlStatement a s' Nothing $
+       F.StUse a s' useName F.Permissive useListA
+     where useName = F.ExpValue a s' (F.ValVariable (commonName name))
            useListA = case useList of [] -> Nothing
-                                      us -> Just (F.AList a s us)
+                                      us -> Just (F.AList a s' us)
            useList = mkUses pos x
 
     mkUses :: FU.Position -> (TCommon A, RenamerCoercer) -> [F.Use A]
     mkUses s ((name, _), r) = map useRenamer (renamerToUse r)
 
-    useRenamer (v, vR) = F.UseRename a s (F.ExpValue a s (F.ValVariable v))
-                                         (F.ExpValue a s (F.ValVariable vR))
+    useRenamer (v, vR) = F.UseRename a s' (F.ExpValue a s' (F.ValVariable v))
+                                          (F.ExpValue a s' (F.ValVariable vR))
 
 mkRenamerCoercerTLC :: TLCommon A :? source -> TLCommon A :? target -> RenamerCoercer
 mkRenamerCoercerTLC x@(fname, (pname, common1)) (_, (_, common2)) =
@@ -416,17 +419,17 @@ introduceModules meta d cenv =
 
 
 mkModuleFile :: F.MetaInfo -> Directory -> (TLCommon A) -> (Report, (Filename, F.ProgramFile A))
-mkModuleFile meta d (_, (_, (name, varTys))) =
+mkModuleFile meta dir (_, (_, (name, varTys))) =
         let modname = commonName name
-            fullpath = d ++ "/" ++ modname ++ ".f90"
-            r = "Created module " ++ modname ++ " at " ++ fullpath ++ "\n"
-        in (r, (fullpath, F.ProgramFile meta [([], mkModule modname varTys modname)] []))
+            path = dir ++ modname ++ ".f90"
+            r = "Created module " ++ modname ++ " at " ++ path ++ "\n"
+        in (r, (path, F.ProgramFile meta [([], mkModule modname varTys modname)] []))
 
 mkModule :: String -> [(F.Name, F.BaseType)] -> String -> F.ProgramUnit A
 mkModule name vtys fname =
     F.PUModule a sp fname decls Nothing
   where
-    a = unitAnnotation { refactored = Just loc }
+    a = unitAnnotation { refactored = Just loc, newNode = True }
     loc = FU.Position 0 0 0
     sp = FU.SrcSpan loc loc
     toDeclBlock (v, t) = F.BlStatement a sp Nothing (toStmt (v, t))
