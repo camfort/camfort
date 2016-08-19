@@ -36,7 +36,7 @@ import qualified Language.Fortran.AST as F
 import qualified Data.ByteString.Char8 as B
 import Data.Data
 import Data.Generics.Uniplate.Operations
-import Data.List (foldl', nub, (\\), elemIndices, intersperse)
+import Data.List (foldl', nub, (\\), elemIndices, intercalate)
 import Data.Monoid
 import Data.Text.Encoding.Error (replace)
 import Data.Text.Encoding (encodeUtf8, decodeUtf8With)
@@ -64,17 +64,16 @@ doAnalysisSummary :: (Monoid s, Show' s) => (Filename -> F.ProgramFile A -> (s, 
                         -> FileOrDir -> [Filename] -> Maybe FileOrDir -> IO ()
 doAnalysisSummary aFun inSrc excludes outSrc = do
   if excludes /= [] && excludes /= [""]
-    then putStrLn $ "Excluding " ++ (concat $ intersperse "," excludes)
+    then putStrLn $ "Excluding " ++ intercalate "," excludes
                                  ++ " from " ++ inSrc ++ "/"
     else return ()
   ps <- readParseSrcDir inSrc excludes
   let (out, ps') = callAndSummarise aFun ps
   putStrLn . show' $ out
 
-callAndSummarise aFun ps = do
+callAndSummarise aFun ps =
   foldl' (\(n, pss) (f, _, ps) -> let (n', ps') = aFun f ps
                                   in (n `mappend` n', ps' : pss)) (mempty, []) ps
-
 
 
 {-| Performs an analysis which reports to the user,
@@ -84,7 +83,7 @@ doAnalysisReport :: ([(Filename, F.ProgramFile A)] -> r)
                        -> FileOrDir -> [Filename] -> IO out
 doAnalysisReport rFun sFun inSrc excludes = do
   if excludes /= [] && excludes /= [""]
-      then putStrLn $ "Excluding " ++ (concat $ intersperse "," excludes)
+      then putStrLn $ "Excluding " ++ intercalate "," excludes
                     ++ " from " ++ inSrc ++ "/"
       else return ()
   ps <- readParseSrcDir inSrc excludes
@@ -96,27 +95,48 @@ doAnalysisReport rFun sFun inSrc excludes = do
 {-| Performs a refactoring provided by its first parameter, on the directory
     of the second, excluding files listed by third,
     output to the directory specified by the fourth parameter -}
-doRefactor :: ([(Filename, F.ProgramFile A)]
-                 -> (String, [(Filename, F.ProgramFile Annotation)]))
-                 -> FileOrDir -> [Filename] -> FileOrDir -> IO String
+
+-- Refactoring where just a single list of filename/program file
+-- pairs is returned (the case when no files are being added)
+doRefactor ::
+     ([(Filename, F.ProgramFile A)] -> (String, [(Filename, F.ProgramFile A)]))
+  -> FileOrDir -> [Filename] -> FileOrDir -> IO String
 doRefactor rFun inSrc excludes outSrc = do
     if excludes /= [] && excludes /= [""]
-    then putStrLn $ "Excluding " ++ (concat $ intersperse "," excludes)
+    then putStrLn $ "Excluding " ++ intercalate "," excludes
            ++ " from " ++ inSrc ++ "/"
     else return ()
     ps <- readParseSrcDir inSrc excludes
     let (report, ps') = rFun (map (\(f, inp, ast) -> (f, ast)) ps)
-    let outputs = mkOutputFile ps ps'
+    let outputs = reassociateSourceText ps ps'
     outputFiles inSrc outSrc outputs
     return report
-  where snd3 (a, b, c) = b
 
-mkOutputFile :: [(Filename, SourceText, a)]
+-- For refactorings which create some files too
+-- i.e., for refactoring functions that return a
+-- pair of lists of filename/program file pairs is
+doRefactorAndCreate ::
+     ([(Filename, F.ProgramFile A)]
+     -> (String, [(Filename, F.ProgramFile A)], [(Filename, F.ProgramFile A)]))
+  -> FileOrDir -> [Filename] -> FileOrDir -> IO String
+doRefactorAndCreate rFun inSrc excludes outSrc = do
+    if excludes /= [] && excludes /= [""]
+    then putStrLn $ "Excluding " ++ intercalate "," excludes
+           ++ " from " ++ inSrc ++ "/"
+    else return ()
+    ps <- readParseSrcDir inSrc excludes
+    let (report, ps', ps'') = rFun (map (\(f, inp, ast) -> (f, ast)) ps)
+    let outputs = reassociateSourceText ps ps'
+    let outputs' = map (\(f, pf) -> (f, B.empty, pf)) ps''
+    outputFiles inSrc outSrc outputs
+    outputFiles inSrc outSrc outputs'
+    return report
+
+reassociateSourceText :: [(Filename, SourceText, a)]
                    -> [(Filename, F.ProgramFile Annotation)]
                    -> [(Filename, SourceText, F.ProgramFile Annotation)]
-mkOutputFile ps ps' = zip3 (map fst ps') (map snd3 ps) (map snd ps')
-  where
-    snd3 (a, b, c) = b
+reassociateSourceText ps ps' = zip3 (map fst ps') (map snd3 ps) (map snd ps')
+  where snd3 (a, b, c) = b
 
 -- * Source directory and file handling
 
@@ -142,13 +162,13 @@ readParseSrcFile :: Filename -> IO (Filename, SourceText, F.ProgramFile A)
 readParseSrcFile f = do
     inp <- flexReadFile f
     let ast = FP.fortranParser inp f
-    return $ (f, inp, fmap (const unitAnnotation) ast)
+    return (f, inp, fmap (const unitAnnotation) ast)
 ----
 
 rGetDirContents :: FileOrDir -> IO [String]
 rGetDirContents d = do
     ds <- getDirectoryContents d
-    ds' <- return $ ds \\ [".", ".."] -- remove '.' and '..' entries
+    let ds' = ds \\ [".", ".."] -- remove '.' and '..' entries
     rec ds'
       where
         rec []     = return $ []
@@ -158,15 +178,15 @@ rGetDirContents d = do
                            do x' <- rGetDirContents (d ++ "/" ++ x)
                               return $ (map (\y -> x ++ "/" ++ y) x') ++ xs'
                         else if isFortran x
-                             then return $ x : xs'
-                             else return $ xs'
+                             then return (x : xs')
+                             else return xs'
 
 {-| predicate on which fileextensions are Fortran files -}
-isFortran x = elem (fileExt x) [".f", ".f90", ".f77", ".cmn", ".inc"]
+isFortran x = fileExt x `elem` [".f", ".f90", ".f77", ".cmn", ".inc"]
 
 {-| extract a filename's extension -}
 fileExt x = let ix = elemIndices '.' x
-            in if (length ix == 0) then ""
+            in if null ix then ""
                else Prelude.drop (Prelude.last ix) x
 
 -- | Read file using ByteString library and deal with any weird characters.

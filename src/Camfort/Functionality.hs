@@ -92,7 +92,7 @@ common inSrc excludes outSrc _ = do
     putStrLn $ "Refactoring common blocks in '" ++ inSrc ++ "'"
     isDir <- isDirectory inSrc
     let dir = if isDir then inSrc ++ "/" else ""
-    report <- doRefactor (commonElimToModules dir) inSrc excludes outSrc
+    report <- doRefactorAndCreate (commonElimToModules dir) inSrc excludes outSrc
     putStrLn report
 
 equivalences inSrc excludes outSrc _ = do

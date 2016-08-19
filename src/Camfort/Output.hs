@@ -63,6 +63,7 @@ class OutputFiles t where
        text (if it exists) and their AST, write these to the directory -}
   mkOutputText :: FileOrDir -> t -> SourceText
   outputFile   :: t -> Filename
+  isNewFile    :: t -> Bool
 
   outputFiles :: FileOrDir -> FileOrDir -> [t] -> IO ()
   outputFiles inp outp pdata = do
@@ -70,29 +71,24 @@ class OutputFiles t where
       inIsDir  <- isDirectory inp
       inIsFile <- doesFileExist inp
       if outIsDir then do
+          -- Output to a directory, create if missing
           createDirectoryIfMissing True outp
+          -- Report which directory the files are going to
           putStrLn $ "Writing refactored files to directory: " ++ outp ++ "/"
+          -- If the input was a directory then work out the path prefix
+          -- which needs to be replaced with the new directory path
           isdir <- isDirectory inp
           let inSrc = if isdir then inp else getDir inp
-          mapM_ (\x -> let f' = changeDir outp inSrc (outputFile x)
-                       in do checkDir f'
-                             putStrLn $ "Writing " ++ f'
-                             B.writeFile f' (mkOutputText outp x)) pdata
+          forM_ pdata (\x -> let f' = changeDir outp inSrc (outputFile x)
+                             in do checkDir f'
+                                   putStrLn $ "Writing " ++ f'
+                                   B.writeFile f' (mkOutputText outp x))
        else
-         if inIsDir || length pdata > 1
-         then  error "Error: attempting to output multiple files, but the \
-                       \given output destination is a single file. \n\
-                       \Please specify an output directory"
-         else
-           if inIsFile -- Input was just a file, then output just a file
-           then do
-             putStrLn $ "Writing " ++ outp
-             B.writeFile outp (mkOutputText outp (head pdata))
+          forM_ pdata (\x -> do
+                let out = if isNewFile x then outputFile x else outp
+                putStrLn $ "Writing " ++ out
+                B.writeFile out (mkOutputText outp x))
 
-            else let outSrc = getDir outp
-               in do createDirectoryIfMissing True outSrc
-                     putStrLn $ "Writing " ++ outp
-                     B.writeFile outp (mkOutputText outp (head pdata))
 
 {-| changeDir is used to change the directory of a filename string.
     If the filename string has no directory then this is an identity  -}
@@ -109,13 +105,19 @@ changeDir newDir oldDir oldFilename =
 instance OutputFiles (Filename, SourceText) where
   mkOutputText _ (_, output) = output
   outputFile (f, _) = f
+  isNewFile (_, inp) = B.null inp
 
 -- When there is a file to be reprinted (for refactoring)
 instance OutputFiles (Filename, SourceText, F.ProgramFile Annotation) where
-  mkOutputText f' (f, input, ast'@(F.ProgramFile (F.MetaInfo version) _ _)) =
-      runIdentity $ reprint (refactoring version) ast' input
+  mkOutputText f' (f, input, ast@(F.ProgramFile (F.MetaInfo version) _ _)) =
+     -- If we are create a file, call the pretty printer directly
+     if B.null input
+      then B.pack $ PP.pprintAndRender version ast Nothing
+      -- Otherwise, applying the refactoring system with reprint
+      else runIdentity $ reprint (refactoring version) ast input
 
   outputFile (f, _, _) = f
+  isNewFile (_, inp, _) = B.null inp
 
 {- Specifies how to do specific refactorings
   (uses generic query extension - remember extQ is non-symmetric) -}

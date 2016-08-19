@@ -38,7 +38,6 @@ Reminder:
                                      posLine   :: Int }
 -}
 
-type Refactored = Bool
 
 -- A refactoring takes a 'Typeable' value
 -- into a stateful SourceText (ByteString) transformer,
@@ -50,9 +49,10 @@ type Refactored = Bool
 -- outgoing value is a cursor ahead of the incoming one which shows
 -- the amount of SourceText that is consumed by the refactoring.
 
+type Refactored = Bool
 type Refactoring m =
-    forall b .
-     Typeable b => b -> SourceText -> StateT FU.Position m (SourceText, Refactored)
+  forall b .
+   Typeable b => b -> SourceText -> StateT FU.Position m (SourceText, Refactored)
 
 -- The reprint algorithm takes a refactoring (parameteric in
 -- some monad m) and turns an arbitrary pretty-printable type 'p'
@@ -61,20 +61,20 @@ type Refactoring m =
 reprint :: (Monad m, Data p)
         => Refactoring m -> p -> SourceText -> m SourceText
 reprint refactoring tree input
-  -- If the inupt is null then switch into pretty printer
-  | B.null input = error "Input was null" -- return $ pprint tree
+  -- If the inupt is null then null is returned
+  | B.null input = return B.empty
   -- Otherwise go with the normal algorithm
   | otherwise = do
       -- Create an initial cursor at the start of the file
       let cursor0 = FU.Position 0 0 1
       -- Enter the top-node of a zipper for 'tree'
       -- setting the cursor at the start of the file
-      (output, cursorn) <- runStateT (enter refactoring (toZipper tree) input) cursor0
+      (out, cursorn) <- runStateT (enter refactoring (toZipper tree) input) cursor0
       -- Remove from the input the portion covered by the main algorithm
       -- leaving the rest of the file not covered within the bounds of
       -- the tree
       let (_, remaining)  = takeBounds (cursor0, cursorn) input
-      return $ output `B.append` remaining
+      return $ out `B.append` remaining
 
 -- The enter, enterDown, enterRight each take a refactoring
 -- and a zipper producing a stateful SourceText transformer with FU.Position state.

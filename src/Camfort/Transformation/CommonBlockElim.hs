@@ -59,11 +59,11 @@ type CommonState = State (Report, [TLCommon A])
 -- Top-level functions for eliminating common blocks in a set of files
 commonElimToModules ::
     Directory -> [(Filename, F.ProgramFile A)]
-              -> (Report, [(Filename, F.ProgramFile A)])
+              -> (Report, [(Filename, F.ProgramFile A)], [(Filename, F.ProgramFile A)])
 
 -- Eliminates common blocks in a program directory (and convert to modules)
 commonElimToModules d pfs =
-    (r ++ r', pfs'' ++ pfM)
+    (r ++ r', pfs'', pfM)
   where
     (pfs', (r, cg)) = runState (analyseCommons pfs) ("", [])
     meta = F.MetaInfo PM.Fortran90
@@ -82,11 +82,12 @@ analyseCommons pfs = mapM perPF pfs
       return (fname, fmap FA.prevAnnotation pf''')
 
     perPU :: FAT.TypeEnv -> Filename -> F.ProgramUnit A1 -> CommonState (F.ProgramUnit A1)
-    perPU tenv fname p = transformBiM (collectCommons tenv fname (F.getName p)) p
+    perPU tenv fname p = transformBiM (collectAndRmCommons tenv fname (F.getName p)) p
 
-collectCommons :: FAT.TypeEnv -> Filename -> F.ProgramUnitName
+
+collectAndRmCommons :: FAT.TypeEnv -> Filename -> F.ProgramUnitName
                -> F.Block A1 -> CommonState (F.Block A1)
-collectCommons tenv fname pname b =
+collectAndRmCommons tenv fname pname b =
     transformBiM commons b
   where
     commons :: F.Statement A1 -> CommonState (F.Statement A1)
@@ -422,7 +423,7 @@ mkModuleFile :: F.MetaInfo -> Directory -> (TLCommon A) -> (Report, (Filename, F
 mkModuleFile meta dir (_, (_, (name, varTys))) =
         let modname = commonName name
             path = dir ++ modname ++ ".f90"
-            r = "Created module " ++ modname ++ " at " ++ path ++ "\n"
+            r = "Creating module " ++ modname ++ " at " ++ path ++ "\n"
         in (r, (path, F.ProgramFile meta [([], mkModule modname varTys modname)] []))
 
 mkModule :: String -> [(F.Name, F.BaseType)] -> String -> F.ProgramUnit A
