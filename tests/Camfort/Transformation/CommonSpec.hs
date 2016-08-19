@@ -14,9 +14,7 @@ samplesBase = "tests" </> "Camfort" </> "Transformation" </> "samples"
 data Example = Example FilePath FilePath
 
 examples =
-  [ Example "toArgs.f90" "toArgs.expected.f90"
-  , Example "toArgs2.f90" "toArgs2.expected.f90"
-  ]
+  [ Example "common.f90" "common.expected.f90" ]
 
 readExpected :: FilePath -> IO String
 readExpected filename = do
@@ -34,9 +32,13 @@ readActual argumentFilename = do
 
 spec :: Spec
 spec =
-  describe "Issue #9" $
-    context "lalala" $ do
+  describe "Common block integration test" $
+    context "common.f90 into common.expect.f90 and foo.f90" $ do
       expected <- runIO $ readExpected "toArgs.expected.f90"
       actual <- runIO $ readActual "toArgs.f90"
+      actualMod <- runIO $ readExpected "foo.f90"
+      expectedMod <- runIO $ readExpected "foo.expected.f90"
       it "it eliminates common statement" $
         actual `shouldBe` expected
+      it "it produces a correct module file" $
+        actualMod `shouldBe` expectedMod

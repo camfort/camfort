@@ -112,7 +112,7 @@ instance OutputFiles (Filename, SourceText, F.ProgramFile Annotation) where
   mkOutputText f' (f, input, ast@(F.ProgramFile (F.MetaInfo version) _ _)) =
      -- If we are create a file, call the pretty printer directly
      if B.null input
-      then B.pack $ PP.pprintAndRender version ast Nothing
+      then B.pack $ PP.pprintAndRender version ast (Just 0)
       -- Otherwise, applying the refactoring system with reprint
       else runIdentity $ reprint (refactoring version) ast input
 

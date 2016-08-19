@@ -54,15 +54,13 @@ spec =
       it "it eliminates equivalence statements" $
         actual `shouldBe` expected
       ----
-      report <- runIO $ doRefactor (mapM refactorEquivalences) (samplesBase </> "equiv.f90") [] "equiv.expected.f90"
+      let rfun = mapM refactorEquivalences
+      let infile = samplesBase </> "equiv.f90"
+      report <- runIO $ doRefactor rfun infile [] "equiv.expected.f90"
       it "report is as expected" $
         report `shouldBe` expectedReport
 
-
 expectedReport =
-  "tests/Camfort/Transformation/samples/equiv.f9\n\
-  \6:2     removed equivalence\n\
-  \14:2    addded copy:   y = transfer(x,y) due to refactored equivalence\n\
-  \15:2    addded copy:   z(2) = transfer(x,z(2)) due to refactored equivalence\n\
-  \o.f90\n\
-  \17:0    removed dead code"
+  "6:3: removed equivalence \n\
+  \14:3: added copy due to refactored equivalence\n\
+  \15:3: added copy due to refactored equivalence\n"

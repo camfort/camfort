@@ -121,15 +121,6 @@ linesCovered :: FU.Position -> FU.Position -> Int
 linesCovered (FU.Position _ _ l1) (FU.Position _ _ l2) = l2 - l1 + 1
 
 toCol0 (FU.Position o c l) = FU.Position o 0 l
-incLineN n (FU.Position o c l) = FU.Position o c (l+n)
-
-refactorSpan :: FU.SrcSpan -> FU.SrcSpan
-refactorSpan = refactorSpanN 0
-
-refactorSpanN :: Int -> FU.SrcSpan -> FU.SrcSpan
-refactorSpanN n (FU.SrcSpan (FU.Position o cA lA)
-                            (FU.Position _ cB lB)) =
-    FU.SrcSpan (FU.Position o cA (lB+n)) (FU.Position o cB (lB+n))
 
 afterAligned :: FU.SrcSpan -> FU.Position
 afterAligned (FU.SrcSpan (FU.Position o cA lA) (FU.Position _ cB lB)) =
