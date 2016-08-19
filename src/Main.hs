@@ -117,7 +117,8 @@ analyses =
      ("stencils-infer", (stencilsInfer, "stencil spec inference")),
      ("stencils-synth", (stencilsSynth, "stencil spec synthesis")),
      ("units-suggest", (unitsCriticals,
-         "suggest variables to annotate for units-of-measure for maximum coverage")),
+                                  "suggest variables to annotate with/
+                                  /units-of-measure for maximum coverage")),
      ("units-check", (unitsCheck, "unit-of-measure checking")),
      ("units-infer", (unitsInfer, "unit-of-measure inference")),
      ("units-synth", (unitsSynth, "unit-of-measure synthesise specs.")) ]
