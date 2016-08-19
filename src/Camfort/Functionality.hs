@@ -72,12 +72,12 @@ type Options = [Flag]
 instance Default String where
     defaultValue = ""
 getExcludes :: Options -> String
-getExcludes xs = getOption xs
+getExcludes = getOption
 
 -- * Wrappers on all of the features
 ast d excludes f _ = do
     xs <- readParseSrcDir (d ++ "/" ++ f) excludes
-    putStrLn $ show (map (\(_, _, p) -> p) xs)
+    print (map (\(_, _, p) -> p) xs)
 
 countVarDecls inSrc excludes _ _ = do
     putStrLn $ "Counting variable declarations in '" ++ inSrc ++ "'"
@@ -85,14 +85,15 @@ countVarDecls inSrc excludes _ _ = do
 
 dead inSrc excludes outSrc _ = do
     putStrLn $ "Eliminating dead code in '" ++ inSrc ++ "'"
-    report <- doRefactor ((mapM (deadCode False))) inSrc excludes outSrc
+    report <- doRefactor (mapM (deadCode False)) inSrc excludes outSrc
     putStrLn report
 
 common inSrc excludes outSrc _ = do
     putStrLn $ "Refactoring common blocks in '" ++ inSrc ++ "'"
     isDir <- isDirectory inSrc
     let dir = if isDir then inSrc ++ "/" else ""
-    report <- doRefactorAndCreate (commonElimToModules dir) inSrc excludes outSrc
+    let rfun = commonElimToModules dir
+    report <- doRefactorAndCreate rfun inSrc excludes outSrc
     putStrLn report
 
 equivalences inSrc excludes outSrc _ = do
@@ -108,34 +109,41 @@ optsToUnitOpts = foldl' (\ o f -> case f of Literals m -> o { uoLiterals = m }
 
 unitsCheck inSrc excludes outSrc opt = do
     putStrLn $ "Checking units for '" ++ inSrc ++ "'"
-    doAnalysisReport (concatMap (LU.checkUnits (optsToUnitOpts opt))) putStrLn inSrc excludes
+    let rfun = concatMap (LU.checkUnits (optsToUnitOpts opt))
+    doAnalysisReport rfun putStrLn inSrc excludes
 
 unitsInfer inSrc excludes outSrc opt = do
     putStrLn $ "Inferring units for '" ++ inSrc ++ "'"
-    doAnalysisReport (concatMap (LU.inferUnits (optsToUnitOpts opt))) putStrLn inSrc excludes
+    let rfun = concatMap (LU.inferUnits (optsToUnitOpts opt))
+    doAnalysisReport rfun putStrLn inSrc excludes
 
 unitsSynth inSrc excludes outSrc opt = do
     putStrLn $ "Synthesising units for '" ++ inSrc ++ "'"
-    report <- doRefactor (mapM (LU.synthesiseUnits (optsToUnitOpts opt))) inSrc excludes outSrc
+    let rfun = mapM (LU.synthesiseUnits (optsToUnitOpts opt))
+    report <- doRefactor rfun inSrc excludes outSrc
     putStrLn report
 
 unitsCriticals inSrc excludes outSrc opt = do
     putStrLn $ "Suggesting variables to annotate with unit specifications in '"
              ++ inSrc ++ "'"
-    doAnalysisReport (mapM (LU.inferCriticalVariables (optsToUnitOpts opt))) (putStrLn . fst) inSrc excludes
+    let rfun = mapM (LU.inferCriticalVariables (optsToUnitOpts opt))
+    doAnalysisReport rfun (putStrLn . fst) inSrc excludes
 
 {- Stencils feature -}
 stencilsCheck inSrc excludes _ _ = do
    putStrLn $ "Checking stencil specs for '" ++ inSrc ++ "'"
-   doAnalysisSummary (\f p -> (Stencils.check f p, p)) inSrc excludes Nothing
+   let rfun = \f p -> (Stencils.check f p, p)
+   doAnalysisSummary rfun inSrc excludes Nothing
 
 stencilsInfer inSrc excludes outSrc opt = do
    putStrLn $ "Infering stencil specs for '" ++ inSrc ++ "'"
-   doAnalysisSummary (Stencils.infer (getOption opt)) inSrc excludes (Just outSrc)
+   let rfun = Stencils.infer (getOption opt)
+   doAnalysisSummary rfun inSrc excludes (Just outSrc)
 
 stencilsSynth inSrc excludes outSrc opt = do
    putStrLn $ "Synthesising stencil specs for '" ++ inSrc ++ "'"
-   report <- doRefactor (Stencils.synth (getOption opt)) inSrc excludes outSrc
+   let rfun = Stencils.synth (getOption opt)
+   report <- doRefactor rfun inSrc excludes outSrc
    putStrLn report
 
 stencilsVarFlowCycles inSrc excludes _ _ = do

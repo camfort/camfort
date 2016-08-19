@@ -15,8 +15,6 @@
 -}
 {-# LANGUAGE FlexibleInstances #-}
 {-# LANGUAGE FlexibleContexts #-}
-{-# LANGUAGE ScopedTypeVariables #-}
-{-# LANGUAGE DeriveGeneric #-}
 
 module Camfort.Transformation.DeadCode where
 
@@ -61,11 +59,11 @@ deadCode flag (fname, pf) = (report, (fname, fmap FA.prevAnnotation pf'))
 
 deadCode' :: Bool -> FAD.InOutMap (S.Set F.Name)
                   -> F.ProgramFile (FA.Analysis A)
-                  -> (Report, (F.ProgramFile (FA.Analysis A)))
+                  -> (Report, F.ProgramFile (FA.Analysis A))
 deadCode' flag lva pf =
     if null report
       then (report, pf')
-      else (report, pf') >>= (deadCode' flag lva)
+      else (report, pf') >>= deadCode' flag lva
   where
     (report, pf') = transformBiM (perStmt flag lva) pf
 
@@ -83,8 +81,8 @@ perStmt flag lva x@(F.StExpressionAssign a sp@(FU.SrcSpan s1 s2) e1 e2)
          then Nothing
          else -- Dead assignment
            Just (report, F.StExpressionAssign a' (dropLine sp) e1 e2)
-             where report =  "o" ++ (show s1) ++ ": removed dead code\n"
+             where report =  "o" ++ show s1 ++ ": removed dead code\n"
                    -- Set annotation to mark statement for elimination in
                    -- the reprinter
-                   a' = onPrev (\ap -> ap {refactored = (Just s1)}) a
+                   a' = onPrev (\ap -> ap {refactored = Just s1}) a
 perStmt _ _ x = return x

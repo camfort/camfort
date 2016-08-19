@@ -71,9 +71,9 @@ doAnalysisSummary aFun inSrc excludes outSrc = do
   let (out, ps') = callAndSummarise aFun ps
   putStrLn . show' $ out
 
-callAndSummarise aFun ps =
+callAndSummarise aFun =
   foldl' (\(n, pss) (f, _, ps) -> let (n', ps') = aFun f ps
-                                  in (n `mappend` n', ps' : pss)) (mempty, []) ps
+                                  in (n `mappend` n', ps' : pss)) (mempty, [])
 
 
 {-| Performs an analysis which reports to the user,
@@ -171,7 +171,7 @@ rGetDirContents d = do
     let ds' = ds \\ [".", ".."] -- remove '.' and '..' entries
     rec ds'
       where
-        rec []     = return $ []
+        rec []     = return []
         rec (x:xs) = do xs' <- rec xs
                         g <- doesDirectoryExist (d ++ "/" ++ x)
                         if g then

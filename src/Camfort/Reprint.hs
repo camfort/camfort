@@ -51,8 +51,8 @@ Reminder:
 
 type Refactored = Bool
 type Refactoring m =
-  forall b .
-   Typeable b => b -> SourceText -> StateT FU.Position m (SourceText, Refactored)
+  forall b . Typeable b
+         => b -> SourceText -> StateT FU.Position m (SourceText, Refactored)
 
 -- The reprint algorithm takes a refactoring (parameteric in
 -- some monad m) and turns an arbitrary pretty-printable type 'p'
@@ -65,19 +65,20 @@ reprint refactoring tree input
   | B.null input = return B.empty
   -- Otherwise go with the normal algorithm
   | otherwise = do
-      -- Create an initial cursor at the start of the file
-      let cursor0 = FU.Position 0 0 1
-      -- Enter the top-node of a zipper for 'tree'
-      -- setting the cursor at the start of the file
-      (out, cursorn) <- runStateT (enter refactoring (toZipper tree) input) cursor0
-      -- Remove from the input the portion covered by the main algorithm
-      -- leaving the rest of the file not covered within the bounds of
-      -- the tree
-      let (_, remaining)  = takeBounds (cursor0, cursorn) input
-      return $ out `B.append` remaining
+   -- Create an initial cursor at the start of the file
+   let cursor0 = FU.Position 0 0 1
+   -- Enter the top-node of a zipper for 'tree'
+   -- setting the cursor at the start of the file
+   (out, cursorn) <- runStateT (enter refactoring (toZipper tree) input) cursor0
+   -- Remove from the input the portion covered by the main algorithm
+   -- leaving the rest of the file not covered within the bounds of
+   -- the tree
+   let (_, remaining)  = takeBounds (cursor0, cursorn) input
+   return $ out `B.append` remaining
 
--- The enter, enterDown, enterRight each take a refactoring
--- and a zipper producing a stateful SourceText transformer with FU.Position state.
+-- The enter, enterDown, enterRight each take a refactoring and a
+-- zipper producing a stateful SourceText transformer with FU.Position
+-- state.
 
 enter, enterDown, enterRight
   :: Monad m
@@ -138,6 +139,6 @@ takeBounds' ((ll, lc), (ul, uc)) tk inp  =
     if (ll == ul && lc == uc) || (ll > ul) then (B.reverse tk, inp)
     else
       case B.uncons inp of
-         Nothing         -> (B.reverse tk, inp)
-         Just ('\n', ys) -> takeBounds' ((ll+1, 0), (ul, uc)) (B.cons '\n' tk) ys
-         Just (x, xs)    -> takeBounds' ((ll, lc+1), (ul, uc)) (B.cons x tk) xs
+       Nothing         -> (B.reverse tk, inp)
+       Just ('\n', ys) -> takeBounds' ((ll+1, 0), (ul, uc)) (B.cons '\n' tk) ys
+       Just (x, xs)    -> takeBounds' ((ll, lc+1), (ul, uc)) (B.cons x tk) xs
