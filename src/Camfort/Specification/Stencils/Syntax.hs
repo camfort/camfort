@@ -19,6 +19,7 @@
 {-# LANGUAGE DeriveDataTypeable #-}
 {-# LANGUAGE FlexibleInstances #-}
 {-# LANGUAGE GADTs #-}
+{-# LANGUAGE DeriveFunctor #-}
 
 module Camfort.Specification.Stencils.Syntax where
 
@@ -91,22 +92,20 @@ lookupAggregate ((names, spec) : ss) name =
 
 -- Top-level of specifications: may be either spatial or temporal
 data Specification =
-  Specification (Approximation Spatial)
+  Specification (Multiplicity (Approximation Spatial))
     deriving (Eq, Data, Typeable)
+
+isEmpty :: Specification -> Bool
+isEmpty (Specification mult) = isUnit . fromMult $ mult
 
 -- **********************
 -- Spatial specifications:
--- Comprises some modifiers on spatial specifications:
---         * linearity
---         * irreflexivity
--- with the region, which is a regionSum
+-- is a regionSum
 --
 -- Regions are in disjunctive normal form (with respect to
 --  products on dimensions and sums):
 --    i.e., (A * B) U (C * D)...
-data Spatial =
-   Spatial { modLinearity    :: Linearity,
-             region          :: RegionSum }
+data Spatial = Spatial RegionSum
   deriving (Eq, Data, Typeable)
 
 -- Helpers for dealing with linearity information
@@ -120,23 +119,19 @@ fromBool False = Linear
 hasDuplicates :: Eq a => [a] -> ([a], Bool)
 hasDuplicates xs = (nub xs, nub xs /= xs)
 
+fromMult :: Multiplicity a -> a
+fromMult (Multiple a) = a
+fromMult (Single a) = a
+
 setLinearity :: Linearity -> Specification -> Specification
-setLinearity l (Specification (Exact s)) =
-    Specification (Exact (s { modLinearity = l }))
-setLinearity l (Specification (Bound sl su)) =
-    Specification (Bound (sl >>= \s -> return $ s { modLinearity = l })
-                         (su >>= \s -> return $ s { modLinearity = l }))
-setLinearity l s = s
-
-emptySpec = Specification (one :: Approximation Spatial)
-emptySpatialSpec = one :: Spatial
-
--- `isEmpty` predicate on which specifications are vacuous or
--- functional empty (i.e., show not be displayed in an inference setting).
-isEmpty :: Specification -> Bool
-isEmpty (Specification s) = isUnit s
+setLinearity l (Specification mult)
+  | l == Linear = Specification $ Single $ fromMult mult
+  | l == NonLinear = Specification $ Multiple $ fromMult mult
 
 data Linearity = Linear | NonLinear deriving (Eq, Data, Typeable)
+
+data Multiplicity a = Multiple a | Single a
+    deriving (Eq, Data, Typeable, Functor, Show)
 
 type Dimension  = Int -- spatial dimensions are 1 indexed
 type Depth      = Int
@@ -186,29 +181,6 @@ instance Ord RegionProd where
 
 
 -- Operations on specifications
-
-specPlus :: Specification -> Specification -> Maybe Specification
-
-specPlus (Specification (Bound (Just l) Nothing))
-         (Specification (Bound Nothing (Just u))) =
-    Just $ Specification (Bound (Just l) (Just u))
-
-specPlus (Specification (Bound Nothing (Just u)))
-         (Specification (Bound (Just l) Nothing)) =
-    Just $ Specification (Bound (Just l) (Just u))
-
-specPlus (Specification (Bound (Just l1) Nothing))
-         (Specification (Bound (Just l2) Nothing)) =
-    Just $ Specification (Bound (Just $ l1 `sum` l2) Nothing)
-
-specPlus (Specification (Bound Nothing (Just l1)))
-         (Specification (Bound Nothing (Just l2))) =
-    Just $ Specification (Bound Nothing (Just $ l1 `sum` l2))
-
-specPlus (Specification (Exact s1)) (Specification (Exact s2)) =
-    Just $ Specification (Exact $ s1 `sum` s2)
-
-specPlus _ _ = Nothing
 
 regionPlus :: Region -> Region -> Maybe Region
 regionPlus (Forward dep dim reflx) (Backward dep' dim' reflx')
@@ -385,27 +357,15 @@ instance RegionRig a => RegionRig (Maybe a) where
   isUnit Nothing = True
   isUnit (Just x) = isUnit x
 
-instance RegionRig Linearity where
-  sum Linear Linear = Linear
-  sum _  _          = NonLinear
-  prod = sum
-  one  = Linear
-  zero = Linear
-
-  isUnit Linear = True
-  isUnit _      = False
-
 instance RegionRig Spatial where
-  sum (Spatial lin  s) (Spatial lin' s') =
-    Spatial (sum lin lin') (sum s s')
+  sum (Spatial s) (Spatial s') = Spatial (sum s s')
 
-  prod (Spatial lin  s) (Spatial lin' s') =
-    Spatial (prod lin lin') (prod s s')
+  prod (Spatial s) (Spatial s') = Spatial (prod s s')
 
-  one = Spatial one one
-  zero = Spatial zero zero
+  one = Spatial one
+  zero = Spatial zero
 
-  isUnit (Spatial _ ss) = isUnit ss
+  isUnit (Spatial ss) = isUnit ss
 
 instance RegionRig (Approximation Spatial) where
   sum (Exact s) (Exact s')      = Exact (sum s s')
@@ -448,6 +408,21 @@ showSumSpecs  = intercalate "+" . map show
 instance Show Specification where
   show (Specification sp) = "stencil " ++ show sp
 
+instance {-# OVERLAPS #-} Show (Multiplicity (Approximation Spatial)) where
+  show mult
+    | Multiple appr <- mult = apprStr empty appr
+    | Single appr <- mult = apprStr "readOnce, " appr
+    where
+      apprStr linearity appr =
+        case appr of
+          Exact s -> linearity ++ show s
+          Bound Nothing Nothing -> "empty"
+          Bound Nothing (Just s) -> "atMost, " ++ linearity ++ show s
+          Bound (Just s) Nothing -> "atLeast, " ++ linearity ++ show s
+          Bound (Just sL) (Just sU) ->
+            "atLeast, " ++ linearity ++ show sL ++
+            "; atMost, " ++ linearity ++ show sU
+
 instance {-# OVERLAPS #-} Show (Approximation Spatial) where
   show (Exact s) = show s
   show (Bound Nothing Nothing) = "empty"
@@ -458,16 +433,11 @@ instance {-# OVERLAPS #-} Show (Approximation Spatial) where
 
 -- Pretty print spatial specs
 instance Show Spatial where
-  show (Spatial modLin region) =
-    intercalate ", " . catMaybes $ [lin, sregion]
-    where
-      -- Map "empty" spec to Nothing here
-      sregion = case show region of
-                  "empty" -> Nothing
-                  xs      -> Just xs
-      lin = case modLin of
-                NonLinear -> Nothing
-                Linear    -> Just "readOnce"
+  show (Spatial region) =
+    -- Map "empty" spec to Nothing here
+    case show region of
+      "empty" -> ""
+      xs      -> xs
 
 -- Pretty print region sums
 instance Show RegionSum where

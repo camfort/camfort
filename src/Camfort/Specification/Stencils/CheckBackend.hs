@@ -74,12 +74,15 @@ instance SynToAst SYN.Spec Specification where
   synToAst (SYN.Spatial mods r) = do
     (modLinear, approx) <- synToAst mods
     r' <- synToAst r
-    let s' = Spatial modLinear r'
-    return $ Specification $
+    let s' = Spatial r'
+    return $ Specification $ addLinearity modLinear $
        case approx of
         Just SYN.AtMost  -> Bound Nothing (Just s')
         Just SYN.AtLeast -> Bound (Just s') Nothing
         Nothing          -> Exact s'
+    where
+      addLinearity Linear appr = Single appr
+      addLinearity NonLinear appr = Multiple appr
 
 -- Convert region definitions into the DNF-form used internally
 instance SynToAst SYN.Region RegionSum where

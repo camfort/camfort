@@ -45,7 +45,8 @@ import Debug.Trace
 -- the multiset representation is a Map to Bool giving
 -- False = multiplicity 1, True = multiplicity > 1
 
-model :: Approximation Spatial -> Approximation (Multiset [Int])
+model :: Multiplicity (Approximation Spatial)
+      -> Multiplicity (Approximation (Set [Int]))
 model s = let ?globalDimensionality = dimensionality s
           in mkModel s
 
@@ -68,31 +69,30 @@ class Model spec where
    -- Return all the dimensions specified for in this spec
    dimensions :: spec -> [Int]
 
--- Multiset representation where multiplicities are (-1) modulo 2
+-- Set representation where multiplicities are (-1) modulo 2
 -- that is, False = multiplicity 1, True = multiplicity > 1
-type Multiset a = DM.Map a Bool
-
--- Build a multiset representation from a list (of possibly repeated) elements
-mkMultiset :: Ord a => [a] -> DM.Map a Bool
-mkMultiset =
-  Prelude.foldr (\a map -> DM.insertWithKey multi a True map) DM.empty
-     where multi k x y = x || y
-
 instance Model Specification where
-   type Domain Specification = Approximation (Multiset [Int])
+   type Domain Specification = Multiplicity (Approximation (Set [Int]))
 
    mkModel (Specification s) = mkModel s
-   mkModel _                 = error "Only spatial specs are modelled"
 
    dimensionality (Specification s) = dimensionality s
-   dimensionality _                 = 0
 
    dimensions (Specification s) = dimensions s
-   dimensions _                 = [0]
 
--- Model a 'Result' of 'Spatial'
+instance Model (Multiplicity (Approximation Spatial)) where
+   type Domain (Multiplicity (Approximation Spatial)) =
+     Multiplicity (Approximation (Set [Int]))
+
+   mkModel (Multiple s) = Multiple (mkModel s)
+   mkModel (Single s) = Single (mkModel s)
+
+   dimensionality mult = dimensionality $ fromMult mult
+
+   dimensions mult = dimensions $ fromMult mult
+
 instance Model (Approximation Spatial) where
-  type Domain (Approximation Spatial) = Approximation (Multiset [Int])
+  type Domain (Approximation Spatial) = Approximation (Set [Int])
 
   mkModel = fmap mkModel
   dimensionality (Exact s) = dimensionality s
@@ -113,18 +113,13 @@ instance Model a => Model (Maybe a) where
 
 -- Core part of the model
 instance Model Spatial where
-    type Domain Spatial = Multiset [Int]
+    type Domain Spatial = Set [Int]
 
-    mkModel spec@(Spatial lin s) =
-      case lin of
-        Linear    -> DM.fromList . map (,False) . toList $ indices
-        NonLinear -> DM.fromList . map (,True) . toList $ indices
-       where
-         indices = mkModel s
+    mkModel (Spatial s) = mkModel s
 
-    dimensionality (Spatial _ s) = dimensionality s
+    dimensionality (Spatial s) = dimensionality s
 
-    dimensions (Spatial _ s)     = dimensions s
+    dimensions (Spatial s)     = dimensions s
 
 
 instance Model RegionSum where

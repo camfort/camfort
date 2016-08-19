@@ -16,7 +16,7 @@ import Language.Fortran.Util.Position
 
 import Data.Bits
 import Data.List
-import Data.Map hiding (map)
+import Data.Set (toList)
 
 import Test.Hspec
 import Test.QuickCheck
@@ -66,70 +66,84 @@ pp x y =
           plus x y = x + y
 
 
-variations :: [([[Int]], Syn.Approximation Spatial)]
+variations :: [([[Int]], Syn.Multiplicity (Syn.Approximation Spatial))]
 variations =
   [ ([ [1], [0] ],
-    Exact $ Spatial NonLinear (Sum [Product [Forward 1 1 True]]))
+    Multiple $ Exact $ Spatial (Sum [Product [Forward 1 1 True]]))
 
   , ([ [absoluteRep,1], [absoluteRep,0] ],
-    Exact $ Spatial NonLinear (Sum [Product [Forward 1 2 True]]))
+    Multiple $ Exact $ Spatial (Sum [Product [Forward 1 2 True]]))
 
   , ([ [1,1], [0,1], [1,0], [0,0] ],
-    Exact $ Spatial NonLinear (Sum [Product [Forward 1 1 True, Forward 1 2 True]]))
+    Multiple $ Exact $ Spatial (Sum [Product [Forward 1 1 True, Forward 1 2 True]]))
 
   , ([ [-1, 1], [0, 1] ],
-    Exact $ Spatial NonLinear (Sum [Product [Backward 1 1 True, Forward 1 2 False]]))
+    Multiple $ Exact $ Spatial (Sum [Product [Backward 1 1 True, Forward 1 2 False]]))
 
   , ([ [-1], [0] ],
-    Exact $ Spatial NonLinear (Sum [Product [Backward 1 1 True]]))
+    Multiple $ Exact $ Spatial (Sum [Product [Backward 1 1 True]]))
 
   , ([ [absoluteRep,-1], [absoluteRep,0] ],
-    Exact $ Spatial NonLinear (Sum [Product [Backward 1 2 True]]))
+    Multiple $ Exact $ Spatial (Sum [Product [Backward 1 2 True]]))
 
   , ([ [-1,-1], [0,-1], [-1,0], [0,0] ],
-    Exact $ Spatial NonLinear (Sum [Product [Backward 1 1 True, Backward 1 2 True]]))
+    Multiple $ Exact $ Spatial (Sum [Product [Backward 1 1 True, Backward 1 2 True]]))
 
   , ( [ [0,-1], [1,-1], [0,0], [1,0], [1,1], [0,1], [2,-1], [2,0], [2,1] ],
-    Exact $ Spatial NonLinear
+    Multiple $ Exact $ Spatial
               (Sum [Product [ Forward 2 1 True, Centered 1 2 True ] ] ))
 
   , ( [ [-1,0], [-1,1], [0,0], [0,1], [1,1], [1,0], [-1,2], [0,2], [1,2] ],
-    Exact $ Spatial NonLinear
+    Multiple $ Exact $ Spatial
               (Sum [Product [ Forward 2 2 True, Centered 1 1 True ] ] ))
  ]
 
-variations2 :: [(Syn.Approximation [[Int]], Int, Syn.Approximation Spatial)]
+variations2 :: [( Syn.Multiplicity (Syn.Approximation [[Int]])
+                , Int
+                , Syn.Multiplicity (Syn.Approximation Spatial) )]
 variations2 =
   [
   -- Stencil which has some absolute component (not represented in the spec)
-    (Exact [ [0, absoluteRep], [1, absoluteRep] ], 2,
-    Exact $ Spatial NonLinear (Sum [Product [Forward 1 1 True]]))
+    ( Multiple $ Exact [ [0, absoluteRep], [1, absoluteRep] ]
+    , 2
+    , Multiple $ Exact $ Spatial (Sum [Product [Forward 1 1 True]])
+    )
 
  -- Spec on bounds
- ,  (Bound Nothing (Just $ [ [0, absoluteRep], [1, absoluteRep],
-                             [2, absoluteRep] ]), 2,
-     Bound Nothing
-           (Just $ Spatial NonLinear (Sum [Product [Forward 2 1 True]])))
- ]
+  , ( Multiple $ Bound Nothing (Just [ [0, absoluteRep], [1, absoluteRep]
+                                     , [2, absoluteRep] ])
+    , 2
+    , Multiple $ Bound Nothing
+        (Just $ Spatial (Sum [Product [Forward 2 1 True]]))
+    )
+  ]
 
-variations3 :: [(Syn.Approximation [[Int]], Int, Syn.Approximation Spatial)]
+variations3 :: [( Syn.Multiplicity (Syn.Approximation [[Int]])
+                , Int
+                , Syn.Multiplicity (Syn.Approximation Spatial) )]
 variations3 =
   [
  -- Spec on bounds
-    (Bound Nothing (Just $ [ [0, absoluteRep, 0], [1, absoluteRep, 0],
-                             [2, absoluteRep, 0],
-                             [0, absoluteRep, 1], [1, absoluteRep, 1],
-                             [2, absoluteRep, 1]]), 3,
-     Bound Nothing
-           (Just $ Spatial NonLinear (Sum [Product [Forward 1 3 True, Forward 2 1 True]])))
+    ( Multiple $
+        Bound Nothing (Just  [ [0, absoluteRep, 0], [1, absoluteRep, 0]
+                             , [2, absoluteRep, 0], [0, absoluteRep, 1]
+                             , [1, absoluteRep, 1], [2, absoluteRep, 1]])
+    , 3
+    , Multiple $
+        Bound Nothing (Just $ Spatial (Sum [Product [ Forward 1 3 True
+                                                    , Forward 2 1 True ]]))
+    )
   ]
 
 modelHasLeftInverse = mapM_ check (zip variations [0..])
   where check ((ixs, spec), n) = it ("("++show n++")") $ sort mdl `shouldBe` sort ixs
-          where mdl = map fst . toList . fromExact . model $ spec
+          where mdl = toList . fromExact . fromMult . model $ spec
 
 modelHasApproxLeftInverse vars = mapM_ check (zip vars [(0 :: Int)..])
-  where check ((ixs, dims, spec), n) =
-          it ("("++show n++")") $ mdl' `shouldBe` (fmap sort ixs)
-            where mdl = let ?globalDimensionality = dims in mkModel spec
-                  mdl' = fmap (sort . map fst . toList) mdl
+  where
+    check ((ixs, dims, spec), n) =
+     it ("("++show n++")") $ mdl `shouldBe` fmap sort <$> ixs
+     where
+       mdl =
+         let ?globalDimensionality = dims
+         in fmap (sort . toList) <$> mkModel spec

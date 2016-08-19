@@ -310,9 +310,12 @@ genSpecifications ivs lhs blocks = do
               . M.unionsWith (++)
 
       splitUpperAndLower = concatMap splitUpperAndLower'
-      splitUpperAndLower' (vs, Specification (Bound (Just l) (Just u))) =
-         [(vs, Specification (Bound (Just l) Nothing)),
-          (vs, Specification (Bound Nothing (Just u)))]
+      splitUpperAndLower' (vs, Specification (Multiple (Bound (Just l) (Just u)))) =
+         [(vs, Specification (Multiple (Bound (Just l) Nothing))),
+          (vs, Specification (Multiple (Bound Nothing (Just u))))]
+      splitUpperAndLower' (vs, Specification (Single (Bound (Just l) (Just u)))) =
+         [(vs, Specification (Single (Bound (Just l) Nothing))),
+          (vs, Specification (Single (Bound Nothing (Just u))))]
       splitUpperAndLower' x = [x]
 
 genOffsets :: Params

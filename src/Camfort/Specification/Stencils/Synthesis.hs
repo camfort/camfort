@@ -82,19 +82,6 @@ formatSpec prefix nm (span, Left specs) =
 a = (head $ FA.initAnalysis [unitAnnotation]) { FA.insLabel = Just 0 }
 s = SrcSpan (Position 0 0 0) (Position 0 0 0)
 
--- Given a spec, an array variable, and a list of inductive variables, generate
--- a list of indexing expressions for the spec
-synthesise :: Specification -> F.Name -> [F.Name] -> [F.Expression (FA.Analysis A)]
-synthesise (Specification (Exact spec)) v ixs =
-  map toSubscriptExpr . toList . fromExact . model $ (Exact spec)
-    where toSubscriptExpr (offs,_) = ixExprToSubscript v
-                                    . map (uncurry offsetToIx) $ zip ixs offs
-synthesise _ _ _ = []
-
-ixExprToSubscript :: F.Name -> [F.Index (FA.Analysis A)] -> F.Expression (FA.Analysis A)
-ixExprToSubscript v es =
-    F.ExpSubscript a s (F.ExpValue a s (F.ValVariable v)) (F.AList a s es)
-
 -- Make indexing expression for variable 'v' from an offset.
 -- essentially inverse to `ixToOffset` in StencilSpecification
 offsetToIx :: F.Name -> Int -> F.Index (FA.Analysis A)
@@ -108,7 +95,3 @@ offsetToIx v o
   | otherwise = F.IxSingle a s Nothing (F.ExpBinary a s F.Subtraction
                                  (F.ExpValue a s (F.ValVariable v))
                                  (F.ExpValue a s (F.ValInteger $ show (abs o))))
-
-offsetToIxWithIVs :: [Variable] -> F.Name -> Int -> F.Index (FA.Analysis A)
-offsetToIxWithIVs ivs v o = F.setAnnotation a ix
-  where ix  = offsetToIx v o
