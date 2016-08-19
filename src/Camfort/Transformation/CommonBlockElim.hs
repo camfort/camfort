@@ -416,14 +416,15 @@ introduceModules ::
 introduceModules meta d cenv =
     mapM (mkModuleFile meta d . head . head) (groupSortCommonBlock cenv)
 
-
 mkModuleFile ::
   F.MetaInfo -> Directory -> TLCommon A -> (Report, (Filename, F.ProgramFile A))
 mkModuleFile meta dir (_, (_, (name, varTys))) =
-        let modname = commonName name
-            path = dir ++ modname ++ ".f90"
-            r = "Creating module " ++ modname ++ " at " ++ path ++ "\n"
-        in (r, (path, F.ProgramFile meta [([], mkModule modname varTys modname)] []))
+    (r, (path, F.ProgramFile meta [([], mod)] []))
+  where
+    modname = commonName name
+    path = dir ++ modname ++ ".f90"
+    r = "Creating module " ++ modname ++ " at " ++ path ++ "\n"
+    mod = mkModule modname varTys modname
 
 mkModule :: String -> [(F.Name, F.BaseType)] -> String -> F.ProgramUnit A
 mkModule name vtys fname =
@@ -436,5 +437,6 @@ mkModule name vtys fname =
     toStmt (v, t) = F.StDeclaration a sp (toTypeSpec t) Nothing (toDeclarator v)
     toTypeSpec t = F.TypeSpec a sp t Nothing
     toDeclarator v = F.AList a sp
-       [F.DeclVariable a sp (F.ExpValue a sp (F.ValVariable (name ++ "_" ++ v))) Nothing Nothing]
+       [F.DeclVariable a sp
+          (F.ExpValue a sp (F.ValVariable (name ++ "_" ++ v))) Nothing Nothing]
     decls = map toDeclBlock vtys
