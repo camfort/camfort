@@ -351,9 +351,9 @@ mkUseStatementBlocks s = map mkUseStmnt
     s' = FU.SrcSpan (toCol0 pos) pos'
     mkUseStmnt x@((name, _), r) = F.BlStatement a s' Nothing $
        F.StUse a s' useName F.Permissive useListA
-     where useName = F.ExpValue a s' (F.ValVariable (commonName name))
+     where useName = F.ExpValue a s' (F.ValVariable (caml (commonName name)))
            useListA = case useList of [] -> Nothing
-                                      us -> Just (F.AList a s' us)
+                                      us -> Just (F.AList a s' (reverse us))
            useList = mkUses pos x
 
     mkUses :: FU.Position -> (TCommon A, RenamerCoercer) -> [F.Use A]
@@ -413,8 +413,8 @@ coherentCommons' _ _ = ("Common blocks of different field lengths", False)
 introduceModules ::
     F.MetaInfo -> Directory -> [TLCommon A]
                             -> (Report, [(Filename, F.ProgramFile A)])
-introduceModules meta d cenv =
-    mapM (mkModuleFile meta d . head . head) (groupSortCommonBlock cenv)
+introduceModules meta dir cenv =
+    mapM (mkModuleFile meta dir . head . head) (groupSortCommonBlock cenv)
 
 mkModuleFile ::
   F.MetaInfo -> Directory -> TLCommon A -> (Report, (Filename, F.ProgramFile A))
@@ -428,7 +428,7 @@ mkModuleFile meta dir (_, (_, (name, varTys))) =
 
 mkModule :: String -> [(F.Name, F.BaseType)] -> String -> F.ProgramUnit A
 mkModule name vtys fname =
-    F.PUModule a sp fname decls Nothing
+    F.PUModule a sp (caml fname) decls Nothing
   where
     a = unitAnnotation { refactored = Just loc, newNode = True }
     loc = FU.Position 0 0 0
@@ -438,5 +438,5 @@ mkModule name vtys fname =
     toTypeSpec t = F.TypeSpec a sp t Nothing
     toDeclarator v = F.AList a sp
        [F.DeclVariable a sp
-          (F.ExpValue a sp (F.ValVariable (name ++ "_" ++ v))) Nothing Nothing]
+          (F.ExpValue a sp (F.ValVariable (caml name ++ "_" ++ v))) Nothing Nothing]
     decls = map toDeclBlock vtys

@@ -27,6 +27,7 @@ module Camfort.Functionality where
 import System.Console.GetOpt
 import System.Directory
 import System.Environment
+import System.FilePath
 import System.IO
 
 import Data.Monoid
@@ -92,7 +93,7 @@ common inSrc excludes outSrc _ = do
     putStrLn $ "Refactoring common blocks in '" ++ inSrc ++ "'"
     isDir <- isDirectory inSrc
     let dir = if isDir then inSrc ++ "/" else ""
-    let rfun = commonElimToModules dir
+    let rfun = commonElimToModules (takeDirectory outSrc ++ "/")
     report <- doRefactorAndCreate rfun inSrc excludes outSrc
     putStrLn report
 
