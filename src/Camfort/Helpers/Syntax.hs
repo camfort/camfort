@@ -94,7 +94,7 @@ instance Eq (AnnotationFree F.BaseType) where
 
 -- * Accessor functions for extracting various pieces of information
 --    out of syntax trees
-{-| Extracts a string of the (root) variable name from an expression, 
+{-| Extracts a string of the (root) variable name from an expression,
     e.g., extractVariable "v"    = Just v
           extractVariable "v(i)" = Just v -}
 extractVariable :: F.Expression a -> Maybe F.Name

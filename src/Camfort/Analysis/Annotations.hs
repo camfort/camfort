@@ -83,7 +83,7 @@ instance ASTEmbeddable UA P.UnitStatement where
 
 -- Link annotation comments to declaration statements
 instance Linkable UA where
-  link ann (b@(F.BlStatement _ _ _ (F.StDeclaration {}))) =
+  link ann (b@(F.BlStatement _ _ _ F.StDeclaration {})) =
       onPrev (\ ann -> ann { unitBlock = Just b }) ann
   link ann b = ann
 
