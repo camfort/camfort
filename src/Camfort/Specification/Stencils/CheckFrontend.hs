@@ -113,13 +113,13 @@ updateRegionEnv ann =
     Just (Right (Left regionEnv)) -> modify $ (((++) regionEnv) *** id) *** id
     _                             -> return ()
 
-checkOffsetsAgainstSpec :: [(Variable, (Bool, [[Int]]))]
+checkOffsetsAgainstSpec :: [(Variable, Multiplicity [[Int]])]
                         -> [(Variable, Specification)]
                         -> Bool
-checkOffsetsAgainstSpec offsetMaps declMaps =
-    all (\(var1, spec)->
+checkOffsetsAgainstSpec offsetMaps =
+    all (\(var1, Specification mult)->
       all (\(var2, offsets) ->
-        var1 /= var2 || offsets `consistent` spec) offsetMaps) declMaps
+        var1 /= var2 || offsets `consistent` mult) offsetMaps)
 
 -- Go into the program units first and record the module name when
 -- entering into a module
@@ -151,10 +151,14 @@ perBlockCheck b@(F.BlComment ann span _) = do
             let lhsN         = maybe [] id (neighbourIndex ivmap subs)
             let correctNames = map (\(name, spec) -> (realName name, spec))
             let relOffsets = correctNames . fst . runWriter $ genOffsets ivmap lhsN [s]
+            let multOffsets = map (\relOffset ->
+                  case relOffset of
+                    (var, (True, offsets)) -> (var, Multiple offsets)
+                    (var, (False, offsets)) -> (var, Single offsets)) relOffsets
             let expandedDecls =
                   concatMap (\(vars,spec) -> map (flip (,) spec) vars) specDecls
             -- Model and compare the current and specified stencil specs
-            if checkOffsetsAgainstSpec relOffsets expandedDecls
+            if checkOffsetsAgainstSpec multOffsets expandedDecls
               then tell [ (span, "Correct.") ]
               else tell [ (span, "Not well specified:\n\t\t  expecting: "
                               ++ pprintSpecDecls specDecls) ]

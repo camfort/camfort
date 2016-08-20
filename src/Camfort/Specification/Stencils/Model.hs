@@ -50,8 +50,36 @@ model :: Multiplicity (Approximation Spatial)
 model s = let ?globalDimensionality = dimensionality s
           in mkModel s
 
-consistent :: (Bool, [[Int]]) -> Specification -> Bool
-consistent (mult, offsets) _ = True
+consistent :: Multiplicity [[Int]]
+           -> Multiplicity (Approximation Spatial)
+           -> Bool
+-- If the specification says "readOnce" but there are duplicates among
+-- offsets, then there is no consistency.
+--
+-- Note that if the spec omits "readOnce" and the offsets happen to be
+-- unique that is allowed as "readOnce" is an extra qualifier.
+consistent (Multiple _) (Single _) = False
+consistent mult1 spec =
+    consistent' mult1 (model spec)
+  where
+    consistent' m1 m2 =
+      case fromMult m2 of
+        Exact unifiers ->
+          consistent' m1 (Multiple (Bound Nothing (Just unifiers))) &&
+          consistent' m1 (Multiple (Bound (Just unifiers) Nothing))
+        Bound lus@Just{} uus@Just{} ->
+          consistent' m1 (Multiple (Bound lus Nothing)) &&
+          consistent' m1 (Multiple (Bound Nothing uus))
+        Bound Nothing (Just unifiers) ->
+          all (\access ->
+            any (\unifier -> access `accepts` unifier) unifiers) accesses
+        Bound (Just unifiers) Nothing ->
+          all (\access ->
+            any (\unifier -> access `accepts` unifier) accesses) unifiers
+    accesses = fromMult mult1
+
+    access `accepts` unifier =
+      all (\(u,v) -> v == absoluteRep || u == v) (zip access unifier)
 
 -- Recursive `Model` class implemented for all parts of the spec.
 class Model spec where
