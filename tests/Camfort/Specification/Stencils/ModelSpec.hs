@@ -24,6 +24,52 @@ import Test.Hspec.QuickCheck
 
 spec :: Spec
 spec = do
+  describe "Consistency of model vs access patterns" $ do
+    let singleOneDimSpec = Single $ Exact $ Spatial $ Sum
+          [ Product [ Forward 1 1 True ] ]
+    it "1D readOnce - positive" $ do
+      let acs = Single [[0], [1]]
+      consistent acs singleOneDimSpec `shouldBe` True
+
+    it "1D readOnce - negative" $ do
+      let acs = Multiple [[0], [1]]
+      consistent acs singleOneDimSpec `shouldBe` False
+
+    let reflCentOneDimSpec = Single $ Exact $ Spatial $ Sum
+          [ Product [ Centered 1 1 False ] ]
+    it "1D centered irreflexive - positive" $ do
+      let acs = Single [[-1], [1]]
+      consistent acs reflCentOneDimSpec `shouldBe` True
+
+    let centeredAcs = Single [[-1], [0], [1]]
+    it "1D centered irreflexive - negative" $
+      consistent centeredAcs reflCentOneDimSpec `shouldBe` False
+
+    it "1D centered irreflexive lower bound - negative" $ do
+      let spec = Single $ Bound
+            (Just $ Spatial $ Sum [ Product [ Centered 1 1 False ] ])
+            Nothing
+      consistent centeredAcs spec `shouldBe` True
+
+    it "1D centered irreflexive upper bound - negative" $ do
+      let spec = Single $ Bound
+            Nothing
+            (Just $ Spatial $ Sum [ Product [ Centered 1 1 False ] ])
+      consistent centeredAcs spec `shouldBe` False
+
+    it "1D double bounded" $ do
+      let acs = Single [ [-3], [-2], [-1], [0], [1], [3] ]
+      let spec = Single $ Bound
+            (Just $ Spatial $ Sum [ Product [ Centered 1 1 True ] ])
+            (Just $ Spatial $ Sum [ Product [ Centered 1 3 True ] ])
+      consistent acs spec `shouldBe` True
+
+    it "1D spec 3D access" $ do
+      let acs = Single [ [0,1,-2], [absoluteRep, 2,3] ]
+      let spec = Single $ Exact $
+            Spatial $ Sum [ Product [ Forward 2 2 False ] ]
+      consistent acs spec `shouldBe` True
+
   describe "Stencils - Model" $ do
     describe "Test soundness of model 1" $ modelHasLeftInverse
     describe "Test soundness of model 2" $ modelHasApproxLeftInverse variations2
