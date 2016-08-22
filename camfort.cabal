@@ -17,6 +17,10 @@ category:               Language, tools
 cabal-version:          >= 1.18
 tested-with:            GHC >= 7.8
 
+extra-source-files:     tests/Camfort/Specification/Stencils/*.f
+                        tests/Camfort/Specification/Units/*.f90
+                        tests/Camfort/Transformation/samples/*.f90
+
 source-repository head
   type: git
   location: https://github.com/camfort/camfort
@@ -159,7 +163,4 @@ test-suite spec
                         array >= 0.4,
                         hmatrix >= 0.15,
                         camfort
-  extra-source-file:    tests/Camfort/Specification/Stencils/*.f
-                        tests/Camfort/Specification/Units/*.f90
-                        tests/Camfort/Transformation/samples/*.f90
   default-language: Haskell2010
