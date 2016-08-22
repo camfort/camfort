@@ -153,8 +153,11 @@ perBlockCheck b@(F.BlComment ann span _) = do
             -- Model and compare the current and specified stencil specs
             if checkOffsetsAgainstSpec multOffsets expandedDecls
               then tell [ (span, "Correct.") ]
-              else tell [ (span, "Not well specified:\n\t\t  expecting: "
-                              ++ pprintSpecDecls specDecls) ]
+              else do
+                let correctNames2 =  map (first (map realName))
+                let inferred = correctNames2 . fst . runWriter $ genSpecifications ivmap lhsN [s]
+                tell [ (span, "Not well specified:\n\t\t  expecting: "
+                              ++ pprintSpecDecls inferred) ]
             return b'
          Nothing -> return b'
 
