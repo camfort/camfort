@@ -45,7 +45,7 @@ spec = do
     it "1D centered irreflexive - negative" $
       consistent centeredAcs reflCentOneDimSpec `shouldBe` False
 
-    it "1D centered irreflexive lower bound - negative" $ do
+    it "1D centered irreflexive lower bound - positive" $ do
       let spec = Single $ Bound
             (Just $ Spatial $ Sum [ Product [ Centered 1 1 False ] ])
             Nothing
@@ -69,6 +69,17 @@ spec = do
       let spec = Single $ Exact $
             Spatial $ Sum [ Product [ Forward 2 2 False ] ]
       consistent acs spec `shouldBe` True
+
+    let twoDimSpec = Single $ Exact $
+          Spatial $ Sum [ Product [ Centered 0 1 True, Forward 1 2 True ] ]
+
+    it "2 dimensional spec example" $ do
+      let acs = Single [ [0,0], [0,1] ]
+      consistent acs twoDimSpec `shouldBe` True
+
+    it "Constant access not allowed in otherwise fine access pattern" $ do
+      let acs = Single [ [0,0], [0,1], [absoluteRep, absoluteRep] ]
+      consistent acs twoDimSpec `shouldBe` False
 
   describe "Stencils - Model" $ do
     describe "Test soundness of model 1" modelHasLeftInverse
