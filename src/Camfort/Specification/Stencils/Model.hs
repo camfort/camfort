@@ -37,18 +37,15 @@ import Data.List
 import qualified Data.List as DL
 import qualified Data.Map as DM
 
-import Debug.Trace
-
--- Relative multi-dimensional indices are represented by [Int]
--- e.g. [0, 1, -1] corresponds to a subscript expression a(i, j+1, k-1)
--- Specifications are mapped to (multi)sets of [Int] where
--- the multiset representation is a Map to Bool giving
--- False = multiplicity 1, True = multiplicity > 1
-
+{-| This function maps inner representation to a set of vectors of length
+-   given by `dim`. This is the mathematical representation of the
+-   specification. |-}
 model :: Multiplicity (Approximation Spatial)
+      -> Int
       -> Multiplicity (Approximation (Set [Int]))
-model s = let ?globalDimensionality = dimensionality s
-          in mkModel s
+model s dims =
+    let ?globalDimensionality = dims
+    in mkModel s
 
 consistent :: Multiplicity [[Int]]
            -> Multiplicity (Approximation Spatial)
@@ -60,8 +57,9 @@ consistent :: Multiplicity [[Int]]
 -- unique that is allowed as "readOnce" is an extra qualifier.
 consistent (Multiple _) (Single _) = False
 consistent mult1 spec =
-    consistent' mult1 (model spec)
+    consistent' mult1 (model spec dimensionality)
   where
+    dimensionality = length . head $ accesses
     consistent' m1 m2 =
       case fromMult m2 of
         Exact unifiers ->
@@ -71,11 +69,10 @@ consistent mult1 spec =
           consistent' m1 (Multiple (Bound lus Nothing)) &&
           consistent' m1 (Multiple (Bound Nothing uus))
         Bound Nothing (Just unifiers) ->
-          all (\access ->
-            any (\unifier -> access `accepts` unifier) unifiers) accesses
+          all (\access -> any (access `accepts`) unifiers) accesses
         Bound (Just unifiers) Nothing ->
-          all (\access ->
-            any (\unifier -> access `accepts` unifier) accesses) unifiers
+          all (\unifier -> any (`accepts` unifier) accesses) unifiers
+
     accesses = fromMult mult1
 
     access `accepts` unifier =

@@ -182,8 +182,13 @@ variations3 =
   ]
 
 modelHasLeftInverse = mapM_ check (zip variations [0..])
-  where check ((ixs, spec), n) = it ("("++show n++")") $ sort mdl `shouldBe` sort ixs
-          where mdl = toList . fromExact . fromMult . model $ spec
+  where
+    check ((ixs, spec), n) =
+        it ("("++show n++")") $
+          sort mdl `shouldBe` sort ixs
+      where
+        mdl = toList . fromExact . fromMult . model' $ spec
+        model' = flip model $ length . head $ ixs
 
 modelHasApproxLeftInverse vars = mapM_ check (zip vars [(0 :: Int)..])
   where
