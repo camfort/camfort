@@ -57,17 +57,17 @@ consistent :: Multiplicity [[Int]]
 -- unique that is allowed as "readOnce" is an extra qualifier.
 consistent (Multiple _) (Single _) = False
 consistent mult1 spec =
-    consistent' mult1 (model spec dimensionality)
+    consistent' (model spec dimensionality)
   where
     dimensionality = length . head $ accesses
-    consistent' m1 m2 =
+    consistent' m2 =
       case fromMult m2 of
         Exact unifiers ->
-          consistent' m1 (Multiple (Bound Nothing (Just unifiers))) &&
-          consistent' m1 (Multiple (Bound (Just unifiers) Nothing))
+          consistent' (Multiple (Bound Nothing (Just unifiers))) &&
+          consistent' (Multiple (Bound (Just unifiers) Nothing))
         Bound lus@Just{} uus@Just{} ->
-          consistent' m1 (Multiple (Bound lus Nothing)) &&
-          consistent' m1 (Multiple (Bound Nothing uus))
+          consistent' (Multiple (Bound lus Nothing)) &&
+          consistent' (Multiple (Bound Nothing uus))
         Bound Nothing (Just unifiers) ->
           all (\access -> any (access `accepts`) unifiers) accesses
         Bound (Just unifiers) Nothing ->
