@@ -58,11 +58,11 @@ infer mode filename pf =
        then ("", fmap FA.prevAnnotation pf'')
        else ("\n" ++ filename ++ "\n" ++ output, fmap FA.prevAnnotation pf'')
     where
-      output = (intercalate "\n")
-             . (filter (not . white))
+      output = intercalate "\n"
+             . filter (not . white)
              . map (formatSpec Nothing nameMap) $ results
       white = all (\x -> (x == ' ') || (x == '\t'))
-      (pf'', results) = (stencilInference nameMap mode) . FAB.analyseBBlocks $ pf'
+      (pf'', results) = stencilInference nameMap mode . FAB.analyseBBlocks $ pf'
       nameMap = FAR.extractNameMap pf'
       pf'     = FAR.analyseRenames . FA.initAnalysis $ pf
 
@@ -74,7 +74,7 @@ infer mode filename pf =
 synth :: InferMode
       -> [(Filename, F.ProgramFile A)]
       -> (String, [(Filename, F.ProgramFile Annotation)])
-synth mode ps = foldr buildOutput ("", []) ps
+synth mode = foldr buildOutput ("", [])
   where
     buildOutput (f, pf) (r, pfs) = (r ++ r', (f, pf') : pfs)
       where (r', pf') = synthPF mode f pf
@@ -86,7 +86,7 @@ synthPF mode filename pf =
     -- Append filename to any outputs
     ("", fmap FA.prevAnnotation pf'')
     where
-      (pf'', _) = (stencilInference nameMap Synth) . FAB.analyseBBlocks $ pf'
+      (pf'', _) = stencilInference nameMap Synth . FAB.analyseBBlocks $ pf'
       nameMap = FAR.extractNameMap pf'
       pf'     = FAR.analyseRenames . FA.initAnalysis $ pf
 
@@ -101,7 +101,7 @@ check filename pf =
     where
      output  = intercalate "\n" results
      -- Applying checking mechanism
-     results  = (stencilChecking nameMap) . FAB.analyseBBlocks $ pf'
+     results  = stencilChecking nameMap . FAB.analyseBBlocks $ pf'
      nameMap = FAR.extractNameMap pf'
      pf'      = FAR.analyseRenames . FA.initAnalysis $ pf
 
