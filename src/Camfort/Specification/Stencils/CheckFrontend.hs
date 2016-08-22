@@ -20,11 +20,9 @@
 
 module Camfort.Specification.Stencils.CheckFrontend where
 
-import Data.Data
 import Data.Generics.Uniplate.Operations
 import Control.Arrow
 import Control.Monad.State.Strict
-import Control.Monad.Reader
 import Control.Monad.Writer.Strict hiding (Product)
 
 import Camfort.Specification.Stencils.CheckBackend
@@ -41,19 +39,14 @@ import Camfort.Helpers
 
 import qualified Language.Fortran.AST as F
 import qualified Language.Fortran.Analysis as FA
-import qualified Language.Fortran.Analysis.Types as FAT
 import qualified Language.Fortran.Analysis.Renaming as FAR
 import qualified Language.Fortran.Analysis.BBlocks as FAB
 import qualified Language.Fortran.Analysis.DataFlow as FAD
 import qualified Language.Fortran.Util.Position as FU
 
-import Data.Graph.Inductive.Graph hiding (isEmpty)
 import qualified Data.Map as M
-import qualified Data.IntMap as IM
-import qualified Data.Set as S
 import Data.Maybe
 import Data.List
-import Debug.Trace
 
 -- Entry point
 stencilChecking :: FAR.NameMap -> F.ProgramFile (FA.Analysis A) -> [String]
@@ -83,7 +76,7 @@ stencilChecking nameMap pf = snd . runWriter $
                     let ?nameMap = nameMap
                       in descendBiM perProgramUnitCheck pf'
      -- Format output
-     let a@(_, output) = evalState (runWriterT $ results) (([], Nothing), ivmap)
+     let a@(_, output) = evalState (runWriterT results) (([], Nothing), ivmap)
      tell $ pprint output
 
 type LogLine = (FU.SrcSpan, String)
@@ -110,26 +103,23 @@ parseCommentToAST ann span =
 updateRegionEnv :: FA.Analysis A -> Checker ()
 updateRegionEnv ann =
   case stencilSpec (FA.prevAnnotation ann) of
-    Just (Right (Left regionEnv)) -> modify $ (((++) regionEnv) *** id) *** id
+    Just (Right (Left regionEnv)) -> modify $ first (first (regionEnv ++))
     _                             -> return ()
 
--- Given a mapping from variables to inferred specifications
--- an environment of specification delcarations, for each declared
--- specification check if there is a inferred specification that
--- agrees with it, *up-to the model*
-compareInferredToDeclared :: [([F.Name], Specification)] -> SpecDecls -> Bool
-compareInferredToDeclared inferreds declareds =
-   all (\(names, dec) ->
-    all (\name ->
-      any (\inf -> eqByModel inf dec) (lookupAggregate inferreds name)
-       ) names) declareds
+checkOffsetsAgainstSpec :: [(Variable, Multiplicity [[Int]])]
+                        -> [(Variable, Specification)]
+                        -> Bool
+checkOffsetsAgainstSpec offsetMaps =
+    all (\(var1, Specification mult)->
+      all (\(var2, offsets) ->
+        var1 /= var2 || offsets `consistent` mult) offsetMaps)
 
 -- Go into the program units first and record the module name when
 -- entering into a module
 perProgramUnitCheck :: (?nameMap :: FAR.NameMap, ?flowsGraph :: FAD.FlowsGraph A)
    => F.ProgramUnit (FA.Analysis A) -> Checker (F.ProgramUnit (FA.Analysis A))
-perProgramUnitCheck p@(F.PUModule {}) = do
-    modify $ (id *** (const (Just $ FA.puName p))) *** id
+perProgramUnitCheck p@F.PUModule{} = do
+    modify $ first (second (const (Just $ FA.puName p)))
     descendBiM perBlockCheck p
 perProgramUnitCheck p = descendBiM perBlockCheck p
 
@@ -148,25 +138,33 @@ perBlockCheck b@(F.BlComment ann span _) = do
        case isArraySubscript lhs of
          Just subs -> do
             -- Create list of relative indices
-            (_, ivmap) <- get
+            ivmap <- snd <$> get
             -- Do inference
             let realName v   = v `fromMaybe` (v `M.lookup` ?nameMap)
-            let lhsN         = maybe [] id (neighbourIndex ivmap subs)
-            let correctNames = map (\(names, spec) -> (map realName names, spec))
-            let inferred = correctNames . fst . runWriter $ genSpecifications ivmap lhsN [s]
+            let lhsN         = fromMaybe [] (neighbourIndex ivmap subs)
+            let correctNames = map (first realName)
+            let relOffsets = correctNames . fst . runWriter $ genOffsets ivmap lhsN [s]
+            let multOffsets = map (\relOffset ->
+                  case relOffset of
+                    (var, (True, offsets)) -> (var, Multiple offsets)
+                    (var, (False, offsets)) -> (var, Single offsets)) relOffsets
+            let expandedDecls =
+                  concatMap (\(vars,spec) -> map (flip (,) spec) vars) specDecls
             -- Model and compare the current and specified stencil specs
-            if compareInferredToDeclared inferred specDecls
+            if checkOffsetsAgainstSpec multOffsets expandedDecls
               then tell [ (span, "Correct.") ]
-              else tell [ (span, "Not well specified:\n\t\t  expecting: "
-                              ++ pprintSpecDecls specDecls
-                              ++ "\t\t  inferred:    " ++ pprintSpecDecls inferred) ]
-            return $ b'
-         Nothing -> return $ b'
+              else do
+                let correctNames2 =  map (first (map realName))
+                let inferred = correctNames2 . fst . runWriter $ genSpecifications ivmap lhsN [s]
+                tell [ (span, "Not well specified:\n\t\t  expecting: "
+                              ++ pprintSpecDecls inferred) ]
+            return b'
+         Nothing -> return b'
 
-      (F.BlDo ann span _ _ _ mDoSpec body _) -> do
+      (F.BlDo ann span _ _ _ mDoSpec body _) ->
            -- Stub, maybe collect stencils inside 'do' block
-           return $ b'
-      _ -> return $ b'
+           return b'
+      _ -> return b'
     _ -> return b'
 
 perBlockCheck b@(F.BlDo ann span _ _ _ mDoSpec body _) = do

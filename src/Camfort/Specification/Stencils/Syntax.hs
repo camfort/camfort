@@ -19,7 +19,7 @@
 {-# LANGUAGE DeriveDataTypeable #-}
 {-# LANGUAGE FlexibleInstances #-}
 {-# LANGUAGE GADTs #-}
-{-# LANGUAGE KindSignatures #-}
+{-# LANGUAGE DeriveFunctor #-}
 
 module Camfort.Specification.Stencils.Syntax where
 
@@ -42,21 +42,21 @@ type Variable = String
 {- *** 0. Representations -}
 
 -- Representation of an inference result, either exact or with some bound
-data Result a =
+data Approximation a =
   Exact a | Bound (Maybe a) (Maybe a)
    deriving (Eq, Data, Typeable, Show)
 
-fromExact :: Result a -> a
+fromExact :: Approximation a -> a
 fromExact (Exact a) = a
 fromExact _ = error "Exception: fromExact on a non-exact result"
 
-upperBound :: a -> Result a
+upperBound :: a -> Approximation a
 upperBound x = Bound Nothing (Just x)
 
-lowerBound :: a -> Result a
+lowerBound :: a -> Approximation a
 lowerBound x = Bound (Just x) Nothing
 
-instance Functor Result where
+instance Functor Approximation where
   fmap f (Exact x) = Exact (f x)
   fmap f (Bound x y) = Bound (fmap f x) (fmap f y)
 
@@ -81,7 +81,7 @@ type SpecDecls = [([String], Specification)]
 pprintSpecDecls :: SpecDecls -> String
 pprintSpecDecls =
  concatMap (\(names, spec) ->
-            show spec ++ " :: " ++ (intercalate "," names) ++ "\n")
+            show spec ++ " :: " ++ intercalate "," names ++ "\n")
 
 lookupAggregate :: Eq a => [([a], b)] -> a -> [b]
 lookupAggregate [] _ = []
@@ -92,29 +92,20 @@ lookupAggregate ((names, spec) : ss) name =
 
 -- Top-level of specifications: may be either spatial or temporal
 data Specification =
-  Specification (Either (Result Spatial) Temporal)
+  Specification (Multiplicity (Approximation Spatial))
     deriving (Eq, Data, Typeable)
 
--- ***********************
--- Temporal specifications:
---   Defines a list of variables which the subject
---   of the specification depends upon
-data Temporal = Dependency [String] Bool
-    deriving (Eq, Data, Typeable)
+isEmpty :: Specification -> Bool
+isEmpty (Specification mult) = isUnit . fromMult $ mult
 
 -- **********************
 -- Spatial specifications:
--- Comprises some modifiers on spatial specifications:
---         * linearity
---         * irreflexivity
--- with the region, which is a regionSum
+-- is a regionSum
 --
 -- Regions are in disjunctive normal form (with respect to
 --  products on dimensions and sums):
 --    i.e., (A * B) U (C * D)...
-data Spatial =
-   Spatial { modLinearity    :: Linearity,
-             region          :: RegionSum }
+data Spatial = Spatial RegionSum
   deriving (Eq, Data, Typeable)
 
 -- Helpers for dealing with linearity information
@@ -128,24 +119,19 @@ fromBool False = Linear
 hasDuplicates :: Eq a => [a] -> ([a], Bool)
 hasDuplicates xs = (nub xs, nub xs /= xs)
 
+fromMult :: Multiplicity a -> a
+fromMult (Multiple a) = a
+fromMult (Single a) = a
+
 setLinearity :: Linearity -> Specification -> Specification
-setLinearity l (Specification (Left (Exact s))) =
-    Specification (Left (Exact (s { modLinearity = l })))
-setLinearity l (Specification (Left (Bound sl su))) =
-    Specification (Left (Bound (sl >>= \s -> return $ s { modLinearity = l })
-                               (su >>= \s -> return $ s { modLinearity = l })))
-setLinearity l s = s
-
-emptySpec = Specification . Left $ (one :: Result Spatial)
-emptySpatialSpec = one :: Spatial
-
--- `isEmpty` predicate on which specifications are vacuous or
--- functional empty (i.e., show not be displayed in an inference setting).
-isEmpty :: Specification -> Bool
-isEmpty (Specification (Right (Dependency [] _))) = True
-isEmpty (Specification (Left s)) = isUnit s
+setLinearity l (Specification mult)
+  | l == Linear = Specification $ Single $ fromMult mult
+  | l == NonLinear = Specification $ Multiple $ fromMult mult
 
 data Linearity = Linear | NonLinear deriving (Eq, Data, Typeable)
+
+data Multiplicity a = Multiple a | Single a
+    deriving (Eq, Data, Typeable, Functor, Show)
 
 type Dimension  = Int -- spatial dimensions are 1 indexed
 type Depth      = Int
@@ -178,9 +164,9 @@ instance Ord Region where
     | otherwise   = dep <= dep'
 
   -- Order in the way defined above: Forward <: Backward <: Centered
-  (Forward _ _ _)  <= _                = True
-  (Backward _ _ _) <= (Centered _ _ _) = True
-  _                <= _                = False
+  Forward{}  <= _          = True
+  Backward{} <= Centered{} = True
+  _          <= _          = False
 
 -- Product of specifications
 newtype RegionProd = Product {unProd :: [Region]}
@@ -195,33 +181,6 @@ instance Ord RegionProd where
 
 
 -- Operations on specifications
-
-specPlus :: Specification -> Specification -> Maybe Specification
-
-specPlus (Specification (Left (Bound (Just l) Nothing)))
-         (Specification (Left (Bound Nothing (Just u)))) =
-    Just $ Specification (Left (Bound (Just l) (Just u)))
-
-specPlus (Specification (Left (Bound Nothing (Just u))))
-         (Specification (Left (Bound (Just l) Nothing))) =
-    Just $ Specification (Left (Bound (Just l) (Just u)))
-
-specPlus (Specification (Left (Bound (Just l1) Nothing)))
-         (Specification (Left (Bound (Just l2) Nothing))) =
-    Just $ Specification (Left (Bound (Just $ l1 `sum` l2) Nothing))
-
-specPlus (Specification (Left (Bound Nothing (Just l1))))
-         (Specification (Left (Bound Nothing (Just l2)))) =
-    Just $ Specification (Left (Bound Nothing (Just $ l1 `sum` l2)))
-
-specPlus (Specification (Left (Exact s1))) (Specification (Left (Exact s2))) =
-    Just $ Specification (Left (Exact $ s1 `sum` s2))
-
-specPlus (Specification (Right (Dependency vs1 m1)))
-         (Specification (Right (Dependency vs2 m2))) | m1 == m2=
-    Just $ Specification (Right (Dependency (vs1 ++ vs2) m1))
-
-specPlus _ _ = Nothing
 
 regionPlus :: Region -> Region -> Maybe Region
 regionPlus (Forward dep dim reflx) (Backward dep' dim' reflx')
@@ -264,13 +223,13 @@ absorbReflexive a b =
 
 absorbReflexive' [] [] = Just ([], [])
 absorbReflexive' (Forward d dim reflx : rs) [Centered 0 dim' _]
-  | dim == dim' = Just ((Forward d dim True):rs, [])
+  | dim == dim' = Just (Forward d dim True:rs, [])
 
 absorbReflexive' (Backward d dim reflx : rs) [Centered 0 dim' _]
-  | dim == dim' = Just ((Backward d dim True):rs, [])
+  | dim == dim' = Just (Backward d dim True:rs, [])
 
 absorbReflexive' (Centered d dim reflx : rs) [Centered 0 dim' _]
-  | dim == dim' && d /= 0 = Just ((Centered d dim True):rs, [])
+  | dim == dim' && d /= 0 = Just (Centered d dim True:rs, [])
 
 absorbReflexive' _ _ = Nothing
 
@@ -398,29 +357,17 @@ instance RegionRig a => RegionRig (Maybe a) where
   isUnit Nothing = True
   isUnit (Just x) = isUnit x
 
-instance RegionRig Linearity where
-  sum Linear Linear = Linear
-  sum _  _          = NonLinear
-  prod = sum
-  one  = Linear
-  zero = Linear
-
-  isUnit Linear = True
-  isUnit _      = False
-
 instance RegionRig Spatial where
-  sum (Spatial lin  s) (Spatial lin' s') =
-    Spatial (sum lin lin') (sum s s')
+  sum (Spatial s) (Spatial s') = Spatial (sum s s')
 
-  prod (Spatial lin  s) (Spatial lin' s') =
-    Spatial (prod lin lin') (prod s s')
+  prod (Spatial s) (Spatial s') = Spatial (prod s s')
 
-  one = Spatial one one
-  zero = Spatial zero zero
+  one = Spatial one
+  zero = Spatial zero
 
-  isUnit (Spatial _ ss) = isUnit ss
+  isUnit (Spatial ss) = isUnit ss
 
-instance RegionRig (Result Spatial) where
+instance RegionRig (Approximation Spatial) where
   sum (Exact s) (Exact s')      = Exact (sum s s')
   sum (Exact s) (Bound l u)     = Bound (sum (Just s) l) (sum (Just s) u)
   sum (Bound l u) (Bound l' u') = Bound (sum l l') (sum u u')
@@ -446,7 +393,7 @@ instance RegionRig RegionSum where
   sum (Sum ss) (Sum ss') = Sum $ normalise $ ss ++ ss'
   zero = Sum []
   one = Sum [Product []]
-  isUnit s@(Sum ss) = s == zero || s == one || all ((==) (Product [])) ss
+  isUnit s@(Sum ss) = s == zero || s == one || all (== Product []) ss
 
 -- Show a list with ',' separator
 showL :: Show a => [a] -> String
@@ -459,10 +406,24 @@ showSumSpecs  = intercalate "+" . map show
 
 -- Pretty print top-level specifications
 instance Show Specification where
-  show (Specification (Left sp)) = "stencil " ++ show sp
-  show (Specification (Right sp)) = "stencil " ++ show sp
+  show (Specification sp) = "stencil " ++ show sp
 
-instance {-# OVERLAPS #-} Show (Result Spatial) where
+instance {-# OVERLAPS #-} Show (Multiplicity (Approximation Spatial)) where
+  show mult
+    | Multiple appr <- mult = apprStr empty appr
+    | Single appr <- mult = apprStr "readOnce, " appr
+    where
+      apprStr linearity appr =
+        case appr of
+          Exact s -> linearity ++ show s
+          Bound Nothing Nothing -> "empty"
+          Bound Nothing (Just s) -> "atMost, " ++ linearity ++ show s
+          Bound (Just s) Nothing -> "atLeast, " ++ linearity ++ show s
+          Bound (Just sL) (Just sU) ->
+            "atLeast, " ++ linearity ++ show sL ++
+            "; atMost, " ++ linearity ++ show sU
+
+instance {-# OVERLAPS #-} Show (Approximation Spatial) where
   show (Exact s) = show s
   show (Bound Nothing Nothing) = "empty"
   show (Bound Nothing (Just s)) = "atMost, " ++ show s
@@ -472,21 +433,11 @@ instance {-# OVERLAPS #-} Show (Result Spatial) where
 
 -- Pretty print spatial specs
 instance Show Spatial where
-  show (Spatial modLin region) =
-    intercalate ", " . catMaybes $ [lin, sregion]
-    where
-      -- Map "empty" spec to Nothing here
-      sregion = case show region of
-                  "empty" -> Nothing
-                  xs      -> Just xs
-      lin = case modLin of
-                NonLinear -> Nothing
-                Linear    -> Just "readOnce"
-
--- Pretty print temporal specs
-instance Show Temporal where
-    show (Dependency vars mutual) =
-      "dependency (" ++ showL vars ++ ")" ++ if mutual then ", mutual" else ""
+  show (Spatial region) =
+    -- Map "empty" spec to Nothing here
+    case show region of
+      "empty" -> ""
+      xs      -> xs
 
 -- Pretty print region sums
 instance Show RegionSum where
@@ -497,12 +448,12 @@ instance Show RegionSum where
 
     show (Sum specs) =
       intercalate " + " ppspecs
-      where ppspecs = filter ((/=) "") $ map show specs
+      where ppspecs = filter (/= "") $ map show specs
 
 instance Show RegionProd where
     show (Product []) = ""
     show (Product ss)  =
-       intercalate "*" . (map (\s -> "(" ++ show s ++ ")")) $ ss
+       intercalate "*" . map (\s -> "(" ++ show s ++ ")") $ ss
 
 instance Show Region where
    show (Forward dep dim reflx)   = showRegion "forward" dep dim reflx

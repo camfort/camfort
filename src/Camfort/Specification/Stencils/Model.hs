@@ -37,50 +37,46 @@ import Data.List
 import qualified Data.List as DL
 import qualified Data.Map as DM
 
-import Debug.Trace
+{-| This function maps inner representation to a set of vectors of length
+-   given by `dim`. This is the mathematical representation of the
+-   specification. |-}
+model :: Multiplicity (Approximation Spatial)
+      -> Int
+      -> Multiplicity (Approximation (Set [Int]))
+model s dims =
+    let ?globalDimensionality = dims
+    in mkModel s
 
--- Relative multi-dimensional indices are represented by [Int]
--- e.g. [0, 1, -1] corresponds to a subscript expression a(i, j+1, k-1)
--- Specifications are mapped to (multi)sets of [Int] where
--- the multiset representation is a Map to Bool giving
--- False = multiplicity 1, True = multiplicity > 1
+consistent :: Multiplicity [[Int]]
+           -> Multiplicity (Approximation Spatial)
+           -> Bool
+-- If the specification says "readOnce" but there are duplicates among
+-- offsets, then there is no consistency.
+--
+-- Note that if the spec omits "readOnce" and the offsets happen to be
+-- unique that is allowed as "readOnce" is an extra qualifier.
+consistent (Multiple _) (Single _) = False
+consistent mult1 spec =
+    consistent' (model spec dimensionality)
+  where
+    dimensionality = length . head $ accesses
+    consistent' m2 =
+      case fromMult m2 of
+        Exact unifiers ->
+          consistent' (Multiple (Bound Nothing (Just unifiers))) &&
+          consistent' (Multiple (Bound (Just unifiers) Nothing))
+        Bound lus@Just{} uus@Just{} ->
+          consistent' (Multiple (Bound lus Nothing)) &&
+          consistent' (Multiple (Bound Nothing uus))
+        Bound Nothing (Just unifiers) ->
+          all (\access -> any (access `accepts`) unifiers) accesses
+        Bound (Just unifiers) Nothing ->
+          all (\unifier -> any (`accepts` unifier) accesses) unifiers
 
-model :: Result Spatial -> Result (Multiset [Int])
-model s = let ?globalDimensionality = dimensionality s
-          in mkModel s
+    accesses = fromMult mult1
 
--- Is an inferred specification equal to a declared specification,
--- up to the mode? The first parameter must come from the inference and
--- the second from a user-given declaration
-eqByModel :: Specification -> Specification -> Bool
-eqByModel infered declared =
-    let d1 = dimensionality infered
-        d2 = dimensionality declared
-    in let ?globalDimensionality = d1 `max` d2
-       in let modelInf = mkModel infered
-              modelDec = mkModel declared
-          in case (modelInf, modelDec) of
-               -- Test approximations first
-
-               -- If only one bound is present in one model, but both are in the
-               -- other, then compare only the bounds present in both
-               (Bound (Just mdlLI) Nothing, Bound (Just mdlLD) _)
-                        -> mdlLD <= mdlLI
-               (Bound Nothing (Just mdlUI), Bound _ (Just mdlUD))
-                        -> mdlUI <= mdlUD
-               (Bound (Just mdlLI) (Just _), Bound (Just mdlLD) Nothing)
-                        -> mdlLD <= mdlLI
-               (Bound (Just _ ) (Just mdlUI), Bound Nothing (Just mdlUD))
-                        -> mdlUI <= mdlUD
-               (Exact s, Bound Nothing (Just mdlUD))
-                        -> s <= mdlUD
-               (Exact s, Bound (Just mdlLD) Nothing)
-                        -> mdlLD <= s
-               (Exact s, Bound (Just mdlLD) (Just mdlUD))
-                        -> (mdlLD <= s) && (s <= mdlUD)
-              -- Otherwise do the normal comparison
-               (x, y) -> x == y
-
+    access `accepts` unifier =
+      all (\(u,v) -> v == absoluteRep || u == v) (zip access unifier)
 
 -- Recursive `Model` class implemented for all parts of the spec.
 class Model spec where
@@ -98,38 +94,37 @@ class Model spec where
    -- Return all the dimensions specified for in this spec
    dimensions :: spec -> [Int]
 
--- Multiset representation where multiplicities are (-1) modulo 2
+-- Set representation where multiplicities are (-1) modulo 2
 -- that is, False = multiplicity 1, True = multiplicity > 1
-type Multiset a = DM.Map a Bool
-
--- Build a multiset representation from a list (of possibly repeated) elements
-mkMultiset :: Ord a => [a] -> DM.Map a Bool
-mkMultiset =
-  Prelude.foldr (\a map -> DM.insertWithKey multi a True map) DM.empty
-     where multi k x y = x || y
-
 instance Model Specification where
-   type Domain Specification = Result (Multiset [Int])
+   type Domain Specification = Multiplicity (Approximation (Set [Int]))
 
-   mkModel (Specification (Left s)) = mkModel s
-   mkModel _                        = error "Only spatial specs are modelled"
+   mkModel (Specification s) = mkModel s
 
-   dimensionality (Specification (Left s)) = dimensionality s
-   dimensionality _                        = 0
+   dimensionality (Specification s) = dimensionality s
 
-   dimensions (Specification (Left s)) = dimensions s
-   dimensions _                        = [0]
+   dimensions (Specification s) = dimensions s
 
--- Model a 'Result' of 'Spatial'
-instance Model (Result Spatial) where
-  type Domain (Result Spatial) = Result (Multiset [Int])
+instance Model (Multiplicity (Approximation Spatial)) where
+   type Domain (Multiplicity (Approximation Spatial)) =
+     Multiplicity (Approximation (Set [Int]))
+
+   mkModel (Multiple s) = Multiple (mkModel s)
+   mkModel (Single s) = Single (mkModel s)
+
+   dimensionality mult = dimensionality $ fromMult mult
+
+   dimensions mult = dimensions $ fromMult mult
+
+instance Model (Approximation Spatial) where
+  type Domain (Approximation Spatial) = Approximation (Set [Int])
 
   mkModel = fmap mkModel
   dimensionality (Exact s) = dimensionality s
-  dimensionality (Bound l u) = (dimensionality l) `max` (dimensionality u)
+  dimensionality (Bound l u) = dimensionality l `max` dimensionality u
 
   dimensions (Exact s) = dimensions s
-  dimensions (Bound l u) = (dimensions l) ++ (dimensions u)
+  dimensions (Bound l u) = dimensions l ++ dimensions u
 
 -- Lifting of model to Maybe type
 instance Model a => Model (Maybe a) where
@@ -143,18 +138,13 @@ instance Model a => Model (Maybe a) where
 
 -- Core part of the model
 instance Model Spatial where
-    type Domain Spatial = Multiset [Int]
+    type Domain Spatial = Set [Int]
 
-    mkModel spec@(Spatial lin s) =
-      case lin of
-        Linear    -> DM.fromList . map (,False) . toList $ indices
-        NonLinear -> DM.fromList . map (,True) . toList $ indices
-       where
-         indices = mkModel s
+    mkModel (Spatial s) = mkModel s
 
-    dimensionality (Spatial _ s) = dimensionality s
+    dimensionality (Spatial s) = dimensionality s
 
-    dimensions (Spatial _ s)     = dimensions s
+    dimensions (Spatial s)     = dimensions s
 
 
 instance Model RegionSum where

@@ -30,8 +30,6 @@ import Camfort.Specification.Stencils.Syntax (showL)
   forward     { TId "forward" }
   backward    { TId "backward" }
   centered    { TId "centered" }
-  dependency  { TId "dependency" }
-  mutual      { TId "mutual" }
   id          { TId $$ }
   num         { TNum $$ }
   '+'         { TPlus }
@@ -91,9 +89,7 @@ REFL :: { Bool }
  : irreflexive  { False }
 
 SPECDEC :: { Spec }
-: dependency '(' VARS ')'        { Temporal $3 False }
-| dependency '(' VARS ')' mutual { Temporal $3 True }
-| APPROXMODS MOD REGION         { Spatial ($1 ++ [$2]) $3 }
+: APPROXMODS MOD REGION         { Spatial ($1 ++ [$2]) $3 }
 | MOD REGION                    { Spatial [$1] $2 }
 | APPROXMOD REGION               { Spatial [$1] $2 }
 | REGION                         { Spatial [] $1 }
@@ -139,9 +135,7 @@ data Region
   | Var String
   deriving (Show, Eq, Ord, Typeable, Data)
 
-data Spec
-  = Spatial [Mod] Region
-  | Temporal [String] Bool
+data Spec = Spatial [Mod] Region
   deriving (Show, Eq, Ord, Typeable, Data)
 
 data Mod

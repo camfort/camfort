@@ -47,28 +47,28 @@ type Span a = (a, a)
 mkTrivialSpan a = (a, a)
 
 inferFromIndices :: VecList Int -> Specification
-inferFromIndices (VL ixs) =
-    setLinearity (fromBool mult) (Specification . Left . infer $ ixs')
-      where
-        (ixs', mult) = hasDuplicates ixs
-        infer :: (IsNatural n, Permutable n) => [Vec n Int] -> Result Spatial
-        infer = simplify . fromRegionsToSpec . inferMinimalVectorRegions
+inferFromIndices (VL ixs) = Specification $
+    case fromBool mult of
+      Linear -> Single $ inferCore ixs'
+      NonLinear -> Multiple $ inferCore ixs'
+    where
+      (ixs', mult) = hasDuplicates ixs
 
 -- Same as inferFromIndices but don't do any linearity checking
 -- (defaults to NonLinear). This is used when the front-end does
 -- the linearity check first as an optimimsation.
 inferFromIndicesWithoutLinearity :: VecList Int -> Specification
 inferFromIndicesWithoutLinearity (VL ixs) =
-    Specification . Left . infer $ ixs
-      where
-        infer :: (IsNatural n, Permutable n) => [Vec n Int] -> Result Spatial
-        infer = simplify . fromRegionsToSpec . inferMinimalVectorRegions
+    Specification . Multiple . inferCore $ ixs
 
-simplify :: Result Spatial -> Result Spatial
+inferCore :: (IsNatural n, Permutable n) => [Vec n Int] -> Approximation Spatial
+inferCore = simplify . fromRegionsToSpec . inferMinimalVectorRegions
+
+simplify :: Approximation Spatial -> Approximation Spatial
 simplify = fmap simplifySpatial
 
 simplifySpatial :: Spatial -> Spatial
-simplifySpatial (Spatial lin (Sum ps)) = Spatial lin (Sum ps')
+simplifySpatial (Spatial (Sum ps)) = Spatial (Sum ps')
    where ps' = order (reducor ps normaliseNoSort size)
          order = sort . (map (Product . sort . unProd))
          size :: [RegionProd] -> Int
@@ -88,51 +88,51 @@ reducor xs f size = reducor' (permutations xs)
             else reducor' ys
         where y' = f y
 
-fromRegionsToSpec :: IsNatural n => [Span (Vec n Int)] -> Result Spatial
-fromRegionsToSpec sps = foldr (\x y -> sum (toSpecND x) y) zero sps
+fromRegionsToSpec :: IsNatural n => [Span (Vec n Int)] -> Approximation Spatial
+fromRegionsToSpec = foldr (\x y -> sum (toSpecND x) y) zero
 
 -- toSpecND converts an n-dimensional region into an exact
 -- spatial specification or a bound of spatial specifications
-toSpecND :: Span (Vec n Int) -> Result Spatial
+toSpecND :: Span (Vec n Int) -> Approximation Spatial
 toSpecND = toSpecPerDim 1
   where
    -- convert the region one dimension at a time.
-   toSpecPerDim :: Int -> Span (Vec n Int) -> Result Spatial
+   toSpecPerDim :: Int -> Span (Vec n Int) -> Approximation Spatial
    toSpecPerDim d (Nil, Nil)             = one
    toSpecPerDim d (Cons l ls, Cons u us) =
      prod (toSpec1D d l u) (toSpecPerDim (d + 1) (ls, us))
 
 -- toSpec1D takes a dimension identifier, a lower and upper bound of a region in
 -- that dimension, and builds the simple directional spec.
-toSpec1D :: Dimension -> Int -> Int -> Result Spatial
+toSpec1D :: Dimension -> Int -> Int -> Approximation Spatial
 toSpec1D dim l u
     | l == absoluteRep || u == absoluteRep =
-        Exact $ Spatial NonLinear (Sum [Product []])
+        Exact $ Spatial (Sum [Product []])
 
     | l == 0 && u == 0 =
-        Exact $ Spatial NonLinear (Sum [Product [Centered 0 dim True]])
+        Exact $ Spatial (Sum [Product [Centered 0 dim True]])
 
     | l < 0 && u == 0 =
-        Exact $ Spatial NonLinear (Sum [Product [Backward (abs l) dim True]])
+        Exact $ Spatial (Sum [Product [Backward (abs l) dim True]])
 
     | l < 0 && u == (-1) =
-        Exact $ Spatial NonLinear (Sum [Product [Backward (abs l) dim False]])
+        Exact $ Spatial (Sum [Product [Backward (abs l) dim False]])
 
     | l == 0 && u > 0 =
-        Exact $ Spatial NonLinear (Sum [Product [Forward u dim True]])
+        Exact $ Spatial (Sum [Product [Forward u dim True]])
 
     | l == 1 && u > 0 =
-        Exact $ Spatial NonLinear (Sum [Product [Forward u dim False]])
+        Exact $ Spatial (Sum [Product [Forward u dim False]])
 
     | l < 0 && u > 0 && (abs l == u) =
-        Exact $ Spatial NonLinear (Sum [Product [Centered u dim True]])
+        Exact $ Spatial (Sum [Product [Centered u dim True]])
 
     | l < 0 && u > 0 && (abs l /= u) =
-        Exact $ Spatial NonLinear (Sum [Product [Backward (abs l) dim True],
-                                        Product [Forward  u       dim True]])
+        Exact $ Spatial (Sum [Product [Backward (abs l) dim True],
+                              Product [Forward  u       dim True]])
     -- Represents a non-contiguous region
     | otherwise =
-        upperBound $ Spatial NonLinear (Sum [Product
+        upperBound $ Spatial (Sum [Product
                         [if l > 0 then Forward u dim True else Backward (abs l) dim True]])
 
 {- Normalise a span into the form (lower, upper) based on the first index -}

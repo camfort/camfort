@@ -94,7 +94,7 @@ spec =
       shouldBe (composeConsecutiveSpans
                   (Cons 1 (Cons 0 Nil), Cons 1 (Cons 0 Nil))
                   (Cons 2 (Cons 0 Nil), Cons 2 (Cons 0 Nil)))
-               ([(Cons 1 (Cons 0 Nil), Cons 2 (Cons 0 Nil))])
+               [(Cons 1 (Cons 0 Nil), Cons 2 (Cons 0 Nil))]
 
     it "composeRegions failing on (1,0)-(2,0) span and (4,0)-(5,0) span" $
       shouldBe (composeConsecutiveSpans
@@ -124,35 +124,36 @@ spec =
 
     describe "Example stencil inferences" $ do
       it "five point stencil 2D" $
-        (inferFromIndices $ VL fivepoint)
+        inferFromIndices (VL fivepoint)
         `shouldBe`
-         (exactSp $ Spatial Linear
+         (Specification $ Single $ Exact $ Spatial
                      (Sum [ Product [ Centered 0 1 True, Centered 1 2 True]
                           , Product [ Centered 0 2 True, Centered 1 1 True]
                           ]))
 
       it "seven point stencil 2D" $
-        (inferFromIndices $ VL sevenpoint)
+        inferFromIndices (VL sevenpoint)
         `shouldBe`
-          (exactSp $ Spatial Linear
+          (Specification $ Single $ Exact $ Spatial
                        (Sum [ Product [ Centered 0 1 True, Centered 0 2 True, Centered 1 3 True]
                             , Product [ Centered 0 1 True, Centered 0 3 True, Centered 1 2 True]
                             , Product [ Centered 0 2 True, Centered 0 3 True, Centered 1 1 True]
                             ]))
 
       it "five point stencil 2D with blip" $
-         (inferFromIndices $ VL fivepointErr)
+         inferFromIndices (VL fivepointErr)
          `shouldBe`
-          (exactSp $ Spatial Linear
+          (Specification $ Single $ Exact $ Spatial
                          (Sum [ Product [ Forward 1 1 True, Forward 1 2 True],
                                 Product [ Centered 0 1 True, Centered 1 2 True],
                                 Product [ Centered 0 2 True, Centered 1 1 True] ]))
 
       it "centered forward" $
-         (inferFromIndices $ VL centeredFwd)
+         inferFromIndices (VL centeredFwd)
          `shouldBe`
-          (exactSp $ Spatial Linear (Sum [ Product [ Forward 1 1 True
-                                                  , Centered 1 2 True] ]))
+          (Specification $ Single $ Exact $ Spatial
+            (Sum [ Product [ Forward 1 1 True
+                           , Centered 1 2 True] ]))
 
     describe "2D stencil verification" $
       mapM_ (test2DSpecVariation (Neighbour "i" 0) (Neighbour "j" 0)) variations
@@ -168,77 +169,77 @@ spec =
               "extracting offsets from indexing expressions; and vice versa") $
       it "isomorphism" $ property prop_extract_synth_inverse
 
-    describe ("Inconsistent induction variable usage tests") $ do
+    describe "Inconsistent induction variable usage tests" $ do
       it "consistent (1) a(i,j) = b(i+1,j+1) + b(i,j)" $
-        (indicesToSpec' ["i", "j"]
-                        [Neighbour "i" 0, Neighbour "j" 0]
-                        [[offsetToIx "i" 1, offsetToIx "j" 1],
-                         [offsetToIx "i" 0, offsetToIx "j" 0]])
-         `shouldBe` (Just $ Specification $ Left $ Exact
-                       (Spatial Linear
+        indicesToSpec' ["i", "j"]
+                       [Neighbour "i" 0, Neighbour "j" 0]
+                       [[offsetToIx "i" 1, offsetToIx "j" 1],
+                        [offsetToIx "i" 0, offsetToIx "j" 0]]
+         `shouldBe` (Just $ Specification $ Single $ Exact
+                       (Spatial
                          (Sum [Product [Forward 1 1 False, Forward 1 2 False],
                                Product [Centered 0 1 True, Centered 0 2 True]])))
       it "consistent (2) a(i,c,j) = b(i,j+1) + b(i,j) \
                         \:: forward(depth=1,dim=2)*reflexive(dim=1)" $
-        (indicesToSpec' ["i", "j"]
+        indicesToSpec' ["i", "j"]
                         [Neighbour "i" 0, Constant (F.ValInteger "0"), Neighbour "j" 0]
                         [[offsetToIx "i" 0, offsetToIx "j" 1],
-                         [offsetToIx "i" 0, offsetToIx "j" 0]])
-         `shouldBe` (Just $ Specification $ Left $ Exact
-                       (Spatial Linear
+                         [offsetToIx "i" 0, offsetToIx "j" 0]]
+         `shouldBe` (Just $ Specification $ Single $ Exact
+                       (Spatial
                          (Sum [Product [Forward 1 2 True, Centered 0 1 True]])))
 
       it "consistent (3) a(i+1,c,j) = b(j,i+1) + b(j,i) \
                         \:: backward(depth=1,dim=2)*reflexive(dim=1)" $
-        (indicesToSpec' ["i", "j"]
+        indicesToSpec' ["i", "j"]
                         [Neighbour "i" 1, Constant (F.ValInteger "0"), Neighbour "j" 0]
                         [[offsetToIx "j" 0, offsetToIx "i" 1],
-                         [offsetToIx "j" 0, offsetToIx "i" 0]])
-         `shouldBe` (Just $ Specification $ Left $ Exact
-                       (Spatial Linear
+                         [offsetToIx "j" 0, offsetToIx "i" 0]]
+         `shouldBe` (Just $ Specification $ Single $ Exact
+                       (Spatial
                          (Sum [Product [Backward 1 2 True, Centered 0 1 True]])))
 
       it "consistent (4) a(i+1,j) = b(0,i+1) + b(0,i) \
                          \:: backward(depth=1,dim=2)" $
-        (indicesToSpec' ["i", "j"]
+        indicesToSpec' ["i", "j"]
                         [Neighbour "i" 1, Neighbour "j" 0]
                         [[offsetToIx "j" absoluteRep, offsetToIx "i" 1],
-                         [offsetToIx "j" absoluteRep, offsetToIx "i" 0]])
-         `shouldBe` (Just $ Specification $ Left $ Exact
-                       (Spatial Linear
+                         [offsetToIx "j" absoluteRep, offsetToIx "i" 0]]
+         `shouldBe` (Just $ Specification $ Single $ Exact
+                       (Spatial
                          (Sum [Product [Backward 1 2 True]])))
 
       it "consistent (5) a(i) = b(i,i+1) \
                         \:: reflexive(dim=1)*forward(depth=1,dim=2,irreflexive)" $
-        (indicesToSpec' ["i", "j"]
+        indicesToSpec' ["i", "j"]
                         [Neighbour "i" 0]
-                        [[offsetToIx "i" 0, offsetToIx "i" 1]])
-         `shouldBe` (Just $ Specification $ Left $ Exact
-                       (Spatial Linear
+                        [[offsetToIx "i" 0, offsetToIx "i" 1]]
+         `shouldBe` (Just $ Specification $ Single $ Exact
+                       (Spatial
                          (Sum [Product [Forward 1 2 False,
                                         Centered 0 1 True]])))
 
       it "consistent (6) a(i) = b(i) + b(0) \
                         \:: reflexive(dim=1)" $
-        (indicesToSpec' ["i", "j"]
+        indicesToSpec' ["i", "j"]
                         [Neighbour "i" 0]
-                        [[offsetToIx "i" 0], [offsetToIx "i" absoluteRep]])
-         `shouldBe` (Just $ Specification $ Left $ Exact
-                       (Spatial Linear
+                        [[offsetToIx "i" 0], [offsetToIx "i" absoluteRep]]
+         `shouldBe` (Just $ Specification $ Single $ Exact
+                       (Spatial
                          (Sum [Product [Centered 0 1 True]])))
 
       it "inconsistent (1) RHS" $
-        (indicesToSpec' ["i", "j"]
+        indicesToSpec' ["i", "j"]
                         [Neighbour "i" 0, Neighbour "j" 0]
                         [[offsetToIx "i" 1, offsetToIx "j" 1],
-                         [offsetToIx "j" 0, offsetToIx "i" 0]])
+                         [offsetToIx "j" 0, offsetToIx "i" 0]]
          `shouldBe` Nothing
 
       it "inconsistent (2) RHS to LHS" $
-        (indicesToSpec' ["i", "j"]
+        indicesToSpec' ["i", "j"]
                         [Neighbour "i" 0]
                         [[offsetToIx "i" 1, offsetToIx "j" 1],
-                         [offsetToIx "j" 0, offsetToIx "i" 0]])
+                         [offsetToIx "j" 0, offsetToIx "i" 0]]
          `shouldBe` Nothing
 
     -------------------------
@@ -250,7 +251,7 @@ spec =
 
     describe "integration test on inference for example2.f" $ do
       it "stencil infer" $
-         (fst $ callAndSummarise (infer AssignMode) program)
+         fst (callAndSummarise (infer AssignMode) program)
            `shouldBe`
            "\ntests/Camfort/Specification/Stencils/example2.f\n\
             \(24:8)-(24:53) \tstencil readOnce, (reflexive(dim=1))*(centered(depth=1, dim=2)) \
@@ -261,7 +262,7 @@ spec =
             \(41:8)-(41:35) \tstencil readOnce, (reflexive(dim=1))*(reflexive(dim=2)) :: a"
 
       it "stencil check" $
-         (fst $ callAndSummarise (\f p -> (check f p, p)) program)
+         fst (callAndSummarise (\f p -> (check f p, p)) program)
            `shouldBe`
            "\ntests/Camfort/Specification/Stencils/example2.f\n\
             \(24:8)-(24:53)\tCorrect.\n(32:7)-(32:26)\tCorrect."
@@ -269,28 +270,16 @@ spec =
     let file = "tests/Camfort/Specification/Stencils/example3.f"
     program <- runIO $ readParseSrcDir file []
 
-    -- describe "integration test on inference for example3.f" $ do
-    --   it "stencil infer" $
-    --      (fst $ callAndSummarise (infer AssignMode) program)
-    --        `shouldBe`
-    --         "\ntests/Camfort/Specification/Stencils/example3.f\n\
-    --          \(15:2)-(15,20) \tstencil readOnce, (reflexive(dim=3)) :: a\n\
-    --          \(20:8)-(20,26) \tstencil readOnce, (reflexive(dim=3)) :: a\n\
-    --          \(23:7)-(23,17) \tstencil readOnce, (reflexive(dim=1)) :: d\n\
-    --          \(24:7)-(24,19) \tstencil readOnce, (reflexive(dim=2)) :: a\n"
-
     let file = "tests/Camfort/Specification/Stencils/example4.f"
     program <- runIO $ readParseSrcDir file []
 
-    describe "integration test on inference for example4.f" $ do
+    describe "integration test on inference for example4.f" $
       it "stencil infer" $
-         (fst $ callAndSummarise (infer AssignMode) program)
+         fst (callAndSummarise (infer AssignMode) program)
            `shouldBe`
             "\ntests/Camfort/Specification/Stencils/example4.f\n\
              \(6:8)-(6:33) \tstencil (reflexive(dim=1)) :: x"
 
-
-exactSp = Specification . Left . Exact
 
 {- Properties of `spanBoundingBox`: idempotent and associative -}
 prop_spanBoundingIdem :: Natural n -> Span (Vec n Int) -> Bool
@@ -349,109 +338,107 @@ instance (Arbitrary (Vec n a), Arbitrary a) => Arbitrary (Vec (S n) a) where
                    return $ Cons x xs
 
 test2DSpecVariation a b (input, expectation) =
-    it ("format=" ++ show input) $ do
-
+    it ("format=" ++ show input) $
        -- Test inference
-       (indicesToSpec' ["i", "j"]
-                       [a, b]
-                       (map fromFormatToIx input))
+       indicesToSpec' ["i", "j"] [a, b] (map fromFormatToIx input)
           `shouldBe` Just expectedSpec
   where
-    expectedSpec = Specification . Left $ expectation
+    expectedSpec = Specification expectation
     fromFormatToIx [ri,rj] = [ offsetToIx "i" ri, offsetToIx "j" rj ]
 
-indicesToSpec' ivs lhs = fst . runWriter . (indicesToSpec ivmap "a" lhs)
+indicesToSpec' ivs lhs = fst . runWriter . indicesToSpec ivmap "a" lhs
   where ivmap = IM.singleton 0 (S.fromList ivs)
 
 variations =
   [ ( [ [0,0] ]
-    , Exact $ Spatial Linear (Sum [Product [ Centered 0 1 True, Centered 0 2 True]])
+    , Single $ Exact $ Spatial (Sum [Product [ Centered 0 1 True, Centered 0 2 True]])
     )
   , ( [ [1,0] ]
-    , Exact $ Spatial Linear (Sum [Product [Forward 1 1 False, Centered 0 2 True]])
+    , Single $ Exact $ Spatial (Sum [Product [Forward 1 1 False, Centered 0 2 True]])
     )
   , ( [ [1,0], [0,0], [0,0] ]
-    , Exact $ Spatial NonLinear (Sum [Product [Forward 1 1 True, Centered 0 2 True]])
+    , Multiple $ Exact $ Spatial (Sum [Product [Forward 1 1 True, Centered 0 2 True]])
     )
   , ( [ [0,1], [0,0] ]
-    , Exact $ Spatial Linear (Sum [Product [Forward 1 2 True, Centered 0 1 True]])
+    , Single $ Exact $ Spatial (Sum [Product [Forward 1 2 True, Centered 0 1 True]])
     )
   , ( [ [1,1], [0,1], [1,0], [0,0] ]
-    , Exact $ Spatial Linear (Sum [Product [Forward 1 1 True, Forward 1 2 True]])
+    , Single $ Exact $ Spatial (Sum [Product [Forward 1 1 True, Forward 1 2 True]])
     )
   , ( [ [-1,0], [0,0] ]
-    , Exact $ Spatial Linear (Sum [Product [Backward 1 1 True, Centered 0 2 True]])
+    , Single $ Exact $ Spatial (Sum [Product [Backward 1 1 True, Centered 0 2 True]])
     )
   , ( [ [0,-1], [0,0], [0,-1] ]
-    , Exact $ Spatial NonLinear (Sum [Product [Backward 1 2 True, Centered 0 1 True]])
+    , Multiple $ Exact $ Spatial (Sum [Product [Backward 1 2 True, Centered 0 1 True]])
     )
   , ( [ [-1,-1], [0,-1], [-1,0], [0,0], [0, -1] ]
-    , Exact $ Spatial NonLinear (Sum [Product [Backward 1 1 True, Backward 1 2 True]])
+    , Multiple $ Exact $ Spatial (Sum [Product [Backward 1 1 True, Backward 1 2 True]])
     )
   , ( [ [0,-1], [1,-1], [0,0], [1,0], [1,1], [0,1] ]
-    , Exact $ Spatial Linear $ Sum [ Product [ Forward 1 1 True, Centered 1 2 True] ]
+    , Single $ Exact $ Spatial $ Sum [ Product [ Forward 1 1 True, Centered 1 2 True] ]
     )
    -- Stencil which is non-contiguous in one direction
   , ( [ [0, 4], [1, 4] ]
-    , Bound (Just (Spatial Linear (Sum [Product [Forward 1 1 True]])))
-            (Just (Spatial Linear (Sum [Product [Forward 1 1 True, Forward 4 2 True]])))
+    , Single $ Bound (Just (Spatial (Sum [ Product [ Forward 1 1 True ] ])))
+                     (Just (Spatial (Sum [ Product [ Forward 1 1 True
+                                                   , Forward 4 2 True ] ])))
     )
   ]
 
 variationsRel =
   [   -- Stencil which has non-relative indices in one dimension
     (Neighbour "i" 0, Constant (F.ValInteger "0"), [ [0, absoluteRep], [1, absoluteRep] ]
-    , Exact $ Spatial Linear (Sum [Product [Forward 1 1 True]])
+    , Single $ Exact $ Spatial (Sum [Product [Forward 1 1 True]])
     )
   , (Neighbour "i" 1, Neighbour "j" 0, [ [0,0] ]
-    , Exact $ Spatial Linear (Sum [Product [ Backward 1 1 False, Centered 0 2 True]])
+    , Single $ Exact $ Spatial (Sum [Product [ Backward 1 1 False, Centered 0 2 True]])
     )
   , (Neighbour "i" 0, Neighbour "j" 1, [ [0,1] ]
-    , Exact $ Spatial Linear (Sum [Product [Centered 0 1 True, Centered 0 2 True]])
+    , Single $ Exact $ Spatial (Sum [Product [Centered 0 1 True, Centered 0 2 True]])
     )
   , (Neighbour "i" 1, Neighbour "j" (-1), [ [1,0], [0,0], [0,0] ]
-    , Exact $ Spatial NonLinear (Sum [Product [Forward 1 2 False, Backward 1 1 True]])
+    , Multiple $ Exact $ Spatial (Sum [Product [Forward 1 2 False, Backward 1 1 True]])
     )
   , (Neighbour "i" 0, Neighbour "j" (-1), [ [0,1], [0,0] ]
-    , Exact $ Spatial Linear (Sum [Product [Forward 2 2 False, Centered 0 1 True]])
+    , Single $ Exact $ Spatial (Sum [Product [Forward 2 2 False, Centered 0 1 True]])
     )
   -- [0,1] [0,0] [0,-1]
   , (Neighbour "i" 1, Neighbour "j" 0, [ [1,1], [1,0], [1,-1] ]
-    , Exact $ Spatial Linear (Sum [Product [Centered 0 1 True, Centered 1 2 True]])
+    , Single $ Exact $ Spatial (Sum [Product [Centered 0 1 True, Centered 1 2 True]])
     )
   , (Neighbour "i" 1, Neighbour "j" 0, [ [-2,0], [-1,0] ]
-    , Bound (Just (Spatial Linear (Sum [Product [Centered 0 2 True]])))
-            (Just (Spatial Linear (Sum [Product [Backward 3 1 True, Centered 0 2 True]]))))
+    , Single $ Bound (Just (Spatial (Sum [Product [ Centered 0 2 True ]])))
+                     (Just (Spatial (Sum [Product [ Backward 3 1 True
+                                                  , Centered 0 2 True ]]))))
 
   , (Constant (F.ValInteger "0"), Neighbour "j" 0, [ [absoluteRep,1], [absoluteRep,0], [absoluteRep,-1] ]
-    , Exact $ Spatial Linear (Sum [Product [Centered 1 2 True]])
+    , Single $ Exact $ Spatial (Sum [Product [Centered 1 2 True]])
     )
   ]
 
 test3DSpecVariation (input, expectation) =
-    it ("format=" ++ show input) $ do
-
+    it ("format=" ++ show input) $
       -- Test inference
-      (indicesToSpec' ["i", "j", "k"]
-                      [Neighbour "i" 0, Neighbour "j" 0, Neighbour "k" 0]
-                      (map fromFormatToIx input))
+      indicesToSpec' ["i", "j", "k"]
+                     [Neighbour "i" 0, Neighbour "j" 0, Neighbour "k" 0]
+                     (map fromFormatToIx input)
            `shouldBe` Just expectedSpec
 
   where
-    expectedSpec = Specification . Left $ expectation
+    expectedSpec = Specification expectation
     fromFormatToIx [ri,rj,rk] =
       [offsetToIx "i" ri, offsetToIx "j" rj, offsetToIx "k" rk]
 
 
 variations3D =
   [ ( [ [-1,0,-1], [0,0,-1], [-1,0,0], [0,0,0] ]
-    ,  Exact $ Spatial Linear (Sum [Product [Backward 1 1 True, Backward 1 3 True, Centered 0 2 True]])
+    ,  Single $ Exact $ Spatial (Sum [Product [Backward 1 1 True, Backward 1 3 True, Centered 0 2 True]])
     )
   , ( [ [1,1,0], [0,1,0] ]
-    ,  Exact $ Spatial Linear (Sum [Product [Forward 1 1 True, Forward 1 2 False, Centered 0 3 True]])
+    ,  Single $ Exact $ Spatial (Sum [Product [Forward 1 1 True, Forward 1 2 False, Centered 0 3 True]])
     )
   , ( [ [-1,0,-1], [0,0,-1], [-1,0,0], [0,0,0] ]
-    ,  Exact $ Spatial Linear (Sum [Product [Backward 1 1 True, Backward 1 3 True, Centered 0 2 True]])
+    ,  Single $ Exact $ Spatial (Sum [Product [Backward 1 1 True, Backward 1 3 True, Centered 0 2 True]])
     )
   ]
 
