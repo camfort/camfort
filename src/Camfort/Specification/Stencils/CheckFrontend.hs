@@ -20,11 +20,9 @@
 
 module Camfort.Specification.Stencils.CheckFrontend where
 
-import Data.Data
 import Data.Generics.Uniplate.Operations
 import Control.Arrow
 import Control.Monad.State.Strict
-import Control.Monad.Reader
 import Control.Monad.Writer.Strict hiding (Product)
 
 import Camfort.Specification.Stencils.CheckBackend
@@ -41,19 +39,14 @@ import Camfort.Helpers
 
 import qualified Language.Fortran.AST as F
 import qualified Language.Fortran.Analysis as FA
-import qualified Language.Fortran.Analysis.Types as FAT
 import qualified Language.Fortran.Analysis.Renaming as FAR
 import qualified Language.Fortran.Analysis.BBlocks as FAB
 import qualified Language.Fortran.Analysis.DataFlow as FAD
 import qualified Language.Fortran.Util.Position as FU
 
-import Data.Graph.Inductive.Graph hiding (isEmpty)
 import qualified Data.Map as M
-import qualified Data.IntMap as IM
-import qualified Data.Set as S
 import Data.Maybe
 import Data.List
-import Debug.Trace
 
 -- Entry point
 stencilChecking :: FAR.NameMap -> F.ProgramFile (FA.Analysis A) -> [String]
@@ -83,7 +76,7 @@ stencilChecking nameMap pf = snd . runWriter $
                     let ?nameMap = nameMap
                       in descendBiM perProgramUnitCheck pf'
      -- Format output
-     let a@(_, output) = evalState (runWriterT $ results) (([], Nothing), ivmap)
+     let a@(_, output) = evalState (runWriterT results) (([], Nothing), ivmap)
      tell $ pprint output
 
 type LogLine = (FU.SrcSpan, String)
@@ -110,7 +103,7 @@ parseCommentToAST ann span =
 updateRegionEnv :: FA.Analysis A -> Checker ()
 updateRegionEnv ann =
   case stencilSpec (FA.prevAnnotation ann) of
-    Just (Right (Left regionEnv)) -> modify $ (((++) regionEnv) *** id) *** id
+    Just (Right (Left regionEnv)) -> modify $ first (first (regionEnv ++))
     _                             -> return ()
 
 checkOffsetsAgainstSpec :: [(Variable, Multiplicity [[Int]])]
@@ -125,8 +118,8 @@ checkOffsetsAgainstSpec offsetMaps =
 -- entering into a module
 perProgramUnitCheck :: (?nameMap :: FAR.NameMap, ?flowsGraph :: FAD.FlowsGraph A)
    => F.ProgramUnit (FA.Analysis A) -> Checker (F.ProgramUnit (FA.Analysis A))
-perProgramUnitCheck p@(F.PUModule {}) = do
-    modify $ (id *** (const (Just $ FA.puName p))) *** id
+perProgramUnitCheck p@F.PUModule{} = do
+    modify $ first (second (const (Just $ FA.puName p)))
     descendBiM perBlockCheck p
 perProgramUnitCheck p = descendBiM perBlockCheck p
 
@@ -145,11 +138,11 @@ perBlockCheck b@(F.BlComment ann span _) = do
        case isArraySubscript lhs of
          Just subs -> do
             -- Create list of relative indices
-            (_, ivmap) <- get
+            ivmap <- snd <$> get
             -- Do inference
             let realName v   = v `fromMaybe` (v `M.lookup` ?nameMap)
-            let lhsN         = maybe [] id (neighbourIndex ivmap subs)
-            let correctNames = map (\(name, spec) -> (realName name, spec))
+            let lhsN         = fromMaybe [] (neighbourIndex ivmap subs)
+            let correctNames = map (first realName)
             let relOffsets = correctNames . fst . runWriter $ genOffsets ivmap lhsN [s]
             let multOffsets = map (\relOffset ->
                   case relOffset of
@@ -162,13 +155,13 @@ perBlockCheck b@(F.BlComment ann span _) = do
               then tell [ (span, "Correct.") ]
               else tell [ (span, "Not well specified:\n\t\t  expecting: "
                               ++ pprintSpecDecls specDecls) ]
-            return $ b'
-         Nothing -> return $ b'
+            return b'
+         Nothing -> return b'
 
-      (F.BlDo ann span _ _ _ mDoSpec body _) -> do
+      (F.BlDo ann span _ _ _ mDoSpec body _) ->
            -- Stub, maybe collect stencils inside 'do' block
-           return $ b'
-      _ -> return $ b'
+           return b'
+      _ -> return b'
     _ -> return b'
 
 perBlockCheck b@(F.BlDo ann span _ _ _ mDoSpec body _) = do
