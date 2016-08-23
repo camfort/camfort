@@ -80,6 +80,10 @@ options =
                 "stencil specification inference mode. ID = Do, Assign, or Both"
      , Option []        ["debug"] (NoArg Debug)
          "enable debug mode"
+     , Option []        ["doxygen"] (NoArg Doxygen)
+         "synthesise annotations compatible with Doxygen"
+     , Option []        ["ford"] (NoArg Ford)
+         "synthesise annotations compatible with Ford"
      ]
 
 compilerOpts :: [String] -> IO ([Flag], [String])
