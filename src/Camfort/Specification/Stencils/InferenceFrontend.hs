@@ -95,10 +95,10 @@ runInferer ivmap flTo =
 
 stencilInference :: FAR.NameMap
                  -> InferMode
-                 -> Bool
+                 -> Char
                  -> F.ProgramFile (FA.Analysis A)
                  -> (F.ProgramFile (FA.Analysis A), [LogLine])
-stencilInference nameMap mode doxygenEnabled pf =
+stencilInference nameMap mode marker pf =
     (F.ProgramFile mi cm_pus' blocks', log1 ++ log2)
   where
     -- Parse specification annotations and include them into the syntax tree
@@ -115,7 +115,7 @@ stencilInference nameMap mode doxygenEnabled pf =
     (blocks', log2) = runInferer ivMap flTo blocksInf
     blocksInf       = let ?flowsGraph = flTo
                           ?nameMap    = nameMap
-                      in descendBiM (perBlockInfer mode doxygenEnabled) blocks
+                      in descendBiM (perBlockInfer mode marker) blocks
 
     -- Run inference per program unit, placing the flowsmap in scope
     perPU :: F.ProgramUnit (FA.Analysis A)
@@ -125,7 +125,7 @@ stencilInference nameMap mode doxygenEnabled pf =
          let ?flowsGraph = flTo
              ?nameMap    = nameMap
          in do
-              let pum = descendBiM (perBlockInfer mode doxygenEnabled) pu
+              let pum = descendBiM (perBlockInfer mode marker) pu
               let (pu', log) = runInferer ivMap flTo pum
               tell log
               return pu'
@@ -189,7 +189,7 @@ fromJustMsg msg Nothing = error msg
 
 -- Traverse Blocks in the AST and infer stencil specifications
 perBlockInfer :: Params
-               => InferMode -> Bool -> F.Block (FA.Analysis A)
+               => InferMode -> Char -> F.Block (FA.Analysis A)
                -> Inferer (F.Block (FA.Analysis A))
 
 perBlockInfer Synth _ b@(F.BlComment ann span _) = do
@@ -210,7 +210,7 @@ perBlockInfer Synth _ b@(F.BlComment ann span _) = do
     _ -> return ()
   return b
 
-perBlockInfer mode doxygenEnabled b@(F.BlStatement ann span@(FU.SrcSpan lp up) _ stmnt)
+perBlockInfer mode marker b@(F.BlStatement ann span@(FU.SrcSpan lp up) _ stmnt)
   | mode == AssignMode || mode == CombinedMode || mode == EvalMode || mode == Synth = do
     -- On all StExpressionAssigns that occur in stmt....
     let lhses = [lhs | (F.StExpressionAssign _ _ lhs _)
@@ -235,8 +235,7 @@ perBlockInfer mode doxygenEnabled b@(F.BlStatement ann span@(FU.SrcSpan lp up) _
            _ -> return [])
     if mode == Synth && not (null specs)
       then
-        let marker = if doxygenEnabled then '!' else '='
-            specComment = Synth.formatSpec (Just (tabs ++ '!':marker:" ")) ?nameMap (span, Left (concat specs'))
+        let specComment = Synth.formatSpec (Just (tabs ++ '!':marker:" ")) ?nameMap (span, Left (concat specs'))
             specs' = map (mapMaybe noSpecAlready) specs
             noSpecAlready (vars, spec) =
                if null vars'
@@ -251,7 +250,7 @@ perBlockInfer mode doxygenEnabled b@(F.BlStatement ann span@(FU.SrcSpan lp up) _
         in return $ F.BlComment ann' span' specComment
       else return b
 
-perBlockInfer mode doxygenEnabled b@(F.BlDo ann span lab cname lab' mDoSpec body tlab) = do
+perBlockInfer mode marker b@(F.BlDo ann span lab cname lab' mDoSpec body tlab) = do
     -- introduce any induction variables into the induction variable state
 
     if (mode == DoMode || mode == CombinedMode) && isStencilDo b
@@ -259,13 +258,13 @@ perBlockInfer mode doxygenEnabled b@(F.BlDo ann span lab cname lab' mDoSpec body
       else return []
 
     -- descend into the body of the do-statement
-    body' <- mapM (descendBiM (perBlockInfer  mode doxygenEnabled)) body
+    body' <- mapM (descendBiM (perBlockInfer  mode marker)) body
     -- Remove any induction variable from the state
     return $ F.BlDo ann span lab cname lab' mDoSpec body' tlab
 
-perBlockInfer mode doxygenEnabled b = do
+perBlockInfer mode marker b = do
     -- Go inside child blocks
-    mapM_ (descendBiM (perBlockInfer mode doxygenEnabled)) $ children b
+    mapM_ (descendBiM (perBlockInfer mode marker)) $ children b
     return b
 
 genSpecifications :: Params

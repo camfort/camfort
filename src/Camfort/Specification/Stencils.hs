@@ -49,10 +49,10 @@ import Data.List
 --------------------------------------------------
 
 -- Top-level of specification inference
-infer :: InferMode -> Bool -> Filename
+infer :: InferMode -> Char -> Filename
       -> F.ProgramFile Annotation
       -> (String, F.ProgramFile Annotation)
-infer mode doxygenEnabled filename pf =
+infer mode marker filename pf =
     -- Append filename to any outputs
     if null output
        then ("", fmap FA.prevAnnotation pf'')
@@ -62,7 +62,7 @@ infer mode doxygenEnabled filename pf =
              . filter (not . white)
              . map (formatSpec Nothing nameMap) $ results
       white = all (\x -> (x == ' ') || (x == '\t'))
-      (pf'', results) = stencilInference nameMap mode doxygenEnabled
+      (pf'', results) = stencilInference nameMap mode marker
                       . FAB.analyseBBlocks $ pf'
       nameMap = FAR.extractNameMap pf'
       pf'     = FAR.analyseRenames . FA.initAnalysis $ pf
@@ -73,22 +73,22 @@ infer mode doxygenEnabled filename pf =
 
 -- Top-level of specification synthesis
 synth :: InferMode
-      -> Bool
+      -> Char
       -> [(Filename, F.ProgramFile A)]
       -> (String, [(Filename, F.ProgramFile Annotation)])
-synth mode doxygenEnabled = foldr buildOutput ("", [])
+synth mode marker = foldr buildOutput ("", [])
   where
     buildOutput (f, pf) (r, pfs) = (r ++ r', (f, pf') : pfs)
-      where (r', pf') = synthPF mode doxygenEnabled f pf
+      where (r', pf') = synthPF mode marker f pf
 
-synthPF :: InferMode -> Bool -> Filename
+synthPF :: InferMode -> Char -> Filename
       -> F.ProgramFile Annotation
       -> (String, F.ProgramFile Annotation)
-synthPF mode doxygenEnabled filename pf =
+synthPF mode marker filename pf =
     -- Append filename to any outputs
     ("", fmap FA.prevAnnotation pf'')
     where
-      (pf'', _) = stencilInference nameMap Synth doxygenEnabled
+      (pf'', _) = stencilInference nameMap Synth marker
                 . FAB.analyseBBlocks $ pf'
       nameMap = FAR.extractNameMap pf'
       pf'     = FAR.analyseRenames . FA.initAnalysis $ pf

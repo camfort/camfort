@@ -206,11 +206,11 @@ inferUnits uo (fname, pf)
     nameMap = FAR.extractNameMap pfRenamed
 
 synthesiseUnits :: UnitOpts
-                -> Bool
+                -> Char
                 -> (Filename, F.ProgramFile Annotation)
                 -> (Report, (Filename, F.ProgramFile Annotation))
 {-| Synthesis unspecified units for a program (after checking) -}
-synthesiseUnits uo doxygenEnabled (fname, pf)
+synthesiseUnits uo marker (fname, pf)
   | Right []   <- eVars = (checkUnits uo (fname, pf), (fname, pf))
   | Right vars <- eVars = (okReport vars, (fname, pfFinal))
   | Left exc   <- eVars = (errReport exc, (fname, pfFinal))
@@ -228,7 +228,7 @@ synthesiseUnits uo doxygenEnabled (fname, pf)
 
     -- run inference
     uOpts = uo { uoNameMap = nameMap }
-    (eVars, state, logs) = runUnitSolver uOpts pfRenamed $ initInference >> runInferVariables >>= runSynthesis doxygenEnabled
+    (eVars, state, logs) = runUnitSolver uOpts pfRenamed $ initInference >> runInferVariables >>= runSynthesis marker
 
     pfUA = usProgramFile state -- the program file after units analysis is done
     pfFinal = fmap prevAnnotation . fmap FA.prevAnnotation $ pfUA -- strip annotations
