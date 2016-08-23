@@ -15,7 +15,7 @@
 -}
 
 module Camfort.Specification.Stencils
- (InferMode, infer, check, synth, findVarFlowCycles) where
+ (InferMode, infer, check, synth) where
 
 import Control.Monad.State.Lazy
 import Control.Monad.Writer hiding (Product)
