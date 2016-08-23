@@ -36,6 +36,9 @@ import Data.Ratio
 
 import Text.Printf
 
+-- | A (unique name, source name) variable
+type VV = (F.Name, F.Name)
+
 -- | Description of the unit of an expression.
 data UnitInfo
   = UnitParamPosAbs (String, Int)         -- an abstract parameter identified by PU name and argument position
@@ -49,7 +52,7 @@ data UnitInfo
   | UnitlessVar                           -- a unitless variable
   | UnitName String                       -- a basic unit
   | UnitAlias String                      -- the name of a unit alias
-  | UnitVar String                        -- variable with undetermined units (assumed to have unique name)
+  | UnitVar VV                            -- variable with undetermined units: (unique name, source name)
   | UnitMul UnitInfo UnitInfo             -- two units multiplied
   | UnitPow UnitInfo Double               -- a unit raised to a constant power
   deriving (Eq, Ord, Data, Typeable)
@@ -67,7 +70,7 @@ instance Show UnitInfo where
     UnitlessVar               -> "1"
     UnitName name             -> name
     UnitAlias name            -> name
-    UnitVar var               -> printf "#<Var %s>" var
+    UnitVar (vName, _)        -> printf "#<Var %s>" vName
     UnitMul u1 (UnitPow u2 k)
       | k < 0                 -> maybeParen u1 ++ " / " ++ show (UnitPow u2 (-k))
     UnitMul u1 u2             -> maybeParenS u1 ++ " " ++ maybeParenS u2
@@ -97,13 +100,13 @@ instance Show Constraint where
   show (ConConj cs) = intercalate " && " (map show cs)
 
 pprintConstr :: Constraint -> String
-pprintConstr (ConEq u1@(UnitVar v) u2@(UnitVar v'))
+pprintConstr (ConEq u1@(UnitVar _) u2@(UnitVar _))
     = "'" ++ pprintUnitInfo u1 ++ "' should have the same units as '" ++ pprintUnitInfo u2 ++ "'"
 pprintConstr (ConEq u1 u2) = "'" ++ pprintUnitInfo u1 ++ "' should be '" ++ pprintUnitInfo u2 ++ "'"
 pprintConstr (ConConj cs) = intercalate "\n\t and " (map pprintConstr cs)
 
 pprintUnitInfo :: UnitInfo -> String
-pprintUnitInfo (UnitVar var) = printf "%s" var
+pprintUnitInfo (UnitVar (_, sName)) = printf "%s" sName
 pprintUnitInfo ui = show ui
 
 --------------------------------------------------

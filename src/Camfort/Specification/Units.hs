@@ -80,14 +80,13 @@ inferCriticalVariables uo (fname, pf)
         expInfo = filter ((`elem` names) . FA.varName) $ declVariables pfUA
         numVars = length expInfo
 
-    expReport e = "(" ++ showSrcSpan (FU.getSpan e) ++ ")\t" ++ unrename nameMap v
-      where v = FA.varName e
+    expReport e = "(" ++ showSrcSpan (FU.getSpan e) ++ ")\t" ++ FA.srcName e
 
     varReport     = intercalate ", " . map showVar
 
-    showVar (UnitVar v)     = v
-    showVar (UnitLiteral _) = "<literal>"
-    showVar _               = "<bad>"
+    showVar (UnitVar (_, s)) = s
+    showVar (UnitLiteral _)   = "<literal>"
+    showVar _                 = "<bad>"
 
     errReport exc = logs ++ "\n" ++ fname ++ ":\n" ++ show exc
 
@@ -122,16 +121,16 @@ checkUnits uo (fname, pf)
            else "\n    instead" ++ intercalate "\n" (mapNotFirst (pad 10) (errorInfo con))
         -- Create additional info about inconsistencies involving variables
         errorInfo con =
-            [" '" ++ (unrename nameMap v) ++ "' is '" ++ pprintUnitInfo (unrename nameMap u) ++ "'"
-              | UnitVar v <- universeBi con
-              ,         u <- findUnitConstrFor con v ]
+            [" '" ++ sName ++ "' is '" ++ pprintUnitInfo (unrename nameMap u) ++ "'"
+              | UnitVar (vName, sName) <- universeBi con
+              , u                       <- findUnitConstrFor con vName ]
         -- Find unit information for variable constraints
         findUnitConstrFor con v = mapMaybe (\con' -> if con == con'
                                                      then Nothing
                                                      else constrainedTo v con')
                                            (concat $ M.elems templateMap)
-        constrainedTo v (ConEq (UnitVar v') u) | v == v' = Just u
-        constrainedTo v (ConEq u (UnitVar v')) | v == v' = Just u
+        constrainedTo v (ConEq (UnitVar (v', _)) u) | v == v' = Just u
+        constrainedTo v (ConEq u (UnitVar (v', _))) | v == v' = Just u
         constrainedTo _ _ = Nothing
 
         mapNotFirst f [] = []
@@ -156,9 +155,9 @@ checkUnits uo (fname, pf)
 
     varReport     = intercalate ", " . map showVar
 
-    showVar (UnitVar v)     = v `fromMaybe` M.lookup v nameMap
-    showVar (UnitLiteral _) = "<literal>" -- FIXME
-    showVar _               = "<bad>"
+    showVar (UnitVar (_, s)) = s
+    showVar (UnitLiteral _)   = "<literal>" -- FIXME
+    showVar _                 = "<bad>"
 
     errReport exc = logs ++ "\n" ++ fname ++ ":\t " ++ show exc
 
@@ -189,10 +188,9 @@ inferUnits uo (fname, pf)
     okReport vars = logs ++ "\n" ++ fname ++ ":\n" ++ unlines [ expReport ei | ei <- expInfo ]
       where
         expInfo = [ (e, u) | e <- declVariables pfUA
-                           , u <- maybeToList (FA.varName e `lookup` vars) ]
+                           , u <- maybeToList ((FA.varName e, FA.srcName e) `lookup` vars) ]
 
-    expReport (e, u) = "  " ++ showSrcSpan (FU.getSpan e) ++ " unit " ++ show u ++ " :: " ++ unrename nameMap v
-      where v = FA.varName e
+    expReport (e, u) = "  " ++ showSrcSpan (FU.getSpan e) ++ " unit " ++ show u ++ " :: " ++ FA.srcName e
 
     errReport exc = logs ++ "\n" ++ fname ++ ":\t" ++ show exc
 
@@ -219,10 +217,9 @@ synthesiseUnits uo marker (fname, pf)
     okReport vars = logs ++ "\n" ++ fname ++ ":\n" ++ unlines [ expReport ei | ei <- expInfo ]
       where
         expInfo = [ (e, u) | e <- declVariables pfUA
-                           , u <- maybeToList (FA.varName e `lookup` vars) ]
+                           , u <- maybeToList ((FA.varName e, FA.srcName e) `lookup` vars) ]
 
-    expReport (e, u) = "  " ++ showSrcSpan (FU.getSpan e) ++ " unit " ++ show u ++ " :: " ++ (v `fromMaybe` M.lookup v nameMap)
-      where v = FA.varName e
+    expReport (e, u) = "  " ++ showSrcSpan (FU.getSpan e) ++ " unit " ++ show u ++ " :: " ++ FA.srcName e
 
     errReport exc = logs ++ "\n" ++ fname ++ ":\t" ++ show exc
 

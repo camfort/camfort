@@ -46,30 +46,28 @@ import Camfort.Specification.Units.Monad
 import qualified Debug.Trace as D
 
 -- | Insert unit declarations into the ProgramFile as comments.
-runSynthesis :: Char -> [(String, UnitInfo)] -> UnitSolver [(String, UnitInfo)]
+runSynthesis :: Char -> [(VV, UnitInfo)] -> UnitSolver [(VV, UnitInfo)]
 runSynthesis marker vars = do
   modifyProgramFileM $ descendBiM (synthBlocks marker vars)   -- descendBiM finds the head of lists
   return vars
 
 -- Should be invoked on the beginning of a list of blocks
-synthBlocks :: Char -> [(String, UnitInfo)] -> [F.Block UA] -> UnitSolver [F.Block UA]
-synthBlocks marker vars =
-    fmap reverse . foldM (synthBlock marker vars) []
+synthBlocks :: Char -> [(VV, UnitInfo)] -> [F.Block UA] -> UnitSolver [F.Block UA]
+synthBlocks marker vars = fmap reverse . foldM (synthBlock marker vars) []
 
 -- Process an individual block while building up a list of blocks (in
 -- reverse order) to ultimately replace the original list of
 -- blocks. We're looking for blocks containing declarations, in
 -- particular, in order to possibly insert a unit annotation before
 -- them.
-synthBlock :: Char -> [(String, UnitInfo)] -> [F.Block UA] -> F.Block UA -> UnitSolver [F.Block UA]
+synthBlock :: Char -> [(VV, UnitInfo)] -> [F.Block UA] -> F.Block UA -> UnitSolver [F.Block UA]
 synthBlock marker vars bs b@(F.BlStatement a ss@(FU.SrcSpan lp up) _ (F.StDeclaration _ _ _ _ decls)) = do
   pf    <- usProgramFile `fmap` get
-  nMap  <- uoNameMap `fmap` ask
   gvSet <- usGivenVarSet `fmap` get
   newBs <- fmap catMaybes . forM (universeBi decls) $ \ e -> case e of
     e@(F.ExpValue _ _ (F.ValVariable _))
-      | name `S.notMember` gvSet            -- not a member of the already-given variables
-      , Just u <- lookup name vars -> do    -- and a unit has been inferred
+      | vname `S.notMember` gvSet                     -- not a member of the already-given variables
+      , Just u <- lookup (vname, sname) vars -> do    -- and a unit has been inferred
         -- Create new annotation which labels this as a refactored node.
         let newA  = a { FA.prevAnnotation = (FA.prevAnnotation a) {
                            prevAnnotation = (prevAnnotation (FA.prevAnnotation a)) {
@@ -77,12 +75,13 @@ synthBlock marker vars bs b@(F.BlStatement a ss@(FU.SrcSpan lp up) _ (F.StDeclar
         -- Create a zero-length span for the new comment node.
         let newSS = FU.SrcSpan (lp {FU.posColumn = 0}) (lp {FU.posColumn = 0})
         -- Build the text of the comment with the unit annotation.
-        let txt   = marker:" " ++ showUnitDecl nMap (e, u)
+        let txt   = marker:" " ++ showUnitDecl (e, u)
         let space = FU.posColumn lp - 1
         let newB  = F.BlComment newA newSS . insertSpacing space $ commentText pf txt
         return $ Just newB
       where
-        name = FA.varName e
+        vname = FA.varName e
+        sname = FA.srcName e
     (e :: F.Expression UA) -> return Nothing
   return (b:reverse newBs ++ bs)
 synthBlock _ _ bs b = return (b:bs)
@@ -97,5 +96,4 @@ insertSpacing :: Int -> String -> String
 insertSpacing n = (replicate n ' ' ++)
 
 -- Pretty print a unit declaration.
-showUnitDecl nameMap (e, u) = "unit(" ++ show u ++ ") :: " ++ (v `fromMaybe` M.lookup v nameMap)
-  where v = FA.varName e
+showUnitDecl (e, u) = "unit(" ++ show u ++ ") :: " ++ FA.srcName e

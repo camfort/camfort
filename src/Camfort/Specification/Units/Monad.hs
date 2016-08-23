@@ -19,7 +19,7 @@
 
 {- | Defines the monad for the units-of-measure modules -}
 module Camfort.Specification.Units.Monad
-  ( UA, UnitSolver, UnitOpts(..), unitOpts0, UnitLogs, UnitState(..), LiteralsOpt(..), UnitException
+  ( UA, VV, UnitSolver, UnitOpts(..), unitOpts0, UnitLogs, UnitState(..), LiteralsOpt(..), UnitException
   , whenDebug, modifyVarUnitMap, modifyGivenVarSet, modifyUnitAliasMap
   , VarUnitMap, GivenVarSet, UnitAliasMap, TemplateMap, CallIdMap
   , modifyTemplateMap, modifyProgramFile, modifyProgramFileM, modifyCallIdRemapM
@@ -37,7 +37,7 @@ import qualified Data.Set as S
 import qualified Language.Fortran.Analysis as FA
 import qualified Language.Fortran.Analysis.Renaming as FAR
 import qualified Language.Fortran.AST as F
-import Camfort.Specification.Units.Environment (UnitInfo, UnitAnnotation, Constraints(..))
+import Camfort.Specification.Units.Environment (UnitInfo, UnitAnnotation, Constraints(..), VV)
 import Camfort.Analysis.Annotations (Annotation, A, UA)
 
 --------------------------------------------------
@@ -92,8 +92,8 @@ type UnitLogs = String
 
 --------------------------------------------------
 
--- | Variable unique name => unit
-type VarUnitMap   = M.Map F.Name UnitInfo
+-- | Variable => unit
+type VarUnitMap   = M.Map VV UnitInfo
 -- | Set of variables given explicit unit annotations
 type GivenVarSet  = S.Set F.Name
 -- | Alias name => definition

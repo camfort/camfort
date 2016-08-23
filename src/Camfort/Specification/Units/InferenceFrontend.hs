@@ -41,6 +41,7 @@ import Control.Monad.RWS.Strict
 import qualified Language.Fortran.AST as F
 import Language.Fortran.Parser.Utils (readReal, readInteger)
 import qualified Language.Fortran.Analysis as FA
+import Language.Fortran.Analysis (varName, srcName)
 
 import Camfort.Analysis.CommentAnnotator (annotateComments)
 import Camfort.Analysis.Annotations
@@ -130,7 +131,7 @@ runCriticalVariables = do
 
 -- | Return a list of variable names mapped to their corresponding
 -- unit that was inferred.
-runInferVariables :: UnitSolver [(String, UnitInfo)]
+runInferVariables :: UnitSolver [(VV, UnitInfo)]
 runInferVariables = do
   cons <- usConstraints `fmap` get
   return $ inferVariables cons
@@ -157,14 +158,16 @@ insertParametricUnits = gets usProgramFile >>= (mapM_ paramPU . universeBi)
         fname = puName pu
 
 -- | Return the list of parameters paired with its positional index.
-indexedParams :: F.ProgramUnit UA -> [(Int, String)]
+indexedParams :: F.ProgramUnit UA -> [(Int, VV)]
 indexedParams pu
-  | F.PUFunction _ _ _ _ _ (Just paList) (Just r) _ _ <- pu = zip [0..] $ varName r : map varName (F.aStrip paList)
-  | F.PUFunction _ _ _ _ _ (Just paList) _ _ _        <- pu = zip [0..] $ fname     : map varName (F.aStrip paList)
-  | F.PUSubroutine _ _ _ _ (Just paList) _ _          <- pu = zip [1..] $ map varName (F.aStrip paList)
+  | F.PUFunction _ _ _ _ _ (Just paList) (Just r) _ _ <- pu = zip [0..] $ map toVV (r : F.aStrip paList)
+  | F.PUFunction _ _ _ _ _ (Just paList) _ _ _        <- pu = zip [0..] $ (fname, sfname) : map toVV (F.aStrip paList)
+  | F.PUSubroutine _ _ _ _ (Just paList) _ _          <- pu = zip [1..] $ map toVV (F.aStrip paList)
   | otherwise                                               = []
   where
-    fname = puName pu
+    fname  = puName pu
+    sfname = puSrcName pu
+    toVV e = (varName e, srcName e)
 
 --------------------------------------------------
 
@@ -184,14 +187,16 @@ insertUndeterminedUnits = do
     toParamVar :: String -> F.Expression UA -> UnitSolver (F.Expression UA)
     toParamVar fname v@(F.ExpValue _ _ (F.ValVariable _)) = do
       let vname = varName v
-      modifyVarUnitMap $ M.insertWith (curry snd) vname (UnitParamVarAbs (fname, vname))
+      let sname = srcName v
+      modifyVarUnitMap $ M.insertWith (curry snd) (vname, sname) (UnitParamVarAbs (fname, vname))
       return v
     toParamVar _ e = return e
 
     toUnitVar :: F.Expression UA -> UnitSolver (F.Expression UA)
     toUnitVar v@(F.ExpValue _ _ (F.ValVariable _)) = do
       let vname = varName v
-      modifyVarUnitMap $ M.insertWith (curry snd) vname (UnitVar vname)
+      let sname = srcName v
+      modifyVarUnitMap $ M.insertWith (curry snd) (vname, sname) (UnitVar (vname, sname))
       return v
     toUnitVar e = return e
 
@@ -219,18 +224,17 @@ insertGivenUnits = do
 
     -- Figure out the unique names of the referenced variables and
     -- then insert unit info under each of those names.
+    insertUnitAssignments :: UnitInfo -> F.Block UA -> [String] -> UnitSolver ()
     insertUnitAssignments info (F.BlStatement _ _ _ (F.StDeclaration _ _ _ _ decls)) varRealNames = do
       -- figure out the 'unique name' of the varRealName that was found in the comment
       -- FIXME: account for module renaming
       -- FIXME: might be more efficient to allow access to variable renaming environ at this program point
-      nameMap <- uoNameMap `fmap` ask
-      let lookupName n = fromMaybe n (n `M.lookup` nameMap)
-      let m = M.fromList [ (varUniqueName, info) | e@(F.ExpValue _ _ (F.ValVariable _)) <- universeBi decls
-                                                 , varRealName <- varRealNames
-                                                 , let varUniqueName = varName e
-                                                 , varRealName == lookupName varUniqueName ]
+      let m = M.fromList [ ((varName e, srcName e), info)
+                         | e@(F.ExpValue _ _ (F.ValVariable _)) <- universeBi decls :: [F.Expression UA]
+                         , varRealName <- varRealNames
+                         , varRealName == FA.srcName e ]
       modifyVarUnitMap $ M.unionWith const m
-      modifyGivenVarSet . S.union . S.fromList . M.keys $ m
+      modifyGivenVarSet . S.union . S.fromList . map fst . M.keys $ m
 
 --------------------------------------------------
 
@@ -240,7 +244,7 @@ annotateAllVariables :: UnitSolver ()
 annotateAllVariables = modifyProgramFileM $ \ pf -> do
   varUnitMap <- usVarUnitMap `fmap` get
   let annotateExp e@(F.ExpValue _ _ (F.ValVariable _))
-        | Just info <- M.lookup (varName e) varUnitMap = setUnitInfo info e
+        | Just info <- M.lookup (varName e, srcName e) varUnitMap = setUnitInfo info e
       annotateExp e = e
   return $ transformBi annotateExp pf
 
@@ -654,7 +658,7 @@ debugLogging = whenDebug $ do
     pf <- gets usProgramFile
     cons <- usConstraints `fmap` get
     vum <- usVarUnitMap `fmap` get
-    tell . unlines $ [ "  " ++ show info ++ " :: " ++ n | (n, info) <- M.toList vum ]
+    tell . unlines $ [ "  " ++ show info ++ " :: " ++ n | ((n, _), info) <- M.toList vum ]
     tell "\n\n"
     uam <- usUnitAliasMap `fmap` get
     tell . unlines $ [ "  " ++ n ++ " = " ++ show info | (n, info) <- M.toList uam ]
@@ -690,7 +694,9 @@ debugLogging = whenDebug $ do
 puName :: F.ProgramUnit UA -> F.Name
 puName pu
   | F.Named n <- FA.puName pu = n
-  | otherwise               = "_nameless"
+  | otherwise                 = "_nameless"
 
-varName :: F.Expression UA -> F.Name
-varName = FA.varName
+puSrcName :: F.ProgramUnit UA -> F.Name
+puSrcName pu
+  | F.Named n <- FA.puSrcName pu = n
+  | otherwise                    = "_nameless"

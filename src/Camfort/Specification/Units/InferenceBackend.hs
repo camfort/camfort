@@ -82,7 +82,7 @@ criticalVariables cons = filter (not . isUnitName) $ map (colA A.!) criticalIndi
 --------------------------------------------------
 
 -- | Returns list of formerly-undetermined variables and their units.
-inferVariables :: Constraints -> [(String, UnitInfo)]
+inferVariables :: Constraints -> [(VV, UnitInfo)]
 inferVariables [] = []
 inferVariables cons
   | null inconsists = [ (var, if null units then UnitlessVar else foldl1 UnitMul units)
