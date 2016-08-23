@@ -139,7 +139,7 @@ perBlockCheck b@(F.BlComment ann span _) = do
     -- Comment contains a specification and an Associated block
     (Just (Right (Right specDecls)), Just block) ->
      case block of
-      s@(F.BlStatement ann span _ (F.StExpressionAssign _ _ lhs rhs)) ->
+      s@(F.BlStatement ann span' _ (F.StExpressionAssign _ _ lhs rhs)) ->
        case isArraySubscript lhs of
          Just subs -> do
             -- Create list of relative indices
@@ -161,7 +161,11 @@ perBlockCheck b@(F.BlComment ann span _) = do
               else do
                 let correctNames2 =  map (first (map realName))
                 let inferred = correctNames2 . fst . runWriter $ genSpecifications ivmap lhsN [s]
-                tell [ (span, "Not well specified:\n\t\t  expecting: "
+                tell [ (span, "Not well specified.\n"
+                              ++ "\tSpecification is:\t "
+                              ++ pprintSpecDecls specDecls
+                              ++ "\tbut at " ++ show span' ++ " the code behaves as"
+                              ++ "\n\t                 \t "
                               ++ pprintSpecDecls inferred) ]
             return b'
          Nothing -> return b'

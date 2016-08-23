@@ -10,7 +10,7 @@ program squarePoly
   real :: b
 
   x = squareP(a)
-  y = squareP(b)
+  y = squareP(x)
 
   contains
 
