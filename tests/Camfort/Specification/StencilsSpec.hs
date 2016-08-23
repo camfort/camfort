@@ -265,7 +265,7 @@ spec =
          fst (callAndSummarise (\f p -> (check f p, p)) program)
            `shouldBe`
            "\ntests/Camfort/Specification/Stencils/example2.f\n\
-            \(24:8)-(24:53)\tCorrect.\n(32:7)-(32:26)\tCorrect."
+            \(23:1)-(23:86)\tCorrect.\n(31:1)-(31:56)\tCorrect."
 
     let file = "tests/Camfort/Specification/Stencils/example3.f"
     program <- runIO $ readParseSrcDir file []
