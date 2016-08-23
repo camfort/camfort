@@ -95,9 +95,10 @@ runInferer ivmap flTo =
 
 stencilInference :: FAR.NameMap
                  -> InferMode
+                 -> Bool
                  -> F.ProgramFile (FA.Analysis A)
                  -> (F.ProgramFile (FA.Analysis A), [LogLine])
-stencilInference nameMap mode pf =
+stencilInference nameMap mode doxygenEnabled pf =
     (F.ProgramFile mi cm_pus' blocks', log1 ++ log2)
   where
     -- Parse specification annotations and include them into the syntax tree
@@ -114,7 +115,7 @@ stencilInference nameMap mode pf =
     (blocks', log2) = runInferer ivMap flTo blocksInf
     blocksInf       = let ?flowsGraph = flTo
                           ?nameMap    = nameMap
-                      in descendBiM (perBlockInfer mode) blocks
+                      in descendBiM (perBlockInfer mode doxygenEnabled) blocks
 
     -- Run inference per program unit, placing the flowsmap in scope
     perPU :: F.ProgramUnit (FA.Analysis A)
@@ -124,7 +125,7 @@ stencilInference nameMap mode pf =
          let ?flowsGraph = flTo
              ?nameMap    = nameMap
          in do
-              let pum = descendBiM (perBlockInfer mode) pu
+              let pum = descendBiM (perBlockInfer mode doxygenEnabled) pu
               let (pu', log) = runInferer ivMap flTo pum
               tell log
               return pu'
@@ -188,9 +189,10 @@ fromJustMsg msg Nothing = error msg
 
 -- Traverse Blocks in the AST and infer stencil specifications
 perBlockInfer :: Params
-    => InferMode -> F.Block (FA.Analysis A) -> Inferer (F.Block (FA.Analysis A))
+               => InferMode -> Bool -> F.Block (FA.Analysis A)
+               -> Inferer (F.Block (FA.Analysis A))
 
-perBlockInfer Synth b@(F.BlComment ann span _) = do
+perBlockInfer Synth _ b@(F.BlComment ann span _) = do
   -- If we have a comment that is actually a specification then record that
   -- this has been assigned so that we don't generate extra specifications
   -- that overlap with user-given oones
@@ -208,7 +210,7 @@ perBlockInfer Synth b@(F.BlComment ann span _) = do
     _ -> return ()
   return b
 
-perBlockInfer mode b@(F.BlStatement ann span@(FU.SrcSpan lp up) _ stmnt)
+perBlockInfer mode doxygenEnabled b@(F.BlStatement ann span@(FU.SrcSpan lp up) _ stmnt)
   | mode == AssignMode || mode == CombinedMode || mode == EvalMode || mode == Synth = do
     -- On all StExpressionAssigns that occur in stmt....
     let lhses = [lhs | (F.StExpressionAssign _ _ lhs _)
@@ -233,7 +235,8 @@ perBlockInfer mode b@(F.BlStatement ann span@(FU.SrcSpan lp up) _ stmnt)
            _ -> return [])
     if mode == Synth && not (null specs)
       then
-        let specComment = Synth.formatSpec (Just (tabs ++ "!= ")) ?nameMap (span, Left (concat specs'))
+        let marker = if doxygenEnabled then '!' else '='
+            specComment = Synth.formatSpec (Just (tabs ++ '!':marker:" ")) ?nameMap (span, Left (concat specs'))
             specs' = map (mapMaybe noSpecAlready) specs
             noSpecAlready (vars, spec) =
                if null vars'
@@ -248,7 +251,7 @@ perBlockInfer mode b@(F.BlStatement ann span@(FU.SrcSpan lp up) _ stmnt)
         in return $ F.BlComment ann' span' specComment
       else return b
 
-perBlockInfer mode b@(F.BlDo ann span lab cname lab' mDoSpec body tlab) = do
+perBlockInfer mode doxygenEnabled b@(F.BlDo ann span lab cname lab' mDoSpec body tlab) = do
     -- introduce any induction variables into the induction variable state
 
     if (mode == DoMode || mode == CombinedMode) && isStencilDo b
@@ -256,13 +259,13 @@ perBlockInfer mode b@(F.BlDo ann span lab cname lab' mDoSpec body tlab) = do
       else return []
 
     -- descend into the body of the do-statement
-    body' <- mapM (descendBiM (perBlockInfer  mode)) body
+    body' <- mapM (descendBiM (perBlockInfer  mode doxygenEnabled)) body
     -- Remove any induction variable from the state
     return $ F.BlDo ann span lab cname lab' mDoSpec body' tlab
 
-perBlockInfer mode b = do
+perBlockInfer mode doxygenEnabled b = do
     -- Go inside child blocks
-    mapM_ (descendBiM (perBlockInfer mode)) $ children b
+    mapM_ (descendBiM (perBlockInfer mode doxygenEnabled)) $ children b
     return b
 
 genSpecifications :: Params

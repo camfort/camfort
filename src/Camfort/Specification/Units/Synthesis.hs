@@ -46,22 +46,23 @@ import Camfort.Specification.Units.Monad
 import qualified Debug.Trace as D
 
 -- | Insert unit declarations into the ProgramFile as comments.
-runSynthesis :: [(String, UnitInfo)] -> UnitSolver [(String, UnitInfo)]
-runSynthesis vars = do
-  modifyProgramFileM $ descendBiM (synthBlocks vars)   -- descendBiM finds the head of lists
+runSynthesis :: Bool -> [(String, UnitInfo)] -> UnitSolver [(String, UnitInfo)]
+runSynthesis doxygenEnabled vars = do
+  modifyProgramFileM $ descendBiM (synthBlocks doxygenEnabled vars)   -- descendBiM finds the head of lists
   return vars
 
 -- Should be invoked on the beginning of a list of blocks
-synthBlocks :: [(String, UnitInfo)] -> [F.Block UA] -> UnitSolver [F.Block UA]
-synthBlocks vars = fmap reverse . foldM (synthBlock vars) []
+synthBlocks :: Bool -> [(String, UnitInfo)] -> [F.Block UA] -> UnitSolver [F.Block UA]
+synthBlocks doxygenEnabled vars =
+    fmap reverse . foldM (synthBlock doxygenEnabled vars) []
 
 -- Process an individual block while building up a list of blocks (in
 -- reverse order) to ultimately replace the original list of
 -- blocks. We're looking for blocks containing declarations, in
 -- particular, in order to possibly insert a unit annotation before
 -- them.
-synthBlock :: [(String, UnitInfo)] -> [F.Block UA] -> F.Block UA -> UnitSolver [F.Block UA]
-synthBlock vars bs b@(F.BlStatement a ss@(FU.SrcSpan lp up) _ (F.StDeclaration _ _ _ _ decls)) = do
+synthBlock :: Bool -> [(String, UnitInfo)] -> [F.Block UA] -> F.Block UA -> UnitSolver [F.Block UA]
+synthBlock doxygenEnabled vars bs b@(F.BlStatement a ss@(FU.SrcSpan lp up) _ (F.StDeclaration _ _ _ _ decls)) = do
   pf    <- usProgramFile `fmap` get
   nMap  <- uoNameMap `fmap` ask
   gvSet <- usGivenVarSet `fmap` get
@@ -76,7 +77,8 @@ synthBlock vars bs b@(F.BlStatement a ss@(FU.SrcSpan lp up) _ (F.StDeclaration _
         -- Create a zero-length span for the new comment node.
         let newSS = FU.SrcSpan (lp {FU.posColumn = 0}) (lp {FU.posColumn = 0})
         -- Build the text of the comment with the unit annotation.
-        let txt   = "= " ++ showUnitDecl nMap (e, u)
+        let marker = if doxygenEnabled then '!' else '='
+        let txt   = marker:" " ++ showUnitDecl nMap (e, u)
         let space = FU.posColumn lp - 1
         let newB  = F.BlComment newA newSS . insertSpacing space $ commentText pf txt
         return $ Just newB
@@ -84,7 +86,7 @@ synthBlock vars bs b@(F.BlStatement a ss@(FU.SrcSpan lp up) _ (F.StDeclaration _
         name = FA.varName e
     (e :: F.Expression UA) -> return Nothing
   return (b:reverse newBs ++ bs)
-synthBlock _ bs b = return (b:bs)
+synthBlock _ _ bs b = return (b:bs)
 
 -- Insert the correct comment markers around the given text string, depending on Fortran version.
 -- FIXME: use Fortran meta information when I have finished adding it to ProgramFile.

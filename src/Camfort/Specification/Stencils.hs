@@ -49,10 +49,10 @@ import Data.List
 --------------------------------------------------
 
 -- Top-level of specification inference
-infer :: InferMode -> Filename
+infer :: InferMode -> Bool -> Filename
       -> F.ProgramFile Annotation
       -> (String, F.ProgramFile Annotation)
-infer mode filename pf =
+infer mode doxygenEnabled filename pf =
     -- Append filename to any outputs
     if null output
        then ("", fmap FA.prevAnnotation pf'')
@@ -62,7 +62,8 @@ infer mode filename pf =
              . filter (not . white)
              . map (formatSpec Nothing nameMap) $ results
       white = all (\x -> (x == ' ') || (x == '\t'))
-      (pf'', results) = stencilInference nameMap mode . FAB.analyseBBlocks $ pf'
+      (pf'', results) = stencilInference nameMap mode doxygenEnabled
+                      . FAB.analyseBBlocks $ pf'
       nameMap = FAR.extractNameMap pf'
       pf'     = FAR.analyseRenames . FA.initAnalysis $ pf
 
@@ -72,21 +73,23 @@ infer mode filename pf =
 
 -- Top-level of specification synthesis
 synth :: InferMode
+      -> Bool
       -> [(Filename, F.ProgramFile A)]
       -> (String, [(Filename, F.ProgramFile Annotation)])
-synth mode = foldr buildOutput ("", [])
+synth mode doxygenEnabled = foldr buildOutput ("", [])
   where
     buildOutput (f, pf) (r, pfs) = (r ++ r', (f, pf') : pfs)
-      where (r', pf') = synthPF mode f pf
+      where (r', pf') = synthPF mode doxygenEnabled f pf
 
-synthPF :: InferMode -> Filename
+synthPF :: InferMode -> Bool -> Filename
       -> F.ProgramFile Annotation
       -> (String, F.ProgramFile Annotation)
-synthPF mode filename pf =
+synthPF mode doxygenEnabled filename pf =
     -- Append filename to any outputs
     ("", fmap FA.prevAnnotation pf'')
     where
-      (pf'', _) = stencilInference nameMap Synth . FAB.analyseBBlocks $ pf'
+      (pf'', _) = stencilInference nameMap Synth doxygenEnabled
+                . FAB.analyseBBlocks $ pf'
       nameMap = FAR.extractNameMap pf'
       pf'     = FAR.analyseRenames . FA.initAnalysis $ pf
 

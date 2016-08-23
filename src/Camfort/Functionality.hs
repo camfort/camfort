@@ -65,7 +65,8 @@ data Flag = Version
          | Excludes String
          | Literals LiteralsOpt
          | StencilInferMode Stencils.InferMode
-         | Debug deriving (Data, Show)
+         | Doxygen
+         | Debug deriving (Data, Show, Eq)
 
 type Options = [Flag]
 
@@ -120,7 +121,8 @@ unitsInfer inSrc excludes outSrc opt = do
 
 unitsSynth inSrc excludes outSrc opt = do
     putStrLn $ "Synthesising units for '" ++ inSrc ++ "'"
-    let rfun = mapM (LU.synthesiseUnits (optsToUnitOpts opt))
+    let rfun =
+          mapM (LU.synthesiseUnits (optsToUnitOpts opt) (Doxygen `elem` opt))
     report <- doRefactor rfun inSrc excludes outSrc
     putStrLn report
 
@@ -138,11 +140,11 @@ stencilsCheck inSrc excludes _ _ = do
 
 stencilsInfer inSrc excludes outSrc opt = do
    putStrLn $ "Infering stencil specs for '" ++ inSrc ++ "'"
-   let rfun = Stencils.infer (getOption opt)
+   let rfun = Stencils.infer (getOption opt) False
    doAnalysisSummary rfun inSrc excludes (Just outSrc)
 
 stencilsSynth inSrc excludes outSrc opt = do
    putStrLn $ "Synthesising stencil specs for '" ++ inSrc ++ "'"
-   let rfun = Stencils.synth (getOption opt)
+   let rfun = Stencils.synth (getOption opt) (Doxygen `elem` opt)
    report <- doRefactor rfun inSrc excludes outSrc
    putStrLn report
