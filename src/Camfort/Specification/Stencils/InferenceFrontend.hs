@@ -79,21 +79,18 @@ type EvalLog = [(String, Variable)]
 type LogLine = (FU.SrcSpan, Either [([Variable], Specification)] (String,Variable))
 -- The core of the inferer works within this monad
 type Inferer = WriterT [LogLine]
-                 (ReaderT (Cycles, F.ProgramUnitName)
+                 (ReaderT (FAD.FlowsGraph A)
                     (State InferState))
-
-type Cycles = [(F.Name, F.Name)]
 
 type Params = (?flowsGraph :: FAD.FlowsGraph A, ?nameMap :: FAR.NameMap)
 
 runInferer :: FAD.InductionVarMapByASTBlock
-           -> Cycles
-           -> F.ProgramUnitName
+           -> FAD.FlowsGraph A
            -> Inferer a
            -> (a, [LogLine])
-runInferer ivmap cycles puName =
+runInferer ivmap flTo =
     flip evalState (IS ivmap [])
-  . flip runReaderT (cycles, puName)
+  . flip runReaderT flTo
   . runWriterT
 
 stencilInference :: FAR.NameMap
@@ -114,7 +111,7 @@ stencilInference nameMap mode pf =
           else (pf, [])
 
     (cm_pus', log1) = runWriter (transformBiM perPU cm_pus)
-    (blocks', log2) = runInferer ivMap [] F.NamelessBlockData blocksInf
+    (blocks', log2) = runInferer ivMap flTo blocksInf
     blocksInf       = let ?flowsGraph = flTo
                           ?nameMap    = nameMap
                       in descendBiM (perBlockInfer mode) blocks
@@ -128,7 +125,7 @@ stencilInference nameMap mode pf =
              ?nameMap    = nameMap
          in do
               let pum = descendBiM (perBlockInfer mode) pu
-              let (pu', log) = runInferer ivMap [] (FA.puName pu) pum
+              let (pu', log) = runInferer ivMap flTo pum
               tell log
               return pu'
     perPU pu = return pu
@@ -154,26 +151,6 @@ stencilInference nameMap mode pf =
 
     -- get map of variable name ==> { defining AST-Block-IDs }
     dm    = FAD.genDefMap bm
-
--- | Return list of variable names that flow into themselves via a 2-cycle
-findVarFlowCycles :: Data a => F.ProgramFile a -> [(F.Name, F.Name)]
-findVarFlowCycles = FAR.underRenaming (findVarFlowCycles' . FAB.analyseBBlocks)
-findVarFlowCycles' pf = cycs2
-  where
-    bm    = FAD.genBlockMap pf     -- get map of AST-Block-ID ==> corresponding AST-Block
-    bbm   = FAB.genBBlockMap pf    -- get map of program unit ==> basic block graph
-    sgr   = FAB.genSuperBBGr bbm   -- stitch all of the graphs together into a 'supergraph'
-    gr    = FAB.superBBGrGraph sgr -- extract the supergraph itself
-    dm    = FAD.genDefMap bm       -- get map of variable name ==> { defining AST-Block-IDs }
-    rd    = FAD.reachingDefinitions dm gr   -- perform reaching definitions analysis
-    flTo  = FAD.genFlowsToGraph bm dm gr rd -- create graph of definition "flows"
-    -- VarFlowsToMap: A -> { B, C } indicates that A contributes to B, C.
-    flMap = FAD.genVarFlowsToMap dm flTo -- create VarFlowsToMap
-    -- find 2-cycles: A -> B -> A
-    cycs2 = [ (n, m) | (n, ns) <- M.toList flMap
-                     , m       <- S.toList ns
-                     , ms      <- maybeToList $ M.lookup m flMap
-                     , n `S.member` ms && n /= m ]
 
 {- *** 1 . Core inference over blocks -}
 

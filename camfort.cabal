@@ -12,7 +12,7 @@ license-file:           LICENSE
 
 stability:              experimental
 build-type:             Simple
-category:               Language, tools
+category:               Language
 
 cabal-version:          >= 1.18
 tested-with:            GHC >= 7.8

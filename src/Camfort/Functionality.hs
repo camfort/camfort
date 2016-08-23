@@ -146,8 +146,3 @@ stencilsSynth inSrc excludes outSrc opt = do
    let rfun = Stencils.synth (getOption opt)
    report <- doRefactor rfun inSrc excludes outSrc
    putStrLn report
-
-stencilsVarFlowCycles inSrc excludes _ _ = do
-   putStrLn $ "Inferring var flow cycles for '" ++ inSrc ++ "'"
-   let flowAnalysis = intercalate ", " . map show . Stencils.findVarFlowCycles
-   doAnalysisSummary (\_ p -> (flowAnalysis p , p)) inSrc excludes Nothing

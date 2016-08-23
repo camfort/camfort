@@ -112,7 +112,12 @@ checkOffsetsAgainstSpec :: [(Variable, Multiplicity [[Int]])]
 checkOffsetsAgainstSpec offsetMaps =
     all (\(var1, Specification mult)->
       all (\(var2, offsets) ->
-        var1 /= var2 || offsets `consistent` mult) offsetMaps)
+        var1 /= var2 || noAllInfinity offsets `consistent` mult) offsetMaps)
+    where
+      noAllInfinity (Single a) =
+        Single $ filter (not . all (== absoluteRep)) a
+      noAllInfinity (Multiple a) =
+        Multiple $ filter (not . all (== absoluteRep)) a
 
 -- Go into the program units first and record the module name when
 -- entering into a module
