@@ -127,8 +127,9 @@ data Token =
  deriving (Show)
 
 lexer :: String -> Either AnnotationParseError [ Token ]
-lexer ('=':xs) = lexer' xs
-lexer _ = Left NotAnnotation
+lexer (c:xs)
+  | c `elem` ['=', '!', '>'] = lexer' xs
+  | otherwise = Left NotAnnotation
 
 addToTokens :: Token -> String -> Either AnnotationParseError [ Token ]
 addToTokens tok rest = do
