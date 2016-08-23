@@ -176,6 +176,7 @@ lexer input | length (stripLeadingWhiteSpace input) >= 2 =
     '=':input' -> testAnnotation input'
     '!':input' -> testAnnotation input'
     '>':input' -> testAnnotation input'
+    '<':input' -> testAnnotation input'
     _ -> Left NotAnnotation
   where
     testAnnotation inp =

@@ -128,7 +128,7 @@ data Token =
 
 lexer :: String -> Either AnnotationParseError [ Token ]
 lexer (c:xs)
-  | c `elem` ['=', '!', '>'] = lexer' xs
+  | c `elem` ['=', '!', '>', '<'] = lexer' xs
   | otherwise = Left NotAnnotation
 
 addToTokens :: Token -> String -> Either AnnotationParseError [ Token ]
