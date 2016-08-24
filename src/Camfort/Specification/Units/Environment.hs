@@ -72,7 +72,7 @@ instance Show UnitInfo where
     UnitAlias name            -> name
     UnitVar (vName, _)        -> printf "#<Var %s>" vName
     UnitMul u1 (UnitPow u2 k)
-      | k < 0                 -> maybeParen u1 ++ " / " ++ show (UnitPow u2 (-k))
+      | k < 0                 -> maybeParen u1 ++ " / " ++ maybeParen (UnitPow u2 (-k))
     UnitMul u1 u2             -> maybeParenS u1 ++ " " ++ maybeParenS u2
     UnitPow u 1               -> show u
     UnitPow u 0               -> "1"
