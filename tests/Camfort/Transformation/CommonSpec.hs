@@ -9,12 +9,9 @@ import Camfort.Helpers
 import Camfort.Functionality
 
 samplesBase :: FilePath
-samplesBase = "tests" </> "Camfort" </> "Transformation" </> "samples"
+samplesBase = "tests" </> "fixtures" </> "Transformation"
 
 data Example = Example FilePath FilePath
-
-examples =
-  [ Example "common.f90" "common.expected.f90" ]
 
 readSample :: FilePath -> IO String
 readSample filename = do

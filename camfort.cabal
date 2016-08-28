@@ -17,9 +17,7 @@ category:               Language
 cabal-version:          >= 1.18
 tested-with:            GHC >= 7.8
 
-extra-source-files:     tests/Camfort/Specification/Stencils/*.f
-                        tests/Camfort/Specification/Units/*.f90
-                        tests/Camfort/Transformation/samples/*.f90
+extra-source-files:     tests/fixtures/*
 
 source-repository head
   type: git

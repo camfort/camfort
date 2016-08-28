@@ -14,7 +14,6 @@
    limitations under the License.
 -}
 {-# LANGUAGE ScopedTypeVariables #-}
-{-# LANGUAGE ImplicitParams #-}
 {-# LANGUAGE FlexibleContexts #-}
 
 module Camfort.Transformation.EquivalenceElimSpec where
@@ -30,7 +29,7 @@ import Camfort.Helpers
 import Camfort.Input
 
 samplesBase :: FilePath
-samplesBase = "tests" </> "Camfort" </> "Transformation" </> "samples"
+samplesBase = "tests" </> "fixtures" </> "Transformation"
 
 readExpected :: FilePath -> IO String
 readExpected filename = do

@@ -27,6 +27,8 @@ import Data.Map.Strict (toList)
 import qualified Data.IntMap as IM
 import qualified Data.Set as S
 
+import System.FilePath
+
 import Test.Hspec
 import Test.QuickCheck
 import Test.Hspec.QuickCheck
@@ -246,14 +248,18 @@ spec =
     -- Some integration tests
     -------------------------
 
-    let file = "tests/Camfort/Specification/Stencils/example2.f"
+    let file = "tests"
+           </> "fixtures"
+           </> "Specification"
+           </> "Stencils"
+           </> "example2.f"
     program <- runIO $ readParseSrcDir file []
 
     describe "integration test on inference for example2.f" $ do
       it "stencil infer" $
          fst (callAndSummarise (infer AssignMode '=') program)
            `shouldBe`
-           "\ntests/Camfort/Specification/Stencils/example2.f\n\
+           "\ntests/fixtures/Specification/Stencils/example2.f\n\
             \(24:8)-(24:53) \tstencil readOnce, (reflexive(dim=1))*(centered(depth=1, dim=2)) \
                                      \+ (reflexive(dim=2))*(centered(depth=1, dim=1)) :: a\n\
             \(32:7)-(32:26) \tstencil readOnce, (backward(depth=1, dim=1)) :: a\n\
@@ -264,20 +270,28 @@ spec =
       it "stencil check" $
          fst (callAndSummarise (\f p -> (check f p, p)) program)
            `shouldBe`
-           "\ntests/Camfort/Specification/Stencils/example2.f\n\
+           "\ntests/fixtures/Specification/Stencils/example2.f\n\
             \(23:1)-(23:86)\tCorrect.\n(31:1)-(31:56)\tCorrect."
 
-    let file = "tests/Camfort/Specification/Stencils/example3.f"
+    let file = "tests"
+           </> "fixtures"
+           </> "Specification"
+           </> "Stencils"
+           </> "example3.f"
     program <- runIO $ readParseSrcDir file []
 
-    let file = "tests/Camfort/Specification/Stencils/example4.f"
+    let file = "tests"
+           </> "fixtures"
+           </> "Specification"
+           </> "Stencils"
+           </> "example4.f"
     program <- runIO $ readParseSrcDir file []
 
     describe "integration test on inference for example4.f" $
       it "stencil infer" $
          fst (callAndSummarise (infer AssignMode '=') program)
            `shouldBe`
-            "\ntests/Camfort/Specification/Stencils/example4.f\n\
+            "\ntests/fixtures/Specification/Stencils/example4.f\n\
              \(6:8)-(6:33) \tstencil (reflexive(dim=1)) :: x"
 
 
