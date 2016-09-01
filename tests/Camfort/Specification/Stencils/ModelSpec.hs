@@ -51,6 +51,12 @@ spec = do
             Nothing
       consistent centeredAcs spec `shouldBe` True
 
+    it "1D backward irreflexive lower bound - positive" $ do
+      let spec = Single $ Bound
+            (Just $ Spatial $ Sum [ Product [ Backward 1 1 False ] ])
+            Nothing
+      consistent (Single [[-1]]) spec `shouldBe` True
+
     it "1D centered irreflexive upper bound - negative" $ do
       let spec = Single $ Bound
             Nothing

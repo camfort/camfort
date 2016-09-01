@@ -165,7 +165,7 @@ instance Model Region where
 
    mkModel (Backward dep dim reflx) = fromList
      [mkSingleEntryNeg i dim ?globalDimensionality | i <- [(-dep)..i0]]
-       where i0 = if reflx then 0 else 1
+       where i0 = if reflx then 0 else -1
 
    mkModel (Centered dep dim reflx) = fromList
      [mkSingleEntryNeg i dim ?globalDimensionality | i <- [(-dep)..dep] \\ i0]
