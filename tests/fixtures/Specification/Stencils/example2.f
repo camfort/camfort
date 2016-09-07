@@ -37,7 +37,7 @@ c= stencil readOnce, backward(depth=1, dim=1) :: a
       do i=1, imax
          do j=1, jmx
            x = a(1,j+1) + a(1,j-1)
-           a(i,j) = a(i,1) + a(i+1 ,1) + a(i-1,1) + a(1,j) + x
+           a(i,j) = a(modulo(i,imax),1) + a(modulo(i+1,imax) ,1) + a(modulo(i-1,imax),1) + a(1,j) + x
            a(i,j) = a(i,j) + a(1,1)
          end do
       end do

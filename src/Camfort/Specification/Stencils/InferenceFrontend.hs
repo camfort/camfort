@@ -349,12 +349,25 @@ genSubscripts top block = do
 genRHSsubscripts ::
      F.Block (FA.Analysis A)
   -> M.Map Variable [[F.Index (FA.Analysis A)]]
-genRHSsubscripts b =
-    collect [ (FA.varName exp, e)
-      | F.ExpSubscript _ _ exp subs <- FA.rhsExprs b
-      , isVariableExpr exp
-      , let e = F.aStrip subs
-      , not (null e)]
+genRHSsubscripts b = genRHSsubscripts' (transformBi replaceModulo b)
+  where
+    -- Any occurence of an subscript "modulo(e, e')" is replaced with "e"
+    replaceModulo :: F.Expression (FA.Analysis A) -> F.Expression (FA.Analysis A)
+    replaceModulo e@(F.ExpSubscript _ _
+                    (F.ExpValue _ _ (F.ValVariable "modulo")) subs) =
+        -- We expect that the first parameter to modulo is being treated
+        -- as an IxSingle element
+        case (head $ F.aStrip subs) of
+           (F.IxSingle _ _ _ e') -> e'
+           _                     -> e
+    replaceModulo e = e
+
+    genRHSsubscripts' b =
+       collect [ (FA.varName exp, e)
+         | F.ExpSubscript _ _ exp subs <- FA.rhsExprs b
+         , isVariableExpr exp
+         , let e = F.aStrip subs
+         , not (null e)]
 
 getInductionVar :: Maybe (F.DoSpecification (FA.Analysis A)) -> [Variable]
 getInductionVar (Just (F.DoSpecification _ _ (F.StExpressionAssign _ _ e _) _ _))

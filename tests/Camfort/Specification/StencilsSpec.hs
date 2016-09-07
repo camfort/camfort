@@ -263,7 +263,7 @@ spec =
             \(24:8)-(24:53) \tstencil readOnce, (reflexive(dim=1))*(centered(depth=1, dim=2)) \
                                      \+ (reflexive(dim=2))*(centered(depth=1, dim=1)) :: a\n\
             \(32:7)-(32:26) \tstencil readOnce, (backward(depth=1, dim=1)) :: a\n\
-            \(40:8)-(40:62) \tstencil readOnce, (centered(depth=1, dim=1)) \
+            \(40:8)-(40:101) \tstencil readOnce, (centered(depth=1, dim=1)) \
                                                 \+ (centered(depth=1, dim=2)) :: a\n\
             \(41:8)-(41:35) \tstencil readOnce, (reflexive(dim=1))*(reflexive(dim=2)) :: a"
 
