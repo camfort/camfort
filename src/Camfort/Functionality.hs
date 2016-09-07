@@ -78,8 +78,8 @@ getExcludes :: Options -> String
 getExcludes = getOption
 
 -- * Wrappers on all of the features
-ast d excludes f _ = do
-    xs <- readParseSrcDir (d ++ "/" ++ f) excludes
+ast d excludes _ _ = do
+    xs <- readParseSrcDir d excludes
     print (map (\(_, _, p) -> p) xs)
 
 countVarDecls inSrc excludes _ _ = do
