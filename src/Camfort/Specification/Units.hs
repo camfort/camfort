@@ -77,14 +77,14 @@ inferCriticalVariables uo (fname, pf)
                          ++ unlines [ "\t" ++ expReport ei | ei <- expInfo ], numVars)
       where
         names = map showVar vars
-        expInfo = filter ((`elem` names) . FA.varName) $ declVariables pfUA
+        expInfo = filter ((`elem` names) . FA.srcName) $ declVariables pfUA
         numVars = length expInfo
 
     expReport e = "(" ++ showSrcSpan (FU.getSpan e) ++ ")\t" ++ FA.srcName e
 
     varReport     = intercalate ", " . map showVar
 
-    showVar (UnitVar (_, s)) = s
+    showVar (UnitVar (_, s))  = s
     showVar (UnitLiteral _)   = "<literal>"
     showVar _                 = "<bad>"
 
