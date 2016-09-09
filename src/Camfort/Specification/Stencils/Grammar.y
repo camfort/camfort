@@ -6,6 +6,7 @@ module Camfort.Specification.Stencils.Grammar
 import Data.Char (isLetter, isNumber, isAlphaNum, toLower, isAlpha, isSpace)
 import Data.List (intersect, sort, isPrefixOf)
 import Data.Data
+import qualified Data.Text as T
 
 import Debug.Trace
 
@@ -163,12 +164,6 @@ addToTokens tok rest = do
  tokens <- lexer' rest
  return $ tok : tokens
 
-stripLeadingWhiteSpace (' ':xs)  = stripLeadingWhiteSpace xs
-stripLeadingWhiteSpace ('\t':xs) = stripLeadingWhiteSpace xs
-stripLeadingWhiteSpace ('\n':xs) = stripLeadingWhiteSpace xs
-stripLeadingWhiteSpace xs = xs
-
-
 lexer :: String -> Either AnnotationParseError [ Token ]
 lexer input | length (stripLeadingWhiteSpace input) >= 2 =
   case stripLeadingWhiteSpace input of
@@ -179,6 +174,7 @@ lexer input | length (stripLeadingWhiteSpace input) >= 2 =
     '<':input' -> testAnnotation input'
     _ -> Left NotAnnotation
   where
+    stripLeadingWhiteSpace = T.unpack . T.strip . T.pack
     testAnnotation inp =
       -- First test to see if the input looks like an actual
       -- specification of either a stencil or region

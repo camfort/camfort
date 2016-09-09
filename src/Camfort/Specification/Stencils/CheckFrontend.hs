@@ -144,7 +144,7 @@ perBlockCheck b@(F.BlComment ann span _) = do
          Just subs -> do
             -- Create list of relative indices
             ivmap <- snd <$> get
-            -- Do inference
+            -- Do analysis
             let realName v   = v `fromMaybe` (v `M.lookup` ?nameMap)
             let lhsN         = fromMaybe [] (neighbourIndex ivmap subs)
             let correctNames = map (first realName)

@@ -11,6 +11,7 @@ import Camfort.Analysis.CommentAnnotator
 import Data.Data
 import Data.List
 import Data.Char (isLetter, isNumber, isAlphaNum, toLower)
+import qualified Data.Text as T
 }
 
 %monad { Either AnnotationParseError } { >>= } { return }
@@ -129,7 +130,11 @@ data Token =
 lexer :: String -> Either AnnotationParseError [ Token ]
 lexer [] = Left NotAnnotation
 lexer (c:xs)
-  | c `elem` ['=', '!', '>', '<'] = lexer' xs
+  | c `elem` ['=', '!', '>', '<'] =
+      -- First test to see if the input looks like an actual unit specification
+      if "unit" `isPrefixOf` (T.unpack . T.strip . T.toLower . T.pack $ xs)
+      then lexer' xs
+      else Left NotAnnotation
   | otherwise = Left NotAnnotation
 
 addToTokens :: Token -> String -> Either AnnotationParseError [ Token ]
@@ -155,7 +160,7 @@ lexer' (')':xs) = addToTokens TRightPar xs
 lexer' (x:xs)
  | isLetter x = aux (\c -> isAlphaNum c || c `elem` ['\'','_','-']) TId
  | isNumber x = aux isNumber TNum
- | otherwise = Left NotAnnotation -- failWith $ "Not valid unit syntax at " ++ show (x:xs)
+ | otherwise = failWith $ "Not valid unit syntax at " ++ show (x:xs)
  where
    aux p cons =
      let (target, rest) = span p xs
@@ -167,6 +172,6 @@ unitParser src = do
  parseUnit tokens
 
 happyError :: [ Token ] -> Either AnnotationParseError a
-happyError t = Left NotAnnotation -- failWith $ "Could not parse specification at: " ++ show t
+happyError t = failWith $ "Could not parse unit specification at: " ++ show t
 
 }
