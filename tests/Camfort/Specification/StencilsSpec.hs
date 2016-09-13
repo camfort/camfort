@@ -22,10 +22,15 @@ import Camfort.Specification.Stencils.Syntax hiding (Spec)
 import Camfort.Analysis.Annotations
 import qualified Language.Fortran.AST as F
 import Language.Fortran.Util.Position
+import Language.Fortran.ParserMonad
+import Camfort.Reprint
+import Camfort.Output
 
 import Data.Map.Strict (toList)
 import qualified Data.IntMap as IM
 import qualified Data.Set as S
+import Data.Functor.Identity
+import qualified Data.ByteString.Char8 as B
 
 import System.FilePath
 
@@ -253,7 +258,14 @@ spec =
            </> "Specification"
            </> "Stencils"
            </> "example2.f"
+    let fileSynthExpected = "tests"
+           </> "fixtures"
+           </> "Specification"
+           </> "Stencils"
+           </> "example2.expected.f"
     program <- runIO $ readParseSrcDir file []
+    programSrc       <- runIO $ readFile file
+    synthExpectedSrc <- runIO $ readFile fileSynthExpected
 
     describe "integration test on inference for example2.f" $ do
       it "stencil infer" $
@@ -263,15 +275,22 @@ spec =
             \(24:8)-(24:53) \tstencil readOnce, (reflexive(dim=1))*(centered(depth=1, dim=2)) \
                                      \+ (reflexive(dim=2))*(centered(depth=1, dim=1)) :: a\n\
             \(32:7)-(32:26) \tstencil readOnce, (backward(depth=1, dim=1)) :: a\n\
-            \(40:8)-(40:101) \tstencil readOnce, (centered(depth=1, dim=1)) \
+            \(41:8)-(41:101) \tstencil readOnce, (centered(depth=1, dim=1)) \
                                                 \+ (centered(depth=1, dim=2)) :: a\n\
-            \(41:8)-(41:35) \tstencil readOnce, (reflexive(dim=1))*(reflexive(dim=2)) :: a"
+            \(42:8)-(42:35) \tstencil readOnce, (reflexive(dim=1))*(reflexive(dim=2)) :: a"
 
       it "stencil check" $
          fst (callAndSummarise (\f p -> (check f p, p)) program)
            `shouldBe`
            "\ntests/fixtures/Specification/Stencils/example2.f\n\
             \(23:1)-(23:86)\tCorrect.\n(31:1)-(31:56)\tCorrect."
+
+      it "stencil synth" $
+         (B.unpack . runIdentity
+           $ reprint (refactoring Fortran77)
+              (snd . head . snd $ synth AssignMode '=' (map (\(f, _, p) -> (f, p)) program))
+              (B.pack programSrc))
+          `shouldBe` synthExpectedSrc
 
     let file = "tests"
            </> "fixtures"

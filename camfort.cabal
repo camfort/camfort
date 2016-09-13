@@ -160,5 +160,6 @@ test-suite spec
                         bytestring >= 0.10,
                         array >= 0.4,
                         hmatrix >= 0.15,
+                        text >= 0.11.2.3,
                         camfort
   default-language: Haskell2010
