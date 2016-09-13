@@ -233,7 +233,7 @@ perBlockInfer mode marker b@(F.BlStatement ann span@(FU.SrcSpan lp up) _ stmnt)
                            else return []
            -- Not an assign we are interested in
            _ -> return [])
-    if mode == Synth && not (null specs)
+    if mode == Synth && not (null specs) && specs /= [[]]
       then
         let specComment = Synth.formatSpec (Just (tabs ++ '!':marker:" ")) ?nameMap (span, Left (concat specs'))
             specs' = map (mapMaybe noSpecAlready) specs
@@ -258,14 +258,14 @@ perBlockInfer mode marker b@(F.BlDo ann span lab cname lab' mDoSpec body tlab) =
       else return []
 
     -- descend into the body of the do-statement
-    body' <- mapM (descendBiM (perBlockInfer  mode marker)) body
+    body' <- mapM (descendBiM (perBlockInfer mode marker)) body
     -- Remove any induction variable from the state
     return $ F.BlDo ann span lab cname lab' mDoSpec body' tlab
 
 perBlockInfer mode marker b = do
     -- Go inside child blocks
-    mapM_ (descendBiM (perBlockInfer mode marker)) $ children b
-    return b
+    b' <- descendM (descendBiM (perBlockInfer mode marker)) $ b
+    return b'
 
 genSpecifications :: Params
   => FAD.InductionVarMapByASTBlock
