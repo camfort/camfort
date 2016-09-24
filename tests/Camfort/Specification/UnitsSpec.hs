@@ -21,6 +21,7 @@ import Data.Either
 import qualified Data.Array as A
 import qualified Numeric.LinearAlgebra as H
 import qualified Data.Map.Strict as M
+import GHC.Real
 import Numeric.LinearAlgebra (
     atIndex, (<>), (><), rank, (?), toLists, toList, fromLists, fromList, rows, cols,
     takeRows, takeColumns, dropRows, dropColumns, subMatrix, diag, build, fromBlocks,
@@ -111,6 +112,9 @@ spec = do
     describe "Infer Variables" $ do
       it "testCons5" $ do
         inferVariables testCons5 `shouldBe` testCons5_infer
+    describe "Check that (restricted) double to ratios is consistent" $ do
+      it "test all in -10/-10 ... 10/10, apart from /0" $
+        do and [testDoubleToRationalSubset x y | x <- [-10..10], y <- [-10..10]]
 
 --------------------------------------------------
 
@@ -182,6 +186,11 @@ testCons5 = [ConEq (UnitVar ("simple2_a11", "simple2_a11")) (UnitParamPosUse ("s
 testCons5_infer = [(("simple2_a11", "simple2_a11"),UnitMul (UnitPow (UnitName "m") 2.0) (UnitPow (UnitName "s") (-4.0)))
                   ,(("simple2_a22", "simple2_a22"),UnitMul (UnitPow (UnitName "m") 1.0) (UnitPow (UnitName "s") (-2.0)))]
 
+testDoubleToRationalSubset :: Integer -> Integer -> Bool
+testDoubleToRationalSubset x y =
+    if x <= 10 && y <= 10 && x >= -10 && y >= -10 && y /= 0
+    then doubleToRationalSubset (fromIntegral x / fromIntegral y) == Just (x % y)
+    else True
 --------------------------------------------------
 
 litTest1 = flip fortranParser "litTest1.f90" . B.pack $ unlines

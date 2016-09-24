@@ -33,6 +33,7 @@ import Data.Data
 import Data.List
 import Data.Matrix
 import Data.Ratio
+import qualified Debug.Trace as D
 
 import Text.Printf
 
@@ -76,9 +77,17 @@ instance Show UnitInfo where
     UnitMul u1 u2             -> maybeParenS u1 ++ " " ++ maybeParenS u2
     UnitPow u 1               -> show u
     UnitPow u 0               -> "1"
-    UnitPow u k               -> printf "%s**%s" (maybeParen u) kStr
-      where kStr | k < 0     = printf "(%f)" k
-                 | otherwise = show k
+    UnitPow u k               ->
+      case doubleToRationalSubset k of
+          Just r -> printf "%s**%s" (maybeParen u) (showRational r)
+          Nothing -> error $
+                      printf "Irrational unit exponent: %s**%f" (maybeParen u) k
+       where showRational r
+               | r < 0     = printf "(%s)" (showRational' r)
+               | otherwise = showRational' r
+             showRational' r
+               | denominator r == 1 = show (numerator r)
+               | otherwise = printf "%s / %s" (numerator r) (denominator r)
     where
       maybeParen x | all isAlphaNum s = s
                    | otherwise        = "(" ++ s ++ ")"
@@ -87,6 +96,30 @@ instance Show UnitInfo where
                     | otherwise         = "(" ++ s ++ ")"
         where s = show x
       isUnitMulOk c = isSpace c || isAlphaNum c || c `elem` "*."
+
+-- Converts doubles to a rational that can be expressed
+-- as a rational with denominator at most 10
+-- otherwise Noting
+doubleToRationalSubset :: Double -> Maybe Rational
+doubleToRationalSubset x | x < 0 =
+    doubleToRationalSubset (abs x) >>= (\x -> return (-x))
+doubleToRationalSubset x =
+    doubleToRational' 0 1 (ceiling x) 1
+  where
+    -- The maximum common denominator, controls granularity
+    n = 16
+    doubleToRational' a b c d
+         | b <= n && d <= n =
+           let mediant = (fromIntegral (a+c))/(fromIntegral (b+d))
+           in if x == mediant
+              then if b + d <= n
+                   then Just $ (a + c) % (b + d)
+                   else Nothing
+              else if x > mediant
+                   then doubleToRational' (a+c) (b+d) c d
+                   else doubleToRational' a b (a+c) (b+d)
+         | b > n     = Just $ c % d
+         | otherwise = Just $ a % b
 
 -- | A relation between UnitInfos
 data Constraint
