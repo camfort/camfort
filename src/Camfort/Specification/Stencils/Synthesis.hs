@@ -62,7 +62,7 @@ formatSpec prefix nm (span, Right (evalInfo,name)) =
   where
     realName v = v `fromMaybe` (v `M.lookup` nm)
     prefix' = case prefix of
-                Nothing -> show span ++ " \t"
+                Nothing -> show span ++ "    "
                 Just pr -> pr
 
 formatSpec prefix nm (span, Left []) = ""
@@ -70,7 +70,7 @@ formatSpec prefix nm (span, Left specs) =
   (intercalate "\n" $ map (\s -> prefix' ++ doSpec s) specs)
     where
       prefix' = case prefix of
-                   Nothing -> show span ++ " \t"
+                   Nothing -> show span ++ "    "
                    Just pr -> pr
       commaSep                 = intercalate ", "
       doSpec (arrayVar, spec)  =

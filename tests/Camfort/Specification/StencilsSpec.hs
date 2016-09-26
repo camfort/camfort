@@ -272,18 +272,18 @@ spec =
          fst (callAndSummarise (infer AssignMode '=') program)
            `shouldBe`
            "\ntests/fixtures/Specification/Stencils/example2.f\n\
-            \(24:8)-(24:53) \tstencil readOnce, (reflexive(dim=1))*(centered(depth=1, dim=2)) \
+            \(24:8)-(24:53)    stencil readOnce, (reflexive(dim=1))*(centered(depth=1, dim=2)) \
                                      \+ (reflexive(dim=2))*(centered(depth=1, dim=1)) :: a\n\
-            \(32:7)-(32:26) \tstencil readOnce, (backward(depth=1, dim=1)) :: a\n\
-            \(41:8)-(41:101) \tstencil readOnce, (centered(depth=1, dim=1)) \
+            \(32:7)-(32:26)    stencil readOnce, (backward(depth=1, dim=1)) :: a\n\
+            \(41:8)-(41:103)    stencil readOnce, (centered(depth=1, dim=1)) \
                                                 \+ (centered(depth=1, dim=2)) :: a\n\
-            \(42:8)-(42:35) \tstencil readOnce, (reflexive(dim=1))*(reflexive(dim=2)) :: a"
+            \(42:8)-(42:37)    stencil readOnce, (reflexive(dim=1))*(reflexive(dim=2)) :: a"
 
       it "stencil check" $
          fst (callAndSummarise (\f p -> (check f p, p)) program)
            `shouldBe`
            "\ntests/fixtures/Specification/Stencils/example2.f\n\
-            \(23:1)-(23:86)\tCorrect.\n(31:1)-(31:56)\tCorrect."
+            \(23:1)-(23:86)    Correct.\n(31:1)-(31:56)    Correct."
 
       it "stencil synth" $
          (B.unpack . runIdentity
@@ -311,7 +311,7 @@ spec =
          fst (callAndSummarise (infer AssignMode '=') program)
            `shouldBe`
             "\ntests/fixtures/Specification/Stencils/example4.f\n\
-             \(6:8)-(6:33) \tstencil (reflexive(dim=1)) :: x"
+             \(6:8)-(6:33)    stencil (reflexive(dim=1)) :: x"
 
 
 {- Properties of `spanBoundingBox`: idempotent and associative -}

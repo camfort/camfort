@@ -133,8 +133,9 @@ introMsg = "CamFort " ++ version ++ " - Cambridge Fortran Infrastructure."
 usage = "Usage: camfort <MODE> <INPUT> [OUTPUT] [OPTIONS...]\n"
 menu =
   "Refactor functions:\n"
-  ++ concatMap (\(k, (_, info)) -> "\t" ++ k ++ replicate (15 - length k) ' '
-  ++ "\t [" ++ info ++ "] \n") refactorings
+  ++ concatMap (\(k, (_, info)) -> space ++ k ++ replicate (15 - length k) ' '
+  ++ "   [" ++ info ++ "] \n") refactorings
   ++ "\nAnalysis functions:\n"
-  ++ concatMap (\(k, (_, info)) -> "\t" ++ k ++ replicate (15 - length k) ' '
-  ++ "\t [" ++ info ++ "] \n") analyses
+  ++ concatMap (\(k, (_, info)) -> space ++ k ++ replicate (15 - length k) ' '
+  ++ "   [" ++ info ++ "] \n") analyses
+  where space = replicate 5 ' '

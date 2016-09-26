@@ -64,7 +64,7 @@ stencilChecking nameMap pf = snd . runWriter $
      let gr    = FAB.superBBGrGraph sgr
      -- get map of variable name ==> { defining AST-Block-IDs }
      let dm    = FAD.genDefMap bm
-     let pprint = map (\(span, spec) -> show span ++ "\t" ++ spec)
+     let pprint = map (\(span, spec) -> show span ++ "    " ++ spec)
      -- perform reaching definitions analysis
      let rd    = FAD.reachingDefinitions dm gr
      -- create graph of definition "flows"
@@ -161,12 +161,14 @@ perBlockCheck b@(F.BlComment ann span _) = do
               else do
                 let correctNames2 =  map (first (map realName))
                 let inferred = correctNames2 . fst . runWriter $ genSpecifications ivmap lhsN [s]
-                tell [ (span, "Not well specified.\n"
-                              ++ "\tSpecification is:\t "
-                              ++ pprintSpecDecls specDecls
-                              ++ "\tbut at " ++ show span' ++ " the code behaves as"
-                              ++ "\n\t                 \t "
-                              ++ pprintSpecDecls inferred) ]
+                let sp = replicate 8 ' '
+                tell [ (span,
+                     "Not well specified.\n"
+                  ++ sp ++ "Specification is:\n"
+                  ++ sp ++ sp ++ pprintSpecDecls specDecls ++ "\n"
+                  ++ sp ++ "but at " ++ show span' ++ " the code behaves as\n"
+                  ++ sp ++ sp ++ pprintSpecDecls inferred) ]
+
             return b'
          Nothing -> return b'
 

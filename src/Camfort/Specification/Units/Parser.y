@@ -160,7 +160,7 @@ lexer' (')':xs) = addToTokens TRightPar xs
 lexer' (x:xs)
  | isLetter x = aux (\c -> isAlphaNum c || c `elem` ['\'','_','-']) TId
  | isNumber x = aux isNumber TNum
- | otherwise = failWith $ "Not valid unit syntax at " ++ show (x:xs)
+ | otherwise = failWith $ "Not valid unit syntax at " ++ show (x:xs) ++ "\n"
  where
    aux p cons =
      let (target, rest) = span p xs
@@ -172,6 +172,6 @@ unitParser src = do
  parseUnit tokens
 
 happyError :: [ Token ] -> Either AnnotationParseError a
-happyError t = failWith $ "Could not parse unit specification at: " ++ show t
+happyError t = failWith $ "Could not parse unit specification at: " ++ show t ++ "\n"
 
 }

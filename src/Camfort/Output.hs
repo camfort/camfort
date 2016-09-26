@@ -144,7 +144,7 @@ refactorBlocks v inp e@(F.BlComment ann span comment) = do
                  lb'      = leftOne lb
                  (p0, _)  = takeBounds (cursor, lb') inp
                  nl       = if null comment then B.empty else B.pack "\n"
-             in put ub >> return (B.concat [p0, B.pack comment, nl], True)
+             in (put ub >> return (B.concat [p0, B.pack comment, nl], True))
      else return (B.empty, False)
   where leftOne (FU.Position f c l) = FU.Position f (c-1) (l-1)
 

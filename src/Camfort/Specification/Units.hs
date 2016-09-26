@@ -69,18 +69,18 @@ inferCriticalVariables uo (fname, pf)
   | Left exc   <- eVars = (errReport exc, -1)
   where
     -- Format report
-    okReport []   = (logs ++ "\n" ++ fname ++ ":\n"
-                         ++ "No additional annotations are necessary.\n", 0)
+    okReport []   = (logs ++ "\n" ++ fname
+                         ++ ":No additional annotations are necessary.\n", 0)
     okReport vars = (logs ++ "\n" ++ fname ++ ": "
                          ++ show numVars
                          ++ " variable declarations suggested to be given a specification:\n"
-                         ++ unlines [ "\t" ++ expReport ei | ei <- expInfo ], numVars)
+                         ++ unlines [ "    " ++ expReport ei | ei <- expInfo ], numVars)
       where
         names = map showVar vars
         expInfo = filter ((`elem` names) . FA.srcName) $ declVariables pfUA
         numVars = length expInfo
 
-    expReport e = "(" ++ showSrcSpan (FU.getSpan e) ++ ")\t" ++ FA.srcName e
+    expReport e = "(" ++ showSrcSpan (FU.getSpan e) ++ ")    " ++ FA.srcName e
 
     varReport     = intercalate ", " . map showVar
 
@@ -106,8 +106,8 @@ checkUnits uo (fname, pf)
   | Left exc    <- eCons = errReport exc
   where
     -- Format report
-    okReport Nothing = logs ++ "\n" ++ fname ++ "\t: Consistent. " ++ show nVars ++ " variables checked."
-    okReport (Just cons) = logs ++ "\n" ++ fname ++ "\t: Inconsistent:\n" ++ reportErrors cons
+    okReport Nothing = logs ++ "\n" ++ fname ++ ": Consistent. " ++ show nVars ++ " variables checked."
+    okReport (Just cons) = logs ++ "\n" ++ fname ++ ": Inconsistent:\n" ++ reportErrors cons
 
     reportErrors cons = unlines [ reportError con | con <- cons ]
     reportError con = " - at " ++ srcSpan con
@@ -159,7 +159,7 @@ checkUnits uo (fname, pf)
     showVar (UnitLiteral _)   = "<literal>" -- FIXME
     showVar _                 = "<bad>"
 
-    errReport exc = logs ++ "\n" ++ fname ++ ":\t " ++ show exc
+    errReport exc = logs ++ "\n" ++ fname ++ ":  " ++ show exc
 
     -- run inference
     uOpts = uo { uoNameMap = nameMap }
@@ -192,7 +192,7 @@ inferUnits uo (fname, pf)
 
     expReport (e, u) = "  " ++ showSrcSpan (FU.getSpan e) ++ " unit " ++ show u ++ " :: " ++ FA.srcName e
 
-    errReport exc = logs ++ "\n" ++ fname ++ ":\t" ++ show exc
+    errReport exc = logs ++ "\n" ++ fname ++ ":  " ++ show exc
 
     -- run inference
     uOpts = uo { uoNameMap = nameMap }
@@ -221,7 +221,7 @@ synthesiseUnits uo marker (fname, pf)
 
     expReport (e, u) = "  " ++ showSrcSpan (FU.getSpan e) ++ " unit " ++ show u ++ " :: " ++ FA.srcName e
 
-    errReport exc = logs ++ "\n" ++ fname ++ ":\t" ++ show exc
+    errReport exc = logs ++ "\n" ++ fname ++ ":  " ++ show exc
 
     -- run inference
     uOpts = uo { uoNameMap = nameMap }
