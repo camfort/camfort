@@ -293,9 +293,19 @@ applyTemplates :: Constraints -> UnitSolver Constraints
 applyTemplates cons = do
   -- Get a list of the instances of parametric polymorphism from the constraints.
   let instances = nub [ (name, i) | UnitParamPosUse (name, _, i) <- universeBi cons ]
+
+  -- Also generate a list of 'dummy' instances to ensure that every
+  -- 'toplevel' function and subroutine is thoroughly expanded and
+  -- analysed, even if it is not used in the current ProgramFile. (It
+  -- might be part of a library module, for instance).
+  pf <- gets usProgramFile
+  dummies <- forM (topLevelFuncsAndSubs pf) $ \ pu -> do
+    id <- genCallId
+    return (puName pu, id)
+
   -- Work through the instances, expanding their templates, and
   -- substituting the callId into the abstract parameters.
-  concreteCons <- foldM (substInstance []) [] instances
+  concreteCons <- foldM (substInstance []) [] (instances ++ dummies)
 
   -- Also include aliases in the final set of constraints, where
   -- aliases are implemented by simply asserting that they are equal
@@ -358,7 +368,7 @@ callIdRemap info = modifyCallIdRemapM $ \ idMap -> case info of
       | Just i' <- IM.lookup i idMap -> return (UnitParamLitUse (l, i'), idMap)
       | otherwise                    -> genCallId >>= \ i' ->
                                           return (UnitParamLitUse (l, i'), IM.insert i i' idMap)
-    _                         -> return (info, idMap)
+    _                                -> return (info, idMap)
 
 
 -- | Convert a parametric template into a particular use
@@ -367,6 +377,18 @@ instantiate (name, callId) = transformBi $ \ info -> case info of
   UnitParamLitAbs litId            -> UnitParamLitUse (litId, callId)
   UnitParamVarAbs (fname, vname)   -> UnitParamVarUse (fname, vname, callId)
   _                                -> info
+
+-- | Return a list of ProgramUnits that might be considered 'toplevel'
+-- in the ProgramFile, e.g., possible exports. These must be analysed
+-- independently of whether they are actually used in the same file,
+-- because other files might use them.
+topLevelFuncsAndSubs (F.ProgramFile _ cm_pus _) = topLevel =<< map snd cm_pus
+  where
+    topLevel (F.PUModule _ _ _ _ (Just contains)) = topLevel =<< contains
+    topLevel (F.PUMain _ _ _ _ (Just contains))   = topLevel =<< contains
+    topLevel f@(F.PUFunction {})                  = return f
+    topLevel s@(F.PUSubroutine {})                = return s
+    topLevel _                                    = []
 
 --------------------------------------------------
 
@@ -403,9 +425,7 @@ propagateUnits = modifyProgramFileM $ transformBiM propagatePU        <=<
 
 propagateExp :: F.Expression UA -> UnitSolver (F.Expression UA)
 propagateExp e = fmap uoLiterals ask >>= \ lm -> case e of
-  F.ExpValue _ _ (F.ValVariable _)       -> return e -- all variables should already be annotated
-  F.ExpValue _ _ (F.ValInteger _)        -> return e -- all literal numbers should already be annotated
-  F.ExpValue _ _ (F.ValReal _)           -> return e -- all literal numbers should already be annotated
+  F.ExpValue _ _ _                       -> return e -- all values should already be annotated
   F.ExpBinary _ _ F.Multiplication e1 e2 -> setF2 UnitMul (getUnitInfoMul lm e1) (getUnitInfoMul lm e2)
   F.ExpBinary _ _ F.Division e1 e2       -> setF2 UnitMul (getUnitInfoMul lm e1) (flip UnitPow (-1) `fmap` (getUnitInfoMul lm e2))
   F.ExpBinary _ _ F.Exponentiation e1 e2 -> setF2 UnitPow (getUnitInfo e1) (constantExpression e2)
