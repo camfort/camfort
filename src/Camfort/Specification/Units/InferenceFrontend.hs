@@ -188,7 +188,7 @@ insertUndeterminedUnits = do
     toParamVar fname v@(F.ExpValue _ _ (F.ValVariable _)) = do
       let vname = varName v
       let sname = srcName v
-      modifyVarUnitMap $ M.insertWith (curry snd) (vname, sname) (UnitParamVarAbs (fname, vname))
+      modifyVarUnitMap $ M.insertWith (curry snd) (vname, sname) (UnitParamVarAbs (fname, (vname, sname)))
       return v
     toParamVar _ e = return e
 

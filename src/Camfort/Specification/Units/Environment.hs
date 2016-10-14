@@ -44,8 +44,8 @@ type VV = (F.Name, F.Name)
 data UnitInfo
   = UnitParamPosAbs (String, Int)         -- an abstract parameter identified by PU name and argument position
   | UnitParamPosUse (String, Int, Int)    -- identify particular instantiation of parameters
-  | UnitParamVarAbs (String, String)      -- an abstract parameter identified by PU name and variable name
-  | UnitParamVarUse (String, String, Int) -- a particular instantiation of above
+  | UnitParamVarAbs (String, VV)          -- an abstract parameter identified by PU name and variable name
+  | UnitParamVarUse (String, VV, Int)     -- a particular instantiation of above
   | UnitParamLitAbs Int                   -- a literal with abstract, polymorphic units, uniquely identified
   | UnitParamLitUse (Int, Int)            -- a particular instantiation of a polymorphic literal
   | UnitLiteral Int                       -- literal with undetermined but uniquely identified units
@@ -60,24 +60,24 @@ data UnitInfo
 
 instance Show UnitInfo where
   show u = case u of
-    UnitParamPosAbs (f, i)    -> printf "#<ParamPosAbs %s[%d]>" f i
-    UnitParamPosUse (f, i, j) -> printf "#<ParamPosUse %s[%d] callId=%d>" f i j
-    UnitParamVarAbs (f, v)    -> printf "#<ParamVarAbs %s.%s>" f v
-    UnitParamVarUse (f, v, j) -> printf "#<ParamVarUse %s.%s callId=%d>" f v j
-    UnitParamLitAbs i         -> printf "#<ParamLitAbs litId=%d>" i
-    UnitParamLitUse (i, j)    -> printf "#<ParamLitUse litId=%d callId=%d]>" i j
-    UnitLiteral i             -> printf "#<Literal id=%d>" i
-    UnitlessLit               -> "1"
-    UnitlessVar               -> "1"
-    UnitName name             -> name
-    UnitAlias name            -> name
-    UnitVar (vName, _)        -> printf "#<Var %s>" vName
+    UnitParamPosAbs (f, i)         -> printf "#<ParamPosAbs %s[%d]>" f i
+    UnitParamPosUse (f, i, j)      -> printf "#<ParamPosUse %s[%d] callId=%d>" f i j
+    UnitParamVarAbs (f, (v, _))    -> printf "#<ParamVarAbs %s.%s>" f v
+    UnitParamVarUse (f, (v, _), j) -> printf "#<ParamVarUse %s.%s callId=%d>" f v j
+    UnitParamLitAbs i              -> printf "#<ParamLitAbs litId=%d>" i
+    UnitParamLitUse (i, j)         -> printf "#<ParamLitUse litId=%d callId=%d]>" i j
+    UnitLiteral i                  -> printf "#<Literal id=%d>" i
+    UnitlessLit                    -> "1"
+    UnitlessVar                    -> "1"
+    UnitName name                  -> name
+    UnitAlias name                 -> name
+    UnitVar (vName, _)             -> printf "#<Var %s>" vName
     UnitMul u1 (UnitPow u2 k)
-      | k < 0                 -> maybeParen u1 ++ " / " ++ maybeParen (UnitPow u2 (-k))
-    UnitMul u1 u2             -> maybeParenS u1 ++ " " ++ maybeParenS u2
-    UnitPow u 1               -> show u
-    UnitPow u 0               -> "1"
-    UnitPow u k               ->
+      | k < 0                      -> maybeParen u1 ++ " / " ++ maybeParen (UnitPow u2 (-k))
+    UnitMul u1 u2                  -> maybeParenS u1 ++ " " ++ maybeParenS u2
+    UnitPow u 1                    -> show u
+    UnitPow u 0                    -> "1"
+    UnitPow u k                    ->
       case doubleToRationalSubset k of
           Just r -> printf "%s**%s" (maybeParen u) (showRational r)
           Nothing -> error $
