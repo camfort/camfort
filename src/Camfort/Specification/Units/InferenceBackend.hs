@@ -85,16 +85,33 @@ criticalVariables cons = filter (not . isUnitName) $ map (colA A.!) criticalIndi
 inferVariables :: Constraints -> [(VV, UnitInfo)]
 inferVariables [] = []
 inferVariables cons
-  | null inconsists = [ (var, if null units then UnitlessVar else foldl1 UnitMul units)
-                      | ([UnitPow (UnitVar var) k], units) <- map (partition (not . isUnitName)) unitPows
-                      , k `approxEq` 1 ]
+  | null inconsists = unitVarAssignments
   | otherwise       = []
   where
-    (unsolvedM, inconsists, colA)       = constraintsToMatrix cons
-    solvedM                             = rref unsolvedM
-    cols                                = A.elems colA
-    unitPows                            = map (concatMap flattenUnits . zipWith UnitPow cols) (H.toLists solvedM)
-    isUnitName (UnitPow (UnitName _) _) = True; isUnitName _ = False
+    (unsolvedM, inconsists, colA) = constraintsToMatrix cons
+    solvedM                       = rref unsolvedM
+    cols                          = A.elems colA
+
+    -- Convert the rows of the solved matrix into flattened unit
+    -- expressions in the form of "unit ** k".
+    unitPows                      = map (concatMap flattenUnits . zipWith UnitPow cols) (H.toLists solvedM)
+
+    -- Variables to the left, unit names to the right side of the equation.
+    unitAssignments               = map (fmap foldUnits . partition (not . isUnitName)) unitPows
+
+    -- Find the rows corresponding to the distilled "unit :: var"
+    -- information; whether they be for ordinary variables or for
+    -- parametric polymorphic variables that were inside of a
+    -- function.
+    unitVarAssignments            =
+      [ (var, units) | ([UnitPow (UnitVar var)                 k], units) <- unitAssignments, k `approxEq` 1 ] ++
+      [ (var, units) | ([UnitPow (UnitParamVarUse (_, var, _)) k], units) <- unitAssignments, k `approxEq` 1 ]
+
+    foldUnits units
+      | null units = UnitlessVar
+      | otherwise  = foldl1 UnitMul units
+    isUnitName (UnitPow (UnitName _) _) = True
+    isUnitName _                        = False
 
 --------------------------------------------------
 
