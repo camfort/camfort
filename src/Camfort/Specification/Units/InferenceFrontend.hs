@@ -486,7 +486,14 @@ propagatePU pu = do
 
   let cons = givenCons ++ bodyCons
   modifyTemplateMap (M.insert name cons)
-  return (setConstraint (ConConj cons) pu)
+
+  -- Set the unitInfo field of a function program unit to be the same
+  -- as the unitInfo of its result.
+  let pu' = case (pu, indexedParams pu) of
+              (F.PUFunction {}, (0, res):_) -> setUnitInfo (UnitParamPosAbs (name, 0) `fromMaybe` M.lookup res varMap) pu
+              _                             -> pu
+
+  return (setConstraint (ConConj cons) pu')
 
 --------------------------------------------------
 
