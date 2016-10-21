@@ -132,6 +132,36 @@ doRefactorAndCreate rFun inSrc excludes outSrc = do
     outputFiles inSrc outSrc outputs'
     return report
 
+-- For refactorings which create some files too
+-- i.e., for refactoring functions that return a
+-- pair of lists of filename/program file pairs is
+type FileProgram = (Filename, F.ProgramFile A)
+doRefactorAndCreateBinary :: ([FileProgram] -> (String, [FileProgram], [(Filename, B.ByteString)]))
+                             -> FileOrDir -> [Filename] -> FileOrDir -> IO String
+doRefactorAndCreateBinary rFun inSrc excludes outSrc = do
+    if excludes /= [] && excludes /= [""]
+    then putStrLn $ "Excluding " ++ intercalate "," excludes
+                    ++ " from " ++ inSrc ++ "/"
+    else return ()
+    ps <- readParseSrcDir inSrc excludes
+    let (report, ps', bins) = rFun (map (\ (f, inp, ast) -> (f, ast)) ps)
+    let outputs = reassociateSourceText ps ps'
+    outputFiles inSrc outSrc outputs
+    outputFiles inSrc outSrc bins
+    return report
+
+doCreateBinary :: ([FileProgram] -> (String, [(Filename, B.ByteString)]))
+                  -> FileOrDir -> [Filename] -> FileOrDir -> IO String
+doCreateBinary rFun inSrc excludes outSrc = do
+    if excludes /= [] && excludes /= [""]
+    then putStrLn $ "Excluding " ++ intercalate "," excludes
+                    ++ " from " ++ inSrc ++ "/"
+    else return ()
+    ps <- readParseSrcDir inSrc excludes
+    let (report, bins) = rFun (map (\ (f, inp, ast) -> (f, ast)) ps)
+    outputFiles inSrc outSrc bins
+    return report
+
 reassociateSourceText :: [(Filename, SourceText, a)]
                    -> [(Filename, F.ProgramFile Annotation)]
                    -> [(Filename, SourceText, F.ProgramFile Annotation)]
