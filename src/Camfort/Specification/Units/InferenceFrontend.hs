@@ -485,7 +485,9 @@ propagatePU pu = do
       _                         -> return Nothing
 
   let cons = givenCons ++ bodyCons
-  modifyTemplateMap (M.insert name cons)
+  case pu of F.PUFunction {}   -> modifyTemplateMap (M.insert name cons)
+             F.PUSubroutine {} -> modifyTemplateMap (M.insert name cons)
+             _                 -> return ()
 
   -- Set the unitInfo field of a function program unit to be the same
   -- as the unitInfo of its result.
