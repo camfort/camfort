@@ -105,7 +105,7 @@ changeDir newDir oldDir oldFilename =
 instance OutputFiles (Filename, SourceText) where
   mkOutputText _ (_, output) = output
   outputFile (f, _) = f
-  isNewFile (_, inp) = B.null inp
+  isNewFile _ = True
 
 -- When there is a file to be reprinted (for refactoring)
 instance OutputFiles (Filename, SourceText, F.ProgramFile Annotation) where
