@@ -125,7 +125,8 @@ analyses =
                                   \units-of-measure for maximum coverage")),
      ("units-check", (unitsCheck, "unit-of-measure checking")),
      ("units-infer", (unitsInfer, "unit-of-measure inference")),
-     ("units-synth", (unitsSynth, "unit-of-measure synthesise specs.")) ]
+     ("units-synth", (unitsSynth, "unit-of-measure synthesise specs.")),
+     ("units-compile", (unitsCompile, "units-of-measure compile module information.")) ]
 
 -- * Usage and about information
 version = "0.902"

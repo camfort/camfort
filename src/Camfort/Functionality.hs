@@ -120,6 +120,11 @@ unitsInfer inSrc excludes outSrc opt = do
     let rfun = concatMap (LU.inferUnits (optsToUnitOpts opt))
     doAnalysisReport rfun putStrLn inSrc excludes
 
+unitsCompile inSrc excludes outSrc opt = do
+    putStrLn $ "Compiling units for '" ++ inSrc ++ "'"
+    let rfun = LU.compileUnits (optsToUnitOpts opt)
+    putStrLn =<< doCreateBinary rfun inSrc excludes outSrc
+
 unitsSynth inSrc excludes outSrc opt = do
     putStrLn $ "Synthesising units for '" ++ inSrc ++ "'"
     let marker

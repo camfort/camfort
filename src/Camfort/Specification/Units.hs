@@ -24,7 +24,7 @@
 {-# LANGUAGE PatternGuards #-}
 
 module Camfort.Specification.Units
-  (checkUnits, inferUnits, synthesiseUnits, inferCriticalVariables)
+  (checkUnits, inferUnits, compileUnits, synthesiseUnits, inferCriticalVariables)
 where
 
 import qualified Data.Map.Strict as M
@@ -32,6 +32,7 @@ import Data.Char (isNumber)
 import Data.List (intercalate)
 import Data.Maybe (fromMaybe, maybeToList, listToMaybe, mapMaybe)
 import Data.Generics.Uniplate.Operations
+import qualified Data.ByteString.Char8 as B
 import Control.Monad.State.Strict
 
 import Camfort.Helpers hiding (lineCol)
@@ -197,6 +198,33 @@ inferUnits uo (fname, pf)
     -- run inference
     uOpts = uo { uoNameMap = nameMap }
     (eVars, state, logs) = runUnitSolver uOpts pfRenamed $ initInference >> runInferVariables
+
+    pfUA = usProgramFile state -- the program file after units analysis is done
+
+    pfRenamed = FAR.analyseRenames . FA.initAnalysis . fmap mkUnitAnnotation $ pf
+    nameMap = FAR.extractNameMap pfRenamed
+
+compileUnits :: UnitOpts -> [FileProgram] -> (String, [(Filename, B.ByteString)])
+compileUnits uo fileprogs = (concat reports, concat bins)
+  where
+    (reports, bins) = unzip [ (report, bin) | fileprog <- fileprogs
+                                            , let (report, bin) = compileUnits' uo fileprog ]
+
+compileUnits' :: UnitOpts -> FileProgram -> (String, [(Filename, B.ByteString)])
+compileUnits' uo (fname, pf)
+  | Right tmap <- eTMap = okReport tmap
+  | Left exc   <- eTMap = errReport exc
+  where
+    -- Format report
+    okReport tmap = ( logs ++ "\n" ++ fname ++ ":\n" ++ unlines [ n ++ ": " ++ show cs | (n, cs) <- M.toList tmap ]
+                    , [(fname ++ ".units-mod", B.pack (show tmap))] )
+
+    errReport exc = ( logs ++ "\n" ++ fname ++ ":  " ++ show exc
+                    , [] )
+
+    -- run inference
+    uOpts = uo { uoNameMap = nameMap }
+    (eTMap, state, logs) = runUnitSolver uOpts pfRenamed $ initInference >> runCompileUnits
 
     pfUA = usProgramFile state -- the program file after units analysis is done
 

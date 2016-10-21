@@ -22,7 +22,7 @@
 {-# LANGUAGE PatternGuards #-}
 
 module Camfort.Specification.Units.InferenceFrontend
-  ( initInference, runCriticalVariables, runInferVariables, runInconsistentConstraints, getConstraint )
+  ( initInference, runCriticalVariables, runInferVariables, runCompileUnits, runInconsistentConstraints, getConstraint )
 where
 
 import Data.Data (Data)
@@ -141,6 +141,10 @@ runInconsistentConstraints :: UnitSolver (Maybe Constraints)
 runInconsistentConstraints = do
   cons <- usConstraints `fmap` get
   return $ inconsistentConstraints cons
+
+-- | Produce information for a "units-mod" file.
+runCompileUnits :: UnitSolver TemplateMap
+runCompileUnits = gets usTemplateMap
 
 --------------------------------------------------
 
