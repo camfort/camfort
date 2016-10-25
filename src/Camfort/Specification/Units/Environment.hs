@@ -13,7 +13,7 @@
    See the License for the specific language governing permissions and
    limitations under the License.
 -}
-{-# LANGUAGE TemplateHaskell, DeriveDataTypeable #-}
+{-# LANGUAGE TemplateHaskell, DeriveDataTypeable, DeriveGeneric #-}
 
 
 {- Provides various data types and type class instances for the Units extension -}
@@ -33,6 +33,8 @@ import Data.Data
 import Data.List
 import Data.Matrix
 import Data.Ratio
+import Data.Binary
+import GHC.Generics (Generic)
 import qualified Debug.Trace as D
 
 import Text.Printf
@@ -56,7 +58,9 @@ data UnitInfo
   | UnitVar VV                            -- variable with undetermined units: (unique name, source name)
   | UnitMul UnitInfo UnitInfo             -- two units multiplied
   | UnitPow UnitInfo Double               -- a unit raised to a constant power
-  deriving (Eq, Ord, Data, Typeable)
+  deriving (Eq, Ord, Data, Typeable, Generic)
+
+instance Binary UnitInfo
 
 instance Show UnitInfo where
   show u = case u of
@@ -125,7 +129,10 @@ doubleToRationalSubset x =
 data Constraint
   = ConEq   UnitInfo UnitInfo        -- an equality constraint
   | ConConj [Constraint]             -- conjunction of constraints
-  deriving (Eq, Ord, Data, Typeable)
+  deriving (Eq, Ord, Data, Typeable, Generic)
+
+instance Binary Constraint
+
 type Constraints = [Constraint]
 
 instance Show Constraint where

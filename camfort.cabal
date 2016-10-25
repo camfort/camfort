@@ -79,7 +79,8 @@ executable camfort
                         fortran-src >= 0.1.0.4,
                         filepath,
                         fgl >= 5.5,
-                        bytestring >= 0.10
+                        bytestring >= 0.10,
+                        binary >= 0.8.3.0
   default-language: Haskell2010
 
 library
@@ -134,7 +135,8 @@ library
                         fortran-src >= 0.1.0.4,
                         filepath,
                         bytestring >= 0.10,
-                        fgl >= 5.5
+                        fgl >= 5.5,
+                        binary >= 0.8.3.0
   default-language: Haskell2010
 
 test-suite spec
@@ -163,5 +165,6 @@ test-suite spec
                         array >= 0.4,
                         hmatrix >= 0.15,
                         text >= 0.11.2.3,
+                        binary >= 0.8.3.0,
                         camfort
   default-language: Haskell2010

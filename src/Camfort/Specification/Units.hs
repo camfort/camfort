@@ -31,8 +31,10 @@ import qualified Data.Map.Strict as M
 import Data.Char (isNumber)
 import Data.List (intercalate)
 import Data.Maybe (fromMaybe, maybeToList, listToMaybe, mapMaybe)
+import Data.Binary
 import Data.Generics.Uniplate.Operations
 import qualified Data.ByteString.Char8 as B
+import qualified Data.ByteString.Lazy.Char8 as LB
 import Control.Monad.State.Strict
 
 import Camfort.Helpers hiding (lineCol)
@@ -217,7 +219,7 @@ compileUnits' uo (fname, pf)
   where
     -- Format report
     okReport tmap = ( logs ++ "\n" ++ fname ++ ":\n" ++ unlines [ n ++ ": " ++ show cs | (n, cs) <- M.toList tmap ]
-                    , [(fname ++ ".units-mod", B.pack (show tmap))] )
+                    , [(fname ++ ".units-mod", LB.toStrict (encode tmap))] )
 
     errReport exc = ( logs ++ "\n" ++ fname ++ ":  " ++ show exc
                     , [] )
