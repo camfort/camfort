@@ -78,6 +78,9 @@ options =
      , Option ['m']     ["stencil-inference-mode"]
                 (ReqArg (StencilInferMode . read . (++ "Mode")) "ID")
                 "stencil specification inference mode. ID = Do, Assign, or Both"
+     , Option ['I']     ["include-dir"]
+                (ReqArg IncludeDir "DIR")
+                "directory to search for precompiled files"
      , Option []        ["debug"] (NoArg Debug)
          "enable debug mode"
      , Option []        ["doxygen"] (NoArg Doxygen)

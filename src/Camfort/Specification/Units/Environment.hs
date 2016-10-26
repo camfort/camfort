@@ -13,7 +13,7 @@
    See the License for the specific language governing permissions and
    limitations under the License.
 -}
-{-# LANGUAGE TemplateHaskell, DeriveDataTypeable, DeriveGeneric #-}
+{-# LANGUAGE DeriveDataTypeable, DeriveGeneric #-}
 
 
 {- Provides various data types and type class instances for the Units extension -}

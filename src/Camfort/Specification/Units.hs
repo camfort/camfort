@@ -42,6 +42,7 @@ import Camfort.Helpers.Syntax
 import Camfort.Output
 import Camfort.Analysis.Annotations
 import Camfort.Input
+import Camfort.ModFile
 
 -- Provides the types and data accessors used in this module
 import Camfort.Specification.Units.Environment
@@ -219,7 +220,8 @@ compileUnits' uo (fname, pf)
   where
     -- Format report
     okReport tmap = ( logs ++ "\n" ++ fname ++ ":\n" ++ unlines [ n ++ ": " ++ show cs | (n, cs) <- M.toList tmap ]
-                    , [(fname ++ ".units-mod", LB.toStrict (encode tmap))] )
+                     -- FIXME, filename manipulation
+                    , [(fname ++ modFileSuffix, encodeModFile (genModFile pfRenamed tmap))] )
 
     errReport exc = ( logs ++ "\n" ++ fname ++ ":  " ++ show exc
                     , [] )
@@ -230,7 +232,10 @@ compileUnits' uo (fname, pf)
 
     pfUA = usProgramFile state -- the program file after units analysis is done
 
-    pfRenamed = FAR.analyseRenames . FA.initAnalysis . fmap mkUnitAnnotation $ pf
+    -- Use the module map derived from all of the included Camfort Mod files.
+    mmap = combinedModuleMap (M.elems (uoModFiles uo))
+    pfRenamed = FAR.analyseRenamesWithModuleMap mmap . FA.initAnalysis . fmap mkUnitAnnotation $ pf
+
     nameMap = FAR.extractNameMap pfRenamed
 
 synthesiseUnits :: UnitOpts

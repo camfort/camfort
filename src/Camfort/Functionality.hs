@@ -30,9 +30,12 @@ import System.Environment
 import System.FilePath
 import System.IO
 
+import Control.Monad
+
 import Data.Monoid
 import Data.Generics.Uniplate.Operations
 import Data.Data
+import Data.Binary
 import Data.List (foldl', intercalate)
 import qualified Debug.Trace as D
 
@@ -50,6 +53,7 @@ import Camfort.Helpers.Syntax
 import Camfort.Helpers
 import Camfort.Output
 import Camfort.Input
+import Camfort.ModFile
 
 import qualified Language.Fortran.Parser.Any as FP
 import qualified Language.Fortran.AST as F
@@ -57,12 +61,15 @@ import Language.Fortran.Analysis.Renaming
   (renameAndStrip, analyseRenames, unrename, NameMap)
 import Language.Fortran.Analysis(initAnalysis)
 import qualified Camfort.Specification.Stencils as Stencils
+import qualified Data.ByteString.Char8 as B
+import qualified Data.Map.Strict as M
 
 -- CamFort optional flags
 data Flag = Version
          | Input String
          | Output String
          | Excludes String
+         | IncludeDir String
          | Literals LiteralsOpt
          | StencilInferMode Stencils.InferMode
          | Doxygen
@@ -105,24 +112,45 @@ equivalences inSrc excludes outSrc _ = do
     putStrLn report
 
 {- Units feature -}
-optsToUnitOpts :: [Flag] -> UnitOpts
-optsToUnitOpts = foldl' (\ o f -> case f of Literals m -> o { uoLiterals = m }
-                                            Debug -> o { uoDebug = True }
-                                            _     -> o) unitOpts0
+optsToUnitOpts :: [Flag] -> IO UnitOpts
+optsToUnitOpts = foldM (\ o f -> do
+  case f of
+    Literals m   -> return $ o { uoLiterals    = m }
+    Debug        -> return $ o { uoDebug       = True }
+    IncludeDir d -> do
+      -- Figure out the camfort mod files and parse them.
+      modFileNames <- filter isModFile `fmap` rGetDirContents' d
+      assocList <- forM modFileNames $ \ modFileName -> do
+        eResult <- decodeFileOrFail (d ++ "/" ++ modFileName) -- FIXME, directory manipulation
+        case eResult of
+          Left (offset, msg) -> do
+            putStrLn $ modFileName ++ ": Error at offset " ++ show offset ++ ": " ++ msg
+            return (modFileName, emptyModFile)
+          Right modFile -> do
+            putStrLn $ modFileName ++ ": successfully parsed precompiled file."
+            return (modFileName, modFile)
+      return $ o { uoModFiles = M.fromList assocList `M.union` uoModFiles o }
+    _            -> return o
+    ) unitOpts0
+
+isModFile = (== modFileSuffix) . fileExt
 
 unitsCheck inSrc excludes outSrc opt = do
     putStrLn $ "Checking units for '" ++ inSrc ++ "'"
-    let rfun = concatMap (LU.checkUnits (optsToUnitOpts opt))
+    uo <- optsToUnitOpts opt
+    let rfun = concatMap (LU.checkUnits uo)
     doAnalysisReport rfun putStrLn inSrc excludes
 
 unitsInfer inSrc excludes outSrc opt = do
     putStrLn $ "Inferring units for '" ++ inSrc ++ "'"
-    let rfun = concatMap (LU.inferUnits (optsToUnitOpts opt))
+    uo <- optsToUnitOpts opt
+    let rfun = concatMap (LU.inferUnits uo)
     doAnalysisReport rfun putStrLn inSrc excludes
 
 unitsCompile inSrc excludes outSrc opt = do
     putStrLn $ "Compiling units for '" ++ inSrc ++ "'"
-    let rfun = LU.compileUnits (optsToUnitOpts opt)
+    uo <- optsToUnitOpts opt
+    let rfun = LU.compileUnits uo
     putStrLn =<< doCreateBinary rfun inSrc excludes outSrc
 
 unitsSynth inSrc excludes outSrc opt = do
@@ -131,15 +159,17 @@ unitsSynth inSrc excludes outSrc opt = do
          | Doxygen `elem` opt = '<'
          | Ford `elem` opt = '!'
          | otherwise = '='
+    uo <- optsToUnitOpts opt
     let rfun =
-          mapM (LU.synthesiseUnits (optsToUnitOpts opt) marker)
+          mapM (LU.synthesiseUnits uo marker)
     report <- doRefactor rfun inSrc excludes outSrc
     putStrLn report
 
 unitsCriticals inSrc excludes outSrc opt = do
     putStrLn $ "Suggesting variables to annotate with unit specifications in '"
              ++ inSrc ++ "'"
-    let rfun = mapM (LU.inferCriticalVariables (optsToUnitOpts opt))
+    uo <- optsToUnitOpts opt
+    let rfun = mapM (LU.inferCriticalVariables uo)
     doAnalysisReport rfun (putStrLn . fst) inSrc excludes
 
 {- Stencils feature -}
