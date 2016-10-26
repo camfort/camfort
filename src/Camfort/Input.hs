@@ -211,6 +211,19 @@ rGetDirContents d = do
                              then return (x : xs')
                              else return xs'
 
+-- A version that lists all files, not just Fortran ones
+rGetDirContents' :: FileOrDir -> IO [String]
+rGetDirContents' d = do
+    ds <- getDirectoryContents d
+    fmap concat . mapM f $ ds \\ [".", ".."] -- remove '.' and '..' entries
+      where
+        f x = do
+          g <- doesDirectoryExist (d ++ "/" ++ x)
+          if g then do
+            x' <- rGetDirContents (d ++ "/" ++ x)
+            return $ map (\ y -> x ++ "/" ++ y) x'
+          else return [x]
+
 {-| predicate on which fileextensions are Fortran files -}
 isFortran x = fileExt x `elem` [".f", ".f90", ".f77", ".cmn", ".inc"]
 

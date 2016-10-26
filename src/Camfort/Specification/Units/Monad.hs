@@ -39,6 +39,8 @@ import qualified Language.Fortran.Analysis.Renaming as FAR
 import qualified Language.Fortran.AST as F
 import Camfort.Specification.Units.Environment (UnitInfo, UnitAnnotation, Constraints(..), VV)
 import Camfort.Analysis.Annotations (Annotation, A, UA)
+import qualified Data.ByteString.Char8 as B
+import Camfort.ModFile
 
 --------------------------------------------------
 
@@ -53,33 +55,6 @@ type UnitException = ()
 --------------------------------------------------
 
 -- Read-only options for the unit solver.
-
--- | Some options about how to handle literals.
-data LiteralsOpt
-  = LitPoly     -- ^ All literals are polymorphic.
-  | LitUnitless -- ^ All literals are unitless.
-  | LitMixed    -- ^ The literal "0" or "0.0" is fully parametric
-                -- polymorphic. All other literals are monomorphic,
-                -- possibly unitless.
-  deriving (Show, Eq, Ord, Data)
-
-instance Read LiteralsOpt where
-  readsPrec _ s = case find ((`isPrefixOf` map toLower s) . fst) ms of
-                    Just (str, con) -> [(con, drop (length str) s)]
-                    Nothing         -> []
-    where
-      ms = [ ("poly", LitPoly), ("unitless", LitUnitless), ("mixed", LitMixed)
-           , ("litpoly", LitPoly), ("litunitless", LitUnitless), ("litmixed", LitMixed) ]
-
-data UnitOpts = UnitOpts
-  { uoDebug          :: Bool         -- ^ debugging mode?
-  , uoLiterals       :: LiteralsOpt  -- ^ how to handle literals
-  , uoNameMap        :: FAR.NameMap  -- ^ map of unique names to original names
-  }
-  deriving (Show, Read, Data, Eq, Ord)
-
-unitOpts0 :: UnitOpts
-unitOpts0 = UnitOpts False LitMixed M.empty
 
 -- | Only run the argument if debugging mode enabled.
 whenDebug :: UnitSolver () -> UnitSolver ()
@@ -98,8 +73,6 @@ type VarUnitMap   = M.Map VV UnitInfo
 type GivenVarSet  = S.Set F.Name
 -- | Alias name => definition
 type UnitAliasMap = M.Map String UnitInfo
--- | Function/subroutine name -> associated, parametric polymorphic constraints
-type TemplateMap  = M.Map F.Name Constraints
 -- | Map of CallId to CallId
 type CallIdMap    = IM.IntMap Int
 
