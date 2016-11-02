@@ -410,18 +410,20 @@ instance Show Specification where
 
 instance {-# OVERLAPS #-} Show (Multiplicity (Approximation Spatial)) where
   show mult
-    | Multiple appr <- mult = apprStr empty appr
-    | Single appr <- mult = apprStr "readOnce, " appr
+    | Multiple appr <- mult = apprStr empty empty appr
+    | Single appr <- mult = apprStr "readOnce" ", " appr
     where
-      apprStr linearity appr =
+      apprStr linearity sep appr =
         case appr of
-          Exact s -> linearity ++ show s
+          Exact s -> linearity ++ optionalSeparator sep (show s)
           Bound Nothing Nothing -> "empty"
-          Bound Nothing (Just s) -> "atMost, " ++ linearity ++ show s
-          Bound (Just s) Nothing -> "atLeast, " ++ linearity ++ show s
+          Bound Nothing (Just s) -> "atMost, " ++ linearity ++ optionalSeparator sep (show s)
+          Bound (Just s) Nothing -> "atLeast, " ++ linearity ++ optionalSeparator sep (show s)
           Bound (Just sL) (Just sU) ->
-            "atLeast, " ++ linearity ++ show sL ++
-            "; atMost, " ++ linearity ++ show sU
+            "atLeast, " ++ linearity ++ optionalSeparator sep (show sL) ++
+            "; atMost, " ++ linearity ++ optionalSeparator sep (show sU)
+      optionalSeparator sep "" = ""
+      optionalSeparator sep s  = sep ++ s
 
 instance {-# OVERLAPS #-} Show (Approximation Spatial) where
   show (Exact s) = show s
