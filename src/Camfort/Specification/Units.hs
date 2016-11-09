@@ -99,7 +99,9 @@ inferCriticalVariables uo (fname, pf)
     (eVars, state, logs) = runUnitSolver uOpts pfRenamed $ initInference >> runCriticalVariables
     pfUA = usProgramFile state -- the program file after units analysis is done
 
-    pfRenamed = FAR.analyseRenames . FA.initAnalysis . fmap mkUnitAnnotation $ pf
+    -- Use the module map derived from all of the included Camfort Mod files.
+    mmap = combinedModuleMap (M.elems (uoModFiles uo))
+    pfRenamed = FAR.analyseRenamesWithModuleMap mmap . FA.initAnalysis . fmap mkUnitAnnotation $ pf
     nameMap = FAR.extractNameMap pfRenamed
 
 checkUnits, inferUnits
@@ -178,7 +180,9 @@ checkUnits uo (fname, pf)
                                    UnitParamVarAbs {} -> True; UnitParamVarUse {} -> True
                                    _ -> False
 
-    pfRenamed = FAR.analyseRenames . FA.initAnalysis . fmap mkUnitAnnotation $ pf
+    -- Use the module map derived from all of the included Camfort Mod files.
+    mmap = combinedModuleMap (M.elems (uoModFiles uo))
+    pfRenamed = FAR.analyseRenamesWithModuleMap mmap . FA.initAnalysis . fmap mkUnitAnnotation $ pf
     nameMap = FAR.extractNameMap pfRenamed
 
 {-| Check and infer units-of-measure for a program
@@ -204,7 +208,10 @@ inferUnits uo (fname, pf)
 
     pfUA = usProgramFile state -- the program file after units analysis is done
 
-    pfRenamed = FAR.analyseRenames . FA.initAnalysis . fmap mkUnitAnnotation $ pf
+    -- Use the module map derived from all of the included Camfort Mod files.
+    mmap = combinedModuleMap (M.elems (uoModFiles uo))
+    pfRenamed = FAR.analyseRenamesWithModuleMap mmap . FA.initAnalysis . fmap mkUnitAnnotation $ pf
+
     nameMap = FAR.extractNameMap pfRenamed
 
 compileUnits :: UnitOpts -> [FileProgram] -> (String, [(Filename, B.ByteString)])
@@ -265,7 +272,9 @@ synthesiseUnits uo marker (fname, pf)
     pfUA = usProgramFile state -- the program file after units analysis is done
     pfFinal = fmap prevAnnotation . fmap FA.prevAnnotation $ pfUA -- strip annotations
 
-    pfRenamed = FAR.analyseRenames . FA.initAnalysis . fmap mkUnitAnnotation $ pf
+    -- Use the module map derived from all of the included Camfort Mod files.
+    mmap = combinedModuleMap (M.elems (uoModFiles uo))
+    pfRenamed = FAR.analyseRenamesWithModuleMap mmap . FA.initAnalysis . fmap mkUnitAnnotation $ pf
     nameMap = FAR.extractNameMap pfRenamed
 
 --------------------------------------------------
