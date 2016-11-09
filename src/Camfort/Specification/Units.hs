@@ -89,6 +89,7 @@ inferCriticalVariables uo (fname, pf)
     varReport     = intercalate ", " . map showVar
 
     showVar (UnitVar (_, s))  = s
+    showVar (UnitParamVarUse (_, (_, s), _))  = s
     showVar (UnitLiteral _)   = "<literal>"
     showVar _                 = "<bad>"
 
