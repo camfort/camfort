@@ -91,7 +91,7 @@ instance Show UnitInfo where
                | otherwise = showRational' r
              showRational' r
                | denominator r == 1 = show (numerator r)
-               | otherwise = printf "%s / %s" (numerator r) (denominator r)
+               | otherwise = printf "%d / %d" (numerator r) (denominator r)
     where
       maybeParen x | all isAlphaNum s = s
                    | otherwise        = "(" ++ s ++ ")"
