@@ -78,6 +78,9 @@ encodeModFile = LB.toStrict . encode
 combinedModuleMap :: [ModFile] -> FAR.ModuleMap
 combinedModuleMap = M.unions . map mfModuleMap
 
+combinedTemplateMap :: [ModFile] -> TemplateMap
+combinedTemplateMap = M.unions . map mfTemplateMap
+
 --------------------------------------------------
 
 -- | Some options about how to handle literals.

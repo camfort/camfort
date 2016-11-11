@@ -205,7 +205,10 @@ inferUnits uo (fname, pf)
 
     -- run inference
     uOpts = uo { uoNameMap = nameMap }
-    (eVars, state, logs) = runUnitSolver uOpts pfRenamed $ initInference >> runInferVariables
+    (eVars, state, logs) = runUnitSolver uOpts pfRenamed $ do
+      modifyTemplateMap . const . combinedTemplateMap . M.elems $ uoModFiles uo
+      initInference
+      runInferVariables
 
     pfUA = usProgramFile state -- the program file after units analysis is done
 
