@@ -82,7 +82,7 @@ type Options = [Flag]
 instance Default String where
     defaultValue = ""
 getExcludes :: Options -> String
-getExcludes = getOption
+getExcludes opts = head ([ e | Excludes e <- universeBi opts ] ++ [""])
 
 -- * Wrappers on all of the features
 ast d excludes _ _ = do
