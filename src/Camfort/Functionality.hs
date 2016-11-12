@@ -74,6 +74,7 @@ data Flag = Version
          | StencilInferMode Stencils.InferMode
          | Doxygen
          | Ford
+         | FVersion String
          | Debug deriving (Data, Show, Eq)
 
 type Options = [Flag]
@@ -85,20 +86,20 @@ getExcludes :: Options -> String
 getExcludes opts = head ([ e | Excludes e <- universeBi opts ] ++ [""])
 
 -- * Wrappers on all of the features
-ast d excludes _ _ = do
+ast d excludes _ opts = do
     xs <- readParseSrcDir d excludes
     print (map (\(_, _, p) -> p) xs)
 
-countVarDecls inSrc excludes _ _ = do
+countVarDecls inSrc excludes _ opts = do
     putStrLn $ "Counting variable declarations in '" ++ inSrc ++ "'"
     doAnalysisSummary countVariableDeclarations inSrc excludes Nothing
 
-dead inSrc excludes outSrc _ = do
+dead inSrc excludes outSrc opts = do
     putStrLn $ "Eliminating dead code in '" ++ inSrc ++ "'"
     report <- doRefactor (mapM (deadCode False)) inSrc excludes outSrc
     putStrLn report
 
-common inSrc excludes outSrc _ = do
+common inSrc excludes outSrc opts = do
     putStrLn $ "Refactoring common blocks in '" ++ inSrc ++ "'"
     isDir <- isDirectory inSrc
     let dir = if isDir then inSrc ++ "/" else ""
@@ -106,7 +107,7 @@ common inSrc excludes outSrc _ = do
     report <- doRefactorAndCreate rfun inSrc excludes outSrc
     putStrLn report
 
-equivalences inSrc excludes outSrc _ = do
+equivalences inSrc excludes outSrc opts = do
     putStrLn $ "Refactoring equivalences blocks in '" ++ inSrc ++ "'"
     report <- doRefactor (mapM refactorEquivalences) inSrc excludes outSrc
     putStrLn report
