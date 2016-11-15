@@ -66,7 +66,7 @@ instance Functor Approximation where
 -- but can be made smaller for debugging purposes,
 -- e.g., 100, but it needs to be high enough to clash with reasonable
 -- relative indices.
-absoluteRep = 100 :: Int -- maxBound :: Int
+absoluteRep = maxBound :: Int
 
 {- *** 1 . Specification syntax -}
 
