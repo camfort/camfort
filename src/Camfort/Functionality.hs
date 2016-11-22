@@ -53,10 +53,10 @@ import Camfort.Helpers.Syntax
 import Camfort.Helpers
 import Camfort.Output
 import Camfort.Input
-import Camfort.ModFile
 
 import qualified Language.Fortran.Parser.Any as FP
 import qualified Language.Fortran.AST as F
+import Language.Fortran.Util.ModFile
 import Language.Fortran.Analysis.Renaming
   (renameAndStrip, analyseRenames, unrename, NameMap)
 import Language.Fortran.Analysis(initAnalysis)

@@ -191,7 +191,7 @@ readParseSrcDir inp excludes = do
 readParseSrcFile :: Filename -> IO (Filename, SourceText, F.ProgramFile A)
 readParseSrcFile f = do
     inp <- flexReadFile f
-    let ast = FP.fortranParser inp f
+    let ast = FP.fortranParserWithModFiles [] inp f
     return (f, inp, fmap (const unitAnnotation) ast)
 ----
 

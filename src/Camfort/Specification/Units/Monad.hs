@@ -37,10 +37,43 @@ import qualified Data.Set as S
 import qualified Language.Fortran.Analysis as FA
 import qualified Language.Fortran.Analysis.Renaming as FAR
 import qualified Language.Fortran.AST as F
+import Language.Fortran.Util.ModFile
 import Camfort.Specification.Units.Environment (UnitInfo, UnitAnnotation, Constraints(..), VV)
 import Camfort.Analysis.Annotations (Annotation, A, UA)
 import qualified Data.ByteString.Char8 as B
-import Camfort.ModFile
+
+
+-- | Some options about how to handle literals.
+data LiteralsOpt
+  = LitPoly     -- ^ All literals are polymorphic.
+  | LitUnitless -- ^ All literals are unitless.
+  | LitMixed    -- ^ The literal "0" or "0.0" is fully parametric
+                -- polymorphic. All other literals are monomorphic,
+                -- possibly unitless.
+  deriving (Show, Eq, Ord, Data)
+
+instance Read LiteralsOpt where
+  readsPrec _ s = case find ((`isPrefixOf` map toLower s) . fst) ms of
+                    Just (str, con) -> [(con, drop (length str) s)]
+                    Nothing         -> []
+    where
+      ms = [ ("poly", LitPoly), ("unitless", LitUnitless), ("mixed", LitMixed)
+           , ("litpoly", LitPoly), ("litunitless", LitUnitless), ("litmixed", LitMixed) ]
+
+-- | Options for the unit solver
+data UnitOpts = UnitOpts
+  { uoDebug          :: Bool                      -- ^ debugging mode?
+  , uoLiterals       :: LiteralsOpt               -- ^ how to handle literals
+  , uoNameMap        :: FAR.NameMap               -- ^ map of unique names to original names
+  , uoModFiles       :: M.Map String ModFile      -- ^ map of included modules
+  }
+  deriving (Show, Data, Eq, Ord)
+
+unitOpts0 :: UnitOpts
+unitOpts0 = UnitOpts False LitMixed M.empty M.empty
+
+-- | Function/subroutine name -> associated, parametric polymorphic constraints
+type TemplateMap = M.Map F.Name Constraints
 
 --------------------------------------------------
 

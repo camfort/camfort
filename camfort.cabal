@@ -58,7 +58,6 @@ executable camfort
                         Camfort.Input
                         Camfort.Output
                         Camfort.Reprint
-                        Camfort.ModFile
                         Main
 
   build-depends:        base >= 4.6 && < 5,
@@ -117,7 +116,6 @@ library
                         Camfort.Input
                         Camfort.Output
                         Camfort.Reprint
-                        Camfort.ModFile
 
   build-depends:        base >= 4.6 && < 5,
                         ghc-prim >= 0.3.1.0,

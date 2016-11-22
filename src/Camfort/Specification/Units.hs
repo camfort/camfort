@@ -42,7 +42,6 @@ import Camfort.Helpers.Syntax
 import Camfort.Output
 import Camfort.Analysis.Annotations
 import Camfort.Input
-import Camfort.ModFile
 
 -- Provides the types and data accessors used in this module
 import Camfort.Specification.Units.Environment
@@ -55,6 +54,7 @@ import qualified Language.Fortran.Analysis.Renaming as FAR
 import qualified Language.Fortran.Analysis as FA
 import qualified Language.Fortran.AST as F
 import qualified Language.Fortran.Util.Position as FU
+import Language.Fortran.Util.ModFile
 
 -- For debugging and development purposes
 import qualified Debug.Trace as D
@@ -217,6 +217,21 @@ inferUnits uo (fname, pf)
     pfRenamed = FAR.analyseRenamesWithModuleMap mmap . FA.initAnalysis . fmap mkUnitAnnotation $ pf
 
     nameMap = FAR.extractNameMap pfRenamed
+
+combinedTemplateMap :: ModFiles -> TemplateMap
+combinedTemplateMap = M.unions . map mfTemplateMap
+
+mfTemplateMap :: ModFile -> TemplateMap
+mfTemplateMap mf = case lookupModFileData "units-template-map" mf of
+  Nothing -> M.empty
+  Just bs -> case decodeOrFail (LB.fromStrict bs) of
+    Left _ -> M.empty
+    Right (_, _, tmap) -> tmap
+
+genModFile :: F.ProgramFile UA -> TemplateMap -> ModFile
+genModFile pf tmap = alterModFileData f "units-template-map" $ buildModuleMap pf emptyModFile
+  where
+    f _ = Just . LB.toStrict $ encode tmap
 
 compileUnits :: UnitOpts -> [FileProgram] -> (String, [(Filename, B.ByteString)])
 compileUnits uo fileprogs = (concat reports, concat bins)
