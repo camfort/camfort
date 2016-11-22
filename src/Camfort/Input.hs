@@ -32,6 +32,7 @@ import Camfort.Output
 
 import qualified Language.Fortran.Parser.Any as FP
 import qualified Language.Fortran.AST as F
+import Language.Fortran.Util.ModFile
 
 import qualified Data.ByteString.Char8 as B
 import Data.Data
@@ -92,6 +93,23 @@ doAnalysisReport rFun sFun inSrc excludes = do
   sFun report
 ----
 
+doAnalysisReportWithModFiles :: ([(Filename, F.ProgramFile A)] -> r)
+                             -> (r -> IO out)
+                             -> FileOrDir
+                             -> [Filename]
+                             -> ModFiles
+                             -> IO out
+doAnalysisReportWithModFiles rFun sFun inSrc excludes mods = do
+  if excludes /= [] && excludes /= [""]
+      then putStrLn $ "Excluding " ++ intercalate "," excludes
+                    ++ " from " ++ inSrc ++ "/"
+      else return ()
+  ps <- readParseSrcDirWithModFiles inSrc excludes mods
+----
+  let report = rFun (map (\(f, inp, ast) -> (f, ast)) ps)
+  sFun report
+----
+
 {-| Performs a refactoring provided by its first parameter, on the directory
     of the second, excluding files listed by third,
     output to the directory specified by the fourth parameter -}
@@ -107,6 +125,23 @@ doRefactor rFun inSrc excludes outSrc = do
            ++ " from " ++ inSrc ++ "/"
     else return ()
     ps <- readParseSrcDir inSrc excludes
+    let (report, ps') = rFun (map (\(f, inp, ast) -> (f, ast)) ps)
+    let outputs = reassociateSourceText ps ps'
+    outputFiles inSrc outSrc outputs
+    return report
+
+doRefactorWithModFiles :: ([(Filename, F.ProgramFile A)] -> (String, [(Filename, F.ProgramFile A)]))
+                       -> FileOrDir
+                       -> [Filename]
+                       -> FileOrDir
+                       -> ModFiles
+                       -> IO String
+doRefactorWithModFiles rFun inSrc excludes outSrc mods = do
+    if excludes /= [] && excludes /= [""]
+    then putStrLn $ "Excluding " ++ intercalate "," excludes
+           ++ " from " ++ inSrc ++ "/"
+    else return ()
+    ps <- readParseSrcDirWithModFiles inSrc excludes mods
     let (report, ps') = rFun (map (\(f, inp, ast) -> (f, ast)) ps)
     let outputs = reassociateSourceText ps ps'
     outputFiles inSrc outSrc outputs
@@ -151,13 +186,17 @@ doRefactorAndCreateBinary rFun inSrc excludes outSrc = do
     return report
 
 doCreateBinary :: ([FileProgram] -> (String, [(Filename, B.ByteString)]))
-                  -> FileOrDir -> [Filename] -> FileOrDir -> IO String
-doCreateBinary rFun inSrc excludes outSrc = do
+               -> FileOrDir
+               -> [Filename]
+               -> FileOrDir
+               -> ModFiles
+               -> IO String
+doCreateBinary rFun inSrc excludes outSrc mods = do
     if excludes /= [] && excludes /= [""]
     then putStrLn $ "Excluding " ++ intercalate "," excludes
                     ++ " from " ++ inSrc ++ "/"
     else return ()
-    ps <- readParseSrcDir inSrc excludes
+    ps <- readParseSrcDirWithModFiles inSrc excludes mods
     let (report, bins) = rFun (map (\ (f, inp, ast) -> (f, ast)) ps)
     outputFiles inSrc outSrc bins
     return report
@@ -187,11 +226,33 @@ readParseSrcDir inp excludes = do
              else return [inp]
     mapM readParseSrcFile files
 
+readParseSrcDirWithModFiles :: FileOrDir
+                            -> [Filename]
+                            -> ModFiles
+                            -> IO [(Filename, SourceText, F.ProgramFile A)]
+readParseSrcDirWithModFiles inp excludes mods = do
+    isdir <- isDirectory inp
+    files <- if isdir
+             then do
+               files <- rGetDirContents inp
+               -- Compute alternate list of excludes with the
+               -- the directory appended
+               let excludes' = excludes ++ map (\x -> inp ++ "/" ++ x) excludes
+               return $ (map (\y -> inp ++ "/" ++ y) files) \\ excludes'
+             else return [inp]
+    mapM (readParseSrcFileWithModFiles mods) files
+
 {-| Read a specific file, and parse it -}
 readParseSrcFile :: Filename -> IO (Filename, SourceText, F.ProgramFile A)
 readParseSrcFile f = do
     inp <- flexReadFile f
     let ast = FP.fortranParserWithModFiles [] inp f
+    return (f, inp, fmap (const unitAnnotation) ast)
+
+readParseSrcFileWithModFiles :: ModFiles -> Filename -> IO (Filename, SourceText, F.ProgramFile A)
+readParseSrcFileWithModFiles mods f = do
+    inp <- flexReadFile f
+    let ast = FP.fortranParserWithModFiles mods inp f
     return (f, inp, fmap (const unitAnnotation) ast)
 ----
 

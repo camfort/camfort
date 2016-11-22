@@ -140,25 +140,44 @@ optsToUnitOpts = foldM (\ o f -> do
     _            -> return o
     ) unitOpts0
 
+getModFiles :: [Flag] -> IO ModFiles
+getModFiles = foldM (\ modFiles f -> do
+  case f of
+    IncludeDir d -> do
+      -- Figure out the camfort mod files and parse them.
+      modFileNames <- filter isModFile `fmap` rGetDirContents' d
+      addedModFiles <- forM modFileNames $ \ modFileName -> do
+        eResult <- decodeFileOrFail (d ++ "/" ++ modFileName) -- FIXME, directory manipulation
+        case eResult of
+          Left (offset, msg) -> do
+            putStrLn $ modFileName ++ ": Error at offset " ++ show offset ++ ": " ++ msg
+            return emptyModFile
+          Right modFile -> do
+            putStrLn $ modFileName ++ ": successfully parsed precompiled file."
+            return modFile
+      return $ addedModFiles ++ modFiles
+    _            -> return modFiles
+    ) emptyModFiles
+
 isModFile = (== modFileSuffix) . fileExt
 
 unitsCheck inSrc excludes outSrc opt = do
     putStrLn $ "Checking units for '" ++ inSrc ++ "'"
     uo <- optsToUnitOpts opt
     let rfun = concatMap (LU.checkUnits uo)
-    doAnalysisReport rfun putStrLn inSrc excludes
+    doAnalysisReportWithModFiles rfun putStrLn inSrc excludes =<< getModFiles opt
 
 unitsInfer inSrc excludes outSrc opt = do
     putStrLn $ "Inferring units for '" ++ inSrc ++ "'"
     uo <- optsToUnitOpts opt
     let rfun = concatMap (LU.inferUnits uo)
-    doAnalysisReport rfun putStrLn inSrc excludes
+    doAnalysisReportWithModFiles rfun putStrLn inSrc excludes =<< getModFiles opt
 
 unitsCompile inSrc excludes outSrc opt = do
     putStrLn $ "Compiling units for '" ++ inSrc ++ "'"
     uo <- optsToUnitOpts opt
     let rfun = LU.compileUnits uo
-    putStrLn =<< doCreateBinary rfun inSrc excludes outSrc
+    putStrLn =<< doCreateBinary rfun inSrc excludes outSrc =<< getModFiles opt
 
 unitsSynth inSrc excludes outSrc opt = do
     putStrLn $ "Synthesising units for '" ++ inSrc ++ "'"
@@ -169,7 +188,7 @@ unitsSynth inSrc excludes outSrc opt = do
     uo <- optsToUnitOpts opt
     let rfun =
           mapM (LU.synthesiseUnits uo marker)
-    report <- doRefactor rfun inSrc excludes outSrc
+    report <- doRefactorWithModFiles rfun inSrc excludes outSrc =<< getModFiles opt
     putStrLn report
 
 unitsCriticals inSrc excludes outSrc opt = do
@@ -177,7 +196,7 @@ unitsCriticals inSrc excludes outSrc opt = do
              ++ inSrc ++ "'"
     uo <- optsToUnitOpts opt
     let rfun = mapM (LU.inferCriticalVariables uo)
-    doAnalysisReport rfun (putStrLn . fst) inSrc excludes
+    doAnalysisReportWithModFiles rfun (putStrLn . fst) inSrc excludes =<< getModFiles opt
 
 {- Stencils feature -}
 stencilsCheck inSrc excludes _ _ = do

@@ -51,6 +51,7 @@ import Camfort.Specification.Units.InferenceFrontend
 import Camfort.Specification.Units.Synthesis (runSynthesis)
 
 import qualified Language.Fortran.Analysis.Renaming as FAR
+import qualified Language.Fortran.Analysis.Types as FAT
 import qualified Language.Fortran.Analysis as FA
 import qualified Language.Fortran.AST as F
 import qualified Language.Fortran.Util.Position as FU
@@ -221,15 +222,18 @@ inferUnits uo (fname, pf)
 combinedTemplateMap :: ModFiles -> TemplateMap
 combinedTemplateMap = M.unions . map mfTemplateMap
 
+-- | Name of the labeled data within a ModFile containing unit-specific info.
+unitsTemplateMapLabel = "units-template-map"
+
 mfTemplateMap :: ModFile -> TemplateMap
-mfTemplateMap mf = case lookupModFileData "units-template-map" mf of
+mfTemplateMap mf = case lookupModFileData unitsTemplateMapLabel mf of
   Nothing -> M.empty
   Just bs -> case decodeOrFail (LB.fromStrict bs) of
     Left _ -> M.empty
     Right (_, _, tmap) -> tmap
 
-genModFile :: F.ProgramFile UA -> TemplateMap -> ModFile
-genModFile pf tmap = alterModFileData f "units-template-map" $ buildModuleMap pf emptyModFile
+genUnitsModFile :: F.ProgramFile UA -> TemplateMap -> ModFile
+genUnitsModFile pf tmap = alterModFileData f unitsTemplateMapLabel $ genModFile pf
   where
     f _ = Just . LB.toStrict $ encode tmap
 
@@ -247,22 +251,24 @@ compileUnits' uo (fname, pf)
     -- Format report
     okReport tmap = ( logs ++ "\n" ++ fname ++ ":\n" ++ unlines [ n ++ ": " ++ show cs | (n, cs) <- M.toList tmap ]
                      -- FIXME, filename manipulation
-                    , [(fname ++ modFileSuffix, encodeModFile (genModFile pfRenamed tmap))] )
+                    , [(fname ++ modFileSuffix, encodeModFile (genUnitsModFile pfTyped tmap))] )
 
     errReport exc = ( logs ++ "\n" ++ fname ++ ":  " ++ show exc
                     , [] )
 
     -- run inference
     uOpts = uo { uoNameMap = nameMap }
-    (eTMap, state, logs) = runUnitSolver uOpts pfRenamed $ initInference >> runCompileUnits
+    (eTMap, state, logs) = runUnitSolver uOpts pfTyped $ initInference >> runCompileUnits
 
     pfUA = usProgramFile state -- the program file after units analysis is done
 
     -- Use the module map derived from all of the included Camfort Mod files.
     mmap = combinedModuleMap (M.elems (uoModFiles uo))
+    tenv = combinedTypeEnv (M.elems (uoModFiles uo))
     pfRenamed = FAR.analyseRenamesWithModuleMap mmap . FA.initAnalysis . fmap mkUnitAnnotation $ pf
+    pfTyped = fst . FAT.analyseTypesWithEnv tenv $ pfRenamed
 
-    nameMap = FAR.extractNameMap pfRenamed
+    nameMap = FAR.extractNameMap pfTyped
 
 synthesiseUnits :: UnitOpts
                 -> Char
