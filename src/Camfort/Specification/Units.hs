@@ -98,7 +98,10 @@ inferCriticalVariables uo (fname, pf)
 
     -- run inference
     uOpts = uo { uoNameMap = nameMap }
-    (eVars, state, logs) = runUnitSolver uOpts pfRenamed $ initInference >> runCriticalVariables
+    (eVars, state, logs) = runUnitSolver uOpts pfRenamed $ do
+      modifyTemplateMap . const . combinedTemplateMap . M.elems $ uoModFiles uo
+      initInference
+      runCriticalVariables
     pfUA = usProgramFile state -- the program file after units analysis is done
 
     -- Use the module map derived from all of the included Camfort Mod files.
@@ -171,7 +174,10 @@ checkUnits uo (fname, pf)
 
     -- run inference
     uOpts = uo { uoNameMap = nameMap }
-    (eCons, state, logs) = runUnitSolver uOpts pfRenamed $ initInference >> runInconsistentConstraints
+    (eCons, state, logs) = runUnitSolver uOpts pfRenamed $ do
+      modifyTemplateMap . const . combinedTemplateMap . M.elems $ uoModFiles uo
+      initInference
+      runInconsistentConstraints
     templateMap = usTemplateMap state
     pfUA :: F.ProgramFile UA
     pfUA = usProgramFile state -- the program file after units analysis is done
@@ -258,7 +264,10 @@ compileUnits' uo (fname, pf)
 
     -- run inference
     uOpts = uo { uoNameMap = nameMap }
-    (eTMap, state, logs) = runUnitSolver uOpts pfTyped $ initInference >> runCompileUnits
+    (eTMap, state, logs) = runUnitSolver uOpts pfTyped $ do
+      modifyTemplateMap . const . combinedTemplateMap . M.elems $ uoModFiles uo
+      initInference
+      runCompileUnits
 
     pfUA = usProgramFile state -- the program file after units analysis is done
 
@@ -292,7 +301,10 @@ synthesiseUnits uo marker (fname, pf)
 
     -- run inference
     uOpts = uo { uoNameMap = nameMap }
-    (eVars, state, logs) = runUnitSolver uOpts pfRenamed $ initInference >> runInferVariables >>= runSynthesis marker
+    (eVars, state, logs) = runUnitSolver uOpts pfRenamed $ do
+      modifyTemplateMap . const . combinedTemplateMap . M.elems $ uoModFiles uo
+      initInference
+      runInferVariables >>= runSynthesis marker
 
     pfUA = usProgramFile state -- the program file after units analysis is done
     pfFinal = fmap prevAnnotation . fmap FA.prevAnnotation $ pfUA -- strip annotations
