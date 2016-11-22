@@ -37,6 +37,8 @@ import Data.Generics.Uniplate.Operations
 import Data.Data
 import Data.Binary
 import Data.List (foldl', intercalate)
+import Data.Text (pack, unpack, split)
+
 import qualified Debug.Trace as D
 
 import Camfort.Analysis.Annotations
@@ -84,6 +86,10 @@ instance Default String where
     defaultValue = ""
 getExcludes :: Options -> String
 getExcludes opts = head ([ e | Excludes e <- universeBi opts ] ++ [""])
+
+-- Separates the comma-separated filenames
+getExcludedFiles :: Options -> [String]
+getExcludedFiles = map unpack . split (==',') . pack . getExcludes
 
 -- * Wrappers on all of the features
 ast d excludes _ opts = do
