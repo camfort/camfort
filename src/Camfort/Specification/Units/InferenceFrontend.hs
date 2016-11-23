@@ -40,6 +40,7 @@ import Control.Monad.RWS.Strict
 
 import qualified Language.Fortran.AST as F
 import Language.Fortran.Parser.Utils (readReal, readInteger)
+import Language.Fortran.Util.Position (getSpan)
 import qualified Language.Fortran.Analysis as FA
 import Language.Fortran.Analysis (varName, srcName)
 
@@ -437,7 +438,10 @@ propagateExp e = fmap uoLiterals ask >>= \ lm -> case e of
                           | isOp RelOp o -> setF2C ConEq  (getUnitInfo e1) (getUnitInfo e2)
   F.ExpFunctionCall {}                   -> propagateFunctionCall e
   F.ExpSubscript _ _ e1 _                -> return $ maybeSetUnitInfo (getUnitInfo e1) e
-  _                                      -> whenDebug (tell ("propagateExp: unhandled: " ++ show e)) >> return e
+  F.ExpUnary _ _ _ e1                    -> return $ maybeSetUnitInfo (getUnitInfo e1) e
+  _                                      -> do
+    whenDebug . tell $ "propagateExp: " ++ show (getSpan e) ++ " unhandled: " ++ show e
+    return e
   where
     -- Shorter names for convenience functions.
     setF2 f u1 u2  = return $ maybeSetUnitInfoF2 f u1 u2 e
