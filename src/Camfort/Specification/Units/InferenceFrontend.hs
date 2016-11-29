@@ -41,6 +41,7 @@ import Control.Monad.RWS.Strict
 import qualified Language.Fortran.AST as F
 import Language.Fortran.Parser.Utils (readReal, readInteger)
 import Language.Fortran.Util.Position (getSpan)
+import Language.Fortran.Util.ModFile
 import qualified Language.Fortran.Analysis as FA
 import Language.Fortran.Analysis (varName, srcName)
 
@@ -182,28 +183,29 @@ indexedParams pu
 -- variables are inside of a function or subroutine.
 insertUndeterminedUnits :: UnitSolver ()
 insertUndeterminedUnits = do
-  pf <- gets usProgramFile
-  forM_ (universeBi pf) $ \ pu -> case pu of
-    F.PUFunction {}   -> modifyPUBlocksM (transformBiM (toParamVar (puName pu))) pu
-    F.PUSubroutine {} -> modifyPUBlocksM (transformBiM (toParamVar (puName pu))) pu
-    _                 -> modifyPUBlocksM (transformBiM toUnitVar) pu
+  pf   <- gets usProgramFile
+  dmap <- (M.union (extractDeclMap pf) . combinedDeclMap . M.elems) `fmap` asks uoModFiles
+  forM_ (universeBi pf :: [F.ProgramUnit UA]) $ \ pu ->
+    modifyPUBlocksM (transformBiM (insertUndeterminedUnitVar dmap)) pu
 
+-- Specifically handle variables
+insertUndeterminedUnitVar :: DeclMap -> F.Expression UA -> UnitSolver (F.Expression UA)
+insertUndeterminedUnitVar dmap v@(F.ExpValue _ _ (F.ValVariable _)) = do
+  let vname = varName v
+  let sname = srcName v
+  let unit  = toUnitVar dmap (vname, sname)
+  modifyVarUnitMap $ M.insertWith (curry snd) (varName v, srcName v) unit
+  return v
+insertUndeterminedUnitVar _ e = return e
+
+-- Choose UnitVar or UnitParamVarAbs depending upon how the variable was declared.
+toUnitVar :: DeclMap -> VV -> UnitInfo
+toUnitVar dmap (vname, sname) = unit
   where
-    toParamVar :: String -> F.Expression UA -> UnitSolver (F.Expression UA)
-    toParamVar fname v@(F.ExpValue _ _ (F.ValVariable _)) = do
-      let vname = varName v
-      let sname = srcName v
-      modifyVarUnitMap $ M.insertWith (curry snd) (vname, sname) (UnitParamVarAbs (fname, (vname, sname)))
-      return v
-    toParamVar _ e = return e
-
-    toUnitVar :: F.Expression UA -> UnitSolver (F.Expression UA)
-    toUnitVar v@(F.ExpValue _ _ (F.ValVariable _)) = do
-      let vname = varName v
-      let sname = srcName v
-      modifyVarUnitMap $ M.insertWith (curry snd) (vname, sname) (UnitVar (vname, sname))
-      return v
-    toUnitVar e = return e
+    unit = case M.lookup vname dmap of
+      Just (F.Named fname, DCFunction)   -> UnitParamVarAbs (fname, (vname, sname))
+      Just (F.Named fname, DCSubroutine) -> UnitParamVarAbs (fname, (vname, sname))
+      _                                  -> UnitVar (vname, sname)
 
 --------------------------------------------------
 
@@ -401,9 +403,10 @@ topLevelFuncsAndSubs (F.ProgramFile _ cm_pus _) = topLevel =<< map snd cm_pus
 extractConstraints :: UnitSolver Constraints
 extractConstraints = do
   pf         <- gets usProgramFile
+  dmap       <- (M.union (extractDeclMap pf) . combinedDeclMap . M.elems) `fmap` asks uoModFiles
   varUnitMap <- gets usVarUnitMap
   return $ [ con | b <- mainBlocks pf, con@(ConEq {}) <- universeBi b ] ++
-           [ ConEq (UnitVar v) u | (v, u) <- M.toList varUnitMap ]
+           [ ConEq (toUnitVar dmap v) u | (v, u) <- M.toList varUnitMap ]
 
 -- | A list of blocks considered to be part of the 'main' program.
 mainBlocks :: F.ProgramFile UA -> [F.Block UA]
