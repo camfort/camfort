@@ -30,7 +30,7 @@ where
 import Data.Tuple (swap)
 import Data.Maybe (maybeToList)
 import Data.List ((\\), findIndex, partition, sortBy, group)
-import Data.Generics.Uniplate.Operations (rewrite)
+import Data.Generics.Uniplate.Operations (rewrite, universeBi)
 import Control.Monad
 import Control.Monad.State.Strict
 import Control.Monad.ST
@@ -99,14 +99,15 @@ inferVariables cons
     -- Variables to the left, unit names to the right side of the equation.
     unitAssignments               = map (fmap foldUnits . partition (not . isUnitName)) unitPows
 
+    -- Variables determined to be unit-polymorphic, so should not appear in result
+    polyVars = [ var | UnitParamVarUse (_, var, i) <- universeBi (filter ((== UnitlessVar) . snd) unitAssignments) ]
+
     -- Find the rows corresponding to the distilled "unit :: var"
-    -- information; whether they be for ordinary variables or for
-    -- parametric polymorphic variables that were inside of a
-    -- function.
+    -- information for ordinary (non-polymorphic) variables.
     unitVarAssignments            =
       [ (var, units) | ([UnitPow (UnitVar var)                 k], units) <- unitAssignments, k `approxEq` 1 ] ++
-      [ (var, units) | ([UnitPow (UnitParamVarUse (_, var, _)) k], units) <- unitAssignments, k `approxEq` 1 ]
-
+      [ (var, units) | ([UnitPow (UnitParamVarUse (_, var, _)) k], units) <- unitAssignments, k `approxEq` 1
+                                                                                            , var `notElem` polyVars ]
     foldUnits units
       | null units = UnitlessVar
       | otherwise  = foldl1 UnitMul units
