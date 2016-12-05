@@ -61,14 +61,14 @@ spec = do
   describe "Unit Inference Frontend" $ do
     describe "Literal Mode" $ do
       it "litTest1 Mixed" $ do
-        head (fromJust (head (rights [fst (runUnits LitMixed litTest1 runInconsistentConstraints)]))) `shouldSatisfy`
-          conParamEq (ConEq (UnitName "a") (UnitMul (UnitName "a") (UnitVar ("j", "j"))))
+        (fromJust (head (rights [fst (runUnits LitMixed litTest1 runInconsistentConstraints)]))) `shouldSatisfy`
+          any (conParamEq (ConEq (UnitVar ("k", "k")) (UnitMul (UnitVar ("j", "j")) (UnitVar ("j", "j")))))
       it "litTest1 Poly" $ do
-        head (fromJust (head (rights [fst (runUnits LitPoly litTest1 runInconsistentConstraints)]))) `shouldSatisfy`
-          conParamEq (ConEq (UnitName "a") (UnitMul (UnitName "a") (UnitVar ("j", "j"))))
+        (fromJust (head (rights [fst (runUnits LitPoly litTest1 runInconsistentConstraints)]))) `shouldSatisfy`
+          any (conParamEq (ConEq (UnitVar ("k", "k")) (UnitMul (UnitVar ("j", "j")) (UnitVar ("j", "j")))))
       it "litTest1 Unitless" $ do
-        head (fromJust (head (rights [fst (runUnits LitUnitless litTest1 runInconsistentConstraints)]))) `shouldSatisfy`
-          conParamEq (ConEq (UnitName "a") (UnitVar ("k", "k")))
+        (fromJust (head (rights [fst (runUnits LitUnitless litTest1 runInconsistentConstraints)]))) `shouldSatisfy`
+          any (conParamEq (ConEq (UnitName "a") (UnitVar ("k", "k"))))
     describe "Polymorphic functions" $ do
       it "squarePoly1" $ do
         show (sort (head (rights [fst (runUnits LitMixed squarePoly1 runInferVariables)]))) `shouldBe`
@@ -79,8 +79,8 @@ spec = do
           show (sort [(("y", "y"),UnitName "m"),(("z", "z"), UnitName "m")])
     describe "Recursive functions" $ do
       it "Recursive Multiplication is not OK" $ do
-        head (fromJust (head (rights [fst (runUnits LitMixed recursive2 runInconsistentConstraints)]))) `shouldSatisfy`
-          conParamEq (ConEq (UnitParamPosAbs ("recur", 0)) (UnitParamPosAbs ("recur", 2)))
+        (fromJust (head (rights [fst (runUnits LitMixed recursive2 runInconsistentConstraints)]))) `shouldSatisfy`
+          any (conParamEq (ConEq (UnitParamPosAbs ("recur", 0)) (UnitParamPosAbs ("recur", 2))))
 
   describe "Unit Inference Backend" $ do
     describe "Flatten constraints" $ do
