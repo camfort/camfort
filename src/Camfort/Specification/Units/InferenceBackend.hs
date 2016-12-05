@@ -314,7 +314,7 @@ fromDouble = toRational
 findInconsistentRows :: H.Matrix Double -> H.Matrix Double -> [Int]
 findInconsistentRows coA augA = [0..(rows augA - 1)] \\ consistent
   where
-    consistent = head (filter (tryRows coA augA) (pset ( [0..(rows augA - 1)])) ++ [[]])
+    consistent = head (filter (tryRows coA augA) (tails ( [0..(rows augA - 1)])) ++ [[]])
 
     -- Rouché–Capelli theorem is that if the rank of the coefficient
     -- matrix is not equal to the rank of the augmented matrix then

@@ -176,8 +176,8 @@ pprintUnitInfo ui = show ui
 -- | Constraint 'parametric' equality: treat all uses of a parametric
 -- abstractions as equivalent to the abstraction.
 conParamEq :: Constraint -> Constraint -> Bool
-conParamEq (ConEq lhs1 rhs1) (ConEq lhs2 rhs2) = (unitParamEq lhs1 lhs2 && unitParamEq rhs1 rhs2) ||
-                                                 (unitParamEq rhs1 lhs2 && unitParamEq lhs1 rhs2)
+conParamEq (ConEq lhs1 rhs1) (ConEq lhs2 rhs2) = unitParamEq lhs1 lhs2 || unitParamEq rhs1 rhs2 ||
+                                                 unitParamEq rhs1 lhs2 || unitParamEq lhs1 rhs2
 conParamEq (ConConj cs1) (ConConj cs2) = and $ zipWith conParamEq cs1 cs2
 conParamEq _ _ = False
 
