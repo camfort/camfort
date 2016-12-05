@@ -298,6 +298,7 @@ annotateLiteralsPU pu = do
 applyTemplates :: Constraints -> UnitSolver Constraints
 -- postcondition: returned constraints lack all Parametric constructors
 applyTemplates cons = do
+  dumpConsM "applyTemplates" cons
   -- Get a list of the instances of parametric polymorphism from the constraints.
   let instances = nub [ (name, i) | UnitParamPosUse (name, _, i) <- universeBi cons ]
 
@@ -310,9 +311,14 @@ applyTemplates cons = do
     id <- genCallId
     return (puName pu, id)
 
+  whenDebug $ do
+    D.traceM ("instances: " ++ show instances ++ "\n")
+    D.traceM ("dummies: " ++ show dummies ++ "\n")
+
   -- Work through the instances, expanding their templates, and
   -- substituting the callId into the abstract parameters.
   concreteCons <- foldM (substInstance []) [] (instances ++ dummies)
+  dumpConsM "concreteCons" concreteCons
 
   -- Also include aliases in the final set of constraints, where
   -- aliases are implemented by simply asserting that they are equal
@@ -322,6 +328,7 @@ applyTemplates cons = do
   let transAlias (UnitName a) | a `M.member` aliasMap = UnitAlias a
       transAlias u                                    = u
 
+  dumpConsM "aliases" aliases
   return . transformBi transAlias . filter (not . isParametric) $ cons ++ concreteCons ++ aliases
 
 -- | Look up the Parametric templates for a given function or
@@ -340,6 +347,7 @@ substInstance callStack output (name, callId) = do
   -- The reason for this is because functions called by functions can
   -- be used in a parametric polymorphic way.
   template <- transformBiM callIdRemap $ [] `fromMaybe` M.lookup name tmap
+  dumpConsM ("template " ++ show (name, callId)) template
 
   -- Reset the usCallIdRemap field so that it is ready for the next
   -- set of templates.
@@ -354,6 +362,9 @@ substInstance callStack output (name, callId) = do
                  return []
                else
                  foldM (substInstance (name:callStack)) [] instances
+
+  dumpConsM ("template' " ++ show (name, callId)) template'
+  dumpConsM ("output " ++ show (name, callId)) output
 
   -- Convert any remaining abstract parametric units into concrete ones.
   return . instantiate (name, callId) $ output ++ template ++ template'
@@ -692,6 +703,11 @@ binOpKind (F.BinCustom _)    = RelOp
 
 --------------------------------------------------
 
+dumpConsM str = whenDebug . D.traceM . unlines . ([replicate 50 '-', str ++ ":"]++) . (++[replicate 50 '^']) . map f
+  where
+    f (ConEq u1 u2)  = show (flattenUnits u1) ++ " === " ++ show (flattenUnits u2)
+    f (ConConj cons) = intercalate " && " (map f cons)
+
 debugLogging :: UnitSolver ()
 debugLogging = whenDebug $ do
     (tell . unlines . map (\ (ConEq u1 u2) -> "  ***AbsConstraint: " ++ show (flattenUnits u1) ++ " === " ++ show (flattenUnits u2) ++ "\n")) =<< extractConstraints
@@ -707,10 +723,10 @@ debugLogging = whenDebug $ do
     forM_ (universeBi pf) $ \ pu -> case pu of
       F.PUFunction {}
         | Just (ConConj cons) <- getConstraint pu ->
-          whenDebug . tell . unlines $ (puName pu ++ ":"):map (\ (ConEq u1 u2) -> "    constraint: " ++ show (flattenUnits u1) ++ " === " ++ show (flattenUnits u2)) cons
+          tell . unlines $ (puName pu ++ ":"):map (\ (ConEq u1 u2) -> "    constraint: " ++ show (flattenUnits u1) ++ " === " ++ show (flattenUnits u2)) cons
       F.PUSubroutine {}
         | Just (ConConj cons) <- getConstraint pu ->
-          whenDebug . tell . unlines $ (puName pu ++ ":"):map (\ (ConEq u1 u2) -> "    constraint: " ++ show (flattenUnits u1) ++ " === " ++ show (flattenUnits u2)) cons
+          tell . unlines $ (puName pu ++ ":"):map (\ (ConEq u1 u2) -> "    constraint: " ++ show (flattenUnits u1) ++ " === " ++ show (flattenUnits u2)) cons
       _ -> return ()
     let (unsolvedM, inconsists, colA) = constraintsToMatrix cons
     let solvedM = rref unsolvedM
