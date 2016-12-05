@@ -13,7 +13,7 @@
    See the License for the specific language governing permissions and
    limitations under the License.
 -}
-{-# LANGUAGE DeriveDataTypeable, DeriveGeneric #-}
+{-# LANGUAGE DeriveDataTypeable, DeriveGeneric, PatternGuards #-}
 
 
 {- Provides various data types and type class instances for the Units extension -}
@@ -139,14 +139,36 @@ instance Show Constraint where
   show (ConEq u1 u2) = show u1 ++ " === " ++ show u2
   show (ConConj cs) = intercalate " && " (map show cs)
 
+isVarUnit (UnitVar _)         = True
+isVarUnit (UnitParamVarUse _) = True
+isVarUnit _                   = False
+
+isUnresolvedUnit (UnitVar _)         = True
+isUnresolvedUnit (UnitParamVarUse _) = True
+isUnresolvedUnit (UnitParamVarAbs _) = True
+isUnresolvedUnit (UnitParamPosUse _) = True
+isUnresolvedUnit (UnitParamPosAbs _) = True
+isUnresolvedUnit (UnitParamLitUse _) = True
+isUnresolvedUnit (UnitParamLitAbs _) = True
+isUnresolvedUnit (UnitPow u _)       = isUnresolvedUnit u
+isUnresolvedUnit (UnitMul u1 u2)     = isUnresolvedUnit u1 || isUnresolvedUnit u2
+isUnresolvedUnit _                   = False
+
+isResolvedUnit = not . isUnresolvedUnit
+
 pprintConstr :: Constraint -> String
-pprintConstr (ConEq u1@(UnitVar _) u2@(UnitVar _))
-    = "'" ++ pprintUnitInfo u1 ++ "' should have the same units as '" ++ pprintUnitInfo u2 ++ "'"
-pprintConstr (ConEq u1 u2) = "'" ++ pprintUnitInfo u1 ++ "' should be '" ++ pprintUnitInfo u2 ++ "'"
-pprintConstr (ConConj cs) = intercalate "\n\t and " (map pprintConstr cs)
+pprintConstr (ConEq u1 u2)
+  | isResolvedUnit u1 = "'" ++ pprintUnitInfo u2 ++ "' should have unit '" ++ pprintUnitInfo u1 ++ "'"
+  | isResolvedUnit u2 = "'" ++ pprintUnitInfo u1 ++ "' should have unit '" ++ pprintUnitInfo u2 ++ "'"
+pprintConstr (ConEq u1 u2) = "'" ++ pprintUnitInfo u1 ++ "' should have the same units as '" ++ pprintUnitInfo u2 ++ "'"
+pprintConstr (ConConj cs)  = intercalate "\n\t and " (map pprintConstr cs)
 
 pprintUnitInfo :: UnitInfo -> String
 pprintUnitInfo (UnitVar (_, sName)) = printf "%s" sName
+pprintUnitInfo (UnitParamVarUse (_, (_, sName), _)) = printf "%s" sName
+pprintUnitInfo (UnitParamPosUse (fname, 0, _)) = printf "result of %s" fname
+pprintUnitInfo (UnitParamPosUse (fname, i, _)) = printf "parameter %d to %s" i fname
+pprintUnitInfo (UnitLiteral _) = "literal number"
 pprintUnitInfo ui = show ui
 
 --------------------------------------------------

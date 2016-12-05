@@ -26,7 +26,7 @@ module Camfort.Specification.Units.InferenceFrontend
 where
 
 import Data.Data (Data)
-import Data.List (nub)
+import Data.List (nub, intercalate)
 import qualified Data.Map.Strict as M
 import qualified Data.IntMap.Strict as IM
 import qualified Data.Set as S

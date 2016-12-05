@@ -29,7 +29,7 @@ where
 
 import Data.Tuple (swap)
 import Data.Maybe (maybeToList)
-import Data.List ((\\), findIndex, partition, sortBy, group)
+import Data.List ((\\), findIndex, partition, sortBy, group, intercalate, tails)
 import Data.Generics.Uniplate.Operations (rewrite, universeBi)
 import Control.Monad
 import Control.Monad.State.Strict
@@ -108,6 +108,7 @@ inferVariables cons
       [ (var, units) | ([UnitPow (UnitVar var)                 k], units) <- unitAssignments, k `approxEq` 1 ] ++
       [ (var, units) | ([UnitPow (UnitParamVarUse (_, var, _)) k], units) <- unitAssignments, k `approxEq` 1
                                                                                             , var `notElem` polyVars ]
+
     foldUnits units
       | null units = UnitlessVar
       | otherwise  = foldl1 UnitMul units
@@ -327,3 +328,8 @@ findInconsistentRows coA augA = [0..(rows augA - 1)] \\ consistent
 
 extractRows = flip (?) -- hmatrix 0.17 changed interface
 m @@> i = m `atIndex` i
+
+showCons str = unlines . ([replicate 50 '-', str ++ ":"]++) . (++[replicate 50 '^']) . map f
+  where
+    f (ConEq u1 u2)  = show (flattenUnits u1) ++ " === " ++ show (flattenUnits u2)
+    f (ConConj cons) = intercalate " && " (map f cons)

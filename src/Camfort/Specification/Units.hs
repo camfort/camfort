@@ -29,8 +29,8 @@ where
 
 import qualified Data.Map.Strict as M
 import Data.Char (isNumber)
-import Data.List (intercalate)
-import Data.Maybe (fromMaybe, maybeToList, listToMaybe, mapMaybe)
+import Data.List (intercalate, find, sort, group)
+import Data.Maybe (fromMaybe, maybeToList, listToMaybe, mapMaybe, isJust, maybe)
 import Data.Binary
 import Data.Generics.Uniplate.Operations
 import qualified Data.ByteString.Char8 as B
@@ -76,10 +76,12 @@ inferCriticalVariables uo (fname, pf)
     -- Format report
     okReport []   = (logs ++ "\n" ++ fname
                          ++ ":No additional annotations are necessary.\n", 0)
-    okReport vars = (logs ++ "\n" ++ fname ++ ": "
-                         ++ show numVars
-                         ++ " variable declarations suggested to be given a specification:\n"
-                         ++ unlines [ "    " ++ expReport ei | ei <- expInfo ], numVars)
+    okReport vars = ( logs ++ "\n" ++ fname ++ ": "
+                           ++ show numVars
+                           ++ " variable declarations suggested to be given a specification:\n"
+                           ++ unlines [ "    " ++ expReport ei | ei <- expInfo ]
+                           ++ show names ++ "\n"
+                    , numVars)
       where
         names = map showVar vars
         expInfo = filter ((`elem` names) . FA.srcName) $ declVariables pfUA
@@ -117,13 +119,16 @@ checkUnits uo (fname, pf)
   | Left exc    <- eCons = errReport exc
   where
     -- Format report
-    okReport Nothing = logs ++ "\n" ++ fname ++ ": Consistent. " ++ show nVars ++ " variables checked."
-    okReport (Just cons) = logs ++ "\n" ++ fname ++ ": Inconsistent:\n" ++ reportErrors cons
+    okReport Nothing     = logs ++ "\n" ++ fname ++ ": Consistent. " ++ show nVars ++ " variables checked."
+    okReport (Just cons) = logs ++ "\n" ++ fname ++ ": Inconsistent:\n" ++ reportErrors cons ++ "\n\n" ++
+                           unlines (map show constraints)
 
-    reportErrors cons = unlines [ reportError con | con <- cons ]
-    reportError con = " - at " ++ srcSpan con
-                      ++ pprintConstr (orient (unrename nameMap con))
-                      ++ additionalInfo con
+    reportErrors cons = unlines [ maybe "" showSS ss ++ str | (ss, str) <- reports ]
+      where
+        reports = map head . group . sort $ map reportError cons
+        showSS  = (++ ": ") . (" - at "++) . showSrcSpan
+
+    reportError con = (findCon con, pprintConstr (orient (unrename nameMap con)) ++ additionalInfo con)
       where
         -- Create additional info for errors
         additionalInfo con =
@@ -148,6 +153,7 @@ checkUnits uo (fname, pf)
         mapNotFirst f (x : xs) =  x : (map f xs)
 
         orient (ConEq u (UnitVar v)) = ConEq (UnitVar v) u
+        orient (ConEq u (UnitParamVarUse v)) = ConEq (UnitParamVarUse v) u
         orient c = c
 
         pad o = (++) (replicate o ' ')
@@ -156,13 +162,18 @@ checkUnits uo (fname, pf)
                     | otherwise              = ""
 
     -- Find a given constraint within the annotated AST. FIXME: optimise
+
     findCon :: Constraint -> Maybe FU.SrcSpan
-    findCon con = listToMaybe $ [ FU.getSpan x | x <- universeBi pfUA :: [F.Expression UA], getConstraint x `eq` con ] ++
-                                [ FU.getSpan x | x <- universeBi pfUA :: [F.Statement UA] , getConstraint x `eq` con ] ++
-                                [ FU.getSpan x | x <- universeBi pfUA :: [F.Declarator UA], getConstraint x `eq` con ] ++
-                                [ FU.getSpan x | x <- universeBi pfUA :: [F.Argument UA]  , getConstraint x `eq` con ]
-      where eq Nothing _    = False
-            eq (Just c1) c2 = conParamEq c1 c2
+    findCon con = lookupWith (eq con) constraints
+      where eq c1 c2 = or [ conParamEq c1 c2' | c2' <- universeBi c2 ]
+
+    constraints = [ (c, FU.getSpan x) | x <- universeBi pfUA :: [F.Expression UA]  , c <- maybeToList (getConstraint x) ] ++
+                  [ (c, FU.getSpan x) | x <- universeBi pfUA :: [F.Statement UA]   , c <- maybeToList (getConstraint x) ] ++
+                  [ (c, FU.getSpan x) | x <- universeBi pfUA :: [F.Argument UA]    , c <- maybeToList (getConstraint x) ] ++
+                  [ (c, FU.getSpan x) | x <- universeBi pfUA :: [F.Declarator UA]  , c <- maybeToList (getConstraint x) ] ++
+                  -- Why reverse? So that PUFunction and PUSubroutine appear first in the list, before PUModule.
+                  reverse [ (c, FU.getSpan x) | x <- universeBi pfUA :: [F.ProgramUnit UA]
+                                              , c <- maybeToList (getConstraint x) ]
 
     varReport     = intercalate ", " . map showVar
 
@@ -192,6 +203,9 @@ checkUnits uo (fname, pf)
     mmap = combinedModuleMap (M.elems (uoModFiles uo))
     pfRenamed = FAR.analyseRenamesWithModuleMap mmap . FA.initAnalysis . fmap mkUnitAnnotation $ pf
     nameMap = FAR.extractNameMap pfRenamed
+
+lookupWith :: (a -> Bool) -> [(a,b)] -> Maybe b
+lookupWith f = fmap snd . find (f . fst)
 
 {-| Check and infer units-of-measure for a program
     This produces an output of all the unit information for a program -}
@@ -255,7 +269,7 @@ compileUnits' uo (fname, pf)
   | Left exc   <- eTMap = errReport exc
   where
     -- Format report
-    okReport tmap = ( logs ++ "\n" ++ fname ++ ":\n" ++ unlines [ n ++ ": " ++ show cs | (n, cs) <- M.toList tmap ]
+    okReport tmap = ( logs ++ "\n" ++ fname ++ ":\n" ++ unlines [ n ++ ":\n  " ++ intercalate "\n  " (map show cs) | (n, cs) <- M.toList tmap ]
                      -- FIXME, filename manipulation
                     , [(fname ++ modFileSuffix, encodeModFile (genUnitsModFile pfTyped tmap))] )
 
