@@ -35,8 +35,8 @@ spec =
             (Right $ Right [(["x","y","z"], Specification $
              Multiple $ Exact (Spatial (Sum [Product [Forward 1 1 True]])))])
 
-      it "parse and convert simple exact stencil with irreflexive (2a)" $
-          parseAndConvert "= stencil centered(depth=1, dim=2, irreflexive) :: x, y, z"
+      it "parse and convert simple exact stencil with nonpointed (2a)" $
+          parseAndConvert "= stencil centered(depth=1, dim=2, nonpointed) :: x, y, z"
           `shouldBe`
             (Right $ Right [(["x","y","z"], Specification $
              Multiple $ Exact (Spatial (Sum [Product [Centered 1 2 False]])))])

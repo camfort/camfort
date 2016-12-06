@@ -22,8 +22,8 @@ import Camfort.Specification.Stencils.Syntax (showL)
   stencil     { TId "stencil" }
   region      { TId "region" }
   readOnce    { TId "readonce" }
-  reflexive   { TId "reflexive" }
-  irreflexive { TId "irreflexive" }
+  pointed     { TId "pointed" }
+  nonpointed  { TId "nonpointed" }
   atMost      { TId "atmost" }
   atLeast     { TId "atleast" }
   dim         { TId "dim" }
@@ -56,7 +56,7 @@ REGION ::                       { Region }
 : forward  '(' REGION_ATTRS ')' { applyAttr Forward  $3 }
 | backward '(' REGION_ATTRS ')' { applyAttr Backward $3 }
 | centered '(' REGION_ATTRS ')' { applyAttr Centered $3 }
-| reflexive '(' dim '=' num ')' { Centered 0 (read $5) True }
+| pointed  '(' dim '=' num ')' { Centered 0 (read $5) True }
 | REGION '+' REGION             { Or $1 $3 }
 | REGION '*' REGION             { And $1 $3 }
 | '(' REGION ')'                { $2 }
@@ -87,7 +87,7 @@ DIM :: { Dim Int }
 DIM : dim '=' num { Dim $ read $3 }
 
 REFL :: { Bool }
- : irreflexive  { False }
+ : nonpointed { False }
 
 SPECDEC :: { Spec }
 : APPROXMODS MOD REGION         { Spatial ($1 ++ [$2]) $3 }

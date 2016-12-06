@@ -187,7 +187,7 @@ spec =
                          (Sum [Product [Forward 1 1 False, Forward 1 2 False],
                                Product [Centered 0 1 True, Centered 0 2 True]])))
       it "consistent (2) a(i,c,j) = b(i,j+1) + b(i,j) \
-                        \:: forward(depth=1,dim=2)*reflexive(dim=1)" $
+                        \:: forward(depth=1,dim=2)*pointed(dim=1)" $
         indicesToSpec' ["i", "j"]
                         [Neighbour "i" 0, Constant (F.ValInteger "0"), Neighbour "j" 0]
                         [[offsetToIx "i" 0, offsetToIx "j" 1],
@@ -197,7 +197,7 @@ spec =
                          (Sum [Product [Forward 1 2 True, Centered 0 1 True]])))
 
       it "consistent (3) a(i+1,c,j) = b(j,i+1) + b(j,i) \
-                        \:: backward(depth=1,dim=2)*reflexive(dim=1)" $
+                        \:: backward(depth=1,dim=2)*pointed(dim=1)" $
         indicesToSpec' ["i", "j"]
                         [Neighbour "i" 1, Constant (F.ValInteger "0"), Neighbour "j" 0]
                         [[offsetToIx "j" 0, offsetToIx "i" 1],
@@ -217,7 +217,7 @@ spec =
                          (Sum [Product [Backward 1 2 True]])))
 
       it "consistent (5) a(i) = b(i,i+1) \
-                        \:: reflexive(dim=1)*forward(depth=1,dim=2,irreflexive)" $
+                        \:: pointed(dim=1)*forward(depth=1,dim=2,nonpointed)" $
         indicesToSpec' ["i", "j"]
                         [Neighbour "i" 0]
                         [[offsetToIx "i" 0, offsetToIx "i" 1]]
@@ -227,7 +227,7 @@ spec =
                                         Centered 0 1 True]])))
 
       it "consistent (6) a(i) = b(i) + b(0) \
-                        \:: reflexive(dim=1)" $
+                        \:: pointed(dim=1)" $
         indicesToSpec' ["i", "j"]
                         [Neighbour "i" 0]
                         [[offsetToIx "i" 0], [offsetToIx "i" absoluteRep]]
@@ -272,18 +272,18 @@ spec =
          fst (callAndSummarise (infer AssignMode '=') program)
            `shouldBe`
            "\ntests/fixtures/Specification/Stencils/example2.f\n\
-            \(24:8)-(24:53)    stencil readOnce, (reflexive(dim=1))*(centered(depth=1, dim=2)) \
-                                     \+ (reflexive(dim=2))*(centered(depth=1, dim=1)) :: a\n\
+            \(24:8)-(24:53)    stencil readOnce, (pointed(dim=1))*(centered(depth=1, dim=2)) \
+                                     \+ (pointed(dim=2))*(centered(depth=1, dim=1)) :: a\n\
             \(32:7)-(32:26)    stencil readOnce, (backward(depth=1, dim=1)) :: a\n\
             \(41:8)-(41:103)    stencil readOnce, (centered(depth=1, dim=1)) \
                                                 \+ (centered(depth=1, dim=2)) :: a\n\
-            \(42:8)-(42:37)    stencil readOnce, (reflexive(dim=1))*(reflexive(dim=2)) :: a"
+            \(42:8)-(42:37)    stencil readOnce, (pointed(dim=1))*(pointed(dim=2)) :: a"
 
       it "stencil check" $
          fst (callAndSummarise (\f p -> (check f p, p)) program)
            `shouldBe`
            "\ntests/fixtures/Specification/Stencils/example2.f\n\
-            \(23:1)-(23:86)    Correct.\n(31:1)-(31:56)    Correct."
+            \(23:1)-(23:82)    Correct.\n(31:1)-(31:56)    Correct."
 
       it "stencil synth" $
          (B.unpack . runIdentity
@@ -311,7 +311,7 @@ spec =
          fst (callAndSummarise (infer AssignMode '=') program)
            `shouldBe`
             "\ntests/fixtures/Specification/Stencils/example4.f\n\
-             \(6:8)-(6:33)    stencil (reflexive(dim=1)) :: x"
+             \(6:8)-(6:33)    stencil (pointed(dim=1)) :: x"
 
 
 {- Properties of `spanBoundingBox`: idempotent and associative -}

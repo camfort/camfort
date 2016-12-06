@@ -461,13 +461,13 @@ instance Show Region where
    show (Forward dep dim reflx)   = showRegion "forward" dep dim reflx
    show (Backward dep dim reflx)  = showRegion "backward" dep dim reflx
    show (Centered dep dim reflx)
-     | dep == 0 = "reflexive(dim=" ++ show dim ++ ")"
+     | dep == 0 = "pointed(dim=" ++ show dim ++ ")"
      | otherwise = showRegion "centered" dep dim reflx
 
 -- Helper for showing regions
 showRegion typ depS dimS reflx = typ ++ "(depth=" ++ show depS
                                ++ ", dim=" ++ show dimS
-                               ++ (if reflx then "" else ", irreflexive")
+                               ++ (if reflx then "" else ", nonpointed")
                                ++ ")"
 
 -- Helper for reassociating an association list, grouping the keys together that

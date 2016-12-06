@@ -20,7 +20,7 @@ c compute mean
             if (.true.) then
 c= region :: r2 = centered(depth=1, dim=2)
                x = a(i-1,j) + a(i,j) + a(i+1,j) + abs(0)
-c= stencil readOnce, (reflexive(dim=1))*r2 + (reflexive(dim=2))*r1 :: a               
+c= stencil readOnce, (pointed(dim=1))*r2 + (pointed(dim=2))*r1 :: a               
              b(i,j) = (x + a(i,j-1) + a(i,j+1)) / 5.0
 c No specification should be inferred here
              b(0,0) = a(i, j)
@@ -40,7 +40,7 @@ c= stencil readOnce, backward(depth=1, dim=1) :: a
             if (.true.) then 
 c= stencil readOnce, (centered(depth=1, dim=1)) + (centered(depth=1, dim=2)) :: a
              a(i,j) = a(modulo(i,imax),1) + a(modulo(i+1,imax) ,1) + a(modulo(i-1,imax),1) + a(1,j) + x
-c= stencil readOnce, (reflexive(dim=1))*(reflexive(dim=2)) :: a
+c= stencil readOnce, (pointed(dim=1))*(pointed(dim=2)) :: a
              a(i,j) = a(i,j) + a(1,1)
             end if
          end do

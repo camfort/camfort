@@ -37,27 +37,27 @@ spec = do
 
     let reflCentOneDimSpec = Single $ Exact $ Spatial $ Sum
           [ Product [ Centered 1 1 False ] ]
-    it "1D centered irreflexive - positive" $ do
+    it "1D centered nonpointed - positive" $ do
       let acs = Single [[-1], [1]]
       consistent acs reflCentOneDimSpec `shouldBe` True
 
     let centeredAcs = Single [[-1], [0], [1]]
-    it "1D centered irreflexive - negative" $
+    it "1D centered nonpointed - negative" $
       consistent centeredAcs reflCentOneDimSpec `shouldBe` False
 
-    it "1D centered irreflexive lower bound - positive" $ do
+    it "1D centered nonpointed lower bound - positive" $ do
       let spec = Single $ Bound
             (Just $ Spatial $ Sum [ Product [ Centered 1 1 False ] ])
             Nothing
       consistent centeredAcs spec `shouldBe` True
 
-    it "1D backward irreflexive lower bound - positive" $ do
+    it "1D backward nonpointed lower bound - positive" $ do
       let spec = Single $ Bound
             (Just $ Spatial $ Sum [ Product [ Backward 1 1 False ] ])
             Nothing
       consistent (Single [[-1]]) spec `shouldBe` True
 
-    it "1D centered irreflexive upper bound - negative" $ do
+    it "1D centered nonpointed upper bound - negative" $ do
       let spec = Single $ Bound
             Nothing
             (Just $ Spatial $ Sum [ Product [ Centered 1 1 False ] ])
