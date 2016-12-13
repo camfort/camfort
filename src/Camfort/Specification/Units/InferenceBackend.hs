@@ -88,13 +88,20 @@ inferVariables cons
   | null inconsists = unitVarAssignments
   | otherwise       = []
   where
-    (unsolvedM, inconsists, colA) = constraintsToMatrix cons
-    solvedM                       = rref unsolvedM
-    cols                          = A.elems colA
+    (lhsM, rhsM, inconsists, lhsColA, rhsColA) = constraintsToMatrices cons
+    solM = H.linearSolveSVD lhsM rhsM
 
     -- Convert the rows of the solved matrix into flattened unit
     -- expressions in the form of "unit ** k".
-    unitPows                      = map (concatMap flattenUnits . zipWith UnitPow cols) (H.toLists solvedM)
+    rhsCol = A.elems rhsColA
+
+    rhsPows :: [[UnitInfo]]
+    rhsPows = map (zipWith UnitPow rhsCol) $ H.toLists solM
+
+    lhsPows :: [UnitInfo]
+    lhsPows = map (flip UnitPow 1) (A.elems lhsColA)
+
+    unitPows = map (concatMap flattenUnits) $ zipWith (:) lhsPows rhsPows
 
     -- Variables to the left, unit names to the right side of the equation.
     unitAssignments               = map (fmap foldUnits . partition (not . isUnitName)) unitPows

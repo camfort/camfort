@@ -728,21 +728,25 @@ debugLogging = whenDebug $ do
         | Just (ConConj cons) <- getConstraint pu ->
           tell . unlines $ (puName pu ++ ":"):map (\ (ConEq u1 u2) -> "    constraint: " ++ show (flattenUnits u1) ++ " === " ++ show (flattenUnits u2)) cons
       _ -> return ()
-    let (unsolvedM, inconsists, colA) = constraintsToMatrix cons
-    let solvedM = rref unsolvedM
+    let (lhsM, rhsM, _, lhsColA, rhsColA) = constraintsToMatrices cons
+    tell "\n--------------------------------------------------\nLHS Cols:\n"
+    tell $ show lhsColA
+    tell "\n--------------------------------------------------\nRHS Cols:\n"
+    tell $ show rhsColA
+    tell "\n--------------------------------------------------\nLHS M:\n"
+    tell $ show lhsM
+    tell "\n--------------------------------------------------\nRHS M:\n"
+    tell $ show rhsM
+    tell "\n--------------------------------------------------\nSolved (SVD) M:\n"
+    tell $ show (H.linearSolveSVD lhsM rhsM)
+    tell "\n--------------------------------------------------\nSingular Values:\n"
+    tell $ show (H.singularValues lhsM)
     tell "\n--------------------------------------------------\n"
-    tell $ show colA
+    tell $ "Rank LHS: " ++ show (H.rank lhsM) ++ "\n"
     tell "\n--------------------------------------------------\n"
-    tell $ show unsolvedM
+    let augA = if H.rows rhsM == 0 || H.cols rhsM == 0 then lhsM else H.fromBlocks [[lhsM, rhsM]]
+    tell $ "Rank Augmented: " ++ show (H.rank augA) ++ "\n"
     tell "\n--------------------------------------------------\n"
-    tell . show $ (H.takeRows (H.rank solvedM) solvedM)
-    tell "\n--------------------------------------------------\n"
-    tell $ "Rank: " ++ show (H.rank solvedM) ++ "\n"
-    tell $ "Is inconsistent RREF? " ++ show (isInconsistentRREF solvedM) ++ "\n"
-    tell $ "Inconsistent rows: " ++ show (inconsistentConstraints cons) ++ "\n"
-    tell "--------------------------------------------------\n"
-    tell $ "Critical Variables: " ++ show (criticalVariables cons) ++ "\n"
-    tell $ "Infer Variables: " ++ show (inferVariables cons) ++ "\n"
 
 --------------------------------------------------
 
