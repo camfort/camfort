@@ -24,7 +24,7 @@
 module Camfort.Specification.Units.InferenceBackend
   ( inconsistentConstraints, criticalVariables, inferVariables
   -- mainly for debugging and testing:
-  , shiftTerms, flattenConstraints, flattenUnits, constraintsToMatrix, rref, isInconsistentRREF )
+  , shiftTerms, flattenConstraints, flattenUnits, constraintsToMatrix, constraintsToMatrices, rref, isInconsistentRREF )
 where
 
 import Data.Tuple (swap)
@@ -63,7 +63,7 @@ inconsistentConstraints cons
   | null inconsists = Nothing
   | otherwise       = Just [ con | (con, i) <- zip cons [0..], i `elem` inconsists ]
   where
-    (unsolvedM, inconsists, colA) = constraintsToMatrix cons
+    (_, _, inconsists, _, _) = constraintsToMatrices cons
 
 --------------------------------------------------
 
@@ -155,6 +155,21 @@ constraintsToMatrix cons = (augM, inconsists, A.listArray (0, length colElems - 
   where
     -- convert each constraint into the form (lhs, rhs)
     consPairs       = flattenConstraints cons
+    -- ensure terms are on the correct side of the equal sign
+    shiftedCons     = map shiftTerms consPairs
+    lhs             = map fst shiftedCons
+    rhs             = map snd shiftedCons
+    (lhsM, lhsCols) = flattenedToMatrix lhs
+    (rhsM, rhsCols) = flattenedToMatrix rhs
+    colElems        = A.elems lhsCols ++ A.elems rhsCols
+    augM            = if rows rhsM == 0 || cols rhsM == 0 then lhsM else fromBlocks [[lhsM, rhsM]]
+    inconsists      = findInconsistentRows lhsM augM
+
+constraintsToMatrices :: Constraints -> (H.Matrix Double, H.Matrix Double, [Int], A.Array Int UnitInfo, A.Array Int UnitInfo)
+constraintsToMatrices cons = (lhsM, rhsM, inconsists, lhsCols, rhsCols)
+  where
+    -- convert each constraint into the form (lhs, rhs)
+    consPairs       = filter (uncurry (/=)) $ flattenConstraints cons
     -- ensure terms are on the correct side of the equal sign
     shiftedCons     = map shiftTerms consPairs
     lhs             = map fst shiftedCons
