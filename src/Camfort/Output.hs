@@ -109,7 +109,7 @@ instance OutputFiles (Filename, SourceText) where
 
 -- When there is a file to be reprinted (for refactoring)
 instance OutputFiles (Filename, SourceText, F.ProgramFile Annotation) where
-  mkOutputText f' (f, input, ast@(F.ProgramFile (F.MetaInfo version) _ _)) =
+  mkOutputText f' (f, input, ast@(F.ProgramFile (F.MetaInfo version _) _ _)) =
      -- If we are create a file, call the pretty printer directly
      if B.null input
       then B.pack $ PP.pprintAndRender version ast (Just 0)

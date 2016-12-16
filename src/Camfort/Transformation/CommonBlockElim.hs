@@ -68,7 +68,7 @@ commonElimToModules d pfs =
     (r ++ r', pfs'', pfM)
   where
     (pfs', (r, cg)) = runState (analyseAndRmCommons pfs) ("", [])
-    meta = F.MetaInfo PM.Fortran90
+    meta = F.MetaInfo PM.Fortran90 ""
     (r', pfM) = introduceModules meta d cg
     pfs'' = updateUseDecls pfs' cg
 
@@ -229,7 +229,7 @@ updateUseDecls ::
   [(Filename, F.ProgramFile A)] -> [TLCommon A] -> [(Filename, F.ProgramFile A)]
 updateUseDecls fps tcs = map perPF fps
   where
-    perPF (f, p@(F.ProgramFile (F.MetaInfo v) _ _)) =
+    perPF (f, p@(F.ProgramFile (F.MetaInfo v _) _ _)) =
       (f, transformBi (importIncludeCommons v) $ transformBi (matchPUnit v f) p)
     tcrs = mkTLCommonRenamers tcs
 
@@ -419,7 +419,7 @@ introduceModules meta dir cenv =
 mkModuleFile ::
   F.MetaInfo -> Directory -> TLCommon A -> (Report, (Filename, F.ProgramFile A))
 mkModuleFile meta dir (_, (_, (name, varTys))) =
-    (r, (path, F.ProgramFile meta [([], mod)] []))
+    (r, (path, F.pfSetFilename path $ F.ProgramFile meta [([], mod)] []))
   where
     modname = commonName name
     path = dir ++ modname ++ ".f90"
