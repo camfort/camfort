@@ -79,27 +79,23 @@ inferCriticalVariables uo (fname, pf)
     okReport vars = ( logs ++ "\n" ++ fname ++ ": "
                            ++ show numVars
                            ++ " variable declarations suggested to be given a specification:\n"
-                           ++ unlines [ "    " ++ expReport ei | ei <- expInfo ]
-                           ++ show names ++ "\n"
+                           ++ unlines [ "    " ++ declReport d | d <- M.toList dmapSlice ]
                     , numVars)
       where
-        names = map showVar vars
-        expInfo = filter ((`elem` names) . FA.srcName) $ declVariables pfUA
-        numVars = length expInfo
+        varNames  = map unitVarName vars
+        dmapSlice = M.filterWithKey (\ k _ -> k `elem` varNames) dmap
+        numVars   = M.size dmapSlice
 
-    expReport e = "(" ++ showSrcSpan (FU.getSpan e) ++ ")    " ++ FA.srcName e
+    declReport (v, (dc, ss)) = "(" ++ showSrcSpan ss ++ ")    " ++ fromMaybe v (M.lookup v uniqnameMap)
 
-    varReport     = intercalate ", " . map showVar
-
-    showVar (UnitVar (_, s))  = s
-    showVar (UnitParamVarUse (_, (_, s), _))  = s
-    showVar (UnitLiteral _)   = "<literal>"
-    showVar _                 = "<bad>"
+    unitVarName (UnitVar (v, _))                 = v
+    unitVarName (UnitParamVarUse (_, (v, _), _)) = v
+    unitVarName _                                = "<bad>"
 
     errReport exc = logs ++ "\n" ++ fname ++ ":\n" ++ show exc
 
     -- run inference
-    uOpts = uo { uoNameMap = nameMap }
+    uOpts = uo { uoNameMap = FAR.extractNameMap pfRenamed }
     (eVars, state, logs) = runUnitSolver uOpts pfRenamed $ do
       modifyTemplateMap . const . combinedTemplateMap . M.elems $ uoModFiles uo
       initInference
@@ -109,7 +105,16 @@ inferCriticalVariables uo (fname, pf)
     -- Use the module map derived from all of the included Camfort Mod files.
     mmap = combinedModuleMap (M.elems (uoModFiles uo))
     pfRenamed = FAR.analyseRenamesWithModuleMap mmap . FA.initAnalysis . fmap mkUnitAnnotation $ pf
-    nameMap = FAR.extractNameMap pfRenamed
+
+    -- Map of all declarations
+    dmap = extractDeclMap pfRenamed `M.union` combinedDeclMap (M.elems (uoModFiles uo))
+
+    mmap' = extractModuleMap pfRenamed `M.union` mmap -- post-parsing
+    -- unique name -> src name across modules
+    uniqnameMap = M.fromList [
+                (FA.varName e, FA.srcName e) |
+                e@(F.ExpValue _ _ (F.ValVariable {})) <- universeBi pfRenamed :: [F.Expression UA]
+              ] `M.union` (M.unions . map (M.fromList . map (\ (a, (b, _)) -> (b, a)) . M.toList) $ M.elems mmap')
 
 checkUnits, inferUnits
             :: UnitOpts -> (Filename, F.ProgramFile Annotation) -> Report

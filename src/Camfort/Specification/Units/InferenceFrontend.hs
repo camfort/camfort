@@ -202,10 +202,10 @@ insertUndeterminedUnitVar _ e = return e
 toUnitVar :: DeclMap -> VV -> UnitInfo
 toUnitVar dmap (vname, sname) = unit
   where
-    unit = case M.lookup vname dmap of
-      Just (F.Named fname, DCFunction)   -> UnitParamVarAbs (fname, (vname, sname))
-      Just (F.Named fname, DCSubroutine) -> UnitParamVarAbs (fname, (vname, sname))
-      _                                  -> UnitVar (vname, sname)
+    unit = case fst `fmap` M.lookup vname dmap of
+      Just (DCFunction (F.Named fname))   -> UnitParamVarAbs (fname, (vname, sname))
+      Just (DCSubroutine (F.Named fname)) -> UnitParamVarAbs (fname, (vname, sname))
+      _                                   -> UnitVar (vname, sname)
 
 --------------------------------------------------
 
