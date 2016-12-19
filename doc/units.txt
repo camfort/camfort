@@ -1,0 +1,62 @@
+Multi-file & units:
+
+The module Language.Fortran.Util.ModFile contains the source and
+documentation for the code that produces "camfort-mod" files. It is a
+relatively straightforward application of Data.Binary. You can modify
+the ModFile datatype to add more things. In addition, there is an
+"mfOtherData" field that is intended to flexibly extend the
+"camfort-mod" file format without recompilation of fortran-src. It is
+simply a Data.Map from a String (a key name) to a block of
+bytes. Presumably, any user of that mfOtherData map would use
+Data.Binary to encode into a ByteString and then store it into the
+block of bytes.
+
+Camfort Units uses the mfOtherData to store units information in the
+form of a TemplateMap.  See functions genUnitsModFile, mfTemplateMap
+in Units.hs for an example of how the TemplateMap is added to the
+mfOtherData field, and extracted. Those functions are invoked from the
+compileUnits function that expects to be itself invoked by the
+doCreateBinary function in Input.hs. That function expects to be
+handed a list of filenames and bytestrings to write to disk, after the
+analysis has completed.
+
+TemplateMap is a data-structure defined in Units/Monad.hs that maps
+function/subroutine names to their associated, parametric polymorphic
+constraints. TemplateMaps are assembled for each program unit during
+the unit analysis process.  So multi-file support is essentially
+taking all the TemplateMaps from all the program units in all of the
+files, and putting them all into one place so that unit analysis can
+look up any set of template maps that it needs.
+
+Linear solving, etc:
+
+Camfort units is based on reducing a matrix of constraints to Hermite
+Normal Form (reduced row echelon form, basically the same thing). The
+function 'rref' in InferenceBackend is a Haskell-coded function that
+achieves Hermite Normal Form by calculating the combination of
+'elementary matrix row operations' that are needed to produce such a
+form. It works, but LAPACK would be much faster, if we can figure out
+how to use it for this purpose. Trouble is, LAPACK is generally used
+by people most interested in solving Ax=B, and over the "real
+numbers", not integers. Also many functions in LAPACK have no interest
+in non-square matrices, which is a problem for us.
+
+Plus, the documentation looks like this: http://www.netlib.org/lapack/explore-html/dc/db6/sgelsy_8f_source.html
+
+So currently Camfort is using linearSolveSVD to solve matrices very
+quickly, then using the solution matrix as a means of assigning unit
+values to the columns of the original co-efficient matrix.
+
+constraintsToMatrices produces the A and B matrices, plus two arrays
+telling us the meaning of their columns.
+
+If you look at inferVariables you'll see that it converts the set of
+constraints into the matrices A and B, then solves Ax=B, then takes x
+and converts it back into a list of UnitInfo values.
+
+That's basically the process in a nutshell.
+
+The problem with linearSolveSVD is that it produces 'real' number
+solutions when the system is underconstrained, which makes life a bit
+difficult.
+
