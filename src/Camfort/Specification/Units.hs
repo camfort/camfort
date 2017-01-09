@@ -86,7 +86,8 @@ inferCriticalVariables uo (fname, pf)
         dmapSlice = M.filterWithKey (\ k _ -> k `elem` varNames) dmap
         numVars   = M.size dmapSlice
 
-    declReport (v, (dc, ss)) = "(" ++ showSrcSpan ss ++ ")    " ++ fromMaybe v (M.lookup v uniqnameMap)
+    declReport (v, (dc, ss)) = vfilename ++ " (" ++ showSrcSpan ss ++ ")    " ++ fromMaybe v (M.lookup v uniqnameMap)
+      where vfilename = fromMaybe fname $ M.lookup v fromWhereMap
 
     unitVarName (UnitVar (v, _))                 = v
     unitVarName (UnitParamVarUse (_, (v, _), _)) = v
@@ -115,6 +116,7 @@ inferCriticalVariables uo (fname, pf)
                 (FA.varName e, FA.srcName e) |
                 e@(F.ExpValue _ _ (F.ValVariable {})) <- universeBi pfRenamed :: [F.Expression UA]
               ] `M.union` (M.unions . map (M.fromList . map (\ (a, (b, _)) -> (b, a)) . M.toList) $ M.elems mmap')
+    fromWhereMap = genUniqNameToFilenameMap . M.elems $ uoModFiles uo
 
 checkUnits, inferUnits
             :: UnitOpts -> (Filename, F.ProgramFile Annotation) -> Report
