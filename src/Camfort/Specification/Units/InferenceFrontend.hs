@@ -209,6 +209,10 @@ toUnitVar dmap (vname, sname) = unit
 
 --------------------------------------------------
 
+transformExplicitPolymorphism :: String -> UnitInfo -> UnitInfo
+transformExplicitPolymorphism f (UnitName a@('\'':_)) = UnitParamVarAbs (f, (a, a))
+transformExplicitPolymorphism _ u = u
+
 -- | Any units provided by the programmer through comment annotations
 -- will be incorporated into the VarUnitMap.
 insertGivenUnits :: UnitSolver ()
@@ -236,7 +240,8 @@ insertGivenUnits = do
       -- figure out the 'unique name' of the varRealName that was found in the comment
       -- FIXME: account for module renaming
       -- FIXME: might be more efficient to allow access to variable renaming environ at this program point
-      let m = M.fromList [ ((varName e, srcName e), info)
+      let info' = transform (transformExplicitPolymorphism "sqr") info
+      let m = M.fromList [ ((varName e, srcName e), info')
                          | e@(F.ExpValue _ _ (F.ValVariable _)) <- universeBi decls :: [F.Expression UA]
                          , varRealName <- varRealNames
                          , varRealName == FA.srcName e ]

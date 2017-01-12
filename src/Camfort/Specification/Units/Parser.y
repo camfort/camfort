@@ -158,9 +158,9 @@ lexer' ('=':xs) = addToTokens TEqual xs
 lexer' ('(':xs) = addToTokens TLeftPar xs
 lexer' (')':xs) = addToTokens TRightPar xs
 lexer' (x:xs)
- | isLetter x = aux (\c -> isAlphaNum c || c `elem` ['\'','_','-']) TId
- | isNumber x = aux isNumber TNum
- | otherwise = failWith $ "Not valid unit syntax at " ++ show (x:xs) ++ "\n"
+ | isLetter x || x == '\'' = aux (\ c -> isAlphaNum c || c `elem` ['\'','_','-']) TId
+ | isNumber x              = aux isNumber TNum
+ | otherwise               = failWith $ "Not valid unit syntax at " ++ show (x:xs) ++ "\n"
  where
    aux p cons =
      let (target, rest) = span p xs
