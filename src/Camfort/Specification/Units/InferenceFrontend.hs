@@ -209,23 +209,27 @@ toUnitVar dmap (vname, sname) = unit
 
 --------------------------------------------------
 
-transformExplicitPolymorphism :: String -> UnitInfo -> UnitInfo
-transformExplicitPolymorphism f (UnitName a@('\'':_)) = UnitParamVarAbs (f, (a, a))
-transformExplicitPolymorphism _ u = u
+transformExplicitPolymorphism :: F.ProgramUnitName -> UnitInfo -> UnitInfo
+transformExplicitPolymorphism (F.Named f) (UnitName a@('\'':_)) = UnitParamVarAbs (f, (a, a))
+transformExplicitPolymorphism _ u                               = u
 
 -- | Any units provided by the programmer through comment annotations
 -- will be incorporated into the VarUnitMap.
 insertGivenUnits :: UnitSolver ()
 insertGivenUnits = do
   pf <- gets usProgramFile
-  mapM_ checkComment [ b | b@(F.BlComment {}) <- universeBi pf ]
+  mapM_ checkPU (universeBi pf)
   where
+    -- Look through each Program Unit for the comments
+    checkPU :: F.ProgramUnit UA -> UnitSolver ()
+    checkPU pu = mapM_ (checkComment (F.getName pu)) [ b | b@(F.BlComment {}) <- universeBi (F.programUnitBody pu) ]
+
     -- Look through each comment that has some kind of unit annotation within it.
-    checkComment :: F.Block UA -> UnitSolver ()
-    checkComment (F.BlComment a _ _)
+    checkComment :: F.ProgramUnitName -> F.Block UA -> UnitSolver ()
+    checkComment pname (F.BlComment a _ _)
       -- Look at unit assignment between variable and spec.
       | Just (P.UnitAssignment (Just vars) unitsAST) <- mSpec
-      , Just b                                       <- mBlock = insertUnitAssignments (toUnitInfo unitsAST) b vars
+      , Just b                                       <- mBlock = insertUnitAssignments pname (toUnitInfo unitsAST) b vars
       -- Add a new unit alias.
       | Just (P.UnitAlias name unitsAST)             <- mSpec  = modifyUnitAliasMap (M.insert name (toUnitInfo unitsAST))
       | otherwise                                              = return ()
@@ -235,12 +239,12 @@ insertGivenUnits = do
 
     -- Figure out the unique names of the referenced variables and
     -- then insert unit info under each of those names.
-    insertUnitAssignments :: UnitInfo -> F.Block UA -> [String] -> UnitSolver ()
-    insertUnitAssignments info (F.BlStatement _ _ _ (F.StDeclaration _ _ _ _ decls)) varRealNames = do
+    insertUnitAssignments :: F.ProgramUnitName -> UnitInfo -> F.Block UA -> [String] -> UnitSolver ()
+    insertUnitAssignments pname info (F.BlStatement _ _ _ (F.StDeclaration _ _ _ _ decls)) varRealNames = do
       -- figure out the 'unique name' of the varRealName that was found in the comment
       -- FIXME: account for module renaming
       -- FIXME: might be more efficient to allow access to variable renaming environ at this program point
-      let info' = transform (transformExplicitPolymorphism "sqr") info
+      let info' = transform (transformExplicitPolymorphism pname) info
       let m = M.fromList [ ((varName e, srcName e), info')
                          | e@(F.ExpValue _ _ (F.ValVariable _)) <- universeBi decls :: [F.Expression UA]
                          , varRealName <- varRealNames
