@@ -209,9 +209,9 @@ toUnitVar dmap (vname, sname) = unit
 
 --------------------------------------------------
 
-transformExplicitPolymorphism :: F.ProgramUnitName -> UnitInfo -> UnitInfo
-transformExplicitPolymorphism (F.Named f) (UnitName a@('\'':_)) = UnitParamVarAbs (f, (a, a))
-transformExplicitPolymorphism _ u                               = u
+transformExplicitPolymorphism :: Maybe F.ProgramUnitName -> UnitInfo -> UnitInfo
+transformExplicitPolymorphism (Just (F.Named f)) (UnitName a@('\'':_)) = UnitParamVarAbs (f, (a, a))
+transformExplicitPolymorphism _ u                                      = u
 
 -- | Any units provided by the programmer through comment annotations
 -- will be incorporated into the VarUnitMap.
@@ -222,10 +222,15 @@ insertGivenUnits = do
   where
     -- Look through each Program Unit for the comments
     checkPU :: F.ProgramUnit UA -> UnitSolver ()
-    checkPU pu = mapM_ (checkComment (F.getName pu)) [ b | b@(F.BlComment {}) <- universeBi (F.programUnitBody pu) ]
+    checkPU pu = mapM_ (checkComment (getName pu)) [ b | b@(F.BlComment {}) <- universeBi (F.programUnitBody pu) ]
+      where
+        getName pu = case pu of
+          F.PUFunction {}   -> Just $ F.getName pu
+          F.PUSubroutine {} -> Just $ F.getName pu
+          _                 -> Nothing
 
     -- Look through each comment that has some kind of unit annotation within it.
-    checkComment :: F.ProgramUnitName -> F.Block UA -> UnitSolver ()
+    checkComment :: Maybe F.ProgramUnitName -> F.Block UA -> UnitSolver ()
     checkComment pname (F.BlComment a _ _)
       -- Look at unit assignment between variable and spec.
       | Just (P.UnitAssignment (Just vars) unitsAST) <- mSpec
@@ -239,7 +244,7 @@ insertGivenUnits = do
 
     -- Figure out the unique names of the referenced variables and
     -- then insert unit info under each of those names.
-    insertUnitAssignments :: F.ProgramUnitName -> UnitInfo -> F.Block UA -> [String] -> UnitSolver ()
+    insertUnitAssignments :: Maybe F.ProgramUnitName -> UnitInfo -> F.Block UA -> [String] -> UnitSolver ()
     insertUnitAssignments pname info (F.BlStatement _ _ _ (F.StDeclaration _ _ _ _ decls)) varRealNames = do
       -- figure out the 'unique name' of the varRealName that was found in the comment
       -- FIXME: account for module renaming
