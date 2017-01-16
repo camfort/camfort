@@ -113,7 +113,7 @@ instance Show UnitOfMeasure where
   show (UnitProduct uom1 uom2) = show uom1 ++ " " ++ show uom2
   show (UnitQuotient uom1 uom2) = show uom1 ++ " / " ++ show uom2
   show (UnitExponentiation uom exp) = show uom ++ "** (" ++ show exp ++ ")"
-  show (UnitRecord _) = "UnitRecord unimplemented"
+  show (UnitRecord recs) = "record (" ++ intercalate ", " (map (\ (n, u) -> n ++ " :: " ++ show u) recs) ++ ")"
 
 data UnitPower =
    UnitPowerInteger Integer
