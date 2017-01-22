@@ -68,7 +68,7 @@ spec = do
           any (conParamEq (ConEq (UnitVar ("k", "k")) (UnitMul (UnitVar ("j", "j")) (UnitVar ("j", "j")))))
       it "litTest1 Unitless" $ do
         (fromJust (head (rights [fst (runUnits LitUnitless litTest1 runInconsistentConstraints)]))) `shouldSatisfy`
-          any (conParamEq (ConEq (UnitName "a") (UnitVar ("k", "k"))))
+          any (conParamEq (ConEq UnitlessLit (UnitVar ("j", "j"))))
     describe "Polymorphic functions" $ do
       it "squarePoly1" $ do
         show (sort (head (rights [fst (runUnits LitMixed squarePoly1 runInferVariables)]))) `shouldBe`

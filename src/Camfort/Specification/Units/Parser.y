@@ -19,18 +19,19 @@ import qualified Data.Text as T
 %tokentype { Token }
 
 %token
- unit  { TId "unit" }
- id    { TId $$ }
- one   { TNum "1" }
- num   { TNum $$ }
- ','   { TComma }
- '-'   { TMinus }
- '**'  { TExponentiation }
- '/'   { TDivision }
- '::'  { TDoubleColon }
- '='   { TEqual }
- '('   { TLeftPar }
- ')'   { TRightPar }
+ unit     { TId "unit" }
+ record   { TRecord }
+ id       { TId $$ }
+ one      { TNum "1" }
+ num      { TNum $$ }
+ ','      { TComma }
+ '-'      { TMinus }
+ '**'     { TExponentiation }
+ '/'      { TDivision }
+ '::'     { TDoubleColon }
+ '='      { TEqual }
+ '('      { TLeftPar }
+ ')'      { TRightPar }
 
 %left '/'
 %left '**'
@@ -53,6 +54,14 @@ UEXP :: { UnitOfMeasure }
 | one           { Unitless }
 | '(' one ')'   { Unitless }
 | '(' ')'       { Unitless }
+| record '(' RECORD_DECLS ')' { UnitRecord $3 }
+
+RECORD_DECLS :: { [(String, UnitOfMeasure)] }
+: RECORD_DECL ',' RECORD_DECLS { $1 : $3 }
+| RECORD_DECL                  { [$1] }
+
+RECORD_DECL :: { (String, UnitOfMeasure) }
+: UEXP '::' id { ($3, $1) }
 
 UEXP_LEVEL1 :: { UnitOfMeasure }
 : UEXP_LEVEL1 UEXP_LEVEL2             { UnitProduct $1 $2 }
@@ -95,6 +104,7 @@ data UnitOfMeasure =
  | UnitProduct UnitOfMeasure UnitOfMeasure
  | UnitQuotient UnitOfMeasure UnitOfMeasure
  | UnitExponentiation UnitOfMeasure UnitPower
+ | UnitRecord [(String, UnitOfMeasure)]
   deriving Data
 
 instance Show UnitOfMeasure where
@@ -103,6 +113,7 @@ instance Show UnitOfMeasure where
   show (UnitProduct uom1 uom2) = show uom1 ++ " " ++ show uom2
   show (UnitQuotient uom1 uom2) = show uom1 ++ " / " ++ show uom2
   show (UnitExponentiation uom exp) = show uom ++ "** (" ++ show exp ++ ")"
+  show (UnitRecord recs) = "record (" ++ intercalate ", " (map (\ (n, u) -> n ++ " :: " ++ show u) recs) ++ ")"
 
 data UnitPower =
    UnitPowerInteger Integer
@@ -123,6 +134,7 @@ data Token =
  | TEqual
  | TLeftPar
  | TRightPar
+ | TRecord
  | TId String
  | TNum String
  deriving (Show)
@@ -158,9 +170,10 @@ lexer' ('=':xs) = addToTokens TEqual xs
 lexer' ('(':xs) = addToTokens TLeftPar xs
 lexer' (')':xs) = addToTokens TRightPar xs
 lexer' (x:xs)
- | isLetter x = aux (\c -> isAlphaNum c || c `elem` ['\'','_','-']) TId
- | isNumber x = aux isNumber TNum
- | otherwise = failWith $ "Not valid unit syntax at " ++ show (x:xs) ++ "\n"
+ | isLetter x || x == '\'' = aux (\ c -> isAlphaNum c || c `elem` ['\'','_','-'])
+                                 (\ s -> if s == "record" then TRecord else TId s)
+ | isNumber x              = aux isNumber TNum
+ | otherwise               = failWith $ "Not valid unit syntax at " ++ show (x:xs) ++ "\n"
  where
    aux p cons =
      let (target, rest) = span p xs

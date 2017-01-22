@@ -202,26 +202,39 @@ insertUndeterminedUnitVar _ e = return e
 toUnitVar :: DeclMap -> VV -> UnitInfo
 toUnitVar dmap (vname, sname) = unit
   where
-    unit = case M.lookup vname dmap of
-      Just (F.Named fname, DCFunction)   -> UnitParamVarAbs (fname, (vname, sname))
-      Just (F.Named fname, DCSubroutine) -> UnitParamVarAbs (fname, (vname, sname))
-      _                                  -> UnitVar (vname, sname)
+    unit = case fst `fmap` M.lookup vname dmap of
+      Just (DCFunction (F.Named fname))   -> UnitParamVarAbs (fname, (vname, sname))
+      Just (DCSubroutine (F.Named fname)) -> UnitParamVarAbs (fname, (vname, sname))
+      _                                   -> UnitVar (vname, sname)
 
 --------------------------------------------------
+
+transformExplicitPolymorphism :: Maybe F.ProgramUnitName -> UnitInfo -> UnitInfo
+transformExplicitPolymorphism (Just (F.Named f)) (UnitName a@('\'':_)) = UnitParamVarAbs (f, (a, a))
+transformExplicitPolymorphism _ u                                      = u
 
 -- | Any units provided by the programmer through comment annotations
 -- will be incorporated into the VarUnitMap.
 insertGivenUnits :: UnitSolver ()
 insertGivenUnits = do
   pf <- gets usProgramFile
-  mapM_ checkComment [ b | b@(F.BlComment {}) <- universeBi pf ]
+  mapM_ checkPU (universeBi pf)
   where
+    -- Look through each Program Unit for the comments
+    checkPU :: F.ProgramUnit UA -> UnitSolver ()
+    checkPU pu = mapM_ (checkComment (getName pu)) [ b | b@(F.BlComment {}) <- universeBi (F.programUnitBody pu) ]
+      where
+        getName pu = case pu of
+          F.PUFunction {}   -> Just $ F.getName pu
+          F.PUSubroutine {} -> Just $ F.getName pu
+          _                 -> Nothing
+
     -- Look through each comment that has some kind of unit annotation within it.
-    checkComment :: F.Block UA -> UnitSolver ()
-    checkComment (F.BlComment a _ _)
+    checkComment :: Maybe F.ProgramUnitName -> F.Block UA -> UnitSolver ()
+    checkComment pname (F.BlComment a _ _)
       -- Look at unit assignment between variable and spec.
       | Just (P.UnitAssignment (Just vars) unitsAST) <- mSpec
-      , Just b                                       <- mBlock = insertUnitAssignments (toUnitInfo unitsAST) b vars
+      , Just b                                       <- mBlock = insertUnitAssignments pname (toUnitInfo unitsAST) b vars
       -- Add a new unit alias.
       | Just (P.UnitAlias name unitsAST)             <- mSpec  = modifyUnitAliasMap (M.insert name (toUnitInfo unitsAST))
       | otherwise                                              = return ()
@@ -231,17 +244,67 @@ insertGivenUnits = do
 
     -- Figure out the unique names of the referenced variables and
     -- then insert unit info under each of those names.
-    insertUnitAssignments :: UnitInfo -> F.Block UA -> [String] -> UnitSolver ()
-    insertUnitAssignments info (F.BlStatement _ _ _ (F.StDeclaration _ _ _ _ decls)) varRealNames = do
+    insertUnitAssignments :: Maybe F.ProgramUnitName -> UnitInfo -> F.Block UA -> [String] -> UnitSolver ()
+    insertUnitAssignments pname info (F.BlStatement _ _ _ (F.StDeclaration _ _ _ _ decls)) varRealNames = do
       -- figure out the 'unique name' of the varRealName that was found in the comment
       -- FIXME: account for module renaming
       -- FIXME: might be more efficient to allow access to variable renaming environ at this program point
-      let m = M.fromList [ ((varName e, srcName e), info)
+      let info' = transform (transformExplicitPolymorphism pname) info
+      let m = M.fromList [ ((varName e, srcName e), info')
                          | e@(F.ExpValue _ _ (F.ValVariable _)) <- universeBi decls :: [F.Expression UA]
                          , varRealName <- varRealNames
-                         , varRealName == FA.srcName e ]
+                         , varRealName == srcName e ]
       modifyVarUnitMap $ M.unionWith const m
       modifyGivenVarSet . S.union . S.fromList . map fst . M.keys $ m
+
+
+-- ensure polymorphic variable annotation is used correctly
+checkPolymorphicAnnotation :: UnitSolver [String]
+checkPolymorphicAnnotation = do
+  pf     <- gets usProgramFile
+  checks <- mapM checkPU (universeBi pf)
+  return . map fst . filter (not . snd) $ checks
+  where
+    -- Look through each Program Unit for its parameters and annotations
+    checkPU :: F.ProgramUnit UA -> UnitSolver (String, Bool)
+    checkPU pu = do
+        (argPolys, resPolys) <- foldM (checkComment (getNameAndArgs pu)) ([], []) [ b | b@(F.BlComment {}) <- universeBi (F.programUnitBody pu) ]
+        return (puName pu, S.fromList resPolys `S.isSubsetOf` S.fromList argPolys)
+      where
+        getNameAndArgs :: F.ProgramUnit UA -> Maybe (String, [String], Maybe String)
+        getNameAndArgs pu = case pu of
+          F.PUFunction _ _ _ _ _ args Nothing _ _
+            | name <- puName pu -> Just (name, map varName (universeBi args :: [F.Expression UA]), Just name)
+          F.PUFunction _ _ _ _ _ args (Just res) _ _
+            | name <- puName pu -> Just (name, map varName (universeBi args :: [F.Expression UA]), Just (varName res))
+          F.PUSubroutine _ _ _ _ args _ _
+            | name <- puName pu -> Just (name, map varName (universeBi args :: [F.Expression UA]), Nothing)
+          _                     -> Nothing
+    checkComment :: Maybe (String, [String], Maybe String) -> ([String], [String]) -> F.Block UA -> UnitSolver ([String], [String])
+    checkComment pinfo (argPolys, resPolys) (F.BlComment a _ _)
+      -- Look at unit assignment between variable and spec.
+      | Just (pname, args, mres)                     <- pinfo
+      , Just (P.UnitAssignment (Just vars) unitsAST) <- mSpec
+      , Just b                                       <- mBlock =
+        let
+          annotVars  = S.fromList [ varName e
+                                  | e@(F.ExpValue _ _ (F.ValVariable _)) <- universeBi b :: [F.Expression UA]
+                                  , varSrcName <- vars
+                                  , varSrcName == srcName e ]
+          extractPolys ast = [ v | P.UnitBasic (v@('\'':_)) <- universeBi ast ]
+        in case () of
+             () | any (`S.member` annotVars) args -> return (extractPolys unitsAST ++ argPolys, resPolys)
+                | Just res <- mres,
+                  res `S.member` annotVars        -> return (argPolys, extractPolys unitsAST ++ resPolys)
+                | otherwise                       -> return (argPolys, resPolys)
+      | otherwise                                             = return (argPolys, resPolys)
+      where
+        mSpec      = unitSpec (FA.prevAnnotation a)
+        mBlock     = unitBlock (FA.prevAnnotation a)
+
+
+
+
 
 --------------------------------------------------
 
@@ -728,21 +791,25 @@ debugLogging = whenDebug $ do
         | Just (ConConj cons) <- getConstraint pu ->
           tell . unlines $ (puName pu ++ ":"):map (\ (ConEq u1 u2) -> "    constraint: " ++ show (flattenUnits u1) ++ " === " ++ show (flattenUnits u2)) cons
       _ -> return ()
-    let (unsolvedM, inconsists, colA) = constraintsToMatrix cons
-    let solvedM = rref unsolvedM
+    let (lhsM, rhsM, _, lhsColA, rhsColA) = constraintsToMatrices cons
+    tell "\n--------------------------------------------------\nLHS Cols:\n"
+    tell $ show lhsColA
+    tell "\n--------------------------------------------------\nRHS Cols:\n"
+    tell $ show rhsColA
+    tell "\n--------------------------------------------------\nLHS M:\n"
+    tell $ show lhsM
+    tell "\n--------------------------------------------------\nRHS M:\n"
+    tell $ show rhsM
+    tell "\n--------------------------------------------------\nSolved (SVD) M:\n"
+    tell $ show (H.linearSolveSVD lhsM rhsM)
+    tell "\n--------------------------------------------------\nSingular Values:\n"
+    tell $ show (H.singularValues lhsM)
     tell "\n--------------------------------------------------\n"
-    tell $ show colA
+    tell $ "Rank LHS: " ++ show (H.rank lhsM) ++ "\n"
     tell "\n--------------------------------------------------\n"
-    tell $ show unsolvedM
+    let augA = if H.rows rhsM == 0 || H.cols rhsM == 0 then lhsM else H.fromBlocks [[lhsM, rhsM]]
+    tell $ "Rank Augmented: " ++ show (H.rank augA) ++ "\n"
     tell "\n--------------------------------------------------\n"
-    tell . show $ (H.takeRows (H.rank solvedM) solvedM)
-    tell "\n--------------------------------------------------\n"
-    tell $ "Rank: " ++ show (H.rank solvedM) ++ "\n"
-    tell $ "Is inconsistent RREF? " ++ show (isInconsistentRREF solvedM) ++ "\n"
-    tell $ "Inconsistent rows: " ++ show (inconsistentConstraints cons) ++ "\n"
-    tell "--------------------------------------------------\n"
-    tell $ "Critical Variables: " ++ show (criticalVariables cons) ++ "\n"
-    tell $ "Infer Variables: " ++ show (inferVariables cons) ++ "\n"
 
 --------------------------------------------------
 

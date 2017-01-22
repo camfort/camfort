@@ -58,6 +58,7 @@ data UnitInfo
   | UnitVar VV                            -- variable with undetermined units: (unique name, source name)
   | UnitMul UnitInfo UnitInfo             -- two units multiplied
   | UnitPow UnitInfo Double               -- a unit raised to a constant power
+  | UnitRecord [(String, UnitInfo)]       -- 'record'-type of units
   deriving (Eq, Ord, Data, Typeable, Generic)
 
 instance Binary UnitInfo
@@ -76,6 +77,7 @@ instance Show UnitInfo where
     UnitName name                  -> name
     UnitAlias name                 -> name
     UnitVar (vName, _)             -> printf "#<Var %s>" vName
+    UnitRecord recs                -> "record (" ++ intercalate ", " (map (\ (n, u) -> n ++ " :: " ++ show u) recs) ++ ")"
     UnitMul u1 (UnitPow u2 k)
       | k < 0                      -> maybeParen u1 ++ " / " ++ maybeParen (UnitPow u2 (-k))
     UnitMul u1 u2                  -> maybeParenS u1 ++ " " ++ maybeParenS u2
@@ -221,18 +223,14 @@ mkUnitAnnotation a = UnitAnnotation a Nothing Nothing Nothing Nothing
 --------------------------------------------------
 
 -- | Convert parser units to UnitInfo
-toUnitInfo :: P.UnitOfMeasure -> UnitInfo
-toUnitInfo (P.UnitProduct u1 u2) =
-    UnitMul (toUnitInfo u1) (toUnitInfo u2)
-toUnitInfo (P.UnitQuotient u1 u2) =
-    UnitMul (toUnitInfo u1) (UnitPow (toUnitInfo u2) (-1))
-toUnitInfo (P.UnitExponentiation u1 p) =
-    UnitPow (toUnitInfo u1) (toDouble p)
+toUnitInfo   :: P.UnitOfMeasure -> UnitInfo
+toUnitInfo (P.UnitProduct u1 u2)       = UnitMul (toUnitInfo u1) (toUnitInfo u2)
+toUnitInfo (P.UnitQuotient u1 u2)      = UnitMul (toUnitInfo u1) (UnitPow (toUnitInfo u2) (-1))
+toUnitInfo (P.UnitExponentiation u1 p) = UnitPow (toUnitInfo u1) (toDouble p)
   where
-    toDouble :: P.UnitPower -> Double
-    toDouble (P.UnitPowerInteger i) = fromInteger i
+    toDouble :: P.UnitPower   -> Double
+    toDouble (P.UnitPowerInteger i)    = fromInteger i
     toDouble (P.UnitPowerRational x y) = fromRational (x % y)
-toUnitInfo (P.UnitBasic str) =
-    UnitName str
-toUnitInfo (P.Unitless) =
-    UnitlessLit
+toUnitInfo (P.UnitBasic str)           = UnitName str
+toUnitInfo (P.Unitless)                = UnitlessLit
+toUnitInfo (P.UnitRecord us)           = UnitRecord (map (fmap toUnitInfo) us)

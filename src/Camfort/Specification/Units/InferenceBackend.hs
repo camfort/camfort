@@ -18,13 +18,13 @@
   Units of measure extension to Fortran: backend
 -}
 
-{-# LANGUAGE DoAndIfThenElse #-}
+{-# LANGUAGE TupleSections #-}
 {-# LANGUAGE ScopedTypeVariables #-}
 
 module Camfort.Specification.Units.InferenceBackend
   ( inconsistentConstraints, criticalVariables, inferVariables
   -- mainly for debugging and testing:
-  , shiftTerms, flattenConstraints, flattenUnits, constraintsToMatrix, rref, isInconsistentRREF )
+  , shiftTerms, flattenConstraints, flattenUnits, constraintsToMatrix, constraintsToMatrices, rref, isInconsistentRREF )
 where
 
 import Data.Tuple (swap)
@@ -48,7 +48,7 @@ import Numeric.LinearAlgebra (
   )
 import qualified Numeric.LinearAlgebra as H
 import Numeric.LinearAlgebra.Devel (
-    newMatrix, readMatrix, writeMatrix, runSTMatrix
+    newMatrix, readMatrix, writeMatrix, runSTMatrix, freezeMatrix, STMatrix
   )
 
 import qualified Debug.Trace as D
@@ -63,7 +63,7 @@ inconsistentConstraints cons
   | null inconsists = Nothing
   | otherwise       = Just [ con | (con, i) <- zip cons [0..], i `elem` inconsists ]
   where
-    (unsolvedM, inconsists, colA) = constraintsToMatrix cons
+    (_, _, inconsists, _, _) = constraintsToMatrices cons
 
 --------------------------------------------------
 
@@ -88,13 +88,20 @@ inferVariables cons
   | null inconsists = unitVarAssignments
   | otherwise       = []
   where
-    (unsolvedM, inconsists, colA) = constraintsToMatrix cons
-    solvedM                       = rref unsolvedM
-    cols                          = A.elems colA
+    (lhsM, rhsM, inconsists, lhsColA, rhsColA) = constraintsToMatrices cons
+    solM = H.linearSolveSVD lhsM rhsM
 
     -- Convert the rows of the solved matrix into flattened unit
     -- expressions in the form of "unit ** k".
-    unitPows                      = map (concatMap flattenUnits . zipWith UnitPow cols) (H.toLists solvedM)
+    rhsCol = A.elems rhsColA
+
+    rhsPows :: [[UnitInfo]]
+    rhsPows = map (zipWith UnitPow rhsCol) $ H.toLists solM
+
+    lhsPows :: [UnitInfo]
+    lhsPows = map (flip UnitPow 1) (A.elems lhsColA)
+
+    unitPows = map (concatMap flattenUnits) $ zipWith (:) lhsPows rhsPows
 
     -- Variables to the left, unit names to the right side of the equation.
     unitAssignments               = map (fmap foldUnits . partition (not . isUnitName)) unitPows
@@ -155,6 +162,21 @@ constraintsToMatrix cons = (augM, inconsists, A.listArray (0, length colElems - 
   where
     -- convert each constraint into the form (lhs, rhs)
     consPairs       = flattenConstraints cons
+    -- ensure terms are on the correct side of the equal sign
+    shiftedCons     = map shiftTerms consPairs
+    lhs             = map fst shiftedCons
+    rhs             = map snd shiftedCons
+    (lhsM, lhsCols) = flattenedToMatrix lhs
+    (rhsM, rhsCols) = flattenedToMatrix rhs
+    colElems        = A.elems lhsCols ++ A.elems rhsCols
+    augM            = if rows rhsM == 0 || cols rhsM == 0 then lhsM else fromBlocks [[lhsM, rhsM]]
+    inconsists      = findInconsistentRows lhsM augM
+
+constraintsToMatrices :: Constraints -> (H.Matrix Double, H.Matrix Double, [Int], A.Array Int UnitInfo, A.Array Int UnitInfo)
+constraintsToMatrices cons = (lhsM, rhsM, inconsists, lhsCols, rhsCols)
+  where
+    -- convert each constraint into the form (lhs, rhs)
+    consPairs       = filter (uncurry (/=)) $ flattenConstraints cons
     -- ensure terms are on the correct side of the equal sign
     shiftedCons     = map shiftTerms consPairs
     lhs             = map fst shiftedCons
@@ -254,29 +276,32 @@ rrefMatrices' a j k mats
     m     = cols a
     below = getColumnBelow a (j - k, j)
 
+    erm   = elemRowMult n (j - k) (recip (a @@> (j - k, j)))
+
     -- scale the row if the cell is not already equal to 1
-    erm    = elemRowMult n (j - k) (recip (a @@> (j - k, j)))
-    (a1, mats1) = if a @@> (j - k, j) /= 1 then
-                    (erm <> a, erm:mats)
-                  else (a, mats)
+    (a1, mats1) | a @@> (j - k, j) /= 1 = (erm <> a, erm:mats)
+                | otherwise             = (a, mats)
 
     -- Locate any non-zero values in the same column as (j - k, j) and
     -- cancel them out. Optimisation: instead of constructing a
     -- separate elemRowAdd matrix for each cancellation that are then
     -- multiplied together, simply build a single matrix that cancels
     -- all of them out at the same time, using the ST Monad.
-    findAdds i m ms = (new <> m, new:ms)
+    findAdds i m ms
+      | isWritten = (new <> m, new:ms)
+      | otherwise = (m, ms)
       where
-        new = runSTMatrix $ do
-          new <- newMatrix 0 n n
+        (isWritten, new) = runST $ do
+          new <- newMatrix 0 n n :: ST s (STMatrix s Double)
           sequence [ writeMatrix new i' i' 1 | i' <- [0 .. (n - 1)] ]
-          let f i | i >= n            = return ()
-                  | i == j - k        = f (i + 1)
-                  | a @@> (i, j) == 0 = f (i + 1)
-                  | otherwise         = writeMatrix new i (j - k) (- (a @@> (i, j)))
-                                        >> f (i + 1)
-          f 0
-          return new
+          let f w i | i >= n            = return w
+                    | i == j - k        = f w (i + 1)
+                    | a @@> (i, j) == 0 = f w (i + 1)
+                    | otherwise         = writeMatrix new i (j - k) (- (a @@> (i, j)))
+                                          >> f True (i + 1)
+          isWritten <- f False 0
+          (isWritten,) `fmap` freezeMatrix new
+
     (a2, mats2) = findAdds 0 a1 mats1
 
 -- Get a list of values that occur below (i, j) in the matrix a.
