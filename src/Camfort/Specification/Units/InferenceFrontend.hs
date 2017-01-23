@@ -253,9 +253,58 @@ insertGivenUnits = do
       let m = M.fromList [ ((varName e, srcName e), info')
                          | e@(F.ExpValue _ _ (F.ValVariable _)) <- universeBi decls :: [F.Expression UA]
                          , varRealName <- varRealNames
-                         , varRealName == FA.srcName e ]
+                         , varRealName == srcName e ]
       modifyVarUnitMap $ M.unionWith const m
       modifyGivenVarSet . S.union . S.fromList . map fst . M.keys $ m
+
+
+-- ensure polymorphic variable annotation is used correctly
+checkPolymorphicAnnotation :: UnitSolver [String]
+checkPolymorphicAnnotation = do
+  pf     <- gets usProgramFile
+  checks <- mapM checkPU (universeBi pf)
+  return . map fst . filter (not . snd) $ checks
+  where
+    -- Look through each Program Unit for its parameters and annotations
+    checkPU :: F.ProgramUnit UA -> UnitSolver (String, Bool)
+    checkPU pu = do
+        (argPolys, resPolys) <- foldM (checkComment (getNameAndArgs pu)) ([], []) [ b | b@(F.BlComment {}) <- universeBi (F.programUnitBody pu) ]
+        return (puName pu, S.fromList resPolys `S.isSubsetOf` S.fromList argPolys)
+      where
+        getNameAndArgs :: F.ProgramUnit UA -> Maybe (String, [String], Maybe String)
+        getNameAndArgs pu = case pu of
+          F.PUFunction _ _ _ _ _ args Nothing _ _
+            | name <- puName pu -> Just (name, map varName (universeBi args :: [F.Expression UA]), Just name)
+          F.PUFunction _ _ _ _ _ args (Just res) _ _
+            | name <- puName pu -> Just (name, map varName (universeBi args :: [F.Expression UA]), Just (varName res))
+          F.PUSubroutine _ _ _ _ args _ _
+            | name <- puName pu -> Just (name, map varName (universeBi args :: [F.Expression UA]), Nothing)
+          _                     -> Nothing
+    checkComment :: Maybe (String, [String], Maybe String) -> ([String], [String]) -> F.Block UA -> UnitSolver ([String], [String])
+    checkComment pinfo (argPolys, resPolys) (F.BlComment a _ _)
+      -- Look at unit assignment between variable and spec.
+      | Just (pname, args, mres)                     <- pinfo
+      , Just (P.UnitAssignment (Just vars) unitsAST) <- mSpec
+      , Just b                                       <- mBlock =
+        let
+          annotVars  = S.fromList [ varName e
+                                  | e@(F.ExpValue _ _ (F.ValVariable _)) <- universeBi b :: [F.Expression UA]
+                                  , varSrcName <- vars
+                                  , varSrcName == srcName e ]
+          extractPolys ast = [ v | P.UnitBasic (v@('\'':_)) <- universeBi ast ]
+        in case () of
+             () | any (`S.member` annotVars) args -> return (extractPolys unitsAST ++ argPolys, resPolys)
+                | Just res <- mres,
+                  res `S.member` annotVars        -> return (argPolys, extractPolys unitsAST ++ resPolys)
+                | otherwise                       -> return (argPolys, resPolys)
+      | otherwise                                             = return (argPolys, resPolys)
+      where
+        mSpec      = unitSpec (FA.prevAnnotation a)
+        mBlock     = unitBlock (FA.prevAnnotation a)
+
+
+
+
 
 --------------------------------------------------
 
