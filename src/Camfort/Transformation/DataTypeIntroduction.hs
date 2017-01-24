@@ -28,6 +28,9 @@ import qualified Language.Fortran.Util.Position as FU
 import qualified Language.Fortran.ParserMonad as PM
 import qualified Language.Fortran.PrettyPrint as PP
 
+import qualified Data.Graph.Inductive.PatriciaTree as G
+import qualified Data.Map.Lazy as M
+
 import qualified Data.Set as S
 
 import Camfort.Helpers
@@ -35,6 +38,10 @@ import Camfort.Helpers.Syntax
 import Camfort.Analysis.Annotations
 
 import qualified Data.IntMap as IM
+
+-- Array-subscript interference graphs, in a map from
+-- the array variable to the interference graph
+type IGraphs = M.Map F.Name (Gr F.Name Int)
 
 -- Top-level
 dataTypeIntro ::
@@ -51,7 +58,7 @@ buildInterferenceGraph = show . (foldr IM.union IM.empty) . map analysePerPF
 -- Stub, generate LVA information
 analysePerPF ::
    (Filename, F.ProgramFile A) -> FAD.InOutMap (S.Set F.Name)
-analysePerPF (fname, pf) = lva
+analysePerPF (fname, pf) = (report, pf') = transformBiM (perStmt lva) pf
   where
     -- initialise analysis
     pf'   = FAB.analyseBBlocks . FAR.analyseRenames . FA.initAnalysis $ pf
@@ -63,3 +70,28 @@ analysePerPF (fname, pf) = lva
     gr    = FAB.superBBGrGraph sgr
     -- live variables
     lva   = FAD.liveVariableAnalysis gr
+
+-- Core of the transformation happens here on assignment statements
+perStmt :: -> FAD.InOutMap (S.Set F.Name)
+           -> F.Statement (FA.Analysis A) -> State (IGraphs, F.Statement (FA.Analysis A))
+perStmt lva x =
+  case (FA.insLabel (FA.getAnnotation x)) of
+    Just label -> case (IM.lookup label lva) of
+      Just (lva_in, _) -> transforBiM (perStmt lva_in)
+
+--perExpr :: FAD.InOutMap (S.Set F.Name)
+--        -> F.Expression (FA.Analysis A) -> State (G F.Name F.Name) (F.Expression (FA.Analysis A))
+perExpr lva_in x@(F.ExpSubscript _ _ (F.ExpValue _ _ (F.ValVariable arrVar)) subs) = do
+  let subscript_vars = [v | (F.ValVariable v) <- subs]
+  let intefering = [(v, w) | v <- subscript_vars,
+                             w <- subscript_vars, v `S.member` lva_in && w `S.member` lva_in]
+  igraphs <- get
+  case (M.lookup igraphs arrVar) of
+     Just igraph -> return x
+          -- TODO: update grapg here
+     Nothing -> do
+        let g0 = G.mkGraph [(0, u),(1, v)] [(0, 1, ())]
+        let m = M.fromList [(arrVar, g0)]
+        put (m `M.union` igraphs)
+        return x
+perExpr _ _ x = return x
