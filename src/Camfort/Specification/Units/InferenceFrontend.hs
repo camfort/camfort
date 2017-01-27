@@ -410,7 +410,7 @@ substInstance callStack output (name, callId) = do
   -- The reason for this is because functions called by functions can
   -- be used in a parametric polymorphic way.
   template <- transformBiM callIdRemap $ [] `fromMaybe` M.lookup name tmap
-  dumpConsM ("template " ++ show (name, callId)) template
+  dumpConsM ("substInstance " ++ show (name, callId) ++ " template lookup") template
 
   -- Reset the usCallIdRemap field so that it is ready for the next
   -- set of templates.
@@ -426,11 +426,22 @@ substInstance callStack output (name, callId) = do
                else
                  foldM (substInstance (name:callStack)) [] instances
 
-  dumpConsM ("template' " ++ show (name, callId)) template'
-  dumpConsM ("output " ++ show (name, callId)) output
+  dumpConsM ("instantiating " ++ show (name, callId) ++ ": (output ++ template) is") (output ++ template)
+  dumpConsM ("instantiating " ++ show (name, callId) ++ ": (template') is") (template')
 
-  -- Convert any remaining abstract parametric units into concrete ones.
-  return . instantiate (name, callId) $ output ++ template ++ template'
+  -- Convert abstract parametric units into concrete ones.
+
+  let output' = -- Do not instantiate explicitly annotated polymorphic
+                -- variables from current context
+                instantiate False (name, callId) (output ++ template) ++
+
+                -- Only instantiate explicitly annotated polymorphic
+                -- variables from nested function/subroutine calls.
+                instantiate True (name, callId) template'
+
+  dumpConsM ("final output for " ++ show (name, callId)) output'
+
+  return output'
 
 -- | If given a usage of a parametric unit, rewrite the callId field
 -- to follow an existing mapping in the usCallIdRemap state field, or
@@ -449,7 +460,6 @@ callIdRemap info = modifyCallIdRemapM $ \ idMap -> case info of
       | Just i' <- IM.lookup i idMap -> return (UnitParamLitUse (l, i'), idMap)
       | otherwise                    -> genCallId >>= \ i' ->
                                           return (UnitParamLitUse (l, i'), IM.insert i i' idMap)
-
     UnitParamEAPUse (v, i)
       | Just i' <- IM.lookup i idMap -> return (UnitParamEAPUse (v, i'), idMap)
       | otherwise                    -> genCallId >>= \ i' ->
@@ -459,11 +469,11 @@ callIdRemap info = modifyCallIdRemapM $ \ idMap -> case info of
 
 
 -- | Convert a parametric template into a particular use
-instantiate (name, callId) = transformBi $ \ info -> case info of
+instantiate ifEAP (name, callId) = transformBi $ \ info -> case info of
   UnitParamPosAbs (name, position) -> UnitParamPosUse (name, position, callId)
   UnitParamLitAbs litId            -> UnitParamLitUse (litId, callId)
   UnitParamVarAbs (fname, vname)   -> UnitParamVarUse (fname, vname, callId)
-  UnitParamEAPAbs vname            -> UnitParamEAPUse (vname, callId)
+  UnitParamEAPAbs vname | ifEAP    -> UnitParamEAPUse (vname, callId)
   _                                -> info
 
 -- | Return a list of ProgramUnits that might be considered 'toplevel'
@@ -501,8 +511,7 @@ mainBlocks = concatMap getBlocks . universeBi
 isParametric :: Constraint -> Bool
 isParametric info = not . null $ [ () | UnitParamPosAbs _ <- universeBi info ] ++
                                  [ () | UnitParamVarAbs _ <- universeBi info ] ++
-                                 [ () | UnitParamLitAbs _ <- universeBi info ] ++
-                                 [ () | UnitParamEAPAbs _ <- universeBi info ]
+                                 [ () | UnitParamLitAbs _ <- universeBi info ]
 
 --------------------------------------------------
 

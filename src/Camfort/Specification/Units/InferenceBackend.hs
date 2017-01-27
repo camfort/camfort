@@ -78,7 +78,6 @@ criticalVariables cons = filter (not . isUnitName) $ map (colA A.!) criticalIndi
     solvedM                       = rref unsolvedM
     uncriticalIndices             = concatMap (maybeToList . findIndex (/= 0)) $ H.toLists solvedM
     criticalIndices               = A.indices colA \\ uncriticalIndices
-    isUnitName (UnitName _)       = True; isUnitName _ = False
 
 --------------------------------------------------
 
@@ -120,8 +119,6 @@ inferVariables cons
     foldUnits units
       | null units = UnitlessVar
       | otherwise  = foldl1 UnitMul units
-    isUnitName (UnitPow (UnitName _) _) = True
-    isUnitName _                        = False
 
 --------------------------------------------------
 
@@ -228,7 +225,11 @@ shiftTerms (lhs, rhs) = (lhsOk ++ negateCons rhsShift, rhsOk ++ negateCons lhsSh
   where
     (lhsOk, lhsShift) = partition (not . isUnitName) lhs
     (rhsOk, rhsShift) = partition isUnitName rhs
-    isUnitName (UnitPow (UnitName _) _) = True; isUnitName _ = False
+
+-- Units that should appear on the right-hand-side
+isUnitName (UnitPow (UnitName _) _)        = True
+isUnitName (UnitPow (UnitParamEAPAbs _) _) = True
+isUnitName _                               = False
 
 --------------------------------------------------
 -- Matrix solving functions based on HMatrix
@@ -390,5 +391,3 @@ genUnitAssignments cons
     foldUnits units
       | null units = UnitlessVar
       | otherwise  = foldl1 UnitMul units
-    isUnitName (UnitPow (UnitName _) _) = True
-    isUnitName _                        = False
