@@ -16,9 +16,10 @@ contains
   end function mul
 
   function sqr(x)
-    != unit 'a ** 2 :: sqr
-    != unit 'a :: x
-    real :: x, y, sqr, z
+    != unit 'c ** 2 :: sqr
+    != unit 'c :: x
+    ! unit for y determined through constraint-solving
+    real :: x, y, sqr
 
     y = mul(x,x)
     sqr = y
