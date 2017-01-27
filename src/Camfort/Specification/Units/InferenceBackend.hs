@@ -78,6 +78,7 @@ criticalVariables cons = filter (not . isUnitName) $ map (colA A.!) criticalIndi
     solvedM                       = rref unsolvedM
     uncriticalIndices             = concatMap (maybeToList . findIndex (/= 0)) $ H.toLists solvedM
     criticalIndices               = A.indices colA \\ uncriticalIndices
+    isUnitName (UnitName _)       = True; isUnitName _ = False
 
 --------------------------------------------------
 
