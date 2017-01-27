@@ -817,6 +817,9 @@ debugLogging = whenDebug $ do
     tell "\n--------------------------------------------------\n"
     let augA = if H.rows rhsM == 0 || H.cols rhsM == 0 then lhsM else H.fromBlocks [[lhsM, rhsM]]
     tell $ "Rank Augmented: " ++ show (H.rank augA) ++ "\n"
+    tell "\n--------------------------------------------------\nGenUnitAssignments:\n"
+    let unitAssignments = genUnitAssignments cons
+    tell . unlines $ map (\ (u1s, u2) -> "  ***UnitAssignment: " ++ show u1s ++ " === " ++ show (flattenUnits u2) ++ "\n") unitAssignments
     tell "\n--------------------------------------------------\n"
 
 --------------------------------------------------

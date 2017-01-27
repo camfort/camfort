@@ -24,7 +24,8 @@
 module Camfort.Specification.Units.InferenceBackend
   ( inconsistentConstraints, criticalVariables, inferVariables
   -- mainly for debugging and testing:
-  , shiftTerms, flattenConstraints, flattenUnits, constraintsToMatrix, constraintsToMatrices, rref, isInconsistentRREF )
+  , shiftTerms, flattenConstraints, flattenUnits, constraintsToMatrix, constraintsToMatrices
+  , rref, isInconsistentRREF, genUnitAssignments )
 where
 
 import Data.Tuple (swap)
@@ -358,3 +359,36 @@ showCons str = unlines . ([replicate 50 '-', str ++ ":"]++) . (++[replicate 50 '
   where
     f (ConEq u1 u2)  = show (flattenUnits u1) ++ " === " ++ show (flattenUnits u2)
     f (ConConj cons) = intercalate " && " (map f cons)
+
+--------------------------------------------------
+
+-- debugging
+
+genUnitAssignments :: [Constraint] -> [([UnitInfo], UnitInfo)]
+genUnitAssignments [] = []
+genUnitAssignments cons
+  | null inconsists = unitAssignments
+  | otherwise       = []
+  where
+    (lhsM, rhsM, inconsists, lhsColA, rhsColA) = constraintsToMatrices cons
+    solM = H.linearSolveSVD lhsM rhsM
+
+    -- Convert the rows of the solved matrix into flattened unit
+    -- expressions in the form of "unit ** k".
+    rhsCol = A.elems rhsColA
+
+    rhsPows :: [[UnitInfo]]
+    rhsPows = map (zipWith UnitPow rhsCol) $ H.toLists solM
+
+    lhsPows :: [UnitInfo]
+    lhsPows = map (flip UnitPow 1) (A.elems lhsColA)
+
+    unitPows = map (concatMap flattenUnits) $ zipWith (:) lhsPows rhsPows
+
+    -- Variables to the left, unit names to the right side of the equation.
+    unitAssignments               = map (fmap foldUnits . partition (not . isUnitName)) unitPows
+    foldUnits units
+      | null units = UnitlessVar
+      | otherwise  = foldl1 UnitMul units
+    isUnitName (UnitPow (UnitName _) _) = True
+    isUnitName _                        = False
