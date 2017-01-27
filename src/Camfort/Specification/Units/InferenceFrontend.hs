@@ -210,7 +210,7 @@ toUnitVar dmap (vname, sname) = unit
 --------------------------------------------------
 
 transformExplicitPolymorphism :: Maybe F.ProgramUnitName -> UnitInfo -> UnitInfo
-transformExplicitPolymorphism (Just (F.Named f)) (UnitName a@('\'':_)) = UnitParamVarAbs (f, (a, a))
+transformExplicitPolymorphism (Just (F.Named f)) (UnitName a@('\'':_)) = UnitParamEAPAbs (a, a)
 transformExplicitPolymorphism _ u                                      = u
 
 -- | Any units provided by the programmer through comment annotations
@@ -449,6 +449,12 @@ callIdRemap info = modifyCallIdRemapM $ \ idMap -> case info of
       | Just i' <- IM.lookup i idMap -> return (UnitParamLitUse (l, i'), idMap)
       | otherwise                    -> genCallId >>= \ i' ->
                                           return (UnitParamLitUse (l, i'), IM.insert i i' idMap)
+
+    UnitParamEAPUse (v, i)
+      | Just i' <- IM.lookup i idMap -> return (UnitParamEAPUse (v, i'), idMap)
+      | otherwise                    -> genCallId >>= \ i' ->
+                                          return (UnitParamEAPUse (v, i'), IM.insert i i' idMap)
+
     _                                -> return (info, idMap)
 
 
@@ -457,6 +463,7 @@ instantiate (name, callId) = transformBi $ \ info -> case info of
   UnitParamPosAbs (name, position) -> UnitParamPosUse (name, position, callId)
   UnitParamLitAbs litId            -> UnitParamLitUse (litId, callId)
   UnitParamVarAbs (fname, vname)   -> UnitParamVarUse (fname, vname, callId)
+  UnitParamEAPAbs vname            -> UnitParamEAPUse (vname, callId)
   _                                -> info
 
 -- | Return a list of ProgramUnits that might be considered 'toplevel'
@@ -494,7 +501,8 @@ mainBlocks = concatMap getBlocks . universeBi
 isParametric :: Constraint -> Bool
 isParametric info = not . null $ [ () | UnitParamPosAbs _ <- universeBi info ] ++
                                  [ () | UnitParamVarAbs _ <- universeBi info ] ++
-                                 [ () | UnitParamLitAbs _ <- universeBi info ]
+                                 [ () | UnitParamLitAbs _ <- universeBi info ] ++
+                                 [ () | UnitParamEAPAbs _ <- universeBi info ]
 
 --------------------------------------------------
 

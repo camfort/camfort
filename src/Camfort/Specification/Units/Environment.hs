@@ -50,6 +50,8 @@ data UnitInfo
   | UnitParamVarUse (String, VV, Int)     -- a particular instantiation of above
   | UnitParamLitAbs Int                   -- a literal with abstract, polymorphic units, uniquely identified
   | UnitParamLitUse (Int, Int)            -- a particular instantiation of a polymorphic literal
+  | UnitParamEAPAbs VV                    -- an abstract Explicitly Annotated Polymorphic unit variable
+  | UnitParamEAPUse (VV, Int)             -- a particular instantiation of an Explicitly Annotated Polymorphic unit variable
   | UnitLiteral Int                       -- literal with undetermined but uniquely identified units
   | UnitlessLit                           -- a unitless literal
   | UnitlessVar                           -- a unitless variable
@@ -71,6 +73,8 @@ instance Show UnitInfo where
     UnitParamVarUse (f, (v, _), j) -> printf "#<ParamVarUse %s.%s callId=%d>" f v j
     UnitParamLitAbs i              -> printf "#<ParamLitAbs litId=%d>" i
     UnitParamLitUse (i, j)         -> printf "#<ParamLitUse litId=%d callId=%d]>" i j
+    UnitParamEAPAbs (v, _)         -> printf "#<ParamEAPAbs %s>" v
+    UnitParamEAPUse ((v, _), i)    -> printf "#<ParamEAPUse %s callId=%d]>" v i
     UnitLiteral i                  -> printf "#<Literal id=%d>" i
     UnitlessLit                    -> "1"
     UnitlessVar                    -> "1"
@@ -152,6 +156,8 @@ isUnresolvedUnit (UnitParamPosUse _) = True
 isUnresolvedUnit (UnitParamPosAbs _) = True
 isUnresolvedUnit (UnitParamLitUse _) = True
 isUnresolvedUnit (UnitParamLitAbs _) = True
+isUnresolvedUnit (UnitParamEAPAbs _) = True
+isUnresolvedUnit (UnitParamEAPUse _) = True
 isUnresolvedUnit (UnitPow u _)       = isUnresolvedUnit u
 isUnresolvedUnit (UnitMul u1 u2)     = isUnresolvedUnit u1 || isUnresolvedUnit u2
 isUnresolvedUnit _                   = False
@@ -170,6 +176,7 @@ pprintUnitInfo (UnitVar (_, sName)) = printf "%s" sName
 pprintUnitInfo (UnitParamVarUse (_, (_, sName), _)) = printf "%s" sName
 pprintUnitInfo (UnitParamPosUse (fname, 0, _)) = printf "result of %s" fname
 pprintUnitInfo (UnitParamPosUse (fname, i, _)) = printf "parameter %d to %s" i fname
+pprintUnitInfo (UnitParamEAPUse ((v, _), _)) = printf "explicitly annotated polymorphic unit %s" v
 pprintUnitInfo (UnitLiteral _) = "literal number"
 pprintUnitInfo ui = show ui
 
@@ -192,6 +199,8 @@ unitParamEq (UnitParamVarAbs (f, i))      (UnitParamVarUse (f', i', _)) = (f, i)
 unitParamEq (UnitParamVarUse (f', i', _)) (UnitParamVarAbs (f, i))      = (f, i) == (f', i')
 unitParamEq (UnitParamPosAbs (f, i))      (UnitParamPosUse (f', i', _)) = (f, i) == (f', i')
 unitParamEq (UnitParamPosUse (f', i', _)) (UnitParamPosAbs (f, i))      = (f, i) == (f', i')
+unitParamEq (UnitParamEAPAbs v)           (UnitParamEAPUse (v', _))     = v == v'
+unitParamEq (UnitParamEAPUse (v', _))     (UnitParamEAPAbs v)           = v == v'
 unitParamEq (UnitMul u1 u2)               (UnitMul u1' u2')             = unitParamEq u1 u1' && unitParamEq u2 u2' ||
                                                                           unitParamEq u1 u2' && unitParamEq u2 u1'
 unitParamEq (UnitPow u p)                 (UnitPow u' p')               = unitParamEq u u' && p == p'
