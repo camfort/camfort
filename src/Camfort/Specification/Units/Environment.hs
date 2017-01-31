@@ -73,7 +73,7 @@ instance Show UnitInfo where
     UnitParamVarUse (f, (v, _), j) -> printf "#<ParamVarUse %s.%s callId=%d>" f v j
     UnitParamLitAbs i              -> printf "#<ParamLitAbs litId=%d>" i
     UnitParamLitUse (i, j)         -> printf "#<ParamLitUse litId=%d callId=%d]>" i j
-    UnitParamEAPAbs (v, _)         -> printf "#<ParamEAPAbs %s>" v
+    UnitParamEAPAbs (v, _)         -> v
     UnitParamEAPUse ((v, _), i)    -> printf "#<ParamEAPUse %s callId=%d]>" v i
     UnitLiteral i                  -> printf "#<Literal id=%d>" i
     UnitlessLit                    -> "1"
