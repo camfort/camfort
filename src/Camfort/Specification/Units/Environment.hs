@@ -87,9 +87,12 @@ instance Show UnitInfo where
     UnitMul u1 u2                  -> maybeParenS u1 ++ " " ++ maybeParenS u2
     UnitPow u 1                    -> show u
     UnitPow u 0                    -> "1"
-    UnitPow u k                    ->
+    UnitPow u k                    -> -- printf "%s**%f" (maybeParen u) k
       case doubleToRationalSubset k of
-          Just r -> printf "%s**%s" (maybeParen u) (showRational r)
+          Just r
+            | e <- showRational r
+            , e /= "1"  -> printf "%s**%s" (maybeParen u) e
+            | otherwise -> show u
           Nothing -> error $
                       printf "Irrational unit exponent: %s**%f" (maybeParen u) k
        where showRational r
@@ -97,7 +100,7 @@ instance Show UnitInfo where
                | otherwise = showRational' r
              showRational' r
                | denominator r == 1 = show (numerator r)
-               | otherwise = printf "%d / %d" (numerator r) (denominator r)
+               | otherwise = printf "(%d / %d)" (numerator r) (denominator r)
     where
       maybeParen x | all isAlphaNum s = s
                    | otherwise        = "(" ++ s ++ ")"
