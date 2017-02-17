@@ -210,7 +210,7 @@ toUnitVar dmap (vname, sname) = unit
 --------------------------------------------------
 
 transformExplicitPolymorphism :: Maybe F.ProgramUnitName -> UnitInfo -> UnitInfo
-transformExplicitPolymorphism (Just (F.Named f)) (UnitName a@('\'':_)) = UnitParamEAPAbs (a, a)
+transformExplicitPolymorphism (Just (F.Named f)) (UnitName a@('\'':_)) = UnitParamEAPAbs (a, f ++ "_" ++ a)
 transformExplicitPolymorphism _ u                                      = u
 
 -- | Any units provided by the programmer through comment annotations
