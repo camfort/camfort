@@ -81,6 +81,10 @@ spec = do
       it "Recursive Multiplication is not OK" $ do
         (fromJust (head (rights [fst (runUnits LitMixed recursive2 runInconsistentConstraints)]))) `shouldSatisfy`
           any (conParamEq (ConEq (UnitParamPosAbs ("recur", 0)) (UnitParamPosAbs ("recur", 2))))
+    describe "Explicitly annotated parametric polymorphic unit variables" $ do
+      it "inside-outside" $ do
+        show (sort (head (rights [fst (runUnits LitMixed insideOutside runInferVariables)]))) `shouldBe`
+          "[((\"k\",\"k\"),'a),((\"m\",\"m\"),('a)**2)]"
 
   describe "Unit Inference Backend" $ do
     describe "Flatten constraints" $ do
@@ -260,3 +264,21 @@ recursive2 = flip fortranParser "recursive2.f90" . B.pack $ unlines
     , "    end if"
     , "  end function recur"
     , "end program main" ]
+
+insideOutside = flip fortranParser "insideOutside.f90" . B.pack $ unlines
+    [ "module mod3"
+    , "contains"
+    , "  function outside(x)"
+    , "    != unit 'a :: x"
+    , "    real :: x, k, m, outside"
+    , "    k = x"
+    , "    outside = inside(k) * 2"
+    , "    m = outside"
+    , "  contains"
+    , "    function inside(y)"
+    , "      != unit 'a ** 2 :: inside"
+    , "      real :: y, inside"
+    , "      inside = y * y"
+    , "    end function inside"
+    , "  end function outside"
+    , "end module mod3" ]
