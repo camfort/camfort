@@ -76,7 +76,7 @@ spec = do
     describe "Recursive functions" $ do
       it "Recursive Addition is OK" $ do
         show (sort (head (rights [fst (runUnits LitMixed recursive1 runInferVariables)]))) `shouldBe`
-          show (sort [(("y", "y"),UnitName "m"),(("z", "z"), UnitName "m")])
+          show (sort [(("x", "x"),UnitlessVar),(("y", "y"),UnitName "m"),(("z", "z"), UnitName "m")])
     describe "Recursive functions" $ do
       it "Recursive Multiplication is not OK" $ do
         (fromJust (head (rights [fst (runUnits LitMixed recursive2 runInconsistentConstraints)]))) `shouldSatisfy`
@@ -111,7 +111,7 @@ spec = do
         criticalVariables testCons5 `shouldSatisfy` null
     describe "Infer Variables" $ do
       it "testCons5" $ do
-        inferVariables testCons5 `shouldBe` testCons5_infer
+        show (inferVariables testCons5) `shouldBe` show testCons5_infer
     describe "Check that (restricted) double to ratios is consistent" $ do
       it "test all in -10/-10 ... 10/10, apart from /0" $
         do and [testDoubleToRationalSubset x y | x <- [-10..10], y <- [-10..10]]
