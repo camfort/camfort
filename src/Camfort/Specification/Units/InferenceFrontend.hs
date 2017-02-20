@@ -431,9 +431,11 @@ substInstance callStack output (name, callId) = do
 
   -- Convert abstract parametric units into concrete ones.
 
+  let ifNotToplevel = not (null callStack)
+
   let output' = -- Do not instantiate explicitly annotated polymorphic
-                -- variables from current context
-                instantiate False (name, callId) (output ++ template) ++
+                -- variables from current context when looking at un-nested call
+                instantiate ifNotToplevel (name, callId) (output ++ template) ++
 
                 -- Only instantiate explicitly annotated polymorphic
                 -- variables from nested function/subroutine calls.
