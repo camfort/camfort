@@ -380,7 +380,8 @@ applyTemplates cons = do
 
   -- Work through the instances, expanding their templates, and
   -- substituting the callId into the abstract parameters.
-  concreteCons <- foldM (substInstance []) [] (instances ++ dummies)
+  concreteCons <- liftM2 (++) (foldM (substInstance False []) [] instances)
+                              (foldM (substInstance True []) [] dummies)
   dumpConsM "concreteCons" concreteCons
 
   -- Also include aliases in the final set of constraints, where
@@ -398,8 +399,8 @@ applyTemplates cons = do
 -- subroutine, and do the substitutions. Process any additional
 -- polymorphic calls that are uncovered, unless they are recursive
 -- calls that have already been seen in the current call stack.
-substInstance :: [F.Name] -> Constraints -> (F.Name, Int) -> UnitSolver Constraints
-substInstance callStack output (name, callId) = do
+substInstance :: Bool -> [F.Name] -> Constraints -> (F.Name, Int) -> UnitSolver Constraints
+substInstance isDummy callStack output (name, callId) = do
   tmap <- gets usTemplateMap
 
   -- Look up the templates associated with the given function or
@@ -410,7 +411,7 @@ substInstance callStack output (name, callId) = do
   -- The reason for this is because functions called by functions can
   -- be used in a parametric polymorphic way.
   template <- transformBiM callIdRemap $ [] `fromMaybe` M.lookup name tmap
-  dumpConsM ("substInstance " ++ show (name, callId) ++ " template lookup") template
+  dumpConsM ("substInstance " ++ show isDummy ++ " " ++ show callStack ++ " " ++ show (name, callId) ++ " template lookup") template
 
   -- Reset the usCallIdRemap field so that it is ready for the next
   -- set of templates.
@@ -424,18 +425,16 @@ substInstance callStack output (name, callId) = do
                  -- unit-assignments as the first call.
                  return []
                else
-                 foldM (substInstance (name:callStack)) [] instances
+                 foldM (substInstance False (name:callStack)) [] instances
 
   dumpConsM ("instantiating " ++ show (name, callId) ++ ": (output ++ template) is") (output ++ template)
   dumpConsM ("instantiating " ++ show (name, callId) ++ ": (template') is") (template')
 
   -- Convert abstract parametric units into concrete ones.
 
-  let ifNotToplevel = not (null callStack)
-
   let output' = -- Do not instantiate explicitly annotated polymorphic
-                -- variables from current context when looking at un-nested call
-                instantiate ifNotToplevel (name, callId) (output ++ template) ++
+                -- variables from current context when looking at dummy (name, callId)
+                instantiate (not isDummy) (name, callId) (output ++ template) ++
 
                 -- Only instantiate explicitly annotated polymorphic
                 -- variables from nested function/subroutine calls.
@@ -470,12 +469,14 @@ callIdRemap info = modifyCallIdRemapM $ \ idMap -> case info of
     _                                -> return (info, idMap)
 
 
--- | Convert a parametric template into a particular use
-instantiate ifEAP (name, callId) = transformBi $ \ info -> case info of
+-- | Convert a parametric template into a particular use. Only convert
+-- explicitly annotated parametric polymorphic variable units if the
+-- flag is True.
+instantiate ifDoEAP (name, callId) = transformBi $ \ info -> case info of
   UnitParamPosAbs (name, position) -> UnitParamPosUse (name, position, callId)
   UnitParamLitAbs litId            -> UnitParamLitUse (litId, callId)
   UnitParamVarAbs (fname, vname)   -> UnitParamVarUse (fname, vname, callId)
-  UnitParamEAPAbs vname | ifEAP    -> UnitParamEAPUse (vname, callId)
+  UnitParamEAPAbs vname | ifDoEAP  -> UnitParamEAPUse (vname, callId)
   _                                -> info
 
 -- | Return a list of ProgramUnits that might be considered 'toplevel'
