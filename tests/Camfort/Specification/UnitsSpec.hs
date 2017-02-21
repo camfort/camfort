@@ -4,8 +4,10 @@ module Camfort.Specification.UnitsSpec (spec) where
 import qualified Data.ByteString.Char8 as B
 
 import Language.Fortran.Parser.Any
+import qualified Language.Fortran.AST as F
 import qualified Language.Fortran.Analysis as FA
 import qualified Language.Fortran.Analysis.Renaming as FAR
+import Data.Generics.Uniplate.Operations
 import Camfort.Input
 import Camfort.Functionality
 import Camfort.Output
@@ -56,6 +58,22 @@ runUnitsRenamed' litMode pf m = (state, logs)
     uOpts = unitOpts0 { uoNameMap = FAR.extractNameMap pf', uoDebug = True, uoLiterals = litMode }
     (r, state, logs) = runUnitSolver uOpts pf' $ initInference >> m
 
+runUnitInference litMode pf = case r of
+  Right vars -> ([ (FA.varName e, u) | e <- declVariables pf'
+                                     , u <- maybeToList ((FA.varName e, FA.srcName e) `lookup` vars) ]
+                , usConstraints state)
+  _          -> ([], usConstraints state)
+  where
+    pf' = FA.initAnalysis . fmap mkUnitAnnotation . fmap (const unitAnnotation) $ pf
+    uOpts = unitOpts0 { uoNameMap = M.empty, uoDebug = False, uoLiterals = litMode }
+    (r, state, logs) = runUnitSolver uOpts pf' $ initInference >> runInferVariables
+
+declVariables :: F.ProgramFile UA -> [F.Expression UA]
+declVariables pf = flip mapMaybe (universeBi pf) $ \ d -> case d of
+  F.DeclVariable _ _ v@(F.ExpValue _ _ (F.ValVariable _)) _ _   -> Just v
+  F.DeclArray    _ _ v@(F.ExpValue _ _ (F.ValVariable _)) _ _ _ -> Just v
+  _                                                             -> Nothing
+
 spec :: Spec
 spec = do
   describe "Unit Inference Frontend" $ do
@@ -85,6 +103,9 @@ spec = do
       it "inside-outside" $ do
         show (sort (head (rights [fst (runUnits LitMixed insideOutside runInferVariables)]))) `shouldBe`
           "[((\"k\",\"k\"),'a),((\"m\",\"m\"),('a)**2)]"
+      it "eapVarScope" $ do
+        show (sort (fst (runUnitInference LitMixed eapVarScope))) `shouldBe`
+          "[(\"j\",'a),(\"k\",('a)**3)]"
 
   describe "Unit Inference Backend" $ do
     describe "Flatten constraints" $ do
@@ -266,7 +287,7 @@ recursive2 = flip fortranParser "recursive2.f90" . B.pack $ unlines
     , "end program main" ]
 
 insideOutside = flip fortranParser "insideOutside.f90" . B.pack $ unlines
-    [ "module mod3"
+    [ "module insideOutside"
     , "contains"
     , "  function outside(x)"
     , "    != unit 'a :: x"
@@ -281,4 +302,21 @@ insideOutside = flip fortranParser "insideOutside.f90" . B.pack $ unlines
     , "      inside = y * y"
     , "    end function inside"
     , "  end function outside"
-    , "end module mod3" ]
+    , "end module insideOutside" ]
+
+eapVarScope = flip fortranParser "eapVarScope.f90" . B.pack $ unlines
+    [ "module eapVarScope"
+    , "contains"
+    , "  function f(x)"
+    , "    != unit 'a :: x"
+    , "    real :: x, k, f"
+    , "    k = g(x) * g(x * x)"
+    , "    f = k"
+    , "  end function f"
+    , "  function g(y)"
+    , "    != unit 'a :: y"
+    , "    real :: y, j, g"
+    , "    j = y"
+    , "    g = j"
+    , "  end function g"
+    , "end module eapVarScope" ]
