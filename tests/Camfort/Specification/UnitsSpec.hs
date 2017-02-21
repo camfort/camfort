@@ -106,6 +106,9 @@ spec = do
       it "eapVarScope" $ do
         show (sort (fst (runUnitInference LitMixed eapVarScope))) `shouldBe`
           "[(\"j\",'a),(\"k\",('a)**3)]"
+      it "eapVarApp" $ do
+        show (sort (fst (runUnitInference LitMixed eapVarApp))) `shouldBe`
+          "[(\"fj\",'a),(\"fk\",('a)**2),(\"fl\",('a)**4),(\"gm\",'b),(\"gn\",'b),(\"hy\",m**2)]"
 
   describe "Unit Inference Backend" $ do
     describe "Flatten constraints" $ do
@@ -320,3 +323,29 @@ eapVarScope = flip fortranParser "eapVarScope.f90" . B.pack $ unlines
     , "    g = j"
     , "  end function g"
     , "end module eapVarScope" ]
+
+eapVarApp = flip fortranParser "eapVarApp.f90" . B.pack $ unlines
+    [ "module eapVarApp"
+    , "contains"
+    , "  function f(fx)"
+    , "    != unit 'a :: fx"
+    , "    real :: fx, fj, fk, fl, f"
+    , "    fj = fx"
+    , "    fk = g(fj*fj)"
+    , "    fl = fj * g(fj * fj * fj)"
+    , "    f = fk"
+    , "  end function f"
+    , "  function g(gx)"
+    , "    != unit 'b :: gx"
+    , "    real :: gx, gn, gm, g"
+    , "    gm = gx"
+    , "    gn = gm"
+    , "    g = gn"
+    , "  end function g"
+    , "  function h(hx)"
+    , "    != unit m :: hx"
+    , "    real :: hx, h, hy"
+    , "    hy = f(hx)"
+    , "    h = hy"
+    , "  end function h"
+    , "end module eapVarApp" ]
