@@ -84,8 +84,41 @@ criticalVariables cons = filter (not . isUnitName) $ map (colA A.!) criticalIndi
 
 -- | Returns list of formerly-undetermined variables and their units.
 inferVariables :: Constraints -> [(VV, UnitInfo)]
-inferVariables [] = []
-inferVariables cons
+inferVariables = inferVariablesRREF
+
+-- using our reduced-row-echelon-form function
+inferVariablesRREF [] = []
+inferVariablesRREF cons
+  | null inconsists = unitVarAssignments
+  | otherwise       = []
+  where
+    (unsolvedM, inconsists, colA) = constraintsToMatrix cons
+    solvedM                       = rref unsolvedM
+    cols                          = A.elems colA
+
+    -- Convert the rows of the solved matrix into flattened unit
+    -- expressions in the form of "unit ** k".
+    unitPows                      = map (concatMap flattenUnits . zipWith UnitPow cols) (H.toLists solvedM)
+
+    -- Variables to the left, unit names to the right side of the equation.
+    unitAssignments               = map (fmap foldUnits . partition (not . isUnitName)) unitPows
+
+    -- Variables determined to be unit-polymorphic, so should not appear in result
+    polyVars = [ var | UnitParamVarUse (_, var, i) <- universeBi (filter ((== UnitlessVar) . snd) unitAssignments) ]
+
+    -- Find the rows corresponding to the distilled "unit :: var"
+    -- information for ordinary (non-polymorphic) variables.
+    unitVarAssignments            =
+      [ (var, units) | ([UnitPow (UnitVar var)                 k], units) <- unitAssignments, k `approxEq` 1 ] ++
+      [ (var, units) | ([UnitPow (UnitParamVarUse (_, var, _)) k], units) <- unitAssignments, k `approxEq` 1
+                                                                                            , var `notElem` polyVars ]
+    foldUnits units
+      | null units = UnitlessVar
+      | otherwise  = foldl1 UnitMul units
+
+-- using LAPACK singular-value-decomposition
+inferVariablesSVD [] = []
+inferVariablesSVD cons
   | null inconsists = unitVarAssignments
   | otherwise       = []
   where
@@ -367,8 +400,10 @@ showCons str = unlines . ([replicate 50 '-', str ++ ":"]++) . (++[replicate 50 '
 -- debugging
 
 genUnitAssignments :: [Constraint] -> [([UnitInfo], UnitInfo)]
-genUnitAssignments [] = []
-genUnitAssignments cons
+genUnitAssignments = genUnitAssignmentsRREF
+
+genUnitAssignmentsSVD [] = []
+genUnitAssignmentsSVD cons
   | null inconsists = unitAssignments
   | otherwise       = []
   where
@@ -389,6 +424,27 @@ genUnitAssignments cons
 
     -- Variables to the left, unit names to the right side of the equation.
     unitAssignments               = map (fmap foldUnits . partition (not . isUnitName)) unitPows
+    foldUnits units
+      | null units = UnitlessVar
+      | otherwise  = foldl1 UnitMul units
+
+-- using our reduced-row-echelon-form function
+genUnitAssignmentsRREF [] = []
+genUnitAssignmentsRREF cons
+  | null inconsists = unitAssignments
+  | otherwise       = []
+  where
+    (unsolvedM, inconsists, colA) = constraintsToMatrix cons
+    solvedM                       = rref unsolvedM
+    cols                          = A.elems colA
+
+    -- Convert the rows of the solved matrix into flattened unit
+    -- expressions in the form of "unit ** k".
+    unitPows                      = map (concatMap flattenUnits . zipWith UnitPow cols) (H.toLists solvedM)
+
+    -- Variables to the left, unit names to the right side of the equation.
+    unitAssignments               = map (fmap foldUnits . partition (not . isUnitName)) unitPows
+
     foldUnits units
       | null units = UnitlessVar
       | otherwise  = foldl1 UnitMul units
