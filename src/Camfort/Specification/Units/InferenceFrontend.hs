@@ -583,11 +583,11 @@ propagatePU pu = do
   -- explicit unit and the UnitParamPosAbs corresponding to the
   -- parameter. This way all other uses of the parameter get linked to
   -- the explicit unit annotation as well.
-  givenCons <- fmap catMaybes . forM (indexedParams pu) $ \ (i, param) -> do
+  givenCons <- forM (indexedParams pu) $ \ (i, param) -> do
     case M.lookup param varMap of
-      Just (UnitParamPosAbs {}) -> return Nothing
-      Just u                    -> return . Just . ConEq u $ UnitParamPosAbs (name, i)
-      _                         -> return Nothing
+      Just (UnitParamPosAbs {}) -> return . ConEq (UnitParamVarAbs (name, param)) $ UnitParamPosAbs (name, i)
+      Just u                    -> return . ConEq u $ UnitParamPosAbs (name, i)
+      _                         -> return . ConEq (UnitParamVarAbs (name, param)) $ UnitParamPosAbs (name, i)
 
   let cons = givenCons ++ bodyCons
   case pu of F.PUFunction {}   -> modifyTemplateMap (M.insert name cons)
