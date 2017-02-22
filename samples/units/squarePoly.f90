@@ -3,6 +3,7 @@ program squarePoly
 
   real :: x
   real :: y
+  != unit kg**2 :: z
   real :: z
 
   != unit(m) :: a
