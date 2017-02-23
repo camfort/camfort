@@ -102,13 +102,15 @@ spec = do
     describe "Explicitly annotated parametric polymorphic unit variables" $ do
       it "inside-outside" $ do
         show (sort (head (rights [fst (runUnits LitMixed insideOutside runInferVariables)]))) `shouldBe`
-          "[((\"k\",\"k\"),'a),((\"m\",\"m\"),('a)**2)]"
+          "[((\"k\",\"k\"),'a),((\"m\",\"m\"),('a)**2),((\"outside\",\"outside\"),('a)**2),((\"y\",\"y\"),'a),((\"y\",\"y\"),'a)]"
+
+
       it "eapVarScope" $ do
         show (sort (fst (runUnitInference LitMixed eapVarScope))) `shouldBe`
-          "[(\"j\",'a),(\"k\",('a)**3)]"
+          "[(\"f\",('a)**3),(\"g\",'a),(\"j\",'a),(\"k\",('a)**3)]"
       it "eapVarApp" $ do
         show (sort (fst (runUnitInference LitMixed eapVarApp))) `shouldBe`
-          "[(\"fj\",'a),(\"fk\",('a)**2),(\"fl\",('a)**4),(\"gm\",'b),(\"gn\",'b),(\"hy\",m**2)]"
+          "[(\"f\",('a)**2),(\"fj\",'a),(\"fk\",('a)**2),(\"fl\",('a)**4),(\"g\",'b),(\"gm\",'b),(\"gn\",'b),(\"h\",m**2),(\"hy\",m**2)]"
 
   describe "Unit Inference Backend" $ do
     describe "Flatten constraints" $ do
