@@ -104,11 +104,13 @@ initInference = do
   -- These constraints will include parametric polymorphic units that
   -- have not yet been instantiated into their particular uses.
   abstractCons <- extractConstraints
+  dumpConsM "***abstractCons" abstractCons
 
   -- Eliminate all parametric polymorphic units by copying them for
   -- each specific use cases and substituting a unique call-site
   -- identifier that distinguishes each use-case from the others.
   cons <- applyTemplates abstractCons
+  dumpConsM "***concreteCons" cons
 
   -- Remove any traces of CommentAnnotator, since the annotations can
   -- cause generic operations traversing the AST to get confused.
@@ -382,7 +384,7 @@ applyTemplates cons = do
   -- substituting the callId into the abstract parameters.
   concreteCons <- liftM2 (++) (foldM (substInstance False []) [] instances)
                               (foldM (substInstance True []) [] dummies)
-  dumpConsM "concreteCons" concreteCons
+  dumpConsM "applyTemplates: concreteCons" concreteCons
 
   -- Also include aliases in the final set of constraints, where
   -- aliases are implemented by simply asserting that they are equal
@@ -393,7 +395,7 @@ applyTemplates cons = do
       transAlias u                                    = u
 
   dumpConsM "aliases" aliases
-  return . transformBi transAlias . filter (not . isParametric) $ cons ++ concreteCons ++ aliases
+  return . transformBi transAlias $ cons ++ concreteCons ++ aliases
 
 -- | Look up the Parametric templates for a given function or
 -- subroutine, and do the substitutions. Process any additional
@@ -473,7 +475,7 @@ callIdRemap info = modifyCallIdRemapM $ \ idMap -> case info of
 -- explicitly annotated parametric polymorphic variable units if the
 -- flag is True.
 instantiate ifDoEAP (name, callId) = transformBi $ \ info -> case info of
-  UnitParamPosAbs (name, position) -> UnitParamPosUse (name, position, callId)
+  UnitParamPosAbs (name, position) | ifDoEAP -> UnitParamPosUse (name, position, callId)
   UnitParamLitAbs litId            -> UnitParamLitUse (litId, callId)
   UnitParamVarAbs (fname, vname)   -> UnitParamVarUse (fname, vname, callId)
   UnitParamEAPAbs vname | ifDoEAP  -> UnitParamEAPUse (vname, callId)
@@ -515,6 +517,16 @@ isParametric :: Constraint -> Bool
 isParametric info = not . null $ [ () | UnitParamPosAbs _ <- universeBi info ] ++
                                  [ () | UnitParamVarAbs _ <- universeBi info ] ++
                                  [ () | UnitParamLitAbs _ <- universeBi info ]
+
+-- | Does the constraint contain only Parametric elements?
+isAllParametric :: Constraint -> Bool
+isAllParametric = all f . universeBi
+  where
+    f i = case i of
+      UnitParamPosAbs _ -> True
+      UnitParamVarAbs _ -> True
+      UnitParamLitAbs _ -> True
+      _                 -> False
 
 --------------------------------------------------
 
@@ -820,10 +832,13 @@ debugLogging = whenDebug $ do
     tell $ show lhsM
     tell "\n--------------------------------------------------\nRHS M:\n"
     tell $ show rhsM
-    tell "\n--------------------------------------------------\nSolved (SVD) M:\n"
-    tell $ show (H.linearSolveSVD lhsM rhsM)
-    tell "\n--------------------------------------------------\nSingular Values:\n"
-    tell $ show (H.singularValues lhsM)
+    tell "\n--------------------------------------------------\nSolved (RREF) M:\n"
+    let augM = if H.rows rhsM == 0 || H.cols rhsM == 0 then lhsM else H.fromBlocks [[lhsM, rhsM]]
+    tell . show . rref $ augM
+    -- tell "\n--------------------------------------------------\nSolved (SVD) M:\n"
+    -- tell $ show (H.linearSolveSVD lhsM rhsM)
+    -- tell "\n--------------------------------------------------\nSingular Values:\n"
+    -- tell $ show (H.singularValues lhsM)
     tell "\n--------------------------------------------------\n"
     tell $ "Rank LHS: " ++ show (H.rank lhsM) ++ "\n"
     tell "\n--------------------------------------------------\n"

@@ -30,7 +30,7 @@ where
 
 import Data.Tuple (swap)
 import Data.Maybe (maybeToList)
-import Data.List ((\\), findIndex, partition, sortBy, group, intercalate, tails)
+import Data.List ((\\), findIndex, partition, sortBy, group, intercalate, tails, sort)
 import Data.Generics.Uniplate.Operations (rewrite, universeBi)
 import Control.Monad
 import Control.Monad.State.Strict
@@ -72,13 +72,13 @@ inconsistentConstraints cons
 -- inference or checking to work.
 criticalVariables :: Constraints -> [UnitInfo]
 criticalVariables [] = []
-criticalVariables cons = filter (not . isUnitName) $ map (colA A.!) criticalIndices
+criticalVariables cons = filter (not . isUnitRHS) $ map (colA A.!) criticalIndices
   where
     (unsolvedM, inconsists, colA) = constraintsToMatrix cons
     solvedM                       = rref unsolvedM
     uncriticalIndices             = concatMap (maybeToList . findIndex (/= 0)) $ H.toLists solvedM
     criticalIndices               = A.indices colA \\ uncriticalIndices
-    isUnitName (UnitName _)       = True; isUnitName _ = False
+    isUnitRHS (UnitName _)       = True; isUnitRHS _ = False
 
 --------------------------------------------------
 
@@ -101,7 +101,15 @@ inferVariablesRREF cons
     unitPows                      = map (concatMap flattenUnits . zipWith UnitPow cols) (H.toLists solvedM)
 
     -- Variables to the left, unit names to the right side of the equation.
-    unitAssignments               = map (fmap foldUnits . partition (not . isUnitName)) unitPows
+    unitAssignments               = map (fmap (foldUnits . map negatePosAbs) . partition (not . isUnitRHS)) unitPows
+    isUnitRHS (UnitPow (UnitName _) _)        = True
+    isUnitRHS (UnitPow (UnitParamEAPAbs _) _) = True
+    -- Because this version of isUnitRHS different from
+    -- constraintsToMatrix interpretation, we need to ensure that any
+    -- moved ParamPosAbs units are negated, because they are
+    -- effectively being shifted across the equal-sign:
+    isUnitRHS (UnitPow (UnitParamPosAbs _) _) = True
+    isUnitRHS _                               = False
 
     -- Variables determined to be unit-polymorphic, so should not appear in result
     polyVars = [ var | UnitParamVarUse (_, var, i) <- universeBi (filter ((== UnitlessVar) . snd) unitAssignments) ]
@@ -138,7 +146,15 @@ inferVariablesSVD cons
     unitPows = map (concatMap flattenUnits) $ zipWith (:) lhsPows rhsPows
 
     -- Variables to the left, unit names to the right side of the equation.
-    unitAssignments               = map (fmap foldUnits . partition (not . isUnitName)) unitPows
+    unitAssignments               = map (fmap foldUnits . partition (not . isUnitRHS)) unitPows
+    isUnitRHS (UnitPow (UnitName _) _)        = True
+    isUnitRHS (UnitPow (UnitParamEAPAbs _) _) = True
+    -- Because this version of isUnitRHS different from
+    -- constraintsToMatrix interpretation, we need to ensure that any
+    -- moved ParamPosAbs units are negated, because they are
+    -- effectively being shifted across the equal-sign:
+    isUnitRHS (UnitPow (UnitParamPosAbs _) _) = True
+    isUnitRHS _                               = False
 
     -- Variables determined to be unit-polymorphic, so should not appear in result
     polyVars = [ var | UnitParamVarUse (_, var, i) <- universeBi (filter ((== UnitlessVar) . snd) unitAssignments) ]
@@ -242,28 +258,34 @@ flattenedToMatrix cons = (m, A.array (0, numCols - 1) (map swap uniqUnits))
 
 negateCons = map (\ (UnitPow u k) -> UnitPow u (-k))
 
-colSort (UnitLiteral i) (UnitLiteral j) = compare i j
-colSort (UnitLiteral _) _               = LT
-colSort _ (UnitLiteral _)               = GT
-colSort x y                             = compare x y
+negatePosAbs (UnitPow (UnitParamPosAbs x) k) = UnitPow (UnitParamPosAbs x) (-k)
+negatePosAbs u                               = u
+
+colSort (UnitLiteral i) (UnitLiteral j)         = compare i j
+colSort (UnitLiteral _) _                       = LT
+colSort _ (UnitLiteral _)                       = GT
+colSort (UnitParamPosAbs x) (UnitParamPosAbs y) = compare x y
+colSort (UnitParamPosAbs _) _                   = GT
+colSort _ (UnitParamPosAbs _)                   = LT
+colSort x y                                     = compare x y
 
 --------------------------------------------------
+
+-- Units that should appear on the right-hand-side of the matrix during solving
+isUnitRHS (UnitPow (UnitName _) _)        = True
+isUnitRHS (UnitPow (UnitParamEAPAbs _) _) = True
+isUnitRHS _                               = False
+
+-- | Shift UnitNames/EAPAbs poly units to the RHS, and all else to the LHS.
+shiftTerms :: ([UnitInfo], [UnitInfo]) -> ([UnitInfo], [UnitInfo])
+shiftTerms (lhs, rhs) = (lhsOk ++ negateCons rhsShift, rhsOk ++ negateCons lhsShift)
+  where
+    (lhsOk, lhsShift) = partition (not . isUnitRHS) lhs
+    (rhsOk, rhsShift) = partition isUnitRHS rhs
 
 -- | Translate all constraints into a LHS, RHS side of units.
 flattenConstraints :: Constraints -> [([UnitInfo], [UnitInfo])]
 flattenConstraints = map (\ (ConEq u1 u2) -> (flattenUnits u1, flattenUnits u2))
-
--- | Shift UnitNames to the RHS, and all else to the LHS.
-shiftTerms :: ([UnitInfo], [UnitInfo]) -> ([UnitInfo], [UnitInfo])
-shiftTerms (lhs, rhs) = (lhsOk ++ negateCons rhsShift, rhsOk ++ negateCons lhsShift)
-  where
-    (lhsOk, lhsShift) = partition (not . isUnitName) lhs
-    (rhsOk, rhsShift) = partition isUnitName rhs
-
--- Units that should appear on the right-hand-side
-isUnitName (UnitPow (UnitName _) _)        = True
-isUnitName (UnitPow (UnitParamEAPAbs _) _) = True
-isUnitName _                               = False
 
 --------------------------------------------------
 -- Matrix solving functions based on HMatrix
@@ -423,7 +445,12 @@ genUnitAssignmentsSVD cons
     unitPows = map (concatMap flattenUnits) $ zipWith (:) lhsPows rhsPows
 
     -- Variables to the left, unit names to the right side of the equation.
-    unitAssignments               = map (fmap foldUnits . partition (not . isUnitName)) unitPows
+    unitAssignments               = map (fmap foldUnits . partition (not . isUnitRHS)) unitPows
+    isUnitRHS (UnitPow (UnitName _) _)        = True
+    isUnitRHS (UnitPow (UnitParamEAPAbs _) _) = True
+    isUnitRHS (UnitPow (UnitParamPosAbs _) _) = True
+    isUnitRHS _                               = False
+
     foldUnits units
       | null units = UnitlessVar
       | otherwise  = foldl1 UnitMul units
@@ -443,7 +470,11 @@ genUnitAssignmentsRREF cons
     unitPows                      = map (concatMap flattenUnits . zipWith UnitPow cols) (H.toLists solvedM)
 
     -- Variables to the left, unit names to the right side of the equation.
-    unitAssignments               = map (fmap foldUnits . partition (not . isUnitName)) unitPows
+    unitAssignments               = map (fmap (foldUnits . map negatePosAbs) . partition (not . isUnitRHS)) unitPows
+    isUnitRHS (UnitPow (UnitName _) _)        = True
+    isUnitRHS (UnitPow (UnitParamEAPAbs _) _) = True
+    isUnitRHS (UnitPow (UnitParamPosAbs _) _) = True
+    isUnitRHS _                               = False
 
     foldUnits units
       | null units = UnitlessVar
