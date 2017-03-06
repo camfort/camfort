@@ -28,8 +28,9 @@ module Camfort.Specification.Units
 where
 
 import qualified Data.Map.Strict as M
+import Data.Data
 import Data.Char (isNumber)
-import Data.List (intercalate, find, sort, group)
+import Data.List (intercalate, find, sort, group, nub, inits)
 import Data.Maybe (fromMaybe, maybeToList, listToMaybe, mapMaybe, isJust, maybe)
 import Data.Binary
 import Data.Generics.Uniplate.Operations
@@ -214,6 +215,26 @@ checkUnits uo (fname, pf)
 lookupWith :: (a -> Bool) -> [(a,b)] -> Maybe b
 lookupWith f = fmap snd . find (f . fst)
 
+-- Create unique names for all of the inferred implicit polymorphic
+-- unit variables.
+chooseImplicitNames :: [(VV, UnitInfo)] -> [(VV, UnitInfo)]
+chooseImplicitNames vars = replaceImplicitNames (genImplicitNamesMap vars) vars
+
+genImplicitNamesMap :: Data a => a -> M.Map UnitInfo UnitInfo
+genImplicitNamesMap x = M.fromList [ (absU, UnitParamEAPAbs (newN, newN)) | (absU, newN) <- zip absUnits newNames ]
+  where
+    absUnits = nub [ u | u@(UnitParamPosAbs _)             <- universeBi x ]
+    eapNames = nub $ [ n | u@(UnitParamEAPAbs (_, n))      <- universeBi x ] ++
+                     [ n | u@(UnitParamEAPUse ((_, n), _)) <- universeBi x ]
+    newNames = filter (`notElem` eapNames) . map ('\'':) $ nameGen
+    nameGen  = concatMap sequence . tail . inits $ repeat ['a'..'z']
+
+replaceImplicitNames :: Data a => M.Map UnitInfo UnitInfo -> a -> a
+replaceImplicitNames implicitMap = transformBi replace
+  where
+    replace u@(UnitParamPosAbs _) = fromMaybe u $ M.lookup u implicitMap
+    replace u                     = u
+
 {-| Check and infer units-of-measure for a program
     This produces an output of all the unit information for a program -}
 inferUnits uo (fname, pf)
@@ -236,7 +257,7 @@ inferUnits uo (fname, pf)
     (eVars, state, logs) = runUnitSolver uOpts pfRenamed $ do
       modifyTemplateMap . const . combinedTemplateMap . M.elems $ uoModFiles uo
       initInference
-      runInferVariables
+      chooseImplicitNames `fmap` runInferVariables
 
     pfUA = usProgramFile state -- the program file after units analysis is done
 
@@ -325,7 +346,7 @@ synthesiseUnits uo marker (fname, pf)
     (eVars, state, logs) = runUnitSolver uOpts pfRenamed $ do
       modifyTemplateMap . const . combinedTemplateMap . M.elems $ uoModFiles uo
       initInference
-      runInferVariables >>= runSynthesis marker
+      runInferVariables >>= (runSynthesis marker . chooseImplicitNames)
 
     pfUA = usProgramFile state -- the program file after units analysis is done
     pfFinal = fmap prevAnnotation . fmap FA.prevAnnotation $ pfUA -- strip annotations
