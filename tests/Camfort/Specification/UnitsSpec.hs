@@ -66,7 +66,7 @@ runUnitInference litMode pf = case r of
   where
     pf' = FA.initAnalysis . fmap mkUnitAnnotation . fmap (const unitAnnotation) $ pf
     uOpts = unitOpts0 { uoNameMap = M.empty, uoDebug = False, uoLiterals = litMode }
-    (r, state, logs) = runUnitSolver uOpts pf' $ initInference >> runInferVariables
+    (r, state, logs) = runUnitSolver uOpts pf' $ initInference >> fmap chooseImplicitNames runInferVariables
 
 declVariables :: F.ProgramFile UA -> [F.Expression UA]
 declVariables pf = flip mapMaybe (universeBi pf) $ \ d -> case d of
@@ -89,11 +89,11 @@ spec = do
           any (conParamEq (ConEq UnitlessLit (UnitVar ("j", "j"))))
     describe "Polymorphic functions" $ do
       it "squarePoly1" $ do
-        show (sort (head (rights [fst (runUnits LitMixed squarePoly1 runInferVariables)]))) `shouldBe`
+        show (sort (head (rights [fst (runUnits LitMixed squarePoly1 (fmap chooseImplicitNames runInferVariables))]))) `shouldBe`
           show (sort [(("a", "a"),UnitName "m"),(("b", "b"), UnitName "s"),(("x", "x"),UnitPow (UnitName "m") 2.0),(("y", "y"),UnitPow (UnitName "s") 2.0)])
     describe "Recursive functions" $ do
       it "Recursive Addition is OK" $ do
-        show (sort (head (rights [fst (runUnits LitMixed recursive1 runInferVariables)]))) `shouldBe`
+        show (sort (head (rights [fst (runUnits LitMixed recursive1 (fmap chooseImplicitNames runInferVariables))]))) `shouldBe`
           show (sort [(("x", "x"),UnitlessVar),(("y", "y"),UnitName "m"),(("z", "z"), UnitName "m")])
     describe "Recursive functions" $ do
       it "Recursive Multiplication is not OK" $ do
@@ -111,6 +111,10 @@ spec = do
       it "eapVarApp" $ do
         show (sort (fst (runUnitInference LitMixed eapVarApp))) `shouldBe`
           "[(\"f\",('a)**2),(\"fj\",'a),(\"fk\",('a)**2),(\"fl\",('a)**4),(\"g\",'b),(\"gm\",'b),(\"gn\",'b),(\"h\",m**2),(\"hy\",m**2)]"
+    describe "Implicit parametric polymorphic unit variables" $ do
+      it "inferPoly1" $ do
+        show (sort (fst (runUnitInference LitMixed inferPoly1))) `shouldBe`
+          "[(\"fst\",'a),(\"id\",'c),(\"snd\",'d),(\"sqr\",('f)**2),(\"x1\",'c),(\"x2\",'f),(\"x3\",'a),(\"x4\",'e),(\"y3\",'b),(\"y4\",'d)]"
 
   describe "Unit Inference Backend" $ do
     describe "Flatten constraints" $ do
@@ -351,3 +355,24 @@ eapVarApp = flip fortranParser "eapVarApp.f90" . B.pack $ unlines
     , "    h = hy"
     , "  end function h"
     , "end module eapVarApp" ]
+
+inferPoly1 = flip fortranParser "inferPoly1.f90" . B.pack $ unlines
+    [ "module inferPoly1"
+    , "contains"
+    , "  function id(x1)"
+    , "    real :: x1, id"
+    , "    id = x1"
+    , "  end function id"
+    , "  function sqr(x2)"
+    , "    real :: x2, sqr"
+    , "    sqr = x2 * x2"
+    , "  end function sqr"
+    , "  function fst(x3,y3)"
+    , "    real :: x3, y3, fst"
+    , "    fst = x3"
+    , "  end function fst"
+    , "  function snd(x4,y4)"
+    , "    real :: x4, y4, snd"
+    , "    snd = y4"
+    , "  end function snd"
+    , "end module inferPoly1" ]

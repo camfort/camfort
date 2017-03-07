@@ -24,7 +24,7 @@
 {-# LANGUAGE PatternGuards #-}
 
 module Camfort.Specification.Units
-  (checkUnits, inferUnits, compileUnits, synthesiseUnits, inferCriticalVariables)
+  (checkUnits, inferUnits, compileUnits, synthesiseUnits, inferCriticalVariables, chooseImplicitNames)
 where
 
 import qualified Data.Map.Strict as M
@@ -215,7 +215,7 @@ checkUnits uo (fname, pf)
 lookupWith :: (a -> Bool) -> [(a,b)] -> Maybe b
 lookupWith f = fmap snd . find (f . fst)
 
--- Create unique names for all of the inferred implicit polymorphic
+-- | Create unique names for all of the inferred implicit polymorphic
 -- unit variables.
 chooseImplicitNames :: [(VV, UnitInfo)] -> [(VV, UnitInfo)]
 chooseImplicitNames vars = replaceImplicitNames (genImplicitNamesMap vars) vars
