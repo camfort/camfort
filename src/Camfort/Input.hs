@@ -14,7 +14,7 @@
    limitations under the License.
 -}
 
-{-
+{-2
 
 Handles input of code base (files and directories)
  and passing them into the core functionality
@@ -36,6 +36,7 @@ import Language.Fortran.Util.ModFile
 
 import qualified Data.ByteString.Char8 as B
 import Data.Data
+import Data.Maybe
 import Data.Generics.Uniplate.Operations
 import Data.List (foldl', nub, (\\), elemIndices, intercalate)
 import Data.Monoid
@@ -224,7 +225,10 @@ readParseSrcDir inp excludes = do
                let excludes' = excludes ++ map (\x -> inp ++ "/" ++ x) excludes
                return $ (map (\y -> inp ++ "/" ++ y) files) \\ excludes'
              else return [inp]
-    mapM readParseSrcFile files
+    mapMaybeM readParseSrcFile files
+
+mapMaybeM :: Monad m => (a -> m (Maybe b)) -> [a] -> m [b]
+mapMaybeM f = fmap catMaybes . (mapM f)
 
 readParseSrcDirWithModFiles :: FileOrDir
                             -> [Filename]
@@ -240,20 +244,27 @@ readParseSrcDirWithModFiles inp excludes mods = do
                let excludes' = excludes ++ map (\x -> inp ++ "/" ++ x) excludes
                return $ (map (\y -> inp ++ "/" ++ y) files) \\ excludes'
              else return [inp]
-    mapM (readParseSrcFileWithModFiles mods) files
+    mapMaybeM (readParseSrcFileWithModFiles mods) files
 
 {-| Read a specific file, and parse it -}
-readParseSrcFile :: Filename -> IO (Filename, SourceText, F.ProgramFile A)
+readParseSrcFile :: Filename
+                 -> IO (Maybe (Filename, SourceText, F.ProgramFile A))
 readParseSrcFile f = do
     inp <- flexReadFile f
-    let ast = FP.fortranParserWithModFiles [] inp f
-    return (f, inp, fmap (const unitAnnotation) ast)
+    let result = FP.fortranParserWithModFiles [] inp f
+    case result of
+      Left ast -> return $ Just (f, inp, fmap (const unitAnnotation) ast)
+      Right error -> (putStrLn $ show error) >> return Nothing
 
-readParseSrcFileWithModFiles :: ModFiles -> Filename -> IO (Filename, SourceText, F.ProgramFile A)
+readParseSrcFileWithModFiles :: ModFiles
+                             -> Filename
+                             -> IO (Maybe (Filename, SourceText, F.ProgramFile A))
 readParseSrcFileWithModFiles mods f = do
     inp <- flexReadFile f
-    let ast = FP.fortranParserWithModFiles mods inp f
-    return (f, inp, fmap (const unitAnnotation) ast)
+    let result = FP.fortranParserWithModFiles mods inp f
+    case result of
+      Left ast -> return $ Just (f, inp, fmap (const unitAnnotation) ast)
+      Right error -> (putStrLn $ show error) >> return Nothing
 ----
 
 rGetDirContents :: FileOrDir -> IO [String]

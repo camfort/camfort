@@ -4,6 +4,7 @@ module Camfort.Specification.UnitsSpec (spec) where
 import qualified Data.ByteString.Char8 as B
 
 import Language.Fortran.Parser.Any
+import Language.Fortran.ParserMonad (fromLeft)
 import qualified Language.Fortran.AST as F
 import qualified Language.Fortran.Analysis as FA
 import qualified Language.Fortran.Analysis.Renaming as FAR
@@ -227,7 +228,7 @@ testDoubleToRationalSubset x y =
     else True
 --------------------------------------------------
 
-litTest1 = flip fortranParser "litTest1.f90" . B.pack $ unlines
+litTest1 = flip fortranParser' "litTest1.f90" . B.pack $ unlines
     [ "program main"
     , "  != unit(a) :: x"
     , "  real :: x, j, k"
@@ -238,7 +239,7 @@ litTest1 = flip fortranParser "litTest1.f90" . B.pack $ unlines
     , "  x = x * j ! inconsistent"
     , "end program main" ]
 
-squarePoly1 = flip fortranParser "squarePoly1.f90" . B.pack $ unlines
+squarePoly1 = flip fortranParser' "squarePoly1.f90" . B.pack $ unlines
     [ "! Demonstrates parametric polymorphism through functions-calling-functions."
     , "program squarePoly"
     , "  implicit none"
@@ -261,7 +262,7 @@ squarePoly1 = flip fortranParser "squarePoly1.f90" . B.pack $ unlines
     , "  end function"
     , "end program" ]
 
-recursive1 = flip fortranParser "recursive1.f90" . B.pack $ unlines
+recursive1 = flip fortranParser' "recursive1.f90" . B.pack $ unlines
     [ "program main"
     , "  != unit(m) :: y"
     , "  integer :: x = 5, y = 2, z"
@@ -278,7 +279,7 @@ recursive1 = flip fortranParser "recursive1.f90" . B.pack $ unlines
     , "  end function recur"
     , "end program main" ]
 
-recursive2 = flip fortranParser "recursive2.f90" . B.pack $ unlines
+recursive2 = flip fortranParser' "recursive2.f90" . B.pack $ unlines
     [ "program main"
     , "  != unit(m) :: y"
     , "  integer :: x = 5, y = 2, z"
@@ -295,7 +296,7 @@ recursive2 = flip fortranParser "recursive2.f90" . B.pack $ unlines
     , "  end function recur"
     , "end program main" ]
 
-insideOutside = flip fortranParser "insideOutside.f90" . B.pack $ unlines
+insideOutside = flip fortranParser' "insideOutside.f90" . B.pack $ unlines
     [ "module insideOutside"
     , "contains"
     , "  function outside(x)"
@@ -313,7 +314,7 @@ insideOutside = flip fortranParser "insideOutside.f90" . B.pack $ unlines
     , "  end function outside"
     , "end module insideOutside" ]
 
-eapVarScope = flip fortranParser "eapVarScope.f90" . B.pack $ unlines
+eapVarScope = flip fortranParser' "eapVarScope.f90" . B.pack $ unlines
     [ "module eapVarScope"
     , "contains"
     , "  function f(x)"
@@ -330,7 +331,7 @@ eapVarScope = flip fortranParser "eapVarScope.f90" . B.pack $ unlines
     , "  end function g"
     , "end module eapVarScope" ]
 
-eapVarApp = flip fortranParser "eapVarApp.f90" . B.pack $ unlines
+eapVarApp = flip fortranParser' "eapVarApp.f90" . B.pack $ unlines
     [ "module eapVarApp"
     , "contains"
     , "  function f(fx)"
@@ -356,7 +357,7 @@ eapVarApp = flip fortranParser "eapVarApp.f90" . B.pack $ unlines
     , "  end function h"
     , "end module eapVarApp" ]
 
-inferPoly1 = flip fortranParser "inferPoly1.f90" . B.pack $ unlines
+inferPoly1 = flip fortranParser' "inferPoly1.f90" . B.pack $ unlines
     [ "module inferPoly1"
     , "contains"
     , "  function id(x1)"
@@ -376,3 +377,5 @@ inferPoly1 = flip fortranParser "inferPoly1.f90" . B.pack $ unlines
     , "    snd = y4"
     , "  end function snd"
     , "end module inferPoly1" ]
+
+fortranParser' = \x -> fromLeft . (fortranParser x)
