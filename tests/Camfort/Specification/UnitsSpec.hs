@@ -4,7 +4,7 @@ module Camfort.Specification.UnitsSpec (spec) where
 import qualified Data.ByteString.Char8 as B
 
 import Language.Fortran.Parser.Any
-import Language.Fortran.ParserMonad (fromLeft)
+import Language.Fortran.ParserMonad (fromRight)
 import qualified Language.Fortran.AST as F
 import qualified Language.Fortran.Analysis as FA
 import qualified Language.Fortran.Analysis.Renaming as FAR
@@ -378,4 +378,4 @@ inferPoly1 = flip fortranParser' "inferPoly1.f90" . B.pack $ unlines
     , "  end function snd"
     , "end module inferPoly1" ]
 
-fortranParser' = \x -> fromLeft . (fortranParser x)
+fortranParser' = \x -> fromRight . (fortranParser x)

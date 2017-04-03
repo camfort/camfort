@@ -253,8 +253,8 @@ readParseSrcFile f = do
     inp <- flexReadFile f
     let result = FP.fortranParserWithModFiles [] inp f
     case result of
-      Left ast -> return $ Just (f, inp, fmap (const unitAnnotation) ast)
-      Right error -> (putStrLn $ show error) >> return Nothing
+      Right ast  -> return $ Just (f, inp, fmap (const unitAnnotation) ast)
+      Left error -> (putStrLn $ show error) >> return Nothing
 
 readParseSrcFileWithModFiles :: ModFiles
                              -> Filename
@@ -263,8 +263,8 @@ readParseSrcFileWithModFiles mods f = do
     inp <- flexReadFile f
     let result = FP.fortranParserWithModFiles mods inp f
     case result of
-      Left ast -> return $ Just (f, inp, fmap (const unitAnnotation) ast)
-      Right error -> (putStrLn $ show error) >> return Nothing
+      Right ast  -> return $ Just (f, inp, fmap (const unitAnnotation) ast)
+      Left error -> (putStrLn $ show error) >> return Nothing
 ----
 
 rGetDirContents :: FileOrDir -> IO [String]
