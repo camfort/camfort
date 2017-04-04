@@ -62,7 +62,7 @@ inferFromIndicesWithoutLinearity :: VecList Int -> Specification
 inferFromIndicesWithoutLinearity (VL ixs) =
     Specification . Multiple . inferCore $ ixs
 
-inferCore :: (IsNatural n, Permutable n) => [Vec n Int] -> Approximation Spatial
+inferCore :: (IsNatural n) => [Vec n Int] -> Approximation Spatial
 inferCore = simplify . fromRegionsToSpec . inferMinimalVectorRegions
 
 simplify :: Approximation Spatial -> Approximation Spatial
@@ -173,68 +173,28 @@ composeConsecutiveSpans (Cons l1 ls1, Cons u1 us1) (Cons l2 ls2, Cons u2 us2)
     n-dimensional relative indices it infers a list of (possibly overlapping)
     1-dimensional spans (vectors) within the n-dimensional space.
     Built from |minimalise| and |allRegionPermutations| -}
-inferMinimalVectorRegions :: (Permutable n) => [Vec n Int] -> [Span (Vec n Int)]
+inferMinimalVectorRegions :: [Vec n Int] -> [Span (Vec n Int)]
 inferMinimalVectorRegions = fixCoalesce . map mkTrivialSpan
   where fixCoalesce spans =
-          let spans' = minimaliseRegions . allRegionPermutations $ spans
+          let spans' = minimaliseRegions . coalesceContiguous $ spans
           in if spans' == spans then spans' else fixCoalesce spans'
 
-{-| Map from a lists of n-dimensional spans of relative indices into all
-    possible contiguous spans within the n-dimensional space (individual pass)-}
-allRegionPermutations :: (Permutable n)
-                      => [Span (Vec n Int)] -> [Span (Vec n Int)]
-allRegionPermutations =
-  nub . concat . unpermuteIndices . map (coalesceRegions >< id) . groupByPerm . map permutationss
-    where
-      {- Permutations of a indices in a span
-         (independently permutes the lower and upper bounds in the same way) -}
-      permutationss :: Permutable n
-                   => Span (Vec n Int)
-                   -> [(Span (Vec n Int), Vec n Int -> Vec n Int)]
-      -- Since the permutation ordering is identical for lower & upper bound,
-      -- reuse the same unpermutation
-      permutationss (l, u) = map (\((l', un1), (u', un2)) -> ((l', u'), un1))
-                           $ zip (permutationsV l) (permutationsV u)
-
-      sortByFst        = sortBy (\(l1, u1) (l2, u2) -> compare l1 l2)
-
-      groupByPerm  :: [[(Span (Vec n Int), Vec n Int -> Vec n Int)]]
-                   -> [( [Span (Vec n Int)] , Vec n Int -> Vec n Int)]
-      groupByPerm      = map (\ixP -> let unPerm = snd $ head ixP
-                                      in (map fst ixP, unPerm)) . transpose
-
-      coalesceRegions :: [Span (Vec n Int)] -> [Span (Vec n Int)]
-      coalesceRegions  = nub . foldL composeConsecutiveSpans . sortByFst
-
-      unpermuteIndices :: [([Span (Vec n Int)], Vec n Int -> Vec n Int)]
-                       -> [[Span (Vec n Int)]]
-      unpermuteIndices = nub . map (\(rs, unPerm) -> map (unPerm *** unPerm) rs)
-
--- An alternative that is hopefully simplier and quicker
-allRegionPermutationsAlt :: [Span (Vec n Int)] -> [Span (Vec n Int)]
-allRegionPermutationsAlt is = allRegionPermutationsAlt' is
-  where
-    allRegionPermutationsAlt' []     = []
-    allRegionPermutationsAlt' (x:xs) = undefined -- nonContig ++ regions
-{-      where
-         coalesces = map (coalesce x) xs
-         case collect coalesces of
-            Nothing -> ([nonContig], 
-         (nonContig, rest) = partitionMaybe (coalesce x) xs
-         regions           = allRegionPermutationsAlt' rest -}
-
-collect :: Eq a => [Maybe a] -> Maybe [a]
-collect xs | all (== Nothing) xs = Nothing
-collect xs | otherwise = Just (catMaybes xs)
-
-partitionMaybe :: (a -> Maybe b) -> [a] -> ([a], [b])
-partitionMaybe f []     = ([], [])
-partitionMaybe f (x:xs) =
-    case f x of
-       Nothing -> (x : l, r)
-       Just y  -> (l, y : r)
-  where
-    (l, r) = partitionMaybe f xs
+-- An alternative that is simpler and possibly quicker
+coalesceContiguous :: [Span (Vec n Int)] -> [Span (Vec n Int)]
+coalesceContiguous []  = []
+coalesceContiguous [x] = [x]
+coalesceContiguous [x, y] =
+    case coalesce x y of
+       Nothing -> [x, y]
+       Just c  -> [c]
+coalesceContiguous (x:xs) =
+    case sequenceMaybes (map (coalesce x) xs) of
+       Nothing -> x : coalesceContiguous xs
+       Just cs -> coalesceContiguous (cs ++ xs)
+      where
+       sequenceMaybes :: Eq a => [Maybe a] -> Maybe [a]
+       sequenceMaybes xs | all (== Nothing) xs = Nothing
+                         | otherwise = Just (catMaybes xs)
 
 coalesce :: Span (Vec n Int) -> Span (Vec n Int) -> Maybe (Span (Vec n Int))
 coalesce (Nil, Nil) (Nil, Nil) = Just (Nil, Nil)
@@ -245,18 +205,10 @@ coalesce x@(Cons l1 ls1, Cons u1 us1) y@(Cons l2 ls2, Cons u2 us2)
         Nothing     -> Nothing
   | (u1 + 1 == l2) && (us1 == us2) && (ls1 == ls2)
     = Just (Cons l1 ls1, Cons u2 us2)
+  | (u2 + 1 == l1) && (us1 == us2) && (ls1 == ls2)
+    = Just (Cons l2 ls2, Cons u1 us1)
   | otherwise
     = Nothing
-
-
-
--- Helper function, reduces a list two elements at a time with a non-determistic operation
-foldL :: (a -> a -> [a]) -> [a] -> [a]
-foldL f [] = []
-foldL f [a] = [a]
-foldL f (a:(b:xs)) = case f a b of
-                       [] -> a : foldL f (b : xs)
-                       cs -> foldL f (cs ++ xs)
 
 {-| Collapses the regions into a small set by looking for potential overlaps
     and eliminating those that overlap -}
@@ -279,57 +231,12 @@ containedWithin (Cons l1 ls1, Cons u1 us1) (Cons l2 ls2, Cons u2 us2)
   = (l2 <= l1 && u1 <= u2) && containedWithin (ls1, us1) (ls2, us2)
 
 
-{-| Defines the (total) class of vector sizes which are permutable, along with
-    the permutation function which pairs permutations with the 'unpermute'
-    operation -}
-class Permutable (n :: Nat) where
-  -- From a Vector of length n to a list of 'selections'
-  --   (triples of a selected element, the rest of the vector,
-  --   a function to 'unselect')
-  selectionsV :: Vec n a -> [Selection n a]
-  -- From a Vector of length n to a list of its permutations paired with the
-  -- 'unpermute' function
-  permutationsV :: Vec n a -> [(Vec n a, Vec n a -> Vec n a)]
-
--- 'Split' is a size-indexed family which gives the type of selections
--- for each size:
---    Z is trivial
---    (S n) provides a triple of the select element, the remaining vector,
---           and the 'unselect' function for returning the original value
-type family Selection n a where
-            Selection Z a = a
-            Selection (S n) a = (a, Vec n a, a -> Vec n a -> Vec (S n) a)
-
-instance Permutable Z where
-  selectionsV Nil   = []
-  permutationsV Nil = [(Nil, id)]
-
-instance Permutable (S Z) where
-  selectionsV (Cons x xs)
-    = [(x, Nil, Cons)]
-  permutationsV (Cons x Nil)
-    = [(Cons x Nil, id)]
-
-instance Permutable (S n) => Permutable (S (S n)) where
-  selectionsV (Cons x xs) =
-    (x, xs, Cons) : [ (y, Cons x ys, unselect unSel)
-                    | (y, ys, unSel) <- selectionsV xs ]
-    where
-     unselect :: (a -> Vec n a -> Vec (S n) a)
-              -> (a -> Vec (S n) a -> Vec (S (S n)) a)
-     unselect f y' (Cons x' ys') = Cons x' (f y' ys')
-
-  permutationsV xs =
-      [ (Cons y zs, \(Cons y' zs') -> unSel y' (unPerm zs'))
-        | (y, ys, unSel) <- selectionsV xs,
-          (zs,  unPerm)  <- permutationsV ys ]
-
 {- Vector list repreentation where the size 'n' is existential quantified -}
-data VecList a where VL :: (IsNatural n, Permutable n) => [Vec n a] -> VecList a
+data VecList a where VL :: IsNatural n => [Vec n a] -> VecList a
 
 -- Lists existentially quanitify over a vector's size : Exists n . Vec n a
 data List a where
-     List :: (IsNatural n, Permutable n) => Vec n a -> List a
+     List :: IsNatural n => Vec n a -> List a
 
 lnil :: List a
 lnil = List Nil
