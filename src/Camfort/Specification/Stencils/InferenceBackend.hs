@@ -32,6 +32,7 @@ import Data.List hiding (sum)
 import Data.Data
 import Control.Arrow ((***))
 import Data.Function
+import Data.Maybe
 
 import Camfort.Specification.Stencils.Model
 import Camfort.Helpers
@@ -208,6 +209,46 @@ allRegionPermutations =
       unpermuteIndices :: [([Span (Vec n Int)], Vec n Int -> Vec n Int)]
                        -> [[Span (Vec n Int)]]
       unpermuteIndices = nub . map (\(rs, unPerm) -> map (unPerm *** unPerm) rs)
+
+-- An alternative that is hopefully simplier and quicker
+allRegionPermutationsAlt :: [Span (Vec n Int)] -> [Span (Vec n Int)]
+allRegionPermutationsAlt is = allRegionPermutationsAlt' is
+  where
+    allRegionPermutationsAlt' []     = []
+    allRegionPermutationsAlt' (x:xs) = undefined -- nonContig ++ regions
+{-      where
+         coalesces = map (coalesce x) xs
+         case collect coalesces of
+            Nothing -> ([nonContig], 
+         (nonContig, rest) = partitionMaybe (coalesce x) xs
+         regions           = allRegionPermutationsAlt' rest -}
+
+collect :: Eq a => [Maybe a] -> Maybe [a]
+collect xs | all (== Nothing) xs = Nothing
+collect xs | otherwise = Just (catMaybes xs)
+
+partitionMaybe :: (a -> Maybe b) -> [a] -> ([a], [b])
+partitionMaybe f []     = ([], [])
+partitionMaybe f (x:xs) =
+    case f x of
+       Nothing -> (x : l, r)
+       Just y  -> (l, y : r)
+  where
+    (l, r) = partitionMaybe f xs
+
+coalesce :: Span (Vec n Int) -> Span (Vec n Int) -> Maybe (Span (Vec n Int))
+coalesce (Nil, Nil) (Nil, Nil) = Just (Nil, Nil)
+coalesce x@(Cons l1 ls1, Cons u1 us1) y@(Cons l2 ls2, Cons u2 us2)
+  | l1 == l2 && u1 == u2
+    = case (coalesce (ls1, us1) (ls2, us2)) of
+        Just (l, u) -> Just (Cons l1 l, Cons u1 u)
+        Nothing     -> Nothing
+  | (u1 + 1 == l2) && (us1 == us2) && (ls1 == ls2)
+    = Just (Cons l1 ls1, Cons u2 us2)
+  | otherwise
+    = Nothing
+
+
 
 -- Helper function, reduces a list two elements at a time with a non-determistic operation
 foldL :: (a -> a -> [a]) -> [a] -> [a]
