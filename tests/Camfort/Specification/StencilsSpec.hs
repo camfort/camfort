@@ -311,7 +311,7 @@ spec =
          fst (callAndSummarise (infer AssignMode '=') program)
            `shouldBe`
             "\ntests/fixtures/Specification/Stencils/example4.f\n\
-             \(6:8)-(6:33)    stencil (pointed(dim=1)) :: x"
+             \(6:8)-(6:33)    stencil readOnce, (pointed(dim=1)) :: x"
 
 
 {- Properties of `spanBoundingBox`: idempotent and associative -}
