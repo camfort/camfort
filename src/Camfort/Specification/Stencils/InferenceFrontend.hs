@@ -181,7 +181,7 @@ isArraySubscript :: F.Expression (FA.Analysis A)
                  -> Maybe [F.Index (FA.Analysis A)]
 isArraySubscript (F.ExpSubscript _ _ (F.ExpValue _ _ (F.ValVariable _)) subs) =
    Just $ F.aStrip subs
-isArraySubscript (F.ExpDataRef _ _ _ e) = isArraySubscript e
+isArraySubscript (F.ExpDataRef _ _ e _) = isArraySubscript e
 isArraySubscript _ = Nothing
 
 fromJustMsg msg (Just x) = x
