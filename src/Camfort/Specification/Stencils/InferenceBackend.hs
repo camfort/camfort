@@ -44,6 +44,8 @@ import Unsafe.Coerce
 import Camfort.Specification.Stencils.Syntax
 
 {- Spans are a pair of a lower and upper bound -}
+-- TODO: changes slightly in the new model
+
 type Span a = (a, a)
 mkTrivialSpan a = (a, a)
 
@@ -107,7 +109,7 @@ toSpecND = toSpecPerDim 1
 -- that dimension, and builds the simple directional spec.
 toSpec1D :: Dimension -> Int -> Int -> Approximation Spatial
 toSpec1D dim l u
-    | l == absoluteRep || u == absoluteRep =
+    | l == absoluteRep || u == absoluteRep = -- TODO - changes slightly in the new model
         Exact $ Spatial (Sum [Product []])
 
     | l == 0 && u == 0 =
@@ -135,39 +137,6 @@ toSpec1D dim l u
     | otherwise =
         upperBound $ Spatial (Sum [Product
                         [if l > 0 then Forward u dim True else Backward (abs l) dim True]])
-
-{- Normalise a span into the form (lower, upper) based on the first index -}
-normaliseSpan :: Span (Vec n Int) -> Span (Vec n Int)
-normaliseSpan (Nil, Nil)
-    = (Nil, Nil)
-normaliseSpan (a@(Cons l1 ls1), b@(Cons u1 us1))
-    | l1 <= u1  = (a, b)
-    | otherwise = (b, a)
-
--- DEPRECATED
-{- `spanBoundingBox` creates a span which is a bounding box over two spans -}
-spanBoundingBox :: Span (Vec n Int) -> Span (Vec n Int) -> Span (Vec n Int)
-spanBoundingBox a b = boundingBox' (normaliseSpan a) (normaliseSpan b)
-  where
-    boundingBox' :: Span (Vec n Int) -> Span (Vec n Int) -> Span (Vec n Int)
-    boundingBox' (Nil, Nil) (Nil, Nil)
-        = (Nil, Nil)
-    boundingBox' (Cons l1 ls1, Cons u1 us1) (Cons l2 ls2, Cons u2 us2)
-        = let (ls', us') = boundingBox' (ls1, us1) (ls2, us2)
-           in (Cons (min l1 l2) ls', Cons (max u1 u2) us')
-
-
-{-| Given two spans, if they are consecutive
-    (i.e., (lower1, upper1) (lower2, upper2) where lower2 = upper1 + 1)
-    then compose together returning Just of the new span. Otherwise Nothing -}
-composeConsecutiveSpans :: Span (Vec n Int)
-                        -> Span (Vec n Int) -> [Span (Vec n Int)]
-composeConsecutiveSpans (Nil, Nil) (Nil, Nil) = [(Nil, Nil)]
-composeConsecutiveSpans (Cons l1 ls1, Cons u1 us1) (Cons l2 ls2, Cons u2 us2)
-    | (ls1 == ls2) && (us1 == us2) && (u1 + 1 == l2)
-      = [(Cons l1 ls1, Cons u2 us2)]
-    | otherwise
-      = []
 
 {-| |inferMinimalVectorRegions| a key part of the algorithm, from a list of
     n-dimensional relative indices it infers a list of (possibly overlapping)
