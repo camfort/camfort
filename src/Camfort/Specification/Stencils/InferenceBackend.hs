@@ -146,7 +146,7 @@ inferMinimalVectorRegions :: [Vec n Int] -> [Span (Vec n Int)]
 inferMinimalVectorRegions = fixCoalesce . map mkTrivialSpan
   where fixCoalesce spans =
           let spans' = minimaliseRegions . coalesceContiguous $ spans
-          in if spans' == spans then spans' else fixCoalesce spans'
+          in if (sort spans') == (sort spans) then spans' else fixCoalesce spans'
 
 -- An alternative that is simpler and possibly quicker
 coalesceContiguous :: [Span (Vec n Int)] -> [Span (Vec n Int)]
@@ -160,13 +160,16 @@ coalesceContiguous (x:xs) =
     case sequenceMaybes (map (coalesce x) xs) of
        Nothing -> x : coalesceContiguous xs
        Just cs -> coalesceContiguous (cs ++ xs)
-      where
-       sequenceMaybes :: Eq a => [Maybe a] -> Maybe [a]
-       sequenceMaybes xs | all (== Nothing) xs = Nothing
-                         | otherwise = Just (catMaybes xs)
+
+sequenceMaybes :: Eq a => [Maybe a] -> Maybe [a]
+sequenceMaybes xs | all (== Nothing) xs = Nothing
+                  | otherwise = Just (catMaybes xs)
 
 coalesce :: Span (Vec n Int) -> Span (Vec n Int) -> Maybe (Span (Vec n Int))
 coalesce (Nil, Nil) (Nil, Nil) = Just (Nil, Nil)
+-- If two well-defined intervals are equal, then they cannot be coalesced
+coalesce x y | x == y = Nothing
+-- Otherwise
 coalesce x@(Cons l1 ls1, Cons u1 us1) y@(Cons l2 ls2, Cons u2 us2)
   | l1 == l2 && u1 == u2
     = case (coalesce (ls1, us1) (ls2, us2)) of
