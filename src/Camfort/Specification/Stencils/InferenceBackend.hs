@@ -146,7 +146,7 @@ inferMinimalVectorRegions :: [Vec n Int] -> [Span (Vec n Int)]
 inferMinimalVectorRegions = fixCoalesce . map mkTrivialSpan
   where fixCoalesce spans =
           let spans' = minimaliseRegions . coalesceContiguous $ spans
-          in if (sort spans') == (sort spans) then spans' else fixCoalesce spans'
+          in if spans' == spans then spans' else fixCoalesce spans'
 
 -- An alternative that is simpler and possibly quicker
 coalesceContiguous :: [Span (Vec n Int)] -> [Span (Vec n Int)]
