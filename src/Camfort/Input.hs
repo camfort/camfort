@@ -36,6 +36,7 @@ import Language.Fortran.Util.ModFile
 
 import qualified Data.ByteString.Char8 as B
 import Data.Data
+import Data.Char (toUpper)
 import Data.Maybe
 import Data.Generics.Uniplate.Operations
 import Data.List (foldl', nub, (\\), elemIndices, intercalate)
@@ -297,7 +298,9 @@ rGetDirContents' d = do
           else return [x]
 
 {-| predicate on which fileextensions are Fortran files -}
-isFortran x = fileExt x `elem` [".f", ".f90", ".f77", ".cmn", ".inc"]
+isFortran x = fileExt x `elem` (exts ++ extsUpper)
+  where exts = [".f", ".f90", ".f77", ".cmn", ".inc"]
+        extsUpper = map (map toUpper) exts
 
 {-| extract a filename's extension -}
 fileExt x = let ix = elemIndices '.' x
