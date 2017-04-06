@@ -55,13 +55,6 @@ spec =
       it "(3)" $ property $ prop_spanBoundingAssoc threeN
       it "(4)" $ property $ prop_spanBoundingAssoc fourN
 
-    describe "Un-permutable permutations on vectors" $ do
-      it "(0)" $ property $ prop_perms_invertable zeroN
-      it "(1)" $ property $ prop_perms_invertable oneN
-      it "(2)" $ property $ prop_perms_invertable twoN
-      it "(3)" $ property $ prop_perms_invertable threeN
-      it "(4)" $ property $ prop_perms_invertable fourN
-
     describe "Some checks on containing spans" $ do
       it "(0)" $ containedWithin (Cons 1 (Cons 1 Nil), Cons 2 (Cons 2 Nil))
                           (Cons 0 (Cons 0 Nil), Cons 3 (Cons 3 Nil))
@@ -117,13 +110,13 @@ spec =
 
     it "five point stencil 2D" $
       -- Sort the expected value for the sake of easy equality
-      shouldBe (inferMinimalVectorRegions fivepoint)
+      shouldBe (sort $ inferMinimalVectorRegions fivepoint)
                (sort [ (Cons (-1) (Cons 0 Nil), Cons 1 (Cons 0 Nil))
                      , (Cons 0 (Cons (-1) Nil), Cons 0 (Cons 1 Nil)) ])
 
     it "seven point stencil 3D" $
       shouldBe
-        (inferMinimalVectorRegions sevenpoint)
+        (sort $ inferMinimalVectorRegions sevenpoint)
         (sort
            [ (Cons (-1) (Cons 0 (Cons 0 Nil)), Cons 1 (Cons 0 (Cons 0 Nil)))
            , (Cons 0 (Cons (-1) (Cons 0 Nil)), Cons 0 (Cons 1 (Cons 0 Nil)))
@@ -324,14 +317,6 @@ prop_spanBoundingAssoc :: Natural n -> Span (Vec n Int)
 prop_spanBoundingAssoc w x y z =
   (==) (spanBoundingBox x (spanBoundingBox y z))
        (spanBoundingBox (spanBoundingBox x y) z)
-
-{- Permutations that come with 'unpermute' functions are invertable -}
-prop_perms_invertable :: (Permutable n) => Natural n -> Vec n Int -> Bool
-prop_perms_invertable w xs =
-  replicate (fact (lengthV xs)) xs == map (\(xs, f) -> f xs) (permutationsV xs)
-  where
-    fact 0 = 1
-    fact n = n * fact (n - 1)
 
 zeroN  = Zero
 oneN   = Succ zeroN
