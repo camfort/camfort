@@ -41,27 +41,6 @@ import Test.Hspec.QuickCheck
 spec :: Spec
 spec =
   describe "Stencils" $ do
-    describe "Idempotence of spanBounding" $ do
-      it "(0)" $ property $ prop_spanBoundingIdem zeroN
-      it "(1)" $ property $ prop_spanBoundingIdem oneN
-      it "(2)" $ property $ prop_spanBoundingIdem twoN
-      it "(3)" $ property $ prop_spanBoundingIdem threeN
-      it "(4)" $ property $ prop_spanBoundingIdem fourN
-
-    describe "Associativity of spanBounding" $ do
-      it "(0)" $ property $ prop_spanBoundingAssoc zeroN
-      it "(1)" $ property $ prop_spanBoundingAssoc oneN
-      it "(2)" $ property $ prop_spanBoundingAssoc twoN
-      it "(3)" $ property $ prop_spanBoundingAssoc threeN
-      it "(4)" $ property $ prop_spanBoundingAssoc fourN
-
-    describe "Un-permutable permutations on vectors" $ do
-      it "(0)" $ property $ prop_perms_invertable zeroN
-      it "(1)" $ property $ prop_perms_invertable oneN
-      it "(2)" $ property $ prop_perms_invertable twoN
-      it "(3)" $ property $ prop_perms_invertable threeN
-      it "(4)" $ property $ prop_perms_invertable fourN
-
     describe "Some checks on containing spans" $ do
       it "(0)" $ containedWithin (Cons 1 (Cons 1 Nil), Cons 2 (Cons 2 Nil))
                           (Cons 0 (Cons 0 Nil), Cons 3 (Cons 3 Nil))
@@ -98,32 +77,32 @@ spec =
                 ] :: [Vec (S (S (S Z))) Int])
 
     it "composeRegions (1,0)-(1,0) span and (2,0)-(2,0) span" $
-      shouldBe (composeConsecutiveSpans
+      shouldBe (coalesce
                   (Cons 1 (Cons 0 Nil), Cons 1 (Cons 0 Nil))
                   (Cons 2 (Cons 0 Nil), Cons 2 (Cons 0 Nil)))
-               [(Cons 1 (Cons 0 Nil), Cons 2 (Cons 0 Nil))]
+               $ Just (Cons 1 (Cons 0 Nil), Cons 2 (Cons 0 Nil))
 
     it "composeRegions failing on (1,0)-(2,0) span and (4,0)-(5,0) span" $
-      shouldBe (composeConsecutiveSpans
+      shouldBe (coalesce
                   (Cons 1 (Cons 0 Nil), Cons 2 (Cons 0 Nil))
                   (Cons 4 (Cons 0 Nil), Cons 5 (Cons 0 Nil)))
-               []
+               Nothing
 
     it "composeRegions failing on (1,0)-(2,0) span and (3,1)-(3,1) span" $
-      shouldBe (composeConsecutiveSpans
+      shouldBe (coalesce
                   (Cons 1 (Cons 0 Nil), Cons 2 (Cons 0 Nil))
                   (Cons 3 (Cons 1 Nil), Cons 3 (Cons 1 Nil)))
-               []
+               Nothing
 
     it "five point stencil 2D" $
       -- Sort the expected value for the sake of easy equality
-      shouldBe (inferMinimalVectorRegions fivepoint)
+      shouldBe (sort $ inferMinimalVectorRegions fivepoint)
                (sort [ (Cons (-1) (Cons 0 Nil), Cons 1 (Cons 0 Nil))
                      , (Cons 0 (Cons (-1) Nil), Cons 0 (Cons 1 Nil)) ])
 
     it "seven point stencil 3D" $
       shouldBe
-        (inferMinimalVectorRegions sevenpoint)
+        (sort $ inferMinimalVectorRegions sevenpoint)
         (sort
            [ (Cons (-1) (Cons 0 (Cons 0 Nil)), Cons 1 (Cons 0 (Cons 0 Nil)))
            , (Cons 0 (Cons (-1) (Cons 0 Nil)), Cons 0 (Cons 1 (Cons 0 Nil)))
@@ -313,25 +292,6 @@ spec =
             "\ntests/fixtures/Specification/Stencils/example4.f\n\
              \(6:8)-(6:33)    stencil readOnce, (pointed(dim=1)) :: x"
 
-
-{- Properties of `spanBoundingBox`: idempotent and associative -}
-prop_spanBoundingIdem :: Natural n -> Span (Vec n Int) -> Bool
-prop_spanBoundingIdem w x = spanBoundingBox x x == normaliseSpan x
-
-prop_spanBoundingAssoc :: Natural n -> Span (Vec n Int)
-                                    -> Span (Vec n Int)
-                                    -> Span (Vec n Int) -> Bool
-prop_spanBoundingAssoc w x y z =
-  (==) (spanBoundingBox x (spanBoundingBox y z))
-       (spanBoundingBox (spanBoundingBox x y) z)
-
-{- Permutations that come with 'unpermute' functions are invertable -}
-prop_perms_invertable :: (Permutable n) => Natural n -> Vec n Int -> Bool
-prop_perms_invertable w xs =
-  replicate (fact (lengthV xs)) xs == map (\(xs, f) -> f xs) (permutationsV xs)
-  where
-    fact 0 = 1
-    fact n = n * fact (n - 1)
 
 zeroN  = Zero
 oneN   = Succ zeroN

@@ -14,6 +14,7 @@
    limitations under the License.
 -}
 
+{-# OPTIONS_GHC -fplugin GHC.TypeLits.Normalise #-}
 {-# LANGUAGE DataKinds #-}
 {-# LANGUAGE GADTs #-}
 {-# LANGUAGE KindSignatures #-}
@@ -32,10 +33,11 @@ import Data.List hiding (sum)
 import Data.Data
 import Control.Arrow ((***))
 import Data.Function
+import Data.Maybe
 
 import Camfort.Specification.Stencils.Model
 import Camfort.Helpers
-import Camfort.Helpers.Vec
+import qualified Camfort.Helpers.Vec as V
 
 import Debug.Trace
 import Unsafe.Coerce
@@ -43,6 +45,8 @@ import Unsafe.Coerce
 import Camfort.Specification.Stencils.Syntax
 
 {- Spans are a pair of a lower and upper bound -}
+-- TODO: changes slightly in the new model
+
 type Span a = (a, a)
 mkTrivialSpan a = (a, a)
 
@@ -61,7 +65,7 @@ inferFromIndicesWithoutLinearity :: VecList Int -> Specification
 inferFromIndicesWithoutLinearity (VL ixs) =
     Specification . Multiple . inferCore $ ixs
 
-inferCore :: (IsNatural n, Permutable n) => [Vec n Int] -> Approximation Spatial
+inferCore :: [V.Vec n Int] -> Approximation Spatial
 inferCore = simplify . fromRegionsToSpec . inferMinimalVectorRegions
 
 simplify :: Approximation Spatial -> Approximation Spatial
@@ -88,25 +92,25 @@ reducor xs f size = reducor' (permutations xs)
             else reducor' ys
         where y' = f y
 
-fromRegionsToSpec :: IsNatural n => [Span (Vec n Int)] -> Approximation Spatial
+fromRegionsToSpec :: [Span (V.Vec n Int)] -> Approximation Spatial
 fromRegionsToSpec = foldr (\x y -> sum (toSpecND x) y) zero
 
 -- toSpecND converts an n-dimensional region into an exact
 -- spatial specification or a bound of spatial specifications
-toSpecND :: Span (Vec n Int) -> Approximation Spatial
+toSpecND :: Span (V.Vec n Int) -> Approximation Spatial
 toSpecND = toSpecPerDim 1
   where
    -- convert the region one dimension at a time.
-   toSpecPerDim :: Int -> Span (Vec n Int) -> Approximation Spatial
-   toSpecPerDim d (Nil, Nil)             = one
-   toSpecPerDim d (Cons l ls, Cons u us) =
+   toSpecPerDim :: Int -> Span (V.Vec n Int) -> Approximation Spatial
+   toSpecPerDim d (V.Nil, V.Nil)             = one
+   toSpecPerDim d (V.Cons l ls, V.Cons u us) =
      prod (toSpec1D d l u) (toSpecPerDim (d + 1) (ls, us))
 
 -- toSpec1D takes a dimension identifier, a lower and upper bound of a region in
 -- that dimension, and builds the simple directional spec.
 toSpec1D :: Dimension -> Int -> Int -> Approximation Spatial
 toSpec1D dim l u
-    | l == absoluteRep || u == absoluteRep =
+    | l == absoluteRep || u == absoluteRep = -- TODO - changes slightly in the new model
         Exact $ Spatial (Sum [Product []])
 
     | l == 0 && u == 0 =
@@ -135,91 +139,53 @@ toSpec1D dim l u
         upperBound $ Spatial (Sum [Product
                         [if l > 0 then Forward u dim True else Backward (abs l) dim True]])
 
-{- Normalise a span into the form (lower, upper) based on the first index -}
-normaliseSpan :: Span (Vec n Int) -> Span (Vec n Int)
-normaliseSpan (Nil, Nil)
-    = (Nil, Nil)
-normaliseSpan (a@(Cons l1 ls1), b@(Cons u1 us1))
-    | l1 <= u1  = (a, b)
-    | otherwise = (b, a)
-
--- DEPRECATED
-{- `spanBoundingBox` creates a span which is a bounding box over two spans -}
-spanBoundingBox :: Span (Vec n Int) -> Span (Vec n Int) -> Span (Vec n Int)
-spanBoundingBox a b = boundingBox' (normaliseSpan a) (normaliseSpan b)
-  where
-    boundingBox' :: Span (Vec n Int) -> Span (Vec n Int) -> Span (Vec n Int)
-    boundingBox' (Nil, Nil) (Nil, Nil)
-        = (Nil, Nil)
-    boundingBox' (Cons l1 ls1, Cons u1 us1) (Cons l2 ls2, Cons u2 us2)
-        = let (ls', us') = boundingBox' (ls1, us1) (ls2, us2)
-           in (Cons (min l1 l2) ls', Cons (max u1 u2) us')
-
-
-{-| Given two spans, if they are consecutive
-    (i.e., (lower1, upper1) (lower2, upper2) where lower2 = upper1 + 1)
-    then compose together returning Just of the new span. Otherwise Nothing -}
-composeConsecutiveSpans :: Span (Vec n Int)
-                        -> Span (Vec n Int) -> [Span (Vec n Int)]
-composeConsecutiveSpans (Nil, Nil) (Nil, Nil) = [(Nil, Nil)]
-composeConsecutiveSpans (Cons l1 ls1, Cons u1 us1) (Cons l2 ls2, Cons u2 us2)
-    | (ls1 == ls2) && (us1 == us2) && (u1 + 1 == l2)
-      = [(Cons l1 ls1, Cons u2 us2)]
-    | otherwise
-      = []
-
 {-| |inferMinimalVectorRegions| a key part of the algorithm, from a list of
     n-dimensional relative indices it infers a list of (possibly overlapping)
     1-dimensional spans (vectors) within the n-dimensional space.
     Built from |minimalise| and |allRegionPermutations| -}
-inferMinimalVectorRegions :: (Permutable n) => [Vec n Int] -> [Span (Vec n Int)]
+inferMinimalVectorRegions :: [V.Vec n Int] -> [Span (V.Vec n Int)]
 inferMinimalVectorRegions = fixCoalesce . map mkTrivialSpan
   where fixCoalesce spans =
-          let spans' = minimaliseRegions . allRegionPermutations $ spans
+          let spans' = minimaliseRegions . coalesceContiguous $ spans
           in if spans' == spans then spans' else fixCoalesce spans'
 
-{-| Map from a lists of n-dimensional spans of relative indices into all
-    possible contiguous spans within the n-dimensional space (individual pass)-}
-allRegionPermutations :: (Permutable n)
-                      => [Span (Vec n Int)] -> [Span (Vec n Int)]
-allRegionPermutations =
-  nub . concat . unpermuteIndices . map (coalesceRegions >< id) . groupByPerm . map permutationss
-    where
-      {- Permutations of a indices in a span
-         (independently permutes the lower and upper bounds in the same way) -}
-      permutationss :: Permutable n
-                   => Span (Vec n Int)
-                   -> [(Span (Vec n Int), Vec n Int -> Vec n Int)]
-      -- Since the permutation ordering is identical for lower & upper bound,
-      -- reuse the same unpermutation
-      permutationss (l, u) = map (\((l', un1), (u', un2)) -> ((l', u'), un1))
-                           $ zip (permutationsV l) (permutationsV u)
+-- An alternative that is simpler and possibly quicker
+coalesceContiguous :: [Span (V.Vec n Int)] -> [Span (V.Vec n Int)]
+coalesceContiguous []  = []
+coalesceContiguous [x] = [x]
+coalesceContiguous [x, y] =
+    case coalesce x y of
+       Nothing -> [x, y]
+       Just c  -> [c]
+coalesceContiguous (x:xs) =
+    case sequenceMaybes (map (coalesce x) xs) of
+       Nothing -> x : coalesceContiguous xs
+       Just cs -> coalesceContiguous (cs ++ xs)
 
-      sortByFst        = sortBy (\(l1, u1) (l2, u2) -> compare l1 l2)
+sequenceMaybes :: Eq a => [Maybe a] -> Maybe [a]
+sequenceMaybes xs | all (== Nothing) xs = Nothing
+                  | otherwise = Just (catMaybes xs)
 
-      groupByPerm  :: [[(Span (Vec n Int), Vec n Int -> Vec n Int)]]
-                   -> [( [Span (Vec n Int)] , Vec n Int -> Vec n Int)]
-      groupByPerm      = map (\ixP -> let unPerm = snd $ head ixP
-                                      in (map fst ixP, unPerm)) . transpose
-
-      coalesceRegions :: [Span (Vec n Int)] -> [Span (Vec n Int)]
-      coalesceRegions  = nub . foldL composeConsecutiveSpans . sortByFst
-
-      unpermuteIndices :: [([Span (Vec n Int)], Vec n Int -> Vec n Int)]
-                       -> [[Span (Vec n Int)]]
-      unpermuteIndices = nub . map (\(rs, unPerm) -> map (unPerm *** unPerm) rs)
-
--- Helper function, reduces a list two elements at a time with a non-determistic operation
-foldL :: (a -> a -> [a]) -> [a] -> [a]
-foldL f [] = []
-foldL f [a] = [a]
-foldL f (a:(b:xs)) = case f a b of
-                       [] -> a : foldL f (b : xs)
-                       cs -> foldL f (cs ++ xs)
+coalesce :: Span (V.Vec n Int) -> Span (V.Vec n Int) -> Maybe (Span (V.Vec n Int))
+coalesce (V.Nil, V.Nil) (V.Nil, V.Nil) = Just (V.Nil, V.Nil)
+-- If two well-defined intervals are equal, then they cannot be coalesced
+coalesce x y | x == y = Nothing
+-- Otherwise
+coalesce x@(V.Cons l1 ls1, V.Cons u1 us1) y@(V.Cons l2 ls2, V.Cons u2 us2)
+  | l1 == l2 && u1 == u2
+    = case (coalesce (ls1, us1) (ls2, us2)) of
+        Just (l, u) -> Just (V.Cons l1 l, V.Cons u1 u)
+        Nothing     -> Nothing
+  | (u1 + 1 == l2) && (us1 == us2) && (ls1 == ls2)
+    = Just (V.Cons l1 ls1, V.Cons u2 us2)
+  | (u2 + 1 == l1) && (us1 == us2) && (ls1 == ls2)
+    = Just (V.Cons l2 ls2, V.Cons u1 us1)
+  | otherwise
+    = Nothing
 
 {-| Collapses the regions into a small set by looking for potential overlaps
     and eliminating those that overlap -}
-minimaliseRegions :: [Span (Vec n Int)] -> [Span (Vec n Int)]
+minimaliseRegions :: [Span (V.Vec n Int)] -> [Span (V.Vec n Int)]
 minimaliseRegions [] = []
 minimaliseRegions xss = nub . minimalise $ xss
   where localMin x ys = (filter' x (\y -> containedWithin x y && (x /= y)) xss) ++ ys
@@ -231,71 +197,25 @@ minimaliseRegions xss = nub . minimalise $ xss
                            ys -> ys
 
 {-| Binary predicate on whether the first region containedWithin the second -}
-containedWithin :: Span (Vec n Int) -> Span (Vec n Int) -> Bool
-containedWithin (Nil, Nil) (Nil, Nil)
+containedWithin :: Span (V.Vec n Int) -> Span (V.Vec n Int) -> Bool
+containedWithin (V.Nil, V.Nil) (V.Nil, V.Nil)
   = True
-containedWithin (Cons l1 ls1, Cons u1 us1) (Cons l2 ls2, Cons u2 us2)
+containedWithin (V.Cons l1 ls1, V.Cons u1 us1) (V.Cons l2 ls2, V.Cons u2 us2)
   = (l2 <= l1 && u1 <= u2) && containedWithin (ls1, us1) (ls2, us2)
 
 
-{-| Defines the (total) class of vector sizes which are permutable, along with
-    the permutation function which pairs permutations with the 'unpermute'
-    operation -}
-class Permutable (n :: Nat) where
-  -- From a Vector of length n to a list of 'selections'
-  --   (triples of a selected element, the rest of the vector,
-  --   a function to 'unselect')
-  selectionsV :: Vec n a -> [Selection n a]
-  -- From a Vector of length n to a list of its permutations paired with the
-  -- 'unpermute' function
-  permutationsV :: Vec n a -> [(Vec n a, Vec n a -> Vec n a)]
-
--- 'Split' is a size-indexed family which gives the type of selections
--- for each size:
---    Z is trivial
---    (S n) provides a triple of the select element, the remaining vector,
---           and the 'unselect' function for returning the original value
-type family Selection n a where
-            Selection Z a = a
-            Selection (S n) a = (a, Vec n a, a -> Vec n a -> Vec (S n) a)
-
-instance Permutable Z where
-  selectionsV Nil   = []
-  permutationsV Nil = [(Nil, id)]
-
-instance Permutable (S Z) where
-  selectionsV (Cons x xs)
-    = [(x, Nil, Cons)]
-  permutationsV (Cons x Nil)
-    = [(Cons x Nil, id)]
-
-instance Permutable (S n) => Permutable (S (S n)) where
-  selectionsV (Cons x xs) =
-    (x, xs, Cons) : [ (y, Cons x ys, unselect unSel)
-                    | (y, ys, unSel) <- selectionsV xs ]
-    where
-     unselect :: (a -> Vec n a -> Vec (S n) a)
-              -> (a -> Vec (S n) a -> Vec (S (S n)) a)
-     unselect f y' (Cons x' ys') = Cons x' (f y' ys')
-
-  permutationsV xs =
-      [ (Cons y zs, \(Cons y' zs') -> unSel y' (unPerm zs'))
-        | (y, ys, unSel) <- selectionsV xs,
-          (zs,  unPerm)  <- permutationsV ys ]
-
 {- Vector list repreentation where the size 'n' is existential quantified -}
-data VecList a where VL :: (IsNatural n, Permutable n) => [Vec n a] -> VecList a
+data VecList a where VL :: [V.Vec n a] -> VecList a
 
 -- Lists existentially quanitify over a vector's size : Exists n . Vec n a
 data List a where
-     List :: (IsNatural n, Permutable n) => Vec n a -> List a
+     List :: V.Vec n a -> List a
 
 lnil :: List a
-lnil = List Nil
+lnil = List V.Nil
 lcons :: a -> List a -> List a
-lcons x (List Nil) = List (Cons x Nil)
-lcons x (List (Cons y Nil)) = List (Cons x (Cons y Nil))
-lcons x (List (Cons y (Cons z xs))) = List (Cons x (Cons y (Cons z xs)))
+lcons x (List V.Nil) = List (V.Cons x V.Nil)
+lcons x (List xs) = List (V.Cons x xs)
 
 fromList :: [a] -> List a
 fromList = foldr lcons lnil
@@ -303,20 +223,18 @@ fromList = foldr lcons lnil
 -- pre-condition: the input is a 'rectangular' list of lists (i.e. all internal
 -- lists have the same size)
 fromLists :: [[Int]] -> VecList Int
-fromLists [] = VL ([] :: [Vec Z Int])
+fromLists [] = VL ([] :: [V.Vec 0 Int])
 fromLists (xs:xss) = consList (fromList xs) (fromLists xss)
   where
     consList :: List Int -> VecList Int -> VecList Int
     consList (List vec) (VL [])     = VL [vec]
-    consList (List vec) (VL (x:xs))
-      = let (vec', x') = zipVec vec x
-        in  -- Force the pre-condition equality
-          case (preCondition x' xs, preCondition vec' xs) of
-            (ReflEq, ReflEq) -> VL (vec' : (x' : xs))
-
+    consList (List vec) (VL xs)
+      = -- Force the pre-condition equality
+        case preCondition vec xs of
+            ReflEq -> VL (vec : xs)
             where -- At the moment the pre-condition is 'assumed', and therefore
               -- force used unsafeCoerce: TODO, rewrite
-              preCondition :: Vec n a -> [Vec n1 a] -> EqT n n1
+              preCondition :: V.Vec n a -> [V.Vec n1 a] -> EqT n n1
               preCondition xs x = unsafeCoerce ReflEq
 
 -- Equality type
