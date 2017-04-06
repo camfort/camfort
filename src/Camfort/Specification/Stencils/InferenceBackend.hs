@@ -14,6 +14,7 @@
    limitations under the License.
 -}
 
+{-# OPTIONS_GHC -fplugin GHC.TypeLits.Normalise #-}
 {-# LANGUAGE DataKinds #-}
 {-# LANGUAGE GADTs #-}
 {-# LANGUAGE KindSignatures #-}
@@ -36,7 +37,7 @@ import Data.Maybe
 
 import Camfort.Specification.Stencils.Model
 import Camfort.Helpers
-import Camfort.Helpers.Vec
+import qualified Camfort.Helpers.Vec as V
 
 import Debug.Trace
 import Unsafe.Coerce
@@ -64,7 +65,7 @@ inferFromIndicesWithoutLinearity :: VecList Int -> Specification
 inferFromIndicesWithoutLinearity (VL ixs) =
     Specification . Multiple . inferCore $ ixs
 
-inferCore :: (IsNatural n) => [Vec n Int] -> Approximation Spatial
+inferCore :: [V.Vec n Int] -> Approximation Spatial
 inferCore = simplify . fromRegionsToSpec . inferMinimalVectorRegions
 
 simplify :: Approximation Spatial -> Approximation Spatial
@@ -91,18 +92,18 @@ reducor xs f size = reducor' (permutations xs)
             else reducor' ys
         where y' = f y
 
-fromRegionsToSpec :: IsNatural n => [Span (Vec n Int)] -> Approximation Spatial
+fromRegionsToSpec :: [Span (V.Vec n Int)] -> Approximation Spatial
 fromRegionsToSpec = foldr (\x y -> sum (toSpecND x) y) zero
 
 -- toSpecND converts an n-dimensional region into an exact
 -- spatial specification or a bound of spatial specifications
-toSpecND :: Span (Vec n Int) -> Approximation Spatial
+toSpecND :: Span (V.Vec n Int) -> Approximation Spatial
 toSpecND = toSpecPerDim 1
   where
    -- convert the region one dimension at a time.
-   toSpecPerDim :: Int -> Span (Vec n Int) -> Approximation Spatial
-   toSpecPerDim d (Nil, Nil)             = one
-   toSpecPerDim d (Cons l ls, Cons u us) =
+   toSpecPerDim :: Int -> Span (V.Vec n Int) -> Approximation Spatial
+   toSpecPerDim d (V.Nil, V.Nil)             = one
+   toSpecPerDim d (V.Cons l ls, V.Cons u us) =
      prod (toSpec1D d l u) (toSpecPerDim (d + 1) (ls, us))
 
 -- toSpec1D takes a dimension identifier, a lower and upper bound of a region in
@@ -142,14 +143,14 @@ toSpec1D dim l u
     n-dimensional relative indices it infers a list of (possibly overlapping)
     1-dimensional spans (vectors) within the n-dimensional space.
     Built from |minimalise| and |allRegionPermutations| -}
-inferMinimalVectorRegions :: [Vec n Int] -> [Span (Vec n Int)]
+inferMinimalVectorRegions :: [V.Vec n Int] -> [Span (V.Vec n Int)]
 inferMinimalVectorRegions = fixCoalesce . map mkTrivialSpan
   where fixCoalesce spans =
           let spans' = minimaliseRegions . coalesceContiguous $ spans
           in if spans' == spans then spans' else fixCoalesce spans'
 
 -- An alternative that is simpler and possibly quicker
-coalesceContiguous :: [Span (Vec n Int)] -> [Span (Vec n Int)]
+coalesceContiguous :: [Span (V.Vec n Int)] -> [Span (V.Vec n Int)]
 coalesceContiguous []  = []
 coalesceContiguous [x] = [x]
 coalesceContiguous [x, y] =
@@ -165,26 +166,26 @@ sequenceMaybes :: Eq a => [Maybe a] -> Maybe [a]
 sequenceMaybes xs | all (== Nothing) xs = Nothing
                   | otherwise = Just (catMaybes xs)
 
-coalesce :: Span (Vec n Int) -> Span (Vec n Int) -> Maybe (Span (Vec n Int))
-coalesce (Nil, Nil) (Nil, Nil) = Just (Nil, Nil)
+coalesce :: Span (V.Vec n Int) -> Span (V.Vec n Int) -> Maybe (Span (V.Vec n Int))
+coalesce (V.Nil, V.Nil) (V.Nil, V.Nil) = Just (V.Nil, V.Nil)
 -- If two well-defined intervals are equal, then they cannot be coalesced
 coalesce x y | x == y = Nothing
 -- Otherwise
-coalesce x@(Cons l1 ls1, Cons u1 us1) y@(Cons l2 ls2, Cons u2 us2)
+coalesce x@(V.Cons l1 ls1, V.Cons u1 us1) y@(V.Cons l2 ls2, V.Cons u2 us2)
   | l1 == l2 && u1 == u2
     = case (coalesce (ls1, us1) (ls2, us2)) of
-        Just (l, u) -> Just (Cons l1 l, Cons u1 u)
+        Just (l, u) -> Just (V.Cons l1 l, V.Cons u1 u)
         Nothing     -> Nothing
   | (u1 + 1 == l2) && (us1 == us2) && (ls1 == ls2)
-    = Just (Cons l1 ls1, Cons u2 us2)
+    = Just (V.Cons l1 ls1, V.Cons u2 us2)
   | (u2 + 1 == l1) && (us1 == us2) && (ls1 == ls2)
-    = Just (Cons l2 ls2, Cons u1 us1)
+    = Just (V.Cons l2 ls2, V.Cons u1 us1)
   | otherwise
     = Nothing
 
 {-| Collapses the regions into a small set by looking for potential overlaps
     and eliminating those that overlap -}
-minimaliseRegions :: [Span (Vec n Int)] -> [Span (Vec n Int)]
+minimaliseRegions :: [Span (V.Vec n Int)] -> [Span (V.Vec n Int)]
 minimaliseRegions [] = []
 minimaliseRegions xss = nub . minimalise $ xss
   where localMin x ys = (filter' x (\y -> containedWithin x y && (x /= y)) xss) ++ ys
@@ -196,26 +197,26 @@ minimaliseRegions xss = nub . minimalise $ xss
                            ys -> ys
 
 {-| Binary predicate on whether the first region containedWithin the second -}
-containedWithin :: Span (Vec n Int) -> Span (Vec n Int) -> Bool
-containedWithin (Nil, Nil) (Nil, Nil)
+containedWithin :: Span (V.Vec n Int) -> Span (V.Vec n Int) -> Bool
+containedWithin (V.Nil, V.Nil) (V.Nil, V.Nil)
   = True
-containedWithin (Cons l1 ls1, Cons u1 us1) (Cons l2 ls2, Cons u2 us2)
+containedWithin (V.Cons l1 ls1, V.Cons u1 us1) (V.Cons l2 ls2, V.Cons u2 us2)
   = (l2 <= l1 && u1 <= u2) && containedWithin (ls1, us1) (ls2, us2)
 
 
 {- Vector list repreentation where the size 'n' is existential quantified -}
-data VecList a where VL :: IsNatural n => [Vec n a] -> VecList a
+data VecList a where VL :: [V.Vec n a] -> VecList a
 
 -- Lists existentially quanitify over a vector's size : Exists n . Vec n a
 data List a where
-     List :: IsNatural n => Vec n a -> List a
+     List :: V.Vec n a -> List a
 
 lnil :: List a
-lnil = List Nil
+lnil = List V.Nil
 lcons :: a -> List a -> List a
-lcons x (List Nil) = List (Cons x Nil)
-lcons x (List (Cons y Nil)) = List (Cons x (Cons y Nil))
-lcons x (List (Cons y (Cons z xs))) = List (Cons x (Cons y (Cons z xs)))
+lcons x (List V.Nil) = List (V.Cons x V.Nil)
+lcons x (List (V.Cons y V.Nil)) = List (V.Cons x (V.Cons y V.Nil))
+lcons x (List (V.Cons y (V.Cons z xs))) = List (V.Cons x (V.Cons y (V.Cons z xs)))
 
 fromList :: [a] -> List a
 fromList = foldr lcons lnil
@@ -223,20 +224,20 @@ fromList = foldr lcons lnil
 -- pre-condition: the input is a 'rectangular' list of lists (i.e. all internal
 -- lists have the same size)
 fromLists :: [[Int]] -> VecList Int
-fromLists [] = VL ([] :: [Vec Z Int])
+fromLists [] = VL ([] :: [V.Vec 0 Int])
 fromLists (xs:xss) = consList (fromList xs) (fromLists xss)
   where
     consList :: List Int -> VecList Int -> VecList Int
     consList (List vec) (VL [])     = VL [vec]
     consList (List vec) (VL (x:xs))
-      = let (vec', x') = zipVec vec x
+      = let (vec', x') = V.zipVec vec x
         in  -- Force the pre-condition equality
           case (preCondition x' xs, preCondition vec' xs) of
             (ReflEq, ReflEq) -> VL (vec' : (x' : xs))
 
             where -- At the moment the pre-condition is 'assumed', and therefore
               -- force used unsafeCoerce: TODO, rewrite
-              preCondition :: Vec n a -> [Vec n1 a] -> EqT n n1
+              preCondition :: V.Vec n a -> [V.Vec n1 a] -> EqT n n1
               preCondition xs x = unsafeCoerce ReflEq
 
 -- Equality type

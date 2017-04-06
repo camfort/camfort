@@ -14,86 +14,53 @@
    limitations under the License.
 -}
 
+{-# OPTIONS_GHC -fplugin GHC.TypeLits.Normalise #-}
 {-# LANGUAGE DataKinds #-}
 {-# LANGUAGE GADTs #-}
 {-# LANGUAGE KindSignatures #-}
-{-# LANGUAGE StandaloneDeriving #-}
-{-# LANGUAGE RankNTypes #-}
 {-# LANGUAGE TypeFamilies #-}
-{-# LANGUAGE PolyKinds #-}
 {-# LANGUAGE FlexibleInstances #-}
 {-# LANGUAGE ScopedTypeVariables #-}
+{-# LANGUAGE TypeOperators #-}
 
 module Camfort.Helpers.Vec where
 
-import Data.Data
-
-data Nat = Z | S Nat
-
--- Indexed natural number type
-data Natural (n :: Nat) where
-     Zero :: Natural Z
-     Succ :: Natural n -> Natural (S n)
-
-deriving instance Show (Natural n)
-
-data NatBox where NatBox :: Natural n -> NatBox
-deriving instance Show NatBox
-
--- Conversions to and from the type-representation
--- of natural numbers
-toNatBox :: Int -> NatBox
-toNatBox 0 = NatBox Zero
-toNatBox n = case toNatBox (n-1) of
-              (NatBox n) -> NatBox (Succ n)
-
-class IsNatural (n :: Nat) where
-   fromNat :: Proxy n -> Int
-instance IsNatural Z where
-   fromNat Proxy = 0
-instance IsNatural n => IsNatural (S n) where
-   fromNat Proxy = 1 + fromNat (Proxy :: Proxy n)
+import GHC.TypeLits
+import Data.Proxy
+import Data.Type.Bool
 
 -- Indexed vector type
 data Vec (n :: Nat) a where
-     Nil :: Vec Z a
-     Cons :: a -> Vec n a -> Vec (S n) a
+  Nil :: Vec 0 a
+  Cons :: a -> Vec n a -> Vec (n + 1) a
 
-lengthV :: Vec n a -> Int
-lengthV Nil = 0
-lengthV (Cons x xs) = 1 + lengthV xs
-
-vmap :: (a -> b) -> Vec n a -> Vec n b
-vmap f Nil         = Nil
-vmap f (Cons x xs) = Cons (f x) (vmap f xs)
+length :: forall n a . KnownNat n => Vec n a -> Int
+length _ = fromInteger . natVal $ (Proxy :: Proxy n)
 
 instance Functor (Vec n) where
-    fmap = vmap
-deriving instance Eq a => Eq (Vec n a)
+  fmap f Nil         = Nil
+  fmap f (Cons x xs) = Cons (f x) (fmap f xs)
+
+instance Eq a => Eq (Vec n a) where
+  Nil         == Nil          = True
+  (Cons x xs) == (Cons y ys)  = x == y && xs == ys
+  _           == _            = False
+
 instance Ord a => Ord (Vec n a) where
     Nil         <= _ = True
-    (Cons x xs) <= (Cons y ys) | xs == ys = x <= y
-                               | otherwise = xs <= ys
+    (Cons x xs) <= (Cons y ys)
+      | xs == ys = x <= y
+      | otherwise = xs <= ys
+
 instance Show a => Show (Vec n a) where
-    show = showV
+  show xs = "<" ++ showV' xs ++ ">"
+    where
+      showV' :: forall n a . Show a => Vec n a -> String
+      showV' Nil          = ""
+      showV' (Cons x Nil) = show x
+      showV' (Cons x xs)  = show x ++ "," ++ showV' xs
 
-showV :: Show a => Vec n a -> String
-showV xs = "<" ++ showV' xs ++ ">"
-  where
-    showV' :: Show a => Vec n a -> String
-    showV' Nil          = ""
-    showV' (Cons x Nil) = show x
-    showV' (Cons x xs)  = show x ++ "," ++ showV' xs
-
-type family Max (n :: Nat) (m :: Nat) :: Nat where
-            Max Z Z = Z
-            Max Z m = m
-            Max m Z = m
-            Max (S n) (S m) = S (Max n m)
-
-zipVec :: Vec m Int -> Vec n Int -> (Vec (Max n m) Int, Vec (Max n m) Int)
+zipVec :: Vec n Int -> Vec n Int -> (Vec n Int, Vec n Int)
 zipVec Nil Nil = (Nil, Nil)
-zipVec Nil xs  = (fmap (const 0) xs, xs)
-zipVec xs Nil  = (xs, fmap (const 0) xs)
 zipVec (Cons x xs) (Cons y ys)
-               = (Cons x xs', Cons y ys') where (xs', ys') = zipVec xs ys
+  = (Cons x xs', Cons y ys') where (xs', ys') = zipVec xs ys
