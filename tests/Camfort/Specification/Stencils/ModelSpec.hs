@@ -3,7 +3,7 @@
 
 module Camfort.Specification.Stencils.ModelSpec (spec) where
 
-import Camfort.Helpers.Vec
+import qualified Camfort.Helpers.Vec as V
 import Camfort.Specification.Stencils
 import Camfort.Specification.Stencils.Synthesis
 import Camfort.Specification.Stencils.Model

@@ -36,7 +36,6 @@ import Camfort.Specification.Stencils.Annotation
 import qualified Camfort.Specification.Stencils.Grammar as Gram
 import qualified Camfort.Specification.Stencils.Synthesis as Synth
 import Camfort.Analysis.Annotations
-import Camfort.Helpers.Vec
 import Camfort.Helpers (collect)
 import Camfort.Input
 import qualified Camfort.Output as O
