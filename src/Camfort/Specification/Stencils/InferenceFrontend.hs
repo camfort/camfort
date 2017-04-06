@@ -471,8 +471,6 @@ relativise lhs rhses = foldr relativiseRHS rhses lhs
       relativiseRHS _ rhses = rhses
 
       relativiseBy v i (Neighbour u j) | v == u = Neighbour u (j - i)
-      -- RHS is a range, map it to constant
-      relativiseBy v i (Neighbour "" j)         = Constant (F.ValInteger "")
       relativiseBy _ _ x = x
 
 -- Check that induction variables are used consistently
