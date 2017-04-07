@@ -110,7 +110,8 @@ refactorings :: [(String
 refactorings =
     [("common", (common, "common block elimination")),
      ("equivalence", (equivalences, "equivalence elimination")),
-     ("dead", (dead, "dead-code elimination"))]
+     ("dead", (dead, "dead-code elimination")),
+     ("datatype", (datatypes, "derived data type introduction"))]
 
 {-| List of analses provided by CamFort -}
 analyses :: [(String

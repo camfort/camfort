@@ -44,10 +44,17 @@ import Unsafe.Coerce
 import Camfort.Specification.Stencils.Syntax
 
 {- Spans are a pair of a lower and upper bound -}
--- TODO: changes slightly in the new model
 
 type Span a = (a, a)
-mkTrivialSpan a = (a, a)
+
+mkTrivialSpan :: Vec n Int -> Span (Vec n Int)
+mkTrivialSpan Nil = (Nil, Nil)
+mkTrivialSpan (Cons x xs) =
+    if x == absoluteRep
+    then (Cons (-absoluteRep) ys, Cons absoluteRep zs)
+    else (Cons x ys, Cons x zs)
+  where
+    (ys, zs) = mkTrivialSpan xs
 
 inferFromIndices :: VecList Int -> Specification
 inferFromIndices (VL ixs) = Specification $
@@ -109,7 +116,7 @@ toSpecND = toSpecPerDim 1
 -- that dimension, and builds the simple directional spec.
 toSpec1D :: Dimension -> Int -> Int -> Approximation Spatial
 toSpec1D dim l u
-    | l == absoluteRep || u == absoluteRep = -- TODO - changes slightly in the new model
+    | l == (-absoluteRep) || u == absoluteRep =
         Exact $ Spatial (Sum [Product []])
 
     | l == 0 && u == 0 =
