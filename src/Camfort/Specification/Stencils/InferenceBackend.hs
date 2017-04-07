@@ -53,6 +53,7 @@ mkTrivialSpan (V.Cons x xs) =
     if x == absoluteRep
     then (V.Cons (-absoluteRep) ys, V.Cons absoluteRep zs)
     else (V.Cons x ys, V.Cons x zs)
+  where
     (ys, zs) = mkTrivialSpan xs
 
 inferFromIndices :: VecList Int -> Specification
