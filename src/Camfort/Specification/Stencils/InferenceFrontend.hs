@@ -36,7 +36,6 @@ import Camfort.Specification.Stencils.Annotation
 import qualified Camfort.Specification.Stencils.Grammar as Gram
 import qualified Camfort.Specification.Stencils.Synthesis as Synth
 import Camfort.Analysis.Annotations
-import Camfort.Helpers.Vec
 import Camfort.Helpers (collect)
 import Camfort.Input
 import qualified Camfort.Output as O
@@ -257,15 +256,12 @@ perBlockInfer mode marker b@(F.BlStatement ann span@(FU.SrcSpan lp up) _ stmnt)
       else return b
 
 perBlockInfer mode marker b@(F.BlDo ann span lab cname lab' mDoSpec body tlab) = do
-    -- introduce any induction variables into the induction variable state
-
     if (mode == DoMode || mode == CombinedMode) && isStencilDo b
       then genSpecsAndReport mode span [] body
       else return []
 
     -- descend into the body of the do-statement
     body' <- mapM (descendBiM (perBlockInfer mode marker)) body
-    -- Remove any induction variable from the state
     return $ F.BlDo ann span lab cname lab' mDoSpec body' tlab
 
 perBlockInfer mode marker b = do
@@ -471,8 +467,6 @@ relativise lhs rhses = foldr relativiseRHS rhses lhs
       relativiseRHS _ rhses = rhses
 
       relativiseBy v i (Neighbour u j) | v == u = Neighbour u (j - i)
-      -- RHS is a range, map it to constant
-      relativiseBy v i (Neighbour "" j)         = Constant (F.ValInteger "")
       relativiseBy _ _ x = x
 
 -- Check that induction variables are used consistently

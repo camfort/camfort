@@ -50,6 +50,7 @@ executable camfort
                         Camfort.Specification.Units.Synthesis
                         Camfort.Transformation.CommonBlockElim
                         Camfort.Transformation.DeadCode
+                        Camfort.Transformation.DataTypeIntroduction
                         Camfort.Transformation.EquivalenceElim
                         Camfort.Helpers
                         Camfort.Helpers.Syntax
@@ -95,6 +96,7 @@ library
                         Camfort.Specification.Stencils.InferenceBackend
                         Camfort.Specification.Stencils.InferenceFrontend
                         Camfort.Specification.Stencils.Model
+                        Camfort.Specification.Stencils.LatticeModel
                         Camfort.Specification.Stencils.Syntax
                         Camfort.Specification.Stencils.Grammar
                         Camfort.Specification.Stencils.Synthesis
@@ -108,6 +110,7 @@ library
                         Camfort.Specification.Units.Synthesis
                         Camfort.Transformation.CommonBlockElim
                         Camfort.Transformation.DeadCode
+                        Camfort.Transformation.DataTypeIntroduction
                         Camfort.Transformation.EquivalenceElim
                         Camfort.Helpers
                         Camfort.Helpers.Syntax
@@ -136,7 +139,9 @@ library
                         filepath,
                         bytestring >= 0.10,
                         fgl >= 5.5,
-                        binary >= 0.8.3.0
+                        binary >= 0.8.3.0,
+                        lattices >= 1.5,
+                        sbv >= 5.14
   default-language: Haskell2010
 
 test-suite spec
@@ -144,7 +149,6 @@ test-suite spec
   main-is:              Spec.hs
   hs-source-dirs:       tests
   other-modules:        Camfort.Analysis.CommentAnnotatorSpec
-                        Camfort.Helpers.VecSpec
                         Camfort.Specification.Stencils.CheckSpec
                         Camfort.Specification.Stencils.GrammarSpec
                         Camfort.Specification.Stencils.ModelSpec
@@ -166,5 +170,7 @@ test-suite spec
                         hmatrix >= 0.15,
                         text >= 0.11.2.3,
                         binary >= 0.8.3.0,
+                        lattices >= 1.5,
+                        sbv >= 5.14,
                         camfort
   default-language: Haskell2010

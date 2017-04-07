@@ -43,6 +43,7 @@ import qualified Debug.Trace as D
 
 import Camfort.Analysis.Annotations
 import Camfort.Analysis.Simple
+import Camfort.Transformation.DataTypeIntroduction
 import Camfort.Transformation.DeadCode
 import Camfort.Transformation.CommonBlockElim
 import Camfort.Transformation.EquivalenceElim
@@ -116,6 +117,11 @@ common inSrc excludes outSrc opts = do
 equivalences inSrc excludes outSrc opts = do
     putStrLn $ "Refactoring equivalences blocks in '" ++ inSrc ++ "'"
     report <- doRefactor (mapM refactorEquivalences) inSrc excludes outSrc
+    putStrLn report
+
+datatypes inSrc excludes outSrc opts = do
+    putStrLn $ "Introducing derived data types in '" ++ inSrc ++ "'"
+    report <- doRefactor dataTypeIntro inSrc excludes outSrc
     putStrLn report
 
 {- Units feature -}

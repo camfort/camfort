@@ -4,8 +4,11 @@
 {-# LANGUAGE GADTs #-}
 {-# LANGUAGE RankNTypes #-}
 {-# LANGUAGE UndecidableInstances #-}
+{-# LANGUAGE TypeOperators #-}
 
 module Camfort.Specification.StencilsSpec (spec) where
+
+import GHC.TypeLits
 
 import Control.Monad.Writer.Strict hiding (Sum, Product)
 import Data.List
@@ -292,13 +295,6 @@ spec =
             "\ntests/fixtures/Specification/Stencils/example4.f\n\
              \(6:8)-(6:33)    stencil readOnce, (pointed(dim=1)) :: x"
 
-
-zeroN  = Zero
-oneN   = Succ zeroN
-twoN   = Succ oneN
-threeN = Succ twoN
-fourN  = Succ threeN
-
 -- Indices for the 2D five point stencil (deliberately in an odd order)
 fivepoint = [ Cons (-1) (Cons 0 Nil), Cons 0 (Cons (-1) Nil)
             , Cons 1 (Cons 0 Nil) , Cons 0 (Cons 1 Nil), Cons 0 (Cons 0 Nil)
@@ -322,7 +318,7 @@ fivepointErr = [ Cons (-1) (Cons 0 Nil)
                , Cons 1 (Cons 1 Nil) ] :: [ Vec (S (S Z)) Int ]
 
 {- Construct arbtirary vectors and test up to certain sizes -}
-instance Arbitrary a => Arbitrary (Vec Z a) where
+instance {-# OVERLAPPING #-} Arbitrary a => Arbitrary (Vec Z a) where
     arbitrary = return Nil
 
 instance (Arbitrary (Vec n a), Arbitrary a) => Arbitrary (Vec (S n) a) where
