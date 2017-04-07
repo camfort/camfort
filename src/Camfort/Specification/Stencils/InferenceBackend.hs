@@ -47,12 +47,12 @@ import Camfort.Specification.Stencils.Syntax
 
 type Span a = (a, a)
 
-mkTrivialSpan :: Vec n Int -> Span (Vec n Int)
-mkTrivialSpan Nil = (Nil, Nil)
-mkTrivialSpan (Cons x xs) =
+mkTrivialSpan :: V.Vec n Int -> Span (V.Vec n Int)
+mkTrivialSpan V.Nil = (V.Nil, V.Nil)
+mkTrivialSpan (V.Cons x xs) =
     if x == absoluteRep
-    then (Cons (-absoluteRep) ys, Cons absoluteRep zs)
-    else (Cons x ys, Cons x zs)
+    then (V.Cons (-absoluteRep) ys, V.Cons absoluteRep zs)
+    else (V.Cons x ys, V.Cons x zs)
   where
     (ys, zs) = mkTrivialSpan xs
 
