@@ -81,8 +81,7 @@ executable camfort
                         filepath,
                         fgl >= 5.5,
                         bytestring >= 0.10,
-                        binary >= 0.8.3.0,
-                        ghc-typelits-natnormalise >= 0.5
+                        binary >= 0.8.3.0
   default-language: Haskell2010
 
 library
@@ -142,8 +141,7 @@ library
                         fgl >= 5.5,
                         binary >= 0.8.3.0,
                         lattices >= 1.5,
-                        sbv >= 5.14,
-                        ghc-typelits-natnormalise >= 0.5
+                        sbv >= 5.14
   default-language: Haskell2010
 
 test-suite spec
@@ -174,6 +172,5 @@ test-suite spec
                         binary >= 0.8.3.0,
                         lattices >= 1.5,
                         sbv >= 5.14,
-                        ghc-typelits-natnormalise >= 0.5,
                         camfort
   default-language: Haskell2010

@@ -1,4 +1,3 @@
-{-# OPTIONS_GHC -fplugin GHC.TypeLits.Normalise #-}
 {-# LANGUAGE DataKinds #-}
 {-# LANGUAGE FlexibleInstances #-}
 {-# LANGUAGE FlexibleContexts #-}
@@ -78,7 +77,7 @@ spec =
                 , Cons 1 (Cons 0 (Cons 2 Nil))
                 , Cons 2 (Cons 2 (Cons 3 Nil))
                 , Cons 1 (Cons 3 (Cons 3 Nil))
-                ] :: [Vec 3 Int])
+                ] :: [Vec (S (S (S Z))) Int])
 
     it "composeRegions (1,0)-(1,0) span and (2,0)-(2,0) span" $
       shouldBe (coalesce
@@ -308,7 +307,7 @@ sevenpoint = [ Cons (-1) (Cons 0 (Cons 0 Nil)), Cons 0 (Cons (-1) (Cons 0 Nil))
              ]
 centeredFwd = [ Cons 1 (Cons 0 Nil), Cons 0 (Cons 1 Nil), Cons 0 (Cons (-1) Nil)
               , Cons 1 (Cons 1 Nil), Cons 0 (Cons 0 Nil), Cons 1 (Cons (-1) Nil)
-              ] :: [ Vec 2 Int ]
+              ] :: [ Vec (S (S Z)) Int ]
 
 -- Examples of unusal patterns
 fivepointErr = [ Cons (-1) (Cons 0 Nil)
@@ -316,13 +315,13 @@ fivepointErr = [ Cons (-1) (Cons 0 Nil)
                , Cons 1 (Cons 0 Nil)
                , Cons 0 (Cons 1 Nil)
                , Cons 0 (Cons 0 Nil)
-               , Cons 1 (Cons 1 Nil) ] :: [ Vec 2 Int ]
+               , Cons 1 (Cons 1 Nil) ] :: [ Vec (S (S Z)) Int ]
 
 {- Construct arbtirary vectors and test up to certain sizes -}
-instance {-# OVERLAPPING #-} Arbitrary a => Arbitrary (Vec 0 a) where
+instance {-# OVERLAPPING #-} Arbitrary a => Arbitrary (Vec Z a) where
     arbitrary = return Nil
 
-instance (Arbitrary (Vec n a), Arbitrary a, n' ~ (n+1)) => Arbitrary (Vec n' a) where
+instance (Arbitrary (Vec n a), Arbitrary a) => Arbitrary (Vec (S n) a) where
     arbitrary = do x  <- arbitrary
                    xs <- arbitrary
                    return $ Cons x xs

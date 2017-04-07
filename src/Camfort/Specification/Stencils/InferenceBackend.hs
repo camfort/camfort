@@ -14,7 +14,6 @@
    limitations under the License.
 -}
 
-{-# OPTIONS_GHC -fplugin GHC.TypeLits.Normalise #-}
 {-# LANGUAGE DataKinds #-}
 {-# LANGUAGE GADTs #-}
 {-# LANGUAGE KindSignatures #-}
@@ -230,7 +229,7 @@ fromList = foldr lcons lnil
 -- pre-condition: the input is a 'rectangular' list of lists (i.e. all internal
 -- lists have the same size)
 fromLists :: [[Int]] -> VecList Int
-fromLists [] = VL ([] :: [V.Vec 0 Int])
+fromLists [] = VL ([] :: [V.Vec V.Z Int])
 fromLists (xs:xss) = consList (fromList xs) (fromLists xss)
   where
     consList :: List Int -> VecList Int -> VecList Int

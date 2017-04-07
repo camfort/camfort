@@ -14,48 +14,72 @@
    limitations under the License.
 -}
 
-{-# OPTIONS_GHC -fplugin GHC.TypeLits.Normalise #-}
 {-# LANGUAGE DataKinds #-}
 {-# LANGUAGE GADTs #-}
 {-# LANGUAGE KindSignatures #-}
+{-# LANGUAGE StandaloneDeriving #-}
+{-# LANGUAGE RankNTypes #-}
 {-# LANGUAGE TypeFamilies #-}
+{-# LANGUAGE PolyKinds #-}
 {-# LANGUAGE FlexibleInstances #-}
 {-# LANGUAGE ScopedTypeVariables #-}
-{-# LANGUAGE TypeOperators #-}
 
 module Camfort.Helpers.Vec where
 
-import GHC.TypeLits
+import Prelude hiding (length)
+
 import Data.Proxy
-import Data.Type.Bool
+
+data Nat = Z | S Nat
+
+-- Indexed natural number type
+data Natural (n :: Nat) where
+     Zero :: Natural Z
+     Succ :: Natural n -> Natural (S n)
+
+deriving instance Show (Natural n)
+
+data NatBox where NatBox :: Natural n -> NatBox
+deriving instance Show NatBox
+
+-- Conversions to and from the type-representation
+-- of natural numbers
+toNatBox :: Int -> NatBox
+toNatBox 0 = NatBox Zero
+toNatBox n = case toNatBox (n-1) of
+              (NatBox n) -> NatBox (Succ n)
+
+class IsNatural (n :: Nat) where
+   fromNat :: Proxy n -> Int
+
+instance IsNatural Z where
+   fromNat Proxy = 0
+instance IsNatural n => IsNatural (S n) where
+   fromNat Proxy = 1 + fromNat (Proxy :: Proxy n)
 
 -- Indexed vector type
 data Vec (n :: Nat) a where
-  Nil :: Vec 0 a
-  Cons :: a -> Vec n a -> Vec (n + 1) a
+     Nil :: Vec Z a
+     Cons :: a -> Vec n a -> Vec (S n) a
 
-length :: forall n a . KnownNat n => Vec n a -> Int
-length _ = fromInteger . natVal $ (Proxy :: Proxy n)
+length :: Vec n a -> Int
+length Nil = 0
+length (Cons x xs) = 1 + length xs
 
 instance Functor (Vec n) where
   fmap f Nil         = Nil
   fmap f (Cons x xs) = Cons (f x) (fmap f xs)
 
-instance Eq a => Eq (Vec n a) where
-  Nil         == Nil          = True
-  (Cons x xs) == (Cons y ys)  = x == y && xs == ys
-  _           == _            = False
+deriving instance Eq a => Eq (Vec n a)
 
 instance Ord a => Ord (Vec n a) where
     Nil         <= _ = True
-    (Cons x xs) <= (Cons y ys)
-      | xs == ys = x <= y
-      | otherwise = xs <= ys
-
+    (Cons x xs) <= (Cons y ys) | xs == ys = x <= y
+                               | otherwise = xs <= ys
 instance Show a => Show (Vec n a) where
-  show xs = "<" ++ showV' xs ++ ">"
+  show xs = "<" ++ showV xs ++ ">"
     where
-      showV' :: forall n a . Show a => Vec n a -> String
-      showV' Nil          = ""
-      showV' (Cons x Nil) = show x
-      showV' (Cons x xs)  = show x ++ "," ++ showV' xs
+      showV :: forall n a . Show a => Vec n a -> String
+      showV Nil          = ""
+      showV (Cons x Nil) = show x
+      showV (Cons x xs)  = show x ++ "," ++ showV xs
