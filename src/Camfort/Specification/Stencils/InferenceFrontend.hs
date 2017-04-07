@@ -257,15 +257,12 @@ perBlockInfer mode marker b@(F.BlStatement ann span@(FU.SrcSpan lp up) _ stmnt)
       else return b
 
 perBlockInfer mode marker b@(F.BlDo ann span lab cname lab' mDoSpec body tlab) = do
-    -- introduce any induction variables into the induction variable state
-
     if (mode == DoMode || mode == CombinedMode) && isStencilDo b
       then genSpecsAndReport mode span [] body
       else return []
 
     -- descend into the body of the do-statement
     body' <- mapM (descendBiM (perBlockInfer mode marker)) body
-    -- Remove any induction variable from the state
     return $ F.BlDo ann span lab cname lab' mDoSpec body' tlab
 
 perBlockInfer mode marker b = do
