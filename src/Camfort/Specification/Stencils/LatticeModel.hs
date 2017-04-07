@@ -22,26 +22,21 @@ the specification checking and program synthesis features.
 
 -}
 
-{-# LANGUAGE KindSignatures #-}
 {-# LANGUAGE DataKinds #-}
 {-# LANGUAGE ScopedTypeVariables #-}
 {-# LANGUAGE FunctionalDependencies #-}
 {-# LANGUAGE FlexibleInstances #-}
-{-# LANGUAGE UndecidableInstances #-}
 {-# LANGUAGE FlexibleContexts #-}
 {-# LANGUAGE DeriveFunctor #-}
 
 module Camfort.Specification.Stencils.LatticeModel ( Interval(..)
                                                    , Offsets(..)
-                                                   , CartesianProduct(..)
+                                                   , UCNF(..)
                                                    , Region
                                                    , ioCompare
-                                                   , Approx(..)
+                                                   , Approximation(..)
                                                    , Mult(..)
                                                    ) where
-
-import GHC.TypeLits
-import Data.Proxy
 
 import Algebra.Lattice
 import Data.Foldable
@@ -133,55 +128,42 @@ instance BoundedMeetSemiLattice Interval where
 instance BoundedLattice Interval
 
 --------------------------------------------------------------------------------
--- CartesianProduct
+-- Union of cartesian products normal form
 --------------------------------------------------------------------------------
 
-data CartesianProduct (n :: Nat) a =
-    Base [ a ]
-  | (CartesianProduct n a) :#: (CartesianProduct n a)
+data UCNF a = Base [ a ] | (UCNF a) :#: (UCNF a)
 
-instance (Container a Integer SInteger, KnownNat n)
-      => Container (CartesianProduct n a) [ Integer ] [ SInteger ] where
+instance (Container a Integer SInteger)
+      => Container (UCNF a) [ Integer ] [ SInteger ] where
   member is (ls :#: rs) = is `member` ls || is `member` rs
   member is (Base space)
-    | (fromInteger . natVal) (Proxy :: Proxy n) == length is =
-      all (uncurry member) $ zip is space
+    | length is == length space = all (uncurry member) $ zip is space
     | otherwise = error "Dimensionality of indices doesn't match the spec."
 
   compile (ls :#: rs) is = compile ls is ||| compile rs is
-  compile (Base intervals) is
-    | (fromInteger . natVal) (Proxy :: Proxy n) == length is =
-      foldr' (\(interv, i) -> (&&&) $ compile interv i) true $ zip intervals is
+  compile (Base space) is
+    | length is == length space =
+      foldr' (\(set, i) -> (&&&) $ compile set i) true $ zip space is
     | otherwise = error "Dimensionality of indices doesn't match the spec."
 
-instance JoinSemiLattice (CartesianProduct n a) where
+instance JoinSemiLattice (UCNF a) where
   oi \/ oi' = oi :#: oi'
 
-instance BoundedLattice a => MeetSemiLattice (CartesianProduct n a) where
+instance BoundedLattice a => MeetSemiLattice (UCNF a) where
   Base ss /\ Base ss' = Base $ zipWith (/\) ss ss'
   b@Base{} /\ (lr :#: rr) = (b /\ lr) \/ (b /\ rr)
   u@(_ :#: _) /\ b@Base{} = b /\ u
   (ll :#: lr) /\ (ll' :#: lr') =
     (ll /\ ll') \/ (ll /\ lr') \/ (lr /\ ll') \/ (lr /\ lr')
 
-instance BoundedLattice a => Lattice (CartesianProduct n a)
-
-instance (BoundedLattice a, KnownNat n) =>
-         BoundedJoinSemiLattice (CartesianProduct n a) where
-  bottom = Base $ replicate (fromInteger . natVal $ (Proxy :: Proxy n)) bottom
-
-instance (BoundedLattice a, KnownNat n) =>
-         BoundedMeetSemiLattice (CartesianProduct n a) where
-  top = Base $ replicate (fromInteger . natVal $ (Proxy :: Proxy n)) top
-
-instance (BoundedLattice a, KnownNat n) => BoundedLattice (CartesianProduct n a)
+instance BoundedLattice a => Lattice (UCNF a)
 
 -- A special case of Cartesian Product is Region as deinfed in the paper.
-type Region n = CartesianProduct n Interval
+type Region = UCNF Interval
 
-ioCompare :: forall n a b . (Container a Integer SInteger,
-                             Container b Integer SInteger, KnownNat n)
-          => CartesianProduct n a -> CartesianProduct n b -> IO Ordering
+ioCompare :: forall a b . (Container a Integer SInteger,
+                           Container b Integer SInteger)
+          => UCNF a -> UCNF b -> IO Ordering
 ioCompare oi oi' = do
     thmRes <- prove pred
     if modelExists thmRes
@@ -206,14 +188,16 @@ ioCompare oi oi' = do
         Right (True, _) -> fail "Returned probable model."
         Left str -> fail str
     pred = do
-      xs <- mkFreeVars (fromInteger . natVal $ (Proxy :: Proxy n))
+      xs <- mkFreeVars $ dimensionality oi
       return $ compile oi xs .== compile oi' xs
+    dimensionality (Base xs)  = length xs
+    dimensionality (u :#: u') = dimensionality u
 
 --------------------------------------------------------------------------------
 -- Injections for multiplicity and exactness
 --------------------------------------------------------------------------------
 
-data Approx a = Exact a | Lower a | Upper a | Both a a deriving Functor
+data Approximation a = Exact a | Lower a | Upper a | Both a a deriving Functor
 data Mult a = Mult a | Once a deriving Functor
 
 peel :: Mult a -> a
