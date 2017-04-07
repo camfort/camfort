@@ -53,7 +53,7 @@ dataTypeIntro pfs = (r, [])
 -- Stub, coalesce LVA information
 -- TODO, build interference graph
 buildInterferenceGraph :: [(Filename, F.ProgramFile A)] -> String
-buildInterferenceGraph = show . (foldr IM.union IM.empty) . map analysePerPF 
+buildInterferenceGraph = show . (foldr IM.union IM.empty) . map analysePerPF
 
 -- Stub, generate LVA information
 analysePerPF ::
