@@ -31,17 +31,20 @@ the specification checking and program synthesis features.
 
 module Camfort.Specification.Stencils.LatticeModel ( Interval(..)
                                                    , Offsets(..)
-                                                   , UCNF(..)
-                                                   , Region
+                                                   , UnionNF(..)
                                                    , ioCompare
                                                    , Approximation(..)
                                                    , Mult(..)
                                                    ) where
 
-import Algebra.Lattice
-import Data.Foldable
+import qualified Control.Monad as CM
+
+import           Algebra.Lattice
+import           Data.Semigroup
+import qualified Data.List.NonEmpty as NE
 import qualified Data.Set as S
-import Data.SBV
+import           Data.Foldable
+import           Data.SBV
 
 import qualified Camfort.Helpers.Vec as V
 
@@ -131,39 +134,33 @@ instance BoundedLattice Interval
 -- Union of cartesian products normal form
 --------------------------------------------------------------------------------
 
-data UCNF a = Base [ a ] | (UCNF a) :#: (UCNF a)
+type UnionNF a = NE.NonEmpty [ a ]
 
 instance (Container a Integer SInteger)
-      => Container (UCNF a) [ Integer ] [ SInteger ] where
-  member is (ls :#: rs) = is `member` ls || is `member` rs
-  member is (Base space)
-    | length is == length space = all (uncurry member) $ zip is space
-    | otherwise = error "Dimensionality of indices doesn't match the spec."
+      => Container (UnionNF a) [ Integer ] [ SInteger ] where
+  member is = any (member' is)
+    where
+      member' is space
+        | length is == length space = and $ zipWith member is space
+        | otherwise = error "Dimensionality of indices doesn't match the spec."
 
-  compile (ls :#: rs) is = compile ls is ||| compile rs is
-  compile (Base space) is
-    | length is == length space =
-      foldr' (\(set, i) -> (&&&) $ compile set i) true $ zip space is
-    | otherwise = error "Dimensionality of indices doesn't match the spec."
+  compile spaces is = foldr1 (|||) $ NE.map (`compile'` is) spaces
+    where
+      compile' space is
+        | length is == length space =
+          foldr' (\(set, i) -> (&&&) $ compile set i) true $ zip space is
 
-instance JoinSemiLattice (UCNF a) where
-  oi \/ oi' = oi :#: oi'
+instance JoinSemiLattice (UnionNF a) where
+  oi \/ oi' = oi <> oi'
 
-instance BoundedLattice a => MeetSemiLattice (UCNF a) where
-  Base ss /\ Base ss' = Base $ zipWith (/\) ss ss'
-  b@Base{} /\ (lr :#: rr) = (b /\ lr) \/ (b /\ rr)
-  u@(_ :#: _) /\ b@Base{} = b /\ u
-  (ll :#: lr) /\ (ll' :#: lr') =
-    (ll /\ ll') \/ (ll /\ lr') \/ (lr /\ ll') \/ (lr /\ lr')
+instance BoundedLattice a => MeetSemiLattice (UnionNF a) where
+  (/\) = CM.liftM2 (zipWith (/\))
 
-instance BoundedLattice a => Lattice (UCNF a)
+instance BoundedLattice a => Lattice (UnionNF a)
 
--- A special case of Cartesian Product is Region as deinfed in the paper.
-type Region = UCNF Interval
-
-ioCompare :: forall a b . (Container a Integer SInteger,
-                           Container b Integer SInteger)
-          => UCNF a -> UCNF b -> IO Ordering
+ioCompare :: forall a b . ( Container a Integer SInteger
+                          , Container b Integer SInteger )
+          => UnionNF a -> UnionNF b -> IO Ordering
 ioCompare oi oi' = do
     thmRes <- prove pred
     if modelExists thmRes
@@ -190,8 +187,7 @@ ioCompare oi oi' = do
     pred = do
       xs <- mkFreeVars $ dimensionality oi
       return $ compile oi xs .== compile oi' xs
-    dimensionality (Base xs)  = length xs
-    dimensionality (u :#: u') = dimensionality u
+    dimensionality = length . NE.head
 
 --------------------------------------------------------------------------------
 -- Injections for multiplicity and exactness
