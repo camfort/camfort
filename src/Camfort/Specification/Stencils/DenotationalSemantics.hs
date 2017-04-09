@@ -51,9 +51,7 @@ intervalsToRegions as = do
         _ -> False
 
     toProd :: V.Vec n Interval -> Either String RegionProd
-    toProd ints = do
-      prods <- mapM convert . (`zip` [0..]) . V.toList $ ints
-      return $ Product prods
+    toProd ints = Product <$> (mapM convert . (`zip` [0..]) . V.toList $ ints)
 
     convert :: (Interval, Int) -> Either String Region
     convert (Interval 0 0 False, _) =
@@ -72,7 +70,7 @@ regionsToIntervals nOfDims (Spatial (Sum prods)) =
 
     convert :: RegionProd -> UnionNF n Interval
     convert (Product []) = error "Empty product"
-    convert (Product rs) = foldr1 (/\) . map convert' $ rs
+    convert (Product rs) = joins1 . map convert' $ rs
 
     convert' r = return $ proto nOfDims 0 $
       case r of
