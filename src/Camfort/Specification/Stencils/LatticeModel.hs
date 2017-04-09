@@ -121,7 +121,7 @@ instance Container Interval where
 instance JoinSemiLattice Interval where
   (Interval lb ub noHole) \/ (Interval lb' ub' noHole') =
     Interval (min lb lb') (max ub ub') (noHole || noHole')
-  _ \/ _ = InfiniteInterval
+  _ \/ _ = top
 
 instance MeetSemiLattice Interval where
   (Interval lb ub noHole) /\ (Interval lb' ub' noHole') =
