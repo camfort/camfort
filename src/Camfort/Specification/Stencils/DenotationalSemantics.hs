@@ -53,14 +53,16 @@ intervalsToRegions as = do
 
 regionsToIntervals :: forall n . V.IsNatural n
                    => V.Natural n -> Spatial -> UnionNF n Interval
-regionsToIntervals nOfDims (Spatial (Sum prods)) =
-    foldr1 (SG.<>) . map convert $ prods
+regionsToIntervals nOfDims (Spatial (Sum prods))
+    | null prods = error "Empty region sum"
+    | otherwise = foldr1 (SG.<>) . map convert $ prods
   where
     nOfDims' = V.fromNat (Proxy :: Proxy n)
 
     convert :: RegionProd -> UnionNF n Interval
-    convert (Product []) = error "Empty product"
-    convert (Product rs) = joins1 . map convert' $ rs
+    convert (Product rs)
+      | null rs = error "Empty region product"
+      | otherwise = joins1 . map convert' $ rs
 
     convert' r = return $ proto nOfDims 0 $
       case r of
