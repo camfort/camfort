@@ -23,10 +23,11 @@
 {-# LANGUAGE PolyKinds #-}
 {-# LANGUAGE FlexibleInstances #-}
 {-# LANGUAGE ScopedTypeVariables #-}
+{-# LANGUAGE TypeOperators #-}
 
 module Camfort.Helpers.Vec where
 
-import Prelude hiding (length)
+import Prelude hiding (length, zipWith, take, drop)
 
 import Data.Proxy
 
@@ -83,3 +84,52 @@ instance Show a => Show (Vec n a) where
       showV Nil          = ""
       showV (Cons x Nil) = show x
       showV (Cons x xs)  = show x ++ "," ++ showV xs
+
+instance Foldable (Vec n) where
+  foldr _ acc Nil = acc
+  foldr f acc (Cons x xs) = foldr f (f x acc) xs
+
+zipWith :: (a -> b -> c) -> Vec n a -> Vec n b -> Vec n c
+zipWith f Nil Nil = Nil
+zipWith f (Cons x xs) (Cons y ys) = Cons (f x y) (zipWith f xs ys)
+
+zip :: Vec n a -> Vec n b -> Vec n (a,b)
+zip = zipWith (,)
+
+-- Equality type
+data EqT a b where
+  ReflEq :: EqT a a
+
+-- Lists existentially quanitify over a vector's size : Exists n . Vec n a
+data VecBox a where
+     VecBox :: Vec n a -> VecBox a
+
+fromList :: [a] -> VecBox a
+fromList = foldr (\x (VecBox xs) -> VecBox (Cons x xs)) (VecBox Nil)
+
+toList :: Vec n a -> [ a ]
+toList Nil = [ ]
+toList (Cons x xs) = x : toList xs
+
+-- | Apply length preserving list operation.
+applyListOp :: ([ a ] -> [ a ]) -> Vec n a -> Vec n a
+applyListOp f v =
+  case fromList . f . toList $ v of
+    VecBox v' ->
+      case proveEqSize v v' of
+        Just ReflEq -> v'
+        Nothing -> error "List operation was not length preserving."
+
+proveEqSize :: Vec n a -> Vec m b -> Maybe (EqT m n)
+proveEqSize Nil Nil = return ReflEq
+proveEqSize (Cons _ xs) (Cons _ ys) = do
+  ReflEq <- proveEqSize xs ys
+  return ReflEq
+proveEqSize _ _ = Nothing
+
+hasSize :: Vec m a -> Natural n -> Maybe (EqT m n)
+hasSize Nil Zero = return ReflEq
+hasSize (Cons _ xs) (Succ n) = do
+  ReflEq <- xs `hasSize` n
+  return ReflEq
+hasSize _ _ = Nothing

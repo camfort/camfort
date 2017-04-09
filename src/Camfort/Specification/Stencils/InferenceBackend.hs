@@ -213,39 +213,22 @@ containedWithin (V.Cons l1 ls1, V.Cons u1 us1) (V.Cons l2 ls2, V.Cons u2 us2)
 {- Vector list repreentation where the size 'n' is existential quantified -}
 data VecList a where VL :: [V.Vec n a] -> VecList a
 
--- Lists existentially quanitify over a vector's size : Exists n . Vec n a
-data List a where
-     List :: V.Vec n a -> List a
-
-lnil :: List a
-lnil = List V.Nil
-lcons :: a -> List a -> List a
-lcons x (List V.Nil) = List (V.Cons x V.Nil)
-lcons x (List xs) = List (V.Cons x xs)
-
-fromList :: [a] -> List a
-fromList = foldr lcons lnil
-
 -- pre-condition: the input is a 'rectangular' list of lists (i.e. all internal
 -- lists have the same size)
 fromLists :: [[Int]] -> VecList Int
 fromLists [] = VL ([] :: [V.Vec V.Z Int])
-fromLists (xs:xss) = consList (fromList xs) (fromLists xss)
+fromLists (xs:xss) = consList (V.fromList xs) (fromLists xss)
   where
-    consList :: List Int -> VecList Int -> VecList Int
-    consList (List vec) (VL [])     = VL [vec]
-    consList (List vec) (VL xs)
+    consList :: V.VecBox Int -> VecList Int -> VecList Int
+    consList (V.VecBox vec) (VL [])     = VL [vec]
+    consList (V.VecBox vec) (VL xs)
       = -- Force the pre-condition equality
         case preCondition vec xs of
-            ReflEq -> VL (vec : xs)
+            V.ReflEq -> VL (vec : xs)
             where -- At the moment the pre-condition is 'assumed', and therefore
               -- force used unsafeCoerce: TODO, rewrite
-              preCondition :: V.Vec n a -> [V.Vec n1 a] -> EqT n n1
-              preCondition xs x = unsafeCoerce ReflEq
-
--- Equality type
-data EqT (a :: k) (b :: k) where
-    ReflEq :: EqT a a
+              preCondition :: V.Vec n a -> [V.Vec n1 a] -> V.EqT n n1
+              preCondition xs x = unsafeCoerce V.ReflEq
 
 -- Local variables:
 -- mode: haskell
