@@ -34,6 +34,7 @@ import Control.Monad.Writer hiding (Product,Sum)
 import Camfort.Specification.Stencils.InferenceBackend
 import Camfort.Specification.Stencils.Syntax
 import Camfort.Specification.Stencils.Model
+import Camfort.Specification.Stencils.LatticeModel
 import qualified Camfort.Specification.Stencils.Grammar as SYN
 
 import Camfort.Analysis.Annotations
@@ -81,8 +82,8 @@ instance SynToAst SYN.Spec Specification where
         Just SYN.AtLeast -> Bound (Just s') Nothing
         Nothing          -> Exact s'
     where
-      addLinearity Linear appr = Single appr
-      addLinearity NonLinear appr = Multiple appr
+      addLinearity Linear appr = Once appr
+      addLinearity NonLinear appr = Mult appr
 
 -- Convert region definitions into the DNF-form used internally
 instance SynToAst SYN.Region RegionSum where

@@ -31,6 +31,8 @@ the specification checking and program synthesis features.
 module Camfort.Specification.Stencils.Model where
 
 import Camfort.Specification.Stencils.Syntax
+import Camfort.Specification.Stencils.LatticeModel
+
 import Data.Set hiding (map,foldl',(\\))
 import qualified Data.Set as Set
 import Data.List
@@ -55,25 +57,25 @@ consistent :: Multiplicity [[Int]]
 --
 -- Note that if the spec omits "readOnce" and the offsets happen to be
 -- unique that is allowed as "readOnce" is an extra qualifier.
-consistent (Multiple _) (Single _) = False
+consistent (Mult _) (Once _) = False
 consistent mult1 spec =
     consistent' (model spec dimensionality)
   where
     dimensionality = length . head $ accesses
     consistent' m2 =
-      case fromMult m2 of
+      case peel m2 of
         Exact unifiers ->
-          consistent' (Multiple (Bound Nothing (Just unifiers))) &&
-          consistent' (Multiple (Bound (Just unifiers) Nothing))
+          consistent' (Mult (Bound Nothing (Just unifiers))) &&
+          consistent' (Mult (Bound (Just unifiers) Nothing))
         Bound lus@Just{} uus@Just{} ->
-          consistent' (Multiple (Bound lus Nothing)) &&
-          consistent' (Multiple (Bound Nothing uus))
+          consistent' (Mult (Bound lus Nothing)) &&
+          consistent' (Mult (Bound Nothing uus))
         Bound Nothing (Just unifiers) ->
           all (\access -> any (access `accepts`) unifiers) accesses
         Bound (Just unifiers) Nothing ->
           all (\unifier -> any (`accepts` unifier) accesses) unifiers
 
-    accesses = fromMult mult1
+    accesses = peel mult1
 
     access `accepts` unifier =
       all (\(u,v) -> v == absoluteRep || u == v) (zip access unifier)
@@ -109,12 +111,12 @@ instance Model (Multiplicity (Approximation Spatial)) where
    type Domain (Multiplicity (Approximation Spatial)) =
      Multiplicity (Approximation (Set [Int]))
 
-   mkModel (Multiple s) = Multiple (mkModel s)
-   mkModel (Single s) = Single (mkModel s)
+   mkModel (Mult s) = Mult (mkModel s)
+   mkModel (Once s) = Once (mkModel s)
 
-   dimensionality mult = dimensionality $ fromMult mult
+   dimensionality mult = dimensionality $ peel mult
 
-   dimensions mult = dimensions $ fromMult mult
+   dimensions mult = dimensions $ peel mult
 
 instance Model (Approximation Spatial) where
   type Domain (Approximation Spatial) = Approximation (Set [Int])

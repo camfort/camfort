@@ -19,11 +19,16 @@
 {-# LANGUAGE DeriveDataTypeable #-}
 {-# LANGUAGE FlexibleInstances #-}
 {-# LANGUAGE GADTs #-}
-{-# LANGUAGE DeriveFunctor #-}
 
 module Camfort.Specification.Stencils.Syntax where
 
 import Camfort.Helpers
+import Camfort.Specification.Stencils.LatticeModel ( Multiplicity(..)
+                                                   , peel
+                                                   , Approximation(..)
+                                                   , lowerBound, upperBound
+                                                   , fromExact
+                                                   )
 
 import Prelude hiding (sum)
 
@@ -40,25 +45,6 @@ type Variable = String
 {-  Contains the syntax representation for stencil specifications -}
 
 {- *** 0. Representations -}
-
--- Representation of an inference result, either exact or with some bound
-data Approximation a =
-  Exact a | Bound (Maybe a) (Maybe a)
-   deriving (Eq, Data, Typeable, Show)
-
-fromExact :: Approximation a -> a
-fromExact (Exact a) = a
-fromExact _ = error "Exception: fromExact on a non-exact result"
-
-upperBound :: a -> Approximation a
-upperBound x = Bound Nothing (Just x)
-
-lowerBound :: a -> Approximation a
-lowerBound x = Bound (Just x) Nothing
-
-instance Functor Approximation where
-  fmap f (Exact x) = Exact (f x)
-  fmap f (Bound x y) = Bound (fmap f x) (fmap f y)
 
 -- 'absoluteRep' is an integer to use to represent absolute indexing expressions
 -- (which may be constants, non-affine indexing expressions, or expressions
@@ -96,7 +82,7 @@ data Specification =
     deriving (Eq, Data, Typeable)
 
 isEmpty :: Specification -> Bool
-isEmpty (Specification mult) = isUnit . fromMult $ mult
+isEmpty (Specification mult) = isUnit . peel $ mult
 
 -- **********************
 -- Spatial specifications:
@@ -119,19 +105,12 @@ fromBool False = Linear
 hasDuplicates :: Eq a => [a] -> ([a], Bool)
 hasDuplicates xs = (nub xs, nub xs /= xs)
 
-fromMult :: Multiplicity a -> a
-fromMult (Multiple a) = a
-fromMult (Single a) = a
-
 setLinearity :: Linearity -> Specification -> Specification
 setLinearity l (Specification mult)
-  | l == Linear = Specification $ Single $ fromMult mult
-  | l == NonLinear = Specification $ Multiple $ fromMult mult
+  | l == Linear = Specification $ Once $ peel mult
+  | l == NonLinear = Specification $ Mult $ peel mult
 
 data Linearity = Linear | NonLinear deriving (Eq, Data, Typeable)
-
-data Multiplicity a = Multiple a | Single a
-    deriving (Eq, Data, Typeable, Functor, Show)
 
 type Dimension  = Int -- spatial dimensions are 1 indexed
 type Depth      = Int
@@ -410,8 +389,8 @@ instance Show Specification where
 
 instance {-# OVERLAPS #-} Show (Multiplicity (Approximation Spatial)) where
   show mult
-    | Multiple appr <- mult = apprStr empty empty appr
-    | Single appr <- mult = apprStr "readOnce" ", " appr
+    | Mult appr <- mult = apprStr empty empty appr
+    | Once appr <- mult = apprStr "readOnce" ", " appr
     where
       apprStr linearity sep appr =
         case appr of

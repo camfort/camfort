@@ -81,7 +81,9 @@ executable camfort
                         filepath,
                         fgl >= 5.5,
                         bytestring >= 0.10,
-                        binary >= 0.8.3.0
+                        binary >= 0.8.3.0,
+                        lattices >= 1.5,
+                        sbv >= 5.14
   default-language: Haskell2010
 
 library

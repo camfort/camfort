@@ -31,6 +31,7 @@ import Control.Monad.Writer.Strict hiding (Product)
 import Camfort.Analysis.CommentAnnotator
 
 import Camfort.Specification.Stencils.InferenceBackend
+import Camfort.Specification.Stencils.LatticeModel
 import Camfort.Specification.Stencils.Syntax
 import Camfort.Specification.Stencils.Annotation
 import qualified Camfort.Specification.Stencils.Grammar as Gram
@@ -291,18 +292,18 @@ genSpecifications ivs lhs blocks = do
               . M.unionsWith (++)
 
       splitUpperAndLower = concatMap splitUpperAndLower'
-      splitUpperAndLower' (vs, Specification (Multiple (Bound (Just l) (Just u))))
+      splitUpperAndLower' (vs, Specification (Mult (Bound (Just l) (Just u))))
         | isUnit l =
-         [(vs, Specification (Multiple (Bound Nothing (Just u))))]
+         [(vs, Specification (Mult (Bound Nothing (Just u))))]
         | otherwise =
-         [(vs, Specification (Multiple (Bound (Just l) Nothing))),
-          (vs, Specification (Multiple (Bound Nothing (Just u))))]
-      splitUpperAndLower' (vs, Specification (Single (Bound (Just l) (Just u))))
+         [(vs, Specification (Mult (Bound (Just l) Nothing))),
+          (vs, Specification (Mult (Bound Nothing (Just u))))]
+      splitUpperAndLower' (vs, Specification (Once (Bound (Just l) (Just u))))
         | isUnit l =
-         [(vs, Specification (Multiple (Bound Nothing (Just u))))]
+         [(vs, Specification (Mult (Bound Nothing (Just u))))]
         | otherwise =
-         [(vs, Specification (Single (Bound (Just l) Nothing))),
-          (vs, Specification (Single (Bound Nothing (Just u))))]
+         [(vs, Specification (Once (Bound (Just l) Nothing))),
+          (vs, Specification (Once (Bound Nothing (Just u))))]
       splitUpperAndLower' x = [x]
 
 genOffsets :: Params

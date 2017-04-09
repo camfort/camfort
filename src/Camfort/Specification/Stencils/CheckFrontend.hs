@@ -29,6 +29,7 @@ import Camfort.Specification.Stencils.CheckBackend
 import qualified Camfort.Specification.Stencils.Grammar as Gram
 import Camfort.Specification.Stencils.Annotation
 import Camfort.Specification.Stencils.Model
+import Camfort.Specification.Stencils.LatticeModel
 import Camfort.Specification.Stencils.InferenceFrontend hiding (LogLine)
 import Camfort.Specification.Stencils.InferenceBackend
 import Camfort.Specification.Stencils.Synthesis
@@ -114,10 +115,10 @@ checkOffsetsAgainstSpec offsetMaps =
       all (\(var2, offsets) ->
         var1 /= var2 || noAllInfinity offsets `consistent` mult) offsetMaps)
     where
-      noAllInfinity (Single a) =
-        Single $ filter (not . all (== absoluteRep)) a
-      noAllInfinity (Multiple a) =
-        Multiple $ filter (not . all (== absoluteRep)) a
+      noAllInfinity (Once a) =
+        Once $ filter (not . all (== absoluteRep)) a
+      noAllInfinity (Mult a) =
+        Mult $ filter (not . all (== absoluteRep)) a
 
 -- Go into the program units first and record the module name when
 -- entering into a module
@@ -151,8 +152,8 @@ perBlockCheck b@(F.BlComment ann span _) = do
             let relOffsets = correctNames . fst . runWriter $ genOffsets ivmap lhsN [s]
             let multOffsets = map (\relOffset ->
                   case relOffset of
-                    (var, (True, offsets)) -> (var, Multiple offsets)
-                    (var, (False, offsets)) -> (var, Single offsets)) relOffsets
+                    (var, (True, offsets)) -> (var, Mult offsets)
+                    (var, (False, offsets)) -> (var, Once offsets)) relOffsets
             let expandedDecls =
                   concatMap (\(vars,spec) -> map (flip (,) spec) vars) specDecls
             -- Model and compare the current and specified stencil specs

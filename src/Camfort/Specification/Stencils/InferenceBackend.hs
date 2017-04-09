@@ -35,6 +35,7 @@ import Data.Function
 import Data.Maybe
 
 import Camfort.Specification.Stencils.Model
+import Camfort.Specification.Stencils.LatticeModel
 import Camfort.Helpers
 import qualified Camfort.Helpers.Vec as V
 
@@ -59,8 +60,8 @@ mkTrivialSpan (V.Cons x xs) =
 inferFromIndices :: VecList Int -> Specification
 inferFromIndices (VL ixs) = Specification $
     case fromBool mult of
-      Linear -> Single $ inferCore ixs'
-      NonLinear -> Multiple $ inferCore ixs'
+      Linear -> Once $ inferCore ixs'
+      NonLinear -> Mult $ inferCore ixs'
     where
       (ixs', mult) = hasDuplicates ixs
 
@@ -69,7 +70,7 @@ inferFromIndices (VL ixs) = Specification $
 -- the linearity check first as an optimimsation.
 inferFromIndicesWithoutLinearity :: VecList Int -> Specification
 inferFromIndicesWithoutLinearity (VL ixs) =
-    Specification . Multiple . inferCore $ ixs
+    Specification . Mult . inferCore $ ixs
 
 inferCore :: [V.Vec n Int] -> Approximation Spatial
 inferCore = simplify . fromRegionsToSpec . inferMinimalVectorRegions
@@ -142,8 +143,9 @@ toSpec1D dim l u
                               Product [Forward  u       dim True]])
     -- Represents a non-contiguous region
     | otherwise =
-        upperBound $ Spatial (Sum [Product
-                        [if l > 0 then Forward u dim True else Backward (abs l) dim True]])
+        Bound Nothing $
+              Just $ Spatial (Sum [Product
+                       [if l > 0 then Forward u dim True else Backward (abs l) dim True]])
 
 {-| |inferMinimalVectorRegions| a key part of the algorithm, from a list of
     n-dimensional relative indices it infers a list of (possibly overlapping)

@@ -26,15 +26,19 @@ the specification checking and program synthesis features.
 {-# LANGUAGE ScopedTypeVariables #-}
 {-# LANGUAGE FlexibleInstances #-}
 {-# LANGUAGE FlexibleContexts #-}
-{-# LANGUAGE DeriveFunctor #-}
 {-# LANGUAGE TypeFamilies #-}
+{-# LANGUAGE DeriveFunctor #-}
+{-# LANGUAGE DeriveDataTypeable #-}
 
 module Camfort.Specification.Stencils.LatticeModel ( Interval(..)
                                                    , Offsets(..)
                                                    , UnionNF(..)
                                                    , ioCompare
                                                    , Approximation(..)
-                                                   , Mult(..)
+                                                   , lowerBound, upperBound
+                                                   , fromExact
+                                                   , Multiplicity(..)
+                                                   , peel
                                                    ) where
 
 import qualified Control.Monad as CM
@@ -45,6 +49,8 @@ import qualified Data.List.NonEmpty as NE
 import qualified Data.Set as S
 import           Data.Foldable
 import           Data.SBV
+import           Data.Data
+import           Data.Typeable
 
 import qualified Camfort.Helpers.Vec as V
 
@@ -213,9 +219,26 @@ ioCompare oi oi' = do
 -- Injections for multiplicity and exactness
 --------------------------------------------------------------------------------
 
-data Approximation a = Exact a | Lower a | Upper a | Both a a deriving Functor
-data Mult a = Mult a | Once a deriving Functor
+data Approximation a =
+    Exact a
+  | Bound (Maybe a) (Maybe a)
+  deriving (Eq, Show, Functor, Data, Typeable)
 
-peel :: Mult a -> a
+fromExact :: Approximation a -> a
+fromExact (Exact a) = a
+fromExact _ = error "Not exact."
+
+lowerBound (Bound (Just a) _) = a
+lowerBound _ = error "No lower bound."
+
+upperBound (Bound _ (Just a)) = a
+upperBound _ = error "No upper bound."
+
+data Multiplicity a =
+    Mult a
+  | Once a
+  deriving (Eq, Show, Functor, Data, Typeable)
+
+peel :: Multiplicity a -> a
 peel (Mult a) = a
 peel (Once a) = a
