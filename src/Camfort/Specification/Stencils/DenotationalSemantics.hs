@@ -6,14 +6,9 @@
 module Camfort.Specification.Stencils.DenotationalSemantics ( intervalsToRegions
                                                             , regionsToIntervals ) where
 
-import Control.Monad as CM (join, when)
-
 import Algebra.Lattice
 import qualified Data.List.NonEmpty as NE
-import Data.List
 import qualified Data.Semigroup as SG
-import Data.Proxy
-import qualified Data.Monoid as M
 
 import qualified Camfort.Helpers.Vec as V
 import Camfort.Specification.Stencils.LatticeModel
@@ -25,7 +20,7 @@ import Camfort.Specification.Stencils.Syntax
 -- 3. All unioned interval lists are of equal length (insured by dep.  type).
 intervalsToRegions :: UnionNF (V.S n) Interval -> Either String Spatial
 intervalsToRegions as = do
-    sums <- mapM toProd . NE.toList . CM.join . NE.map asymmetryElim $ as
+    sums <- mapM toProd . NE.toList . SG.sconcat . fmap asymmetryElim $ as
     return . Spatial . Sum $ sums
   where
     asymmetryElim :: V.Vec n Interval -> UnionNF n Interval
