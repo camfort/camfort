@@ -52,10 +52,9 @@ intervalsToRegions as = do
         _ -> False
 
     replace :: Int -> a -> V.Vec n a -> V.Vec n a
-    replace i a = V.applyListOp (replace' i a)
-
-    replace' :: Int -> a -> [ a ] -> [ a ]
-    replace' ix interv ints = take ix ints ++ interv : drop (ix + 1) ints
+    replace 0 a (V.Cons x xs) = V.Cons a xs
+    replace n a (V.Cons x xs) = V.Cons x (replace (n-1) a xs)
+    replace _ _ V.Nil = error "Found asymmetry is beyond the limits."
 
     toProd :: V.Vec n Interval -> Either String RegionProd
     toProd ints = do
