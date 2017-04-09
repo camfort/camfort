@@ -28,6 +28,7 @@ the specification checking and program synthesis features.
 {-# LANGUAGE FlexibleInstances #-}
 {-# LANGUAGE FlexibleContexts #-}
 {-# LANGUAGE DeriveFunctor #-}
+{-# LANGUAGE TypeFamilies #-}
 
 module Camfort.Specification.Stencils.LatticeModel ( Interval(..)
                                                    , Offsets(..)
@@ -134,60 +135,68 @@ instance BoundedLattice Interval
 -- Union of cartesian products normal form
 --------------------------------------------------------------------------------
 
-type UnionNF a = NE.NonEmpty [ a ]
+type UnionNF n a = NE.NonEmpty (V.Vec n a)
 
 instance (Container a Integer SInteger)
-      => Container (UnionNF a) [ Integer ] [ SInteger ] where
+      => Container (UnionNF n a) (V.Vec n Integer) (V.Vec n SInteger) where
   member is = any (member' is)
     where
-      member' is space
-        | length is == length space = and $ zipWith member is space
-        | otherwise = error "Dimensionality of indices doesn't match the spec."
+      member' is space = and $ V.zipWith member is space
 
   compile spaces is = foldr1 (|||) $ NE.map (`compile'` is) spaces
     where
-      compile' space is
-        | length is == length space =
-          foldr' (\(set, i) -> (&&&) $ compile set i) true $ zip space is
+      compile' space is =
+        foldr' (\(set, i) -> (&&&) $ compile set i) true $ V.zip space is
 
-instance JoinSemiLattice (UnionNF a) where
+instance JoinSemiLattice (UnionNF n a) where
   oi \/ oi' = oi <> oi'
 
-instance BoundedLattice a => MeetSemiLattice (UnionNF a) where
-  (/\) = CM.liftM2 (zipWith (/\))
+instance BoundedLattice a => MeetSemiLattice (UnionNF n a) where
+  (/\) = CM.liftM2 (V.zipWith (/\))
 
-instance BoundedLattice a => Lattice (UnionNF a)
+instance BoundedLattice a => Lattice (UnionNF n a)
 
-ioCompare :: forall a b . ( Container a Integer SInteger
-                          , Container b Integer SInteger )
-          => UnionNF a -> UnionNF b -> IO Ordering
+ioCompare :: forall a b n . ( Container a Integer SInteger
+                            , Container b Integer SInteger )
+          => UnionNF n a -> UnionNF n b -> IO Ordering
 ioCompare oi oi' = do
     thmRes <- prove pred
     if modelExists thmRes
       then do
         ce <- counterExample thmRes
-        -- TODO: The bit below is defensive programming the second member
-        -- check should not be necessary unless the counter example is
-        -- bogus (it shouldn't be). Delete if it adversely effects the
-        -- performance.
-        return $
-          if ce `member` oi
-            then GT
-            else
-              if ce `member` oi'
-                then LT
-                else error "Impossible: counter example is in neither of the oeprands"
+        case V.fromList ce of
+          V.VecBox cev ->
+            case V.proveEqSize (NE.head oi) cev of
+              Just V.ReflEq ->
+                -- TODO: The bit below is defensive programming the second member
+                -- check should not be necessary unless the counter example is
+                -- bogus (it shouldn't be). Delete if it adversely effects the
+                -- performance.
+                return $
+                  if cev `member` oi
+                    then GT
+                    else
+                      if cev `member` oi'
+                        then LT
+                        else error "Impossible: counter example is in neither of the oeprands"
       else return EQ
   where
+    counterExample :: ThmResult -> IO [ Integer ]
     counterExample thmRes =
       case getModel thmRes of
         Right (False, ce) -> return ce
         Right (True, _) -> fail "Returned probable model."
         Left str -> fail str
+
+    pred :: Predicate
     pred = do
-      xs <- mkFreeVars $ dimensionality oi
-      return $ compile oi xs .== compile oi' xs
-    dimensionality = length . NE.head
+      freeVars <- (mkFreeVars . dimensionality) oi :: Symbolic [ SBV Integer ]
+      case V.fromList freeVars of
+        V.VecBox freeVarVec ->
+          case V.proveEqSize (NE.head oi) freeVarVec of
+            Just V.ReflEq -> return $ compile oi freeVarVec .== compile oi' freeVarVec
+            Nothing -> fail "Impossible: Length free variables doesn't match that of the union parameter." :: Symbolic SBool
+    dimensionality = V.length . NE.head
 
 --------------------------------------------------------------------------------
 -- Injections for multiplicity and exactness
