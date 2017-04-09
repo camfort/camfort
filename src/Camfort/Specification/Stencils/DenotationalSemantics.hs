@@ -87,19 +87,13 @@ regionsToIntervals nOfDims (Spatial (Sum prods)) =
 
     convert :: RegionProd -> UnionNF n Interval
     convert (Product []) = error "Empty product"
-    convert (Product rs) = foldr1 (/\) . map (ensure . convert') $ rs
+    convert (Product rs) = foldr1 (/\) . map convert' $ rs
 
     convert' r = return $ proto nOfDims 0 $
       case r of
         Forward  dep dim p -> (dim-1, Interval 0 (toInteger dep) p)
         Backward dep dim p -> (dim-1, Interval (- toInteger dep) 0 p)
         Centered dep dim p -> (dim-1, Interval (- toInteger dep) (toInteger dep) p)
-
-    ensure :: UnionNF m Interval -> UnionNF n Interval
-    ensure u =
-      case NE.head u `V.hasSize` nOfDims of
-        Just V.ReflEq -> u
-        Nothing -> error "Impossible: nOfDims doesn't match vector size."
 
     proto :: forall n
            . V.Natural n -> Int -> (Int, Interval) -> V.Vec n Interval
