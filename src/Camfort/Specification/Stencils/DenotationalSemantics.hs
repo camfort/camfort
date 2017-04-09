@@ -62,15 +62,14 @@ regionsToIntervals nOfDims (Spatial (Sum prods))
       | null rs = Left "Empty region product"
       | otherwise = Right $ joins1 . map convert' $ rs
 
-    convert' r = return $ proto nOfDims 0 $
+    convert' r = return $ proto nOfDims $
       case r of
         Forward  dep dim p -> (dim-1, Interval 0 (toInteger dep) p)
         Backward dep dim p -> (dim-1, Interval (- toInteger dep) 0 p)
         Centered dep dim p -> (dim-1, Interval (- toInteger dep) (toInteger dep) p)
 
-    proto :: forall n
-           . V.Natural n -> Int -> (Int, Interval) -> V.Vec n Interval
-    proto V.Zero _ _ = V.Nil
-    proto (V.Succ n) c p@(i, interv) = V.Cons
-      (if c == i then interv else InfiniteInterval)
-      (proto n (c+1) p)
+    proto :: forall n . V.Natural n -> (Int, Interval) -> V.Vec n Interval
+    proto V.Zero _ = V.Nil
+    proto (V.Succ n) (i, interv) = V.Cons
+      (if i == 0 then interv else InfiniteInterval)
+      (proto n (i-1, interv))
