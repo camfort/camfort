@@ -51,14 +51,11 @@ intervalsToRegions as = do
     convert (Interval m n p, ix) = return $ Centered (fromInteger n) ix p
     convert _ = Left "Infinite interval cannot be realised as a region."
 
-regionsToIntervals :: forall n . V.IsNatural n
-                   => V.Natural n -> Spatial -> UnionNF n Interval
+regionsToIntervals :: forall n . V.Natural n -> Spatial -> UnionNF n Interval
 regionsToIntervals nOfDims (Spatial (Sum prods))
     | null prods = error "Empty region sum"
     | otherwise = foldr1 (SG.<>) . map convert $ prods
   where
-    nOfDims' = V.fromNat (Proxy :: Proxy n)
-
     convert :: RegionProd -> UnionNF n Interval
     convert (Product rs)
       | null rs = error "Empty region product"
