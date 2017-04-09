@@ -39,22 +39,16 @@ intervalsToRegions as = do
   where
     asymmetryElim :: V.Vec n Interval -> UnionNF n Interval
     asymmetryElim ints
-      | ints' <- V.toList ints
-      , Just ix <- findAsymmetry ints' =
-        case ints' !! ix of
+      | Just ix <- findAsymmetry ints =
+        case ints V.!! ix of
           Interval m n p ->
-            asymmetryElim (replace ix (Interval m 0 p) ints) SG.<>
-            asymmetryElim (replace ix (Interval 0 n p) ints)
+            asymmetryElim (V.replace ix (Interval m 0 p) ints) SG.<>
+            asymmetryElim (V.replace ix (Interval 0 n p) ints)
       | otherwise = return ints
     findAsymmetry =
-      findIndex $ \case
+      V.findIndex $ \case
         (Interval m n _) -> m /= 0 && n /= 0 && m /= -n
         _ -> False
-
-    replace :: Int -> a -> V.Vec n a -> V.Vec n a
-    replace 0 a (V.Cons x xs) = V.Cons a xs
-    replace n a (V.Cons x xs) = V.Cons x (replace (n-1) a xs)
-    replace _ _ V.Nil = error "Found asymmetry is beyond the limits."
 
     toProd :: V.Vec n Interval -> Either String RegionProd
     toProd ints = do

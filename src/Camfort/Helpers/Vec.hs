@@ -27,7 +27,7 @@
 
 module Camfort.Helpers.Vec where
 
-import Prelude hiding (length, zipWith, take, drop)
+import Prelude hiding (length, zipWith, take, drop, (!!))
 
 import Data.Proxy
 
@@ -95,6 +95,24 @@ zipWith f (Cons x xs) (Cons y ys) = Cons (f x y) (zipWith f xs ys)
 
 zip :: Vec n a -> Vec n b -> Vec n (a,b)
 zip = zipWith (,)
+
+findIndex :: (a -> Bool) -> Vec n a -> Maybe Int
+findIndex = go 0
+  where
+    go :: Int -> (a -> Bool) -> Vec n a -> Maybe Int
+    go _ _ Nil = Nothing
+    go acc p (Cons x xs)
+      | p x = Just acc
+      | otherwise = go (acc + 1) p xs
+
+(!!) :: Vec n a -> Int -> a
+Cons x v' !! 0 = x
+Cons _ v' !! n = v' !! (n - 1)
+
+replace :: Int -> a -> Vec n a -> Vec n a
+replace 0 a (Cons x xs) = Cons a xs
+replace n a (Cons x xs) = Cons x (replace (n-1) a xs)
+replace _ _ Nil = error "Found asymmetry is beyond the limits."
 
 -- Equality type
 data EqT a b where
