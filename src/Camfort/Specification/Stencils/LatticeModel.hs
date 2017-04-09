@@ -24,7 +24,6 @@ the specification checking and program synthesis features.
 
 {-# LANGUAGE DataKinds #-}
 {-# LANGUAGE ScopedTypeVariables #-}
-{-# LANGUAGE FunctionalDependencies #-}
 {-# LANGUAGE FlexibleInstances #-}
 {-# LANGUAGE FlexibleContexts #-}
 {-# LANGUAGE DeriveFunctor #-}
@@ -50,9 +49,12 @@ import           Data.SBV
 import qualified Camfort.Helpers.Vec as V
 
 -- Utility container
-class Container a b c | a -> b, b -> c where
-  member :: b -> a -> Bool
-  compile :: a -> (c -> SBool)
+class Container a where
+  type MemberTyp a
+  type CompTyp a
+
+  member :: MemberTyp a -> a -> Bool
+  compile :: a -> (CompTyp a -> SBool)
 
 --------------------------------------------------------------------------------
 -- Arbitrary sets representing offsets
@@ -63,7 +65,10 @@ data Offsets =
   | SetOfIntegers
   deriving Eq
 
-instance Container Offsets Integer SInteger where
+instance Container Offsets where
+  type MemberTyp Offsets = Integer
+  type CompTyp Offsets = SInteger
+
   member i (Offsets s) = i `S.member` s
   member _ _ = True
 
@@ -98,7 +103,10 @@ data Interval =
   | InfiniteInterval
   deriving Eq
 
-instance Container Interval Integer SInteger where
+instance Container Interval where
+  type MemberTyp Interval = Integer
+  type CompTyp Interval = SInteger
+
   member 0 (Interval _ _ b) = b
   member i (Interval a b _) = i >= a && i <= b
   member _ _ = True
@@ -137,8 +145,9 @@ instance BoundedLattice Interval
 
 type UnionNF n a = NE.NonEmpty (V.Vec n a)
 
-instance (Container a Integer SInteger)
-      => Container (UnionNF n a) (V.Vec n Integer) (V.Vec n SInteger) where
+instance Container a => Container (UnionNF n a) where
+  type MemberTyp (UnionNF n a) = V.Vec n (MemberTyp a)
+  type CompTyp (UnionNF n a) = V.Vec n (CompTyp a)
   member is = any (member' is)
     where
       member' is space = and $ V.zipWith member is space
@@ -156,8 +165,10 @@ instance BoundedLattice a => MeetSemiLattice (UnionNF n a) where
 
 instance BoundedLattice a => Lattice (UnionNF n a)
 
-ioCompare :: forall a b n . ( Container a Integer SInteger
-                            , Container b Integer SInteger )
+ioCompare :: forall a b n . ( Container a,            Container b
+                            , MemberTyp a ~ Integer,  MemberTyp b ~ Integer
+                            , CompTyp a ~ SInteger,   CompTyp b ~ SInteger
+                            )
           => UnionNF n a -> UnionNF n b -> IO Ordering
 ioCompare oi oi' = do
     thmRes <- prove pred
