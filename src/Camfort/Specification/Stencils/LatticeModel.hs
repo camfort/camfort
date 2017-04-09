@@ -61,18 +61,18 @@ class Container a where
 --------------------------------------------------------------------------------
 
 data Offsets =
-    Offsets (S.Set Integer)
+    Offsets (S.Set Int64)
   | SetOfIntegers
   deriving Eq
 
 instance Container Offsets where
-  type MemberTyp Offsets = Integer
-  type CompTyp Offsets = SInteger
+  type MemberTyp Offsets = Int64
+  type CompTyp Offsets = SInt64
 
   member i (Offsets s) = i `S.member` s
   member _ _ = True
 
-  compile (Offsets s) i = i `sElem` map fromInteger (S.toList s)
+  compile (Offsets s) i = i `sElem` map fromIntegral (S.toList s)
   compile SetOfIntegers _ = true
 
 instance JoinSemiLattice Offsets where
@@ -99,13 +99,13 @@ instance BoundedLattice Offsets
 --------------------------------------------------------------------------------
 
 data Interval =
-    Interval Integer Integer Bool
+    Interval Int64 Int64 Bool
   | InfiniteInterval
   deriving Eq
 
 instance Container Interval where
-  type MemberTyp Interval = Integer
-  type CompTyp Interval = SInteger
+  type MemberTyp Interval = Int64
+  type CompTyp Interval = SInt64
 
   member 0 (Interval _ _ b) = b
   member i (Interval a b _) = i >= a && i <= b
@@ -115,7 +115,7 @@ instance Container Interval where
     | b = inRange i range
     | otherwise = inRange i range &&& i ./= 0
     where
-      range = (fromInteger i1, fromInteger i2)
+      range = (fromIntegral i1, fromIntegral i2)
   compile InfiniteInterval _ = true
 
 instance JoinSemiLattice Interval where
@@ -165,9 +165,9 @@ instance BoundedLattice a => MeetSemiLattice (UnionNF n a) where
 
 instance BoundedLattice a => Lattice (UnionNF n a)
 
-ioCompare :: forall a b n . ( Container a,            Container b
-                            , MemberTyp a ~ Integer,  MemberTyp b ~ Integer
-                            , CompTyp a ~ SInteger,   CompTyp b ~ SInteger
+ioCompare :: forall a b n . ( Container a,          Container b
+                            , MemberTyp a ~ Int64,  MemberTyp b ~ Int64
+                            , CompTyp a ~ SInt64,   CompTyp b ~ SInt64
                             )
           => UnionNF n a -> UnionNF n b -> IO Ordering
 ioCompare oi oi' = do
@@ -192,7 +192,7 @@ ioCompare oi oi' = do
                         else error "Impossible: counter example is in neither of the oeprands"
       else return EQ
   where
-    counterExample :: ThmResult -> IO [ Integer ]
+    counterExample :: ThmResult -> IO [ Int64 ]
     counterExample thmRes =
       case getModel thmRes of
         Right (False, ce) -> return ce
@@ -201,7 +201,7 @@ ioCompare oi oi' = do
 
     pred :: Predicate
     pred = do
-      freeVars <- (mkFreeVars . dimensionality) oi :: Symbolic [ SBV Integer ]
+      freeVars <- (mkFreeVars . dimensionality) oi :: Symbolic [ SInt64 ]
       case V.fromList freeVars of
         V.VecBox freeVarVec ->
           case V.proveEqSize (NE.head oi) freeVarVec of

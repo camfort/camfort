@@ -42,9 +42,9 @@ intervalsToRegions as = do
     convert :: (Interval, Int) -> Either String Region
     convert (Interval 0 0 False, _) =
       Left "Empty set cannot be realised as a region."
-    convert (Interval 0 m p, ix) = return $ Forward (fromInteger m) ix p
-    convert (Interval m 0 p, ix) = return $ Backward (fromInteger $ -m) ix p
-    convert (Interval m n p, ix) = return $ Centered (fromInteger n) ix p
+    convert (Interval 0 m p, ix) = return $ Forward (fromIntegral m) ix p
+    convert (Interval m 0 p, ix) = return $ Backward (fromIntegral $ -m) ix p
+    convert (Interval m n p, ix) = return $ Centered (fromIntegral n) ix p
     convert _ = Left "Infinite interval cannot be realised as a region."
 
 regionsToIntervals :: forall n . V.Natural n -> Spatial -> Either String (UnionNF n Interval)
@@ -59,9 +59,9 @@ regionsToIntervals nOfDims (Spatial (Sum prods))
 
     convert' r = return $ proto nOfDims $
       case r of
-        Forward  dep dim p -> (dim-1, Interval 0 (toInteger dep) p)
-        Backward dep dim p -> (dim-1, Interval (- toInteger dep) 0 p)
-        Centered dep dim p -> (dim-1, Interval (- toInteger dep) (toInteger dep) p)
+        Forward  dep dim p -> (dim-1, Interval 0 (fromIntegral dep) p)
+        Backward dep dim p -> (dim-1, Interval (- fromIntegral dep) 0 p)
+        Centered dep dim p -> (dim-1, Interval (- fromIntegral dep) (fromIntegral dep) p)
 
     proto :: forall n . V.Natural n -> (Int, Interval) -> V.Vec n Interval
     proto V.Zero _ = V.Nil
