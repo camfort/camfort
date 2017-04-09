@@ -62,13 +62,8 @@ intervalsToRegions as = do
 
     toProd :: V.Vec n Interval -> Either String RegionProd
     toProd ints = do
-      prods <- mapM convert . collectIntervs . V.toList $ ints
+      prods <- mapM convert . (`zip` [0..]) . V.toList $ ints
       return $ Product prods
-
-    collectIntervs :: [ Interval ] -> [ (Interval, Int) ]
-    collectIntervs = collectIntervs' 0
-    collectIntervs' _ [] = []
-    collectIntervs' i (int@Interval{}:ints) = (int,i) : collectIntervs' (i+1) ints
 
     convert :: (Interval, Int) -> Either String Region
     convert (Interval 0 0 False, _) =
