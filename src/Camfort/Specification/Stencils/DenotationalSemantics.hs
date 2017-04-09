@@ -22,8 +22,6 @@ sanityCheck union = do
   when (any null union) $
     fail "Dimensionless interval list is observed."
   return ()
-  where
-    dimensionality = length . NE.head $ union
 
 -- preconditions:
 -- Intervals are
