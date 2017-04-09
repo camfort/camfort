@@ -1,6 +1,7 @@
 {-# LANGUAGE LambdaCase #-}
 {-# LANGUAGE TypeFamilies #-}
 {-# LANGUAGE ScopedTypeVariables #-}
+{-# LANGUAGE DataKinds #-}
 
 module Camfort.Specification.Stencils.DenotationalSemantics ( intervalsToRegions
                                                             , regionsToIntervals ) where
@@ -17,23 +18,14 @@ import qualified Camfort.Helpers.Vec as V
 import Camfort.Specification.Stencils.LatticeModel
 import Camfort.Specification.Stencils.Syntax
 
-sanityCheck :: UnionNF n Interval -> Either String ()
-sanityCheck union = do
-  when (any null union) $
-    fail "Dimensionless interval list is observed."
-  return ()
-
 -- preconditions:
--- Intervals are
--- 1. If finite all have lower bound <= 0 <= upper bound;
--- 2. No dimensionality of 0;
--- 3. All unioned interval lists are of equal length (insured by dependent
---    type).
-intervalsToRegions :: UnionNF n Interval -> Either String Spatial
+-- 1. If finite interval, all have "lower bound <= 0 <= upper bound";
+-- 2. No dimensionality of 0; (insured by dep. type);
+-- 3. All unioned interval lists are of equal length (insured by dep.  type).
+intervalsToRegions :: UnionNF (V.S n) Interval -> Either String Spatial
 intervalsToRegions as = do
-    sanityCheck as -- TODO: Delete if too much overhead!
     sums <- mapM toProd . NE.toList . CM.join . NE.map asymmetryElim $ as
-    return $ Spatial . Sum $ sums
+    return . Spatial . Sum $ sums
   where
     asymmetryElim :: V.Vec n Interval -> UnionNF n Interval
     asymmetryElim ints
