@@ -13,6 +13,7 @@ import qualified Data.List.NonEmpty as NE
 import Data.List
 import qualified Data.Semigroup as SG
 import Data.Proxy
+import qualified Data.Monoid as M
 
 import qualified Camfort.Helpers.Vec as V
 import Camfort.Specification.Stencils.LatticeModel
@@ -51,15 +52,15 @@ intervalsToRegions as = do
     convert (Interval m n p, ix) = return $ Centered (fromInteger n) ix p
     convert _ = Left "Infinite interval cannot be realised as a region."
 
-regionsToIntervals :: forall n . V.Natural n -> Spatial -> UnionNF n Interval
+regionsToIntervals :: forall n . V.Natural n -> Spatial -> Either String (UnionNF n Interval)
 regionsToIntervals nOfDims (Spatial (Sum prods))
-    | null prods = error "Empty region sum"
-    | otherwise = foldr1 (SG.<>) . map convert $ prods
+    | null prods = Left "Empty region sum"
+    | otherwise = SG.sconcat . fmap convert . NE.fromList $ prods
   where
-    convert :: RegionProd -> UnionNF n Interval
+    convert :: RegionProd -> Either String (UnionNF n Interval)
     convert (Product rs)
-      | null rs = error "Empty region product"
-      | otherwise = joins1 . map convert' $ rs
+      | null rs = Left "Empty region product"
+      | otherwise = Right $ joins1 . map convert' $ rs
 
     convert' r = return $ proto nOfDims 0 $
       case r of
