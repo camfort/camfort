@@ -119,6 +119,18 @@ data Interval a where
 
 deriving instance Eq (Interval a)
 
+data Elongated = Elongated (Interval Standard) | Original (Interval Standard)
+
+toHoledInterv :: Interval Arbitrary -> Elongated
+toHoledInterv (IntervArbitrary a b)
+  | a > b = error
+    "Interval condition violated: lower bound is bigger than the upper bound."
+  | a <=  0, b >=  0 = Original  $ IntervHoled a b True
+  | a <= -1, b == -1 = Original  $ IntervHoled a 0 False
+  | a ==  1, b >=  1 = Original  $ IntervHoled 0 b False
+  | a >   1, b >   1 = Elongated $ IntervHoled 0 b False
+  | a <  -1, b <  -1 = Elongated $ IntervHoled a 0 False
+
 instance Container (Interval Standard) where
   type MemberTyp (Interval Standard) = Int64
   type CompTyp (Interval Standard) = SInt64
