@@ -31,9 +31,12 @@ the specification checking and program synthesis features.
 {-# LANGUAGE DeriveFunctor #-}
 {-# LANGUAGE DeriveDataTypeable #-}
 {-# LANGUAGE StandaloneDeriving #-}
+{-# LANGUAGE LambdaCase #-}
 
 module Camfort.Specification.Stencils.LatticeModel ( Interval(..)
                                                    , Bound(..)
+                                                   , Elongated(..)
+                                                   , elongate
                                                    , Offsets(..)
                                                    , UnionNF(..)
                                                    , ioCompare
@@ -48,6 +51,7 @@ import qualified Control.Monad as CM
 
 import           Algebra.Lattice
 import           Data.Semigroup
+import           Data.List
 import qualified Data.List.NonEmpty as NE
 import qualified Data.Set as S
 import           Data.Foldable
@@ -119,15 +123,15 @@ data Interval a where
 
 deriving instance Eq (Interval a)
 
-data Elongated = Elongated (Interval Standard) | Original (Interval Standard)
+data Elongated a = Elongated a | Original a deriving Functor
 
-instance Peelable Elongated where
-  type CoreTyp Elongated = Interval Standard
+instance Peelable (Elongated a) where
+  type CoreTyp (Elongated a) = a
 
   peel (Elongated a) = a
   peel (Original a) = a
 
-toHoledInterv :: Interval Arbitrary -> Elongated
+toHoledInterv :: Interval Arbitrary -> Elongated (Interval Standard)
 toHoledInterv (IntervArbitrary a b)
   | a > b = error
     "Interval condition violated: lower bound is bigger than the upper bound."
@@ -139,6 +143,22 @@ toHoledInterv (IntervArbitrary a b)
   where
     a' = fromIntegral a
     b' = fromIntegral b
+
+elongate :: V.Vec n (Interval Arbitrary)
+         -> Elongated (V.Vec n (Interval Standard))
+elongate v =
+  flip fmap listStdIntervs $ \l' ->
+    case V.fromList l' of
+      V.VecBox v' ->
+        case V.proveEqSize v v' of
+          Just V.ReflEq -> v'
+  where
+    listStdIntervs =
+      case partition (\case {Original _ -> True; _ -> False}) listRep of
+        (orgs, []) -> Original (map peel orgs)
+        ([], elongs) -> Elongated (map peel elongs)
+        (orgs, elongs) -> Elongated (map peel (orgs ++ elongs))
+    listRep = map toHoledInterv . V.toList $ v
 
 instance Container (Interval Standard) where
   type MemberTyp (Interval Standard) = Int64

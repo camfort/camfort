@@ -23,6 +23,7 @@
 {-# LANGUAGE NoMonomorphismRestriction #-}
 {-# LANGUAGE ScopedTypeVariables #-}
 {-# LANGUAGE PolyKinds #-}
+{-# LANGUAGE LambdaCase #-}
 
 module Camfort.Specification.Stencils.InferenceBackend where
 
@@ -33,9 +34,11 @@ import Data.Data
 import Control.Arrow ((***))
 import Data.Function
 import Data.Maybe
+import Algebra.Lattice (joins1)
 
 import Camfort.Specification.Stencils.Model
 import Camfort.Specification.Stencils.LatticeModel
+import Camfort.Specification.Stencils.DenotationalSemantics
 import Camfort.Helpers
 import qualified Camfort.Helpers.Vec as V
 
@@ -47,6 +50,28 @@ import Camfort.Specification.Stencils.Syntax
 {- Spans are a pair of a lower and upper bound -}
 
 type Span a = (a, a)
+
+fromSpansApproxSpatial :: [ Span (V.Vec (V.S n) Int) ]
+                       -> Approximation (Either String Spatial)
+fromSpansApproxSpatial spans = fmap intervalsToRegions approxUnion
+  where
+    approxVecs = toApprox . map transposeVecInterval $ spans
+    approxUnion = fmap (joins1 . map return) approxVecs
+
+    toApprox :: [ V.Vec n (Interval Arbitrary) ]
+             -> Approximation [ V.Vec n (Interval Standard) ]
+    toApprox vs
+      | parts <- (elongatedPartitions . map elongate) vs = fmap (map peel) $
+          case parts of
+            (orgs, []) -> Exact orgs
+            ([], elongs) -> Bound Nothing (Just elongs)
+            (orgs, elongs) -> Bound (Just orgs) (Just $ orgs ++ elongs)
+
+    elongatedPartitions =
+      partition $ \case { Original _ -> True; Elongated _ -> False }
+
+    transposeVecInterval :: Span (V.Vec n Int) -> V.Vec n (Interval Arbitrary)
+    transposeVecInterval (us, vs) = V.zipWith IntervArbitrary us vs
 
 mkTrivialSpan :: V.Vec n Int -> Span (V.Vec n Int)
 mkTrivialSpan V.Nil = (V.Nil, V.Nil)
