@@ -23,14 +23,17 @@ the specification checking and program synthesis features.
 -}
 
 {-# LANGUAGE DataKinds #-}
+{-# LANGUAGE GADTs #-}
 {-# LANGUAGE ScopedTypeVariables #-}
 {-# LANGUAGE FlexibleInstances #-}
 {-# LANGUAGE FlexibleContexts #-}
 {-# LANGUAGE TypeFamilies #-}
 {-# LANGUAGE DeriveFunctor #-}
 {-# LANGUAGE DeriveDataTypeable #-}
+{-# LANGUAGE StandaloneDeriving #-}
 
 module Camfort.Specification.Stencils.LatticeModel ( Interval(..)
+                                                   , Bound(..)
                                                    , Offsets(..)
                                                    , UnionNF(..)
                                                    , ioCompare
@@ -104,46 +107,53 @@ instance BoundedLattice Offsets
 -- Interval as defined in the paper
 --------------------------------------------------------------------------------
 
-data Interval =
-    Interval Int64 Int64 Bool
-  | InfiniteInterval
-  deriving Eq
+data Bound = Arbitrary | Standard
 
-instance Container Interval where
-  type MemberTyp Interval = Int64
-  type CompTyp Interval = SInt64
+-- | Interval data structure assumes the following:
+-- 1. The first num. param. is less than the second;
+-- 2. For holed intervals, first num. param. <= 0 <= second num. param.;
+data Interval a where
+  IntervArbitrary :: Int64 -> Int64 -> Interval Arbitrary
+  IntervHoled     :: Int64 -> Int64 -> Bool -> Interval Standard
+  IntervInfinite  :: Interval Standard
 
-  member 0 (Interval _ _ b) = b
-  member i (Interval a b _) = i >= a && i <= b
+deriving instance Eq (Interval a)
+
+instance Container (Interval Standard) where
+  type MemberTyp (Interval Standard) = Int64
+  type CompTyp (Interval Standard) = SInt64
+
+  member 0 (IntervHoled _ _ b) = b
+  member i (IntervHoled a b _) = i >= a && i <= b
   member _ _ = True
 
-  compile (Interval i1 i2 b) i
+  compile (IntervHoled i1 i2 b) i
     | b = inRange i range
     | otherwise = inRange i range &&& i ./= 0
     where
       range = (fromIntegral i1, fromIntegral i2)
-  compile InfiniteInterval _ = true
+  compile IntervInfinite _ = true
 
-instance JoinSemiLattice Interval where
-  (Interval lb ub noHole) \/ (Interval lb' ub' noHole') =
-    Interval (min lb lb') (max ub ub') (noHole || noHole')
+instance JoinSemiLattice (Interval Standard) where
+  (IntervHoled lb ub noHole) \/ (IntervHoled lb' ub' noHole') =
+    IntervHoled (min lb lb') (max ub ub') (noHole || noHole')
   _ \/ _ = top
 
-instance MeetSemiLattice Interval where
-  (Interval lb ub noHole) /\ (Interval lb' ub' noHole') =
-    Interval (max lb lb') (min ub ub') (noHole && noHole')
-  int@Interval{} /\ _ = int
+instance MeetSemiLattice (Interval Standard) where
+  (IntervHoled lb ub noHole) /\ (IntervHoled lb' ub' noHole') =
+    IntervHoled (max lb lb') (min ub ub') (noHole && noHole')
+  int@IntervHoled{} /\ _ = int
   _ /\ int = int
 
-instance Lattice Interval
+instance Lattice (Interval Standard)
 
-instance BoundedJoinSemiLattice Interval where
-  bottom = Interval 0 0 False
+instance BoundedJoinSemiLattice (Interval Standard) where
+  bottom = IntervHoled 0 0 False
 
-instance BoundedMeetSemiLattice Interval where
-  top = InfiniteInterval
+instance BoundedMeetSemiLattice (Interval Standard) where
+  top = IntervInfinite
 
-instance BoundedLattice Interval
+instance BoundedLattice (Interval Standard)
 
 --------------------------------------------------------------------------------
 -- Union of cartesian products normal form

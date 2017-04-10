@@ -16,22 +16,22 @@ spec =
   describe "Model spec" $ do
     describe "ioCompare" $ do
       let reg1 =
-            return (V.Cons (Interval 0 2 False) (V.Cons (Interval 0 2 False) V.Nil))
+            return (V.Cons (IntervHoled 0 2 False) (V.Cons (IntervHoled 0 2 False) V.Nil))
             \/
-            return (V.Cons (Interval 0 1 True) (V.Cons (Interval 0 2 False) V.Nil))
-      let reg2 = return $ V.Cons (Interval 0 2 True) (V.Cons (Interval 0 2 False) V.Nil)
+            return (V.Cons (IntervHoled 0 1 True) (V.Cons (IntervHoled 0 2 False) V.Nil))
+      let reg2 = return $ V.Cons (IntervHoled 0 2 True) (V.Cons (IntervHoled 0 2 False) V.Nil)
       res <- runIO $ ioCompare reg1 reg2
 
       it "compares equal regions" $
         res `shouldBe` EQ
 
       let reg3 =
-            reg2 \/ return (V.Cons (Interval 0 3 False) (V.Cons (Interval 0 0 True) V.Nil))
+            reg2 \/ return (V.Cons (IntervHoled 0 3 False) (V.Cons (IntervHoled 0 0 True) V.Nil))
       res <- runIO $ ioCompare reg3 reg2
       it "compares greater regions" $
         res `shouldBe` GT
 
-      let reg4 = reg1 \/ return (V.Cons InfiniteInterval $ V.Cons InfiniteInterval V.Nil)
+      let reg4 = reg1 \/ return (V.Cons IntervInfinite $ V.Cons IntervInfinite V.Nil)
       res <- runIO $ ioCompare reg3 reg4
       it "compares smaller regions" $
         res `shouldBe` LT
