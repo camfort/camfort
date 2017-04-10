@@ -121,6 +121,12 @@ deriving instance Eq (Interval a)
 
 data Elongated = Elongated (Interval Standard) | Original (Interval Standard)
 
+instance Peelable Elongated where
+  type CoreTyp Elongated = Interval Standard
+
+  peel (Elongated a) = a
+  peel (Original a) = a
+
 toHoledInterv :: Interval Arbitrary -> Elongated
 toHoledInterv (IntervArbitrary a b)
   | a > b = error
@@ -262,12 +268,15 @@ upperBound (Bound _ Nothing) = error "Approximation doesn't have a upper bound."
 upperBound (Exact a) = a
 
 class Peelable a where
-  peel :: a b -> b
+  type CoreTyp a
+  peel :: a -> CoreTyp a
 
 data Multiplicity a = Mult a | Once a
   deriving (Eq, Show, Functor, Data, Typeable)
 
-instance Peelable Multiplicity where
+instance Peelable (Multiplicity a) where
+  type CoreTyp (Multiplicity a) = a
+
   peel (Mult a) = a
   peel (Once a) = a
 
