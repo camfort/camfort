@@ -113,7 +113,7 @@ data Bound = Arbitrary | Standard
 -- 1. The first num. param. is less than the second;
 -- 2. For holed intervals, first num. param. <= 0 <= second num. param.;
 data Interval a where
-  IntervArbitrary :: Int64 -> Int64 -> Interval Arbitrary
+  IntervArbitrary :: Int -> Int -> Interval Arbitrary
   IntervHoled     :: Int64 -> Int64 -> Bool -> Interval Standard
   IntervInfinite  :: Interval Standard
 
@@ -125,11 +125,14 @@ toHoledInterv :: Interval Arbitrary -> Elongated
 toHoledInterv (IntervArbitrary a b)
   | a > b = error
     "Interval condition violated: lower bound is bigger than the upper bound."
-  | a <=  0, b >=  0 = Original  $ IntervHoled a b True
-  | a <= -1, b == -1 = Original  $ IntervHoled a 0 False
-  | a ==  1, b >=  1 = Original  $ IntervHoled 0 b False
-  | a >   1, b >   1 = Elongated $ IntervHoled 0 b False
-  | a <  -1, b <  -1 = Elongated $ IntervHoled a 0 False
+  | a <=  0, b >=  0 = Original  $ IntervHoled a' b' True
+  | a <= -1, b == -1 = Original  $ IntervHoled a' 0  False
+  | a ==  1, b >=  1 = Original  $ IntervHoled 0  b' False
+  | a >   1, b >   1 = Elongated $ IntervHoled 0  b' False
+  | a <  -1, b <  -1 = Elongated $ IntervHoled a' 0  False
+  where
+    a' = fromIntegral a
+    b' = fromIntegral b
 
 instance Container (Interval Standard) where
   type MemberTyp (Interval Standard) = Int64
