@@ -38,7 +38,7 @@ module Camfort.Specification.Stencils.LatticeModel ( Interval(..)
                                                    , lowerBound, upperBound
                                                    , fromExact
                                                    , Multiplicity(..)
-                                                   , peel
+                                                   , Peelable(..)
                                                    ) where
 
 import qualified Control.Monad as CM
@@ -219,26 +219,39 @@ ioCompare oi oi' = do
 -- Injections for multiplicity and exactness
 --------------------------------------------------------------------------------
 
-data Approximation a =
-    Exact a
-  | Bound (Maybe a) (Maybe a)
+data Approximation a = Exact a | Bound (Maybe a) (Maybe a)
   deriving (Eq, Show, Functor, Data, Typeable)
 
 fromExact :: Approximation a -> a
 fromExact (Exact a) = a
-fromExact _ = error "Not exact."
+fromExact _ = error "Can't retrieve from bounded as if it was exact."
 
+lowerBound :: Approximation a -> a
 lowerBound (Bound (Just a) _) = a
-lowerBound _ = error "No lower bound."
+lowerBound (Bound Nothing _) = error "Approximation doesn't have a lower bound."
+lowerBound (Exact a) = a
 
+upperBound :: Approximation a -> a
 upperBound (Bound _ (Just a)) = a
-upperBound _ = error "No upper bound."
+upperBound (Bound _ Nothing) = error "Approximation doesn't have a upper bound."
+upperBound (Exact a) = a
 
-data Multiplicity a =
-    Mult a
-  | Once a
+class Peelable a where
+  peel :: a b -> b
+
+data Multiplicity a = Mult a | Once a
   deriving (Eq, Show, Functor, Data, Typeable)
 
-peel :: Multiplicity a -> a
-peel (Mult a) = a
-peel (Once a) = a
+instance Peelable Multiplicity where
+  peel (Mult a) = a
+  peel (Once a) = a
+
+{-
+data Approximation a = Exact a | Lower a | Upper a
+  deriving (Eq, Show, Functor, Data, Typeable)
+
+instance Peelable Approximation where
+  peel (Exact a) = a
+  peel (Lower a) = a
+  peel (Upper a) = a
+-}
