@@ -214,9 +214,7 @@ spec =
         indicesToSpec' ["i", "j"]
                         [Neighbour "i" 0]
                         [[offsetToIx "i" 0], [offsetToIx "i" absoluteRep]]
-         `shouldBe` (Just $ Specification $ Once $ Exact
-                       (Spatial
-                         (Sum [Product [Centered 0 1 True]])))
+         `shouldBe` Nothing
 
       it "inconsistent (1) RHS" $
         indicesToSpec' ["i", "j"]
