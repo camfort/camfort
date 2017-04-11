@@ -98,7 +98,14 @@ inferFromIndicesWithoutLinearity (VL ixs) =
     Specification . Mult . inferCore $ ixs
 
 inferCore :: [V.Vec n Int] -> Approximation Spatial
-inferCore = simplify . fromRegionsToSpec . inferMinimalVectorRegions
+-- inferCore = simplify . fromRegionsToSpec . inferMinimalVectorRegions
+inferCore subs =
+    case V.proveNonEmpty . head $ subs of
+      Just (V.ExistsEqT V.ReflEq) ->
+        case fmap simplify . spansToApproxSpatial . inferMinimalVectorRegions $ subs of
+          Right a -> a
+          Left msg -> error msg
+      Nothing -> error "Input vectors are empty!"
 
 simplify :: Approximation Spatial -> Approximation Spatial
 simplify = fmap simplifySpatial

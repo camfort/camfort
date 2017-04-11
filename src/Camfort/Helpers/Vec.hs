@@ -118,6 +118,9 @@ replace _ _ Nil = error "Found asymmetry is beyond the limits."
 data EqT a b where
   ReflEq :: EqT a a
 
+data ExistsEqT t n where
+     ExistsEqT :: EqT (t m) n -> ExistsEqT t n
+
 -- Lists existentially quanitify over a vector's size : Exists n . Vec n a
 data VecBox a where
      VecBox :: Vec n a -> VecBox a
@@ -144,6 +147,12 @@ proveEqSize (Cons _ xs) (Cons _ ys) = do
   ReflEq <- proveEqSize xs ys
   return ReflEq
 proveEqSize _ _ = Nothing
+
+proveNonEmpty :: Vec n a -> Maybe (ExistsEqT S n)
+proveNonEmpty v =
+  case v of
+    Nil -> Nothing
+    (Cons x xs) -> Just $ ExistsEqT ReflEq
 
 hasSize :: Vec m a -> Natural n -> Maybe (EqT m n)
 hasSize Nil Zero = return ReflEq
