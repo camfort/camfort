@@ -51,9 +51,9 @@ import Camfort.Specification.Stencils.Syntax
 
 type Span a = (a, a)
 
-fromSpansApproxSpatial :: [ Span (V.Vec (V.S n) Int) ]
-                       -> Approximation (Either String Spatial)
-fromSpansApproxSpatial spans = fmap intervalsToRegions approxUnion
+spansToApproxSpatial :: [ Span (V.Vec (V.S n) Int) ]
+                       -> Either String (Approximation Spatial)
+spansToApproxSpatial spans = sequence . fmap intervalsToRegions $ approxUnion
   where
     approxVecs = toApprox . map transposeVecInterval $ spans
     approxUnion = fmap (joins1 . map return) approxVecs

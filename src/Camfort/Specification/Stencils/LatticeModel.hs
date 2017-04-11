@@ -29,6 +29,8 @@ the specification checking and program synthesis features.
 {-# LANGUAGE FlexibleContexts #-}
 {-# LANGUAGE TypeFamilies #-}
 {-# LANGUAGE DeriveFunctor #-}
+{-# LANGUAGE DeriveFoldable #-}
+{-# LANGUAGE DeriveTraversable #-}
 {-# LANGUAGE DeriveDataTypeable #-}
 {-# LANGUAGE StandaloneDeriving #-}
 {-# LANGUAGE LambdaCase #-}
@@ -55,6 +57,7 @@ import           Data.List
 import qualified Data.List.NonEmpty as NE
 import qualified Data.Set as S
 import           Data.Foldable
+import           Data.Traversable
 import           Data.SBV
 import           Data.Data
 import           Data.Typeable
@@ -271,7 +274,7 @@ ioCompare oi oi' = do
 --------------------------------------------------------------------------------
 
 data Approximation a = Exact a | Bound (Maybe a) (Maybe a)
-  deriving (Eq, Show, Functor, Data, Typeable)
+  deriving (Eq, Show, Functor, Foldable, Traversable, Data, Typeable)
 
 fromExact :: Approximation a -> a
 fromExact (Exact a) = a
