@@ -34,6 +34,7 @@ the specification checking and program synthesis features.
 {-# LANGUAGE DeriveDataTypeable #-}
 {-# LANGUAGE StandaloneDeriving #-}
 {-# LANGUAGE LambdaCase #-}
+{-# LANGUAGE MultiWayIf #-}
 
 module Camfort.Specification.Stencils.LatticeModel ( Interval(..)
                                                    , Bound(..)
@@ -239,17 +240,17 @@ ioCompare oi oi' = do
           V.VecBox cev ->
             case V.proveEqSize (NE.head oi) cev of
               Just V.ReflEq ->
-                -- TODO: The bit below is defensive programming the second member
-                -- check should not be necessary unless the counter example is
-                -- bogus (it shouldn't be). Delete if it adversely effects the
-                -- performance.
-                return $
-                  if cev `member` oi
-                    then GT
-                    else
-                      if cev `member` oi'
-                        then LT
-                        else error "Impossible: counter example is in neither of the oeprands"
+                -- TODO: The second branch is defensive programming the
+                -- member check is not necessary unless the counter example
+                -- is bogus (it shouldn't be). Delete if it adversely
+                -- effects the performance.
+                if | cev `member` oi  -> return GT
+                   | cev `member` oi' -> return LT
+                   | otherwise -> fail
+                     "Impossible: counter example is in neither of the operands"
+              Nothing -> fail $
+                "Impossible: Counter example size doesn't match the original" ++
+                " vector size."
       else return EQ
   where
     counterExample :: ThmResult -> IO [ Int64 ]
@@ -265,8 +266,11 @@ ioCompare oi oi' = do
       case V.fromList freeVars of
         V.VecBox freeVarVec ->
           case V.proveEqSize (NE.head oi) freeVarVec of
-            Just V.ReflEq -> return $ compile oi freeVarVec .== compile oi' freeVarVec
-            Nothing -> fail "Impossible: Length free variables doesn't match that of the union parameter." :: Symbolic SBool
+            Just V.ReflEq -> return $
+              compile oi freeVarVec .== compile oi' freeVarVec
+            Nothing -> fail $
+              "Impossible: Free variables size doesn't match that of the " ++
+              "union parameter."
     dimensionality = V.length . NE.head
 
 --------------------------------------------------------------------------------
