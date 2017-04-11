@@ -38,7 +38,14 @@ intervalsToRegions as = do
         _ -> False
 
     toProd :: V.Vec n (Interval Standard) -> Either String RegionProd
-    toProd ints = Product <$> (mapM convert . (`zip` [0..]) . V.toList $ ints)
+    toProd ints =
+      fmap Product $ mapM convert
+                   . filter (isNonInf . fst)
+                   $ zip (V.toList ints) [0..]
+
+    isNonInf :: Interval Standard -> Bool
+    isNonInf IntervInfinite = False
+    isNonInf _ = True
 
     convert :: (Interval Standard, Int) -> Either String Region
     convert (IntervHoled 0 0 False, _) =
