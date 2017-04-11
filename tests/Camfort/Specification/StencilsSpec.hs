@@ -369,9 +369,9 @@ variations =
     )
    -- Stencil which is non-contiguous in one direction
   , ( [ [0, 4], [1, 4] ]
-    , Once $ Bound (Just (Spatial (Sum [ Product [ Forward 1 1 True ] ])))
-                     (Just (Spatial (Sum [ Product [ Forward 1 1 True
-                                                   , Forward 4 2 True ] ])))
+    , Once $ Bound Nothing
+                   (Just (Spatial (Sum [ Product [ Forward 1 1 True
+                                                 , Forward 4 2 False ] ])))
     )
   ]
 
@@ -397,9 +397,9 @@ variationsRel =
     , Once $ Exact $ Spatial (Sum [Product [Centered 0 1 True, Centered 1 2 True]])
     )
   , (Neighbour "i" 1, Neighbour "j" 0, [ [-2,0], [-1,0] ]
-    , Once $ Bound (Just (Spatial (Sum [Product [ Centered 0 2 True ]])))
-                     (Just (Spatial (Sum [Product [ Backward 3 1 True
-                                                  , Centered 0 2 True ]]))))
+    , Once $ Bound Nothing
+                   (Just (Spatial (Sum [Product [ Backward 3 1 False
+                                                , Centered 0 2 True ]]))))
 
   , (Constant (F.ValInteger "0"), Neighbour "j" 0, [ [absoluteRep,1], [absoluteRep,0], [absoluteRep,-1] ]
     , Once $ Exact $ Spatial (Sum [Product [Centered 1 2 True]])
