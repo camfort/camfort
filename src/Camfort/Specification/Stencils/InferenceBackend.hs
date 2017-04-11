@@ -62,14 +62,15 @@ spansToApproxSpatial spans = sequence . fmap intervalsToRegions $ approxUnion
     toApprox :: [ V.Vec n (Interval Arbitrary) ]
              -> Approximation [ V.Vec n (Interval Standard) ]
     toApprox vs
-      | parts <- (elongatedPartitions . map elongate) vs = fmap (map peel) $
+      | parts <- (elongatedPartitions . map approxVec) vs =
           case parts of
-            (orgs, []) -> Exact orgs
-            ([], elongs) -> Bound Nothing (Just elongs)
-            (orgs, elongs) -> Bound (Just orgs) (Just $ orgs ++ elongs)
+            (orgs, []) -> Exact . map fromExact $ orgs
+            ([], elongs) -> Bound Nothing (Just $ map upperBound elongs)
+            (orgs, elongs) -> Bound (Just . map upperBound $ orgs)
+                                    (Just . map upperBound $ orgs ++ elongs)
 
     elongatedPartitions =
-      partition $ \case { Original _ -> True; Elongated _ -> False }
+      partition $ \case { Exact{} -> True; Bound{} -> False }
 
     -- TODO: DELETE AS SOON AS POSSIBLE
     absRepToInf :: Interval Arbitrary -> Interval Arbitrary

@@ -33,13 +33,11 @@ the specification checking and program synthesis features.
 {-# LANGUAGE DeriveTraversable #-}
 {-# LANGUAGE DeriveDataTypeable #-}
 {-# LANGUAGE StandaloneDeriving #-}
-{-# LANGUAGE LambdaCase #-}
 {-# LANGUAGE MultiWayIf #-}
 
 module Camfort.Specification.Stencils.LatticeModel ( Interval(..)
                                                    , Bound(..)
-                                                   , Elongated(..)
-                                                   , elongate
+                                                   , approxVec
                                                    , Offsets(..)
                                                    , UnionNF(..)
                                                    , ioCompare
@@ -128,43 +126,45 @@ data Interval a where
 
 deriving instance Eq (Interval a)
 
-data Elongated a = Elongated a | Original a deriving Functor
-
-instance Peelable (Elongated a) where
-  type CoreTyp (Elongated a) = a
-
-  peel (Elongated a) = a
-  peel (Original a) = a
-
-toHoledInterv :: Interval Arbitrary -> Elongated (Interval Standard)
-toHoledInterv (IntervArbitrary a b)
+approxInterv :: Interval Arbitrary -> Approximation (Interval Standard)
+approxInterv (IntervArbitrary a b)
   | a > b = error
     "Interval condition violated: lower bound is bigger than the upper bound."
-  | a <=  0, b >=  0 = Original  $ IntervHoled a' b' True
-  | a <= -1, b == -1 = Original  $ IntervHoled a' 0  False
-  | a ==  1, b >=  1 = Original  $ IntervHoled 0  b' False
-  | a >   1, b >   1 = Elongated $ IntervHoled 0  b' False
-  | a <  -1, b <  -1 = Elongated $ IntervHoled a' 0  False
+  | a <=  0, b >=  0 = Exact  $ IntervHoled a' b' True
+  | a <= -1, b == -1 = Exact  $ IntervHoled a' 0  False
+  | a ==  1, b >=  1 = Exact  $ IntervHoled 0  b' False
+  | a >   1, b >   1 = Bound Nothing $ Just $ IntervHoled 0  b' False
+  | a <  -1, b <  -1 = Bound Nothing $ Just $ IntervHoled a' 0  False
   where
     a' = fromIntegral a
     b' = fromIntegral b
-toHoledInterv IntervInfiniteArbitrary = Original IntervInfinite
+approxInterv IntervInfiniteArbitrary = Exact IntervInfinite
 
-elongate :: V.Vec n (Interval Arbitrary)
-         -> Elongated (V.Vec n (Interval Standard))
-elongate v =
-  flip fmap listStdIntervs $ \l' ->
-    case V.fromList l' of
-      V.VecBox v' ->
-        case V.proveEqSize v v' of
-          Just V.ReflEq -> v'
+approxVec :: forall n .
+             V.Vec n (Interval Arbitrary)
+          -> Approximation (V.Vec n (Interval Standard))
+approxVec v =
+  case findApproxIntervs stdVec of
+    ([],_) -> Exact . fmap fromExact $ stdVec
+    _      -> Bound Nothing (Just $ upperBound <$> stdVec)
   where
-    listStdIntervs =
-      case partition (\case {Original _ -> True; _ -> False}) listRep of
-        (orgs, []) -> Original (map peel orgs)
-        ([], elongs) -> Elongated (map peel elongs)
-        (orgs, elongs) -> Elongated (map peel (orgs ++ elongs))
-    listRep = map toHoledInterv . V.toList $ v
+    stdVec :: V.Vec n (Approximation (Interval Standard))
+    stdVec = fmap approxInterv v
+
+    findApproxIntervs :: forall n . V.Vec n (Approximation (Interval Standard))
+                      -> ([ Int ], [ Int ])
+    findApproxIntervs v = findApproxIntervs' 0 v ([],[])
+
+    findApproxIntervs' :: forall n . Int
+                       -> V.Vec n (Approximation (Interval Standard))
+                       -> ([ Int ], [ Int ])
+                       -> ([ Int ], [ Int ])
+    findApproxIntervs' _ V.Nil acc = acc
+    findApproxIntervs' i (V.Cons x xs) (bixs, eixs) =
+      findApproxIntervs' (i+1) xs $
+        case x of
+          Bound{} -> (i:bixs, eixs)
+          Exact{} -> (bixs, i:eixs)
 
 instance Container (Interval Standard) where
   type MemberTyp (Interval Standard) = Int64
