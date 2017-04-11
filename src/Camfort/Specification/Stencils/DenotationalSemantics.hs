@@ -43,6 +43,7 @@ intervalsToRegions as = do
     convert :: (Interval Standard, Int) -> Either String Region
     convert (IntervHoled 0 0 False, _) =
       Left "Empty set cannot be realised as a region."
+    convert (IntervHoled 0 0 True, ix) = return $ Centered 0 (ix + 1) True
     convert (IntervHoled 0 m p, ix) = return $ Forward (fromIntegral m) (ix + 1) p
     convert (IntervHoled m 0 p, ix) = return $ Backward (fromIntegral $ -m) (ix + 1) p
     convert (IntervHoled m n p, ix) = return $ Centered (fromIntegral n) (ix + 1) p

@@ -55,7 +55,8 @@ spansToApproxSpatial :: [ Span (V.Vec (V.S n) Int) ]
                        -> Either String (Approximation Spatial)
 spansToApproxSpatial spans = sequence . fmap intervalsToRegions $ approxUnion
   where
-    approxVecs = toApprox . map transposeVecInterval $ spans
+    approxVecs =
+      toApprox . map (fmap absRepToInf . transposeVecInterval) $ spans
     approxUnion = fmap (joins1 . map return) approxVecs
 
     toApprox :: [ V.Vec n (Interval Arbitrary) ]
@@ -69,6 +70,13 @@ spansToApproxSpatial spans = sequence . fmap intervalsToRegions $ approxUnion
 
     elongatedPartitions =
       partition $ \case { Original _ -> True; Elongated _ -> False }
+
+    -- TODO: DELETE AS SOON AS POSSIBLE
+    absRepToInf :: Interval Arbitrary -> Interval Arbitrary
+    absRepToInf interv@(IntervArbitrary a b)
+      | fromIntegral a == absoluteRep = IntervInfiniteArbitrary
+      | fromIntegral b == absoluteRep = IntervInfiniteArbitrary
+      | otherwise = interv
 
     transposeVecInterval :: Span (V.Vec n Int) -> V.Vec n (Interval Arbitrary)
     transposeVecInterval (us, vs) = V.zipWith IntervArbitrary us vs

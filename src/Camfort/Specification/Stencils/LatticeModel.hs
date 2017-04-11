@@ -122,6 +122,7 @@ data Bound = Arbitrary | Standard
 -- 2. For holed intervals, first num. param. <= 0 <= second num. param.;
 data Interval a where
   IntervArbitrary :: Int -> Int -> Interval Arbitrary
+  IntervInfiniteArbitrary :: Interval Arbitrary
   IntervHoled     :: Int64 -> Int64 -> Bool -> Interval Standard
   IntervInfinite  :: Interval Standard
 
@@ -147,6 +148,7 @@ toHoledInterv (IntervArbitrary a b)
   where
     a' = fromIntegral a
     b' = fromIntegral b
+toHoledInterv IntervInfiniteArbitrary = Original IntervInfinite
 
 elongate :: V.Vec n (Interval Arbitrary)
          -> Elongated (V.Vec n (Interval Standard))
