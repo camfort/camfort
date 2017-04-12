@@ -16,32 +16,19 @@
 
 {-# LANGUAGE DataKinds #-}
 {-# LANGUAGE GADTs #-}
-{-# LANGUAGE TypeFamilies #-}
-{-# LANGUAGE FlexibleInstances #-}
-{-# LANGUAGE FlexibleContexts #-}
-{-# LANGUAGE NoMonomorphismRestriction #-}
-{-# LANGUAGE ScopedTypeVariables #-}
-{-# LANGUAGE PolyKinds #-}
 {-# LANGUAGE LambdaCase #-}
 
 module Camfort.Specification.Stencils.InferenceBackend where
 
-import Prelude
-import Data.Generics.Uniplate.Operations
 import Data.List
-import Data.Data
-import Control.Arrow ((***))
-import Data.Function
 import Data.Maybe
 import Algebra.Lattice (joins1)
 
-import Camfort.Specification.Stencils.Model
 import Camfort.Specification.Stencils.LatticeModel
 import Camfort.Specification.Stencils.DenotationalSemantics
 import Camfort.Helpers
 import qualified Camfort.Helpers.Vec as V
 
-import Debug.Trace
 import Unsafe.Coerce
 
 import Camfort.Specification.Stencils.Syntax
