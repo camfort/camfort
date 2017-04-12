@@ -40,6 +40,7 @@ module Camfort.Specification.Stencils.LatticeModel ( Interval(..)
                                                    , approxVec
                                                    , Offsets(..)
                                                    , UnionNF(..)
+                                                   , vecLength
                                                    , ioCompare
                                                    , Approximation(..)
                                                    , lowerBound, upperBound
