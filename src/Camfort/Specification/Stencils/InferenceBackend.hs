@@ -139,54 +139,6 @@ reducor xs f size = reducor' (permutations xs)
             else reducor' ys
         where y' = f y
 
-fromRegionsToSpec :: [Span (V.Vec n Int)] -> Approximation Spatial
-fromRegionsToSpec = foldr (\x y -> sum (toSpecND x) y) zero
-
--- toSpecND converts an n-dimensional region into an exact
--- spatial specification or a bound of spatial specifications
-toSpecND :: Span (V.Vec n Int) -> Approximation Spatial
-toSpecND = toSpecPerDim 1
-  where
-   -- convert the region one dimension at a time.
-   toSpecPerDim :: Int -> Span (V.Vec n Int) -> Approximation Spatial
-   toSpecPerDim d (V.Nil, V.Nil)             = one
-   toSpecPerDim d (V.Cons l ls, V.Cons u us) =
-     prod (toSpec1D d l u) (toSpecPerDim (d + 1) (ls, us))
-
--- toSpec1D takes a dimension identifier, a lower and upper bound of a region in
--- that dimension, and builds the simple directional spec.
-toSpec1D :: Dimension -> Int -> Int -> Approximation Spatial
-toSpec1D dim l u
-    | l == (-absoluteRep) || u == absoluteRep =
-        Exact $ Spatial (Sum [Product []])
-
-    | l == 0 && u == 0 =
-        Exact $ Spatial (Sum [Product [Centered 0 dim True]])
-
-    | l < 0 && u == 0 =
-        Exact $ Spatial (Sum [Product [Backward (abs l) dim True]])
-
-    | l < 0 && u == (-1) =
-        Exact $ Spatial (Sum [Product [Backward (abs l) dim False]])
-
-    | l == 0 && u > 0 =
-        Exact $ Spatial (Sum [Product [Forward u dim True]])
-
-    | l == 1 && u > 0 =
-        Exact $ Spatial (Sum [Product [Forward u dim False]])
-
-    | l < 0 && u > 0 && (abs l == u) =
-        Exact $ Spatial (Sum [Product [Centered u dim True]])
-
-    | l < 0 && u > 0 && (abs l /= u) =
-        Exact $ Spatial (Sum [Product [Backward (abs l) dim True],
-                              Product [Forward  u       dim True]])
-    -- Represents a non-contiguous region
-    | otherwise =
-        Bound Nothing $
-              Just $ Spatial (Sum [Product
-                       [if l > 0 then Forward u dim True else Backward (abs l) dim True]])
-
 {-| |inferMinimalVectorRegions| a key part of the algorithm, from a list of
     n-dimensional relative indices it infers a list of (possibly overlapping)
     1-dimensional spans (vectors) within the n-dimensional space.
