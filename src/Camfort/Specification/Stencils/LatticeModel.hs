@@ -208,6 +208,9 @@ instance BoundedLattice (Interval Standard)
 
 type UnionNF n a = NE.NonEmpty (V.Vec n a)
 
+vecLength :: UnionNF n a -> V.Natural n
+vecLength = V.lengthN . NE.head
+
 instance Container a => Container (UnionNF n a) where
   type MemberTyp (UnionNF n a) = V.Vec n (MemberTyp a)
   type CompTyp (UnionNF n a) = V.Vec n (CompTyp a)
@@ -301,7 +304,7 @@ class Peelable a where
   peel :: a -> CoreTyp a
 
 data Multiplicity a = Mult a | Once a
-  deriving (Eq, Show, Functor, Data, Typeable)
+  deriving (Eq, Show, Functor, Foldable, Traversable, Data, Typeable)
 
 instance Peelable (Multiplicity a) where
   type CoreTyp (Multiplicity a) = a

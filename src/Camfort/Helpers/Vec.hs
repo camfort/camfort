@@ -67,6 +67,10 @@ length :: Vec n a -> Int
 length Nil = 0
 length (Cons x xs) = 1 + length xs
 
+lengthN :: Vec n a -> Natural n
+lengthN Nil = Zero
+lengthN (Cons x xs) = Succ $ lengthN xs
+
 instance Functor (Vec n) where
   fmap f Nil         = Nil
   fmap f (Cons x xs) = Cons (f x) (fmap f xs)
