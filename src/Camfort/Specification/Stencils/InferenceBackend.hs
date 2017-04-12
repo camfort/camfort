@@ -90,6 +90,7 @@ mkTrivialSpan (V.Cons x xs) =
   where
     (ys, zs) = mkTrivialSpan xs
 
+-- TODO: This seems completely redundant. Perhaps DELETE.
 inferFromIndices :: VecList Int -> Specification
 inferFromIndices (VL ixs) = Specification $
     case fromBool mult of
