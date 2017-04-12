@@ -38,6 +38,7 @@ the specification checking and program synthesis features.
 module Camfort.Specification.Stencils.LatticeModel ( Interval(..)
                                                    , Bound(..)
                                                    , approxVec
+                                                   , Offsets(..)
                                                    , UnionNF(..)
                                                    , ioCompare
                                                    , Approximation(..)
@@ -69,6 +70,44 @@ class Container a where
 
   member :: MemberTyp a -> a -> Bool
   compile :: a -> (CompTyp a -> SBool)
+
+--------------------------------------------------------------------------------
+-- Arbitrary sets representing offsets
+--------------------------------------------------------------------------------
+
+data Offsets =
+    Offsets (S.Set Int64)
+  | SetOfIntegers
+  deriving Eq
+
+instance Container Offsets where
+  type MemberTyp Offsets = Int64
+  type CompTyp Offsets = SInt64
+
+  member i (Offsets s) = i `S.member` s
+  member _ _ = True
+
+  compile (Offsets s) i = i `sElem` map fromIntegral (S.toList s)
+  compile SetOfIntegers _ = true
+
+instance JoinSemiLattice Offsets where
+  (Offsets s) \/ (Offsets s') = Offsets $ s `S.union` s'
+  _ \/ _ = SetOfIntegers
+
+instance MeetSemiLattice Offsets where
+  (Offsets s) /\ (Offsets s') = Offsets $ s `S.intersection` s'
+  off@Offsets{} /\ _ = off
+  _ /\ o = o
+
+instance Lattice Offsets
+
+instance BoundedJoinSemiLattice Offsets where
+  bottom = Offsets S.empty
+
+instance BoundedMeetSemiLattice Offsets where
+  top = SetOfIntegers
+
+instance BoundedLattice Offsets
 
 --------------------------------------------------------------------------------
 -- Interval as defined in the paper
