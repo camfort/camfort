@@ -16,7 +16,6 @@
 
 {-# LANGUAGE DataKinds #-}
 {-# LANGUAGE GADTs #-}
-{-# LANGUAGE KindSignatures #-}
 {-# LANGUAGE TypeFamilies #-}
 {-# LANGUAGE FlexibleInstances #-}
 {-# LANGUAGE FlexibleContexts #-}
@@ -27,9 +26,9 @@
 
 module Camfort.Specification.Stencils.InferenceBackend where
 
-import Prelude hiding (sum)
+import Prelude
 import Data.Generics.Uniplate.Operations
-import Data.List hiding (sum)
+import Data.List
 import Data.Data
 import Control.Arrow ((***))
 import Data.Function
@@ -121,9 +120,9 @@ simplify = fmap simplifySpatial
 simplifySpatial :: Spatial -> Spatial
 simplifySpatial (Spatial (Sum ps)) = Spatial (Sum ps')
    where ps' = order (reducor ps normaliseNoSort size)
-         order = sort . (map (Product . sort . unProd))
+         order = sort . map (Product . sort . unProd)
          size :: [RegionProd] -> Int
-         size = foldr (+) 0 . map (length . unProd)
+         size = Prelude.sum . map (length . unProd)
 
 -- Given a list, a list->list transofmer, a size function
 -- find the minimal transformed list by applying the transformer
@@ -134,7 +133,7 @@ reducor xs f size = reducor' (permutations xs)
     where
       reducor' [y] = f y
       reducor' (y:ys) =
-          if (size y' < size y)
+          if size y' < size y
             then reducor' (permutations y')
             else reducor' ys
         where y' = f y
@@ -173,7 +172,7 @@ coalesce x y | x == y = Nothing
 -- Otherwise
 coalesce x@(V.Cons l1 ls1, V.Cons u1 us1) y@(V.Cons l2 ls2, V.Cons u2 us2)
   | l1 == l2 && u1 == u2
-    = case (coalesce (ls1, us1) (ls2, us2)) of
+    = case coalesce (ls1, us1) (ls2, us2) of
         Just (l, u) -> Just (V.Cons l1 l, V.Cons u1 u)
         Nothing     -> Nothing
   | (u1 + 1 == l2) && (us1 == us2) && (ls1 == ls2)
@@ -188,7 +187,7 @@ coalesce x@(V.Cons l1 ls1, V.Cons u1 us1) y@(V.Cons l2 ls2, V.Cons u2 us2)
 minimaliseRegions :: [Span (V.Vec n Int)] -> [Span (V.Vec n Int)]
 minimaliseRegions [] = []
 minimaliseRegions xss = nub . minimalise $ xss
-  where localMin x ys = (filter' x (\y -> containedWithin x y && (x /= y)) xss) ++ ys
+  where localMin x ys = filter' x (\y -> containedWithin x y && (x /= y)) xss ++ ys
         minimalise = foldr localMin []
         -- If nothing is caught by the filter, i.e. no overlaps then return
         -- the original regions r
