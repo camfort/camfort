@@ -14,8 +14,6 @@
    limitations under the License.
 -}
 
-{-# LANGUAGE FlexibleContexts #-}
-{-# LANGUAGE MultiParamTypeClasses #-}
 {-# LANGUAGE ImplicitParams #-}
 
 module Camfort.Specification.Stencils.CheckFrontend where
@@ -27,16 +25,12 @@ import Control.Monad.Writer.Strict hiding (Product)
 
 import Camfort.Specification.Stencils.CheckBackend
 import qualified Camfort.Specification.Stencils.Grammar as Gram
-import Camfort.Specification.Stencils.Annotation
 import Camfort.Specification.Stencils.Model
 import Camfort.Specification.Stencils.LatticeModel
 import Camfort.Specification.Stencils.InferenceFrontend hiding (LogLine)
-import Camfort.Specification.Stencils.InferenceBackend
-import Camfort.Specification.Stencils.Synthesis
 import Camfort.Specification.Stencils.Syntax
 import Camfort.Analysis.Annotations
 import Camfort.Analysis.CommentAnnotator
-import Camfort.Helpers
 
 import qualified Language.Fortran.AST as F
 import qualified Language.Fortran.Analysis as FA
@@ -47,7 +41,6 @@ import qualified Language.Fortran.Util.Position as FU
 
 import qualified Data.Map as M
 import Data.Maybe
-import Data.List
 
 -- Entry point
 stencilChecking :: FAR.NameMap -> F.ProgramFile (FA.Analysis A) -> [String]
