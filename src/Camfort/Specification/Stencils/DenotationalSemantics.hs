@@ -4,7 +4,7 @@
 {-# LANGUAGE DataKinds #-}
 
 module Camfort.Specification.Stencils.DenotationalSemantics ( intervalsToRegions
-                                                            , regionsToIntervHoleds ) where
+                                                            , regionsToIntervals ) where
 
 import Algebra.Lattice
 import qualified Data.List.NonEmpty as NE
@@ -56,11 +56,11 @@ intervalsToRegions as = do
     convert (IntervHoled m n p, ix) = return $ Centered (fromIntegral n) (ix + 1) p
     convert _ = Left "Infinite interval cannot be realised as a region."
 
-regionsToIntervHoleds :: forall n .
-                         V.Natural n
-                      -> Spatial
-                      -> Either String (UnionNF n (Interval Standard))
-regionsToIntervHoleds nOfDims (Spatial (Sum prods))
+regionsToIntervals :: forall n .
+                      V.Natural n
+                   -> Spatial
+                   -> Either String (UnionNF n (Interval Standard))
+regionsToIntervals nOfDims (Spatial (Sum prods))
     | null prods = Left "Empty region sum"
     | otherwise = SG.sconcat . fmap convert . NE.fromList $ prods
   where
