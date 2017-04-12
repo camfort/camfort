@@ -35,21 +35,3 @@ spec =
       res <- runIO $ ioCompare reg3 reg4
       it "compares smaller regions" $
         res `shouldBe` LT
-
-      let prod1 = return $ V.Cons (Offsets . S.fromList $ [2,3,5])
-                                  (V.Cons (Offsets . S.fromList $ [10, 15]) V.Nil)
-      let prod2 = return $ V.Cons (Offsets . S.fromList $ [2,3,4,5])
-                                  (V.Cons (Offsets . S.fromList $ [10, 12, 15]) V.Nil)
-      res <- runIO $ ioCompare prod1 prod2
-      it "compare equal offset products" $
-        res `shouldBe` LT
-
-      let prod3 = prod1 \/
-                  return (V.Cons (Offsets . S.fromList $ [ 4 ])
-                                 (V.Cons (Offsets . S.fromList $ [ 10, 12, 15 ]) V.Nil))
-                         \/
-                  return (V.Cons (Offsets . S.fromList $ [ 2, 3, 4, 5 ])
-                                 (V.Cons (Offsets . S.fromList $ [ 12 ]) V.Nil))
-      res <- runIO $ ioCompare prod3 prod2
-      it "compare equal offset products" $
-        res `shouldBe` EQ
