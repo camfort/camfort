@@ -107,7 +107,6 @@ inferFromIndicesWithoutLinearity (VL ixs) =
     Specification . Mult . inferCore $ ixs
 
 inferCore :: [V.Vec n Int] -> Approximation Spatial
--- inferCore = simplify . fromRegionsToSpec . inferMinimalVectorRegions
 inferCore subs =
     case V.proveNonEmpty . head $ subs of
       Just (V.ExistsEqT V.ReflEq) ->
