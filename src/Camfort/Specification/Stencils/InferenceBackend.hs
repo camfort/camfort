@@ -41,7 +41,7 @@ spansToApproxSpatial spans = sequence . fmap intervalsToRegions $ approxUnion
   where
     approxVecs =
       toApprox . map (fmap absRepToInf . transposeVecInterval) $ spans
-    approxUnion = fmap (joins1 . map return) approxVecs
+    approxUnion = fmap (optimise . joins1 . map return) approxVecs
 
     toApprox :: [ V.Vec n (Interval Arbitrary) ]
              -> Approximation [ V.Vec n (Interval Standard) ]

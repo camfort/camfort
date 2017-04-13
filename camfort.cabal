@@ -85,7 +85,8 @@ executable camfort
                         bytestring >= 0.10,
                         binary >= 0.8.3.0,
                         lattices >= 1.5,
-                        sbv >= 5.14
+                        sbv >= 5.14,
+                        partial-order >= 0.1.2
   default-language: Haskell2010
 
 library
@@ -146,7 +147,8 @@ library
                         fgl >= 5.5,
                         binary >= 0.8.3.0,
                         lattices >= 1.5,
-                        sbv >= 5.14
+                        sbv >= 5.14,
+                        partial-order >= 0.1.2
   default-language: Haskell2010
 
 test-suite spec
@@ -179,5 +181,6 @@ test-suite spec
                         binary >= 0.8.3.0,
                         lattices >= 1.5,
                         sbv >= 5.14,
+                        partial-order >= 0.1.2,
                         camfort
   default-language: Haskell2010

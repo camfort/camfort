@@ -41,6 +41,7 @@ module Camfort.Specification.Stencils.Model ( Interval(..)
                                             , UnionNF
                                             , vecLength
                                             , unfCompare
+                                            , optimise
                                             , Approximation(..)
                                             , lowerBound, upperBound
                                             , fromExact
@@ -57,6 +58,8 @@ import qualified Data.Set as S
 import           Data.Foldable
 import           Data.SBV
 import           Data.Data
+import           Data.List (groupBy)
+import qualified Data.PartialOrd as PO
 
 import qualified Camfort.Helpers.Vec as V
 import System.IO.Unsafe
@@ -77,6 +80,12 @@ data Offsets =
     Offsets (S.Set Int64)
   | SetOfIntegers
   deriving Eq
+
+instance Ord Offsets where
+    Offsets s `compare` Offsets s' = s `compare` s'
+    Offsets _ `compare` SetOfIntegers = LT
+    SetOfIntegers `compare` Offsets _ = GT
+    SetOfIntegers `compare` SetOfIntegers = EQ
 
 instance Container Offsets where
   type MemberTyp Offsets = Int64
@@ -281,6 +290,57 @@ unfCompare oi oi' = unsafePerformIO $ do
               "Impossible: Free variables size doesn't match that of the " ++
               "union parameter."
     dimensionality = V.length . NE.head
+
+--------------------------------------------------------------------------------
+-- Optimise unions
+--------------------------------------------------------------------------------
+
+instance PO.PartialOrd Offsets where
+  (Offsets s) <= (Offsets s') = s <= s'
+  SetOfIntegers <= Offsets{} = False
+  _ <= SetOfIntegers = True
+
+instance PO.PartialOrd (Interval Standard) where
+  (IntervHoled lb ub p) <= (IntervHoled lb' ub' p') =
+    lb >= lb' && ub <= ub' && (p' || not p)
+  IntervInfinite <= IntervHoled{} = False
+  _ <= IntervInfinite = True
+
+instance PO.PartialOrd a => PO.PartialOrd (V.Vec n a) where
+  v <= v' = and $ V.zipWith (PO.<=) v v'
+
+optimise :: UnionNF n (Interval Standard) -> UnionNF n (Interval Standard)
+optimise = maximas . fixedPointUnion
+  where
+    fixedPointUnion unf =
+      let unf' = unionLemma unf
+      in if unf' == unf then unf' else fixedPointUnion unf'
+
+maximas :: PO.PartialOrd a => UnionNF n a -> UnionNF n a
+maximas = NE.fromList . fmap (head . PO.maxima) . groupBy (PO.<=) . NE.toList
+
+-- | Union lemma says that if we have a product of intervals (as defined in
+-- the paper) and we union two that agrees in each dimension except one.
+-- The union is again a product of intervals that agrees with the original
+-- dimensions in all dimensions except the original differing one. At that
+-- point it is the union of intervals, which is itself still an interval.
+unionLemma :: UnionNF n (Interval Standard) -> UnionNF n (Interval Standard)
+unionLemma =
+  NE.fromList . map (foldr1 (V.zipWith (\/))) . NE.groupBy agreeButOne
+  where
+    -- This function returns true if two vectors agree at all points but one.
+    -- It also holds if two vectors are identical.
+    agreeButOne :: Eq a => V.Vec n a -> V.Vec n a -> Bool
+    agreeButOne = go False
+      where
+        go :: Eq a => Bool -> V.Vec n a -> V.Vec n a -> Bool
+        go _ V.Nil V.Nil = True
+        go False (V.Cons x xs) (V.Cons y ys)
+          | x == y = go False xs ys
+          | otherwise = go True xs ys
+        go True (V.Cons x xs) (V.Cons y ys)
+          | x == y = go True xs ys
+          | otherwise = False
 
 --------------------------------------------------------------------------------
 -- Injections for multiplicity and exactness
