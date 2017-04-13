@@ -13,7 +13,6 @@ import GHC.TypeLits
 import Control.Monad.Writer.Strict hiding (Sum, Product)
 import Data.List
 
-import Camfort.Functionality
 import Camfort.Helpers.Vec
 import Camfort.Input
 import Camfort.Specification.Stencils
@@ -22,14 +21,11 @@ import Camfort.Specification.Stencils.Model
 import Camfort.Specification.Stencils.InferenceBackend
 import Camfort.Specification.Stencils.InferenceFrontend
 import Camfort.Specification.Stencils.Syntax hiding (Spec)
-import Camfort.Analysis.Annotations
 import qualified Language.Fortran.AST as F
-import Language.Fortran.Util.Position
 import Language.Fortran.ParserMonad
 import Camfort.Reprint
 import Camfort.Output
 
-import Data.Map.Strict (toList)
 import qualified Data.IntMap as IM
 import qualified Data.Set as S
 import Data.Functor.Identity
@@ -39,7 +35,6 @@ import System.FilePath
 
 import Test.Hspec
 import Test.QuickCheck
-import Test.Hspec.QuickCheck
 
 spec :: Spec
 spec =
