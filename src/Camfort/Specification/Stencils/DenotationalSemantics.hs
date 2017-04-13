@@ -62,12 +62,13 @@ regionsToIntervals :: forall n .
                    -> Either String (UnionNF n (Interval Standard))
 regionsToIntervals nOfDims (Spatial (Sum prods))
     | null prods = Left "Empty region sum"
-    | otherwise = SG.sconcat . fmap convert . NE.fromList $ prods
+    | otherwise =
+      fmap SG.sconcat . sequence . fmap convert . NE.fromList $ prods
   where
     convert :: RegionProd -> Either String (UnionNF n (Interval Standard))
     convert (Product rs)
       | null rs = Left "Empty region product"
-      | otherwise = Right $ joins1 . map convert' $ rs
+      | otherwise = Right $ meets1 . map convert' $ rs
 
     convert' r = return $ proto nOfDims $
       case r of
