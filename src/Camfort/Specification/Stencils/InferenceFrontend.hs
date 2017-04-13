@@ -31,7 +31,7 @@ import Control.Monad.Writer.Strict hiding (Product)
 import Camfort.Analysis.CommentAnnotator
 
 import Camfort.Specification.Stencils.InferenceBackend
-import Camfort.Specification.Stencils.LatticeModel
+import Camfort.Specification.Stencils.Model
 import Camfort.Specification.Stencils.Syntax
 import Camfort.Specification.Stencils.Annotation
 import qualified Camfort.Specification.Stencils.Grammar as Gram

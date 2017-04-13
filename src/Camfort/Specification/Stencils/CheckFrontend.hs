@@ -29,7 +29,7 @@ import qualified Camfort.Helpers.Vec as V
 import Camfort.Specification.Stencils.CheckBackend
 import qualified Camfort.Specification.Stencils.Consistency as C
 import qualified Camfort.Specification.Stencils.Grammar as Gram
-import Camfort.Specification.Stencils.LatticeModel
+import Camfort.Specification.Stencils.Model
 import Camfort.Specification.Stencils.InferenceFrontend hiding (LogLine)
 import Camfort.Specification.Stencils.Syntax
 import Camfort.Analysis.Annotations

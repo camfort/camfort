@@ -23,12 +23,12 @@
 module Camfort.Specification.Stencils.Syntax where
 
 import Camfort.Helpers
-import Camfort.Specification.Stencils.LatticeModel ( Multiplicity(..)
-                                                   , peel
-                                                   , Approximation(..)
-                                                   , lowerBound, upperBound
-                                                   , fromExact
-                                                   )
+import Camfort.Specification.Stencils.Model ( Multiplicity(..)
+                                            , peel
+                                            , Approximation(..)
+                                            , lowerBound, upperBound
+                                            , fromExact
+                                            )
 
 import Prelude hiding (sum)
 

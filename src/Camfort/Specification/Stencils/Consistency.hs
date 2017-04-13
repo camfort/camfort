@@ -6,7 +6,7 @@ module Camfort.Specification.Stencils.Consistency ( consistent
 
 import qualified Camfort.Helpers.Vec as V
 import Camfort.Specification.Stencils.DenotationalSemantics
-import Camfort.Specification.Stencils.LatticeModel
+import Camfort.Specification.Stencils.Model
 import Camfort.Specification.Stencils.Syntax
 
 data ConsistencyResult =

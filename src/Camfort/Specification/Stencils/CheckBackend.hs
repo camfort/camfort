@@ -21,7 +21,7 @@
 module Camfort.Specification.Stencils.CheckBackend where
 
 import Camfort.Specification.Stencils.Syntax
-import Camfort.Specification.Stencils.LatticeModel
+import Camfort.Specification.Stencils.Model
 import qualified Camfort.Specification.Stencils.Grammar as SYN
 
 type ErrorMsg = String

@@ -2,7 +2,7 @@ module Camfort.Specification.Stencils.ConsistencySpec (spec) where
 
 import qualified Camfort.Helpers.Vec as V
 
-import Camfort.Specification.Stencils.LatticeModel
+import Camfort.Specification.Stencils.Model
 import Camfort.Specification.Stencils.Consistency
 import Camfort.Specification.Stencils.Syntax
 

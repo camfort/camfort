@@ -1,13 +1,13 @@
 {-# LANGUAGE DataKinds #-}
 
-module Camfort.Specification.Stencils.LatticeModelSpec (spec) where
+module Camfort.Specification.Stencils.ModelSpec (spec) where
 
 import Algebra.Lattice
 import qualified Data.Set as S
 import Data.List.NonEmpty
 import qualified Camfort.Helpers.Vec as V
 
-import Camfort.Specification.Stencils.LatticeModel
+import Camfort.Specification.Stencils.Model
 
 import Test.Hspec
 

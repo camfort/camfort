@@ -11,7 +11,7 @@ import qualified Data.List.NonEmpty as NE
 import qualified Data.Semigroup as SG
 
 import qualified Camfort.Helpers.Vec as V
-import Camfort.Specification.Stencils.LatticeModel
+import Camfort.Specification.Stencils.Model
 import Camfort.Specification.Stencils.Syntax
 
 -- preconditions:

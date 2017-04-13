@@ -35,19 +35,19 @@ the specification checking and program synthesis features.
 {-# LANGUAGE StandaloneDeriving #-}
 {-# LANGUAGE MultiWayIf #-}
 
-module Camfort.Specification.Stencils.LatticeModel ( Interval(..)
-                                                   , Bound(..)
-                                                   , approxVec
-                                                   , Offsets(..)
-                                                   , UnionNF(..)
-                                                   , vecLength
-                                                   , ioCompare
-                                                   , Approximation(..)
-                                                   , lowerBound, upperBound
-                                                   , fromExact
-                                                   , Multiplicity(..)
-                                                   , Peelable(..)
-                                                   ) where
+module Camfort.Specification.Stencils.Model ( Interval(..)
+                                            , Bound(..)
+                                            , approxVec
+                                            , Offsets(..)
+                                            , UnionNF(..)
+                                            , vecLength
+                                            , ioCompare
+                                            , Approximation(..)
+                                            , lowerBound, upperBound
+                                            , fromExact
+                                            , Multiplicity(..)
+                                            , Peelable(..)
+                                            ) where
 
 import qualified Control.Monad as CM
 
