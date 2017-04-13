@@ -110,15 +110,12 @@ updateRegionEnv ann =
 
 checkOffsetsAgainstSpec :: [(Variable, Multiplicity [[Int]])]
                         -> [(Variable, Specification)]
-                        -> IO Bool
-checkOffsetsAgainstSpec offsetMaps specMaps = do
-    res <- forM specToVecList $
+                        -> Bool
+checkOffsetsAgainstSpec offsetMaps specMaps =
+    flip all specToVecList $
       \case
-        (spec, Once (V.VL vs)) -> spec `C.consistent` (Once . toUNF) vs
-        (spec, Mult (V.VL vs)) -> spec `C.consistent` (Mult . toUNF) vs
-    return $ flip all res $ \case
-      C.Consistent -> True
-      _ -> False
+        (spec, Once (V.VL vs)) -> spec `C.consistent` (Once . toUNF) vs == C.Consistent
+        (spec, Mult (V.VL vs)) -> spec `C.consistent` (Mult . toUNF) vs == C.Consistent
   where
     toUNF :: [ V.Vec n Int64 ] -> UnionNF n Offsets
     toUNF = joins1 . map (return . fmap intToSubscript)
@@ -186,7 +183,7 @@ perBlockCheck b@(F.BlComment ann span _) = do
             let expandedDecls =
                   concatMap (\(vars,spec) -> map (flip (,) spec) vars) specDecls
             -- Model and compare the current and specified stencil specs
-            if unsafePerformIO $ checkOffsetsAgainstSpec multOffsets expandedDecls
+            if checkOffsetsAgainstSpec multOffsets expandedDecls
               then tell [ (span, "Correct.") ]
               else do
                 let correctNames2 =  map (first (map realName))

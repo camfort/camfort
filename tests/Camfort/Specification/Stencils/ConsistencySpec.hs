@@ -33,6 +33,5 @@ spec =
           return (V.Cons (Offsets . S.fromList $ [0])
                          (V.Cons (Offsets . S.fromList $ [1]) V.Nil))
     let fivePointIndices = Once offFivePoint
-    res <- runIO $ fivePointSpec `consistent` fivePointIndices
     it "finds read once five point stencil consistent with its indices" $
-      res `shouldBe` Consistent
+      fivePointSpec `consistent` fivePointIndices `shouldBe` Consistent

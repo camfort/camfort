@@ -40,7 +40,7 @@ module Camfort.Specification.Stencils.Model ( Interval(..)
                                             , Offsets(..)
                                             , UnionNF(..)
                                             , vecLength
-                                            , ioCompare
+                                            , unfCompare
                                             , Approximation(..)
                                             , lowerBound, upperBound
                                             , fromExact
@@ -62,6 +62,7 @@ import           Data.Data
 import           Data.Typeable
 
 import qualified Camfort.Helpers.Vec as V
+import System.IO.Unsafe
 
 -- Utility container
 class Container a where
@@ -236,12 +237,12 @@ instance BoundedLattice a => MeetSemiLattice (UnionNF n a) where
 
 instance BoundedLattice a => Lattice (UnionNF n a)
 
-ioCompare :: forall a b n . ( Container a,          Container b
-                            , MemberTyp a ~ Int64,  MemberTyp b ~ Int64
-                            , CompTyp a ~ SInt64,   CompTyp b ~ SInt64
-                            )
-          => UnionNF n a -> UnionNF n b -> IO Ordering
-ioCompare oi oi' = do
+unfCompare :: forall a b n . ( Container a,          Container b
+                             , MemberTyp a ~ Int64,  MemberTyp b ~ Int64
+                             , CompTyp a ~ SInt64,   CompTyp b ~ SInt64
+                             )
+           => UnionNF n a -> UnionNF n b -> Ordering
+unfCompare oi oi' = unsafePerformIO $ do
     thmRes <- prove pred
     if modelExists thmRes
       then do
