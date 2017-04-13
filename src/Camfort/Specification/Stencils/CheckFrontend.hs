@@ -112,30 +112,37 @@ checkOffsetsAgainstSpec :: [(Variable, Multiplicity [[Int]])]
                         -> [(Variable, Specification)]
                         -> IO Bool
 checkOffsetsAgainstSpec offsetMaps specMaps = do
-    res <- flip mapM specToVecList $
+    res <- forM specToVecList $
       \case
-        (spec, Once (V.VL vs)) ->
-          spec `C.consistent` (Once . joins1 . map (return . fmap intToSubscript)) vs
-        (spec, Mult (V.VL vs)) ->
-          spec `C.consistent` (Mult . joins1 . map (return . fmap intToSubscript)) vs
+        (spec, Once (V.VL vs)) -> spec `C.consistent` (Once . toUNF) vs
+        (spec, Mult (V.VL vs)) -> spec `C.consistent` (Mult . toUNF) vs
     return $ flip all res $ \case
       C.Consistent -> True
       _ -> False
   where
-    -- | This function generates the special offsets subspace, subscript,
+    toUNF :: [ V.Vec n Int64 ] -> UnionNF n Offsets
+    toUNF = joins1 . map (return . fmap intToSubscript)
+
+    -- This function generates the special offsets subspace, subscript,
     -- that either had one element or is the whole set.
     intToSubscript :: Int64 -> Offsets
     intToSubscript i
       | fromIntegral i == absoluteRep = SetOfIntegers
       | otherwise = Offsets . S.singleton $ i
 
+    -- Convert list of list of indices into vectors and wrap them around
+    -- existential so that we don't have to prove they are all of the same
+    -- size.
     specToVecList :: [ (Specification, Multiplicity (V.VecList Int64)) ]
     specToVecList = map (second (fmap V.fromLists)) specToIxs
 
     specToIxs :: [ (Specification, Multiplicity [ [ Int64 ] ]) ]
-    specToIxs = pairWithFst specMaps (map (second (fmap (map (map fromIntegral)))) offsetMaps)
+    specToIxs = pairWithFst specMaps (map (second toInt64) offsetMaps)
 
-    -- | Given two maps for each key in the first map generate a set of
+    toInt64 :: Multiplicity [ [ Int ] ] -> Multiplicity [ [ Int64 ] ]
+    toInt64 = fmap (map (map fromIntegral))
+
+    -- Given two maps for each key in the first map generate a set of
     -- tuples matching the (val,val') where val and val' are corresponding
     -- values from each set.
     pairWithFst :: Eq a => [ (a, b) ] -> [ (a, c) ] -> [ (b, c) ]
