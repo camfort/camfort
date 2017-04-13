@@ -31,6 +31,8 @@ import Prelude hiding (length, zipWith, take, drop, (!!))
 
 import Data.Proxy
 
+import Unsafe.Coerce
+
 data Nat = Z | S Nat
 
 -- Indexed natural number type
@@ -164,3 +166,22 @@ hasSize (Cons _ xs) (Succ n) = do
   ReflEq <- xs `hasSize` n
   return ReflEq
 hasSize _ _ = Nothing
+
+{- Vector list repreentation where the size 'n' is existential quantified -}
+data VecList a where VL :: [Vec n a] -> VecList a
+
+-- pre-condition: the input is a 'rectangular' list of lists (i.e. all internal
+-- lists have the same size)
+fromLists :: forall a . [[a]] -> VecList a
+fromLists [] = VL ([] :: [Vec Z a])
+fromLists (xs:xss) = consList (fromList xs) (fromLists xss)
+  where
+    consList :: VecBox a -> VecList a -> VecList a
+    consList (VecBox vec) (VL [])     = VL [vec]
+    consList (VecBox vec) (VL xs) = -- Force the pre-condition equality
+      case preCondition vec xs of
+          ReflEq -> VL (vec : xs)
+          where -- At the moment the pre-condition is 'assumed', and therefore
+            -- force used unsafeCoerce: TODO, rewrite
+            preCondition :: forall n n1 a . Vec n a -> [Vec n1 a] -> EqT n n1
+            preCondition xs x = unsafeCoerce ReflEq

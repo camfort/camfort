@@ -127,6 +127,11 @@ data Interval a where
 
 deriving instance Eq (Interval a)
 
+instance Show (Interval Standard) where
+  show IntervInfinite = "IntervInfinite"
+  show (IntervHoled lb up p) =
+    "Interv [" ++ show lb ++ "," ++ show up ++ "]^" ++ show p
+
 approxInterv :: Interval Arbitrary -> Approximation (Interval Standard)
 approxInterv (IntervArbitrary a b)
   | a > b = error

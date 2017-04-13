@@ -15,6 +15,8 @@
 -}
 
 {-# LANGUAGE ImplicitParams #-}
+{-# LANGUAGE TupleSections #-}
+{-# LANGUAGE LambdaCase #-}
 
 module Camfort.Specification.Stencils.CheckFrontend where
 
@@ -23,7 +25,9 @@ import Control.Arrow
 import Control.Monad.State.Strict
 import Control.Monad.Writer.Strict hiding (Product)
 
+import qualified Camfort.Helpers.Vec as V
 import Camfort.Specification.Stencils.CheckBackend
+import qualified Camfort.Specification.Stencils.Consistency as C
 import qualified Camfort.Specification.Stencils.Grammar as Gram
 import Camfort.Specification.Stencils.Model
 import Camfort.Specification.Stencils.LatticeModel
@@ -41,6 +45,11 @@ import qualified Language.Fortran.Util.Position as FU
 
 import qualified Data.Map as M
 import Data.Maybe
+import Algebra.Lattice (joins1)
+import Data.Int
+import qualified Data.Set as S
+
+import System.IO.Unsafe
 
 -- Entry point
 stencilChecking :: FAR.NameMap -> F.ProgramFile (FA.Analysis A) -> [String]
@@ -102,16 +111,37 @@ updateRegionEnv ann =
 
 checkOffsetsAgainstSpec :: [(Variable, Multiplicity [[Int]])]
                         -> [(Variable, Specification)]
-                        -> Bool
-checkOffsetsAgainstSpec offsetMaps =
-    all (\(var1, Specification mult)->
-      all (\(var2, offsets) ->
-        var1 /= var2 || noAllInfinity offsets `consistent` mult) offsetMaps)
-    where
-      noAllInfinity (Once a) =
-        Once $ filter (not . all (== absoluteRep)) a
-      noAllInfinity (Mult a) =
-        Mult $ filter (not . all (== absoluteRep)) a
+                        -> IO Bool
+checkOffsetsAgainstSpec offsetMaps specMaps = do
+    res <- flip mapM specToVecList $
+      \case
+        (spec, Once (V.VL vs)) ->
+          spec `C.consistent` (Once . joins1 . map (return . fmap intToSubscript)) vs
+        (spec, Mult (V.VL vs)) ->
+          spec `C.consistent` (Mult . joins1 . map (return . fmap intToSubscript)) vs
+    return $ flip all res $ \case
+      C.Consistent -> True
+      _ -> False
+  where
+    -- | This function generates the special offsets subspace, subscript,
+    -- that either had one element or is the whole set.
+    intToSubscript :: Int64 -> Offsets
+    intToSubscript i
+      | fromIntegral i == absoluteRep = SetOfIntegers
+      | otherwise = Offsets . S.singleton $ i
+
+    specToVecList :: [ (Specification, Multiplicity (V.VecList Int64)) ]
+    specToVecList = map (second (fmap V.fromLists)) specToIxs
+
+    specToIxs :: [ (Specification, Multiplicity [ [ Int64 ] ]) ]
+    specToIxs = pairWithFst specMaps (map (second (fmap (map (map fromIntegral)))) offsetMaps)
+
+    -- | Given two maps for each key in the first map generate a set of
+    -- tuples matching the (val,val') where val and val' are corresponding
+    -- values from each set.
+    pairWithFst :: Eq a => [ (a, b) ] -> [ (a, c) ] -> [ (b, c) ]
+    pairWithFst ((key, val):xs) ys =
+      map ((val,) . snd) $ filter ((key ==) . fst) ys
 
 -- Go into the program units first and record the module name when
 -- entering into a module
@@ -150,7 +180,7 @@ perBlockCheck b@(F.BlComment ann span _) = do
             let expandedDecls =
                   concatMap (\(vars,spec) -> map (flip (,) spec) vars) specDecls
             -- Model and compare the current and specified stencil specs
-            if checkOffsetsAgainstSpec multOffsets expandedDecls
+            if unsafePerformIO $ checkOffsetsAgainstSpec multOffsets expandedDecls
               then tell [ (span, "Correct.") ]
               else do
                 let correctNames2 =  map (first (map realName))

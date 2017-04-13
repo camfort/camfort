@@ -29,8 +29,6 @@ import Camfort.Specification.Stencils.DenotationalSemantics
 import Camfort.Helpers
 import qualified Camfort.Helpers.Vec as V
 
-import Unsafe.Coerce
-
 import Camfort.Specification.Stencils.Syntax
 
 {- Spans are a pair of a lower and upper bound -}
@@ -78,8 +76,8 @@ mkTrivialSpan (V.Cons x xs) =
     (ys, zs) = mkTrivialSpan xs
 
 -- TODO: This seems completely redundant. Perhaps DELETE.
-inferFromIndices :: VecList Int -> Specification
-inferFromIndices (VL ixs) = Specification $
+inferFromIndices :: V.VecList Int -> Specification
+inferFromIndices (V.VL ixs) = Specification $
     case fromBool mult of
       Linear -> Once $ inferCore ixs'
       NonLinear -> Mult $ inferCore ixs'
@@ -89,8 +87,8 @@ inferFromIndices (VL ixs) = Specification $
 -- Same as inferFromIndices but don't do any linearity checking
 -- (defaults to NonLinear). This is used when the front-end does
 -- the linearity check first as an optimimsation.
-inferFromIndicesWithoutLinearity :: VecList Int -> Specification
-inferFromIndicesWithoutLinearity (VL ixs) =
+inferFromIndicesWithoutLinearity :: V.VecList Int -> Specification
+inferFromIndicesWithoutLinearity (V.VL ixs) =
     Specification . Mult . inferCore $ ixs
 
 inferCore :: [V.Vec n Int] -> Approximation Spatial
@@ -189,27 +187,6 @@ containedWithin (V.Nil, V.Nil) (V.Nil, V.Nil)
   = True
 containedWithin (V.Cons l1 ls1, V.Cons u1 us1) (V.Cons l2 ls2, V.Cons u2 us2)
   = (l2 <= l1 && u1 <= u2) && containedWithin (ls1, us1) (ls2, us2)
-
-
-{- Vector list repreentation where the size 'n' is existential quantified -}
-data VecList a where VL :: [V.Vec n a] -> VecList a
-
--- pre-condition: the input is a 'rectangular' list of lists (i.e. all internal
--- lists have the same size)
-fromLists :: [[Int]] -> VecList Int
-fromLists [] = VL ([] :: [V.Vec V.Z Int])
-fromLists (xs:xss) = consList (V.fromList xs) (fromLists xss)
-  where
-    consList :: V.VecBox Int -> VecList Int -> VecList Int
-    consList (V.VecBox vec) (VL [])     = VL [vec]
-    consList (V.VecBox vec) (VL xs)
-      = -- Force the pre-condition equality
-        case preCondition vec xs of
-            V.ReflEq -> VL (vec : xs)
-            where -- At the moment the pre-condition is 'assumed', and therefore
-              -- force used unsafeCoerce: TODO, rewrite
-              preCondition :: V.Vec n a -> [V.Vec n1 a] -> V.EqT n n1
-              preCondition xs x = unsafeCoerce V.ReflEq
 
 -- Local variables:
 -- mode: haskell

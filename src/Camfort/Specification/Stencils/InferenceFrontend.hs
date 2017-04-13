@@ -38,6 +38,7 @@ import qualified Camfort.Specification.Stencils.Grammar as Gram
 import qualified Camfort.Specification.Stencils.Synthesis as Synth
 import Camfort.Analysis.Annotations
 import Camfort.Helpers (collect)
+import qualified Camfort.Helpers.Vec as V
 import Camfort.Input
 import qualified Camfort.Output as O
 
@@ -502,7 +503,7 @@ consistentIVSuse lhs rhses =
 relativeIxsToSpec :: [[Int]] -> Maybe Specification
 relativeIxsToSpec ixs =
     if isEmpty exactSpec then Nothing else Just exactSpec
-    where exactSpec = inferFromIndicesWithoutLinearity . fromLists $ ixs
+    where exactSpec = inferFromIndicesWithoutLinearity . V.fromLists $ ixs
 
 isNeighbour :: Data a => F.Index (FA.Analysis a) -> [Variable] -> Bool
 isNeighbour exp vs =
