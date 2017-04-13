@@ -18,7 +18,6 @@ import Camfort.Helpers.Vec
 import Camfort.Input
 import Camfort.Specification.Stencils
 import Camfort.Specification.Stencils.Synthesis
-import Camfort.Specification.Stencils.Model
 import Camfort.Specification.Stencils.LatticeModel
 import Camfort.Specification.Stencils.InferenceBackend
 import Camfort.Specification.Stencils.InferenceFrontend

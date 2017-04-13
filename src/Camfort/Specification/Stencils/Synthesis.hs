@@ -31,7 +31,6 @@ import Control.Monad.Writer hiding (Product)
 
 import Camfort.Specification.Stencils.InferenceBackend
 import Camfort.Specification.Stencils.Syntax
-import Camfort.Specification.Stencils.Model
 
 import Camfort.Analysis.Annotations
 import Camfort.Helpers.Vec
