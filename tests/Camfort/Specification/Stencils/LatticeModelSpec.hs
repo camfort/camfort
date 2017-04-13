@@ -53,3 +53,36 @@ spec =
       res <- runIO $ ioCompare prod3 prod2
       it "compare equal offset products" $
         res `shouldBe` EQ
+
+      let regBack = return $
+            V.Cons (IntervHoled (-1) 0 True) (V.Cons IntervInfinite V.Nil)
+      let off = return $
+            V.Cons (Offsets . S.fromList $ [-1, 0]) (V.Cons SetOfIntegers V.Nil)
+      res <- runIO $ ioCompare regBack off
+      it "compare equal offset and interval" $
+        res `shouldBe` EQ
+
+      let regFivePoint =
+            return (V.Cons (IntervHoled (-1) 1 True)
+                           (V.Cons (IntervHoled 0 0 True) V.Nil))
+            \/
+            return (V.Cons (IntervHoled 0 0 True)
+                           (V.Cons (IntervHoled (-1) 1 True) V.Nil))
+      let offFivePoint =
+            return (V.Cons (Offsets . S.fromList $ [-1])
+                           (V.Cons (Offsets . S.fromList $ [0]) V.Nil))
+            \/
+            return (V.Cons (Offsets . S.fromList $ [0])
+                           (V.Cons (Offsets . S.fromList $ [0]) V.Nil))
+            \/
+            return (V.Cons (Offsets . S.fromList $ [1])
+                           (V.Cons (Offsets . S.fromList $ [0]) V.Nil))
+            \/
+            return (V.Cons (Offsets . S.fromList $ [0])
+                           (V.Cons (Offsets . S.fromList $ [-1]) V.Nil))
+            \/
+            return (V.Cons (Offsets . S.fromList $ [0])
+                           (V.Cons (Offsets . S.fromList $ [1]) V.Nil))
+      res <- runIO $ ioCompare regFivePoint offFivePoint
+      it "compare equal offset and interval" $
+        res `shouldBe` EQ
