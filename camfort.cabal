@@ -35,8 +35,10 @@ executable camfort
                         Camfort.Specification.Stencils.CheckBackend
                         Camfort.Specification.Stencils.CheckFrontend
                         Camfort.Specification.Stencils.Consistency
+                        Camfort.Specification.Stencils.DenotationalSemantics
                         Camfort.Specification.Stencils.InferenceBackend
                         Camfort.Specification.Stencils.InferenceFrontend
+                        Camfort.Specification.Stencils.Model
                         Camfort.Specification.Stencils.Syntax
                         Camfort.Specification.Stencils.Grammar
                         Camfort.Specification.Stencils.Synthesis
@@ -153,7 +155,10 @@ test-suite spec
   hs-source-dirs:       tests
   other-modules:        Camfort.Analysis.CommentAnnotatorSpec
                         Camfort.Specification.Stencils.CheckSpec
+                        Camfort.Specification.Stencils.ConsistencySpec
+                        Camfort.Specification.Stencils.DenotationalSemanticsSpec
                         Camfort.Specification.Stencils.GrammarSpec
+                        Camfort.Specification.Stencils.ModelSpec
                         Camfort.Specification.StencilsSpec
                         Camfort.Specification.UnitsSpec
                         Camfort.Transformation.CommonSpec
