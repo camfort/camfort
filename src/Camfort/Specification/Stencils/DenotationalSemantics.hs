@@ -53,7 +53,11 @@ intervalsToRegions as = do
     convert (IntervHoled 0 0 True, ix) = return $ Centered 0 (ix + 1) True
     convert (IntervHoled 0 m p, ix) = return $ Forward (fromIntegral m) (ix + 1) p
     convert (IntervHoled m 0 p, ix) = return $ Backward (fromIntegral $ -m) (ix + 1) p
-    convert (IntervHoled m n p, ix) = return $ Centered (fromIntegral n) (ix + 1) p
+    convert (IntervHoled m n p, ix)
+      | m == -n = return $ Centered (fromIntegral n) (ix + 1) p
+      | otherwise = Left $
+        "Impossible: the lower bound is not negation of upper bound. " ++
+        "Should have been separated before."
     convert _ = Left "Infinite interval cannot be realised as a region."
 
 regionsToIntervals :: forall n .

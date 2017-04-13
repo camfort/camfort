@@ -62,6 +62,7 @@ spansToApproxSpatial spans = sequence . fmap intervalsToRegions $ approxUnion
       | fromIntegral a == absoluteRep = IntervInfiniteArbitrary
       | fromIntegral b == absoluteRep = IntervInfiniteArbitrary
       | otherwise = interv
+    absRepToInf interv = interv
 
     transposeVecInterval :: Span (V.Vec n Int) -> V.Vec n (Interval Arbitrary)
     transposeVecInterval (us, vs) = V.zipWith IntervArbitrary us vs
@@ -156,7 +157,7 @@ coalesce (V.Nil, V.Nil) (V.Nil, V.Nil) = Just (V.Nil, V.Nil)
 -- If two well-defined intervals are equal, then they cannot be coalesced
 coalesce x y | x == y = Nothing
 -- Otherwise
-coalesce x@(V.Cons l1 ls1, V.Cons u1 us1) y@(V.Cons l2 ls2, V.Cons u2 us2)
+coalesce (V.Cons l1 ls1, V.Cons u1 us1) (V.Cons l2 ls2, V.Cons u2 us2)
   | l1 == l2 && u1 == u2
     = case coalesce (ls1, us1) (ls2, us2) of
         Just (l, u) -> Just (V.Cons l1 l, V.Cons u1 u)

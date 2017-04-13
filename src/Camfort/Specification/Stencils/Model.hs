@@ -38,7 +38,7 @@ module Camfort.Specification.Stencils.Model ( Interval(..)
                                             , Bound(..)
                                             , approxVec
                                             , Offsets(..)
-                                            , UnionNF(..)
+                                            , UnionNF
                                             , vecLength
                                             , unfCompare
                                             , Approximation(..)
@@ -52,14 +52,11 @@ import qualified Control.Monad as CM
 
 import           Algebra.Lattice
 import           Data.Semigroup
-import           Data.List
 import qualified Data.List.NonEmpty as NE
 import qualified Data.Set as S
 import           Data.Foldable
-import           Data.Traversable
 import           Data.SBV
 import           Data.Data
-import           Data.Typeable
 
 import qualified Camfort.Helpers.Vec as V
 import System.IO.Unsafe
@@ -141,6 +138,7 @@ approxInterv (IntervArbitrary a b)
   | a ==  1, b >=  1 = Exact  $ IntervHoled 0  b' False
   | a >   1, b >   1 = Bound Nothing $ Just $ IntervHoled 0  b' False
   | a <  -1, b <  -1 = Bound Nothing $ Just $ IntervHoled a' 0  False
+  | otherwise = error "Impossible: All posibilities are covered."
   where
     a' = fromIntegral a
     b' = fromIntegral b

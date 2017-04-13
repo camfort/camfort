@@ -21,12 +21,10 @@ module Camfort.Specification.Stencils.Annotation where
 
 import Camfort.Analysis.Annotations
 import Camfort.Analysis.CommentAnnotator
-import Camfort.Specification.Stencils.Syntax
 import qualified Camfort.Specification.Stencils.Grammar as Gram
 
 import qualified Language.Fortran.AST as F
 import qualified Language.Fortran.Analysis as FA
-import Debug.Trace
 
 {- *** Routines for associating annotations to ASTs -}
 

@@ -48,8 +48,6 @@ import Algebra.Lattice (joins1)
 import Data.Int
 import qualified Data.Set as S
 
-import System.IO.Unsafe
-
 -- Entry point
 stencilChecking :: FAR.NameMap -> F.ProgramFile (FA.Analysis A) -> [String]
 stencilChecking nameMap pf = snd . runWriter $
@@ -78,7 +76,7 @@ stencilChecking nameMap pf = snd . runWriter $
                     let ?nameMap = nameMap
                       in descendBiM perProgramUnitCheck pf'
      -- Format output
-     let a@(_, output) = evalState (runWriterT results) (([], Nothing), ivmap)
+     let (_, output) = evalState (runWriterT results) (([], Nothing), ivmap)
      tell $ pprint output
 
 type LogLine = (FU.SrcSpan, String)
@@ -143,8 +141,9 @@ checkOffsetsAgainstSpec offsetMaps specMaps =
     -- tuples matching the (val,val') where val and val' are corresponding
     -- values from each set.
     pairWithFst :: Eq a => [ (a, b) ] -> [ (a, c) ] -> [ (b, c) ]
+    pairWithFst [] _ = []
     pairWithFst ((key, val):xs) ys =
-      map ((val,) . snd) $ filter ((key ==) . fst) ys
+      map ((val,) . snd) (filter ((key ==) . fst) ys) ++ pairWithFst xs ys
 
 -- Go into the program units first and record the module name when
 -- entering into a module
@@ -166,7 +165,7 @@ perBlockCheck b@(F.BlComment ann span _) = do
     -- Comment contains a specification and an Associated block
     (Just (Right (Right specDecls)), Just block) ->
      case block of
-      s@(F.BlStatement ann span' _ (F.StExpressionAssign _ _ lhs rhs)) ->
+      s@(F.BlStatement _ span' _ (F.StExpressionAssign _ _ lhs _)) ->
        case isArraySubscript lhs of
          Just subs -> do
             -- Create list of relative indices
@@ -199,13 +198,12 @@ perBlockCheck b@(F.BlComment ann span _) = do
             return b'
          Nothing -> return b'
 
-      (F.BlDo ann span _ _ _ mDoSpec body _) ->
-           -- Stub, maybe collect stencils inside 'do' block
-           return b'
+      -- Stub, maybe collect stencils inside 'do' block
+      F.BlDo{} -> return b'
       _ -> return b'
     _ -> return b'
 
-perBlockCheck b@(F.BlDo ann span _ _ _ mDoSpec body _) = do
+perBlockCheck b@(F.BlDo _ _ _ _ _ _ body _) = do
    -- descend into the body of the do-statement
    mapM_ (descendBiM perBlockCheck) body
    -- Remove any induction variable from the state
