@@ -160,6 +160,7 @@ test-suite spec
                         Camfort.Specification.Stencils.ConsistencySpec
                         Camfort.Specification.Stencils.DenotationalSemanticsSpec
                         Camfort.Specification.Stencils.GrammarSpec
+                        Camfort.Specification.Stencils.InferenceBackendSpec
                         Camfort.Specification.Stencils.ModelSpec
                         Camfort.Specification.StencilsSpec
                         Camfort.Specification.UnitsSpec
