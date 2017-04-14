@@ -58,7 +58,8 @@ import qualified Data.Set as S
 import           Data.Foldable
 import           Data.SBV
 import           Data.Data
-import           Data.List (groupBy)
+import           Data.List (sortBy, nub)
+import           Data.Maybe (fromJust)
 import qualified Data.PartialOrd as PO
 
 import qualified Camfort.Helpers.Vec as V
@@ -302,7 +303,7 @@ instance PO.PartialOrd Offsets where
 
 instance PO.PartialOrd (Interval Standard) where
   (IntervHoled lb ub p) <= (IntervHoled lb' ub' p') =
-    lb >= lb' && ub <= ub' && (p' || not p)
+    (p' || not p) && lb >= lb' && ub <= ub'
   IntervInfinite <= IntervHoled{} = False
   _ <= IntervInfinite = True
 
@@ -310,23 +311,34 @@ instance PO.PartialOrd a => PO.PartialOrd (V.Vec n a) where
   v <= v' = and $ V.zipWith (PO.<=) v v'
 
 optimise :: UnionNF n (Interval Standard) -> UnionNF n (Interval Standard)
-optimise = maximas . fixedPointUnion
+optimise = NE.fromList . maximas . fixedPointUnion . NE.toList
   where
     fixedPointUnion unf =
-      let unf' = unionLemma unf
+      let unf' = unionLemma . maximas $ unf
       in if unf' == unf then unf' else fixedPointUnion unf'
 
-maximas :: PO.PartialOrd a => UnionNF n a -> UnionNF n a
-maximas = NE.fromList . fmap (head . PO.maxima) . groupBy (PO.<=) . NE.toList
+sensibleGroupBy :: Eq a =>
+                   (a -> a -> Ordering)
+                -> (a -> a -> Bool)
+                -> [ a ]
+                -> [ [ a ] ]
+sensibleGroupBy ord p l = nub . map (\el -> sortBy ord . filter (p el) $ l) $ l
+
+maximas :: [ V.Vec n (Interval Standard) ] -> [ V.Vec n (Interval Standard) ]
+maximas = nub
+        . fmap (head . PO.maxima)
+        . sensibleGroupBy ord (PO.<=)
+  where
+    ord a b = fromJust $ a `PO.compare` b
 
 -- | Union lemma says that if we have a product of intervals (as defined in
 -- the paper) and we union two that agrees in each dimension except one.
 -- The union is again a product of intervals that agrees with the original
 -- dimensions in all dimensions except the original differing one. At that
 -- point it is the union of intervals, which is itself still an interval.
-unionLemma :: UnionNF n (Interval Standard) -> UnionNF n (Interval Standard)
-unionLemma =
-  NE.fromList . map (foldr1 (V.zipWith (\/))) . NE.groupBy agreeButOne
+unionLemma :: [ V.Vec n (Interval Standard) ] -> [ V.Vec n (Interval Standard) ]
+unionLemma = map (foldr1 (V.zipWith (\/)))
+           . sensibleGroupBy (\a b -> if a == b then EQ else LT) agreeButOne
   where
     -- This function returns true if two vectors agree at all points but one.
     -- It also holds if two vectors are identical.

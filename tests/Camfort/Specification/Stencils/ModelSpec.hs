@@ -14,6 +14,13 @@ import Test.Hspec
 spec :: Spec
 spec =
   describe "Model spec" $ do
+    let regFivePoint =
+          return (V.Cons (IntervHoled (-1) 1 True)
+                         (V.Cons (IntervHoled 0 0 True) V.Nil))
+          \/
+          return (V.Cons (IntervHoled 0 0 True)
+                         (V.Cons (IntervHoled (-1) 1 True) V.Nil))
+
     describe "unfCompare" $ do
       let reg1 =
             return (V.Cons (IntervHoled 0 2 False) (V.Cons (IntervHoled 0 2 False) V.Nil))
@@ -55,12 +62,6 @@ spec =
       it "compare equal offset and interval" $
         unfCompare regBack off `shouldBe` EQ
 
-      let regFivePoint =
-            return (V.Cons (IntervHoled (-1) 1 True)
-                           (V.Cons (IntervHoled 0 0 True) V.Nil))
-            \/
-            return (V.Cons (IntervHoled 0 0 True)
-                           (V.Cons (IntervHoled (-1) 1 True) V.Nil))
       let offFivePoint =
             return (V.Cons (Offsets . S.fromList $ [-1])
                            (V.Cons (Offsets . S.fromList $ [0]) V.Nil))
@@ -78,3 +79,37 @@ spec =
                            (V.Cons (Offsets . S.fromList $ [1]) V.Nil))
       it "compare equal offset and interval" $
         unfCompare regFivePoint offFivePoint `shouldBe` EQ
+
+    describe "optimisation" $ do
+      it "eliminates subsumed products" $ do
+        let regFivePointPlus =
+              return (V.Cons (IntervHoled 0 1 True)
+                             (V.Cons (IntervHoled 0 0 True) V.Nil))
+              \/
+              regFivePoint
+              \/
+              return (V.Cons (IntervHoled 0 1 False)
+                             (V.Cons (IntervHoled 0 0 True) V.Nil))
+              \/
+              return (V.Cons (IntervHoled 0 0 True)
+                             (V.Cons (IntervHoled (-1) 0 True) V.Nil))
+        optimise regFivePointPlus `shouldBe` regFivePoint
+
+      it "applies union lemma" $ do
+        let reg =
+              return (V.Cons (IntervHoled (-1) 1 False)
+                             (V.Cons (IntervHoled (-2) 0 False)
+                                     (V.Cons (IntervHoled (-2) 2 True) V.Nil)))
+              \/
+              return (V.Cons (IntervHoled 0 0 True)
+                             (V.Cons (IntervHoled (-2) 0 False)
+                                     (V.Cons (IntervHoled (-2) 2 True) V.Nil)))
+              \/
+              return (V.Cons (IntervHoled (-1) 1 True)
+                             (V.Cons (IntervHoled 0 2 False)
+                                     (V.Cons (IntervHoled (-2) 2 True) V.Nil)))
+        let reg' =
+              return (V.Cons (IntervHoled (-1) 1 True)
+                             (V.Cons (IntervHoled (-2) 2 False)
+                                     (V.Cons (IntervHoled (-2) 2 True) V.Nil)))
+        optimise reg `shouldBe` reg'
