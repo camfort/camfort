@@ -16,36 +16,56 @@
 
 {-# LANGUAGE DataKinds #-}
 {-# LANGUAGE GADTs #-}
-{-# LANGUAGE KindSignatures #-}
-{-# LANGUAGE TypeFamilies #-}
-{-# LANGUAGE FlexibleInstances #-}
-{-# LANGUAGE FlexibleContexts #-}
-{-# LANGUAGE NoMonomorphismRestriction #-}
-{-# LANGUAGE ScopedTypeVariables #-}
-{-# LANGUAGE PolyKinds #-}
+{-# LANGUAGE LambdaCase #-}
 
 module Camfort.Specification.Stencils.InferenceBackend where
 
-import Prelude hiding (sum)
-import Data.Generics.Uniplate.Operations
-import Data.List hiding (sum)
-import Data.Data
-import Control.Arrow ((***))
-import Data.Function
+import Data.List
 import Data.Maybe
+import Algebra.Lattice (joins1)
 
 import Camfort.Specification.Stencils.Model
+import Camfort.Specification.Stencils.DenotationalSemantics
 import Camfort.Helpers
 import qualified Camfort.Helpers.Vec as V
-
-import Debug.Trace
-import Unsafe.Coerce
 
 import Camfort.Specification.Stencils.Syntax
 
 {- Spans are a pair of a lower and upper bound -}
 
 type Span a = (a, a)
+
+spansToApproxSpatial :: [ Span (V.Vec (V.S n) Int) ]
+                       -> Either String (Approximation Spatial)
+spansToApproxSpatial spans = sequence . fmap intervalsToRegions $ approxUnion
+  where
+    approxVecs =
+      toApprox . map (fmap absRepToInf . transposeVecInterval) $ spans
+    approxUnion = fmap (optimise . joins1 . map return) approxVecs
+
+    toApprox :: [ V.Vec n (Interval Arbitrary) ]
+             -> Approximation [ V.Vec n (Interval Standard) ]
+    toApprox vs
+      | parts <- (elongatedPartitions . map approxVec) vs =
+          case parts of
+            (orgs, []) -> Exact . map fromExact $ orgs
+            ([], elongs) -> Bound Nothing (Just $ map upperBound elongs)
+            (orgs, elongs) -> Bound (Just . map upperBound $ orgs)
+                                    (Just . map upperBound $ orgs ++ elongs)
+
+    elongatedPartitions =
+      partition $ \case { Exact{} -> True; Bound{} -> False }
+
+    -- TODO: DELETE AS SOON AS POSSIBLE
+    absRepToInf :: Interval Arbitrary -> Interval Arbitrary
+    absRepToInf interv@(IntervArbitrary a b)
+      | fromIntegral a == absoluteRep = IntervInfiniteArbitrary
+      | fromIntegral b == absoluteRep = IntervInfiniteArbitrary
+      | otherwise = interv
+    absRepToInf interv = interv
+
+    transposeVecInterval :: Span (V.Vec n Int) -> V.Vec n (Interval Arbitrary)
+    transposeVecInterval (us, vs) = V.zipWith IntervArbitrary us vs
 
 mkTrivialSpan :: V.Vec n Int -> Span (V.Vec n Int)
 mkTrivialSpan V.Nil = (V.Nil, V.Nil)
@@ -56,94 +76,30 @@ mkTrivialSpan (V.Cons x xs) =
   where
     (ys, zs) = mkTrivialSpan xs
 
-inferFromIndices :: VecList Int -> Specification
-inferFromIndices (VL ixs) = Specification $
+-- TODO: This seems completely redundant. Perhaps DELETE.
+inferFromIndices :: V.VecList Int -> Specification
+inferFromIndices (V.VL ixs) = Specification $
     case fromBool mult of
-      Linear -> Single $ inferCore ixs'
-      NonLinear -> Multiple $ inferCore ixs'
+      Linear -> Once $ inferCore ixs'
+      NonLinear -> Mult $ inferCore ixs'
     where
       (ixs', mult) = hasDuplicates ixs
 
 -- Same as inferFromIndices but don't do any linearity checking
 -- (defaults to NonLinear). This is used when the front-end does
 -- the linearity check first as an optimimsation.
-inferFromIndicesWithoutLinearity :: VecList Int -> Specification
-inferFromIndicesWithoutLinearity (VL ixs) =
-    Specification . Multiple . inferCore $ ixs
+inferFromIndicesWithoutLinearity :: V.VecList Int -> Specification
+inferFromIndicesWithoutLinearity (V.VL ixs) =
+    Specification . Mult . inferCore $ ixs
 
 inferCore :: [V.Vec n Int] -> Approximation Spatial
-inferCore = simplify . fromRegionsToSpec . inferMinimalVectorRegions
-
-simplify :: Approximation Spatial -> Approximation Spatial
-simplify = fmap simplifySpatial
-
-simplifySpatial :: Spatial -> Spatial
-simplifySpatial (Spatial (Sum ps)) = Spatial (Sum ps')
-   where ps' = order (reducor ps normaliseNoSort size)
-         order = sort . (map (Product . sort . unProd))
-         size :: [RegionProd] -> Int
-         size = foldr (+) 0 . map (length . unProd)
-
--- Given a list, a list->list transofmer, a size function
--- find the minimal transformed list by applying the transformer
--- to every permutation of the list and when a smaller list is found
--- iteratively apply to permutations on the smaller list
-reducor :: [a] -> ([a] -> [a]) -> ([a] -> Int) -> [a]
-reducor xs f size = reducor' (permutations xs)
-    where
-      reducor' [y] = f y
-      reducor' (y:ys) =
-          if (size y' < size y)
-            then reducor' (permutations y')
-            else reducor' ys
-        where y' = f y
-
-fromRegionsToSpec :: [Span (V.Vec n Int)] -> Approximation Spatial
-fromRegionsToSpec = foldr (\x y -> sum (toSpecND x) y) zero
-
--- toSpecND converts an n-dimensional region into an exact
--- spatial specification or a bound of spatial specifications
-toSpecND :: Span (V.Vec n Int) -> Approximation Spatial
-toSpecND = toSpecPerDim 1
-  where
-   -- convert the region one dimension at a time.
-   toSpecPerDim :: Int -> Span (V.Vec n Int) -> Approximation Spatial
-   toSpecPerDim d (V.Nil, V.Nil)             = one
-   toSpecPerDim d (V.Cons l ls, V.Cons u us) =
-     prod (toSpec1D d l u) (toSpecPerDim (d + 1) (ls, us))
-
--- toSpec1D takes a dimension identifier, a lower and upper bound of a region in
--- that dimension, and builds the simple directional spec.
-toSpec1D :: Dimension -> Int -> Int -> Approximation Spatial
-toSpec1D dim l u
-    | l == (-absoluteRep) || u == absoluteRep =
-        Exact $ Spatial (Sum [Product []])
-
-    | l == 0 && u == 0 =
-        Exact $ Spatial (Sum [Product [Centered 0 dim True]])
-
-    | l < 0 && u == 0 =
-        Exact $ Spatial (Sum [Product [Backward (abs l) dim True]])
-
-    | l < 0 && u == (-1) =
-        Exact $ Spatial (Sum [Product [Backward (abs l) dim False]])
-
-    | l == 0 && u > 0 =
-        Exact $ Spatial (Sum [Product [Forward u dim True]])
-
-    | l == 1 && u > 0 =
-        Exact $ Spatial (Sum [Product [Forward u dim False]])
-
-    | l < 0 && u > 0 && (abs l == u) =
-        Exact $ Spatial (Sum [Product [Centered u dim True]])
-
-    | l < 0 && u > 0 && (abs l /= u) =
-        Exact $ Spatial (Sum [Product [Backward (abs l) dim True],
-                              Product [Forward  u       dim True]])
-    -- Represents a non-contiguous region
-    | otherwise =
-        upperBound $ Spatial (Sum [Product
-                        [if l > 0 then Forward u dim True else Backward (abs l) dim True]])
+inferCore subs =
+    case V.proveNonEmpty . head $ subs of
+      Just (V.ExistsEqT V.ReflEq) ->
+        case spansToApproxSpatial . inferMinimalVectorRegions $ subs of
+          Right a -> a
+          Left msg -> error msg
+      Nothing -> error "Input vectors are empty!"
 
 {-| |inferMinimalVectorRegions| a key part of the algorithm, from a list of
     n-dimensional relative indices it infers a list of (possibly overlapping)
@@ -177,9 +133,9 @@ coalesce (V.Nil, V.Nil) (V.Nil, V.Nil) = Just (V.Nil, V.Nil)
 -- If two well-defined intervals are equal, then they cannot be coalesced
 coalesce x y | x == y = Nothing
 -- Otherwise
-coalesce x@(V.Cons l1 ls1, V.Cons u1 us1) y@(V.Cons l2 ls2, V.Cons u2 us2)
+coalesce (V.Cons l1 ls1, V.Cons u1 us1) (V.Cons l2 ls2, V.Cons u2 us2)
   | l1 == l2 && u1 == u2
-    = case (coalesce (ls1, us1) (ls2, us2)) of
+    = case coalesce (ls1, us1) (ls2, us2) of
         Just (l, u) -> Just (V.Cons l1 l, V.Cons u1 u)
         Nothing     -> Nothing
   | (u1 + 1 == l2) && (us1 == us2) && (ls1 == ls2)
@@ -194,7 +150,7 @@ coalesce x@(V.Cons l1 ls1, V.Cons u1 us1) y@(V.Cons l2 ls2, V.Cons u2 us2)
 minimaliseRegions :: [Span (V.Vec n Int)] -> [Span (V.Vec n Int)]
 minimaliseRegions [] = []
 minimaliseRegions xss = nub . minimalise $ xss
-  where localMin x ys = (filter' x (\y -> containedWithin x y && (x /= y)) xss) ++ ys
+  where localMin x ys = filter' x (\y -> containedWithin x y && (x /= y)) xss ++ ys
         minimalise = foldr localMin []
         -- If nothing is caught by the filter, i.e. no overlaps then return
         -- the original regions r
@@ -208,44 +164,6 @@ containedWithin (V.Nil, V.Nil) (V.Nil, V.Nil)
   = True
 containedWithin (V.Cons l1 ls1, V.Cons u1 us1) (V.Cons l2 ls2, V.Cons u2 us2)
   = (l2 <= l1 && u1 <= u2) && containedWithin (ls1, us1) (ls2, us2)
-
-
-{- Vector list repreentation where the size 'n' is existential quantified -}
-data VecList a where VL :: [V.Vec n a] -> VecList a
-
--- Lists existentially quanitify over a vector's size : Exists n . Vec n a
-data List a where
-     List :: V.Vec n a -> List a
-
-lnil :: List a
-lnil = List V.Nil
-lcons :: a -> List a -> List a
-lcons x (List V.Nil) = List (V.Cons x V.Nil)
-lcons x (List xs) = List (V.Cons x xs)
-
-fromList :: [a] -> List a
-fromList = foldr lcons lnil
-
--- pre-condition: the input is a 'rectangular' list of lists (i.e. all internal
--- lists have the same size)
-fromLists :: [[Int]] -> VecList Int
-fromLists [] = VL ([] :: [V.Vec V.Z Int])
-fromLists (xs:xss) = consList (fromList xs) (fromLists xss)
-  where
-    consList :: List Int -> VecList Int -> VecList Int
-    consList (List vec) (VL [])     = VL [vec]
-    consList (List vec) (VL xs)
-      = -- Force the pre-condition equality
-        case preCondition vec xs of
-            ReflEq -> VL (vec : xs)
-            where -- At the moment the pre-condition is 'assumed', and therefore
-              -- force used unsafeCoerce: TODO, rewrite
-              preCondition :: V.Vec n a -> [V.Vec n1 a] -> EqT n n1
-              preCondition xs x = unsafeCoerce ReflEq
-
--- Equality type
-data EqT (a :: k) (b :: k) where
-    ReflEq :: EqT a a
 
 -- Local variables:
 -- mode: haskell

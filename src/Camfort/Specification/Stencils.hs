@@ -17,31 +17,18 @@
 module Camfort.Specification.Stencils
  (InferMode, infer, check, synth) where
 
-import Control.Monad.State.Lazy
-import Control.Monad.Writer hiding (Product)
-
-import qualified Camfort.Specification.Stencils.Grammar as Gram
 import Camfort.Specification.Stencils.CheckFrontend hiding (LogLine)
 import Camfort.Specification.Stencils.InferenceFrontend
-import Camfort.Specification.Stencils.Syntax
 import Camfort.Specification.Stencils.Synthesis
-import Camfort.Analysis.CommentAnnotator
 import Camfort.Analysis.Annotations
 -- These two are redefined here for ForPar ASTs
-import Camfort.Helpers hiding (lineCol, spanLineCol)
+import Camfort.Helpers
 
 import qualified Language.Fortran.AST as F
 import qualified Language.Fortran.Analysis as FA
-import qualified Language.Fortran.Analysis.Types as FAT
 import qualified Language.Fortran.Analysis.Renaming as FAR
 import qualified Language.Fortran.Analysis.BBlocks as FAB
-import qualified Language.Fortran.Analysis.DataFlow as FAD
-import qualified Language.Fortran.Util.Position as FU
 
-import Data.Generics.Uniplate.Operations
-import Data.Data
-import qualified Data.Map as M
-import Data.Maybe
 import Data.List
 
 --------------------------------------------------
@@ -84,7 +71,7 @@ synth mode marker = foldr buildOutput ("", [])
 synthPF :: InferMode -> Char -> Filename
       -> F.ProgramFile Annotation
       -> (String, F.ProgramFile Annotation)
-synthPF mode marker filename pf =
+synthPF _ marker _ pf =
     -- Append filename to any outputs
     ("", fmap FA.prevAnnotation pf'')
     where

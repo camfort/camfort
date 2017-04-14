@@ -40,7 +40,6 @@ c= stencil readOnce, backward(depth=1, dim=1) :: a
             if (.true.) then 
 c= stencil readOnce, (centered(depth=1, dim=1)) + (centered(depth=1, dim=2)) :: a
              a(i,j) = a(modulo(i,imax),1) + a(modulo(i+1,imax) ,1) + a(modulo(i-1,imax),1) + a(1,j) + x
-c= stencil readOnce, (pointed(dim=1))*(pointed(dim=2)) :: a
              a(i,j) = a(i,j) + a(1,1)
             end if
          end do

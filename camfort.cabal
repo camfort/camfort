@@ -34,6 +34,8 @@ executable camfort
                         Camfort.Specification.Stencils.Annotation
                         Camfort.Specification.Stencils.CheckBackend
                         Camfort.Specification.Stencils.CheckFrontend
+                        Camfort.Specification.Stencils.Consistency
+                        Camfort.Specification.Stencils.DenotationalSemantics
                         Camfort.Specification.Stencils.InferenceBackend
                         Camfort.Specification.Stencils.InferenceFrontend
                         Camfort.Specification.Stencils.Model
@@ -81,7 +83,10 @@ executable camfort
                         filepath,
                         fgl >= 5.5,
                         bytestring >= 0.10,
-                        binary >= 0.8.3.0
+                        binary >= 0.8.3.0,
+                        lattices >= 1.5,
+                        sbv >= 5.14,
+                        partial-order >= 0.1.2
   default-language: Haskell2010
 
 library
@@ -93,10 +98,11 @@ library
                         Camfort.Specification.Stencils.Annotation
                         Camfort.Specification.Stencils.CheckBackend
                         Camfort.Specification.Stencils.CheckFrontend
+                        Camfort.Specification.Stencils.Consistency
+                        Camfort.Specification.Stencils.DenotationalSemantics
                         Camfort.Specification.Stencils.InferenceBackend
                         Camfort.Specification.Stencils.InferenceFrontend
                         Camfort.Specification.Stencils.Model
-                        Camfort.Specification.Stencils.LatticeModel
                         Camfort.Specification.Stencils.Syntax
                         Camfort.Specification.Stencils.Grammar
                         Camfort.Specification.Stencils.Synthesis
@@ -141,7 +147,8 @@ library
                         fgl >= 5.5,
                         binary >= 0.8.3.0,
                         lattices >= 1.5,
-                        sbv >= 5.14
+                        sbv >= 5.14,
+                        partial-order >= 0.1.2
   default-language: Haskell2010
 
 test-suite spec
@@ -150,7 +157,10 @@ test-suite spec
   hs-source-dirs:       tests
   other-modules:        Camfort.Analysis.CommentAnnotatorSpec
                         Camfort.Specification.Stencils.CheckSpec
+                        Camfort.Specification.Stencils.ConsistencySpec
+                        Camfort.Specification.Stencils.DenotationalSemanticsSpec
                         Camfort.Specification.Stencils.GrammarSpec
+                        Camfort.Specification.Stencils.InferenceBackendSpec
                         Camfort.Specification.Stencils.ModelSpec
                         Camfort.Specification.StencilsSpec
                         Camfort.Specification.UnitsSpec
@@ -172,5 +182,6 @@ test-suite spec
                         binary >= 0.8.3.0,
                         lattices >= 1.5,
                         sbv >= 5.14,
+                        partial-order >= 0.1.2,
                         camfort
   default-language: Haskell2010

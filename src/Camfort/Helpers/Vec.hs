@@ -23,12 +23,15 @@
 {-# LANGUAGE PolyKinds #-}
 {-# LANGUAGE FlexibleInstances #-}
 {-# LANGUAGE ScopedTypeVariables #-}
+{-# LANGUAGE TypeOperators #-}
 
 module Camfort.Helpers.Vec where
 
-import Prelude hiding (length)
+import Prelude hiding (length, zipWith, take, drop, (!!))
 
 import Data.Proxy
+
+import Unsafe.Coerce
 
 data Nat = Z | S Nat
 
@@ -66,6 +69,10 @@ length :: Vec n a -> Int
 length Nil = 0
 length (Cons x xs) = 1 + length xs
 
+lengthN :: Vec n a -> Natural n
+lengthN Nil = Zero
+lengthN (Cons x xs) = Succ $ lengthN xs
+
 instance Functor (Vec n) where
   fmap f Nil         = Nil
   fmap f (Cons x xs) = Cons (f x) (fmap f xs)
@@ -83,3 +90,98 @@ instance Show a => Show (Vec n a) where
       showV Nil          = ""
       showV (Cons x Nil) = show x
       showV (Cons x xs)  = show x ++ "," ++ showV xs
+
+instance Foldable (Vec n) where
+  foldr _ acc Nil = acc
+  foldr f acc (Cons x xs) = foldr f (f x acc) xs
+
+zipWith :: (a -> b -> c) -> Vec n a -> Vec n b -> Vec n c
+zipWith f Nil Nil = Nil
+zipWith f (Cons x xs) (Cons y ys) = Cons (f x y) (zipWith f xs ys)
+
+zip :: Vec n a -> Vec n b -> Vec n (a,b)
+zip = zipWith (,)
+
+findIndex :: (a -> Bool) -> Vec n a -> Maybe Int
+findIndex = go 0
+  where
+    go :: Int -> (a -> Bool) -> Vec n a -> Maybe Int
+    go _ _ Nil = Nothing
+    go acc p (Cons x xs)
+      | p x = Just acc
+      | otherwise = go (acc + 1) p xs
+
+(!!) :: Vec n a -> Int -> a
+Cons x v' !! 0 = x
+Cons _ v' !! n = v' !! (n - 1)
+
+replace :: Int -> a -> Vec n a -> Vec n a
+replace 0 a (Cons x xs) = Cons a xs
+replace n a (Cons x xs) = Cons x (replace (n-1) a xs)
+replace _ _ Nil = error "Found asymmetry is beyond the limits."
+
+-- Equality type
+data EqT a b where
+  ReflEq :: EqT a a
+
+data ExistsEqT t n where
+     ExistsEqT :: EqT (t m) n -> ExistsEqT t n
+
+-- Lists existentially quanitify over a vector's size : Exists n . Vec n a
+data VecBox a where
+     VecBox :: Vec n a -> VecBox a
+
+fromList :: [a] -> VecBox a
+fromList = foldr (\x (VecBox xs) -> VecBox (Cons x xs)) (VecBox Nil)
+
+toList :: Vec n a -> [ a ]
+toList Nil = [ ]
+toList (Cons x xs) = x : toList xs
+
+-- | Apply length preserving list operation.
+applyListOp :: ([ a ] -> [ a ]) -> Vec n a -> Vec n a
+applyListOp f v =
+  case fromList . f . toList $ v of
+    VecBox v' ->
+      case proveEqSize v v' of
+        Just ReflEq -> v'
+        Nothing -> error "List operation was not length preserving."
+
+proveEqSize :: Vec n a -> Vec m b -> Maybe (EqT m n)
+proveEqSize Nil Nil = return ReflEq
+proveEqSize (Cons _ xs) (Cons _ ys) = do
+  ReflEq <- proveEqSize xs ys
+  return ReflEq
+proveEqSize _ _ = Nothing
+
+proveNonEmpty :: Vec n a -> Maybe (ExistsEqT S n)
+proveNonEmpty v =
+  case v of
+    Nil -> Nothing
+    (Cons x xs) -> Just $ ExistsEqT ReflEq
+
+hasSize :: Vec m a -> Natural n -> Maybe (EqT m n)
+hasSize Nil Zero = return ReflEq
+hasSize (Cons _ xs) (Succ n) = do
+  ReflEq <- xs `hasSize` n
+  return ReflEq
+hasSize _ _ = Nothing
+
+{- Vector list repreentation where the size 'n' is existential quantified -}
+data VecList a where VL :: [Vec n a] -> VecList a
+
+-- pre-condition: the input is a 'rectangular' list of lists (i.e. all internal
+-- lists have the same size)
+fromLists :: forall a . [[a]] -> VecList a
+fromLists [] = VL ([] :: [Vec Z a])
+fromLists (xs:xss) = consList (fromList xs) (fromLists xss)
+  where
+    consList :: VecBox a -> VecList a -> VecList a
+    consList (VecBox vec) (VL [])     = VL [vec]
+    consList (VecBox vec) (VL xs) = -- Force the pre-condition equality
+      case preCondition vec xs of
+          ReflEq -> VL (vec : xs)
+          where -- At the moment the pre-condition is 'assumed', and therefore
+            -- force used unsafeCoerce: TODO, rewrite
+            preCondition :: forall n n1 a . Vec n a -> [Vec n1 a] -> EqT n n1
+            preCondition xs x = unsafeCoerce ReflEq

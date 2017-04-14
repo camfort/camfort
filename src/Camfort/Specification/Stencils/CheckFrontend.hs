@@ -14,9 +14,9 @@
    limitations under the License.
 -}
 
-{-# LANGUAGE FlexibleContexts #-}
-{-# LANGUAGE MultiParamTypeClasses #-}
 {-# LANGUAGE ImplicitParams #-}
+{-# LANGUAGE TupleSections #-}
+{-# LANGUAGE LambdaCase #-}
 
 module Camfort.Specification.Stencils.CheckFrontend where
 
@@ -25,17 +25,15 @@ import Control.Arrow
 import Control.Monad.State.Strict
 import Control.Monad.Writer.Strict hiding (Product)
 
+import qualified Camfort.Helpers.Vec as V
 import Camfort.Specification.Stencils.CheckBackend
+import qualified Camfort.Specification.Stencils.Consistency as C
 import qualified Camfort.Specification.Stencils.Grammar as Gram
-import Camfort.Specification.Stencils.Annotation
 import Camfort.Specification.Stencils.Model
 import Camfort.Specification.Stencils.InferenceFrontend hiding (LogLine)
-import Camfort.Specification.Stencils.InferenceBackend
-import Camfort.Specification.Stencils.Synthesis
 import Camfort.Specification.Stencils.Syntax
 import Camfort.Analysis.Annotations
 import Camfort.Analysis.CommentAnnotator
-import Camfort.Helpers
 
 import qualified Language.Fortran.AST as F
 import qualified Language.Fortran.Analysis as FA
@@ -46,7 +44,9 @@ import qualified Language.Fortran.Util.Position as FU
 
 import qualified Data.Map as M
 import Data.Maybe
-import Data.List
+import Algebra.Lattice (joins1)
+import Data.Int
+import qualified Data.Set as S
 
 -- Entry point
 stencilChecking :: FAR.NameMap -> F.ProgramFile (FA.Analysis A) -> [String]
@@ -76,7 +76,7 @@ stencilChecking nameMap pf = snd . runWriter $
                     let ?nameMap = nameMap
                       in descendBiM perProgramUnitCheck pf'
      -- Format output
-     let a@(_, output) = evalState (runWriterT results) (([], Nothing), ivmap)
+     let (_, output) = evalState (runWriterT results) (([], Nothing), ivmap)
      tell $ pprint output
 
 type LogLine = (FU.SrcSpan, String)
@@ -109,15 +109,41 @@ updateRegionEnv ann =
 checkOffsetsAgainstSpec :: [(Variable, Multiplicity [[Int]])]
                         -> [(Variable, Specification)]
                         -> Bool
-checkOffsetsAgainstSpec offsetMaps =
-    all (\(var1, Specification mult)->
-      all (\(var2, offsets) ->
-        var1 /= var2 || noAllInfinity offsets `consistent` mult) offsetMaps)
-    where
-      noAllInfinity (Single a) =
-        Single $ filter (not . all (== absoluteRep)) a
-      noAllInfinity (Multiple a) =
-        Multiple $ filter (not . all (== absoluteRep)) a
+checkOffsetsAgainstSpec offsetMaps specMaps =
+    flip all specToVecList $
+      \case
+        (spec, Once (V.VL vs)) -> spec `C.consistent` (Once . toUNF) vs == C.Consistent
+        (spec, Mult (V.VL vs)) -> spec `C.consistent` (Mult . toUNF) vs == C.Consistent
+  where
+    toUNF :: [ V.Vec n Int64 ] -> UnionNF n Offsets
+    toUNF = joins1 . map (return . fmap intToSubscript)
+
+    -- This function generates the special offsets subspace, subscript,
+    -- that either had one element or is the whole set.
+    intToSubscript :: Int64 -> Offsets
+    intToSubscript i
+      | fromIntegral i == absoluteRep = SetOfIntegers
+      | otherwise = Offsets . S.singleton $ i
+
+    -- Convert list of list of indices into vectors and wrap them around
+    -- existential so that we don't have to prove they are all of the same
+    -- size.
+    specToVecList :: [ (Specification, Multiplicity (V.VecList Int64)) ]
+    specToVecList = map (second (fmap V.fromLists)) specToIxs
+
+    specToIxs :: [ (Specification, Multiplicity [ [ Int64 ] ]) ]
+    specToIxs = pairWithFst specMaps (map (second toInt64) offsetMaps)
+
+    toInt64 :: Multiplicity [ [ Int ] ] -> Multiplicity [ [ Int64 ] ]
+    toInt64 = fmap (map (map fromIntegral))
+
+    -- Given two maps for each key in the first map generate a set of
+    -- tuples matching the (val,val') where val and val' are corresponding
+    -- values from each set.
+    pairWithFst :: Eq a => [ (a, b) ] -> [ (a, c) ] -> [ (b, c) ]
+    pairWithFst [] _ = []
+    pairWithFst ((key, val):xs) ys =
+      map ((val,) . snd) (filter ((key ==) . fst) ys) ++ pairWithFst xs ys
 
 -- Go into the program units first and record the module name when
 -- entering into a module
@@ -139,7 +165,7 @@ perBlockCheck b@(F.BlComment ann span _) = do
     -- Comment contains a specification and an Associated block
     (Just (Right (Right specDecls)), Just block) ->
      case block of
-      s@(F.BlStatement ann span' _ (F.StExpressionAssign _ _ lhs rhs)) ->
+      s@(F.BlStatement _ span' _ (F.StExpressionAssign _ _ lhs _)) ->
        case isArraySubscript lhs of
          Just subs -> do
             -- Create list of relative indices
@@ -151,8 +177,8 @@ perBlockCheck b@(F.BlComment ann span _) = do
             let relOffsets = correctNames . fst . runWriter $ genOffsets ivmap lhsN [s]
             let multOffsets = map (\relOffset ->
                   case relOffset of
-                    (var, (True, offsets)) -> (var, Multiple offsets)
-                    (var, (False, offsets)) -> (var, Single offsets)) relOffsets
+                    (var, (True, offsets)) -> (var, Mult offsets)
+                    (var, (False, offsets)) -> (var, Once offsets)) relOffsets
             let expandedDecls =
                   concatMap (\(vars,spec) -> map (flip (,) spec) vars) specDecls
             -- Model and compare the current and specified stencil specs
@@ -172,13 +198,12 @@ perBlockCheck b@(F.BlComment ann span _) = do
             return b'
          Nothing -> return b'
 
-      (F.BlDo ann span _ _ _ mDoSpec body _) ->
-           -- Stub, maybe collect stencils inside 'do' block
-           return b'
+      -- Stub, maybe collect stencils inside 'do' block
+      F.BlDo{} -> return b'
       _ -> return b'
     _ -> return b'
 
-perBlockCheck b@(F.BlDo ann span _ _ _ mDoSpec body _) = do
+perBlockCheck b@(F.BlDo _ _ _ _ _ _ body _) = do
    -- descend into the body of the do-statement
    mapM_ (descendBiM perBlockCheck) body
    -- Remove any induction variable from the state

@@ -24,24 +24,14 @@
 
 module Camfort.Functionality where
 
-import System.Console.GetOpt
-import System.Directory
-import System.Environment
 import System.FilePath
-import System.IO
-
 import Control.Monad
 
-import Data.Monoid
 import Data.Generics.Uniplate.Operations
 import Data.Data
 import Data.Binary
-import Data.List (foldl', intercalate)
 import Data.Text (pack, unpack, split)
 
-import qualified Debug.Trace as D
-
-import Camfort.Analysis.Annotations
 import Camfort.Analysis.Simple
 import Camfort.Transformation.DataTypeIntroduction
 import Camfort.Transformation.DeadCode
@@ -49,22 +39,14 @@ import Camfort.Transformation.CommonBlockElim
 import Camfort.Transformation.EquivalenceElim
 
 import qualified Camfort.Specification.Units as LU
-import Camfort.Specification.Units.Environment
 import Camfort.Specification.Units.Monad
 
-import Camfort.Helpers.Syntax
 import Camfort.Helpers
-import Camfort.Output
 import Camfort.Input
 
 import qualified Language.Fortran.Parser.Any as FP
-import qualified Language.Fortran.AST as F
 import Language.Fortran.Util.ModFile
-import Language.Fortran.Analysis.Renaming
-  (renameAndStrip, analyseRenames, unrename, NameMap)
-import Language.Fortran.Analysis(initAnalysis)
 import qualified Camfort.Specification.Stencils as Stencils
-import qualified Data.ByteString.Char8 as B
 import qualified Data.Map.Strict as M
 
 -- CamFort optional flags
@@ -93,33 +75,32 @@ getExcludedFiles :: Options -> [String]
 getExcludedFiles = map unpack . split (==',') . pack . getExcludes
 
 -- * Wrappers on all of the features
-ast d excludes _ opts = do
+ast d excludes _ _ = do
     xs <- readParseSrcDir d excludes
     print (map (\(_, _, p) -> p) xs)
 
-countVarDecls inSrc excludes _ opts = do
+countVarDecls inSrc excludes _ _ = do
     putStrLn $ "Counting variable declarations in '" ++ inSrc ++ "'"
     doAnalysisSummary countVariableDeclarations inSrc excludes Nothing
 
-dead inSrc excludes outSrc opts = do
+dead inSrc excludes outSrc _ = do
     putStrLn $ "Eliminating dead code in '" ++ inSrc ++ "'"
     report <- doRefactor (mapM (deadCode False)) inSrc excludes outSrc
     putStrLn report
 
-common inSrc excludes outSrc opts = do
+common inSrc excludes outSrc _ = do
     putStrLn $ "Refactoring common blocks in '" ++ inSrc ++ "'"
     isDir <- isDirectory inSrc
-    let dir = if isDir then inSrc ++ "/" else ""
     let rfun = commonElimToModules (takeDirectory outSrc ++ "/")
     report <- doRefactorAndCreate rfun inSrc excludes outSrc
     putStrLn report
 
-equivalences inSrc excludes outSrc opts = do
+equivalences inSrc excludes outSrc _ = do
     putStrLn $ "Refactoring equivalences blocks in '" ++ inSrc ++ "'"
     report <- doRefactor (mapM refactorEquivalences) inSrc excludes outSrc
     putStrLn report
 
-datatypes inSrc excludes outSrc opts = do
+datatypes inSrc excludes outSrc _ = do
     putStrLn $ "Introducing derived data types in '" ++ inSrc ++ "'"
     report <- doRefactor dataTypeIntro inSrc excludes outSrc
     putStrLn report
@@ -167,13 +148,13 @@ getModFiles = foldM (\ modFiles f -> do
 
 isModFile = (== modFileSuffix) . fileExt
 
-unitsCheck inSrc excludes outSrc opt = do
+unitsCheck inSrc excludes _ opt = do
     putStrLn $ "Checking units for '" ++ inSrc ++ "'"
     uo <- optsToUnitOpts opt
     let rfun = concatMap (LU.checkUnits uo)
     doAnalysisReportWithModFiles rfun putStrLn inSrc excludes =<< getModFiles opt
 
-unitsInfer inSrc excludes outSrc opt = do
+unitsInfer inSrc excludes _ opt = do
     putStrLn $ "Inferring units for '" ++ inSrc ++ "'"
     uo <- optsToUnitOpts opt
     let rfun = concatMap (LU.inferUnits uo)
@@ -197,7 +178,7 @@ unitsSynth inSrc excludes outSrc opt = do
     report <- doRefactorWithModFiles rfun inSrc excludes outSrc =<< getModFiles opt
     putStrLn report
 
-unitsCriticals inSrc excludes outSrc opt = do
+unitsCriticals inSrc excludes _ opt = do
     putStrLn $ "Suggesting variables to annotate with unit specifications in '"
              ++ inSrc ++ "'"
     uo <- optsToUnitOpts opt

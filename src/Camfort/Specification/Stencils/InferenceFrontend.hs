@@ -31,23 +31,22 @@ import Control.Monad.Writer.Strict hiding (Product)
 import Camfort.Analysis.CommentAnnotator
 
 import Camfort.Specification.Stencils.InferenceBackend
+import Camfort.Specification.Stencils.Model
 import Camfort.Specification.Stencils.Syntax
-import Camfort.Specification.Stencils.Annotation
+import Camfort.Specification.Stencils.Annotation ()
 import qualified Camfort.Specification.Stencils.Grammar as Gram
 import qualified Camfort.Specification.Stencils.Synthesis as Synth
 import Camfort.Analysis.Annotations
 import Camfort.Helpers (collect)
+import qualified Camfort.Helpers.Vec as V
 import Camfort.Input
-import qualified Camfort.Output as O
 
 import qualified Language.Fortran.AST as F
 import qualified Language.Fortran.Analysis as FA
-import qualified Language.Fortran.Analysis.Types as FAT
 import qualified Language.Fortran.Analysis.Renaming as FAR
 import qualified Language.Fortran.Analysis.BBlocks as FAB
 import qualified Language.Fortran.Analysis.DataFlow as FAD
 import qualified Language.Fortran.Util.Position as FU
-import qualified Language.Fortran.Util.SecondParameter as FUS
 
 import Data.Data
 import Data.Foldable
@@ -57,8 +56,6 @@ import qualified Data.Map as M
 import qualified Data.IntMap as IM
 import qualified Data.Set as S
 import Data.Maybe
-import Data.List
-import Debug.Trace
 
 -- Define modes of interaction with the inference
 data InferMode =
@@ -189,7 +186,7 @@ isArraySubscript (F.ExpDataRef _ _ e e') = do
    Just xs <++> Just ys  = Just (xs ++ ys)
 isArraySubscript _ = Nothing
 
-fromJustMsg msg (Just x) = x
+fromJustMsg _ (Just x) = x
 fromJustMsg msg Nothing = error msg
 
 -- Traverse Blocks in the AST and infer stencil specifications
@@ -197,7 +194,7 @@ perBlockInfer :: Params
                => InferMode -> Char -> F.Block (FA.Analysis A)
                -> Inferer (F.Block (FA.Analysis A))
 
-perBlockInfer Synth _ b@(F.BlComment ann span _) = do
+perBlockInfer Synth _ b@(F.BlComment ann _ _) = do
   -- If we have a comment that is actually a specification then record that
   -- this has been assigned so that we don't generate extra specifications
   -- that overlap with user-given oones
@@ -208,14 +205,14 @@ perBlockInfer Synth _ b@(F.BlComment ann span _) = do
     (Just (Left (Gram.SpecDec _  vars)), Just block) ->
      -- Is the block an assignment
      case block of
-      s@(F.BlStatement _ span _ assg@(F.StExpressionAssign _ _ _ _)) -> do
+      F.BlStatement _ span _ F.StExpressionAssign{} -> do
          -- Then update the list of spans+vars that have specifications
          state <- get
          put (state { hasSpec = hasSpec state ++ zip (repeat span) vars })
     _ -> return ()
   return b
 
-perBlockInfer mode marker b@(F.BlStatement ann span@(FU.SrcSpan lp up) _ stmnt)
+perBlockInfer mode marker b@(F.BlStatement ann span@(FU.SrcSpan lp _) _ stmnt)
   | mode == AssignMode || mode == CombinedMode || mode == EvalMode || mode == Synth = do
     -- On all StExpressionAssigns that occur in stmt....
     let lhses = [lhs | (F.StExpressionAssign _ _ lhs _)
@@ -291,18 +288,18 @@ genSpecifications ivs lhs blocks = do
               . M.unionsWith (++)
 
       splitUpperAndLower = concatMap splitUpperAndLower'
-      splitUpperAndLower' (vs, Specification (Multiple (Bound (Just l) (Just u))))
+      splitUpperAndLower' (vs, Specification (Mult (Bound (Just l) (Just u))))
         | isUnit l =
-         [(vs, Specification (Multiple (Bound Nothing (Just u))))]
+         [(vs, Specification (Mult (Bound Nothing (Just u))))]
         | otherwise =
-         [(vs, Specification (Multiple (Bound (Just l) Nothing))),
-          (vs, Specification (Multiple (Bound Nothing (Just u))))]
-      splitUpperAndLower' (vs, Specification (Single (Bound (Just l) (Just u))))
+         [(vs, Specification (Mult (Bound (Just l) Nothing))),
+          (vs, Specification (Mult (Bound Nothing (Just u))))]
+      splitUpperAndLower' (vs, Specification (Once (Bound (Just l) (Just u))))
         | isUnit l =
-         [(vs, Specification (Multiple (Bound Nothing (Just u))))]
+         [(vs, Specification (Mult (Bound Nothing (Just u))))]
         | otherwise =
-         [(vs, Specification (Single (Bound (Just l) Nothing))),
-          (vs, Specification (Single (Bound Nothing (Just u))))]
+         [(vs, Specification (Once (Bound (Just l) Nothing))),
+          (vs, Specification (Once (Bound Nothing (Just u))))]
       splitUpperAndLower' x = [x]
 
 genOffsets :: Params
@@ -334,7 +331,7 @@ genSubscripts False (F.BlStatement _ _ _ (F.StExpressionAssign _ _ e _))
     -- Don't pull dependencies through arrays
     = return M.empty
 
-genSubscripts top block = do
+genSubscripts _ block = do
     visited <- get
     case (FA.insLabel $ F.getAnnotation block) of
 
@@ -383,7 +380,7 @@ getInductionVar (Just (F.DoSpecification _ _ (F.StExpressionAssign _ _ e _) _ _)
 getInductionVar _ = []
 
 isStencilDo :: F.Block (FA.Analysis A) -> Bool
-isStencilDo b@(F.BlDo _ span _ _ _ mDoSpec body _) =
+isStencilDo (F.BlDo _ _ _ _ _ mDoSpec body _) =
  -- Check to see if the body contains any affine use of the induction variable
  -- as a subscript
  case getInductionVar mDoSpec of
@@ -471,7 +468,7 @@ relativise lhs rhses = foldr relativiseRHS rhses lhs
 
 -- Check that induction variables are used consistently
 consistentIVSuse :: [Neighbour] -> [[Neighbour]] -> Bool
-consistentIVSuse lhs [] = True
+consistentIVSuse _ [] = True
 consistentIVSuse lhs rhses =
   consistentRHS /= Nothing && (all consistentWithLHS (fromJust consistentRHS))
     where
@@ -493,15 +490,15 @@ consistentIVSuse lhs rhses =
       matchesIV :: Variable -> Neighbour -> Bool
       matchesIV v (Neighbour v' _) | v == v' = True
       -- All RHS to contain index ranges
-      matchesIV v (Neighbour v' _) | v == "" = True
-      matchesIV v (Neighbour v' _) | v' == "" = True
+      matchesIV v Neighbour{}      | v  == "" = True
+      matchesIV _ (Neighbour v' _) | v' == "" = True
       matchesIV _ _                          = False
 
 -- Convert list of relative offsets to a spec
 relativeIxsToSpec :: [[Int]] -> Maybe Specification
 relativeIxsToSpec ixs =
     if isEmpty exactSpec then Nothing else Just exactSpec
-    where exactSpec = inferFromIndicesWithoutLinearity . fromLists $ ixs
+    where exactSpec = inferFromIndicesWithoutLinearity . V.fromLists $ ixs
 
 isNeighbour :: Data a => F.Index (FA.Analysis a) -> [Variable] -> Bool
 isNeighbour exp vs =
@@ -554,8 +551,8 @@ ixToNeighbour ivmap f = ixToNeighbour' ivsList f
     ixsspan  (F.IxRange _ sp _ _ _) = sp
     ixsspan (F.IxSingle _ sp _ _ ) = sp
 
-ixToNeighbour' ivs (F.IxRange _ _ Nothing Nothing Nothing)     = Neighbour "" 0
-ixToNeighbour' ivs (F.IxRange _ _ Nothing Nothing
+ixToNeighbour' _ (F.IxRange _ _ Nothing Nothing Nothing)     = Neighbour "" 0
+ixToNeighbour' _ (F.IxRange _ _ Nothing Nothing
                   (Just (F.ExpValue _ _ (F.ValInteger "1")))) = Neighbour "" 0
 
 ixToNeighbour' ivs (F.IxSingle _ _ _ exp)  = expToNeighbour ivs exp
@@ -570,7 +567,7 @@ expToNeighbour ivs e@(F.ExpValue _ _ v@(F.ValVariable _))
     | FA.varName e `elem` ivs = Neighbour (FA.varName e) 0
     | otherwise               = Constant (fmap (const ()) v)
 
-expToNeighbour ivs (F.ExpValue _ _ val) = Constant (fmap (const ()) val)
+expToNeighbour _ (F.ExpValue _ _ val) = Constant (fmap (const ()) val)
 
 expToNeighbour ivs (F.ExpBinary _ _ F.Addition
                  e@(F.ExpValue _ _ (F.ValVariable _))

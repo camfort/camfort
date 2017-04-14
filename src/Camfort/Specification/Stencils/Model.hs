@@ -22,202 +22,378 @@ the specification checking and program synthesis features.
 
 -}
 
-{-# LANGUAGE TypeFamilies #-}
 {-# LANGUAGE DataKinds #-}
-{-# LANGUAGE TupleSections #-}
+{-# LANGUAGE GADTs #-}
+{-# LANGUAGE ScopedTypeVariables #-}
 {-# LANGUAGE FlexibleInstances #-}
-{-# LANGUAGE ImplicitParams #-}
+{-# LANGUAGE TypeFamilies #-}
+{-# LANGUAGE DeriveFunctor #-}
+{-# LANGUAGE DeriveFoldable #-}
+{-# LANGUAGE DeriveTraversable #-}
+{-# LANGUAGE DeriveDataTypeable #-}
+{-# LANGUAGE StandaloneDeriving #-}
+{-# LANGUAGE MultiWayIf #-}
 
-module Camfort.Specification.Stencils.Model where
+module Camfort.Specification.Stencils.Model ( Interval(..)
+                                            , Bound(..)
+                                            , approxVec
+                                            , Offsets(..)
+                                            , UnionNF
+                                            , vecLength
+                                            , unfCompare
+                                            , optimise
+                                            , Approximation(..)
+                                            , lowerBound, upperBound
+                                            , fromExact
+                                            , Multiplicity(..)
+                                            , Peelable(..)
+                                            ) where
 
-import Camfort.Specification.Stencils.Syntax
-import Data.Set hiding (map,foldl',(\\))
-import qualified Data.Set as Set
-import Data.List
-import qualified Data.List as DL
-import qualified Data.Map as DM
+import qualified Control.Monad as CM
 
-{-| This function maps inner representation to a set of vectors of length
--   given by `dim`. This is the mathematical representation of the
--   specification. |-}
-model :: Multiplicity (Approximation Spatial)
-      -> Int
-      -> Multiplicity (Approximation (Set [Int]))
-model s dims =
-    let ?globalDimensionality = dims
-    in mkModel s
+import           Algebra.Lattice
+import           Data.Semigroup
+import qualified Data.List.NonEmpty as NE
+import qualified Data.Set as S
+import           Data.Foldable
+import           Data.SBV
+import           Data.Data
+import           Data.List (sortBy, nub)
+import           Data.Maybe (fromJust)
+import qualified Data.PartialOrd as PO
 
-consistent :: Multiplicity [[Int]]
-           -> Multiplicity (Approximation Spatial)
-           -> Bool
--- If the specification says "readOnce" but there are duplicates among
--- offsets, then there is no consistency.
---
--- Note that if the spec omits "readOnce" and the offsets happen to be
--- unique that is allowed as "readOnce" is an extra qualifier.
-consistent (Multiple _) (Single _) = False
-consistent mult1 spec =
-    consistent' (model spec dimensionality)
+import qualified Camfort.Helpers.Vec as V
+import System.IO.Unsafe
+
+-- Utility container
+class Container a where
+  type MemberTyp a
+  type CompTyp a
+
+  member :: MemberTyp a -> a -> Bool
+  compile :: a -> (CompTyp a -> SBool)
+
+--------------------------------------------------------------------------------
+-- Arbitrary sets representing offsets
+--------------------------------------------------------------------------------
+
+data Offsets =
+    Offsets (S.Set Int64)
+  | SetOfIntegers
+  deriving Eq
+
+instance Ord Offsets where
+    Offsets s `compare` Offsets s' = s `compare` s'
+    Offsets _ `compare` SetOfIntegers = LT
+    SetOfIntegers `compare` Offsets _ = GT
+    SetOfIntegers `compare` SetOfIntegers = EQ
+
+instance Container Offsets where
+  type MemberTyp Offsets = Int64
+  type CompTyp Offsets = SInt64
+
+  member i (Offsets s) = i `S.member` s
+  member _ _ = True
+
+  compile (Offsets s) i = i `sElem` map fromIntegral (S.toList s)
+  compile SetOfIntegers _ = true
+
+instance JoinSemiLattice Offsets where
+  (Offsets s) \/ (Offsets s') = Offsets $ s `S.union` s'
+  _ \/ _ = SetOfIntegers
+
+instance MeetSemiLattice Offsets where
+  (Offsets s) /\ (Offsets s') = Offsets $ s `S.intersection` s'
+  off@Offsets{} /\ _ = off
+  _ /\ o = o
+
+instance Lattice Offsets
+
+instance BoundedJoinSemiLattice Offsets where
+  bottom = Offsets S.empty
+
+instance BoundedMeetSemiLattice Offsets where
+  top = SetOfIntegers
+
+instance BoundedLattice Offsets
+
+--------------------------------------------------------------------------------
+-- Interval as defined in the paper
+--------------------------------------------------------------------------------
+
+data Bound = Arbitrary | Standard
+
+-- | Interval data structure assumes the following:
+-- 1. The first num. param. is less than the second;
+-- 2. For holed intervals, first num. param. <= 0 <= second num. param.;
+data Interval a where
+  IntervArbitrary :: Int -> Int -> Interval Arbitrary
+  IntervInfiniteArbitrary :: Interval Arbitrary
+  IntervHoled     :: Int64 -> Int64 -> Bool -> Interval Standard
+  IntervInfinite  :: Interval Standard
+
+deriving instance Eq (Interval a)
+
+instance Show (Interval Standard) where
+  show IntervInfinite = "IntervInfinite"
+  show (IntervHoled lb up p) =
+    "Interv [" ++ show lb ++ "," ++ show up ++ "]^" ++ show p
+
+approxInterv :: Interval Arbitrary -> Approximation (Interval Standard)
+approxInterv (IntervArbitrary a b)
+  | a > b = error
+    "Interval condition violated: lower bound is bigger than the upper bound."
+  | a <=  0, b >=  0 = Exact  $ IntervHoled a' b' True
+  | a <= -1, b == -1 = Exact  $ IntervHoled a' 0  False
+  | a ==  1, b >=  1 = Exact  $ IntervHoled 0  b' False
+  | a >   1, b >   1 = Bound Nothing $ Just $ IntervHoled 0  b' False
+  | a <  -1, b <  -1 = Bound Nothing $ Just $ IntervHoled a' 0  False
+  | otherwise = error "Impossible: All posibilities are covered."
   where
-    dimensionality = length . head $ accesses
-    consistent' m2 =
-      case fromMult m2 of
-        Exact unifiers ->
-          consistent' (Multiple (Bound Nothing (Just unifiers))) &&
-          consistent' (Multiple (Bound (Just unifiers) Nothing))
-        Bound lus@Just{} uus@Just{} ->
-          consistent' (Multiple (Bound lus Nothing)) &&
-          consistent' (Multiple (Bound Nothing uus))
-        Bound Nothing (Just unifiers) ->
-          all (\access -> any (access `accepts`) unifiers) accesses
-        Bound (Just unifiers) Nothing ->
-          all (\unifier -> any (`accepts` unifier) accesses) unifiers
+    a' = fromIntegral a
+    b' = fromIntegral b
+approxInterv IntervInfiniteArbitrary = Exact IntervInfinite
 
-    accesses = fromMult mult1
+approxVec :: forall n .
+             V.Vec n (Interval Arbitrary)
+          -> Approximation (V.Vec n (Interval Standard))
+approxVec v =
+  case findApproxIntervs stdVec of
+    ([],_) -> Exact . fmap fromExact $ stdVec
+    _      -> Bound Nothing (Just $ upperBound <$> stdVec)
+  where
+    stdVec :: V.Vec n (Approximation (Interval Standard))
+    stdVec = fmap approxInterv v
 
-    access `accepts` unifier =
-      all (\(u,v) -> v == absoluteRep || u == v) (zip access unifier)
+    findApproxIntervs :: forall n . V.Vec n (Approximation (Interval Standard))
+                      -> ([ Int ], [ Int ])
+    findApproxIntervs v = findApproxIntervs' 0 v ([],[])
 
--- Recursive `Model` class implemented for all parts of the spec.
-class Model spec where
-   type Domain spec
+    findApproxIntervs' :: forall n . Int
+                       -> V.Vec n (Approximation (Interval Standard))
+                       -> ([ Int ], [ Int ])
+                       -> ([ Int ], [ Int ])
+    findApproxIntervs' _ V.Nil acc = acc
+    findApproxIntervs' i (V.Cons x xs) (bixs, eixs) =
+      findApproxIntervs' (i+1) xs $
+        case x of
+          Bound{} -> (i:bixs, eixs)
+          Exact{} -> (bixs, i:eixs)
 
-   -- generate model for the specification, where the implicit
-   -- parameter ?globalDimensionality is the global dimensionality
-   -- for the spec (not just the local maximum dimensionality)
-   mkModel :: (?globalDimensionality :: Int) => spec -> Domain spec
+instance Container (Interval Standard) where
+  type MemberTyp (Interval Standard) = Int64
+  type CompTyp (Interval Standard) = SInt64
 
-   -- Return the maximum dimension specified in the spec
-   -- giving the dimensionality for that specification
-   dimensionality :: spec -> Int
-   dimensionality = maximum . dimensions
-   -- Return all the dimensions specified for in this spec
-   dimensions :: spec -> [Int]
+  member 0 (IntervHoled _ _ b) = b
+  member i (IntervHoled a b _) = i >= a && i <= b
+  member _ _ = True
 
--- Set representation where multiplicities are (-1) modulo 2
--- that is, False = multiplicity 1, True = multiplicity > 1
-instance Model Specification where
-   type Domain Specification = Multiplicity (Approximation (Set [Int]))
+  compile (IntervHoled i1 i2 b) i
+    | b = inRange i range
+    | otherwise = inRange i range &&& i ./= 0
+    where
+      range = (fromIntegral i1, fromIntegral i2)
+  compile IntervInfinite _ = true
 
-   mkModel (Specification s) = mkModel s
+instance JoinSemiLattice (Interval Standard) where
+  (IntervHoled lb ub noHole) \/ (IntervHoled lb' ub' noHole') =
+    IntervHoled (min lb lb') (max ub ub') (noHole || noHole')
+  _ \/ _ = top
 
-   dimensionality (Specification s) = dimensionality s
+instance MeetSemiLattice (Interval Standard) where
+  (IntervHoled lb ub noHole) /\ (IntervHoled lb' ub' noHole') =
+    IntervHoled (max lb lb') (min ub ub') (noHole && noHole')
+  int@IntervHoled{} /\ _ = int
+  _ /\ int = int
 
-   dimensions (Specification s) = dimensions s
+instance Lattice (Interval Standard)
 
-instance Model (Multiplicity (Approximation Spatial)) where
-   type Domain (Multiplicity (Approximation Spatial)) =
-     Multiplicity (Approximation (Set [Int]))
+instance BoundedJoinSemiLattice (Interval Standard) where
+  bottom = IntervHoled 0 0 False
 
-   mkModel (Multiple s) = Multiple (mkModel s)
-   mkModel (Single s) = Single (mkModel s)
+instance BoundedMeetSemiLattice (Interval Standard) where
+  top = IntervInfinite
 
-   dimensionality mult = dimensionality $ fromMult mult
+instance BoundedLattice (Interval Standard)
 
-   dimensions mult = dimensions $ fromMult mult
+--------------------------------------------------------------------------------
+-- Union of cartesian products normal form
+--------------------------------------------------------------------------------
 
-instance Model (Approximation Spatial) where
-  type Domain (Approximation Spatial) = Approximation (Set [Int])
+type UnionNF n a = NE.NonEmpty (V.Vec n a)
 
-  mkModel = fmap mkModel
-  dimensionality (Exact s) = dimensionality s
-  dimensionality (Bound l u) = dimensionality l `max` dimensionality u
+vecLength :: UnionNF n a -> V.Natural n
+vecLength = V.lengthN . NE.head
 
-  dimensions (Exact s) = dimensions s
-  dimensions (Bound l u) = dimensions l ++ dimensions u
+instance Container a => Container (UnionNF n a) where
+  type MemberTyp (UnionNF n a) = V.Vec n (MemberTyp a)
+  type CompTyp (UnionNF n a) = V.Vec n (CompTyp a)
+  member is = any (member' is)
+    where
+      member' is space = and $ V.zipWith member is space
 
--- Lifting of model to Maybe type
-instance Model a => Model (Maybe a) where
-  type Domain (Maybe a) = Maybe (Domain a)
+  compile spaces is = foldr1 (|||) $ NE.map (`compile'` is) spaces
+    where
+      compile' space is =
+        foldr' (\(set, i) -> (&&&) $ compile set i) true $ V.zip space is
 
-  mkModel Nothing = Nothing
-  mkModel (Just x) = Just (mkModel x)
+instance JoinSemiLattice (UnionNF n a) where
+  oi \/ oi' = oi <> oi'
 
-  dimensions Nothing = [0]
-  dimensions (Just x) = dimensions x
+instance BoundedLattice a => MeetSemiLattice (UnionNF n a) where
+  (/\) = CM.liftM2 (V.zipWith (/\))
 
--- Core part of the model
-instance Model Spatial where
-    type Domain Spatial = Set [Int]
+instance BoundedLattice a => Lattice (UnionNF n a)
 
-    mkModel (Spatial s) = mkModel s
+unfCompare :: forall a b n . ( Container a,          Container b
+                             , MemberTyp a ~ Int64,  MemberTyp b ~ Int64
+                             , CompTyp a ~ SInt64,   CompTyp b ~ SInt64
+                             )
+           => UnionNF n a -> UnionNF n b -> Ordering
+unfCompare oi oi' = unsafePerformIO $ do
+    thmRes <- prove pred
+    if modelExists thmRes
+      then do
+        ce <- counterExample thmRes
+        case V.fromList ce of
+          V.VecBox cev ->
+            case V.proveEqSize (NE.head oi) cev of
+              Just V.ReflEq ->
+                -- TODO: The second branch is defensive programming the
+                -- member check is not necessary unless the counter example
+                -- is bogus (it shouldn't be). Delete if it adversely
+                -- effects the performance.
+                if | cev `member` oi  -> return GT
+                   | cev `member` oi' -> return LT
+                   | otherwise -> fail
+                     "Impossible: counter example is in neither of the operands"
+              Nothing -> fail $
+                "Impossible: Counter example size doesn't match the original" ++
+                " vector size."
+      else return EQ
+  where
+    counterExample :: ThmResult -> IO [ Int64 ]
+    counterExample thmRes =
+      case getModel thmRes of
+        Right (False, ce) -> return ce
+        Right (True, _) -> fail "Returned probable model."
+        Left str -> fail str
 
-    dimensionality (Spatial s) = dimensionality s
+    pred :: Predicate
+    pred = do
+      freeVars <- (mkFreeVars . dimensionality) oi :: Symbolic [ SInt64 ]
+      case V.fromList freeVars of
+        V.VecBox freeVarVec ->
+          case V.proveEqSize (NE.head oi) freeVarVec of
+            Just V.ReflEq -> return $
+              compile oi freeVarVec .== compile oi' freeVarVec
+            Nothing -> fail $
+              "Impossible: Free variables size doesn't match that of the " ++
+              "union parameter."
+    dimensionality = V.length . NE.head
 
-    dimensions (Spatial s)     = dimensions s
+--------------------------------------------------------------------------------
+-- Optimise unions
+--------------------------------------------------------------------------------
 
+instance PO.PartialOrd Offsets where
+  (Offsets s) <= (Offsets s') = s <= s'
+  SetOfIntegers <= Offsets{} = False
+  _ <= SetOfIntegers = True
 
-instance Model RegionSum where
-   type Domain RegionSum = Set [Int]
-   mkModel (Sum ss) = unions (map mkModel ss)
-   dimensionality (Sum ss) =
-     maximum1 (map dimensionality ss)
+instance PO.PartialOrd (Interval Standard) where
+  (IntervHoled lb ub p) <= (IntervHoled lb' ub' p') =
+    (p' || not p) && lb >= lb' && ub <= ub'
+  IntervInfinite <= IntervHoled{} = False
+  _ <= IntervInfinite = True
 
-   dimensions (Sum ss) = concatMap dimensions ss
+instance PO.PartialOrd a => PO.PartialOrd (V.Vec n a) where
+  v <= v' = and $ V.zipWith (PO.<=) v v'
 
+optimise :: UnionNF n (Interval Standard) -> UnionNF n (Interval Standard)
+optimise = NE.fromList . maximas . fixedPointUnion . NE.toList
+  where
+    fixedPointUnion unf =
+      let unf' = unionLemma . maximas $ unf
+      in if unf' == unf then unf' else fixedPointUnion unf'
 
-instance Model Region where
-   type Domain Region = Set [Int]
+sensibleGroupBy :: Eq a =>
+                   (a -> a -> Ordering)
+                -> (a -> a -> Bool)
+                -> [ a ]
+                -> [ [ a ] ]
+sensibleGroupBy ord p l = nub . map (\el -> sortBy ord . filter (p el) $ l) $ l
 
-   mkModel (Forward dep dim reflx) = fromList
-     [mkSingleEntryNeg i dim ?globalDimensionality | i <- [i0..dep]]
-       where i0 = if reflx then 0 else 1
+maximas :: [ V.Vec n (Interval Standard) ] -> [ V.Vec n (Interval Standard) ]
+maximas = nub
+        . fmap (head . PO.maxima)
+        . sensibleGroupBy ord (PO.<=)
+  where
+    ord a b = fromJust $ a `PO.compare` b
 
-   mkModel (Backward dep dim reflx) = fromList
-     [mkSingleEntryNeg i dim ?globalDimensionality | i <- [(-dep)..i0]]
-       where i0 = if reflx then 0 else -1
+-- | Union lemma says that if we have a product of intervals (as defined in
+-- the paper) and we union two that agrees in each dimension except one.
+-- The union is again a product of intervals that agrees with the original
+-- dimensions in all dimensions except the original differing one. At that
+-- point it is the union of intervals, which is itself still an interval.
+unionLemma :: [ V.Vec n (Interval Standard) ] -> [ V.Vec n (Interval Standard) ]
+unionLemma = map (foldr1 (V.zipWith (\/)))
+           . sensibleGroupBy (\a b -> if a == b then EQ else LT) agreeButOne
+  where
+    -- This function returns true if two vectors agree at all points but one.
+    -- It also holds if two vectors are identical.
+    agreeButOne :: Eq a => V.Vec n a -> V.Vec n a -> Bool
+    agreeButOne = go False
+      where
+        go :: Eq a => Bool -> V.Vec n a -> V.Vec n a -> Bool
+        go _ V.Nil V.Nil = True
+        go False (V.Cons x xs) (V.Cons y ys)
+          | x == y = go False xs ys
+          | otherwise = go True xs ys
+        go True (V.Cons x xs) (V.Cons y ys)
+          | x == y = go True xs ys
+          | otherwise = False
 
-   mkModel (Centered dep dim reflx) = fromList
-     [mkSingleEntryNeg i dim ?globalDimensionality | i <- [(-dep)..dep] \\ i0]
-       where i0 = if reflx then [] else [0]
+--------------------------------------------------------------------------------
+-- Injections for multiplicity and exactness
+--------------------------------------------------------------------------------
 
-   dimensionality (Forward  _ d _) = d
-   dimensionality (Backward _ d _) = d
-   dimensionality (Centered _ d _) = d
+data Approximation a = Exact a | Bound (Maybe a) (Maybe a)
+  deriving (Eq, Show, Functor, Foldable, Traversable, Data, Typeable)
 
-   dimensions (Forward _ d _)  = [d]
-   dimensions (Backward _ d _) = [d]
-   dimensions (Centered _ d _) = [d]
+fromExact :: Approximation a -> a
+fromExact (Exact a) = a
+fromExact _ = error "Can't retrieve from bounded as if it was exact."
 
-mkSingleEntryNeg :: Int -> Int -> Int -> [Int]
-mkSingleEntryNeg i 0 ds = error "Dimensions are 1-indexed"
-mkSingleEntryNeg i 1 ds = i : replicate (ds - 1) absoluteRep
-mkSingleEntryNeg i d ds = absoluteRep : mkSingleEntryNeg i (d - 1) (ds - 1)
+lowerBound :: Approximation a -> a
+lowerBound (Bound (Just a) _) = a
+lowerBound (Bound Nothing _) = error "Approximation doesn't have a lower bound."
+lowerBound (Exact a) = a
 
-instance Model RegionProd where
-   type Domain RegionProd = Set [Int]
+upperBound :: Approximation a -> a
+upperBound (Bound _ (Just a)) = a
+upperBound (Bound _ Nothing) = error "Approximation doesn't have a upper bound."
+upperBound (Exact a) = a
 
-   mkModel (Product [])  = Set.empty
-   mkModel (Product [s])  = mkModel s
-   mkModel p@(Product ss)  = cleanedProduct
-     where
-       cleanedProduct = fromList $ DL.filter keepPred product
-       product = cprodVs $ map (toList . mkModel) ss
-       dims = dimensions p
-       keepPred el = DL.foldr (\pr acc -> nonProdP pr && acc) True (zip [(1::Int)..] el)
-       nonProdP (i,el) = i `notElem` dims || el /= absoluteRep
+class Peelable a where
+  type CoreTyp a
+  peel :: a -> CoreTyp a
 
-   dimensionality (Product ss) =
-      maximum1 (map dimensionality ss)
-   dimensions (Product ss) =
-      nub $ concatMap dimensions ss
+data Multiplicity a = Mult a | Once a
+  deriving (Eq, Show, Functor, Foldable, Traversable, Data, Typeable)
 
-tensor n s t = cleanedProduct
-   where
-       cleanedProduct = fromList $ DL.filter keepPred product
-       product = cprodV s t
-       keepPred el = DL.foldr (\pr acc -> nonProdP pr && acc) True (zip [(1::Int)..] el)
-       nonProdP (i,el) = i `notElem` [1..n] || el /= absoluteRep
+instance Peelable (Multiplicity a) where
+  type CoreTyp (Multiplicity a) = a
 
--- Cartesian product on list of vectors4
-cprodVs :: [[[Int]]] -> [[Int]]
-cprodVs = foldr1 cprodV
+  peel (Mult a) = a
+  peel (Once a) = a
 
-cprodV :: [[Int]] -> [[Int]] -> [[Int]]
-cprodV xss yss = xss >>= (\xs -> yss >>= pairwisePerm xs)
+{-
+data Approximation a = Exact a | Lower a | Upper a
+  deriving (Eq, Show, Functor, Data, Typeable)
 
-pairwisePerm :: [Int] -> [Int] -> [[Int]]
-pairwisePerm x y = sequence . transpose $ [x, y]
-
-maximum1 [] = 0
-maximum1 xs = maximum xs
+instance Peelable Approximation where
+  peel (Exact a) = a
+  peel (Lower a) = a
+  peel (Upper a) = a
+-}

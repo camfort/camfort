@@ -20,34 +20,20 @@
 
 module Camfort.Specification.Stencils.Synthesis where
 
-import Data.Data
 import Data.List
 import Data.Maybe
 import qualified Data.Map as M
-import Data.Generics.Uniplate.Operations
-import Control.Monad.State.Lazy
-import Control.Monad.Reader
-import Control.Monad.Writer hiding (Product)
 
-import Camfort.Specification.Stencils.InferenceBackend
 import Camfort.Specification.Stencils.Syntax
-import Camfort.Specification.Stencils.Model
 
 import Camfort.Analysis.Annotations
-import Camfort.Helpers.Vec
--- These two are redefined here for ForPar ASTs
-import Camfort.Helpers hiding (lineCol, spanLineCol)
 
 import qualified Language.Fortran.AST as F
 import qualified Language.Fortran.Analysis as FA
-import qualified Language.Fortran.Analysis.Types as FAT
 import qualified Language.Fortran.Analysis.Renaming as FAR
-import qualified Language.Fortran.Analysis.BBlocks as FAB
-import qualified Language.Fortran.Analysis.DataFlow as FAD
 import qualified Language.Fortran.Util.Position as FU
 
 import Language.Fortran.Util.Position
-import Data.Map hiding (map)
 
 -- Format inferred specifications
 formatSpec ::
@@ -65,7 +51,7 @@ formatSpec prefix nm (span, Right (evalInfo,name)) =
                 Nothing -> show span ++ "    "
                 Just pr -> pr
 
-formatSpec prefix nm (span, Left []) = ""
+formatSpec _ _ (_, Left []) = ""
 formatSpec prefix nm (span, Left specs) =
   (intercalate "\n" $ map (\s -> prefix' ++ doSpec s) specs)
     where

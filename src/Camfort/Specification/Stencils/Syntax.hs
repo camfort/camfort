@@ -19,11 +19,16 @@
 {-# LANGUAGE DeriveDataTypeable #-}
 {-# LANGUAGE FlexibleInstances #-}
 {-# LANGUAGE GADTs #-}
-{-# LANGUAGE DeriveFunctor #-}
 
 module Camfort.Specification.Stencils.Syntax where
 
 import Camfort.Helpers
+import Camfort.Specification.Stencils.Model ( Multiplicity(..)
+                                            , peel
+                                            , Approximation(..)
+                                            , lowerBound, upperBound
+                                            , fromExact
+                                            )
 
 import Prelude hiding (sum)
 
@@ -40,25 +45,6 @@ type Variable = String
 {-  Contains the syntax representation for stencil specifications -}
 
 {- *** 0. Representations -}
-
--- Representation of an inference result, either exact or with some bound
-data Approximation a =
-  Exact a | Bound (Maybe a) (Maybe a)
-   deriving (Eq, Data, Typeable, Show)
-
-fromExact :: Approximation a -> a
-fromExact (Exact a) = a
-fromExact _ = error "Exception: fromExact on a non-exact result"
-
-upperBound :: a -> Approximation a
-upperBound x = Bound Nothing (Just x)
-
-lowerBound :: a -> Approximation a
-lowerBound x = Bound (Just x) Nothing
-
-instance Functor Approximation where
-  fmap f (Exact x) = Exact (f x)
-  fmap f (Bound x y) = Bound (fmap f x) (fmap f y)
 
 -- 'absoluteRep' is an integer to use to represent absolute indexing expressions
 -- (which may be constants, non-affine indexing expressions, or expressions
@@ -96,7 +82,7 @@ data Specification =
     deriving (Eq, Data, Typeable)
 
 isEmpty :: Specification -> Bool
-isEmpty (Specification mult) = isUnit . fromMult $ mult
+isEmpty (Specification mult) = isUnit . peel $ mult
 
 -- **********************
 -- Spatial specifications:
@@ -119,19 +105,12 @@ fromBool False = Linear
 hasDuplicates :: Eq a => [a] -> ([a], Bool)
 hasDuplicates xs = (nub xs, nub xs /= xs)
 
-fromMult :: Multiplicity a -> a
-fromMult (Multiple a) = a
-fromMult (Single a) = a
-
 setLinearity :: Linearity -> Specification -> Specification
 setLinearity l (Specification mult)
-  | l == Linear = Specification $ Single $ fromMult mult
-  | l == NonLinear = Specification $ Multiple $ fromMult mult
+  | l == Linear = Specification $ Once $ peel mult
+  | l == NonLinear = Specification $ Mult $ peel mult
 
 data Linearity = Linear | NonLinear deriving (Eq, Data, Typeable)
-
-data Multiplicity a = Multiple a | Single a
-    deriving (Eq, Data, Typeable, Functor, Show)
 
 type Dimension  = Int -- spatial dimensions are 1 indexed
 type Depth      = Int
@@ -189,147 +168,6 @@ regionPlus (Backward dep dim reflx) (Forward dep' dim' reflx')
     | dep == dep' && dim == dim' = Just $ Centered dep dim (reflx || reflx')
 regionPlus x y | x == y          = Just x
 regionPlus x y                   = Nothing
-
-instance PartialMonoid RegionProd where
-   emptyM = Product []
-
-   appendM (Product [])   s  = Just s
-   appendM s (Product [])    = Just s
-   appendM (Product [s]) (Product [s']) =
-       regionPlus s s' >>= (\sCombined -> return $ Product [sCombined])
-   appendM (Product ss) (Product ss')
-       | ss == ss' = Just $ Product ss
-       | otherwise =
-         case absorbReflexive ss ss' of
-           Just (ss0, ss1) ->
-               case distAndOverlaps ss0 ss1 of
-                 Just ss'' -> return $ Product $ sort ss''
-                 Nothing   -> return $ Product $ sort (ss0 ++ ss1)
-           Nothing -> case distAndOverlaps ss ss' of
-                        Just ss'' -> return $ Product $ sort ss''
-                        Nothing   -> Nothing
-
---Based on equations:
--- Forward n d + Reflexive d = Forward n d
--- Backward n d + Reflexive d = Backward n d
--- Centered n d + Reflexive d = Centered n d
--- (and so on for n-ary cases and Backward and Centered).
-
-absorbReflexive :: [Region] -> [Region] -> Maybe ([Region], [Region])
-absorbReflexive a b =
-      absorbReflexive' (sortBy cmpDims a) (sortBy cmpDims b)
-  <|> absorbReflexive' (sortBy cmpDims b) (sortBy cmpDims a)
-  where cmpDims = compare `on` getDimension
-
-absorbReflexive' [] [] = Just ([], [])
-absorbReflexive' (Forward d dim reflx : rs) [Centered 0 dim' _]
-  | dim == dim' = Just (Forward d dim True:rs, [])
-
-absorbReflexive' (Backward d dim reflx : rs) [Centered 0 dim' _]
-  | dim == dim' = Just (Backward d dim True:rs, [])
-
-absorbReflexive' (Centered d dim reflx : rs) [Centered 0 dim' _]
-  | dim == dim' && d /= 0 = Just (Centered d dim True:rs, [])
-
-absorbReflexive' _ _ = Nothing
-
--- Implements a combination of (+DIST), (+COMM), and (OVERLAPS)
-distAndOverlaps :: [Region] -> [Region] -> Maybe [Region]
-distAndOverlaps x y =
-    if length x <= 1 || length y <= 1
-    then Nothing
-    else -- (+COMM)
-         distAndOverlaps' x y <|> distAndOverlaps' y x
-
-distAndOverlaps' [] xs = Just xs
-distAndOverlaps' xs [] = Just xs
-
--- F+F
-distAndOverlaps' (Forward d dim refl : rs) (Forward d' dim' refl' : rs')
-  | rs == rs' && dim == dim'
-      = Just (Forward (max d d') dim (refl || refl') : rs)
-
--- B+B
-distAndOverlaps' (Backward d dim refl : rs) (Backward d' dim' refl' : rs')
-  | rs == rs' && dim == dim'
-      = Just (Backward (max d d') dim (refl || refl') : rs)
-
--- C+C
-distAndOverlaps' (Centered d dim refl : rs) (Centered d' dim' refl' : rs')
-  | rs == rs' && dim == dim' && d /= 0 && d' /= 0
-      = Just (Centered (max d d') dim (refl || refl') : rs)
-
--- C+F
-distAndOverlaps' (Forward d dim refl : rs) (Centered d' dim' refl' : rs')
-  | rs == rs' && dim == dim' && d <= d' && d' /= 0
-      = Just (Centered d' dim (refl || refl') : rs)
-
--- C+B
-distAndOverlaps' (Backward d dim refl : rs) (Centered d' dim' refl' : rs')
-  | rs == rs' && dim == dim' && d <= d' && d' /= 0
-      = Just (Centered d' dim (refl || refl') : rs)
-
--- F+B
-distAndOverlaps' (Forward d dim reflx : rs) (Backward d' dim' reflx' : rs')
-    | rs == rs' && d == d' && dim == dim'
-      = Just (Centered d dim (reflx || reflx') : rs)
-
--- C+R
-distAndOverlaps' (Centered d dim reflx : rs) (Centered 0 dim' True : rs')
-    | rs == rs' && dim == dim' && d /= 0
-      = Just (Centered d dim True : rs)
-
--- F+R
-distAndOverlaps' (Forward d dim reflx : rs) (Centered 0 dim' True : rs')
-    | rs == rs' && dim == dim'
-      = Just (Forward d dim True : rs)
-
--- B+R
-distAndOverlaps' (Backward d dim reflx : rs) (Centered 0 dim' True : rs')
-    | rs == rs' && dim == dim'
-      = Just (Backward d dim True : rs)
-
--- IRREFL B+!B
-distAndOverlaps' p1@(Backward d1 dim1 refl1 : Backward d2 dim2 refl2 : rs)
-                 p2@(Backward d1' dim1' refl1' : Backward d2' dim2' refl2' : rs')
-    | rs == rs' && dim1 == dim1' && dim2 == dim2'
-      && d1 == d1' && d2 == d2' && refl1 == not refl1' && refl2 == not refl2'
-      = Just $ [Backward d1 dim1 True, Backward d2 dim2 True] ++ rs
-
-    | rs == rs' && dim1 == dim2' && dim2 == dim1'
-      && d1 == d2' && d2 == d1' && refl1 == not refl2' && refl2 == not refl1'
-      = Just $ [Backward d1 dim1 True, Backward d2 dim2 True] ++ rs
-
--- IRREFL C+!C
-distAndOverlaps' p1@(Centered d1 dim1 refl1 : Centered d2 dim2 refl2 : rs)
-                 p2@(Centered d1' dim1' refl1' : Centered d2' dim2' refl2' : rs')
-    | rs == rs' && dim1 == dim1' && dim2 == dim2' && (d1 * d2 * d1' * d2' /= 0)
-      && d1 == d1' && d2 == d2' && refl1 == not refl1' && refl2 == not refl2'
-      = Just $ [Centered d1 dim1 True, Centered d2 dim2 True] ++ rs
-
-    | rs == rs' && dim1 == dim2' && dim2 == dim1'
-      && d1 == d2' && d2 == d1' && refl1 == not refl2' && refl2 == not refl1'
-      = Just $ [Centered d1 dim1 True, Centered d2 dim2 True] ++ rs
-
--- IRREFL F+!F
-distAndOverlaps' p1@(Forward d1 dim1 refl1 : Forward d2 dim2 refl2 : rs)
-                 p2@(Forward d1' dim1' refl1' : Forward d2' dim2' refl2' : rs')
-    | rs == rs' && dim1 == dim1' && dim2 == dim2' && (d1 * d2 * d1' * d2' /= 0)
-      && d1 == d1' && d2 == d2' && refl1 == not refl1' && refl2 == not refl2'
-      = Just $ [Forward d1 dim1 True, Forward d2 dim2 True] ++ rs
-
-    | rs == rs' && dim1 == dim2' && dim2 == dim1' && (d1 * d2 * d1' * d2' /= 0)
-      && d1 == d2' && d2 == d1' && refl1 == not refl2' && refl2 == not refl1'
-      = Just $ [Forward d1 dim1 True, Forward d2 dim2 True] ++ rs
-
--- push any remaining idempotence through dist
--- distAndOverlaps(r*s + r*s') = r*(distAndOverlaps (s + s'))
-distAndOverlaps' (r:rs) (r':rs')
-    | r == r'   = do rs'' <- distAndOverlaps rs rs'
-                     return $ r : rs''
-
-distAndOverlaps' _ _ = Nothing
-
 
 -- Operations on region specifications form a semiring
 --  where `sum` is the additive, and `prod` is the multiplicative
@@ -390,7 +228,7 @@ instance RegionRig RegionSum where
      do (Product spec) <- ss
         (Product spec') <- ss'
         return $ Product $ nub $ sort $ spec ++ spec'
-  sum (Sum ss) (Sum ss') = Sum $ normalise $ ss ++ ss'
+  sum (Sum ss) (Sum ss') = Sum $ ss ++ ss'
   zero = Sum []
   one = Sum [Product []]
   isUnit s@(Sum ss) = s == zero || s == one || all (== Product []) ss
@@ -410,8 +248,8 @@ instance Show Specification where
 
 instance {-# OVERLAPS #-} Show (Multiplicity (Approximation Spatial)) where
   show mult
-    | Multiple appr <- mult = apprStr empty empty appr
-    | Single appr <- mult = apprStr "readOnce" ", " appr
+    | Mult appr <- mult = apprStr empty empty appr
+    | Once appr <- mult = apprStr "readOnce" ", " appr
     where
       apprStr linearity sep appr =
         case appr of

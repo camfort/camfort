@@ -17,20 +17,13 @@
 
 module Main where
 
-import Data.Generics.Uniplate.Operations
 import System.Console.GetOpt
-import System.Directory
 import System.Environment
-import System.IO
 
-import Camfort.Analysis.Annotations hiding (Unitless)
 import Camfort.Helpers
-import Camfort.Output
-import Camfort.Input
 import Camfort.Functionality
 
 import Data.Text (pack, unpack, split)
-import Data.Maybe
 
 {-| The entry point to CamFort. Displays user information, and
     handlers which functionality is being requested -}
