@@ -27,3 +27,15 @@ spec =
                            (V.Cons (IntervHoled (-1) 1 True) V.Nil))
       shouldBe (regionsToIntervals (V.Succ (V.Succ V.Zero)) fivePointSpatial)
                regFivePoint
+
+    it "handles interval to region example" $ do
+      let reg =
+            return (V.Cons (IntervHoled 0 0 True)
+                           (V.Cons (IntervHoled 0 1 False) V.Nil))
+            \/
+            return (V.Cons (IntervHoled 0 2 False)
+                           (V.Cons (IntervHoled 0 2 False) V.Nil))
+      let spec = Right $ Spatial $
+            Sum [ Product [ Centered 0 1 True, Forward 1 2 False ]
+                , Product [ Forward 2 1 False, Forward 2 2 False ] ]
+      intervalsToRegions reg `shouldBe` spec

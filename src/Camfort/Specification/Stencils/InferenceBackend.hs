@@ -96,34 +96,10 @@ inferCore :: [V.Vec n Int] -> Approximation Spatial
 inferCore subs =
     case V.proveNonEmpty . head $ subs of
       Just (V.ExistsEqT V.ReflEq) ->
-        case fmap simplify . spansToApproxSpatial . inferMinimalVectorRegions $ subs of
+        case spansToApproxSpatial . inferMinimalVectorRegions $ subs of
           Right a -> a
           Left msg -> error msg
       Nothing -> error "Input vectors are empty!"
-
-simplify :: Approximation Spatial -> Approximation Spatial
-simplify = fmap simplifySpatial
-
-simplifySpatial :: Spatial -> Spatial
-simplifySpatial (Spatial (Sum ps)) = Spatial (Sum ps')
-   where ps' = order (reducor ps normaliseNoSort size)
-         order = sort . map (Product . sort . unProd)
-         size :: [RegionProd] -> Int
-         size = Prelude.sum . map (length . unProd)
-
--- Given a list, a list->list transofmer, a size function
--- find the minimal transformed list by applying the transformer
--- to every permutation of the list and when a smaller list is found
--- iteratively apply to permutations on the smaller list
-reducor :: [a] -> ([a] -> [a]) -> ([a] -> Int) -> [a]
-reducor xs f size = reducor' (permutations xs)
-    where
-      reducor' [y] = f y
-      reducor' (y:ys) =
-          if size y' < size y
-            then reducor' (permutations y')
-            else reducor' ys
-        where y' = f y
 
 {-| |inferMinimalVectorRegions| a key part of the algorithm, from a list of
     n-dimensional relative indices it infers a list of (possibly overlapping)

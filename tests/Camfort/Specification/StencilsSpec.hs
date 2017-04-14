@@ -111,26 +111,26 @@ spec =
         inferFromIndices (VL fivepoint)
         `shouldBe`
          (Specification $ Once $ Exact $ Spatial
-                     (Sum [ Product [ Centered 0 1 True, Centered 1 2 True]
-                          , Product [ Centered 0 2 True, Centered 1 1 True]
+                     (Sum [ Product [ Centered 1 1 True, Centered 0 2 True]
+                          , Product [ Centered 0 1 True, Centered 1 2 True]
                           ]))
 
       it "seven point stencil 2D" $
         inferFromIndices (VL sevenpoint)
         `shouldBe`
           (Specification $ Once $ Exact $ Spatial
-                       (Sum [ Product [ Centered 0 1 True, Centered 0 2 True, Centered 1 3 True]
-                            , Product [ Centered 0 1 True, Centered 0 3 True, Centered 1 2 True]
-                            , Product [ Centered 0 2 True, Centered 0 3 True, Centered 1 1 True]
+                       (Sum [ Product [ Centered 1 1 True, Centered 0 2 True, Centered 0 3 True]
+                            , Product [ Centered 0 1 True, Centered 1 2 True, Centered 0 3 True]
+                            , Product [ Centered 0 1 True, Centered 0 2 True, Centered 1 3 True]
                             ]))
 
       it "five point stencil 2D with blip" $
          inferFromIndices (VL fivepointErr)
          `shouldBe`
           (Specification $ Once $ Exact $ Spatial
-                         (Sum [ Product [ Forward 1 1 True, Forward 1 2 True],
+                         (Sum [ Product [ Centered 1 1 True, Centered 0 2 True],
                                 Product [ Centered 0 1 True, Centered 1 2 True],
-                                Product [ Centered 0 2 True, Centered 1 1 True] ]))
+                                Product [ Forward 1 1 True, Forward 1 2 True] ]))
 
       it "centered forward" $
          inferFromIndices (VL centeredFwd)
@@ -171,7 +171,7 @@ spec =
                          [offsetToIx "i" 0, offsetToIx "j" 0]]
          `shouldBe` (Just $ Specification $ Once $ Exact
                        (Spatial
-                         (Sum [Product [Forward 1 2 True, Centered 0 1 True]])))
+                         (Sum [Product [Centered 0 1 True, Forward 1 2 True]])))
 
       it "consistent (3) a(i+1,c,j) = b(j,i+1) + b(j,i) \
                         \:: backward(depth=1,dim=2)*pointed(dim=1)" $
@@ -181,7 +181,7 @@ spec =
                          [offsetToIx "j" 0, offsetToIx "i" 0]]
          `shouldBe` (Just $ Specification $ Once $ Exact
                        (Spatial
-                         (Sum [Product [Backward 1 2 True, Centered 0 1 True]])))
+                         (Sum [Product [Centered 0 1 True, Backward 1 2 True]])))
 
       it "consistent (4) a(i+1,j) = b(0,i+1) + b(0,i) \
                          \:: backward(depth=1,dim=2)" $
@@ -200,8 +200,8 @@ spec =
                         [[offsetToIx "i" 0, offsetToIx "i" 1]]
          `shouldBe` (Just $ Specification $ Once $ Exact
                        (Spatial
-                         (Sum [Product [Forward 1 2 False,
-                                        Centered 0 1 True]])))
+                         (Sum [Product [Centered 0 1 True,
+                                        Forward 1 2 False]])))
 
       it "consistent (6) a(i) = b(i) + b(0) \
                         \:: pointed(dim=1)" $
@@ -342,7 +342,7 @@ variations =
     , Mult $ Exact $ Spatial (Sum [Product [Forward 1 1 True, Centered 0 2 True]])
     )
   , ( [ [0,1], [0,0] ]
-    , Once $ Exact $ Spatial (Sum [Product [Forward 1 2 True, Centered 0 1 True]])
+    , Once $ Exact $ Spatial (Sum [Product [Centered 0 1 True, Forward 1 2 True]])
     )
   , ( [ [1,1], [0,1], [1,0], [0,0] ]
     , Once $ Exact $ Spatial (Sum [Product [Forward 1 1 True, Forward 1 2 True]])
@@ -351,7 +351,7 @@ variations =
     , Once $ Exact $ Spatial (Sum [Product [Backward 1 1 True, Centered 0 2 True]])
     )
   , ( [ [0,-1], [0,0], [0,-1] ]
-    , Mult $ Exact $ Spatial (Sum [Product [Backward 1 2 True, Centered 0 1 True]])
+    , Mult $ Exact $ Spatial (Sum [Product [Centered 0 1 True, Backward 1 2 True]])
     )
   , ( [ [-1,-1], [0,-1], [-1,0], [0,0], [0, -1] ]
     , Mult $ Exact $ Spatial (Sum [Product [Backward 1 1 True, Backward 1 2 True]])
@@ -379,10 +379,10 @@ variationsRel =
     , Once $ Exact $ Spatial (Sum [Product [Centered 0 1 True, Centered 0 2 True]])
     )
   , (Neighbour "i" 1, Neighbour "j" (-1), [ [1,0], [0,0], [0,0] ]
-    , Mult $ Exact $ Spatial (Sum [Product [Forward 1 2 False, Backward 1 1 True]])
+    , Mult $ Exact $ Spatial (Sum [Product [Backward 1 1 True, Forward 1 2 False]])
     )
   , (Neighbour "i" 0, Neighbour "j" (-1), [ [0,1], [0,0] ]
-    , Once $ Exact $ Spatial (Sum [Product [Forward 2 2 False, Centered 0 1 True]])
+    , Once $ Exact $ Spatial (Sum [Product [Centered 0 1 True, Forward 2 2 False]])
     )
   -- [0,1] [0,0] [0,-1]
   , (Neighbour "i" 1, Neighbour "j" 0, [ [1,1], [1,0], [1,-1] ]
@@ -414,13 +414,13 @@ test3DSpecVariation (input, expectation) =
 
 variations3D =
   [ ( [ [-1,0,-1], [0,0,-1], [-1,0,0], [0,0,0] ]
-    ,  Once $ Exact $ Spatial (Sum [Product [Backward 1 1 True, Backward 1 3 True, Centered 0 2 True]])
+    ,  Once $ Exact $ Spatial (Sum [Product [Backward 1 1 True, Centered 0 2 True, Backward 1 3 True]])
     )
   , ( [ [1,1,0], [0,1,0] ]
     ,  Once $ Exact $ Spatial (Sum [Product [Forward 1 1 True, Forward 1 2 False, Centered 0 3 True]])
     )
   , ( [ [-1,0,-1], [0,0,-1], [-1,0,0], [0,0,0] ]
-    ,  Once $ Exact $ Spatial (Sum [Product [Backward 1 1 True, Backward 1 3 True, Centered 0 2 True]])
+    ,  Once $ Exact $ Spatial (Sum [Product [Backward 1 1 True, Centered 0 2 True, Backward 1 3 True]])
     )
   ]
 
