@@ -113,3 +113,21 @@ spec =
                              (V.Cons (IntervHoled (-2) 2 False)
                                      (V.Cons (IntervHoled (-2) 2 True) V.Nil)))
         optimise reg `shouldBe` reg'
+
+      it "another contains approximation" $ do
+        let reg =
+              return (V.Cons (IntervHoled 0 2 False)
+                             (V.Cons (IntervHoled 0 2 False) V.Nil))
+              \/
+              return (V.Cons (IntervHoled 0 2 False)
+                             (V.Cons (IntervHoled 0 2 False) V.Nil))
+              \/
+              return (V.Cons (IntervHoled 0 0 True)
+                             (V.Cons (IntervHoled 0 1 False) V.Nil))
+        let reg' =
+              return (V.Cons (IntervHoled 0 2 False)
+                             (V.Cons (IntervHoled 0 2 False) V.Nil))
+              \/
+              return (V.Cons (IntervHoled 0 0 True)
+                             (V.Cons (IntervHoled 0 1 False) V.Nil))
+        optimise reg `shouldBe` reg'
