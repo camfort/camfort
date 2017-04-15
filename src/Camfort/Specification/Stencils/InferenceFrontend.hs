@@ -37,7 +37,7 @@ import Camfort.Specification.Stencils.Annotation ()
 import qualified Camfort.Specification.Stencils.Grammar as Gram
 import qualified Camfort.Specification.Stencils.Synthesis as Synth
 import Camfort.Analysis.Annotations
-import Camfort.Helpers (collect)
+import Camfort.Helpers (collect, descendReverseM, descendBiReverseM)
 import qualified Camfort.Helpers.Vec as V
 import Camfort.Input
 
@@ -56,6 +56,7 @@ import qualified Data.Map as M
 import qualified Data.IntMap as IM
 import qualified Data.Set as S
 import Data.Maybe
+import Debug.Trace
 
 -- Define modes of interaction with the inference
 data InferMode =
@@ -67,7 +68,8 @@ instance Default InferMode where
 
 data InferState = IS {
      ivMap        :: FAD.InductionVarMapByASTBlock
-   , hasSpec      :: [(FU.SrcSpan, Variable)] }
+   , hasSpec      :: [(FU.SrcSpan, Variable)]
+   , visitedNodes :: [Int]}
 
 
 -- The inferer returns information as a LogLine
@@ -85,7 +87,7 @@ runInferer :: FAD.InductionVarMapByASTBlock
            -> Inferer a
            -> (a, [LogLine])
 runInferer ivmap flTo =
-    flip evalState (IS ivmap [])
+    flip evalState (IS ivmap [] [])
   . flip runReaderT flTo
   . runWriterT
 
@@ -156,8 +158,9 @@ genSpecsAndReport :: Params
   -> [F.Block (FA.Analysis A)]
   -> Inferer [([Variable], Specification)]
 genSpecsAndReport mode span lhs blocks = do
-    (IS ivmap _) <- get
-    let (specs, evalInfos) = runWriter $ genSpecifications ivmap lhs blocks
+    (IS ivmap _ _) <- get
+    let ((specs, visited), evalInfos) = runWriter $ genSpecifications ivmap lhs blocks
+    modify (\state -> state { visitedNodes = (visitedNodes state) ++ visited })
     tell [ (span, Left specs) ]
     if mode == EvalMode
       then do
@@ -216,17 +219,22 @@ perBlockInfer Synth _ b@(F.BlComment ann _ _) = do
 
 perBlockInfer mode marker b@(F.BlStatement ann span@(FU.SrcSpan lp _) _ stmnt)
   | mode == AssignMode || mode == CombinedMode || mode == EvalMode || mode == Synth = do
-    -- On all StExpressionAssigns that occur in stmt....
-    let lhses = [lhs | (F.StExpressionAssign _ _ lhs _)
+
+    (IS ivmap hasSpec visitedStmts) <- get
+    let label = fromMaybe (-1) (FA.insLabel ann)
+    if (label `elem` visitedStmts)
+    then -- This statement has been part of a visited dataflow path
+      return b
+    else do
+      -- On all StExpressionAssigns that occur in stmt....
+      let lhses = [lhs | (F.StExpressionAssign _ _ lhs _)
                            <- universe stmnt :: [F.Statement (FA.Analysis A)]]
-    (IS ivmap hasSpec) <- get
-    specs <- forM lhses $ \lhs -> do
-    -- ... apply the following:
+      specs <- forM lhses $ \lhs -> do
+         -- ... apply the following:
          case lhs of
           -- Assignment to a variable
-          (F.ExpValue _ _ (F.ValVariable v)) -> return [] -- genSpecsAndReport mode spa
-          _ ->
-            case isArraySubscript lhs of
+          (F.ExpValue _ _ (F.ValVariable v)) -> genSpecsAndReport mode span [] [b]
+          _ -> case isArraySubscript lhs of
              Just subs ->
                -- Left-hand side is a subscript-by relative index or by a range
                case neighbourIndex ivmap subs of
@@ -240,7 +248,7 @@ perBlockInfer mode marker b@(F.BlStatement ann span@(FU.SrcSpan lp _) _ stmnt)
                              else return []
              -- Not an assign we are interested in
              _ -> return []
-    if mode == Synth && not (null specs) && specs /= [[]]
+      if mode == Synth && not (null specs) && specs /= [[]]
       then
         let specComment = Synth.formatSpec (Just (tabs ++ '!':marker:" ")) ?nameMap (span, Left (concat specs'))
             specs' = map (mapMaybe noSpecAlready) specs
@@ -262,15 +270,17 @@ perBlockInfer mode marker b@(F.BlDo ann span lab cname lab' mDoSpec body tlab) =
       then genSpecsAndReport mode span [] body
       else return []
 
-    -- descend into the body of the do-statement
-    body' <- mapM (descendBiM (perBlockInfer mode marker)) body
+    -- descend into the body of the do-statement (in reverse order)
+    body' <- mapM (descendBiReverseM (perBlockInfer mode marker)) (reverse body)
     return $ F.BlDo ann span lab cname lab' mDoSpec body' tlab
 
 perBlockInfer mode marker b = do
     -- Go inside child blocks
-    b' <- descendM (descendBiM (perBlockInfer mode marker)) $ b
+    b' <- descendReverseM (descendBiReverseM (perBlockInfer mode marker)) $ b
     return b'
 
+-- Combiantor for reducing a map with effects and partiality inside
+-- into an effectful list of key-value pairs
 assocsSequence :: Monad m => M.Map k (m (Maybe a)) -> m [(k, a)]
 assocsSequence maps = do
     assocs <- sequence . map strength . M.toList $ maps
@@ -283,17 +293,17 @@ genSpecifications :: Params
   => FAD.InductionVarMapByASTBlock
   -> [Neighbour]
   -> [F.Block (FA.Analysis A)]
-  -> Writer EvalLog [([Variable], Specification)]
+  -> Writer EvalLog ([([Variable], Specification)], [Int])
 genSpecifications ivs lhs blocks = do
     let (subscripts, visitedNodes) = subscriptsOnRhs ?nameMap blocks
     varToSpecs <- assocsSequence $ mkSpecs subscripts
     case varToSpecs of
       [] -> do
          tell [("EVALMODE: Empty specification (tag: emptySpec)", "")]
-         return []
+         return ([], visitedNodes)
       _ -> do
          let varsToSpecs = groupKeyBy varToSpecs
-         return $ splitUpperAndLower varsToSpecs
+         return (splitUpperAndLower varsToSpecs, visitedNodes)
     where
       mkSpecs = M.mapWithKey (\v -> indicesToSpec ivs v lhs)
 
@@ -499,6 +509,7 @@ relativise lhs rhses = foldr relativiseRHS rhses lhs
 
 -- Check that induction variables are used consistently
 consistentIVSuse :: [Neighbour] -> [[Neighbour]] -> Bool
+consistentIVSuse [] _ = True
 consistentIVSuse _ [] = True
 consistentIVSuse lhs rhses =
   consistentRHS /= Nothing && (all consistentWithLHS (fromJust consistentRHS))

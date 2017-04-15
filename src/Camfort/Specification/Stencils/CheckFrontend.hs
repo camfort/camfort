@@ -186,7 +186,7 @@ perBlockCheck b@(F.BlComment ann span _) = do
               then tell [ (span, "Correct.") ]
               else do
                 let correctNames2 =  map (first (map realName))
-                let inferred = correctNames2 . fst . runWriter $ genSpecifications ivmap lhsN [s]
+                let inferred = correctNames2 . fst . fst . runWriter $ genSpecifications ivmap lhsN [s]
                 let sp = replicate 8 ' '
                 tell [ (span,
                      "Not well specified.\n"

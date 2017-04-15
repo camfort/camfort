@@ -17,6 +17,7 @@
 {-# LANGUAGE PolyKinds #-}
 {-# LANGUAGE FlexibleInstances #-}
 {-# LANGUAGE FlexibleContexts #-}
+{-# LANGUAGE DeriveDataTypeable #-}
 {-# LANGUAGE CPP #-}
 
 module Camfort.Helpers where
@@ -24,8 +25,8 @@ module Camfort.Helpers where
 import GHC.Generics
 import Data.Generics.Zipper
 import Data.Generics.Aliases
-import Data.Generics.Str
 import Data.Generics.Uniplate.Operations
+import qualified Data.Generics.Str as Str
 import Data.Data
 import Data.Maybe
 import Data.Monoid
@@ -179,3 +180,32 @@ everywhere k z = everywhere' z
 
 zfmap :: Data a => (a -> a) -> Zipper (d a) -> Zipper (d a)
 zfmap f x = zeverywhere (mkT f) x
+
+-- Data-generic generic descend but processes children in reverse order
+-- (good for backwards analysis)
+data Reverse f a = Reverse { unwrapReverse :: f a }
+
+instance Functor (Reverse Str.Str) where
+    fmap f (Reverse s) = Reverse (fmap f s)
+
+instance Foldable (Reverse Str.Str) where
+    foldMap f (Reverse x) = foldMap f x
+
+instance Traversable (Reverse Str.Str) where
+    traverse f (Reverse Str.Zero) = pure $ Reverse Str.Zero
+    traverse f (Reverse (Str.One x)) = (Reverse . Str.One) <$> f x
+    traverse f (Reverse (Str.Two x y)) = (\y x -> Reverse $ Str.Two x y)
+                             <$> (fmap unwrapReverse . traverse f . Reverse $ y)
+                             <*> (fmap unwrapReverse . traverse f . Reverse $ x)
+
+
+-- Custom version of descend that process tree in reverse order
+descendReverseM :: (Data on, Monad m, Uniplate on) => (on -> m on) -> on -> m on
+descendReverseM f x =
+    liftM generate . fmap unwrapReverse . traverse f . Reverse $ current
+  where (current, generate) = uniplate x
+
+descendBiReverseM :: (Data from, Data to, Monad m, Biplate from to) => (to -> m to) -> from -> m from
+descendBiReverseM f x =
+    liftM generate . fmap unwrapReverse . traverse f . Reverse $ current
+  where (current, generate) = biplate x
