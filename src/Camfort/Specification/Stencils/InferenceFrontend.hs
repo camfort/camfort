@@ -512,7 +512,9 @@ consistentIVSuse :: [Neighbour] -> [[Neighbour]] -> Bool
 consistentIVSuse [] _ = True
 consistentIVSuse _ [] = True
 consistentIVSuse lhs rhses =
-  consistentRHS /= Nothing && (all consistentWithLHS (fromJust consistentRHS))
+     rhsBasis /= Nothing  -- There is a consitent RHS
+  && (all (`consistentWith` lhs) (fromJust rhsBasis)
+   || all (`consistentWith` (fromJust rhsBasis)) lhs)
     where
       cmp (Neighbour v i) (Neighbour v' _) | v == v'   = Just $ Neighbour v i
                                            | otherwise = Nothing
@@ -522,12 +524,12 @@ consistentIVSuse lhs rhses =
       cmp (NonNeighbour {}) (Neighbour {}) = Nothing
       cmp (Neighbour {}) (NonNeighbour{})  = Nothing
       cmp _ _                              = Just $ Constant (F.ValInteger "")
-      consistentRHS = foldrM (\a b -> mapM (uncurry cmp) $ zip a b) (head rhses) (tail rhses)
+      rhsBasis = foldrM (\a b -> mapM (uncurry cmp) $ zip a b) (head rhses) (tail rhses)
       -- If there is an induction variable on the RHS, then it also occurs on
       -- the LHS
-      consistentWithLHS :: Neighbour -> Bool
-      consistentWithLHS (Neighbour rv _) = any (matchesIV rv) lhs
-      consistentWithLHS _                = True
+      consistentWith :: Neighbour -> [Neighbour] -> Bool
+      consistentWith (Neighbour rv _) ns = any (matchesIV rv) ns
+      consistentWith _                _  = True
 
       matchesIV :: Variable -> Neighbour -> Bool
       matchesIV v (Neighbour v' _) | v == v' = True

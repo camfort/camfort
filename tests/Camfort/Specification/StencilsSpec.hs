@@ -248,6 +248,7 @@ spec =
            `shouldBe`
            "\ntests/fixtures/Specification/Stencils/example2.f\n\
             \(32:7)-(32:26)    stencil readOnce, (backward(depth=1, dim=1)) :: a\n\
+            \(26:8)-(26:29)    stencil readOnce, (pointed(dim=1))*(pointed(dim=2)) :: a\n\
             \(24:8)-(24:53)    stencil readOnce, (pointed(dim=1))*(centered(depth=1, dim=2)) \
                                      \+ (centered(depth=1, dim=1))*(pointed(dim=2)) :: a\n\
             \(41:8)-(41:103)    stencil readOnce, (centered(depth=1, dim=2)) \
