@@ -66,8 +66,8 @@ instance Default InferMode where
     defaultValue = AssignMode
 
 data InferState = IS {
-     ivMap :: FAD.InductionVarMapByASTBlock,
-     hasSpec :: [(FU.SrcSpan, Variable)] }
+     ivMap        :: FAD.InductionVarMapByASTBlock
+   , hasSpec      :: [(FU.SrcSpan, Variable)] }
 
 
 -- The inferer returns information as a LogLine
@@ -171,6 +171,8 @@ genSpecsAndReport mode span lhs blocks = do
          return specs
       else return specs
 
+
+
 -- Match expressions which are array subscripts, returning Just of their
 -- index expressions, else Nothing
 isArraySubscript :: F.Expression (FA.Analysis A)
@@ -218,23 +220,26 @@ perBlockInfer mode marker b@(F.BlStatement ann span@(FU.SrcSpan lp _) _ stmnt)
     let lhses = [lhs | (F.StExpressionAssign _ _ lhs _)
                            <- universe stmnt :: [F.Statement (FA.Analysis A)]]
     (IS ivmap hasSpec) <- get
-    specs <- flip mapM lhses
+    specs <- forM lhses $ \lhs -> do
     -- ... apply the following:
-      (\lhs -> do
-         case isArraySubscript lhs of
-           Just subs ->
-             -- Left-hand side is a subscript-by relative index or by a range
-             case neighbourIndex ivmap subs of
-               Just lhs -> genSpecsAndReport mode span lhs [b]
-               Nothing  -> if mode == EvalMode
-                           then do
-                             tell [(span , Right ("EVALMODE: LHS is an array\
-                                                 \ subscript we can't handle \
-                                                 \(tag: LHSnotHandled)",""))]
-                             return []
-                           else return []
-           -- Not an assign we are interested in
-           _ -> return [])
+         case lhs of
+          -- Assignment to a variable
+          (F.ExpValue _ _ (F.ValVariable v)) -> return [] -- genSpecsAndReport mode spa
+          _ ->
+            case isArraySubscript lhs of
+             Just subs ->
+               -- Left-hand side is a subscript-by relative index or by a range
+               case neighbourIndex ivmap subs of
+                 Just lhs -> genSpecsAndReport mode span lhs [b]
+                 Nothing  -> if mode == EvalMode
+                             then do
+                               tell [(span , Right ("EVALMODE: LHS is an array\
+                                                   \ subscript we can't handle \
+                                                   \(tag: LHSnotHandled)",""))]
+                               return []
+                             else return []
+             -- Not an assign we are interested in
+             _ -> return []
     if mode == Synth && not (null specs) && specs /= [[]]
       then
         let specComment = Synth.formatSpec (Just (tabs ++ '!':marker:" ")) ?nameMap (span, Left (concat specs'))
@@ -266,15 +271,22 @@ perBlockInfer mode marker b = do
     b' <- descendM (descendBiM (perBlockInfer mode marker)) $ b
     return b'
 
+assocsSequence :: Monad m => M.Map k (m (Maybe a)) -> m [(k, a)]
+assocsSequence maps = do
+    assocs <- sequence . map strength . M.toList $ maps
+    return . catMaybes . map strength $ assocs
+  where
+    strength :: Monad m => (a, m b) -> m (a, b)
+    strength (a, mb) = mb >>= (\b -> return (a, b))
+
 genSpecifications :: Params
   => FAD.InductionVarMapByASTBlock
   -> [Neighbour]
   -> [F.Block (FA.Analysis A)]
   -> Writer EvalLog [([Variable], Specification)]
 genSpecifications ivs lhs blocks = do
-    let subscripts = evalState (mapM (genSubscripts True) blocks) []
-    varToMaybeSpecs <- sequence . map strength . mkSpecs $ subscripts
-    let varToSpecs = catMaybes . map strength $ varToMaybeSpecs
+    let (subscripts, visitedNodes) = subscriptsOnRhs ?nameMap blocks
+    varToSpecs <- assocsSequence $ mkSpecs subscripts
     case varToSpecs of
       [] -> do
          tell [("EVALMODE: Empty specification (tag: emptySpec)", "")]
@@ -283,9 +295,7 @@ genSpecifications ivs lhs blocks = do
          let varsToSpecs = groupKeyBy varToSpecs
          return $ splitUpperAndLower varsToSpecs
     where
-      mkSpecs = M.toList
-              . M.mapWithKey (\v -> indicesToSpec ivs v lhs)
-              . M.unionsWith (++)
+      mkSpecs = M.mapWithKey (\v -> indicesToSpec ivs v lhs)
 
       splitUpperAndLower = concatMap splitUpperAndLower'
       splitUpperAndLower' (vs, Specification (Mult (Bound (Just l) (Just u))))
@@ -302,22 +312,43 @@ genSpecifications ivs lhs blocks = do
           (vs, Specification (Once (Bound Nothing (Just u))))]
       splitUpperAndLower' x = [x]
 
+{-| subscriptsOnRhs
+   Takes * a name map
+         * a list of blocks representing an RHS
+   Returns a map from array variables to indices, and a list of
+   nodes that were visited when computing this information -}
+subscriptsOnRhs :: Params
+  => FAR.NameMap
+  -> [F.Block (FA.Analysis A)]
+  -> (M.Map Variable [[F.Index (FA.Analysis A)]], [Int])
+subscriptsOnRhs nameMap blocks =
+    (subscripts', visitedNodes)
+  where
+    (maps, visitedNodes) = runState (mapM (genSubscripts True) blocks) []
+    subscripts = M.unionsWith (++) maps
+    subscripts' = filterOutFuns ?nameMap subscripts
+
 genOffsets :: Params
   => FAD.InductionVarMapByASTBlock
   -> [Neighbour]
   -> [F.Block (FA.Analysis A)]
   -> Writer EvalLog [(Variable, (Bool, [[Int]]))]
 genOffsets ivs lhs blocks = do
-    let subscripts = evalState (mapM (genSubscripts True) blocks) []
-    varToMaybeSpecs <- sequence . map strength . mkOffsets $ subscripts
-    return $ catMaybes . map strength $ varToMaybeSpecs
+    let (subscripts, _) = subscriptsOnRhs ?nameMap blocks
+    assocsSequence $ mkOffsets subscripts
   where
-    mkOffsets = M.toList
-              . M.mapWithKey (\v -> indicesToRelativisedOffsets ivs v lhs)
-              . M.unionsWith (++)
+    mkOffsets = M.mapWithKey (\v -> indicesToRelativisedOffsets ivs v lhs)
 
-strength :: Monad m => (a, m b) -> m (a, b)
-strength (a, mb) = mb >>= (\b -> return (a, b))
+
+-- Filter out any variable names which do not appear in the name map or
+-- which in appear in the name map with the same name, indicating they
+-- are an instric function, e.g., abs
+filterOutFuns nameMap m =
+  M.filterWithKey (\k _ ->
+     case k `M.lookup` nameMap of
+        Nothing           -> False
+        Just k' | k == k' -> False
+        _                 -> True) m
 
 -- Generate all subscripting expressions (that are translations on
 -- induction variables) that flow to this block
