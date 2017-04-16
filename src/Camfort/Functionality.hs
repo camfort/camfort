@@ -81,7 +81,7 @@ data Flag = Version
 
 type Options = [Flag]
 
--- Extract excluces information from options
+-- Extract excludes information from options
 instance Default String where
     defaultValue = ""
 getExcludes :: Options -> String
@@ -205,7 +205,7 @@ stencilsCheck inSrc excludes _ _ = do
    doAnalysisSummary rfun inSrc excludes Nothing
 
 stencilsInfer inSrc excludes outSrc opt = do
-   putStrLn $ "Infering stencil specs for '" ++ inSrc ++ "'"
+   putStrLn $ "Inferring stencil specs for '" ++ inSrc ++ "'"
    let rfun = Stencils.infer (getOption opt) '='
    doAnalysisSummary rfun inSrc excludes (Just outSrc)
 
