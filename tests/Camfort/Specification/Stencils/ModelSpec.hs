@@ -131,3 +131,21 @@ spec =
               return (V.Cons (IntervHoled 0 0 True)
                              (V.Cons (IntervHoled 0 1 False) V.Nil))
         optimise reg `shouldBe` reg'
+
+      it "another subsumption example" $ do
+        let reg =
+              return (V.Cons (IntervHoled 0 2 True)
+                             (V.Cons (IntervHoled (-1) 1 True) V.Nil))
+              \/
+              return (V.Cons (IntervHoled (-1) 0 True)
+                             (V.Cons (IntervHoled 0 1 True) V.Nil))
+              \/
+              return (V.Cons (IntervHoled 0 2 True)
+                             (V.Cons (IntervHoled 0 1 True) V.Nil))
+        let reg' =
+              return (V.Cons (IntervHoled 0 2 True)
+                             (V.Cons (IntervHoled (-1) 1 True) V.Nil))
+              \/
+              return (V.Cons (IntervHoled (-1) 0 True)
+                             (V.Cons (IntervHoled 0 1 True) V.Nil))
+        optimise reg `shouldBe` reg'
