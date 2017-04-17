@@ -42,6 +42,7 @@ module Camfort.Specification.Stencils.Model ( Interval(..)
                                             , vecLength
                                             , unfCompare
                                             , optimise
+                                            , maximas
                                             , Approximation(..)
                                             , lowerBound, upperBound
                                             , fromExact

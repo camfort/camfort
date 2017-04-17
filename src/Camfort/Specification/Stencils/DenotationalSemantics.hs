@@ -21,7 +21,12 @@ import Camfort.Specification.Stencils.Syntax
 intervalsToRegions :: UnionNF (V.S n) (Interval Standard)
                    -> Either String Spatial
 intervalsToRegions as = do
-    sums <- mapM toProd . NE.toList . SG.sconcat . fmap asymmetryElim $ as
+    sums <- mapM toProd
+          . maximas -- Final subsumption optimisation
+          . NE.toList
+          . SG.sconcat
+          . fmap asymmetryElim
+          $ as
     return . Spatial . Sum $ sums
   where
     asymmetryElim :: V.Vec n (Interval a) -> UnionNF n (Interval a)
