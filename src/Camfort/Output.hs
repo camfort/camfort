@@ -137,7 +137,7 @@ refactorBlocks :: FPM.FortranVersion
                -> F.Block Annotation
                -> StateT FU.Position (State Int) (SourceText, Bool)
 -- Output comments
-refactorBlocks v inp e@(F.BlComment ann span comment) = do
+refactorBlocks v inp e@(F.BlComment ann span (F.Comment comment)) = do
     cursor <- get
     if pRefactored ann
      then    let (FU.SrcSpan lb ub) = span

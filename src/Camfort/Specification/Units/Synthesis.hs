@@ -77,7 +77,7 @@ synthBlock marker vars bs b@(F.BlStatement a ss@(FU.SrcSpan lp up) _ (F.StDeclar
         -- Build the text of the comment with the unit annotation.
         let txt   = marker:" " ++ showUnitDecl (e, u)
         let space = FU.posColumn lp - 1
-        let newB  = F.BlComment newA newSS . insertSpacing space $ commentText pf txt
+        let newB  = F.BlComment newA newSS . F.Comment . insertSpacing space $ commentText pf txt
         return $ Just newB
       where
         vname = FA.varName e

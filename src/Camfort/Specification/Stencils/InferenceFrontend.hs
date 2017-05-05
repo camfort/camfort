@@ -262,7 +262,7 @@ perBlockInfer mode marker b@(F.BlStatement ann span@(FU.SrcSpan lp _) _ stmnt)
             (FU.SrcSpan loc _) = span
             span' = FU.SrcSpan (lp {FU.posColumn = 0}) (lp {FU.posColumn = 0})
             ann'  = ann { FA.prevAnnotation = (FA.prevAnnotation ann) { refactored = Just loc } }
-        in return $ F.BlComment ann' span' specComment
+        in return $ F.BlComment ann' span' (F.Comment specComment)
       else return b
 
 perBlockInfer mode marker b@(F.BlDo ann span lab cname lab' mDoSpec body tlab) = do

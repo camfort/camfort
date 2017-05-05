@@ -57,7 +57,7 @@ annotateComments parse pf = do
   where
     writeAST :: (Data a, ASTEmbeddable a ast)
              => AnnotationParser ast -> Block a -> Logger (Block a)
-    writeAST parse b@(BlComment a srcSpan comment) =
+    writeAST parse b@(BlComment a srcSpan (Comment comment)) =
       case parse comment of
         Right ast -> return $ setAnnotation (annotateWithAST a ast) b
         Left NotAnnotation -> return b

@@ -67,56 +67,56 @@ bs = [ BlStatement ea p Nothing (StPause ea p Nothing) ]
 
 pf2 = wrapBlocks bs2
 bs2 =
-  [ BlComment ea p "something"
+  [ BlComment ea p (Comment "something")
   , BlStatement ea p Nothing (StPause ea p Nothing) ]
 
 pf2e = wrapBlocks bs2e
 bs2e =
-  [ BlComment (A (Just (bs2e !! 1)) (Just "hello")) p "something"
+  [ BlComment (A (Just (bs2e !! 1)) (Just "hello")) p (Comment "something")
   , BlStatement ea p Nothing (StPause ea p Nothing) ]
 
 pf3 = wrapBlocks bs3
 bs3 =
-  [ BlComment ea p "mistral"
-  , BlComment ea p "orhan"
-  , BlComment ea p "jean-pierre"
-  , BlComment ea p "contrastin"
+  [ BlComment ea p (Comment "mistral")
+  , BlComment ea p (Comment "orhan")
+  , BlComment ea p (Comment "jean-pierre")
+  , BlComment ea p (Comment "contrastin")
   , BlStatement ea p Nothing (StPause ea p Nothing) ]
 
 pf3e = wrapBlocks bs3e
 bs3e =
-  [ BlComment (A (Just (last bs3e)) (Just "!!!mistral")) p "mistral"
-  , BlComment (A (Just (last bs3e)) (Just "!!!orhan")) p "orhan"
-  , BlComment (A (Just (last bs3e)) (Just "!!!jean-pierre")) p "jean-pierre"
-  , BlComment (A (Just (last bs3e)) (Just "!!!contrastin")) p "contrastin"
+  [ BlComment (A (Just (last bs3e)) (Just "!!!mistral")) p (Comment "mistral")
+  , BlComment (A (Just (last bs3e)) (Just "!!!orhan")) p (Comment "orhan")
+  , BlComment (A (Just (last bs3e)) (Just "!!!jean-pierre")) p (Comment "jean-pierre")
+  , BlComment (A (Just (last bs3e)) (Just "!!!contrastin")) p (Comment "contrastin")
   , BlStatement ea p Nothing (StPause ea p Nothing) ]
 
 pf4 = wrapBlocks bs4
 bs4 =
-  [ BlComment ea p "mistral"
-  , BlComment ea p "contrastin"
+  [ BlComment ea p (Comment "mistral")
+  , BlComment ea p (Comment "contrastin")
   , BlStatement ea p Nothing (StPause ea p Nothing)
-  , BlComment ea p "dominic"
-  , BlComment ea p "orchard"
+  , BlComment ea p (Comment "dominic")
+  , BlComment ea p (Comment "orchard")
   , BlStatement ea p Nothing (StExpressionAssign ea p (varGen "x") (intGen 42)) ]
 
 pf4e = wrapBlocks bs4e
 bs4e =
-  [ BlComment (A (Just (bs4e !! 2)) (Just "!!!mistral")) p "mistral"
-  , BlComment (A (Just (bs4e !! 2)) (Just "!!!contrastin")) p "contrastin"
+  [ BlComment (A (Just (bs4e !! 2)) (Just "!!!mistral")) p (Comment "mistral")
+  , BlComment (A (Just (bs4e !! 2)) (Just "!!!contrastin")) p (Comment "contrastin")
   , BlStatement ea p Nothing (StPause ea p Nothing)
-  , BlComment (A (Just (last bs4e)) (Just "!!!dominic")) p "dominic"
-  , BlComment (A (Just (last bs4e)) (Just "!!!orchard")) p "orchard"
+  , BlComment (A (Just (last bs4e)) (Just "!!!dominic")) p (Comment "dominic")
+  , BlComment (A (Just (last bs4e)) (Just "!!!orchard")) p (Comment "orchard")
   , BlStatement ea p Nothing (StExpressionAssign ea p (varGen "x") (intGen 42)) ]
 
 pf5 = wrapBlocks bs5
 bs5 =
-  [ BlComment ea p "comment 1"
-  , BlComment ea p "comment 2"
+  [ BlComment ea p (Comment "comment 1")
+  , BlComment ea p (Comment "comment 2")
   , BlStatement ea p Nothing (StPause ea p Nothing) ]
 
 pf5e = wrapBlocks bs5e
 bs5e =
-  [ BlComment (A (Just (last bs5e)) Nothing) p "comment 1"
-  , BlComment (A (Just (last bs5e)) Nothing) p "comment 2"
+  [ BlComment (A (Just (last bs5e)) Nothing) p (Comment "comment 1")
+  , BlComment (A (Just (last bs5e)) Nothing) p (Comment "comment 2")
   , BlStatement ea p Nothing (StPause ea p Nothing) ]
