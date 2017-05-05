@@ -719,6 +719,7 @@ modifyPUBlocksM f pu = case pu of
   F.PUSubroutine a s r n p b subs         -> flip fmap (f b) $ \ b' -> F.PUSubroutine a s r n p b' subs
   F.PUFunction   a s r rec n p res b subs -> flip fmap (f b) $ \ b' -> F.PUFunction a s r rec n p res b' subs
   F.PUBlockData  a s n b                  -> flip fmap (f b) $ \ b' -> F.PUBlockData  a s n b'
+  F.PUComment {}                          -> return pu -- no blocks
 
 -- Is it a literal, literally?
 isLiteral (F.ExpValue _ _ (F.ValReal _)) = True

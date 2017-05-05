@@ -335,6 +335,7 @@ getUnitStartPosition (F.PUFunction _ s _ _ _ _ _ [] _) = s
 getUnitStartPosition (F.PUFunction _ _ _ _ _ _ _ bs _) = FU.getSpan (head bs)
 getUnitStartPosition (F.PUBlockData _ s _ []) = s
 getUnitStartPosition (F.PUBlockData _ _ _ bs) = FU.getSpan (head bs)
+getUnitStartPosition (F.PUComment _ s _) = s
 
 renamerToUse :: RenamerCoercer -> [(F.Name, F.Name)]
 renamerToUse Nothing = []
