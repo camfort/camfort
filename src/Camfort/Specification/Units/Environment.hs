@@ -213,24 +213,31 @@ unitParamEq u1 u2 = u1 == u2
 
 -- The annotation on the AST used for solving units.
 data UnitAnnotation a = UnitAnnotation {
-   prevAnnotation :: a,
-   unitSpec       :: Maybe P.UnitStatement,
-   unitConstraint :: Maybe Constraint,
-   unitInfo       :: Maybe UnitInfo,
-   unitBlock      :: Maybe (F.Block (FA.Analysis (UnitAnnotation a))) }
-  deriving (Data, Typeable, Show)
+    prevAnnotation :: a,
+    unitSpec       :: Maybe P.UnitStatement,
+    unitConstraint :: Maybe Constraint,
+    unitInfo       :: Maybe UnitInfo,
+    unitBlock      :: Maybe (F.Block (FA.Analysis (UnitAnnotation a))), -- ^ linked variable declaration
+    unitPU         :: Maybe (F.ProgramUnit (FA.Analysis (UnitAnnotation a))) -- ^ linked program unit
+  } deriving (Data, Typeable, Show)
 
-dbgUnitAnnotation (UnitAnnotation _ s c i b) =
+dbgUnitAnnotation (UnitAnnotation _ s c i b p) =
   "{ unitSpec = " ++ show s ++ ", unitConstraint = " ++ show c ++ ", unitInfo = " ++ show i ++ ", unitBlock = " ++
      (case b of
         Nothing -> "Nothing"
         Just (F.BlStatement _ span _ (F.StDeclaration {}))  -> "Just {decl}@" ++ show span
         Just (F.BlStatement _ span _ _) -> "Just {stmt}@" ++ show span
         Just _ -> "Just ...")
+   ++ ", unitPU = " ++
+     (case p of
+        Nothing -> "Nothing"
+        Just (F.PUFunction _ span _ _ _ _ _ _ _)  -> "Just {func}@" ++ show span
+        Just (F.PUSubroutine _ span _ _ _ _ _) -> "Just {subr}@" ++ show span
+        Just _ -> "Just ...")
    ++ "}"
 
 mkUnitAnnotation :: a -> UnitAnnotation a
-mkUnitAnnotation a = UnitAnnotation a Nothing Nothing Nothing Nothing
+mkUnitAnnotation a = UnitAnnotation a Nothing Nothing Nothing Nothing Nothing
 
 --------------------------------------------------
 

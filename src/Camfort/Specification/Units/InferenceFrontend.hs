@@ -22,7 +22,8 @@
 {-# LANGUAGE PatternGuards #-}
 
 module Camfort.Specification.Units.InferenceFrontend
-  ( initInference, runCriticalVariables, runInferVariables, runCompileUnits, runInconsistentConstraints, getConstraint )
+  ( initInference, runCriticalVariables, runInferVariables, runCompileUnits, runInconsistentConstraints, getConstraint
+  , puName, puSrcName )
 where
 
 import Data.Data (Data)
@@ -121,7 +122,7 @@ initInference = do
   debugLogging
 
 cleanLinks :: F.ProgramFile UA -> F.ProgramFile UA
-cleanLinks = transformBi (\ a -> a { unitBlock = Nothing, unitSpec = Nothing } :: UnitAnnotation A)
+cleanLinks = transformBi (\ a -> a { unitPU = Nothing, unitBlock = Nothing, unitSpec = Nothing } :: UnitAnnotation A)
 
 --------------------------------------------------
 -- Inference functions
@@ -211,6 +212,9 @@ toUnitVar dmap (vname, sname) = unit
 
 --------------------------------------------------
 
+-- | Convert explicit polymorphic annotations such as (UnitName "'a")
+-- into UnitParamEAPAbs with a 'context-unique-name' given by the
+-- ProgramUnitName combined with the supplied unit name.
 transformExplicitPolymorphism :: Maybe F.ProgramUnitName -> UnitInfo -> UnitInfo
 transformExplicitPolymorphism (Just (F.Named f)) (UnitName a@('\'':_)) = UnitParamEAPAbs (a, f ++ "_" ++ a)
 transformExplicitPolymorphism _ u                                      = u
@@ -224,7 +228,18 @@ insertGivenUnits = do
   where
     -- Look through each Program Unit for the comments
     checkPU :: F.ProgramUnit UA -> UnitSolver ()
-    checkPU pu = mapM_ (checkComment (getName pu)) [ b | b@(F.BlComment {}) <- universeBi (F.programUnitBody pu) ]
+    checkPU pu@(F.PUComment a _ _)
+      -- Look at unit assignment between function return variable and spec.
+      | Just (P.UnitAssignment (Just vars) unitsAST) <- mSpec
+      , Just pu                                      <- mPU = insertPUUnitAssigns (toUnitInfo unitsAST) pu vars
+      -- Add a new unit alias.
+      | Just (P.UnitAlias name unitsAST) <- mSpec = modifyUnitAliasMap (M.insert name (toUnitInfo unitsAST))
+      | otherwise                                 = return ()
+      where
+        mSpec = unitSpec (FA.prevAnnotation a)
+        mPU   = unitPU (FA.prevAnnotation a)
+    -- Other type of ProgramUnit (e.g. one with a body of blocks)
+    checkPU pu = mapM_ (checkBlockComment (getName pu)) [ b | b@(F.BlComment {}) <- universeBi (F.programUnitBody pu) ]
       where
         getName pu = case pu of
           F.PUFunction {}   -> Just $ F.getName pu
@@ -232,22 +247,22 @@ insertGivenUnits = do
           _                 -> Nothing
 
     -- Look through each comment that has some kind of unit annotation within it.
-    checkComment :: Maybe F.ProgramUnitName -> F.Block UA -> UnitSolver ()
-    checkComment pname (F.BlComment a _ _)
+    checkBlockComment :: Maybe F.ProgramUnitName -> F.Block UA -> UnitSolver ()
+    checkBlockComment pname (F.BlComment a _ _)
       -- Look at unit assignment between variable and spec.
       | Just (P.UnitAssignment (Just vars) unitsAST) <- mSpec
-      , Just b                                       <- mBlock = insertUnitAssignments pname (toUnitInfo unitsAST) b vars
+      , Just b                                       <- mBlock = insertBlockUnitAssigns pname (toUnitInfo unitsAST) b vars
       -- Add a new unit alias.
-      | Just (P.UnitAlias name unitsAST)             <- mSpec  = modifyUnitAliasMap (M.insert name (toUnitInfo unitsAST))
-      | otherwise                                              = return ()
+      | Just (P.UnitAlias name unitsAST) <- mSpec  = modifyUnitAliasMap (M.insert name (toUnitInfo unitsAST))
+      | otherwise                                  = return ()
       where
         mSpec  = unitSpec (FA.prevAnnotation a)
         mBlock = unitBlock (FA.prevAnnotation a)
 
     -- Figure out the unique names of the referenced variables and
     -- then insert unit info under each of those names.
-    insertUnitAssignments :: Maybe F.ProgramUnitName -> UnitInfo -> F.Block UA -> [String] -> UnitSolver ()
-    insertUnitAssignments pname info (F.BlStatement _ _ _ (F.StDeclaration _ _ _ _ decls)) varRealNames = do
+    insertBlockUnitAssigns :: Maybe F.ProgramUnitName -> UnitInfo -> F.Block UA -> [String] -> UnitSolver ()
+    insertBlockUnitAssigns pname info (F.BlStatement _ _ _ (F.StDeclaration _ _ _ _ decls)) varRealNames = do
       -- figure out the 'unique name' of the varRealName that was found in the comment
       -- FIXME: account for module renaming
       -- FIXME: might be more efficient to allow access to variable renaming environ at this program point
@@ -258,6 +273,18 @@ insertGivenUnits = do
                          , varRealName == srcName e ]
       modifyVarUnitMap $ M.unionWith const m
       modifyGivenVarSet . S.union . S.fromList . map fst . M.keys $ m
+
+    -- Insert unit annotation for function return variable
+    insertPUUnitAssigns :: UnitInfo -> F.ProgramUnit UA -> [String] -> UnitSolver ()
+    insertPUUnitAssigns info pu@(F.PUFunction _ _ _ _ _ _ mret _ _) varRealNames
+      | (retUniq, retSrc) <- case mret of Just ret -> (FA.varName ret, FA.srcName ret)
+                                          Nothing  -> (puName pu, puSrcName pu)
+      , retSrc `elem` varRealNames = do
+          let pname = Just $ F.getName pu
+          let info' = transform (transformExplicitPolymorphism pname) info
+          let m = M.fromList [ ((retUniq, retSrc), info') ]
+          modifyVarUnitMap $ M.unionWith const m
+          modifyGivenVarSet . S.union . S.fromList . map fst . M.keys $ m
 
 
 -- ensure polymorphic variable annotation is used correctly
@@ -270,7 +297,7 @@ checkPolymorphicAnnotation = do
     -- Look through each Program Unit for its parameters and annotations
     checkPU :: F.ProgramUnit UA -> UnitSolver (String, Bool)
     checkPU pu = do
-        (argPolys, resPolys) <- foldM (checkComment (getNameAndArgs pu)) ([], []) [ b | b@(F.BlComment {}) <- universeBi (F.programUnitBody pu) ]
+        (argPolys, resPolys) <- foldM (checkBlockComment (getNameAndArgs pu)) ([], []) [ b | b@(F.BlComment {}) <- universeBi (F.programUnitBody pu) ]
         return (puName pu, S.fromList resPolys `S.isSubsetOf` S.fromList argPolys)
       where
         getNameAndArgs :: F.ProgramUnit UA -> Maybe (String, [String], Maybe String)
@@ -282,8 +309,8 @@ checkPolymorphicAnnotation = do
           F.PUSubroutine _ _ _ _ args _ _
             | name <- puName pu -> Just (name, map varName (universeBi args :: [F.Expression UA]), Nothing)
           _                     -> Nothing
-    checkComment :: Maybe (String, [String], Maybe String) -> ([String], [String]) -> F.Block UA -> UnitSolver ([String], [String])
-    checkComment pinfo (argPolys, resPolys) (F.BlComment a _ _)
+    checkBlockComment :: Maybe (String, [String], Maybe String) -> ([String], [String]) -> F.Block UA -> UnitSolver ([String], [String])
+    checkBlockComment pinfo (argPolys, resPolys) (F.BlComment a _ _)
       -- Look at unit assignment between variable and spec.
       | Just (pname, args, mres)                     <- pinfo
       , Just (P.UnitAssignment (Just vars) unitsAST) <- mSpec

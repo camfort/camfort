@@ -22,6 +22,8 @@
 
 {-# LANGUAGE ScopedTypeVariables #-}
 {-# LANGUAGE PatternGuards #-}
+{-# LANGUAGE DeriveDataTypeable #-}
+{-# LANGUAGE DeriveGeneric #-}
 
 module Camfort.Specification.Units
   (checkUnits, inferUnits, compileUnits, synthesiseUnits, inferCriticalVariables, chooseImplicitNames)
@@ -37,6 +39,7 @@ import Data.Generics.Uniplate.Operations
 import qualified Data.ByteString.Char8 as B
 import qualified Data.ByteString.Lazy.Char8 as LB
 import Control.Monad.State.Strict
+import GHC.Generics (Generic)
 
 import Camfort.Helpers hiding (lineCol)
 import Camfort.Helpers.Syntax
@@ -245,10 +248,10 @@ inferUnits uo (fname, pf)
     -- Format report
     okReport vars = logs ++ "\n" ++ fname ++ ":\n" ++ unlines [ expReport ei | ei <- expInfo ]
       where
-        expInfo = [ (e, u) | e <- declVariables pfUA
-                           , u <- maybeToList ((FA.varName e, FA.srcName e) `lookup` vars) ]
+        expInfo = [ (ei, u) | ei@(ExpInfo _ vname sname) <- declVariableNames pfUA
+                            , u <- maybeToList ((vname, sname) `lookup` vars) ]
 
-    expReport (e, u) = "  " ++ showSrcSpan (FU.getSpan e) ++ " unit " ++ show u ++ " :: " ++ FA.srcName e
+    expReport (ExpInfo ss vname sname, u) = "  " ++ showSrcSpan ss ++ " unit " ++ show u ++ " :: " ++ sname
 
     errReport exc = logs ++ "\n" ++ fname ++ ":  " ++ show exc
 
@@ -334,10 +337,10 @@ synthesiseUnits uo marker (fname, pf)
     -- Format report
     okReport vars = logs ++ "\n" ++ fname ++ ":\n" ++ unlines [ expReport ei | ei <- expInfo ]
       where
-        expInfo = [ (e, u) | e <- declVariables pfUA
-                           , u <- maybeToList ((FA.varName e, FA.srcName e) `lookup` vars) ]
+        expInfo = [ (ei, u) | ei@(ExpInfo _ vname sname) <- declVariableNames pfUA
+                            , u <- maybeToList ((vname, sname) `lookup` vars) ]
 
-    expReport (e, u) = "  " ++ showSrcSpan (FU.getSpan e) ++ " unit " ++ show u ++ " :: " ++ FA.srcName e
+    expReport (ExpInfo ss vname sname, u) = "  " ++ showSrcSpan ss ++ " unit " ++ show u ++ " :: " ++ sname
 
     errReport exc = logs ++ "\n" ++ fname ++ ":  " ++ show exc
 
@@ -363,8 +366,23 @@ unrename nameMap = transformBi $ \ x -> x `fromMaybe` M.lookup x nameMap
 showSrcSpan :: FU.SrcSpan -> String
 showSrcSpan (FU.SrcSpan l u) = show l
 
-declVariables :: F.ProgramFile UA -> [F.Expression UA]
-declVariables pf = flip mapMaybe (universeBi pf) $ \ d -> case d of
-  F.DeclVariable _ _ v@(F.ExpValue _ _ (F.ValVariable _)) _ _   -> Just v
-  F.DeclArray    _ _ v@(F.ExpValue _ _ (F.ValVariable _)) _ _ _ -> Just v
+data ExpInfo = ExpInfo { expInfoSrcSpan :: FU.SrcSpan, expInfoVName :: F.Name, expInfoSName :: F.Name }
+  deriving (Show, Eq, Ord, Typeable, Data, Generic)
+
+-- | List of declared variables (including both decl statements & function returns, defaulting to first)
+declVariableNames :: F.ProgramFile UA -> [ExpInfo]
+declVariableNames pf = sort . M.elems $ M.unionWith (curry fst) declInfo puInfo
+  where
+    declInfo = M.fromList [ (expInfoVName ei, ei) | ei <- declVariableNamesDecl pf ]
+    puInfo   = M.fromList [ (expInfoVName ei, ei) | ei <- declVariableNamesPU pf ]
+
+declVariableNamesDecl :: F.ProgramFile UA -> [ExpInfo]
+declVariableNamesDecl pf = flip mapMaybe (universeBi pf :: [F.Declarator UA]) $ \ d -> case d of
+  F.DeclVariable _ ss v@(F.ExpValue _ _ (F.ValVariable _)) _ _   -> Just (ExpInfo ss (FA.varName v) (FA.srcName v))
+  F.DeclArray    _ ss v@(F.ExpValue _ _ (F.ValVariable _)) _ _ _ -> Just (ExpInfo ss (FA.varName v) (FA.srcName v))
   _                                                             -> Nothing
+declVariableNamesPU :: F.ProgramFile UA -> [ExpInfo]
+declVariableNamesPU pf = flip mapMaybe (universeBi pf :: [F.ProgramUnit UA]) $ \ pu -> case pu of
+  F.PUFunction _ ss _ _ _ _ (Just v@(F.ExpValue _ _ (F.ValVariable _))) _ _ -> Just (ExpInfo ss (FA.varName v) (FA.srcName v))
+  F.PUFunction _ ss _ _ _ _ Nothing _ _                                     -> Just (ExpInfo ss (puName pu) (puSrcName pu))
+  _                                                                         -> Nothing

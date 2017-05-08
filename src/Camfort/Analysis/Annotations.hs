@@ -86,6 +86,11 @@ instance Linkable UA where
   link ann (b@(F.BlStatement _ _ _ F.StDeclaration {})) =
       onPrev (\ ann -> ann { unitBlock = Just b }) ann
   link ann b = ann
+  linkPU ann (pu@(F.PUFunction {})) =
+      onPrev (\ ann -> ann { unitPU = Just pu }) ann
+  linkPU ann (pu@(F.PUSubroutine {})) =
+      onPrev (\ ann -> ann { unitPU = Just pu }) ann
+  linkPU ann b = ann
 
 -- Helpers for transforming the 'previous' annotation
 onPrev :: (a -> a) -> FA.Analysis a -> FA.Analysis a
