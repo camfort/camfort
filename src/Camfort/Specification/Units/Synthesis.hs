@@ -14,7 +14,7 @@
    limitations under the License.
 -}
 
-{-# LANGUAGE PatternGuards, ScopedTypeVariables, ImplicitParams, DoAndIfThenElse, ConstraintKinds #-}
+{-# LANGUAGE PatternGuards, ScopedTypeVariables, ImplicitParams, DoAndIfThenElse, ConstraintKinds, TupleSections #-}
 
 module Camfort.Specification.Units.Synthesis
   (runSynthesis)
@@ -51,7 +51,7 @@ import qualified Debug.Trace as D
 runSynthesis :: Char -> [(VV, UnitInfo)] -> UnitSolver [(VV, UnitInfo)]
 runSynthesis marker vars = do
   -- descendBiM finds the head of lists
-  modifyProgramFileM $ descendBiM (synthProgramUnits marker vars) <=< descendBiM (synthBlocks marker vars)
+  modifyProgramFileM $ descendBiM (synthProgramUnitsTemp marker vars) <=< descendBiM (synthProgramUnits marker vars) <=< descendBiM (synthBlocks marker vars)
   return vars
 
 -- Should be invoked on the beginning of a list of blocks
@@ -93,18 +93,20 @@ synthBlock _ _ bs b = return (b:bs)
 synthProgramUnits :: Char -> [(VV, UnitInfo)] -> [F.ProgramUnit UA] -> UnitSolver [F.ProgramUnit UA]
 synthProgramUnits marker vars = fmap reverse . foldM (synthProgramUnit marker vars) []
 
+-- FIXME: need this until I refactor ProgramFile to remove [Block] comments.
+synthProgramUnitsTemp :: Char -> [(VV, UnitInfo)] -> [([F.Block UA], F.ProgramUnit UA)] -> UnitSolver [([F.Block UA], F.ProgramUnit UA)]
+synthProgramUnitsTemp marker vars = fmap (map ([],) . reverse) . foldM (synthProgramUnit marker vars) [] . map snd
+
 -- Process an individual program unit while building up a list of
 -- program units (in reverse order) to ultimately replace the original
 -- list of program units. We're looking for functions, in particular,
 -- in order to possibly insert a unit annotation before them.
 synthProgramUnit :: Char -> [(VV, UnitInfo)] -> [F.ProgramUnit UA] -> F.ProgramUnit UA -> UnitSolver [F.ProgramUnit UA]
 synthProgramUnit marker vars pus pu@(F.PUFunction a ss@(FU.SrcSpan lp up) _ _ _ _ mret _ _) = do
-  D.traceM $ show vars
   pf    <- usProgramFile `fmap` get
   gvSet <- usGivenVarSet `fmap` get
   let (vname, sname) = case mret of Just e  -> (FA.varName e, FA.srcName e)
                                     Nothing -> (puName pu, puSrcName pu)
-  D.traceM $ show (vname, sname)
   case lookup (vname, sname) vars of
     -- if return var has a unit & not a member of the already-given variables
     Just u | vname `S.notMember` gvSet -> do
