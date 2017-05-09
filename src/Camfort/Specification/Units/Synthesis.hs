@@ -43,12 +43,14 @@ import Camfort.Analysis.CommentAnnotator
 import Camfort.Analysis.Annotations hiding (Unitless)
 import Camfort.Specification.Units.Environment
 import Camfort.Specification.Units.Monad
+import Camfort.Specification.Units.InferenceFrontend (puName, puSrcName)
 import qualified Debug.Trace as D
 
 -- | Insert unit declarations into the ProgramFile as comments.
 runSynthesis :: Char -> [(VV, UnitInfo)] -> UnitSolver [(VV, UnitInfo)]
 runSynthesis marker vars = do
-  modifyProgramFileM $ descendBiM (synthBlocks marker vars)   -- descendBiM finds the head of lists
+  -- descendBiM finds the head of lists
+  modifyProgramFileM $ descendBiM (synthProgramUnits marker vars) <=< descendBiM (synthBlocks marker vars)
   return vars
 
 -- Should be invoked on the beginning of a list of blocks
@@ -75,7 +77,7 @@ synthBlock marker vars bs b@(F.BlStatement a ss@(FU.SrcSpan lp up) _ (F.StDeclar
         -- Create a zero-length span for the new comment node.
         let newSS = FU.SrcSpan (lp {FU.posColumn = 0}) (lp {FU.posColumn = 0})
         -- Build the text of the comment with the unit annotation.
-        let txt   = marker:" " ++ showUnitDecl (e, u)
+        let txt   = marker:" " ++ showUnitDecl (FA.srcName e, u)
         let space = FU.posColumn lp - 1
         let newB  = F.BlComment newA newSS . F.Comment . insertSpacing space $ commentText pf txt
         return $ Just newB
@@ -85,6 +87,40 @@ synthBlock marker vars bs b@(F.BlStatement a ss@(FU.SrcSpan lp up) _ (F.StDeclar
     (e :: F.Expression UA) -> return Nothing
   return (b:reverse newBs ++ bs)
 synthBlock _ _ bs b = return (b:bs)
+
+-- Should be invoked on the beginning of a list of program units
+synthProgramUnits :: Char -> [(VV, UnitInfo)] -> [F.ProgramUnit UA] -> UnitSolver [F.ProgramUnit UA]
+synthProgramUnits marker vars = fmap reverse . foldM (synthProgramUnit marker vars) []
+
+-- Process an individual program unit while building up a list of
+-- program units (in reverse order) to ultimately replace the original
+-- list of program units. We're looking for functions, in particular,
+-- in order to possibly insert a unit annotation before them.
+synthProgramUnit :: Char -> [(VV, UnitInfo)] -> [F.ProgramUnit UA] -> F.ProgramUnit UA -> UnitSolver [F.ProgramUnit UA]
+synthProgramUnit marker vars pus pu@(F.PUFunction a ss@(FU.SrcSpan lp up) _ _ _ _ mret _ _) = do
+  D.traceM $ show vars
+  pf    <- usProgramFile `fmap` get
+  gvSet <- usGivenVarSet `fmap` get
+  let (vname, sname) = case mret of Just e  -> (FA.varName e, FA.srcName e)
+                                    Nothing -> (puName pu, puSrcName pu)
+  D.traceM $ show (vname, sname)
+  case lookup (vname, sname) vars of
+    -- if return var has a unit & not a member of the already-given variables
+    Just u | vname `S.notMember` gvSet -> do
+      let newA  = a { FA.prevAnnotation = (FA.prevAnnotation a) {
+                         prevAnnotation = (prevAnnotation (FA.prevAnnotation a)) {
+                             refactored = Just lp } } }
+      -- Create a zero-length span for the new comment node.
+      let newSS = FU.SrcSpan (lp {FU.posColumn = 0}) (lp {FU.posColumn = 0})
+      -- Build the text of the comment with the unit annotation.
+      let txt   = marker:" " ++ showUnitDecl (sname, u)
+      let space = FU.posColumn lp - 1
+      let newPU = F.PUComment newA newSS . F.Comment . insertSpacing space $ commentText pf txt
+      return (pu:newPU:pus)
+
+    -- otherwise, nevermind
+    _ -> return (pu:pus)
+synthProgramUnit _ _ pus pu = return (pu:pus)
 
 -- Insert the correct comment markers around the given text string, depending on Fortran version.
 -- FIXME: use Fortran meta information when I have finished adding it to ProgramFile.
@@ -96,4 +132,4 @@ insertSpacing :: Int -> String -> String
 insertSpacing n = (replicate n ' ' ++)
 
 -- Pretty print a unit declaration.
-showUnitDecl (e, u) = "unit(" ++ show u ++ ") :: " ++ FA.srcName e
+showUnitDecl (sname, u) = "unit(" ++ show u ++ ") :: " ++ sname

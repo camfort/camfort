@@ -125,12 +125,41 @@ instance OutputFiles (Filename, SourceText, F.ProgramFile Annotation) where
 refactoring :: Typeable a
             => FPM.FortranVersion
             -> a -> SourceText -> StateT FU.Position Identity (SourceText, Bool)
-refactoring v z inp = catchAll inp `extQ` refactorings inp $ z
+refactoring v z inp = ((catchAll inp `extQ` refactoringsForProgramUnits v inp) `extQ` refactoringsForBlocks v inp) $ z
   where
     catchAll :: SourceText -> a -> StateT FU.Position Identity (SourceText, Bool)
     catchAll _ _ = return (B.empty, False)
-    refactorings inp z =
-      mapStateT (\n -> Identity $ n `evalState` 0) (refactorBlocks v inp z)
+
+refactoringsForProgramUnits :: FPM.FortranVersion
+                            -> SourceText
+                            -> F.ProgramUnit Annotation
+                            -> StateT FU.Position Identity (SourceText, Bool)
+refactoringsForProgramUnits v inp z =
+   mapStateT (\n -> Identity $ n `evalState` 0) (refactorProgramUnits v inp z)
+
+refactorProgramUnits :: FPM.FortranVersion
+                     -> SourceText
+                     -> F.ProgramUnit Annotation
+                     -> StateT FU.Position (State Int) (SourceText, Bool)
+-- Output comments
+refactorProgramUnits v inp e@(F.PUComment ann span (F.Comment comment)) = do
+    cursor <- get
+    if pRefactored ann
+     then    let (FU.SrcSpan lb ub) = span
+                 lb'      = leftOne lb
+                 (p0, _)  = takeBounds (cursor, lb') inp
+                 nl       = if null comment then B.empty else B.pack "\n"
+             in (put ub >> return (B.concat [p0, B.pack comment, nl], True))
+     else return (B.empty, False)
+  where leftOne (FU.Position f c l) = FU.Position f (c-1) (l-1)
+refactorProgramUnits _ _ _ = return (B.empty, False)
+
+refactoringsForBlocks :: FPM.FortranVersion
+                      -> SourceText
+                      -> F.Block Annotation
+                      -> StateT FU.Position Identity (SourceText, Bool)
+refactoringsForBlocks v inp z =
+   mapStateT (\n -> Identity $ n `evalState` 0) (refactorBlocks v inp z)
 
 refactorBlocks :: FPM.FortranVersion
                -> SourceText
