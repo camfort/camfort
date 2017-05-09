@@ -37,6 +37,7 @@ import qualified Language.Fortran.AST as F
 import qualified Language.Fortran.Analysis as FA
 import qualified Language.Fortran.Analysis.Renaming as FAR
 import qualified Language.Fortran.Util.Position as FU
+import Language.Fortran.ParserMonad (FortranVersion(Fortran90))
 
 import qualified Camfort.Specification.Units.Parser as P
 import Camfort.Analysis.CommentAnnotator
@@ -79,7 +80,7 @@ synthBlock marker vars bs b@(F.BlStatement a ss@(FU.SrcSpan lp up) _ (F.StDeclar
         -- Build the text of the comment with the unit annotation.
         let txt   = marker:" " ++ showUnitDecl (FA.srcName e, u)
         let space = FU.posColumn lp - 1
-        let newB  = F.BlComment newA newSS . F.Comment . insertSpacing space $ commentText pf txt
+        let newB  = F.BlComment newA newSS . F.Comment . insertSpacing pf space $ commentText pf txt
         return $ Just newB
       where
         vname = FA.varName e
@@ -115,7 +116,7 @@ synthProgramUnit marker vars pus pu@(F.PUFunction a ss@(FU.SrcSpan lp up) _ _ _ 
       -- Build the text of the comment with the unit annotation.
       let txt   = marker:" " ++ showUnitDecl (sname, u)
       let space = FU.posColumn lp - 1
-      let newPU = F.PUComment newA newSS . F.Comment . insertSpacing space $ commentText pf txt
+      let newPU = F.PUComment newA newSS . F.Comment . insertSpacing pf space $ commentText pf txt
       return (pu:newPU:pus)
 
     -- otherwise, nevermind
@@ -123,13 +124,16 @@ synthProgramUnit marker vars pus pu@(F.PUFunction a ss@(FU.SrcSpan lp up) _ _ _ 
 synthProgramUnit _ _ pus pu = return (pu:pus)
 
 -- Insert the correct comment markers around the given text string, depending on Fortran version.
--- FIXME: use Fortran meta information when I have finished adding it to ProgramFile.
 commentText :: F.ProgramFile UA -> String -> String
-commentText _ text = "!" ++ text
+commentText pf text | isModernFortran pf = "!" ++ text
+                    | otherwise          = "c" ++ text
 
 -- Insert a given amount of spacing before the string.
-insertSpacing :: Int -> String -> String
-insertSpacing n = (replicate n ' ' ++)
+insertSpacing :: F.ProgramFile UA -> Int -> String -> String
+insertSpacing pf n | isModernFortran pf = (replicate n ' ' ++)
+                   | otherwise          = id
 
 -- Pretty print a unit declaration.
 showUnitDecl (sname, u) = "unit(" ++ show u ++ ") :: " ++ sname
+
+isModernFortran (F.ProgramFile (F.MetaInfo { F.miVersion = v }) _ _) = v >= Fortran90
