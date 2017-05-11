@@ -75,8 +75,10 @@ declVariables pf = flip mapMaybe (universeBi pf) $ \ d -> case d of
   F.DeclArray    _ _ v@(F.ExpValue _ _ (F.ValVariable _)) _ _ _ -> Just v
   _                                                             -> Nothing
 
+
 spec :: Spec
 spec = do
+  let showClean = show . nub . sort . head . rights . (:[]) . fst
   describe "Unit Inference Frontend" $ do
     describe "Literal Mode" $ do
       it "litTest1 Mixed" $ do
@@ -90,28 +92,27 @@ spec = do
           any (conParamEq (ConEq UnitlessLit (UnitVar ("j", "j"))))
     describe "Polymorphic functions" $ do
       it "squarePoly1" $ do
-        show (sort (head (rights [fst (runUnits LitMixed squarePoly1 (fmap chooseImplicitNames runInferVariables))]))) `shouldBe`
-          show (sort [(("a", "a"),UnitName "m"),(("b", "b"), UnitName "s"),(("x", "x"),UnitPow (UnitName "m") 2.0),(("y", "y"),UnitPow (UnitName "s") 2.0)])
+        showClean (runUnits LitMixed squarePoly1 (fmap chooseImplicitNames runInferVariables)) `shouldBe`
+          "[((\"a\",\"a\"),m),((\"b\",\"b\"),s),((\"m\",\"m\"),'b),((\"n\",\"n\"),'a),((\"square\",\"square\"),('a)**2),((\"squarep\",\"squarep\"),('b)**2),((\"x\",\"x\"),m**2),((\"y\",\"y\"),s**2)]"
     describe "Recursive functions" $ do
       it "Recursive Addition is OK" $ do
-        show (sort (head (rights [fst (runUnits LitMixed recursive1 (fmap chooseImplicitNames runInferVariables))]))) `shouldBe`
-          show (sort [(("x", "x"),UnitlessVar),(("y", "y"),UnitName "m"),(("z", "z"), UnitName "m")])
+        showClean (runUnits LitMixed recursive1 (fmap chooseImplicitNames runInferVariables)) `shouldBe`
+          "[((\"b\",\"b\"),'a),((\"n\",\"n\"),1),((\"r\",\"r\"),'a),((\"x\",\"x\"),1),((\"y\",\"y\"),m),((\"z\",\"z\"),m)]"
     describe "Recursive functions" $ do
       it "Recursive Multiplication is not OK" $ do
         (fromJust (head (rights [fst (runUnits LitMixed recursive2 runInconsistentConstraints)]))) `shouldSatisfy`
           any (conParamEq (ConEq (UnitParamPosAbs ("recur", 0)) (UnitParamPosAbs ("recur", 2))))
     describe "Explicitly annotated parametric polymorphic unit variables" $ do
       it "inside-outside" $ do
-        show (sort (head (rights [fst (runUnits LitMixed insideOutside runInferVariables)]))) `shouldBe`
-          "[((\"k\",\"k\"),'a),((\"m\",\"m\"),('a)**2),((\"outside\",\"outside\"),('a)**2),((\"y\",\"y\"),'a),((\"y\",\"y\"),'a)]"
-
-
+        showClean (runUnits LitMixed insideOutside runInferVariables) `shouldBe`
+          "[((\"inside\",\"inside\"),('a)**2),((\"k\",\"k\"),'a),((\"m\",\"m\"),('a)**2),((\"outside\",\"outside\"),('a)**2),((\"x\",\"x\"),'a),((\"y\",\"y\"),'a)]"
       it "eapVarScope" $ do
         show (sort (fst (runUnitInference LitMixed eapVarScope))) `shouldBe`
-          "[(\"f\",('a)**3),(\"g\",'a),(\"j\",'a),(\"k\",('a)**3)]"
+          "[(\"f\",('a)**3),(\"g\",'a),(\"j\",'a),(\"k\",('a)**3),(\"x\",'a),(\"y\",'a)]"
       it "eapVarApp" $ do
         show (sort (fst (runUnitInference LitMixed eapVarApp))) `shouldBe`
-          "[(\"f\",('a)**2),(\"fj\",'a),(\"fk\",('a)**2),(\"fl\",('a)**4),(\"g\",'b),(\"gm\",'b),(\"gn\",'b),(\"h\",m**2),(\"hy\",m**2)]"
+          "[(\"f\",('a)**2),(\"fj\",'a),(\"fk\",('a)**2),(\"fl\",('a)**4),(\"fx\",'a),(\"g\",'b),(\"gm\",'b),(\"gn\",'b),(\"gx\",'b),(\"h\",m**2),(\"hx\",m),(\"hy\",m**2)]"
+
     describe "Implicit parametric polymorphic unit variables" $ do
       it "inferPoly1" $ do
         show (sort (fst (runUnitInference LitMixed inferPoly1))) `shouldBe`

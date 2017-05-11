@@ -111,15 +111,11 @@ inferVariablesRREF cons
     isUnitRHS (UnitPow (UnitParamPosAbs _) _) = True
     isUnitRHS _                               = False
 
-    -- Variables determined to be unit-polymorphic, so should not appear in result
-    polyVars = [ var | UnitParamVarUse (_, var, i) <- universeBi (filter ((== UnitlessVar) . snd) unitAssignments) ]
-
     -- Find the rows corresponding to the distilled "unit :: var"
     -- information for ordinary (non-polymorphic) variables.
     unitVarAssignments            =
       [ (var, units) | ([UnitPow (UnitVar var)                 k], units) <- unitAssignments, k `approxEq` 1 ] ++
-      [ (var, units) | ([UnitPow (UnitParamVarUse (_, var, _)) k], units) <- unitAssignments, k `approxEq` 1
-                                                                                            , var `notElem` polyVars ]
+      [ (var, units) | ([UnitPow (UnitParamVarAbs (_, var)) k], units)    <- unitAssignments, k `approxEq` 1 ]
     foldUnits units
       | null units = UnitlessVar
       | otherwise  = foldl1 UnitMul units

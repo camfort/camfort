@@ -369,8 +369,10 @@ annotateLiteralsPU pu = do
     -- Follow the LitMixed rules.
     expMixed e = case e of
       F.ExpValue _ _ (F.ValInteger i) | readInteger i == Just 0 -> withLiterals genParamLit e
+                                      | isPolyCtxt              -> expUnitless e
                                       | otherwise               -> withLiterals genUnitLiteral e
       F.ExpValue _ _ (F.ValReal i) | readReal i == Just 0       -> withLiterals genParamLit e
+                                   | isPolyCtxt                 -> expUnitless e
                                    | otherwise                  -> withLiterals genUnitLiteral e
       _                                                         -> return e
 
@@ -383,6 +385,8 @@ annotateLiteralsPU pu = do
     withLiterals m e
       | isLiteral e = flip setUnitInfo e `fmap` m
       | otherwise   = return e
+
+    isPolyCtxt = case pu of F.PUFunction {} -> True; F.PUSubroutine {} -> True; _ -> False
 
 --------------------------------------------------
 
@@ -463,11 +467,12 @@ substInstance isDummy callStack output (name, callId) = do
 
   let output' = -- Do not instantiate explicitly annotated polymorphic
                 -- variables from current context when looking at dummy (name, callId)
-                instantiate (not isDummy) (name, callId) (output ++ template) ++
+                (if isDummy then output ++ template
+                            else instantiate (name, callId) (output ++ template)) ++
 
                 -- Only instantiate explicitly annotated polymorphic
                 -- variables from nested function/subroutine calls.
-                instantiate True (name, callId) template'
+                instantiate (name, callId) template'
 
   dumpConsM ("final output for " ++ show (name, callId)) output'
 
@@ -498,14 +503,12 @@ callIdRemap info = modifyCallIdRemapM $ \ idMap -> case info of
     _                                -> return (info, idMap)
 
 
--- | Convert a parametric template into a particular use. Only convert
--- explicitly annotated parametric polymorphic variable units if the
--- flag is True.
-instantiate ifDoEAP (name, callId) = transformBi $ \ info -> case info of
-  UnitParamPosAbs (name, position) | ifDoEAP -> UnitParamPosUse (name, position, callId)
+-- | Convert a parametric template into a particular use.
+instantiate (name, callId) = transformBi $ \ info -> case info of
+  UnitParamPosAbs (name, position) -> UnitParamPosUse (name, position, callId)
   UnitParamLitAbs litId            -> UnitParamLitUse (litId, callId)
   UnitParamVarAbs (fname, vname)   -> UnitParamVarUse (fname, vname, callId)
-  UnitParamEAPAbs vname | ifDoEAP  -> UnitParamEAPUse (vname, callId)
+  UnitParamEAPAbs vname            -> UnitParamEAPUse (vname, callId)
   _                                -> info
 
 -- | Return a list of ProgramUnits that might be considered 'toplevel'
