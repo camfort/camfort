@@ -39,3 +39,4 @@ instance Linkable (FA.Analysis Annotation) where
   link ann (b@(F.BlStatement _ _ _ (F.StExpressionAssign {}))) =
       onPrev (\ann -> ann { stencilBlock = Just b }) ann
   link ann b = ann
+  linkPU ann pu = ann
