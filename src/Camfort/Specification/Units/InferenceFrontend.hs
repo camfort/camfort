@@ -515,7 +515,8 @@ instantiate (name, callId) = transformBi $ \ info -> case info of
 -- in the ProgramFile, e.g., possible exports. These must be analysed
 -- independently of whether they are actually used in the same file,
 -- because other files might use them.
-topLevelFuncsAndSubs (F.ProgramFile _ cm_pus _) = topLevel =<< map snd cm_pus
+topLevelFuncsAndSubs :: F.ProgramFile a -> [F.ProgramUnit a]
+topLevelFuncsAndSubs (F.ProgramFile _ pus) = topLevel =<< pus
   where
     topLevel (F.PUModule _ _ _ _ (Just contains)) = topLevel =<< contains
     topLevel (F.PUMain _ _ _ _ (Just contains))   = topLevel =<< contains

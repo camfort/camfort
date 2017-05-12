@@ -138,4 +138,4 @@ insertSpacing pf n | isModernFortran pf = (replicate n ' ' ++)
 -- Pretty print a unit declaration.
 showUnitDecl (sname, u) = "unit(" ++ show u ++ ") :: " ++ sname
 
-isModernFortran (F.ProgramFile (F.MetaInfo { F.miVersion = v }) _ _) = v >= Fortran90
+isModernFortran (F.ProgramFile (F.MetaInfo { F.miVersion = v }) _ ) = v >= Fortran90

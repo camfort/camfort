@@ -97,23 +97,19 @@ stencilInference :: FAR.NameMap
                  -> F.ProgramFile (FA.Analysis A)
                  -> (F.ProgramFile (FA.Analysis A), [LogLine])
 stencilInference nameMap mode marker pf =
-    (F.ProgramFile mi cm_pus' blocks', log1 ++ log2)
+    (F.ProgramFile mi pus', log1)
   where
     -- Parse specification annotations and include them into the syntax tree
     -- that way if generate specifications at the same place we can
     -- decide whether to synthesise or not
 
     -- TODO: might want to output log0 somehow (though it doesn't fit LogLine)
-    (pf'@(F.ProgramFile mi cm_pus blocks), log0) =
+    (pf'@(F.ProgramFile mi pus), log0) =
          if mode == Synth
           then runWriter (annotateComments Gram.specParser pf)
           else (pf, [])
 
-    (cm_pus', log1) = runWriter (transformBiM perPU cm_pus)
-    (blocks', log2) = runInferer ivMap flTo blocksInf
-    blocksInf       = let ?flowsGraph = flTo
-                          ?nameMap    = nameMap
-                      in descendBiM (perBlockInfer mode marker) blocks
+    (pus', log1)    = runWriter (transformBiM perPU pus)
 
     -- Run inference per program unit, placing the flowsmap in scope
     perPU :: F.ProgramUnit (FA.Analysis A)
