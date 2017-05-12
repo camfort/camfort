@@ -51,7 +51,7 @@ import qualified Debug.Trace as D
 runSynthesis :: Char -> [(VV, UnitInfo)] -> UnitSolver [(VV, UnitInfo)]
 runSynthesis marker vars = do
   -- descendBiM finds the head of lists
-  modifyProgramFileM $ descendBiM (synthProgramUnitsTemp marker vars) <=< descendBiM (synthProgramUnits marker vars) <=< descendBiM (synthBlocks marker vars)
+  modifyProgramFileM $ descendBiM (synthProgramUnits marker vars) <=< descendBiM (synthBlocks marker vars)
   return vars
 
 -- Should be invoked on the beginning of a list of blocks
@@ -92,10 +92,6 @@ synthBlock _ _ bs b = return (b:bs)
 -- Should be invoked on the beginning of a list of program units
 synthProgramUnits :: Char -> [(VV, UnitInfo)] -> [F.ProgramUnit UA] -> UnitSolver [F.ProgramUnit UA]
 synthProgramUnits marker vars = fmap reverse . foldM (synthProgramUnit marker vars) []
-
--- FIXME: need this until I refactor ProgramFile to remove [Block] comments.
-synthProgramUnitsTemp :: Char -> [(VV, UnitInfo)] -> [([F.Block UA], F.ProgramUnit UA)] -> UnitSolver [([F.Block UA], F.ProgramUnit UA)]
-synthProgramUnitsTemp marker vars = fmap (map ([],) . reverse) . foldM (synthProgramUnit marker vars) [] . map snd
 
 -- Process an individual program unit while building up a list of
 -- program units (in reverse order) to ultimately replace the original
