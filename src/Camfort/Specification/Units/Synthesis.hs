@@ -91,7 +91,8 @@ synthBlock _ _ bs b = return (b:bs)
 
 -- Should be invoked on the beginning of a list of program units
 synthProgramUnits :: Char -> [(VV, UnitInfo)] -> [F.ProgramUnit UA] -> UnitSolver [F.ProgramUnit UA]
-synthProgramUnits marker vars = fmap reverse . foldM (synthProgramUnit marker vars) []
+synthProgramUnits marker vars pus = do
+  fmap reverse . foldM (synthProgramUnit marker vars) [] $ pus
 
 -- Process an individual program unit while building up a list of
 -- program units (in reverse order) to ultimately replace the original
@@ -115,11 +116,14 @@ synthProgramUnit marker vars pus pu@(F.PUFunction a ss@(FU.SrcSpan lp up) _ _ _ 
       let txt   = marker:" " ++ showUnitDecl (sname, u)
       let space = FU.posColumn lp - 1
       let newPU = F.PUComment newA newSS . F.Comment . insertSpacing pf space $ commentText pf txt
-      return (pu:newPU:pus)
 
-    -- otherwise, nevermind
-    _ -> return (pu:pus)
-synthProgramUnit _ _ pus pu = return (pu:pus)
+      -- recursively descend to find program units inside of current one
+      fmap (:newPU:pus) $ descendBiM (synthProgramUnits marker vars) pu
+
+    -- otherwise, nevermind, but still recursively descend to find
+    -- program units inside of current one
+    _ -> fmap (:pus) $ descendBiM (synthProgramUnits marker vars) pu
+synthProgramUnit marker vars pus pu = fmap (:pus) $ descendBiM (synthProgramUnits marker vars) pu
 
 -- Insert the correct comment markers around the given text string, depending on Fortran version.
 commentText :: F.ProgramFile UA -> String -> String
