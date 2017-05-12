@@ -468,11 +468,11 @@ substInstance isDummy callStack output (name, callId) = do
   let output' = -- Do not instantiate explicitly annotated polymorphic
                 -- variables from current context when looking at dummy (name, callId)
                 (if isDummy then output ++ template
-                            else instantiate (name, callId) (output ++ template)) ++
+                            else instantiate callId (output ++ template)) ++
 
                 -- Only instantiate explicitly annotated polymorphic
                 -- variables from nested function/subroutine calls.
-                instantiate (name, callId) template'
+                instantiate callId template'
 
   dumpConsM ("final output for " ++ show (name, callId)) output'
 
@@ -504,7 +504,8 @@ callIdRemap info = modifyCallIdRemapM $ \ idMap -> case info of
 
 
 -- | Convert a parametric template into a particular use.
-instantiate (name, callId) = transformBi $ \ info -> case info of
+instantiate :: Data a => Int -> a -> a
+instantiate callId = transformBi $ \ info -> case info of
   UnitParamPosAbs (name, position) -> UnitParamPosUse (name, position, callId)
   UnitParamLitAbs litId            -> UnitParamLitUse (litId, callId)
   UnitParamVarAbs (fname, vname)   -> UnitParamVarUse (fname, vname, callId)
