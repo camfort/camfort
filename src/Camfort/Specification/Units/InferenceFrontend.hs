@@ -599,7 +599,10 @@ propagateFunctionCall e@(F.ExpFunctionCall a s f (Just (F.AList a' s' args))) = 
 
 propagateStatement :: F.Statement UA -> UnitSolver (F.Statement UA)
 propagateStatement stmt = case stmt of
-  F.StExpressionAssign _ _ e1 e2               -> do
+  F.StExpressionAssign _ _ e1 e2
+    -- Allow literal assignment to proceed without units-check.
+    | isLiteral e2                             -> return stmt
+    | otherwise                                -> do
     return $ maybeSetUnitConstraintF2 ConEq (getUnitInfo e1) (getUnitInfo e2) stmt
   F.StCall a s sub (Just (F.AList a' s' args)) -> do
     (_, args') <- callHelper sub args
@@ -609,10 +612,14 @@ propagateStatement stmt = case stmt of
 
 propagateDeclarator :: F.Declarator UA -> UnitSolver (F.Declarator UA)
 propagateDeclarator decl = case decl of
-  F.DeclVariable _ _ e1 _ (Just e2) -> do
-    return $ maybeSetUnitConstraintF2 ConEq (getUnitInfo e1) (getUnitInfo e2) decl
-  F.DeclArray _ _ e1 _ _ (Just e2)  -> do
-    return $ maybeSetUnitConstraintF2 ConEq (getUnitInfo e1) (getUnitInfo e2) decl
+  F.DeclVariable _ _ e1 _ (Just e2)
+    -- Allow literal assignment to proceed without units-check.
+    | isLiteral e2                  -> return decl
+    | otherwise                     -> return $ maybeSetUnitConstraintF2 ConEq (getUnitInfo e1) (getUnitInfo e2) decl
+  F.DeclArray _ _ e1 _ _ (Just e2)
+    -- Allow literal assignment to proceed without units-check.
+    | isLiteral e2                  -> return decl
+    | otherwise                     -> return $ maybeSetUnitConstraintF2 ConEq (getUnitInfo e1) (getUnitInfo e2) decl
   _                                 -> return decl
 
 propagatePU :: F.ProgramUnit UA -> UnitSolver (F.ProgramUnit UA)
