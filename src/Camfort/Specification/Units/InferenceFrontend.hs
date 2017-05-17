@@ -344,6 +344,7 @@ annotateAllVariables = modifyProgramFileM $ \ pf -> do
   varUnitMap <- usVarUnitMap `fmap` get
   let annotateExp e@(F.ExpValue _ _ (F.ValVariable _))
         | Just info <- M.lookup (varName e, srcName e) varUnitMap = setUnitInfo info e
+      -- may need to annotate intrinsics separately
       annotateExp e = e
   return $ transformBi annotateExp pf
 
@@ -901,3 +902,85 @@ puSrcName :: F.ProgramUnit UA -> F.Name
 puSrcName pu
   | F.Named n <- FA.puSrcName pu = n
   | otherwise                    = "_nameless"
+
+--------------------------------------------------
+
+-- | name => (return-unit, parameter-units)
+fortran77intrinisics :: M.Map F.Name (UnitInfo, [UnitInfo])
+fortran77intrinisics =
+  M.fromList
+    [ ("abs", (UnitParamEAPAbs ("'a", "'a"), [UnitParamEAPAbs ("'a", "'a")]))
+    , ("iabs", (UnitParamEAPAbs ("'a", "'a"), [UnitParamEAPAbs ("'a", "'a")]))
+    , ("dabs", (UnitParamEAPAbs ("'a", "'a"), [UnitParamEAPAbs ("'a", "'a")]))
+    , ("cabs", (UnitParamEAPAbs ("'a", "'a"), [UnitParamEAPAbs ("'a", "'a")]))
+    , ("aimag", (UnitParamEAPAbs ("'a", "'a"), [UnitParamEAPAbs ("'a", "'a")]))
+    , ("aint", (UnitParamEAPAbs ("'a", "'a"), [UnitParamEAPAbs ("'a", "'a")]))
+    , ("dint", (UnitParamEAPAbs ("'a", "'a"), [UnitParamEAPAbs ("'a", "'a")]))
+    , ("anint", (UnitParamEAPAbs ("'a", "'a"), [UnitParamEAPAbs ("'a", "'a")]))
+    , ("dnint", (UnitParamEAPAbs ("'a", "'a"), [UnitParamEAPAbs ("'a", "'a")]))
+    , ("cmplx", (UnitParamEAPAbs ("'a", "'a"), [UnitParamEAPAbs ("'a", "'a")]))
+    , ("conjg", (UnitParamEAPAbs ("'a", "'a"), [UnitParamEAPAbs ("'a", "'a")]))
+    , ("dble", (UnitParamEAPAbs ("'a", "'a"), [UnitParamEAPAbs ("'a", "'a")]))
+    , ("dim", (UnitParamEAPAbs ("'a", "'a"), [UnitParamEAPAbs ("'a", "'a"), UnitParamEAPAbs ("'a", "'a")]))
+    , ("idim", (UnitParamEAPAbs ("'a", "'a"), [UnitParamEAPAbs ("'a", "'a"), UnitParamEAPAbs ("'a", "'a")]))
+    , ("ddim", (UnitParamEAPAbs ("'a", "'a"), [UnitParamEAPAbs ("'a", "'a"), UnitParamEAPAbs ("'a", "'a")]))
+    , ("dprod", (UnitParamEAPAbs ("'a", "'a"), [UnitParamEAPAbs ("'a", "'a")]))
+    , ("ceiling", (UnitParamEAPAbs ("'a", "'a"), [UnitParamEAPAbs ("'a", "'a")]))
+    , ("floor", (UnitParamEAPAbs ("'a", "'a"), [UnitParamEAPAbs ("'a", "'a")]))
+    , ("int", (UnitParamEAPAbs ("'a", "'a"), [UnitParamEAPAbs ("'a", "'a")]))
+    , ("ifix", (UnitParamEAPAbs ("'a", "'a"), [UnitParamEAPAbs ("'a", "'a")]))
+    , ("idint", (UnitParamEAPAbs ("'a", "'a"), [UnitParamEAPAbs ("'a", "'a")]))
+    , ("max", (UnitParamEAPAbs ("'a", "'a"), [UnitParamEAPAbs ("'a", "'a")]))   -- special case: arbitrary # of parameters
+    , ("min", (UnitParamEAPAbs ("'a", "'a"), [UnitParamEAPAbs ("'a", "'a")]))   -- special case: arbitrary # of parameters
+    , ("min0", (UnitParamEAPAbs ("'a", "'a"), [UnitParamEAPAbs ("'a", "'a")]))  -- special case: arbitrary # of parameters
+    , ("amin1", (UnitParamEAPAbs ("'a", "'a"), [UnitParamEAPAbs ("'a", "'a")])) -- special case: arbitrary # of parameters
+    , ("dmin1", (UnitParamEAPAbs ("'a", "'a"), [UnitParamEAPAbs ("'a", "'a")])) -- special case: arbitrary # of parameters
+    , ("amin0", (UnitParamEAPAbs ("'a", "'a"), [UnitParamEAPAbs ("'a", "'a")])) -- special case: arbitrary # of parameters
+    , ("min1", (UnitParamEAPAbs ("'a", "'a"), [UnitParamEAPAbs ("'a", "'a")]))  -- special case: arbitrary # of parameters
+    , ("mod", (UnitParamEAPAbs ("'a", "'a"), [UnitParamEAPAbs ("'a", "'a"), UnitParamEAPAbs ("'b", "'b")]))
+    , ("modulo", (UnitParamEAPAbs ("'a", "'a"), [UnitParamEAPAbs ("'a", "'a"), UnitParamEAPAbs ("'b", "'b")]))
+    , ("amod", (UnitParamEAPAbs ("'a", "'a"), [UnitParamEAPAbs ("'a", "'a"), UnitParamEAPAbs ("'b", "'b")]))
+    , ("dmod", (UnitParamEAPAbs ("'a", "'a"), [UnitParamEAPAbs ("'a", "'a"), UnitParamEAPAbs ("'b", "'b")]))
+    , ("nint", (UnitParamEAPAbs ("'a", "'a"), [UnitParamEAPAbs ("'a", "'a")]))
+    , ("real", (UnitParamEAPAbs ("'a", "'a"), [UnitParamEAPAbs ("'a", "'a")]))
+    , ("float", (UnitParamEAPAbs ("'a", "'a"), [UnitParamEAPAbs ("'a", "'a")]))
+    , ("sngl", (UnitParamEAPAbs ("'a", "'a"), [UnitParamEAPAbs ("'a", "'a")]))
+    , ("sign", (UnitParamEAPAbs ("'a", "'a"), [UnitParamEAPAbs ("'a", "'a"), UnitParamEAPAbs ("'b", "'b")]))
+    , ("isign", (UnitParamEAPAbs ("'a", "'a"), [UnitParamEAPAbs ("'a", "'a"), UnitParamEAPAbs ("'b", "'b")]))
+    , ("dsign", (UnitParamEAPAbs ("'a", "'a"), [UnitParamEAPAbs ("'a", "'a"), UnitParamEAPAbs ("'b", "'b")]))
+    , ("present", (UnitParamEAPAbs ("'a", "'a"), [UnitlessVar]))
+    , ("sqrt", (UnitParamEAPAbs ("'a", "'a"), [UnitPow (UnitParamEAPAbs ("'a", "'a")) 2]))
+    , ("dsqrt", (UnitParamEAPAbs ("'a", "'a"), [UnitPow (UnitParamEAPAbs ("'a", "'a")) 2]))
+    , ("csqrt", (UnitParamEAPAbs ("'a", "'a"), [UnitPow (UnitParamEAPAbs ("'a", "'a")) 2]))
+    , ("exp", (UnitlessVar, [UnitlessVar]))
+    , ("dexp", (UnitlessVar, [UnitlessVar]))
+    , ("cexp", (UnitlessVar, [UnitlessVar]))
+    , ("alog", (UnitlessVar, [UnitlessVar]))
+    , ("dlog", (UnitlessVar, [UnitlessVar]))
+    , ("clog", (UnitlessVar, [UnitlessVar]))
+    , ("alog10", (UnitlessVar, [UnitlessVar]))
+    , ("dlog10", (UnitlessVar, [UnitlessVar]))
+    , ("sin", (UnitlessVar, [UnitlessVar]))
+    , ("dsin", (UnitlessVar, [UnitlessVar]))
+    , ("csin", (UnitlessVar, [UnitlessVar]))
+    , ("cos", (UnitlessVar, [UnitlessVar]))
+    , ("dcos", (UnitlessVar, [UnitlessVar]))
+    , ("ccos", (UnitlessVar, [UnitlessVar]))
+    , ("tan", (UnitlessVar, [UnitlessVar]))
+    , ("dtan", (UnitlessVar, [UnitlessVar]))
+    , ("asin", (UnitlessVar, [UnitlessVar]))
+    , ("dasin", (UnitlessVar, [UnitlessVar]))
+    , ("acos", (UnitlessVar, [UnitlessVar]))
+    , ("dacos", (UnitlessVar, [UnitlessVar]))
+    , ("atan", (UnitlessVar, [UnitlessVar]))
+    , ("datan", (UnitlessVar, [UnitlessVar]))
+    , ("atan2", (UnitlessVar, [UnitParamEAPAbs ("'a", "'a"), UnitParamEAPAbs ("'a", "'a")]))
+    , ("datan2", (UnitlessVar, [UnitParamEAPAbs ("'a", "'a"), UnitParamEAPAbs ("'a", "'a")]))
+    , ("sinh", (UnitlessVar, [UnitlessVar]))
+    , ("dsinh", (UnitlessVar, [UnitlessVar]))
+    , ("cosh", (UnitlessVar, [UnitlessVar]))
+    , ("dcosh", (UnitlessVar, [UnitlessVar]))
+    , ("tanh", (UnitlessVar, [UnitlessVar]))
+    , ("dtanh", (UnitlessVar, [UnitlessVar])) ]
+
+-- Others: reshape, merge need special handling
