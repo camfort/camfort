@@ -119,6 +119,7 @@ inferCriticalVariables uo (fname, pf)
     uniqnameMap = M.fromList [
                 (FA.varName e, FA.srcName e) |
                 e@(F.ExpValue _ _ (F.ValVariable {})) <- universeBi pfRenamed :: [F.Expression UA]
+                -- going to ignore intrinsics here
               ] `M.union` (M.unions . map (M.fromList . map (\ (a, (b, _)) -> (b, a)) . M.toList) $ M.elems mmap')
     fromWhereMap = genUniqNameToFilenameMap . M.elems $ uoModFiles uo
 

@@ -395,13 +395,12 @@ genRHSsubscripts b = genRHSsubscripts' (transformBi replaceModulo b)
   where
     -- Any occurence of an subscript "modulo(e, e')" is replaced with "e"
     replaceModulo :: F.Expression (FA.Analysis A) -> F.Expression (FA.Analysis A)
-    replaceModulo e@(F.ExpSubscript _ _
-                    (F.ExpValue _ _ (F.ValVariable "modulo")) subs) =
+    replaceModulo e@(F.ExpFunctionCall _ _
+                      (F.ExpValue _ _ (F.ValIntrinsic iname)) subs)
+        | iname `elem` ["modulo", "mod", "amod", "dmod"]
         -- We expect that the first parameter to modulo is being treated
         -- as an IxSingle element
-        case (head $ F.aStrip subs) of
-           (F.IxSingle _ _ _ e') -> e'
-           _                     -> e
+        , Just (F.Argument _ _ _ e':_) <- fmap F.aStrip subs = e'
     replaceModulo e = e
 
     genRHSsubscripts' b =
