@@ -121,6 +121,11 @@ spec = do
         show (sort (fst (runUnitInference LitMixed inferPoly1))) `shouldBe`
           "[(\"fst\",'a),(\"id\",'c),(\"snd\",'d),(\"sqr\",('f)**2),(\"x1\",'c),(\"x2\",'f),(\"x3\",'a),(\"x4\",'e),(\"y3\",'b),(\"y4\",'d)]"
 
+    describe "Intrinsic functions" $ do
+      it "sqrtPoly" $ do
+        show (sort (fst (runUnitInference LitMixed sqrtPoly))) `shouldBe`
+          "[(\"a\",m**2),(\"b\",s**4),(\"c\",j**2),(\"n\",'a),(\"x\",m),(\"y\",s),(\"z\",j)]"
+
   describe "Unit Inference Backend" $ do
     describe "Flatten constraints" $ do
       it "testCons1" $ do
@@ -401,5 +406,28 @@ inconsist1 = flip fortranParser' "inconsist1.f90" . B.pack $ unlines
     , "    sqr = y * y + z"
     , "  end function"
     , "end program inconsist1" ]
+
+-- Test intrinsic function sqrt()
+sqrtPoly = flip fortranParser' "sqrtPoly.f90" . B.pack $ unlines
+    [ "program sqrtPoly"
+    , "  implicit none"
+    , "  != unit m :: x"
+    , "  real :: x"
+    , "  != unit s :: y"
+    , "  real :: y"
+    , "  != unit J :: z"
+    , "  real :: z"
+    , "  integer :: a"
+    , "  integer :: b"
+    , "  integer :: c"
+    , "  x = sqrt(a)"
+    , "  y = sqrt(sqrt(b))"
+    , "  z = sqrt(square(sqrt(c)))"
+    , "contains"
+    , "  real function square(n)"
+    , "    real :: n"
+    , "    square = n * n"
+    , "  end function square"
+    , "end program sqrtPoly" ]
 
 fortranParser' = \x -> fromRight . (fortranParser x)

@@ -611,18 +611,21 @@ propagateExp e = fmap uoLiterals ask >>= \ lm -> case e of
 
 propagateFunctionCall :: F.Expression UA -> UnitSolver (F.Expression UA)
 propagateFunctionCall e@(F.ExpFunctionCall a s f Nothing)                     = do
-  (info, _)     <- callHelper f []
-  return . setUnitInfo info $ F.ExpFunctionCall a s f Nothing
+  (info, _) <- callHelper f []
+  let cons = intrinsicHelper info f []
+  return . setConstraint (ConConj cons) . setUnitInfo info $ F.ExpFunctionCall a s f Nothing
 propagateFunctionCall e@(F.ExpFunctionCall a s f (Just (F.AList a' s' args))) = do
   (info, args') <- callHelper f args
-  return . setUnitInfo info $ F.ExpFunctionCall a s f (Just (F.AList a' s' args'))
+  let cons = intrinsicHelper info f args'
+  return . setConstraint (ConConj cons) . setUnitInfo info $ F.ExpFunctionCall a s f (Just (F.AList a' s' args'))
 
 propagateStatement :: F.Statement UA -> UnitSolver (F.Statement UA)
 propagateStatement stmt = case stmt of
   F.StExpressionAssign _ _ e1 e2               -> literalAssignmentSpecialCase e1 e2 stmt
   F.StCall a s sub (Just (F.AList a' s' args)) -> do
-    (_, args') <- callHelper sub args
-    return $ F.StCall a s sub (Just (F.AList a' s' args'))
+    (info, args') <- callHelper sub args
+    let cons = intrinsicHelper info sub args'
+    return . setConstraint (ConConj cons) $ F.StCall a s sub (Just (F.AList a' s' args'))
   F.StDeclaration {}                           -> transformBiM propagateDeclarator stmt
   _                                            -> return stmt
 
@@ -696,6 +699,16 @@ callHelper nexp args = do
   let info = UnitParamPosUse (name, 0, callId)
   return (info, args')
 
+-- FIXME: use this function to create a list of constraints on intrinsic call-sites...
+intrinsicHelper (UnitParamPosUse (_, _, callId)) f@(F.ExpValue _ _ (F.ValIntrinsic _)) args
+  | Just (retU, argUs) <- M.lookup sname intrinsicUnits = zipWith eachArg [0..numArgs] (retU:argUs)
+  where
+    numArgs     = length args
+    sname       = srcName f
+    vname       = varName f
+    eachArg i u = ConEq (UnitParamPosUse (vname, i, callId)) (instantiate callId u)
+intrinsicHelper _ _ _ = []
+
 -- | Generate a unique identifier for a call-site.
 genCallId :: UnitSolver Int
 genCallId = do
@@ -750,7 +763,8 @@ setUnitInfo info = modifyAnnotation (onPrev (\ ua -> ua { unitInfo = Just info }
 
 -- | Set the Constraint field on a piece of AST.
 setConstraint :: F.Annotated f => Constraint -> f UA -> f UA
-setConstraint c = modifyAnnotation (onPrev (\ ua -> ua { unitConstraint = Just c }))
+setConstraint (ConConj []) = id
+setConstraint c            = modifyAnnotation (onPrev (\ ua -> ua { unitConstraint = Just c }))
 
 --------------------------------------------------
 
@@ -922,8 +936,8 @@ puSrcName pu
 --------------------------------------------------
 
 -- | name => (return-unit, parameter-units)
-fortran77intrinisics :: M.Map F.Name (UnitInfo, [UnitInfo])
-fortran77intrinisics =
+intrinsicUnits :: M.Map F.Name (UnitInfo, [UnitInfo])
+intrinsicUnits =
   M.fromList
     [ ("abs", (UnitParamEAPAbs ("'a", "'a"), [UnitParamEAPAbs ("'a", "'a")]))
     , ("iabs", (UnitParamEAPAbs ("'a", "'a"), [UnitParamEAPAbs ("'a", "'a")]))
