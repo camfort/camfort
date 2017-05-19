@@ -27,7 +27,7 @@ module Camfort.Specification.Units.InferenceFrontend
 where
 
 import Data.Data (Data)
-import Data.List (nub, intercalate)
+import Data.List (nub, intercalate, partition)
 import qualified Data.Map.Strict as M
 import qualified Data.IntMap.Strict as IM
 import qualified Data.Set as S
@@ -150,7 +150,35 @@ runInconsistentConstraints = do
 
 -- | Produce information for a "units-mod" file.
 runCompileUnits :: UnitSolver TemplateMap
-runCompileUnits = gets usTemplateMap
+runCompileUnits = do
+  cons <- usConstraints `fmap` get
+
+  -- Sketching some ideas about solving the unit equation for each
+  -- parameter of each function.
+  let unitAssigns = map (fmap flattenUnits) $ genUnitAssignments cons
+  let mulCons x = map (\ (UnitPow u k) -> UnitPow u (x * k))
+  let negateCons = mulCons (-1)
+  let epsilon = 0.001 -- arbitrary
+  let approxEq a b = abs (b - a) < epsilon
+  let uninvert ([UnitPow u k], rhs) | not (k `approxEq` 1) = ([UnitPow u 1], mulCons (1 / k) rhs)
+      uninvert (lhs, rhs)                                  = (lhs, rhs)
+  let shiftTerms name pos (lhs, rhs) = (lhsOk ++ negateCons rhsShift, rhsOk ++ negateCons lhsShift)
+        where
+          (lhsOk, lhsShift) = partition isLHS lhs
+          (rhsOk, rhsShift) = partition (not . isLHS) rhs
+          isLHS (UnitParamPosAbs (n, i)) | n == name && i == pos = True
+          isLHS (UnitPow u _) = isLHS u
+          isLHS _ = False
+
+  let nameParams = M.fromList [ ((name, pos), rhs) | assign <- unitAssigns
+                                                   , UnitParamPosAbs (name, pos) <- universeBi assign
+                                                   , let (_, rhs) = uninvert $ shiftTerms name pos assign ]
+
+
+  D.traceM "nameParams\n"
+  D.traceM . unlines . map show . M.toList $ nameParams
+
+  gets usTemplateMap
 
 --------------------------------------------------
 
