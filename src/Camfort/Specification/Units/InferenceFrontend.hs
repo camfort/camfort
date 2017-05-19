@@ -62,6 +62,7 @@ import qualified Numeric.LinearAlgebra as H -- for debugging
 initInference :: UnitSolver ()
 initInference = do
   pf <- gets usProgramFile
+
   -- Parse unit annotations found in comments and link to their
   -- corresponding statements in the AST.
   let (linkedPF, parserReport) = runWriter $ annotateComments P.unitParser pf
