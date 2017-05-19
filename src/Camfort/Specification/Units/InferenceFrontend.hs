@@ -390,6 +390,24 @@ annotateLiteralsPU pu = do
 
     isPolyCtxt = case pu of F.PUFunction {} -> True; F.PUSubroutine {} -> True; _ -> False
 
+-- | Is it a literal, literally?
+isLiteral :: F.Expression UA -> Bool
+isLiteral (F.ExpValue _ _ (F.ValReal _))    = True
+isLiteral (F.ExpValue _ _ (F.ValInteger _)) = True
+isLiteral _                                 = False
+
+-- | Is expression a literal and is it zero?
+isLiteralZero :: F.Expression UA -> Bool
+isLiteralZero (F.ExpValue _ _ (F.ValInteger i)) = readInteger i == Just 0
+isLiteralZero (F.ExpValue _ _ (F.ValReal i))    = readReal i    == Just 0
+isLiteralZero _                                 = False
+
+-- | Is expression a literal and is it zero?
+isLiteralNonZero :: F.Expression UA -> Bool
+isLiteralNonZero (F.ExpValue _ _ (F.ValInteger i)) = readInteger i /= Just 0
+isLiteralNonZero (F.ExpValue _ _ (F.ValReal i))    = readReal i    /= Just 0
+isLiteralNonZero _                                 = False
+
 --------------------------------------------------
 
 -- | Convert all parametric templates into actual uses, via substitution.
@@ -601,11 +619,7 @@ propagateFunctionCall e@(F.ExpFunctionCall a s f (Just (F.AList a' s' args))) = 
 
 propagateStatement :: F.Statement UA -> UnitSolver (F.Statement UA)
 propagateStatement stmt = case stmt of
-  F.StExpressionAssign _ _ e1 e2
-    -- Allow literal assignment to proceed without units-check.
-    | isLiteral e2                             -> return stmt
-    | otherwise                                -> do
-    return $ maybeSetUnitConstraintF2 ConEq (getUnitInfo e1) (getUnitInfo e2) stmt
+  F.StExpressionAssign _ _ e1 e2               -> literalAssignmentSpecialCase e1 e2 stmt
   F.StCall a s sub (Just (F.AList a' s' args)) -> do
     (_, args') <- callHelper sub args
     return $ F.StCall a s sub (Just (F.AList a' s' args'))
@@ -614,15 +628,21 @@ propagateStatement stmt = case stmt of
 
 propagateDeclarator :: F.Declarator UA -> UnitSolver (F.Declarator UA)
 propagateDeclarator decl = case decl of
-  F.DeclVariable _ _ e1 _ (Just e2)
-    -- Allow literal assignment to proceed without units-check.
-    | isLiteral e2                  -> return decl
-    | otherwise                     -> return $ maybeSetUnitConstraintF2 ConEq (getUnitInfo e1) (getUnitInfo e2) decl
-  F.DeclArray _ _ e1 _ _ (Just e2)
-    -- Allow literal assignment to proceed without units-check.
-    | isLiteral e2                  -> return decl
-    | otherwise                     -> return $ maybeSetUnitConstraintF2 ConEq (getUnitInfo e1) (getUnitInfo e2) decl
+  F.DeclVariable _ _ e1 _ (Just e2) -> literalAssignmentSpecialCase e1 e2 decl
+  F.DeclArray _ _ e1 _ _ (Just e2)  -> literalAssignmentSpecialCase e1 e2 decl
   _                                 -> return decl
+
+-- Allow literal assignment to overload the non-polymorphic
+-- unit-assignment of the non-zero literal.
+literalAssignmentSpecialCase e1 e2 ast
+  | u2@(Just (UnitLiteral _)) <- getUnitInfo e2 = do
+    return $ maybeSetUnitConstraintF2 ConEq (getUnitInfo e1) u2 ast
+  | isLiteralNonZero e2                         = do
+    u2 <- genUnitLiteral
+    return $ maybeSetUnitConstraintF2 ConEq (getUnitInfo e1) (Just u2) ast
+  | otherwise                                   = do
+    -- otherwise express the constraint between LHS and RHS of assignment.
+    return $ maybeSetUnitConstraintF2 ConEq (getUnitInfo e1) (getUnitInfo e2) ast
 
 propagatePU :: F.ProgramUnit UA -> UnitSolver (F.ProgramUnit UA)
 propagatePU pu = do
@@ -761,11 +781,6 @@ modifyPUBlocksM f pu = case pu of
   F.PUFunction   a s r rec n p res b subs -> flip fmap (f b) $ \ b' -> F.PUFunction a s r rec n p res b' subs
   F.PUBlockData  a s n b                  -> flip fmap (f b) $ \ b' -> F.PUBlockData  a s n b'
   F.PUComment {}                          -> return pu -- no blocks
-
--- Is it a literal, literally?
-isLiteral (F.ExpValue _ _ (F.ValReal _)) = True
-isLiteral (F.ExpValue _ _ (F.ValInteger _)) = True
-isLiteral _ = False
 
 --------------------------------------------------
 

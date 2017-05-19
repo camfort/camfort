@@ -90,6 +90,9 @@ spec = do
       it "litTest1 Unitless" $ do
         (fromJust (head (rights [fst (runUnits LitUnitless litTest1 runInconsistentConstraints)]))) `shouldSatisfy`
           any (conParamEq (ConEq UnitlessLit (UnitVar ("j", "j"))))
+      it "Polymorphic non-zero literal is not OK" $ do
+        head (rights [fst (runUnits LitMixed inconsist1 runInconsistentConstraints)]) `shouldSatisfy` isJust
+
     describe "Polymorphic functions" $ do
       it "squarePoly1" $ do
         showClean (runUnits LitMixed squarePoly1 (fmap chooseImplicitNames runInferVariables)) `shouldBe`
@@ -378,5 +381,25 @@ inferPoly1 = flip fortranParser' "inferPoly1.f90" . B.pack $ unlines
     , "    snd = y4"
     , "  end function snd"
     , "end module inferPoly1" ]
+
+-- This should be inconsistent because of the use of the literal "10"
+-- in the parametric polymorphic function sqr.
+inconsist1 = flip fortranParser' "inconsist1.f90" . B.pack $ unlines
+    [ "program inconsist1"
+    , "  implicit none"
+    , "  real :: a, b"
+    , "  != unit(m) :: x"
+    , "  real :: x = 1"
+    , "  != unit(s) :: t"
+    , "  real :: t = 2"
+    , "  a = sqr(x) "
+    , "  b = sqr(t)"
+    , "  contains "
+    , "  real function sqr(y)"
+    , "    real :: y"
+    , "    real :: z = 10"
+    , "    sqr = y * y + z"
+    , "  end function"
+    , "end program inconsist1" ]
 
 fortranParser' = \x -> fromRight . (fortranParser x)
