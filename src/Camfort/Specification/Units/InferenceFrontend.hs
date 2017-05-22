@@ -149,7 +149,7 @@ runInconsistentConstraints = do
   return $ inconsistentConstraints cons
 
 -- | Produce information for a "units-mod" file.
-runCompileUnits :: UnitSolver TemplateMap
+runCompileUnits :: UnitSolver CompiledUnits
 runCompileUnits = do
   cons <- usConstraints `fmap` get
 
@@ -175,10 +175,8 @@ runCompileUnits = do
                                                    , let (_, rhs) = uninvert $ shiftTerms name pos assign ]
 
 
-  D.traceM "nameParams\n"
-  D.traceM . unlines . map show . M.toList $ nameParams
-
-  gets usTemplateMap
+  tmap <- gets usTemplateMap
+  return $ CompiledUnits { cuTemplateMap = tmap, cuNameParamMap = nameParams }
 
 --------------------------------------------------
 

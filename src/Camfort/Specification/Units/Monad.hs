@@ -15,6 +15,7 @@
 -}
 
 {-# LANGUAGE DeriveDataTypeable #-}
+{-# LANGUAGE DeriveGeneric #-}
 {-# LANGUAGE ScopedTypeVariables #-}
 
 {- | Defines the monad for the units-of-measure modules -}
@@ -23,14 +24,18 @@ module Camfort.Specification.Units.Monad
   , whenDebug, modifyVarUnitMap, modifyGivenVarSet, modifyUnitAliasMap
   , VarUnitMap, GivenVarSet, UnitAliasMap, TemplateMap, CallIdMap
   , modifyTemplateMap, modifyProgramFile, modifyProgramFileM, modifyCallIdRemapM
-  , runUnitSolver, evalUnitSolver, execUnitSolver )
+  , runUnitSolver, evalUnitSolver, execUnitSolver
+  , CompiledUnits(..), NameParamMap, emptyCompiledUnits )
 where
 
 import Control.Monad.RWS.Strict
 import Control.Monad.Trans.Except
+import Data.Binary (Binary)
+import Data.Typeable (Typeable)
 import Data.Char (toLower)
 import Data.Data (Data)
 import Data.List (find, isPrefixOf)
+import GHC.Generics (Generic)
 import qualified Data.Map.Strict as M
 import qualified Data.IntMap.Strict as IM
 import qualified Data.Set as S
@@ -74,6 +79,18 @@ unitOpts0 = UnitOpts False LitMixed M.empty M.empty
 
 -- | Function/subroutine name -> associated, parametric polymorphic constraints
 type TemplateMap = M.Map F.Name Constraints
+
+-- | (Function/subroutine name, position of parameter) -> associated list of units (to be multiplied together)
+type NameParamMap = M.Map (F.Name, Int) [UnitInfo]
+
+data CompiledUnits = CompiledUnits { cuTemplateMap  :: TemplateMap
+                                   , cuNameParamMap :: NameParamMap }
+  deriving (Ord, Eq, Show, Data, Typeable, Generic)
+
+instance Binary CompiledUnits
+
+emptyCompiledUnits :: CompiledUnits
+emptyCompiledUnits = CompiledUnits M.empty M.empty
 
 --------------------------------------------------
 
