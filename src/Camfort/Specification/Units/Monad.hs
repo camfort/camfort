@@ -25,7 +25,7 @@ module Camfort.Specification.Units.Monad
   , VarUnitMap, GivenVarSet, UnitAliasMap, TemplateMap, CallIdMap
   , modifyTemplateMap, modifyProgramFile, modifyProgramFileM, modifyCallIdRemapM
   , runUnitSolver, evalUnitSolver, execUnitSolver
-  , CompiledUnits(..), NameParamMap, emptyCompiledUnits )
+  , CompiledUnits(..), NameParamMap, NameParamKey(..), emptyCompiledUnits )
 where
 
 import Control.Monad.RWS.Strict
@@ -80,9 +80,18 @@ unitOpts0 = UnitOpts False LitMixed M.empty M.empty
 -- | Function/subroutine name -> associated, parametric polymorphic constraints
 type TemplateMap = M.Map F.Name Constraints
 
--- | (Function/subroutine name, position of parameter) -> associated list of units (to be multiplied together)
-type NameParamMap = M.Map (F.Name, Int) [UnitInfo]
+-- | Things that can be exported from modules
+data NameParamKey
+  = NPKParam F.Name Int -- ^ Function/subroutine name, position of parameter
+  | NPKVariable VV      -- ^ variable
+  deriving (Ord, Eq, Show, Data, Typeable, Generic)
 
+instance Binary NameParamKey
+
+-- | mapped to a list of units (to be multiplied together)
+type NameParamMap = M.Map NameParamKey [UnitInfo]
+
+-- | The data-structure stored in 'fortran-src mod files'
 data CompiledUnits = CompiledUnits { cuTemplateMap  :: TemplateMap
                                    , cuNameParamMap :: NameParamMap }
   deriving (Ord, Eq, Show, Data, Typeable, Generic)

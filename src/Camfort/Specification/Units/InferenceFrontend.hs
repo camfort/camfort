@@ -170,13 +170,16 @@ runCompileUnits = do
           isLHS (UnitPow u _) = isLHS u
           isLHS _ = False
 
-  let nameParams = M.fromList [ ((name, pos), rhs) | assign <- unitAssigns
-                                                   , UnitParamPosAbs (name, pos) <- universeBi assign
-                                                   , let (_, rhs) = uninvert $ shiftTerms name pos assign ]
+  let nameParams = M.fromList [ (NPKParam name pos, rhs) | assign <- unitAssigns
+                                                         , UnitParamPosAbs (name, pos) <- universeBi assign
+                                                         , let (_, rhs) = uninvert $ shiftTerms name pos assign ]
 
+
+  let variables = M.fromList [ (NPKVariable var, units) | ([UnitPow (UnitVar var) k], units) <- unitAssigns
+                                                        , k `approxEq` 1 ]
 
   tmap <- gets usTemplateMap
-  return $ CompiledUnits { cuTemplateMap = tmap, cuNameParamMap = nameParams }
+  return $ CompiledUnits { cuTemplateMap = tmap, cuNameParamMap = nameParams `M.union` variables }
 
 --------------------------------------------------
 
