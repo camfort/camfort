@@ -512,6 +512,11 @@ substInstance isDummy callStack output (name, callId) = do
   dumpConsM ("instantiating " ++ show (name, callId) ++ ": (output ++ template) is") (output ++ template)
   dumpConsM ("instantiating " ++ show (name, callId) ++ ": (template') is") (template')
 
+  -- Get constraints for any imported variables
+  let filterForVars (NPKVariable _) _ = True; filterForVars _ _ = False
+  nmap <- M.filterWithKey filterForVars `fmap` gets usNameParamMap
+  let importedVariables = [ ConEq (UnitVar vv) (foldUnits units) | (NPKVariable vv, units) <- M.toList nmap ]
+
   -- Convert abstract parametric units into concrete ones.
 
   let output' = -- Do not instantiate explicitly annotated polymorphic
@@ -521,7 +526,10 @@ substInstance isDummy callStack output (name, callId) = do
 
                 -- Only instantiate explicitly annotated polymorphic
                 -- variables from nested function/subroutine calls.
-                instantiate callId template'
+                instantiate callId template' ++
+
+                -- any imported variables
+                importedVariables
 
   dumpConsM ("final output for " ++ show (name, callId)) output'
 

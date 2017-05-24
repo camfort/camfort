@@ -103,6 +103,7 @@ inferCriticalVariables uo (fname, pf)
     uOpts = uo { uoNameMap = FAR.extractNameMap pfRenamed }
     (eVars, state, logs) = runUnitSolver uOpts pfRenamed $ do
       modifyTemplateMap . const . cuTemplateMap . combinedCompiledUnits . M.elems $ uoModFiles uo
+      modifyNameParamMap . const . cuNameParamMap . combinedCompiledUnits . M.elems $ uoModFiles uo
       initInference
       runCriticalVariables
     pfUA = usProgramFile state -- the program file after units analysis is done
@@ -199,6 +200,7 @@ checkUnits uo (fname, pf)
     uOpts = uo { uoNameMap = nameMap }
     (eCons, state, logs) = runUnitSolver uOpts pfRenamed $ do
       modifyTemplateMap . const . cuTemplateMap . combinedCompiledUnits . M.elems $ uoModFiles uo
+      modifyNameParamMap . const . cuNameParamMap . combinedCompiledUnits . M.elems $ uoModFiles uo
       initInference
       runInconsistentConstraints
     templateMap = usTemplateMap state
@@ -260,6 +262,7 @@ inferUnits uo (fname, pf)
     uOpts = uo { uoNameMap = nameMap }
     (eVars, state, logs) = runUnitSolver uOpts pfRenamed $ do
       modifyTemplateMap . const . cuTemplateMap . combinedCompiledUnits . M.elems $ uoModFiles uo
+      modifyNameParamMap . const . cuNameParamMap . combinedCompiledUnits . M.elems $ uoModFiles uo
       initInference
       chooseImplicitNames `fmap` runInferVariables
 
@@ -320,6 +323,7 @@ compileUnits' uo (fname, pf)
     uOpts = uo { uoNameMap = nameMap }
     (eCUnits, state, logs) = runUnitSolver uOpts pfTyped $ do
       modifyTemplateMap . const . cuTemplateMap . combinedCompiledUnits . M.elems $ uoModFiles uo
+      modifyNameParamMap . const . cuNameParamMap . combinedCompiledUnits . M.elems $ uoModFiles uo
       initInference
       runCompileUnits
 
@@ -357,6 +361,7 @@ synthesiseUnits uo marker (fname, pf)
     uOpts = uo { uoNameMap = nameMap }
     (eVars, state, logs) = runUnitSolver uOpts pfRenamed $ do
       modifyTemplateMap . const . cuTemplateMap . combinedCompiledUnits . M.elems $ uoModFiles uo
+      modifyNameParamMap . const . cuNameParamMap . combinedCompiledUnits . M.elems $ uoModFiles uo
       initInference
       runInferVariables >>= (runSynthesis marker . chooseImplicitNames)
 
