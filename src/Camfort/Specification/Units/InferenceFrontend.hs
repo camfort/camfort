@@ -527,6 +527,18 @@ substInstance isDummy callStack output (name, callId) = do
 
   return output'
 
+foldUnits units
+  | null units = UnitlessVar
+  | otherwise  = foldl1 UnitMul units
+
+-- | Generate constraints from a NameParamMap entry.
+nameParamConstraints :: F.Name -> UnitSolver Constraints
+nameParamConstraints fname = do
+  let filterForName (NPKParam n _) _ = n == fname
+      filterForName _ _              = False
+  nlst <- (M.toList . M.filterWithKey filterForName) `fmap` gets usNameParamMap
+  return [ ConEq (UnitParamPosAbs (fname, pos)) (foldUnits units) | (NPKParam _ pos, units) <- nlst ]
+
 -- | If given a usage of a parametric unit, rewrite the callId field
 -- to follow an existing mapping in the usCallIdRemap state field, or
 -- generate a new callId and add it to the usCallIdRemap state field.

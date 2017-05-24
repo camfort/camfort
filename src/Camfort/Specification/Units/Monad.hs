@@ -23,7 +23,7 @@ module Camfort.Specification.Units.Monad
   ( UA, VV, UnitSolver, UnitOpts(..), unitOpts0, UnitLogs, UnitState(..), LiteralsOpt(..), UnitException
   , whenDebug, modifyVarUnitMap, modifyGivenVarSet, modifyUnitAliasMap
   , VarUnitMap, GivenVarSet, UnitAliasMap, TemplateMap, CallIdMap
-  , modifyTemplateMap, modifyProgramFile, modifyProgramFileM, modifyCallIdRemapM
+  , modifyTemplateMap, modifyNameParamMap, modifyProgramFile, modifyProgramFileM, modifyCallIdRemapM
   , runUnitSolver, evalUnitSolver, execUnitSolver
   , CompiledUnits(..), NameParamMap, NameParamKey(..), emptyCompiledUnits )
 where
@@ -142,6 +142,7 @@ data UnitState = UnitState
   , usGivenVarSet  :: GivenVarSet
   , usUnitAliasMap :: UnitAliasMap
   , usTemplateMap  :: TemplateMap
+  , usNameParamMap :: NameParamMap
   , usLitNums      :: Int
   , usCallIds      :: Int
   , usCallIdRemap  :: CallIdMap
@@ -153,6 +154,7 @@ unitState0 pf = UnitState { usProgramFile  = pf
                           , usGivenVarSet  = S.empty
                           , usUnitAliasMap = M.empty
                           , usTemplateMap  = M.empty
+                          , usNameParamMap = M.empty
                           , usLitNums      = 0
                           , usCallIds      = 0
                           , usCallIdRemap  = IM.empty
@@ -170,6 +172,9 @@ modifyUnitAliasMap f = modify (\ s -> s { usUnitAliasMap = f (usUnitAliasMap s) 
 
 modifyTemplateMap :: (TemplateMap -> TemplateMap) -> UnitSolver ()
 modifyTemplateMap f = modify (\ s -> s { usTemplateMap = f (usTemplateMap s) })
+
+modifyNameParamMap :: (NameParamMap -> NameParamMap) -> UnitSolver ()
+modifyNameParamMap f = modify (\ s -> s { usNameParamMap = f (usNameParamMap s) })
 
 modifyProgramFile :: (F.ProgramFile UA -> F.ProgramFile UA) -> UnitSolver ()
 modifyProgramFile f = modify (\ s -> s { usProgramFile = f (usProgramFile s) })
