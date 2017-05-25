@@ -65,6 +65,7 @@ import qualified Data.PartialOrd as PO
 
 import qualified Camfort.Helpers.Vec as V
 import System.IO.Unsafe
+import Debug.Trace
 
 -- Utility container
 class Container a where
@@ -253,25 +254,32 @@ unfCompare :: forall a b n . ( Container a,          Container b
            => UnionNF n a -> UnionNF n b -> Ordering
 unfCompare oi oi' = unsafePerformIO $ do
     thmRes <- prove pred
-    if modelExists thmRes
-      then do
-        ce <- counterExample thmRes
-        case V.fromList ce of
-          V.VecBox cev ->
-            case V.proveEqSize (NE.head oi) cev of
-              Just V.ReflEq ->
-                -- TODO: The second branch is defensive programming the
-                -- member check is not necessary unless the counter example
-                -- is bogus (it shouldn't be). Delete if it adversely
-                -- effects the performance.
-                if | cev `member` oi  -> return GT
-                   | cev `member` oi' -> return LT
-                   | otherwise -> fail
-                     "Impossible: counter example is in neither of the operands"
-              Nothing -> fail $
-                "Impossible: Counter example size doesn't match the original" ++
-                " vector size."
-      else return EQ
+    case thmRes of
+      -- Tell the user if there was a hard proof error (e.g., if
+      -- z3 is not installed/accessible).
+      -- TODO: give more information
+      ThmResult (ProofError _ msgs) -> fail $ unlines msgs
+      _ ->
+        if modelExists thmRes
+        then do
+          ce <- counterExample thmRes
+          case V.fromList ce of
+             V.VecBox cev ->
+               case V.proveEqSize (NE.head oi) cev of
+                 Just V.ReflEq ->
+                   -- TODO: The second branch is defensive programming the
+                   -- member check is not necessary unless the counter example
+                   -- is bogus (it shouldn't be). Delete if it adversely
+                   -- effects the performance.
+                   if | cev `member` oi  -> return GT
+                      | cev `member` oi' -> return LT
+                      | otherwise -> fail
+                         "Impossible: counter example is in \
+                          \neither of the operands"
+                 Nothing -> fail
+                    "Impossible: Counter example size doesn't \
+                    \match the original vector size."
+        else "EQ branch" `trace` return EQ
   where
     counterExample :: ThmResult -> IO [ Int64 ]
     counterExample thmRes =
