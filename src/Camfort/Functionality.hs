@@ -60,6 +60,7 @@ data Flag = Version
          | Doxygen
          | Ford
          | FVersion String
+         | RefactorInPlace
          | Debug deriving (Data, Show, Eq)
 
 type Options = [Flag]
