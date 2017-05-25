@@ -52,8 +52,11 @@ main = do
                            return (3, "")
                  else if length args >= 3
                       then return (3, args !! 2)
-                      else fail $ usage ++ "This mode requires an output \
-                                           \file/directory to be specified."
+                      else fail $ usage ++ "\nThis mode requires an output\
+                                           \ file/directory to be specified\n\
+                                           \ or use the --inplace flag to set\
+                                           \ the ouput location to be the input\
+                                           \ location."
 
            let excluded_files = map unpack . split (==',') . pack . getExcludes
            fun inp (excluded_files opts) outp opts
