@@ -27,7 +27,7 @@ module Camfort.Specification.Units.InferenceFrontend
 where
 
 import Data.Data (Data)
-import Data.List (nub, intercalate)
+import Data.List (nub, intercalate, partition)
 import qualified Data.Map.Strict as M
 import qualified Data.IntMap.Strict as IM
 import qualified Data.Set as S
@@ -62,6 +62,7 @@ import qualified Numeric.LinearAlgebra as H -- for debugging
 initInference :: UnitSolver ()
 initInference = do
   pf <- gets usProgramFile
+
   -- Parse unit annotations found in comments and link to their
   -- corresponding statements in the AST.
   let (linkedPF, parserReport) = runWriter $ annotateComments P.unitParser pf
@@ -148,8 +149,37 @@ runInconsistentConstraints = do
   return $ inconsistentConstraints cons
 
 -- | Produce information for a "units-mod" file.
-runCompileUnits :: UnitSolver TemplateMap
-runCompileUnits = gets usTemplateMap
+runCompileUnits :: UnitSolver CompiledUnits
+runCompileUnits = do
+  cons <- usConstraints `fmap` get
+
+  -- Sketching some ideas about solving the unit equation for each
+  -- parameter of each function.
+  let unitAssigns = map (fmap flattenUnits) $ genUnitAssignments cons
+  let mulCons x = map (\ (UnitPow u k) -> UnitPow u (x * k))
+  let negateCons = mulCons (-1)
+  let epsilon = 0.001 -- arbitrary
+  let approxEq a b = abs (b - a) < epsilon
+  let uninvert ([UnitPow u k], rhs) | not (k `approxEq` 1) = ([UnitPow u 1], mulCons (1 / k) rhs)
+      uninvert (lhs, rhs)                                  = (lhs, rhs)
+  let shiftTerms name pos (lhs, rhs) = (lhsOk ++ negateCons rhsShift, rhsOk ++ negateCons lhsShift)
+        where
+          (lhsOk, lhsShift) = partition isLHS lhs
+          (rhsOk, rhsShift) = partition (not . isLHS) rhs
+          isLHS (UnitParamPosAbs (n, i)) | n == name && i == pos = True
+          isLHS (UnitPow u _) = isLHS u
+          isLHS _ = False
+
+  let nameParams = M.fromList [ (NPKParam name pos, rhs) | assign <- unitAssigns
+                                                         , UnitParamPosAbs (name, pos) <- universeBi assign
+                                                         , let (_, rhs) = uninvert $ shiftTerms name pos assign ]
+
+
+  let variables = M.fromList [ (NPKVariable var, units) | ([UnitPow (UnitVar var) k], units) <- unitAssigns
+                                                        , k `approxEq` 1 ]
+
+  tmap <- gets usTemplateMap
+  return $ CompiledUnits { cuTemplateMap = tmap, cuNameParamMap = nameParams `M.union` variables }
 
 --------------------------------------------------
 
@@ -389,6 +419,24 @@ annotateLiteralsPU pu = do
 
     isPolyCtxt = case pu of F.PUFunction {} -> True; F.PUSubroutine {} -> True; _ -> False
 
+-- | Is it a literal, literally?
+isLiteral :: F.Expression UA -> Bool
+isLiteral (F.ExpValue _ _ (F.ValReal _))    = True
+isLiteral (F.ExpValue _ _ (F.ValInteger _)) = True
+isLiteral _                                 = False
+
+-- | Is expression a literal and is it zero?
+isLiteralZero :: F.Expression UA -> Bool
+isLiteralZero (F.ExpValue _ _ (F.ValInteger i)) = readInteger i == Just 0
+isLiteralZero (F.ExpValue _ _ (F.ValReal i))    = readReal i    == Just 0
+isLiteralZero _                                 = False
+
+-- | Is expression a literal and is it zero?
+isLiteralNonZero :: F.Expression UA -> Bool
+isLiteralNonZero (F.ExpValue _ _ (F.ValInteger i)) = readInteger i /= Just 0
+isLiteralNonZero (F.ExpValue _ _ (F.ValReal i))    = readReal i    /= Just 0
+isLiteralNonZero _                                 = False
+
 --------------------------------------------------
 
 -- | Convert all parametric templates into actual uses, via substitution.
@@ -464,6 +512,11 @@ substInstance isDummy callStack output (name, callId) = do
   dumpConsM ("instantiating " ++ show (name, callId) ++ ": (output ++ template) is") (output ++ template)
   dumpConsM ("instantiating " ++ show (name, callId) ++ ": (template') is") (template')
 
+  -- Get constraints for any imported variables
+  let filterForVars (NPKVariable _) _ = True; filterForVars _ _ = False
+  nmap <- M.filterWithKey filterForVars `fmap` gets usNameParamMap
+  let importedVariables = [ ConEq (UnitVar vv) (foldUnits units) | (NPKVariable vv, units) <- M.toList nmap ]
+
   -- Convert abstract parametric units into concrete ones.
 
   let output' = -- Do not instantiate explicitly annotated polymorphic
@@ -473,11 +526,26 @@ substInstance isDummy callStack output (name, callId) = do
 
                 -- Only instantiate explicitly annotated polymorphic
                 -- variables from nested function/subroutine calls.
-                instantiate callId template'
+                instantiate callId template' ++
+
+                -- any imported variables
+                importedVariables
 
   dumpConsM ("final output for " ++ show (name, callId)) output'
 
   return output'
+
+foldUnits units
+  | null units = UnitlessVar
+  | otherwise  = foldl1 UnitMul units
+
+-- | Generate constraints from a NameParamMap entry.
+nameParamConstraints :: F.Name -> UnitSolver Constraints
+nameParamConstraints fname = do
+  let filterForName (NPKParam n _) _ = n == fname
+      filterForName _ _              = False
+  nlst <- (M.toList . M.filterWithKey filterForName) `fmap` gets usNameParamMap
+  return [ ConEq (UnitParamPosAbs (fname, pos)) (foldUnits units) | (NPKParam _ pos, units) <- nlst ]
 
 -- | If given a usage of a parametric unit, rewrite the callId field
 -- to follow an existing mapping in the usCallIdRemap state field, or
@@ -592,36 +660,41 @@ propagateExp e = fmap uoLiterals ask >>= \ lm -> case e of
 
 propagateFunctionCall :: F.Expression UA -> UnitSolver (F.Expression UA)
 propagateFunctionCall e@(F.ExpFunctionCall a s f Nothing)                     = do
-  (info, _)     <- callHelper f []
-  return . setUnitInfo info $ F.ExpFunctionCall a s f Nothing
+  (info, _) <- callHelper f []
+  let cons = intrinsicHelper info f []
+  return . setConstraint (ConConj cons) . setUnitInfo info $ F.ExpFunctionCall a s f Nothing
 propagateFunctionCall e@(F.ExpFunctionCall a s f (Just (F.AList a' s' args))) = do
   (info, args') <- callHelper f args
-  return . setUnitInfo info $ F.ExpFunctionCall a s f (Just (F.AList a' s' args'))
+  let cons = intrinsicHelper info f args'
+  return . setConstraint (ConConj cons) . setUnitInfo info $ F.ExpFunctionCall a s f (Just (F.AList a' s' args'))
 
 propagateStatement :: F.Statement UA -> UnitSolver (F.Statement UA)
 propagateStatement stmt = case stmt of
-  F.StExpressionAssign _ _ e1 e2
-    -- Allow literal assignment to proceed without units-check.
-    | isLiteral e2                             -> return stmt
-    | otherwise                                -> do
-    return $ maybeSetUnitConstraintF2 ConEq (getUnitInfo e1) (getUnitInfo e2) stmt
+  F.StExpressionAssign _ _ e1 e2               -> literalAssignmentSpecialCase e1 e2 stmt
   F.StCall a s sub (Just (F.AList a' s' args)) -> do
-    (_, args') <- callHelper sub args
-    return $ F.StCall a s sub (Just (F.AList a' s' args'))
+    (info, args') <- callHelper sub args
+    let cons = intrinsicHelper info sub args'
+    return . setConstraint (ConConj cons) $ F.StCall a s sub (Just (F.AList a' s' args'))
   F.StDeclaration {}                           -> transformBiM propagateDeclarator stmt
   _                                            -> return stmt
 
 propagateDeclarator :: F.Declarator UA -> UnitSolver (F.Declarator UA)
 propagateDeclarator decl = case decl of
-  F.DeclVariable _ _ e1 _ (Just e2)
-    -- Allow literal assignment to proceed without units-check.
-    | isLiteral e2                  -> return decl
-    | otherwise                     -> return $ maybeSetUnitConstraintF2 ConEq (getUnitInfo e1) (getUnitInfo e2) decl
-  F.DeclArray _ _ e1 _ _ (Just e2)
-    -- Allow literal assignment to proceed without units-check.
-    | isLiteral e2                  -> return decl
-    | otherwise                     -> return $ maybeSetUnitConstraintF2 ConEq (getUnitInfo e1) (getUnitInfo e2) decl
+  F.DeclVariable _ _ e1 _ (Just e2) -> literalAssignmentSpecialCase e1 e2 decl
+  F.DeclArray _ _ e1 _ _ (Just e2)  -> literalAssignmentSpecialCase e1 e2 decl
   _                                 -> return decl
+
+-- Allow literal assignment to overload the non-polymorphic
+-- unit-assignment of the non-zero literal.
+literalAssignmentSpecialCase e1 e2 ast
+  | u2@(Just (UnitLiteral _)) <- getUnitInfo e2 = do
+    return $ maybeSetUnitConstraintF2 ConEq (getUnitInfo e1) u2 ast
+  | isLiteralNonZero e2                         = do
+    u2 <- genUnitLiteral
+    return $ maybeSetUnitConstraintF2 ConEq (getUnitInfo e1) (Just u2) ast
+  | otherwise                                   = do
+    -- otherwise express the constraint between LHS and RHS of assignment.
+    return $ maybeSetUnitConstraintF2 ConEq (getUnitInfo e1) (getUnitInfo e2) ast
 
 propagatePU :: F.ProgramUnit UA -> UnitSolver (F.ProgramUnit UA)
 propagatePU pu = do
@@ -674,6 +747,16 @@ callHelper nexp args = do
   -- build a site-specific parametric unit for use on a return variable, if any
   let info = UnitParamPosUse (name, 0, callId)
   return (info, args')
+
+-- FIXME: use this function to create a list of constraints on intrinsic call-sites...
+intrinsicHelper (UnitParamPosUse (_, _, callId)) f@(F.ExpValue _ _ (F.ValIntrinsic _)) args
+  | Just (retU, argUs) <- M.lookup sname intrinsicUnits = zipWith eachArg [0..numArgs] (retU:argUs)
+  where
+    numArgs     = length args
+    sname       = srcName f
+    vname       = varName f
+    eachArg i u = ConEq (UnitParamPosUse (vname, i, callId)) (instantiate callId u)
+intrinsicHelper _ _ _ = []
 
 -- | Generate a unique identifier for a call-site.
 genCallId :: UnitSolver Int
@@ -729,7 +812,8 @@ setUnitInfo info = modifyAnnotation (onPrev (\ ua -> ua { unitInfo = Just info }
 
 -- | Set the Constraint field on a piece of AST.
 setConstraint :: F.Annotated f => Constraint -> f UA -> f UA
-setConstraint c = modifyAnnotation (onPrev (\ ua -> ua { unitConstraint = Just c }))
+setConstraint (ConConj []) = id
+setConstraint c            = modifyAnnotation (onPrev (\ ua -> ua { unitConstraint = Just c }))
 
 --------------------------------------------------
 
@@ -760,11 +844,6 @@ modifyPUBlocksM f pu = case pu of
   F.PUFunction   a s r rec n p res b subs -> flip fmap (f b) $ \ b' -> F.PUFunction a s r rec n p res b' subs
   F.PUBlockData  a s n b                  -> flip fmap (f b) $ \ b' -> F.PUBlockData  a s n b'
   F.PUComment {}                          -> return pu -- no blocks
-
--- Is it a literal, literally?
-isLiteral (F.ExpValue _ _ (F.ValReal _)) = True
-isLiteral (F.ExpValue _ _ (F.ValInteger _)) = True
-isLiteral _ = False
 
 --------------------------------------------------
 
@@ -906,8 +985,8 @@ puSrcName pu
 --------------------------------------------------
 
 -- | name => (return-unit, parameter-units)
-fortran77intrinisics :: M.Map F.Name (UnitInfo, [UnitInfo])
-fortran77intrinisics =
+intrinsicUnits :: M.Map F.Name (UnitInfo, [UnitInfo])
+intrinsicUnits =
   M.fromList
     [ ("abs", (UnitParamEAPAbs ("'a", "'a"), [UnitParamEAPAbs ("'a", "'a")]))
     , ("iabs", (UnitParamEAPAbs ("'a", "'a"), [UnitParamEAPAbs ("'a", "'a")]))

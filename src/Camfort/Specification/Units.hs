@@ -102,7 +102,8 @@ inferCriticalVariables uo (fname, pf)
     -- run inference
     uOpts = uo { uoNameMap = FAR.extractNameMap pfRenamed }
     (eVars, state, logs) = runUnitSolver uOpts pfRenamed $ do
-      modifyTemplateMap . const . combinedTemplateMap . M.elems $ uoModFiles uo
+      modifyTemplateMap . const . cuTemplateMap . combinedCompiledUnits . M.elems $ uoModFiles uo
+      modifyNameParamMap . const . cuNameParamMap . combinedCompiledUnits . M.elems $ uoModFiles uo
       initInference
       runCriticalVariables
     pfUA = usProgramFile state -- the program file after units analysis is done
@@ -198,7 +199,8 @@ checkUnits uo (fname, pf)
     -- run inference
     uOpts = uo { uoNameMap = nameMap }
     (eCons, state, logs) = runUnitSolver uOpts pfRenamed $ do
-      modifyTemplateMap . const . combinedTemplateMap . M.elems $ uoModFiles uo
+      modifyTemplateMap . const . cuTemplateMap . combinedCompiledUnits . M.elems $ uoModFiles uo
+      modifyNameParamMap . const . cuNameParamMap . combinedCompiledUnits . M.elems $ uoModFiles uo
       initInference
       runInconsistentConstraints
     templateMap = usTemplateMap state
@@ -247,7 +249,7 @@ inferUnits uo (fname, pf)
   | Left exc   <- eVars = errReport exc
   where
     -- Format report
-    okReport vars = logs ++ "\n" ++ fname ++ ":\n" ++ unlines [ expReport ei | ei <- expInfo ]
+    okReport vars = logs ++ "\n" ++ fname ++ ":\n" ++ unlines [ expReport ei | ei <- expInfo ] ++ show vars
       where
         expInfo = [ (ei, u) | ei@(ExpInfo _ vname sname) <- declVariableNames pfUA
                             , u <- maybeToList ((vname, sname) `lookup` vars) ]
@@ -259,7 +261,8 @@ inferUnits uo (fname, pf)
     -- run inference
     uOpts = uo { uoNameMap = nameMap }
     (eVars, state, logs) = runUnitSolver uOpts pfRenamed $ do
-      modifyTemplateMap . const . combinedTemplateMap . M.elems $ uoModFiles uo
+      modifyTemplateMap . const . cuTemplateMap . combinedCompiledUnits . M.elems $ uoModFiles uo
+      modifyNameParamMap . const . cuNameParamMap . combinedCompiledUnits . M.elems $ uoModFiles uo
       initInference
       chooseImplicitNames `fmap` runInferVariables
 
@@ -271,23 +274,28 @@ inferUnits uo (fname, pf)
 
     nameMap = FAR.extractNameMap pfRenamed
 
-combinedTemplateMap :: ModFiles -> TemplateMap
-combinedTemplateMap = M.unions . map mfTemplateMap
+combinedCompiledUnits :: ModFiles -> CompiledUnits
+combinedCompiledUnits mfs = CompiledUnits { cuTemplateMap = M.unions tmaps
+                                          , cuNameParamMap = M.unions nmaps }
+  where
+    cus = map mfCompiledUnits mfs
+    tmaps = map cuTemplateMap cus
+    nmaps = map cuNameParamMap cus
 
 -- | Name of the labeled data within a ModFile containing unit-specific info.
-unitsTemplateMapLabel = "units-template-map"
+unitsCompiledDataLabel = "units-compiled-data"
 
-mfTemplateMap :: ModFile -> TemplateMap
-mfTemplateMap mf = case lookupModFileData unitsTemplateMapLabel mf of
-  Nothing -> M.empty
+mfCompiledUnits :: ModFile -> CompiledUnits
+mfCompiledUnits mf = case lookupModFileData unitsCompiledDataLabel mf of
+  Nothing -> emptyCompiledUnits
   Just bs -> case decodeOrFail (LB.fromStrict bs) of
-    Left _ -> M.empty
-    Right (_, _, tmap) -> tmap
+    Left _ -> emptyCompiledUnits
+    Right (_, _, cu) -> cu
 
-genUnitsModFile :: F.ProgramFile UA -> TemplateMap -> ModFile
-genUnitsModFile pf tmap = alterModFileData f unitsTemplateMapLabel $ genModFile pf
+genUnitsModFile :: F.ProgramFile UA -> CompiledUnits -> ModFile
+genUnitsModFile pf cu = alterModFileData f unitsCompiledDataLabel $ genModFile pf
   where
-    f _ = Just . LB.toStrict $ encode tmap
+    f _ = Just . LB.toStrict $ encode cu
 
 compileUnits :: UnitOpts -> [FileProgram] -> (String, [(Filename, B.ByteString)])
 compileUnits uo fileprogs = (concat reports, concat bins)
@@ -297,21 +305,25 @@ compileUnits uo fileprogs = (concat reports, concat bins)
 
 compileUnits' :: UnitOpts -> FileProgram -> (String, [(Filename, B.ByteString)])
 compileUnits' uo (fname, pf)
-  | Right tmap <- eTMap = okReport tmap
-  | Left exc   <- eTMap = errReport exc
+  | Right cu <- eCUnits = okReport cu
+  | Left exc <- eCUnits = errReport exc
   where
     -- Format report
-    okReport tmap = ( logs ++ "\n" ++ fname ++ ":\n" ++ unlines [ n ++ ":\n  " ++ intercalate "\n  " (map show cs) | (n, cs) <- M.toList tmap ]
-                     -- FIXME, filename manipulation
-                    , [(fname ++ modFileSuffix, encodeModFile (genUnitsModFile pfTyped tmap))] )
+    okReport cu = ( logs ++ "\n" ++ fname ++ ":\n" ++ if uoDebug uo then debugInfo else []
+                     -- FIXME, filename manipulation (needs to go in -I dir?)
+                    , [(fname ++ modFileSuffix, encodeModFile (genUnitsModFile pfTyped cu))] )
+      where
+        debugInfo = unlines [ n ++ ":\n  " ++ intercalate "\n  " (map show cs) | (n, cs) <- M.toList (cuTemplateMap cu) ] ++
+                    unlines ("nameParams:" : (map show . M.toList $ cuNameParamMap cu))
+
 
     errReport exc = ( logs ++ "\n" ++ fname ++ ":  " ++ show exc
                     , [] )
-
     -- run inference
     uOpts = uo { uoNameMap = nameMap }
-    (eTMap, state, logs) = runUnitSolver uOpts pfTyped $ do
-      modifyTemplateMap . const . combinedTemplateMap . M.elems $ uoModFiles uo
+    (eCUnits, state, logs) = runUnitSolver uOpts pfTyped $ do
+      modifyTemplateMap . const . cuTemplateMap . combinedCompiledUnits . M.elems $ uoModFiles uo
+      modifyNameParamMap . const . cuNameParamMap . combinedCompiledUnits . M.elems $ uoModFiles uo
       initInference
       runCompileUnits
 
@@ -348,7 +360,8 @@ synthesiseUnits uo marker (fname, pf)
     -- run inference
     uOpts = uo { uoNameMap = nameMap }
     (eVars, state, logs) = runUnitSolver uOpts pfRenamed $ do
-      modifyTemplateMap . const . combinedTemplateMap . M.elems $ uoModFiles uo
+      modifyTemplateMap . const . cuTemplateMap . combinedCompiledUnits . M.elems $ uoModFiles uo
+      modifyNameParamMap . const . cuNameParamMap . combinedCompiledUnits . M.elems $ uoModFiles uo
       initInference
       runInferVariables >>= (runSynthesis marker . chooseImplicitNames)
 

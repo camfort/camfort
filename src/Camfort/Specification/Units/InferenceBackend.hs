@@ -84,12 +84,19 @@ criticalVariables cons = filter (not . isUnitRHS) $ map (colA A.!) criticalIndic
 
 -- | Returns list of formerly-undetermined variables and their units.
 inferVariables :: Constraints -> [(VV, UnitInfo)]
-inferVariables = inferVariablesRREF
+inferVariables cons = unitVarAssignments
+  where
+    unitAssignments = genUnitAssignments cons
+    -- Find the rows corresponding to the distilled "unit :: var"
+    -- information for ordinary (non-polymorphic) variables.
+    unitVarAssignments            =
+      [ (var, units) | ([UnitPow (UnitVar var)                 k], units) <- unitAssignments, k `approxEq` 1 ] ++
+      [ (var, units) | ([UnitPow (UnitParamVarAbs (_, var)) k], units)    <- unitAssignments, k `approxEq` 1 ]
 
--- using our reduced-row-echelon-form function
-inferVariablesRREF [] = []
-inferVariablesRREF cons
-  | null inconsists = unitVarAssignments
+-- | Raw units-assignment pairs.
+genUnitAssignments :: [Constraint] -> [([UnitInfo], UnitInfo)]
+genUnitAssignments cons
+  | null inconsists = unitAssignments
   | otherwise       = []
   where
     (unsolvedM, inconsists, colA) = constraintsToMatrix cons
@@ -110,57 +117,6 @@ inferVariablesRREF cons
     -- effectively being shifted across the equal-sign:
     isUnitRHS (UnitPow (UnitParamPosAbs _) _) = True
     isUnitRHS _                               = False
-
-    -- Find the rows corresponding to the distilled "unit :: var"
-    -- information for ordinary (non-polymorphic) variables.
-    unitVarAssignments            =
-      [ (var, units) | ([UnitPow (UnitVar var)                 k], units) <- unitAssignments, k `approxEq` 1 ] ++
-      [ (var, units) | ([UnitPow (UnitParamVarAbs (_, var)) k], units)    <- unitAssignments, k `approxEq` 1 ]
-    foldUnits units
-      | null units = UnitlessVar
-      | otherwise  = foldl1 UnitMul units
-
--- using LAPACK singular-value-decomposition
-inferVariablesSVD [] = []
-inferVariablesSVD cons
-  | null inconsists = unitVarAssignments
-  | otherwise       = []
-  where
-    (lhsM, rhsM, inconsists, lhsColA, rhsColA) = constraintsToMatrices cons
-    solM = H.linearSolveSVD lhsM rhsM
-
-    -- Convert the rows of the solved matrix into flattened unit
-    -- expressions in the form of "unit ** k".
-    rhsCol = A.elems rhsColA
-
-    rhsPows :: [[UnitInfo]]
-    rhsPows = map (zipWith UnitPow rhsCol) $ H.toLists solM
-
-    lhsPows :: [UnitInfo]
-    lhsPows = map (flip UnitPow 1) (A.elems lhsColA)
-
-    unitPows = map (concatMap flattenUnits) $ zipWith (:) lhsPows rhsPows
-
-    -- Variables to the left, unit names to the right side of the equation.
-    unitAssignments               = map (fmap foldUnits . partition (not . isUnitRHS)) unitPows
-    isUnitRHS (UnitPow (UnitName _) _)        = True
-    isUnitRHS (UnitPow (UnitParamEAPAbs _) _) = True
-    -- Because this version of isUnitRHS different from
-    -- constraintsToMatrix interpretation, we need to ensure that any
-    -- moved ParamPosAbs units are negated, because they are
-    -- effectively being shifted across the equal-sign:
-    isUnitRHS (UnitPow (UnitParamPosAbs _) _) = True
-    isUnitRHS _                               = False
-
-    -- Variables determined to be unit-polymorphic, so should not appear in result
-    polyVars = [ var | UnitParamVarUse (_, var, i) <- universeBi (filter ((== UnitlessVar) . snd) unitAssignments) ]
-
-    -- Find the rows corresponding to the distilled "unit :: var"
-    -- information for ordinary (non-polymorphic) variables.
-    unitVarAssignments            =
-      [ (var, units) | ([UnitPow (UnitVar var)                 k], units) <- unitAssignments, k `approxEq` 1 ] ++
-      [ (var, units) | ([UnitPow (UnitParamVarUse (_, var, _)) k], units) <- unitAssignments, k `approxEq` 1
-                                                                                            , var `notElem` polyVars ]
 
     foldUnits units
       | null units = UnitlessVar
@@ -412,66 +368,3 @@ showCons str = unlines . ([replicate 50 '-', str ++ ":"]++) . (++[replicate 50 '
   where
     f (ConEq u1 u2)  = show (flattenUnits u1) ++ " === " ++ show (flattenUnits u2)
     f (ConConj cons) = intercalate " && " (map f cons)
-
---------------------------------------------------
-
--- debugging
-
-genUnitAssignments :: [Constraint] -> [([UnitInfo], UnitInfo)]
-genUnitAssignments = genUnitAssignmentsRREF
-
-genUnitAssignmentsSVD [] = []
-genUnitAssignmentsSVD cons
-  | null inconsists = unitAssignments
-  | otherwise       = []
-  where
-    (lhsM, rhsM, inconsists, lhsColA, rhsColA) = constraintsToMatrices cons
-    solM = H.linearSolveSVD lhsM rhsM
-
-    -- Convert the rows of the solved matrix into flattened unit
-    -- expressions in the form of "unit ** k".
-    rhsCol = A.elems rhsColA
-
-    rhsPows :: [[UnitInfo]]
-    rhsPows = map (zipWith UnitPow rhsCol) $ H.toLists solM
-
-    lhsPows :: [UnitInfo]
-    lhsPows = map (flip UnitPow 1) (A.elems lhsColA)
-
-    unitPows = map (concatMap flattenUnits) $ zipWith (:) lhsPows rhsPows
-
-    -- Variables to the left, unit names to the right side of the equation.
-    unitAssignments               = map (fmap foldUnits . partition (not . isUnitRHS)) unitPows
-    isUnitRHS (UnitPow (UnitName _) _)        = True
-    isUnitRHS (UnitPow (UnitParamEAPAbs _) _) = True
-    isUnitRHS (UnitPow (UnitParamPosAbs _) _) = True
-    isUnitRHS _                               = False
-
-    foldUnits units
-      | null units = UnitlessVar
-      | otherwise  = foldl1 UnitMul units
-
--- using our reduced-row-echelon-form function
-genUnitAssignmentsRREF [] = []
-genUnitAssignmentsRREF cons
-  | null inconsists = unitAssignments
-  | otherwise       = []
-  where
-    (unsolvedM, inconsists, colA) = constraintsToMatrix cons
-    solvedM                       = rref unsolvedM
-    cols                          = A.elems colA
-
-    -- Convert the rows of the solved matrix into flattened unit
-    -- expressions in the form of "unit ** k".
-    unitPows                      = map (concatMap flattenUnits . zipWith UnitPow cols) (H.toLists solvedM)
-
-    -- Variables to the left, unit names to the right side of the equation.
-    unitAssignments               = map (fmap (foldUnits . map negatePosAbs) . partition (not . isUnitRHS)) unitPows
-    isUnitRHS (UnitPow (UnitName _) _)        = True
-    isUnitRHS (UnitPow (UnitParamEAPAbs _) _) = True
-    isUnitRHS (UnitPow (UnitParamPosAbs _) _) = True
-    isUnitRHS _                               = False
-
-    foldUnits units
-      | null units = UnitlessVar
-      | otherwise  = foldl1 UnitMul units

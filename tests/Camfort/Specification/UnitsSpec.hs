@@ -90,6 +90,9 @@ spec = do
       it "litTest1 Unitless" $ do
         (fromJust (head (rights [fst (runUnits LitUnitless litTest1 runInconsistentConstraints)]))) `shouldSatisfy`
           any (conParamEq (ConEq UnitlessLit (UnitVar ("j", "j"))))
+      it "Polymorphic non-zero literal is not OK" $ do
+        head (rights [fst (runUnits LitMixed inconsist1 runInconsistentConstraints)]) `shouldSatisfy` isJust
+
     describe "Polymorphic functions" $ do
       it "squarePoly1" $ do
         showClean (runUnits LitMixed squarePoly1 (fmap chooseImplicitNames runInferVariables)) `shouldBe`
@@ -117,6 +120,11 @@ spec = do
       it "inferPoly1" $ do
         show (sort (fst (runUnitInference LitMixed inferPoly1))) `shouldBe`
           "[(\"fst\",'a),(\"id\",'c),(\"snd\",'d),(\"sqr\",('f)**2),(\"x1\",'c),(\"x2\",'f),(\"x3\",'a),(\"x4\",'e),(\"y3\",'b),(\"y4\",'d)]"
+
+    describe "Intrinsic functions" $ do
+      it "sqrtPoly" $ do
+        show (sort (fst (runUnitInference LitMixed sqrtPoly))) `shouldBe`
+          "[(\"a\",m**2),(\"b\",s**4),(\"c\",j**2),(\"n\",'a),(\"x\",m),(\"y\",s),(\"z\",j)]"
 
   describe "Unit Inference Backend" $ do
     describe "Flatten constraints" $ do
@@ -378,5 +386,48 @@ inferPoly1 = flip fortranParser' "inferPoly1.f90" . B.pack $ unlines
     , "    snd = y4"
     , "  end function snd"
     , "end module inferPoly1" ]
+
+-- This should be inconsistent because of the use of the literal "10"
+-- in the parametric polymorphic function sqr.
+inconsist1 = flip fortranParser' "inconsist1.f90" . B.pack $ unlines
+    [ "program inconsist1"
+    , "  implicit none"
+    , "  real :: a, b"
+    , "  != unit(m) :: x"
+    , "  real :: x = 1"
+    , "  != unit(s) :: t"
+    , "  real :: t = 2"
+    , "  a = sqr(x) "
+    , "  b = sqr(t)"
+    , "  contains "
+    , "  real function sqr(y)"
+    , "    real :: y"
+    , "    real :: z = 10"
+    , "    sqr = y * y + z"
+    , "  end function"
+    , "end program inconsist1" ]
+
+-- Test intrinsic function sqrt()
+sqrtPoly = flip fortranParser' "sqrtPoly.f90" . B.pack $ unlines
+    [ "program sqrtPoly"
+    , "  implicit none"
+    , "  != unit m :: x"
+    , "  real :: x"
+    , "  != unit s :: y"
+    , "  real :: y"
+    , "  != unit J :: z"
+    , "  real :: z"
+    , "  integer :: a"
+    , "  integer :: b"
+    , "  integer :: c"
+    , "  x = sqrt(a)"
+    , "  y = sqrt(sqrt(b))"
+    , "  z = sqrt(square(sqrt(c)))"
+    , "contains"
+    , "  real function square(n)"
+    , "    real :: n"
+    , "    square = n * n"
+    , "  end function square"
+    , "end program sqrtPoly" ]
 
 fortranParser' = \x -> fromRight . (fortranParser x)
