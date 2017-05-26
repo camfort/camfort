@@ -492,7 +492,10 @@ substInstance isDummy callStack output (name, callId) = do
   --
   -- The reason for this is because functions called by functions can
   -- be used in a parametric polymorphic way.
-  template <- transformBiM callIdRemap $ [] `fromMaybe` M.lookup name tmap
+
+  -- npc <- nameParamConstraints name -- In case it is an imported function, use this.
+  let npc = [] -- disabled for now
+  template <- transformBiM callIdRemap $ npc `fromMaybe` M.lookup name tmap
   dumpConsM ("substInstance " ++ show isDummy ++ " " ++ show callStack ++ " " ++ show (name, callId) ++ " template lookup") template
 
   -- Reset the usCallIdRemap field so that it is ready for the next
