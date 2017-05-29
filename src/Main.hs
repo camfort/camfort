@@ -140,7 +140,7 @@ analyses =
      ("units-compile", (unitsCompile, "units-of-measure compile module information.")) ]
 
 -- * Usage and about information
-version = "0.902"
+version = "0.903"
 introMsg = "CamFort " ++ version ++ " - Cambridge Fortran Infrastructure."
 usage = "Usage: camfort <MODE> <INPUT> [OUTPUT] [OPTIONS...]\n"
 menu =
