@@ -42,14 +42,16 @@ import Text.Printf
 -- | A (unique name, source name) variable
 type VV = (F.Name, F.Name)
 
+type UniqueId = Int
+
 -- | Description of the unit of an expression.
 data UnitInfo
   = UnitParamPosAbs (String, Int)         -- an abstract parameter identified by PU name and argument position
   | UnitParamPosUse (String, Int, Int)    -- identify particular instantiation of parameters
   | UnitParamVarAbs (String, VV)          -- an abstract parameter identified by PU name and variable name
   | UnitParamVarUse (String, VV, Int)     -- a particular instantiation of above
-  | UnitParamLitAbs Int                   -- a literal with abstract, polymorphic units, uniquely identified
-  | UnitParamLitUse (Int, Int)            -- a particular instantiation of a polymorphic literal
+  | UnitParamLitAbs UniqueId              -- a literal with abstract, polymorphic units, uniquely identified
+  | UnitParamLitUse (UniqueId, Int)       -- a particular instantiation of a polymorphic literal
   | UnitParamEAPAbs VV                    -- an abstract Explicitly Annotated Polymorphic unit variable
   | UnitParamEAPUse (VV, Int)             -- a particular instantiation of an Explicitly Annotated Polymorphic unit variable
   | UnitLiteral Int                       -- literal with undetermined but uniquely identified units
@@ -188,8 +190,8 @@ pprintUnitInfo ui = show ui
 -- | Constraint 'parametric' equality: treat all uses of a parametric
 -- abstractions as equivalent to the abstraction.
 conParamEq :: Constraint -> Constraint -> Bool
-conParamEq (ConEq lhs1 rhs1) (ConEq lhs2 rhs2) = unitParamEq lhs1 lhs2 || unitParamEq rhs1 rhs2 ||
-                                                 unitParamEq rhs1 lhs2 || unitParamEq lhs1 rhs2
+conParamEq (ConEq lhs1 rhs1) (ConEq lhs2 rhs2) = (unitParamEq lhs1 lhs2 && unitParamEq rhs1 rhs2) ||
+                                                 (unitParamEq rhs1 lhs2 && unitParamEq lhs1 rhs2)
 conParamEq (ConConj cs1) (ConConj cs2) = and $ zipWith conParamEq cs1 cs2
 conParamEq _ _ = False
 
