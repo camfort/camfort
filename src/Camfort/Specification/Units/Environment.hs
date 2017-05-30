@@ -169,8 +169,20 @@ isUnresolvedUnit _                   = False
 
 isResolvedUnit = not . isUnresolvedUnit
 
+isConcreteUnit :: UnitInfo -> Bool
+isConcreteUnit (UnitPow u _) = isConcreteUnit u
+isConcreteUnit (UnitMul u v) = isConcreteUnit u && isConcreteUnit v
+isConcreteUnit (UnitAlias _) = True
+isConcreteUnit UnitlessLit = True
+isConcreteUnit (UnitName _) = True
+isConcreteUnit _ = False
+
 pprintConstr :: Constraint -> String
 pprintConstr (ConEq u1 u2)
+  | isResolvedUnit u1 && isConcreteUnit u1 &&
+    isResolvedUnit u2 && isConcreteUnit u2 =
+      "Units '" ++ pprintUnitInfo u1 ++ "' and '" ++ pprintUnitInfo u2 ++
+      "' are inconsistent"
   | isResolvedUnit u1 = "'" ++ pprintUnitInfo u2 ++ "' should have unit '" ++ pprintUnitInfo u1 ++ "'"
   | isResolvedUnit u2 = "'" ++ pprintUnitInfo u1 ++ "' should have unit '" ++ pprintUnitInfo u2 ++ "'"
 pprintConstr (ConEq u1 u2) = "'" ++ pprintUnitInfo u1 ++ "' should have the same units as '" ++ pprintUnitInfo u2 ++ "'"
