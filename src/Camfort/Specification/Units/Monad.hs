@@ -23,9 +23,9 @@ module Camfort.Specification.Units.Monad
   ( UA, VV, UnitSolver, UnitOpts(..), unitOpts0, UnitLogs, UnitState(..), LiteralsOpt(..), UnitException
   , whenDebug, modifyVarUnitMap, modifyGivenVarSet, modifyUnitAliasMap
   , VarUnitMap, GivenVarSet, UnitAliasMap, TemplateMap, CallIdMap
-  , modifyTemplateMap, modifyProgramFile, modifyProgramFileM, modifyCallIdRemapM
+  , modifyTemplateMap, modifyNameParamMap, modifyProgramFile, modifyProgramFileM, modifyCallIdRemapM
   , runUnitSolver, evalUnitSolver, execUnitSolver
-  , CompiledUnits(..), NameParamMap, emptyCompiledUnits )
+  , CompiledUnits(..), NameParamMap, NameParamKey(..), emptyCompiledUnits )
 where
 
 import Control.Monad.RWS.Strict
@@ -80,9 +80,18 @@ unitOpts0 = UnitOpts False LitMixed M.empty M.empty
 -- | Function/subroutine name -> associated, parametric polymorphic constraints
 type TemplateMap = M.Map F.Name Constraints
 
--- | (Function/subroutine name, position of parameter) -> associated list of units (to be multiplied together)
-type NameParamMap = M.Map (F.Name, Int) [UnitInfo]
+-- | Things that can be exported from modules
+data NameParamKey
+  = NPKParam F.Name Int -- ^ Function/subroutine name, position of parameter
+  | NPKVariable VV      -- ^ variable
+  deriving (Ord, Eq, Show, Data, Typeable, Generic)
 
+instance Binary NameParamKey
+
+-- | mapped to a list of units (to be multiplied together)
+type NameParamMap = M.Map NameParamKey [UnitInfo]
+
+-- | The data-structure stored in 'fortran-src mod files'
 data CompiledUnits = CompiledUnits { cuTemplateMap  :: TemplateMap
                                    , cuNameParamMap :: NameParamMap }
   deriving (Ord, Eq, Show, Data, Typeable, Generic)
@@ -133,6 +142,7 @@ data UnitState = UnitState
   , usGivenVarSet  :: GivenVarSet
   , usUnitAliasMap :: UnitAliasMap
   , usTemplateMap  :: TemplateMap
+  , usNameParamMap :: NameParamMap
   , usLitNums      :: Int
   , usCallIds      :: Int
   , usCallIdRemap  :: CallIdMap
@@ -144,6 +154,7 @@ unitState0 pf = UnitState { usProgramFile  = pf
                           , usGivenVarSet  = S.empty
                           , usUnitAliasMap = M.empty
                           , usTemplateMap  = M.empty
+                          , usNameParamMap = M.empty
                           , usLitNums      = 0
                           , usCallIds      = 0
                           , usCallIdRemap  = IM.empty
@@ -161,6 +172,9 @@ modifyUnitAliasMap f = modify (\ s -> s { usUnitAliasMap = f (usUnitAliasMap s) 
 
 modifyTemplateMap :: (TemplateMap -> TemplateMap) -> UnitSolver ()
 modifyTemplateMap f = modify (\ s -> s { usTemplateMap = f (usTemplateMap s) })
+
+modifyNameParamMap :: (NameParamMap -> NameParamMap) -> UnitSolver ()
+modifyNameParamMap f = modify (\ s -> s { usNameParamMap = f (usNameParamMap s) })
 
 modifyProgramFile :: (F.ProgramFile UA -> F.ProgramFile UA) -> UnitSolver ()
 modifyProgramFile f = modify (\ s -> s { usProgramFile = f (usProgramFile s) })

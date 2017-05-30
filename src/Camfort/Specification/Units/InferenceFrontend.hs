@@ -170,13 +170,16 @@ runCompileUnits = do
           isLHS (UnitPow u _) = isLHS u
           isLHS _ = False
 
-  let nameParams = M.fromList [ ((name, pos), rhs) | assign <- unitAssigns
-                                                   , UnitParamPosAbs (name, pos) <- universeBi assign
-                                                   , let (_, rhs) = uninvert $ shiftTerms name pos assign ]
+  let nameParams = M.fromList [ (NPKParam name pos, rhs) | assign <- unitAssigns
+                                                         , UnitParamPosAbs (name, pos) <- universeBi assign
+                                                         , let (_, rhs) = uninvert $ shiftTerms name pos assign ]
 
+
+  let variables = M.fromList [ (NPKVariable var, units) | ([UnitPow (UnitVar var) k], units) <- unitAssigns
+                                                        , k `approxEq` 1 ]
 
   tmap <- gets usTemplateMap
-  return $ CompiledUnits { cuTemplateMap = tmap, cuNameParamMap = nameParams }
+  return $ CompiledUnits { cuTemplateMap = tmap, cuNameParamMap = nameParams `M.union` variables }
 
 --------------------------------------------------
 
@@ -489,7 +492,10 @@ substInstance isDummy callStack output (name, callId) = do
   --
   -- The reason for this is because functions called by functions can
   -- be used in a parametric polymorphic way.
-  template <- transformBiM callIdRemap $ [] `fromMaybe` M.lookup name tmap
+
+  -- npc <- nameParamConstraints name -- In case it is an imported function, use this.
+  let npc = [] -- disabled for now
+  template <- transformBiM callIdRemap $ npc `fromMaybe` M.lookup name tmap
   dumpConsM ("substInstance " ++ show isDummy ++ " " ++ show callStack ++ " " ++ show (name, callId) ++ " template lookup") template
 
   -- Reset the usCallIdRemap field so that it is ready for the next
@@ -509,6 +515,11 @@ substInstance isDummy callStack output (name, callId) = do
   dumpConsM ("instantiating " ++ show (name, callId) ++ ": (output ++ template) is") (output ++ template)
   dumpConsM ("instantiating " ++ show (name, callId) ++ ": (template') is") (template')
 
+  -- Get constraints for any imported variables
+  let filterForVars (NPKVariable _) _ = True; filterForVars _ _ = False
+  nmap <- M.filterWithKey filterForVars `fmap` gets usNameParamMap
+  let importedVariables = [ ConEq (UnitVar vv) (foldUnits units) | (NPKVariable vv, units) <- M.toList nmap ]
+
   -- Convert abstract parametric units into concrete ones.
 
   let output' = -- Do not instantiate explicitly annotated polymorphic
@@ -518,11 +529,26 @@ substInstance isDummy callStack output (name, callId) = do
 
                 -- Only instantiate explicitly annotated polymorphic
                 -- variables from nested function/subroutine calls.
-                instantiate callId template'
+                instantiate callId template' ++
+
+                -- any imported variables
+                importedVariables
 
   dumpConsM ("final output for " ++ show (name, callId)) output'
 
   return output'
+
+foldUnits units
+  | null units = UnitlessVar
+  | otherwise  = foldl1 UnitMul units
+
+-- | Generate constraints from a NameParamMap entry.
+nameParamConstraints :: F.Name -> UnitSolver Constraints
+nameParamConstraints fname = do
+  let filterForName (NPKParam n _) _ = n == fname
+      filterForName _ _              = False
+  nlst <- (M.toList . M.filterWithKey filterForName) `fmap` gets usNameParamMap
+  return [ ConEq (UnitParamPosAbs (fname, pos)) (foldUnits units) | (NPKParam _ pos, units) <- nlst ]
 
 -- | If given a usage of a parametric unit, rewrite the callId field
 -- to follow an existing mapping in the usCallIdRemap state field, or

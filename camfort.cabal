@@ -1,5 +1,5 @@
 name:                   camfort
-version:                0.902
+version:                0.903
 synopsis:               CamFort - Cambridge Fortran infrastructure
 description:            CamFort is a tool for the analysis, transformation, verification of Fortran code.
 
@@ -79,7 +79,7 @@ executable camfort
                         transformers >= 0.4,
                         GenericPretty >= 1.2,
                         QuickCheck >= 2.8,
-                        fortran-src >= 0.1.0.6,
+                        fortran-src == 0.1.0.7,
                         filepath,
                         fgl >= 5.5,
                         bytestring >= 0.10,
@@ -141,7 +141,7 @@ library
                         transformers >= 0.4,
                         vector >= 0.1,
                         GenericPretty >= 1.2,
-                        fortran-src >= 0.1.0.4,
+                        fortran-src == 0.1.0.7,
                         filepath,
                         bytestring >= 0.10,
                         fgl >= 5.5,
@@ -172,7 +172,7 @@ test-suite spec
                         directory >= 1.2,
                         hspec >= 2.2,
                         QuickCheck >= 2.8,
-                        fortran-src >= 0.1.0.4,
+                        fortran-src == 0.1.0.7,
                         uniplate >= 1.6.10,
                         mtl >= 2.1,
                         bytestring >= 0.10,

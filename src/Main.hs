@@ -35,17 +35,29 @@ main = do
     let (func : (inp : _)) = args
     in case lookup func functionality of
          Just (fun, _) -> do
+           (opts, _) <- compilerOpts args
+
            (numReqArgs, outp) <-
-             if func `elem` outputNotRequired
-             then if length args >= 3 && (head (args !! 2) == '-')
-                  then return (2, "")
-                  else -- case where an unnecessary output is specified
-                       return (3, "")
-             else if length args >= 3
-                  then return (3, args !! 2)
-                  else error $ usage ++ "This mode requires an output "
-                                     ++ "file/directory to be specified."
-           (opts, _) <- compilerOpts (drop numReqArgs args)
+               if RefactorInPlace `elem` opts
+                -- Does not check to see if an output directory
+                -- is also specified since flags come last and therefore
+                -- override any specification of an output directory
+                -- (which would come earlier).
+               then return (2, inp)
+               else
+                 if func `elem` outputNotRequired
+                 then if length args >= 3 && (head (args !! 2) == '-')
+                      then return (2, "")
+                      else -- case where an unnecessary output is specified
+                           return (3, "")
+                 else if length args >= 3
+                      then return (3, args !! 2)
+                      else fail $ usage ++ "\nThis mode requires an output\
+                                           \ file/directory to be specified\n\
+                                           \ or use the --inplace flag to set\
+                                           \ the ouput location to be the input\
+                                           \ location."
+
            let excluded_files = map unpack . split (==',') . pack . getExcludes
            fun inp (excluded_files opts) outp opts
          Nothing -> putStrLn fullUsageInfo
@@ -64,6 +76,8 @@ options :: [OptDescr Flag]
 options =
      [ Option ['v','?'] ["version"] (NoArg Version)
          "show version number"
+     , Option [] ["inplace"] (NoArg RefactorInPlace)
+         "refactor in place (replaces input files)"
      , Option ['e']     ["exclude"] (ReqArg Excludes "FILES")
          "files to exclude (comma separated list, no spaces)"
      , Option ['l']     ["units-literals"] (ReqArg (Literals . read) "ID")
@@ -126,7 +140,7 @@ analyses =
      ("units-compile", (unitsCompile, "units-of-measure compile module information.")) ]
 
 -- * Usage and about information
-version = "0.902"
+version = "0.903"
 introMsg = "CamFort " ++ version ++ " - Cambridge Fortran Infrastructure."
 usage = "Usage: camfort <MODE> <INPUT> [OUTPUT] [OPTIONS...]\n"
 menu =

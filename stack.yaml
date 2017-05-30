@@ -4,7 +4,6 @@ packages:
 - '.'
 - ../fortran-src
 extra-deps:
-- camfort-0.902
-- fortran-src-0.1.0.6
+- fortran-src-0.1.0.7
 - partial-order-0.1.2
 resolver: lts-8.6
