@@ -15,6 +15,7 @@ import Camfort.Output
 import Camfort.Analysis.Annotations
 import Camfort.Specification.Units
 import Camfort.Specification.Units.Monad
+import Camfort.Specification.Units.Parser hiding (UnitAlias)
 import Camfort.Specification.Units.InferenceFrontend
 import Camfort.Specification.Units.InferenceBackend
 import Camfort.Specification.Units.Environment
@@ -101,10 +102,12 @@ spec = do
       it "Recursive Addition is OK" $ do
         showClean (runUnits LitMixed recursive1 (fmap chooseImplicitNames runInferVariables)) `shouldBe`
           "[((\"b\",\"b\"),'a),((\"n\",\"n\"),1),((\"r\",\"r\"),'a),((\"x\",\"x\"),1),((\"y\",\"y\"),m),((\"z\",\"z\"),m)]"
+
     describe "Recursive functions" $ do
       it "Recursive Multiplication is not OK" $ do
         (fromJust (head (rights [fst (runUnits LitMixed recursive2 runInconsistentConstraints)]))) `shouldSatisfy`
           any (conParamEq (ConEq (UnitParamPosAbs ("recur", 0)) (UnitParamPosAbs ("recur", 2))))
+
     describe "Explicitly annotated parametric polymorphic unit variables" $ do
       it "inside-outside" $ do
         showClean (runUnits LitMixed insideOutside runInferVariables) `shouldBe`
@@ -159,6 +162,15 @@ spec = do
     describe "Check that (restricted) double to ratios is consistent" $ do
       it "test all in -10/-10 ... 10/10, apart from /0" $
         do and [testDoubleToRationalSubset x y | x <- [-10..10], y <- [-10..10]]
+
+  describe "Parsing * for product" $ do
+    describe "Compare with juxtaposition" $ do
+      it "test - m s" $ do
+        unitParser "m * s" `shouldBe` unitParser "m s"
+      it "test - m s**2" $ do
+        unitParser "m * s**2" `shouldBe` unitParser "m s**2"
+      it "test - m s/t" $ do
+        unitParser "m * s/t" `shouldBe` unitParser "m s/t"
 
 --------------------------------------------------
 

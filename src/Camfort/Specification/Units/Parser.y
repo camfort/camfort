@@ -26,6 +26,7 @@ import qualified Data.Text as T
  num      { TNum $$ }
  ','      { TComma }
  '-'      { TMinus }
+ '*'      { TMult }
  '**'     { TExponentiation }
  '/'      { TDivision }
  '::'     { TDoubleColon }
@@ -33,6 +34,7 @@ import qualified Data.Text as T
  '('      { TLeftPar }
  ')'      { TRightPar }
 
+%left '*'
 %left '/'
 %left '**'
 %%
@@ -65,6 +67,7 @@ RECORD_DECL :: { (String, UnitOfMeasure) }
 
 UEXP_LEVEL1 :: { UnitOfMeasure }
 : UEXP_LEVEL1 UEXP_LEVEL2             { UnitProduct $1 $2 }
+| UEXP_LEVEL1 '*' UEXP_LEVEL2         { UnitProduct $1 $3 }
 | UEXP '/' UEXP_LEVEL2                { UnitQuotient $1 $3 }
 | UEXP_LEVEL2                         { $1 }
 
@@ -91,7 +94,7 @@ NUM :: { String }
 data UnitStatement =
    UnitAssignment (Maybe [String]) UnitOfMeasure
  | UnitAlias String UnitOfMeasure
-  deriving Data
+  deriving (Eq, Data)
 
 instance Show UnitStatement where
   show (UnitAssignment (Just ss) uom) = "= unit (" ++ show uom ++ ") :: " ++ (intercalate "," ss)
@@ -105,7 +108,7 @@ data UnitOfMeasure =
  | UnitQuotient UnitOfMeasure UnitOfMeasure
  | UnitExponentiation UnitOfMeasure UnitPower
  | UnitRecord [(String, UnitOfMeasure)]
-  deriving Data
+  deriving (Data, Eq)
 
 instance Show UnitOfMeasure where
   show Unitless = "1"
@@ -118,7 +121,7 @@ instance Show UnitOfMeasure where
 data UnitPower =
    UnitPowerInteger Integer
  | UnitPowerRational Integer Integer
- deriving Data
+ deriving (Data, Eq)
 
 instance Show UnitPower where
   show (UnitPowerInteger i) = show i
@@ -131,6 +134,7 @@ data Token =
  | TExponentiation
  | TDivision
  | TMinus
+ | TMult
  | TEqual
  | TLeftPar
  | TRightPar
@@ -166,6 +170,7 @@ lexer' ('*':'*':xs) = addToTokens TExponentiation xs
 lexer' (',':xs) = addToTokens TComma xs
 lexer' ('/':xs) = addToTokens TDivision xs
 lexer' ('-':xs) = addToTokens TMinus xs
+lexer' ('*':xs) = addToTokens TMult xs
 lexer' ('=':xs) = addToTokens TEqual xs
 lexer' ('(':xs) = addToTokens TLeftPar xs
 lexer' (')':xs) = addToTokens TRightPar xs
