@@ -120,6 +120,8 @@ refactorings =
      ("dead", (dead, "dead-code elimination")),
      ("datatype", (datatypes, "derived data type introduction"))]
 
+-- TODO: merge outputNotRequired into data structure
+
 {-| List of analses provided by CamFort -}
 analyses :: [(String
            , (FileOrDir -> [Filename] -> FileOrDir -> Options -> IO ()
