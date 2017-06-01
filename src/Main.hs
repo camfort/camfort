@@ -78,21 +78,20 @@ options =
          "show version number"
      , Option [] ["inplace"] (NoArg RefactorInPlace)
          "refactor in place (replaces input files)"
-     , Option ['e']     ["exclude"] (ReqArg Excludes "FILES")
+     , Option ['e'] ["exclude"] (ReqArg Excludes "FILES")
          "files to exclude (comma separated list, no spaces)"
-     , Option ['l']     ["units-literals"] (ReqArg (Literals . read) "ID")
+     , Option ['l'] ["units-literals"] (ReqArg (Literals . read) "ID")
          "units-of-measure literals mode. ID = Unitless, Poly, or Mixed"
-     , Option ['m']     ["stencil-inference-mode"]
+     , Option ['m'] ["stencil-inference-mode"]
                 (ReqArg (StencilInferMode . read . (++ "Mode")) "ID")
                 "stencil specification inference mode. ID = Do, Assign, or Both"
-     , Option ['I']     ["include-dir"]
-                (ReqArg IncludeDir "DIR")
+     , Option ['I'] ["include-dir"] (ReqArg IncludeDir "DIR")
                 "directory to search for precompiled files"
-     , Option []        ["debug"] (NoArg Debug)
+     , Option [] ["debug"] (NoArg Debug)
          "enable debug mode"
-     , Option []        ["doxygen"] (NoArg Doxygen)
+     , Option [] ["doxygen"] (NoArg Doxygen)
          "synthesise annotations compatible with Doxygen"
-     , Option []        ["ford"] (NoArg Ford)
+     , Option [] ["ford"] (NoArg Ford)
          "synthesise annotations compatible with Ford"
      ]
 
