@@ -1063,6 +1063,8 @@ intrinsicUnits =
     , ("cosh", (UnitlessVar, [UnitlessVar]))
     , ("dcosh", (UnitlessVar, [UnitlessVar]))
     , ("tanh", (UnitlessVar, [UnitlessVar]))
-    , ("dtanh", (UnitlessVar, [UnitlessVar])) ]
+    , ("dtanh", (UnitlessVar, [UnitlessVar]))
+    , ("iand", (UnitParamEAPAbs ("'a", "'a"), [UnitParamEAPAbs ("'a", "'a"), UnitParamEAPAbs ("'a", "'a")]))
+    ]
 
 -- Others: reshape, merge need special handling
