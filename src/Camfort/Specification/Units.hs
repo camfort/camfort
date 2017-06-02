@@ -139,8 +139,16 @@ checkUnits uo (fname, fileText, pf)
 
     reportErrors cons = unlines [ maybe "" showSS ss ++ str | (ss, str) <- reports ]
       where
-        reports = map head . group . sort $ map reportError cons
+        reports = map head . group . sort . map reportError . filter relevantConstraints $ cons
         showSS  = (++ ": ") . (" - at "++) . showSrcSpan
+
+        relevantConstraints c = not (isPolymorphic0 c) && not (isReflexive c)
+
+        isPolymorphic0 (ConEq (UnitParamLitAbs {}) _) = True
+        isPolymorphic0 (ConEq _ (UnitParamLitAbs {})) = True
+        isPolymorphic0 _                         = False
+
+        isReflexive (ConEq u1 u2) = u1 == u2
 
     reportError con = (span, pprintConstr srcText (orient (unrename nameMap con)) ++ additionalInfo con)
       where
@@ -183,19 +191,44 @@ checkUnits uo (fname, fileText, pf)
     findCon con = lookupWith (eq con) constraints
       where eq c1 c2 = or [ conParamEq c1 c2' | c2' <- universeBi c2 ]
 
-    constraints = [ (c, (Just (fst $ subtext (1,1) lower upper fileText), srcSpan))
+
+    constraints = [ (c, (Just (getSnippet srcSpan), srcSpan))
                   | x <- universeBi pfUA :: [F.Expression UA]
-                  , let srcSpan@(FU.SrcSpan (FU.Position _ colLower lnLower) (FU.Position _ colUpper lnUpper)) = FU.getSpan x
-                  , let lower = (lnLower, colLower)
-                  , let upper = (lnUpper, colUpper)
+                  , let srcSpan = FU.getSpan x
                   , c <- maybeToList (getConstraint x)
                   ] ++
-                  [ (c, (Just "Statement", FU.getSpan x)) | x <- universeBi pfUA :: [F.Statement UA]   , c <- maybeToList (getConstraint x) ] ++
-                  [ (c, (Just "F.Argument", FU.getSpan x)) | x <- universeBi pfUA :: [F.Argument UA]    , c <- maybeToList (getConstraint x) ] ++
-                  [ (c, (Just "Declarator", FU.getSpan x)) | x <- universeBi pfUA :: [F.Declarator UA]  , c <-  maybeToList (getConstraint x) ] ++
-                  -- Why reverse? So that PUFunction and PUSubroutine appear first in the list, before PUModule.
-                  reverse [ (c, (Nothing, FU.getSpan x)) | x <- universeBi pfUA :: [F.ProgramUnit UA]
-                                              , c <- maybeToList (getConstraint x) ]
+
+                  [ (c, (Just (getSnippet srcSpan), srcSpan))
+                  | x <- universeBi pfUA :: [F.Statement UA]
+                  , let srcSpan = FU.getSpan x
+                  , c <- maybeToList (getConstraint x)
+                  ] ++
+
+                  [ (c, (Just (getSnippet srcSpan), srcSpan))
+                  | x <- universeBi pfUA :: [F.Argument UA]
+                  , let srcSpan = FU.getSpan x
+                  , c <- maybeToList (getConstraint x)
+                  ] ++
+
+                  [ (c, (Just (getSnippet srcSpan), srcSpan))
+                  | x <- universeBi pfUA :: [F.Declarator UA]
+                  , let srcSpan = FU.getSpan x
+                  , c <- maybeToList (getConstraint x)
+                  ] ++
+
+                  -- Why reverse? So that PUFunction and PUSubroutine appear
+                  -- first in the list, before PUModule.
+                  reverse [ (c, (Nothing, srcSpan))
+                  | x <- universeBi pfUA :: [F.ProgramUnit UA]
+                  , let srcSpan = FU.getSpan x
+                  , c <- maybeToList (getConstraint x)
+                  ]
+
+    getSnippet srcSpan = fst $ subtext (1,1) lower upper fileText
+      where
+        (FU.SrcSpan (FU.Position _ colL lnL) (FU.Position _ colU lnU)) = srcSpan
+        lower = (lnL, colL)
+        upper = (lnU, colU)
 
     varReport     = intercalate ", " . map showVar
 

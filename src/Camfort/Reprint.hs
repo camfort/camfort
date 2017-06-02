@@ -38,10 +38,6 @@ Reminder:
                                      posLine   :: Int }
 -}
 
--- |Logical implication operator.
-(==>) :: Bool -> Bool -> Bool
-a ==> b = a <= b; infix 2 ==>
-
 
 -- A refactoring takes a 'Typeable' value
 -- into a stateful SourceText (B.ByteString) transformer,
@@ -140,7 +136,6 @@ takeBounds (l, u) = subtext (ll, lc) (ll, lc) (ul, uc)
   where (FU.Position _ lc ll) = l
         (FU.Position _ uc ul) = u
 
-
 {-|
   Split a text.
 
@@ -164,7 +159,8 @@ subtext = subtext' B.empty
              lower@(lowerLn, lowerCol)
              upper@(upperLn, upperCol)
              input
-      | cursorLn <= lowerLn && cursorCol < lowerCol =
+      -- | cursorLn <= lowerLn && cursorCol < lowerCol =
+      | cursorLn <= lowerLn && cursorLn == lowerLn ==> cursorCol < lowerCol =
         case B.uncons input of
           Nothing -> error $ "Trying to take subtext between " ++ show lower ++
             " and " ++ show upper ++ ", but file ended at: " ++ show cursor
@@ -174,7 +170,13 @@ subtext = subtext' B.empty
         case B.uncons input of
           Nothing -> error $ "Trying to take subtext between " ++ show lower ++
             " and " ++ show upper ++ ", but file ended at: " ++ show cursor
-          Just ('\n', input') -> subtext' (B.cons '\n' acc) (cursorLn+1, 1) lower upper input'
-          Just (x, input') -> subtext' (B.cons x acc) (cursorLn, cursorCol+1) lower upper input'
+          Just ('\n', input') ->
+            subtext' (B.cons '\n' acc) (cursorLn+1, 1) lower upper input'
+          Just (x, input') ->
+            subtext' (B.cons x acc) (cursorLn, cursorCol+1) lower upper input'
       | otherwise = -- cursorLn > upperLn || (cursorLn == upperLn ==> cursolCol > upperCol)
         (B.reverse acc, input)
+
+-- |Logical implication operator.
+(==>) :: Bool -> Bool -> Bool; infix 2 ==>
+a ==> b = a <= b
