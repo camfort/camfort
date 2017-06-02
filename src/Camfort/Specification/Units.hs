@@ -190,9 +190,9 @@ checkUnits uo (fname, fileText, pf)
                   , let upper = (lnUpper, colUpper)
                   , c <- maybeToList (getConstraint x)
                   ] ++
-                  [ (c, (Just "Statement", FU.getSpan x)) | x <- universeBi pfUA :: [F.Statement UA]   , c <- maybeToList (getConstraint x) ] ++
-                  [ (c, (Just "F.Argument", FU.getSpan x)) | x <- universeBi pfUA :: [F.Argument UA]    , c <- maybeToList (getConstraint x) ] ++
-                  [ (c, (Just "Declarator", FU.getSpan x)) | x <- universeBi pfUA :: [F.Declarator UA]  , c <-  maybeToList (getConstraint x) ] ++
+                  [ (c, (Just (B.pack "Statement"), FU.getSpan x)) | x <- universeBi pfUA :: [F.Statement UA]   , c <- maybeToList (getConstraint x) ] ++
+                  [ (c, (Just (B.pack "F.Argument"), FU.getSpan x)) | x <- universeBi pfUA :: [F.Argument UA]    , c <- maybeToList (getConstraint x) ] ++
+                  [ (c, (Just (B.pack "Declarator"), FU.getSpan x)) | x <- universeBi pfUA :: [F.Declarator UA]  , c <-  maybeToList (getConstraint x) ] ++
                   -- Why reverse? So that PUFunction and PUSubroutine appear first in the list, before PUModule.
                   reverse [ (c, (Nothing, FU.getSpan x)) | x <- universeBi pfUA :: [F.ProgramUnit UA]
                                               , c <- maybeToList (getConstraint x) ]

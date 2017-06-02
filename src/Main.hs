@@ -17,7 +17,7 @@
 
 module Main where
 
-import Data.Foldable (asum)
+import Data.Foldable (find)
 
 import System.Console.GetOpt
 import System.Environment
@@ -120,10 +120,10 @@ compilerOpts argv =
 -- wiring between the outward facing command line interface and our internal
 -- functions
 data Functionality = Functionality
-  { commandName :: String -- ^ the command invoked by user at the cli
-  , altNames :: [String]  -- ^ alternative command names (let's be nice)
-  , fun :: FileOrDir -> [Filename] -> FileOrDir -> Options -> IO () -- ^ the function that provides the functionality
-  , info :: String        -- ^ information about the functionality
+  { commandName :: String          -- ^ the command invoked by user at the cli
+  , altNames :: [String]           -- ^ alternative command names (let's be nice)
+  , fun :: FileOrDir -> [Filename] -> FileOrDir -> Options -> IO () -- ^ the function to dispatch to
+  , info :: String                 -- ^ information about the functionality
   , outputFileReq :: OutputFileReq -- ^ whether an output file is required
   }
 
@@ -132,15 +132,15 @@ data OutputFileReq = OutputFileReq | OutputFileNotReq
 
 -- | Given a string, maybe return an associated Functionality
 lookupFunctionality :: String -> [Functionality] -> Maybe Functionality
-lookupFunctionality str fs = asum $ map (getFunctionality str) fs
-  where getFunctionality str f | commandName f == str  = Just f
-                               | str `elem` altNames f = Just f
-                               | otherwise             = Nothing
+lookupFunctionality str = find (getFunctionality str)
+  where getFunctionality s f | commandName f == s  = True
+                             | s `elem` altNames f = True
+                             | otherwise           = False
 
 
 
 -- | The list of functionalties that Camfort provides
--- functionalities :: [Functionality]
+functionalities :: [Functionality]
 functionalities = analyses ++ refactorings
 
 analyses =
