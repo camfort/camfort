@@ -119,10 +119,10 @@ compilerOpts argv =
 -- | Datatype for a functionality provided by the system, i.e. this is the
 -- wiring between the outward facing command line interface and our internal
 -- functions
-data Functionality t = Functionality
+data Functionality = Functionality
   { commandName :: String -- ^ the command invoked by user at the cli
   , altNames :: [String]  -- ^ alternative command names (let's be nice)
-  , fun :: t              -- ^ the function that provides the functionality
+  , fun :: FileOrDir -> [Filename] -> FileOrDir -> Options -> IO () -- ^ the function that provides the functionality
   , info :: String        -- ^ information about the functionality
   , outputFileReq :: OutputFileReq -- ^ whether an output file is required
   }
@@ -131,7 +131,7 @@ data Functionality t = Functionality
 data OutputFileReq = OutputFileReq | OutputFileNotReq
 
 -- | Given a string, maybe return an associated Functionality
-lookupFunctionality :: String -> [Functionality t] -> Maybe (Functionality t)
+lookupFunctionality :: String -> [Functionality] -> Maybe Functionality
 lookupFunctionality str fs = asum $ map (getFunctionality str) fs
   where getFunctionality str f | commandName f == str  = Just f
                                | str `elem` altNames f = Just f
@@ -140,6 +140,7 @@ lookupFunctionality str fs = asum $ map (getFunctionality str) fs
 
 
 -- | The list of functionalties that Camfort provides
+-- functionalities :: [Functionality]
 functionalities = analyses ++ refactorings
 
 analyses =
