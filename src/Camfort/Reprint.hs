@@ -66,7 +66,7 @@ reprint refactoring tree input
   -- Otherwise go with the normal algorithm
   | otherwise = do
    -- Create an initial cursor at the start of the file
-   let cursor0 = FU.Position 0 0 1
+   let cursor0 = FU.initPosition
    -- Enter the top-node of a zipper for 'tree'
    -- setting the cursor at the start of the file
    (out, cursorn) <- runStateT (enter refactoring (toZipper tree) input) cursor0
@@ -160,13 +160,13 @@ subtext = subtext' B.empty
              upper@(upperLn, upperCol)
              input
       -- | cursorLn <= lowerLn && cursorCol < lowerCol =
-      | cursorLn <= lowerLn && cursorLn == lowerLn ==> cursorCol < lowerCol =
+      | cursorLn <= lowerLn && (cursorCol >= lowerCol ==> cursorLn < lowerLn) =
         case B.uncons input of
           Nothing -> error $ "Trying to take subtext between " ++ show lower ++
             " and " ++ show upper ++ ", but file ended at: " ++ show cursor
           Just ('\n', input') -> subtext' acc (cursorLn+1, 1) lower upper input'
           Just (x, input') -> subtext' acc (cursorLn, cursorCol+1) lower upper input'
-      | cursorLn >= lowerLn && (cursorLn == upperLn ==> cursorCol <= upperCol) =
+      | cursorLn <= upperLn && (cursorCol >= upperCol ==> cursorLn < upperLn) =
         case B.uncons input of
           Nothing -> error $ "Trying to take subtext between " ++ show lower ++
             " and " ++ show upper ++ ", but file ended at: " ++ show cursor
@@ -177,6 +177,6 @@ subtext = subtext' B.empty
       | otherwise = -- cursorLn > upperLn || (cursorLn == upperLn ==> cursolCol > upperCol)
         (B.reverse acc, input)
 
--- |Logical implication operator.
+-- | Logical implication operator.
 (==>) :: Bool -> Bool -> Bool; infix 2 ==>
 a ==> b = a <= b
