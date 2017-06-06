@@ -111,16 +111,16 @@ instance Monoid Int where
 
 dropLine :: FU.SrcSpan -> FU.SrcSpan
 dropLine (FU.SrcSpan s1 (FU.Position o c l)) =
-    FU.SrcSpan s1 (FU.Position o 0 (l+1))
+    FU.SrcSpan s1 (FU.Position o 1 (l+1))
 
 deleteLine :: FU.SrcSpan -> FU.SrcSpan
 deleteLine (FU.SrcSpan (FU.Position ol cl ll) (FU.Position ou cu lu)) =
-    FU.SrcSpan (FU.Position ol (cl-1) ll) (FU.Position ou 0 (lu+1))
+    FU.SrcSpan (FU.Position ol (cl-1) ll) (FU.Position ou 1 (lu+1))
 
 linesCovered :: FU.Position -> FU.Position -> Int
 linesCovered (FU.Position _ _ l1) (FU.Position _ _ l2) = l2 - l1 + 1
 
-toCol0 (FU.Position o c l) = FU.Position o 0 l
+toCol0 (FU.Position o c l) = FU.Position o 1 l
 
 afterAligned :: FU.SrcSpan -> FU.Position
 afterAligned (FU.SrcSpan (FU.Position o cA lA) (FU.Position _ cB lB)) =
