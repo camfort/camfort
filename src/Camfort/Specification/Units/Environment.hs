@@ -185,7 +185,7 @@ pprintConstr srcText (ConEq u1 u2)
   | isResolvedUnit u1 && isConcreteUnit u1 &&
     isResolvedUnit u2 && isConcreteUnit u2 =
       "Units '" ++ pprintUnitInfo srcText u1 ++ "' and '" ++ pprintUnitInfo srcText u2 ++
-      "' are inconsistent"
+      "' should be equal"
   | isResolvedUnit u1 = "'" ++ pprintUnitInfo srcText u2 ++ "' should have unit '" ++ pprintUnitInfo srcText u1 ++ "'"
   | isResolvedUnit u2 = "'" ++ pprintUnitInfo srcText u1 ++ "' should have unit '" ++ pprintUnitInfo srcText u2 ++ "'"
 pprintConstr srcText (ConEq u1 u2) = "'" ++ pprintUnitInfo srcText u1 ++ "' should have the same units as '" ++ pprintUnitInfo srcText u2 ++ "'"
