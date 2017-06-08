@@ -229,7 +229,7 @@ checkUnits uo (fname, fileText, pf)
         (FU.SrcSpan (FU.Position _ colL lnL) (FU.Position _ colU lnU)) = srcSpan
         lower = (lnL, colL)
         upper = (lnU, colU)
-
+ 
     varReport     = intercalate ", " . map showVar
 
     showVar (UnitVar (_, s)) = s
