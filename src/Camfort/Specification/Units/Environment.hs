@@ -203,11 +203,22 @@ pprintUnitInfo _ ui = show ui
 
 --------------------------------------------------
 
+-- | Constraint 'parametric' equality (structural) treat all uses of a parametric
+-- abstractions as equivalent to the abstraction. This structural version
+-- compares equality of two constraints, but does not consider the constraints
+-- to be composable (by transitivity).
+conParamEqStructural :: Constraint -> Constraint -> Bool
+conParamEqStructural (ConEq lhs1 rhs1) (ConEq lhs2 rhs2) =
+   (unitParamEq lhs1 lhs2 && unitParamEq rhs1 rhs2) ||
+   (unitParamEq rhs1 lhs2 && unitParamEq lhs1 rhs2)
+conParamEqStructural (ConConj cs1) (ConConj cs2) = and $ zipWith conParamEqStructural cs1 cs2
+conParamEqStructural _ _ = False
+
 -- | Constraint 'parametric' equality: treat all uses of a parametric
 -- abstractions as equivalent to the abstraction.
 conParamEq :: Constraint -> Constraint -> Bool
-conParamEq (ConEq lhs1 rhs1) (ConEq lhs2 rhs2) = (unitParamEq lhs1 lhs2 && unitParamEq rhs1 rhs2) ||
-                                                 (unitParamEq rhs1 lhs2 && unitParamEq lhs1 rhs2)
+conParamEq (ConEq lhs1 rhs1) (ConEq lhs2 rhs2) = (unitParamEq lhs1 lhs2 || unitParamEq rhs1 rhs2) ||
+                                                 (unitParamEq rhs1 lhs2 || unitParamEq lhs1 rhs2)
 conParamEq (ConConj cs1) (ConConj cs2) = and $ zipWith conParamEq cs1 cs2
 conParamEq _ _ = False
 
