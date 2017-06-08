@@ -218,28 +218,28 @@ analyses =
 refactorings =
   [ Functionality
       "common"
-      ["common"]
+      ["commons"]
       common
       "common block elimination"
       OutputFileReq
 
   , Functionality
       "equivalence"
-      ["equivalence"]
+      ["equivalences"]
       equivalences
       "equivalence elimination"
       OutputFileReq
 
   , Functionality
       "dead"
-      ["dead"]
+      []
       dead
       "dead-code elimination"
       OutputFileReq
 
   , Functionality
       "datatype"
-      ["refactor-datatypes", "datatype", "datatypes"]
+      ["datatypes"]
       datatypes
       "derived data type introduction"
       OutputFileReq
