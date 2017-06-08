@@ -3,7 +3,7 @@ program wrt
   integer :: x = 97
   character :: y
   character :: z(20)
-  
+ 
   z(1) = "c"
 
   write (*,'(i8,A)') x, y

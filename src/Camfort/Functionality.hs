@@ -179,7 +179,7 @@ unitsSynth inSrc excludes outSrc opt = do
     report <- doRefactorWithModFiles rfun inSrc excludes outSrc =<< getModFiles opt
     putStrLn report
 
-unitsCriticals inSrc excludes _ opt = do
+unitsCriticals inSrc excludes outSrc opt = do
     putStrLn $ "Suggesting variables to annotate with unit specifications in '"
              ++ inSrc ++ "'"
     uo <- optsToUnitOpts opt

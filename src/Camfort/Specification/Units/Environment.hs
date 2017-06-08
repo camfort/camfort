@@ -37,10 +37,15 @@ import Data.Binary
 import GHC.Generics (Generic)
 import qualified Debug.Trace as D
 
+import Camfort.Helpers (SourceText)
+import qualified Data.ByteString.Char8 as B
+
 import Text.Printf
 
 -- | A (unique name, source name) variable
 type VV = (F.Name, F.Name)
+
+type UniqueId = Int
 
 -- | Description of the unit of an expression.
 data UnitInfo
@@ -48,8 +53,8 @@ data UnitInfo
   | UnitParamPosUse (String, Int, Int)    -- identify particular instantiation of parameters
   | UnitParamVarAbs (String, VV)          -- an abstract parameter identified by PU name and variable name
   | UnitParamVarUse (String, VV, Int)     -- a particular instantiation of above
-  | UnitParamLitAbs Int                   -- a literal with abstract, polymorphic units, uniquely identified
-  | UnitParamLitUse (Int, Int)            -- a particular instantiation of a polymorphic literal
+  | UnitParamLitAbs UniqueId              -- a literal with abstract, polymorphic units, uniquely identified
+  | UnitParamLitUse (UniqueId, Int)       -- a particular instantiation of a polymorphic literal
   | UnitParamEAPAbs VV                    -- an abstract Explicitly Annotated Polymorphic unit variable
   | UnitParamEAPUse (VV, Int)             -- a particular instantiation of an Explicitly Annotated Polymorphic unit variable
   | UnitLiteral Int                       -- literal with undetermined but uniquely identified units
@@ -167,29 +172,53 @@ isUnresolvedUnit _                   = False
 
 isResolvedUnit = not . isUnresolvedUnit
 
-pprintConstr :: Constraint -> String
-pprintConstr (ConEq u1 u2)
-  | isResolvedUnit u1 = "'" ++ pprintUnitInfo u2 ++ "' should have unit '" ++ pprintUnitInfo u1 ++ "'"
-  | isResolvedUnit u2 = "'" ++ pprintUnitInfo u1 ++ "' should have unit '" ++ pprintUnitInfo u2 ++ "'"
-pprintConstr (ConEq u1 u2) = "'" ++ pprintUnitInfo u1 ++ "' should have the same units as '" ++ pprintUnitInfo u2 ++ "'"
-pprintConstr (ConConj cs)  = intercalate "\n\t and " (map pprintConstr cs)
+isConcreteUnit :: UnitInfo -> Bool
+isConcreteUnit (UnitPow u _) = isConcreteUnit u
+isConcreteUnit (UnitMul u v) = isConcreteUnit u && isConcreteUnit v
+isConcreteUnit (UnitAlias _) = True
+isConcreteUnit UnitlessLit = True
+isConcreteUnit (UnitName _) = True
+isConcreteUnit _ = False
 
-pprintUnitInfo :: UnitInfo -> String
-pprintUnitInfo (UnitVar (_, sName)) = printf "%s" sName
-pprintUnitInfo (UnitParamVarUse (_, (_, sName), _)) = printf "%s" sName
-pprintUnitInfo (UnitParamPosUse (fname, 0, _)) = printf "result of %s" fname
-pprintUnitInfo (UnitParamPosUse (fname, i, _)) = printf "parameter %d to %s" i fname
-pprintUnitInfo (UnitParamEAPUse ((v, _), _)) = printf "explicitly annotated polymorphic unit %s" v
-pprintUnitInfo (UnitLiteral _) = "literal number"
-pprintUnitInfo ui = show ui
+pprintConstr :: Maybe SourceText -> Constraint -> String
+pprintConstr srcText (ConEq u1 u2)
+  | isResolvedUnit u1 && isConcreteUnit u1 &&
+    isResolvedUnit u2 && isConcreteUnit u2 =
+      "Units '" ++ pprintUnitInfo srcText u1 ++ "' and '" ++ pprintUnitInfo srcText u2 ++
+      "' should be equal"
+  | isResolvedUnit u1 = "'" ++ pprintUnitInfo srcText u2 ++ "' should have unit '" ++ pprintUnitInfo srcText u1 ++ "'"
+  | isResolvedUnit u2 = "'" ++ pprintUnitInfo srcText u1 ++ "' should have unit '" ++ pprintUnitInfo srcText u2 ++ "'"
+pprintConstr srcText (ConEq u1 u2) = "'" ++ pprintUnitInfo srcText u1 ++ "' should have the same units as '" ++ pprintUnitInfo srcText u2 ++ "'"
+pprintConstr srcText (ConConj cs)  = intercalate "\n\t and " (map (pprintConstr srcText) cs)
+
+pprintUnitInfo :: Maybe SourceText -> UnitInfo -> String
+pprintUnitInfo _ (UnitVar (_, sName)) = printf "%s" sName
+pprintUnitInfo _ (UnitParamVarUse (_, (_, sName), _)) = printf "%s" sName
+pprintUnitInfo _ (UnitParamPosUse (fname, 0, _)) = printf "result of %s" fname
+pprintUnitInfo _ (UnitParamPosUse (fname, i, _)) = printf "parameter %d to %s" i fname
+pprintUnitInfo _ (UnitParamEAPUse ((v, _), _)) = printf "explicitly annotated polymorphic unit %s" v
+pprintUnitInfo (Just srcText) (UnitLiteral _) = B.unpack srcText
+pprintUnitInfo Nothing (UnitLiteral _) = "literal number"
+pprintUnitInfo _ ui = show ui
 
 --------------------------------------------------
+
+-- | Constraint 'parametric' equality (structural) treat all uses of a parametric
+-- abstractions as equivalent to the abstraction. This structural version
+-- compares equality of two constraints, but does not consider the constraints
+-- to be composable (by transitivity).
+conParamEqStructural :: Constraint -> Constraint -> Bool
+conParamEqStructural (ConEq lhs1 rhs1) (ConEq lhs2 rhs2) =
+   (unitParamEq lhs1 lhs2 && unitParamEq rhs1 rhs2) ||
+   (unitParamEq rhs1 lhs2 && unitParamEq lhs1 rhs2)
+conParamEqStructural (ConConj cs1) (ConConj cs2) = and $ zipWith conParamEqStructural cs1 cs2
+conParamEqStructural _ _ = False
 
 -- | Constraint 'parametric' equality: treat all uses of a parametric
 -- abstractions as equivalent to the abstraction.
 conParamEq :: Constraint -> Constraint -> Bool
-conParamEq (ConEq lhs1 rhs1) (ConEq lhs2 rhs2) = unitParamEq lhs1 lhs2 || unitParamEq rhs1 rhs2 ||
-                                                 unitParamEq rhs1 lhs2 || unitParamEq lhs1 rhs2
+conParamEq (ConEq lhs1 rhs1) (ConEq lhs2 rhs2) = (unitParamEq lhs1 lhs2 || unitParamEq rhs1 rhs2) ||
+                                                 (unitParamEq rhs1 lhs2 || unitParamEq lhs1 rhs2)
 conParamEq (ConConj cs1) (ConConj cs2) = and $ zipWith conParamEq cs1 cs2
 conParamEq _ _ = False
 

@@ -40,7 +40,7 @@ Reminder:
 
 
 -- A refactoring takes a 'Typeable' value
--- into a stateful SourceText (ByteString) transformer,
+-- into a stateful SourceText (B.ByteString) transformer,
 -- which returns a pair of a stateful computation of an updated SourceText
 -- paired with a boolean flag denoting whether a refactoring has been
 -- performed.  The state contains a FU.Position which is the "cursor"
@@ -66,7 +66,7 @@ reprint refactoring tree input
   -- Otherwise go with the normal algorithm
   | otherwise = do
    -- Create an initial cursor at the start of the file
-   let cursor0 = FU.Position 0 0 1
+   let cursor0 = FU.initPosition
    -- Enter the top-node of a zipper for 'tree'
    -- setting the cursor at the start of the file
    (out, cursorn) <- runStateT (enter refactoring (toZipper tree) input) cursor0
@@ -132,13 +132,51 @@ enterRight refactoring z inp =
 -- Given a lower-bound and upper-bound pair of FU.Positions, split the
 -- incoming SourceText based on the distanceF between the FU.Position pairs
 takeBounds :: (FU.Position, FU.Position) -> SourceText -> (SourceText, SourceText)
-takeBounds (l, u) = takeBounds' ((ll, lc), (ul, uc)) B.empty
+takeBounds (l, u) = subtext (ll, lc) (ll, lc) (ul, uc)
   where (FU.Position _ lc ll) = l
         (FU.Position _ uc ul) = u
-takeBounds' ((ll, lc), (ul, uc)) tk inp  =
-    if (ll == ul && lc == uc) || (ll > ul) then (B.reverse tk, inp)
-    else
-      case B.uncons inp of
-       Nothing         -> (B.reverse tk, inp)
-       Just ('\n', ys) -> takeBounds' ((ll+1, 0), (ul, uc)) (B.cons '\n' tk) ys
-       Just (x, xs)    -> takeBounds' ((ll, lc+1), (ul, uc)) (B.cons x tk) xs
+
+{-|
+  Split a text.
+
+  Returns a tuple containing:
+    1. the bit of input text between upper and lower bounds
+    2. the remaining input text
+
+  Takes:
+    1. current cursor position
+    2. lower bound
+    3. upper bound
+    4. input text
+
+  Fails when lower and upper bounds are not within the text.
+-}
+subtext :: (Int, Int) -> (Int, Int) -> (Int, Int) -> B.ByteString -> (B.ByteString, B.ByteString)
+subtext = subtext' B.empty
+  where
+    subtext' acc -- accumulator
+             cursor@(cursorLn, cursorCol)
+             lower@(lowerLn, lowerCol)
+             upper@(upperLn, upperCol)
+             input
+      -- | cursorLn <= lowerLn && cursorCol < lowerCol =
+      | cursorLn <= lowerLn && (cursorCol >= lowerCol ==> cursorLn < lowerLn) =
+        case B.uncons input of
+          Nothing -> error $ "Trying to take subtext between " ++ show lower ++
+            " and " ++ show upper ++ ", but file ended at: " ++ show cursor
+          Just ('\n', input') -> subtext' acc (cursorLn+1, 1) lower upper input'
+          Just (x, input') -> subtext' acc (cursorLn, cursorCol+1) lower upper input'
+      | cursorLn <= upperLn && (cursorCol >= upperCol ==> cursorLn < upperLn) =
+        case B.uncons input of
+          Nothing -> error $ "Trying to take subtext between " ++ show lower ++
+            " and " ++ show upper ++ ", but file ended at: " ++ show cursor
+          Just ('\n', input') ->
+            subtext' (B.cons '\n' acc) (cursorLn+1, 1) lower upper input'
+          Just (x, input') ->
+            subtext' (B.cons x acc) (cursorLn, cursorCol+1) lower upper input'
+      | otherwise = -- cursorLn > upperLn || (cursorLn == upperLn ==> cursolCol > upperCol)
+        (B.reverse acc, input)
+
+-- | Logical implication operator.
+(==>) :: Bool -> Bool -> Bool; infix 2 ==>
+a ==> b = a <= b

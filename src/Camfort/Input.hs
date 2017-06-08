@@ -95,7 +95,7 @@ doAnalysisReport rFun sFun inSrc excludes = do
   sFun report
 ----
 
-doAnalysisReportWithModFiles :: ([(Filename, F.ProgramFile A)] -> r)
+doAnalysisReportWithModFiles :: ([(Filename, SourceText, F.ProgramFile A)] -> r)
                              -> (r -> IO out)
                              -> FileOrDir
                              -> [Filename]
@@ -108,7 +108,7 @@ doAnalysisReportWithModFiles rFun sFun inSrc excludes mods = do
       else return ()
   ps <- readParseSrcDirWithModFiles inSrc excludes mods
 ----
-  let report = rFun (map (\(f, inp, ast) -> (f, ast)) ps)
+  let report = rFun ps
   sFun report
 ----
 
@@ -132,7 +132,7 @@ doRefactor rFun inSrc excludes outSrc = do
     outputFiles inSrc outSrc outputs
     return report
 
-doRefactorWithModFiles :: ([(Filename, F.ProgramFile A)] -> (String, [(Filename, F.ProgramFile A)]))
+doRefactorWithModFiles :: ([(Filename, SourceText, F.ProgramFile A)] -> (String, [(Filename, F.ProgramFile A)]))
                        -> FileOrDir
                        -> [Filename]
                        -> FileOrDir
@@ -144,7 +144,7 @@ doRefactorWithModFiles rFun inSrc excludes outSrc mods = do
            ++ " from " ++ inSrc ++ "/"
     else return ()
     ps <- readParseSrcDirWithModFiles inSrc excludes mods
-    let (report, ps') = rFun (map (\(f, inp, ast) -> (f, ast)) ps)
+    let (report, ps') = rFun ps
     let outputs = reassociateSourceText ps ps'
     outputFiles inSrc outSrc outputs
     return report
