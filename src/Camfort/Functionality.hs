@@ -158,8 +158,8 @@ unitsCheck inSrc excludes _ opt = do
 unitsInfer inSrc excludes _ opt = do
     putStrLn $ "Inferring units for '" ++ inSrc ++ "'"
     uo <- optsToUnitOpts opt
-    let rfun = concatMap (LU.inferUnits uo)
-    doAnalysisReportWithModFiles rfun putStrLn inSrc excludes =<< getModFiles opt
+    let rfun x = concat <$> mapM (LU.inferUnits uo) x
+    doAnalysisReportWithModFilesIO rfun putStrLn inSrc excludes =<< getModFiles opt
 
 unitsCompile inSrc excludes outSrc opt = do
     putStrLn $ "Compiling units for '" ++ inSrc ++ "'"

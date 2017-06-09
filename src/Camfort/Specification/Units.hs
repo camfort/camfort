@@ -52,6 +52,7 @@ import Camfort.Reprint (subtext)
 import Camfort.Specification.Units.Environment
 import Camfort.Specification.Units.Monad
 import Camfort.Specification.Units.InferenceBackend
+import qualified Camfort.Specification.Units.InferenceBackendZ3 as Z
 import Camfort.Specification.Units.InferenceFrontend
 import Camfort.Specification.Units.Synthesis (runSynthesis)
 
@@ -125,8 +126,7 @@ inferCriticalVariables uo (fname, fileText, pf)
               ] `M.union` (M.unions . map (M.fromList . map (\ (a, (b, _)) -> (b, a)) . M.toList) $ M.elems mmap')
     fromWhereMap = genUniqNameToFilenameMap . M.elems $ uoModFiles uo
 
-checkUnits, inferUnits
-            :: UnitOpts -> (Filename, B.ByteString, F.ProgramFile Annotation) -> Report
+checkUnits :: UnitOpts -> (Filename, B.ByteString, F.ProgramFile Annotation) -> Report
 {-| Check units-of-measure for a program -}
 checkUnits uo (fname, fileText, pf)
   | Right mCons <- eCons = okReport mCons
@@ -286,10 +286,14 @@ replaceImplicitNames implicitMap = transformBi replace
 
 {-| Check and infer units-of-measure for a program
     This produces an output of all the unit information for a program -}
+inferUnits :: UnitOpts -> (Filename, B.ByteString, F.ProgramFile Annotation) -> IO Report
 inferUnits uo (fname, fileText, pf)
-  | Right []   <- eVars = checkUnits uo (fname, fileText, pf)
-  | Right vars <- eVars = okReport vars
-  | Left exc   <- eVars = errReport exc
+  | Right []   <- eVars = return $ checkUnits uo (fname, fileText, pf)
+  | Right vars <- eVars = do
+    let cons = usConstraints state
+    (putStrLn . unlines . map show . fromMaybe [] . snd) =<< Z.inferVariables cons
+    return $ okReport vars
+  | Left exc   <- eVars = return $ errReport exc
   where
     -- Format report
     okReport vars = logs ++ "\n" ++ fname ++ ":\n" ++ unlines [ expReport ei | ei <- expInfo ] ++ show vars

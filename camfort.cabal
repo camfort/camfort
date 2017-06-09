@@ -46,6 +46,7 @@ executable camfort
                         Camfort.Specification.Units
                         Camfort.Specification.Units.InferenceFrontend
                         Camfort.Specification.Units.InferenceBackend
+                        Camfort.Specification.Units.InferenceBackendZ3
                         Camfort.Specification.Units.Environment
                         Camfort.Specification.Units.Monad
                         Camfort.Specification.Units.Parser
@@ -86,7 +87,8 @@ executable camfort
                         binary >= 0.8.3.0,
                         lattices >= 1.5,
                         sbv >= 5.14,
-                        partial-order >= 0.1.2
+                        partial-order >= 0.1.2,
+                        z3 >= 4.1.0
   default-language: Haskell2010
 
 library
@@ -110,6 +112,7 @@ library
                         Camfort.Specification.Units
                         Camfort.Specification.Units.InferenceFrontend
                         Camfort.Specification.Units.InferenceBackend
+                        Camfort.Specification.Units.InferenceBackendZ3
                         Camfort.Specification.Units.Environment
                         Camfort.Specification.Units.Monad
                         Camfort.Specification.Units.Parser
@@ -148,7 +151,8 @@ library
                         binary >= 0.8.3.0,
                         lattices >= 1.5,
                         sbv >= 5.14,
-                        partial-order >= 0.1.2
+                        partial-order >= 0.1.2,
+                        z3 >= 4.1.0
   default-language: Haskell2010
 
 test-suite spec
@@ -183,5 +187,6 @@ test-suite spec
                         lattices >= 1.5,
                         sbv >= 5.14,
                         partial-order >= 0.1.2,
+                        z3 >= 4.1.0,
                         camfort
   default-language: Haskell2010

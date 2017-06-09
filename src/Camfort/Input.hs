@@ -112,6 +112,23 @@ doAnalysisReportWithModFiles rFun sFun inSrc excludes mods = do
   sFun report
 ----
 
+doAnalysisReportWithModFilesIO :: ([(Filename, SourceText, F.ProgramFile A)] -> IO r)
+                               -> (r -> IO out)
+                               -> FileOrDir
+                               -> [Filename]
+                               -> ModFiles
+                               -> IO out
+doAnalysisReportWithModFilesIO rFun sFun inSrc excludes mods = do
+  if excludes /= [] && excludes /= [""]
+      then putStrLn $ "Excluding " ++ intercalate "," excludes
+                    ++ " from " ++ inSrc ++ "/"
+      else return ()
+  ps <- readParseSrcDirWithModFiles inSrc excludes mods
+----
+  report <- rFun ps
+  sFun report
+----
+
 {-| Performs a refactoring provided by its first parameter, on the directory
     of the second, excluding files listed by third,
     output to the directory specified by the fourth parameter -}
