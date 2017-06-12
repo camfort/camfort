@@ -35,46 +35,44 @@ import Data.Text (pack, unpack, split)
 main = do
   args <- getArgs
   putStrLn ""
-  if length args >= 2 then
-
-    let (f : (inp : _)) = args
-    in case lookupFunctionality f functionalities of
-      Nothing -> putStrLn fullUsageInfo
-      Just func -> do
-        (opts, _) <- compilerOpts args
-
-        (numReqArgs, outp) <-
-          if RefactorInPlace `elem` opts
-          -- Does not check to see if an output directory
-          -- is also specified since flags come last and therefore
-          -- override any specification of an output directory
-          -- (which would come earlier).
-            then return (2, inp)
-            else case outputFileReq func of
-              OutputFileNotReq ->
-                if length args >= 3 && (head (args !! 2) == '-')
-                  then
-                    return (2, "")
-                  else -- case where an unnecessary output is specified
-                    return (3, "")
-              OutputFileReq ->
-                if length args >= 3
-                  then return (3, args !! 2)
-                  else fail $ usage ++ "\nThis mode requires an output\
-                                       \ file/directory to be specified\n\
-                                       \ or use the --inplace flag to set\
-                                       \ the ouput location to be the input\
-                                       \ location."
-
-        let excluded_files = map unpack . split (==',') . pack . getExcludes
-        fun func inp (excluded_files opts) outp opts
-
-
-  else do
-    putStrLn introMsg
-    if length args == 1
-     then putStrLn $ usage ++ "Please specify an input file/directory"
-     else putStrLn fullUsageInfo
+  (opts,posArgs) <- compilerOpts args
+  case opts of
+    (Version:_) -> displayVersion
+    _           -> do
+      if length args >= 2 then
+        let (f : (inp : _)) = args
+        in case lookupFunctionality f functionalities of
+          Nothing -> putStrLn fullUsageInfo
+          Just func -> do
+            (numReqArgs, outp) <-
+              if RefactorInPlace `elem` opts
+              -- Does not check to see if an output directory
+              -- is also specified since flags come last and therefore
+              -- override any specification of an output directory
+              -- (which would come earlier).
+                then return (2, inp)
+                else case outputFileReq func of
+                  OutputFileNotReq ->
+                    if length args >= 3 && (head (args !! 2) == '-')
+                      then
+                        return (2, "")
+                      else -- case where an unnecessary output is specified
+                        return (3, "")
+                  OutputFileReq ->
+                    if length args >= 3
+                      then return (3, args !! 2)
+                      else fail $ usage ++ "\nThis mode requires an output\
+                                          \ file/directory to be specified\n\
+                                          \ or use the --inplace flag to set\
+                                          \ the ouput location to be the input\
+                                          \ location."
+            let excluded_files = map unpack . split (==',') . pack . getExcludes
+            fun func inp (excluded_files opts) outp opts
+      else do
+        putStrLn versionMessage
+        if length args == 1
+        then putStrLn $ usage ++ "Please specify an input file/directory"
+        else putStrLn fullUsageInfo
 
 
 
@@ -111,7 +109,7 @@ compilerOpts argv =
   case getOpt Permute options argv of
     (o,n,[]  ) -> return (o,n)
     (_,_,errs) -> ioError (userError (concat errs ++ usageInfo header options))
-  where header = introMsg ++ usage ++ menu ++ "\nOptions:"
+  where header = versionMessage ++ usage ++ menu ++ "\nOptions:"
 
 
 
@@ -249,7 +247,11 @@ refactorings =
 
 -- * Usage and about information
 version = "0.903"
-introMsg = "CamFort " ++ version ++ " - Cambridge Fortran Infrastructure."
+versionMessage = "CamFort " ++ version ++ " - Cambridge Fortran Infrastructure."
+
+displayVersion :: IO ()
+displayVersion = putStrLn versionMessage
+
 usage = "Usage: camfort <MODE> <INPUT> [OUTPUT] [OPTIONS...]\n"
 menu =
   "Refactor functions:\n"
