@@ -5,8 +5,6 @@
       parameter (imax = 3, jmax = 3)
       logical flag
 
-c Hello this is a comment
-      
       real a(0:imax,0:jmax), b(0:imax,0:jmax), x
 
       do 1 i = 1, (imax-1)
