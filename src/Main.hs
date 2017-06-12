@@ -111,8 +111,8 @@ compilerOpts :: [String] -> IO ([Flag], [String])
 compilerOpts argv =
   case getOpt Permute options argv of
     (o,n,[]  ) -> return (o,n)
-    (_,_,errs) -> ioError (userError (concat errs ++ usageInfo header options))
-  where header = versionMessage ++ usage ++ menu ++ "\nOptions:"
+    (_,_,errs) -> ioError (userError (concat errs ++ helpPrompt))
+  where helpPrompt = "Try camfort --help for more information."
 
 
 
