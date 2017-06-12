@@ -38,6 +38,7 @@ main = do
   (opts,posArgs) <- compilerOpts args
   case opts of
     (Version:_) -> displayVersion
+    (Help:_)    -> displayHelp
     _           -> do
       if length args >= 2 then
         let (f : (inp : _)) = args
@@ -85,6 +86,8 @@ options :: [OptDescr Flag]
 options =
      [ Option ['v','?'] ["version"] (NoArg Version)
          "show version number"
+     , Option [] ["help"] (NoArg Help)
+         "show this help message and exit"
      , Option [] ["inplace"] (NoArg RefactorInPlace)
          "refactor in place (replaces input files)"
      , Option ['e'] ["exclude"] (ReqArg Excludes "FILES")
@@ -251,6 +254,9 @@ versionMessage = "CamFort " ++ version ++ " - Cambridge Fortran Infrastructure."
 
 displayVersion :: IO ()
 displayVersion = putStrLn versionMessage
+
+displayHelp :: IO ()
+displayHelp = putStrLn fullUsageInfo
 
 usage = "Usage: camfort <MODE> <INPUT> [OUTPUT] [OPTIONS...]\n"
 menu =

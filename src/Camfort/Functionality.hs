@@ -51,17 +51,18 @@ import qualified Data.Map.Strict as M
 
 -- CamFort optional flags
 data Flag = Version
-         | Input String
-         | Output String
-         | Excludes String
-         | IncludeDir String
-         | Literals LiteralsOpt
-         | StencilInferMode Stencils.InferMode
-         | Doxygen
-         | Ford
-         | FVersion String
-         | RefactorInPlace
-         | Debug deriving (Data, Show, Eq)
+          | Help
+          | Input String
+          | Output String
+          | Excludes String
+          | IncludeDir String
+          | Literals LiteralsOpt
+          | StencilInferMode Stencils.InferMode
+          | Doxygen
+          | Ford
+          | FVersion String
+          | RefactorInPlace
+          | Debug deriving (Data, Show, Eq)
 
 type Options = [Flag]
 
