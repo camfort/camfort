@@ -132,9 +132,25 @@ enterRight refactoring z inp =
 -- Given a lower-bound and upper-bound pair of FU.Positions, split the
 -- incoming SourceText based on the distanceF between the FU.Position pairs
 takeBounds :: (FU.Position, FU.Position) -> SourceText -> (SourceText, SourceText)
+takeBounds (l, u) = takeBounds' ((ll, lc), (ul, uc)) B.empty
+  where (FU.Position _ lc ll) = l
+        (FU.Position _ uc ul) = u
+takeBounds' ((ll, lc), (ul, uc)) tk inp  =
+    if (ll == ul && lc == uc) || (ll > ul) then (B.reverse tk, inp)
+    else
+      case B.uncons inp of
+       Nothing         -> (B.reverse tk, inp)
+       Just ('\n', ys) -> takeBounds' ((ll+1, 0), (ul, uc)) (B.cons '\n' tk) ys
+       Just (x, xs)    -> takeBounds' ((ll, lc+1), (ul, uc)) (B.cons x tk) xs
+
+{-
+-- Given a lower-bound and upper-bound pair of FU.Positions, split the
+-- incoming SourceText based on the distanceF between the FU.Position pairs
+takeBounds :: (FU.Position, FU.Position) -> SourceText -> (SourceText, SourceText)
 takeBounds (l, u) = subtext (ll, lc) (ll, lc) (ul, uc)
   where (FU.Position _ lc ll) = l
         (FU.Position _ uc ul) = u
+-}
 
 {-|
   Split a text.
