@@ -34,7 +34,6 @@ import Data.Text (pack, unpack, split)
     handlers which functionality is being requested -}
 main = do
   args <- getArgs
-  putStrLn ""
   (opts,posArgs) <- compilerOpts args
   case opts of
     (Version:_) -> displayVersion
