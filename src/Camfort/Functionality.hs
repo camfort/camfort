@@ -21,13 +21,14 @@
 {-# LANGUAGE DeriveDataTypeable #-}
 {-# LANGUAGE TypeSynonymInstances #-}
 {-# LANGUAGE FlexibleInstances #-}
+{-# LANGUAGE ScopedTypeVariables #-}
 
 module Camfort.Functionality where
 
 import System.FilePath
 import Control.Monad
 
-import Data.Generics.Uniplate.Operations
+import Data.Generics.Uniplate.Operations (universeBi)
 import Data.Data
 import Data.Binary
 import Data.Text (pack, unpack, split)
@@ -150,6 +151,14 @@ getModFiles = foldM (\ modFiles f -> do
 
 isModFile = (== modFileSuffix) . fileExt
 
+-- | Retrieve the inference mode provided in the options (or a default mode).
+getInferMode :: Options -> Stencils.InferMode
+getInferMode [] = defaultValue
+getInferMode (x : xs) =
+    case x of
+      StencilInferMode mode -> mode
+      _ -> getInferMode xs
+
 unitsCheck inSrc excludes _ opt = do
     putStrLn $ "Checking units for '" ++ inSrc ++ "'"
     uo <- optsToUnitOpts opt
@@ -195,7 +204,7 @@ stencilsCheck inSrc excludes _ _ = do
 
 stencilsInfer inSrc excludes outSrc opt = do
    putStrLn $ "Inferring stencil specs for '" ++ inSrc ++ "'"
-   let rfun = Stencils.infer (getOption opt) '='
+   let rfun = Stencils.infer (getInferMode opt) '='
    doAnalysisSummary rfun inSrc excludes (Just outSrc)
 
 stencilsSynth inSrc excludes outSrc opt = do
@@ -204,6 +213,6 @@ stencilsSynth inSrc excludes outSrc opt = do
         | Doxygen `elem` opt = '<'
         | Ford `elem` opt = '!'
         | otherwise = '='
-   let rfun = Stencils.synth (getOption opt) marker
+   let rfun = Stencils.synth (getInferMode opt) marker
    report <- doRefactor rfun inSrc excludes outSrc
    putStrLn report
