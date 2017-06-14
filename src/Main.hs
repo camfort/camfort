@@ -28,10 +28,9 @@ import Camfort.Functionality
 import Data.Text (pack, unpack, split)
 
 
-
-
-{-| The entry point to CamFort. Displays user information, and
-    handlers which functionality is being requested -}
+-- | The entry point to CamFort. Displays user information, and
+-- | handles which functionality is being requested
+main :: IO ()
 main = do
   args <- getArgs
   (opts,posArgs) <- compilerOpts args
@@ -75,11 +74,9 @@ main = do
         else putStrLn fullUsageInfo
 
 
-
-
--- * Options for CamFort and information on the different modes
-
+-- | Usage information, including descriptions of supported functions.
 fullUsageInfo = usageInfo (usage ++ menu ++ "\nOptions:") options
+
 
 options :: [OptDescr Flag]
 options =
@@ -106,6 +103,9 @@ options =
          "synthesise annotations compatible with Ford"
      ]
 
+
+-- | Wrapper around 'getOpt' to provide usage information
+-- upon failure.
 compilerOpts :: [String] -> IO ([Flag], [String])
 compilerOpts argv =
   case getOpt Permute options argv of
@@ -114,23 +114,24 @@ compilerOpts argv =
   where helpPrompt = "Try camfort --help for more information."
 
 
-
-
--- | Datatype for a functionality provided by the system, i.e. this is the
+-- | Functionality provided by the system, i.e. this is the
 -- wiring between the outward facing command line interface and our internal
--- functions
+-- functions.
 data Functionality = Functionality
-  { commandName :: String          -- ^ the command invoked by user at the cli
-  , altNames :: [String]           -- ^ alternative command names (let's be nice)
-  , fun :: FileOrDir -> [Filename] -> FileOrDir -> Options -> IO () -- ^ the function to dispatch to
-  , info :: String                 -- ^ information about the functionality
-  , outputFileReq :: OutputFileReq -- ^ whether an output file is required
+  { commandName   :: String         -- ^ Command invoked by user at the cli
+  , altNames      :: [String]       -- ^ Alternative command names
+                                    -- ^ Function to dispatch to
+  , fun           :: FileOrDir -> [Filename] -> FileOrDir -> Options -> IO ()
+  , info          :: String         -- ^ Description of functionality
+  , outputFileReq :: OutputFileReq  -- ^ Whether an output file is required
   }
 
--- | A tag do destinguish whether a functionality requires an output file
+
+-- | Tag to distinguish whether a functionality requires an output file.
 data OutputFileReq = OutputFileReq | OutputFileNotReq
 
--- | Given a string, maybe return an associated Functionality
+
+-- | Resolve some text into CamFort functionality.
 lookupFunctionality :: String -> [Functionality] -> Maybe Functionality
 lookupFunctionality str = find (getFunctionality str)
   where getFunctionality s f | commandName f == s  = True
@@ -138,11 +139,13 @@ lookupFunctionality str = find (getFunctionality str)
                              | otherwise           = False
 
 
-
--- | The list of functionalties that Camfort provides
+-- | The functionalties that Camfort provides
 functionalities :: [Functionality]
 functionalities = analyses ++ refactorings
 
+
+-- | Functionality for analysis.
+analyses :: [Functionality]
 analyses =
   [ Functionality
       "count"
@@ -215,6 +218,9 @@ analyses =
       OutputFileReq
   ]
 
+
+-- | Functionality for refactoring.
+refactorings :: [Functionality]
 refactorings =
   [ Functionality
       "common"
@@ -246,18 +252,29 @@ refactorings =
   ]
 
 
-
--- * Usage and about information
+-- | Current CamFort version.
 version = "0.903"
+
+
+-- | Full CamFort version string.
 versionMessage = "CamFort " ++ version ++ " - Cambridge Fortran Infrastructure."
 
+
+-- | Print the full version string.
 displayVersion :: IO ()
 displayVersion = putStrLn versionMessage
 
+
+-- | Print the help message.
 displayHelp :: IO ()
 displayHelp = putStrLn fullUsageInfo
 
+
+-- | One-line usage string.
 usage = "Usage: camfort <MODE> <INPUT> [OUTPUT] [OPTIONS...]\n"
+
+
+-- | Description of supported CamFort functions for user display.
 menu =
   "Refactor functions:\n"
   ++ concatMap display refactorings
