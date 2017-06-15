@@ -40,7 +40,7 @@ readActual :: FilePath -> IO String
 readActual argumentFilename = do
   let argumentPath = samplesBase </> argumentFilename
   let outFile = argumentPath `addExtension` "out"
-  equivalences argumentPath [] outFile ()
+  equivalences argumentPath [] outFile
   actual <- readFile outFile
   removeFile outFile
   return actual

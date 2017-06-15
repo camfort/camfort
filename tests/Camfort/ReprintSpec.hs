@@ -5,6 +5,7 @@ module Camfort.ReprintSpec (spec) where
 import Camfort.Functionality
 import Camfort.Reprint
 import Camfort.Helpers
+import Camfort.Specification.Units.Monad (LiteralsOpt(LitMixed))
 import qualified Data.ByteString.Char8 as B
 import qualified Language.Fortran.Util.Position as FU
 
@@ -72,7 +73,8 @@ spec =
 
     context "Integration test with synthesising a spec" $ do
        runIO $ unitsSynth ("tests" </> "fixtures" </> "simple.f90") []
-                          ("tests" </> "fixtures" </> "simple.f90.out") []
+                          ("tests" </> "fixtures" </> "simple.f90.out")
+         ATDefault LitMixed False Nothing
        actual <- runIO $ readFile ("tests" </> "fixtures" </> "simple.f90.out")
        expected <- runIO $ readFile ("tests" </> "fixtures" </> "simple.expected.f90")
        it "Unit synth" $ actual `shouldBe` expected
