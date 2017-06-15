@@ -23,7 +23,27 @@
 {-# LANGUAGE FlexibleInstances #-}
 {-# LANGUAGE ScopedTypeVariables #-}
 
-module Camfort.Functionality where
+module Camfort.Functionality (
+  -- * Datatypes
+    AnnotationType(..)
+  -- * Commands
+  , ast
+  , countVarDecls
+  -- ** Stencil Analysis
+  , stencilsCheck
+  , stencilsInfer
+  , stencilsSynth
+  -- ** Unit Analysis
+  , unitsCriticals
+  , unitsCheck
+  , unitsInfer
+  , unitsSynth
+  , unitsCompile
+  -- ** Refactorings
+  , common
+  , dead
+  , equivalences
+  , datatypes) where
 
 import System.FilePath
 import Control.Monad
