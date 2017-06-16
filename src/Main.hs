@@ -146,10 +146,12 @@ readOptions = liftA ReadOptions
   <*> excludeOption
 
 
+-- | User must specify either an ouput file, or say that the file
+-- | should be rewritten in place.
 writeOptions :: Parser WriteOptions
 writeOptions = (liftA WriteFile . fileArgument $
                  help "file to write output to")
-               <|> (pure WriteInplace <* flag' True
+               <|> (pure WriteInplace <* flag' ()
                      (   long "inplace"
                       <> help "write in place (replaces input files)"))
 
