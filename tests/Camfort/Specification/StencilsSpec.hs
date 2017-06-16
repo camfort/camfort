@@ -108,34 +108,34 @@ spec =
 
     describe "Example stencil inferences" $ do
       it "five point stencil 2D" $
-        inferFromIndices (VL fivepoint)
+        inferFromIndicesWithoutLinearity (VL fivepoint)
         `shouldBe`
-         (Specification $ Once $ Exact $ Spatial
+         (Specification $ Mult $ Exact $ Spatial
                      (Sum [ Product [ Centered 1 1 True, Centered 0 2 True]
                           , Product [ Centered 0 1 True, Centered 1 2 True]
                           ]))
 
       it "seven point stencil 2D" $
-        inferFromIndices (VL sevenpoint)
+        inferFromIndicesWithoutLinearity (VL sevenpoint)
         `shouldBe`
-          (Specification $ Once $ Exact $ Spatial
+          (Specification $ Mult $ Exact $ Spatial
                        (Sum [ Product [ Centered 1 1 True, Centered 0 2 True, Centered 0 3 True]
                             , Product [ Centered 0 1 True, Centered 1 2 True, Centered 0 3 True]
                             , Product [ Centered 0 1 True, Centered 0 2 True, Centered 1 3 True]
                             ]))
 
       it "five point stencil 2D with blip" $
-         inferFromIndices (VL fivepointErr)
+         inferFromIndicesWithoutLinearity (VL fivepointErr)
          `shouldBe`
-          (Specification $ Once $ Exact $ Spatial
+          (Specification $ Mult $ Exact $ Spatial
                          (Sum [ Product [ Centered 1 1 True, Centered 0 2 True],
                                 Product [ Centered 0 1 True, Centered 1 2 True],
                                 Product [ Forward 1 1 True, Forward 1 2 True] ]))
 
       it "centered forward" $
-         inferFromIndices (VL centeredFwd)
+         inferFromIndicesWithoutLinearity (VL centeredFwd)
          `shouldBe`
-          (Specification $ Once $ Exact $ Spatial
+          (Specification $ Mult $ Exact $ Spatial
             (Sum [ Product [ Forward 1 1 True
                            , Centered 1 2 True] ]))
 
