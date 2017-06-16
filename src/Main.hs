@@ -149,7 +149,7 @@ readOptions = liftA ReadOptions
 writeOptions :: Parser WriteOptions
 writeOptions = (liftA WriteFile . fileArgument $
                  help "file to write output to")
-               <|> (pure WriteInplace <* switch
+               <|> (pure WriteInplace <* flag' True
                      (   long "inplace"
                       <> help "write in place (replaces input files)"))
 
