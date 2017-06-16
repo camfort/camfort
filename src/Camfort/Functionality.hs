@@ -74,6 +74,14 @@ import qualified Data.Map.Strict as M
 data AnnotationType = ATDefault | Doxygen | Ford
 
 
+-- | Retrieve the marker character compatible with the given
+-- type of annotation.
+markerChar :: AnnotationType -> Char
+markerChar Doxygen   = '<'
+markerChar Ford      = '!'
+markerChar ATDefault = '='
+
+
 -- * Wrappers on all of the features
 ast d excludes = do
     xs <- readParseSrcDir d excludes
@@ -161,12 +169,10 @@ unitsCompile inSrc excludes m debug incDir outSrc = do
     let rfun = LU.compileUnits uo
     putStrLn =<< doCreateBinary rfun inSrc excludes outSrc =<< getModFiles incDir
 
+
 unitsSynth inSrc excludes m debug incDir outSrc annType = do
     putStrLn $ "Synthesising units for '" ++ inSrc ++ "'"
-    let marker = case annType of
-                   Doxygen   -> '<'
-                   Ford      -> '!'
-                   ATDefault -> '='
+    let marker = markerChar annType
     uo <- optsToUnitOpts m debug incDir
     let rfun =
           mapM (LU.synthesiseUnits uo marker)
@@ -193,10 +199,6 @@ stencilsInfer inSrc excludes outSrc inferMode = do
 
 stencilsSynth inSrc excludes outSrc inferMode annType = do
    putStrLn $ "Synthesising stencil specs for '" ++ inSrc ++ "'"
-   let marker = case annType of
-                  Doxygen   -> '<'
-                  Ford      -> '!'
-                  ATDefault -> '='
-   let rfun = Stencils.synth inferMode marker
+   let rfun = Stencils.synth inferMode (markerChar annType)
    report <- doRefactor rfun inSrc excludes outSrc
    putStrLn report
