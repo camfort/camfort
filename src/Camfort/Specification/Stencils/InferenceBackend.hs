@@ -76,15 +76,6 @@ mkTrivialSpan (V.Cons x xs) =
   where
     (ys, zs) = mkTrivialSpan xs
 
--- TODO: This seems completely redundant. Perhaps DELETE.
-inferFromIndices :: V.VecList Int -> Specification
-inferFromIndices (V.VL ixs) = Specification $
-    case fromBool mult of
-      Linear -> Once $ inferCore ixs'
-      NonLinear -> Mult $ inferCore ixs'
-    where
-      (ixs', mult) = hasDuplicates ixs
-
 -- Same as inferFromIndices but don't do any linearity checking
 -- (defaults to NonLinear). This is used when the front-end does
 -- the linearity check first as an optimimsation.
