@@ -141,7 +141,7 @@ excludeOption = optional $ multiFileOption $
 
 -- | Parse options for 'ReadOptions'.
 readOptions :: Parser ReadOptions
-readOptions = liftA ReadOptions
+readOptions = fmap ReadOptions
   (fileArgument $ help "input file")
   <*> excludeOption
 
@@ -149,7 +149,7 @@ readOptions = liftA ReadOptions
 -- | User must specify either an ouput file, or say that the file
 -- | should be rewritten in place.
 writeOptions :: Parser WriteOptions
-writeOptions = (liftA WriteFile . fileArgument $
+writeOptions = (fmap WriteFile . fileArgument $
                  help "file to write output to")
                <|> (pure WriteInplace <* flag' ()
                      (   long "inplace"
@@ -157,7 +157,7 @@ writeOptions = (liftA WriteFile . fileArgument $
 
 
 stencilsOptions :: Parser StencilsOptions
-stencilsOptions = liftA StencilsOptions
+stencilsOptions = fmap StencilsOptions
   readOptions <*> writeOptions <*> inferModeOption
   where
     inferModeOption = fmap (fromMaybe defaultValue)
@@ -176,12 +176,12 @@ stencilsOptions = liftA StencilsOptions
 
 
 stencilsSynthOptions :: Parser StencilsSynthOptions
-stencilsSynthOptions = liftA StencilsSynthOptions
+stencilsSynthOptions = fmap StencilsSynthOptions
   stencilsOptions <*> annotationOptions
 
 
 unitsOptions :: Parser UnitsOptions
-unitsOptions = liftA UnitsOptions
+unitsOptions = fmap UnitsOptions
       readOptions
   <*> literalsOption
   <*> debugOption
@@ -204,12 +204,12 @@ unitsOptions = liftA UnitsOptions
 
 
 unitsWriteOptions :: Parser UnitsWriteOptions
-unitsWriteOptions = liftA UnitsWriteOptions
+unitsWriteOptions = fmap UnitsWriteOptions
   unitsOptions <*> writeOptions
 
 
 annotationOptions :: Parser AnnotationOptions
-annotationOptions = liftA AnnotationOptions $
+annotationOptions = fmap AnnotationOptions $
   flag ATDefault Doxygen
     (long "doxygen" <> help "synthesise annotations compatible with Doxygen")
   <|> flag ATDefault Ford
@@ -217,41 +217,41 @@ annotationOptions = liftA AnnotationOptions $
 
 
 unitsSynthOptions :: Parser UnitsSynthOptions
-unitsSynthOptions = liftA UnitsSynthOptions
+unitsSynthOptions = fmap UnitsSynthOptions
   unitsWriteOptions <*> annotationOptions
 
 
 refactOptions :: Parser RefactOptions
-refactOptions = liftA RefactOptions
+refactOptions = fmap RefactOptions
   readOptions <*> writeOptions
 
 
 cmdCount, cmdAST :: Parser Command
-cmdCount = liftA CmdCount readOptions
-cmdAST   = liftA CmdAST   readOptions
+cmdCount = fmap CmdCount readOptions
+cmdAST   = fmap CmdAST   readOptions
 
 
 cmdStencilsCheck, cmdStencilsInfer, cmdStencilsSynth :: Parser Command
-cmdStencilsCheck = liftA CmdStencilsCheck readOptions
-cmdStencilsInfer = liftA CmdStencilsInfer stencilsOptions
-cmdStencilsSynth = liftA CmdStencilsSynth stencilsSynthOptions
+cmdStencilsCheck = fmap CmdStencilsCheck readOptions
+cmdStencilsInfer = fmap CmdStencilsInfer stencilsOptions
+cmdStencilsSynth = fmap CmdStencilsSynth stencilsSynthOptions
 
 
 cmdUnitsSuggest, cmdUnitsCheck, cmdUnitsInfer
   , cmdUnitsSynth, cmdUnitsCompile :: Parser Command
-cmdUnitsSuggest = liftA CmdUnitsSuggest unitsWriteOptions
-cmdUnitsCheck   = liftA CmdUnitsCheck   unitsOptions
-cmdUnitsInfer   = liftA CmdUnitsInfer   unitsOptions
-cmdUnitsSynth   = liftA CmdUnitsSynth   unitsSynthOptions
-cmdUnitsCompile = liftA CmdUnitsCompile unitsWriteOptions
+cmdUnitsSuggest = fmap CmdUnitsSuggest unitsWriteOptions
+cmdUnitsCheck   = fmap CmdUnitsCheck   unitsOptions
+cmdUnitsInfer   = fmap CmdUnitsInfer   unitsOptions
+cmdUnitsSynth   = fmap CmdUnitsSynth   unitsSynthOptions
+cmdUnitsCompile = fmap CmdUnitsCompile unitsWriteOptions
 
 
 cmdRefactCommon, cmdRefactDatatype
   , cmdRefactDead, cmdRefactEquivalence :: Parser Command
-cmdRefactCommon      = liftA CmdRefactCommon refactOptions
-cmdRefactDatatype    = liftA CmdRefactDatatype refactOptions
-cmdRefactDead        = liftA CmdRefactDead refactOptions
-cmdRefactEquivalence = liftA CmdRefactEquivalence refactOptions
+cmdRefactCommon      = fmap CmdRefactCommon refactOptions
+cmdRefactDatatype    = fmap CmdRefactDatatype refactOptions
+cmdRefactDead        = fmap CmdRefactDead refactOptions
+cmdRefactEquivalence = fmap CmdRefactEquivalence refactOptions
 
 
 analysesParser :: Parser Command
