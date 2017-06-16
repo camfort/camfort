@@ -16,7 +16,6 @@
 
 {-# LANGUAGE TupleSections #-}
 {-# LANGUAGE FlexibleContexts #-}
-{-# LANGUAGE ImplicitParams #-}
 {-# LANGUAGE DeriveDataTypeable #-}
 {-# LANGUAGE PatternGuards #-}
 {-# LANGUAGE ScopedTypeVariables #-}
@@ -80,8 +79,6 @@ type Inferer = WriterT [LogLine]
                  (ReaderT (FAD.FlowsGraph A)
                     (State InferState))
 
-type Params = (?flowsGraph :: FAD.FlowsGraph A, ?nameMap :: FAR.NameMap)
-
 runInferer :: FAD.InductionVarMapByASTBlock
            -> FAD.FlowsGraph A
            -> Inferer a
@@ -115,14 +112,12 @@ stencilInference nameMap mode marker pf =
     perPU :: F.ProgramUnit (FA.Analysis A)
           -> Writer [LogLine] (F.ProgramUnit (FA.Analysis A))
 
-    perPU pu | Just _ <- FA.bBlocks $ F.getAnnotation pu =
-         let ?flowsGraph = flTo
-             ?nameMap    = nameMap
-         in do
-              let pum = descendBiM (perBlockInfer mode marker) pu
-              let (pu', log) = runInferer ivMap flTo pum
-              tell log
-              return pu'
+    perPU pu | Just _ <- FA.bBlocks $ F.getAnnotation pu = do
+        let pum = descendBiM (perBlockInfer mode marker) pu
+        let (pu', log) = runInferer ivMap flTo pum
+        tell log
+        return pu'
+
     perPU pu = return pu
 
     -- induction variable map
@@ -149,13 +144,14 @@ stencilInference nameMap mode marker pf =
 
 {- *** 1 . Core inference over blocks -}
 
-genSpecsAndReport :: Params
-  => InferMode -> FU.SrcSpan -> [Neighbour]
+genSpecsAndReport ::
+     InferMode -> FU.SrcSpan -> [Neighbour]
   -> [F.Block (FA.Analysis A)]
   -> Inferer [([Variable], Specification)]
 genSpecsAndReport mode span lhs blocks = do
     (IS ivmap _ _) <- get
-    let ((specs, visited), evalInfos) = runWriter $ genSpecifications ivmap lhs blocks
+    flowsGraph     <- ask
+    let ((specs, visited), evalInfos) = runWriter $ genSpecifications flowsGraph ivmap lhs blocks
     modify (\state -> state { visitedNodes = (visitedNodes state) ++ visited })
     tell [ (span, Left specs) ]
     if mode == EvalMode
@@ -191,8 +187,7 @@ fromJustMsg _ (Just x) = x
 fromJustMsg msg Nothing = error msg
 
 -- Traverse Blocks in the AST and infer stencil specifications
-perBlockInfer :: Params
-               => InferMode -> Char -> F.Block (FA.Analysis A)
+perBlockInfer :: InferMode -> Char -> F.Block (FA.Analysis A)
                -> Inferer (F.Block (FA.Analysis A))
 
 perBlockInfer Synth _ b@(F.BlComment ann _ _) = do
@@ -246,19 +241,20 @@ perBlockInfer mode marker b@(F.BlStatement ann span@(FU.SrcSpan lp _) _ stmnt)
              _ -> return []
       if mode == Synth && not (null specs) && specs /= [[]]
       then
-        let specComment = Synth.formatSpec (Just (tabs ++ '!':marker:" ")) ?nameMap (span, Left (concat specs'))
+        let specComment = Synth.formatSpec (Just (tabs ++ '!':marker:" ")) (span, Left (concat specs'))
+
             specs' = map (mapMaybe noSpecAlready) specs
             noSpecAlready (vars, spec) =
                if null vars'
                then Nothing
                else Just (vars', spec)
-               where vars' = filter (\v -> not ((span, realName v) `elem` hasSpec)) vars
-            realName v = v `fromMaybe` (v `M.lookup` ?nameMap)
+               where vars' = filter (\v -> not ((span, v) `elem` hasSpec)) vars
             tabs  = take (FU.posColumn lp  - 1) (repeat ' ')
             (FU.SrcSpan loc _) = span
             span' = FU.SrcSpan (lp {FU.posColumn = 0}) (lp {FU.posColumn = 0})
             ann'  = ann { FA.prevAnnotation = (FA.prevAnnotation ann) { refactored = Just loc } }
         in return $ F.BlComment ann' span' (F.Comment specComment)
+
       else return b
 
 perBlockInfer mode marker b@(F.BlDo ann span lab cname lab' mDoSpec body tlab) = do
@@ -275,6 +271,7 @@ perBlockInfer mode marker b = do
     b' <- descendReverseM (descendBiReverseM (perBlockInfer mode marker)) $ b
     return b'
 
+
 -- Combiantor for reducing a map with effects and partiality inside
 -- into an effectful list of key-value pairs
 assocsSequence :: Monad m => M.Map k (m (Maybe a)) -> m [(k, a)]
@@ -285,13 +282,14 @@ assocsSequence maps = do
     strength :: Monad m => (a, m b) -> m (a, b)
     strength (a, mb) = mb >>= (\b -> return (a, b))
 
-genSpecifications :: Params
-  => FAD.InductionVarMapByASTBlock
+genSpecifications ::
+     FAD.FlowsGraph A
+  -> FAD.InductionVarMapByASTBlock
   -> [Neighbour]
   -> [F.Block (FA.Analysis A)]
   -> Writer EvalLog ([([Variable], Specification)], [Int])
-genSpecifications ivs lhs blocks = do
-    let (subscripts, visitedNodes) = subscriptsOnRhs ?nameMap blocks
+genSpecifications flowsGraph ivs lhs blocks = do
+    let (subscripts, visitedNodes) = genSubscripts flowsGraph blocks
     varToSpecs <- assocsSequence $ mkSpecs subscripts
     case varToSpecs of
       [] -> do
@@ -318,79 +316,60 @@ genSpecifications ivs lhs blocks = do
           (vs, Specification (Once (Bound Nothing (Just u))))]
       splitUpperAndLower' x = [x]
 
-{-| subscriptsOnRhs
+
+type Indices = [F.Index (FA.Analysis A)]
+
+{-| genSubscripts
    Takes * a name map
          * a list of blocks representing an RHS
    Returns a map from array variables to indices, and a list of
    nodes that were visited when computing this information -}
-subscriptsOnRhs :: Params
-  => FAR.NameMap
+genSubscripts ::
+     FAD.FlowsGraph A
   -> [F.Block (FA.Analysis A)]
-  -> (M.Map Variable [[F.Index (FA.Analysis A)]], [Int])
-subscriptsOnRhs nameMap blocks =
-    (subscripts', visitedNodes)
+  -> (M.Map Variable [Indices], [Int])
+genSubscripts flowsGraph blocks =
+    (subscripts, visitedNodes)
   where
-    (maps, visitedNodes) = runState (mapM (genSubscripts True) blocks) []
+    (maps, visitedNodes) = runState (mapM (genSubscripts' True flowsGraph) blocks) []
     subscripts = M.unionsWith (++) maps
-    subscripts' = filterOutFuns ?nameMap subscripts
 
-genOffsets :: Params
-  => FAD.InductionVarMapByASTBlock
-  -> [Neighbour]
-  -> [F.Block (FA.Analysis A)]
-  -> Writer EvalLog [(Variable, (Bool, [[Int]]))]
-genOffsets ivs lhs blocks = do
-    let (subscripts, _) = subscriptsOnRhs ?nameMap blocks
-    assocsSequence $ mkOffsets subscripts
-  where
-    mkOffsets = M.mapWithKey (\v -> indicesToRelativisedOffsets ivs v lhs)
+    -- Generate all subscripting expressions (that are translations on
+    -- induction variables) that flow to this block
+    -- The State monad provides a list of the visited nodes so far
+    genSubscripts' ::
+        Bool
+     -> FAD.FlowsGraph A
+     -> F.Block (FA.Analysis A)
+     -> State [Int] (M.Map Variable [Indices])
 
+    genSubscripts' False _ (F.BlStatement _ _ _ (F.StExpressionAssign _ _ e _))
+       | isArraySubscript e /= Nothing
+       -- Don't pull dependencies through arrays
+       = return M.empty
 
--- Filter out any variable names which do not appear in the name map or
--- which in appear in the name map with the same name, indicating they
--- are an instric function, e.g., abs
-filterOutFuns nameMap m =
-  M.filterWithKey (\k _ ->
-     case k `M.lookup` nameMap of
-        Nothing           -> False
-        Just k' | k == k' -> False
-        _                 -> True) m
+    genSubscripts' _ flowsGraph block = do
+       visited <- get
+       case (FA.insLabel $ F.getAnnotation block) of
 
--- Generate all subscripting expressions (that are translations on
--- induction variables) that flow to this block
--- The State monad provides a list of the visited nodes so far
-genSubscripts :: Params
-  => Bool
-  -> F.Block (FA.Analysis A)
-  -> State [Int] (M.Map Variable [[F.Index (FA.Analysis A)]])
-genSubscripts False (F.BlStatement _ _ _ (F.StExpressionAssign _ _ e _))
-    | isArraySubscript e /= Nothing
-    -- Don't pull dependencies through arrays
-    = return M.empty
+         Just node
+           | node `elem` visited ->
+            -- This dependency has already been visited during this traversal
+              return $ M.empty
+           | otherwise -> do
+            -- Fresh dependency
+            put $ node : visited
+            let blocksFlowingIn = mapMaybe (lab flowsGraph) $ pre flowsGraph node
+            dependencies <- mapM (genSubscripts' False flowsGraph) blocksFlowingIn
+            return $ M.unionsWith (++) (genRHSsubscripts block : dependencies)
 
-genSubscripts _ block = do
-    visited <- get
-    case (FA.insLabel $ F.getAnnotation block) of
-
-      Just node
-        | node `elem` visited ->
-          -- This dependency has already been visited during this traversal
-          return $ M.empty
-        | otherwise -> do
-          -- Fresh dependency
-          put $ node : visited
-          let blocksFlowingIn = mapMaybe (lab ?flowsGraph) $ pre ?flowsGraph node
-          dependencies <- mapM (genSubscripts False) blocksFlowingIn
-          return $ M.unionsWith (++) (genRHSsubscripts block : dependencies)
-
-      Nothing -> error $ "Missing a label for: " ++ show block
+         Nothing -> error $ "Missing a label for: " ++ show block
 
 -- Get all RHS subscript which are translated induction variables
--- return as a map from (program) variables to a list of relative indices and
--- a flag marking whether there are any duplicate indices
+-- return as a map from (source name) variables to a list of relative indices
 genRHSsubscripts ::
      F.Block (FA.Analysis A)
-  -> M.Map Variable [[F.Index (FA.Analysis A)]]
+  -> M.Map Variable [Indices]
 genRHSsubscripts b = genRHSsubscripts' (transformBi replaceModulo b)
   where
     -- Any occurence of an subscript "modulo(e, e')" is replaced with "e"
@@ -404,7 +383,7 @@ genRHSsubscripts b = genRHSsubscripts' (transformBi replaceModulo b)
     replaceModulo e = e
 
     genRHSsubscripts' b =
-       collect [ (FA.varName exp, e)
+       collect [ (FA.srcName exp, e)
          | F.ExpSubscript _ _ exp subs <- FA.rhsExprs b
          , isVariableExpr exp
          , let e = F.aStrip subs

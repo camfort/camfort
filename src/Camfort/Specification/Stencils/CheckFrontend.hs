@@ -14,14 +14,15 @@
    limitations under the License.
 -}
 
-{-# LANGUAGE ImplicitParams #-}
 {-# LANGUAGE TupleSections #-}
+{-# LANGUAGE ImplicitParams #-}
 {-# LANGUAGE LambdaCase #-}
 
 module Camfort.Specification.Stencils.CheckFrontend where
 
 import Data.Generics.Uniplate.Operations
 import Control.Arrow
+import Control.Monad.Reader (ReaderT, ask, runReaderT)
 import Control.Monad.State.Strict
 import Control.Monad.Writer.Strict hiding (Product)
 
@@ -68,21 +69,24 @@ stencilChecking nameMap pf = snd . runWriter $
      -- perform reaching definitions analysis
      let rd    = FAD.reachingDefinitions dm gr
      -- create graph of definition "flows"
-     let flTo =  FAD.genFlowsToGraph bm dm gr rd
+     let flowsGraph =  FAD.genFlowsToGraph bm dm gr rd
      -- identify every loop by its back-edge
      let beMap = FAD.genBackEdgeMap (FAD.dominators gr) gr
      let ivmap = FAD.genInductionVarMapByASTBlock beMap gr
-     let results = let ?flowsGraph = flTo in
-                    let ?nameMap = nameMap
-                      in descendBiM perProgramUnitCheck pf'
+     let results = descendBiM perProgramUnitCheck pf'
+
      -- Format output
-     let (_, output) = evalState (runWriterT results) (([], Nothing), ivmap)
+     let (_, output) = flip evalState (([], Nothing), ivmap)
+                     . flip runReaderT flowsGraph
+                     . runWriterT
+                     $ results
      tell $ pprint output
 
 type LogLine = (FU.SrcSpan, String)
 type Checker a =
     WriterT [LogLine]
-            (State ((RegionEnv, Maybe F.ProgramUnitName), FAD.InductionVarMapByASTBlock)) a
+      (ReaderT (FAD.FlowsGraph A)
+            (State ((RegionEnv, Maybe F.ProgramUnitName), FAD.InductionVarMapByASTBlock))) a
 
 -- If the annotation contains an unconverted stencil specification syntax tree
 -- then convert it and return an updated annotation containing the AST
@@ -147,18 +151,19 @@ checkOffsetsAgainstSpec offsetMaps specMaps =
 
 -- Go into the program units first and record the module name when
 -- entering into a module
-perProgramUnitCheck :: (?nameMap :: FAR.NameMap, ?flowsGraph :: FAD.FlowsGraph A)
-   => F.ProgramUnit (FA.Analysis A) -> Checker (F.ProgramUnit (FA.Analysis A))
+perProgramUnitCheck ::
+   F.ProgramUnit (FA.Analysis A) -> Checker (F.ProgramUnit (FA.Analysis A))
+
 perProgramUnitCheck p@F.PUModule{} = do
     modify $ first (second (const (Just $ FA.puName p)))
     descendBiM perBlockCheck p
 perProgramUnitCheck p = descendBiM perBlockCheck p
 
-perBlockCheck :: (?nameMap :: FAR.NameMap, ?flowsGraph :: FAD.FlowsGraph A)
-   =>  F.Block (FA.Analysis A) -> Checker (F.Block (FA.Analysis A))
+perBlockCheck :: F.Block (FA.Analysis A) -> Checker (F.Block (FA.Analysis A))
 
 perBlockCheck b@(F.BlComment ann span _) = do
-  ann' <- parseCommentToAST ann span
+  ann'       <- parseCommentToAST ann span
+  flowsGraph <- ask
   updateRegionEnv ann'
   let b' = F.setAnnotation ann' b
   case (stencilSpec $ FA.prevAnnotation ann', stencilBlock $ FA.prevAnnotation ann') of
@@ -171,10 +176,8 @@ perBlockCheck b@(F.BlComment ann span _) = do
             -- Create list of relative indices
             ivmap <- snd <$> get
             -- Do analysis
-            let realName v   = v `fromMaybe` (v `M.lookup` ?nameMap)
             let lhsN         = fromMaybe [] (neighbourIndex ivmap subs)
-            let correctNames = map (first realName)
-            let relOffsets = correctNames . fst . runWriter $ genOffsets ivmap lhsN [s]
+            let relOffsets = fst . runWriter $ genOffsets flowsGraph ivmap lhsN [s]
             let multOffsets = map (\relOffset ->
                   case relOffset of
                     (var, (True, offsets)) -> (var, Mult offsets)
@@ -185,8 +188,8 @@ perBlockCheck b@(F.BlComment ann span _) = do
             if checkOffsetsAgainstSpec multOffsets expandedDecls
               then tell [ (span, "Correct.") ]
               else do
-                let correctNames2 =  map (first (map realName))
-                let inferred = correctNames2 . fst . fst . runWriter $ genSpecifications ivmap lhsN [s]
+
+                let inferred = fst . fst . runWriter $ genSpecifications flowsGraph ivmap lhsN [s]
                 let sp = replicate 8 ' '
                 tell [ (span,
                      "Not well specified.\n"
@@ -214,6 +217,19 @@ perBlockCheck b = do
   -- Go inside child blocks
   mapM_ (descendBiM perBlockCheck) $ children b
   return b
+
+genOffsets ::
+     FAD.FlowsGraph A
+  -> FAD.InductionVarMapByASTBlock
+  -> [Neighbour]
+  -> [F.Block (FA.Analysis A)]
+  -> Writer EvalLog [(Variable, (Bool, [[Int]]))]
+genOffsets flowsGraph ivs lhs blocks = do
+    let (subscripts, _) = genSubscripts flowsGraph blocks
+    assocsSequence $ mkOffsets subscripts
+  where
+    mkOffsets = M.mapWithKey (\v -> indicesToRelativisedOffsets ivs v lhs)
+
 
 -- Local variables:
 -- mode: haskell

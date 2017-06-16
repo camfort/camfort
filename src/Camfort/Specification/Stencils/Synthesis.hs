@@ -38,21 +38,19 @@ import Language.Fortran.Util.Position
 -- Format inferred specifications
 formatSpec ::
     Maybe String
- -> FAR.NameMap
  -> (FU.SrcSpan, Either [([Variable], Specification)] (String,Variable))
  -> String
-formatSpec prefix nm (span, Right (evalInfo,name)) =
+formatSpec prefix (span, Right (evalInfo, name)) =
      prefix'
   ++ evalInfo
-  ++ (if name /= "" then " :: " ++ realName name else "") ++ "\n"
+  ++ (if name /= "" then " :: " ++ name else "") ++ "\n"
   where
-    realName v = v `fromMaybe` (v `M.lookup` nm)
     prefix' = case prefix of
                 Nothing -> show span ++ "    "
                 Just pr -> pr
 
-formatSpec _ _ (_, Left []) = ""
-formatSpec prefix nm (span, Left specs) =
+formatSpec _ (_, Left []) = ""
+formatSpec prefix (span, Left specs) =
   (intercalate "\n" $ map (\s -> prefix' ++ doSpec s) specs)
     where
       prefix' = case prefix of
@@ -60,8 +58,7 @@ formatSpec prefix nm (span, Left specs) =
                    Just pr -> pr
       commaSep                 = intercalate ", "
       doSpec (arrayVar, spec)  =
-             show (fixSpec spec) ++ " :: " ++ commaSep (map realName arrayVar)
-      realName v               = v `fromMaybe` (v `M.lookup` nm)
+             show (fixSpec spec) ++ " :: " ++ commaSep arrayVar
       fixSpec s                = s
 
 ------------------------
