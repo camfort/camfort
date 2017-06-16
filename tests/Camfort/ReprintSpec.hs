@@ -73,8 +73,8 @@ spec =
 
     context "Integration test with synthesising a spec" $ do
        runIO $ unitsSynth ("tests" </> "fixtures" </> "simple.f90") []
-                          ("tests" </> "fixtures" </> "simple.f90.out")
-         ATDefault LitMixed False Nothing
+         LitMixed False Nothing
+         ("tests" </> "fixtures" </> "simple.f90.out") ATDefault
        actual <- runIO $ readFile ("tests" </> "fixtures" </> "simple.f90.out")
        expected <- runIO $ readFile ("tests" </> "fixtures" </> "simple.expected.f90")
        it "Unit synth" $ actual `shouldBe` expected

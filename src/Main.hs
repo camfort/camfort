@@ -313,90 +313,49 @@ main = do
     getExcludes = fromMaybe [] . exclude
     getOutputFile _ (WriteFile f) = f
     getOutputFile inp WriteInplace = inp
-    runCommand (CmdAST ro) =
-      ast (inputSource ro) (getExcludes ro)
-    runCommand (CmdCount ro) =
-      countVarDecls (inputSource ro) (getExcludes ro)
-    runCommand (CmdStencilsCheck ro) =
-      stencilsCheck (inputSource ro) (getExcludes ro)
-    runCommand (CmdStencilsInfer so) =
-      let ro = soReadOptions so
-          wo = soWriteOptions so
+    runRO ro f = f (inputSource ro) (getExcludes ro)
+    runSO so f =
+      let ro     = soReadOptions so
+          wo     = soWriteOptions so
           inFile = inputSource ro
-      in stencilsInfer inFile (getExcludes ro)
-                       (getOutputFile inFile wo) (soInferMode so)
-    runCommand (CmdStencilsSynth sso) =
-      let so = ssoStencilsOptions sso
-          ro = soReadOptions so
-          wo = soWriteOptions so
-          ao = ssoAnnotationOptions sso
-          inFile = inputSource ro
-      in stencilsSynth inFile (getExcludes ro)
-                       (getOutputFile inFile wo) (soInferMode so)
-                       (annotationType ao)
-    runCommand (CmdUnitsSuggest uwo) =
-      let uo = uwoUnitsOptions uwo
-          ro = uoReadOptions uo
-          wo = uwoWriteOptions uwo
-          inFile = inputSource ro
-      in unitsCriticals inFile (getExcludes ro)
-                       (getOutputFile inFile wo)
-                       (literals uo) (debug uo)
-                       (includeDir uo)
-    runCommand (CmdUnitsCheck uo) =
+      in runRO ro f (getOutputFile inFile wo) (soInferMode so)
+    runSSO sso f =
+      let ao = ssoAnnotationOptions sso
+          so = ssoStencilsOptions sso
+      in runSO so stencilsSynth (annotationType ao)
+    runUO uo f =
       let ro = uoReadOptions uo
+      in runRO ro f (literals uo) (debug uo) (includeDir uo)
+    runUWO uwo f =
+      let uo     = uwoUnitsOptions uwo
+          ro     = uoReadOptions uo
+          wo     = uwoWriteOptions uwo
           inFile = inputSource ro
-      in unitsCheck inFile (getExcludes ro)
-                       (literals uo) (debug uo)
-                       (includeDir uo)
-    runCommand (CmdUnitsInfer uo) =
-      let ro = uoReadOptions uo
-          inFile = inputSource ro
-      in unitsInfer inFile (getExcludes ro)
-                       (literals uo) (debug uo)
-                       (includeDir uo)
-    runCommand (CmdUnitsSynth uso) =
+      in runUO uo f (getOutputFile inFile wo)
+    runUSO uso f =
       let uwo = usoUnitsWriteOptions uso
-          uo = uwoUnitsOptions uwo
-          ro = uoReadOptions uo
-          wo = uwoWriteOptions uwo
-          ao = usoAnnotationOptions uso
+          ao  = usoAnnotationOptions uso
+      in runUWO uwo f (annotationType ao)
+    runRFO rfo f =
+      let ro     = rfoReadOptions rfo
+          wo     = rfoWriteOptions rfo
           inFile = inputSource ro
-      in unitsSynth inFile (getExcludes ro)
-                       (getOutputFile inFile wo)
-                       (annotationType ao)
-                       (literals uo) (debug uo)
-                       (includeDir uo)
-    runCommand (CmdUnitsCompile uwo) =
-      let uo = uwoUnitsOptions uwo
-          ro = uoReadOptions uo
-          wo = uwoWriteOptions uwo
-          inFile = inputSource ro
-      in unitsCompile inFile (getExcludes ro)
-                       (getOutputFile inFile wo)
-                       (literals uo) (debug uo)
-                       (includeDir uo)
-    runCommand (CmdRefactCommon rfo) =
-      let ro = rfoReadOptions rfo
-          wo = rfoWriteOptions rfo
-          inFile = inputSource ro
-      in common inFile (getExcludes ro) (getOutputFile inFile wo)
-    runCommand (CmdRefactDead rfo) =
-      let ro = rfoReadOptions rfo
-          wo = rfoWriteOptions rfo
-          inFile = inputSource ro
-      in dead inFile (getExcludes ro) (getOutputFile inFile wo)
-    runCommand (CmdRefactEquivalence rfo) =
-      let ro = rfoReadOptions rfo
-          wo = rfoWriteOptions rfo
-          inFile = inputSource ro
-      in equivalences inFile (getExcludes ro) (getOutputFile inFile wo)
-    runCommand (CmdRefactDatatype rfo) =
-      let ro = rfoReadOptions rfo
-          wo = rfoWriteOptions rfo
-          inFile = inputSource ro
-      in datatypes inFile (getExcludes ro) (getOutputFile inFile wo)
-    runCommand CmdTopVersion = displayVersion
+      in runRO ro f (getOutputFile inFile wo)
+    runCommand (CmdAST ro)                = runRO ro ast
+    runCommand (CmdCount ro)              = runRO ro countVarDecls
+    runCommand (CmdStencilsCheck ro)      = runRO ro stencilsCheck
+    runCommand (CmdStencilsInfer so)      = runSO so stencilsInfer
+    runCommand (CmdStencilsSynth sso)     = runSSO sso stencilsSynth
+    runCommand (CmdUnitsSuggest uwo)      = runUWO uwo unitsCriticals
+    runCommand (CmdUnitsCheck uo)         = runUO uo unitsCheck
+    runCommand (CmdUnitsInfer uo)         = runUO uo unitsInfer
+    runCommand (CmdUnitsSynth uso)        = runUSO uso unitsSynth
+    runCommand (CmdUnitsCompile uwo)      = runUWO uwo unitsCompile
+    runCommand (CmdRefactCommon rfo)      = runRFO rfo common
+    runCommand (CmdRefactDead rfo)        = runRFO rfo dead
+    runCommand (CmdRefactEquivalence rfo) = runRFO rfo equivalences
+    runCommand (CmdRefactDatatype rfo)    = runRFO rfo datatypes
+    runCommand CmdTopVersion              = displayVersion
 
 
 -- | Current CamFort version.

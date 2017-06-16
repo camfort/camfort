@@ -155,13 +155,13 @@ unitsInfer inSrc excludes m debug incDir = do
     let rfun = concatMap (LU.inferUnits uo)
     doAnalysisReportWithModFiles rfun putStrLn inSrc excludes =<< getModFiles incDir
 
-unitsCompile inSrc excludes outSrc m debug incDir = do
+unitsCompile inSrc excludes m debug incDir outSrc = do
     putStrLn $ "Compiling units for '" ++ inSrc ++ "'"
     uo <- optsToUnitOpts m debug incDir
     let rfun = LU.compileUnits uo
     putStrLn =<< doCreateBinary rfun inSrc excludes outSrc =<< getModFiles incDir
 
-unitsSynth inSrc excludes outSrc annType m debug incDir = do
+unitsSynth inSrc excludes m debug incDir outSrc annType = do
     putStrLn $ "Synthesising units for '" ++ inSrc ++ "'"
     let marker = case annType of
                    Doxygen   -> '<'
@@ -173,7 +173,7 @@ unitsSynth inSrc excludes outSrc annType m debug incDir = do
     report <- doRefactorWithModFiles rfun inSrc excludes outSrc =<< getModFiles incDir
     putStrLn report
 
-unitsCriticals inSrc excludes outSrc m debug incDir = do
+unitsCriticals inSrc excludes m debug incDir outSrc = do
     putStrLn $ "Suggesting variables to annotate with unit specifications in '"
              ++ inSrc ++ "'"
     uo <- optsToUnitOpts m debug incDir
