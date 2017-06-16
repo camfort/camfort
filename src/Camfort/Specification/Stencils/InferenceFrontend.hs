@@ -241,16 +241,18 @@ perBlockInfer mode marker b@(F.BlStatement ann span@(FU.SrcSpan lp _) _ stmnt)
       if mode == Synth && not (null specs) && specs /= [[]]
       then
         let specComment = Synth.formatSpec (Just (tabs ++ '!':marker:" ")) (span, Left (concat specs'))
-
             specs' = map (mapMaybe noSpecAlready) specs
+
             noSpecAlready (vars, spec) =
                if null vars'
                then Nothing
                else Just (vars', spec)
                where vars' = filter (\v -> not ((span, v) `elem` hasSpec)) vars
+
+            -- Indentation for the specification to match the code
             tabs  = take (FU.posColumn lp  - 1) (repeat ' ')
             (FU.SrcSpan loc _) = span
-            span' = FU.SrcSpan (lp {FU.posColumn = 0}) (lp {FU.posColumn = 0})
+            span' = FU.SrcSpan (lp {FU.posColumn = 1}) (lp {FU.posColumn = 1})
             ann'  = ann { FA.prevAnnotation = (FA.prevAnnotation ann) { refactored = Just loc } }
         in return $ F.BlComment ann' span' (F.Comment specComment)
 
@@ -263,7 +265,7 @@ perBlockInfer mode marker b@(F.BlDo ann span lab cname lab' mDoSpec body tlab) =
 
     -- descend into the body of the do-statement (in reverse order)
     body' <- mapM (descendBiReverseM (perBlockInfer mode marker)) (reverse body)
-    return $ F.BlDo ann span lab cname lab' mDoSpec body' tlab
+    return $ F.BlDo ann span lab cname lab' mDoSpec (reverse body') tlab
 
 perBlockInfer mode marker b = do
     -- Go inside child blocks
