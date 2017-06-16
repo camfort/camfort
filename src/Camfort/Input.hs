@@ -22,7 +22,6 @@ Handles input of code base (files and directories)
 -}
 
 {-# LANGUAGE DoAndIfThenElse #-}
-{-# LANGUAGE ScopedTypeVariables #-}
 
 module Camfort.Input where
 
@@ -38,7 +37,6 @@ import qualified Data.ByteString.Char8 as B
 import Data.Data
 import Data.Char (toUpper)
 import Data.Maybe
-import Data.Generics.Uniplate.Operations
 import Data.List (foldl', nub, (\\), elemIndices, intercalate)
 import Data.Monoid
 import Data.Text.Encoding.Error (replace)
@@ -49,15 +47,6 @@ import System.Directory
 -- Class for default values of some type 't'
 class Default t where
     defaultValue :: t
-
--- From a '[t]' extract the first occurence of an 'opt' value.
--- If one does not exist, return the default 'opt'
-getOption :: forall t opt . (Data opt, Data t, Default opt) => [t] -> opt
-getOption [] = defaultValue
-getOption (x : xs) =
-    case universeBi x :: [opt] of
-      []        -> getOption xs
-      (opt : _) -> opt
 
 -- * Builders for analysers and refactorings
 
