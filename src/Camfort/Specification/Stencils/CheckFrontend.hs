@@ -50,8 +50,8 @@ import Data.Int
 import qualified Data.Set as S
 
 -- Entry point
-stencilChecking :: FAR.NameMap -> F.ProgramFile (FA.Analysis A) -> [String]
-stencilChecking nameMap pf = snd . runWriter $
+stencilChecking :: F.ProgramFile (FA.Analysis A) -> [String]
+stencilChecking pf = snd . runWriter $
   do -- Attempt to parse comments to specifications
      pf' <- annotateComments Gram.specParser pf
 

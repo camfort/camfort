@@ -47,11 +47,10 @@ infer mode marker filename pf =
     where
       output = intercalate "\n"
              . filter (not . white)
-             . map (formatSpec Nothing nameMap) $ results
+             . map (formatSpec Nothing) $ results
       white = all (\x -> (x == ' ') || (x == '\t'))
-      (pf'', results) = stencilInference nameMap mode marker
+      (pf'', results) = stencilInference mode marker
                       . FAB.analyseBBlocks $ pf'
-      nameMap = FAR.extractNameMap pf'
       pf'     = FAR.analyseRenames . FA.initAnalysis $ pf
 
 --------------------------------------------------
@@ -75,9 +74,8 @@ synthPF _ marker _ pf =
     -- Append filename to any outputs
     ("", fmap FA.prevAnnotation pf'')
     where
-      (pf'', _) = stencilInference nameMap Synth marker
+      (pf'', _) = stencilInference Synth marker
                 . FAB.analyseBBlocks $ pf'
-      nameMap = FAR.extractNameMap pf'
       pf'     = FAR.analyseRenames . FA.initAnalysis $ pf
 
 --------------------------------------------------
@@ -91,8 +89,7 @@ check filename pf =
     where
      output  = intercalate "\n" results
      -- Applying checking mechanism
-     results  = stencilChecking nameMap . FAB.analyseBBlocks $ pf'
-     nameMap = FAR.extractNameMap pf'
+     results  = stencilChecking . FAB.analyseBBlocks $ pf'
      pf'      = FAR.analyseRenames . FA.initAnalysis $ pf
 
 -- Local variables:

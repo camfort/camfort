@@ -88,12 +88,11 @@ runInferer ivmap flTo =
   . flip runReaderT flTo
   . runWriterT
 
-stencilInference :: FAR.NameMap
-                 -> InferMode
+stencilInference :: InferMode
                  -> Char
                  -> F.ProgramFile (FA.Analysis A)
                  -> (F.ProgramFile (FA.Analysis A), [LogLine])
-stencilInference nameMap mode marker pf =
+stencilInference mode marker pf =
     (F.ProgramFile mi pus', log1)
   where
     -- Parse specification annotations and include them into the syntax tree
