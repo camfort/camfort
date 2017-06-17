@@ -18,14 +18,16 @@
 {-# LANGUAGE MultiParamTypeClasses #-}
 {-# LANGUAGE PatternGuards #-}
 
-module Camfort.Analysis.CommentAnnotator ( annotateComments
-                                         , Logger
-                                         , ASTEmbeddable(..)
-                                         , Linkable(..)
-                                         , AnnotationParseError(..)
-                                         , AnnotationParser
-                                         , failWith
-                                         ) where
+module Camfort.Analysis.CommentAnnotator
+  ( annotateComments
+  , Logger
+  , ASTEmbeddable(..)
+  , Linkable(..)
+  , AnnotationParseError(..)
+  , AnnotationParser
+  , failWith
+  ) where
+
 
 import Control.Monad.Writer.Strict (Writer(..), tell)
 import Data.Generics.Uniplate.Operations
