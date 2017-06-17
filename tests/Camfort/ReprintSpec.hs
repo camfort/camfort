@@ -4,13 +4,11 @@ module Camfort.ReprintSpec (spec) where
 
 import Camfort.Functionality
 import Camfort.Reprint
-import Camfort.Helpers
 import Camfort.Specification.Units.Monad (LiteralsOpt(LitMixed))
 import qualified Data.ByteString.Char8 as B
 import qualified Language.Fortran.Util.Position as FU
 
 import System.FilePath
-import System.Directory
 
 import Test.Hspec
 import Test.QuickCheck

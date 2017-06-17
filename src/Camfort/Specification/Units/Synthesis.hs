@@ -20,31 +20,19 @@ module Camfort.Specification.Units.Synthesis
   (runSynthesis)
 where
 
-import Data.Function
-import Data.List
-import Data.Matrix
 import Data.Maybe
-import Data.Ratio (numerator, denominator)
-import qualified Data.Map.Strict as M
 import qualified Data.Set as S
 import Data.Generics.Uniplate.Operations
 import Control.Monad.State.Strict hiding (gets)
-import Control.Monad.Reader
-import Control.Monad.Writer.Strict
-import Control.Monad
 
 import qualified Language.Fortran.AST as F
 import qualified Language.Fortran.Analysis as FA
-import qualified Language.Fortran.Analysis.Renaming as FAR
 import qualified Language.Fortran.Util.Position as FU
 
-import qualified Camfort.Specification.Units.Parser as P
-import Camfort.Analysis.CommentAnnotator
 import Camfort.Analysis.Annotations hiding (Unitless)
 import Camfort.Specification.Units.Environment
 import Camfort.Specification.Units.Monad
 import Camfort.Specification.Units.InferenceFrontend (puName, puSrcName)
-import qualified Debug.Trace as D
 
 -- | Insert unit declarations into the ProgramFile as comments.
 runSynthesis :: Char -> [(VV, UnitInfo)] -> UnitSolver [(VV, UnitInfo)]

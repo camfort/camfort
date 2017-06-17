@@ -21,8 +21,6 @@
 module Camfort.Specification.Stencils.Synthesis where
 
 import Data.List
-import Data.Maybe
-import qualified Data.Map as M
 
 import Camfort.Specification.Stencils.Syntax
 
@@ -30,7 +28,6 @@ import Camfort.Analysis.Annotations
 
 import qualified Language.Fortran.AST as F
 import qualified Language.Fortran.Analysis as FA
-import qualified Language.Fortran.Analysis.Renaming as FAR
 import qualified Language.Fortran.Util.Position as FU
 
 import Language.Fortran.Util.Position

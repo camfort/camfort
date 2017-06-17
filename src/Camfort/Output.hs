@@ -23,7 +23,6 @@
 module Camfort.Output where
 
 import qualified Language.Fortran.AST as F
-import qualified Language.Fortran.Analysis as FA
 import qualified Language.Fortran.PrettyPrint as PP
 import qualified Language.Fortran.Util.Position as FU
 import qualified Language.Fortran.ParserMonad as FPM
@@ -33,16 +32,11 @@ import Camfort.Reprint
 import Camfort.Helpers
 import Camfort.Helpers.Syntax
 
-import System.FilePath
 import System.Directory
 
 import qualified Data.ByteString.Char8 as B
 import Data.Generics
 import Data.Functor.Identity
-import Data.List hiding (zip)
-import Data.Generics.Uniplate.Data
-import Data.Generics.Zipper
-import Debug.Trace
 import Control.Monad
 
 import Control.Monad.Trans.Class

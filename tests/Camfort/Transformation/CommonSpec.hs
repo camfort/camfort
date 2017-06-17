@@ -5,7 +5,6 @@ import System.Directory
 
 import Test.Hspec
 
-import Camfort.Helpers
 import Camfort.Functionality
 
 samplesBase :: FilePath

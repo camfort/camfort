@@ -48,10 +48,7 @@ module Camfort.Functionality (
 import System.FilePath
 import Control.Monad
 
-import Data.Generics.Uniplate.Operations (universeBi)
-import Data.Data
 import Data.Binary
-import Data.Text (pack, unpack, split)
 
 import Camfort.Analysis.Simple
 import Camfort.Transformation.DataTypeIntroduction
@@ -65,7 +62,6 @@ import Camfort.Specification.Units.Monad
 import Camfort.Helpers
 import Camfort.Input
 
-import qualified Language.Fortran.Parser.Any as FP
 import Language.Fortran.Util.ModFile
 import qualified Camfort.Specification.Stencils as Stencils
 import qualified Data.Map.Strict as M

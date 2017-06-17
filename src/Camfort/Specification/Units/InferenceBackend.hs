@@ -30,29 +30,26 @@ where
 
 import Data.Tuple (swap)
 import Data.Maybe (maybeToList)
-import Data.List ((\\), findIndex, partition, sortBy, group, intercalate, tails, sort)
-import Data.Generics.Uniplate.Operations (rewrite, universeBi)
+import Data.List ((\\), findIndex, partition, sortBy, group, intercalate, tails)
+import Data.Generics.Uniplate.Operations (rewrite)
 import Control.Monad
-import Control.Monad.State.Strict
 import Control.Monad.ST
 import Control.Arrow (first, second)
 import qualified Data.Map.Strict as M
 import qualified Data.Array as A
 
-import Camfort.Analysis.Annotations
 import Camfort.Specification.Units.Environment
 
 import Numeric.LinearAlgebra (
-    atIndex, (<>), (><), rank, (?), toLists, toList, fromLists, fromList, rows, cols,
-    takeRows, takeColumns, dropRows, dropColumns, subMatrix, diag, build, fromBlocks,
-    ident, flatten, lu, dispf
+    atIndex, (<>), rank, (?), rows, cols,
+    takeColumns, dropRows, subMatrix, diag, fromBlocks,
+    ident,
   )
 import qualified Numeric.LinearAlgebra as H
 import Numeric.LinearAlgebra.Devel (
     newMatrix, readMatrix, writeMatrix, runSTMatrix, freezeMatrix, STMatrix
   )
 
-import qualified Debug.Trace as D
 
 --------------------------------------------------
 

@@ -17,12 +17,6 @@
 
 module Main where
 
-import Data.Foldable (find)
-
-import System.Console.GetOpt
-import System.Environment
-
-import Camfort.Helpers hiding ((<>))
 import Camfort.Input (defaultValue)
 import Camfort.Functionality
 import Camfort.Specification.Stencils (InferMode)
@@ -30,7 +24,6 @@ import Camfort.Specification.Units.Monad (LiteralsOpt(LitMixed))
 
 import Data.Maybe (fromMaybe)
 import Data.Monoid ((<>))
-import Data.Text (pack, unpack, split)
 
 import Options.Applicative
 

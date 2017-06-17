@@ -18,7 +18,6 @@
 
 module Camfort.Transformation.EquivalenceElim where
 
-import Data.Data
 import Data.List
 import qualified Data.Map as M
 import Data.Generics.Uniplate.Operations
@@ -30,13 +29,11 @@ import qualified Language.Fortran.Util.Position as FU
 import qualified Language.Fortran.Analysis.Renaming as FAR
 import qualified Language.Fortran.Analysis as FA
 
-import Camfort.Output
 import Camfort.Helpers
 import Camfort.Helpers.Syntax
 import Camfort.Analysis.Annotations
 import Camfort.Transformation.DeadCode
 
-import Debug.Trace
 
 type A1 = FA.Analysis Annotation
 type RmEqState = ([[F.Expression A1]], Int, Report)

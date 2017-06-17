@@ -8,7 +8,6 @@
 
 module Camfort.Specification.StencilsSpec (spec) where
 
-import GHC.TypeLits
 
 import Control.Monad.Writer.Strict hiding (Sum, Product)
 import Data.List

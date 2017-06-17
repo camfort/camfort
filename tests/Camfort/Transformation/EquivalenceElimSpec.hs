@@ -25,7 +25,6 @@ import Test.Hspec
 
 import Camfort.Transformation.EquivalenceElim
 import Camfort.Functionality
-import Camfort.Helpers
 import Camfort.Input
 
 samplesBase :: FilePath

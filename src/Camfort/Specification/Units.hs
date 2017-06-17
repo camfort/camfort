@@ -31,19 +31,15 @@ where
 
 import qualified Data.Map.Strict as M
 import Data.Data
-import Data.Char (isNumber)
 import Data.List (intercalate, find, sort, group, nub, inits)
-import Data.Maybe (fromMaybe, maybeToList, listToMaybe, mapMaybe, isJust, maybe)
+import Data.Maybe (fromMaybe, maybeToList, mapMaybe, maybe)
 import Data.Binary
 import Data.Generics.Uniplate.Operations
 import qualified Data.ByteString.Char8 as B
 import qualified Data.ByteString.Lazy.Char8 as LB
-import Control.Monad.State.Strict
 import GHC.Generics (Generic)
 
 import Camfort.Helpers hiding (lineCol)
-import Camfort.Helpers.Syntax
-import Camfort.Output
 import Camfort.Analysis.Annotations
 import Camfort.Input
 import Camfort.Reprint (subtext)
@@ -51,7 +47,6 @@ import Camfort.Reprint (subtext)
 -- Provides the types and data accessors used in this module
 import Camfort.Specification.Units.Environment
 import Camfort.Specification.Units.Monad
-import Camfort.Specification.Units.InferenceBackend
 import Camfort.Specification.Units.InferenceFrontend
 import Camfort.Specification.Units.Synthesis (runSynthesis)
 
@@ -62,8 +57,6 @@ import qualified Language.Fortran.AST as F
 import qualified Language.Fortran.Util.Position as FU
 import Language.Fortran.Util.ModFile
 
--- For debugging and development purposes
-import qualified Debug.Trace as D
 
 -- *************************************
 --   Unit inference (top - level)

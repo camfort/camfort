@@ -9,9 +9,6 @@ import qualified Language.Fortran.AST as F
 import qualified Language.Fortran.Analysis as FA
 import qualified Language.Fortran.Analysis.Renaming as FAR
 import Data.Generics.Uniplate.Operations
-import Camfort.Input
-import Camfort.Functionality
-import Camfort.Output
 import Camfort.Analysis.Annotations
 import Camfort.Specification.Units
 import Camfort.Specification.Units.Monad
@@ -22,19 +19,11 @@ import Camfort.Specification.Units.Environment
 import Data.List
 import Data.Maybe
 import Data.Either
-import qualified Data.Array as A
-import qualified Numeric.LinearAlgebra as H
 import qualified Data.Map.Strict as M
 import GHC.Real
-import Numeric.LinearAlgebra (
-    atIndex, (<>), (><), rank, (?), toLists, toList, fromLists, fromList, rows, cols,
-    takeRows, takeColumns, dropRows, dropColumns, subMatrix, diag, build, fromBlocks,
-    ident, flatten, lu, dispf, Matrix
-  )
 
 import Test.Hspec
-import Test.QuickCheck
-import Test.Hspec.QuickCheck
+
 
 runFrontendInit litMode pf = usConstraints state
   where

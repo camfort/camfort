@@ -34,11 +34,9 @@ import qualified Language.Fortran.AST as F
 import Language.Fortran.Util.ModFile
 
 import qualified Data.ByteString.Char8 as B
-import Data.Data
 import Data.Char (toUpper)
 import Data.Maybe
-import Data.List (foldl', nub, (\\), elemIndices, intercalate)
-import Data.Monoid
+import Data.List (foldl', (\\), elemIndices, intercalate)
 import Data.Text.Encoding.Error (replace)
 import Data.Text.Encoding (encodeUtf8, decodeUtf8With)
 

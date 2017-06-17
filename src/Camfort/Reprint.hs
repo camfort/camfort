@@ -20,14 +20,9 @@ module Camfort.Reprint where
 
 import Data.Generics.Zipper
 
-import Camfort.Analysis.Annotations
 import Camfort.Helpers
-import Camfort.Helpers.Syntax
-
-import Debug.Trace
 
 import qualified Data.ByteString.Char8 as B
-import Data.Functor.Identity
 import Data.Data
 import Control.Monad.Trans.State.Lazy
 import qualified Language.Fortran.Util.Position as FU

@@ -20,22 +20,17 @@
 
 module Camfort.Specification.Units.Environment where
 
-import Control.Monad.State.Strict hiding (gets)
-
 import qualified Language.Fortran.AST as F
 import qualified Language.Fortran.Analysis as FA
-import qualified Language.Fortran.Util.Position as FU
 
 import qualified Camfort.Specification.Units.Parser as P
 
 import Data.Char
 import Data.Data
 import Data.List
-import Data.Matrix
 import Data.Ratio
 import Data.Binary
 import GHC.Generics (Generic)
-import qualified Debug.Trace as D
 
 import Camfort.Helpers (SourceText)
 import qualified Data.ByteString.Char8 as B

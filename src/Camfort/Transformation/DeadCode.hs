@@ -32,9 +32,7 @@ import qualified Data.IntMap as IM
 import qualified Data.Set as S
 import Data.Generics.Uniplate.Operations
 import Data.Maybe
-import GHC.Generics
 
-import Debug.Trace
 
 -- Eliminate dead code from a program, based on the fortran-src
 -- live-variable analysis

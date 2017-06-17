@@ -29,25 +29,12 @@ module Camfort.Helpers.Syntax where
 
 -- Standard imports
 import Data.Char
-import Data.List
-import Data.Monoid
-import Control.Monad.State.Lazy
-import Debug.Trace
 
 -- Data-type generics imports
-import Data.Data
 import Data.Generics.Uniplate.Data
-import Data.Generics.Uniplate.Operations
-import Data.Generics.Zipper
-import Data.Typeable
-
--- CamFort specific functionality
-import Camfort.Analysis.Annotations
 
 import qualified Language.Fortran.AST as F
 import qualified Language.Fortran.Util.Position as FU
-import Language.Fortran.Util.FirstParameter
-import Language.Fortran.Util.SecondParameter
 
 -- * Comparison and ordering
 

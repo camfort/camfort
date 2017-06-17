@@ -22,10 +22,8 @@ module Camfort.Transformation.CommonBlockElim where
 import Control.Monad
 import Control.Monad.State.Lazy
 
-import Debug.Trace
 import Data.Data
 import Data.List
-import Data.Ord
 import qualified Data.Map as M
 import Data.Generics.Uniplate.Operations
 

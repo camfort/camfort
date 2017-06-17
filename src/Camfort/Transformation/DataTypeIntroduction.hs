@@ -24,21 +24,13 @@ import qualified Language.Fortran.Analysis as FA
 import qualified Language.Fortran.Analysis.DataFlow as FAD
 import qualified Language.Fortran.Analysis.Renaming as FAR
 import qualified Language.Fortran.Analysis.BBlocks as FAB
-import qualified Language.Fortran.Analysis.Types as FAT
-import qualified Language.Fortran.Util.Position as FU
-import qualified Language.Fortran.ParserMonad as PM
-import qualified Language.Fortran.PrettyPrint as PP
 
 import qualified Data.Graph.Inductive.PatriciaTree as G
-import qualified Data.Graph.Inductive.Graph as IGr
 import qualified Data.Map.Lazy as M
-import Data.Generics.Uniplate.Operations
 
 import qualified Data.Set as S
-import Control.Monad.State.Lazy
 
 import Camfort.Helpers
-import Camfort.Helpers.Syntax
 import Camfort.Analysis.Annotations
 
 import qualified Data.IntMap as IM

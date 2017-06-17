@@ -31,12 +31,11 @@ import Data.List (nub, intercalate, partition)
 import qualified Data.Map.Strict as M
 import qualified Data.IntMap.Strict as IM
 import qualified Data.Set as S
-import Data.Maybe (isJust, fromMaybe, catMaybes)
+import Data.Maybe (isJust, fromMaybe)
 import Data.Generics.Uniplate.Operations
 import Control.Monad
 import Control.Monad.State.Strict
 import Control.Monad.Writer.Strict
-import Control.Monad.Trans.Except
 import Control.Monad.RWS.Strict
 
 import qualified Language.Fortran.AST as F

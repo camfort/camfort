@@ -21,11 +21,7 @@
 module Camfort.Analysis.Annotations where
 
 import Data.Data
-import Data.Generics.Uniplate.Operations
 import Data.Maybe (isJust)
-
-import Data.Map.Lazy hiding (map)
-import Debug.Trace
 
 import Camfort.Specification.Units.Environment
 import qualified Camfort.Specification.Units.Parser as P

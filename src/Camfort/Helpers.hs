@@ -22,18 +22,14 @@
 
 module Camfort.Helpers where
 
-import GHC.Generics
 import Data.Generics.Zipper
 import Data.Generics.Aliases
 import Data.Generics.Uniplate.Operations
 import qualified Data.Generics.Str as Str
 import Data.Data
-import Data.Maybe
-import Data.Monoid
-import Data.List (elemIndices, group, sort, nub)
+import Data.List (elemIndices, sort, nub, union)
 import qualified Data.ByteString.Char8 as B
 import System.Directory
-import Data.List (union)
 import qualified Data.Map.Lazy as Map hiding (map, (\\))
 import Control.Monad.Writer.Strict
 

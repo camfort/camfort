@@ -26,7 +26,6 @@ import Algebra.Lattice (joins1)
 
 import Camfort.Specification.Stencils.Model
 import Camfort.Specification.Stencils.DenotationalSemantics
-import Camfort.Helpers
 import qualified Camfort.Helpers.Vec as V
 
 import Camfort.Specification.Stencils.Syntax

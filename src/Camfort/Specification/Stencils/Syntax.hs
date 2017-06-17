@@ -22,22 +22,15 @@
 
 module Camfort.Specification.Stencils.Syntax where
 
-import Camfort.Helpers
 import Camfort.Specification.Stencils.Model ( Multiplicity(..)
                                             , peel
                                             , Approximation(..)
-                                            , lowerBound, upperBound
-                                            , fromExact
                                             )
 
 import Prelude hiding (sum)
 
 import Data.Data
-import Data.Generics.Uniplate.Data
 import Data.List hiding (sum)
-import Data.Function
-import Data.Maybe
-import Debug.Trace
 import Control.Applicative
 
 type Variable = String
