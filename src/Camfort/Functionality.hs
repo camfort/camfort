@@ -89,7 +89,7 @@ ast d excludes = do
 
 countVarDecls inSrc excludes = do
     putStrLn $ "Counting variable declarations in '" ++ inSrc ++ "'"
-    doAnalysisSummary countVariableDeclarations inSrc excludes Nothing
+    doAnalysisSummary countVariableDeclarations inSrc excludes
 
 dead inSrc excludes outSrc = do
     putStrLn $ "Eliminating dead code in '" ++ inSrc ++ "'"
@@ -190,14 +190,14 @@ unitsCriticals inSrc excludes m debug incDir = do
 stencilsCheck inSrc excludes = do
    putStrLn $ "Checking stencil specs for '" ++ inSrc ++ "'"
    let rfun = \f p -> (Stencils.check f p, p)
-   doAnalysisSummary rfun inSrc excludes Nothing
+   doAnalysisSummary rfun inSrc excludes
 
-stencilsInfer inSrc excludes outSrc inferMode = do
+stencilsInfer inSrc excludes inferMode = do
    putStrLn $ "Inferring stencil specs for '" ++ inSrc ++ "'"
    let rfun = Stencils.infer inferMode '='
-   doAnalysisSummary rfun inSrc excludes (Just outSrc)
+   doAnalysisSummary rfun inSrc excludes
 
-stencilsSynth inSrc excludes outSrc inferMode annType = do
+stencilsSynth inSrc excludes inferMode annType outSrc = do
    putStrLn $ "Synthesising stencil specs for '" ++ inSrc ++ "'"
    let rfun = Stencils.synth inferMode (markerChar annType)
    report <- doRefactor rfun inSrc excludes outSrc

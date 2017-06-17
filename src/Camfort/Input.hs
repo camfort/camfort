@@ -53,8 +53,8 @@ class Default t where
 {-| Performs an analysis provided by its first parameter which generates
     information 's', which is then combined together (via a monoid) -}
 doAnalysisSummary :: (Monoid s, Show' s) => (Filename -> F.ProgramFile A -> (s, F.ProgramFile A))
-                        -> FileOrDir -> [Filename] -> Maybe FileOrDir -> IO ()
-doAnalysisSummary aFun inSrc excludes outSrc = do
+                        -> FileOrDir -> [Filename] -> IO ()
+doAnalysisSummary aFun inSrc excludes = do
   if excludes /= [] && excludes /= [""]
     then putStrLn $ "Excluding " ++ intercalate "," excludes
                                  ++ " from " ++ inSrc ++ "/"

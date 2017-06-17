@@ -71,7 +71,6 @@ data WriteOptions = WriteFile { outputFile :: String }
 -- | Options used by stencil commands.
 data StencilsOptions = StencilsOptions
   { soReadOptions  :: ReadOptions
-  , soWriteOptions :: WriteOptions
   , soInferMode    :: InferMode
   }
 
@@ -103,6 +102,7 @@ data UnitsSynthOptions = UnitsSynthOptions
 
 data StencilsSynthOptions = StencilsSynthOptions
   { ssoStencilsOptions    :: StencilsOptions
+  , ssoWriteOptions       :: WriteOptions
   , ssoAnnotationOptions  :: AnnotationOptions
   }
 
@@ -158,7 +158,7 @@ writeOptions = (fmap WriteFile . fileArgument $
 
 stencilsOptions :: Parser StencilsOptions
 stencilsOptions = fmap StencilsOptions
-  readOptions <*> writeOptions <*> inferModeOption
+  readOptions <*> inferModeOption
   where
     inferModeOption = fmap (fromMaybe defaultValue)
                       . optional . option readInferOption $
@@ -177,7 +177,7 @@ stencilsOptions = fmap StencilsOptions
 
 stencilsSynthOptions :: Parser StencilsSynthOptions
 stencilsSynthOptions = fmap StencilsSynthOptions
-  stencilsOptions <*> annotationOptions
+  stencilsOptions <*> writeOptions <*> annotationOptions
 
 
 unitsOptions :: Parser UnitsOptions
@@ -317,14 +317,14 @@ main = do
     getOutputFile inp WriteInplace = inp
     runRO ro f = f (inputSource ro) (getExcludes ro)
     runSO so f =
-      let ro     = soReadOptions so
-          wo     = soWriteOptions so
-          inFile = inputSource ro
-      in runRO ro f (getOutputFile inFile wo) (soInferMode so)
+      runRO (soReadOptions so) f (soInferMode so)
     runSSO sso f =
-      let ao = ssoAnnotationOptions sso
-          so = ssoStencilsOptions sso
-      in runSO so stencilsSynth (annotationType ao)
+      let ao     = ssoAnnotationOptions sso
+          wo     = ssoWriteOptions sso
+          so     = ssoStencilsOptions sso
+          ro     = soReadOptions so
+          inFile = inputSource ro
+      in runSO so stencilsSynth (annotationType ao) (getOutputFile inFile wo)
     runUO uo f =
       let ro = uoReadOptions uo
       in runRO ro f (literals uo) (debug uo) (includeDir uo)
