@@ -47,7 +47,7 @@ infer mode marker filename pf =
     where
       output = intercalate "\n"
              . filter (not . white)
-             . map (formatSpec Nothing) $ results
+             . map formatSpecNoComment $ results
       white = all (\x -> (x == ' ') || (x == '\t'))
       (pf'', results) = stencilInference mode marker
                       . FAB.analyseBBlocks $ pf'

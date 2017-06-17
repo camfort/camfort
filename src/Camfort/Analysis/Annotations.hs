@@ -35,6 +35,7 @@ import qualified Camfort.Specification.Stencils.Grammar as StencilComment
 
 import qualified Language.Fortran.AST as F
 import qualified Language.Fortran.Analysis as FA
+import Language.Fortran.ParserMonad (FortranVersion(Fortran90))
 import qualified Language.Fortran.Util.Position as FU
 
 type Report = String
@@ -98,3 +99,10 @@ onPrev f ann = ann { FA.prevAnnotation = f (FA.prevAnnotation ann) }
 
 modifyAnnotation :: F.Annotated f => (a -> a) -> f a -> f a
 modifyAnnotation f x = F.setAnnotation (f (F.getAnnotation x)) x
+
+
+-- | Build a Fortran comment string appropriate for the Fortran version.
+buildCommentText :: F.MetaInfo -> Int -> String -> String
+buildCommentText mi col text | isModernFortran = replicate col ' ' ++ "!" ++ text
+                             | otherwise       = "c" ++ text
+  where isModernFortran = F.miVersion mi >= Fortran90

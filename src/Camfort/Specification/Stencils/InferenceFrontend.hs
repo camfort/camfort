@@ -112,7 +112,7 @@ stencilInference mode marker pf =
           -> Writer [LogLine] (F.ProgramUnit (FA.Analysis A))
 
     perPU pu | Just _ <- FA.bBlocks $ F.getAnnotation pu = do
-        let pum = descendBiM (perBlockInfer mode marker) pu
+        let pum = descendBiM (perBlockInfer mode marker mi) pu
         let (pu', log) = runInferer ivMap flTo pum
         tell log
         return pu'
@@ -186,10 +186,11 @@ fromJustMsg _ (Just x) = x
 fromJustMsg msg Nothing = error msg
 
 -- Traverse Blocks in the AST and infer stencil specifications
-perBlockInfer :: InferMode -> Char -> F.Block (FA.Analysis A)
-               -> Inferer (F.Block (FA.Analysis A))
+perBlockInfer :: InferMode -> Char -> F.MetaInfo
+              -> F.Block (FA.Analysis A)
+              -> Inferer (F.Block (FA.Analysis A))
 
-perBlockInfer Synth _ b@(F.BlComment ann _ _) = do
+perBlockInfer Synth _ _ b@(F.BlComment ann _ _) = do
   -- If we have a comment that is actually a specification then record that
   -- this has been assigned so that we don't generate extra specifications
   -- that overlap with user-given oones
@@ -207,7 +208,7 @@ perBlockInfer Synth _ b@(F.BlComment ann _ _) = do
     _ -> return ()
   return b
 
-perBlockInfer mode marker b@(F.BlStatement ann span@(FU.SrcSpan lp _) _ stmnt)
+perBlockInfer mode marker mi b@(F.BlStatement ann span@(FU.SrcSpan lp _) _ stmnt)
   | mode == AssignMode || mode == CombinedMode || mode == EvalMode || mode == Synth = do
 
     (IS ivmap hasSpec visitedStmts) <- get
@@ -240,7 +241,7 @@ perBlockInfer mode marker b@(F.BlStatement ann span@(FU.SrcSpan lp _) _ stmnt)
              _ -> return []
       if mode == Synth && not (null specs) && specs /= [[]]
       then
-        let specComment = Synth.formatSpec (Just (tabs ++ '!':marker:" ")) (span, Left (concat specs'))
+        let specComment = Synth.formatSpec mi tabs marker (span, Left (concat specs'))
             specs' = map (mapMaybe noSpecAlready) specs
 
             noSpecAlready (vars, spec) =
@@ -250,7 +251,7 @@ perBlockInfer mode marker b@(F.BlStatement ann span@(FU.SrcSpan lp _) _ stmnt)
                where vars' = filter (\v -> not ((span, v) `elem` hasSpec)) vars
 
             -- Indentation for the specification to match the code
-            tabs  = take (FU.posColumn lp  - 1) (repeat ' ')
+            tabs  = FU.posColumn lp - 1
             (FU.SrcSpan loc _) = span
             span' = FU.SrcSpan (lp {FU.posColumn = 1}) (lp {FU.posColumn = 1})
             ann'  = ann { FA.prevAnnotation = (FA.prevAnnotation ann) { refactored = Just loc } }
@@ -258,18 +259,18 @@ perBlockInfer mode marker b@(F.BlStatement ann span@(FU.SrcSpan lp _) _ stmnt)
 
       else return b
 
-perBlockInfer mode marker b@(F.BlDo ann span lab cname lab' mDoSpec body tlab) = do
+perBlockInfer mode marker mi b@(F.BlDo ann span lab cname lab' mDoSpec body tlab) = do
     if (mode == DoMode || mode == CombinedMode) && isStencilDo b
       then genSpecsAndReport mode span [] body
       else return []
 
     -- descend into the body of the do-statement (in reverse order)
-    body' <- mapM (descendBiReverseM (perBlockInfer mode marker)) (reverse body)
+    body' <- mapM (descendBiReverseM (perBlockInfer mode marker mi)) (reverse body)
     return $ F.BlDo ann span lab cname lab' mDoSpec (reverse body') tlab
 
-perBlockInfer mode marker b = do
+perBlockInfer mode marker mi b = do
     -- Go inside child blocks
-    b' <- descendReverseM (descendBiReverseM (perBlockInfer mode marker)) $ b
+    b' <- descendReverseM (descendBiReverseM (perBlockInfer mode marker mi)) $ b
     return b'
 
 

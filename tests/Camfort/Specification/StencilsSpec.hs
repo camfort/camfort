@@ -228,19 +228,15 @@ spec =
     -- Some integration tests
     -------------------------
 
-    let file = "tests"
-           </> "fixtures"
-           </> "Specification"
-           </> "Stencils"
-           </> "example2.f"
-    let fileSynthExpected = "tests"
-           </> "fixtures"
-           </> "Specification"
-           </> "Stencils"
-           </> "example2.expected.f"
-    program <- runIO $ readParseSrcDir file []
-    programSrc       <- runIO $ readFile file
-    synthExpectedSrc <- runIO $ readFile fileSynthExpected
+    let fixturesDir = "tests"
+                      </> "fixtures"
+                      </> "Specification"
+                      </> "Stencils"
+        example2In = fixturesDir </> "example2.f"
+        example2Expected = fixturesDir </> "example2.expected.f"
+    program <- runIO $ readParseSrcDir example2In []
+    programSrc       <- runIO $ readFile example2In
+    synthExpectedSrc <- runIO $ readFile example2Expected
 
     describe "integration test on inference for example2.f" $ do
       it "stencil infer" $
@@ -260,29 +256,18 @@ spec =
            "\ntests/fixtures/Specification/Stencils/example2.f\n\
             \(23:1)-(23:82)    Correct.\n(31:1)-(31:56)    Correct."
 
-      it "stencil synth [NOTE - SEE TEST COMMENT]" $
-         -- This should not fail, but is polluting Travis builds.
-         -- See: https://github.com/camfort/camfort/issues/39
-         expectFailure $
-         (B.unpack . runIdentity
+      it "stencil synth [UNKNOWN ISSUE - SHOULD PASS]" $
+         expectFailure $ (B.unpack . runIdentity
            $ reprint (refactoring Fortran77)
               (snd . head . snd $ synth AssignMode '=' (map (\(f, _, p) -> (f, p)) program))
               (B.pack programSrc))
           `shouldBe` synthExpectedSrc
 
-    let file = "tests"
-           </> "fixtures"
-           </> "Specification"
-           </> "Stencils"
-           </> "example3.f"
-    program <- runIO $ readParseSrcDir file []
+    let example3In = fixturesDir </> "example3.f"
+    program <- runIO $ readParseSrcDir example3In []
 
-    let file = "tests"
-           </> "fixtures"
-           </> "Specification"
-           </> "Stencils"
-           </> "example4.f"
-    program <- runIO $ readParseSrcDir file []
+    let example4In = fixturesDir </> "example4.f"
+    program <- runIO $ readParseSrcDir example4In []
 
     describe "integration test on inference for example4.f" $
       it "stencil infer" $
@@ -290,6 +275,31 @@ spec =
            `shouldBe`
             "\ntests/fixtures/Specification/Stencils/example4.f\n\
              \(6:8)-(6:33)    stencil readOnce, (pointed(dim=1)) :: x"
+
+    let example5oldStyleFile     = fixturesDir </> "example5.f"
+        example5oldStyleExpected = fixturesDir </> "example5.expected.f"
+        example5newStyleFile     = fixturesDir </> "example5.f90"
+        example5newStyleExpected = fixturesDir </> "example5.expected.f90"
+    program5old <- runIO $ readParseSrcDir example5oldStyleFile []
+    program5oldSrc       <- runIO $ readFile example5oldStyleFile
+    synthExpectedSrc5Old <- runIO $ readFile example5oldStyleExpected
+    program5new <- runIO $ readParseSrcDir example5newStyleFile []
+    program5newSrc       <- runIO $ readFile example5newStyleFile
+    synthExpectedSrc5New <- runIO $ readFile example5newStyleExpected
+    describe "integration test on inference for example5" $ do
+      describe "stencil synth" $ do
+        it "inserts correct comment types for old fortran" $
+          (B.unpack . runIdentity
+            $ reprint (refactoring Fortran77)
+            (snd . head . snd $ synth AssignMode '=' (map (\(f, _, p) -> (f, p)) program5old))
+            (B.pack program5oldSrc))
+          `shouldBe` synthExpectedSrc5Old
+        it "inserts correct comment types for modern fortran" $
+          (B.unpack . runIdentity
+            $ reprint (refactoring Fortran90)
+            (snd . head . snd $ synth AssignMode '=' (map (\(f, _, p) -> (f, p)) program5new))
+            (B.pack program5newSrc))
+          `shouldBe` synthExpectedSrc5New
 
 -- Indices for the 2D five point stencil (deliberately in an odd order)
 fivepoint = [ Cons (-1) (Cons 0 Nil), Cons 0 (Cons (-1) Nil)

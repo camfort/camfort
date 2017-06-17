@@ -36,30 +36,39 @@ import qualified Language.Fortran.Util.Position as FU
 import Language.Fortran.Util.Position
 
 -- Format inferred specifications
-formatSpec ::
-    Maybe String
+formatSpec :: F.MetaInfo -> Int -> Char
  -> (FU.SrcSpan, Either [([Variable], Specification)] (String,Variable))
  -> String
-formatSpec prefix (span, Right (evalInfo, name)) =
-     prefix'
+formatSpec mi indent marker (span, Right (evalInfo, name)) = buildCommentText mi indent $
+     marker : " "
   ++ evalInfo
   ++ (if name /= "" then " :: " ++ name else "") ++ "\n"
-  where
-    prefix' = case prefix of
-                Nothing -> show span ++ "    "
-                Just pr -> pr
 
-formatSpec _ (_, Left []) = ""
-formatSpec prefix (span, Left specs) =
-  (intercalate "\n" $ map (\s -> prefix' ++ doSpec s) specs)
+formatSpec _ _ _ (_, Left []) = ""
+formatSpec mi indent marker (span, Left specs) =
+  (intercalate "\n" $ map (\s -> buildCommentText mi indent (marker : " " ++ doSpec s)) specs)
     where
-      prefix' = case prefix of
-                   Nothing -> show span ++ "    "
-                   Just pr -> pr
       commaSep                 = intercalate ", "
       doSpec (arrayVar, spec)  =
              show (fixSpec spec) ++ " :: " ++ commaSep arrayVar
       fixSpec s                = s
+
+
+-- | Format inferred specifications, but do not format as a comment.
+formatSpecNoComment ::
+  (FU.SrcSpan, Either [([Variable], Specification)] (String,Variable))
+  -> String
+formatSpecNoComment (span, Right (evalInfo, name)) =
+  show span ++ "    " ++ evalInfo ++ (if name /= "" then " :: " ++ name else "") ++ "\n"
+formatSpecNoComment (_, Left []) = ""
+formatSpecNoComment (span, Left specs) =
+  intercalate "\n" . map (\s -> show span ++ "    " ++ doSpec s) $ specs
+    where
+      commaSep                 = intercalate ", "
+      doSpec (arrayVar, spec)  =
+             show (fixSpec spec) ++ " :: " ++ commaSep arrayVar
+      fixSpec s                = s
+
 
 ------------------------
 a = (head $ FA.initAnalysis [unitAnnotation]) { FA.insLabel = Just 0 }

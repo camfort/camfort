@@ -37,7 +37,6 @@ import qualified Language.Fortran.AST as F
 import qualified Language.Fortran.Analysis as FA
 import qualified Language.Fortran.Analysis.Renaming as FAR
 import qualified Language.Fortran.Util.Position as FU
-import Language.Fortran.ParserMonad (FortranVersion(Fortran90))
 
 import qualified Camfort.Specification.Units.Parser as P
 import Camfort.Analysis.CommentAnnotator
@@ -75,12 +74,13 @@ synthBlock marker vars bs b@(F.BlStatement a ss@(FU.SrcSpan lp up) _ (F.StDeclar
         let newA  = a { FA.prevAnnotation = (FA.prevAnnotation a) {
                            prevAnnotation = (prevAnnotation (FA.prevAnnotation a)) {
                                refactored = Just lp } } }
-        -- Create a zero-length span for the new comment node.
-        let newSS = FU.SrcSpan (lp {FU.posColumn = 0}) (lp {FU.posColumn = 0})
-        -- Build the text of the comment with the unit annotation.
-        let txt   = marker:" " ++ showUnitDecl (FA.srcName e, u)
-        let space = FU.posColumn lp - 1
-        let newB  = F.BlComment newA newSS . F.Comment . insertSpacing pf space $ commentText pf txt
+            -- Create a zero-length span for the new comment node.
+            newSS = FU.SrcSpan (lp {FU.posColumn = 0}) (lp {FU.posColumn = 0})
+            -- Build the text of the comment with the unit annotation.
+            txt   = marker:" " ++ showUnitDecl (FA.srcName e, u)
+            space = FU.posColumn lp - 1
+            (F.ProgramFile mi _) = pf
+            newB  = F.BlComment newA newSS . F.Comment $ buildCommentText mi space txt
         return $ Just newB
       where
         vname = FA.varName e
@@ -113,9 +113,10 @@ synthProgramUnit marker vars pus pu@(F.PUFunction a ss@(FU.SrcSpan lp up) _ _ _ 
       -- Create a zero-length span for the new comment node.
       let newSS = FU.SrcSpan (lp {FU.posColumn = 0}) (lp {FU.posColumn = 0})
       -- Build the text of the comment with the unit annotation.
-      let txt   = marker:" " ++ showUnitDecl (sname, u)
-      let space = FU.posColumn lp - 1
-      let newPU = F.PUComment newA newSS . F.Comment . insertSpacing pf space $ commentText pf txt
+          txt   = marker:" " ++ showUnitDecl (sname, u)
+          space = FU.posColumn lp - 1
+          (F.ProgramFile mi _) = pf
+          newPU = F.PUComment newA newSS . F.Comment $ buildCommentText mi space txt
 
       -- recursively descend to find program units inside of current one
       fmap (:newPU:pus) $ descendBiM (synthProgramUnits marker vars) pu
@@ -125,17 +126,5 @@ synthProgramUnit marker vars pus pu@(F.PUFunction a ss@(FU.SrcSpan lp up) _ _ _ 
     _ -> fmap (:pus) $ descendBiM (synthProgramUnits marker vars) pu
 synthProgramUnit marker vars pus pu = fmap (:pus) $ descendBiM (synthProgramUnits marker vars) pu
 
--- Insert the correct comment markers around the given text string, depending on Fortran version.
-commentText :: F.ProgramFile UA -> String -> String
-commentText pf text | isModernFortran pf = "!" ++ text
-                    | otherwise          = "c" ++ text
-
--- Insert a given amount of spacing before the string.
-insertSpacing :: F.ProgramFile UA -> Int -> String -> String
-insertSpacing pf n | isModernFortran pf = (replicate n ' ' ++)
-                   | otherwise          = id
-
 -- Pretty print a unit declaration.
 showUnitDecl (sname, u) = "unit(" ++ show u ++ ") :: " ++ sname
-
-isModernFortran (F.ProgramFile (F.MetaInfo { F.miVersion = v }) _ ) = v >= Fortran90
