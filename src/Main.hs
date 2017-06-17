@@ -41,7 +41,7 @@ data Command = CmdCount ReadOptions
              | CmdStencilsCheck ReadOptions
              | CmdStencilsInfer StencilsOptions
              | CmdStencilsSynth StencilsSynthOptions
-             | CmdUnitsSuggest UnitsWriteOptions
+             | CmdUnitsSuggest UnitsOptions
              | CmdUnitsCheck UnitsOptions
              | CmdUnitsInfer UnitsOptions
              | CmdUnitsSynth UnitsSynthOptions
@@ -239,7 +239,7 @@ cmdStencilsSynth = fmap CmdStencilsSynth stencilsSynthOptions
 
 cmdUnitsSuggest, cmdUnitsCheck, cmdUnitsInfer
   , cmdUnitsSynth, cmdUnitsCompile :: Parser Command
-cmdUnitsSuggest = fmap CmdUnitsSuggest unitsWriteOptions
+cmdUnitsSuggest = fmap CmdUnitsSuggest unitsOptions
 cmdUnitsCheck   = fmap CmdUnitsCheck   unitsOptions
 cmdUnitsInfer   = fmap CmdUnitsInfer   unitsOptions
 cmdUnitsSynth   = fmap CmdUnitsSynth   unitsSynthOptions
@@ -348,7 +348,7 @@ main = do
     runCommand (CmdStencilsCheck ro)      = runRO ro stencilsCheck
     runCommand (CmdStencilsInfer so)      = runSO so stencilsInfer
     runCommand (CmdStencilsSynth sso)     = runSSO sso stencilsSynth
-    runCommand (CmdUnitsSuggest uwo)      = runUWO uwo unitsCriticals
+    runCommand (CmdUnitsSuggest uo)       = runUO uo unitsCriticals
     runCommand (CmdUnitsCheck uo)         = runUO uo unitsCheck
     runCommand (CmdUnitsInfer uo)         = runUO uo unitsInfer
     runCommand (CmdUnitsSynth uso)        = runUSO uso unitsSynth

@@ -179,7 +179,7 @@ unitsSynth inSrc excludes m debug incDir outSrc annType = do
     report <- doRefactorWithModFiles rfun inSrc excludes outSrc =<< getModFiles incDir
     putStrLn report
 
-unitsCriticals inSrc excludes m debug incDir outSrc = do
+unitsCriticals inSrc excludes m debug incDir = do
     putStrLn $ "Suggesting variables to annotate with unit specifications in '"
              ++ inSrc ++ "'"
     uo <- optsToUnitOpts m debug incDir
