@@ -233,10 +233,7 @@ spec =
                       </> "Specification"
                       </> "Stencils"
         example2In = fixturesDir </> "example2.f"
-        example2Expected = fixturesDir </> "example2.expected.f"
     program <- runIO $ readParseSrcDir example2In []
-    programSrc       <- runIO $ readFile example2In
-    synthExpectedSrc <- runIO $ readFile example2Expected
 
     describe "integration test on inference for example2.f" $ do
       it "stencil infer" $
@@ -255,13 +252,6 @@ spec =
            `shouldBe`
            "\ntests/fixtures/Specification/Stencils/example2.f\n\
             \(23:1)-(23:82)    Correct.\n(31:1)-(31:56)    Correct."
-
-      it "stencil synth [UNKNOWN ISSUE - SHOULD PASS]" $
-         expectFailure $ (B.unpack . runIdentity
-           $ reprint (refactoring Fortran77)
-              (snd . head . snd $ synth AssignMode '=' (map (\(f, _, p) -> (f, p)) program))
-              (B.pack programSrc))
-          `shouldBe` synthExpectedSrc
 
     let example3In = fixturesDir </> "example3.f"
     program <- runIO $ readParseSrcDir example3In []
