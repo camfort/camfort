@@ -21,6 +21,7 @@ import Camfort.Specification.Stencils.InferenceBackend
 import Camfort.Specification.Stencils.InferenceFrontend
 import Camfort.Specification.Stencils.Syntax
 import qualified Language.Fortran.AST as F
+import Language.Fortran.Parser.Any (deduceVersion)
 import Language.Fortran.ParserMonad
 import Camfort.Reprint
 import Camfort.Output
@@ -262,30 +263,27 @@ spec =
             "\ntests/fixtures/Specification/Stencils/example4.f\n\
              \(6:8)-(6:33)    stencil readOnce, (pointed(dim=1)) :: x"
 
-    let example5oldStyleFile     = fixturesDir </> "example5.f"
-        example5oldStyleExpected = fixturesDir </> "example5.expected.f"
-        example5newStyleFile     = fixturesDir </> "example5.f90"
-        example5newStyleExpected = fixturesDir </> "example5.expected.f90"
-    program5old <- runIO $ readParseSrcDir example5oldStyleFile []
-    program5oldSrc       <- runIO $ readFile example5oldStyleFile
-    synthExpectedSrc5Old <- runIO $ readFile example5oldStyleExpected
-    program5new <- runIO $ readParseSrcDir example5newStyleFile []
-    program5newSrc       <- runIO $ readFile example5newStyleFile
-    synthExpectedSrc5New <- runIO $ readFile example5newStyleExpected
-    describe "integration test on inference for example5" $ do
+    describe "integration test on inference for example5" $
       describe "stencil synth" $ do
-        it "inserts correct comment types for old fortran" $
-          (B.unpack . runIdentity
-            $ reprint (refactoring Fortran77)
-            (snd . head . snd $ synth AssignMode '=' (map (\(f, _, p) -> (f, p)) program5old))
-            (B.pack program5oldSrc))
-          `shouldBe` synthExpectedSrc5Old
-        it "inserts correct comment types for modern fortran" $
-          (B.unpack . runIdentity
-            $ reprint (refactoring Fortran90)
-            (snd . head . snd $ synth AssignMode '=' (map (\(f, _, p) -> (f, p)) program5new))
-            (B.pack program5newSrc))
-          `shouldBe` synthExpectedSrc5New
+        assertStencilInferenceOnFile (fixturesDir </> "example5.f")
+          "inserts correct comment types for old fortran"
+        assertStencilInferenceOnFile (fixturesDir </> "example5.f90")
+          "inserts correct comment types for modern fortran"
+  where assertStencilInferenceOnFile file testComment =
+          let version      = deduceVersion file
+              oldExtension = takeExtension file
+              expectedFile =
+                addExtension (replaceExtension file "expected")
+                oldExtension in do
+            program          <- runIO $ readParseSrcDir file []
+            programSrc       <- runIO $ readFile file
+            synthExpectedSrc <- runIO $ readFile expectedFile
+            it testComment $
+              (B.unpack . runIdentity
+               $ reprint (refactoring version)
+               (snd . head . snd $ synth AssignMode '=' (map (\(f, _, p) -> (f, p)) program))
+               (B.pack programSrc))
+                `shouldBe` synthExpectedSrc
 
 -- Indices for the 2D five point stencil (deliberately in an odd order)
 fivepoint = [ Cons (-1) (Cons 0 Nil), Cons 0 (Cons (-1) Nil)
