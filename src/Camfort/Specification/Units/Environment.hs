@@ -25,7 +25,7 @@ module Camfort.Specification.Units.Environment
   , Constraints
   , UnitAnnotation(..)
   , UnitInfo(..)
-  , VV
+  , VV, PP
     -- * Helpers
   , conParamEq
   , doubleToRationalSubset
@@ -57,14 +57,17 @@ import Text.Printf
 -- | A (unique name, source name) variable
 type VV = (F.Name, F.Name)
 
+-- | A (unique name, source name) program unit name
+type PP = (F.Name, F.Name)
+
 type UniqueId = Int
 
 -- | Description of the unit of an expression.
 data UnitInfo
-  = UnitParamPosAbs (String, Int)         -- an abstract parameter identified by PU name and argument position
-  | UnitParamPosUse (String, Int, Int)    -- identify particular instantiation of parameters
-  | UnitParamVarAbs (String, VV)          -- an abstract parameter identified by PU name and variable name
-  | UnitParamVarUse (String, VV, Int)     -- a particular instantiation of above
+  = UnitParamPosAbs (PP, Int)             -- an abstract parameter identified by PU name and argument position
+  | UnitParamPosUse (PP, Int, Int)        -- identify particular instantiation of parameters
+  | UnitParamVarAbs (PP, VV)              -- an abstract parameter identified by PU name and variable name
+  | UnitParamVarUse (PP, VV, Int)         -- a particular instantiation of above
   | UnitParamLitAbs UniqueId              -- a literal with abstract, polymorphic units, uniquely identified
   | UnitParamLitUse (UniqueId, Int)       -- a particular instantiation of a polymorphic literal
   | UnitParamEAPAbs VV                    -- an abstract Explicitly Annotated Polymorphic unit variable
@@ -84,27 +87,27 @@ instance Binary UnitInfo
 
 instance Show UnitInfo where
   show u = case u of
-    UnitParamPosAbs (f, i)         -> printf "#<ParamPosAbs %s[%d]>" f i
-    UnitParamPosUse (f, i, j)      -> printf "#<ParamPosUse %s[%d] callId=%d>" f i j
-    UnitParamVarAbs (f, (v, _))    -> printf "#<ParamVarAbs %s.%s>" f v
-    UnitParamVarUse (f, (v, _), j) -> printf "#<ParamVarUse %s.%s callId=%d>" f v j
-    UnitParamLitAbs i              -> printf "#<ParamLitAbs litId=%d>" i
-    UnitParamLitUse (i, j)         -> printf "#<ParamLitUse litId=%d callId=%d]>" i j
-    UnitParamEAPAbs (v, _)         -> v
-    UnitParamEAPUse ((v, _), i)    -> printf "#<ParamEAPUse %s callId=%d]>" v i
-    UnitLiteral i                  -> printf "#<Literal id=%d>" i
-    UnitlessLit                    -> "1"
-    UnitlessVar                    -> "1"
-    UnitName name                  -> name
-    UnitAlias name                 -> name
-    UnitVar (vName, _)             -> printf "#<Var %s>" vName
-    UnitRecord recs                -> "record (" ++ intercalate ", " (map (\ (n, u) -> n ++ " :: " ++ show u) recs) ++ ")"
+    UnitParamPosAbs ((f, _), i)         -> printf "#<ParamPosAbs %s[%d]>" f i
+    UnitParamPosUse ((f, _), i, j)      -> printf "#<ParamPosUse %s[%d] callId=%d>" f i j
+    UnitParamVarAbs ((f, _), (v, _))    -> printf "#<ParamVarAbs %s.%s>" f v
+    UnitParamVarUse ((f, _), (v, _), j) -> printf "#<ParamVarUse %s.%s callId=%d>" f v j
+    UnitParamLitAbs i                   -> printf "#<ParamLitAbs litId=%d>" i
+    UnitParamLitUse (i, j)              -> printf "#<ParamLitUse litId=%d callId=%d]>" i j
+    UnitParamEAPAbs (v, _)              -> v
+    UnitParamEAPUse ((v, _), i)         -> printf "#<ParamEAPUse %s callId=%d]>" v i
+    UnitLiteral i                       -> printf "#<Literal id=%d>" i
+    UnitlessLit                         -> "1"
+    UnitlessVar                         -> "1"
+    UnitName name                       -> name
+    UnitAlias name                      -> name
+    UnitVar (vName, _)                  -> printf "#<Var %s>" vName
+    UnitRecord recs                     -> "record (" ++ intercalate ", " (map (\ (n, u) -> n ++ " :: " ++ show u) recs) ++ ")"
     UnitMul u1 (UnitPow u2 k)
-      | k < 0                      -> maybeParen u1 ++ " / " ++ maybeParen (UnitPow u2 (-k))
-    UnitMul u1 u2                  -> maybeParenS u1 ++ " " ++ maybeParenS u2
-    UnitPow u 1                    -> show u
-    UnitPow _ 0                    -> "1"
-    UnitPow u k                    -> -- printf "%s**%f" (maybeParen u) k
+      | k < 0                           -> maybeParen u1 ++ " / " ++ maybeParen (UnitPow u2 (-k))
+    UnitMul u1 u2                       -> maybeParenS u1 ++ " " ++ maybeParenS u2
+    UnitPow u 1                         -> show u
+    UnitPow _ 0                         -> "1"
+    UnitPow u k                         -> -- printf "%s**%f" (maybeParen u) k
       case doubleToRationalSubset k of
           Just r
             | e <- showRational r
@@ -200,14 +203,14 @@ pprintConstr srcText (ConEq u1 u2) = "'" ++ pprintUnitInfo srcText u1 ++ "' shou
 pprintConstr srcText (ConConj cs)  = intercalate "\n\t and " (map (pprintConstr srcText) cs)
 
 pprintUnitInfo :: Maybe SourceText -> UnitInfo -> String
-pprintUnitInfo _ (UnitVar (_, sName)) = printf "%s" sName
+pprintUnitInfo _ (UnitVar (_, sName))                 = printf "%s" sName
 pprintUnitInfo _ (UnitParamVarUse (_, (_, sName), _)) = printf "%s" sName
-pprintUnitInfo _ (UnitParamPosUse (fname, 0, _)) = printf "result of %s" fname
-pprintUnitInfo _ (UnitParamPosUse (fname, i, _)) = printf "parameter %d to %s" i fname
-pprintUnitInfo _ (UnitParamEAPUse ((v, _), _)) = printf "explicitly annotated polymorphic unit %s" v
-pprintUnitInfo (Just srcText) (UnitLiteral _) = B.unpack srcText
-pprintUnitInfo Nothing (UnitLiteral _) = "literal number"
-pprintUnitInfo _ ui = show ui
+pprintUnitInfo _ (UnitParamPosUse ((_, fname), 0, _)) = printf "result of %s" fname
+pprintUnitInfo _ (UnitParamPosUse ((_, fname), i, _)) = printf "parameter %d to %s" i fname
+pprintUnitInfo _ (UnitParamEAPUse ((v, _), _))        = printf "explicitly annotated polymorphic unit %s" v
+pprintUnitInfo (Just srcText) (UnitLiteral _)         = B.unpack srcText
+pprintUnitInfo Nothing (UnitLiteral _)                = "literal number"
+pprintUnitInfo _ ui                                   = show ui
 
 --------------------------------------------------
 

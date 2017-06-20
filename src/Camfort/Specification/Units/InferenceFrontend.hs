@@ -193,7 +193,7 @@ insertParametricUnits = gets usProgramFile >>= (mapM_ paramPU . universeBi)
         -- Insert a parametric unit if the variable does not already have a unit.
         modifyVarUnitMap $ M.insertWith (curry snd) param (UnitParamPosAbs (fname, i))
       where
-        fname = puName pu
+        fname = (puName pu, puSrcName pu)
 
 -- | Return the list of parameters paired with its positional index.
 indexedParams :: F.ProgramUnit UA -> [(Int, VV)]
@@ -235,9 +235,9 @@ toUnitVar :: DeclMap -> VV -> UnitInfo
 toUnitVar dmap (vname, sname) = unit
   where
     unit = case fst `fmap` M.lookup vname dmap of
-      Just (DCFunction (F.Named fname))   -> UnitParamVarAbs (fname, (vname, sname))
-      Just (DCSubroutine (F.Named fname)) -> UnitParamVarAbs (fname, (vname, sname))
-      _                                   -> UnitVar (vname, sname)
+      Just (DCFunction (F.Named fvname, F.Named fsname))   -> UnitParamVarAbs ((fvname, fsname), (vname, sname))
+      Just (DCSubroutine (F.Named fvname, F.Named fsname)) -> UnitParamVarAbs ((fvname, fsname), (vname, sname))
+      _                                                    -> UnitVar (vname, sname)
 
 --------------------------------------------------
 
@@ -389,7 +389,7 @@ applyTemplates :: Constraints -> UnitSolver Constraints
 applyTemplates cons = do
   dumpConsM "applyTemplates" cons
   -- Get a list of the instances of parametric polymorphism from the constraints.
-  let instances = nub [ (name, i) | UnitParamPosUse (name, _, i) <- universeBi cons ]
+  let instances = nub [ (name, i) | UnitParamPosUse ((name, _), _, i) <- universeBi cons ]
 
   -- Also generate a list of 'dummy' instances to ensure that every
   -- 'toplevel' function and subroutine is thoroughly expanded and
@@ -447,7 +447,7 @@ substInstance isDummy callStack output (name, callId) = do
   modify $ \ s -> s { usCallIdRemap = IM.empty }
 
   -- If any new instances are discovered, also process them, unless recursive.
-  let instances = nub [ (name, i) | UnitParamPosUse (name, _, i) <- universeBi template ]
+  let instances = nub [ (name, i) | UnitParamPosUse ((name, _), _, i) <- universeBi template ]
   template' <- if name `elem` callStack then
                  -- Detected recursion: we do not support polymorphic-unit recursion,
                  -- ergo all subsequent recursive calls are assumed to have the same
@@ -485,6 +485,14 @@ substInstance isDummy callStack output (name, callId) = do
 foldUnits units
   | null units = UnitlessVar
   | otherwise  = foldl1 UnitMul units
+
+-- | Generate constraints from a NameParamMap entry.
+nameParamConstraints :: F.Name -> UnitSolver Constraints
+nameParamConstraints fname = do
+  let filterForName (NPKParam (n, _) _) _ = n == fname
+      filterForName _ _                   = False
+  nlst <- (M.toList . M.filterWithKey filterForName) `fmap` gets usNameParamMap
+  return [ ConEq (UnitParamPosAbs (n, pos)) (foldUnits units) | (NPKParam n pos, units) <- nlst ]
 
 -- | If given a usage of a parametric unit, rewrite the callId field
 -- to follow an existing mapping in the usCallIdRemap state field, or
@@ -621,7 +629,9 @@ literalAssignmentSpecialCase e1 e2 ast
 
 propagatePU :: F.ProgramUnit UA -> UnitSolver (F.ProgramUnit UA)
 propagatePU pu = do
-  let name = puName pu
+  let name     = puName pu
+  let sname    = puSrcName pu
+  let nn       = (name, sname)
   let bodyCons = [ con | con@(ConEq {}) <- universeBi pu ] -- Constraints within the PU.
 
   varMap <- gets usVarUnitMap
@@ -633,9 +643,9 @@ propagatePU pu = do
   -- the explicit unit annotation as well.
   givenCons <- forM (indexedParams pu) $ \ (i, param) -> do
     case M.lookup param varMap of
-      Just (UnitParamPosAbs {}) -> return . ConEq (UnitParamVarAbs (name, param)) $ UnitParamPosAbs (name, i)
-      Just u                    -> return . ConEq u $ UnitParamPosAbs (name, i)
-      _                         -> return . ConEq (UnitParamVarAbs (name, param)) $ UnitParamPosAbs (name, i)
+      Just (UnitParamPosAbs {}) -> return . ConEq (UnitParamVarAbs (nn, param)) $ UnitParamPosAbs (nn, i)
+      Just u                    -> return . ConEq u $ UnitParamPosAbs (nn, i)
+      _                         -> return . ConEq (UnitParamVarAbs (nn, param)) $ UnitParamPosAbs (nn, i)
 
   let cons = givenCons ++ bodyCons
   case pu of F.PUFunction {}   -> modifyTemplateMap (M.insert name cons)
@@ -645,17 +655,22 @@ propagatePU pu = do
   -- Set the unitInfo field of a function program unit to be the same
   -- as the unitInfo of its result.
   let pu' = case (pu, indexedParams pu) of
-              (F.PUFunction {}, (0, res):_) -> setUnitInfo (UnitParamPosAbs (name, 0) `fromMaybe` M.lookup res varMap) pu
+              (F.PUFunction {}, (0, res):_) -> setUnitInfo (UnitParamPosAbs (nn, 0) `fromMaybe` M.lookup res varMap) pu
               _                             -> pu
 
   return (setConstraint (ConConj cons) pu')
 
 --------------------------------------------------
 
+-- | Check if x contains an abstract parametric reference under the given name.
+containsParametric :: Data from => String -> from -> Bool
+containsParametric name x = not . null $ [ () | UnitParamPosAbs ((name', _), _) <- universeBi x, name == name' ] ++
+                                         [ () | UnitParamVarAbs ((name', _), _) <- universeBi x, name == name' ]
+
 -- | Coalesce various function and subroutine call common code.
 callHelper :: F.Expression UA -> [F.Argument UA] -> UnitSolver (UnitInfo, [F.Argument UA])
 callHelper nexp args = do
-  let name = varName nexp
+  let name = (varName nexp, srcName nexp)
   callId <- genCallId -- every call-site gets its own unique identifier
   let eachArg i arg@(F.Argument _ _ _ e)
         -- add site-specific parametric constraints to each argument
@@ -673,7 +688,7 @@ intrinsicHelper (UnitParamPosUse (_, _, callId)) f@(F.ExpValue _ _ (F.ValIntrins
     numArgs     = length args
     sname       = srcName f
     vname       = varName f
-    eachArg i u = ConEq (UnitParamPosUse (vname, i, callId)) (instantiate callId u)
+    eachArg i u = ConEq (UnitParamPosUse ((vname, sname), i, callId)) (instantiate callId u)
 intrinsicHelper _ _ _ = []
 
 -- | Generate a unique identifier for a call-site.

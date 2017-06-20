@@ -42,7 +42,7 @@ import qualified Data.Set as S
 import qualified Language.Fortran.Analysis.Renaming as FAR
 import qualified Language.Fortran.AST as F
 import Language.Fortran.Util.ModFile
-import Camfort.Specification.Units.Environment (UnitInfo, Constraints(..), VV)
+import Camfort.Specification.Units.Environment (UnitInfo, Constraints(..), VV, PP)
 import Camfort.Analysis.Annotations (UA)
 
 
@@ -80,7 +80,7 @@ type TemplateMap = M.Map F.Name Constraints
 
 -- | Things that can be exported from modules
 data NameParamKey
-  = NPKParam F.Name Int -- ^ Function/subroutine name, position of parameter
+  = NPKParam PP Int     -- ^ Function/subroutine name, position of parameter
   | NPKVariable VV      -- ^ variable
   deriving (Ord, Eq, Show, Data, Typeable, Generic)
 

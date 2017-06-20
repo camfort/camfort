@@ -75,7 +75,7 @@ spec = do
     describe "Recursive functions" $ do
       it "Recursive Multiplication is not OK" $ do
         (fromJust (head (rights [fst (runUnits LitMixed recursive2 runInconsistentConstraints)]))) `shouldSatisfy`
-          any (conParamEq (ConEq (UnitParamPosAbs ("recur", 0)) (UnitParamPosAbs ("recur", 2))))
+          any (conParamEq (ConEq (UnitParamPosAbs (("recur", "recur"), 0)) (UnitParamPosAbs (("recur", "recur"), 2))))
 
     describe "Explicitly annotated parametric polymorphic unit variables" $ do
       it "inside-outside" $ do
@@ -159,32 +159,32 @@ testCons1_shifted = [([],[UnitPow (UnitName "m") 1.0,UnitPow (UnitName "kg") (-1
 
 testCons2 = [ConEq (UnitMul (UnitName "m") (UnitPow (UnitName "s") (-1.0))) (UnitMul (UnitName "m") (UnitPow (UnitName "s") (-1.0)))
             ,ConEq (UnitName "m") (UnitMul (UnitMul (UnitName "m") (UnitPow (UnitName "s") (-1.0))) (UnitName "s"))
-            ,ConEq (UnitAlias "accel") (UnitMul (UnitName "m") (UnitPow (UnitParamPosUse ("simple1_sqr6",0,0)) (-1.0)))
-            ,ConEq (UnitName "s") (UnitParamPosUse ("simple1_sqr6",1,0))
+            ,ConEq (UnitAlias "accel") (UnitMul (UnitName "m") (UnitPow (UnitParamPosUse (("simple1_sqr6", "sqr"),0,0)) (-1.0)))
+            ,ConEq (UnitName "s") (UnitParamPosUse (("simple1_sqr6", "sqr"),1,0))
             ,ConEq (UnitVar ("simple1_a5", "simple1_a5")) (UnitAlias "accel")
             ,ConEq (UnitVar ("simple1_t4", "simple1_t4")) (UnitName "s")
             ,ConEq (UnitVar ("simple1_v3", "simple1_v3")) (UnitMul (UnitName "m") (UnitPow (UnitName "s") (-1.0)))
             ,ConEq (UnitVar ("simple1_x1", "simple1_x1")) (UnitName "m")
             ,ConEq (UnitVar ("simple1_y2", "simple1_y2")) (UnitName "m")
-            ,ConEq (UnitParamPosUse ("simple1_sqr6",0,0)) (UnitParamPosUse ("simple1_mul7",0,1))
-            ,ConEq (UnitParamPosUse ("simple1_sqr6",1,0)) (UnitParamPosUse ("simple1_mul7",1,1))
-            ,ConEq (UnitParamPosUse ("simple1_sqr6",1,0)) (UnitParamPosUse ("simple1_mul7",2,1))
-            ,ConEq (UnitParamPosUse ("simple1_mul7",0,1)) (UnitMul (UnitParamPosUse ("simple1_mul7",1,1)) (UnitParamPosUse ("simple1_mul7",2,1)))
+            ,ConEq (UnitParamPosUse (("simple1_sqr6","sqr"),0,0)) (UnitParamPosUse (("simple1_mul7","mul"),0,1))
+            ,ConEq (UnitParamPosUse (("simple1_sqr6","sqr"),1,0)) (UnitParamPosUse (("simple1_mul7","mul"),1,1))
+            ,ConEq (UnitParamPosUse (("simple1_sqr6","sqr"),1,0)) (UnitParamPosUse (("simple1_mul7","mul"),2,1))
+            ,ConEq (UnitParamPosUse (("simple1_mul7","mul"),0,1)) (UnitMul (UnitParamPosUse (("simple1_mul7","mul"),1,1)) (UnitParamPosUse (("simple1_mul7","mul"),2,1)))
             ,ConEq (UnitAlias "accel") (UnitMul (UnitName "m") (UnitPow (UnitName "s") (-2.0)))]
 
 testCons2_shifted = [([],[UnitPow (UnitName "m") 1.0,UnitPow (UnitName "s") (-1.0),UnitPow (UnitName "m") (-1.0),UnitPow (UnitName "s") 1.0])
                     ,([],[UnitPow (UnitName "m") 1.0,UnitPow (UnitName "m") (-1.0)])
-                    ,([UnitPow (UnitAlias "accel") 1.0,UnitPow (UnitParamPosUse ("simple1_sqr6",0,0)) 1.0],[UnitPow (UnitName "m") 1.0])
-                    ,([UnitPow (UnitParamPosUse ("simple1_sqr6",1,0)) (-1.0)],[UnitPow (UnitName "s") (-1.0)])
+                    ,([UnitPow (UnitAlias "accel") 1.0,UnitPow (UnitParamPosUse (("simple1_sqr6","sqr"),0,0)) 1.0],[UnitPow (UnitName "m") 1.0])
+                    ,([UnitPow (UnitParamPosUse (("simple1_sqr6","sqr"),1,0)) (-1.0)],[UnitPow (UnitName "s") (-1.0)])
                     ,([UnitPow (UnitVar ("simple1_a5", "simple1_a5")) 1.0,UnitPow (UnitAlias "accel") (-1.0)],[])
                     ,([UnitPow (UnitVar ("simple1_t4", "simple1_t4")) 1.0],[UnitPow (UnitName "s") 1.0])
                     ,([UnitPow (UnitVar ("simple1_v3", "simple1_v3")) 1.0],[UnitPow (UnitName "m") 1.0,UnitPow (UnitName "s") (-1.0)])
                     ,([UnitPow (UnitVar ("simple1_x1", "simple1_x1")) 1.0],[UnitPow (UnitName "m") 1.0])
                     ,([UnitPow (UnitVar ("simple1_y2", "simple1_y2")) 1.0],[UnitPow (UnitName "m") 1.0])
-                    ,([UnitPow (UnitParamPosUse ("simple1_sqr6",0,0)) 1.0,UnitPow (UnitParamPosUse ("simple1_mul7",0,1)) (-1.0)],[])
-                    ,([UnitPow (UnitParamPosUse ("simple1_sqr6",1,0)) 1.0,UnitPow (UnitParamPosUse ("simple1_mul7",1,1)) (-1.0)],[])
-                    ,([UnitPow (UnitParamPosUse ("simple1_sqr6",1,0)) 1.0,UnitPow (UnitParamPosUse ("simple1_mul7",2,1)) (-1.0)],[])
-                    ,([UnitPow (UnitParamPosUse ("simple1_mul7",0,1)) 1.0,UnitPow (UnitParamPosUse ("simple1_mul7",1,1)) (-1.0),UnitPow (UnitParamPosUse ("simple1_mul7",2,1)) (-1.0)],[])
+                    ,([UnitPow (UnitParamPosUse (("simple1_sqr6","sqr"),0,0)) 1.0,UnitPow (UnitParamPosUse (("simple1_mul7","mul"),0,1)) (-1.0)],[])
+                    ,([UnitPow (UnitParamPosUse (("simple1_sqr6","sqr"),1,0)) 1.0,UnitPow (UnitParamPosUse (("simple1_mul7","mul"),1,1)) (-1.0)],[])
+                    ,([UnitPow (UnitParamPosUse (("simple1_sqr6","sqr"),1,0)) 1.0,UnitPow (UnitParamPosUse (("simple1_mul7","mul"),2,1)) (-1.0)],[])
+                    ,([UnitPow (UnitParamPosUse (("simple1_mul7","mul"),0,1)) 1.0,UnitPow (UnitParamPosUse (("simple1_mul7","mul"),1,1)) (-1.0),UnitPow (UnitParamPosUse (("simple1_mul7","mul"),2,1)) (-1.0)],[])
                     ,([UnitPow (UnitAlias "accel") 1.0],[UnitPow (UnitName "m") 1.0,UnitPow (UnitName "s") (-2.0)])]
 
 testCons3 = [ ConEq (UnitVar ("a", "a")) (UnitVar ("e", "e"))
@@ -195,17 +195,17 @@ testCons3_shifted = [([UnitPow (UnitVar ("a", "a")) 1.0,UnitPow (UnitVar ("e", "
                     ,([UnitPow (UnitVar ("a", "a")) 1.0,UnitPow (UnitVar ("b", "b")) (-1.0),UnitPow (UnitVar ("c", "c")) (-1.0),UnitPow (UnitVar ("d", "d")) (-1.0)],[])
                     ,([UnitPow (UnitVar ("d", "d")) 1.0],[UnitPow (UnitName "m") 1.0])]
 
-testCons4 = [ConEq (UnitVar ("simple2_a11", "simple2_a11")) (UnitParamPosUse ("simple2_sqr3",0,0))
-            ,ConEq (UnitVar ("simple2_a22", "simple2_a22")) (UnitParamPosUse ("simple2_sqr3",1,0))
+testCons4 = [ConEq (UnitVar ("simple2_a11", "simple2_a11")) (UnitParamPosUse (("simple2_sqr3","sqr"),0,0))
+            ,ConEq (UnitVar ("simple2_a22", "simple2_a22")) (UnitParamPosUse (("simple2_sqr3","sqr"),1,0))
             ,ConEq (UnitVar ("simple2_a11", "simple2_a11")) (UnitVar ("simple2_a11", "simple2_a11"))
             ,ConEq (UnitVar ("simple2_a22", "simple2_a22")) (UnitVar ("simple2_a22", "simple2_a22"))
-            ,ConEq (UnitParamPosUse ("simple2_sqr3",0,0)) (UnitMul (UnitParamPosUse ("simple2_sqr3",1,0)) (UnitParamPosUse ("simple2_sqr3",1,0)))]
+            ,ConEq (UnitParamPosUse (("simple2_sqr3","sqr"),0,0)) (UnitMul (UnitParamPosUse (("simple2_sqr3","sqr"),1,0)) (UnitParamPosUse (("simple2_sqr3","sqr"),1,0)))]
 
-testCons5 = [ConEq (UnitVar ("simple2_a11", "simple2_a11")) (UnitParamPosUse ("simple2_sqr3",0,0))
-            ,ConEq (UnitAlias "accel") (UnitParamPosUse ("simple2_sqr3",1,0))
+testCons5 = [ConEq (UnitVar ("simple2_a11", "simple2_a11")) (UnitParamPosUse (("simple2_sqr3","sqr"),0,0))
+            ,ConEq (UnitAlias "accel") (UnitParamPosUse (("simple2_sqr3","sqr"),1,0))
             ,ConEq (UnitVar ("simple2_a11", "simple2_a11")) (UnitVar ("simple2_a11", "simple2_a11"))
             ,ConEq (UnitVar ("simple2_a22", "simple2_a22")) (UnitAlias "accel")
-            ,ConEq (UnitParamPosUse ("simple2_sqr3",0,0)) (UnitMul (UnitParamPosUse ("simple2_sqr3",1,0)) (UnitParamPosUse ("simple2_sqr3",1,0)))
+            ,ConEq (UnitParamPosUse (("simple2_sqr3","sqr"),0,0)) (UnitMul (UnitParamPosUse (("simple2_sqr3","sqr"),1,0)) (UnitParamPosUse (("simple2_sqr3","sqr"),1,0)))
             ,ConEq (UnitAlias "accel") (UnitMul (UnitName "m") (UnitPow (UnitName "s") (-2.0)))]
 
 testCons5_infer = [(("simple2_a11", "simple2_a11"),UnitMul (UnitPow (UnitName "m") 2.0) (UnitPow (UnitName "s") (-4.0)))
