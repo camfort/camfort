@@ -15,8 +15,7 @@ before_install:
 script:
 - "GHC_OPTIONS=\"--ghc-options=\"$(ruby -e 'print (ENV[%q|TRAVIS_TAG|] =~ /v/ ? %q|-O3| : %q|-O0|)')\"\""
 - echo $GHC_OPTIONS
-- travis_wait 60 "stack test $GHC_OPTIONS"
-- stack haddock
+- stack haddock --test $GHC_OPTIONS
 after_success:
 - cp "$(stack exec -- which camfort)" camfort-Linux-x64
 - tar -cvzf camfort-Linux-x64.tar.gz camfort-Linux-x64
