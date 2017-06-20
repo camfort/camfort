@@ -26,7 +26,7 @@ import Test.Hspec
 runUnits litMode pf m = (r, usConstraints state)
   where
     pf' = FA.initAnalysis . fmap mkUnitAnnotation . fmap (const unitAnnotation) $ pf
-    uOpts = unitOpts0 { uoNameMap = M.empty, uoDebug = False, uoLiterals = litMode }
+    uOpts = unitOpts0 { uoDebug = False, uoLiterals = litMode }
     (r, state, _) = runUnitSolver uOpts pf' $ initInference >> m
 
 runUnitInference litMode pf = case r of
@@ -36,7 +36,7 @@ runUnitInference litMode pf = case r of
   _          -> ([], usConstraints state)
   where
     pf' = FA.initAnalysis . fmap mkUnitAnnotation . fmap (const unitAnnotation) $ pf
-    uOpts = unitOpts0 { uoNameMap = M.empty, uoDebug = False, uoLiterals = litMode }
+    uOpts = unitOpts0 { uoDebug = False, uoLiterals = litMode }
     (r, state, _) = runUnitSolver uOpts pf' $ initInference >> fmap chooseImplicitNames runInferVariables
 
 declVariables :: F.ProgramFile UA -> [F.Expression UA]
