@@ -31,6 +31,7 @@ import qualified Data.Set as S
 import Data.Functor.Identity
 import qualified Data.ByteString.Char8 as B
 
+import System.Directory (listDirectory)
 import System.FilePath
 
 import Test.Hspec
@@ -290,9 +291,19 @@ spec =
 \                stencil readOnce, (forward(depth=1, dim=1)) :: a\n\n\
 \Please resolve these errors, and then run synthesis again."
 
-  where assertStencilInferenceOnFile fileName testComment =
-          let file         = fixturesDir </> fileName
-              version      = deduceVersion file
+    let isExpectedSrcFile = (==".expected") . takeExtension . dropExtension
+        sampleDirectory   = fixturesDir </> "samples"
+    sampleFiles <- runIO $
+      fmap (filter (not . isExpectedSrcFile))
+      (listDirectory sampleDirectory)
+
+    describe "sample file tests" $
+        mapM_ (\file -> assertStencilInferenceOnFile
+                (sampleDirectory</>file)
+                ("produces correct output file for " ++ file)) sampleFiles
+
+  where assertStencilInferenceOnFile file testComment =
+          let version      = deduceVersion file
               oldExtension = takeExtension file
               expectedFile =
                 addExtension (replaceExtension file "expected")
