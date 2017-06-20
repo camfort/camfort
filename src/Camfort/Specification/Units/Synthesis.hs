@@ -14,7 +14,7 @@
    limitations under the License.
 -}
 
-{-# LANGUAGE PatternGuards, ScopedTypeVariables, ImplicitParams, DoAndIfThenElse, ConstraintKinds, TupleSections #-}
+{-# LANGUAGE PatternGuards, DoAndIfThenElse, ConstraintKinds, ScopedTypeVariables #-}
 
 module Camfort.Specification.Units.Synthesis
   (runSynthesis)
@@ -51,7 +51,7 @@ synthBlocks marker vars = fmap reverse . foldM (synthBlock marker vars) []
 -- particular, in order to possibly insert a unit annotation before
 -- them.
 synthBlock :: Char -> [(VV, UnitInfo)] -> [F.Block UA] -> F.Block UA -> UnitSolver [F.Block UA]
-synthBlock marker vars bs b@(F.BlStatement a ss@(FU.SrcSpan lp up) _ (F.StDeclaration _ _ _ _ decls)) = do
+synthBlock marker vars bs b@(F.BlStatement a (FU.SrcSpan lp _) _ (F.StDeclaration _ _ _ _ decls)) = do
   pf    <- usProgramFile `fmap` get
   gvSet <- usGivenVarSet `fmap` get
   newBs <- fmap catMaybes . forM (universeBi decls) $ \ e -> case e of
@@ -73,7 +73,7 @@ synthBlock marker vars bs b@(F.BlStatement a ss@(FU.SrcSpan lp up) _ (F.StDeclar
       where
         vname = FA.varName e
         sname = FA.srcName e
-    (e :: F.Expression UA) -> return Nothing
+    (_ :: F.Expression UA) -> return Nothing
   return (b:reverse newBs ++ bs)
 synthBlock _ _ bs b = return (b:bs)
 
@@ -87,7 +87,7 @@ synthProgramUnits marker vars pus = do
 -- list of program units. We're looking for functions, in particular,
 -- in order to possibly insert a unit annotation before them.
 synthProgramUnit :: Char -> [(VV, UnitInfo)] -> [F.ProgramUnit UA] -> F.ProgramUnit UA -> UnitSolver [F.ProgramUnit UA]
-synthProgramUnit marker vars pus pu@(F.PUFunction a ss@(FU.SrcSpan lp up) _ _ _ _ mret _ _) = do
+synthProgramUnit marker vars pus pu@(F.PUFunction a (FU.SrcSpan lp _) _ _ _ _ mret _ _) = do
   pf    <- usProgramFile `fmap` get
   gvSet <- usGivenVarSet `fmap` get
   let (vname, sname) = case mret of Just e  -> (FA.varName e, FA.srcName e)

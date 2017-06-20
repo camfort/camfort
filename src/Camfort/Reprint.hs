@@ -16,7 +16,11 @@
 
 {-# LANGUAGE RankNTypes #-}
 
-module Camfort.Reprint where
+module Camfort.Reprint
+  ( reprint
+  , subtext
+  , takeBounds
+  ) where
 
 import Data.Generics.Zipper
 
@@ -148,16 +152,16 @@ takeBounds (l, u) = subtext (ll, lc) (ll, lc) (ul, uc)
 
 -}
 subtext :: (Int, Int) -> (Int, Int) -> (Int, Int) -> B.ByteString -> (B.ByteString, B.ByteString)
-subtext cursor lower@(lowerLn, lowerCol) upper@(upperLn, upperCol) =
+subtext cursor (lowerLn, lowerCol) (upperLn, upperCol) =
     subtext' B.empty cursor
   where
-    subtext' acc cursor@(cursorLn, cursorCol) input
+    subtext' acc (cursorLn, cursorCol) input
 
       | cursorLn <= lowerLn && (cursorCol >= lowerCol ==> cursorLn < lowerLn) =
         case B.uncons input of
           Nothing -> (B.reverse acc, input)
           Just ('\n', input') -> subtext' acc (cursorLn+1, 1) input'
-          Just (x, input')    -> subtext' acc (cursorLn, cursorCol+1) input'
+          Just (_, input')    -> subtext' acc (cursorLn, cursorCol+1) input'
 
       | cursorLn <= upperLn && (cursorCol >= upperCol ==> cursorLn < upperLn) =
         case B.uncons input of

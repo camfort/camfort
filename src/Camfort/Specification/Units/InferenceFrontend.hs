@@ -257,7 +257,7 @@ insertGivenUnits = do
   where
     -- Look through each Program Unit for the comments
     checkPU :: F.ProgramUnit UA -> UnitSolver ()
-    checkPU pu@(F.PUComment a _ _)
+    checkPU (F.PUComment a _ _)
       -- Look at unit assignment between function return variable and spec.
       | Just (P.UnitAssignment (Just vars) unitsAST) <- mSpec
       , Just pu                                      <- mPU = insertPUUnitAssigns (toUnitInfo unitsAST) pu vars
@@ -314,55 +314,6 @@ insertGivenUnits = do
           let m = M.fromList [ ((retUniq, retSrc), info') ]
           modifyVarUnitMap $ M.unionWith const m
           modifyGivenVarSet . S.union . S.fromList . map fst . M.keys $ m
-
-
--- ensure polymorphic variable annotation is used correctly
-checkPolymorphicAnnotation :: UnitSolver [String]
-checkPolymorphicAnnotation = do
-  pf     <- gets usProgramFile
-  checks <- mapM checkPU (universeBi pf)
-  return . map fst . filter (not . snd) $ checks
-  where
-    -- Look through each Program Unit for its parameters and annotations
-    checkPU :: F.ProgramUnit UA -> UnitSolver (String, Bool)
-    checkPU pu = do
-        (argPolys, resPolys) <- foldM (checkBlockComment (getNameAndArgs pu)) ([], []) [ b | b@(F.BlComment {}) <- universeBi (F.programUnitBody pu) ]
-        return (puName pu, S.fromList resPolys `S.isSubsetOf` S.fromList argPolys)
-      where
-        getNameAndArgs :: F.ProgramUnit UA -> Maybe (String, [String], Maybe String)
-        getNameAndArgs pu = case pu of
-          F.PUFunction _ _ _ _ _ args Nothing _ _
-            | name <- puName pu -> Just (name, map varName (universeBi args :: [F.Expression UA]), Just name)
-          F.PUFunction _ _ _ _ _ args (Just res) _ _
-            | name <- puName pu -> Just (name, map varName (universeBi args :: [F.Expression UA]), Just (varName res))
-          F.PUSubroutine _ _ _ _ args _ _
-            | name <- puName pu -> Just (name, map varName (universeBi args :: [F.Expression UA]), Nothing)
-          _                     -> Nothing
-    checkBlockComment :: Maybe (String, [String], Maybe String) -> ([String], [String]) -> F.Block UA -> UnitSolver ([String], [String])
-    checkBlockComment pinfo (argPolys, resPolys) (F.BlComment a _ _)
-      -- Look at unit assignment between variable and spec.
-      | Just (pname, args, mres)                     <- pinfo
-      , Just (P.UnitAssignment (Just vars) unitsAST) <- mSpec
-      , Just b                                       <- mBlock =
-        let
-          annotVars  = S.fromList [ varName e
-                                  | e@(F.ExpValue _ _ (F.ValVariable _)) <- universeBi b :: [F.Expression UA]
-                                  , varSrcName <- vars
-                                  , varSrcName == srcName e ]
-          extractPolys ast = [ v | P.UnitBasic (v@('\'':_)) <- universeBi ast ]
-        in case () of
-             () | any (`S.member` annotVars) args -> return (extractPolys unitsAST ++ argPolys, resPolys)
-                | Just res <- mres,
-                  res `S.member` annotVars        -> return (argPolys, extractPolys unitsAST ++ resPolys)
-                | otherwise                       -> return (argPolys, resPolys)
-      | otherwise                                             = return (argPolys, resPolys)
-      where
-        mSpec      = unitSpec (FA.prevAnnotation a)
-        mBlock     = unitBlock (FA.prevAnnotation a)
-
-
-
-
 
 --------------------------------------------------
 
@@ -423,12 +374,6 @@ isLiteral :: F.Expression UA -> Bool
 isLiteral (F.ExpValue _ _ (F.ValReal _))    = True
 isLiteral (F.ExpValue _ _ (F.ValInteger _)) = True
 isLiteral _                                 = False
-
--- | Is expression a literal and is it zero?
-isLiteralZero :: F.Expression UA -> Bool
-isLiteralZero (F.ExpValue _ _ (F.ValInteger i)) = readInteger i == Just 0
-isLiteralZero (F.ExpValue _ _ (F.ValReal i))    = readReal i    == Just 0
-isLiteralZero _                                 = False
 
 -- | Is expression a literal and is it zero?
 isLiteralNonZero :: F.Expression UA -> Bool
@@ -541,14 +486,6 @@ foldUnits units
   | null units = UnitlessVar
   | otherwise  = foldl1 UnitMul units
 
--- | Generate constraints from a NameParamMap entry.
-nameParamConstraints :: F.Name -> UnitSolver Constraints
-nameParamConstraints fname = do
-  let filterForName (NPKParam n _) _ = n == fname
-      filterForName _ _              = False
-  nlst <- (M.toList . M.filterWithKey filterForName) `fmap` gets usNameParamMap
-  return [ ConEq (UnitParamPosAbs (fname, pos)) (foldUnits units) | (NPKParam _ pos, units) <- nlst ]
-
 -- | If given a usage of a parametric unit, rewrite the callId field
 -- to follow an existing mapping in the usCallIdRemap state field, or
 -- generate a new callId and add it to the usCallIdRemap state field.
@@ -615,22 +552,6 @@ mainBlocks = concatMap getBlocks . universeBi
     getBlocks (F.PUModule _ _ _ bs _) = bs
     getBlocks _                       = []
 
--- | Does the constraint contain any Parametric elements?
-isParametric :: Constraint -> Bool
-isParametric info = not . null $ [ () | UnitParamPosAbs _ <- universeBi info ] ++
-                                 [ () | UnitParamVarAbs _ <- universeBi info ] ++
-                                 [ () | UnitParamLitAbs _ <- universeBi info ]
-
--- | Does the constraint contain only Parametric elements?
-isAllParametric :: Constraint -> Bool
-isAllParametric = all f . universeBi
-  where
-    f i = case i of
-      UnitParamPosAbs _ -> True
-      UnitParamVarAbs _ -> True
-      UnitParamLitAbs _ -> True
-      _                 -> False
-
 --------------------------------------------------
 
 -- | Decorate the AST with unit info.
@@ -661,11 +582,11 @@ propagateExp e = fmap uoLiterals ask >>= \ lm -> case e of
     setF2C f u1 u2 = return . maybeSetUnitInfo u1 $ maybeSetUnitConstraintF2 f u1 u2 e
 
 propagateFunctionCall :: F.Expression UA -> UnitSolver (F.Expression UA)
-propagateFunctionCall e@(F.ExpFunctionCall a s f Nothing)                     = do
+propagateFunctionCall (F.ExpFunctionCall a s f Nothing)                     = do
   (info, _) <- callHelper f []
   let cons = intrinsicHelper info f []
   return . setConstraint (ConConj cons) . setUnitInfo info $ F.ExpFunctionCall a s f Nothing
-propagateFunctionCall e@(F.ExpFunctionCall a s f (Just (F.AList a' s' args))) = do
+propagateFunctionCall (F.ExpFunctionCall a s f (Just (F.AList a' s' args))) = do
   (info, args') <- callHelper f args
   let cons = intrinsicHelper info f args'
   return . setConstraint (ConConj cons) . setUnitInfo info $ F.ExpFunctionCall a s f (Just (F.AList a' s' args'))
@@ -730,11 +651,6 @@ propagatePU pu = do
   return (setConstraint (ConConj cons) pu')
 
 --------------------------------------------------
-
--- | Check if x contains an abstract parametric reference under the given name.
-containsParametric :: Data from => String -> from -> Bool
-containsParametric name x = not . null $ [ () | UnitParamPosAbs (name', _) <- universeBi x, name == name' ] ++
-                                         [ () | UnitParamVarAbs (name', _) <- universeBi x, name == name' ]
 
 -- | Coalesce various function and subroutine call common code.
 callHelper :: F.Expression UA -> [F.Argument UA] -> UnitSolver (UnitInfo, [F.Argument UA])
@@ -831,11 +747,6 @@ maybeSetUnitInfoF2 _ _ _ e                 = e
 maybeSetUnitConstraintF2 :: F.Annotated f => (a -> b -> Constraint) -> Maybe a -> Maybe b -> f UA -> f UA
 maybeSetUnitConstraintF2 f (Just u1) (Just u2) e = setConstraint (f u1 u2) e
 maybeSetUnitConstraintF2 _ _ _ e                 = e
-
-fmapUnitInfo :: F.Annotated f => (UnitInfo -> UnitInfo) -> f UA -> f UA
-fmapUnitInfo f x
-  | Just u <- getUnitInfo x = setUnitInfo (f u) x
-  | otherwise               = x
 
 -- Operate only on the blocks of a program unit, not the contained sub-programunits.
 modifyPUBlocksM :: Monad m => ([F.Block a] -> m [F.Block a]) -> F.ProgramUnit a -> m (F.ProgramUnit a)

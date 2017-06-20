@@ -18,7 +18,24 @@
 
 {- Provides various data types and type class instances for the Units extension -}
 
-module Camfort.Specification.Units.Environment where
+module Camfort.Specification.Units.Environment
+  (
+    -- * Datatypes and Aliases
+    Constraint(..)
+  , Constraints
+  , UnitAnnotation(..)
+  , UnitInfo(..)
+  , VV
+    -- * Helpers
+  , conParamEq
+  , doubleToRationalSubset
+  , mkUnitAnnotation
+  , pprintConstr
+  , pprintUnitInfo
+  , toUnitInfo
+    -- * Modules (instances)
+  , module Data.Data
+  ) where
 
 import qualified Language.Fortran.AST as F
 import qualified Language.Fortran.Analysis as FA
@@ -86,7 +103,7 @@ instance Show UnitInfo where
       | k < 0                      -> maybeParen u1 ++ " / " ++ maybeParen (UnitPow u2 (-k))
     UnitMul u1 u2                  -> maybeParenS u1 ++ " " ++ maybeParenS u2
     UnitPow u 1                    -> show u
-    UnitPow u 0                    -> "1"
+    UnitPow _ 0                    -> "1"
     UnitPow u k                    -> -- printf "%s**%f" (maybeParen u) k
       case doubleToRationalSubset k of
           Just r
@@ -148,10 +165,6 @@ instance Show Constraint where
   show (ConEq u1 u2) = show u1 ++ " === " ++ show u2
   show (ConConj cs) = intercalate " && " (map show cs)
 
-isVarUnit (UnitVar _)         = True
-isVarUnit (UnitParamVarUse _) = True
-isVarUnit _                   = False
-
 isUnresolvedUnit (UnitVar _)         = True
 isUnresolvedUnit (UnitParamVarUse _) = True
 isUnresolvedUnit (UnitParamVarAbs _) = True
@@ -198,17 +211,6 @@ pprintUnitInfo _ ui = show ui
 
 --------------------------------------------------
 
--- | Constraint 'parametric' equality (structural) treat all uses of a parametric
--- abstractions as equivalent to the abstraction. This structural version
--- compares equality of two constraints, but does not consider the constraints
--- to be composable (by transitivity).
-conParamEqStructural :: Constraint -> Constraint -> Bool
-conParamEqStructural (ConEq lhs1 rhs1) (ConEq lhs2 rhs2) =
-   (unitParamEq lhs1 lhs2 && unitParamEq rhs1 rhs2) ||
-   (unitParamEq rhs1 lhs2 && unitParamEq lhs1 rhs2)
-conParamEqStructural (ConConj cs1) (ConConj cs2) = and $ zipWith conParamEqStructural cs1 cs2
-conParamEqStructural _ _ = False
-
 -- | Constraint 'parametric' equality: treat all uses of a parametric
 -- abstractions as equivalent to the abstraction.
 conParamEq :: Constraint -> Constraint -> Bool
@@ -244,21 +246,6 @@ data UnitAnnotation a = UnitAnnotation {
     unitBlock      :: Maybe (F.Block (FA.Analysis (UnitAnnotation a))), -- ^ linked variable declaration
     unitPU         :: Maybe (F.ProgramUnit (FA.Analysis (UnitAnnotation a))) -- ^ linked program unit
   } deriving (Data, Typeable, Show)
-
-dbgUnitAnnotation (UnitAnnotation _ s c i b p) =
-  "{ unitSpec = " ++ show s ++ ", unitConstraint = " ++ show c ++ ", unitInfo = " ++ show i ++ ", unitBlock = " ++
-     (case b of
-        Nothing -> "Nothing"
-        Just (F.BlStatement _ span _ (F.StDeclaration {}))  -> "Just {decl}@" ++ show span
-        Just (F.BlStatement _ span _ _) -> "Just {stmt}@" ++ show span
-        Just _ -> "Just ...")
-   ++ ", unitPU = " ++
-     (case p of
-        Nothing -> "Nothing"
-        Just (F.PUFunction _ span _ _ _ _ _ _ _)  -> "Just {func}@" ++ show span
-        Just (F.PUSubroutine _ span _ _ _ _ _) -> "Just {subr}@" ++ show span
-        Just _ -> "Just ...")
-   ++ "}"
 
 mkUnitAnnotation :: a -> UnitAnnotation a
 mkUnitAnnotation a = UnitAnnotation a Nothing Nothing Nothing Nothing Nothing

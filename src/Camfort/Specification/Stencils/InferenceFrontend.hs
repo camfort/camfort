@@ -14,14 +14,29 @@
    limitations under the License.
 -}
 
-{-# LANGUAGE TupleSections #-}
 {-# LANGUAGE FlexibleContexts #-}
 {-# LANGUAGE DeriveDataTypeable #-}
 {-# LANGUAGE PatternGuards #-}
 {-# LANGUAGE ScopedTypeVariables #-}
 {-# LANGUAGE ConstraintKinds #-}
 
-module Camfort.Specification.Stencils.InferenceFrontend where
+module Camfort.Specification.Stencils.InferenceFrontend
+  (
+    -- * Datatypes and Aliases
+    EvalLog
+  , InferMode(..)
+  , Neighbour(..)
+    -- * Functions
+  , assocsSequence
+  , genSpecifications
+  , genSubscripts
+  , indicesToRelativisedOffsets
+  , indicesToSpec
+  , isArraySubscript
+  , ixToNeighbour'
+  , neighbourIndex
+  , stencilInference
+  ) where
 
 import Control.Monad.State.Strict
 import Control.Monad.Reader
@@ -98,7 +113,7 @@ stencilInference mode marker pf =
     -- decide whether to synthesise or not
 
     -- TODO: might want to output log0 somehow (though it doesn't fit LogLine)
-    (pf'@(F.ProgramFile mi pus), log0) =
+    (pf'@(F.ProgramFile mi pus), _log0) =
          if mode == Synth
           then runWriter (annotateComments Gram.specParser pf)
           else (pf, [])
@@ -112,13 +127,13 @@ stencilInference mode marker pf =
     perPU pu | Just _ <- FA.bBlocks $ F.getAnnotation pu = do
         let pum = descendBiM (perBlockInfer mode marker mi) pu
         let (pu', log) = runInferer ivMap flTo pum
+            -- induction variable map
+            ivMap = FAD.genInductionVarMapByASTBlock beMap gr
         tell log
         return pu'
 
     perPU pu = return pu
 
-    -- induction variable map
-    ivMap = FAD.genInductionVarMapByASTBlock beMap gr
     -- perform reaching definitions analysis
     rd    = FAD.reachingDefinitions dm gr
     -- create graph of definition "flows"
@@ -222,7 +237,7 @@ perBlockInfer mode marker mi b@(F.BlStatement ann span@(FU.SrcSpan lp _) _ stmnt
          -- ... apply the following:
          case lhs of
           -- Assignment to a variable
-          (F.ExpValue _ _ (F.ValVariable v)) -> genSpecsAndReport mode span [] [b]
+          (F.ExpValue _ _ (F.ValVariable _)) -> genSpecsAndReport mode span [] [b]
           _ -> case isArraySubscript lhs of
              Just subs ->
                -- Left-hand side is a subscript-by relative index or by a range
@@ -374,7 +389,7 @@ genRHSsubscripts b = genRHSsubscripts' (transformBi replaceModulo b)
   where
     -- Any occurence of an subscript "modulo(e, e')" is replaced with "e"
     replaceModulo :: F.Expression (FA.Analysis A) -> F.Expression (FA.Analysis A)
-    replaceModulo e@(F.ExpFunctionCall _ _
+    replaceModulo (F.ExpFunctionCall _ _
                       (F.ExpValue _ _ (F.ValIntrinsic iname)) subs)
         | iname `elem` ["modulo", "mod", "amod", "dmod"]
         -- We expect that the first parameter to modulo is being treated
@@ -618,11 +633,6 @@ expToNeighbour ivs e =
 --------------------------------------------------
 
 -- Helper predicates
-isUnaryOrBinaryExpr :: F.Expression a -> Bool
-isUnaryOrBinaryExpr (F.ExpUnary {})  = True
-isUnaryOrBinaryExpr (F.ExpBinary {}) = True
-isUnaryOrBinaryExpr _                = False
-
 isVariableExpr :: F.Expression a -> Bool
 isVariableExpr (F.ExpValue _ _ (F.ValVariable _)) = True
 isVariableExpr _                                  = False

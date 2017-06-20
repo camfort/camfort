@@ -18,7 +18,26 @@
 {-# LANGUAGE TypeSynonymInstances #-}
 {-# LANGUAGE FlexibleInstances #-}
 
-module Camfort.Analysis.Annotations where
+module Camfort.Analysis.Annotations
+  (
+  -- * Annotation Datatype
+    Annotation(..)
+  , A
+  , UA
+  , unitAnnotation
+  -- ** Predicates
+  , pRefactored
+  , refactored
+  -- ** Transformation Helpers
+  , modifyAnnotation
+  , onPrev
+  -- * Stencils
+  , stencilBlock
+  , stencilSpec
+  -- * Other Helpers
+  , Report
+  , buildCommentText
+  ) where
 
 import Data.Data
 import Data.Maybe (isJust)

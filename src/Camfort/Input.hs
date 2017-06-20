@@ -23,7 +23,25 @@ Handles input of code base (files and directories)
 
 {-# LANGUAGE DoAndIfThenElse #-}
 
-module Camfort.Input where
+module Camfort.Input
+  (
+    -- * Classes
+    Default(..)
+    -- * Datatypes and Aliases
+  , FileProgram
+    -- * Builders for analysers and refactorings
+  , callAndSummarise
+  , doAnalysisReportWithModFiles
+  , doAnalysisSummary
+  , doRefactor
+  , doRefactorAndCreate
+  , doRefactorWithModFiles
+    -- * Source directory and file handling
+  , doCreateBinary
+  , fileExt
+  , readParseSrcDir
+  , rGetDirContents'
+  ) where
 
 import Camfort.Analysis.Annotations
 import Camfort.Helpers

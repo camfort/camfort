@@ -79,7 +79,7 @@ spec =
 
 ----
 
-data PlusOne a = PlusOne { unwrapPO :: a } deriving Show
+data PlusOne a = PlusOne { _unwrapPO :: a } deriving Show
 
 instance Arbitrary (PlusOne FU.Position) where
     arbitrary = do

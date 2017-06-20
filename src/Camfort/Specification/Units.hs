@@ -39,7 +39,7 @@ import qualified Data.ByteString.Char8 as B
 import qualified Data.ByteString.Lazy.Char8 as LB
 import GHC.Generics (Generic)
 
-import Camfort.Helpers hiding (lineCol)
+import Camfort.Helpers
 import Camfort.Analysis.Annotations
 import Camfort.Input
 import Camfort.Reprint (subtext)
@@ -67,7 +67,7 @@ inferCriticalVariables
   :: UnitOpts -> (Filename, SourceText, F.ProgramFile Annotation) -> (Report, Int)
 
 {-| Infer one possible set of critical variables for a program -}
-inferCriticalVariables uo (fname, fileText, pf)
+inferCriticalVariables uo (fname, _, pf)
   | Right vars <- eVars = okReport vars
   | Left exc   <- eVars = (errReport exc, -1)
   where
@@ -222,7 +222,7 @@ checkUnits uo (fname, fileText, pf)
         (FU.SrcSpan (FU.Position _ colL lnL) (FU.Position _ colU lnU)) = srcSpan
         lower = (lnL, colL)
         upper = (lnU, colU)
- 
+
     varReport     = intercalate ", " . map showVar
 
     showVar (UnitVar (_, s)) = s

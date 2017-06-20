@@ -30,7 +30,7 @@ where
 
 import Data.Tuple (swap)
 import Data.Maybe (maybeToList)
-import Data.List ((\\), findIndex, partition, sortBy, group, intercalate, tails)
+import Data.List ((\\), findIndex, partition, sortBy, group, tails)
 import Data.Generics.Uniplate.Operations (rewrite)
 import Control.Monad
 import Control.Monad.ST
@@ -71,7 +71,7 @@ criticalVariables :: Constraints -> [UnitInfo]
 criticalVariables [] = []
 criticalVariables cons = filter (not . isUnitRHS) $ map (colA A.!) criticalIndices
   where
-    (unsolvedM, inconsists, colA) = constraintsToMatrix cons
+    (unsolvedM, _, colA) = constraintsToMatrix cons
     solvedM                       = rref unsolvedM
     uncriticalIndices             = concatMap (maybeToList . findIndex (/= 0)) $ H.toLists solvedM
     criticalIndices               = A.indices colA \\ uncriticalIndices
@@ -121,8 +121,6 @@ genUnitAssignments cons
 
 --------------------------------------------------
 
-simplifyConstraints = map (\ (ConEq u1 u2) -> (flattenUnits u1, flattenUnits u2))
-
 simplifyUnits :: UnitInfo -> UnitInfo
 simplifyUnits = rewrite rw
   where
@@ -133,7 +131,7 @@ simplifyUnits = rewrite rw
     rw (UnitPow _ p) | p `approxEq` 0                        = Just UnitlessLit
     rw (UnitMul UnitlessLit u)                               = Just u
     rw (UnitMul u UnitlessLit)                               = Just u
-    rw u                                                     = Nothing
+    rw _                                                     = Nothing
 
 flattenUnits :: UnitInfo -> [UnitInfo]
 flattenUnits = map (uncurry UnitPow) . M.toList
@@ -180,7 +178,6 @@ constraintsToMatrices cons = (lhsM, rhsM, inconsists, lhsCols, rhsCols)
     rhs             = map snd shiftedCons
     (lhsM, lhsCols) = flattenedToMatrix lhs
     (rhsM, rhsCols) = flattenedToMatrix rhs
-    colElems        = A.elems lhsCols ++ A.elems rhsCols
     augM            = if rows rhsM == 0 || cols rhsM == 0 then lhsM else fromBlocks [[lhsM, rhsM]]
     inconsists      = findInconsistentRows lhsM augM
 
@@ -247,16 +244,6 @@ isInconsistentRREF a = a @@> (rows a - 1, cols a - 1) == 1 && rank (takeColumns 
 rref :: H.Matrix Double -> H.Matrix Double
 rref a = snd $ rrefMatrices' a 0 0 []
 
--- | List of matrices that when multiplied transform input into
--- Reduced Row Echelon Form
-rrefMatrices :: H.Matrix Double -> [H.Matrix Double]
-rrefMatrices a = fst $ rrefMatrices' a 0 0 []
-
--- | Single matrix that transforms input into Reduced Row Echelon form
--- when multiplied to the original.
-rrefMatrix :: H.Matrix Double -> H.Matrix Double
-rrefMatrix a = foldr (<>) (ident (rows a)) . fst $ rrefMatrices' a 0 0 []
-
 -- worker function
 -- invariant: the matrix a is in rref except within the submatrix (j-k,j) to (n,n)
 rrefMatrices' a j k mats
@@ -294,7 +281,7 @@ rrefMatrices' a j k mats
     -- separate elemRowAdd matrix for each cancellation that are then
     -- multiplied together, simply build a single matrix that cancels
     -- all of them out at the same time, using the ST Monad.
-    findAdds i m ms
+    findAdds _ m ms
       | isWritten = (new <> m, new:ms)
       | otherwise = (m, ms)
       where
@@ -319,13 +306,6 @@ getColumnBelow a (i, j) = concat . H.toLists $ subMatrix (i, j) (n - i, 1) a
 elemRowMult :: Int -> Int -> Double -> H.Matrix Double
 elemRowMult n i k = diag (H.fromList (replicate i 1.0 ++ [k] ++ replicate (n - i - 1) 1.0))
 
-elemRowAdd :: Int -> Int -> Int -> Double -> H.Matrix Double
-elemRowAdd n i j k = runSTMatrix $ do
-      m <- newMatrix 0 n n
-      sequence [ writeMatrix m i' i' 1 | i' <- [0 .. (n - 1)] ]
-      writeMatrix m i j k
-      return m
-
 elemRowSwap :: Int -> Int -> Int -> H.Matrix Double
 elemRowSwap n i j
   | i == j          = ident n
@@ -336,12 +316,6 @@ elemRowSwap n i j
 --------------------------------------------------
 
 -- Worker functions:
-
-toDouble :: Rational -> Double
-toDouble = fromRational
-
-fromDouble :: Double -> Rational
-fromDouble = toRational
 
 findInconsistentRows :: H.Matrix Double -> H.Matrix Double -> [Int]
 findInconsistentRows coA augA = [0..(rows augA - 1)] \\ consistent
@@ -356,12 +330,5 @@ findInconsistentRows coA augA = [0..(rows augA - 1)] \\ consistent
         coA'  = extractRows ns coA
         augA' = extractRows ns augA
 
-    pset = filterM (const [True, False])
-
 extractRows = flip (?) -- hmatrix 0.17 changed interface
 m @@> i = m `atIndex` i
-
-showCons str = unlines . ([replicate 50 '-', str ++ ":"]++) . (++[replicate 50 '^']) . map f
-  where
-    f (ConEq u1 u2)  = show (flattenUnits u1) ++ " === " ++ show (flattenUnits u2)
-    f (ConConj cons) = intercalate " && " (map f cons)

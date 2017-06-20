@@ -18,7 +18,11 @@
 {-# LANGUAGE ImplicitParams #-}
 {-# LANGUAGE LambdaCase #-}
 
-module Camfort.Specification.Stencils.CheckFrontend where
+module Camfort.Specification.Stencils.CheckFrontend
+  (
+    -- * Stencil checking
+    stencilChecking
+  ) where
 
 import Data.Generics.Uniplate.Operations
 import Control.Arrow

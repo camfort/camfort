@@ -16,9 +16,12 @@
 
 {-# LANGUAGE GADTs #-}
 {-# LANGUAGE FlexibleContexts #-}
-{-# LANGUAGE TupleSections #-}
 
-module Camfort.Specification.Stencils.Synthesis where
+module Camfort.Specification.Stencils.Synthesis
+  ( formatSpec
+  , formatSpecNoComment
+  , offsetToIx
+  ) where
 
 import Data.List
 

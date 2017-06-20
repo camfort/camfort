@@ -17,7 +17,6 @@ promoteErrors (Right x) = Right x
 parseAndConvert x =
     let ?renv = []
     in SYN.specParser x >>= (promoteErrors . synToAst)
-extract (Right (Right [(_, s)])) = s
 
 spec :: Spec
 spec =

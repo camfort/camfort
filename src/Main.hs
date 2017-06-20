@@ -15,7 +15,7 @@
 
 {-# LANGUAGE DoAndIfThenElse #-}
 
-module Main where
+module Main (main) where
 
 import Camfort.Input (defaultValue)
 import Camfort.Functionality
@@ -57,7 +57,7 @@ data ReadOptions = ReadOptions
 --
 -- User can choose to either specify which file to write, or have
 -- the input files be written over.
-data WriteOptions = WriteFile { outputFile :: String }
+data WriteOptions = WriteFile { _outputFile :: String }
                   | WriteInplace
 
 
@@ -119,7 +119,7 @@ multiFileOption m = option (list str)
                     (metavar "FILE..." <> action "file" <> m)
   where list :: ReadM String -> ReadM [String]
         list = fmap (splitBy ',')
-        splitBy c [] = []
+        splitBy _ [] = []
         splitBy c xs = case break (==c) xs of
                          (xs', [])     -> [xs']
                          (xs', _:cs) -> xs' : splitBy c cs
@@ -317,7 +317,7 @@ main = do
           so     = ssoStencilsOptions sso
           ro     = soReadOptions so
           inFile = inputSource ro
-      in runSO so stencilsSynth (annotationType ao) (getOutputFile inFile wo)
+      in runSO so f (annotationType ao) (getOutputFile inFile wo)
     runUO uo f =
       let ro = uoReadOptions uo
       in runRO ro f (literals uo) (debug uo) (includeDir uo)

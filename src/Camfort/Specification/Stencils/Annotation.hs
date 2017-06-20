@@ -17,7 +17,7 @@
 {-# LANGUAGE FlexibleInstances #-}
 {-# LANGUAGE MultiParamTypeClasses #-}
 
-module Camfort.Specification.Stencils.Annotation where
+module Camfort.Specification.Stencils.Annotation () where
 
 import Camfort.Analysis.Annotations
 import Camfort.Analysis.CommentAnnotator
@@ -38,5 +38,5 @@ instance Linkable (FA.Analysis Annotation) where
       onPrev (\ann -> ann { stencilBlock = Just b }) ann
   link ann (b@(F.BlStatement _ _ _ (F.StExpressionAssign {}))) =
       onPrev (\ann -> ann { stencilBlock = Just b }) ann
-  link ann b = ann
-  linkPU ann pu = ann
+  link ann _ = ann
+  linkPU ann _ = ann

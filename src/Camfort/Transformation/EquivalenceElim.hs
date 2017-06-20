@@ -16,7 +16,9 @@
 {-# LANGUAGE ScopedTypeVariables #-}
 {-# LANGUAGE FlexibleContexts #-}
 
-module Camfort.Transformation.EquivalenceElim where
+module Camfort.Transformation.EquivalenceElim
+  ( refactorEquivalences
+  ) where
 
 import Data.List
 import qualified Data.Map as M
@@ -66,8 +68,8 @@ addCopysPerBlockGroup tenv blocks = do
     return $ concat blockss
 
 addCopysPerBlock :: FAT.TypeEnv -> F.Block A1 -> State RmEqState [F.Block A1]
-addCopysPerBlock tenv x@(F.BlStatement a0 s0 lab
-                 (F.StExpressionAssign a sp@(FU.SrcSpan s1 s2) dstE srcE))
+addCopysPerBlock tenv x@(F.BlStatement _ _ _
+                 (F.StExpressionAssign a sp@(FU.SrcSpan s1 _) dstE _))
   | not (pRefactored $ FA.prevAnnotation a) = do
     -- Find all variables/cells that are equivalent to the target
     -- of this assignment
@@ -129,7 +131,7 @@ mkCopy tenv pos srcE dstE = FA.initAnalysis $
                      argst  = Just (F.AList a sp args)
                      args   = map (F.Argument a sp Nothing) [srcE', dstE']
        -- Types are equal, simple a assignment
-       Just t -> F.StExpressionAssign a sp dstE' srcE'
+       Just _ -> F.StExpressionAssign a sp dstE' srcE'
   where
      -- Set position to be at col = 0
      sp   = FU.SrcSpan (toCol0 pos) (toCol0 pos)
@@ -143,7 +145,7 @@ perBlockRmEquiv :: F.Block A1 -> State RmEqState (F.Block A1)
 perBlockRmEquiv = transformBiM perStatementRmEquiv
 
 perStatementRmEquiv :: F.Statement A1 -> State RmEqState (F.Statement A1)
-perStatementRmEquiv f@(F.StEquivalence a sp@(FU.SrcSpan spL spU) equivs) = do
+perStatementRmEquiv (F.StEquivalence a sp@(FU.SrcSpan spL _) equivs) = do
     (ess, n, r) <- get
     let report = r ++ show spL ++ ": removed equivalence \n"
     put (((map F.aStrip) . F.aStrip $ equivs) ++ ess, n - 1, r ++ report)
@@ -158,7 +160,7 @@ equivalentsToExpr x = do
     (equivs, _, _) <- get
     return (inGroup x equivs)
   where
-    inGroup x [] = []
+    inGroup _ [] = []
     inGroup x (xs:xss) =
         if AnnotationFree x `elem` map AnnotationFree xs
         then xs

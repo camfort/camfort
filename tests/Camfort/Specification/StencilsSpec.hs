@@ -19,7 +19,7 @@ import Camfort.Specification.Stencils.Synthesis
 import Camfort.Specification.Stencils.Model
 import Camfort.Specification.Stencils.InferenceBackend
 import Camfort.Specification.Stencils.InferenceFrontend
-import Camfort.Specification.Stencils.Syntax hiding (Spec)
+import Camfort.Specification.Stencils.Syntax
 import qualified Language.Fortran.AST as F
 import Language.Fortran.ParserMonad
 import Camfort.Reprint
@@ -251,9 +251,6 @@ spec =
            `shouldBe`
            "\ntests/fixtures/Specification/Stencils/example2.f\n\
             \(23:1)-(23:82)    Correct.\n(31:1)-(31:56)    Correct."
-
-    let example3In = fixturesDir </> "example3.f"
-    program <- runIO $ readParseSrcDir example3In []
 
     let example4In = fixturesDir </> "example4.f"
     program <- runIO $ readParseSrcDir example4In []

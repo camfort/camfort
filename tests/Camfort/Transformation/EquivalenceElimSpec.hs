@@ -16,7 +16,7 @@
 {-# LANGUAGE ScopedTypeVariables #-}
 {-# LANGUAGE FlexibleContexts #-}
 
-module Camfort.Transformation.EquivalenceElimSpec where
+module Camfort.Transformation.EquivalenceElimSpec (spec) where
 
 import System.FilePath
 import System.Directory

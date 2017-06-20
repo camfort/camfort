@@ -18,7 +18,13 @@
 {-# LANGUAGE GADTs #-}
 {-# LANGUAGE LambdaCase #-}
 
-module Camfort.Specification.Stencils.InferenceBackend where
+module Camfort.Specification.Stencils.InferenceBackend
+  ( coalesce
+  , containedWithin
+  , inferFromIndicesWithoutLinearity
+  , inferMinimalVectorRegions
+  , spansToApproxSpatial
+  ) where
 
 import Data.List
 import Data.Maybe

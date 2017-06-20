@@ -17,16 +17,13 @@
 {-# LANGUAGE FlexibleInstances #-}
 {-# LANGUAGE FlexibleContexts #-}
 
-module Camfort.Transformation.DataTypeIntroduction where
+module Camfort.Transformation.DataTypeIntroduction
+  ( dataTypeIntro
+  ) where
 
 import qualified Language.Fortran.AST as F
-import qualified Language.Fortran.Analysis as FA
 import qualified Language.Fortran.Analysis.DataFlow as FAD
-import qualified Language.Fortran.Analysis.Renaming as FAR
-import qualified Language.Fortran.Analysis.BBlocks as FAB
 
-import qualified Data.Graph.Inductive.PatriciaTree as G
-import qualified Data.Map.Lazy as M
 
 import qualified Data.Set as S
 
@@ -34,10 +31,6 @@ import Camfort.Helpers
 import Camfort.Analysis.Annotations
 
 import qualified Data.IntMap as IM
-
--- Array-subscript interference graphs, in a map from
--- the array variable to the interference graph
-type IGraphs = M.Map F.Name (G.Gr F.Name Int)
 
 -- Top-level
 dataTypeIntro ::
@@ -54,43 +47,4 @@ buildInterferenceGraph = show . (foldr IM.union IM.empty) . map analysePerPF
 -- Stub, generate LVA information
 analysePerPF ::
    (Filename, F.ProgramFile A) -> FAD.InOutMap (S.Set F.Name)
-analysePerPF (fname, pf) = undefined
-  where
-    -- (report, pf'') = transformBiM (perStmt lva) pf
-    -- initialise analysis
-    pf'   = FAB.analyseBBlocks . FAR.analyseRenames . FA.initAnalysis $ pf
-    -- get map of program unit ==> basic block graph
-    bbm   = FAB.genBBlockMap pf'
-    -- build the supergraph of global dependency
-    sgr   = FAB.genSuperBBGr bbm
-    -- extract the supergraph itself
-    gr    = FAB.superBBGrGraph sgr
-    -- live variables
-    lva   = FAD.liveVariableAnalysis gr
-
--- Core of the transformation happens here on assignment statements
---perStmt :: FAD.InOutMap -> S.Set F.Name
---           -> F.Statement (FA.Analysis A) -> State IGraphs (F.Statement (FA.Analysis A))
-perStmt lva x =
-  case (FA.insLabel (F.getAnnotation x)) of
-    Just label -> case (IM.lookup label lva) of
-      Just (lva_in, _) -> undefined -- transformBiM (perStmt lva_in) x
-
-{-
-perExpr :: FAD.InOutMap (S.Set F.Name)
-        -> F.Expression (FA.Analysis A) -> State IGraphs (F.Expression (FA.Analysis A))
-perExpr lva_in x@(F.ExpSubscript _ _ (F.ExpValue _ _ (F.ValVariable arrVar)) subs) = do
-  let subscript_vars = [v | (F.ValVariable v) <- universeBi (F.aStrip subs) ]
-  let intefering = [(v, w) | v <- subscript_vars,
-                             w <- subscript_vars, v `S.member` lva_in && w `S.member` lva_in]
-  igraphs <- get
-  case (M.lookup arrVar igraphs) of
-     Just igraph -> return x
-          -- TODO: update graph here
-     Nothing -> do
-        let g0 = IGr.mkGraph undefined -- [(0, u),(1, v)] [(0, 1, ())]
-        let m = M.fromList [(arrVar, g0)]
-        put (m `M.union` igraphs)
-        return x
-perExpr _ x = return x
--}
+analysePerPF (_, _) = undefined
