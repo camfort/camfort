@@ -66,6 +66,7 @@ library
                         Camfort.Specification.Units.Analysis.Infer
                         Camfort.Specification.Units.Annotation
                         Camfort.Specification.Units.InferenceBackend
+                        Camfort.Specification.Units.InferenceBackendZ3
                         Camfort.Specification.Units.Environment
                         Camfort.Specification.Units.ModFile
                         Camfort.Specification.Units.Monad
