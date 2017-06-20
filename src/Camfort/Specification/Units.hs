@@ -67,7 +67,7 @@ inferCriticalVariables
   :: UnitOpts -> (Filename, SourceText, F.ProgramFile Annotation) -> (Report, Int)
 
 {-| Infer one possible set of critical variables for a program -}
-inferCriticalVariables uo (fname, _, pf)
+inferCriticalVariables uOpts (fname, _, pf)
   | Right vars <- eVars = okReport vars
   | Left exc   <- eVars = (errReport exc, -1)
   where
@@ -94,20 +94,19 @@ inferCriticalVariables uo (fname, _, pf)
     errReport exc = logs ++ "\n" ++ fname ++ ":\n" ++ show exc
 
     -- run inference
-    uOpts = uo { uoNameMap = FAR.extractNameMap pfRenamed }
     (eVars, state, logs) = runUnitSolver uOpts pfRenamed $ do
-      modifyTemplateMap . const . cuTemplateMap . combinedCompiledUnits . M.elems $ uoModFiles uo
-      modifyNameParamMap . const . cuNameParamMap . combinedCompiledUnits . M.elems $ uoModFiles uo
+      modifyTemplateMap . const . cuTemplateMap . combinedCompiledUnits . M.elems $ uoModFiles uOpts
+      modifyNameParamMap . const . cuNameParamMap . combinedCompiledUnits . M.elems $ uoModFiles uOpts
       initInference
       runCriticalVariables
     pfUA = usProgramFile state -- the program file after units analysis is done
 
     -- Use the module map derived from all of the included Camfort Mod files.
-    mmap = combinedModuleMap (M.elems (uoModFiles uo))
+    mmap = combinedModuleMap (M.elems (uoModFiles uOpts))
     pfRenamed = FAR.analyseRenamesWithModuleMap mmap . FA.initAnalysis . fmap mkUnitAnnotation $ pf
 
     -- Map of all declarations
-    dmap = extractDeclMap pfRenamed `M.union` combinedDeclMap (M.elems (uoModFiles uo))
+    dmap = extractDeclMap pfRenamed `M.union` combinedDeclMap (M.elems (uoModFiles uOpts))
 
     mmap' = extractModuleMap pfRenamed `M.union` mmap -- post-parsing
     -- unique name -> src name across modules
@@ -116,12 +115,12 @@ inferCriticalVariables uo (fname, _, pf)
                 e@(F.ExpValue _ _ (F.ValVariable {})) <- universeBi pfRenamed :: [F.Expression UA]
                 -- going to ignore intrinsics here
               ] `M.union` (M.unions . map (M.fromList . map (\ (a, (b, _)) -> (b, a)) . M.toList) $ M.elems mmap')
-    fromWhereMap = genUniqNameToFilenameMap . M.elems $ uoModFiles uo
+    fromWhereMap = genUniqNameToFilenameMap . M.elems $ uoModFiles uOpts
 
 checkUnits, inferUnits
             :: UnitOpts -> (Filename, B.ByteString, F.ProgramFile Annotation) -> Report
 {-| Check units-of-measure for a program -}
-checkUnits uo (fname, fileText, pf)
+checkUnits uOpts (fname, fileText, pf)
   | Right mCons <- eCons = okReport mCons
   | Left exc    <- eCons = errReport exc
   where
@@ -143,7 +142,7 @@ checkUnits uo (fname, fileText, pf)
 
         isReflexive (ConEq u1 u2) = u1 == u2
 
-    reportError con = (span, pprintConstr srcText (orient (unrename nameMap con)) ++ additionalInfo con)
+    reportError con = (span, pprintConstr srcText (orient (unrename con)) ++ additionalInfo con)
       where
         srcText = findCon con >>= fst
         span = findCon con >>= (return . snd)
@@ -154,7 +153,7 @@ checkUnits uo (fname, fileText, pf)
            else "\n    instead" ++ intercalate "\n" (mapNotFirst (pad 10) (errorInfo con))
         -- Create additional info about inconsistencies involving variables
         errorInfo con =
-            [" '" ++ sName ++ "' is '" ++ pprintUnitInfo Nothing (unrename nameMap u) ++ "'"
+            [" '" ++ sName ++ "' is '" ++ pprintUnitInfo Nothing (unrename u) ++ "'"
               | UnitVar (vName, sName) <- universeBi con
               , u                       <- findUnitConstrFor con vName ]
         -- Find unit information for variable constraints
@@ -232,10 +231,9 @@ checkUnits uo (fname, fileText, pf)
     errReport exc = logs ++ "\n" ++ fname ++ ":  " ++ show exc
 
     -- run inference
-    uOpts = uo { uoNameMap = nameMap }
     (eCons, state, logs) = runUnitSolver uOpts pfRenamed $ do
-      modifyTemplateMap . const . cuTemplateMap . combinedCompiledUnits . M.elems $ uoModFiles uo
-      modifyNameParamMap . const . cuNameParamMap . combinedCompiledUnits . M.elems $ uoModFiles uo
+      modifyTemplateMap . const . cuTemplateMap . combinedCompiledUnits . M.elems $ uoModFiles uOpts
+      modifyNameParamMap . const . cuNameParamMap . combinedCompiledUnits . M.elems $ uoModFiles uOpts
       initInference
       runInconsistentConstraints
     templateMap = usTemplateMap state
@@ -249,9 +247,8 @@ checkUnits uo (fname, fileText, pf)
                                    _ -> False
 
     -- Use the module map derived from all of the included Camfort Mod files.
-    mmap = combinedModuleMap (M.elems (uoModFiles uo))
+    mmap = combinedModuleMap (M.elems (uoModFiles uOpts))
     pfRenamed = FAR.analyseRenamesWithModuleMap mmap . FA.initAnalysis . fmap mkUnitAnnotation $ pf
-    nameMap = FAR.extractNameMap pfRenamed
 
 lookupWith :: (a -> Bool) -> [(a,b)] -> Maybe b
 lookupWith f = fmap snd . find (f . fst)
@@ -279,8 +276,8 @@ replaceImplicitNames implicitMap = transformBi replace
 
 {-| Check and infer units-of-measure for a program
     This produces an output of all the unit information for a program -}
-inferUnits uo (fname, fileText, pf)
-  | Right []   <- eVars = checkUnits uo (fname, fileText, pf)
+inferUnits uOpts (fname, fileText, pf)
+  | Right []   <- eVars = checkUnits uOpts (fname, fileText, pf)
   | Right vars <- eVars = okReport vars
   | Left exc   <- eVars = errReport exc
   where
@@ -295,20 +292,17 @@ inferUnits uo (fname, fileText, pf)
     errReport exc = logs ++ "\n" ++ fname ++ ":  " ++ show exc
 
     -- run inference
-    uOpts = uo { uoNameMap = nameMap }
     (eVars, state, logs) = runUnitSolver uOpts pfRenamed $ do
-      modifyTemplateMap . const . cuTemplateMap . combinedCompiledUnits . M.elems $ uoModFiles uo
-      modifyNameParamMap . const . cuNameParamMap . combinedCompiledUnits . M.elems $ uoModFiles uo
+      modifyTemplateMap . const . cuTemplateMap . combinedCompiledUnits . M.elems $ uoModFiles uOpts
+      modifyNameParamMap . const . cuNameParamMap . combinedCompiledUnits . M.elems $ uoModFiles uOpts
       initInference
       chooseImplicitNames `fmap` runInferVariables
 
     pfUA = usProgramFile state -- the program file after units analysis is done
 
     -- Use the module map derived from all of the included Camfort Mod files.
-    mmap = combinedModuleMap (M.elems (uoModFiles uo))
+    mmap = combinedModuleMap (M.elems (uoModFiles uOpts))
     pfRenamed = FAR.analyseRenamesWithModuleMap mmap . FA.initAnalysis . fmap mkUnitAnnotation $ pf
-
-    nameMap = FAR.extractNameMap pfRenamed
 
 combinedCompiledUnits :: ModFiles -> CompiledUnits
 combinedCompiledUnits mfs = CompiledUnits { cuTemplateMap = M.unions tmaps
@@ -334,18 +328,18 @@ genUnitsModFile pf cu = alterModFileData f unitsCompiledDataLabel $ genModFile p
     f _ = Just . LB.toStrict $ encode cu
 
 compileUnits :: UnitOpts -> [FileProgram] -> (String, [(Filename, B.ByteString)])
-compileUnits uo fileprogs = (concat reports, concat bins)
+compileUnits uOpts fileprogs = (concat reports, concat bins)
   where
     (reports, bins) = unzip [ (report, bin) | fileprog <- fileprogs
-                                            , let (report, bin) = compileUnits' uo fileprog ]
+                                            , let (report, bin) = compileUnits' uOpts fileprog ]
 
 compileUnits' :: UnitOpts -> FileProgram -> (String, [(Filename, B.ByteString)])
-compileUnits' uo (fname, pf)
+compileUnits' uOpts (fname, pf)
   | Right cu <- eCUnits = okReport cu
   | Left exc <- eCUnits = errReport exc
   where
     -- Format report
-    okReport cu = ( logs ++ "\n" ++ fname ++ ":\n" ++ if uoDebug uo then debugInfo else []
+    okReport cu = ( logs ++ "\n" ++ fname ++ ":\n" ++ if uoDebug uOpts then debugInfo else []
                      -- FIXME, filename manipulation (needs to go in -I dir?)
                     , [(fname ++ modFileSuffix, encodeModFile (genUnitsModFile pfTyped cu))] )
       where
@@ -356,30 +350,27 @@ compileUnits' uo (fname, pf)
     errReport exc = ( logs ++ "\n" ++ fname ++ ":  " ++ show exc
                     , [] )
     -- run inference
-    uOpts = uo { uoNameMap = nameMap }
     (eCUnits, state, logs) = runUnitSolver uOpts pfTyped $ do
-      modifyTemplateMap . const . cuTemplateMap . combinedCompiledUnits . M.elems $ uoModFiles uo
-      modifyNameParamMap . const . cuNameParamMap . combinedCompiledUnits . M.elems $ uoModFiles uo
+      modifyTemplateMap . const . cuTemplateMap . combinedCompiledUnits . M.elems $ uoModFiles uOpts
+      modifyNameParamMap . const . cuNameParamMap . combinedCompiledUnits . M.elems $ uoModFiles uOpts
       initInference
       runCompileUnits
 
     pfUA = usProgramFile state -- the program file after units analysis is done
 
     -- Use the module map derived from all of the included Camfort Mod files.
-    mmap = combinedModuleMap (M.elems (uoModFiles uo))
-    tenv = combinedTypeEnv (M.elems (uoModFiles uo))
+    mmap = combinedModuleMap (M.elems (uoModFiles uOpts))
+    tenv = combinedTypeEnv (M.elems (uoModFiles uOpts))
     pfRenamed = FAR.analyseRenamesWithModuleMap mmap . FA.initAnalysis . fmap mkUnitAnnotation $ pf
     pfTyped = fst . FAT.analyseTypesWithEnv tenv $ pfRenamed
-
-    nameMap = FAR.extractNameMap pfTyped
 
 synthesiseUnits :: UnitOpts
                 -> Char
                 -> (Filename, B.ByteString, F.ProgramFile Annotation)
                 -> (Report, (Filename, F.ProgramFile Annotation))
 {-| Synthesis unspecified units for a program (after checking) -}
-synthesiseUnits uo marker (fname, fileText, pf)
-  | Right []   <- eVars = (checkUnits uo (fname, fileText, pf), (fname, pf))
+synthesiseUnits uOpts marker (fname, fileText, pf)
+  | Right []   <- eVars = (checkUnits uOpts (fname, fileText, pf), (fname, pf))
   | Right vars <- eVars = (okReport vars, (fname, pfFinal))
   | Left exc   <- eVars = (errReport exc, (fname, pfFinal))
   where
@@ -394,10 +385,9 @@ synthesiseUnits uo marker (fname, fileText, pf)
     errReport exc = logs ++ "\n" ++ fname ++ ":  " ++ show exc
 
     -- run inference
-    uOpts = uo { uoNameMap = nameMap }
     (eVars, state, logs) = runUnitSolver uOpts pfRenamed $ do
-      modifyTemplateMap . const . cuTemplateMap . combinedCompiledUnits . M.elems $ uoModFiles uo
-      modifyNameParamMap . const . cuNameParamMap . combinedCompiledUnits . M.elems $ uoModFiles uo
+      modifyTemplateMap . const . cuTemplateMap . combinedCompiledUnits . M.elems $ uoModFiles uOpts
+      modifyNameParamMap . const . cuNameParamMap . combinedCompiledUnits . M.elems $ uoModFiles uOpts
       initInference
       runInferVariables >>= (runSynthesis marker . chooseImplicitNames)
 
@@ -405,13 +395,21 @@ synthesiseUnits uo marker (fname, fileText, pf)
     pfFinal = fmap prevAnnotation . fmap FA.prevAnnotation $ pfUA -- strip annotations
 
     -- Use the module map derived from all of the included Camfort Mod files.
-    mmap = combinedModuleMap (M.elems (uoModFiles uo))
+    mmap = combinedModuleMap (M.elems (uoModFiles uOpts))
     pfRenamed = FAR.analyseRenamesWithModuleMap mmap . FA.initAnalysis . fmap mkUnitAnnotation $ pf
-    nameMap = FAR.extractNameMap pfRenamed
 
 --------------------------------------------------
 
-unrename nameMap = transformBi $ \ x -> x `fromMaybe` M.lookup x nameMap
+-- clear out the unique names in the UnitInfos.
+unrename :: Data a => a -> a
+unrename = transformBi $ \ x -> case x of
+  UnitVar (u, s)                      -> UnitVar (s, s)
+  UnitParamVarAbs ((_, f), (_, s))    -> UnitParamVarAbs ((f, f), (s, s))
+  UnitParamVarUse ((_, f), (_, s), i) -> UnitParamVarUse ((f, f), (s, s), i)
+  UnitParamEAPAbs (_, s)              -> UnitParamEAPAbs (s, s)
+  UnitParamEAPUse ((_, s), i)         -> UnitParamEAPUse ((s, s), i)
+  u                                   -> u
+
 
 showSrcSpan :: FU.SrcSpan -> String
 showSrcSpan (FU.SrcSpan l u) = show l
