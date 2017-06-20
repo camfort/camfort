@@ -6,4 +6,5 @@ packages:
 extra-deps:
 - fortran-src-0.1.0.7
 - partial-order-0.1.2
+- z3-4.1.0
 resolver: lts-8.6
