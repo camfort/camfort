@@ -42,7 +42,6 @@ data Command = CmdCount ReadOptions
              | CmdRefactCommon RefactOptions
              | CmdRefactDead RefactOptions
              | CmdRefactEquivalence RefactOptions
-             | CmdRefactDatatype RefactOptions
              | CmdTopVersion
 
 
@@ -239,10 +238,8 @@ cmdUnitsSynth   = fmap CmdUnitsSynth   unitsSynthOptions
 cmdUnitsCompile = fmap CmdUnitsCompile unitsWriteOptions
 
 
-cmdRefactCommon, cmdRefactDatatype
-  , cmdRefactDead, cmdRefactEquivalence :: Parser Command
+cmdRefactCommon, cmdRefactDead, cmdRefactEquivalence :: Parser Command
 cmdRefactCommon      = fmap CmdRefactCommon refactOptions
-cmdRefactDatatype    = fmap CmdRefactDatatype refactOptions
 cmdRefactDead        = fmap CmdRefactDead refactOptions
 cmdRefactEquivalence = fmap CmdRefactEquivalence refactOptions
 
@@ -280,8 +277,6 @@ refactoringsParser = hsubparser $
        . progDesc $ "equivalence elimination")
   <> (command "dead" . info cmdRefactDead
        . progDesc $ "dead-code elimination")
-  <> (command "datatype" . info cmdRefactDatatype
-       . progDesc $ "derived data type introduction")
   <> commandGroup "Refactoring Commands"
 
 
@@ -349,7 +344,6 @@ main = do
     runCommand (CmdRefactCommon rfo)      = runRFO rfo common
     runCommand (CmdRefactDead rfo)        = runRFO rfo dead
     runCommand (CmdRefactEquivalence rfo) = runRFO rfo equivalences
-    runCommand (CmdRefactDatatype rfo)    = runRFO rfo datatypes
     runCommand CmdTopVersion              = displayVersion
 
 
