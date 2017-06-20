@@ -662,11 +662,6 @@ propagatePU pu = do
 
 --------------------------------------------------
 
--- | Check if x contains an abstract parametric reference under the given name.
-containsParametric :: Data from => String -> from -> Bool
-containsParametric name x = not . null $ [ () | UnitParamPosAbs ((name', _), _) <- universeBi x, name == name' ] ++
-                                         [ () | UnitParamVarAbs ((name', _), _) <- universeBi x, name == name' ]
-
 -- | Coalesce various function and subroutine call common code.
 callHelper :: F.Expression UA -> [F.Argument UA] -> UnitSolver (UnitInfo, [F.Argument UA])
 callHelper nexp args = do
