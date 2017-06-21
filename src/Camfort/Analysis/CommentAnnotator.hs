@@ -29,7 +29,7 @@ module Camfort.Analysis.CommentAnnotator
   ) where
 
 
-import Control.Monad.Writer.Strict (Writer(..), tell)
+import Control.Monad.Writer.Strict (Writer, tell)
 import Data.Generics.Uniplate.Operations
 import Data.Data (Data)
 
