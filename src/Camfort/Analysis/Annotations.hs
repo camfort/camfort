@@ -29,7 +29,6 @@ module Camfort.Analysis.Annotations
   , pRefactored
   , refactored
   -- ** Transformation Helpers
-  , modifyAnnotation
   , onPrev
   -- * Stencils
   , stencilBlock
@@ -111,10 +110,6 @@ instance Linkable UA where
 -- Helpers for transforming the 'previous' annotation
 onPrev :: (a -> a) -> FA.Analysis a -> FA.Analysis a
 onPrev f ann = ann { FA.prevAnnotation = f (FA.prevAnnotation ann) }
-
-modifyAnnotation :: F.Annotated f => (a -> a) -> f a -> f a
-modifyAnnotation f x = F.setAnnotation (f (F.getAnnotation x)) x
-
 
 -- | Build a Fortran comment string appropriate for the Fortran version.
 buildCommentText :: F.MetaInfo -> Int -> String -> String

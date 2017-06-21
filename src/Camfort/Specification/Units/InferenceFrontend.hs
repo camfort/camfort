@@ -736,12 +736,12 @@ getUnitInfoMul _ e
 
 -- | Set the UnitInfo field on a piece of AST.
 setUnitInfo :: F.Annotated f => UnitInfo -> f UA -> f UA
-setUnitInfo info = modifyAnnotation (onPrev (\ ua -> ua { unitInfo = Just info }))
+setUnitInfo info = F.modifyAnnotation (onPrev (\ ua -> ua { unitInfo = Just info }))
 
 -- | Set the Constraint field on a piece of AST.
 setConstraint :: F.Annotated f => Constraint -> f UA -> f UA
 setConstraint (ConConj []) = id
-setConstraint c            = modifyAnnotation (onPrev (\ ua -> ua { unitConstraint = Just c }))
+setConstraint c            = F.modifyAnnotation (onPrev (\ ua -> ua { unitConstraint = Just c }))
 
 --------------------------------------------------
 
