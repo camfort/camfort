@@ -4,10 +4,8 @@
       integer i, imax
       parameter (imax = 3)
       real a(0:imax)
-      
+
       do i = 0, imax
-     != stencil atLeast, readOnce,  pointed(dims=1)        :: a
-     != stencil readOnce, atMost, (forward(depth=2, dim=1)) :: a
             a(i) = a(i) + a(i+2)
       end do
 

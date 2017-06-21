@@ -4,7 +4,7 @@
       integer i, j, imax, jmax
       parameter (imax = 3, jmax = 3)
       logical flag
-      
+
       real a(0:imax,0:jmax), b(0:imax,0:jmax), x
 
       do 1 i = 1, (imax-1)
@@ -20,4 +20,4 @@
  2       continue
  1    continue
 
-      end 
+      end
