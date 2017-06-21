@@ -53,24 +53,24 @@ annotateComments :: forall a ast . (Data a, Linkable a, ASTEmbeddable a ast)
                                  -> ProgramFile a
                                  -> Logger (ProgramFile a)
 annotateComments parse pf = do
-    pf' <- transformBiM (writeASTProgramUnits parse) =<< transformBiM (writeASTBlocks parse) pf
+    pf' <- transformBiM writeASTProgramUnits =<< transformBiM writeASTBlocks pf
     return . descendBi linkProgramUnits $ descendBi linkBlocks pf'
   where
-    writeASTBlocks :: (Data a, ASTEmbeddable a ast) => AnnotationParser ast -> Block a -> Logger (Block a)
-    writeASTBlocks parse b@(BlComment a srcSpan (Comment comment)) =
+    writeAST a d srcSpan comment =
       case parse comment of
-        Right ast -> return $ setAnnotation (annotateWithAST a ast) b
-        Left NotAnnotation -> return b
-        Left (ProbablyAnnotation err) -> parserWarn srcSpan err >> return b
-    writeASTBlocks _ b = return b
+        Right ast -> return $ setAnnotation (annotateWithAST a ast) d
+        Left NotAnnotation -> return d
+        Left (ProbablyAnnotation err) -> parserWarn srcSpan err >> return d
 
-    writeASTProgramUnits :: (Data a, ASTEmbeddable a ast) => AnnotationParser ast -> ProgramUnit a -> Logger (ProgramUnit a)
-    writeASTProgramUnits parse pu@(PUComment a srcSpan (Comment comment)) =
-      case parse comment of
-        Right ast -> return $ setAnnotation (annotateWithAST a ast) pu
-        Left NotAnnotation -> return pu
-        Left (ProbablyAnnotation err) -> parserWarn srcSpan err >> return pu
-    writeASTProgramUnits _ pu = return pu
+    writeASTProgramUnits :: (Data a) => ProgramUnit a -> Logger (ProgramUnit a)
+    writeASTProgramUnits pu@(PUComment a srcSpan (Comment comment)) =
+      writeAST a pu srcSpan comment
+    writeASTProgramUnits pu = return pu
+
+    writeASTBlocks :: (Data a) => Block a -> Logger (Block a)
+    writeASTBlocks b@(BlComment a srcSpan (Comment comment)) =
+      writeAST a b srcSpan comment
+    writeASTBlocks b = return b
 
     {-| Link all comment blocks to first non-comment block in the list. |-}
     linkBlocks :: (Data a, Linkable a) => [ Block a ] -> [ Block a ]
@@ -80,9 +80,9 @@ annotateComments parse pf = do
         let (comments, rest) = span isComment blocks
         in if null rest -- Does the group of blocks end with comments
              then comments
-             else let (bs, bs') = linkMultiple comments rest
-                  in bs ++ linkBlocks bs'
-      | otherwise = (descendBi linkBlocks b) : linkBlocks bs
+             else let (bs', bs'') = linkMultiple comments rest
+                  in bs' ++ linkBlocks bs''
+      | otherwise = descendBi linkBlocks b : linkBlocks bs
       where
         isComment BlComment{} = True
         isComment _           = False
@@ -97,7 +97,7 @@ annotateComments parse pf = do
              then comments
              else let (procPUs, unprocPUs) = linkMultiplePUs comments rest
                   in procPUs ++ linkProgramUnits unprocPUs
-      | otherwise = (descendBi linkProgramUnits pu) : linkProgramUnits pus
+      | otherwise = descendBi linkProgramUnits pu : linkProgramUnits pus
       where
         isComment PUComment{} = True
         isComment _           = False
