@@ -16,7 +16,6 @@
 
 {-# LANGUAGE ScopedTypeVariables #-}
 {-# LANGUAGE MultiParamTypeClasses #-}
-{-# LANGUAGE PatternGuards #-}
 
 module Camfort.Analysis.CommentAnnotator
   ( annotateComments
@@ -72,57 +71,65 @@ annotateComments parse pf = do
       writeAST a b srcSpan comment
     writeASTBlocks b = return b
 
+    -- | Link all comments to first non-comment in the list.
+    joinComments [ ] = [ ]
+    joinComments dss@(d:ds)
+      | isComment d =
+        let (comments, rest) = span isComment dss
+            -- Given a list of comments and a list of non-comment blocks which occur
+            -- afterward in the code, then link them together (either forward or backward)
+            -- returning a pair of processed blocks and unprocessed blocks
+
+            -- pre-condition: first parameter is a list of comments
+
+            -- default uses 'link' to associate every comment to the first following block
+            linkMulti = (map (fmap $ flip linker (head rest)) comments, rest)
+        in if null rest -- Does the group end with comments
+             then comments
+             else let (procs, unprocs) = linkMulti
+                  in procs ++ joinComments unprocs
+      | otherwise = descendBi joinComments d
+                    : joinComments ds
+
     {-| Link all comment blocks to first non-comment block in the list. |-}
     linkBlocks :: (Data a, Linkable a) => [ Block a ] -> [ Block a ]
-    linkBlocks [ ] = [ ]
-    linkBlocks blocks@(b:bs)
-      | BlComment{} <- b =
-        let (comments, rest) = span isComment blocks
-        in if null rest -- Does the group of blocks end with comments
-             then comments
-             else let (bs', bs'') = linkMultiple comments rest
-                  in bs' ++ linkBlocks bs''
-      | otherwise = descendBi linkBlocks b : linkBlocks bs
-      where
-        isComment BlComment{} = True
-        isComment _           = False
+    linkBlocks = joinComments
 
     {-| Link all comment 'program units' to first non-comment program unit in the list. |-}
     linkProgramUnits :: (Data a, Linkable a) => [ ProgramUnit a ] -> [ ProgramUnit a ]
-    linkProgramUnits [ ] = [ ]
-    linkProgramUnits programUnits@(pu:pus)
-      | PUComment{} <- pu =
-        let (comments, rest) = span isComment programUnits
-        in if null rest -- Does the group of blocks end with comments
-             then comments
-             else let (procPUs, unprocPUs) = linkMultiplePUs comments rest
-                  in procPUs ++ linkProgramUnits unprocPUs
-      | otherwise = descendBi linkProgramUnits pu : linkProgramUnits pus
-      where
-        isComment PUComment{} = True
-        isComment _           = False
+    linkProgramUnits = joinComments
 
 class ASTEmbeddable a ast where
   annotateWithAST :: a -> ast -> a
 
+-- | Instances of this class can be combined with 'Block' and 'ProgramUnit'.
 class Linkable a where
+  -- ^ Combine an @a@ with a 'Block'
   link   :: a   -> Block a -> a
+  -- ^ Combine an @a@ with a 'ProgramUnit'
   linkPU :: a -> ProgramUnit a -> a
 
-  -- Given a list of comments and a list of non-comment blocks which occur
-  -- afterward in the code, then link them together (either forward or backward)
-  -- returning a pair of processed blocks and unprocessed blocks
+-- | Interface for types that can be combined with 'Linkable' types.
+class Linked a where
+  linker :: (Linkable b) => b -> a b -> b
 
-  -- pre-condition: first parameter is a list of comments
+instance Linked Block where
+  linker = link
 
-  -- default uses 'link' to associate every comment to the first following block
-  linkMultiple :: [Block a] -> [Block a] -> ([Block a], [Block a])
-  linkMultiple comments blocks =
-     (map (fmap $ flip link (head blocks)) comments, blocks)
+instance Linked ProgramUnit where
+  linker = linkPU
 
-  linkMultiplePUs :: [ProgramUnit a] -> [ProgramUnit a] -> ([ProgramUnit a], [ProgramUnit a])
-  linkMultiplePUs comments pus = -- trace (show (map (fmap (const ())) comments, (map (fmap (const ())) pus))) $
-     (map (fmap $ flip linkPU (head pus)) comments, pus)
+-- | Interface for types that can have comments.
+class HasComment a where
+  isComment :: a -> Bool
+
+instance HasComment (Block a) where
+  isComment BlComment{} = True
+  isComment _           = False
+
+instance HasComment (ProgramUnit a) where
+  isComment PUComment{} = True
+  isComment _           = False
 
 parserWarn :: SrcSpan -> String -> Logger ()
 parserWarn srcSpan err = tell [ "Error " ++ show srcSpan ++ ": " ++ err ]
