@@ -27,12 +27,8 @@ module Camfort.Analysis.Annotations
   , unitAnnotation
   -- ** Predicates
   , pRefactored
-  , refactored
   -- ** Transformation Helpers
   , onPrev
-  -- * Stencils
-  , stencilBlock
-  , stencilSpec
   -- * Other Helpers
   , Report
   , buildCommentText
