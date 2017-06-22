@@ -269,6 +269,18 @@ spec =
           "inserts correct comment types for old fortran"
         assertStencilInferenceOnFile (fixturesDir </> "example5.f90")
           "inserts correct comment types for modern fortran"
+
+    describe "synth on files already containing stencils" $ do
+      assertStencilInferenceOnFile (fixturesDir </> "example6.f")
+        "complements existing stencils (when second missing)"
+      assertStencilInferenceOnFile (fixturesDir </> "example7.f")
+        "complements existing stencils (when none missing)"
+      assertStencilInferenceOnFile (fixturesDir </> "example8.f")
+        "complements existing stencils (when first missing)"
+      assertStencilInferenceOnFile (fixturesDir </> "example9.f")
+        "complements existing stencils (when none missing - only one stencil)"
+      assertStencilInferenceOnFile (fixturesDir </> "example10.f")
+        "complements existing stencils (when one missing - inside if)"
   where assertStencilInferenceOnFile file testComment =
           let version      = deduceVersion file
               oldExtension = takeExtension file

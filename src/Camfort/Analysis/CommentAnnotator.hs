@@ -19,6 +19,7 @@
 
 module Camfort.Analysis.CommentAnnotator
   ( annotateComments
+  , isComment
   , Logger
   , ASTEmbeddable(..)
   , Linkable(..)

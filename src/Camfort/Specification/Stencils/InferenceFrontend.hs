@@ -16,6 +16,7 @@
 
 {-# LANGUAGE FlexibleContexts #-}
 {-# LANGUAGE DeriveDataTypeable #-}
+{-# LANGUAGE ImplicitParams #-}
 {-# LANGUAGE PatternGuards #-}
 {-# LANGUAGE ScopedTypeVariables #-}
 {-# LANGUAGE ConstraintKinds #-}
@@ -44,6 +45,7 @@ import Control.Monad.Writer.Strict hiding (Product)
 
 import Camfort.Analysis.CommentAnnotator
 
+import Camfort.Specification.Stencils.CheckBackend (synToAst)
 import Camfort.Specification.Stencils.InferenceBackend
 import Camfort.Specification.Stencils.Model
 import Camfort.Specification.Stencils.Syntax
@@ -80,7 +82,8 @@ instance Default InferMode where
 
 data InferState = IS {
      ivMap        :: FAD.InductionVarMapByASTBlock
-   , hasSpec      :: [(FU.SrcSpan, Variable)]
+     -- ^ Known (existing) specifications.
+   , hasSpec      :: [(Specification, FU.SrcSpan, Variable)]
    , visitedNodes :: [Int]}
 
 
@@ -100,6 +103,26 @@ runInferer ivmap flTo =
     flip evalState (IS ivmap [] [])
   . flip runReaderT flTo
   . runWriterT
+
+-- | Add a new 'Specification' to the tracked specifications.
+addSpec :: Specification -> FU.SrcSpan -> Variable -> Inferer ()
+addSpec spec src var = do
+  modify (\s -> s { hasSpec = hasSpec s ++ [(spec, src, var)] })
+
+-- | Add a new 'Grammar.Specification' to the tracked specifications.
+addGSpec :: Gram.Spec -> FU.SrcSpan -> Variable -> Inferer ()
+addGSpec spec src var = case specToSynSpec spec of
+                          Nothing -> pure ()
+                          Just spec' -> addSpec spec' src var
+
+-- | Attempt to convert a 'Grammar.Specification' into a 'Specification'.
+--
+-- Only performs conversions for spatial specifications.
+specToSynSpec :: Gram.Spec -> Maybe Specification
+specToSynSpec spec = let ?renv = [] in
+                       case synToAst spec of
+                         Left err -> Nothing
+                         Right x  -> Just x
 
 stencilInference :: InferMode
                  -> Char
@@ -203,27 +226,12 @@ perBlockInfer :: InferMode -> Char -> F.MetaInfo
               -> F.Block (FA.Analysis A)
               -> Inferer (F.Block (FA.Analysis A))
 
-perBlockInfer Synth _ _ b@(F.BlComment ann _ _) = do
-  -- If we have a comment that is actually a specification then record that
-  -- this has been assigned so that we don't generate extra specifications
-  -- that overlap with user-given oones
-  ann' <- return $ FA.prevAnnotation ann
-  -- Check if we have a spec
-  case (stencilSpec ann', stencilBlock ann') of
-    -- Comment contains an (uncoverted) specification and an associated block
-    (Just (Left (Gram.SpecDec _  vars)), Just block) ->
-     -- Is the block an assignment
-     case block of
-      F.BlStatement _ span _ F.StExpressionAssign{} -> do
-         -- Then update the list of spans+vars that have specifications
-         state <- get
-         put (state { hasSpec = hasSpec state ++ zip (repeat span) vars })
-    _ -> return ()
-  return b
+perBlockInfer _ _ _ b@(F.BlComment _ _ _) = pure b
 
 perBlockInfer mode marker mi b@(F.BlStatement ann span@(FU.SrcSpan lp _) _ stmnt)
   | mode == AssignMode || mode == CombinedMode || mode == EvalMode || mode == Synth = do
 
+    addUserSpecsToTracked b
     (IS ivmap hasSpec visitedStmts) <- get
     let label = fromMaybe (-1) (FA.insLabel ann)
     if (label `elem` visitedStmts)
@@ -261,7 +269,7 @@ perBlockInfer mode marker mi b@(F.BlStatement ann span@(FU.SrcSpan lp _) _ stmnt
                if null vars'
                then Nothing
                else Just (vars', spec)
-               where vars' = filter (\v -> not ((span, v) `elem` hasSpec)) vars
+               where vars' = filter (\v -> (spec, span, v) `notElem` hasSpec) vars
 
             -- Indentation for the specification to match the code
             tabs  = FU.posColumn lp - 1
@@ -273,6 +281,7 @@ perBlockInfer mode marker mi b@(F.BlStatement ann span@(FU.SrcSpan lp _) _ stmnt
       else return b
 
 perBlockInfer mode marker mi b@(F.BlDo ann span lab cname lab' mDoSpec body tlab) = do
+    addUserSpecsToTracked b
     if (mode == DoMode || mode == CombinedMode) && isStencilDo b
       then genSpecsAndReport mode span [] body
       else return []
@@ -282,10 +291,33 @@ perBlockInfer mode marker mi b@(F.BlDo ann span lab cname lab' mDoSpec body tlab
     return $ F.BlDo ann span lab cname lab' mDoSpec (reverse body') tlab
 
 perBlockInfer mode marker mi b = do
+    addUserSpecsToTracked b
     -- Go inside child blocks
     b' <- descendReverseM (descendBiReverseM (perBlockInfer mode marker mi)) $ b
     return b'
 
+
+addUserSpecsToTracked :: F.Block (FA.Analysis A) -> Inferer ()
+addUserSpecsToTracked b = do
+  let comments = filter isComment $ children b
+  mapM_ addCommentSpec comments
+
+addCommentSpec :: F.Block (FA.Analysis A) -> Inferer ()
+addCommentSpec b@(F.BlComment ann srcSpan _) = do
+  -- If we have a comment that is actually a specification then record that
+  -- this has been assigned so that we don't generate extra specifications
+  -- that overlap with user-given ones
+  ann' <- return $ FA.prevAnnotation ann
+  -- Check if we have a spec
+  case (stencilSpec ann', stencilBlock ann') of
+    -- Comment contains an (uncoverted) specification and an associated block
+    (Just (Left (Gram.SpecDec spec vars)), Just block) -> do
+      -- Is the block an assignment
+      let F.BlStatement _ span _ F.StExpressionAssign{} = block
+      -- Then update the list of spans+vars that have specifications
+      sequence_ $ fmap (addGSpec spec span) vars
+    _ -> pure ()
+  pure ()
 
 -- Combiantor for reducing a map with effects and partiality inside
 -- into an effectful list of key-value pairs
