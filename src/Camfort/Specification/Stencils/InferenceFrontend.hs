@@ -71,6 +71,7 @@ import qualified Data.Map as M
 import qualified Data.IntMap as IM
 import qualified Data.Set as S
 import Data.Maybe
+import Data.Monoid ((<>))
 
 -- Define modes of interaction with the inference
 data InferMode =
@@ -106,7 +107,7 @@ runInferer ivmap flTo =
 
 -- | Add a new 'Specification' to the tracked specifications.
 addSpec :: Specification -> FU.SrcSpan -> Variable -> Inferer ()
-addSpec spec src var = do
+addSpec spec src var =
   modify (\s -> s { hasSpec = hasSpec s ++ [(spec, src, var)] })
 
 -- | Add a new 'Grammar.Specification' to the tracked specifications.
@@ -187,17 +188,17 @@ genSpecsAndReport mode span lhs blocks = do
     (IS ivmap _ _) <- get
     flowsGraph     <- ask
     let ((specs, visited), evalInfos) = runWriter $ genSpecifications flowsGraph ivmap lhs blocks
-    modify (\state -> state { visitedNodes = (visitedNodes state) ++ visited })
+    modify (\state -> state { visitedNodes = visitedNodes state ++ visited })
     tell [ (span, Left specs) ]
     if mode == EvalMode
       then do
          tell [ (span, Right ("EVALMODE: assign to relative array subscript\
                               \ (tag: tickAssign)","")) ]
          mapM_ (\evalInfo -> tell [ (span, Right evalInfo) ]) evalInfos
-         mapM_ (\spec -> if show spec == ""
-                          then tell [ (span, Right ("EVALMODE: Cannot make spec\
+         mapM_ (\spec -> when (show spec == "") $
+                          tell [ (span, Right ("EVALMODE: Cannot make spec\
                                                    \ (tag: emptySpec)","")) ]
-                          else return ()) specs
+                          ) specs
          return specs
       else return specs
 
@@ -209,13 +210,8 @@ isArraySubscript :: F.Expression (FA.Analysis A)
                  -> Maybe [F.Index (FA.Analysis A)]
 isArraySubscript (F.ExpSubscript _ _ (F.ExpValue _ _ (F.ValVariable _)) subs) =
    Just $ F.aStrip subs
-isArraySubscript (F.ExpDataRef _ _ e e') = do
-   isArraySubscript e <++> isArraySubscript e'
- where
-   Nothing <++> Nothing = Nothing
-   Nothing <++> Just xs = Just xs
-   Just xs <++> Nothing  = Just xs
-   Just xs <++> Just ys  = Just (xs ++ ys)
+isArraySubscript (F.ExpDataRef _ _ e e') =
+   isArraySubscript e <> isArraySubscript e'
 isArraySubscript _ = Nothing
 
 fromJustMsg _ (Just x) = x
@@ -226,7 +222,7 @@ perBlockInfer :: InferMode -> Char -> F.MetaInfo
               -> F.Block (FA.Analysis A)
               -> Inferer (F.Block (FA.Analysis A))
 
-perBlockInfer _ _ _ b@(F.BlComment _ _ _) = pure b
+perBlockInfer _ _ _ b@F.BlComment{} = pure b
 
 perBlockInfer mode marker mi b@(F.BlStatement ann span@(FU.SrcSpan lp _) _ stmnt)
   | mode == AssignMode || mode == CombinedMode || mode == EvalMode || mode == Synth = do
@@ -234,15 +230,14 @@ perBlockInfer mode marker mi b@(F.BlStatement ann span@(FU.SrcSpan lp _) _ stmnt
     addUserSpecsToTracked b
     (IS ivmap hasSpec visitedStmts) <- get
     let label = fromMaybe (-1) (FA.insLabel ann)
-    if (label `elem` visitedStmts)
+    if label `elem` visitedStmts
     then -- This statement has been part of a visited dataflow path
       return b
     else do
       -- On all StExpressionAssigns that occur in stmt....
       let lhses = [lhs | (F.StExpressionAssign _ _ lhs _)
                            <- universe stmnt :: [F.Statement (FA.Analysis A)]]
-      specs <- forM lhses $ \lhs -> do
-         -- ... apply the following:
+      specs <- forM lhses $ \lhs ->
          case lhs of
           -- Assignment to a variable
           (F.ExpValue _ _ (F.ValVariable _)) -> genSpecsAndReport mode span [] [b]
@@ -262,8 +257,8 @@ perBlockInfer mode marker mi b@(F.BlStatement ann span@(FU.SrcSpan lp _) _ stmnt
              _ -> return []
       if mode == Synth && not (null specs) && specs /= [[]]
       then
-        let specComment = Synth.formatSpec mi tabs marker (span, Left (concat specs'))
-            specs' = map (mapMaybe noSpecAlready) specs
+        let specComment = Synth.formatSpec mi tabs marker (span, Left specs')
+            specs' = concatMap (mapMaybe noSpecAlready) specs
 
             noSpecAlready (vars, spec) =
                if null vars'
@@ -276,8 +271,7 @@ perBlockInfer mode marker mi b@(F.BlStatement ann span@(FU.SrcSpan lp _) _ stmnt
             (FU.SrcSpan loc _) = span
             span' = FU.SrcSpan (lp {FU.posColumn = 1}) (lp {FU.posColumn = 1})
             ann'  = ann { FA.prevAnnotation = (FA.prevAnnotation ann) { refactored = Just loc } }
-        in return $ F.BlComment ann' span' (F.Comment specComment)
-
+        in pure (F.BlComment ann' span' (F.Comment specComment))
       else return b
 
 perBlockInfer mode marker mi b@(F.BlDo ann span lab cname lab' mDoSpec body tlab) = do
@@ -293,8 +287,7 @@ perBlockInfer mode marker mi b@(F.BlDo ann span lab cname lab' mDoSpec body tlab
 perBlockInfer mode marker mi b = do
     addUserSpecsToTracked b
     -- Go inside child blocks
-    b' <- descendReverseM (descendBiReverseM (perBlockInfer mode marker mi)) $ b
-    return b'
+    descendReverseM (descendBiReverseM (perBlockInfer mode marker mi)) b
 
 
 addUserSpecsToTracked :: F.Block (FA.Analysis A) -> Inferer ()
@@ -307,7 +300,7 @@ addCommentSpec b@(F.BlComment ann srcSpan _) = do
   -- If we have a comment that is actually a specification then record that
   -- this has been assigned so that we don't generate extra specifications
   -- that overlap with user-given ones
-  ann' <- return $ FA.prevAnnotation ann
+  let ann' = FA.prevAnnotation ann
   -- Check if we have a spec
   case (stencilSpec ann', stencilBlock ann') of
     -- Comment contains an (uncoverted) specification and an associated block
@@ -323,8 +316,8 @@ addCommentSpec b@(F.BlComment ann srcSpan _) = do
 -- into an effectful list of key-value pairs
 assocsSequence :: Monad m => M.Map k (m (Maybe a)) -> m [(k, a)]
 assocsSequence maps = do
-    assocs <- sequence . map strength . M.toList $ maps
-    return . catMaybes . map strength $ assocs
+    assocs <- mapM strength . M.toList $ maps
+    return . mapMaybe strength $ assocs
   where
     strength :: Monad m => (a, m b) -> m (a, b)
     strength (a, mb) = mb >>= (\b -> return (a, b))
@@ -391,18 +384,18 @@ genSubscripts flowsGraph blocks =
      -> State [Int] (M.Map Variable [Indices])
 
     genSubscripts' False _ (F.BlStatement _ _ _ (F.StExpressionAssign _ _ e _))
-       | isArraySubscript e /= Nothing
+       | isJust $ isArraySubscript e
        -- Don't pull dependencies through arrays
        = return M.empty
 
     genSubscripts' _ flowsGraph block = do
        visited <- get
-       case (FA.insLabel $ F.getAnnotation block) of
+       case FA.insLabel $ F.getAnnotation block of
 
          Just node
            | node `elem` visited ->
             -- This dependency has already been visited during this traversal
-              return $ M.empty
+              pure M.empty
            | otherwise -> do
             -- Fresh dependency
             put $ node : visited
@@ -447,14 +440,14 @@ isStencilDo (F.BlDo _ _ _ _ _ mDoSpec body _) =
  -- as a subscript
  case getInductionVar mDoSpec of
     [] -> False
-    [ivar] -> length exprs > 0 &&
+    [ivar] -> not (null exprs) &&
                and [ all (\sub -> sub `isNeighbour` [ivar]) subs' |
                F.ExpSubscript _ _ _ subs <- exprs
                , let subs' = F.aStrip subs
                , not (null subs') ]
       where exprs = universeBi upToNextDo :: [F.Expression (FA.Analysis A)]
             upToNextDo = takeWhile (not . isDo) body
-            isDo (F.BlDo {}) = True
+            isDo F.BlDo{} = True
             isDo _            = False
 isStencilDo _  = False
 
@@ -505,16 +498,14 @@ indicesToRelativisedOffsets ivs a lhs ixs = do
       else do
         -- Relativize the offsets based on the lhs
         let rhses'' = relativise lhs rhses'
-        if rhses' /= rhses''
-          then  tell [("EVALMODE: Relativized spec (tag: relativized)", "")]
-          else return ()
+        when (rhses' /= rhses'') $
+          tell [("EVALMODE: Relativized spec (tag: relativized)", "")]
 
         let offsets  = padZeros $ map (fromJust . mapM neighbourToOffset) rhses''
         tell [("EVALMODE: dimensionality=" ++
                  show (if null offsets then 0 else length . head $ offsets), a)]
-        return (Just $ (mult, offsets))
-  where hasNonNeighbourhoodRelatives xs = or (map (any ((==) NonNeighbour)) xs)
-
+        return (Just (mult, offsets))
+  where hasNonNeighbourhoodRelatives = any (elem NonNeighbour)
 
 -- Given a list of the neighbourhood representation for the LHS, of size n
 -- and a list of size-n lists of offsets, relativise the offsets
@@ -533,19 +524,19 @@ consistentIVSuse :: [Neighbour] -> [[Neighbour]] -> Bool
 consistentIVSuse [] _ = True
 consistentIVSuse _ [] = True
 consistentIVSuse lhs rhses =
-     rhsBasis /= Nothing  -- There is a consitent RHS
+     isJust rhsBasis -- There is a consitent RHS
   && (all (`consistentWith` lhs) (fromJust rhsBasis)
-   || all (`consistentWith` (fromJust rhsBasis)) lhs)
+   || all (`consistentWith` fromJust rhsBasis) lhs)
     where
       cmp (Neighbour v i) (Neighbour v' _) | v == v'   = Just $ Neighbour v i
                                            | otherwise = Nothing
       -- Cases for constants or non neighbour indices
-      cmp n@(Neighbour {})  (Constant _)   = Just n
-      cmp (Constant _) n@(Neighbour {})    = Just n
-      cmp (NonNeighbour {}) (Neighbour {}) = Nothing
-      cmp (Neighbour {}) (NonNeighbour{})  = Nothing
-      cmp _ _                              = Just $ Constant (F.ValInteger "")
-      rhsBasis = foldrM (\a b -> mapM (uncurry cmp) $ zip a b) (head rhses) (tail rhses)
+      cmp n@Neighbour{}  (Constant _) = Just n
+      cmp (Constant _) n@Neighbour{}  = Just n
+      cmp NonNeighbour{} Neighbour{}  = Nothing
+      cmp Neighbour{} NonNeighbour{}  = Nothing
+      cmp _ _                         = Just $ Constant (F.ValInteger "")
+      rhsBasis = foldrM (zipWithM cmp) (head rhses) (tail rhses)
       -- If there is an induction variable on the RHS, then it also occurs on
       -- the LHS
       consistentWith :: Neighbour -> [Neighbour] -> Bool
@@ -567,7 +558,7 @@ relativeIxsToSpec ixs =
 
 isNeighbour :: Data a => F.Index (FA.Analysis a) -> [Variable] -> Bool
 isNeighbour exp vs =
-    case (ixToNeighbour' vs exp) of
+    case ixToNeighbour' vs exp of
         Neighbour _ _ -> True
         _             -> False
 
@@ -577,7 +568,7 @@ isNeighbour exp vs =
 neighbourIndex :: FAD.InductionVarMapByASTBlock
                -> [F.Index (FA.Analysis Annotation)] -> Maybe [Neighbour]
 neighbourIndex ivs ixs =
-  if all ((/=) NonNeighbour) neighbours
+  if NonNeighbour `notElem` neighbours
   then Just neighbours
   else Nothing
     where neighbours = map (ixToNeighbour ivs) ixs
@@ -630,9 +621,9 @@ expToNeighbour :: forall a. Data a
 
 expToNeighbour ivs e@(F.ExpValue _ _ v@(F.ValVariable _))
     | FA.varName e `elem` ivs = Neighbour (FA.varName e) 0
-    | otherwise               = Constant (fmap (const ()) v)
+    | otherwise               = Constant (void v)
 
-expToNeighbour _ (F.ExpValue _ _ val) = Constant (fmap (const ()) val)
+expToNeighbour _ (F.ExpValue _ _ val) = Constant (void val)
 
 expToNeighbour ivs (F.ExpBinary _ _ F.Addition
                  e@(F.ExpValue _ _ (F.ValVariable _))
@@ -657,7 +648,7 @@ expToNeighbour ivs e =
   if null ivs' then Constant (F.ValInteger "0") else NonNeighbour
   where
     -- set of all induction variables involved in this expression
-    ivs' = [i | e@(F.ExpValue _ _ (F.ValVariable {}))
+    ivs' = [i | e@(F.ExpValue _ _ F.ValVariable{})
                  <- universeBi e :: [F.Expression (FA.Analysis a)]
                 , let i = FA.varName e
                 , i `elem` ivs]
@@ -669,6 +660,7 @@ isVariableExpr :: F.Expression a -> Bool
 isVariableExpr (F.ExpValue _ _ (F.ValVariable _)) = True
 isVariableExpr _                                  = False
 
+-- Cute <3
 -- Penelope's first code, 20/03/2016.
 -- iii././//////////////////////. mvnmmmmmmmmmu
 
