@@ -24,6 +24,8 @@ module Camfort.Specification.Stencils.CheckBackend
     SynToAst(..)
   ) where
 
+import Data.Function (on)
+
 import Camfort.Specification.Stencils.Syntax
 import Camfort.Specification.Stencils.Model
 import qualified Camfort.Specification.Stencils.Grammar as SYN
@@ -47,18 +49,19 @@ instance SynToAst SYN.Specification (Either RegionEnv SpecDecls) where
 
 -- Convert temporal or spatial specifications
 instance SynToAst SYN.Spec Specification where
-  synToAst (SYN.Spatial mods r) = do
-    (modLinear, approx) <- synToAst mods
-    r' <- synToAst r
-    let s' = Spatial r'
-    return $ Specification $ addLinearity modLinear $
-       case approx of
-        Just SYN.AtMost  -> Bound Nothing (Just s')
-        Just SYN.AtLeast -> Bound (Just s') Nothing
-        Nothing          -> Exact s'
-    where
-      addLinearity Linear appr = Once appr
-      addLinearity NonLinear appr = Mult appr
+  synToAst (SYN.Spec m) = fmap Specification . synToAst $ m
+
+instance SynToAst (Multiplicity (Approximation SYN.Region)) (Multiplicity (Approximation Spatial)) where
+  synToAst (Once a) = fmap Once . synToAst $ a
+  synToAst (Mult a) = fmap Mult . synToAst $ a
+
+instance SynToAst (Approximation SYN.Region) (Approximation Spatial) where
+  synToAst (Exact s)     = fmap (Exact . Spatial) . synToAst $ s
+  synToAst (Bound s1 s2) = (Bound `on` (fmap Spatial)) <$> synToAst s1 <*> synToAst s2
+
+instance SynToAst (Maybe SYN.Region) (Maybe RegionSum) where
+  synToAst Nothing  = pure Nothing
+  synToAst (Just r) = fmap Just . synToAst $ r
 
 -- Convert region definitions into the DNF-form used internally
 instance SynToAst SYN.Region RegionSum where
@@ -87,25 +90,6 @@ dnf (SYN.Var v)            =
     case lookup v ?renv of
       Nothing -> Left $ "Error: region " ++ v ++ " is not in scope."
       Just rs -> return rs
-
--- Convert modifier list to modifier info
-instance SynToAst [SYN.Mod]
-                  (Linearity, Maybe SYN.Mod) where
-  synToAst mods = return (linearity, approx)
-    where
-      linearity = if SYN.ReadOnce `elem` mods then Linear else NonLinear
-
-      approx = find' isApprox mods
-      isApprox SYN.AtMost  = Just SYN.AtMost
-      isApprox SYN.AtLeast = Just SYN.AtLeast
-      isApprox _           = Nothing
-
-find' :: Eq a => (a -> Maybe b) -> [a] -> Maybe b
-find' _ [] = Nothing
-find' p (x : xs) =
-  case p x of
-    Nothing -> find' p xs
-    Just b  -> Just b
 
 -- Local variables:
 -- mode: haskell

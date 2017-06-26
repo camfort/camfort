@@ -240,11 +240,12 @@ instance {-# OVERLAPS #-} Show (Multiplicity (Approximation Spatial)) where
         case appr of
           Exact s -> linearity ++ optionalSeparator sep (show s)
           Bound Nothing Nothing -> "empty"
-          Bound Nothing (Just s) -> "atMost, " ++ linearity ++ optionalSeparator sep (show s)
-          Bound (Just s) Nothing -> "atLeast, " ++ linearity ++ optionalSeparator sep (show s)
+          Bound Nothing (Just s) -> linearity ++ optionalSeparator sep "atMost, " ++ show s
+          Bound (Just s) Nothing -> linearity ++ optionalSeparator sep "atLeast, " ++ show s
           Bound (Just sL) (Just sU) ->
-            "atLeast, " ++ linearity ++ optionalSeparator sep (show sL) ++
-            "; atMost, " ++ linearity ++ optionalSeparator sep (show sU)
+            concat [ linearity, optionalSeparator sep (show sL), ";"
+                   , if linearity == empty then "" else " " ++ linearity ++ ", "
+                   , "atMost, ", show sU ]
       optionalSeparator _   "" = ""
       optionalSeparator sep s  = sep ++ s
 

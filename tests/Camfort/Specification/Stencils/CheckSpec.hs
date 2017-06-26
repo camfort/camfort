@@ -55,7 +55,7 @@ spec =
                       (Sum [Product [Backward 2 1 True]])) Nothing)])
 
       it "parse and convert stencil requiring distribution (5)" $
-          parseAndConvert "= stencil atleast, readonce, (forward(depth=1, dim=1) * ((centered(depth=1, dim=2)) + backward(depth=3, dim=4))) :: frob"
+          parseAndConvert "= stencil readonce, atleast, (forward(depth=1, dim=1) * ((centered(depth=1, dim=2)) + backward(depth=3, dim=4))) :: frob"
           `shouldBe`
             (Right $ Right [(["frob"], Specification $
              Once $ Bound (Just $ Spatial
