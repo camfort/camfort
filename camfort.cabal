@@ -48,7 +48,7 @@ executable camfort
                         Camfort.Specification.Units
                         Camfort.Specification.Units.InferenceFrontend
                         Camfort.Specification.Units.InferenceBackend
-                        Camfort.Specification.Units.InferenceBackendZ3
+                        Camfort.Specification.Units.InferenceBackendSBV
                         Camfort.Specification.Units.Environment
                         Camfort.Specification.Units.Monad
                         Camfort.Specification.Units.Parser
@@ -90,7 +90,7 @@ executable camfort
                         bytestring >= 0.10,
                         binary >= 0.8.3.0,
                         lattices >= 1.5,
-                        sbv >= 5.14,
+                        sbv == 6.1,
                         partial-order >= 0.1.2,
                         optparse-applicative >= 0.13.2.0,
                         z3 >= 4.1.0,

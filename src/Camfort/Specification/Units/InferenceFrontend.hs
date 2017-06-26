@@ -50,6 +50,7 @@ import Camfort.Analysis.Annotations
 import Camfort.Specification.Units.Environment
 import Camfort.Specification.Units.Monad
 import Camfort.Specification.Units.InferenceBackend
+import Camfort.Specification.Units.InferenceBackendSBV (inferVariablesSBV)
 import qualified Camfort.Specification.Units.Parser as P
 
 import qualified Debug.Trace as D
@@ -139,7 +140,7 @@ runCriticalVariables = do
 runInferVariables :: UnitSolver [(VV, UnitInfo)]
 runInferVariables = do
   cons <- usConstraints `fmap` get
-  return $ inferVariables cons
+  return $ inferVariablesSBV cons
 
 -- | Return a possible list of unsolvable constraints.
 runInconsistentConstraints :: UnitSolver (Maybe Constraints)

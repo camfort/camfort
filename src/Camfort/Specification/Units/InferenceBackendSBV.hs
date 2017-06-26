@@ -16,27 +16,31 @@
 
 {-
   Units of measure extension to Fortran: backend
+      -- declare-const -> exists
+      -- define-fun -> namedConstraint
 -}
 
 {-# LANGUAGE TupleSections #-}
 {-# LANGUAGE ScopedTypeVariables #-}
 
-module Camfort.Specification.Units.InferenceBackend
-  ( inconsistentConstraints, criticalVariables, inferVariables
-  -- mainly for debugging and testing:
-  , shiftTerms, flattenConstraints, flattenUnits, constraintsToMatrix, constraintsToMatrices
-  , rref, isInconsistentRREF, genUnitAssignments )
+module Camfort.Specification.Units.InferenceBackendSBV
+  -- ( inconsistentConstraints, criticalVariables, inferVariables
+  -- -- mainly for debugging and testing:
+  -- , shiftTerms, flattenConstraints, flattenUnits, constraintsToMatrix, constraintsToMatrices
+  -- , rref, isInconsistentRREF, genUnitAssignments )
 where
 
 import Data.Tuple (swap)
 import Data.Maybe (maybeToList)
 import Data.List ((\\), findIndex, partition, sortBy, group, tails)
 import Data.Generics.Uniplate.Operations (rewrite)
+import Debug.Trace (trace)
 import Control.Monad
 import Control.Monad.ST
 import Control.Arrow (first, second)
 import qualified Data.Map.Strict as M
 import qualified Data.Array as A
+import System.IO.Unsafe (unsafePerformIO)
 
 import Camfort.Specification.Units.Environment
 
@@ -53,17 +57,6 @@ import Numeric.LinearAlgebra.Devel (
 
 --------------------------------------------------
 
--- | Returns just the list of constraints that were identified as
--- being possible candidates for inconsistency, if there is a problem.
-inconsistentConstraints :: Constraints -> Maybe Constraints
-inconsistentConstraints [] = Nothing
-inconsistentConstraints cons
-  | null inconsists = Nothing
-  | otherwise       = Just [ con | (con, i) <- zip cons [0..], i `elem` inconsists ]
-  where
-    (_, _, inconsists, _, _) = constraintsToMatrices cons
-
---------------------------------------------------
 
 -- | Identifies the variables that need to be annotated in order for
 -- inference or checking to work.
@@ -72,15 +65,15 @@ criticalVariables _ = [] -- STUB
 --------------------------------------------------
 
 -- | Returns list of formerly-undetermined variables and their units.
-inferVariablesSBV :: Constraints -> IO [(VV, UnitInfo)]
-inferVariablesSBV cons = unitVarAssignments
-  where
-    unitAssignments = genUnitAssignments cons
-    -- Find the rows corresponding to the distilled "unit :: var"
-    -- information for ordinary (non-polymorphic) variables.
-    unitVarAssignments            =
-      [ (var, units) | ([UnitPow (UnitVar var)                 k], units) <- unitAssignments, k `approxEq` 1 ] ++
-      [ (var, units) | ([UnitPow (UnitParamVarAbs (_, var)) k], units)    <- unitAssignments, k `approxEq` 1 ]
+inferVariablesSBV :: Constraints -> [(VV, UnitInfo)]
+inferVariablesSBV cons = unsafePerformIO $ do
+  unitAssignments <- genUnitAssignmentsSBV cons
+  -- Find the rows corresponding to the distilled "unit :: var"
+  -- information for ordinary (non-polymorphic) variables.
+  let unitVarAssignments =
+        [ (var, units) | ([UnitPow (UnitVar var)              k], units) <- unitAssignments, k `approxEq` 1 ] ++
+        [ (var, units) | ([UnitPow (UnitParamVarAbs (_, var)) k], units) <- unitAssignments, k `approxEq` 1 ]
+  pure unitVarAssignments
 
 
 -- Convert a set of constraints into a matrix of co-efficients, and a
@@ -109,7 +102,7 @@ genUnitAssignmentsSBV cons = do
     let unitPows = map (concatMap flattenUnits . zipWith UnitPow cols) (H.toLists solvedM)
 
     -- Variables to the left, unit names to the right side of the equation.
-    unitAssignments               = map (fmap (foldUnits . map negatePosAbs) . partition (not . isUnitRHS)) unitPows
+    let unitAssignments = map (fmap (foldUnits . map negatePosAbs) . partition (not . isUnitRHS)) unitPows
     return unitAssignments
   where
 
@@ -128,8 +121,9 @@ genUnitAssignmentsSBV cons = do
       | otherwise  = foldl1 UnitMul units
 
 solveSMT :: (H.Matrix Double, H.Matrix Double, A.Array Int UnitInfo, A.Array Int UnitInfo)
-         -> IO H.Matrix Double
-solveSMT (lhsM, rhsM, lhsCols, rhsCols) = do undefined
+         -> IO (H.Matrix Double)
+solveSMT (lhsM, rhsM, lhsCols, rhsCols) = do
+  trace (show (lhsM, rhsM, lhsCols, rhsCols)) undefined
 {-    case sat model of
       ...
   where
@@ -168,8 +162,8 @@ epsilon = 0.001 -- arbitrary
 
 -- Convert a set of constraints into a matrix of co-efficients, and a
 -- reverse mapping of column numbers to units.
-constraintsToMatrix :: Constraints -> (H.Matrix Double, [Int], A.Array Int UnitInfo)
-constraintsToMatrix cons = (augM, inconsists, A.listArray (0, length colElems - 1) colElems)
+constraintsToMatrix :: Constraints -> (H.Matrix Double, A.Array Int UnitInfo)
+constraintsToMatrix cons = (augM, A.listArray (0, length colElems - 1) colElems)
   where
     -- convert each constraint into the form (lhs, rhs)
     consPairs       = flattenConstraints cons
@@ -181,10 +175,9 @@ constraintsToMatrix cons = (augM, inconsists, A.listArray (0, length colElems - 
     (rhsM, rhsCols) = flattenedToMatrix rhs
     colElems        = A.elems lhsCols ++ A.elems rhsCols
     augM            = if rows rhsM == 0 || cols rhsM == 0 then lhsM else fromBlocks [[lhsM, rhsM]]
-    inconsists      = findInconsistentRows lhsM augM
 
-constraintsToMatrices :: Constraints -> (H.Matrix Double, H.Matrix Double, [Int], A.Array Int UnitInfo, A.Array Int UnitInfo)
-constraintsToMatrices cons = (lhsM, rhsM, inconsists, lhsCols, rhsCols)
+constraintsToMatrices :: Constraints -> (H.Matrix Double, H.Matrix Double, A.Array Int UnitInfo, A.Array Int UnitInfo)
+constraintsToMatrices cons = (lhsM, rhsM, lhsCols, rhsCols)
   where
     -- convert each constraint into the form (lhs, rhs)
     consPairs       = filter (uncurry (/=)) $ flattenConstraints cons
@@ -195,7 +188,6 @@ constraintsToMatrices cons = (lhsM, rhsM, inconsists, lhsCols, rhsCols)
     (lhsM, lhsCols) = flattenedToMatrix lhs
     (rhsM, rhsCols) = flattenedToMatrix rhs
     augM            = if rows rhsM == 0 || cols rhsM == 0 then lhsM else fromBlocks [[lhsM, rhsM]]
-    inconsists      = findInconsistentRows lhsM augM
 
 -- [[UnitInfo]] is a list of flattened constraints
 flattenedToMatrix :: [[UnitInfo]] -> (H.Matrix Double, A.Array Int UnitInfo)
@@ -248,4 +240,3 @@ shiftTerms (lhs, rhs) = (lhsOk ++ negateCons rhsShift, rhsOk ++ negateCons lhsSh
 -- | Translate all constraints into a LHS, RHS side of units.
 flattenConstraints :: Constraints -> [([UnitInfo], [UnitInfo])]
 flattenConstraints = map (\ (ConEq u1 u2) -> (flattenUnits u1, flattenUnits u2))
-
