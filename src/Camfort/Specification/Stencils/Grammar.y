@@ -12,7 +12,7 @@ import Debug.Trace
 
 import Camfort.Analysis.CommentAnnotator
 import Camfort.Specification.Stencils.Model (Approximation(..), Multiplicity(..))
-import Camfort.Specification.Stencils.Syntax ()
+import qualified Camfort.Specification.Stencils.Syntax as Syn
 
 }
 
@@ -54,14 +54,17 @@ REGIONDEC :: { (String, Region) }
 : region '::' id '=' REGION { ($3, $5) }
 
 REGION ::                       { Region }
-: forward  '(' REGION_ATTRS ')' { applyAttr Forward  $3 }
-| backward '(' REGION_ATTRS ')' { applyAttr Backward $3 }
-| centered '(' REGION_ATTRS ')' { applyAttr Centered $3 }
-| pointed  '(' dim '=' num ')' { Centered 0 (read $5) True }
+: REGIONCONST                   { RegionConst $1 }
 | REGION '+' REGION             { Or $1 $3 }
 | REGION '*' REGION             { And $1 $3 }
 | '(' REGION ')'                { $2 }
 | id                            { Var $1 }
+
+REGIONCONST :: { Syn.Region }
+: forward  '(' REGION_ATTRS ')' { applyAttr Syn.Forward  $3 }
+| backward '(' REGION_ATTRS ')' { applyAttr Syn.Backward $3 }
+| centered '(' REGION_ATTRS ')' { applyAttr Syn.Centered $3 }
+| pointed  '(' dim '=' num ')'  { Syn.Centered 0 (read $5) True }
 
 REGION_ATTRS :: { (Depth Int, Dim Int, Bool) }
   : DEPTH DIM_REFL    { ($1, fst $2, snd $2) }
@@ -110,9 +113,9 @@ VARS :: { [String] }
 newtype Depth a = Depth a
 newtype Dim a = Dim a
 
-applyAttr :: (Int -> Int -> Bool -> Region)
+applyAttr :: (Int -> Int -> Bool -> Syn.Region)
           -> (Depth Int, Dim Int, Bool)
-          -> Region
+          -> Syn.Region
 applyAttr constr (Depth d, Dim dim, irrefl) = constr d dim irrefl
 
 data Specification
@@ -121,9 +124,7 @@ data Specification
   deriving (Show, Eq, Typeable, Data)
 
 data Region
-  = Forward Int Int Bool
-  | Backward Int Int Bool
-  | Centered Int Int Bool
+  = RegionConst Syn.Region
   | Or Region Region
   | And Region Region
   | Var String

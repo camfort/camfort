@@ -6,6 +6,7 @@ import Camfort.Specification.Stencils.Grammar
 import Camfort.Specification.Stencils.Model (
     Approximation(..)
   , Multiplicity(..))
+import qualified Camfort.Specification.Stencils.Syntax as Syn
 
 import Test.Hspec hiding (Spec)
 import qualified Test.Hspec as Test
@@ -71,20 +72,24 @@ spec =
         Right (SpecDec (Spec . Once . Exact $ Or (Var "r1") (Var "r2")) ["a"])
 
 
+    let regionTestCase isRefl =
+          Right (RegionDec "r"
+                  (Or (RegionConst (Syn.Forward 1 1 isRefl))
+                   (RegionConst (Syn.Backward 2 2 isRefl))))
     it "region defn" $
       parse "= region :: r = forward(depth=1, dim=1) + backward(depth=2, dim=2)"
       `shouldBe`
-        Right (RegionDec "r" (Or (Forward 1 1 True) (Backward 2 2 True)))
+        regionTestCase True
 
     it "region defn syntactic permutation" $
       parse "= region :: r = forward(dim=1,depth=1) + backward(depth=2, dim=2)"
       `shouldBe`
-        Right (RegionDec "r" (Or (Forward 1 1 True) (Backward 2 2 True)))
+        regionTestCase True
 
     it "region defn irreflx syntactic permutation" $
       parse "= region :: r = forward(nonpointed,dim=1,depth=1) + backward(depth=2,nonpointed,dim=2)"
       `shouldBe`
-        Right (RegionDec "r" (Or (Forward 1 1 False) (Backward 2 2 False)))
+        regionTestCase False
 
 
 parse = specParser

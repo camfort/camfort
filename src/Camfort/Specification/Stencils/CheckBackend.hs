@@ -70,6 +70,7 @@ instance SynToAst SYN.Region RegionSum where
 -- Convert a grammar syntax to Disjunctive Normal Form AST
 dnf :: (?renv :: RegionEnv) => SYN.Region -> Either ErrorMsg RegionSum
 
+dnf (SYN.RegionConst rconst) = pure . Sum $ [Product [rconst]]
 -- Distributive law
 dnf (SYN.And r1 r2) = do
     r1' <- dnf r1
@@ -83,10 +84,7 @@ dnf (SYN.Or r1 r2) = do
     r2' <- dnf r2
     return $ Sum $ unSum r1' ++ unSum r2'
 -- Region conversion
-dnf (SYN.Forward dep dim reflx)  = return $ Sum [Product [Forward dep dim reflx]]
-dnf (SYN.Backward dep dim reflx) = return $ Sum [Product [Backward dep dim reflx]]
-dnf (SYN.Centered dep dim reflx) = return $ Sum [Product [Centered dep dim reflx]]
-dnf (SYN.Var v)            =
+dnf (SYN.Var v)              =
     case lookup v ?renv of
       Nothing -> Left $ "Error: region " ++ v ++ " is not in scope."
       Just rs -> return rs
