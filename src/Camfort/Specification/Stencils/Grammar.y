@@ -191,10 +191,11 @@ lexer' ('(':xs)                                        = addToTokens TLParen xs
 lexer' (')':xs)                                        = addToTokens TRParen xs
 lexer' (x:xs)
   | isLetter x                                        = aux (TId . fmap toLower) $ \ c -> isAlphaNum c || c == '_'
-  | isNumber x                                        = aux TNum isNumber
+  | isPositiveNumber x                                = aux TNum isNumber
   | otherwise
      = failWith $ "Not an indentifier " ++ show x
  where
+   isPositiveNumber x = isNumber x && x /= '0'
    aux f p = (f target :) <$> lexer' rest
      where (target, rest) = span p (x:xs)
 lexer' x

@@ -41,6 +41,16 @@ spec =
       modifierTest "readonce, atleast," (Once . (`Bound` Nothing) . Just)
       modifierTest "readonce, atmost,"  (Once . Bound Nothing . Just)
 
+    let dimDepthTest (depth, dim) =
+          let depthDim = concat ["depth=", depth, ", dim=", dim]
+          in it depthDim $
+          parse (concat ["= stencil forward(", depthDim, ") :: a"])
+          `shouldBe` Right (SpecDec (Spec . Mult . Exact $ RegionConst $
+                                     Syn.Forward (read depth) (read dim) True) ["a"])
+
+    describe "depth and dim" $
+        mapM_ dimDepthTest [("1", "1"), ("10", "20")]
+
     describe "invalid stencils" $ do
       invalidStencilTest "approximation before multiplicity"
         "= stencil atLeast, readOnce r1 :: a"
@@ -50,6 +60,14 @@ spec =
         "= stencil atLeast, atLeast, r1 :: a"
       invalidStencilTest "multiple approximations"
         "= stencil atLeast, atMost, r1 :: a"
+      invalidStencilTest "zero dim"
+        "= stencil forward(depth=1, dim=0) :: a"
+      invalidStencilTest "zero depth"
+        "= stencil forward(depth=0, dim=1) :: a"
+      invalidStencilTest "negative dim"
+        "= stencil forward(depth=1, dim=-1) :: a"
+      invalidStencilTest "negative depth"
+        "= stencil forward(depth=-1, dim=1) :: a"
       invalidStencilTest "just pointed stencil"
         "= stencil pointed(dims=1,2) :: a"
       invalidStencilTest "basic monfieid stencil (2)"
