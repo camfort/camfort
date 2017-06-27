@@ -1,7 +1,7 @@
 { -- -*- Mode: Haskell -*-
 {-# LANGUAGE DeriveDataTypeable, PatternGuards #-}
 module Camfort.Specification.Stencils.Grammar
-( specParser, Specification(..), Region(..), Spec(..), Mod(..), lexer ) where
+( specParser, Specification(..), Region(..), Spec(..), lexer ) where
 
 import Data.Char (isLetter, isNumber, isAlphaNum, toLower, isAlpha, isSpace)
 import Data.List (intersect, sort, isPrefixOf)
@@ -11,7 +11,8 @@ import qualified Data.Text as T
 import Debug.Trace
 
 import Camfort.Analysis.CommentAnnotator
-import Camfort.Specification.Stencils.Syntax ()
+import Camfort.Specification.Stencils.Model (Approximation(..), Multiplicity(..))
+import qualified Camfort.Specification.Stencils.Syntax as Syn
 
 }
 
@@ -53,14 +54,17 @@ REGIONDEC :: { (String, Region) }
 : region '::' id '=' REGION { ($3, $5) }
 
 REGION ::                       { Region }
-: forward  '(' REGION_ATTRS ')' { applyAttr Forward  $3 }
-| backward '(' REGION_ATTRS ')' { applyAttr Backward $3 }
-| centered '(' REGION_ATTRS ')' { applyAttr Centered $3 }
-| pointed  '(' dim '=' num ')' { Centered 0 (read $5) True }
+: REGIONCONST                   { RegionConst $1 }
 | REGION '+' REGION             { Or $1 $3 }
 | REGION '*' REGION             { And $1 $3 }
 | '(' REGION ')'                { $2 }
 | id                            { Var $1 }
+
+REGIONCONST :: { Syn.Region }
+: forward  '(' REGION_ATTRS ')' { applyAttr Syn.Forward  $3 }
+| backward '(' REGION_ATTRS ')' { applyAttr Syn.Backward $3 }
+| centered '(' REGION_ATTRS ')' { applyAttr Syn.Centered $3 }
+| pointed  '(' dim '=' num ')'  { Syn.Centered 0 (read $5) True }
 
 REGION_ATTRS :: { (Depth Int, Dim Int, Bool) }
   : DEPTH DIM_REFL    { ($1, fst $2, snd $2) }
@@ -90,24 +94,16 @@ REFL :: { Bool }
  : nonpointed { False }
 
 SPECDEC :: { Spec }
-: APPROXMODS MOD REGION         { Spatial ($1 ++ [$2]) $3 }
-| MOD REGION                    { Spatial [$1] $2 }
-| APPROXMOD REGION               { Spatial [$1] $2 }
-| REGION                         { Spatial [] $1 }
+: MULTIPLICITY { Spec $1 }
 
-MOD :: { Mod }
-: readOnce                          { ReadOnce }
+MULTIPLICITY ::          { Multiplicity (Approximation Region) }
+: readOnce APPROXIMATION { Once $2 }
+| APPROXIMATION          { Mult $1 }
 
--- Even though multiple approx mods is not allowed
--- allow them to be parsed so that the validator can
--- report a nice error if the user supplies more than one
-APPROXMODS :: { [Mod] }
-: APPROXMOD APPROXMODS { $1 : $2 }
-| APPROXMOD            { [$1] }
-
-APPROXMOD :: { Mod }
-: atMost                    { AtMost }
-| atLeast                   { AtLeast }
+APPROXIMATION :: { Approximation Region }
+: atLeast REGION { Bound (Just $2) Nothing }
+| atMost REGION  { Bound Nothing (Just $2) }
+| REGION         { Exact $1 }
 
 VARS :: { [String] }
 : id VARS { $1 : $2 }
@@ -117,33 +113,25 @@ VARS :: { [String] }
 newtype Depth a = Depth a
 newtype Dim a = Dim a
 
-applyAttr :: (Int -> Int -> Bool -> Region)
+applyAttr :: (Int -> Int -> Bool -> Syn.Region)
           -> (Depth Int, Dim Int, Bool)
-          -> Region
+          -> Syn.Region
 applyAttr constr (Depth d, Dim dim, irrefl) = constr d dim irrefl
 
 data Specification
   = RegionDec String Region
   | SpecDec Spec [String]
-  deriving (Show, Eq, Ord, Typeable, Data)
+  deriving (Show, Eq, Typeable, Data)
 
 data Region
-  = Forward Int Int Bool
-  | Backward Int Int Bool
-  | Centered Int Int Bool
+  = RegionConst Syn.Region
   | Or Region Region
   | And Region Region
   | Var String
   deriving (Show, Eq, Ord, Typeable, Data)
 
-data Spec = Spatial [Mod] Region
-  deriving (Show, Eq, Ord, Typeable, Data)
-
-data Mod
-  = AtLeast
-  | AtMost
-  | ReadOnce
-  deriving (Show, Eq, Ord, Typeable, Data)
+newtype Spec = Spec (Multiplicity (Approximation Region))
+  deriving (Show, Eq, Typeable, Data)
 
 --------------------------------------------------
 
@@ -202,12 +190,12 @@ lexer' (',':xs)
 lexer' ('(':xs)                                        = addToTokens TLParen xs
 lexer' (')':xs)                                        = addToTokens TRParen xs
 lexer' (x:xs)
-  | isLetter x                                        = aux TId $ \ c -> isAlphaNum c || c == '_'
+  | isLetter x                                        = aux (TId . fmap toLower) $ \ c -> isAlphaNum c || c == '_'
   | isNumber x                                        = aux TNum isNumber
   | otherwise
      = failWith $ "Not an indentifier " ++ show x
  where
-   aux f p = (f target :) `fmap` lexer' rest
+   aux f p = (f target :) <$> lexer' rest
      where (target, rest) = span p (x:xs)
 lexer' x
     = failWith $ "Not a valid piece of stencil syntax " ++ show x
@@ -218,33 +206,7 @@ lexer' x
 specParser :: AnnotationParser Specification
 specParser src = do
  tokens <- lexer src
- parseSpec tokens >>= modValidate
-
--- Check whether modifiers are used correctly
-modValidate :: Specification -> Either AnnotationParseError Specification
-modValidate (SpecDec (Spatial mods r) vars) =
-  do mods' <- modValidate' $ sort mods
-     return $ SpecDec (Spatial mods' r) vars
-
-  where    modValidate' [] = return $ []
-
-           modValidate' (AtLeast : AtLeast : xs)
-             = failWith "Duplicate 'atLeast' modifier; use at most one."
-
-           modValidate' (AtMost : AtMost : xs)
-             = failWith "Duplicate 'atMost' modifier; use at most one."
-
-           modValidate' (ReadOnce : ReadOnce : xs)
-             = failWith "Duplicate 'readOnce' modifier; use at most one."
-
-           modValidate' (AtLeast : AtMost : xs)
-             = failWith $ "Conflicting modifiers: cannot use 'atLeast' and "
-                     ++ "'atMost' together"
-
-           modValidate' (x : xs)
-             = do xs' <- modValidate' xs
-                  return $ x : xs'
-modValidate x = return x
+ parseSpec tokens
 
 happyError :: [ Token ] -> Either AnnotationParseError a
 happyError t = failWith $ "Could not parse specification at: " ++ show t
