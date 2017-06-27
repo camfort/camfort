@@ -11,22 +11,30 @@ import qualified Camfort.Specification.Stencils.Syntax as Syn
 import Test.Hspec hiding (Spec)
 import qualified Test.Hspec as Test
 
+-- | Helper for building stencil strings.
+stencilString :: String -> String
+stencilString body = "= stencil " ++ body ++ " :: a"
+
+-- | Helper for building stencils.
+mkSpec :: Multiplicity (Approximation Region) -> Either a Specification
+mkSpec m = Right (SpecDec (Spec m) ["a"])
+
 modifierTest :: String -> (Region -> Multiplicity (Approximation Region)) -> SpecWith ()
 modifierTest modifiers f =
-  it ("modified with " ++ modifiers) $ parse ("= stencil " ++ modifiers ++ " r1 + r2 :: a")
-  `shouldBe` Right (SpecDec (Spec (f $ Or (Var "r1") (Var "r2"))) ["a"])
+  it ("modified with " ++ modifiers) $ parse (stencilString (modifiers ++ " r1 + r2"))
+  `shouldBe` (mkSpec . f $ Or (Var "r1") (Var "r2"))
 
 invalidStencilTest :: String -> String -> SpecWith ()
-invalidStencilTest description stencilString =
-  it description $ parse stencilString `shouldSatisfy` isLeft
+invalidStencilTest description stencilStr =
+  it description $ parse (stencilString stencilStr) `shouldSatisfy` isLeft
 
 spec :: Test.Spec
 spec =
   describe "Stencils - Grammar" $ do
     it "basic unmodified stencil" $
-      parse "= stencil r1 + r2 :: a"
+      parse (stencilString "r1 + r2")
       `shouldBe`
-        Right (SpecDec (Spec . Mult . Exact $ Or (Var "r1") (Var "r2")) ["a"])
+        mkSpec (Mult . Exact $ Or (Var "r1") (Var "r2"))
 
     context "with modifiers" $ do
       modifierTest "readOnce,"          (Once . Exact)
@@ -44,50 +52,48 @@ spec =
     let dimDepthTest (depth, dim) =
           let depthDim = concat ["depth=", depth, ", dim=", dim]
           in it depthDim $
-          parse (concat ["= stencil forward(", depthDim, ") :: a"])
-          `shouldBe` Right (SpecDec (Spec . Mult . Exact $ RegionConst $
-                                     Syn.Forward (read depth) (read dim) True) ["a"])
+          parse (stencilString $ concat ["forward(", depthDim, ")"])
+          `shouldBe` mkSpec (Mult . Exact $ RegionConst $
+                                     Syn.Forward (read depth) (read dim) True)
 
     describe "depth and dim" $
         mapM_ dimDepthTest [("1", "1"), ("10", "20")]
 
     describe "invalid stencils" $ do
       invalidStencilTest "approximation before multiplicity"
-        "= stencil atLeast, readOnce r1 :: a"
+        "atLeast, readOnce r1"
       invalidStencilTest "repeated multiplicities"
-        "= stencil readOnce, readOnce r1 :: a"
+        "readOnce, readOnce r1"
       invalidStencilTest "repeated approximations"
-        "= stencil atLeast, atLeast, r1 :: a"
+        "atLeast, atLeast, r1"
       invalidStencilTest "multiple approximations"
-        "= stencil atLeast, atMost, r1 :: a"
+        "atLeast, atMost, r1"
       invalidStencilTest "zero dim"
-        "= stencil forward(depth=1, dim=0) :: a"
+        "forward(depth=1, dim=0)"
       invalidStencilTest "zero depth"
-        "= stencil forward(depth=0, dim=1) :: a"
+        "forward(depth=0, dim=1)"
       invalidStencilTest "negative dim"
-        "= stencil forward(depth=1, dim=-1) :: a"
+        "forward(depth=1, dim=-1)"
       invalidStencilTest "negative depth"
-        "= stencil forward(depth=-1, dim=1) :: a"
+        "forward(depth=-1, dim=1)"
       invalidStencilTest "just pointed stencil"
-        "= stencil pointed(dims=1,2) :: a"
+        "pointed(dims=1,2)"
       invalidStencilTest "basic monfieid stencil (2)"
-        "= stencil atleast, pointed(dims=1,2), \
-             \       forward(depth=1, dim=1) :: x"
+        "atleast, pointed(dims=1,2), forward(depth=1, dim=1)"
       invalidStencilTest "basic stencil with pointed and nonpointed"
-        "= stencil atleast, pointed(dims=2),  \
-            \        nonpointed(dims=1), forward(depth=1, dim=1) :: frob"
+        "atleast, pointed(dims=2),  \
+            \        nonpointed(dims=1), forward(depth=1, dim=1)"
       invalidStencilTest "complex stencil"
-        "= stencil atleast, pointed(dims=1,2), readonce, \
-            \ (forward(depth=1, dim=1) + r) * backward(depth=3, dim=4) \
-            \ :: frob"
+        "atleast, pointed(dims=1,2), readonce, \
+            \ (forward(depth=1, dim=1) + r) * backward(depth=3, dim=4)"
       invalidStencilTest "pointed/nonpointed on same dim"
-        "= stencil atleast, nonpointed(dims=2), pointed(dims=1,2), \
-             \ forward(depth=1, dim=1) :: x"
+        "atleast, nonpointed(dims=2), pointed(dims=1,2), \
+             \ forward(depth=1, dim=1)"
 
     it "basic modified stencil (1)" $
-      parse "      = stencil readonce, r1 + r2 :: a"
+      parse (stencilString "      readonce, r1 + r2")
       `shouldBe`
-        Right (SpecDec (Spec . Once . Exact $ Or (Var "r1") (Var "r2")) ["a"])
+        mkSpec (Once . Exact $ Or (Var "r1") (Var "r2"))
 
 
     let regionTestCase isRefl =
