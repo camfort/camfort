@@ -185,23 +185,28 @@ genSpecsAndReport ::
      InferMode -> FU.SrcSpan -> [Neighbour]
   -> [F.Block (FA.Analysis A)]
   -> Inferer [([Variable], Specification)]
-genSpecsAndReport mode span lhs blocks = do
+genSpecsAndReport mode span lhsIxs blocks = do
     (IS ivmap _ _) <- get
     flowsGraph     <- ask
-    let ((specs, visited), evalInfos) = runWriter $ genSpecifications flowsGraph ivmap lhs blocks
+    -- Generate specification for the
+    let ((specs, visited), evalInfos) = runWriter $ genSpecifications flowsGraph ivmap lhsIxs blocks
+    -- Remember which nodes were visited during this traversal
     modify (\state -> state { visitedNodes = visitedNodes state ++ visited })
+    -- Report the specifications
     tell [ (span, Left specs) ]
-    if mode == EvalMode
-      then do
+
+    -- Evaluation mode information reporting:
+    when (mode == EvalMode) $ do
          tell [ (span, Right ("EVALMODE: assign to relative array subscript\
                               \ (tag: tickAssign)","")) ]
-         mapM_ (\evalInfo -> tell [ (span, Right evalInfo) ]) evalInfos
-         mapM_ (\spec -> when (show spec == "") $
-                          tell [ (span, Right ("EVALMODE: Cannot make spec\
-                                                   \ (tag: emptySpec)","")) ]
-                          ) specs
-         return specs
-      else return specs
+         forM_ evalInfos $ \evalInfo ->
+             tell [ (span, Right evalInfo) ]
+         forM_ specs $ \spec ->
+             when (show spec == "") $
+               tell [ (span, Right ("EVALMODE: Cannot make spec\
+                                    \ (tag: emptySpec)","")) ]
+
+    return specs
 
 
 
@@ -241,7 +246,10 @@ perBlockInfer mode marker mi b@(F.BlStatement ann span@(FU.SrcSpan lp _) _ stmnt
       specs <- forM lhses $ \lhs ->
          case lhs of
           -- Assignment to a variable
-          (F.ExpValue _ _ (F.ValVariable _)) -> genSpecsAndReport mode span [] [b]
+          (F.ExpValue _ _ (F.ValVariable _)) ->
+              genSpecsAndReport mode span [] [b]
+
+          -- Assignment to something else...
           _ -> case isArraySubscript lhs of
              Just subs ->
                -- Left-hand side is a subscript-by relative index or by a range

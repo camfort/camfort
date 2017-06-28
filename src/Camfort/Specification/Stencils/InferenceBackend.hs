@@ -126,6 +126,7 @@ sequenceMaybes :: Eq a => [Maybe a] -> Maybe [a]
 sequenceMaybes xs | all (== Nothing) xs = Nothing
                   | otherwise = Just (catMaybes xs)
 
+{-| Coalesce two intervals of vectors into one, if they are contiguous -}
 coalesce :: Span (V.Vec n Int) -> Span (V.Vec n Int) -> Maybe (Span (V.Vec n Int))
 coalesce (V.Nil, V.Nil) (V.Nil, V.Nil) = Just (V.Nil, V.Nil)
 -- If two well-defined intervals are equal, then they cannot be coalesced
