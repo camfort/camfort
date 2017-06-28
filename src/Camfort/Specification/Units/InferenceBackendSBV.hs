@@ -16,12 +16,13 @@
 
 {-
   Units of measure extension to Fortran: backend
-      -- declare-const -> exists
+      -- declare-const -> exists / mkExistVars
       -- define-fun -> namedConstraint
 -}
 
 {-# LANGUAGE TupleSections #-}
 {-# LANGUAGE ScopedTypeVariables #-}
+{-# LANGUAGE FlexibleContexts #-}
 
 module Camfort.Specification.Units.InferenceBackendSBV
   -- ( inconsistentConstraints, criticalVariables, inferVariables
@@ -30,6 +31,7 @@ module Camfort.Specification.Units.InferenceBackendSBV
   -- , rref, isInconsistentRREF, genUnitAssignments )
 where
 
+import Data.Char
 import Data.Tuple (swap)
 import Data.Maybe (maybeToList)
 import Data.List ((\\), findIndex, partition, sortBy, group, tails)
@@ -41,6 +43,7 @@ import Control.Arrow (first, second)
 import qualified Data.Map.Strict as M
 import qualified Data.Array as A
 import System.IO.Unsafe (unsafePerformIO)
+import Data.SBV
 
 import Camfort.Specification.Units.Environment
 
@@ -120,16 +123,65 @@ genUnitAssignmentsSBV cons = do
       | null units = UnitlessVar
       | otherwise  = foldl1 UnitMul units
 
+
 solveSMT :: (H.Matrix Double, H.Matrix Double, A.Array Int UnitInfo, A.Array Int UnitInfo)
          -> IO (H.Matrix Double)
 solveSMT (lhsM, rhsM, lhsCols, rhsCols) = do
-  trace (show (lhsM, rhsM, lhsCols, rhsCols)) undefined
-{-    case sat model of
-      ...
+
+    satResult <- sat predicate
+    thmResult <- prove predicate
+    case thmResult of
+      ThmResult (Unknown _ model) -> putStrLn $ "Unknown: " ++ show model
+      _ -> return ()
+    case satResult of
+      SatResult (Unknown _ model) -> putStrLn $ "Unknown (SAT): " ++ show model
+      _ -> return ()
+    print (satResult, thmResult)
+
+    return undefined
+
   where
-    model = undefined
--}
---------------------------------------------------
+    predicate :: Symbolic SBool
+    predicate = do
+          trace (show lhsColNamesNumbered) $ do
+            rhsVars <- mapM generateRHSRows (H.toRows rhsM)
+            lhsVars <- mkExistVarsNamed lhsColNamesNumbered
+            zipWithM_ (generateLHSRows lhsVars) (H.toRows lhsM) rhsVars
+            return true
+
+    generateLHSRows lhsVars lhsRow rhsVars =
+      zipWithM (generateConstraints rhsVars) lhsVars (H.toList lhsRow)
+
+    generateConstraints :: [SInteger] -> [SInteger] -> Double -> Symbolic [()]
+    generateConstraints rhsVars lhsVars c =
+      zipWithM (\vL vR -> constrain (cast c * vL .== vR)) lhsVars rhsVars
+
+    generateRHSRows :: H.Vector Double -> Symbolic [SBV Integer]
+    generateRHSRows v = do
+      let cs = H.toList v
+      vars <- mapM (\n -> sInteger $ "rhs" ++ show n) [1..length cs]
+      zipWithM_ (\v c -> constrain (v .== cast c)) vars cs
+      return vars
+
+    cast :: Double -> SInteger
+    cast = literal . round
+
+    mkExistVarsNamed :: [[String]] -> Symbolic [[SInteger]]
+    mkExistVarsNamed = mapM (mapM sInteger)
+
+    lhsColNamesNumbered :: [[String]]
+    lhsColNamesNumbered = map (\n -> map (++ show n) lhsColNames) [0..cols rhsM]
+
+    lhsColNames :: [String]
+    lhsColNames = [ identif ++ "-" ++ show row ++ "-"
+              | (identif, row) <- zip (map (sanitise . show) $ A.elems lhsCols) [0..]
+              ]
+
+    sanitise :: String -> String
+    sanitise = filter (\c -> isAlphaNum c && isAscii c)
+    -- sanitise identifier = [ c | c <- identifier, isAlphaNum c, isAscii c ]
+
+          ----------------------------------------------
 
 simplifyUnits :: UnitInfo -> UnitInfo
 simplifyUnits = rewrite rw
