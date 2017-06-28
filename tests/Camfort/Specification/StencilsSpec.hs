@@ -110,34 +110,34 @@ spec =
       it "five point stencil 2D" $
         inferFromIndicesWithoutLinearity (VL fivepoint)
         `shouldBe`
-         (Specification $ Mult $ Exact $ Spatial
+         (Specification (Mult $ Exact $ Spatial
                      (Sum [ Product [ Centered 1 1 True, Centered 0 2 True]
                           , Product [ Centered 0 1 True, Centered 1 2 True]
-                          ]))
+                          ])) True)
 
       it "seven point stencil 2D" $
         inferFromIndicesWithoutLinearity (VL sevenpoint)
         `shouldBe`
-          (Specification $ Mult $ Exact $ Spatial
+          (Specification (Mult $ Exact $ Spatial
                        (Sum [ Product [ Centered 1 1 True, Centered 0 2 True, Centered 0 3 True]
                             , Product [ Centered 0 1 True, Centered 1 2 True, Centered 0 3 True]
                             , Product [ Centered 0 1 True, Centered 0 2 True, Centered 1 3 True]
-                            ]))
+                            ])) True)
 
       it "five point stencil 2D with blip" $
          inferFromIndicesWithoutLinearity (VL fivepointErr)
          `shouldBe`
-          (Specification $ Mult $ Exact $ Spatial
+          (Specification (Mult $ Exact $ Spatial
                          (Sum [ Product [ Centered 1 1 True, Centered 0 2 True],
                                 Product [ Centered 0 1 True, Centered 1 2 True],
-                                Product [ Forward 1 1 True, Forward 1 2 True] ]))
+                                Product [ Forward 1 1 True, Forward 1 2 True] ])) True)
 
       it "centered forward" $
          inferFromIndicesWithoutLinearity (VL centeredFwd)
          `shouldBe`
-          (Specification $ Mult $ Exact $ Spatial
+          (Specification (Mult $ Exact $ Spatial
             (Sum [ Product [ Forward 1 1 True
-                           , Centered 1 2 True] ]))
+                           , Centered 1 2 True] ])) True)
 
     describe "2D stencil verification" $
       mapM_ (test2DSpecVariation (Neighbour "i" 0) (Neighbour "j" 0)) variations
@@ -159,19 +159,19 @@ spec =
                        [Neighbour "i" 0, Neighbour "j" 0]
                        [[offsetToIx "i" 1, offsetToIx "j" 1],
                         [offsetToIx "i" 0, offsetToIx "j" 0]]
-         `shouldBe` (Just $ Specification $ Once $ Exact
+         `shouldBe` (Just $ Specification (Once $ Exact
                        (Spatial
                          (Sum [Product [Forward 1 1 False, Forward 1 2 False],
-                               Product [Centered 0 1 True, Centered 0 2 True]])))
+                               Product [Centered 0 1 True, Centered 0 2 True]]))) True)
       it "consistent (2) a(i,c,j) = b(i,j+1) + b(i,j) \
                         \:: forward(depth=1,dim=2)*pointed(dim=1)" $
         indicesToSpec' ["i", "j"]
                         [Neighbour "i" 0, Constant (F.ValInteger "0"), Neighbour "j" 0]
                         [[offsetToIx "i" 0, offsetToIx "j" 1],
                          [offsetToIx "i" 0, offsetToIx "j" 0]]
-         `shouldBe` (Just $ Specification $ Once $ Exact
+         `shouldBe` (Just $ Specification (Once $ Exact
                        (Spatial
-                         (Sum [Product [Centered 0 1 True, Forward 1 2 True]])))
+                         (Sum [Product [Centered 0 1 True, Forward 1 2 True]]))) True)
 
       it "consistent (3) a(i+1,c,j) = b(j,i+1) + b(j,i) \
                         \:: backward(depth=1,dim=2)*pointed(dim=1)" $
@@ -179,9 +179,9 @@ spec =
                         [Neighbour "i" 1, Constant (F.ValInteger "0"), Neighbour "j" 0]
                         [[offsetToIx "j" 0, offsetToIx "i" 1],
                          [offsetToIx "j" 0, offsetToIx "i" 0]]
-         `shouldBe` (Just $ Specification $ Once $ Exact
+         `shouldBe` (Just $ Specification (Once $ Exact
                        (Spatial
-                         (Sum [Product [Centered 0 1 True, Backward 1 2 True]])))
+                         (Sum [Product [Centered 0 1 True, Backward 1 2 True]]))) True)
 
       it "consistent (4) a(i+1,j) = b(0,i+1) + b(0,i) \
                          \:: backward(depth=1,dim=2)" $
@@ -189,19 +189,19 @@ spec =
                         [Neighbour "i" 1, Neighbour "j" 0]
                         [[offsetToIx "j" absoluteRep, offsetToIx "i" 1],
                          [offsetToIx "j" absoluteRep, offsetToIx "i" 0]]
-         `shouldBe` (Just $ Specification $ Once $ Exact
+         `shouldBe` (Just $ Specification (Once $ Exact
                        (Spatial
-                         (Sum [Product [Backward 1 2 True]])))
+                         (Sum [Product [Backward 1 2 True]]))) True)
 
       it "consistent (5) a(i) = b(i,i+1) \
                         \:: pointed(dim=1)*forward(depth=1,dim=2,nonpointed)" $
         indicesToSpec' ["i", "j"]
                         [Neighbour "i" 0]
                         [[offsetToIx "i" 0, offsetToIx "i" 1]]
-         `shouldBe` (Just $ Specification $ Once $ Exact
+         `shouldBe` (Just $ Specification (Once $ Exact
                        (Spatial
                          (Sum [Product [Centered 0 1 True,
-                                        Forward 1 2 False]])))
+                                        Forward 1 2 False]]))) True)
 
       it "consistent (6) a(i) = b(i) + b(0) \
                         \:: pointed(dim=1)" $
@@ -281,6 +281,9 @@ spec =
         "complements existing stencils (when none missing - only one stencil)"
       assertStencilInferenceOnFile (fixturesDir </> "example10.f")
         "complements existing stencils (when one missing - inside if)"
+      assertStencilInferenceOnFile (fixturesDir </> "example11.f")
+        "inserts correct access specification"
+
   where assertStencilInferenceOnFile file testComment =
           let version      = deduceVersion file
               oldExtension = takeExtension file
@@ -334,7 +337,7 @@ test2DSpecVariation a b (input, expectation) =
        indicesToSpec' ["i", "j"] [a, b] (map fromFormatToIx input)
           `shouldBe` Just expectedSpec
   where
-    expectedSpec = Specification expectation
+    expectedSpec = Specification expectation True
     fromFormatToIx [ri,rj] = [ offsetToIx "i" ri, offsetToIx "j" rj ]
 
 indicesToSpec' ivs lhs = fst . runWriter . indicesToSpec ivmap "a" lhs
@@ -416,7 +419,7 @@ test3DSpecVariation (input, expectation) =
            `shouldBe` Just expectedSpec
 
   where
-    expectedSpec = Specification expectation
+    expectedSpec = Specification expectation True
     fromFormatToIx [ri,rj,rk] =
       [offsetToIx "i" ri, offsetToIx "j" rj, offsetToIx "k" rk]
 

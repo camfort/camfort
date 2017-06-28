@@ -48,8 +48,10 @@ instance SynToAst SYN.Specification (Either RegionEnv SpecDecls) where
      return $ Left [(rvar, spec')]
 
 -- Convert temporal or spatial specifications
-instance SynToAst SYN.Spec Specification where
-  synToAst (SYN.Spec m) = fmap Specification . synToAst $ m
+instance SynToAst SYN.SpecInner Specification where
+  synToAst (SYN.SpecInner spec isStencil) = do
+    spec' <- synToAst spec
+    return $ Specification spec' isStencil
 
 instance SynToAst (Multiplicity (Approximation SYN.Region)) (Multiplicity (Approximation Spatial)) where
   synToAst (Once a) = fmap Once . synToAst $ a

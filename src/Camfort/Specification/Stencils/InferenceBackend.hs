@@ -81,12 +81,14 @@ mkTrivialSpan (V.Cons x xs) =
   where
     (ys, zs) = mkTrivialSpan xs
 
--- Same as inferFromIndices but don't do any linearity checking
--- (defaults to NonLinear). This is used when the front-end does
--- the linearity check first as an optimimsation.
+{-| From a list of vectors of integers, representing relative offsets,
+    generate a specification (but does not do any linearity checking)
+    (defaults to Mult). Instead let the front-end does
+    the linearity check first as an optimimsation.
+    Also defaults to the specification being for a stencil -}
 inferFromIndicesWithoutLinearity :: V.VecList Int -> Specification
 inferFromIndicesWithoutLinearity (V.VL ixs) =
-    Specification . Mult . inferCore $ ixs
+    Specification (Mult . inferCore $ ixs) True
 
 inferCore :: [V.Vec n Int] -> Approximation Spatial
 inferCore subs =

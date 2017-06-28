@@ -1,7 +1,7 @@
 { -- -*- Mode: Haskell -*-
 {-# LANGUAGE DeriveDataTypeable, PatternGuards #-}
 module Camfort.Specification.Stencils.Grammar
-( specParser, Specification(..), Region(..), Spec(..), lexer ) where
+( specParser, Specification(..), Region(..), SpecInner(..), lexer ) where
 
 import Data.Char (isLetter, isNumber, isAlphaNum, toLower, isAlpha, isSpace)
 import Data.List (intersect, sort, isPrefixOf)
@@ -21,6 +21,7 @@ import qualified Camfort.Specification.Stencils.Syntax as Syn
 %tokentype { Token }
 %token
   stencil     { TId "stencil" }
+  access      { TId "access" }
   region      { TId "region" }
   readOnce    { TId "readonce" }
   pointed     { TId "pointed" }
@@ -48,7 +49,8 @@ import qualified Camfort.Specification.Stencils.Syntax as Syn
 
 SPEC :: { Specification }
 : REGIONDEC                 { RegionDec (fst $1) (snd $1) }
-| stencil SPECDEC '::' VARS { SpecDec $2 $4 }
+| stencil SPECDEC '::' VARS { SpecDec ($2 True) $4 }
+| access  SPECDEC '::' VARS { SpecDec ($2 False) $4 }
 
 REGIONDEC :: { (String, Region) }
 : region '::' id '=' REGION { ($3, $5) }
@@ -93,8 +95,8 @@ DIM : dim '=' num { Dim $ read $3 }
 REFL :: { Bool }
  : nonpointed { False }
 
-SPECDEC :: { Spec }
-: MULTIPLICITY { Spec $1 }
+SPECDEC :: { Syn.IsStencil -> SpecInner }
+: MULTIPLICITY { SpecInner $1 }
 
 MULTIPLICITY ::          { Multiplicity (Approximation Region) }
 : readOnce APPROXIMATION { Once $2 }
@@ -120,7 +122,7 @@ applyAttr constr (Depth d, Dim dim, irrefl) = constr d dim irrefl
 
 data Specification
   = RegionDec String Region
-  | SpecDec Spec [String]
+  | SpecDec SpecInner [String]
   deriving (Show, Eq, Typeable, Data)
 
 data Region
@@ -130,7 +132,9 @@ data Region
   | Var String
   deriving (Show, Eq, Ord, Typeable, Data)
 
-newtype Spec = Spec (Multiplicity (Approximation Region))
+data SpecInner = SpecInner
+    (Multiplicity (Approximation Region))  -- main specification content
+    Syn.IsStencil                          -- a bool: stencil or access
   deriving (Show, Eq, Typeable, Data)
 
 --------------------------------------------------
@@ -166,7 +170,8 @@ lexer input | length (stripLeadingWhiteSpace input) >= 2 =
     testAnnotation inp =
       -- First test to see if the input looks like an actual
       -- specification of either a stencil or region
-      if (inp `hasPrefix` "stencil" || inp `hasPrefix` "region")
+      if (inp `hasPrefix` "stencil" || inp `hasPrefix` "region"
+                                    || inp `hasPrefix` "access")
       then lexer' inp
       else Left NotAnnotation
     hasPrefix []       str = False

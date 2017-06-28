@@ -17,7 +17,7 @@ stencilString body = "= stencil " ++ body ++ " :: a"
 
 -- | Helper for building stencils.
 mkSpec :: Multiplicity (Approximation Region) -> Either a Specification
-mkSpec m = Right (SpecDec (Spec m) ["a"])
+mkSpec m = Right (SpecDec (SpecInner m True) ["a"])
 
 modifierTest :: String -> (Region -> Multiplicity (Approximation Region)) -> SpecWith ()
 modifierTest modifiers f =

@@ -111,7 +111,7 @@ addSpec spec src var =
   modify (\s -> s { hasSpec = hasSpec s ++ [(spec, src, var)] })
 
 -- | Add a new 'Grammar.Specification' to the tracked specifications.
-addGSpec :: Gram.Spec -> FU.SrcSpan -> Variable -> Inferer ()
+addGSpec :: Gram.SpecInner -> FU.SrcSpan -> Variable -> Inferer ()
 addGSpec spec src var = case specToSynSpec spec of
                           Nothing -> pure ()
                           Just spec' -> addSpec spec' src var
@@ -119,12 +119,13 @@ addGSpec spec src var = case specToSynSpec spec of
 -- | Attempt to convert a 'Grammar.Specification' into a 'Specification'.
 --
 -- Only performs conversions for spatial specifications.
-specToSynSpec :: Gram.Spec -> Maybe Specification
+specToSynSpec :: Gram.SpecInner -> Maybe Specification
 specToSynSpec spec = let ?renv = [] in
                        case synToAst spec of
                          Left err -> Nothing
                          Right x  -> Just x
 
+-- | Main stencil inference code
 stencilInference :: InferMode
                  -> Char
                  -> F.ProgramFile (FA.Analysis A)
@@ -342,18 +343,18 @@ genSpecifications flowsGraph ivs lhs blocks = do
       mkSpecs = M.mapWithKey (\v -> indicesToSpec ivs v lhs)
 
       splitUpperAndLower = concatMap splitUpperAndLower'
-      splitUpperAndLower' (vs, Specification (Mult (Bound (Just l) (Just u))))
+      splitUpperAndLower' (vs, Specification (Mult (Bound (Just l) (Just u))) isStencil)
         | isUnit l =
-         [(vs, Specification (Mult (Bound Nothing (Just u))))]
+         [(vs, Specification (Mult (Bound Nothing (Just u))) isStencil)]
         | otherwise =
-         [(vs, Specification (Mult (Bound (Just l) Nothing))),
-          (vs, Specification (Mult (Bound Nothing (Just u))))]
-      splitUpperAndLower' (vs, Specification (Once (Bound (Just l) (Just u))))
+         [(vs, Specification (Mult (Bound (Just l) Nothing)) isStencil),
+          (vs, Specification (Mult (Bound Nothing (Just u))) isStencil)]
+      splitUpperAndLower' (vs, Specification (Once (Bound (Just l) (Just u))) isStencil)
         | isUnit l =
-         [(vs, Specification (Mult (Bound Nothing (Just u))))]
+         [(vs, Specification (Mult (Bound Nothing (Just u))) isStencil)]
         | otherwise =
-         [(vs, Specification (Once (Bound (Just l) Nothing))),
-          (vs, Specification (Once (Bound Nothing (Just u))))]
+         [(vs, Specification (Once (Bound (Just l) Nothing)) isStencil),
+          (vs, Specification (Once (Bound Nothing (Just u))) isStencil)]
       splitUpperAndLower' x = [x]
 
 
@@ -465,11 +466,19 @@ indicesToSpec :: FAD.InductionVarMapByASTBlock
               -> [[F.Index (FA.Analysis Annotation)]]
               -> Writer EvalLog (Maybe Specification)
 indicesToSpec ivs a lhs ixs = do
-  mMultOffsets <- indicesToRelativisedOffsets ivs a lhs ixs
-  return $ do
-    (mult, offsets) <- mMultOffsets
-    let spec = relativeIxsToSpec offsets
-    fmap (setLinearity (fromBool mult)) spec
+    mMultOffsets <- indicesToRelativisedOffsets ivs a lhs ixs
+    return $ do
+      (mult, offsets) <- mMultOffsets
+      spec <- relativeIxsToSpec offsets
+      let spec' = setLinearity (fromBool mult) spec
+      return $ setType lhs spec'
+
+{-| Set the type of Specification (stencil or access) based on the lhs
+    set of neighbourhood indices; empty implies this is an access
+    specification -}
+setType :: [Neighbour] -> Specification -> Specification
+setType [] (Specification spec _) = Specification spec False
+setType _  (Specification spec _)  = Specification spec True
 
 indicesToRelativisedOffsets :: FAD.InductionVarMapByASTBlock
                             -> Variable

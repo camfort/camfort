@@ -14,9 +14,9 @@ import Test.Hspec
 spec :: Spec
 spec =
   describe "Consistency spec" $ do
-    let fivePointSpec = Specification . Once . Exact . Spatial $
+    let fivePointSpec = Specification (Once . Exact . Spatial $
           Sum [ Product [ Centered 1 1 True, Centered 0 2 True ]
-              , Product [ Centered 1 2 True, Centered 0 1 True ] ]
+              , Product [ Centered 1 2 True, Centered 0 1 True ] ]) True
     let offFivePoint =
           return (V.Cons (Offsets . S.fromList $ [-1])
                          (V.Cons (Offsets . S.fromList $ [0]) V.Nil))

@@ -20,7 +20,7 @@ consistent :: forall n .
               Specification
            -> Multiplicity (UnionNF n Offsets)
            -> ConsistencyResult
-consistent (Specification mult) observedIxs =
+consistent (Specification mult _) observedIxs =
     -- First do the linearity check
     case (specModel, observedIxs) of
       (Mult a, Mult b) -> a `consistent'` b

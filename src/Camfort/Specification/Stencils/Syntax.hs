@@ -31,6 +31,7 @@ module Camfort.Specification.Stencils.Syntax
   , Spatial(..)
   , SpecDecls
   , Specification(..)
+  , IsStencil
   , Variable
     -- * Functions
   , absoluteRep
@@ -84,12 +85,17 @@ pprintSpecDecls =
             show spec ++ " :: " ++ intercalate "," names ++ "\n")
 
 -- Top-level of specifications: may be either spatial or temporal
+
+-- | `isStencil` is used to mark whether a specification is associated
+-- | with a stencil computation, or a general array computation
+type IsStencil = Bool
+
 data Specification =
-  Specification (Multiplicity (Approximation Spatial))
+  Specification (Multiplicity (Approximation Spatial)) IsStencil
     deriving (Eq, Data, Typeable)
 
 isEmpty :: Specification -> Bool
-isEmpty (Specification mult) = isUnit . peel $ mult
+isEmpty (Specification mult _) = isUnit . peel $ mult
 
 -- **********************
 -- Spatial specifications:
@@ -113,9 +119,9 @@ hasDuplicates :: Eq a => [a] -> ([a], Bool)
 hasDuplicates xs = (nub xs, nub xs /= xs)
 
 setLinearity :: Linearity -> Specification -> Specification
-setLinearity l (Specification mult)
-  | l == Linear = Specification $ Once $ peel mult
-  | l == NonLinear = Specification $ Mult $ peel mult
+setLinearity l (Specification mult isStencil)
+  | l == Linear    = Specification (Once $ peel mult) isStencil
+  | l == NonLinear = Specification (Mult $ peel mult) isStencil
 
 data Linearity = Linear | NonLinear deriving (Eq, Data, Typeable)
 
@@ -229,7 +235,8 @@ instance RegionRig RegionSum where
 
 -- Pretty print top-level specifications
 instance Show Specification where
-  show (Specification sp) = "stencil " ++ show sp
+  show (Specification sp True)  = "stencil " ++ show sp
+  show (Specification sp False) = "access " ++ show sp
 
 instance {-# OVERLAPS #-} Show (Multiplicity (Approximation Spatial)) where
   show mult
