@@ -243,35 +243,71 @@ cmdRefactCommon      = fmap CmdRefactCommon refactOptions
 cmdRefactDead        = fmap CmdRefactDead refactOptions
 cmdRefactEquivalence = fmap CmdRefactEquivalence refactOptions
 
+-- | Helper for building a command alias.
+--
+-- Command aliases will not show up in the help text, nor be subject to completion.
+commandAlias :: String -> Parser Command -> Mod CommandFields Command
+commandAlias alias cmdParser = command alias . info cmdParser $ mempty
+
 -- | Helper for building a parser for a group of commands.
-commandsParser :: String -> [(String, Parser Command, String)] -> Parser Command
-commandsParser groupName commands = hsubparser $
-  mconcat (fmap (\(cname, cfun, desc) -> command cname . info cfun . progDesc $ desc) commands)
-  <> commandGroup groupName
+commandsParser :: String -> [(String, [String], Parser Command, String)] -> Parser Command
+commandsParser groupName commands =
+  hsubparser (mconcat (fmap
+                        (\(name, _, cmdParser, description) ->
+                           (command name . info cmdParser . progDesc $ description))
+                        commands)
+  <> commandGroup groupName)
+  <|> aliasSubParser
+  where aliasSubParser = subparser $
+          mconcat (fmap
+                    (\(_, aliases, cmdParser, _) ->
+                       mconcat $ fmap (`commandAlias` cmdParser) aliases)
+                    commands)
+          <> internal
 
 analysesParser :: Parser Command
 analysesParser = commandsParser "Analysis Commands" analysesCommands
   where
     analysesCommands =
-      [ ("count",          cmdCount,         "count variable declarations")
-      , ("ast",            cmdAST,           "print the raw AST -- for development purposes")
-      , ("stencils-check", cmdStencilsCheck, "stencil spec checking")
-      , ("stencils-infer", cmdStencilsInfer, "stencil spec inference")
-      , ("stencils-synth", cmdStencilsSynth, "stencil spec synthesis")
-      , ("units-suggest",  cmdUnitsSuggest,  "suggest variables to annotate with units-of-measure for maximum coverage")
-      , ("units-check",    cmdUnitsCheck,    "unit-of-measure checking")
-      , ("units-infer",    cmdUnitsInfer,    "unit-of-measure inference")
-      , ("units-synth",    cmdUnitsSynth,    "unit-of-measure synthesise specs")
-      , ("units-compile",  cmdUnitsCompile,  "units-of-measure compile module information") ]
+      [ ("count",
+          [],
+          cmdCount,         "count variable declarations")
+      , ("ast",
+          [],
+          cmdAST,           "print the raw AST -- for development purposes")
+      , ("stencils-check",
+          ["stencil-check"],
+          cmdStencilsCheck, "stencil spec checking")
+      , ("stencils-infer",
+          ["stencil-infer"],
+          cmdStencilsInfer, "stencil spec inference")
+      , ("stencils-synth",
+          ["stencil-synth"],
+          cmdStencilsSynth, "stencil spec synthesis")
+      , ("units-suggest",
+          ["unit-suggest"],
+          cmdUnitsSuggest,  "suggest variables to annotate with units-of-measure for maximum coverage")
+      , ("units-check",
+          ["unit-check"],
+          cmdUnitsCheck,    "unit-of-measure checking")
+      , ("units-infer",
+          ["unit-infer"],
+          cmdUnitsInfer,    "unit-of-measure inference")
+      , ("units-synth",
+          ["unit-synth"],
+          cmdUnitsSynth,    "unit-of-measure synthesise specs")
+      , ("units-compile",
+          ["unit-compile"],
+          cmdUnitsCompile,  "units-of-measure compile module information") ]
 
 
 refactoringsParser :: Parser Command
 refactoringsParser = commandsParser "Refactoring Commands" refactoringsCommands
   where
     refactoringsCommands =
-      [ ("common",      cmdRefactCommon,      "common block elimination")
-      , ("equivalence", cmdRefactEquivalence, "equivalence elimination")
-      , ("dead",        cmdRefactDead,        "dead-code elimination") ]
+      [ ("common",      [], cmdRefactCommon,      "common block elimination")
+      , ("equivalence", [], cmdRefactEquivalence, "equivalence elimination")
+      , ("dead",        [], cmdRefactDead,        "dead-code elimination") ]
 
 
 topLevelCommands :: Parser Command
