@@ -22,6 +22,7 @@ module Camfort.Specification.Stencils.CheckFrontend
   (
     -- * Stencil checking
     stencilChecking
+  , checkFailure
   ) where
 
 import Data.Generics.Uniplate.Operations
@@ -55,6 +56,18 @@ import qualified Data.Set as S
 
 newtype CheckResult = CheckResult { getCheckResult :: [StencilResult] }
 
+-- | Represents only the check results for invalid stencils.
+newtype CheckError  = CheckError { getCheckError :: [StencilCheckError] }
+
+-- | Retrieve the checks for invalid stencils from a 'CheckResult'. Result is
+-- Nothing if there are no invalid checks.
+checkFailure :: CheckResult -> Maybe CheckError
+checkFailure c = case catMaybes $ fmap toFailure (getCheckResult c) of
+                 [] -> Nothing
+                 xs -> Just $ CheckError xs
+  where toFailure SCOkay{} = Nothing
+        toFailure (SCFail err) = Just err
+
 -- | Result of stencil validation.
 data StencilResult
   -- | No issues were identified with the stencil at the given position.
@@ -78,6 +91,9 @@ prettyWithSpan srcSpan s = show srcSpan ++ "    " ++ s
 
 instance Show CheckResult where
   show = intercalate "\n" . fmap show . getCheckResult
+
+instance Show CheckError where
+  show = intercalate "\n" . fmap show . getCheckError
 
 instance Show StencilResult where
   show (SCOkay span) = prettyWithSpan span "Correct."

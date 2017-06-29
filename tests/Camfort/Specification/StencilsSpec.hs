@@ -279,6 +279,16 @@ spec =
         "complements existing stencils (when one missing - inside if)"
       assertStencilInferenceOnFile "example11.f"
         "inserts correct access specification"
+      assertStencilSynthResponse "example12.f"
+        "reports errors when conflicting stencil exists"
+        "\nEncountered the following errors when checking stencil specs for 'tests/fixtures/Specification/Stencils/example12.f'\n\
+\(8:1)-(8:52)    Not well specified.\n\
+\        Specification is:\n\
+\                stencil readOnce, (backward(depth=1, dim=1)) :: a\n\
+\\n\
+\        but at (9:8)-(9:32) the code behaves as\n\
+\                stencil readOnce, (forward(depth=1, dim=1)) :: a\n\n\
+\Please resolve these errors, and then run synthesis again."
 
   where assertStencilInferenceOnFile fileName testComment =
           let file         = fixturesDir </> fileName
@@ -296,6 +306,13 @@ spec =
                (snd . head . snd $ synth AssignMode '=' (map (\(f, _, p) -> (f, p)) program))
                (B.pack programSrc))
                 `shouldBe` synthExpectedSrc
+        assertStencilSynthResponse fileName testComment expectedResponse =
+            let file = fixturesDir </> fileName
+            in do
+              program          <- runIO $ readParseSrcDir file []
+              programSrc       <- runIO $ readFile file
+              it testComment $ (fst $ synth AssignMode '=' (map (\(f, _, p) -> (f, p)) program))
+                `shouldBe` expectedResponse
         fixturesDir = "tests" </> "fixtures" </> "Specification" </> "Stencils"
 
 -- Indices for the 2D five point stencil (deliberately in an odd order)
