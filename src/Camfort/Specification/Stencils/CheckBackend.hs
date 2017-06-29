@@ -22,6 +22,9 @@ module Camfort.Specification.Stencils.CheckBackend
   (
     -- * Classes
     SynToAst(..)
+    -- * Errors
+  , SynToAstError
+  , regionNotInScope
   ) where
 
 import Data.Function (on)
@@ -30,12 +33,19 @@ import Camfort.Specification.Stencils.Syntax
 import Camfort.Specification.Stencils.Model
 import qualified Camfort.Specification.Stencils.Grammar as SYN
 
-type ErrorMsg = String
+data SynToAstError = RegionNotInScope String
+  deriving (Eq)
+
+regionNotInScope :: String -> SynToAstError
+regionNotInScope = RegionNotInScope
+
+instance Show SynToAstError where
+  show (RegionNotInScope r) = "Error: region " ++ r ++ " is not in scope."
 
 -- Class for functions converting from Grammar parse
 -- syntax to the AST representation of the Syntax module
 class SynToAst s t | s -> t where
-  synToAst :: (?renv :: RegionEnv) => s -> Either ErrorMsg t
+  synToAst :: (?renv :: RegionEnv) => s -> Either SynToAstError t
 
 -- Top-level conversion of declarations
 instance SynToAst SYN.Specification (Either RegionEnv SpecDecls) where
@@ -70,7 +80,7 @@ instance SynToAst SYN.Region RegionSum where
   synToAst = dnf
 
 -- Convert a grammar syntax to Disjunctive Normal Form AST
-dnf :: (?renv :: RegionEnv) => SYN.Region -> Either ErrorMsg RegionSum
+dnf :: (?renv :: RegionEnv) => SYN.Region -> Either SynToAstError RegionSum
 
 dnf (SYN.RegionConst rconst) = pure . Sum $ [Product [rconst]]
 -- Distributive law
@@ -88,7 +98,7 @@ dnf (SYN.Or r1 r2) = do
 -- Region conversion
 dnf (SYN.Var v)              =
     case lookup v ?renv of
-      Nothing -> Left $ "Error: region " ++ v ++ " is not in scope."
+      Nothing -> Left (RegionNotInScope v)
       Just rs -> return rs
 
 -- Local variables:

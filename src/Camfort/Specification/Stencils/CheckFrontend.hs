@@ -29,13 +29,14 @@ import Control.Arrow
 import Control.Monad.Reader (ReaderT, ask, runReaderT)
 import Control.Monad.State.Strict
 import Control.Monad.Writer.Strict hiding (Product)
+import Data.List (intercalate)
 
 import qualified Camfort.Helpers.Vec as V
 import Camfort.Specification.Stencils.CheckBackend
 import qualified Camfort.Specification.Stencils.Consistency as C
 import qualified Camfort.Specification.Stencils.Grammar as Gram
 import Camfort.Specification.Stencils.Model
-import Camfort.Specification.Stencils.InferenceFrontend hiding (LogLine)
+import Camfort.Specification.Stencils.InferenceFrontend
 import Camfort.Specification.Stencils.Syntax
 import Camfort.Analysis.Annotations
 import Camfort.Analysis.CommentAnnotator
@@ -52,58 +53,95 @@ import Algebra.Lattice (joins1)
 import Data.Int
 import qualified Data.Set as S
 
+newtype CheckResult = CheckResult { getCheckResult :: [StencilResult] }
+
+-- | Result of stencil validation.
+data StencilResult
+  -- | No issues were identified with the stencil at the given position.
+  = SCOkay FU.SrcSpan
+  -- | Validation of stencil failed. See 'StencilCheckError' for information
+  -- on the types of validation errors that can occur.
+  | SCFail StencilCheckError
+
+-- | Represents a way in which validation of a stencil can fail.
+data StencilCheckError
+  -- | Error occurred during conversion from parsed representation to AST.
+  = SynToAstError SynToAstError FU.SrcSpan
+  -- | The existing stencil conflicts with an inferred stencil.
+  | NotWellSpecified (FU.SrcSpan, SpecDecls) (FU.SrcSpan, SpecDecls)
+  -- | The stencil could not be parsed correctly.
+  | ParseError String
+
+-- | Pretty print a message with suitable spacing after the source position.
+prettyWithSpan :: FU.SrcSpan -> String -> String
+prettyWithSpan srcSpan s = show srcSpan ++ "    " ++ s
+
+instance Show CheckResult where
+  show = intercalate "\n" . fmap show . getCheckResult
+
+instance Show StencilResult where
+  show (SCOkay span) = prettyWithSpan span "Correct."
+  show (SCFail err)  = show err
+
+instance Show StencilCheckError where
+  show (SynToAstError err srcSpan) = prettyWithSpan srcSpan (show err)
+  show (NotWellSpecified (spanActual, stencilActual) (spanInferred, stencilInferred)) =
+    let sp = replicate 8 ' '
+    in concat [prettyWithSpan spanActual "Not well specified.\n", sp,
+               "Specification is:\n", sp, sp, pprintSpecDecls stencilActual, "\n",
+               sp, "but at ", show spanInferred, " the code behaves as\n", sp, sp,
+               pprintSpecDecls stencilInferred]
+  show (ParseError s) = show s
+
 -- Entry point
-stencilChecking :: F.ProgramFile (FA.Analysis A) -> [String]
-stencilChecking pf = snd . runWriter $
+stencilChecking :: F.ProgramFile (FA.Analysis A) -> CheckResult
+stencilChecking pf = CheckResult . snd . runWriter $
   do -- Attempt to parse comments to specifications
-     pf' <- annotateComments Gram.specParser pf
+     pf' <- mapWriter (second (fmap $ SCFail . ParseError)) $ annotateComments Gram.specParser pf
 
-     -- get map of AST-Block-ID ==> corresponding AST-Block
-     let bm    = FAD.genBlockMap pf'
-     -- get map of program unit ==> basic block graph
-     let bbm   = FAB.genBBlockMap pf'
-     -- build the supergraph of global dependency
-     let sgr   = FAB.genSuperBBGr bbm
-     -- extract the supergraph itself
-     let gr    = FAB.superBBGrGraph sgr
-     -- get map of variable name ==> { defining AST-Block-IDs }
-     let dm    = FAD.genDefMap bm
-     let pprint = map (\(span, spec) -> show span ++ "    " ++ spec)
-     -- perform reaching definitions analysis
-     let rd    = FAD.reachingDefinitions dm gr
-     -- create graph of definition "flows"
-     let flowsGraph =  FAD.genFlowsToGraph bm dm gr rd
-     -- identify every loop by its back-edge
-     let beMap = FAD.genBackEdgeMap (FAD.dominators gr) gr
-     let ivmap = FAD.genInductionVarMapByASTBlock beMap gr
-     let results = descendBiM perProgramUnitCheck pf'
+         -- get map of AST-Block-ID ==> corresponding AST-Block
+     let bm         = FAD.genBlockMap pf'
+         -- get map of program unit  ==> basic block graph
+         bbm        = FAB.genBBlockMap pf'
+         -- build the supergraph of global dependency
+         sgr        = FAB.genSuperBBGr bbm
+         -- extract the supergraph itself
+         gr         = FAB.superBBGrGraph sgr
+         -- get map of variable name ==> { defining AST-Block-IDs }
+         dm         = FAD.genDefMap bm
+         -- perform reaching definitions analysis
+         rd         = FAD.reachingDefinitions dm gr
+         -- create graph of definition "flows"
+         flowsGraph =  FAD.genFlowsToGraph bm dm gr rd
+         -- identify every loop by its back-edge
+         beMap      = FAD.genBackEdgeMap (FAD.dominators gr) gr
+         ivmap      = FAD.genInductionVarMapByASTBlock beMap gr
+         results    = descendBiM perProgramUnitCheck pf'
 
-     -- Format output
      let (_, output) = flip evalState (([], Nothing), ivmap)
                      . flip runReaderT flowsGraph
-                     . runWriterT
-                     $ results
-     tell $ pprint output
+                     . runWriterT $ results
+     tell output
 
-type LogLine = (FU.SrcSpan, String)
 type Checker a =
-    WriterT [LogLine]
+  WriterT [StencilResult]
       (ReaderT (FAD.FlowsGraph A)
             (State ((RegionEnv, Maybe F.ProgramUnitName), FAD.InductionVarMapByASTBlock))) a
 
 -- If the annotation contains an unconverted stencil specification syntax tree
 -- then convert it and return an updated annotation containing the AST
-parseCommentToAST :: FA.Analysis A -> FU.SrcSpan -> Checker (FA.Analysis A)
+parseCommentToAST :: FA.Analysis A -> FU.SrcSpan -> Checker (Either SynToAstError (FA.Analysis A))
 parseCommentToAST ann span =
   case stencilSpec (FA.prevAnnotation ann) of
     Just (Left stencilComment) -> do
          ((regionEnv, _), _) <- get
          let ?renv = regionEnv
           in case synToAst stencilComment of
-               Left err   -> error $ show span ++ ": " ++ err
-               Right ast  -> return $ onPrev
+               Right ast  -> pure . pure $ onPrev
                               (\ann -> ann {stencilSpec = Just (Right ast)}) ann
-    _ -> return ann
+               Left err   -> pure . Left $ err
+
+    _ -> pure . pure $ ann
 
 -- If the annotation contains an encapsulated region environment, extract it
 -- and add it to current region environment in scope
@@ -165,49 +203,28 @@ perProgramUnitCheck p = descendBiM perBlockCheck p
 perBlockCheck :: F.Block (FA.Analysis A) -> Checker (F.Block (FA.Analysis A))
 
 perBlockCheck b@(F.BlComment ann span _) = do
-  ann'       <- parseCommentToAST ann span
-  flowsGraph <- ask
-  updateRegionEnv ann'
-  let b' = F.setAnnotation ann' b
-  case (stencilSpec $ FA.prevAnnotation ann', stencilBlock $ FA.prevAnnotation ann') of
-    -- Comment contains a specification and an Associated block
-    (Just (Right (Right specDecls)), Just block) ->
-     case block of
-      s@(F.BlStatement _ span' _ (F.StExpressionAssign _ _ lhs _)) ->
-       case isArraySubscript lhs of
-         Just subs -> do
-            -- Create list of relative indices
-            ivmap <- snd <$> get
-            -- Do analysis
-            let lhsN         = fromMaybe [] (neighbourIndex ivmap subs)
-            let relOffsets = fst . runWriter $ genOffsets flowsGraph ivmap lhsN [s]
-            let multOffsets = map (\relOffset ->
-                  case relOffset of
-                    (var, (True, offsets)) -> (var, Mult offsets)
-                    (var, (False, offsets)) -> (var, Once offsets)) relOffsets
-            let expandedDecls =
-                  concatMap (\(vars,spec) -> map (flip (,) spec) vars) specDecls
-            -- Model and compare the current and specified stencil specs
-            if checkOffsetsAgainstSpec multOffsets expandedDecls
-              then tell [ (span, "Correct.") ]
-              else do
+  ast       <- parseCommentToAST ann span
+  case ast of
+    Left err -> tell [SCFail $ SynToAstError err span] *> pure b
+    Right ann' -> do
+      flowsGraph <- ask
+      updateRegionEnv ann'
+      let b' = F.setAnnotation ann' b
+      case (stencilSpec $ FA.prevAnnotation ann', stencilBlock $ FA.prevAnnotation ann') of
+        -- Comment contains a specification and an Associated block
+        (Just (Right (Right specDecls)), Just block) ->
+         case block of
+          s@(F.BlStatement _ span' _ (F.StExpressionAssign _ _ lhs _)) ->
+           case isArraySubscript lhs of
+             Just subs -> do
+                checkStencil flowsGraph s specDecls span' subs span
+                return b'
+             Nothing -> return b'
 
-                let inferred = fst . fst . runWriter $ genSpecifications flowsGraph ivmap lhsN [s]
-                let sp = replicate 8 ' '
-                tell [ (span,
-                     "Not well specified.\n"
-                  ++ sp ++ "Specification is:\n"
-                  ++ sp ++ sp ++ pprintSpecDecls specDecls ++ "\n"
-                  ++ sp ++ "but at " ++ show span' ++ " the code behaves as\n"
-                  ++ sp ++ sp ++ pprintSpecDecls inferred) ]
-
-            return b'
-         Nothing -> return b'
-
-      -- Stub, maybe collect stencils inside 'do' block
-      F.BlDo{} -> return b'
-      _ -> return b'
-    _ -> return b'
+          -- Stub, maybe collect stencils inside 'do' block
+          F.BlDo{} -> return b'
+          _ -> return b'
+        _ -> return b'
 
 perBlockCheck b@(F.BlDo _ _ _ _ _ _ body _) = do
    -- descend into the body of the do-statement
@@ -220,6 +237,28 @@ perBlockCheck b = do
   -- Go inside child blocks
   mapM_ (descendBiM perBlockCheck) $ children b
   return b
+
+-- | Validate the stencil and log an appropriate result.
+checkStencil :: FAD.FlowsGraph A -> F.Block (FA.Analysis A) -> SpecDecls
+  -> FU.SrcSpan -> [F.Index (FA.Analysis Annotation)] -> FU.SrcSpan -> Checker ()
+checkStencil flowsGraph s specDecls spanInferred subs span = do
+  -- Create list of relative indices
+  ivmap <- snd <$> get
+  -- Do analysis
+  let lhsN         = fromMaybe [] (neighbourIndex ivmap subs)
+      relOffsets = fst . runWriter $ genOffsets flowsGraph ivmap lhsN [s]
+      multOffsets = map (\relOffset ->
+          case relOffset of
+          (var, (True, offsets)) -> (var, Mult offsets)
+          (var, (False, offsets)) -> (var, Once offsets)) relOffsets
+      expandedDecls =
+          concatMap (\(vars,spec) -> map (flip (,) spec) vars) specDecls
+  -- Model and compare the current and specified stencil specs
+  if checkOffsetsAgainstSpec multOffsets expandedDecls
+    then tell [SCOkay span]
+    else do
+    let inferred = fst . fst . runWriter $ genSpecifications flowsGraph ivmap lhsN [s]
+    tell [SCFail $ NotWellSpecified (span, specDecls) (spanInferred, inferred)]
 
 genOffsets ::
      FAD.FlowsGraph A

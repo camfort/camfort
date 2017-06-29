@@ -82,7 +82,7 @@ check filename pf =
     -- Append filename to any outputs
     if null output then "" else "\n" ++ filename ++ "\n" ++ output
     where
-     output = intercalate "\n" . stencilChecking . getBlocks $ pf
+     output = show . stencilChecking . getBlocks $ pf
 
 -- Local variables:
 -- mode: haskell

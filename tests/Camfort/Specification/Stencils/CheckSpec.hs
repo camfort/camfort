@@ -10,13 +10,11 @@ import Camfort.Specification.Stencils.Syntax
 
 import Test.Hspec
 
-promoteErrors :: Either String x -> Either AnnotationParseError x
-promoteErrors (Left x)  = Left (ProbablyAnnotation x)
-promoteErrors (Right x) = Right x
-
 parseAndConvert x =
     let ?renv = []
-    in SYN.specParser x >>= (promoteErrors . synToAst)
+    in case SYN.specParser x of
+         Left  _  -> error "received stencil with invalid syntax in test"
+         Right v  -> synToAst v
 
 spec :: Spec
 spec =
@@ -74,3 +72,7 @@ spec =
              (Once $ Bound (Just $ Spatial
                       (Sum [Product [Forward 1 1 True, Centered 1 2 True],
                             Product [Forward 1 1 True, Backward 3 4 True]])) Nothing) True)])
+
+      it "rejects stencils with undefined regions" $
+         parseAndConvert "= stencil r1 :: a"
+         `shouldBe` (Left . regionNotInScope $ "r1")
