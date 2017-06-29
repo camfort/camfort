@@ -1,4 +1,4 @@
-      program example10
+      program example11
 
       integer i, imax
       parameter (imax = 3)
