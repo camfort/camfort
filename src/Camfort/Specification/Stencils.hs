@@ -31,6 +31,10 @@ import qualified Language.Fortran.Analysis.BBlocks as FAB
 
 import Data.List
 
+
+-- | Helper for retrieving analysed blocks.
+getBlocks = FAB.analyseBBlocks . FAR.analyseRenames . FA.initAnalysis
+
 --------------------------------------------------
 --         Stencil specification inference      --
 --------------------------------------------------
@@ -42,16 +46,16 @@ infer :: InferMode -> Char -> Filename
 infer mode marker filename pf =
     -- Append filename to any outputs
     if null output
-       then ("", fmap FA.prevAnnotation pf'')
-       else ("\n" ++ filename ++ "\n" ++ output, fmap FA.prevAnnotation pf'')
+       then ("", infer1)
+       else ("\n" ++ filename ++ "\n" ++ output, infer1)
     where
       output = intercalate "\n"
              . filter (not . white)
-             . map formatSpecNoComment $ results
+             . map formatSpecNoComment $ infer2
       white = all (\x -> (x == ' ') || (x == '\t'))
-      (pf'', results) = stencilInference mode marker
-                      . FAB.analyseBBlocks $ pf'
-      pf'     = FAR.analyseRenames . FA.initAnalysis $ pf
+      infer' = stencilInference mode marker . getBlocks $ pf
+      infer1 = fmap FA.prevAnnotation . fst $ infer'
+      infer2 = snd infer'
 
 --------------------------------------------------
 --         Stencil specification synthesis      --
@@ -65,18 +69,9 @@ synth :: InferMode
 synth mode marker = foldr buildOutput ("", [])
   where
     buildOutput (f, pf) (r, pfs) = (r ++ r', (f, pf') : pfs)
-      where (r', pf') = synthPF mode marker f pf
+      where (r', pf') = ("", synthPF' pf)
+    synthPF' = fmap FA.prevAnnotation . fst . stencilInference Synth marker . getBlocks
 
-synthPF :: InferMode -> Char -> Filename
-      -> F.ProgramFile Annotation
-      -> (String, F.ProgramFile Annotation)
-synthPF _ marker _ pf =
-    -- Append filename to any outputs
-    ("", fmap FA.prevAnnotation pf'')
-    where
-      (pf'', _) = stencilInference Synth marker
-                . FAB.analyseBBlocks $ pf'
-      pf'     = FAR.analyseRenames . FA.initAnalysis $ pf
 
 --------------------------------------------------
 --         Stencil specification checking       --
@@ -87,10 +82,7 @@ check filename pf =
     -- Append filename to any outputs
     if null output then "" else "\n" ++ filename ++ "\n" ++ output
     where
-     output  = intercalate "\n" results
-     -- Applying checking mechanism
-     results  = stencilChecking . FAB.analyseBBlocks $ pf'
-     pf'      = FAR.analyseRenames . FA.initAnalysis $ pf
+     output = show . stencilChecking . getBlocks $ pf
 
 -- Local variables:
 -- mode: haskell
