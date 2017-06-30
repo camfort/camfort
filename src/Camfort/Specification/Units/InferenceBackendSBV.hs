@@ -34,7 +34,7 @@ where
 import Data.Char
 import Data.Tuple (swap)
 import Data.Maybe (maybeToList)
-import Data.List ((\\), findIndex, partition, sortBy, group, tails)
+import Data.List ((\\), findIndex, partition, sortBy, group, tails, transpose)
 import Data.Generics.Uniplate.Operations (rewrite)
 import Debug.Trace (trace)
 import Control.Monad
@@ -128,7 +128,7 @@ solveSMT :: (H.Matrix Double, H.Matrix Double, A.Array Int UnitInfo, A.Array Int
          -> IO (H.Matrix Double)
 solveSMT (lhsM, rhsM, lhsCols, rhsCols) = do
 
-    satResult <- sat predicate
+    satResult <- satWith z3{smtFile=Just "model.smt2"} predicate
     thmResult <- prove predicate
     case thmResult of
       ThmResult (Unknown _ model) -> putStrLn $ "Unknown: " ++ show model
@@ -144,43 +144,72 @@ solveSMT (lhsM, rhsM, lhsCols, rhsCols) = do
     predicate :: Symbolic SBool
     predicate = do
           trace (show lhsColNamesNumbered) $ do
-            rhsVars <- mapM generateRHSRows (H.toRows rhsM)
+            -- Generate names (constrained to their assigned values) for RHS
+            rhsVars <- zipWithM generateRHSRows [1..] (H.toRows rhsM)
+            -- Generate LHS variables
             lhsVars <- mkExistVarsNamed lhsColNamesNumbered
-            zipWithM_ (generateLHSRows lhsVars) (H.toRows lhsM) rhsVars
+            -- Make constraints
+            genEqConstraints lhsVars (H.toRows lhsM) rhsVars
             return true
 
-    generateLHSRows lhsVars lhsRow rhsVars =
-      zipWithM (generateConstraints rhsVars) lhsVars (H.toList lhsRow)
+    genEqConstraints :: [[(String, SInteger)]] -- lhs variables (len lc * len rc)
+                     -> [H.Vector Double]       -- matrix lhs coeffecients (len r)
+                     -> [[(String, SInteger)]]  -- matrix rhs variables    (len r)
+                     -> Symbolic ()
+    genEqConstraints lhsVars lhsCoeffss rhsVarss = do
+      zipWithM' (genEqConstraints' lhsVars) lhsCoeffss rhsVarss
+      return ()
 
-    generateConstraints :: [SInteger] -> [SInteger] -> Double -> Symbolic [()]
-    generateConstraints rhsVars lhsVars c =
-      zipWithM (\vL vR -> constrain (cast c * vL .== vR)) lhsVars rhsVars
+    genEqConstraints' :: [[(String, SInteger)]] -- lhs variables (len lc * len rc)
+                      -> H.Vector Double        -- row lhs coeffections (len lc)
+                      -> [(String, SInteger)]   -- row rhs variables (len rc)
+                      -> Symbolic ()
+    genEqConstraints' lhsVars lhsCoeffs rhsVars = do
+      zipWithM' (genUnitConstraint lhsCoeffs) (transpose lhsVars) rhsVars
+      return ()
 
-    generateRHSRows :: H.Vector Double -> Symbolic [SBV Integer]
-    generateRHSRows v = do
+    genUnitConstraint :: H.Vector Double      -- row lhs coeffects (len lc)
+                       -> [(String, SInteger)] -- lhs variables (len lc)
+                       -> (String, SInteger)   -- rhs variable
+                       -> Symbolic ()
+    genUnitConstraint lhsCoeffs lhsVars (vRname, vR) = do
+      let lhs = sum $ zipWith (\c (_, vL) -> cast c * vL) (H.toList lhsCoeffs) lhsVars
+      let lhsName = foldr1 (++) $
+                      zipWith (\c (vLname, _) -> show c ++ " * " ++ vLname)
+                        (H.toList lhsCoeffs) lhsVars
+      namedConstraint (lhsName ++ " == " ++ vRname) (lhs .== vR)
+      return ()
+
+    generateRHSRows :: Int -> H.Vector Double -> Symbolic [(String, SBV Integer)]
+    generateRHSRows r v = do
       let cs = H.toList v
-      vars <- mapM (\n -> sInteger $ "rhs" ++ show n) [1..length cs]
-      zipWithM_ (\v c -> constrain (v .== cast c)) vars cs
+      vars <- mapM (\n -> do let name = "rhs" ++ show r ++ show n
+                             var <- sInteger name
+                             return (name, var)) [1..length cs]
+      zipWithM' (\(vname, v) c -> namedConstraint (vname ++ " == " ++ show c) (v .== cast c)) vars cs
       return vars
 
     cast :: Double -> SInteger
     cast = literal . round
 
-    mkExistVarsNamed :: [[String]] -> Symbolic [[SInteger]]
-    mkExistVarsNamed = mapM (mapM sInteger)
+    mkExistVarsNamed :: [[String]] -> Symbolic [[(String, SInteger)]]
+    mkExistVarsNamed = mapM (mapM (\x -> do { v <- sInteger x; return (x, v) }))
 
     lhsColNamesNumbered :: [[String]]
-    lhsColNamesNumbered = map (\n -> map (++ show n) lhsColNames) [0..cols rhsM]
+    lhsColNamesNumbered = transpose $ map (\n -> map (++ show n) lhsColNames) [1..cols rhsM]
 
     lhsColNames :: [String]
-    lhsColNames = [ identif ++ "-" ++ show row ++ "-"
-              | (identif, row) <- zip (map (sanitise . show) $ A.elems lhsCols) [0..]
+    lhsColNames = [ identif ++ "-" -- ++ show row ++ "-"
+              | (identif, row) <- zip (map (sanitise . show) $ A.elems lhsCols) [1..]
               ]
 
     sanitise :: String -> String
-    sanitise = filter (\c -> isAlphaNum c && isAscii c)
+    sanitise = id -- filter (\c -> isAlphaNum c && isAscii c)
     -- sanitise identifier = [ c | c <- identifier, isAlphaNum c, isAscii c ]
 
+    zipWithM' f xs ys
+      | length xs /= length ys = error $ "not of same length " ++ show xs ++ " " ++ show ys
+      | otherwise = zipWithM f xs ys
           ----------------------------------------------
 
 simplifyUnits :: UnitInfo -> UnitInfo
