@@ -128,29 +128,30 @@ solveSMT :: (H.Matrix Double, H.Matrix Double, A.Array Int UnitInfo, A.Array Int
          -> IO (H.Matrix Double)
 solveSMT (lhsM, rhsM, lhsCols, rhsCols) = do
 
-    satResult <- satWith z3{smtFile=Just "model.smt2"} predicate
-    thmResult <- prove predicate
-    case thmResult of
-      ThmResult (Unknown _ model) -> putStrLn $ "Unknown: " ++ show model
-      _ -> return ()
+    satResult <- satWith
+                   z3{smtFile=Just "model.smt2"} -- SMT-LIB dump
+                   predicate
+
     case satResult of
       SatResult (Unknown _ model) -> putStrLn $ "Unknown (SAT): " ++ show model
       _ -> return ()
-    print (satResult, thmResult)
+
+    let dict = getModelDictionary satResult
+
+    print dict
 
     return undefined
 
   where
     predicate :: Symbolic SBool
     predicate = do
-          trace (show lhsColNamesNumbered) $ do
-            -- Generate names (constrained to their assigned values) for RHS
-            rhsVars <- zipWithM generateRHSRows [1..] (H.toRows rhsM)
-            -- Generate LHS variables
-            lhsVars <- mkExistVarsNamed lhsColNamesNumbered
-            -- Make constraints
-            genEqConstraints lhsVars (H.toRows lhsM) rhsVars
-            return true
+      -- Generate names (constrained to their assigned values) for RHS
+      rhsVars <- zipWithM generateRHSRows [1..] (H.toRows rhsM)
+      -- Generate LHS variables
+      lhsVars <- mkExistVarsNamed lhsColNamesNumbered
+      -- Make constraints
+      genEqConstraints lhsVars (H.toRows lhsM) rhsVars
+      return true
 
     genEqConstraints :: [[(String, SInteger)]] -- lhs variables (len lc * len rc)
                      -> [H.Vector Double]       -- matrix lhs coeffecients (len r)
@@ -183,7 +184,7 @@ solveSMT (lhsM, rhsM, lhsCols, rhsCols) = do
     generateRHSRows :: Int -> H.Vector Double -> Symbolic [(String, SBV Integer)]
     generateRHSRows r v = do
       let cs = H.toList v
-      vars <- mapM (\n -> do let name = "rhs" ++ show r ++ show n
+      vars <- mapM (\n -> do let name = "rhs-" ++ show r ++ "-" ++ show n
                              var <- sInteger name
                              return (name, var)) [1..length cs]
       zipWithM' (\(vname, v) c -> namedConstraint (vname ++ " == " ++ show c) (v .== cast c)) vars cs
@@ -200,15 +201,13 @@ solveSMT (lhsM, rhsM, lhsCols, rhsCols) = do
 
     lhsColNames :: [String]
     lhsColNames = [ identif ++ "-" -- ++ show row ++ "-"
-              | (identif, row) <- zip (map (sanitise . show) $ A.elems lhsCols) [1..]
-              ]
+                  | (identif, row) <- zip (map show $ A.elems lhsCols) [0..]
+                  ]
 
-    sanitise :: String -> String
-    sanitise = id -- filter (\c -> isAlphaNum c && isAscii c)
-    -- sanitise identifier = [ c | c <- identifier, isAlphaNum c, isAscii c ]
 
     zipWithM' f xs ys
-      | length xs /= length ys = error $ "not of same length " ++ show xs ++ " " ++ show ys
+      | length xs /= length ys =
+          error $ "not of same length " ++ show xs ++ " and " ++ show ys
       | otherwise = zipWithM f xs ys
           ----------------------------------------------
 
