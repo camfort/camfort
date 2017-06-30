@@ -66,8 +66,6 @@ executable camfort
                         Camfort.Reprint
                         Main
 
-                        Camfort.Specification.Units.SmtLib
-
   build-depends:        base >= 4.6 && < 5,
                         ghc-prim >= 0.3.1.0,
                         containers >= 0.5.0.0,
