@@ -34,7 +34,7 @@ where
 import Data.Char
 import Data.Tuple (swap)
 import Data.Maybe (maybeToList)
-import Data.List ((\\), findIndex, partition, sortBy, group, tails, transpose)
+import Data.List ((\\), isPrefixOf, findIndex, partition, sortBy, group, tails, transpose)
 import Data.Generics.Uniplate.Operations (rewrite)
 import Debug.Trace (trace)
 import Control.Monad
@@ -138,6 +138,32 @@ solveSMT (lhsM, rhsM, lhsCols, rhsCols) = do
 
     let dict = getModelDictionary satResult
 
+    let vars = filter ("#<Var" `isPrefixOf`) (map show (A.elems lhsCols))
+
+    let get k = case M.lookup k dict of Just val -> fromCW val :: Integer
+
+
+    let x = map (\v -> filter (isPrefixOf v) (M.keys dict)) vars
+    -- print x
+    -- x = [["#<Var trivial_dist1>-0","#<Var trivial_dist1>-1"],["#<Var trivial_sum2>-0","#<Var trivial_sum2>-1"],["#<Var trivial_time3>-0","#<Var trivial_time3>-1"],["#<Var trivial_y4>-0","#<Var trivial_y4>-1"]]
+
+    let y = zip vars (map (map get) x)
+    -- print y
+    -- [("#<Var trivial_dist1>",[1,0]),("#<Var trivial_sum2>",[1,-1]),("#<Var trivial_time3>",[0,1]),("#<Var trivial_y4>",[0,0])]
+
+    let z = zip vars $ map (zip (A.elems rhsCols)) (map snd y)
+
+    print z
+
+
+
+
+
+
+
+
+    print satResult
+
     print dict
 
     return undefined
@@ -197,7 +223,7 @@ solveSMT (lhsM, rhsM, lhsCols, rhsCols) = do
     mkExistVarsNamed = mapM (mapM (\x -> do { v <- sInteger x; return (x, v) }))
 
     lhsColNamesNumbered :: [[String]]
-    lhsColNamesNumbered = transpose $ map (\n -> map (++ show n) lhsColNames) [1..cols rhsM]
+    lhsColNamesNumbered = transpose $ map (\n -> map (++ show n) lhsColNames) [0..cols rhsM-1]
 
     lhsColNames :: [String]
     lhsColNames = [ identif ++ "-" -- ++ show row ++ "-"
