@@ -77,12 +77,16 @@ synth mode marker = first normaliseMsg . foldr buildOutput ("", [])
     synthWithCheck pf =
       let blocks = getBlocks pf in
         case checkFailure $ stencilChecking blocks of
-          Nothing  -> Right $ fmap FA.prevAnnotation . fst $ stencilInference Synth marker blocks
+          Nothing  -> Right . fmap FA.prevAnnotation . fst
+                            $ stencilInference Synth marker blocks
           Just err -> Left  $ show err
-    mkMsg f e = "\nEncountered the following errors when checking stencil specs for '"
-                ++ f ++ "'\n" ++ e
+
+    mkMsg f e = "\nEncountered the following errors when checking\
+                \ stencil specs for '" ++ f ++ "'\n\n" ++ e
+
     normaliseMsg "" = ""
-    normaliseMsg xs = xs ++ "\nPlease resolve these errors, and then run synthesis again."
+    normaliseMsg xs = xs ++ "\nPlease resolve these errors, and then\
+                            \ run synthesis again."
 
 
 --------------------------------------------------

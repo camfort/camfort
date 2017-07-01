@@ -39,15 +39,17 @@ import Language.Fortran.Util.Position
 formatSpec :: F.MetaInfo -> Int -> Char
  -> (FU.SrcSpan, Either [([Variable], Specification)] (String,Variable))
  -> String
-formatSpec mi indent marker (span, Right (evalInfo, name)) = buildCommentText mi indent $
-     marker : " "
-  ++ evalInfo
-  ++ (if name /= "" then " :: " ++ name else "") ++ "\n"
+formatSpec mi indent marker (span, Right (evalInfo, name)) =
+  buildCommentText mi indent $
+       marker : " "
+    ++ evalInfo
+    ++ (if name /= "" then " :: " ++ name else "") ++ "\n"
 
 formatSpec _ _ _ (_, Left []) = ""
 formatSpec mi indent marker (span, Left specs) =
-  (intercalate "\n" $ map (\s -> buildCommentText mi indent (marker : " " ++ doSpec s)) specs)
+  intercalate "\n" $ map commentText specs
     where
+      commentText s = buildCommentText mi indent (marker : " " ++ doSpec s)
       commaSep                 = intercalate ", "
       doSpec (arrayVar, spec)  =
              show (fixSpec spec) ++ " :: " ++ commaSep arrayVar
