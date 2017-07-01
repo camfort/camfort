@@ -17,6 +17,8 @@
 module Camfort.Specification.Stencils
  (InferMode, infer, check, synth) where
 
+import Control.Arrow (first, second)
+
 import Camfort.Specification.Stencils.CheckFrontend hiding (LogLine)
 import Camfort.Specification.Stencils.InferenceFrontend
 import Camfort.Specification.Stencils.Synthesis
@@ -66,11 +68,21 @@ synth :: InferMode
       -> Char
       -> [(Filename, F.ProgramFile A)]
       -> (String, [(Filename, F.ProgramFile Annotation)])
-synth mode marker = foldr buildOutput ("", [])
+synth mode marker = first normaliseMsg . foldr buildOutput ("", [])
   where
-    buildOutput (f, pf) (r, pfs) = (r ++ r', (f, pf') : pfs)
-      where (r', pf') = ("", synthPF' pf)
-    synthPF' = fmap FA.prevAnnotation . fst . stencilInference Synth marker . getBlocks
+    buildOutput (f, pf) =
+      case synthWithCheck pf of
+        Left e    -> first (++ mkMsg f e)
+        Right pf' -> second ((f, pf'):)
+    synthWithCheck pf =
+      let blocks = getBlocks pf in
+        case checkFailure $ stencilChecking blocks of
+          Nothing  -> Right $ fmap FA.prevAnnotation . fst $ stencilInference Synth marker blocks
+          Just err -> Left  $ show err
+    mkMsg f e = "\nEncountered the following errors when checking stencil specs for '"
+                ++ f ++ "'\n" ++ e
+    normaliseMsg "" = ""
+    normaliseMsg xs = xs ++ "\nPlease resolve these errors, and then run synthesis again."
 
 
 --------------------------------------------------

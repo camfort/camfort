@@ -228,11 +228,7 @@ spec =
     -- Some integration tests
     -------------------------
 
-    let fixturesDir = "tests"
-                      </> "fixtures"
-                      </> "Specification"
-                      </> "Stencils"
-        example2In = fixturesDir </> "example2.f"
+    let example2In = fixturesDir </> "example2.f"
     program <- runIO $ readParseSrcDir example2In []
 
     describe "integration test on inference for example2.f" $ do
@@ -265,27 +261,38 @@ spec =
 
     describe "integration test on inference for example5" $
       describe "stencil synth" $ do
-        assertStencilInferenceOnFile (fixturesDir </> "example5.f")
+        assertStencilInferenceOnFile "example5.f"
           "inserts correct comment types for old fortran"
-        assertStencilInferenceOnFile (fixturesDir </> "example5.f90")
+        assertStencilInferenceOnFile "example5.f90"
           "inserts correct comment types for modern fortran"
 
     describe "synth on files already containing stencils" $ do
-      assertStencilInferenceOnFile (fixturesDir </> "example6.f")
+      assertStencilInferenceOnFile "example6.f"
         "complements existing stencils (when second missing)"
-      assertStencilInferenceOnFile (fixturesDir </> "example7.f")
+      assertStencilInferenceOnFile "example7.f"
         "complements existing stencils (when none missing)"
-      assertStencilInferenceOnFile (fixturesDir </> "example8.f")
+      assertStencilInferenceOnFile "example8.f"
         "complements existing stencils (when first missing)"
-      assertStencilInferenceOnFile (fixturesDir </> "example9.f")
+      assertStencilInferenceOnFile "example9.f"
         "complements existing stencils (when none missing - only one stencil)"
-      assertStencilInferenceOnFile (fixturesDir </> "example10.f")
+      assertStencilInferenceOnFile "example10.f"
         "complements existing stencils (when one missing - inside if)"
-      assertStencilInferenceOnFile (fixturesDir </> "example11.f")
+      assertStencilInferenceOnFile "example11.f"
         "inserts correct access specification"
+      assertStencilSynthResponse "example12.f"
+        "reports errors when conflicting stencil exists"
+        "\nEncountered the following errors when checking stencil specs for 'tests/fixtures/Specification/Stencils/example12.f'\n\
+\(8:1)-(8:52)    Not well specified.\n\
+\        Specification is:\n\
+\                stencil readOnce, (backward(depth=1, dim=1)) :: a\n\
+\\n\
+\        but at (9:8)-(9:32) the code behaves as\n\
+\                stencil readOnce, (forward(depth=1, dim=1)) :: a\n\n\
+\Please resolve these errors, and then run synthesis again."
 
-  where assertStencilInferenceOnFile file testComment =
-          let version      = deduceVersion file
+  where assertStencilInferenceOnFile fileName testComment =
+          let file         = fixturesDir </> fileName
+              version      = deduceVersion file
               oldExtension = takeExtension file
               expectedFile =
                 addExtension (replaceExtension file "expected")
@@ -299,6 +306,14 @@ spec =
                (snd . head . snd $ synth AssignMode '=' (map (\(f, _, p) -> (f, p)) program))
                (B.pack programSrc))
                 `shouldBe` synthExpectedSrc
+        assertStencilSynthResponse fileName testComment expectedResponse =
+            let file = fixturesDir </> fileName
+            in do
+              program          <- runIO $ readParseSrcDir file []
+              programSrc       <- runIO $ readFile file
+              it testComment $ (fst $ synth AssignMode '=' (map (\(f, _, p) -> (f, p)) program))
+                `shouldBe` expectedResponse
+        fixturesDir = "tests" </> "fixtures" </> "Specification" </> "Stencils"
 
 -- Indices for the 2D five point stencil (deliberately in an odd order)
 fivepoint = [ Cons (-1) (Cons 0 Nil), Cons 0 (Cons (-1) Nil)
