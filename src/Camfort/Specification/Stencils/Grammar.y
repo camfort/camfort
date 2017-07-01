@@ -4,7 +4,7 @@ module Camfort.Specification.Stencils.Grammar
 ( specParser, Specification(..), Region(..), SpecInner(..), lexer ) where
 
 import Data.Char (isLetter, isNumber, isAlphaNum, toLower, isAlpha, isSpace)
-import Data.List (intersect, sort, isPrefixOf)
+import Data.List (intersect, sort, isPrefixOf, isInfixOf, intercalate)
 import Data.Data
 import qualified Data.Text as T
 
@@ -20,20 +20,20 @@ import qualified Camfort.Specification.Stencils.Syntax as Syn
 %name parseSpec SPEC
 %tokentype { Token }
 %token
-  stencil     { TId "stencil" }
-  access      { TId "access" }
-  region      { TId "region" }
-  readOnce    { TId "readonce" }
-  pointed     { TId "pointed" }
-  nonpointed  { TId "nonpointed" }
-  atMost      { TId "atmost" }
-  atLeast     { TId "atleast" }
-  dim         { TId "dim" }
-  depth       { TId "depth" }
-  forward     { TId "forward" }
-  backward    { TId "backward" }
-  centered    { TId "centered" }
-  id          { TId $$ }
+  stencil     { TId _ "stencil" }
+  access      { TId _ "access" }
+  region      { TId _ "region" }
+  readOnce    { TId _ "readonce" }
+  pointed     { TId _ "pointed" }
+  nonpointed  { TId _ "nonpointed" }
+  atMost      { TId _ "atmost" }
+  atLeast     { TId _ "atleast" }
+  dim         { TId _ "dim" }
+  depth       { TId _ "depth" }
+  forward     { TId _ "forward" }
+  backward    { TId _ "backward" }
+  centered    { TId _ "centered" }
+  id          { TId _ $$ }
   num         { TNum $$ }
   '+'         { TPlus }
   '*'         { TStar }
@@ -147,9 +147,10 @@ data Token
   | TComma
   | TLParen
   | TRParen
-  | TId String
+  | TId String String -- first string contains the original text
+                      -- second is normalised (e.g., for keywords)
   | TNum String
- deriving (Show)
+ deriving (Show, Eq)
 
 addToTokens :: Token -> String -> Either AnnotationParseError [ Token ]
 addToTokens tok rest = do
@@ -188,14 +189,16 @@ lexer' (':':':':xs)                                    = addToTokens TDoubleColo
 lexer' ('*':xs)                                        = addToTokens TStar xs
 lexer' ('+':xs)                                        = addToTokens TPlus xs
 lexer' ('=':xs)                                        = addToTokens TEqual xs
--- Comma hack: drop commas that are not separating numbers, in order to avoid need for 2-token lookahead.
+-- Comma hack: drop commas that are not separating numbers,
+-- in order to avoid need for 2-token lookahead.
 lexer' (',':xs)
   | x':xs' <- dropWhile isSpace xs, not (isNumber x') = lexer' (x':xs')
   | otherwise                                         = addToTokens TComma xs
-lexer' ('(':xs)                                        = addToTokens TLParen xs
-lexer' (')':xs)                                        = addToTokens TRParen xs
+lexer' ('(':xs)                                       = addToTokens TLParen xs
+lexer' (')':xs)                                       = addToTokens TRParen xs
 lexer' (x:xs)
-  | isLetter x                                        = aux (TId . fmap toLower) $ \ c -> isAlphaNum c || c == '_'
+  | isLetter x                                        =
+        aux (\x -> TId x $ fmap toLower x) $ \ c -> isAlphaNum c || c == '_'
   | isPositiveNumber x                                = aux TNum isNumber
   | otherwise
      = failWith $ "Not an indentifier " ++ show x
@@ -215,6 +218,34 @@ specParser src = do
  parseSpec tokens
 
 happyError :: [ Token ] -> Either AnnotationParseError a
-happyError t = failWith $ "Could not parse specification at: " ++ show t
+happyError t =
+  failWith $ "Could not parse specification at: \"" ++ prettyTokens t ++ "\""
+            ++ reason t ++ "\n"
+
+-- | Possible reasons for parse failure
+reason :: [ Token ] -> String
+reason (TId s "readonce" : _) =
+    "\nPossible reason: '" ++ s ++ "' not placed at the start of the specification"
+reason _ = ""
+
+-- | Pretty-print the tokens, showing the smallest unique prefix of tokens
+prettyTokens :: [ Token ] -> String
+prettyTokens =
+    (++ "... ") . intercalate " " . map prettyToken . takeUniquePrefix 1
+  where
+    takeUniquePrefix n ts =
+      if ((take n ts) `isInfixOf` (drop n ts))
+      then takeUniquePrefix (n+1) ts
+      else take n ts
+
+prettyToken TDoubleColon = "::"
+prettyToken TStar        = "*"
+prettyToken TPlus        = "+"
+prettyToken TEqual       = "="
+prettyToken TComma       = ","
+prettyToken TLParen      = "("
+prettyToken TRParen      = ")"
+prettyToken (TId s _)    = s
+prettyToken (TNum n)     = n
 
 }

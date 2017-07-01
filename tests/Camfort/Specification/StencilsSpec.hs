@@ -281,7 +281,7 @@ spec =
         "inserts correct access specification"
       assertStencilSynthResponse "example12.f"
         "reports errors when conflicting stencil exists"
-        "\nEncountered the following errors when checking stencil specs for 'tests/fixtures/Specification/Stencils/example12.f'\n\
+        "\nEncountered the following errors when checking stencil specs for 'tests/fixtures/Specification/Stencils/example12.f'\n\n\
 \(8:1)-(8:52)    Not well specified.\n\
 \        Specification is:\n\
 \                stencil readOnce, (backward(depth=1, dim=1)) :: a\n\

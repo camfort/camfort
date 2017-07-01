@@ -107,7 +107,7 @@ instance Show StencilCheckError where
                "Specification is:\n", sp, sp, pprintSpecDecls stencilActual, "\n",
                sp, "but at ", show spanInferred, " the code behaves as\n", sp, sp,
                pprintSpecDecls stencilInferred]
-  show (ParseError s) = show s
+  show (ParseError s) = s
 
 -- Entry point
 stencilChecking :: F.ProgramFile (FA.Analysis A) -> CheckResult
