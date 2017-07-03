@@ -14,33 +14,35 @@
    limitations under the License.
 -}
 
-{-# LANGUAGE TupleSections #-}
 {-# LANGUAGE ImplicitParams #-}
 {-# LANGUAGE LambdaCase #-}
+{-# LANGUAGE TupleSections #-}
 
 module Camfort.Specification.Stencils.CheckFrontend
   (
     -- * Stencil checking
-    stencilChecking
+    CheckResult
+  , stencilChecking
   , checkFailure
+  , existingStencils
   ) where
 
-import Data.Generics.Uniplate.Operations
 import Control.Arrow
 import Control.Monad.Reader (ReaderT, ask, runReaderT)
 import Control.Monad.State.Strict
 import Control.Monad.Writer.Strict hiding (Product)
+import Data.Generics.Uniplate.Operations
 import Data.List (intercalate)
 
+import Camfort.Analysis.Annotations
+import Camfort.Analysis.CommentAnnotator
 import qualified Camfort.Helpers.Vec as V
 import Camfort.Specification.Stencils.CheckBackend
 import qualified Camfort.Specification.Stencils.Consistency as C
+import Camfort.Specification.Stencils.Generate
 import qualified Camfort.Specification.Stencils.Grammar as Gram
 import Camfort.Specification.Stencils.Model
-import Camfort.Specification.Stencils.InferenceFrontend
 import Camfort.Specification.Stencils.Syntax
-import Camfort.Analysis.Annotations
-import Camfort.Analysis.CommentAnnotator
 
 import qualified Language.Fortran.AST as F
 import qualified Language.Fortran.Analysis as FA
@@ -71,7 +73,11 @@ checkFailure c = case catMaybes $ fmap toFailure (getCheckResult c) of
 -- | Result of stencil validation.
 data StencilResult
   -- | No issues were identified with the stencil at the given position.
-  = SCOkay FU.SrcSpan
+  = SCOkay { scSpan :: FU.SrcSpan
+           , scSpec :: Specification
+           , scVar  :: Variable
+           , scBodySpan :: FU.SrcSpan
+           }
   -- | Validation of stencil failed. See 'StencilCheckError' for information
   -- on the types of validation errors that can occur.
   | SCFail StencilCheckError
@@ -96,7 +102,7 @@ instance Show CheckError where
   show = intercalate "\n" . fmap show . getCheckError
 
 instance Show StencilResult where
-  show (SCOkay span) = prettyWithSpan span "Correct."
+  show SCOkay{ scSpan = span } = prettyWithSpan span "Correct."
   show (SCFail err)  = show err
 
 instance Show StencilCheckError where
@@ -271,7 +277,7 @@ checkStencil flowsGraph s specDecls spanInferred subs span = do
           concatMap (\(vars,spec) -> map (flip (,) spec) vars) specDecls
   -- Model and compare the current and specified stencil specs
   if checkOffsetsAgainstSpec multOffsets expandedDecls
-    then tell [SCOkay span]
+    then mapM_ (\(v,s) -> tell [SCOkay span s v spanInferred]) expandedDecls
     else do
     let inferred = fst . fst . runWriter $ genSpecifications flowsGraph ivmap lhsN [s]
     tell [SCFail $ NotWellSpecified (span, specDecls) (spanInferred, inferred)]
@@ -288,6 +294,10 @@ genOffsets flowsGraph ivs lhs blocks = do
   where
     mkOffsets = M.mapWithKey (\v -> indicesToRelativisedOffsets ivs v lhs)
 
+existingStencils :: CheckResult -> [(Specification, FU.SrcSpan, Variable)]
+existingStencils = mapMaybe getExistingStencil . getCheckResult
+  where getExistingStencil SCFail{}                  = Nothing
+        getExistingStencil (SCOkay _ spec var bodySpan) = Just (spec, bodySpan, var)
 
 -- Local variables:
 -- mode: haskell

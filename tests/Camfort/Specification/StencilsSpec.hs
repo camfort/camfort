@@ -15,6 +15,8 @@ import Data.List
 import Camfort.Helpers.Vec
 import Camfort.Input
 import Camfort.Specification.Stencils
+import Camfort.Specification.Stencils.Generate
+  (Neighbour(..), indicesToSpec, ixToNeighbour')
 import Camfort.Specification.Stencils.Synthesis
 import Camfort.Specification.Stencils.Model
 import Camfort.Specification.Stencils.InferenceBackend
@@ -278,6 +280,8 @@ spec =
         "complements existing stencils (when none missing - only one stencil)"
       assertStencilInferenceOnFile "example10.f"
         "complements existing stencils (when one missing - inside if)"
+      assertStencilInferenceOnFile "example13.f"
+        "complements existing stencils (when using regions references)"
       assertStencilInferenceOnFile "example11.f"
         "inserts correct access specification"
       assertStencilSynthResponse "example12.f"

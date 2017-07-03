@@ -40,11 +40,9 @@ program one
      ! top and bottom (inner) edges
 
      != stencil readOnce, r1 :: a
-     != stencil readOnce, (centered(depth=1, dim=1)) :: a
      b(i, 0) = (a(i, 0) + a(i-1,0) + a(i+1,0) + a(i,1))/4.0
 
      != stencil readOnce, r1 :: a
-     != stencil readOnce, (centered(depth=1, dim=1)) :: a
      b(i, jmax) = (a(i, jmax) + a(i-1, jmax) + a(i+1, jmax) + a(i,jmax-1))/4.0
   end do
 
