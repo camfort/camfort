@@ -19,7 +19,6 @@ module Main (main) where
 
 import Camfort.Input (defaultValue)
 import Camfort.Functionality
-import Camfort.Specification.Stencils (InferMode)
 import Camfort.Specification.Units.Monad (LiteralsOpt(LitMixed))
 
 import Data.Maybe (fromMaybe)
@@ -32,7 +31,7 @@ import Options.Applicative
 data Command = CmdCount ReadOptions
              | CmdAST ReadOptions
              | CmdStencilsCheck ReadOptions
-             | CmdStencilsInfer StencilsOptions
+             | CmdStencilsInfer ReadOptions
              | CmdStencilsSynth StencilsSynthOptions
              | CmdUnitsSuggest UnitsOptions
              | CmdUnitsCheck UnitsOptions
@@ -58,13 +57,6 @@ data ReadOptions = ReadOptions
 -- the input files be written over.
 data WriteOptions = WriteFile { _outputFile :: String }
                   | WriteInplace
-
-
--- | Options used by stencil commands.
-data StencilsOptions = StencilsOptions
-  { soReadOptions  :: ReadOptions
-  , soInferMode    :: InferMode
-  }
 
 
 -- | Options used by all unit commands.
@@ -93,9 +85,9 @@ data UnitsSynthOptions = UnitsSynthOptions
 
 
 data StencilsSynthOptions = StencilsSynthOptions
-  { ssoStencilsOptions    :: StencilsOptions
-  , ssoWriteOptions       :: WriteOptions
-  , ssoAnnotationOptions  :: AnnotationOptions
+  { ssoReadOptions       :: ReadOptions
+  , ssoWriteOptions      :: WriteOptions
+  , ssoAnnotationOptions :: AnnotationOptions
   }
 
 
@@ -148,28 +140,9 @@ writeOptions = (fmap WriteFile . fileArgument $
                       <> help "write in place (replaces input files)"))
 
 
-stencilsOptions :: Parser StencilsOptions
-stencilsOptions = fmap StencilsOptions
-  readOptions <*> inferModeOption
-  where
-    inferModeOption = fmap (fromMaybe defaultValue)
-                      . optional . option readInferOption $
-      (    metavar "INFER-MODE"
-        <> completeWith ["Assign", "Do", "Both"]
-        <> long "stencil-inference-mode"
-        <> short 'm'
-        <> help "stencil specification inference mode. ID = Do, Assign, or Both")
-    readInferOption = fmap parseInfer str
-    -- TODO: Make this more robust
-    -- This can encounter a read error, we should
-    -- ensure that we can't reach this point
-    -- with invalid mode.
-    parseInfer = read . (++"Mode")
-
-
 stencilsSynthOptions :: Parser StencilsSynthOptions
 stencilsSynthOptions = fmap StencilsSynthOptions
-  stencilsOptions <*> writeOptions <*> annotationOptions
+  readOptions <*> writeOptions <*> annotationOptions
 
 
 unitsOptions :: Parser UnitsOptions
@@ -225,7 +198,7 @@ cmdAST   = fmap CmdAST   readOptions
 
 cmdStencilsCheck, cmdStencilsInfer, cmdStencilsSynth :: Parser Command
 cmdStencilsCheck = fmap CmdStencilsCheck readOptions
-cmdStencilsInfer = fmap CmdStencilsInfer stencilsOptions
+cmdStencilsInfer = fmap CmdStencilsInfer readOptions
 cmdStencilsSynth = fmap CmdStencilsSynth stencilsSynthOptions
 
 
@@ -304,15 +277,12 @@ main = do
     getOutputFile _ (WriteFile f) = f
     getOutputFile inp WriteInplace = inp
     runRO ro f = f (inputSource ro) (getExcludes ro)
-    runSO so f =
-      runRO (soReadOptions so) f (soInferMode so)
     runSSO sso f =
       let ao     = ssoAnnotationOptions sso
           wo     = ssoWriteOptions sso
-          so     = ssoStencilsOptions sso
-          ro     = soReadOptions so
+          ro     = ssoReadOptions sso
           inFile = inputSource ro
-      in runSO so f (annotationType ao) (getOutputFile inFile wo)
+      in runRO ro f (annotationType ao) (getOutputFile inFile wo)
     runUO uo f =
       let ro = uoReadOptions uo
       in runRO ro f (literals uo) (debug uo) (includeDir uo)
@@ -334,7 +304,7 @@ main = do
     runCommand (CmdAST ro)                = runRO ro ast
     runCommand (CmdCount ro)              = runRO ro countVarDecls
     runCommand (CmdStencilsCheck ro)      = runRO ro stencilsCheck
-    runCommand (CmdStencilsInfer so)      = runSO so stencilsInfer
+    runCommand (CmdStencilsInfer ro)      = runRO ro stencilsInfer
     runCommand (CmdStencilsSynth sso)     = runSSO sso stencilsSynth
     runCommand (CmdUnitsSuggest uo)       = runUO uo unitsCriticals
     runCommand (CmdUnitsCheck uo)         = runUO uo unitsCheck
