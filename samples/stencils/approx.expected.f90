@@ -6,8 +6,8 @@
       real a(0:imax)
 
       do i = 0, imax
-            != stencil atLeast, readOnce, (pointed(dim=1)) :: a
-            != stencil atMost, readOnce, (forward(depth=2, dim=1)) :: a
+            != stencil readOnce, atLeast, (pointed(dim=1)) :: a
+            != stencil readOnce, atMost, (forward(depth=2, dim=1)) :: a
             a(i) = a(i) + a(i+2)
       end do
 
