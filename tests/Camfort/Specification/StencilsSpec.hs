@@ -15,6 +15,8 @@ import Data.List
 import Camfort.Helpers.Vec
 import Camfort.Input
 import Camfort.Specification.Stencils
+import Camfort.Specification.Stencils.Generate
+  (Neighbour(..), indicesToSpec, ixToNeighbour')
 import Camfort.Specification.Stencils.Synthesis
 import Camfort.Specification.Stencils.Model
 import Camfort.Specification.Stencils.InferenceBackend

@@ -106,6 +106,7 @@ library
                         Camfort.Specification.Stencils.InferenceFrontend
                         Camfort.Specification.Stencils.Model
                         Camfort.Specification.Stencils.Syntax
+                        Camfort.Specification.Stencils.Generate
                         Camfort.Specification.Stencils.Grammar
                         Camfort.Specification.Stencils.Synthesis
                         Camfort.Specification.Stencils

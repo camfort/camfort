@@ -14,9 +14,9 @@
    limitations under the License.
 -}
 
-{-# LANGUAGE TupleSections #-}
 {-# LANGUAGE ImplicitParams #-}
 {-# LANGUAGE LambdaCase #-}
+{-# LANGUAGE TupleSections #-}
 
 module Camfort.Specification.Stencils.CheckFrontend
   (
@@ -25,22 +25,22 @@ module Camfort.Specification.Stencils.CheckFrontend
   , checkFailure
   ) where
 
-import Data.Generics.Uniplate.Operations
 import Control.Arrow
 import Control.Monad.Reader (ReaderT, ask, runReaderT)
 import Control.Monad.State.Strict
 import Control.Monad.Writer.Strict hiding (Product)
+import Data.Generics.Uniplate.Operations
 import Data.List (intercalate)
 
+import Camfort.Analysis.Annotations
+import Camfort.Analysis.CommentAnnotator
 import qualified Camfort.Helpers.Vec as V
 import Camfort.Specification.Stencils.CheckBackend
 import qualified Camfort.Specification.Stencils.Consistency as C
+import Camfort.Specification.Stencils.Generate
 import qualified Camfort.Specification.Stencils.Grammar as Gram
 import Camfort.Specification.Stencils.Model
-import Camfort.Specification.Stencils.InferenceFrontend
 import Camfort.Specification.Stencils.Syntax
-import Camfort.Analysis.Annotations
-import Camfort.Analysis.CommentAnnotator
 
 import qualified Language.Fortran.AST as F
 import qualified Language.Fortran.Analysis as FA
