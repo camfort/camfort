@@ -1,3 +1,5 @@
+! Region declarations can be used to create reusable
+! names for stencils or parts of stencils
 program regiondeclaration
 implicit none
 
