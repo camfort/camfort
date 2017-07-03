@@ -65,7 +65,7 @@ import Data.Monoid ((<>))
 
 -- Define modes of interaction with the inference
 data InferMode =
-  DoMode | AssignMode | CombinedMode | EvalMode | Synth
+  AssignMode | EvalMode | Synth
   deriving (Eq, Show, Data, Read)
 
 instance Default InferMode where
@@ -202,9 +202,7 @@ perBlockInfer :: InferMode -> Char -> F.MetaInfo
 
 perBlockInfer _ _ _ b@F.BlComment{} = pure b
 
-perBlockInfer mode marker mi b@(F.BlStatement ann span@(FU.SrcSpan lp _) _ stmnt)
-  | mode == AssignMode || mode == CombinedMode || mode == EvalMode || mode == Synth = do
-
+perBlockInfer mode marker mi b@(F.BlStatement ann span@(FU.SrcSpan lp _) _ stmnt) = do
     (IS ivmap visitedStmts) <- get
     let label = fromMaybe (-1) (FA.insLabel ann)
     if label `elem` visitedStmts
@@ -256,10 +254,6 @@ perBlockInfer mode marker mi b@(F.BlStatement ann span@(FU.SrcSpan lp _) _ stmnt
       else return b
 
 perBlockInfer mode marker mi b@(F.BlDo ann span lab cname lab' mDoSpec body tlab) = do
-    if (mode == DoMode || mode == CombinedMode) && isStencilDo b
-      then genSpecsAndReport mode span [] body
-      else return []
-
     -- descend into the body of the do-statement (in reverse order)
     body' <- mapM (descendBiReverseM (perBlockInfer mode marker mi)) (reverse body)
     return $ F.BlDo ann span lab cname lab' mDoSpec (reverse body') tlab
@@ -267,36 +261,6 @@ perBlockInfer mode marker mi b@(F.BlDo ann span lab cname lab' mDoSpec body tlab
 perBlockInfer mode marker mi b =
     -- Go inside child blocks
     descendReverseM (descendBiReverseM (perBlockInfer mode marker mi)) b
-
-getInductionVar :: Maybe (F.DoSpecification (FA.Analysis A)) -> [Variable]
-getInductionVar (Just (F.DoSpecification _ _ (F.StExpressionAssign _ _ e _) _ _))
-  | isVariableExpr e = [FA.varName e]
-getInductionVar _ = []
-
-isStencilDo :: F.Block (FA.Analysis A) -> Bool
-isStencilDo (F.BlDo _ _ _ _ _ mDoSpec body _) =
- -- Check to see if the body contains any affine use of the induction variable
- -- as a subscript
- case getInductionVar mDoSpec of
-    [] -> False
-    [ivar] -> not (null exprs) &&
-               and [ all (\sub -> sub `isNeighbour` [ivar]) subs' |
-               F.ExpSubscript _ _ _ subs <- exprs
-               , let subs' = F.aStrip subs
-               , not (null subs') ]
-      where exprs = universeBi upToNextDo :: [F.Expression (FA.Analysis A)]
-            upToNextDo = takeWhile (not . isDo) body
-            isDo F.BlDo{} = True
-            isDo _            = False
-isStencilDo _  = False
-
-{- *** 2 .Conversion from indexing expressions -}
-
-isNeighbour :: Data a => F.Index (FA.Analysis a) -> [Variable] -> Bool
-isNeighbour exp vs =
-    case ixToNeighbour' vs exp of
-        Neighbour _ _ -> True
-        _             -> False
 
 --------------------------------------------------
 
