@@ -31,6 +31,7 @@ import qualified Data.Set as S
 import Data.Functor.Identity
 import qualified Data.ByteString.Char8 as B
 
+import System.Directory (listDirectory)
 import System.FilePath
 
 import Test.Hspec
@@ -290,13 +291,21 @@ spec =
 \                stencil readOnce, (forward(depth=1, dim=1)) :: a\n\n\
 \Please resolve these errors, and then run synthesis again."
 
-  where assertStencilInferenceOnFile fileName testComment =
-          let file         = fixturesDir </> fileName
+    sampleDirConts <- runIO $ listDirectory samplesDir
+    let isExpectedSrcFile = (==".expected") . takeExtension . dropExtension
+        hasExpectedSrcFile f = getExpectedSrcFileName f `elem` sampleDirConts
+        sampleFiles = filter (\f -> (not . isExpectedSrcFile $ f) && hasExpectedSrcFile f) sampleDirConts
+
+    describe "sample file tests" $
+        mapM_ (\file -> assertStencilInferenceSample
+                file ("produces correct output file for " ++ file))
+        sampleFiles
+
+  where assertStencilInferenceDir dir fileName testComment =
+          let file         = dir </> fileName
               version      = deduceVersion file
-              oldExtension = takeExtension file
-              expectedFile =
-                addExtension (replaceExtension file "expected")
-                oldExtension in do
+              expectedFile = getExpectedSrcFileName file
+          in do
             program          <- runIO $ readParseSrcDir file []
             programSrc       <- runIO $ readFile file
             synthExpectedSrc <- runIO $ readFile expectedFile
@@ -306,6 +315,8 @@ spec =
                (snd . head . snd $ synth AssignMode '=' (map (\(f, _, p) -> (f, p)) program))
                (B.pack programSrc))
                 `shouldBe` synthExpectedSrc
+        assertStencilInferenceOnFile = assertStencilInferenceDir fixturesDir
+        assertStencilInferenceSample = assertStencilInferenceDir samplesDir
         assertStencilSynthResponse fileName testComment expectedResponse =
             let file = fixturesDir </> fileName
             in do
@@ -314,6 +325,10 @@ spec =
               it testComment $ (fst $ synth AssignMode '=' (map (\(f, _, p) -> (f, p)) program))
                 `shouldBe` expectedResponse
         fixturesDir = "tests" </> "fixtures" </> "Specification" </> "Stencils"
+        samplesDir  = "samples" </> "stencils"
+        getExpectedSrcFileName file =
+          let oldExtension = takeExtension file
+          in addExtension (replaceExtension file "expected") oldExtension
 
 -- Indices for the 2D five point stencil (deliberately in an odd order)
 fivepoint = [ Cons (-1) (Cons 0 Nil), Cons 0 (Cons (-1) Nil)

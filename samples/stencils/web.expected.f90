@@ -8,6 +8,7 @@ program web
     do j = 1, m
       x = a(i, j-1) + a(i, j+1) + a(i, j)
       y = a(i+1, j-1) + a(i+1, j+1) + a(i+1, j)
+      != stencil readOnce, (forward(depth=1, dim=1))*(centered(depth=1, dim=2)) :: a
       b(i, j) = x + y
     end do
   end do
