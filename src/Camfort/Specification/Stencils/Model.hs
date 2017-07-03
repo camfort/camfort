@@ -65,7 +65,6 @@ import qualified Data.PartialOrd as PO
 
 import qualified Camfort.Helpers.Vec as V
 import System.IO.Unsafe
-import Debug.Trace
 
 -- Utility container
 class Container a where
@@ -279,7 +278,7 @@ unfCompare oi oi' = unsafePerformIO $ do
                  Nothing -> fail
                     "Impossible: Counter example size doesn't \
                     \match the original vector size."
-        else "EQ branch" `trace` return EQ
+        else return EQ
   where
     counterExample :: ThmResult -> IO [ Int64 ]
     counterExample thmRes =
