@@ -46,14 +46,3 @@
       p(ni,k+1) = 0.0
  3    continue
       end
-
-! *Main> stencilsInf "samples/stencils/wave.f" [] () ()
-! Inferring stencil specs for "samples/stencils/wave.f"
-
-! samples/stencils/wave.f
-! Output of the analysis:
-! ((19,8),(19,26)) 	p0: unspecified 
-! ((29,8),(29,44)) 	p: centered depth=1 dim=0,fixed dim=1
-! ((30,8),(30,35)) 	p: reflexive dims=0,fixed dim=1
-! ((42,8),(42,47)) 	p: centered depth=1 dim=0,reflexive dims=1
-! ((43,8),(43,49)) 	p: reflexive dims=0,backward depth=1 dim=1
