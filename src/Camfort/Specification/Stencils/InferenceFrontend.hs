@@ -77,7 +77,7 @@ data InferState = IS {
 
 data InferEnv = IE
   {
-    -- ^ Known (existing) specifications.
+    -- | Known (existing) specifications.
     ieExistingSpecs :: [(Specification, FU.SrcSpan, Variable)]
   , ieFlowsGraph    :: FAD.FlowsGraph A
   }
