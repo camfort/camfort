@@ -16,27 +16,34 @@
 
 {-
   Units of measure extension to Fortran: backend
+      -- declare-const -> exists / mkExistVars
+      -- define-fun -> namedConstraint
 -}
 
 {-# LANGUAGE TupleSections #-}
 {-# LANGUAGE ScopedTypeVariables #-}
+{-# LANGUAGE FlexibleContexts #-}
 
-module Camfort.Specification.Units.InferenceBackend
-  ( inconsistentConstraints, criticalVariables, inferVariables
-  -- mainly for debugging and testing:
-  , shiftTerms, flattenConstraints, flattenUnits, constraintsToMatrix, constraintsToMatrices
-  , rref, isInconsistentRREF, genUnitAssignments )
+module Camfort.Specification.Units.InferenceBackendSBV
+  -- ( inconsistentConstraints, criticalVariables, inferVariables
+  -- -- mainly for debugging and testing:
+  -- , shiftTerms, flattenConstraints, flattenUnits, constraintsToMatrix, constraintsToMatrices
+  -- , rref, isInconsistentRREF, genUnitAssignments )
 where
 
+import Data.Char
 import Data.Tuple (swap)
 import Data.Maybe (maybeToList)
-import Data.List ((\\), findIndex, partition, sortBy, group, tails)
+import Data.List ((\\), findIndex, partition, sortBy, group, tails, transpose)
 import Data.Generics.Uniplate.Operations (rewrite)
+import Debug.Trace (trace)
 import Control.Monad
 import Control.Monad.ST
 import Control.Arrow (first, second)
 import qualified Data.Map.Strict as M
 import qualified Data.Array as A
+import System.IO.Unsafe (unsafePerformIO)
+import Data.SBV
 
 import Camfort.Specification.Units.Environment
 
@@ -53,59 +60,56 @@ import Numeric.LinearAlgebra.Devel (
 
 --------------------------------------------------
 
--- | Returns just the list of constraints that were identified as
--- being possible candidates for inconsistency, if there is a problem.
-inconsistentConstraints :: Constraints -> Maybe Constraints
-inconsistentConstraints [] = Nothing
-inconsistentConstraints cons
-  | null inconsists = Nothing
-  | otherwise       = Just [ con | (con, i) <- zip cons [0..], i `elem` inconsists ]
-  where
-    (_, _, inconsists, _, _) = constraintsToMatrices cons
-
---------------------------------------------------
 
 -- | Identifies the variables that need to be annotated in order for
 -- inference or checking to work.
 criticalVariables :: Constraints -> [UnitInfo]
-criticalVariables [] = []
-criticalVariables cons = filter (not . isUnitRHS) $ map (colA A.!) criticalIndices
-  where
-    (unsolvedM, _, colA) = constraintsToMatrix cons
-    solvedM                       = rref unsolvedM
-    uncriticalIndices             = concatMap (maybeToList . findIndex (/= 0)) $ H.toLists solvedM
-    criticalIndices               = A.indices colA \\ uncriticalIndices
-    isUnitRHS (UnitName _)       = True; isUnitRHS _ = False
-
+criticalVariables _ = [] -- STUB
 --------------------------------------------------
 
 -- | Returns list of formerly-undetermined variables and their units.
-inferVariables :: Constraints -> [(VV, UnitInfo)]
-inferVariables cons = unitVarAssignments
+inferVariablesSBV :: Constraints -> [(VV, UnitInfo)]
+inferVariablesSBV cons = unsafePerformIO $ do
+  unitAssignments <- genUnitAssignmentsSBV cons
+  -- Find the rows corresponding to the distilled "unit :: var"
+  -- information for ordinary (non-polymorphic) variables.
+  let unitVarAssignments =
+        [ (var, units) | ([UnitPow (UnitVar var)              k], units) <- unitAssignments, k `approxEq` 1 ] ++
+        [ (var, units) | ([UnitPow (UnitParamVarAbs (_, var)) k], units) <- unitAssignments, k `approxEq` 1 ]
+  pure unitVarAssignments
+
+
+-- Convert a set of constraints into a matrix of co-efficients, and a
+-- reverse mapping of column numbers to units.
+constraintsToLHSRHSMatrix :: Constraints -> (H.Matrix Double, H.Matrix Double, A.Array Int UnitInfo, A.Array Int UnitInfo)
+constraintsToLHSRHSMatrix cons = (lhsM, rhsM, lhsCols, rhsCols)
   where
-    unitAssignments = genUnitAssignments cons
-    -- Find the rows corresponding to the distilled "unit :: var"
-    -- information for ordinary (non-polymorphic) variables.
-    unitVarAssignments            =
-      [ (var, units) | ([UnitPow (UnitVar var)                 k], units) <- unitAssignments, k `approxEq` 1 ] ++
-      [ (var, units) | ([UnitPow (UnitParamVarAbs (_, var)) k], units)    <- unitAssignments, k `approxEq` 1 ]
+    -- convert each constraint into the form (lhs, rhs)
+    consPairs       = flattenConstraints cons
+    -- ensure terms are on the correct side of the equal sign
+    shiftedCons     = map shiftTerms consPairs
+    lhs             = map fst shiftedCons
+    rhs             = map snd shiftedCons
+    (lhsM, lhsCols) = flattenedToMatrix lhs
+    (rhsM, rhsCols) = flattenedToMatrix rhs
 
 -- | Raw units-assignment pairs.
-genUnitAssignments :: [Constraint] -> [([UnitInfo], UnitInfo)]
-genUnitAssignments cons
-  | null inconsists = unitAssignments
-  | otherwise       = []
-  where
-    (unsolvedM, inconsists, colA) = constraintsToMatrix cons
-    solvedM                       = rref unsolvedM
-    cols                          = A.elems colA
+genUnitAssignmentsSBV :: [Constraint] -> IO [([UnitInfo], UnitInfo)]
+genUnitAssignmentsSBV cons = do
+    let (lhsM, rhsM, lhsCols, rhsCols) = constraintsToLHSRHSMatrix cons
+    solvedM <- solveSMT (lhsM, rhsM, lhsCols, rhsCols)
+    let cols = A.elems lhsCols ++ A.elems rhsCols
 
     -- Convert the rows of the solved matrix into flattened unit
     -- expressions in the form of "unit ** k".
-    unitPows                      = map (concatMap flattenUnits . zipWith UnitPow cols) (H.toLists solvedM)
+    let unitPows = map (concatMap flattenUnits . zipWith UnitPow cols) (H.toLists solvedM)
 
     -- Variables to the left, unit names to the right side of the equation.
-    unitAssignments               = map (fmap (foldUnits . map negatePosAbs) . partition (not . isUnitRHS)) unitPows
+    let unitAssignments = map (fmap (foldUnits . map negatePosAbs) . partition (not . isUnitRHS)) unitPows
+    return unitAssignments
+  where
+
+
     isUnitRHS (UnitPow (UnitName _) _)        = True
     isUnitRHS (UnitPow (UnitParamEAPAbs _) _) = True
     -- Because this version of isUnitRHS different from
@@ -119,7 +123,93 @@ genUnitAssignments cons
       | null units = UnitlessVar
       | otherwise  = foldl1 UnitMul units
 
---------------------------------------------------
+
+solveSMT :: (H.Matrix Double, H.Matrix Double, A.Array Int UnitInfo, A.Array Int UnitInfo)
+         -> IO (H.Matrix Double)
+solveSMT (lhsM, rhsM, lhsCols, rhsCols) = do
+
+    satResult <- satWith
+                   z3{smtFile=Just "model.smt2"} -- SMT-LIB dump
+                   predicate
+
+    case satResult of
+      SatResult (Unknown _ model) -> putStrLn $ "Unknown (SAT): " ++ show model
+      _ -> return ()
+
+    let dict = getModelDictionary satResult
+
+    print dict
+
+    return undefined
+
+  where
+    predicate :: Symbolic SBool
+    predicate = do
+      -- Generate names (constrained to their assigned values) for RHS
+      rhsVars <- zipWithM generateRHSRows [1..] (H.toRows rhsM)
+      -- Generate LHS variables
+      lhsVars <- mkExistVarsNamed lhsColNamesNumbered
+      -- Make constraints
+      genEqConstraints lhsVars (H.toRows lhsM) rhsVars
+      return true
+
+    genEqConstraints :: [[(String, SInteger)]] -- lhs variables (len lc * len rc)
+                     -> [H.Vector Double]       -- matrix lhs coeffecients (len r)
+                     -> [[(String, SInteger)]]  -- matrix rhs variables    (len r)
+                     -> Symbolic ()
+    genEqConstraints lhsVars lhsCoeffss rhsVarss = do
+      zipWithM' (genEqConstraints' lhsVars) lhsCoeffss rhsVarss
+      return ()
+
+    genEqConstraints' :: [[(String, SInteger)]] -- lhs variables (len lc * len rc)
+                      -> H.Vector Double        -- row lhs coeffections (len lc)
+                      -> [(String, SInteger)]   -- row rhs variables (len rc)
+                      -> Symbolic ()
+    genEqConstraints' lhsVars lhsCoeffs rhsVars = do
+      zipWithM' (genUnitConstraint lhsCoeffs) (transpose lhsVars) rhsVars
+      return ()
+
+    genUnitConstraint :: H.Vector Double      -- row lhs coeffects (len lc)
+                       -> [(String, SInteger)] -- lhs variables (len lc)
+                       -> (String, SInteger)   -- rhs variable
+                       -> Symbolic ()
+    genUnitConstraint lhsCoeffs lhsVars (vRname, vR) = do
+      let lhs = sum $ zipWith (\c (_, vL) -> cast c * vL) (H.toList lhsCoeffs) lhsVars
+      let lhsName = foldr1 (++) $
+                      zipWith (\c (vLname, _) -> show c ++ " * " ++ vLname)
+                        (H.toList lhsCoeffs) lhsVars
+      namedConstraint (lhsName ++ " == " ++ vRname) (lhs .== vR)
+      return ()
+
+    generateRHSRows :: Int -> H.Vector Double -> Symbolic [(String, SBV Integer)]
+    generateRHSRows r v = do
+      let cs = H.toList v
+      vars <- mapM (\n -> do let name = "rhs-" ++ show r ++ "-" ++ show n
+                             var <- sInteger name
+                             return (name, var)) [1..length cs]
+      zipWithM' (\(vname, v) c -> namedConstraint (vname ++ " == " ++ show c) (v .== cast c)) vars cs
+      return vars
+
+    cast :: Double -> SInteger
+    cast = literal . round
+
+    mkExistVarsNamed :: [[String]] -> Symbolic [[(String, SInteger)]]
+    mkExistVarsNamed = mapM (mapM (\x -> do { v <- sInteger x; return (x, v) }))
+
+    lhsColNamesNumbered :: [[String]]
+    lhsColNamesNumbered = transpose $ map (\n -> map (++ show n) lhsColNames) [1..cols rhsM]
+
+    lhsColNames :: [String]
+    lhsColNames = [ identif ++ "-" -- ++ show row ++ "-"
+                  | (identif, row) <- zip (map show $ A.elems lhsCols) [0..]
+                  ]
+
+
+    zipWithM' f xs ys
+      | length xs /= length ys =
+          error $ "not of same length " ++ show xs ++ " and " ++ show ys
+      | otherwise = zipWithM f xs ys
+          ----------------------------------------------
 
 simplifyUnits :: UnitInfo -> UnitInfo
 simplifyUnits = rewrite rw
@@ -152,8 +242,8 @@ epsilon = 0.001 -- arbitrary
 
 -- Convert a set of constraints into a matrix of co-efficients, and a
 -- reverse mapping of column numbers to units.
-constraintsToMatrix :: Constraints -> (H.Matrix Double, [Int], A.Array Int UnitInfo)
-constraintsToMatrix cons = (augM, inconsists, A.listArray (0, length colElems - 1) colElems)
+constraintsToMatrix :: Constraints -> (H.Matrix Double, A.Array Int UnitInfo)
+constraintsToMatrix cons = (augM, A.listArray (0, length colElems - 1) colElems)
   where
     -- convert each constraint into the form (lhs, rhs)
     consPairs       = flattenConstraints cons
@@ -165,10 +255,9 @@ constraintsToMatrix cons = (augM, inconsists, A.listArray (0, length colElems - 
     (rhsM, rhsCols) = flattenedToMatrix rhs
     colElems        = A.elems lhsCols ++ A.elems rhsCols
     augM            = if rows rhsM == 0 || cols rhsM == 0 then lhsM else fromBlocks [[lhsM, rhsM]]
-    inconsists      = findInconsistentRows lhsM augM
 
-constraintsToMatrices :: Constraints -> (H.Matrix Double, H.Matrix Double, [Int], A.Array Int UnitInfo, A.Array Int UnitInfo)
-constraintsToMatrices cons = (lhsM, rhsM, inconsists, lhsCols, rhsCols)
+constraintsToMatrices :: Constraints -> (H.Matrix Double, H.Matrix Double, A.Array Int UnitInfo, A.Array Int UnitInfo)
+constraintsToMatrices cons = (lhsM, rhsM, lhsCols, rhsCols)
   where
     -- convert each constraint into the form (lhs, rhs)
     consPairs       = filter (uncurry (/=)) $ flattenConstraints cons
@@ -179,7 +268,6 @@ constraintsToMatrices cons = (lhsM, rhsM, inconsists, lhsCols, rhsCols)
     (lhsM, lhsCols) = flattenedToMatrix lhs
     (rhsM, rhsCols) = flattenedToMatrix rhs
     augM            = if rows rhsM == 0 || cols rhsM == 0 then lhsM else fromBlocks [[lhsM, rhsM]]
-    inconsists      = findInconsistentRows lhsM augM
 
 -- [[UnitInfo]] is a list of flattened constraints
 flattenedToMatrix :: [[UnitInfo]] -> (H.Matrix Double, A.Array Int UnitInfo)
@@ -232,103 +320,3 @@ shiftTerms (lhs, rhs) = (lhsOk ++ negateCons rhsShift, rhsOk ++ negateCons lhsSh
 -- | Translate all constraints into a LHS, RHS side of units.
 flattenConstraints :: Constraints -> [([UnitInfo], [UnitInfo])]
 flattenConstraints = map (\ (ConEq u1 u2) -> (flattenUnits u1, flattenUnits u2))
-
---------------------------------------------------
--- Matrix solving functions based on HMatrix
-
--- | Returns True iff the given matrix in reduced row echelon form
--- represents an inconsistent system of linear equations
-isInconsistentRREF a = a @@> (rows a - 1, cols a - 1) == 1 && rank (takeColumns (cols a - 1) (dropRows (rows a - 1) a))== 0
-
--- | Returns given matrix transformed into Reduced Row Echelon Form
-rref :: H.Matrix Double -> H.Matrix Double
-rref a = snd $ rrefMatrices' a 0 0 []
-
--- worker function
--- invariant: the matrix a is in rref except within the submatrix (j-k,j) to (n,n)
-rrefMatrices' a j k mats
-  -- Base cases:
-  | j - k == n            = (mats, a)
-  | j     == m            = (mats, a)
-
-  -- When we haven't yet found the first non-zero number in the row, but we really need one:
-  | a @@> (j - k, j) == 0 = case findIndex (/= 0) below of
-    -- this column is all 0s below current row, must move onto the next column
-    Nothing -> rrefMatrices' a (j + 1) (k + 1) mats
-    -- we've found a row that has a non-zero element that can be swapped into this row
-    Just i' -> rrefMatrices' (swapMat <> a) j k (swapMat:mats)
-      where i       = j - k + i'
-            swapMat = elemRowSwap n i (j - k)
-
-  -- We have found a non-zero cell at (j - k, j), so transform it into
-  -- a 1 if needed using elemRowMult, and then clear out any lingering
-  -- non-zero values that might appear in the same column, using
-  -- elemRowAdd:
-  | otherwise             = rrefMatrices' a2 (j + 1) k mats2
-  where
-    n     = rows a
-    m     = cols a
-    below = getColumnBelow a (j - k, j)
-
-    erm   = elemRowMult n (j - k) (recip (a @@> (j - k, j)))
-
-    -- scale the row if the cell is not already equal to 1
-    (a1, mats1) | a @@> (j - k, j) /= 1 = (erm <> a, erm:mats)
-                | otherwise             = (a, mats)
-
-    -- Locate any non-zero values in the same column as (j - k, j) and
-    -- cancel them out. Optimisation: instead of constructing a
-    -- separate elemRowAdd matrix for each cancellation that are then
-    -- multiplied together, simply build a single matrix that cancels
-    -- all of them out at the same time, using the ST Monad.
-    findAdds _ m ms
-      | isWritten = (new <> m, new:ms)
-      | otherwise = (m, ms)
-      where
-        (isWritten, new) = runST $ do
-          new <- newMatrix 0 n n :: ST s (STMatrix s Double)
-          sequence [ writeMatrix new i' i' 1 | i' <- [0 .. (n - 1)] ]
-          let f w i | i >= n            = return w
-                    | i == j - k        = f w (i + 1)
-                    | a @@> (i, j) == 0 = f w (i + 1)
-                    | otherwise         = writeMatrix new i (j - k) (- (a @@> (i, j)))
-                                          >> f True (i + 1)
-          isWritten <- f False 0
-          (isWritten,) `fmap` freezeMatrix new
-
-    (a2, mats2) = findAdds 0 a1 mats1
-
--- Get a list of values that occur below (i, j) in the matrix a.
-getColumnBelow a (i, j) = concat . H.toLists $ subMatrix (i, j) (n - i, 1) a
-  where n = rows a
-
--- 'Elementary row operation' matrices
-elemRowMult :: Int -> Int -> Double -> H.Matrix Double
-elemRowMult n i k = diag (H.fromList (replicate i 1.0 ++ [k] ++ replicate (n - i - 1) 1.0))
-
-elemRowSwap :: Int -> Int -> Int -> H.Matrix Double
-elemRowSwap n i j
-  | i == j          = ident n
-  | i > j           = elemRowSwap n j i
-  | otherwise       = extractRows ([0..i-1] ++ [j] ++ [i+1..j-1] ++ [i] ++ [j+1..n-1]) $ ident n
-
-
---------------------------------------------------
-
--- Worker functions:
-
-findInconsistentRows :: H.Matrix Double -> H.Matrix Double -> [Int]
-findInconsistentRows coA augA = [0..(rows augA - 1)] \\ consistent
-  where
-    consistent = head (filter (tryRows coA augA) (tails ( [0..(rows augA - 1)])) ++ [[]])
-
-    -- Rouché–Capelli theorem is that if the rank of the coefficient
-    -- matrix is not equal to the rank of the augmented matrix then
-    -- the system of linear equations is inconsistent.
-    tryRows coA augA ns = (rank coA' == rank augA')
-      where
-        coA'  = extractRows ns coA
-        augA' = extractRows ns augA
-
-extractRows = flip (?) -- hmatrix 0.17 changed interface
-m @@> i = m `atIndex` i

@@ -8,7 +8,6 @@ module Camfort.Analysis.CommentAnnotatorSpec (spec) where
 import Test.Hspec
 
 import Data.Data
-import Data.Generics.Uniplate.Data
 import Control.Monad.Writer.Strict
 
 import Language.Fortran.AST

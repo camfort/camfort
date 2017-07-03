@@ -20,10 +20,16 @@
 
 {- Provides support for outputting source files and analysis information -}
 
-module Camfort.Output where
+module Camfort.Output
+  (
+    -- * Classes
+    OutputFiles(..)
+  , Show'(..)
+    -- * Refactoring
+  , refactoring
+  ) where
 
 import qualified Language.Fortran.AST as F
-import qualified Language.Fortran.Analysis as FA
 import qualified Language.Fortran.PrettyPrint as PP
 import qualified Language.Fortran.Util.Position as FU
 import qualified Language.Fortran.ParserMonad as FPM
@@ -33,16 +39,11 @@ import Camfort.Reprint
 import Camfort.Helpers
 import Camfort.Helpers.Syntax
 
-import System.FilePath
 import System.Directory
 
 import qualified Data.ByteString.Char8 as B
 import Data.Generics
 import Data.Functor.Identity
-import Data.List hiding (zip)
-import Data.Generics.Uniplate.Data
-import Data.Generics.Zipper
-import Debug.Trace
 import Control.Monad
 
 import Control.Monad.Trans.Class
@@ -68,8 +69,6 @@ class OutputFiles t where
   outputFiles :: FileOrDir -> FileOrDir -> [t] -> IO ()
   outputFiles inp outp pdata = do
       outIsDir <- isDirectory outp
-      inIsDir  <- isDirectory inp
-      inIsFile <- doesFileExist inp
       if outIsDir then do
           -- Output to a directory, create if missing
           createDirectoryIfMissing True outp
@@ -96,7 +95,7 @@ changeDir newDir oldDir oldFilename =
     newDir ++ listDiffL oldDir oldFilename
   where
     listDiffL []     ys = ys
-    listDiffL xs     [] = []
+    listDiffL _      [] = []
     listDiffL (x:xs) (y:ys)
         | x==y      = listDiffL xs ys
         | otherwise = ys
@@ -109,7 +108,7 @@ instance OutputFiles (Filename, SourceText) where
 
 -- When there is a file to be reprinted (for refactoring)
 instance OutputFiles (Filename, SourceText, F.ProgramFile Annotation) where
-  mkOutputText f' (f, input, ast@(F.ProgramFile (F.MetaInfo version _) _)) =
+  mkOutputText _ (_, input, ast@(F.ProgramFile (F.MetaInfo version _) _)) =
      -- If we are create a file, call the pretty printer directly
      if B.null input
       then B.pack $ PP.pprintAndRender version ast (Just 0)
@@ -142,16 +141,15 @@ refactorProgramUnits :: FPM.FortranVersion
                      -> F.ProgramUnit Annotation
                      -> StateT FU.Position (State Int) (SourceText, Bool)
 -- Output comments
-refactorProgramUnits v inp e@(F.PUComment ann span (F.Comment comment)) = do
+refactorProgramUnits _ inp (F.PUComment ann span (F.Comment comment)) = do
     cursor <- get
     if pRefactored ann
      then    let (FU.SrcSpan lb ub) = span
-                 lb'      = leftOne lb
-                 (p0, _)  = takeBounds (cursor, lb') inp
+                 (p0, _)  = takeBounds (cursor, lb) inp
                  nl       = if null comment then B.empty else B.pack "\n"
              in (put ub >> return (B.concat [p0, B.pack comment, nl], True))
      else return (B.empty, False)
-  where leftOne (FU.Position f c l) = FU.Position f (c-1) (l-1)
+
 refactorProgramUnits _ _ _ = return (B.empty, False)
 
 refactoringsForBlocks :: FPM.FortranVersion
@@ -166,22 +164,20 @@ refactorBlocks :: FPM.FortranVersion
                -> F.Block Annotation
                -> StateT FU.Position (State Int) (SourceText, Bool)
 -- Output comments
-refactorBlocks v inp e@(F.BlComment ann span (F.Comment comment)) = do
+refactorBlocks _ inp (F.BlComment ann span (F.Comment comment)) = do
     cursor <- get
     if pRefactored ann
      then    let (FU.SrcSpan lb ub) = span
-                 lb'      = leftOne lb
-                 (p0, _)  = takeBounds (cursor, lb') inp
+                 (p0, _)  = takeBounds (cursor, lb) inp
                  nl       = if null comment then B.empty else B.pack "\n"
-             in (put ub >> return (B.concat [p0, B.pack comment, nl], True))
+             in put ub >> return (B.concat [p0, B.pack comment, nl], True)
      else return (B.empty, False)
-  where leftOne (FU.Position f c l) = FU.Position f (c-1) (l-1)
 
 -- Refactor use statements
 refactorBlocks v inp b@(F.BlStatement _ _ _ u@F.StUse{}) = do
     cursor <- get
     case refactored $ F.getAnnotation u of
-           Just (FU.Position _ rCol rLine) -> do
+           Just (FU.Position _ rCol _) -> do
                let (FU.SrcSpan lb _) = FU.getSpan u
                let (p0, _) = takeBounds (cursor, lb) inp
                let out  = B.pack $ PP.pprintAndRender v b (Just (rCol -1))
@@ -194,11 +190,11 @@ refactorBlocks v inp b@(F.BlStatement _ _ _ u@F.StUse{}) = do
 
 -- Common blocks, equivalence statements, and declarations can all
 -- be refactored by the default refactoring
-refactorBlocks v inp b@(F.BlStatement _ _ _ s@F.StEquivalence{}) =
+refactorBlocks v inp (F.BlStatement _ _ _ s@F.StEquivalence{}) =
     refactorStatements v inp s
-refactorBlocks v inp b@(F.BlStatement _ _ _ s@F.StCommon{}) =
+refactorBlocks v inp (F.BlStatement _ _ _ s@F.StCommon{}) =
     refactorStatements v inp s
-refactorBlocks v inp b@(F.BlStatement _ _ _ s@F.StDeclaration{}) =
+refactorBlocks v inp (F.BlStatement _ _ _ s@F.StDeclaration{}) =
     refactorStatements v inp s
 -- Arbitrary statements can be refactored *as blocks* (in order to
 -- get good indenting)
@@ -219,7 +215,7 @@ refactorSyntax v inp e = do
     let a = F.getAnnotation e
     case refactored a of
       Nothing -> return (B.empty, False)
-      Just (FU.Position _ rCol rLine) -> do
+      Just (FU.Position _ rCol _) -> do
         let (FU.SrcSpan lb ub) = FU.getSpan e
         let (pre, _) = takeBounds (cursor, lb) inp
         let indent = if newNode a then Just (rCol - 1) else Nothing
@@ -243,7 +239,7 @@ countLines xs =
   case B.uncons xs of
     Nothing -> 0
     Just ('\n', xs) -> 1 + countLines xs
-    Just (x, xs)    -> countLines xs
+    Just (_, xs)    -> countLines xs
 
 {- 'removeNewLines xs n' removes at most 'n' new lines characters from
 the input string xs, returning the new string and the number of new
@@ -265,6 +261,6 @@ removeNewLines xs n =
            case B.uncons xs of
                Nothing -> (xs, 0)
                Just (x, xs) -> (B.cons x xs', n)
-                   where (xs', n') = removeNewLines xs n
+                   where (xs', _) = removeNewLines xs n
 
 unpackFst (x, y) = (B.unpack x, y)

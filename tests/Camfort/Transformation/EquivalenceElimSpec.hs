@@ -16,7 +16,7 @@
 {-# LANGUAGE ScopedTypeVariables #-}
 {-# LANGUAGE FlexibleContexts #-}
 
-module Camfort.Transformation.EquivalenceElimSpec where
+module Camfort.Transformation.EquivalenceElimSpec (spec) where
 
 import System.FilePath
 import System.Directory
@@ -25,7 +25,6 @@ import Test.Hspec
 
 import Camfort.Transformation.EquivalenceElim
 import Camfort.Functionality
-import Camfort.Helpers
 import Camfort.Input
 
 samplesBase :: FilePath
@@ -40,7 +39,7 @@ readActual :: FilePath -> IO String
 readActual argumentFilename = do
   let argumentPath = samplesBase </> argumentFilename
   let outFile = argumentPath `addExtension` "out"
-  equivalences argumentPath [] outFile ()
+  equivalences argumentPath [] outFile
   actual <- readFile outFile
   removeFile outFile
   return actual

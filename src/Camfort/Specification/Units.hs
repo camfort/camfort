@@ -31,19 +31,15 @@ where
 
 import qualified Data.Map.Strict as M
 import Data.Data
-import Data.Char (isNumber)
 import Data.List (intercalate, find, sort, group, nub, inits)
-import Data.Maybe (fromMaybe, maybeToList, listToMaybe, mapMaybe, isJust, maybe)
+import Data.Maybe (fromMaybe, maybeToList, mapMaybe, maybe)
 import Data.Binary
 import Data.Generics.Uniplate.Operations
 import qualified Data.ByteString.Char8 as B
 import qualified Data.ByteString.Lazy.Char8 as LB
-import Control.Monad.State.Strict
 import GHC.Generics (Generic)
 
-import Camfort.Helpers hiding (lineCol)
-import Camfort.Helpers.Syntax
-import Camfort.Output
+import Camfort.Helpers
 import Camfort.Analysis.Annotations
 import Camfort.Input
 import Camfort.Reprint (subtext)
@@ -63,8 +59,6 @@ import qualified Language.Fortran.AST as F
 import qualified Language.Fortran.Util.Position as FU
 import Language.Fortran.Util.ModFile
 
--- For debugging and development purposes
-import qualified Debug.Trace as D
 
 -- *************************************
 --   Unit inference (top - level)
@@ -75,7 +69,7 @@ inferCriticalVariables
   :: UnitOpts -> (Filename, SourceText, F.ProgramFile Annotation) -> (Report, Int)
 
 {-| Infer one possible set of critical variables for a program -}
-inferCriticalVariables uo (fname, fileText, pf)
+inferCriticalVariables uo (fname, _, pf)
   | Right vars <- eVars = okReport vars
   | Left exc   <- eVars = (errReport exc, -1)
   where
@@ -229,7 +223,7 @@ checkUnits uo (fname, fileText, pf)
         (FU.SrcSpan (FU.Position _ colL lnL) (FU.Position _ colU lnU)) = srcSpan
         lower = (lnL, colL)
         upper = (lnU, colU)
- 
+
     varReport     = intercalate ", " . map showVar
 
     showVar (UnitVar (_, s)) = s

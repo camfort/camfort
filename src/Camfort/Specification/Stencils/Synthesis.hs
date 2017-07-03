@@ -16,13 +16,14 @@
 
 {-# LANGUAGE GADTs #-}
 {-# LANGUAGE FlexibleContexts #-}
-{-# LANGUAGE TupleSections #-}
 
-module Camfort.Specification.Stencils.Synthesis where
+module Camfort.Specification.Stencils.Synthesis
+  ( formatSpec
+  , formatSpecNoComment
+  , offsetToIx
+  ) where
 
 import Data.List
-import Data.Maybe
-import qualified Data.Map as M
 
 import Camfort.Specification.Stencils.Syntax
 
@@ -30,39 +31,44 @@ import Camfort.Analysis.Annotations
 
 import qualified Language.Fortran.AST as F
 import qualified Language.Fortran.Analysis as FA
-import qualified Language.Fortran.Analysis.Renaming as FAR
 import qualified Language.Fortran.Util.Position as FU
 
 import Language.Fortran.Util.Position
 
 -- Format inferred specifications
-formatSpec ::
-    Maybe String
- -> FAR.NameMap
+formatSpec :: F.MetaInfo -> Int -> Char
  -> (FU.SrcSpan, Either [([Variable], Specification)] (String,Variable))
  -> String
-formatSpec prefix nm (span, Right (evalInfo,name)) =
-     prefix'
+formatSpec mi indent marker (span, Right (evalInfo, name)) = buildCommentText mi indent $
+     marker : " "
   ++ evalInfo
-  ++ (if name /= "" then " :: " ++ realName name else "") ++ "\n"
-  where
-    realName v = v `fromMaybe` (v `M.lookup` nm)
-    prefix' = case prefix of
-                Nothing -> show span ++ "    "
-                Just pr -> pr
+  ++ (if name /= "" then " :: " ++ name else "") ++ "\n"
 
-formatSpec _ _ (_, Left []) = ""
-formatSpec prefix nm (span, Left specs) =
-  (intercalate "\n" $ map (\s -> prefix' ++ doSpec s) specs)
+formatSpec _ _ _ (_, Left []) = ""
+formatSpec mi indent marker (span, Left specs) =
+  (intercalate "\n" $ map (\s -> buildCommentText mi indent (marker : " " ++ doSpec s)) specs)
     where
-      prefix' = case prefix of
-                   Nothing -> show span ++ "    "
-                   Just pr -> pr
       commaSep                 = intercalate ", "
       doSpec (arrayVar, spec)  =
-             show (fixSpec spec) ++ " :: " ++ commaSep (map realName arrayVar)
-      realName v               = v `fromMaybe` (v `M.lookup` nm)
+             show (fixSpec spec) ++ " :: " ++ commaSep arrayVar
       fixSpec s                = s
+
+
+-- | Format inferred specifications, but do not format as a comment.
+formatSpecNoComment ::
+  (FU.SrcSpan, Either [([Variable], Specification)] (String,Variable))
+  -> String
+formatSpecNoComment (span, Right (evalInfo, name)) =
+  show span ++ "    " ++ evalInfo ++ (if name /= "" then " :: " ++ name else "") ++ "\n"
+formatSpecNoComment (_, Left []) = ""
+formatSpecNoComment (span, Left specs) =
+  intercalate "\n" . map (\s -> show span ++ "    " ++ doSpec s) $ specs
+    where
+      commaSep                 = intercalate ", "
+      doSpec (arrayVar, spec)  =
+             show (fixSpec spec) ++ " :: " ++ commaSep arrayVar
+      fixSpec s                = s
+
 
 ------------------------
 a = (head $ FA.initAnalysis [unitAnnotation]) { FA.insLabel = Just 0 }

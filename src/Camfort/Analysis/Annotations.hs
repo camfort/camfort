@@ -18,14 +18,29 @@
 {-# LANGUAGE TypeSynonymInstances #-}
 {-# LANGUAGE FlexibleInstances #-}
 
-module Camfort.Analysis.Annotations where
+module Camfort.Analysis.Annotations
+  (
+  -- * Annotation Datatype
+    Annotation(..)
+  , A
+  , UA
+  , unitAnnotation
+  -- ** Predicates
+  , pRefactored
+  , refactored
+  -- ** Transformation Helpers
+  , modifyAnnotation
+  , onPrev
+  -- * Stencils
+  , stencilBlock
+  , stencilSpec
+  -- * Other Helpers
+  , Report
+  , buildCommentText
+  ) where
 
 import Data.Data
-import Data.Generics.Uniplate.Operations
 import Data.Maybe (isJust)
-
-import Data.Map.Lazy hiding (map)
-import Debug.Trace
 
 import Camfort.Specification.Units.Environment
 import qualified Camfort.Specification.Units.Parser as P
@@ -35,6 +50,7 @@ import qualified Camfort.Specification.Stencils.Grammar as StencilComment
 
 import qualified Language.Fortran.AST as F
 import qualified Language.Fortran.Analysis as FA
+import Language.Fortran.ParserMonad (FortranVersion(Fortran90))
 import qualified Language.Fortran.Util.Position as FU
 
 type Report = String
@@ -98,3 +114,10 @@ onPrev f ann = ann { FA.prevAnnotation = f (FA.prevAnnotation ann) }
 
 modifyAnnotation :: F.Annotated f => (a -> a) -> f a -> f a
 modifyAnnotation f x = F.setAnnotation (f (F.getAnnotation x)) x
+
+
+-- | Build a Fortran comment string appropriate for the Fortran version.
+buildCommentText :: F.MetaInfo -> Int -> String -> String
+buildCommentText mi col text | isModernFortran = replicate col ' ' ++ "!" ++ text
+                             | otherwise       = "c" ++ text
+  where isModernFortran = F.miVersion mi >= Fortran90

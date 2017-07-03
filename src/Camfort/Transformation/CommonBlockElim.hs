@@ -15,17 +15,20 @@
 -}
 {-# LANGUAGE TypeOperators #-}
 {-# LANGUAGE FlexibleInstances #-}
+{-# LANGUAGE PolyKinds #-}
 {-# LANGUAGE TypeSynonymInstances #-}
 
-module Camfort.Transformation.CommonBlockElim where
+module Camfort.Transformation.CommonBlockElim
+  ( commonElimToModules
+  ) where
 
 import Control.Monad
 import Control.Monad.State.Lazy
+import Control.Monad.Writer.Strict (execWriter, tell)
 
-import Debug.Trace
 import Data.Data
+import Data.Function (on)
 import Data.List
-import Data.Ord
 import qualified Data.Map as M
 import Data.Generics.Uniplate.Operations
 
@@ -56,6 +59,9 @@ type TLCommon p = (Filename, (F.Name, TCommon p))
 
 type A1 = FA.Analysis Annotation
 type CommonState = State (Report, [TLCommon A])
+
+-- | Type for type-level annotations giving documentation
+type (:?) a (b :: k) = a
 
 -- Top-level functions for eliminating common blocks in a set of files
 commonElimToModules ::
@@ -94,7 +100,7 @@ collectAndRmCommons :: FAT.TypeEnv -> Filename -> F.ProgramUnitName
 collectAndRmCommons tenv fname pname = transformBiM commons
   where
     commons :: F.Statement A1 -> CommonState (F.Statement A1)
-    commons f@(F.StCommon a s@(FU.SrcSpan p1 _) cgrps) = do
+    commons (F.StCommon a s@(FU.SrcSpan p1 _) cgrps) = do
         mapM_ commonGroups (F.aStrip cgrps)
         let a' = onPrev (\ap -> ap {refactored = Just p1, deleteNode = True}) a
         return $ F.StCommon a' (deleteLine s) (F.AList a s [])
@@ -105,7 +111,7 @@ collectAndRmCommons tenv fname pname = transformBiM commons
 
     -- Process a common group, adding blocks to the common state
     commonGroups :: F.CommonGroup A1 -> CommonState ()
-    commonGroups (F.CommonGroup a (FU.SrcSpan p1 _) cname exprs) = do
+    commonGroups (F.CommonGroup _ (FU.SrcSpan p1 _) cname exprs) = do
       let r' = show p1 ++ ": removed common declaration\n"
       let tcommon = map typeCommonExprs (F.aStrip exprs)
       let info = (fname, (punitName pname, (commonNameFromAST cname, tcommon)))
@@ -180,6 +186,7 @@ groupSortCommonBlock commons = gccs
     gcs = groupBy (\x y -> cmpEq $ cmpTLConBNames x y) commons
     -- Group within by the different common block variable-type fields
     gccs = map (sortBy (\y x -> length x `compare` length y) . group . sortBy cmpVarName) gcs
+    cmpEq = (== EQ)
 
 mkTLCommonRenamers :: [TLCommon A] -> [(TLCommon A, RenamerCoercer)]
 mkTLCommonRenamers commons =
@@ -196,23 +203,14 @@ mkTLCommonRenamers commons =
                   map (\c -> (c, mkRenamerCoercerTLC c com)) (concat $ tail grp)) gccs
     -- Now re-sort based on the file and program unit
     commons' = sortBy (cmpFst cmpTLConFName) (sortBy (cmpFst cmpTLConPName) (concat gcrcs))
+    cmpFst = (`on` fst)
 
-type NameMap = M.Map F.Name F.Name
 
 -- Nothing represents an overall identity renamer/coercer for efficiency
 -- a Nothing for a variable represent a variable-level (renamer) identity
 -- a Nothing for a type represents a type-level (coercer) identity
 type RenamerCoercer =
     Maybe (M.Map F.Name (Maybe F.Name, Maybe (F.BaseType, F.BaseType)))
-
-applyRenaming :: (Typeable (t A), Data (t A)) => NameMap -> t A -> t A
-applyRenaming r = transformBi rename
-  where
-    rename :: F.Value A -> F.Value A
-    rename vn@(F.ValVariable v) =
-        case M.lookup v r of
-           Nothing -> vn
-           Just v' -> F.ValVariable v'
 
 class Renaming r where
     hasRenaming :: F.Name -> r -> Bool
@@ -241,6 +239,14 @@ updateUseDecls fps tcs = map perPF fps
     importIncludeCommons v p =
         foldl (flip (matchPUnit v)) p (reduceCollect inames p)
 
+    -- Data-type generic reduce traversal
+    reduceCollect :: (Data s, Data t, Uniplate t, Biplate t s) => (s -> Maybe a) -> t -> [a]
+    reduceCollect k x = execWriter (transformBiM (\y -> do case k y of
+                                                            Just x -> tell [x]
+                                                            Nothing -> return ()
+                                                           return y) x)
+
+
     insertUses :: [F.Block A] -> F.ProgramUnit A -> F.ProgramUnit A
     insertUses uses = descendBi insertUses'
       where insertUses' :: [F.Block A] -> [F.Block A]
@@ -254,10 +260,16 @@ updateUseDecls fps tcs = map perPF fps
                   F.Named pname -> pname
                    -- If no subname is available, use the filename
                   _             -> fname
-        tcrs' = lookups' pname (lookups' fname tcrs)
+        tcrs' = lookups pname (lookups fname tcrs)
         pos = getUnitStartPosition p
         uses = mkUseStatementBlocks pos tcrs'
         p' = insertUses uses p
+        -- Lookup functions over relation s
+
+        lookups :: Eq a => a -> [((a, b), c)] -> [(b, c)]
+        lookups x = map (\((_,b),c) -> (b, c))
+          . filter ((==x) . fst . fst)
+
 
     -- Given the list of renamed/coercerd variables form common blocks,
     -- remove any declaration sites
@@ -271,7 +283,7 @@ updateUseDecls fps tcs = map perPF fps
     -- statements)
     removeDecl :: [RenamerCoercer]
                -> F.Statement A -> State [F.Statement A] (F.Statement A)
-    removeDecl rcs d@(F.StDeclaration a s@(FU.SrcSpan p1 _) typ attr decls) = do
+    removeDecl rcs (F.StDeclaration a s@(FU.SrcSpan p1 _) typ attr decls) = do
         modify (++ assgns)
         return $ F.StDeclaration a' (deleteLine s) typ attr decls'
       where
@@ -288,8 +300,8 @@ updateUseDecls fps tcs = map perPF fps
         matchVar :: ([F.Statement A], [F.Declarator A]) -> F.Declarator A
                  -> ([F.Statement A], [F.Declarator A])
         matchVar (assgns, decls)
-                     dec@(F.DeclVariable a s
-                    lvar@(F.ExpValue _ _ (F.ValVariable v)) len init) =
+                     dec@(F.DeclVariable _ s
+                    lvar@(F.ExpValue _ _ (F.ValVariable v)) _ init) =
            if hasRenaming v rcs
            then case init of
                    -- Renaming exists and no default, then remove
@@ -339,7 +351,7 @@ getUnitStartPosition (F.PUComment _ s _) = s
 
 renamerToUse :: RenamerCoercer -> [(F.Name, F.Name)]
 renamerToUse Nothing = []
-renamerToUse (Just m) = let entryToPair v (Nothing, _) = []
+renamerToUse (Just m) = let entryToPair _ (Nothing, _) = []
                             entryToPair v (Just v', _) = [(v, v')]
                         in M.foldlWithKey (\xs v e -> entryToPair v e ++ xs) [] m
 
@@ -350,7 +362,7 @@ mkUseStatementBlocks s = map mkUseStmnt
     a = unitAnnotation { refactored = Just pos, newNode = True }
     (FU.SrcSpan pos pos') = s
     s' = FU.SrcSpan (toCol0 pos) pos'
-    mkUseStmnt x@((name, _), r) = F.BlStatement a s' Nothing $
+    mkUseStmnt x@((name, _), _) = F.BlStatement a s' Nothing $
        F.StUse a s' useName F.Permissive useListA
      where useName = F.ExpValue a s' (F.ValVariable (caml (commonName name)))
            useListA = case useList of [] -> Nothing
@@ -358,13 +370,13 @@ mkUseStatementBlocks s = map mkUseStmnt
            useList = mkUses pos x
 
     mkUses :: FU.Position -> (TCommon A, RenamerCoercer) -> [F.Use A]
-    mkUses s ((name, _), r) = map useRenamer (renamerToUse r)
+    mkUses _ ((_, _), r) = map useRenamer (renamerToUse r)
 
     useRenamer (v, vR) = F.UseRename a s' (F.ExpValue a s' (F.ValVariable v))
                                           (F.ExpValue a s' (F.ValVariable vR))
 
 mkRenamerCoercerTLC :: TLCommon A :? source -> TLCommon A :? target -> RenamerCoercer
-mkRenamerCoercerTLC x@(fname, (pname, common1)) (_, (_, common2)) =
+mkRenamerCoercerTLC (_, (_, common1)) (_, (_, common2)) =
     mkRenamerCoercer common1 common2
 
 mkRenamerCoercer :: TCommon A :? source -> TCommon A :? target -> RenamerCoercer
@@ -387,9 +399,15 @@ allCoherentCommons :: [TLCommon A] -> (Report, Bool)
 allCoherentCommons commons =
    foldM (\p (c1, c2) -> coherentCommons c1 c2 >>= \p' -> return $ p && p')
      True (pairs commons)
+   where
+    -- Computes all pairwise combinations
+    pairs :: [a] -> [(a, a)]
+    pairs []     = []
+    pairs (x:xs) = zip (repeat x) xs ++ pairs xs
+
 
 coherentCommons :: TLCommon A -> TLCommon A -> (Report, Bool)
-coherentCommons (f1, (p1, (n1, vtys1))) (f2, (p2, (n2, vtys2))) =
+coherentCommons (_, (_, (n1, vtys1))) (_, (_, (n2, vtys2))) =
     if n1 == n2
     then coherentCommons' vtys1 vtys2
     else error $ "Trying to compare differently named common blocks: "

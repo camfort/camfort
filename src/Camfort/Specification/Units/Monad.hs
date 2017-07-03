@@ -39,13 +39,11 @@ import GHC.Generics (Generic)
 import qualified Data.Map.Strict as M
 import qualified Data.IntMap.Strict as IM
 import qualified Data.Set as S
-import qualified Language.Fortran.Analysis as FA
 import qualified Language.Fortran.Analysis.Renaming as FAR
 import qualified Language.Fortran.AST as F
 import Language.Fortran.Util.ModFile
-import Camfort.Specification.Units.Environment (UnitInfo, UnitAnnotation, Constraints(..), VV)
-import Camfort.Analysis.Annotations (Annotation, A, UA)
-import qualified Data.ByteString.Char8 as B
+import Camfort.Specification.Units.Environment (UnitInfo, Constraints(..), VV)
+import Camfort.Analysis.Annotations (UA)
 
 
 -- | Some options about how to handle literals.

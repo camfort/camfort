@@ -18,7 +18,11 @@
 {-# LANGUAGE FunctionalDependencies #-}
 {-# LANGUAGE ImplicitParams #-}
 
-module Camfort.Specification.Stencils.CheckBackend where
+module Camfort.Specification.Stencils.CheckBackend
+  (
+    -- * Classes
+    SynToAst(..)
+  ) where
 
 import Camfort.Specification.Stencils.Syntax
 import Camfort.Specification.Stencils.Model
@@ -97,7 +101,7 @@ instance SynToAst [SYN.Mod]
       isApprox _           = Nothing
 
 find' :: Eq a => (a -> Maybe b) -> [a] -> Maybe b
-find' p [] = Nothing
+find' _ [] = Nothing
 find' p (x : xs) =
   case p x of
     Nothing -> find' p xs

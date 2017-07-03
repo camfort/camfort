@@ -22,9 +22,26 @@ Handles input of code base (files and directories)
 -}
 
 {-# LANGUAGE DoAndIfThenElse #-}
-{-# LANGUAGE ScopedTypeVariables #-}
 
-module Camfort.Input where
+module Camfort.Input
+  (
+    -- * Classes
+    Default(..)
+    -- * Datatypes and Aliases
+  , FileProgram
+    -- * Builders for analysers and refactorings
+  , callAndSummarise
+  , doAnalysisReportWithModFiles
+  , doAnalysisSummary
+  , doRefactor
+  , doRefactorAndCreate
+  , doRefactorWithModFiles
+    -- * Source directory and file handling
+  , doCreateBinary
+  , fileExt
+  , readParseSrcDir
+  , rGetDirContents'
+  ) where
 
 import Camfort.Analysis.Annotations
 import Camfort.Helpers
@@ -35,12 +52,9 @@ import qualified Language.Fortran.AST as F
 import Language.Fortran.Util.ModFile
 
 import qualified Data.ByteString.Char8 as B
-import Data.Data
 import Data.Char (toUpper)
 import Data.Maybe
-import Data.Generics.Uniplate.Operations
-import Data.List (foldl', nub, (\\), elemIndices, intercalate)
-import Data.Monoid
+import Data.List (foldl', (\\), elemIndices, intercalate)
 import Data.Text.Encoding.Error (replace)
 import Data.Text.Encoding (encodeUtf8, decodeUtf8With)
 
@@ -50,22 +64,13 @@ import System.Directory
 class Default t where
     defaultValue :: t
 
--- From a '[t]' extract the first occurence of an 'opt' value.
--- If one does not exist, return the default 'opt'
-getOption :: forall t opt . (Data opt, Data t, Default opt) => [t] -> opt
-getOption [] = defaultValue
-getOption (x : xs) =
-    case universeBi x :: [opt] of
-      []        -> getOption xs
-      (opt : _) -> opt
-
 -- * Builders for analysers and refactorings
 
 {-| Performs an analysis provided by its first parameter which generates
     information 's', which is then combined together (via a monoid) -}
 doAnalysisSummary :: (Monoid s, Show' s) => (Filename -> F.ProgramFile A -> (s, F.ProgramFile A))
-                        -> FileOrDir -> [Filename] -> Maybe FileOrDir -> IO ()
-doAnalysisSummary aFun inSrc excludes outSrc = do
+                        -> FileOrDir -> [Filename] -> IO ()
+doAnalysisSummary aFun inSrc excludes = do
   if excludes /= [] && excludes /= [""]
     then putStrLn $ "Excluding " ++ intercalate "," excludes
                                  ++ " from " ++ inSrc ++ "/"

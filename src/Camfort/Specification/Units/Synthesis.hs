@@ -14,38 +14,25 @@
    limitations under the License.
 -}
 
-{-# LANGUAGE PatternGuards, ScopedTypeVariables, ImplicitParams, DoAndIfThenElse, ConstraintKinds, TupleSections #-}
+{-# LANGUAGE PatternGuards, DoAndIfThenElse, ConstraintKinds, ScopedTypeVariables #-}
 
 module Camfort.Specification.Units.Synthesis
   (runSynthesis)
 where
 
-import Data.Function
-import Data.List
-import Data.Matrix
 import Data.Maybe
-import Data.Ratio (numerator, denominator)
-import qualified Data.Map.Strict as M
 import qualified Data.Set as S
 import Data.Generics.Uniplate.Operations
 import Control.Monad.State.Strict hiding (gets)
-import Control.Monad.Reader
-import Control.Monad.Writer.Strict
-import Control.Monad
 
 import qualified Language.Fortran.AST as F
 import qualified Language.Fortran.Analysis as FA
-import qualified Language.Fortran.Analysis.Renaming as FAR
 import qualified Language.Fortran.Util.Position as FU
-import Language.Fortran.ParserMonad (FortranVersion(Fortran90))
 
-import qualified Camfort.Specification.Units.Parser as P
-import Camfort.Analysis.CommentAnnotator
 import Camfort.Analysis.Annotations hiding (Unitless)
 import Camfort.Specification.Units.Environment
 import Camfort.Specification.Units.Monad
 import Camfort.Specification.Units.InferenceFrontend (puName, puSrcName)
-import qualified Debug.Trace as D
 
 -- | Insert unit declarations into the ProgramFile as comments.
 runSynthesis :: Char -> [(VV, UnitInfo)] -> UnitSolver [(VV, UnitInfo)]
@@ -64,7 +51,7 @@ synthBlocks marker vars = fmap reverse . foldM (synthBlock marker vars) []
 -- particular, in order to possibly insert a unit annotation before
 -- them.
 synthBlock :: Char -> [(VV, UnitInfo)] -> [F.Block UA] -> F.Block UA -> UnitSolver [F.Block UA]
-synthBlock marker vars bs b@(F.BlStatement a ss@(FU.SrcSpan lp up) _ (F.StDeclaration _ _ _ _ decls)) = do
+synthBlock marker vars bs b@(F.BlStatement a (FU.SrcSpan lp _) _ (F.StDeclaration _ _ _ _ decls)) = do
   pf    <- usProgramFile `fmap` get
   gvSet <- usGivenVarSet `fmap` get
   newBs <- fmap catMaybes . forM (universeBi decls) $ \ e -> case e of
@@ -75,17 +62,18 @@ synthBlock marker vars bs b@(F.BlStatement a ss@(FU.SrcSpan lp up) _ (F.StDeclar
         let newA  = a { FA.prevAnnotation = (FA.prevAnnotation a) {
                            prevAnnotation = (prevAnnotation (FA.prevAnnotation a)) {
                                refactored = Just lp } } }
-        -- Create a zero-length span for the new comment node.
-        let newSS = FU.SrcSpan (lp {FU.posColumn = 0}) (lp {FU.posColumn = 0})
-        -- Build the text of the comment with the unit annotation.
-        let txt   = marker:" " ++ showUnitDecl (FA.srcName e, u)
-        let space = FU.posColumn lp - 1
-        let newB  = F.BlComment newA newSS . F.Comment . insertSpacing pf space $ commentText pf txt
+            -- Create a zero-length span for the new comment node.
+            newSS = FU.SrcSpan (lp {FU.posColumn = 0}) (lp {FU.posColumn = 0})
+            -- Build the text of the comment with the unit annotation.
+            txt   = marker:" " ++ showUnitDecl (FA.srcName e, u)
+            space = FU.posColumn lp - 1
+            (F.ProgramFile mi _) = pf
+            newB  = F.BlComment newA newSS . F.Comment $ buildCommentText mi space txt
         return $ Just newB
       where
         vname = FA.varName e
         sname = FA.srcName e
-    (e :: F.Expression UA) -> return Nothing
+    (_ :: F.Expression UA) -> return Nothing
   return (b:reverse newBs ++ bs)
 synthBlock _ _ bs b = return (b:bs)
 
@@ -99,7 +87,7 @@ synthProgramUnits marker vars pus = do
 -- list of program units. We're looking for functions, in particular,
 -- in order to possibly insert a unit annotation before them.
 synthProgramUnit :: Char -> [(VV, UnitInfo)] -> [F.ProgramUnit UA] -> F.ProgramUnit UA -> UnitSolver [F.ProgramUnit UA]
-synthProgramUnit marker vars pus pu@(F.PUFunction a ss@(FU.SrcSpan lp up) _ _ _ _ mret _ _) = do
+synthProgramUnit marker vars pus pu@(F.PUFunction a (FU.SrcSpan lp _) _ _ _ _ mret _ _) = do
   pf    <- usProgramFile `fmap` get
   gvSet <- usGivenVarSet `fmap` get
   let (vname, sname) = case mret of Just e  -> (FA.varName e, FA.srcName e)
@@ -113,9 +101,10 @@ synthProgramUnit marker vars pus pu@(F.PUFunction a ss@(FU.SrcSpan lp up) _ _ _ 
       -- Create a zero-length span for the new comment node.
       let newSS = FU.SrcSpan (lp {FU.posColumn = 0}) (lp {FU.posColumn = 0})
       -- Build the text of the comment with the unit annotation.
-      let txt   = marker:" " ++ showUnitDecl (sname, u)
-      let space = FU.posColumn lp - 1
-      let newPU = F.PUComment newA newSS . F.Comment . insertSpacing pf space $ commentText pf txt
+          txt   = marker:" " ++ showUnitDecl (sname, u)
+          space = FU.posColumn lp - 1
+          (F.ProgramFile mi _) = pf
+          newPU = F.PUComment newA newSS . F.Comment $ buildCommentText mi space txt
 
       -- recursively descend to find program units inside of current one
       fmap (:newPU:pus) $ descendBiM (synthProgramUnits marker vars) pu
@@ -125,17 +114,5 @@ synthProgramUnit marker vars pus pu@(F.PUFunction a ss@(FU.SrcSpan lp up) _ _ _ 
     _ -> fmap (:pus) $ descendBiM (synthProgramUnits marker vars) pu
 synthProgramUnit marker vars pus pu = fmap (:pus) $ descendBiM (synthProgramUnits marker vars) pu
 
--- Insert the correct comment markers around the given text string, depending on Fortran version.
-commentText :: F.ProgramFile UA -> String -> String
-commentText pf text | isModernFortran pf = "!" ++ text
-                    | otherwise          = "c" ++ text
-
--- Insert a given amount of spacing before the string.
-insertSpacing :: F.ProgramFile UA -> Int -> String -> String
-insertSpacing pf n | isModernFortran pf = (replicate n ' ' ++)
-                   | otherwise          = id
-
 -- Pretty print a unit declaration.
 showUnitDecl (sname, u) = "unit(" ++ show u ++ ") :: " ++ sname
-
-isModernFortran (F.ProgramFile (F.MetaInfo { F.miVersion = v }) _ ) = v >= Fortran90

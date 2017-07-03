@@ -20,24 +20,38 @@
 {-# LANGUAGE FlexibleInstances #-}
 {-# LANGUAGE GADTs #-}
 
-module Camfort.Specification.Stencils.Syntax where
+module Camfort.Specification.Stencils.Syntax
+  (
+    -- * Datatypes and Aliases
+    Linearity(..)
+  , Region(..)
+  , RegionEnv
+  , RegionProd(..)
+  , RegionSum(..)
+  , Spatial(..)
+  , SpecDecls
+  , Specification(..)
+  , Variable
+    -- * Functions
+  , absoluteRep
+  , fromBool
+  , groupKeyBy
+  , hasDuplicates
+  , isEmpty
+  , isUnit
+  , pprintSpecDecls
+  , setLinearity
+  ) where
 
-import Camfort.Helpers
 import Camfort.Specification.Stencils.Model ( Multiplicity(..)
                                             , peel
                                             , Approximation(..)
-                                            , lowerBound, upperBound
-                                            , fromExact
                                             )
 
 import Prelude hiding (sum)
 
 import Data.Data
-import Data.Generics.Uniplate.Data
 import Data.List hiding (sum)
-import Data.Function
-import Data.Maybe
-import Debug.Trace
 import Control.Applicative
 
 type Variable = String
@@ -68,13 +82,6 @@ pprintSpecDecls :: SpecDecls -> String
 pprintSpecDecls =
  concatMap (\(names, spec) ->
             show spec ++ " :: " ++ intercalate "," names ++ "\n")
-
-lookupAggregate :: Eq a => [([a], b)] -> a -> [b]
-lookupAggregate [] _ = []
-lookupAggregate ((names, spec) : ss) name =
-  if name `elem` names
-  then spec : lookupAggregate ss name
-  else lookupAggregate ss name
 
 -- Top-level of specifications: may be either spatial or temporal
 data Specification =
@@ -123,11 +130,6 @@ data Region where
     Centered :: Depth -> Dimension -> IsRefl -> Region
   deriving (Eq, Data, Typeable)
 
-getDimension :: Region -> Dimension
-getDimension (Forward _ dim _) = dim
-getDimension (Backward _ dim _) = dim
-getDimension (Centered _ dim _) = dim
-
 -- An (arbitrary) ordering on regions for the sake of normalisation
 instance Ord Region where
   (Forward dep dim _) <= (Forward dep' dim' _)
@@ -160,14 +162,6 @@ instance Ord RegionProd where
 
 
 -- Operations on specifications
-
-regionPlus :: Region -> Region -> Maybe Region
-regionPlus (Forward dep dim reflx) (Backward dep' dim' reflx')
-    | dep == dep' && dim == dim' = Just $ Centered dep dim (reflx || reflx')
-regionPlus (Backward dep dim reflx) (Forward dep' dim' reflx')
-    | dep == dep' && dim == dim' = Just $ Centered dep dim (reflx || reflx')
-regionPlus x y | x == y          = Just x
-regionPlus x y                   = Nothing
 
 -- Operations on region specifications form a semiring
 --  where `sum` is the additive, and `prod` is the multiplicative
@@ -233,15 +227,6 @@ instance RegionRig RegionSum where
   one = Sum [Product []]
   isUnit s@(Sum ss) = s == zero || s == one || all (== Product []) ss
 
--- Show a list with ',' separator
-showL :: Show a => [a] -> String
-showL = intercalate "," . map show
-
--- Show lists with '*' or '+' separator (used to represent product of regions)
-showProdSpecs, showSumSpecs :: Show a => [a] -> String
-showProdSpecs = intercalate "*" . map show
-showSumSpecs  = intercalate "+" . map show
-
 -- Pretty print top-level specifications
 instance Show Specification where
   show (Specification sp) = "stencil " ++ show sp
@@ -260,7 +245,7 @@ instance {-# OVERLAPS #-} Show (Multiplicity (Approximation Spatial)) where
           Bound (Just sL) (Just sU) ->
             "atLeast, " ++ linearity ++ optionalSeparator sep (show sL) ++
             "; atMost, " ++ linearity ++ optionalSeparator sep (show sU)
-      optionalSeparator sep "" = ""
+      optionalSeparator _   "" = ""
       optionalSeparator sep s  = sep ++ s
 
 instance {-# OVERLAPS #-} Show (Approximation Spatial) where

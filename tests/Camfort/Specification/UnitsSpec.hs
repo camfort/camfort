@@ -1,4 +1,3 @@
-{-# LANGUAGE ImplicitParams #-}
 module Camfort.Specification.UnitsSpec (spec) where
 
 import qualified Data.ByteString.Char8 as B
@@ -7,11 +6,7 @@ import Language.Fortran.Parser.Any
 import Language.Fortran.ParserMonad (fromRight)
 import qualified Language.Fortran.AST as F
 import qualified Language.Fortran.Analysis as FA
-import qualified Language.Fortran.Analysis.Renaming as FAR
 import Data.Generics.Uniplate.Operations
-import Camfort.Input
-import Camfort.Functionality
-import Camfort.Output
 import Camfort.Analysis.Annotations
 import Camfort.Specification.Units
 import Camfort.Specification.Units.Monad
@@ -22,43 +17,17 @@ import Camfort.Specification.Units.Environment
 import Data.List
 import Data.Maybe
 import Data.Either
-import qualified Data.Array as A
-import qualified Numeric.LinearAlgebra as H
 import qualified Data.Map.Strict as M
 import GHC.Real
-import Numeric.LinearAlgebra (
-    atIndex, (<>), (><), rank, (?), toLists, toList, fromLists, fromList, rows, cols,
-    takeRows, takeColumns, dropRows, dropColumns, subMatrix, diag, build, fromBlocks,
-    ident, flatten, lu, dispf, Matrix
-  )
 
 import Test.Hspec
-import Test.QuickCheck
-import Test.Hspec.QuickCheck
 
-runFrontendInit litMode pf = usConstraints state
-  where
-    pf' = FA.initAnalysis . fmap mkUnitAnnotation . fmap (const unitAnnotation) $ pf
-    uOpts = unitOpts0 { uoNameMap = M.empty, uoDebug = False, uoLiterals = litMode }
-    (_, state, logs) = runUnitSolver uOpts pf' initInference
 
 runUnits litMode pf m = (r, usConstraints state)
   where
     pf' = FA.initAnalysis . fmap mkUnitAnnotation . fmap (const unitAnnotation) $ pf
     uOpts = unitOpts0 { uoNameMap = M.empty, uoDebug = False, uoLiterals = litMode }
-    (r, state, logs) = runUnitSolver uOpts pf' $ initInference >> m
-
-runUnits' litMode pf m = (state, logs)
-  where
-    pf' = FA.initAnalysis . fmap mkUnitAnnotation . fmap (const unitAnnotation) $ pf
-    uOpts = unitOpts0 { uoNameMap = M.empty, uoDebug = True, uoLiterals = litMode }
-    (r, state, logs) = runUnitSolver uOpts pf' $ initInference >> m
-
-runUnitsRenamed' litMode pf m = (state, logs)
-  where
-    pf' = FAR.analyseRenames . FA.initAnalysis . fmap mkUnitAnnotation . fmap (const unitAnnotation) $ pf
-    uOpts = unitOpts0 { uoNameMap = FAR.extractNameMap pf', uoDebug = True, uoLiterals = litMode }
-    (r, state, logs) = runUnitSolver uOpts pf' $ initInference >> m
+    (r, state, _) = runUnitSolver uOpts pf' $ initInference >> m
 
 runUnitInference litMode pf = case r of
   Right vars -> ([ (FA.varName e, u) | e <- declVariables pf'
@@ -68,7 +37,7 @@ runUnitInference litMode pf = case r of
   where
     pf' = FA.initAnalysis . fmap mkUnitAnnotation . fmap (const unitAnnotation) $ pf
     uOpts = unitOpts0 { uoNameMap = M.empty, uoDebug = False, uoLiterals = litMode }
-    (r, state, logs) = runUnitSolver uOpts pf' $ initInference >> fmap chooseImplicitNames runInferVariables
+    (r, state, _) = runUnitSolver uOpts pf' $ initInference >> fmap chooseImplicitNames runInferVariables
 
 declVariables :: F.ProgramFile UA -> [F.Expression UA]
 declVariables pf = flip mapMaybe (universeBi pf) $ \ d -> case d of

@@ -11,7 +11,7 @@ import qualified Data.Text as T
 import Debug.Trace
 
 import Camfort.Analysis.CommentAnnotator
-import Camfort.Specification.Stencils.Syntax (showL)
+import Camfort.Specification.Stencils.Syntax ()
 
 }
 

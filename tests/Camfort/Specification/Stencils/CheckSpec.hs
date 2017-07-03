@@ -4,7 +4,6 @@ module Camfort.Specification.Stencils.CheckSpec (spec) where
 
 import Camfort.Analysis.CommentAnnotator
 import Camfort.Specification.Stencils.CheckBackend
-import Camfort.Specification.Stencils.CheckFrontend
 import qualified Camfort.Specification.Stencils.Grammar as SYN
 import Camfort.Specification.Stencils.Model
 import Camfort.Specification.Stencils.Syntax
@@ -18,7 +17,6 @@ promoteErrors (Right x) = Right x
 parseAndConvert x =
     let ?renv = []
     in SYN.specParser x >>= (promoteErrors . synToAst)
-extract (Right (Right [(_, s)])) = s
 
 spec :: Spec
 spec =

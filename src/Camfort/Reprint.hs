@@ -16,16 +16,17 @@
 
 {-# LANGUAGE RankNTypes #-}
 
-module Camfort.Reprint where
+module Camfort.Reprint
+  ( reprint
+  , subtext
+  , takeBounds
+  ) where
 
 import Data.Generics.Zipper
 
-import Camfort.Analysis.Annotations
 import Camfort.Helpers
-import Camfort.Helpers.Syntax
 
 import qualified Data.ByteString.Char8 as B
-import Data.Functor.Identity
 import Data.Data
 import Control.Monad.Trans.State.Lazy
 import qualified Language.Fortran.Util.Position as FU
@@ -149,32 +150,26 @@ takeBounds (l, u) = subtext (ll, lc) (ll, lc) (ul, uc)
     3. upper bound
     4. input text
 
-  Fails when lower and upper bounds are not within the text.
 -}
 subtext :: (Int, Int) -> (Int, Int) -> (Int, Int) -> B.ByteString -> (B.ByteString, B.ByteString)
-subtext = subtext' B.empty
+subtext cursor (lowerLn, lowerCol) (upperLn, upperCol) =
+    subtext' B.empty cursor
   where
-    subtext' acc -- accumulator
-             cursor@(cursorLn, cursorCol)
-             lower@(lowerLn, lowerCol)
-             upper@(upperLn, upperCol)
-             input
-      -- | cursorLn <= lowerLn && cursorCol < lowerCol =
+    subtext' acc (cursorLn, cursorCol) input
+
       | cursorLn <= lowerLn && (cursorCol >= lowerCol ==> cursorLn < lowerLn) =
         case B.uncons input of
-          Nothing -> error $ "Trying to take subtext between " ++ show lower ++
-            " and " ++ show upper ++ ", but file ended at: " ++ show cursor
-          Just ('\n', input') -> subtext' acc (cursorLn+1, 1) lower upper input'
-          Just (x, input') -> subtext' acc (cursorLn, cursorCol+1) lower upper input'
+          Nothing -> (B.reverse acc, input)
+          Just ('\n', input') -> subtext' acc (cursorLn+1, 1) input'
+          Just (_, input')    -> subtext' acc (cursorLn, cursorCol+1) input'
+
       | cursorLn <= upperLn && (cursorCol >= upperCol ==> cursorLn < upperLn) =
         case B.uncons input of
-          Nothing -> error $ "Trying to take subtext between " ++ show lower ++
-            " and " ++ show upper ++ ", but file ended at: " ++ show cursor
-          Just ('\n', input') ->
-            subtext' (B.cons '\n' acc) (cursorLn+1, 1) lower upper input'
-          Just (x, input') ->
-            subtext' (B.cons x acc) (cursorLn, cursorCol+1) lower upper input'
-      | otherwise = -- cursorLn > upperLn || (cursorLn == upperLn ==> cursolCol > upperCol)
+          Nothing -> (B.reverse acc, input)
+          Just ('\n', input') -> subtext' (B.cons '\n' acc) (cursorLn+1, 1) input'
+          Just (x, input')    -> subtext' (B.cons x acc) (cursorLn, cursorCol+1) input'
+
+      | otherwise =
         (B.reverse acc, input)
 
 -- | Logical implication operator.

@@ -2,6 +2,8 @@ name:                   camfort
 version:                0.903
 synopsis:               CamFort - Cambridge Fortran infrastructure
 description:            CamFort is a tool for the analysis, transformation, verification of Fortran code.
+homepage:               https://camfort.github.io
+bug-reports:            https://github.com/camfort/camfort/issues
 
 copyright:              2012-2016 University of Cambridge
 author:                 Dominic Orchard, Matthew Danish, Mistral Contrastin, Andrew Rice, Oleg Oshmyan
@@ -46,7 +48,7 @@ executable camfort
                         Camfort.Specification.Units
                         Camfort.Specification.Units.InferenceFrontend
                         Camfort.Specification.Units.InferenceBackend
-                        Camfort.Specification.Units.InferenceBackendZ3
+                        Camfort.Specification.Units.InferenceBackendSBV
                         Camfort.Specification.Units.Environment
                         Camfort.Specification.Units.Monad
                         Camfort.Specification.Units.Parser
@@ -86,9 +88,12 @@ executable camfort
                         bytestring >= 0.10,
                         binary >= 0.8.3.0,
                         lattices >= 1.5,
-                        sbv >= 5.14,
+                        sbv == 6.1,
                         partial-order >= 0.1.2,
-                        z3 >= 4.1.0
+                        optparse-applicative >= 0.13.2.0,
+                        z3 >= 4.1.0,
+                        process >= 1.4.3
+
   default-language: Haskell2010
 
 library

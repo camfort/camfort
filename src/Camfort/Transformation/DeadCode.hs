@@ -16,7 +16,9 @@
 {-# LANGUAGE FlexibleInstances #-}
 {-# LANGUAGE FlexibleContexts #-}
 
-module Camfort.Transformation.DeadCode where
+module Camfort.Transformation.DeadCode
+  ( deadCode
+  ) where
 
 import Camfort.Analysis.Annotations
 import qualified Language.Fortran.Analysis.DataFlow as FAD
@@ -32,9 +34,7 @@ import qualified Data.IntMap as IM
 import qualified Data.Set as S
 import Data.Generics.Uniplate.Operations
 import Data.Maybe
-import GHC.Generics
 
-import Debug.Trace
 
 -- Eliminate dead code from a program, based on the fortran-src
 -- live-variable analysis
@@ -45,7 +45,7 @@ deadCode :: Bool -> (Filename, F.ProgramFile A)
                  -> (Report, (Filename, F.ProgramFile A))
 deadCode flag (fname, pf) = (report, (fname, fmap FA.prevAnnotation pf'))
   where
-    (report, pf'') = deadCode' flag lva pf'
+    (report, _) = deadCode' flag lva pf'
     -- initialise analysis
     pf'   = FAB.analyseBBlocks . FAR.analyseRenames . FA.initAnalysis $ pf
     -- get map of program unit ==> basic block graph
@@ -71,7 +71,7 @@ deadCode' flag lva pf =
 perStmt :: Bool
         -> FAD.InOutMap (S.Set F.Name)
         -> F.Statement (FA.Analysis A) -> (Report, F.Statement (FA.Analysis A))
-perStmt flag lva x@(F.StExpressionAssign a sp@(FU.SrcSpan s1 s2) e1 e2)
+perStmt flag lva x@(F.StExpressionAssign a sp@(FU.SrcSpan s1 _) e1 e2)
      | pRefactored (FA.prevAnnotation a) == flag =
   fromMaybe ("", x) $
     do label <- FA.insLabel a

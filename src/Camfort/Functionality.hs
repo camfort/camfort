@@ -21,16 +21,34 @@
 {-# LANGUAGE DeriveDataTypeable #-}
 {-# LANGUAGE TypeSynonymInstances #-}
 {-# LANGUAGE FlexibleInstances #-}
+{-# LANGUAGE ScopedTypeVariables #-}
 
-module Camfort.Functionality where
+module Camfort.Functionality (
+  -- * Datatypes
+    AnnotationType(..)
+  -- * Commands
+  , ast
+  , countVarDecls
+  -- ** Stencil Analysis
+  , stencilsCheck
+  , stencilsInfer
+  , stencilsSynth
+  -- ** Unit Analysis
+  , unitsCriticals
+  , unitsCheck
+  , unitsInfer
+  , unitsSynth
+  , unitsCompile
+  -- ** Refactorings
+  , common
+  , dead
+  , equivalences
+  , datatypes) where
 
 import System.FilePath
 import Control.Monad
 
-import Data.Generics.Uniplate.Operations
-import Data.Data
 import Data.Binary
-import Data.Text (pack, unpack, split)
 
 import Camfort.Analysis.Simple
 import Camfort.Transformation.DataTypeIntroduction
@@ -44,165 +62,139 @@ import Camfort.Specification.Units.Monad
 import Camfort.Helpers
 import Camfort.Input
 
-import qualified Language.Fortran.Parser.Any as FP
 import Language.Fortran.Util.ModFile
 import qualified Camfort.Specification.Stencils as Stencils
 import qualified Data.Map.Strict as M
 
--- CamFort optional flags
-data Flag = Version
-         | Input String
-         | Output String
-         | Excludes String
-         | IncludeDir String
-         | Literals LiteralsOpt
-         | StencilInferMode Stencils.InferMode
-         | Doxygen
-         | Ford
-         | FVersion String
-         | RefactorInPlace
-         | Debug deriving (Data, Show, Eq)
 
-type Options = [Flag]
+data AnnotationType = ATDefault | Doxygen | Ford
 
--- Extract excludes information from options
-instance Default String where
-    defaultValue = ""
-getExcludes :: Options -> String
-getExcludes opts = head ([ e | Excludes e <- universeBi opts ] ++ [""])
 
--- Separates the comma-separated filenames
-getExcludedFiles :: Options -> [String]
-getExcludedFiles = map unpack . split (==',') . pack . getExcludes
+-- | Retrieve the marker character compatible with the given
+-- type of annotation.
+markerChar :: AnnotationType -> Char
+markerChar Doxygen   = '<'
+markerChar Ford      = '!'
+markerChar ATDefault = '='
+
 
 -- * Wrappers on all of the features
-ast d excludes _ _ = do
+ast d excludes = do
     xs <- readParseSrcDir d excludes
     print (map (\(_, _, p) -> p) xs)
 
-countVarDecls inSrc excludes _ _ = do
+countVarDecls inSrc excludes = do
     putStrLn $ "Counting variable declarations in '" ++ inSrc ++ "'"
-    doAnalysisSummary countVariableDeclarations inSrc excludes Nothing
+    doAnalysisSummary countVariableDeclarations inSrc excludes
 
-dead inSrc excludes outSrc _ = do
+dead inSrc excludes outSrc = do
     putStrLn $ "Eliminating dead code in '" ++ inSrc ++ "'"
     report <- doRefactor (mapM (deadCode False)) inSrc excludes outSrc
     putStrLn report
 
-common inSrc excludes outSrc _ = do
+common inSrc excludes outSrc = do
     putStrLn $ "Refactoring common blocks in '" ++ inSrc ++ "'"
     isDir <- isDirectory inSrc
     let rfun = commonElimToModules (takeDirectory outSrc ++ "/")
     report <- doRefactorAndCreate rfun inSrc excludes outSrc
     putStrLn report
 
-equivalences inSrc excludes outSrc _ = do
+equivalences inSrc excludes outSrc = do
     putStrLn $ "Refactoring equivalences blocks in '" ++ inSrc ++ "'"
     report <- doRefactor (mapM refactorEquivalences) inSrc excludes outSrc
     putStrLn report
 
-datatypes inSrc excludes outSrc _ = do
+datatypes inSrc excludes outSrc = do
     putStrLn $ "Introducing derived data types in '" ++ inSrc ++ "'"
     report <- doRefactor dataTypeIntro inSrc excludes outSrc
     putStrLn report
 
 {- Units feature -}
-optsToUnitOpts :: [Flag] -> IO UnitOpts
-optsToUnitOpts = foldM (\ o f -> do
-  case f of
-    Literals m   -> return $ o { uoLiterals    = m }
-    Debug        -> return $ o { uoDebug       = True }
-    IncludeDir d -> do
-      -- Figure out the camfort mod files and parse them.
-      modFileNames <- filter isModFile `fmap` rGetDirContents' d
-      assocList <- forM modFileNames $ \ modFileName -> do
-        eResult <- decodeFileOrFail (d ++ "/" ++ modFileName) -- FIXME, directory manipulation
-        case eResult of
-          Left (offset, msg) -> do
-            putStrLn $ modFileName ++ ": Error at offset " ++ show offset ++ ": " ++ msg
-            return (modFileName, emptyModFile)
-          Right modFile -> do
-            putStrLn $ modFileName ++ ": successfully parsed precompiled file."
-            return (modFileName, modFile)
-      return $ o { uoModFiles = M.fromList assocList `M.union` uoModFiles o }
-    _            -> return o
-    ) unitOpts0
+optsToUnitOpts :: LiteralsOpt -> Bool -> Maybe String -> IO UnitOpts
+optsToUnitOpts m debug = maybe (pure o1) (\d -> do
+  -- Figure out the camfort mod files and parse them.
+  modFileNames <- filter isModFile `fmap` rGetDirContents' d
+  assocList <- forM modFileNames $ \ modFileName -> do
+    eResult <- decodeFileOrFail (d ++ "/" ++ modFileName) -- FIXME, directory manipulation
+    case eResult of
+      Left (offset, msg) -> do
+        putStrLn $ modFileName ++ ": Error at offset " ++ show offset ++ ": " ++ msg
+        return (modFileName, emptyModFile)
+      Right modFile -> do
+        putStrLn $ modFileName ++ ": successfully parsed precompiled file."
+        return (modFileName, modFile)
+  return $ o1 { uoModFiles = M.fromList assocList })
+  -- return $ o1 { uoModFiles = M.fromList assocList `M.union` uoModFiles o })
+  where o1 = unitOpts0 { uoLiterals = m
+                       , uoDebug = debug
+                       , uoModFiles = M.empty }
 
-getModFiles :: [Flag] -> IO ModFiles
-getModFiles = foldM (\ modFiles f -> do
-  case f of
-    IncludeDir d -> do
-      -- Figure out the camfort mod files and parse them.
-      modFileNames <- filter isModFile `fmap` rGetDirContents' d
-      addedModFiles <- forM modFileNames $ \ modFileName -> do
-        eResult <- decodeFileOrFail (d ++ "/" ++ modFileName) -- FIXME, directory manipulation
-        case eResult of
-          Left (offset, msg) -> do
-            putStrLn $ modFileName ++ ": Error at offset " ++ show offset ++ ": " ++ msg
-            return emptyModFile
-          Right modFile -> do
-            putStrLn $ modFileName ++ ": successfully parsed precompiled file."
-            return modFile
-      return $ addedModFiles ++ modFiles
-    _            -> return modFiles
-    ) emptyModFiles
+
+getModFiles :: Maybe String -> IO ModFiles
+getModFiles = maybe (pure emptyModFiles) (\d -> do
+  -- Figure out the camfort mod files and parse them.
+  modFileNames <- filter isModFile `fmap` rGetDirContents' d
+  addedModFiles <- forM modFileNames $ \ modFileName -> do
+    eResult <- decodeFileOrFail (d ++ "/" ++ modFileName) -- FIXME, directory manipulation
+    case eResult of
+      Left (offset, msg) -> do
+        putStrLn $ modFileName ++ ": Error at offset " ++ show offset ++ ": " ++ msg
+        return emptyModFile
+      Right modFile -> do
+        putStrLn $ modFileName ++ ": successfully parsed precompiled file."
+        return modFile
+  return addedModFiles)
 
 isModFile = (== modFileSuffix) . fileExt
 
-unitsCheck inSrc excludes _ opt = do
+unitsCheck inSrc excludes m debug incDir = do
     putStrLn $ "Checking units for '" ++ inSrc ++ "'"
-    uo <- optsToUnitOpts opt
+    uo <- optsToUnitOpts m debug incDir
     let rfun = concatMap (LU.checkUnits uo)
-    doAnalysisReportWithModFiles rfun putStrLn inSrc excludes =<< getModFiles opt
+    doAnalysisReportWithModFiles rfun putStrLn inSrc excludes =<< getModFiles incDir
 
-unitsInfer inSrc excludes _ opt = do
+unitsInfer inSrc excludes m debug incDir = do
     putStrLn $ "Inferring units for '" ++ inSrc ++ "'"
-    uo <- optsToUnitOpts opt
+    uo <- optsToUnitOpts m debug incDir
     let rfun x = concat <$> mapM (LU.inferUnits uo) x
-    doAnalysisReportWithModFilesIO rfun putStrLn inSrc excludes =<< getModFiles opt
+    doAnalysisReportWithModFilesIO rfun putStrLn inSrc excludes =<< getModFiles incDir
 
-unitsCompile inSrc excludes outSrc opt = do
+unitsCompile inSrc excludes m debug incDir outSrc = do
     putStrLn $ "Compiling units for '" ++ inSrc ++ "'"
-    uo <- optsToUnitOpts opt
+    uo <- optsToUnitOpts m debug incDir
     let rfun = LU.compileUnits uo
-    putStrLn =<< doCreateBinary rfun inSrc excludes outSrc =<< getModFiles opt
+    putStrLn =<< doCreateBinary rfun inSrc excludes outSrc =<< getModFiles incDir
 
-unitsSynth inSrc excludes outSrc opt = do
+
+unitsSynth inSrc excludes m debug incDir outSrc annType = do
     putStrLn $ "Synthesising units for '" ++ inSrc ++ "'"
-    let marker
-         | Doxygen `elem` opt = '<'
-         | Ford `elem` opt = '!'
-         | otherwise = '='
-    uo <- optsToUnitOpts opt
+    let marker = markerChar annType
+    uo <- optsToUnitOpts m debug incDir
     let rfun =
           mapM (LU.synthesiseUnits uo marker)
-    report <- doRefactorWithModFiles rfun inSrc excludes outSrc =<< getModFiles opt
+    report <- doRefactorWithModFiles rfun inSrc excludes outSrc =<< getModFiles incDir
     putStrLn report
 
-unitsCriticals inSrc excludes outSrc opt = do
+unitsCriticals inSrc excludes m debug incDir = do
     putStrLn $ "Suggesting variables to annotate with unit specifications in '"
              ++ inSrc ++ "'"
-    uo <- optsToUnitOpts opt
+    uo <- optsToUnitOpts m debug incDir
     let rfun = mapM (LU.inferCriticalVariables uo)
-    doAnalysisReportWithModFiles rfun (putStrLn . fst) inSrc excludes =<< getModFiles opt
+    doAnalysisReportWithModFiles rfun (putStrLn . fst) inSrc excludes =<< getModFiles incDir
 
 {- Stencils feature -}
-stencilsCheck inSrc excludes _ _ = do
+stencilsCheck inSrc excludes = do
    putStrLn $ "Checking stencil specs for '" ++ inSrc ++ "'"
    let rfun = \f p -> (Stencils.check f p, p)
-   doAnalysisSummary rfun inSrc excludes Nothing
+   doAnalysisSummary rfun inSrc excludes
 
-stencilsInfer inSrc excludes outSrc opt = do
+stencilsInfer inSrc excludes inferMode = do
    putStrLn $ "Inferring stencil specs for '" ++ inSrc ++ "'"
-   let rfun = Stencils.infer (getOption opt) '='
-   doAnalysisSummary rfun inSrc excludes (Just outSrc)
+   let rfun = Stencils.infer inferMode '='
+   doAnalysisSummary rfun inSrc excludes
 
-stencilsSynth inSrc excludes outSrc opt = do
+stencilsSynth inSrc excludes inferMode annType outSrc = do
    putStrLn $ "Synthesising stencil specs for '" ++ inSrc ++ "'"
-   let marker
-        | Doxygen `elem` opt = '<'
-        | Ford `elem` opt = '!'
-        | otherwise = '='
-   let rfun = Stencils.synth (getOption opt) marker
+   let rfun = Stencils.synth inferMode (markerChar annType)
    report <- doRefactor rfun inSrc excludes outSrc
    putStrLn report

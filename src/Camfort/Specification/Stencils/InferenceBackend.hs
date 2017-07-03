@@ -18,7 +18,13 @@
 {-# LANGUAGE GADTs #-}
 {-# LANGUAGE LambdaCase #-}
 
-module Camfort.Specification.Stencils.InferenceBackend where
+module Camfort.Specification.Stencils.InferenceBackend
+  ( coalesce
+  , containedWithin
+  , inferFromIndicesWithoutLinearity
+  , inferMinimalVectorRegions
+  , spansToApproxSpatial
+  ) where
 
 import Data.List
 import Data.Maybe
@@ -26,7 +32,6 @@ import Algebra.Lattice (joins1)
 
 import Camfort.Specification.Stencils.Model
 import Camfort.Specification.Stencils.DenotationalSemantics
-import Camfort.Helpers
 import qualified Camfort.Helpers.Vec as V
 
 import Camfort.Specification.Stencils.Syntax
@@ -75,15 +80,6 @@ mkTrivialSpan (V.Cons x xs) =
     else (V.Cons x ys, V.Cons x zs)
   where
     (ys, zs) = mkTrivialSpan xs
-
--- TODO: This seems completely redundant. Perhaps DELETE.
-inferFromIndices :: V.VecList Int -> Specification
-inferFromIndices (V.VL ixs) = Specification $
-    case fromBool mult of
-      Linear -> Once $ inferCore ixs'
-      NonLinear -> Mult $ inferCore ixs'
-    where
-      (ixs', mult) = hasDuplicates ixs
 
 -- Same as inferFromIndices but don't do any linearity checking
 -- (defaults to NonLinear). This is used when the front-end does

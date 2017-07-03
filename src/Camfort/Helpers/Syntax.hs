@@ -25,29 +25,32 @@ This module provides a number of helper functions for working with Fortran
 syntax that are useful between different analyses and transformations.
 
 -}
-module Camfort.Helpers.Syntax where
+module Camfort.Helpers.Syntax
+  (
+  -- * Variable renaming helpers
+    caml
+  -- * Comparison and ordering
+  , AnnotationFree(..)
+  , af
+  -- * Accessor functions for extracting various pieces of information
+  --   out of syntax trees
+  , extractVariable
+  -- * SrcSpan Helpers
+  , afterAligned
+  , deleteLine
+  , dropLine
+  , linesCovered
+  , toCol0
+  ) where
 
 -- Standard imports
 import Data.Char
-import Data.List
-import Data.Monoid
-import Control.Monad.State.Lazy
-import Debug.Trace
 
 -- Data-type generics imports
-import Data.Data
 import Data.Generics.Uniplate.Data
-import Data.Generics.Uniplate.Operations
-import Data.Generics.Zipper
-import Data.Typeable
-
--- CamFort specific functionality
-import Camfort.Analysis.Annotations
 
 import qualified Language.Fortran.AST as F
 import qualified Language.Fortran.Util.Position as FU
-import Language.Fortran.Util.FirstParameter
-import Language.Fortran.Util.SecondParameter
 
 -- * Comparison and ordering
 
@@ -58,12 +61,9 @@ data AnnotationFree t = AnnotationFree { annotationBound :: t } deriving Show
 
 {-| short-hand constructor for 'AnnotationFree' -}
 af = AnnotationFree
-{-| short-hand deconstructor for 'AnnotationFree' -}
-unaf = annotationBound
 
 -- variable renaming helpers
 caml (x:xs) = toUpper x : xs
-lower = map toLower
 
 -- Here begins varioous 'Eq' instances for instantiations of 'AnnotationFree'
 
@@ -110,18 +110,18 @@ instance Monoid Int where
 -- SrcSpan helpers
 
 dropLine :: FU.SrcSpan -> FU.SrcSpan
-dropLine (FU.SrcSpan s1 (FU.Position o c l)) =
+dropLine (FU.SrcSpan s1 (FU.Position o _ l)) =
     FU.SrcSpan s1 (FU.Position o 1 (l+1))
 
 deleteLine :: FU.SrcSpan -> FU.SrcSpan
-deleteLine (FU.SrcSpan (FU.Position ol cl ll) (FU.Position ou cu lu)) =
+deleteLine (FU.SrcSpan (FU.Position ol cl ll) (FU.Position ou _ lu)) =
     FU.SrcSpan (FU.Position ol (cl-1) ll) (FU.Position ou 1 (lu+1))
 
 linesCovered :: FU.Position -> FU.Position -> Int
 linesCovered (FU.Position _ _ l1) (FU.Position _ _ l2) = l2 - l1 + 1
 
-toCol0 (FU.Position o c l) = FU.Position o 1 l
+toCol0 (FU.Position o _ l) = FU.Position o 1 l
 
 afterAligned :: FU.SrcSpan -> FU.Position
-afterAligned (FU.SrcSpan (FU.Position o cA lA) (FU.Position _ cB lB)) =
+afterAligned (FU.SrcSpan (FU.Position o cA _) (FU.Position _ _ lB)) =
     FU.Position o cA (lB+1)

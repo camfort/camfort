@@ -8,7 +8,6 @@
 
 module Camfort.Specification.StencilsSpec (spec) where
 
-import GHC.TypeLits
 
 import Control.Monad.Writer.Strict hiding (Sum, Product)
 import Data.List
@@ -20,7 +19,7 @@ import Camfort.Specification.Stencils.Synthesis
 import Camfort.Specification.Stencils.Model
 import Camfort.Specification.Stencils.InferenceBackend
 import Camfort.Specification.Stencils.InferenceFrontend
-import Camfort.Specification.Stencils.Syntax hiding (Spec)
+import Camfort.Specification.Stencils.Syntax
 import qualified Language.Fortran.AST as F
 import Language.Fortran.ParserMonad
 import Camfort.Reprint
@@ -108,34 +107,34 @@ spec =
 
     describe "Example stencil inferences" $ do
       it "five point stencil 2D" $
-        inferFromIndices (VL fivepoint)
+        inferFromIndicesWithoutLinearity (VL fivepoint)
         `shouldBe`
-         (Specification $ Once $ Exact $ Spatial
+         (Specification $ Mult $ Exact $ Spatial
                      (Sum [ Product [ Centered 1 1 True, Centered 0 2 True]
                           , Product [ Centered 0 1 True, Centered 1 2 True]
                           ]))
 
       it "seven point stencil 2D" $
-        inferFromIndices (VL sevenpoint)
+        inferFromIndicesWithoutLinearity (VL sevenpoint)
         `shouldBe`
-          (Specification $ Once $ Exact $ Spatial
+          (Specification $ Mult $ Exact $ Spatial
                        (Sum [ Product [ Centered 1 1 True, Centered 0 2 True, Centered 0 3 True]
                             , Product [ Centered 0 1 True, Centered 1 2 True, Centered 0 3 True]
                             , Product [ Centered 0 1 True, Centered 0 2 True, Centered 1 3 True]
                             ]))
 
       it "five point stencil 2D with blip" $
-         inferFromIndices (VL fivepointErr)
+         inferFromIndicesWithoutLinearity (VL fivepointErr)
          `shouldBe`
-          (Specification $ Once $ Exact $ Spatial
+          (Specification $ Mult $ Exact $ Spatial
                          (Sum [ Product [ Centered 1 1 True, Centered 0 2 True],
                                 Product [ Centered 0 1 True, Centered 1 2 True],
                                 Product [ Forward 1 1 True, Forward 1 2 True] ]))
 
       it "centered forward" $
-         inferFromIndices (VL centeredFwd)
+         inferFromIndicesWithoutLinearity (VL centeredFwd)
          `shouldBe`
-          (Specification $ Once $ Exact $ Spatial
+          (Specification $ Mult $ Exact $ Spatial
             (Sum [ Product [ Forward 1 1 True
                            , Centered 1 2 True] ]))
 
@@ -228,19 +227,12 @@ spec =
     -- Some integration tests
     -------------------------
 
-    let file = "tests"
-           </> "fixtures"
-           </> "Specification"
-           </> "Stencils"
-           </> "example2.f"
-    let fileSynthExpected = "tests"
-           </> "fixtures"
-           </> "Specification"
-           </> "Stencils"
-           </> "example2.expected.f"
-    program <- runIO $ readParseSrcDir file []
-    programSrc       <- runIO $ readFile file
-    synthExpectedSrc <- runIO $ readFile fileSynthExpected
+    let fixturesDir = "tests"
+                      </> "fixtures"
+                      </> "Specification"
+                      </> "Stencils"
+        example2In = fixturesDir </> "example2.f"
+    program <- runIO $ readParseSrcDir example2In []
 
     describe "integration test on inference for example2.f" $ do
       it "stencil infer" $
@@ -260,26 +252,8 @@ spec =
            "\ntests/fixtures/Specification/Stencils/example2.f\n\
             \(23:1)-(23:82)    Correct.\n(31:1)-(31:56)    Correct."
 
-      it "stencil synth" $
-         (B.unpack . runIdentity
-           $ reprint (refactoring Fortran77)
-              (snd . head . snd $ synth AssignMode '=' (map (\(f, _, p) -> (f, p)) program))
-              (B.pack programSrc))
-          `shouldBe` synthExpectedSrc
-
-    let file = "tests"
-           </> "fixtures"
-           </> "Specification"
-           </> "Stencils"
-           </> "example3.f"
-    program <- runIO $ readParseSrcDir file []
-
-    let file = "tests"
-           </> "fixtures"
-           </> "Specification"
-           </> "Stencils"
-           </> "example4.f"
-    program <- runIO $ readParseSrcDir file []
+    let example4In = fixturesDir </> "example4.f"
+    program <- runIO $ readParseSrcDir example4In []
 
     describe "integration test on inference for example4.f" $
       it "stencil infer" $
@@ -287,6 +261,31 @@ spec =
            `shouldBe`
             "\ntests/fixtures/Specification/Stencils/example4.f\n\
              \(6:8)-(6:33)    stencil readOnce, (pointed(dim=1)) :: x"
+
+    let example5oldStyleFile     = fixturesDir </> "example5.f"
+        example5oldStyleExpected = fixturesDir </> "example5.expected.f"
+        example5newStyleFile     = fixturesDir </> "example5.f90"
+        example5newStyleExpected = fixturesDir </> "example5.expected.f90"
+    program5old <- runIO $ readParseSrcDir example5oldStyleFile []
+    program5oldSrc       <- runIO $ readFile example5oldStyleFile
+    synthExpectedSrc5Old <- runIO $ readFile example5oldStyleExpected
+    program5new <- runIO $ readParseSrcDir example5newStyleFile []
+    program5newSrc       <- runIO $ readFile example5newStyleFile
+    synthExpectedSrc5New <- runIO $ readFile example5newStyleExpected
+    describe "integration test on inference for example5" $ do
+      describe "stencil synth" $ do
+        it "inserts correct comment types for old fortran" $
+          (B.unpack . runIdentity
+            $ reprint (refactoring Fortran77)
+            (snd . head . snd $ synth AssignMode '=' (map (\(f, _, p) -> (f, p)) program5old))
+            (B.pack program5oldSrc))
+          `shouldBe` synthExpectedSrc5Old
+        it "inserts correct comment types for modern fortran" $
+          (B.unpack . runIdentity
+            $ reprint (refactoring Fortran90)
+            (snd . head . snd $ synth AssignMode '=' (map (\(f, _, p) -> (f, p)) program5new))
+            (B.pack program5newSrc))
+          `shouldBe` synthExpectedSrc5New
 
 -- Indices for the 2D five point stencil (deliberately in an odd order)
 fivepoint = [ Cons (-1) (Cons 0 Nil), Cons 0 (Cons (-1) Nil)

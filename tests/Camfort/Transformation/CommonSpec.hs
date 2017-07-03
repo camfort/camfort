@@ -5,7 +5,6 @@ import System.Directory
 
 import Test.Hspec
 
-import Camfort.Helpers
 import Camfort.Functionality
 
 samplesBase :: FilePath
@@ -30,7 +29,7 @@ spec =
       expectedMod <- runIO $ readSample "cmn.expected.f90"
 
       let outFile = samplesBase </> "common.f90.out"
-      runIO $ common (samplesBase </> "common.f90") [] outFile ()
+      runIO $ common (samplesBase </> "common.f90") [] outFile
 
       actual    <- runIO $ readSample "common.f90.out"
       actualMod <- runIO $ readSample "cmn.f90"
