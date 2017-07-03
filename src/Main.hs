@@ -276,28 +276,28 @@ analysesParser = commandsParser "Analysis Commands" analysesCommands
           [],
           cmdAST,           "print the raw AST -- for development purposes")
       , ("stencils-check",
-          ["stencil-check"],
+          ["stencil-check", "check-stencils", "check-stencil"],
           cmdStencilsCheck, "stencil spec checking")
       , ("stencils-infer",
-          ["stencil-infer"],
+          ["stencil-infer", "infer-stencils", "infer-stencil"],
           cmdStencilsInfer, "stencil spec inference")
       , ("stencils-synth",
-          ["stencil-synth"],
+          ["stencil-synth", "synth-stencils", "synth-stencil"],
           cmdStencilsSynth, "stencil spec synthesis")
       , ("units-suggest",
-          ["unit-suggest"],
+          ["unit-suggest", "suggest-units", "suggest-unit"],
           cmdUnitsSuggest,  "suggest variables to annotate with units-of-measure for maximum coverage")
       , ("units-check",
-          ["unit-check"],
+          ["unit-check", "check-units", "check-unit"],
           cmdUnitsCheck,    "unit-of-measure checking")
       , ("units-infer",
-          ["unit-infer"],
+          ["unit-infer", "infer-units", "infer-unit"],
           cmdUnitsInfer,    "unit-of-measure inference")
       , ("units-synth",
-          ["unit-synth"],
+          ["unit-synth", "synth-units", "synth-unit"],
           cmdUnitsSynth,    "unit-of-measure synthesise specs")
       , ("units-compile",
-          ["unit-compile"],
+          ["unit-compile", "compile-units", "compile-unit"],
           cmdUnitsCompile,  "units-of-measure compile module information") ]
 
 
