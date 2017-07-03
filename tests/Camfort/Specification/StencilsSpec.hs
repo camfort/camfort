@@ -292,19 +292,19 @@ spec =
 \Please resolve these errors, and then run synthesis again."
 
     sampleDirConts <- runIO $ listDirectory samplesDir
-    let isExpectedSrcFile = (==".expected") . takeExtension . dropExtension
-        hasExpectedSrcFile f = getExpectedSrcFileName f `elem` sampleDirConts
-        sampleFiles = filter (\f -> (not . isExpectedSrcFile $ f) && hasExpectedSrcFile f) sampleDirConts
+    expectedDirConts <- runIO $ listDirectory (samplesDir </> "expected")
+    let hasExpectedSrcFile f = f `elem` expectedDirConts
+        sampleFiles          = filter hasExpectedSrcFile sampleDirConts
 
     describe "sample file tests" $
         mapM_ (\file -> assertStencilInferenceSample
                 file ("produces correct output file for " ++ file))
         sampleFiles
 
-  where assertStencilInferenceDir dir fileName testComment =
+  where assertStencilInferenceDir expected dir fileName testComment =
           let file         = dir </> fileName
               version      = deduceVersion file
-              expectedFile = getExpectedSrcFileName file
+              expectedFile = expected dir fileName
           in do
             program          <- runIO $ readParseSrcDir file []
             programSrc       <- runIO $ readFile file
@@ -315,8 +315,10 @@ spec =
                (snd . head . snd $ synth AssignMode '=' (map (\(f, _, p) -> (f, p)) program))
                (B.pack programSrc))
                 `shouldBe` synthExpectedSrc
-        assertStencilInferenceOnFile = assertStencilInferenceDir fixturesDir
-        assertStencilInferenceSample = assertStencilInferenceDir samplesDir
+        assertStencilInferenceOnFile = assertStencilInferenceDir
+          (\d f -> d </> getExpectedSrcFileName f) fixturesDir
+        assertStencilInferenceSample = assertStencilInferenceDir
+          (\d f -> d </> "expected" </> f) samplesDir
         assertStencilSynthResponse fileName testComment expectedResponse =
             let file = fixturesDir </> fileName
             in do
