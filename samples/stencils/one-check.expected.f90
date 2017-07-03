@@ -33,15 +33,18 @@ program one
 
         != stencil readOnce, pointed(dim=1) * r1 * r2 + r1 * pointed(dim=2) :: a
 
+        != stencil readOnce, (pointed(dim=1))*(centered(depth=1, dim=2)) + (centered(depth=1, dim=1))*(pointed(dim=2)) :: a
         b(i,j) = (a(i-1,j) + a(i,j) + a(i+1,j) + &
                   a(i,j-1) + a(i,j+1)) / 5.0
      end do
      ! top and bottom (inner) edges
 
      != stencil readOnce, r1 :: a
+     != stencil readOnce, (centered(depth=1, dim=1)) :: a
      b(i, 0) = (a(i, 0) + a(i-1,0) + a(i+1,0) + a(i,1))/4.0
 
      != stencil readOnce, r1 :: a
+     != stencil readOnce, (centered(depth=1, dim=1)) :: a
      b(i, jmax) = (a(i, jmax) + a(i-1, jmax) + a(i+1, jmax) + a(i,jmax-1))/4.0
   end do
 
@@ -50,6 +53,7 @@ program one
      b(0, j) = (a(0, 0) + a(0,j-1) + a(0,j+1) + a(1,0))/4.0
      != stencil r2 :: a
      e = a(imax, j) + a(imax, j-1)
+     != stencil readOnce, (centered(depth=1, dim=2)) :: a
      b(imax, j) = (e + a(imax, j+1) + a(imax-1,j))/4.0
   end do
 
