@@ -1,14 +1,20 @@
-      program approx
-      implicit none
+! Example of an approximate stencil
+!
+! In situations where the stencil language cannot exactly
+! describe the pattern an approximate stencil can be given
+! as an upper and lower bound using the atMost and atLeast
+! modifiers
+program approx
+implicit none
 
-      integer i, imax
-      parameter (imax = 3)
-      real a(0:imax)
+integer i, n
+parameter (n = 3)
+real a(0:n)
+      
+do i = 0, n
+ != stencil readOnce, atLeast, (pointed(dim=1)) :: a
+ != stencil readOnce, atMost, (forward(depth=4, dim=1)) :: a
+ a(i) = a(i) + a(i+4)
+end do
 
-      do i = 0, imax
-            != stencil readOnce, atLeast, (pointed(dim=1)) :: a
-            != stencil readOnce, atMost, (forward(depth=2, dim=1)) :: a
-            a(i) = a(i) + a(i+2)
-      end do
-
-      end program
+end program
