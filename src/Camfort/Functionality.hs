@@ -55,7 +55,6 @@ import Camfort.Transformation.DeadCode
 import Camfort.Transformation.CommonBlockElim
 import Camfort.Transformation.EquivalenceElim
 
-import Camfort.Specification.Stencils.InferenceFrontend (InferMode(AssignMode))
 import qualified Camfort.Specification.Units as LU
 import Camfort.Specification.Units.Monad
 
@@ -183,13 +182,13 @@ stencilsCheck inSrc excludes = do
    let rfun = \f p -> (Stencils.check f p, p)
    doAnalysisSummary rfun inSrc excludes
 
-stencilsInfer inSrc excludes = do
+stencilsInfer inSrc excludes inferMode = do
    putStrLn $ "Inferring stencil specs for '" ++ inSrc ++ "'"
-   let rfun = Stencils.infer AssignMode '='
+   let rfun = Stencils.infer inferMode '='
    doAnalysisSummary rfun inSrc excludes
 
-stencilsSynth inSrc excludes annType outSrc = do
+stencilsSynth inSrc excludes inferMode annType outSrc = do
    putStrLn $ "Synthesising stencil specs for '" ++ inSrc ++ "'"
-   let rfun = Stencils.synth AssignMode (markerChar annType)
+   let rfun = Stencils.synth inferMode (markerChar annType)
    report <- doRefactor rfun inSrc excludes outSrc
    putStrLn report
