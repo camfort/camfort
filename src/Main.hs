@@ -19,7 +19,7 @@ module Main (main) where
 
 import Camfort.Input (defaultValue)
 import Camfort.Functionality
-import Camfort.Specification.Stencils (InferMode)
+import Camfort.Specification.Stencils.InferenceFrontend (InferMode(..))
 import Camfort.Specification.Units.Monad (LiteralsOpt(LitMixed))
 
 import Data.Maybe (fromMaybe)
@@ -150,21 +150,12 @@ writeOptions = (fmap WriteFile . fileArgument $
 
 stencilsOptions :: Parser StencilsOptions
 stencilsOptions = fmap StencilsOptions
-  readOptions <*> inferModeOption
+  readOptions <*> evalOption
   where
-    inferModeOption = fmap (fromMaybe defaultValue)
-                      . optional . option readInferOption $
-      (    metavar "INFER-MODE"
-        <> completeWith ["Assign", "Do", "Both"]
-        <> long "stencil-inference-mode"
-        <> short 'm'
-        <> help "stencil specification inference mode. ID = Do, Assign, or Both")
-    readInferOption = fmap parseInfer str
-    -- TODO: Make this more robust
-    -- This can encounter a read error, we should
-    -- ensure that we can't reach this point
-    -- with invalid mode.
-    parseInfer = read . (++"Mode")
+    evalOption = flag AssignMode EvalMode
+      (    long "eval"
+        <> help "provide additional evaluation reporting"
+        <> internal)
 
 
 stencilsSynthOptions :: Parser StencilsSynthOptions
