@@ -16,7 +16,7 @@ import Camfort.Helpers.Vec
 import Camfort.Input
 import Camfort.Specification.Stencils
 import Camfort.Specification.Stencils.Generate
-  (Neighbour(..), indicesToSpec, ixToNeighbour')
+  (Neighbour(..), indicesToSpec, convIxToNeighbour)
 import Camfort.Specification.Stencils.Synthesis
 import Camfort.Specification.Stencils.Model
 import Camfort.Specification.Stencils.InferenceBackend
@@ -486,7 +486,7 @@ variations3D =
 
 prop_extract_synth_inverse :: F.Name -> Int -> Bool
 prop_extract_synth_inverse v o =
-     ixToNeighbour' [v] (offsetToIx v o) == Neighbour v o
+     convIxToNeighbour [v] (offsetToIx v o) == Neighbour v o
 
 -- Local variables:
 -- mode: haskell

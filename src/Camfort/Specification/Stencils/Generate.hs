@@ -26,7 +26,7 @@ module Camfort.Specification.Stencils.Generate
   , isArraySubscript
   , neighbourIndex
   , isVariableExpr
-  , ixToNeighbour'
+  , convIxToNeighbour
   , indicesToRelativisedOffsets
   , indicesToSpec
   ) where
@@ -70,34 +70,34 @@ import Camfort.Specification.Stencils.CheckBackend
 import Camfort.Specification.Stencils.InferenceBackend
 type EvalLog = [(String, Variable)]
 
--- Representation for indices as either:
---   * neighbour indices
---   * constant
---   * non neighbour index
+{-| Representation for indices as either:
+     * neighbour indices
+     * constant
+     * non neighbour index -}
 data Neighbour = Neighbour Variable Int
                | Constant (F.Value ())
                | NonNeighbour deriving (Eq, Show)
 
--- Match expressions which are array subscripts, returning Just of their
--- index expressions, else Nothing
-isArraySubscript :: F.Expression (FA.Analysis A)
-                 -> Maybe [F.Index (FA.Analysis A)]
+
+{-| Match expressions which are array subscripts, returning Just of their
+    index expressions, else Nothing -}
+isArraySubscript :: F.Expression (FA.Analysis A) -> Maybe [F.Index (FA.Analysis A)]
 isArraySubscript (F.ExpSubscript _ _ (F.ExpValue _ _ (F.ValVariable _)) subs) =
    Just $ F.aStrip subs
 isArraySubscript (F.ExpDataRef _ _ e e') =
    isArraySubscript e <> isArraySubscript e'
 isArraySubscript _ = Nothing
 
--- Given a list of induction variables and a list of indices
--- map them to a list of constant or neighbourhood indices
--- if any are non neighbourhood then return Nothi ng
-neighbourIndex :: FAD.InductionVarMapByASTBlock
-               -> [F.Index (FA.Analysis Annotation)] -> Maybe [Neighbour]
+{-| Given an induction-variable-map, convert a list of indices to
+    Maybe a list of constant or neighbourhood indices.
+    If any are non neighbourhood then return Nothing -}
+neighbourIndex :: FAD.InductionVarMapByASTBlock -> [F.Index (FA.Analysis A)] -> Maybe [Neighbour]
 neighbourIndex ivs ixs =
   if NonNeighbour `notElem` neighbours
   then Just neighbours
   else Nothing
-    where neighbours = map (ixToNeighbour ivs) ixs
+    where
+      neighbours = map (\ix -> convIxToNeighbour (extractRelevantIVS ivs ix) ix) ixs
 
 genSpecifications ::
      FAD.FlowsGraph A
@@ -141,7 +141,7 @@ genSpecifications flowsGraph ivs lhs blocks = do
 genSubscripts ::
      FAD.FlowsGraph A
   -> [F.Block (FA.Analysis A)]
-  -> (M.Map Variable [Indices], [Int])
+  -> (M.Map Variable [[F.Index (FA.Analysis A)]], [Int])
 genSubscripts flowsGraph blocks =
     (subscripts, visitedNodes)
   where
@@ -155,7 +155,7 @@ genSubscripts flowsGraph blocks =
         Bool
      -> FAD.FlowsGraph A
      -> F.Block (FA.Analysis A)
-     -> State [Int] (M.Map Variable [Indices])
+     -> State [Int] (M.Map Variable [[F.Index (FA.Analysis A)]])
 
     genSubscripts' False _ (F.BlStatement _ _ _ (F.StExpressionAssign _ _ e _))
        | isJust $ isArraySubscript e
@@ -179,39 +179,36 @@ genSubscripts flowsGraph blocks =
 
          Nothing -> error $ "Missing a label for: " ++ show block
 
-type Indices = [F.Index (FA.Analysis A)]
-
--- Given a list of induction variables and an index, compute
--- its Neighbour representation
--- e.g., for the expression a(i+1,j-1) then this function gets
--- passed expr = i + 1   (returning +1) and expr = j - 1 (returning -1)
-ixToNeighbour :: FAD.InductionVarMapByASTBlock
-              -> F.Index (FA.Analysis Annotation) -> Neighbour
--- Range with stride = 1 and no explicit bounds count as reflexive indexing
-ixToNeighbour ivmap f = ixToNeighbour' ivsList f
+-- | Given an induction variable map, and a piece of indexing syntax
+-- return a list of induction variables in scope for this index
+extractRelevantIVS ::
+     FAD.InductionVarMapByASTBlock
+  -> F.Index (FA.Analysis Annotation)
+  -> [Variable]
+extractRelevantIVS ivmap f = ivsList
   where
-    insl = FA.insLabel . F.getAnnotation $ f
-    errorMsg = show (ixsspan f)
-            ++ " get IVs associated to labelled index "
-            ++ show insl
-    insl' = fromJustMsg errorMsg insl
-    ivsList = S.toList $ fromMaybe S.empty $ IM.lookup insl'  ivmap
+    ivsList = S.toList $ fromMaybe S.empty $ IM.lookup label ivmap
+
+    label   = case (FA.insLabel . F.getAnnotation $ f) of
+                Just label -> label
+                Nothing    -> error errorMsg
     -- For debugging purposes
-    ixsspan :: F.Index (FA.Analysis A)  -> FU.SrcSpan
-    ixsspan  (F.IxRange _ sp _ _ _) = sp
-    ixsspan (F.IxSingle _ sp _ _ ) = sp
+    errorMsg = show (FU.getSpan f)
+            ++ " get IVs associated to labelled index "
 
-fromJustMsg _ (Just x) = x
-fromJustMsg msg Nothing = error msg
-
-ixToNeighbour' _ (F.IxRange _ _ Nothing Nothing Nothing)     = Neighbour "" 0
-ixToNeighbour' _ (F.IxRange _ _ Nothing Nothing
+{-| Given a list of induction variables and an index, compute
+   its Neighbour representation
+   e.g., for the expression a(i+1,j-1) then this function gets
+   passed expr = i + 1   (returning +1) and expr = j - 1 (returning -1) -}
+convIxToNeighbour :: [Variable] -> F.Index (FA.Analysis Annotation) -> Neighbour
+convIxToNeighbour _ (F.IxRange _ _ Nothing Nothing Nothing)     = Neighbour "" 0
+convIxToNeighbour _ (F.IxRange _ _ Nothing Nothing
                   (Just (F.ExpValue _ _ (F.ValInteger "1")))) = Neighbour "" 0
 
-ixToNeighbour' ivs (F.IxSingle _ _ _ exp)  = expToNeighbour ivs exp
-ixToNeighbour' _ _ = NonNeighbour -- indexing expression is a range
+convIxToNeighbour ivs (F.IxSingle _ _ _ exp)  = expToNeighbour ivs exp
+convIxToNeighbour _ _ = NonNeighbour -- indexing expression is a range
 
--- Combiantor for reducing a map with effects and partiality inside
+-- Combinator for reducing a map with effects and partiality inside
 -- into an effectful list of key-value pairs
 assocsSequence :: Monad m => M.Map k (m (Maybe a)) -> m [(k, a)]
 assocsSequence maps = do
@@ -239,7 +236,7 @@ indicesToSpec ivs a lhs ixs = do
 -- return as a map from (source name) variables to a list of relative indices
 genRHSsubscripts ::
      F.Block (FA.Analysis A)
-  -> M.Map Variable [Indices]
+  -> M.Map Variable [[F.Index (FA.Analysis A)]]
 genRHSsubscripts b = genRHSsubscripts' (transformBi replaceModulo b)
   where
     -- Any occurence of an subscript "modulo(e, e')" is replaced with "e"
@@ -305,7 +302,7 @@ indicesToRelativisedOffsets :: FAD.InductionVarMapByASTBlock
                             -> Writer EvalLog (Maybe (Bool, [[Int]]))
 indicesToRelativisedOffsets ivs a lhs ixs = do
    -- Convert indices to neighbourhood representation
-  let rhses = map (map (ixToNeighbour ivs)) ixs
+  let rhses = map (map (\ix -> convIxToNeighbour (extractRelevantIVS ivs ix) ix) ) ixs
 
   -- As an optimisation, do duplicate check in front-end first
   -- so that duplicate indices don't get passed into the main engine
