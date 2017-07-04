@@ -24,6 +24,7 @@ module Camfort.Specification.Stencils.InferenceBackend
   , inferFromIndicesWithoutLinearity
   , inferMinimalVectorRegions
   , spansToApproxSpatial
+  , Span
   ) where
 
 import Data.List
