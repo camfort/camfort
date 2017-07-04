@@ -24,6 +24,7 @@ module Camfort.Specification.Stencils.CheckFrontend
     CheckResult
   , stencilChecking
   , checkFailure
+  , checkWarnings
   , existingStencils
   ) where
 
@@ -61,14 +62,24 @@ newtype CheckResult = CheckResult { getCheckResult :: [StencilResult] }
 -- | Represents only the check results for invalid stencils.
 newtype CheckError  = CheckError { getCheckError :: [StencilCheckError] }
 
+-- | Represents only the check results that resulted in warnings.
+newtype CheckWarning = CheckWarning { getCheckWarning :: [StencilCheckWarning] }
+
 -- | Retrieve the checks for invalid stencils from a 'CheckResult'. Result is
 -- Nothing if there are no invalid checks.
 checkFailure :: CheckResult -> Maybe CheckError
 checkFailure c = case catMaybes $ fmap toFailure (getCheckResult c) of
                  [] -> Nothing
                  xs -> Just $ CheckError xs
-  where toFailure SCOkay{} = Nothing
-        toFailure (SCFail err) = Just err
+  where toFailure (SCFail err) = Just err
+        toFailure _            = Nothing
+
+checkWarnings :: CheckResult -> Maybe CheckWarning
+checkWarnings c = case catMaybes $ fmap toWarning (getCheckResult c) of
+                    [] -> Nothing
+                    xs -> Just $ CheckWarning xs
+  where toWarning (SCWarn warn) = Just warn
+        toWarning _             = Nothing
 
 -- | Result of stencil validation.
 data StencilResult
@@ -81,6 +92,8 @@ data StencilResult
   -- | Validation of stencil failed. See 'StencilCheckError' for information
   -- on the types of validation errors that can occur.
   | SCFail StencilCheckError
+  -- | A warning which shouldn't interrupt other procedures.
+  | SCWarn StencilCheckWarning
 
 -- | Represents a way in which validation of a stencil can fail.
 data StencilCheckError
@@ -90,6 +103,11 @@ data StencilCheckError
   | NotWellSpecified (FU.SrcSpan, SpecDecls) (FU.SrcSpan, SpecDecls)
   -- | The stencil could not be parsed correctly.
   | ParseError String
+
+-- | Represents a non-fatal validation warning.
+newtype StencilCheckWarning =
+  -- | Specification is defined multiple times.
+  DuplicateSpecification FU.SrcSpan
 
 -- | Pretty print a message with suitable spacing after the source position.
 prettyWithSpan :: FU.SrcSpan -> String -> String
@@ -101,9 +119,13 @@ instance Show CheckResult where
 instance Show CheckError where
   show = intercalate "\n" . fmap show . getCheckError
 
+instance Show CheckWarning where
+  show = intercalate "\n" . fmap show . getCheckWarning
+
 instance Show StencilResult where
   show SCOkay{ scSpan = span } = prettyWithSpan span "Correct."
-  show (SCFail err)  = show err
+  show (SCFail err)            = show err
+  show (SCWarn warn)           = show warn
 
 instance Show StencilCheckError where
   show (SynToAstError err srcSpan) = prettyWithSpan srcSpan (show err)
@@ -114,6 +136,9 @@ instance Show StencilCheckError where
                sp, "but at ", show spanInferred, " the code behaves as\n", sp, sp,
                pprintSpecDecls stencilInferred]
   show (ParseError s) = s
+
+instance Show StencilCheckWarning where
+  show (DuplicateSpecification srcSpan) = prettyWithSpan srcSpan "Warning: Duplicate specification."
 
 -- Entry point
 stencilChecking :: F.ProgramFile (FA.Analysis A) -> CheckResult
@@ -140,15 +165,31 @@ stencilChecking pf = CheckResult . snd . runWriter $
          ivmap      = FAD.genInductionVarMapByASTBlock beMap gr
          results    = descendBiM perProgramUnitCheck pf'
 
-     let (_, output) = flip evalState (([], Nothing), ivmap)
-                     . flip runReaderT flowsGraph
-                     . runWriterT $ results
+     let output = checkResult $ execState (runReaderT results flowsGraph) (startState ivmap)
+
      tell output
 
+
+data CheckState = CheckState
+  { regionEnv   :: RegionEnv
+  , checkResult :: [StencilResult]
+  , prog        :: Maybe F.ProgramUnitName
+  , ivMap       :: FAD.InductionVarMapByASTBlock
+  }
+
+addResult :: StencilResult -> Checker ()
+addResult r = modify (\s -> s { checkResult = checkResult s ++ [r] })
+
+startState :: FAD.InductionVarMapByASTBlock -> CheckState
+startState ivmap =
+  CheckState { regionEnv   = []
+             , checkResult = []
+             , prog        = Nothing
+             , ivMap       = ivmap
+             }
+
 type Checker a =
-  WriterT [StencilResult]
-      (ReaderT (FAD.FlowsGraph A)
-            (State ((RegionEnv, Maybe F.ProgramUnitName), FAD.InductionVarMapByASTBlock))) a
+  ReaderT (FAD.FlowsGraph A) (State CheckState) a
 
 -- If the annotation contains an unconverted stencil specification syntax tree
 -- then convert it and return an updated annotation containing the AST
@@ -156,8 +197,8 @@ parseCommentToAST :: FA.Analysis A -> FU.SrcSpan -> Checker (Either SynToAstErro
 parseCommentToAST ann span =
   case stencilSpec (FA.prevAnnotation ann) of
     Just (Left stencilComment) -> do
-         ((regionEnv, _), _) <- get
-         let ?renv = regionEnv
+         renv <- fmap regionEnv get
+         let ?renv = renv
           in case synToAst stencilComment of
                Right ast  -> pure . pure $ onPrev
                               (\ann -> ann {stencilSpec = Just (Right ast)}) ann
@@ -170,8 +211,8 @@ parseCommentToAST ann span =
 updateRegionEnv :: FA.Analysis A -> Checker ()
 updateRegionEnv ann =
   case stencilSpec (FA.prevAnnotation ann) of
-    Just (Right (Left regionEnv)) -> modify $ first (first (regionEnv ++))
-    _                             -> return ()
+    Just (Right (Left renv)) -> modify (\s -> s { regionEnv = renv ++ regionEnv s })
+    _                        -> return ()
 
 checkOffsetsAgainstSpec :: [(Variable, Multiplicity [[Int]])]
                         -> [(Variable, Specification)]
@@ -218,7 +259,7 @@ perProgramUnitCheck ::
    F.ProgramUnit (FA.Analysis A) -> Checker (F.ProgramUnit (FA.Analysis A))
 
 perProgramUnitCheck p@F.PUModule{} = do
-    modify $ first (second (const (Just $ FA.puName p)))
+    modify (\s -> s { prog = Just $ FA.puName p })
     descendBiM perBlockCheck p
 perProgramUnitCheck p = descendBiM perBlockCheck p
 
@@ -227,7 +268,7 @@ perBlockCheck :: F.Block (FA.Analysis A) -> Checker (F.Block (FA.Analysis A))
 perBlockCheck b@(F.BlComment ann span _) = do
   ast       <- parseCommentToAST ann span
   case ast of
-    Left err -> tell [SCFail $ SynToAstError err span] *> pure b
+    Left err -> addResult (SCFail $ SynToAstError err span) *> pure b
     Right ann' -> do
       flowsGraph <- ask
       updateRegionEnv ann'
@@ -265,7 +306,7 @@ checkStencil :: FAD.FlowsGraph A -> F.Block (FA.Analysis A) -> SpecDecls
   -> FU.SrcSpan -> [F.Index (FA.Analysis Annotation)] -> FU.SrcSpan -> Checker ()
 checkStencil flowsGraph s specDecls spanInferred subs span = do
   -- Create list of relative indices
-  ivmap <- snd <$> get
+  ivmap <- fmap ivMap get
   -- Do analysis
   let lhsN         = fromMaybe [] (neighbourIndex ivmap subs)
       relOffsets = fst . runWriter $ genOffsets flowsGraph ivmap lhsN [s]
@@ -277,10 +318,23 @@ checkStencil flowsGraph s specDecls spanInferred subs span = do
           concatMap (\(vars,spec) -> map (flip (,) spec) vars) specDecls
   -- Model and compare the current and specified stencil specs
   if checkOffsetsAgainstSpec multOffsets expandedDecls
-    then mapM_ (\(v,s) -> tell [SCOkay span s v spanInferred]) expandedDecls
+    then mapM_ (\spec@(v,s) -> do
+                   specExists <- seenBefore spec
+                   if specExists then addResult (SCWarn (DuplicateSpecification span))
+                     else addResult (SCOkay span s v spanInferred)) expandedDecls
     else do
     let inferred = fst . fst . runWriter $ genSpecifications flowsGraph ivmap lhsN [s]
-    tell [SCFail $ NotWellSpecified (span, specDecls) (spanInferred, inferred)]
+    addResult (SCFail $ NotWellSpecified (span, specDecls) (spanInferred, inferred))
+  where
+    seenBefore :: (Variable, Specification) -> Checker Bool
+    seenBefore (v,spec) = do
+          checkLog <- fmap checkResult get
+          pure $ any (\x -> case x of
+                              SCOkay{ scSpec=spec'
+                                    , scBodySpan=bspan
+                                    , scVar = var}
+                                -> spec' == spec && bspan == spanInferred && v == var
+                              _ -> False) checkLog
 
 genOffsets ::
      FAD.FlowsGraph A
@@ -296,8 +350,8 @@ genOffsets flowsGraph ivs lhs blocks = do
 
 existingStencils :: CheckResult -> [(Specification, FU.SrcSpan, Variable)]
 existingStencils = mapMaybe getExistingStencil . getCheckResult
-  where getExistingStencil SCFail{}                  = Nothing
-        getExistingStencil (SCOkay _ spec var bodySpan) = Just (spec, bodySpan, var)
+  where getExistingStencil (SCOkay _ spec var bodySpan) = Just (spec, bodySpan, var)
+        getExistingStencil _                            = Nothing
 
 -- Local variables:
 -- mode: haskell

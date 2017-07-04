@@ -294,6 +294,14 @@ spec =
 \        but at (9:8)-(9:32) the code behaves as\n\
 \                stencil readOnce, (forward(depth=1, dim=1)) :: a\n\n\
 \Please resolve these errors, and then run synthesis again."
+      assertStencilSynthResponseOut "example14.f"
+        "warns when duplicate stencils exist, but continues"
+        "\nEncountered the following errors when checking stencil specs for 'tests/fixtures/Specification/Stencils/example14.f'\n\n\
+\(10:1)-(10:51)    Warning: Duplicate specification."
+      assertStencilSynthResponseOut "example15.f"
+        "warns when duplicate stencils exist (combined stencils), but continues"
+        "\nEncountered the following errors when checking stencil specs for 'tests/fixtures/Specification/Stencils/example15.f'\n\n\
+\(9:1)-(9:51)    Warning: Duplicate specification."
 
     sampleDirConts <- runIO $ listDirectory samplesDir
     expectedDirConts <- runIO $ listDirectory (samplesDir </> "expected")
@@ -330,6 +338,10 @@ spec =
               programSrc       <- runIO $ readFile file
               it testComment $ (fst $ synth AssignMode '=' (map (\(f, _, p) -> (f, p)) program))
                 `shouldBe` expectedResponse
+        assertStencilSynthResponseOut fileName testComment expectedResponse =
+          describe testComment $ do
+            assertStencilInferenceOnFile fileName "correct synthesis"
+            assertStencilSynthResponse fileName "correct output" expectedResponse
         fixturesDir = "tests" </> "fixtures" </> "Specification" </> "Stencils"
         samplesDir  = "samples" </> "stencils"
         getExpectedSrcFileName file =
