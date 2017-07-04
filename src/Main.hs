@@ -216,41 +216,71 @@ cmdRefactCommon      = fmap CmdRefactCommon refactOptions
 cmdRefactDead        = fmap CmdRefactDead refactOptions
 cmdRefactEquivalence = fmap CmdRefactEquivalence refactOptions
 
+-- | Helper for building a command alias.
+--
+-- Command aliases will not show up in the help text, nor be subject to completion.
+commandAlias :: String -> Parser Command -> Mod CommandFields Command
+commandAlias alias cmdParser = command alias . info cmdParser $ mempty
+
+-- | Helper for building a parser for a group of commands.
+commandsParser :: String -> [(String, [String], Parser Command, String)] -> Parser Command
+commandsParser groupName commands =
+  hsubparser (mconcat (fmap
+                        (\(name, _, cmdParser, description) ->
+                           (command name . info cmdParser . progDesc $ description))
+                        commands)
+  <> commandGroup groupName)
+  <|> aliasSubParser
+  where aliasSubParser = subparser $
+          mconcat (fmap
+                    (\(_, aliases, cmdParser, _) ->
+                       mconcat $ fmap (`commandAlias` cmdParser) aliases)
+                    commands)
+          <> internal
 
 analysesParser :: Parser Command
-analysesParser = hsubparser $
-     (command "count" . info cmdCount
-       . progDesc $ "count variable declarations")
-  <> (command "ast" . info cmdAST
-       . progDesc $ "print the raw AST -- for development purposes")
-  <> (command "stencils-check" . info cmdStencilsCheck
-       . progDesc $ "stencil spec checking")
-  <> (command "stencils-infer" . info cmdStencilsInfer
-       . progDesc $ "stencil spec inference")
-  <> (command "stencils-synth" . info cmdStencilsSynth
-       . progDesc $ "stencil spec synthesis")
-  <> (command "units-suggest" . info cmdUnitsSuggest
-       . progDesc $ "suggest variables to annotate with units-of-measure for maximum coverage")
-  <> (command "units-check" . info cmdUnitsCheck
-       . progDesc $ "unit-of-measure checking")
-  <> (command "units-infer" . info cmdUnitsInfer
-       . progDesc $ "unit-of-measure inference")
-  <> (command "units-synth" . info cmdUnitsSynth
-       . progDesc $ "unit-of-measure synthesise specs")
-  <> (command "units-compile" . info cmdUnitsCompile
-       . progDesc $ "units-of-measure compile module information")
-  <> commandGroup "Analysis Commands"
+analysesParser = commandsParser "Analysis Commands" analysesCommands
+  where
+    analysesCommands =
+      [ ("count",
+          [],
+          cmdCount,         "count variable declarations")
+      , ("ast",
+          [],
+          cmdAST,           "print the raw AST -- for development purposes")
+      , ("stencils-check",
+          ["stencil-check", "check-stencils", "check-stencil"],
+          cmdStencilsCheck, "stencil spec checking")
+      , ("stencils-infer",
+          ["stencil-infer", "infer-stencils", "infer-stencil"],
+          cmdStencilsInfer, "stencil spec inference")
+      , ("stencils-synth",
+          ["stencil-synth", "synth-stencils", "synth-stencil"],
+          cmdStencilsSynth, "stencil spec synthesis")
+      , ("units-suggest",
+          ["unit-suggest", "suggest-units", "suggest-unit"],
+          cmdUnitsSuggest,  "suggest variables to annotate with units-of-measure for maximum coverage")
+      , ("units-check",
+          ["unit-check", "check-units", "check-unit"],
+          cmdUnitsCheck,    "unit-of-measure checking")
+      , ("units-infer",
+          ["unit-infer", "infer-units", "infer-unit"],
+          cmdUnitsInfer,    "unit-of-measure inference")
+      , ("units-synth",
+          ["unit-synth", "synth-units", "synth-unit"],
+          cmdUnitsSynth,    "unit-of-measure synthesise specs")
+      , ("units-compile",
+          ["unit-compile", "compile-units", "compile-unit"],
+          cmdUnitsCompile,  "units-of-measure compile module information") ]
 
 
 refactoringsParser :: Parser Command
-refactoringsParser = hsubparser $
-     (command "common" . info cmdRefactCommon
-       . progDesc $ "common block elimination")
-  <> (command "equivalence" . info cmdRefactEquivalence
-       . progDesc $ "equivalence elimination")
-  <> (command "dead" . info cmdRefactDead
-       . progDesc $ "dead-code elimination")
-  <> commandGroup "Refactoring Commands"
+refactoringsParser = commandsParser "Refactoring Commands" refactoringsCommands
+  where
+    refactoringsCommands =
+      [ ("common",      [], cmdRefactCommon,      "common block elimination")
+      , ("equivalence", [], cmdRefactEquivalence, "equivalence elimination")
+      , ("dead",        [], cmdRefactDead,        "dead-code elimination") ]
 
 
 topLevelCommands :: Parser Command
