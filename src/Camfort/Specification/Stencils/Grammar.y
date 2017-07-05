@@ -233,6 +233,7 @@ prettyTokens :: [ Token ] -> String
 prettyTokens =
     (++ "... ") . intercalate " " . map prettyToken . takeUniquePrefix 1
   where
+    takeUniquePrefix _ [] = []
     takeUniquePrefix n ts =
       if ((take n ts) `isInfixOf` (drop n ts))
       then takeUniquePrefix (n+1) ts

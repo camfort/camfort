@@ -24,9 +24,19 @@ modifierTest modifiers f =
   it ("modified with " ++ modifiers) $ parse (stencilString (modifiers ++ " r1 + r2"))
   `shouldBe` (mkSpec . f $ Or (Var "r1") (Var "r2"))
 
+-- | Check that a stencil specification does not parse.
+--
+-- Automatically inserts a leading "!= stencil " and trailing " :: a".
 invalidStencilTest :: String -> String -> SpecWith ()
 invalidStencilTest description stencilStr =
   it description $ parse (stencilString stencilStr) `shouldSatisfy` isLeft
+
+-- | Check that a stencil specification does not parse.
+--
+-- Tests the @stencilStr@ as is.
+invalidStencilTest' :: String -> String -> SpecWith ()
+invalidStencilTest' description stencilStr =
+  it description $ parse stencilStr `shouldSatisfy` isLeft
 
 spec :: Test.Spec
 spec =
@@ -89,6 +99,10 @@ spec =
       invalidStencilTest "pointed/nonpointed on same dim"
         "atleast, nonpointed(dims=2), pointed(dims=1,2), \
              \ forward(depth=1, dim=1)"
+      invalidStencilTest' "empty specification"
+        "!= stencil"
+      invalidStencilTest' "only identifier"
+        "!= stencil foo"
 
     it "basic modified stencil (1)" $
       parse (stencilString "      readonce, r1 + r2")
