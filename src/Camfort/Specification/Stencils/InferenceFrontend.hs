@@ -199,10 +199,14 @@ genSpecsAndReport mode span lhsIxs blocks = do
 perBlockInfer :: InferMode -> Char -> F.MetaInfo
               -> F.Block (FA.Analysis A)
               -> Inferer (F.Block (FA.Analysis A))
+perBlockInfer = perBlockInfer' False
+-- The primed version, perBlockInfer' has a flag indicating whether
+-- the following code is inside a do-loop since we only target
+-- array computations inside loops.
 
-perBlockInfer _ _ _ b@F.BlComment{} = pure b
+perBlockInfer' _ _ _ _ b@F.BlComment{} = pure b
 
-perBlockInfer mode marker mi b@(F.BlStatement ann span@(FU.SrcSpan lp _) _ stmnt) = do
+perBlockInfer' inDo mode marker mi b@(F.BlStatement ann span@(FU.SrcSpan lp _) _ stmnt) = do
     (IS ivmap visitedStmts) <- get
     let label = fromMaybe (-1) (FA.insLabel ann)
     if label `elem` visitedStmts
@@ -216,7 +220,7 @@ perBlockInfer mode marker mi b@(F.BlStatement ann span@(FU.SrcSpan lp _) _ stmnt
       specs <- forM lhses $ \lhs ->
          case lhs of
           -- Assignment to a variable
-          (F.ExpValue _ _ (F.ValVariable _)) ->
+          (F.ExpValue _ _ (F.ValVariable _)) | inDo ->
               genSpecsAndReport mode span [] [b]
 
           -- Assignment to something else...
@@ -253,14 +257,14 @@ perBlockInfer mode marker mi b@(F.BlStatement ann span@(FU.SrcSpan lp _) _ stmnt
         in pure (F.BlComment ann' span' (F.Comment specComment))
       else return b
 
-perBlockInfer mode marker mi b@(F.BlDo ann span lab cname lab' mDoSpec body tlab) = do
+perBlockInfer' _ mode marker mi b@(F.BlDo ann span lab cname lab' mDoSpec body tlab) = do
     -- descend into the body of the do-statement (in reverse order)
-    body' <- mapM (descendBiReverseM (perBlockInfer mode marker mi)) (reverse body)
+    body' <- mapM (descendBiReverseM (perBlockInfer' True mode marker mi)) (reverse body)
     return $ F.BlDo ann span lab cname lab' mDoSpec (reverse body') tlab
 
-perBlockInfer mode marker mi b =
+perBlockInfer' inDo mode marker mi b =
     -- Go inside child blocks
-    descendReverseM (descendBiReverseM (perBlockInfer mode marker mi)) b
+    descendReverseM (descendBiReverseM (perBlockInfer' inDo mode marker mi)) b
 
 --------------------------------------------------
 
