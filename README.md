@@ -11,6 +11,11 @@ Please see the
 [installation guide](https://github.com/camfort/camfort/wiki/Installation-Guide)
 in the wiki.
 
+### Tab Completion
+
+To enable bash autocompletion for camfort, add
+`eval "$(camfort --bash-completion-script=$(which camfort))"` to your .bashrc.
+
 ## Usage
 
 For detailed information please check
