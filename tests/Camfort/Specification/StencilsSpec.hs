@@ -264,25 +264,25 @@ spec =
 
     describe "integration test on inference for example5" $
       describe "stencil synth" $ do
-        assertStencilInferenceOnFile "example5.f"
+        assertStencilInferenceNoWarn "example5.f"
           "inserts correct comment types for old fortran"
-        assertStencilInferenceOnFile "example5.f90"
+        assertStencilInferenceNoWarn "example5.f90"
           "inserts correct comment types for modern fortran"
 
     describe "synth on files already containing stencils" $ do
-      assertStencilInferenceOnFile "example6.f"
+      assertStencilInferenceNoWarn "example6.f"
         "complements existing stencils (when second missing)"
-      assertStencilInferenceOnFile "example7.f"
+      assertStencilInferenceNoWarn "example7.f"
         "complements existing stencils (when none missing)"
-      assertStencilInferenceOnFile "example8.f"
+      assertStencilInferenceNoWarn "example8.f"
         "complements existing stencils (when first missing)"
-      assertStencilInferenceOnFile "example9.f"
+      assertStencilInferenceNoWarn "example9.f"
         "complements existing stencils (when none missing - only one stencil)"
-      assertStencilInferenceOnFile "example10.f"
+      assertStencilInferenceNoWarn "example10.f"
         "complements existing stencils (when one missing - inside if)"
-      assertStencilInferenceOnFile "example13.f"
+      assertStencilInferenceNoWarn "example13.f"
         "complements existing stencils (when using regions references)"
-      assertStencilInferenceOnFile "example11.f"
+      assertStencilInferenceNoWarn "example11.f"
         "inserts correct access specification"
       assertStencilSynthResponse "example12.f"
         "reports errors when conflicting stencil exists"
@@ -342,6 +342,7 @@ spec =
           describe testComment $ do
             assertStencilInferenceOnFile fileName "correct synthesis"
             assertStencilSynthResponse fileName "correct output" expectedResponse
+        assertStencilInferenceNoWarn fileName testComment = assertStencilSynthResponseOut fileName testComment ""
         fixturesDir = "tests" </> "fixtures" </> "Specification" </> "Stencils"
         samplesDir  = "samples" </> "stencils"
         getExpectedSrcFileName file =

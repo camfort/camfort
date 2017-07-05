@@ -72,8 +72,10 @@ synth mode marker = first normaliseMsg . foldr buildOutput (("",""), [])
   where
     buildOutput (f, pf) =
       case synthWithCheck pf of
-        Left err         -> first . first  $ (++ (mkMsg f err))
-        Right (warn,pf') -> second (++ mkMsg f warn) *** ((f, pf'):)
+        Left err         -> first . first  $ (++ mkMsg f err)
+        Right (warn,pf') -> second (if null warn
+                                    then id
+                                    else (++ mkMsg f warn)) *** ((f, pf'):)
     synthWithCheck pf =
       let blocks = getBlocks pf
           checkRes = stencilChecking blocks in
