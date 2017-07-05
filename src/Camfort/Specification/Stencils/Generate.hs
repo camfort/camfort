@@ -29,6 +29,8 @@ module Camfort.Specification.Stencils.Generate
   , convIxToNeighbour
   , indicesToRelativisedOffsets
   , indicesToSpec
+  , neighbourToOffset
+  , relativise
   ) where
 
 import Control.Monad (void, when, zipWithM)
@@ -134,7 +136,7 @@ genSpecifications flowsGraph ivs lhs blocks = do
       splitUpperAndLower' x = [x]
 
 {-| genSubscripts
-   Takes * a name map
+   Takes * a flows graph
          * a list of blocks representing an RHS
    Returns a map from array variables to indices, and a list of
    nodes that were visited when computing this information -}
