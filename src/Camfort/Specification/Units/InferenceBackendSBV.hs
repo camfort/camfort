@@ -130,13 +130,13 @@ solveSMT (lhsM, rhsM, lhsCols, rhsCols) = do
     -- print x
     -- x = [["#<Var trivial_dist1>-0","#<Var trivial_dist1>-1"],["#<Var trivial_sum2>-0","#<Var trivial_sum2>-1"],["#<Var trivial_time3>-0","#<Var trivial_time3>-1"],["#<Var trivial_y4>-0","#<Var trivial_y4>-1"]]
 
-    let y = zip vars (map (map get) x)
+    let y = map (map get) x
     -- print y
     -- [("#<Var trivial_dist1>",[1,0]),("#<Var trivial_sum2>",[1,-1]),("#<Var trivial_time3>",[0,1]),("#<Var trivial_y4>",[0,0])]
 
    -- z
     let z :: [(UnitInfo, [(UnitInfo, Integer)])] =
-         zip vars $ map (zip (A.elems rhsCols)) (map snd y)
+         zip vars $ map (zip (A.elems rhsCols)) y
 
     -- print satResult
     -- print dict
