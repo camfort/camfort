@@ -168,13 +168,13 @@ stencilInference mode marker pf =
 
 genSpecsAndReport ::
      InferMode -> FU.SrcSpan -> [Neighbour]
-  -> [F.Block (FA.Analysis A)]
+  -> F.Block (FA.Analysis A)
   -> Inferer [([Variable], Specification)]
-genSpecsAndReport mode span lhsIxs blocks = do
+genSpecsAndReport mode span lhsIxs block = do
     (IS ivmap _) <- get
     flowsGraph     <- fmap ieFlowsGraph ask
     -- Generate specification for the
-    let ((specs, visited), evalInfos) = runWriter $ genSpecifications flowsGraph ivmap lhsIxs blocks
+    let ((specs, visited), evalInfos) = runWriter $ genSpecifications flowsGraph ivmap lhsIxs block
     -- Remember which nodes were visited during this traversal
     modify (\state -> state { visitedNodes = visitedNodes state ++ visited })
     -- Report the specifications
@@ -221,14 +221,14 @@ perBlockInfer' inDo mode marker mi b@(F.BlStatement ann span@(FU.SrcSpan lp _) _
          case lhs of
           -- Assignment to a variable
           (F.ExpValue _ _ (F.ValVariable _)) | inDo ->
-              genSpecsAndReport mode span [] [b]
+              genSpecsAndReport mode span [] b
 
           -- Assignment to something else...
           _ -> case isArraySubscript lhs of
              Just subs ->
                -- Left-hand side is a subscript-by relative index or by a range
                case neighbourIndex ivmap subs of
-                 Just lhs -> genSpecsAndReport mode span lhs [b]
+                 Just lhs -> genSpecsAndReport mode span lhs b
                  Nothing  -> if mode == EvalMode
                              then do
                                tell [(span , Right ("EVALMODE: LHS is an array\

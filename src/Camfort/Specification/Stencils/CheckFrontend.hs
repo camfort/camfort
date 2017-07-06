@@ -323,7 +323,7 @@ checkStencil flowsGraph s specDecls spanInferred subs span = do
                    if specExists then addResult (SCWarn (DuplicateSpecification span))
                      else addResult (SCOkay span s v spanInferred)) expandedDecls
     else do
-    let inferred = fst . fst . runWriter $ genSpecifications flowsGraph ivmap lhsN [s]
+    let inferred = fst . fst . runWriter $ genSpecifications flowsGraph ivmap lhsN s
     addResult (SCFail $ NotWellSpecified (span, specDecls) (spanInferred, inferred))
   where
     seenBefore :: (Variable, Specification) -> Checker Bool

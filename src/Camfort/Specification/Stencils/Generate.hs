@@ -105,10 +105,10 @@ genSpecifications ::
      FAD.FlowsGraph A
   -> FAD.InductionVarMapByASTBlock
   -> [Neighbour]
-  -> [F.Block (FA.Analysis A)]
+  -> F.Block (FA.Analysis A)
   -> Writer EvalLog ([([Variable], Specification)], [Int])
-genSpecifications flowsGraph ivs lhs blocks = do
-    let (subscripts, visitedNodes) = genSubscripts flowsGraph blocks
+genSpecifications flowsGraph ivs lhs block = do
+    let (subscripts, visitedNodes) = genSubscripts flowsGraph [block]
     varToSpecs <- assocsSequence $ mkSpecs subscripts
     case varToSpecs of
       [] -> do
