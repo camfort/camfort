@@ -73,10 +73,7 @@ inferVariablesSBV cons = unsafePerformIO $ do
   unitAssignments <- genUnitAssignmentsSBV cons
   -- Find the rows corresponding to the distilled "unit :: var"
   -- information for ordinary (non-polymorphic) variables.
-  let unitVarAssignments =
-        [ (var, units) | ([UnitPow (UnitVar var)              k], units) <- unitAssignments, k `approxEq` 1 ] ++
-        [ (var, units) | ([UnitPow (UnitParamVarAbs (_, var)) k], units) <- unitAssignments, k `approxEq` 1 ]
-  pure unitVarAssignments
+  return [ (var, units) | (UnitVar var, units) <- unitAssignments ]
 
 
 -- Convert a set of constraints into a matrix of co-efficients, and a
@@ -94,38 +91,24 @@ constraintsToLHSRHSMatrix cons = (lhsM, rhsM, lhsCols, rhsCols)
     (rhsM, rhsCols) = flattenedToMatrix rhs
 
 -- | Raw units-assignment pairs.
-genUnitAssignmentsSBV :: [Constraint] -> IO [([UnitInfo], UnitInfo)]
+genUnitAssignmentsSBV :: [Constraint] -> IO [(UnitInfo, UnitInfo)]
 genUnitAssignmentsSBV cons = do
     let (lhsM, rhsM, lhsCols, rhsCols) = constraintsToLHSRHSMatrix cons
-    solvedM <- solveSMT (lhsM, rhsM, lhsCols, rhsCols)
-    let cols = A.elems lhsCols ++ A.elems rhsCols
+    units <- solveSMT (lhsM, rhsM, lhsCols, rhsCols)
 
-    -- Convert the rows of the solved matrix into flattened unit
-    -- expressions in the form of "unit ** k".
-    let unitPows = map (concatMap flattenUnits . zipWith UnitPow cols) (H.toLists solvedM)
+    let unitPows = map (second (concatMap flattenUnits)) units
 
     -- Variables to the left, unit names to the right side of the equation.
-    let unitAssignments = map (fmap (foldUnits . map negatePosAbs) . partition (not . isUnitRHS)) unitPows
+    let unitAssignments = map (second (foldUnits . map negatePosAbs)) unitPows
     return unitAssignments
   where
-
-
-    isUnitRHS (UnitPow (UnitName _) _)        = True
-    isUnitRHS (UnitPow (UnitParamEAPAbs _) _) = True
-    -- Because this version of isUnitRHS different from
-    -- constraintsToMatrix interpretation, we need to ensure that any
-    -- moved ParamPosAbs units are negated, because they are
-    -- effectively being shifted across the equal-sign:
-    isUnitRHS (UnitPow (UnitParamPosAbs _) _) = True
-    isUnitRHS _                               = False
-
     foldUnits units
       | null units = UnitlessVar
       | otherwise  = foldl1 UnitMul units
 
 
 solveSMT :: (H.Matrix Double, H.Matrix Double, A.Array Int UnitInfo, A.Array Int UnitInfo)
-         -> IO (H.Matrix Double)
+         -> IO [(UnitInfo, [UnitInfo])]
 solveSMT (lhsM, rhsM, lhsCols, rhsCols) = do
 
     satResult <- satWith
@@ -138,12 +121,12 @@ solveSMT (lhsM, rhsM, lhsCols, rhsCols) = do
 
     let dict = getModelDictionary satResult
 
-    let vars = filter ("#<Var" `isPrefixOf`) (map show (A.elems lhsCols))
+    let vars = filter (\x -> "#<Var" `isPrefixOf` show x) (A.elems lhsCols)
 
     let get k = case M.lookup k dict of Just val -> fromCW val :: Integer
 
 
-    let x = map (\v -> filter (isPrefixOf v) (M.keys dict)) vars
+    let x = map (\v -> filter (isPrefixOf (show v)) (M.keys dict)) vars
     -- print x
     -- x = [["#<Var trivial_dist1>-0","#<Var trivial_dist1>-1"],["#<Var trivial_sum2>-0","#<Var trivial_sum2>-1"],["#<Var trivial_time3>-0","#<Var trivial_time3>-1"],["#<Var trivial_y4>-0","#<Var trivial_y4>-1"]]
 
@@ -151,23 +134,13 @@ solveSMT (lhsM, rhsM, lhsCols, rhsCols) = do
     -- print y
     -- [("#<Var trivial_dist1>",[1,0]),("#<Var trivial_sum2>",[1,-1]),("#<Var trivial_time3>",[0,1]),("#<Var trivial_y4>",[0,0])]
 
-    let z = zip vars $ map (zip (A.elems rhsCols)) (map snd y)
+   -- z
+    let z :: [(UnitInfo, [(UnitInfo, Integer)])] =
+         zip vars $ map (zip (A.elems rhsCols)) (map snd y)
 
-    print z
-
-
-
-
-
-
-
-
-    print satResult
-
-    print dict
-
-    return undefined
-
+    -- print satResult
+    -- print dict
+    return $ map (second (map (\(u, c) -> UnitPow u $ fromInteger c))) z
   where
     predicate :: Symbolic SBool
     predicate = do
