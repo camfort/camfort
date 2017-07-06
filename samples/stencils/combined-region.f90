@@ -22,7 +22,7 @@ end do
 ! This is a five point stencil
 do i=1, n
  do j=1, n
-  b(i,j) = -4*a(i,j) + a(i-1,j) + a(i,j-1) + a(i,j+1)
+  b(i,j) = -4*a(i,j) + a(i+1, j) + a(i-1,j) + a(i,j-1) + a(i,j+1)
  end do
 end do
 
