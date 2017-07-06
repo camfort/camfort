@@ -1,8 +1,7 @@
 ! Flows-to example
 !
-! This is a three point stencil (centred, depth 1) which
-! has been decomposed. Camfort will infer a single stencil
-! for the loop.
+! This is a three point stencil (centred, depth 1) which has been
+! decomposed. CamFort will infer a single specification for the loop.
 program decomposedthreepoint
 implicit none
 

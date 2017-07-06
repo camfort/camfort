@@ -6,13 +6,15 @@
 program relativisation
 implicit none
 
-integer i, n
+integer i, j, n
 parameter (n = 3)
-real a(0:n)
-real b(0:n)
+real a(0:n, 0:n)
+real b(0:n, 0:n)
 
-do i=1,n
- a(i+1,j) = b(i,j) + b(i-1,j)
+do i=1, n
+   do j=1, n
+      a(i+1,j) = b(i,j) + b(i-1,j)
+   end do
 end do
 
-end
+end program

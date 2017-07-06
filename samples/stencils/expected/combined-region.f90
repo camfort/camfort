@@ -1,4 +1,4 @@
-! Example of stencils with combined regions
+! Example of specifications with combined regions
 !
 ! Regions can be combined with intersection (*) or union (+).
 program combinedregion

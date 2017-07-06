@@ -1,9 +1,8 @@
-! Example of an approximate stencil
+! Example of an approximate stencil specification
 !
-! In situations where the stencil language cannot exactly
-! describe the pattern an approximate stencil can be given
-! as an upper and lower bound using the atMost and atLeast
-! modifiers
+! In situations where the specification language cannot exactly
+! describe the pattern an approximate specification can be given as an
+! upper and lower bound using the atMost and atLeast modifiers
 program approx
 implicit none
 
