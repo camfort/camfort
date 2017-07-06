@@ -127,18 +127,20 @@ stencilInference mode marker pf =
           then runWriter (annotateComments Gram.specParser pf)
           else (pf, [])
 
-    (pus', log1)    = runWriter (transformBiM perPU pus)
+    (pus', log1)    = runWriter (mapM perPU pus)
+    checkRes        = stencilChecking pf
+    -- induction variable map
+    ivMap = FAD.genInductionVarMapByASTBlock beMap gr
 
-    -- Run inference per program unit, placing the flowsmap in scope
+    -- Run inference per program unit
     perPU :: F.ProgramUnit (FA.Analysis A)
           -> Writer [LogLine] (F.ProgramUnit (FA.Analysis A))
 
     perPU pu | Just _ <- FA.bBlocks $ F.getAnnotation pu = do
-        let pum = descendBiM (perBlockInfer mode marker mi) pu
-            checkRes = stencilChecking pf
-            (pu', log) = runInferer checkRes ivMap flTo pum
-            -- induction variable map
-            ivMap = FAD.genInductionVarMapByASTBlock beMap gr
+        let -- Traverse the blocks (delayed in monad)
+            puM = descendBiM (perBlockInfer mode marker mi) pu
+            -- Run the inference
+            (pu', log) = runInferer checkRes ivMap flTo puM
         tell log
         return pu'
 
