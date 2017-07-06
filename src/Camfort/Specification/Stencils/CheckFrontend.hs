@@ -21,10 +21,13 @@
 module Camfort.Specification.Stencils.CheckFrontend
   (
     -- * Stencil checking
-    CheckResult
-  , stencilChecking
+    stencilChecking
+    -- ** Validation Results
+  , CheckResult
   , checkFailure
   , checkWarnings
+  , unusedRegion
+    -- ** Helpers
   , existingStencils
   ) where
 
@@ -32,8 +35,9 @@ import Control.Arrow
 import Control.Monad.Reader (ReaderT, ask, runReaderT)
 import Control.Monad.State.Strict
 import Control.Monad.Writer.Strict hiding (Product)
+import Data.Function (on)
 import Data.Generics.Uniplate.Operations
-import Data.List (intercalate)
+import Data.List (intercalate, sort)
 
 import Camfort.Analysis.Annotations
 import Camfort.Analysis.CommentAnnotator
@@ -58,6 +62,9 @@ import Data.Int
 import qualified Data.Set as S
 
 newtype CheckResult = CheckResult { getCheckResult :: [StencilResult] }
+
+instance Eq CheckResult where
+  (==) = (==) `on` (sort . getCheckResult)
 
 -- | Represents only the check results for invalid stencils.
 newtype CheckError  = CheckError { getCheckError :: [StencilCheckError] }
@@ -94,6 +101,28 @@ data StencilResult
   | SCFail StencilCheckError
   -- | A warning which shouldn't interrupt other procedures.
   | SCWarn StencilCheckWarning
+  deriving (Eq)
+
+class GetSpan a where
+  getSpan :: a -> FU.SrcSpan
+
+instance GetSpan StencilResult where
+  getSpan SCOkay{scSpan = srcSpan} = srcSpan
+  getSpan (SCFail err)             = getSpan err
+  getSpan (SCWarn warn)            = getSpan warn
+
+instance GetSpan StencilCheckError where
+  getSpan (SynToAstError     _ srcSpan)      = srcSpan
+  getSpan (NotWellSpecified  (srcSpan, _) _) = srcSpan
+  getSpan (ParseError _)                     = error
+    "CheckFrontend: attempted to get span of parse error"
+
+instance GetSpan StencilCheckWarning where
+  getSpan (DuplicateSpecification srcSpan) = srcSpan
+  getSpan (UnusedRegion srcSpan _)         = srcSpan
+
+instance Ord StencilResult where
+  compare SCOkay{ scSpan = srcSpan } SCOkay{ scSpan = srcSpan' } = compare srcSpan srcSpan'
 
 -- | Represents a way in which validation of a stencil can fail.
 data StencilCheckError
@@ -103,11 +132,19 @@ data StencilCheckError
   | NotWellSpecified (FU.SrcSpan, SpecDecls) (FU.SrcSpan, SpecDecls)
   -- | The stencil could not be parsed correctly.
   | ParseError String
+  deriving (Eq)
 
 -- | Represents a non-fatal validation warning.
-newtype StencilCheckWarning =
+data StencilCheckWarning
   -- | Specification is defined multiple times.
-  DuplicateSpecification FU.SrcSpan
+  = DuplicateSpecification FU.SrcSpan
+  -- | Region is defined but not used.
+  | UnusedRegion FU.SrcSpan Variable
+  deriving (Eq)
+
+-- | Create a check result informating an unused region.
+unusedRegion :: FU.SrcSpan -> Variable -> CheckResult
+unusedRegion srcSpan var = CheckResult [SCWarn $ UnusedRegion srcSpan var]
 
 -- | Pretty print a message with suitable spacing after the source position.
 prettyWithSpan :: FU.SrcSpan -> String -> String
@@ -138,7 +175,10 @@ instance Show StencilCheckError where
   show (ParseError s) = s
 
 instance Show StencilCheckWarning where
-  show (DuplicateSpecification srcSpan) = prettyWithSpan srcSpan "Warning: Duplicate specification."
+  show (DuplicateSpecification srcSpan) = prettyWithSpan srcSpan
+    "Warning: Duplicate specification."
+  show (UnusedRegion srcSpan name)      = prettyWithSpan srcSpan $
+    "Warning: Unused region '" ++ name ++ "'"
 
 -- Entry point
 stencilChecking :: F.ProgramFile (FA.Analysis A) -> CheckResult
@@ -165,27 +205,45 @@ stencilChecking pf = CheckResult . snd . runWriter $
          ivmap      = FAD.genInductionVarMapByASTBlock beMap gr
          results    = descendBiM perProgramUnitCheck pf'
 
-     let output = checkResult $ execState (runReaderT results flowsGraph) (startState ivmap)
+     let addUnusedRegionsToResult = do
+           unused <- fmap unusedRegions get
+           mapM_ (addResult . SCWarn . uncurry UnusedRegion) unused
+         output = checkResult $ execState (runReaderT (results >> addUnusedRegionsToResult) flowsGraph) (startState ivmap)
 
      tell output
 
 
 data CheckState = CheckState
-  { regionEnv   :: RegionEnv
-  , checkResult :: [StencilResult]
-  , prog        :: Maybe F.ProgramUnitName
-  , ivMap       :: FAD.InductionVarMapByASTBlock
+  { regionEnv     :: RegionEnv
+  , checkResult   :: [StencilResult]
+  , prog          :: Maybe F.ProgramUnitName
+  , ivMap         :: FAD.InductionVarMapByASTBlock
+  , unusedRegions :: [(FU.SrcSpan, Variable)]
   }
 
 addResult :: StencilResult -> Checker ()
 addResult r = modify (\s -> s { checkResult = checkResult s ++ [r] })
 
+modifyUnusedRegions :: ([(FU.SrcSpan, Variable)] -> [(FU.SrcSpan, Variable)]) -> Checker ()
+modifyUnusedRegions f = modify (\s -> s { unusedRegions = f (unusedRegions s) })
+
+-- | Remove the given regions variables from the tracked unused regions.
+informRegionsUsed :: [Variable] -> Checker ()
+informRegionsUsed regions = modify
+  (\s -> s { unusedRegions = filter ((`notElem` regions) . snd) $ unusedRegions s })
+
+-- | Start tracking a region to see whether or not it gets used.
+addRegionToTracked :: FU.SrcSpan -> RegionEnv -> Checker ()
+addRegionToTracked srcSpan = mapM_
+  (\(r,_) -> modify (\s -> s { unusedRegions = (srcSpan, r) : unusedRegions s }))
+
 startState :: FAD.InductionVarMapByASTBlock -> CheckState
 startState ivmap =
-  CheckState { regionEnv   = []
-             , checkResult = []
-             , prog        = Nothing
-             , ivMap       = ivmap
+  CheckState { regionEnv     = []
+             , checkResult   = []
+             , prog          = Nothing
+             , ivMap         = ivmap
+             , unusedRegions = []
              }
 
 type Checker a =
@@ -197,12 +255,14 @@ parseCommentToAST :: FA.Analysis A -> FU.SrcSpan -> Checker (Either SynToAstErro
 parseCommentToAST ann span =
   case getParseSpec (FA.prevAnnotation ann) of
     Just stencilComment -> do
+         informRegionsUsed (Gram.reqRegions stencilComment)
          renv <- fmap regionEnv get
          let ?renv = renv
-          in case synToAst stencilComment of
-               Right ast -> pure . pure $ onPrev
-                 (either giveRegionSpec giveAstSpec ast) ann
-               Left err  -> pure . Left $ err
+         case synToAst stencilComment of
+           Right ast -> do
+             either (addRegionToTracked span) (const (pure ())) ast
+             pure . pure $ onPrev (either giveRegionSpec giveAstSpec ast) ann
+           Left err  -> pure . Left $ err
 
     _ -> pure . pure $ ann
 

@@ -2,11 +2,21 @@
 
 module Camfort.Specification.Stencils.CheckSpec (spec) where
 
-import Camfort.Analysis.CommentAnnotator
+import qualified Data.ByteString.Internal as BS
+
+import Camfort.Analysis.Annotations (unitAnnotation)
 import Camfort.Specification.Stencils.CheckBackend
+import Camfort.Specification.Stencils.CheckFrontend
+  (CheckResult, stencilChecking, unusedRegion)
 import qualified Camfort.Specification.Stencils.Grammar as SYN
 import Camfort.Specification.Stencils.Model
 import Camfort.Specification.Stencils.Syntax
+
+import qualified Language.Fortran.Analysis          as FA
+import qualified Language.Fortran.Analysis.BBlocks  as FAB
+import qualified Language.Fortran.Analysis.Renaming as FAR
+import           Language.Fortran.Parser.Any (fortranParser)
+import qualified Language.Fortran.Util.Position     as FU
 
 import Test.Hspec
 
@@ -15,6 +25,11 @@ parseAndConvert x =
     in case SYN.specParser x of
          Left  _  -> error "received stencil with invalid syntax in test"
          Right v  -> synToAst v
+
+checkText text =
+  either (error "received test input with invalid syntax")
+     (stencilChecking . getBlocks . fmap (const unitAnnotation)) $ fortranParser text "example"
+  where getBlocks = FAB.analyseBBlocks . FAR.analyseRenames . FA.initAnalysis
 
 spec :: Spec
 spec =
@@ -76,3 +91,26 @@ spec =
       it "rejects stencils with undefined regions" $
          parseAndConvert "= stencil r1 :: a"
          `shouldBe` (Left . regionNotInScope $ "r1")
+
+      describe "region validation" $
+        checkTest exampleUnusedRegion "warns about unused regions"
+          (unusedRegion (mkSpan (18, 2, 3) (49, 2, 34)) "r1")
+
+checkTest :: String -> String -> CheckResult -> SpecWith ()
+checkTest exampleText testDescription expected =
+  it testDescription $ checkText (BS.packChars exampleText) `shouldBe` expected
+
+mkSpan :: (Int, Int, Int) -> (Int, Int, Int) -> FU.SrcSpan
+mkSpan (a,r,c) (a',r',c') = FU.SrcSpan
+  (FU.initPosition { FU.posAbsoluteOffset = a
+                   , FU.posLine = r
+                   ,  FU.posColumn = c  })
+  (FU.initPosition { FU.posAbsoluteOffset = a'
+                   , FU.posLine = r'
+                   , FU.posColumn = c' })
+
+exampleUnusedRegion :: String
+exampleUnusedRegion =
+  "program example\n\
+  \  != region :: r1 = pointed(dim=1)\n\
+  \end program"

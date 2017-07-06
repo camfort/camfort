@@ -1,10 +1,10 @@
 { -- -*- Mode: Haskell -*-
 {-# LANGUAGE DeriveDataTypeable, PatternGuards #-}
 module Camfort.Specification.Stencils.Grammar
-( specParser, Specification(..), Region(..), SpecInner(..), lexer ) where
+( reqRegions, specParser, Specification(..), Region(..), SpecInner(..), lexer ) where
 
 import Data.Char (isLetter, isNumber, isAlphaNum, toLower, isAlpha, isSpace)
-import Data.List (intersect, sort, isPrefixOf, isInfixOf, intercalate)
+import Data.List (intersect, nub, sort, isPrefixOf, isInfixOf, intercalate)
 import Data.Data
 import qualified Data.Text as T
 
@@ -124,6 +124,26 @@ data Specification
   = RegionDec String Region
   | SpecDec SpecInner [String]
   deriving (Show, Eq, Typeable, Data)
+
+-- | Regions that are referenced in a specification.
+reqRegions :: Specification -> [Syn.Variable]
+reqRegions spec = nub . sort $
+  case spec of
+    RegionDec _ r             -> reqRegions' r
+    SpecDec (SpecInner x _) _ ->
+      case x of
+        Once a -> reqRegionsApprox a
+        Mult a -> reqRegionsApprox a
+  where
+    reqRegionsApprox (Exact r) = reqRegions' r
+    reqRegionsApprox (Bound l u) =
+      let maybeReqRegions = maybe [] reqRegions'
+      in maybeReqRegions l ++ maybeReqRegions u
+    reqRegions' :: Region -> [Syn.Variable]
+    reqRegions' RegionConst{} = []
+    reqRegions' (Or r1 r2)    = reqRegions' r1 ++ reqRegions' r2
+    reqRegions' (And r1 r2)   = reqRegions' r1 ++ reqRegions' r2
+    reqRegions' (Var v)       = [v]
 
 data Region
   = RegionConst Syn.Region
