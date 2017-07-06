@@ -5,7 +5,13 @@ program nested
   integer :: i
 
   do i = 1, 10
-      x = a(i)
+     if (.true.) then 
+       x = a(i)
+      else
+       x = a(i+2)
+     end if
+     y = a(i+1) + x
+     a(i) = y
   end do
   
   contains
