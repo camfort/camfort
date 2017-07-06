@@ -195,14 +195,14 @@ type Checker a =
 -- then convert it and return an updated annotation containing the AST
 parseCommentToAST :: FA.Analysis A -> FU.SrcSpan -> Checker (Either SynToAstError (FA.Analysis A))
 parseCommentToAST ann span =
-  case stencilSpec (FA.prevAnnotation ann) of
-    Just (Left stencilComment) -> do
+  case getParseSpec (FA.prevAnnotation ann) of
+    Just stencilComment -> do
          renv <- fmap regionEnv get
          let ?renv = renv
           in case synToAst stencilComment of
-               Right ast  -> pure . pure $ onPrev
-                              (\ann -> ann {stencilSpec = Just (Right ast)}) ann
-               Left err   -> pure . Left $ err
+               Right ast -> pure . pure $ onPrev
+                 (either giveRegionSpec giveAstSpec ast) ann
+               Left err  -> pure . Left $ err
 
     _ -> pure . pure $ ann
 
@@ -210,9 +210,9 @@ parseCommentToAST ann span =
 -- and add it to current region environment in scope
 updateRegionEnv :: FA.Analysis A -> Checker ()
 updateRegionEnv ann =
-  case stencilSpec (FA.prevAnnotation ann) of
-    Just (Right (Left renv)) -> modify (\s -> s { regionEnv = renv ++ regionEnv s })
-    _                        -> return ()
+  case getRegionSpec (FA.prevAnnotation ann) of
+    Just renv -> modify (\s -> s { regionEnv = renv ++ regionEnv s })
+    _         -> pure ()
 
 checkOffsetsAgainstSpec :: [(Variable, Multiplicity [[Int]])]
                         -> [(Variable, Specification)]
@@ -273,9 +273,9 @@ perBlockCheck b@(F.BlComment ann span _) = do
       flowsGraph <- ask
       updateRegionEnv ann'
       let b' = F.setAnnotation ann' b
-      case (stencilSpec $ FA.prevAnnotation ann', stencilBlock $ FA.prevAnnotation ann') of
+      case (getAstSpec $ FA.prevAnnotation ann', stencilBlock $ FA.prevAnnotation ann') of
         -- Comment contains a specification and an Associated block
-        (Just (Right (Right specDecls)), Just block) ->
+        (Just specDecls, Just block) ->
          case block of
           s@(F.BlStatement _ span' _ (F.StExpressionAssign _ _ lhs _)) ->
            case isArraySubscript lhs of

@@ -29,6 +29,13 @@ module Camfort.Analysis.Annotations
   , pRefactored
   -- ** Transformation Helpers
   , onPrev
+  -- ** Specification Annotation Helpers
+  , getAstSpec
+  , getParseSpec
+  , getRegionSpec
+  , giveAstSpec
+  , giveParseSpec
+  , giveRegionSpec
   -- * Other Helpers
   , Report
   , buildCommentText
@@ -61,13 +68,49 @@ data Annotation =
     , deleteNode    :: Bool
     -- Stencil specification annotations
     -- TODO: move these into their own annotation
-    , stencilSpec    :: Maybe
-    -- If defined, either an unprocessed syntax tree
-         (Either StencilComment.Specification
-           -- Or a parser AST of a RegionEnv or SpecDecls
-           (Either StencilSpec.RegionEnv StencilSpec.SpecDecls))
+    , stencilSpec    :: Maybe SpecAnnotation
     , stencilBlock   :: Maybe (F.Block (FA.Analysis Annotation))
     } deriving (Eq, Show, Typeable, Data)
+
+-- | Specification annotation.
+data SpecAnnotation
+  -- | Unprocessed syntax tree.
+  = ParserSpec StencilComment.Specification
+  -- | Region definition.
+  | RegionDecl StencilSpec.RegionEnv
+  -- | Normalised AST specification.
+  | ASTSpec StencilSpec.SpecDecls
+  deriving (Eq, Show, Data)
+
+-- | Set the annotation's stencil specification to a parsed specification.
+giveParseSpec :: StencilComment.Specification -> Annotation -> Annotation
+giveParseSpec spec ann = ann { stencilSpec = Just $ ParserSpec spec }
+
+-- | Set the annotation's stencil specification to a parsed specification.
+giveRegionSpec :: StencilSpec.RegionEnv -> Annotation -> Annotation
+giveRegionSpec spec ann = ann { stencilSpec = Just $ RegionDecl spec }
+
+-- | Set the annotation's stencil specification to a normalized specification.
+giveAstSpec :: StencilSpec.SpecDecls -> Annotation -> Annotation
+giveAstSpec spec ann = ann { stencilSpec = Just $ ASTSpec spec }
+
+-- | Retrieve a parsed specification from an annotation.
+getParseSpec :: Annotation -> Maybe StencilComment.Specification
+getParseSpec s = case stencilSpec s of
+  (Just (ParserSpec spec)) -> Just spec
+  _                        -> Nothing
+
+-- | Retrieve a region environment from an annotation.
+getRegionSpec :: Annotation -> Maybe StencilSpec.RegionEnv
+getRegionSpec s = case stencilSpec s of
+  (Just (RegionDecl renv)) -> Just renv
+  _                        -> Nothing
+
+-- | Retrieve a normalized specification from an annotation.
+getAstSpec :: Annotation -> Maybe StencilSpec.SpecDecls
+getAstSpec s = case stencilSpec s of
+  (Just (ASTSpec ast)) -> Just ast
+  _                    -> Nothing
 
 -- Predicate on whether an AST has been refactored
 pRefactored :: Annotation -> Bool

@@ -31,7 +31,7 @@ import qualified Language.Fortran.Analysis as FA
 -- Instances for embedding parsed specifications into the AST
 instance ASTEmbeddable (FA.Analysis Annotation) Gram.Specification where
   annotateWithAST ann ast =
-    onPrev (\ann -> ann { stencilSpec = Just $ Left ast }) ann
+    onPrev (giveParseSpec ast) ann
 
 instance Linkable (FA.Analysis Annotation) where
   link ann (b@(F.BlDo {})) =
