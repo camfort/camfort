@@ -32,6 +32,7 @@ module Camfort.Input
     -- * Builders for analysers and refactorings
   , callAndSummarise
   , doAnalysisReportWithModFiles
+  , doAnalysisReportWithModFilesIO
   , doAnalysisSummary
   , doRefactor
   , doRefactorAndCreate

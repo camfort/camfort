@@ -48,7 +48,7 @@ executable camfort
                         Camfort.Specification.Units
                         Camfort.Specification.Units.InferenceFrontend
                         Camfort.Specification.Units.InferenceBackend
-                        Camfort.Specification.Units.InferenceBackendSBV
+                        Camfort.Specification.Units.InferenceBackendZ3
                         Camfort.Specification.Units.Environment
                         Camfort.Specification.Units.Monad
                         Camfort.Specification.Units.Parser

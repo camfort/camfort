@@ -285,7 +285,13 @@ inferUnits uo (fname, fileText, pf)
   | Right []   <- eVars = return $ checkUnits uo (fname, fileText, pf)
   | Right vars <- eVars = do
     let cons = usConstraints state
-    (putStrLn . unlines . map show . fromMaybe [] . snd) =<< Z.inferVariables cons
+    putStrLn "****************************** Z3"
+    (result, m_model) <- Z.inferVariables cons
+    putStrLn $ "Result: " ++ show result
+    case m_model of
+      Just model -> putStrLn . unlines . map show $ model
+      Nothing    -> return ()
+    putStrLn "^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^ Z3"
     return $ okReport vars
   | Left exc   <- eVars = return $ errReport exc
   where

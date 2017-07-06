@@ -140,7 +140,7 @@ runCriticalVariables = do
 runInferVariables :: UnitSolver [(VV, UnitInfo)]
 runInferVariables = do
   cons <- usConstraints `fmap` get
-  return $ inferVariablesSBV cons
+  return $ inferVariables cons
 
 -- | Return a possible list of unsolvable constraints.
 runInconsistentConstraints :: UnitSolver (Maybe Constraints)
