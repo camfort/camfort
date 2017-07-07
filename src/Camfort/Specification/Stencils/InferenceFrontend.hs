@@ -136,30 +136,29 @@ stencilInference mode marker pf =
     perPU pu | Just _ <- FA.bBlocks $ F.getAnnotation pu = do
         let pum = descendBiM (perBlockInfer mode marker mi) pu
             checkRes = stencilChecking pf
-            (pu', log) = runInferer checkRes ivMap flTo pum
+            rd = FAD.reachingDefinitions dm gr
+            Just gr = M.lookup (FA.puName pu) bbm
+            flTo = FAD.genFlowsToGraph bm dm gr rd
             -- induction variable map
+            beMap = FAD.genBackEdgeMap (FAD.dominators gr) gr
+            -- identify every loop by its back-edge
             ivMap = FAD.genInductionVarMapByASTBlock beMap gr
+            (pu', log) = runInferer checkRes ivMap flTo pum
         tell log
         return pu'
 
     perPU pu = return pu
 
     -- perform reaching definitions analysis
-    rd    = FAD.reachingDefinitions dm gr
-    -- create graph of definition "flows"
-    flTo =  FAD.genFlowsToGraph bm dm gr rd
 
-    -- identify every loop by its back-edge
-    beMap = FAD.genBackEdgeMap (FAD.dominators gr) gr
+    -- create graph of definition "flows"
+
+
 
     -- get map of AST-Block-ID ==> corresponding AST-Block
     bm    = FAD.genBlockMap pf'
     -- get map of program unit ==> basic block graph
     bbm   = FAB.genBBlockMap pf'
-    -- build the supergraph of global dependency
-    sgr   = FAB.genSuperBBGr bbm
-    -- extract the supergraph itself
-    gr    = FAB.superBBGrGraph sgr
 
     -- get map of variable name ==> { defining AST-Block-IDs }
     dm    = FAD.genDefMap bm
