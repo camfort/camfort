@@ -11,7 +11,7 @@ real a(0:n)
 real r
 
 do i = 1,n
- r = max(a(i), r)
+   r = max(a(i), r)
 end do
 
-end
+end program

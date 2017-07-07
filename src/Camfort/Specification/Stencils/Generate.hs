@@ -176,8 +176,12 @@ genSubscripts flowsGraph blocks =
             -- Fresh dependency
             put $ node : visited
             let blocksFlowingIn = mapMaybe (lab flowsGraph) $ pre flowsGraph node
+            -- Try to get the block from the flowsGraph before analysis its rhses
+            let blockG = case (lab flowsGraph node) of
+                           Nothing -> block
+                           Just b  -> b
             dependencies <- mapM (genSubscripts' False flowsGraph) blocksFlowingIn
-            return $ M.unionsWith (++) (genRHSsubscripts block : dependencies)
+            return $ M.unionsWith (++) (genRHSsubscripts blockG : dependencies)
 
          Nothing -> error $ "Missing a label for: " ++ show block
 
