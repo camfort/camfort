@@ -96,9 +96,30 @@ spec =
         checkTest exampleUnusedRegion "warns about unused regions"
           (unusedRegion (mkSpan (18, 2, 3) (49, 2, 34)) "r1")
 
+      describe "check output" $ do
+        checkTestShow exampleSimpleCorrect
+          "recognises correct stencils"
+          "(4:5)-(4:63)    Correct."
+        checkTestShow exampleUnusedRegionWithOtherSpecs
+          "provides reports in correct order"
+          "(3:3)-(3:34)    Warning: Unused region 'r1'\n\
+          \(5:5)-(5:63)    Correct.\n\
+          \(9:5)-(9:52)    Not well specified.\n\
+          \        Specification is:\n\
+          \                stencil readOnce, (forward(depth=1, dim=1)) :: a\n\n\
+          \        but at (10:5)-(10:17) the code behaves as\n\
+          \                stencil readOnce, (forward(depth=1, dim=1, nonpointed)) :: a\n"
+
+runCheck :: String -> CheckResult
+runCheck = checkText . BS.packChars
+
 checkTest :: String -> String -> CheckResult -> SpecWith ()
 checkTest exampleText testDescription expected =
-  it testDescription $ checkText (BS.packChars exampleText) `shouldBe` expected
+  it testDescription $ runCheck exampleText `shouldBe` expected
+
+checkTestShow :: String -> String -> String -> SpecWith ()
+checkTestShow exampleText testDescription expected =
+  it testDescription $ show (runCheck exampleText) `shouldBe` expected
 
 mkSpan :: (Int, Int, Int) -> (Int, Int, Int) -> FU.SrcSpan
 mkSpan (a,r,c) (a',r',c') = FU.SrcSpan
@@ -113,4 +134,29 @@ exampleUnusedRegion :: String
 exampleUnusedRegion =
   "program example\n\
   \  != region :: r1 = pointed(dim=1)\n\
+  \end program"
+
+exampleSimpleCorrect :: String
+exampleSimpleCorrect =
+  "program example\n\
+  \  real, dimension(10) :: a\n\
+  \  do i = 1, 10\n\
+  \    != stencil readOnce, forward(depth=1,dim=1,nonpointed) :: a\n\
+  \    a(i) = a(i+1)\n\
+  \  end do\n\
+  \end program"
+
+exampleUnusedRegionWithOtherSpecs :: String
+exampleUnusedRegionWithOtherSpecs =
+  "program example\n\
+  \  real, dimension(10) :: a, b\n\
+  \  != region :: r1 = pointed(dim=1)\n\
+  \  do i = 1, 10\n\
+  \    != stencil readOnce, forward(depth=1,dim=1,nonpointed) :: a\n\
+  \    a(i) = a(i+1)\n\
+  \  end do\n\
+  \  do i = 1, 10\n\
+  \    != stencil readOnce, forward(depth=1,dim=1) :: a\n\
+  \    a(i) = a(i+1)\n\
+  \  end do\n\
   \end program"
