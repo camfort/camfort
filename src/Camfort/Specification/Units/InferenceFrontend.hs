@@ -68,7 +68,7 @@ initInference = do
   modifyProgramFile $ const linkedPF
 
   -- Send the output of the parser to the logger.
-  mapM_ tell parserReport
+  mapM_ (tell . (\(s,e) -> "Error " ++ show s ++ ": " ++ e)) parserReport
 
   -- The following insert* functions examine the AST and insert
   -- mappings into the tables stored in the UnitState.

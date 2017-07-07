@@ -119,8 +119,7 @@ instance GetSpan StencilResult where
 instance GetSpan StencilCheckError where
   getSpan (SynToAstError     _ srcSpan)      = srcSpan
   getSpan (NotWellSpecified  (srcSpan, _) _) = srcSpan
-  getSpan (ParseError _)                     = error
-    "CheckFrontend: attempted to get span of parse error"
+  getSpan (ParseError srcSpan _)             = srcSpan
 
 instance GetSpan StencilCheckWarning where
   getSpan (DuplicateSpecification srcSpan) = srcSpan
@@ -139,7 +138,7 @@ data StencilCheckError
   -- | The existing stencil conflicts with an inferred stencil.
   | NotWellSpecified (FU.SrcSpan, SpecDecls) (FU.SrcSpan, SpecDecls)
   -- | The stencil could not be parsed correctly.
-  | ParseError String
+  | ParseError FU.SrcSpan String
   deriving (Eq)
 
 -- | Create a check result informating a user of a 'SynToAstError'.
@@ -151,8 +150,8 @@ notWellSpecified :: (FU.SrcSpan, SpecDecls) -> (FU.SrcSpan, SpecDecls) -> Stenci
 notWellSpecified got inferred = SCFail $ NotWellSpecified got inferred
 
 -- | Create a check result informating a user of a parse error.
-parseError :: String -> StencilResult
-parseError = SCFail . ParseError
+parseError :: FU.SrcSpan -> String -> StencilResult
+parseError srcSpan err = SCFail $ ParseError srcSpan err
 
 -- | Represents a non-fatal validation warning.
 data StencilCheckWarning
@@ -204,7 +203,7 @@ instance Show StencilCheckError where
                "Specification is:\n", sp, sp, pprintSpecDecls stencilActual, "\n",
                sp, "but at ", show spanInferred, " the code behaves as\n", sp, sp,
                pprintSpecDecls stencilInferred]
-  show (ParseError s) = s
+  show (ParseError srcSpan err) = prettyWithSpan srcSpan err
 
 instance Show StencilCheckWarning where
   show (DuplicateSpecification srcSpan) = prettyWithSpan srcSpan
@@ -216,7 +215,7 @@ instance Show StencilCheckWarning where
 stencilChecking :: F.ProgramFile (FA.Analysis A) -> CheckResult
 stencilChecking pf = CheckResult . snd . runWriter $
   do -- Attempt to parse comments to specifications
-     pf' <- mapWriter (second $ fmap parseError) $ annotateComments Gram.specParser pf
+     pf' <- mapWriter (second $ fmap (uncurry parseError)) $ annotateComments Gram.specParser pf
 
          -- get map of AST-Block-ID ==> corresponding AST-Block
      let bm         = FAD.genBlockMap pf'

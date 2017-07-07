@@ -91,6 +91,9 @@ spec =
         checkTestShow exampleUnusedRegion
           "warns about unused regions"
           "(2:3)-(2:34)    Warning: Unused region 'r1'"
+        checkTestShow exampleSimpleInvalidSyntax
+          "warns about specification parse errors"
+          "(2:3)-(2:16)    Could not parse specification at: \"... \"\n"
         checkTestShow exampleSimpleCorrect
           "recognises correct stencils"
           "(4:5)-(4:63)    Correct."
@@ -102,7 +105,8 @@ spec =
           \        Specification is:\n\
           \                stencil readOnce, (forward(depth=1, dim=1)) :: a\n\n\
           \        but at (10:5)-(10:17) the code behaves as\n\
-          \                stencil readOnce, (forward(depth=1, dim=1, nonpointed)) :: a\n"
+          \                stencil readOnce, (forward(depth=1, dim=1, nonpointed)) :: a\n\n\
+          \(12:3)-(12:16)    Could not parse specification at: \"... \"\n"
 
 checkText text =
   either (error "received test input with invalid syntax")
@@ -132,6 +136,12 @@ exampleSimpleCorrect =
   \  end do\n\
   \end program"
 
+exampleSimpleInvalidSyntax :: String
+exampleSimpleInvalidSyntax =
+  "program example\n\
+  \  != stencil foo\n\
+  \end program"
+
 exampleUnusedRegionWithOtherSpecs :: String
 exampleUnusedRegionWithOtherSpecs =
   "program example\n\
@@ -145,4 +155,5 @@ exampleUnusedRegionWithOtherSpecs =
   \    != stencil readOnce, forward(depth=1,dim=1) :: a\n\
   \    a(i) = a(i+1)\n\
   \  end do\n\
+  \  != stencil foo\n\
   \end program"
