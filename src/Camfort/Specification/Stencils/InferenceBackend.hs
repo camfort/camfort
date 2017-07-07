@@ -142,7 +142,9 @@ coalesce (V.Cons l1 ls1, V.Cons u1 us1) (V.Cons l2 ls2, V.Cons u2 us2)
     = Just (V.Cons l1 ls1, V.Cons u2 us2)
   | (u2 + 1 == l1) && (us1 == us2) && (ls1 == ls2)
     = Just (V.Cons l2 ls2, V.Cons u1 us1)
-  | otherwise
+-- Fall through (also catches cases where the initial size pre-condition
+-- has been violated in a use of `Helpers.Vec.fromLists`
+coalesce _ _
     = Nothing
 
 {-| Collapses the regions into a small set by looking for potential overlaps
