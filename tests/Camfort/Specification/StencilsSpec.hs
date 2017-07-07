@@ -296,10 +296,31 @@ spec =
         "warns when duplicate stencils exist, but continues"
         "\nEncountered the following errors when checking stencil specs for 'tests/fixtures/Specification/Stencils/example14.f'\n\n\
 \(10:1)-(10:51)    Warning: Duplicate specification."
+
       assertStencilSynthResponseOut "example15.f"
         "warns when duplicate stencils exist (combined stencils), but continues"
         "\nEncountered the following errors when checking stencil specs for 'tests/fixtures/Specification/Stencils/example15.f'\n\n\
 \(9:1)-(9:51)    Warning: Duplicate specification."
+
+      assertStencilCheck "example16.f"
+        "error trying to check an access spec against a stencil"
+        "\nexample16.f\n\
+\(8:1)-(8:50)    Not well specified.\n\
+\        Specification is:\n\
+\                access readOnce, (forward(depth=1, dim=1)) :: a\n\
+\\n\
+\        but at (9:8)-(9:32) the code behaves as\n\
+\                stencil readOnce, (forward(depth=1, dim=1)) :: a\n"
+
+      assertStencilCheck "example17.f"
+        "error trying to check an access spec against a stencil"
+        "\nexample17.f\n\
+\(8:1)-(8:51)    Not well specified.\n\
+\        Specification is:\n\
+\                stencil readOnce, (forward(depth=1, dim=1)) :: a\n\
+\\n\
+\        but at (9:8)-(9:29) the code behaves as\n\
+\                access readOnce, (forward(depth=1, dim=1)) :: a\n"
 
     sampleDirConts <- runIO $ listDirectory samplesDir
     expectedDirConts <- runIO $ listDirectory (samplesDir </> "expected")
@@ -311,7 +332,14 @@ spec =
                 file ("produces correct output file for " ++ file))
         sampleFiles
 
-  where assertStencilInferenceDir expected dir fileName testComment =
+  where -- Helpers go here for loading files and running analyses
+        assertStencilCheck fileName testComment expected = do
+            let file = fixturesDir </> fileName
+            programs <- runIO $ readParseSrcDir file []
+            let [(_, _, program)] = programs
+            it testComment $  check fileName program `shouldBe` expected
+
+        assertStencilInferenceDir expected dir fileName testComment =
           let file         = dir </> fileName
               version      = deduceVersion file
               expectedFile = expected dir fileName
@@ -320,15 +348,17 @@ spec =
             programSrc       <- runIO $ readFile file
             synthExpectedSrc <- runIO $ readFile expectedFile
             it testComment $
-              (B.unpack . runIdentity
-               $ reprint (refactoring version)
-               (snd . head . snd $ synth AssignMode '=' (map (\(f, _, p) -> (f, p)) program))
-               (B.pack programSrc))
-                `shouldBe` synthExpectedSrc
+               (map (B.unpack . runIdentity . flip (reprint (refactoring version)) (B.pack programSrc) . snd)
+               (snd $ synth AssignMode '=' (map (\(f, _, p) -> (f, p)) program))
+               )
+                `shouldBe` [synthExpectedSrc]
+
         assertStencilInferenceOnFile = assertStencilInferenceDir
           (\d f -> d </> getExpectedSrcFileName f) fixturesDir
+
         assertStencilInferenceSample = assertStencilInferenceDir
           (\d f -> d </> "expected" </> f) samplesDir
+
         assertStencilSynthResponse fileName testComment expectedResponse =
             let file = fixturesDir </> fileName
             in do
@@ -336,10 +366,12 @@ spec =
               programSrc       <- runIO $ readFile file
               it testComment $ (fst $ synth AssignMode '=' (map (\(f, _, p) -> (f, p)) program))
                 `shouldBe` expectedResponse
+
         assertStencilSynthResponseOut fileName testComment expectedResponse =
           describe testComment $ do
             assertStencilInferenceOnFile fileName "correct synthesis"
             assertStencilSynthResponse fileName "correct output" expectedResponse
+
         assertStencilInferenceNoWarn fileName testComment = assertStencilSynthResponseOut fileName testComment ""
         fixturesDir = "tests" </> "fixtures" </> "Specification" </> "Stencils"
         samplesDir  = "samples" </> "stencils"

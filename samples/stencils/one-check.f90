@@ -48,8 +48,8 @@ program one
   ! left and right (inner) edges
   do j = 1, (jmax-1)
      b(0, j) = (a(0, 0) + a(0,j-1) + a(0,j+1) + a(1,0))/4.0
-     != stencil r2 :: a
      e = a(imax, j) + a(imax, j-1)
+     != stencil readOnce, r2 :: a
      b(imax, j) = (e + a(imax, j+1) + a(imax-1,j))/4.0
   end do
 

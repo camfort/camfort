@@ -277,12 +277,9 @@ perBlockCheck b@(F.BlComment ann span _) = do
         -- Comment contains a specification and an Associated block
         (Just specDecls, Just block) ->
          case block of
-          s@(F.BlStatement _ span' _ (F.StExpressionAssign _ _ lhs _)) ->
-           case isArraySubscript lhs of
-             Just subs -> do
-                checkStencil flowsGraph s specDecls span' subs span
-                return b'
-             Nothing -> return b'
+          s@(F.BlStatement _ span' _ (F.StExpressionAssign _ _ lhs _)) -> do
+             checkStencil flowsGraph s specDecls span' (isArraySubscript lhs) span
+             return b'
 
           -- Stub, maybe collect stencils inside 'do' block
           F.BlDo{} -> return b'
@@ -303,8 +300,12 @@ perBlockCheck b = do
 
 -- | Validate the stencil and log an appropriate result.
 checkStencil :: FAD.FlowsGraph A -> F.Block (FA.Analysis A) -> SpecDecls
-  -> FU.SrcSpan -> [F.Index (FA.Analysis Annotation)] -> FU.SrcSpan -> Checker ()
-checkStencil flowsGraph s specDecls spanInferred subs span = do
+  -> FU.SrcSpan -> Maybe [F.Index (FA.Analysis Annotation)] -> FU.SrcSpan -> Checker ()
+checkStencil flowsGraph s specDecls spanInferred maybeSubs span = do
+  -- Work out whether this is a stencil (non empty LHS indices) or not
+  let (subs, isStencil) = case maybeSubs of
+                             Nothing -> ([], False)
+                             Just subs -> (subs, True)
   -- Create list of relative indices
   ivmap <- fmap ivMap get
   -- Do analysis
@@ -316,8 +317,10 @@ checkStencil flowsGraph s specDecls spanInferred subs span = do
           (var, (False, offsets)) -> (var, Once offsets)) relOffsets
       expandedDecls =
           concatMap (\(vars,spec) -> map (flip (,) spec) vars) specDecls
+
+  let userDefinedIsStencils = map (\(_, Specification _ b) -> b) specDecls
   -- Model and compare the current and specified stencil specs
-  if checkOffsetsAgainstSpec multOffsets expandedDecls
+  if (all (isStencil ==) userDefinedIsStencils) && checkOffsetsAgainstSpec multOffsets expandedDecls
     then mapM_ (\spec@(v,s) -> do
                    specExists <- seenBefore spec
                    if specExists then addResult (SCWarn (DuplicateSpecification span))
