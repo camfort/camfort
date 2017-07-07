@@ -166,6 +166,8 @@ containedWithin (V.Nil, V.Nil) (V.Nil, V.Nil)
   = True
 containedWithin (V.Cons l1 ls1, V.Cons u1 us1) (V.Cons l2 ls2, V.Cons u2 us2)
   = (l2 <= l1 && u1 <= u2) && containedWithin (ls1, us1) (ls2, us2)
+containedWithin _ _
+  = False
 
 -- Local variables:
 -- mode: haskell
