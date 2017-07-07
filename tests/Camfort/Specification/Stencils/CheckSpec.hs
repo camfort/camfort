@@ -7,7 +7,7 @@ import qualified Data.ByteString.Internal as BS
 import Camfort.Analysis.Annotations (unitAnnotation)
 import Camfort.Specification.Stencils.CheckBackend
 import Camfort.Specification.Stencils.CheckFrontend
-  (CheckResult, stencilChecking, unusedRegion)
+  (CheckResult, stencilChecking)
 import qualified Camfort.Specification.Stencils.Grammar as SYN
 import Camfort.Specification.Stencils.Model
 import Camfort.Specification.Stencils.Syntax
@@ -25,11 +25,6 @@ parseAndConvert x =
     in case SYN.specParser x of
          Left  _  -> error "received stencil with invalid syntax in test"
          Right v  -> synToAst v
-
-checkText text =
-  either (error "received test input with invalid syntax")
-     (stencilChecking . getBlocks . fmap (const unitAnnotation)) $ fortranParser text "example"
-  where getBlocks = FAB.analyseBBlocks . FAR.analyseRenames . FA.initAnalysis
 
 spec :: Spec
 spec =
@@ -92,11 +87,10 @@ spec =
          parseAndConvert "= stencil r1 :: a"
          `shouldBe` (Left . regionNotInScope $ "r1")
 
-      describe "region validation" $
-        checkTest exampleUnusedRegion "warns about unused regions"
-          (unusedRegion (mkSpan (18, 2, 3) (49, 2, 34)) "r1")
-
-      describe "check output" $ do
+      describe "stencils check" $ do
+        checkTestShow exampleUnusedRegion
+          "warns about unused regions"
+          "(2:3)-(2:34)    Warning: Unused region 'r1'"
         checkTestShow exampleSimpleCorrect
           "recognises correct stencils"
           "(4:5)-(4:63)    Correct."
@@ -110,25 +104,17 @@ spec =
           \        but at (10:5)-(10:17) the code behaves as\n\
           \                stencil readOnce, (forward(depth=1, dim=1, nonpointed)) :: a\n"
 
+checkText text =
+  either (error "received test input with invalid syntax")
+     (stencilChecking . getBlocks . fmap (const unitAnnotation)) $ fortranParser text "example"
+  where getBlocks = FAB.analyseBBlocks . FAR.analyseRenames . FA.initAnalysis
+
 runCheck :: String -> CheckResult
 runCheck = checkText . BS.packChars
-
-checkTest :: String -> String -> CheckResult -> SpecWith ()
-checkTest exampleText testDescription expected =
-  it testDescription $ runCheck exampleText `shouldBe` expected
 
 checkTestShow :: String -> String -> String -> SpecWith ()
 checkTestShow exampleText testDescription expected =
   it testDescription $ show (runCheck exampleText) `shouldBe` expected
-
-mkSpan :: (Int, Int, Int) -> (Int, Int, Int) -> FU.SrcSpan
-mkSpan (a,r,c) (a',r',c') = FU.SrcSpan
-  (FU.initPosition { FU.posAbsoluteOffset = a
-                   , FU.posLine = r
-                   ,  FU.posColumn = c  })
-  (FU.initPosition { FU.posAbsoluteOffset = a'
-                   , FU.posLine = r'
-                   , FU.posColumn = c' })
 
 exampleUnusedRegion :: String
 exampleUnusedRegion =

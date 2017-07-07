@@ -26,7 +26,6 @@ module Camfort.Specification.Stencils.CheckFrontend
   , CheckResult
   , checkFailure
   , checkWarnings
-  , unusedRegion
     -- ** Helpers
   , existingStencils
   ) where
@@ -37,7 +36,7 @@ import Control.Monad.State.Strict
 import Control.Monad.Writer.Strict hiding (Product)
 import Data.Function (on)
 import Data.Generics.Uniplate.Operations
-import Data.List (insert, intercalate, sort)
+import Data.List (intercalate, sort)
 
 import Camfort.Analysis.Annotations
 import Camfort.Analysis.CommentAnnotator
@@ -61,15 +60,16 @@ import Algebra.Lattice (joins1)
 import Data.Int
 import qualified Data.Set as S
 
-newtype CheckResult = CheckResult { getCheckResult :: [StencilResult] }
+newtype CheckResult = CheckResult [StencilResult]
+
+-- | Retrieve a list of 'StencilResult' from a 'CheckResult'.
+--
+-- Ensures correct ordering of results.
+getCheckResult :: CheckResult -> [StencilResult]
+getCheckResult (CheckResult rs) = sort rs
 
 instance Eq CheckResult where
-  (==) = (==) `on` (sort . getCheckResult)
-
--- | Results are ordered based on the position of the specification.
-instance Monoid CheckResult where
-  mempty = CheckResult mempty
-  mappend (CheckResult x) (CheckResult y) = CheckResult $ foldr insert x y
+  (==) = (==) `on` getCheckResult
 
 -- | Represents only the check results for invalid stencils.
 newtype CheckError  = CheckError { getCheckError :: [StencilCheckError] }
@@ -143,16 +143,16 @@ data StencilCheckError
   deriving (Eq)
 
 -- | Create a check result informating a user of a 'SynToAstError'.
-synToAstError :: SynToAstError -> FU.SrcSpan -> CheckResult
-synToAstError err srcSpan = CheckResult . (:[]) . SCFail $ SynToAstError err srcSpan
+synToAstError :: SynToAstError -> FU.SrcSpan -> StencilResult
+synToAstError err srcSpan = SCFail $ SynToAstError err srcSpan
 
 -- | Create a check result informating a user of a 'NotWellSpecified' error.
-notWellSpecified :: (FU.SrcSpan, SpecDecls) -> (FU.SrcSpan, SpecDecls) -> CheckResult
-notWellSpecified got inferred = CheckResult . (:[]) . SCFail $ NotWellSpecified got inferred
+notWellSpecified :: (FU.SrcSpan, SpecDecls) -> (FU.SrcSpan, SpecDecls) -> StencilResult
+notWellSpecified got inferred = SCFail $ NotWellSpecified got inferred
 
 -- | Create a check result informating a user of a parse error.
-parseError :: String -> CheckResult
-parseError = CheckResult . (:[]) . SCFail . ParseError
+parseError :: String -> StencilResult
+parseError = SCFail . ParseError
 
 -- | Represents a non-fatal validation warning.
 data StencilCheckWarning
@@ -163,20 +163,20 @@ data StencilCheckWarning
   deriving (Eq)
 
 -- | Create a check result informing a user of a duplicate specification.
-duplicateSpecification :: FU.SrcSpan -> CheckResult
-duplicateSpecification = CheckResult . (:[]) . SCWarn . DuplicateSpecification
+duplicateSpecification :: FU.SrcSpan -> StencilResult
+duplicateSpecification = SCWarn . DuplicateSpecification
 
 -- | Create a check result informating an unused region.
-unusedRegion :: FU.SrcSpan -> Variable -> CheckResult
-unusedRegion srcSpan var = CheckResult [SCWarn $ UnusedRegion srcSpan var]
+unusedRegion :: FU.SrcSpan -> Variable -> StencilResult
+unusedRegion srcSpan var = SCWarn $ UnusedRegion srcSpan var
 
-specOkay :: FU.SrcSpan -> Specification -> Variable -> FU.SrcSpan -> CheckResult
+specOkay :: FU.SrcSpan -> Specification -> Variable -> FU.SrcSpan -> StencilResult
 specOkay spanSpec@(FU.SrcSpan (FU.Position o1 _ _) (FU.Position o2 _ _)) spec var spanBody@(FU.SrcSpan (FU.Position o1' _ _) (FU.Position o2' _ _)) =
-  CheckResult [SCOkay { scSpan      = spanSpec
-                      , scSpec      = spec
-                      , scBodySpan  = spanBody
-                      , scVar       = var
-                      }]
+  SCOkay { scSpan      = spanSpec
+         , scSpec      = spec
+         , scBodySpan  = spanBody
+         , scVar       = var
+         }
 
 -- | Pretty print a message with suitable spacing after the source position.
 prettyWithSpan :: FU.SrcSpan -> String -> String
@@ -214,9 +214,9 @@ instance Show StencilCheckWarning where
 
 -- Entry point
 stencilChecking :: F.ProgramFile (FA.Analysis A) -> CheckResult
-stencilChecking pf = snd . runWriter $
+stencilChecking pf = CheckResult . snd . runWriter $
   do -- Attempt to parse comments to specifications
-     pf' <- mapWriter (second (mconcat . fmap parseError)) $ annotateComments Gram.specParser pf
+     pf' <- mapWriter (second $ fmap parseError) $ annotateComments Gram.specParser pf
 
          -- get map of AST-Block-ID ==> corresponding AST-Block
      let bm         = FAD.genBlockMap pf'
@@ -246,14 +246,14 @@ stencilChecking pf = snd . runWriter $
 
 data CheckState = CheckState
   { regionEnv     :: RegionEnv
-  , checkResult   :: CheckResult
+  , checkResult   :: [StencilResult]
   , prog          :: Maybe F.ProgramUnitName
   , ivMap         :: FAD.InductionVarMapByASTBlock
   , unusedRegions :: [(FU.SrcSpan, Variable)]
   }
 
-addResult :: CheckResult -> Checker ()
-addResult r = modify (\s -> s { checkResult = checkResult s <> r })
+addResult :: StencilResult -> Checker ()
+addResult r = modify (\s -> s { checkResult = r : checkResult s })
 
 modifyUnusedRegions :: ([(FU.SrcSpan, Variable)] -> [(FU.SrcSpan, Variable)]) -> Checker ()
 modifyUnusedRegions f = modify (\s -> s { unusedRegions = f (unusedRegions s) })
@@ -271,7 +271,7 @@ addRegionToTracked srcSpan@(FU.SrcSpan (FU.Position o1 _ _) (FU.Position o2 _ _)
 startState :: FAD.InductionVarMapByASTBlock -> CheckState
 startState ivmap =
   CheckState { regionEnv     = []
-             , checkResult   = CheckResult []
+             , checkResult   = []
              , prog          = Nothing
              , ivMap         = ivmap
              , unusedRegions = []
@@ -422,7 +422,7 @@ checkStencil flowsGraph s specDecls spanInferred maybeSubs span = do
   where
     seenBefore :: (Variable, Specification) -> Checker Bool
     seenBefore (v,spec) = do
-          checkLog <- fmap (getCheckResult . checkResult) get
+          checkLog <- fmap checkResult get
           pure $ any (\x -> case x of
                               SCOkay{ scSpec=spec'
                                     , scBodySpan=bspan
