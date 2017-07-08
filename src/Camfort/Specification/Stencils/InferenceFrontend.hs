@@ -127,33 +127,37 @@ stencilInference mode marker pf =
           then runWriter (annotateComments Gram.specParser pf)
           else (pf, [])
 
-    (pus', log1)    = runWriter (transformBiM perPU pus)
+    (pus', log1)    = runWriter (mapM perPU pus)
+    checkRes        = stencilChecking pf
+    -- induction variable map
+    ivMap = FAD.genInductionVarMapByASTBlock beMap gr
 
-    -- Run inference per program unit, placing the flowsmap in scope
+    -- Run inference per program unit
     perPU :: F.ProgramUnit (FA.Analysis A)
           -> Writer [LogLine] (F.ProgramUnit (FA.Analysis A))
 
     perPU pu | Just _ <- FA.bBlocks $ F.getAnnotation pu = do
-        let pum = descendBiM (perBlockInfer mode marker mi) pu
-            checkRes = stencilChecking pf
+        let -- Analysis/infer on blocks in the program unit (includes nested pus) 
+            pum = descendBiM (perBlockInfer mode marker mi) pu
+
+            -- perform reaching definitions analysis
             rd = FAD.reachingDefinitions dm gr
+
             Just gr = M.lookup (FA.puName pu) bbm
+            -- create graph of definition "flows"
             flTo = FAD.genFlowsToGraph bm dm gr rd
+
             -- induction variable map
             beMap = FAD.genBackEdgeMap (FAD.dominators gr) gr
+
             -- identify every loop by its back-edge
             ivMap = FAD.genInductionVarMapByASTBlock beMap gr
+
             (pu', log) = runInferer checkRes ivMap flTo pum
         tell log
         return pu'
 
     perPU pu = return pu
-
-    -- perform reaching definitions analysis
-
-    -- create graph of definition "flows"
-
-
 
     -- get map of AST-Block-ID ==> corresponding AST-Block
     bm    = FAD.genBlockMap pf'
@@ -167,13 +171,13 @@ stencilInference mode marker pf =
 
 genSpecsAndReport ::
      InferMode -> FU.SrcSpan -> [Neighbour]
-  -> [F.Block (FA.Analysis A)]
+  -> F.Block (FA.Analysis A)
   -> Inferer [([Variable], Specification)]
-genSpecsAndReport mode span lhsIxs blocks = do
+genSpecsAndReport mode span lhsIxs block = do
     (IS ivmap _) <- get
     flowsGraph     <- fmap ieFlowsGraph ask
     -- Generate specification for the
-    let ((specs, visited), evalInfos) = runWriter $ genSpecifications flowsGraph ivmap lhsIxs blocks
+    let ((specs, visited), evalInfos) = runWriter $ genSpecifications flowsGraph ivmap lhsIxs block
     -- Remember which nodes were visited during this traversal
     modify (\state -> state { visitedNodes = visitedNodes state ++ visited })
     -- Report the specifications
@@ -220,14 +224,14 @@ perBlockInfer' inDo mode marker mi b@(F.BlStatement ann span@(FU.SrcSpan lp _) _
          case lhs of
           -- Assignment to a variable
           (F.ExpValue _ _ (F.ValVariable _)) | inDo ->
-              genSpecsAndReport mode span [] [b]
+              genSpecsAndReport mode span [] b
 
           -- Assignment to something else...
           _ -> case isArraySubscript lhs of
              Just subs ->
                -- Left-hand side is a subscript-by relative index or by a range
                case neighbourIndex ivmap subs of
-                 Just lhs -> genSpecsAndReport mode span lhs [b]
+                 Just lhs -> genSpecsAndReport mode span lhs b
                  Nothing  -> if mode == EvalMode
                              then do
                                tell [(span , Right ("EVALMODE: LHS is an array\
