@@ -153,7 +153,8 @@ stencilInference mode marker pf =
 
             (pu', log) = runInferer checkRes ivMap flTo pum
         tell log
-        return pu'
+        pu'' <- descendM perPU pu'
+        return pu''
 
     perPU pu = return pu
 

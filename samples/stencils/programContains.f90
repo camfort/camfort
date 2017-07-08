@@ -13,7 +13,7 @@ program nested
      y = a(i+1) + x
      a(i) = y
   end do
-  
+
   contains
 
   real function example() 
