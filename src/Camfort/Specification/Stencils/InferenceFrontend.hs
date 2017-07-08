@@ -127,7 +127,7 @@ stencilInference mode marker pf =
           then runWriter (annotateComments Gram.specParser pf)
           else (pf, [])
 
-    (pus', log1)    = runWriter (mapM perPU pus)
+    (pus', log1)    = runWriter (transformBiM perPU pus)
     checkRes        = stencilChecking pf
 
     -- Run inference per program unit
@@ -135,8 +135,10 @@ stencilInference mode marker pf =
           -> Writer [LogLine] (F.ProgramUnit (FA.Analysis A))
 
     perPU pu | Just _ <- FA.bBlocks $ F.getAnnotation pu = do
-        let -- Analysis/infer on blocks in the program unit (includes nested pus) 
-            pum = descendBiM (perBlockInfer mode marker mi) pu
+        let -- Analysis/infer on blocks of just this program unit
+            blocksM = mapM (perBlockInfer mode marker mi) (F.programUnitBody pu)
+            -- Update the program unit body with these blocks
+            pum = (F.updateProgramUnitBody pu) <$> blocksM
 
             -- perform reaching definitions analysis
             rd = FAD.reachingDefinitions dm gr
@@ -153,8 +155,7 @@ stencilInference mode marker pf =
 
             (pu', log) = runInferer checkRes ivMap flTo pum
         tell log
-        pu'' <- descendM perPU pu'
-        return pu''
+        return pu'
 
     perPU pu = return pu
 
