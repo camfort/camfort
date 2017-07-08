@@ -129,8 +129,6 @@ stencilInference mode marker pf =
 
     (pus', log1)    = runWriter (mapM perPU pus)
     checkRes        = stencilChecking pf
-    -- induction variable map
-    ivMap = FAD.genInductionVarMapByASTBlock beMap gr
 
     -- Run inference per program unit
     perPU :: F.ProgramUnit (FA.Analysis A)
@@ -163,7 +161,6 @@ stencilInference mode marker pf =
     bm    = FAD.genBlockMap pf'
     -- get map of program unit ==> basic block graph
     bbm   = FAB.genBBlockMap pf'
-
     -- get map of variable name ==> { defining AST-Block-IDs }
     dm    = FAD.genDefMap bm
 
