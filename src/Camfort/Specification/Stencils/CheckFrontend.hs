@@ -21,10 +21,12 @@
 module Camfort.Specification.Stencils.CheckFrontend
   (
     -- * Stencil checking
-    CheckResult
-  , stencilChecking
+    stencilChecking
+    -- ** Validation Results
+  , CheckResult
   , checkFailure
   , checkWarnings
+    -- ** Helpers
   , existingStencils
   ) where
 
@@ -32,8 +34,9 @@ import Control.Arrow
 import Control.Monad.Reader (ReaderT, ask, runReaderT)
 import Control.Monad.State.Strict
 import Control.Monad.Writer.Strict hiding (Product)
+import Data.Function (on)
 import Data.Generics.Uniplate.Operations
-import Data.List (intercalate)
+import Data.List (intercalate, sort)
 
 import Camfort.Analysis.Annotations
 import Camfort.Analysis.CommentAnnotator
@@ -57,7 +60,16 @@ import Algebra.Lattice (joins1)
 import Data.Int
 import qualified Data.Set as S
 
-newtype CheckResult = CheckResult { getCheckResult :: [StencilResult] }
+newtype CheckResult = CheckResult [StencilResult]
+
+-- | Retrieve a list of 'StencilResult' from a 'CheckResult'.
+--
+-- Ensures correct ordering of results.
+getCheckResult :: CheckResult -> [StencilResult]
+getCheckResult (CheckResult rs) = sort rs
+
+instance Eq CheckResult where
+  (==) = (==) `on` getCheckResult
 
 -- | Represents only the check results for invalid stencils.
 newtype CheckError  = CheckError { getCheckError :: [StencilCheckError] }
@@ -94,6 +106,30 @@ data StencilResult
   | SCFail StencilCheckError
   -- | A warning which shouldn't interrupt other procedures.
   | SCWarn StencilCheckWarning
+  deriving (Eq)
+
+class GetSpan a where
+  getSpan :: a -> FU.SrcSpan
+
+instance GetSpan StencilResult where
+  getSpan SCOkay{scSpan = srcSpan} = srcSpan
+  getSpan (SCFail err)             = getSpan err
+  getSpan (SCWarn warn)            = getSpan warn
+
+instance GetSpan StencilCheckError where
+  getSpan (SynToAstError     _ srcSpan)      = srcSpan
+  getSpan (NotWellSpecified  (srcSpan, _) _) = srcSpan
+  getSpan (ParseError srcSpan _)             = srcSpan
+
+instance GetSpan StencilCheckWarning where
+  getSpan (DuplicateSpecification srcSpan) = srcSpan
+  getSpan (UnusedRegion srcSpan _)         = srcSpan
+
+instance Ord StencilResult where
+  compare = compare `on` getSpan
+
+instance Ord StencilCheckError where
+  compare = compare `on` getSpan
 
 -- | Represents a way in which validation of a stencil can fail.
 data StencilCheckError
@@ -102,12 +138,44 @@ data StencilCheckError
   -- | The existing stencil conflicts with an inferred stencil.
   | NotWellSpecified (FU.SrcSpan, SpecDecls) (FU.SrcSpan, SpecDecls)
   -- | The stencil could not be parsed correctly.
-  | ParseError String
+  | ParseError FU.SrcSpan String
+  deriving (Eq)
+
+-- | Create a check result informating a user of a 'SynToAstError'.
+synToAstError :: SynToAstError -> FU.SrcSpan -> StencilResult
+synToAstError err srcSpan = SCFail $ SynToAstError err srcSpan
+
+-- | Create a check result informating a user of a 'NotWellSpecified' error.
+notWellSpecified :: (FU.SrcSpan, SpecDecls) -> (FU.SrcSpan, SpecDecls) -> StencilResult
+notWellSpecified got inferred = SCFail $ NotWellSpecified got inferred
+
+-- | Create a check result informating a user of a parse error.
+parseError :: FU.SrcSpan -> String -> StencilResult
+parseError srcSpan err = SCFail $ ParseError srcSpan err
 
 -- | Represents a non-fatal validation warning.
-newtype StencilCheckWarning =
+data StencilCheckWarning
   -- | Specification is defined multiple times.
-  DuplicateSpecification FU.SrcSpan
+  = DuplicateSpecification FU.SrcSpan
+  -- | Region is defined but not used.
+  | UnusedRegion FU.SrcSpan Variable
+  deriving (Eq)
+
+-- | Create a check result informing a user of a duplicate specification.
+duplicateSpecification :: FU.SrcSpan -> StencilResult
+duplicateSpecification = SCWarn . DuplicateSpecification
+
+-- | Create a check result informating an unused region.
+unusedRegion :: FU.SrcSpan -> Variable -> StencilResult
+unusedRegion srcSpan var = SCWarn $ UnusedRegion srcSpan var
+
+specOkay :: FU.SrcSpan -> Specification -> Variable -> FU.SrcSpan -> StencilResult
+specOkay spanSpec@(FU.SrcSpan (FU.Position o1 _ _) (FU.Position o2 _ _)) spec var spanBody@(FU.SrcSpan (FU.Position o1' _ _) (FU.Position o2' _ _)) =
+  SCOkay { scSpan      = spanSpec
+         , scSpec      = spec
+         , scBodySpan  = spanBody
+         , scVar       = var
+         }
 
 -- | Pretty print a message with suitable spacing after the source position.
 prettyWithSpan :: FU.SrcSpan -> String -> String
@@ -135,16 +203,19 @@ instance Show StencilCheckError where
                "Specification is:\n", sp, sp, pprintSpecDecls stencilActual, "\n",
                sp, "but at ", show spanInferred, " the code behaves as\n", sp, sp,
                pprintSpecDecls stencilInferred]
-  show (ParseError s) = s
+  show (ParseError srcSpan err) = prettyWithSpan srcSpan err
 
 instance Show StencilCheckWarning where
-  show (DuplicateSpecification srcSpan) = prettyWithSpan srcSpan "Warning: Duplicate specification."
+  show (DuplicateSpecification srcSpan) = prettyWithSpan srcSpan
+    "Warning: Duplicate specification."
+  show (UnusedRegion srcSpan name)      = prettyWithSpan srcSpan $
+    "Warning: Unused region '" ++ name ++ "'"
 
 -- Entry point
 stencilChecking :: F.ProgramFile (FA.Analysis A) -> CheckResult
 stencilChecking pf = CheckResult . snd . runWriter $
   do -- Attempt to parse comments to specifications
-     pf' <- mapWriter (second (fmap $ SCFail . ParseError)) $ annotateComments Gram.specParser pf
+     pf' <- mapWriter (second $ fmap (uncurry parseError)) $ annotateComments Gram.specParser pf
 
          -- get map of AST-Block-ID ==> corresponding AST-Block
      let bm         = FAD.genBlockMap pf'
@@ -165,27 +236,44 @@ stencilChecking pf = CheckResult . snd . runWriter $
          ivmap      = FAD.genInductionVarMapByASTBlock beMap gr
          results    = descendBiM perProgramUnitCheck pf'
 
-     let output = checkResult $ execState (runReaderT results flowsGraph) (startState ivmap)
+     let addUnusedRegionsToResult = do
+           unused <- fmap unusedRegions get
+           mapM_ (addResult . uncurry unusedRegion) unused
+         output = checkResult $ execState (runReaderT (results >> addUnusedRegionsToResult) flowsGraph) (startState ivmap)
 
      tell output
 
-
 data CheckState = CheckState
-  { regionEnv   :: RegionEnv
-  , checkResult :: [StencilResult]
-  , prog        :: Maybe F.ProgramUnitName
-  , ivMap       :: FAD.InductionVarMapByASTBlock
+  { regionEnv     :: RegionEnv
+  , checkResult   :: [StencilResult]
+  , prog          :: Maybe F.ProgramUnitName
+  , ivMap         :: FAD.InductionVarMapByASTBlock
+  , unusedRegions :: [(FU.SrcSpan, Variable)]
   }
 
 addResult :: StencilResult -> Checker ()
-addResult r = modify (\s -> s { checkResult = checkResult s ++ [r] })
+addResult r = modify (\s -> s { checkResult = r : checkResult s })
+
+modifyUnusedRegions :: ([(FU.SrcSpan, Variable)] -> [(FU.SrcSpan, Variable)]) -> Checker ()
+modifyUnusedRegions f = modify (\s -> s { unusedRegions = f (unusedRegions s) })
+
+-- | Remove the given regions variables from the tracked unused regions.
+informRegionsUsed :: [Variable] -> Checker ()
+informRegionsUsed regions = modify
+  (\s -> s { unusedRegions = filter ((`notElem` regions) . snd) $ unusedRegions s })
+
+-- | Start tracking a region to see whether or not it gets used.
+addRegionToTracked :: FU.SrcSpan -> RegionEnv -> Checker ()
+addRegionToTracked srcSpan@(FU.SrcSpan (FU.Position o1 _ _) (FU.Position o2 _ _)) =
+  mapM_ (\(r,_) -> modify (\s -> s { unusedRegions = (srcSpan, r) : unusedRegions s }))
 
 startState :: FAD.InductionVarMapByASTBlock -> CheckState
 startState ivmap =
-  CheckState { regionEnv   = []
-             , checkResult = []
-             , prog        = Nothing
-             , ivMap       = ivmap
+  CheckState { regionEnv     = []
+             , checkResult   = []
+             , prog          = Nothing
+             , ivMap         = ivmap
+             , unusedRegions = []
              }
 
 type Checker a =
@@ -197,12 +285,14 @@ parseCommentToAST :: FA.Analysis A -> FU.SrcSpan -> Checker (Either SynToAstErro
 parseCommentToAST ann span =
   case getParseSpec (FA.prevAnnotation ann) of
     Just stencilComment -> do
+         informRegionsUsed (Gram.reqRegions stencilComment)
          renv <- fmap regionEnv get
          let ?renv = renv
-          in case synToAst stencilComment of
-               Right ast -> pure . pure $ onPrev
-                 (either giveRegionSpec giveAstSpec ast) ann
-               Left err  -> pure . Left $ err
+         case synToAst stencilComment of
+           Right ast -> do
+             either (addRegionToTracked span) (const (pure ())) ast
+             pure . pure $ onPrev (either giveRegionSpec giveAstSpec ast) ann
+           Left err  -> pure . Left $ err
 
     _ -> pure . pure $ ann
 
@@ -268,7 +358,7 @@ perBlockCheck :: F.Block (FA.Analysis A) -> Checker (F.Block (FA.Analysis A))
 perBlockCheck b@(F.BlComment ann span _) = do
   ast       <- parseCommentToAST ann span
   case ast of
-    Left err -> addResult (SCFail $ SynToAstError err span) *> pure b
+    Left err -> addResult (synToAstError err span) *> pure b
     Right ann' -> do
       flowsGraph <- ask
       updateRegionEnv ann'
@@ -323,11 +413,11 @@ checkStencil flowsGraph s specDecls spanInferred maybeSubs span = do
   if (all (isStencil ==) userDefinedIsStencils) && checkOffsetsAgainstSpec multOffsets expandedDecls
     then mapM_ (\spec@(v,s) -> do
                    specExists <- seenBefore spec
-                   if specExists then addResult (SCWarn (DuplicateSpecification span))
-                     else addResult (SCOkay span s v spanInferred)) expandedDecls
+                   if specExists then addResult (duplicateSpecification span)
+                     else addResult (specOkay span s v spanInferred)) expandedDecls
     else do
     let inferred = fst . fst . runWriter $ genSpecifications flowsGraph ivmap lhsN s
-    addResult (SCFail $ NotWellSpecified (span, specDecls) (spanInferred, inferred))
+    addResult (notWellSpecified (span, specDecls) (spanInferred, inferred))
   where
     seenBefore :: (Variable, Specification) -> Checker Bool
     seenBefore (v,spec) = do

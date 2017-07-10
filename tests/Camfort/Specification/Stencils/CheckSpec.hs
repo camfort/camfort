@@ -2,11 +2,21 @@
 
 module Camfort.Specification.Stencils.CheckSpec (spec) where
 
-import Camfort.Analysis.CommentAnnotator
+import qualified Data.ByteString.Internal as BS
+
+import Camfort.Analysis.Annotations (unitAnnotation)
 import Camfort.Specification.Stencils.CheckBackend
+import Camfort.Specification.Stencils.CheckFrontend
+  (CheckResult, stencilChecking)
 import qualified Camfort.Specification.Stencils.Grammar as SYN
 import Camfort.Specification.Stencils.Model
 import Camfort.Specification.Stencils.Syntax
+
+import qualified Language.Fortran.Analysis          as FA
+import qualified Language.Fortran.Analysis.BBlocks  as FAB
+import qualified Language.Fortran.Analysis.Renaming as FAR
+import           Language.Fortran.Parser.Any (fortranParser)
+import qualified Language.Fortran.Util.Position     as FU
 
 import Test.Hspec
 
@@ -76,3 +86,74 @@ spec =
       it "rejects stencils with undefined regions" $
          parseAndConvert "= stencil r1 :: a"
          `shouldBe` (Left . regionNotInScope $ "r1")
+
+      describe "stencils check" $ do
+        checkTestShow exampleUnusedRegion
+          "warns about unused regions"
+          "(2:3)-(2:34)    Warning: Unused region 'r1'"
+        checkTestShow exampleSimpleInvalidSyntax
+          "warns about specification parse errors"
+          "(2:3)-(2:16)    Could not parse specification at: \"... \"\n"
+        checkTestShow exampleSimpleCorrect
+          "recognises correct stencils"
+          "(4:5)-(4:63)    Correct."
+        checkTestShow exampleUnusedRegionWithOtherSpecs
+          "provides reports in correct order"
+          "(3:3)-(3:34)    Warning: Unused region 'r1'\n\
+          \(5:5)-(5:63)    Correct.\n\
+          \(9:5)-(9:52)    Not well specified.\n\
+          \        Specification is:\n\
+          \                stencil readOnce, (forward(depth=1, dim=1)) :: a\n\n\
+          \        but at (10:5)-(10:17) the code behaves as\n\
+          \                stencil readOnce, (forward(depth=1, dim=1, nonpointed)) :: a\n\n\
+          \(12:3)-(12:16)    Could not parse specification at: \"... \"\n"
+
+checkText text =
+  either (error "received test input with invalid syntax")
+     (stencilChecking . getBlocks . fmap (const unitAnnotation)) $ fortranParser text "example"
+  where getBlocks = FAB.analyseBBlocks . FAR.analyseRenames . FA.initAnalysis
+
+runCheck :: String -> CheckResult
+runCheck = checkText . BS.packChars
+
+checkTestShow :: String -> String -> String -> SpecWith ()
+checkTestShow exampleText testDescription expected =
+  it testDescription $ show (runCheck exampleText) `shouldBe` expected
+
+exampleUnusedRegion :: String
+exampleUnusedRegion =
+  "program example\n\
+  \  != region :: r1 = pointed(dim=1)\n\
+  \end program"
+
+exampleSimpleCorrect :: String
+exampleSimpleCorrect =
+  "program example\n\
+  \  real, dimension(10) :: a\n\
+  \  do i = 1, 10\n\
+  \    != stencil readOnce, forward(depth=1,dim=1,nonpointed) :: a\n\
+  \    a(i) = a(i+1)\n\
+  \  end do\n\
+  \end program"
+
+exampleSimpleInvalidSyntax :: String
+exampleSimpleInvalidSyntax =
+  "program example\n\
+  \  != stencil foo\n\
+  \end program"
+
+exampleUnusedRegionWithOtherSpecs :: String
+exampleUnusedRegionWithOtherSpecs =
+  "program example\n\
+  \  real, dimension(10) :: a, b\n\
+  \  != region :: r1 = pointed(dim=1)\n\
+  \  do i = 1, 10\n\
+  \    != stencil readOnce, forward(depth=1,dim=1,nonpointed) :: a\n\
+  \    a(i) = a(i+1)\n\
+  \  end do\n\
+  \  do i = 1, 10\n\
+  \    != stencil readOnce, forward(depth=1,dim=1) :: a\n\
+  \    a(i) = a(i+1)\n\
+  \  end do\n\
+  \  != stencil foo\n\
+  \end program"

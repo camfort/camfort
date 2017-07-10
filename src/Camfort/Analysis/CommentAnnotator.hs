@@ -36,7 +36,7 @@ import Data.Data (Data)
 import Language.Fortran.AST
 import Language.Fortran.Util.Position
 
-type Logger = Writer [ String ]
+type Logger = Writer [ (SrcSpan, String) ]
 type AnnotationParser ast = String -> Either AnnotationParseError ast
 
 data AnnotationParseError =
@@ -133,4 +133,4 @@ instance HasComment (ProgramUnit a) where
   isComment _           = False
 
 parserWarn :: SrcSpan -> String -> Logger ()
-parserWarn srcSpan err = tell [ "Error " ++ show srcSpan ++ ": " ++ err ]
+parserWarn srcSpan err = tell [(srcSpan, err)]
