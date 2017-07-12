@@ -42,6 +42,7 @@ import Data.List (intercalate, sort, union)
 import Camfort.Analysis.Annotations
 import Camfort.Analysis.CommentAnnotator
 import qualified Camfort.Helpers.Vec as V
+import Camfort.Specification.Parser (SpecParseError)
 import Camfort.Specification.Stencils.CheckBackend
 import qualified Camfort.Specification.Stencils.Consistency as C
 import Camfort.Specification.Stencils.Generate
@@ -140,7 +141,7 @@ data StencilCheckError
   -- | The existing stencil conflicts with an inferred stencil.
   | NotWellSpecified (FU.SrcSpan, SpecDecls) (FU.SrcSpan, SpecDecls)
   -- | The stencil could not be parsed correctly.
-  | ParseError FU.SrcSpan Gram.SpecParseError
+  | ParseError FU.SrcSpan (SpecParseError Gram.SpecParseError)
   -- | A definition for the region alias already exists.
   | RegionExists FU.SrcSpan Variable
   deriving (Eq)
@@ -154,7 +155,7 @@ notWellSpecified :: (FU.SrcSpan, SpecDecls) -> (FU.SrcSpan, SpecDecls) -> Stenci
 notWellSpecified got inferred = SCFail $ NotWellSpecified got inferred
 
 -- | Create a check result informating a user of a parse error.
-parseError :: FU.SrcSpan -> Gram.SpecParseError -> StencilResult
+parseError :: FU.SrcSpan -> (SpecParseError Gram.SpecParseError) -> StencilResult
 parseError srcSpan err = SCFail $ ParseError srcSpan err
 
 -- | Create a check result informating that a region already exists.

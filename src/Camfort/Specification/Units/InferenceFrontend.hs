@@ -66,7 +66,7 @@ initInference = do
   -- corresponding statements in the AST.
   let (linkedPF, parserReport) =
         runWriter $ annotateComments P.unitParser
-        (\srcSpan err -> tell $ "Error " ++ show srcSpan ++ ": " ++ err) pf
+        (\srcSpan err -> tell $ "Error " ++ show srcSpan ++ ": " ++ show err) pf
   modifyProgramFile $ const linkedPF
 
   -- The following insert* functions examine the AST and insert

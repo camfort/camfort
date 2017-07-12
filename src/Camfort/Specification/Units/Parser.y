@@ -11,7 +11,6 @@ import Control.Monad.Except (throwError)
 import Data.Data
 import Data.List
 import Data.Char (isLetter, isNumber, isAlphaNum, toLower)
-import qualified Data.Text as T
 
 import Camfort.Specification.Parser (mkParser, SpecParser)
 }
@@ -149,38 +148,28 @@ data Token =
  | TNum String
  deriving (Show)
 
-looksLikeUnitSpec :: String -> Bool
-looksLikeUnitSpec [] = True
-looksLikeUnitSpec (c:cs) =
-  c `elem` ['=', '!', '>', '<'] &&
-  "unit" `isPrefixOf` (T.unpack . T.strip . T.toLower . T.pack $ cs)
-
-lexer :: String -> UnitSpecParser [ Token ]
-lexer xs | not (looksLikeUnitSpec xs) = throwError "not a unit specification"
-lexer (c:xs) = lexer' xs
-
 addToTokens :: Token -> String -> UnitSpecParser [ Token ]
 addToTokens tok rest = do
- tokens <- lexer' rest
+ tokens <- lexer rest
  return $ tok : tokens
 
-lexer' :: String -> UnitSpecParser [ Token ]
-lexer' [] = Right []
-lexer' ['\n']  = Right []
-lexer' ['\r', '\n']  = Right []
-lexer' ['\r']  = Right [] -- windows
-lexer' (' ':xs) = lexer' xs
-lexer' ('\t':xs) = lexer' xs
-lexer' (':':':':xs) = addToTokens TDoubleColon xs
-lexer' ('*':'*':xs) = addToTokens TExponentiation xs
-lexer' (',':xs) = addToTokens TComma xs
-lexer' ('/':xs) = addToTokens TDivision xs
-lexer' ('-':xs) = addToTokens TMinus xs
-lexer' ('*':xs) = addToTokens TMult xs
-lexer' ('=':xs) = addToTokens TEqual xs
-lexer' ('(':xs) = addToTokens TLeftPar xs
-lexer' (')':xs) = addToTokens TRightPar xs
-lexer' (x:xs)
+lexer :: String -> UnitSpecParser [ Token ]
+lexer [] = Right []
+lexer ['\n']  = Right []
+lexer ['\r', '\n']  = Right []
+lexer ['\r']  = Right [] -- windows
+lexer (' ':xs) = lexer xs
+lexer ('\t':xs) = lexer xs
+lexer (':':':':xs) = addToTokens TDoubleColon xs
+lexer ('*':'*':xs) = addToTokens TExponentiation xs
+lexer (',':xs) = addToTokens TComma xs
+lexer ('/':xs) = addToTokens TDivision xs
+lexer ('-':xs) = addToTokens TMinus xs
+lexer ('*':xs) = addToTokens TMult xs
+lexer ('=':xs) = addToTokens TEqual xs
+lexer ('(':xs) = addToTokens TLeftPar xs
+lexer (')':xs) = addToTokens TRightPar xs
+lexer (x:xs)
  | isLetter x || x == '\'' = aux (\ c -> isAlphaNum c || c `elem` ['\'','_','-'])
                                  (\ s -> if s == "record" then TRecord else TId s)
  | isNumber x              = aux isNumber TNum
@@ -188,12 +177,12 @@ lexer' (x:xs)
  where
    aux p cons =
      let (target, rest) = span p xs
-     in lexer' rest >>= (\tokens -> return $ cons (x:target) : tokens)
+     in lexer rest >>= (\tokens -> return $ cons (x:target) : tokens)
 
 unitParser :: SpecParser UnitParseError UnitStatement
 unitParser = mkParser (\src -> do
                           tokens <- lexer $ map toLower src
-                          parseUnit tokens) looksLikeUnitSpec
+                          parseUnit tokens) ["unit"]
 
 happyError :: [ Token ] -> UnitSpecParser a
 happyError t = throwError $ "Could not parse unit specification at: " ++ show t ++ "\n"

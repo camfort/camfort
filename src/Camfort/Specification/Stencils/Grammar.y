@@ -7,7 +7,6 @@ import Control.Monad.Except (throwError)
 import Data.Char (isLetter, isNumber, isAlphaNum, toLower, isAlpha, isSpace)
 import Data.Data
 import Data.List (intersect, nub, sort, isPrefixOf, isInfixOf, intercalate)
-import qualified Data.Text as T
 
 import Camfort.Specification.Parser (SpecParser, mkParser)
 import Camfort.Specification.Stencils.Model (Approximation(..), Multiplicity(..))
@@ -115,10 +114,8 @@ VARS :: { [String] }
 -- ** Errors
 
 data SpecParseError
-  -- | Character cannot be used at start of specification.
-  = InvalidSpecificationCharacter Char
   -- | Not a valid identifier character.
-  | NotAnIdentifier Char
+  = NotAnIdentifier Char
   -- | Specification consisted only of whitespace.
   | EmptySpecification
   -- | Tokens do not represent a syntactically valid specification.
@@ -129,12 +126,7 @@ instance Show SpecParseError where
   show (CouldNotParseSpecification ts) =
     "Could not parse specification at: \"" ++ prettyTokens ts ++ "\"\n"
   show EmptySpecification = "Empty specification"
-  show (InvalidSpecificationCharacter c) =
-    "Invalid character at start of specification: " ++ show c
   show (NotAnIdentifier c) = "Invalid character in identifier: " ++ show c
-
-invalidSpecificationCharacter :: Char -> SpecParseError
-invalidSpecificationCharacter = InvalidSpecificationCharacter
 
 notAnIdentifier :: Char -> SpecParseError
 notAnIdentifier = NotAnIdentifier
@@ -209,60 +201,25 @@ data Token
 
 addToTokens :: Token -> String -> StencilSpecParser [ Token ]
 addToTokens tok rest = do
- tokens <- lexer' rest
+ tokens <- lexer rest
  return $ tok : tokens
 
-looksLikeStencilSpec :: String -> Bool
-looksLikeStencilSpec input
-  | length (stripLeadingWhiteSpace input) >= 2 =
-  case stripLeadingWhiteSpace input of
-    -- Check the leading character is '=' for specification
-    '=':input' -> testAnnotation input'
-    '!':input' -> testAnnotation input'
-    '>':input' -> testAnnotation input'
-    '<':input' -> testAnnotation input'
-    _          -> False
-  | otherwise = False
-  where
-    testAnnotation inp =
-      (inp `hasPrefix` "stencil"
-        || inp `hasPrefix` "region"
-        || inp `hasPrefix` "access")
-    hasPrefix []       str = False
-    hasPrefix (' ':xs) str = hasPrefix xs str
-    hasPrefix xs       str = isPrefixOf str xs
-
--- | Remove any whitespace characters at the beginning of the string.
-stripLeadingWhiteSpace :: String -> String
-stripLeadingWhiteSpace = T.unpack . T.strip . T.pack
-
-lexer :: String -> StencilSpecParser [Token]
-lexer input =
-  case stripLeadingWhiteSpace input of
-    -- Check the leading character is '=' for specification
-    '=':input' -> lexer' input'
-    '!':input' -> lexer' input'
-    '>':input' -> lexer' input'
-    '<':input' -> lexer' input'
-    (c:_)      -> throwError $ invalidSpecificationCharacter c
-    _          -> throwError emptySpecification
-
-lexer' :: String -> StencilSpecParser [ Token ]
-lexer' []                                              = return []
-lexer' (' ':xs)                                        = lexer' xs
-lexer' ('\t':xs)                                       = lexer' xs
-lexer' (':':':':xs)                                    = addToTokens TDoubleColon xs
-lexer' ('*':xs)                                        = addToTokens TStar xs
-lexer' ('+':xs)                                        = addToTokens TPlus xs
-lexer' ('=':xs)                                        = addToTokens TEqual xs
+lexer :: String -> StencilSpecParser [ Token ]
+lexer []                                              = return []
+lexer (' ':xs)                                        = lexer xs
+lexer ('\t':xs)                                       = lexer xs
+lexer (':':':':xs)                                    = addToTokens TDoubleColon xs
+lexer ('*':xs)                                        = addToTokens TStar xs
+lexer ('+':xs)                                        = addToTokens TPlus xs
+lexer ('=':xs)                                        = addToTokens TEqual xs
 -- Comma hack: drop commas that are not separating numbers,
 -- in order to avoid need for 2-token lookahead.
-lexer' (',':xs)
-  | x':xs' <- dropWhile isSpace xs, not (isNumber x') = lexer' (x':xs')
+lexer (',':xs)
+  | x':xs' <- dropWhile isSpace xs, not (isNumber x') = lexer (x':xs')
   | otherwise                                         = addToTokens TComma xs
-lexer' ('(':xs)                                       = addToTokens TLParen xs
-lexer' (')':xs)                                       = addToTokens TRParen xs
-lexer' (x:xs)
+lexer ('(':xs)                                       = addToTokens TLParen xs
+lexer (')':xs)                                       = addToTokens TRParen xs
+lexer (x:xs)
   | isLetter x                                        =
         aux (\x -> TId x $ fmap toLower x) $ \ c -> isAlphaNum c || c == '_'
   | isPositiveNumber x                                = aux TNum isNumber
@@ -270,7 +227,7 @@ lexer' (x:xs)
      = throwError $ notAnIdentifier x
  where
    isPositiveNumber x = isNumber x && x /= '0'
-   aux f p = (f target :) <$> lexer' rest
+   aux f p = (f target :) <$> lexer rest
      where (target, rest) = span p (x:xs)
 
 --------------------------------------------------
@@ -278,7 +235,8 @@ lexer' (x:xs)
 specParser :: SpecParser SpecParseError Specification
 specParser = mkParser (\src -> do
                           tokens <- lexer src
-                          parseSpecification tokens) looksLikeStencilSpec
+                          parseSpecification tokens)
+             ["stencil", "region", "access"]
 
 happyError :: [ Token ] -> StencilSpecParser a
 happyError = throwError . couldNotParseSpecification

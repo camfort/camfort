@@ -33,12 +33,13 @@ import Language.Fortran.Util.Position
 
 import Camfort.Specification.Parser ( looksLikeASpec
                                     , runParser
+                                    , SpecParseError
                                     , SpecParser)
 
 annotateComments :: forall m e a ast .
   (Monad m, Data a, Linkable a, ASTEmbeddable a ast)
   => SpecParser e ast
-  -> (SrcSpan -> e -> m ())
+  -> (SrcSpan -> SpecParseError e -> m ())
   -> ProgramFile a
   -> m (ProgramFile a)
 annotateComments parser handleErr pf = do
