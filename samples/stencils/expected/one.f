@@ -31,22 +31,22 @@
       do 5 i = 1, (imax-1)
          do 6 j = 1, (jmax-1)
             c = (a(i-1,j) + a(i,j) + a(i+1,j))
-c= stencil readOnce, (pointed(dim=1))*(centered(depth=1, dim=2)) + (centered(depth=1, dim=1))*(pointed(dim=2)) :: a
+c= stencil readOnce, pointed(dim=1)*centered(depth=1, dim=2) + centered(depth=1, dim=1)*pointed(dim=2) :: a
             b(i,j) = (c + a(i,j-1) + a(i,j+1)) / 5.0
  6       continue
 ! top and bottom (inner) edges
-c= stencil readOnce, (centered(depth=1, dim=1)) :: a
+c= stencil readOnce, centered(depth=1, dim=1) :: a
          b(i, 0) = (a(i, 0) + a(i-1,0) + a(i+1,0) + a(i,1))/4.0
-c= stencil readOnce, (centered(depth=1, dim=1)) :: a
+c= stencil readOnce, centered(depth=1, dim=1) :: a
          b(i, jmax) = (a(i, jmax) + a(i-1, jmax) + a(i+1, jmax) +
      .        a(i,jmax-1))/4.0
  5    continue
 
 ! left and right (inner) edges
       do 7 j = 1, (jmax-1)
-c= stencil readOnce, (centered(depth=1, dim=2)) :: a
+c= stencil readOnce, centered(depth=1, dim=2) :: a
          b(0, j) = (a(0, j) + a(0,j-1) + a(0,j+1) + a(1,j))/4.0
-c= stencil readOnce, (centered(depth=1, dim=2)) :: a
+c= stencil readOnce, centered(depth=1, dim=2) :: a
          b(imax, j) = (a(imax, j) + a(imax, j-1) + a(imax, j+1) +
      .        a(imax-1,j))/4.0
  7    continue

@@ -7,11 +7,11 @@ program foo
   integer :: i
 
   do i=1,10
-    != stencil readOnce, (pointed(dim=1)) :: a
+    != stencil readOnce, pointed(dim=1) :: a
     a(i)%val = a(i)%val
   end do
   do i=1,10
-    != stencil readOnce, (pointed(dim=1)) :: a
+    != stencil readOnce, pointed(dim=1) :: a
     b(i) = a(i)
   end do
 end program foo

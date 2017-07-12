@@ -10,10 +10,10 @@ program reduction
         if (.true.) then
         else if (.true.) then
                beta_mod = -6/((eps_E+1)*5+2*3)
-               != stencil (forward(depth=1, dim=1)) :: b
+               != stencil forward(depth=1, dim=1) :: b
                a(i) = (b(i) + beta_mod + eps_E*b(i)) / 2
                z = a(i)
-               != access readOnce, (pointed(dim=1)) :: a
+               != access readOnce, pointed(dim=1) :: a
                r = max(r, z)
            end if
        end if

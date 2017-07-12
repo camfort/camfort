@@ -11,7 +11,7 @@ program nested
        x = a(i+2)
      end if
      y = a(i+1) + x
-     != stencil readOnce, (forward(depth=2, dim=1)) :: a
+     != stencil readOnce, forward(depth=2, dim=1) :: a
      a(i) = y
   end do
 
@@ -23,7 +23,7 @@ program nested
     integer :: i
 
     do i = 1, 10
-       != access readOnce, (pointed(dim=1)) :: a
+       != access readOnce, pointed(dim=1) :: a
        x = a(i)
     end do
     example = x

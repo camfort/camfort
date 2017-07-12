@@ -32,17 +32,17 @@ program one
         b(i,j) = stencil(i,j)
      end do
      ! top and bottom (inner) edges
-     != stencil readOnce, (centered(depth=1, dim=1)) :: a
+     != stencil readOnce, centered(depth=1, dim=1) :: a
      b(i, 0) = (a(i, 0) + a(i-1,0) + a(i+1,0) + a(i,1))/4.0
-     != stencil readOnce, (centered(depth=1, dim=1)) :: a
+     != stencil readOnce, centered(depth=1, dim=1) :: a
      b(i, jmax) = (a(i, jmax) + a(i-1, jmax) + a(i+1, jmax) + a(i,jmax-1))/4.0
   end do
 
   ! left and right (inner) edges
   do j = 1, (jmax-1)
-     != stencil readOnce, (centered(depth=1, dim=2)) :: a
+     != stencil readOnce, centered(depth=1, dim=2) :: a
      b(0, j) = (a(0, j) + a(0,j-1) + a(0,j+1) + a(1,j))/4.0
-     != stencil readOnce, (centered(depth=1, dim=2)) :: a
+     != stencil readOnce, centered(depth=1, dim=2) :: a
      b(imax, j) = (a(imax, j) + a(imax, j-1) + a(imax, j+1) + a(imax-1,j))/4.0
   end do
 

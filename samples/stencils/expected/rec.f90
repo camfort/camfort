@@ -25,7 +25,7 @@
          a(1:imax,1:jmax) = b(i, j)
          do 4 j = 1, (jmax-1)
             if (.true.) then
-            != stencil readOnce, (pointed(dim=1))*(centered(depth=1, dim=2)) + (centered(depth=1, dim=1))*(pointed(dim=2)) :: a
+            != stencil readOnce, pointed(dim=1)*centered(depth=1, dim=2) + centered(depth=1, dim=1)*pointed(dim=2) :: a
             a(i,j) = (a(i-1,j) + a(i,j) + a(i+1,j)  &
                  &              + a(i,j-1) + a(i,j+1)) / 5.0
             b(1:imax,1:jmax) = a(1:imax, 1:jmax)*p(1:imax, 1:jmax) + b(1:imax,1:jmax)*p(1:imax,1:jmax)

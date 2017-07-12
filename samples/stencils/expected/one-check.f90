@@ -33,7 +33,7 @@ program one
 
         != stencil readOnce, pointed(dim=1) * r1 * r2 + r1 * pointed(dim=2) :: a
 
-        != stencil readOnce, (pointed(dim=1))*(centered(depth=1, dim=2)) + (centered(depth=1, dim=1))*(pointed(dim=2)) :: a
+        != stencil readOnce, pointed(dim=1)*centered(depth=1, dim=2) + centered(depth=1, dim=1)*pointed(dim=2) :: a
         b(i,j) = (a(i-1,j) + a(i,j) + a(i+1,j) + &
                   a(i,j-1) + a(i,j+1)) / 5.0
      end do

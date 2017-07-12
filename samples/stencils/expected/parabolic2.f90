@@ -41,7 +41,7 @@ program parabolic2
       do j = 1,m 
        do i = 1,n-1
           d(i) = r
-          != stencil readOnce, (pointed(dim=1)) :: u
+          != stencil readOnce, pointed(dim=1) :: u
           v(i) = s*u(i)     
         end do 
         call tri(n-1,c,d,c,v,v) 
@@ -49,13 +49,13 @@ program parabolic2
         print "(//(5(5x,e22.14)))",(v(i),i = 1,n-1)
         t = real(j)*k      
         do i = 1,n-1
-           != stencil readOnce, (pointed(dim=1)) :: v
+           != stencil readOnce, pointed(dim=1) :: v
            u(i) = exp(-pi2*t)*sin(pi*real(i)*h) - v(i)       
         end do 
         print*, "This is the difference between true value and v(i) and j =",j
         print "(//(5(5x,e22.14)))",(u(i),i = 1,n-1)
         do i = 1,n-1
-           != stencil readOnce, (pointed(dim=1)) :: v
+           != stencil readOnce, pointed(dim=1) :: v
            u(i) = v(i)       
         end do 
       end do 
@@ -70,18 +70,18 @@ subroutine tri(n,a,d,c,b,x)
       real :: xmult                                                
       do i = 2,n                                                   
         xmult = a(i-1)/d(i-1)                                      
-        != stencil readOnce, (backward(depth=1, dim=1, nonpointed)) :: a, c
-        != stencil readOnce, (backward(depth=1, dim=1)) :: d
+        != stencil readOnce, backward(depth=1, dim=1, nonpointed) :: a, c
+        != stencil readOnce, backward(depth=1, dim=1) :: d
         d(i) = d(i) - xmult*c(i-1)                                 
-        != stencil readOnce, (backward(depth=1, dim=1, nonpointed)) :: a
-        != stencil readOnce, (backward(depth=1, dim=1)) :: b
-        != stencil readOnce, (backward(depth=1, dim=1, nonpointed)) :: d
+        != stencil readOnce, backward(depth=1, dim=1, nonpointed) :: a
+        != stencil readOnce, backward(depth=1, dim=1) :: b
+        != stencil readOnce, backward(depth=1, dim=1, nonpointed) :: d
         b(i) = b(i) - xmult*b(i-1)                                 
       end do                                                       
       x(n) = b(n)/d(n)                                             
       do i = n-1,1,-1                                              
-        != stencil readOnce, (pointed(dim=1)) :: b, c, d
-        != stencil readOnce, (forward(depth=1, dim=1, nonpointed)) :: x
+        != stencil readOnce, pointed(dim=1) :: b, c, d
+        != stencil readOnce, forward(depth=1, dim=1, nonpointed) :: x
         x(i) = (b(i) - c(i)*x(i+1))/d(i)                           
       end do                                                       
 end subroutine tri                                                 

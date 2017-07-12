@@ -13,7 +13,7 @@ real b(0:imax)
 do i = 1, n
  x = a(i)
  y = a(i+1)
- != stencil readOnce, (centered(depth=1, dim=1)) :: a
+ != stencil readOnce, centered(depth=1, dim=1) :: a
  b(i) = (a(i-1) + x + y)/3.0
 end do
 

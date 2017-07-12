@@ -11,7 +11,7 @@ real a(0:imax)
 real b(0:imax)
 
 do  i = 1, (n-1)
- != stencil readOnce, (centered(depth=1, dim=1)) :: a
+ != stencil readOnce, centered(depth=1, dim=1) :: a
  b(i) = a(i-1) - 2*a(i) + a(i+1)
 end do
 

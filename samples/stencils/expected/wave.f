@@ -27,7 +27,7 @@
 ! Time iteration 0 = space loop.
       do 2 i = 1, ni
          dp = p(i+1,0) - 2*p(i,0) + p(i-1,0)
-c= stencil (centered(depth=1, dim=1)) :: p
+c= stencil centered(depth=1, dim=1) :: p
          p(i,1) = p(i,0) + 0.5*a*dp
  2    continue
 ! Right boundary
@@ -41,7 +41,7 @@ c= stencil (centered(depth=1, dim=1)) :: p
 ! Time iteration k = space loop
          do 4 i = 1, ni
             dp = p(i+1,k) - 2*p(i,k) + p(i-1,k)
-c= stencil (pointed(dim=1))*(backward(depth=2, dim=2, nonpointed)) + (centered(depth=1, dim=1))*(backward(depth=1, dim=2, nonpointed)) :: p
+c= stencil pointed(dim=1)*backward(depth=2, dim=2, nonpointed) + centered(depth=1, dim=1)*backward(depth=1, dim=2, nonpointed) :: p
             p(i,k+1) = 2*p(i,k) - p(i,k-1) + a*dp
  4       continue
 ! Right boundary

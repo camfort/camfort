@@ -239,16 +239,16 @@ spec =
          fst (callAndSummarise (infer AssignMode '=') program)
            `shouldBe`
            "\ntests/fixtures/Specification/Stencils/example2.f\n\
-            \(32:7)-(32:26)    stencil readOnce, (backward(depth=1, dim=1)) :: a\n\
-            \(26:8)-(26:29)    stencil readOnce, (pointed(dim=1))*(pointed(dim=2)) :: a\n\
-            \(24:8)-(24:53)    stencil readOnce, (pointed(dim=1))*(centered(depth=1, dim=2)) \
-                                     \+ (centered(depth=1, dim=1))*(pointed(dim=2)) :: a"
+            \(32:7)-(32:26)    stencil readOnce, backward(depth=1, dim=1) :: a\n\
+            \(26:8)-(26:29)    stencil readOnce, pointed(dim=1)*pointed(dim=2) :: a\n\
+            \(24:8)-(24:53)    stencil readOnce, pointed(dim=1)*centered(depth=1, dim=2) \
+                                     \+ centered(depth=1, dim=1)*pointed(dim=2) :: a"
 
       it "stencil check" $
          fst (callAndSummarise (\f p -> (check f p, p)) program)
            `shouldBe`
            "\ntests/fixtures/Specification/Stencils/example2.f\n\
-            \(23:1)-(23:82)    Correct.\n(31:1)-(31:56)    Correct."
+            \(23:1)-(23:78)    Correct.\n(31:1)-(31:56)    Correct."
 
     let example4In = fixturesDir </> "example4.f"
     program <- runIO $ readParseSrcDir example4In []
@@ -258,7 +258,7 @@ spec =
          fst (callAndSummarise (infer AssignMode '=') program)
            `shouldBe`
             "\ntests/fixtures/Specification/Stencils/example4.f\n\
-             \(6:8)-(6:33)    stencil readOnce, (pointed(dim=1)) :: x"
+             \(6:8)-(6:33)    stencil readOnce, pointed(dim=1) :: x"
 
     describe "integration test on inference for example5" $
       describe "stencil synth" $ do
@@ -287,40 +287,40 @@ spec =
         "\nEncountered the following errors when checking stencil specs for 'tests/fixtures/Specification/Stencils/example12.f'\n\n\
 \(8:1)-(8:52)    Not well specified.\n\
 \        Specification is:\n\
-\                stencil readOnce, (backward(depth=1, dim=1)) :: a\n\
+\                stencil readOnce, backward(depth=1, dim=1) :: a\n\
 \\n\
 \        but at (9:8)-(9:32) the code behaves as\n\
-\                stencil readOnce, (forward(depth=1, dim=1)) :: a\n\n\
+\                stencil readOnce, forward(depth=1, dim=1) :: a\n\n\
 \Please resolve these errors, and then run synthesis again."
       assertStencilSynthResponseOut "example14.f"
         "warns when duplicate stencils exist, but continues"
         "\nEncountered the following errors when checking stencil specs for 'tests/fixtures/Specification/Stencils/example14.f'\n\n\
-\(10:1)-(10:51)    Warning: Duplicate specification."
+\(10:1)-(10:49)    Warning: Duplicate specification."
 
       assertStencilSynthResponseOut "example15.f"
         "warns when duplicate stencils exist (combined stencils), but continues"
         "\nEncountered the following errors when checking stencil specs for 'tests/fixtures/Specification/Stencils/example15.f'\n\n\
-\(9:1)-(9:51)    Warning: Duplicate specification."
+\(9:1)-(9:49)    Warning: Duplicate specification."
 
       assertStencilCheck "example16.f"
         "error trying to check an access spec against a stencil"
         "\nexample16.f\n\
 \(8:1)-(8:50)    Not well specified.\n\
 \        Specification is:\n\
-\                access readOnce, (forward(depth=1, dim=1)) :: a\n\
+\                access readOnce, forward(depth=1, dim=1) :: a\n\
 \\n\
 \        but at (9:8)-(9:32) the code behaves as\n\
-\                stencil readOnce, (forward(depth=1, dim=1)) :: a\n"
+\                stencil readOnce, forward(depth=1, dim=1) :: a\n"
 
       assertStencilCheck "example17.f"
         "error trying to check an access spec against a stencil"
         "\nexample17.f\n\
 \(8:1)-(8:51)    Not well specified.\n\
 \        Specification is:\n\
-\                stencil readOnce, (forward(depth=1, dim=1)) :: a\n\
+\                stencil readOnce, forward(depth=1, dim=1) :: a\n\
 \\n\
 \        but at (9:8)-(9:29) the code behaves as\n\
-\                access readOnce, (forward(depth=1, dim=1)) :: a\n"
+\                access readOnce, forward(depth=1, dim=1) :: a\n"
 
     sampleDirConts <- runIO $ listDirectory samplesDir
     expectedDirConts <- runIO $ listDirectory (samplesDir </> "expected")

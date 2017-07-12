@@ -5,7 +5,7 @@ program funcExample
   real :: x
   do i = 1, 2
      x = foo(a(i+1) + a(i))
-     != stencil readOnce, (forward(depth=1, dim=1)) :: a
+     != stencil readOnce, forward(depth=1, dim=1) :: a
      b(i) = x
  end do
 

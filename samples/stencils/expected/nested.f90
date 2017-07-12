@@ -11,7 +11,7 @@ contains
     if (.true.) then
        do i = 1, 10
           do j = 1, 10
-             != access readOnce, (pointed(dim=1)) :: a
+             != access readOnce, pointed(dim=1) :: a
              x = max(abs(a(i)), x)
        end do
     end do

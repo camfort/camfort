@@ -13,7 +13,7 @@ real b(0:n, 0:n)
 
 do i=1, n
    do j=1, n
-      != stencil readOnce, (backward(depth=2, dim=1, nonpointed))*(pointed(dim=2)) :: b
+      != stencil readOnce, backward(depth=2, dim=1, nonpointed)*pointed(dim=2) :: b
       a(i+1,j) = b(i,j) + b(i-1,j)
    end do
 end do

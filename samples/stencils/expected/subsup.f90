@@ -7,11 +7,11 @@ program reduction
 
   do i = 1, 10
      do j = 1, 10
-        != stencil readOnce, (forward(depth=1, dim=1, nonpointed))*(pointed(dim=2)) :: b
+        != stencil readOnce, forward(depth=1, dim=1, nonpointed)*pointed(dim=2) :: b
         a(i) = b(i+1, j)
-        != stencil readOnce, (backward(depth=1, dim=1, nonpointed))*(pointed(dim=2)) :: b
+        != stencil readOnce, backward(depth=1, dim=1, nonpointed)*pointed(dim=2) :: b
         a(i) = b(i-1, j)
-        != stencil readOnce, (pointed(dim=1)) :: d
+        != stencil readOnce, pointed(dim=1) :: d
         c(i+1, j) = d(i+1)
      end do
   end do

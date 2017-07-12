@@ -76,7 +76,7 @@ spec =
                       (Sum [Product [Backward 2 1 True]])) Nothing) True)])
 
       it "parse and convert stencil requiring distribution (5)" $
-          parseAndConvert "= stencil readonce, atleast, (forward(depth=1, dim=1) * ((centered(depth=1, dim=2)) + backward(depth=3, dim=4))) :: frob"
+          parseAndConvert "= stencil readonce, atleast, forward(depth=1, dim=1) * (centered(depth=1, dim=2) + backward(depth=3, dim=4)) :: frob"
           `shouldBe`
             (Right $ Right [(["frob"], Specification
              (Once $ Bound (Just $ Spatial
@@ -103,9 +103,9 @@ spec =
           \(5:5)-(5:63)    Correct.\n\
           \(9:5)-(9:52)    Not well specified.\n\
           \        Specification is:\n\
-          \                stencil readOnce, (forward(depth=1, dim=1)) :: a\n\n\
+          \                stencil readOnce, forward(depth=1, dim=1) :: a\n\n\
           \        but at (10:5)-(10:17) the code behaves as\n\
-          \                stencil readOnce, (forward(depth=1, dim=1, nonpointed)) :: a\n\n\
+          \                stencil readOnce, forward(depth=1, dim=1, nonpointed) :: a\n\n\
           \(12:3)-(12:16)    Could not parse specification at: \"... \"\n"
 
 checkText text =
