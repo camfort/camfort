@@ -133,17 +133,6 @@ spec = do
       it "test all in -10/-10 ... 10/10, apart from /0" $
         do and [testDoubleToRationalSubset x y | x <- [-10..10], y <- [-10..10]]
 
-  let shouldParseSameAs s s' =
-        runParser unitParser s `shouldBe` runParser unitParser s'
-  describe "Parsing * for product" $ do
-    describe "Compare with juxtaposition" $ do
-      it "test - m s" $ do
-        "m * s" `shouldParseSameAs` "m s"
-      it "test - m s**2" $ do
-        "m * s**2" `shouldParseSameAs` "m s**2"
-      it "test - m s/t" $ do
-        "m * s/t" `shouldParseSameAs` "m s/t"
-
 --------------------------------------------------
 
 testCons1 = [ ConEq (UnitName "kg") (UnitName "m")

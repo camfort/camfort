@@ -4,6 +4,7 @@
 module Camfort.Specification.Units.Parser ( unitParser
                                      , UnitStatement(..)
                                      , UnitOfMeasure(..)
+                                     , UnitParseError
                                      , UnitPower(..)
                                      ) where
 
