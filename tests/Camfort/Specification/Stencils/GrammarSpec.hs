@@ -26,7 +26,7 @@ modifierTest modifiers f =
 
 -- | Check that a stencil specification does not parse.
 --
--- Automatically inserts a leading "!= stencil " and trailing " :: a".
+-- Automatically inserts a leading "= stencil " and trailing " :: a".
 invalidStencilTest :: String -> String -> SpecWith ()
 invalidStencilTest description stencilStr =
   it description $ parse (stencilString stencilStr) `shouldSatisfy` isLeft
@@ -100,9 +100,9 @@ spec =
         "atleast, nonpointed(dims=2), pointed(dims=1,2), \
              \ forward(depth=1, dim=1)"
       invalidStencilTest' "empty specification"
-        "!= stencil"
+        "= stencil"
       invalidStencilTest' "only identifier"
-        "!= stencil foo"
+        "= stencil foo"
 
     it "basic modified stencil (1)" $
       parse (stencilString "      readonce, r1 + r2")
