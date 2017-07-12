@@ -14,6 +14,7 @@
    limitations under the License.
 -}
 
+{-# LANGUAGE GeneralizedNewtypeDeriving #-}
 {-# LANGUAGE ImplicitParams #-}
 {-# LANGUAGE LambdaCase #-}
 {-# LANGUAGE TupleSections #-}
@@ -31,7 +32,7 @@ module Camfort.Specification.Stencils.CheckFrontend
   ) where
 
 import Control.Arrow
-import Control.Monad.Reader (ReaderT, ask, runReaderT)
+import Control.Monad.Reader (MonadReader, ReaderT, ask, runReaderT)
 import Control.Monad.State.Strict
 import Control.Monad.Writer.Strict hiding (Product)
 import Data.Function (on)
@@ -250,7 +251,11 @@ stencilChecking pf = CheckResult . snd . runWriter $
            usedRegions' <- fmap usedRegions get
            let unused = filter ((`notElem` usedRegions') . snd) regions'
            mapM_ (addResult . uncurry unusedRegion) unused
-         output = checkResult $ execState (runReaderT (results >> addUnusedRegionsToResult) flowsGraph) (startState ivmap)
+         output = checkResult $ execState
+           (runReaderT
+             (runChecker (results >> addUnusedRegionsToResult))
+             flowsGraph)
+           (startState ivmap)
 
      tell output
 
@@ -292,8 +297,12 @@ startState ivmap =
              , usedRegions   = []
              }
 
-type Checker a =
-  ReaderT (FAD.FlowsGraph A) (State CheckState) a
+newtype Checker a =
+  Checker { runChecker :: ReaderT (FAD.FlowsGraph A) (State CheckState) a }
+  deriving ( Functor, Applicative, Monad
+           , MonadReader (FAD.FlowsGraph A)
+           , MonadState CheckState
+           )
 
 -- If the annotation contains an unconverted stencil specification syntax tree
 -- then convert it and return an updated annotation containing the AST
