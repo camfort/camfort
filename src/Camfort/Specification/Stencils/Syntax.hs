@@ -274,19 +274,23 @@ instance Show Spatial where
 
 -- Pretty print region sums
 instance Show RegionSum where
-    -- Tweedle-dum
-    show (Sum []) = "empty"
-    -- Tweedle-dee
-    show (Sum [Product []]) = "empty"
+    showsPrec _ (Sum []) = showString "empty"
 
-    show (Sum specs) =
-      intercalate " + " ppspecs
-      where ppspecs = filter (/= "") $ map show specs
+    showsPrec p (Sum specs) =
+        showParen (p > 6) $ inter specs
+      where
+        inter [ ] = id
+        inter [ x ] = showsPrec 6 x
+        inter (x:xs) = showsPrec 6 x . (" + " ++) . inter xs
 
 instance Show RegionProd where
-    show (Product []) = ""
-    show (Product ss)  =
-       intercalate "*" . map (\s -> "(" ++ show s ++ ")") $ ss
+    showsPrec _ (Product []) = showString "empty"
+    showsPrec p (Product ss)  =
+        showParen (p > 7) $ inter ss
+      where
+        inter [ ] = id
+        inter [ x ] = showsPrec 7 x
+        inter (x:xs) = showsPrec 7 x . ('*' :) . inter xs
 
 instance Show Region where
    show (Forward dep dim reflx)   = showRegion "forward" dep dim reflx
