@@ -1,23 +1,22 @@
 { -- -*- Mode: Haskell -*-
 {-# LANGUAGE DeriveDataTypeable, PatternGuards #-}
 module Camfort.Specification.Stencils.Grammar
-( reqRegions, specParser, Specification(..), Region(..), SpecInner(..), lexer ) where
+( reqRegions, specParser, Specification(..), Region(..), SpecParseError, SpecInner(..), lexer ) where
 
+import Control.Monad.Except (throwError)
 import Data.Char (isLetter, isNumber, isAlphaNum, toLower, isAlpha, isSpace)
-import Data.List (intersect, nub, sort, isPrefixOf, isInfixOf, intercalate)
 import Data.Data
+import Data.List (intersect, nub, sort, isPrefixOf, isInfixOf, intercalate)
 import qualified Data.Text as T
 
-import Debug.Trace
-
-import Camfort.Analysis.CommentAnnotator
+import Camfort.Specification.Parser (SpecParser, mkParser)
 import Camfort.Specification.Stencils.Model (Approximation(..), Multiplicity(..))
 import qualified Camfort.Specification.Stencils.Syntax as Syn
 
 }
 
-%monad { Either AnnotationParseError } { >>= } { return }
-%name parseSpec SPEC
+%monad { StencilSpecParser } { >>= } { return }
+%name parseSpecification SPEC
 %tokentype { Token }
 %token
   stencil     { TId _ "stencil" }
@@ -112,6 +111,42 @@ VARS :: { [String] }
 | id      { [$1] }
 
 {
+
+-- ** Errors
+
+data SpecParseError
+  -- | Character cannot be used at start of specification.
+  = InvalidSpecificationCharacter Char
+  -- | Not a valid identifier character.
+  | NotAnIdentifier Char
+  -- | Specification consisted only of whitespace.
+  | EmptySpecification
+  -- | Tokens do not represent a syntactically valid specification.
+  | CouldNotParseSpecification [Token]
+  deriving (Eq)
+
+instance Show SpecParseError where
+  show (CouldNotParseSpecification ts) =
+    "Could not parse specification at: \"" ++ prettyTokens ts ++ "\"\n"
+  show EmptySpecification = "Empty specification"
+  show (InvalidSpecificationCharacter c) =
+    "Invalid character at start of specification: " ++ show c
+  show (NotAnIdentifier c) = "Invalid character in identifier: " ++ show c
+
+invalidSpecificationCharacter :: Char -> SpecParseError
+invalidSpecificationCharacter = InvalidSpecificationCharacter
+
+notAnIdentifier :: Char -> SpecParseError
+notAnIdentifier = NotAnIdentifier
+
+emptySpecification :: SpecParseError
+emptySpecification = EmptySpecification
+
+couldNotParseSpecification :: [Token] -> SpecParseError
+couldNotParseSpecification = CouldNotParseSpecification
+
+type StencilSpecParser a = Either SpecParseError a
+
 newtype Depth a = Depth a
 newtype Dim a = Dim a
 
@@ -172,36 +207,47 @@ data Token
   | TNum String
  deriving (Show, Eq)
 
-addToTokens :: Token -> String -> Either AnnotationParseError [ Token ]
+addToTokens :: Token -> String -> StencilSpecParser [ Token ]
 addToTokens tok rest = do
  tokens <- lexer' rest
  return $ tok : tokens
 
-lexer :: String -> Either AnnotationParseError [ Token ]
-lexer input | length (stripLeadingWhiteSpace input) >= 2 =
+looksLikeStencilSpec :: String -> Bool
+looksLikeStencilSpec input
+  | length (stripLeadingWhiteSpace input) >= 2 =
   case stripLeadingWhiteSpace input of
     -- Check the leading character is '=' for specification
     '=':input' -> testAnnotation input'
     '!':input' -> testAnnotation input'
     '>':input' -> testAnnotation input'
     '<':input' -> testAnnotation input'
-    _ -> Left NotAnnotation
+    _          -> False
+  | otherwise = False
   where
-    stripLeadingWhiteSpace = T.unpack . T.strip . T.pack
     testAnnotation inp =
-      -- First test to see if the input looks like an actual
-      -- specification of either a stencil or region
-      if (inp `hasPrefix` "stencil" || inp `hasPrefix` "region"
-                                    || inp `hasPrefix` "access")
-      then lexer' inp
-      else Left NotAnnotation
+      (inp `hasPrefix` "stencil"
+        || inp `hasPrefix` "region"
+        || inp `hasPrefix` "access")
     hasPrefix []       str = False
     hasPrefix (' ':xs) str = hasPrefix xs str
     hasPrefix xs       str = isPrefixOf str xs
-lexer _ = Left NotAnnotation
 
+-- | Remove any whitespace characters at the beginning of the string.
+stripLeadingWhiteSpace :: String -> String
+stripLeadingWhiteSpace = T.unpack . T.strip . T.pack
 
-lexer' :: String -> Either AnnotationParseError [ Token ]
+lexer :: String -> StencilSpecParser [Token]
+lexer input =
+  case stripLeadingWhiteSpace input of
+    -- Check the leading character is '=' for specification
+    '=':input' -> lexer' input'
+    '!':input' -> lexer' input'
+    '>':input' -> lexer' input'
+    '<':input' -> lexer' input'
+    (c:_)      -> throwError $ invalidSpecificationCharacter c
+    _          -> throwError emptySpecification
+
+lexer' :: String -> StencilSpecParser [ Token ]
 lexer' []                                              = return []
 lexer' (' ':xs)                                        = lexer' xs
 lexer' ('\t':xs)                                       = lexer' xs
@@ -221,32 +267,21 @@ lexer' (x:xs)
         aux (\x -> TId x $ fmap toLower x) $ \ c -> isAlphaNum c || c == '_'
   | isPositiveNumber x                                = aux TNum isNumber
   | otherwise
-     = failWith $ "Not an indentifier " ++ show x
+     = throwError $ notAnIdentifier x
  where
    isPositiveNumber x = isNumber x && x /= '0'
    aux f p = (f target :) <$> lexer' rest
      where (target, rest) = span p (x:xs)
-lexer' x
-    = failWith $ "Not a valid piece of stencil syntax " ++ show x
 
 --------------------------------------------------
 
--- specParser :: String -> Either AnnotationParseError Specification
-specParser :: AnnotationParser Specification
-specParser src = do
- tokens <- lexer src
- parseSpec tokens
+specParser :: SpecParser SpecParseError Specification
+specParser = mkParser (\src -> do
+                          tokens <- lexer src
+                          parseSpecification tokens) looksLikeStencilSpec
 
-happyError :: [ Token ] -> Either AnnotationParseError a
-happyError t =
-  failWith $ "Could not parse specification at: \"" ++ prettyTokens t ++ "\""
-            ++ reason t ++ "\n"
-
--- | Possible reasons for parse failure
-reason :: [ Token ] -> String
-reason (TId s "readonce" : _) =
-    "\nPossible reason: '" ++ s ++ "' not placed at the start of the specification"
-reason _ = ""
+happyError :: [ Token ] -> StencilSpecParser a
+happyError = throwError . couldNotParseSpecification
 
 -- | Pretty-print the tokens, showing the smallest unique prefix of tokens
 prettyTokens :: [ Token ] -> String

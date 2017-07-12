@@ -124,7 +124,7 @@ stencilInference mode marker pf =
     -- TODO: might want to output log0 somehow (though it doesn't fit LogLine)
     (pf'@(F.ProgramFile mi pus), _log0) =
          if mode == Synth
-          then runWriter (annotateComments Gram.specParser pf)
+          then runWriter (annotateComments Gram.specParser (const . const . pure $ ()) pf)
           else (pf, [])
 
     (pus', log1)    = runWriter (transformBiM perPU pus)

@@ -20,57 +20,47 @@
 module Camfort.Analysis.CommentAnnotator
   ( annotateComments
   , isComment
-  , Logger
   , ASTEmbeddable(..)
   , Linkable(..)
-  , AnnotationParseError(..)
-  , AnnotationParser
-  , failWith
   ) where
 
 
-import Control.Monad.Writer.Strict (Writer, tell)
-import Data.Generics.Uniplate.Operations
 import Data.Data (Data)
+import Data.Generics.Uniplate.Operations
 
 import Language.Fortran.AST
 import Language.Fortran.Util.Position
 
-type Logger = Writer [ (SrcSpan, String) ]
-type AnnotationParser ast = String -> Either AnnotationParseError ast
+import Camfort.Specification.Parser ( looksLikeASpec
+                                    , runParser
+                                    , SpecParser)
 
-data AnnotationParseError =
-    NotAnnotation
-  | ProbablyAnnotation String
-  deriving (Eq, Show)
-
--- A parser that throws an annotation parsing error
-failWith :: AnnotationParser ast
-failWith = Left . ProbablyAnnotation
-
-annotateComments :: forall a ast . (Data a, Linkable a, ASTEmbeddable a ast)
-                                 => AnnotationParser ast
-                                 -> ProgramFile a
-                                 -> Logger (ProgramFile a)
-annotateComments parse pf = do
+annotateComments :: forall m e a ast .
+  (Monad m, Data a, Linkable a, ASTEmbeddable a ast)
+  => SpecParser e ast
+  -> (SrcSpan -> e -> m ())
+  -> ProgramFile a
+  -> m (ProgramFile a)
+annotateComments parser handleErr pf = do
     pf' <- transformBiM writeASTProgramUnits =<< transformBiM writeASTBlocks pf
     return . descendBi linkProgramUnits $ descendBi linkBlocks pf'
   where
     writeAST a d srcSpan comment =
-      case parse comment of
-        Right ast -> return $ setAnnotation (annotateWithAST a ast) d
-        Left NotAnnotation -> return d
-        Left (ProbablyAnnotation err) -> parserWarn srcSpan err >> return d
+      if looksLikeASpec parser comment
+      then case runParser parser comment of
+             Left  err -> handleErr srcSpan err >> pure d
+             Right ast -> pure $ setAnnotation (annotateWithAST a ast) d
+      else pure d
 
-    writeASTProgramUnits :: (Data a) => ProgramUnit a -> Logger (ProgramUnit a)
+    writeASTProgramUnits :: ProgramUnit a -> m (ProgramUnit a)
     writeASTProgramUnits pu@(PUComment a srcSpan (Comment comment)) =
       writeAST a pu srcSpan comment
-    writeASTProgramUnits pu = return pu
+    writeASTProgramUnits pu = pure pu
 
-    writeASTBlocks :: (Data a) => Block a -> Logger (Block a)
+    writeASTBlocks :: Block a -> m (Block a)
     writeASTBlocks b@(BlComment a srcSpan (Comment comment)) =
       writeAST a b srcSpan comment
-    writeASTBlocks b = return b
+    writeASTBlocks b = pure b
 
     -- | Link all comments to first non-comment in the list.
     joinComments [ ] = [ ]
@@ -131,6 +121,3 @@ instance HasComment (Block a) where
 instance HasComment (ProgramUnit a) where
   isComment PUComment{} = True
   isComment _           = False
-
-parserWarn :: SrcSpan -> String -> Logger ()
-parserWarn srcSpan err = tell [(srcSpan, err)]

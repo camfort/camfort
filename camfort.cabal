@@ -33,6 +33,7 @@ executable camfort
   other-modules:        Camfort.Analysis.Annotations
                         Camfort.Analysis.CommentAnnotator
                         Camfort.Analysis.Simple
+                        Camfort.Specification.Parser
                         Camfort.Specification.Stencils.Annotation
                         Camfort.Specification.Stencils.CheckBackend
                         Camfort.Specification.Stencils.CheckFrontend
@@ -98,6 +99,7 @@ library
   exposed-modules:      Camfort.Analysis.Annotations
                         Camfort.Analysis.CommentAnnotator
                         Camfort.Analysis.Simple
+                        Camfort.Specification.Parser
                         Camfort.Specification.Stencils.Annotation
                         Camfort.Specification.Stencils.CheckBackend
                         Camfort.Specification.Stencils.CheckFrontend

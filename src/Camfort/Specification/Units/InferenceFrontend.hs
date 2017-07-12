@@ -64,11 +64,10 @@ initInference = do
 
   -- Parse unit annotations found in comments and link to their
   -- corresponding statements in the AST.
-  let (linkedPF, parserReport) = runWriter $ annotateComments P.unitParser pf
+  let (linkedPF, parserReport) =
+        runWriter $ annotateComments P.unitParser
+        (\srcSpan err -> tell $ "Error " ++ show srcSpan ++ ": " ++ err) pf
   modifyProgramFile $ const linkedPF
-
-  -- Send the output of the parser to the logger.
-  mapM_ (tell . (\(s,e) -> "Error " ++ show s ++ ": " ++ e)) parserReport
 
   -- The following insert* functions examine the AST and insert
   -- mappings into the tables stored in the UnitState.

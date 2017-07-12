@@ -8,6 +8,7 @@ module Camfort.Analysis.CommentAnnotatorSpec (spec) where
 import Test.Hspec
 
 import Data.Data
+import Control.Monad.Identity (runIdentity)
 import Control.Monad.Writer.Strict
 
 import Language.Fortran.AST
@@ -15,27 +16,33 @@ import Language.Fortran.ParserMonad
 import Language.Fortran.Util.Position
 
 import Camfort.Analysis.CommentAnnotator
+import Camfort.Specification.Parser (mkParser, SpecParser)
 
 p = SrcSpan (Position 0 1 1) (Position 0 1 1)
+
+annotateWith :: (String -> String) -> ProgramFile A -> ProgramFile A
+annotateWith s = runIdentity . annotateComments trivialParser ignore
+  where trivialParser = mkParser (Right . s) (const True)
+        ignore        = (const . const . pure $ ())
 
 spec =
   describe "Comment annotator" $ do
     it "annotates with no comment blocks" $
-      runWriter (annotateComments (\_ -> Right "") pf) `shouldBe` (pf, [])
+      annotateWith (const "") pf `shouldBe` pf
 
     it "links & annotates single comment block" $
-      runWriter (annotateComments (\_ -> Right "hello") pf2) `shouldBe` (pf2e, [])
+      annotateWith (const "hello") pf2 `shouldBe` pf2e
 
     it "link multiple comments to single statement" $
-      runWriter (annotateComments (\s -> Right $ "!!!" ++ s) pf3) `shouldBe` (pf3e, [])
+      annotateWith ("!!!"++) pf3 `shouldBe` pf3e
 
     it "link comments to separate targets" $
-      runWriter (annotateComments (\s -> Right $ "!!!" ++ s) pf4) `shouldBe` (pf4e, [])
+      annotateWith ("!!!"++) pf4 `shouldBe` pf4e
 
-    it "generates warnings when there is a partial match" $ do
-      let parser _ = Left $ ProbablyAnnotation "This is a warning."
-                     :: Either AnnotationParseError String
-      shouldBe (runWriter (annotateComments parser pf5))
+    it "allows handling of parse errors" $ do
+      let parser :: SpecParser String String
+          parser = mkParser (const $ Left "This is a warning.") (const True)
+      shouldBe (runWriter (annotateComments parser (\srcSpan err -> tell [(srcSpan, err)]) pf5))
                (pf5e, [ (initSrcSpan, "This is a warning.")
                       , (initSrcSpan, "This is a warning.")])
 

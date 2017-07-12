@@ -2,6 +2,7 @@ module Camfort.Specification.Stencils.GrammarSpec (spec) where
 
 import Data.Either (isLeft)
 
+import Camfort.Specification.Parser (runParser)
 import Camfort.Specification.Stencils.Grammar
 import Camfort.Specification.Stencils.Model (
     Approximation(..)
@@ -37,6 +38,17 @@ invalidStencilTest description stencilStr =
 invalidStencilTest' :: String -> String -> SpecWith ()
 invalidStencilTest' description stencilStr =
   it description $ parse stencilStr `shouldSatisfy` isLeft
+
+-- | Check that a stencil specification does not parse, and that the
+-- error string matches that provided.
+--
+-- Tests the @stencilStr@ as is.
+invalidStencilTestStr :: String -- ^ Test description
+                      -> String -- ^ Specification string
+                      -> String -- ^ Expected error string
+                      -> SpecWith ()
+invalidStencilTestStr description stencilStr errStr =
+  it description $ show (parse stencilStr) `shouldBe` ("Left " ++ errStr)
 
 spec :: Test.Spec
 spec =
@@ -129,8 +141,22 @@ spec =
       `shouldBe`
         regionTestCase False
 
+    describe "error messages" $ do
+      invalidStencilTestStr "invalid identifier"
+        "= stencil foo$ :: a"
+        "Invalid character in identifier: '$'"
+      invalidStencilTestStr "empty specification"
+        ""
+        "Empty specification"
+      invalidStencilTestStr "invalid character at start of spec"
+        "c stencil pointed(dim=1) :: a"
+        "Invalid character at start of specification: 'c'"
+      invalidStencilTestStr "invalid syntax"
+        "= stencil readonce, readonce, pointed(dim=1) :: a"
+        "Could not parse specification at: \"readonce... \"\n"
 
-parse = specParser
+parse :: String -> Either SpecParseError Specification
+parse = runParser specParser
 
 -- Local variables:
 -- mode: haskell

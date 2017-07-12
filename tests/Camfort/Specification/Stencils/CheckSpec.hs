@@ -5,6 +5,7 @@ module Camfort.Specification.Stencils.CheckSpec (spec) where
 import qualified Data.ByteString.Internal as BS
 
 import Camfort.Analysis.Annotations (unitAnnotation)
+import Camfort.Specification.Parser (runParser)
 import Camfort.Specification.Stencils.CheckBackend
 import Camfort.Specification.Stencils.CheckFrontend
   (CheckResult, stencilChecking)
@@ -22,7 +23,7 @@ import Test.Hspec
 
 parseAndConvert x =
     let ?renv = []
-    in case SYN.specParser x of
+    in case runParser SYN.specParser x of
          Left  _  -> error "received stencil with invalid syntax in test"
          Right v  -> synToAst v
 

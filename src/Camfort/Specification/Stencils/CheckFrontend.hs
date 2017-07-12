@@ -140,7 +140,7 @@ data StencilCheckError
   -- | The existing stencil conflicts with an inferred stencil.
   | NotWellSpecified (FU.SrcSpan, SpecDecls) (FU.SrcSpan, SpecDecls)
   -- | The stencil could not be parsed correctly.
-  | ParseError FU.SrcSpan String
+  | ParseError FU.SrcSpan Gram.SpecParseError
   -- | A definition for the region alias already exists.
   | RegionExists FU.SrcSpan Variable
   deriving (Eq)
@@ -154,7 +154,7 @@ notWellSpecified :: (FU.SrcSpan, SpecDecls) -> (FU.SrcSpan, SpecDecls) -> Stenci
 notWellSpecified got inferred = SCFail $ NotWellSpecified got inferred
 
 -- | Create a check result informating a user of a parse error.
-parseError :: FU.SrcSpan -> String -> StencilResult
+parseError :: FU.SrcSpan -> Gram.SpecParseError -> StencilResult
 parseError srcSpan err = SCFail $ ParseError srcSpan err
 
 -- | Create a check result informating that a region already exists.
@@ -211,7 +211,7 @@ instance Show StencilCheckError where
                "Specification is:\n", sp, sp, pprintSpecDecls stencilActual, "\n",
                sp, "but at ", show spanInferred, " the code behaves as\n", sp, sp,
                pprintSpecDecls stencilInferred]
-  show (ParseError srcSpan err) = prettyWithSpan srcSpan err
+  show (ParseError srcSpan err) = prettyWithSpan srcSpan (show err)
   show (RegionExists srcSpan name) =
     prettyWithSpan srcSpan ("Region '" ++ name ++ "' already defined")
 
@@ -223,41 +223,41 @@ instance Show StencilCheckWarning where
 
 -- Entry point
 stencilChecking :: F.ProgramFile (FA.Analysis A) -> CheckResult
-stencilChecking pf = CheckResult . snd . runWriter $
-  do -- Attempt to parse comments to specifications
-     pf' <- mapWriter (second $ fmap (uncurry parseError)) $ annotateComments Gram.specParser pf
+stencilChecking pf = CheckResult . snd . runWriter $ do
+  -- Attempt to parse comments to specifications
+  pf' <- annotateComments Gram.specParser (\srcSpan err -> tell [parseError srcSpan err]) pf
+  let -- get map of AST-Block-ID ==> corresponding AST-Block
+      bm         = FAD.genBlockMap pf'
+      -- get map of program unit  ==> basic block graph
+      bbm        = FAB.genBBlockMap pf'
+      -- build the supergraph of global dependency
+      sgr        = FAB.genSuperBBGr bbm
+      -- extract the supergraph itself
+      gr         = FAB.superBBGrGraph sgr
+      -- get map of variable name ==> { defining AST-Block-IDs }
+      dm         = FAD.genDefMap bm
+      -- perform reaching definitions analysis
+      rd         = FAD.reachingDefinitions dm gr
+      -- create graph of definition "flows"
+      flowsGraph =  FAD.genFlowsToGraph bm dm gr rd
+      -- identify every loop by its back-edge
+      beMap      = FAD.genBackEdgeMap (FAD.dominators gr) gr
+      ivmap      = FAD.genInductionVarMapByASTBlock beMap gr
+      -- results :: Checker (F.ProgramFile (F.ProgramFile (FA.Analysis A)))
+      results    = descendBiM perProgramUnitCheck pf'
 
-         -- get map of AST-Block-ID ==> corresponding AST-Block
-     let bm         = FAD.genBlockMap pf'
-         -- get map of program unit  ==> basic block graph
-         bbm        = FAB.genBBlockMap pf'
-         -- build the supergraph of global dependency
-         sgr        = FAB.genSuperBBGr bbm
-         -- extract the supergraph itself
-         gr         = FAB.superBBGrGraph sgr
-         -- get map of variable name ==> { defining AST-Block-IDs }
-         dm         = FAD.genDefMap bm
-         -- perform reaching definitions analysis
-         rd         = FAD.reachingDefinitions dm gr
-         -- create graph of definition "flows"
-         flowsGraph =  FAD.genFlowsToGraph bm dm gr rd
-         -- identify every loop by its back-edge
-         beMap      = FAD.genBackEdgeMap (FAD.dominators gr) gr
-         ivmap      = FAD.genInductionVarMapByASTBlock beMap gr
-         results    = descendBiM perProgramUnitCheck pf'
+  let addUnusedRegionsToResult = do
+        regions'     <- fmap regions get
+        usedRegions' <- fmap usedRegions get
+        let unused = filter ((`notElem` usedRegions') . snd) regions'
+        mapM_ (addResult . uncurry unusedRegion) unused
+      output = checkResult $ execState
+        (runReaderT
+          (runChecker (results >> addUnusedRegionsToResult))
+          flowsGraph)
+        (startState ivmap)
 
-     let addUnusedRegionsToResult = do
-           regions'     <- fmap regions get
-           usedRegions' <- fmap usedRegions get
-           let unused = filter ((`notElem` usedRegions') . snd) regions'
-           mapM_ (addResult . uncurry unusedRegion) unused
-         output = checkResult $ execState
-           (runReaderT
-             (runChecker (results >> addUnusedRegionsToResult))
-             flowsGraph)
-           (startState ivmap)
-
-     tell output
+  tell output
 
 data CheckState = CheckState
   { regionEnv     :: RegionEnv
@@ -447,7 +447,7 @@ checkStencil flowsGraph s specDecls spanInferred maybeSubs span = do
 
   let userDefinedIsStencils = map (\(_, Specification _ b) -> b) specDecls
   -- Model and compare the current and specified stencil specs
-  if (all (isStencil ==) userDefinedIsStencils) && checkOffsetsAgainstSpec multOffsets expandedDecls
+  if all (isStencil ==) userDefinedIsStencils && checkOffsetsAgainstSpec multOffsets expandedDecls
     then mapM_ (\spec@(v,s) -> do
                    specExists <- seenBefore spec
                    if specExists then addResult (duplicateSpecification span)

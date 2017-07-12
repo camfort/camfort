@@ -7,14 +7,16 @@ module Camfort.Specification.Units.Parser ( unitParser
                                      , UnitPower(..)
                                      ) where
 
-import Camfort.Analysis.CommentAnnotator
+import Control.Monad.Except (throwError)
 import Data.Data
 import Data.List
 import Data.Char (isLetter, isNumber, isAlphaNum, toLower)
 import qualified Data.Text as T
+
+import Camfort.Specification.Parser (mkParser, SpecParser)
 }
 
-%monad { Either AnnotationParseError } { >>= } { return }
+%monad { UnitSpecParser } { >>= } { return }
 %name parseUnit UNIT
 %tokentype { Token }
 
@@ -91,6 +93,10 @@ NUM :: { String }
 
 {
 
+type UnitParseError = String
+
+type UnitSpecParser a = Either UnitParseError a
+
 data UnitStatement =
    UnitAssignment (Maybe [String]) UnitOfMeasure
  | UnitAlias String UnitOfMeasure
@@ -143,22 +149,22 @@ data Token =
  | TNum String
  deriving (Show)
 
-lexer :: String -> Either AnnotationParseError [ Token ]
-lexer [] = Left NotAnnotation
-lexer (c:xs)
-  | c `elem` ['=', '!', '>', '<'] =
-      -- First test to see if the input looks like an actual unit specification
-      if "unit" `isPrefixOf` (T.unpack . T.strip . T.toLower . T.pack $ xs)
-      then lexer' xs
-      else Left NotAnnotation
-  | otherwise = Left NotAnnotation
+looksLikeUnitSpec :: String -> Bool
+looksLikeUnitSpec [] = True
+looksLikeUnitSpec (c:cs) =
+  c `elem` ['=', '!', '>', '<'] &&
+  "unit" `isPrefixOf` (T.unpack . T.strip . T.toLower . T.pack $ cs)
 
-addToTokens :: Token -> String -> Either AnnotationParseError [ Token ]
+lexer :: String -> UnitSpecParser [ Token ]
+lexer xs | not (looksLikeUnitSpec xs) = throwError "not a unit specification"
+lexer (c:xs) = lexer' xs
+
+addToTokens :: Token -> String -> UnitSpecParser [ Token ]
 addToTokens tok rest = do
  tokens <- lexer' rest
  return $ tok : tokens
 
-lexer' :: String -> Either AnnotationParseError [ Token ]
+lexer' :: String -> UnitSpecParser [ Token ]
 lexer' [] = Right []
 lexer' ['\n']  = Right []
 lexer' ['\r', '\n']  = Right []
@@ -178,18 +184,18 @@ lexer' (x:xs)
  | isLetter x || x == '\'' = aux (\ c -> isAlphaNum c || c `elem` ['\'','_','-'])
                                  (\ s -> if s == "record" then TRecord else TId s)
  | isNumber x              = aux isNumber TNum
- | otherwise               = failWith $ "Not valid unit syntax at " ++ show (x:xs) ++ "\n"
+ | otherwise               = throwError $ "Not valid unit syntax at " ++ show (x:xs) ++ "\n"
  where
    aux p cons =
      let (target, rest) = span p xs
      in lexer' rest >>= (\tokens -> return $ cons (x:target) : tokens)
 
-unitParser :: String -> Either AnnotationParseError UnitStatement
-unitParser src = do
- tokens <- lexer $ map toLower src
- parseUnit tokens
+unitParser :: SpecParser UnitParseError UnitStatement
+unitParser = mkParser (\src -> do
+                          tokens <- lexer $ map toLower src
+                          parseUnit tokens) looksLikeUnitSpec
 
-happyError :: [ Token ] -> Either AnnotationParseError a
-happyError t = failWith $ "Could not parse unit specification at: " ++ show t ++ "\n"
+happyError :: [ Token ] -> UnitSpecParser a
+happyError t = throwError $ "Could not parse unit specification at: " ++ show t ++ "\n"
 
 }

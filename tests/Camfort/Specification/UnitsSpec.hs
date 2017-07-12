@@ -8,6 +8,7 @@ import qualified Language.Fortran.AST as F
 import qualified Language.Fortran.Analysis as FA
 import Data.Generics.Uniplate.Operations
 import Camfort.Analysis.Annotations
+import Camfort.Specification.Parser (runParser)
 import Camfort.Specification.Units
 import Camfort.Specification.Units.Monad
 import Camfort.Specification.Units.Parser hiding (UnitAlias)
@@ -132,14 +133,16 @@ spec = do
       it "test all in -10/-10 ... 10/10, apart from /0" $
         do and [testDoubleToRationalSubset x y | x <- [-10..10], y <- [-10..10]]
 
+  let shouldParseSameAs s s' =
+        runParser unitParser s `shouldBe` runParser unitParser s'
   describe "Parsing * for product" $ do
     describe "Compare with juxtaposition" $ do
       it "test - m s" $ do
-        unitParser "m * s" `shouldBe` unitParser "m s"
+        "m * s" `shouldParseSameAs` "m s"
       it "test - m s**2" $ do
-        unitParser "m * s**2" `shouldBe` unitParser "m s**2"
+        "m * s**2" `shouldParseSameAs` "m s**2"
       it "test - m s/t" $ do
-        unitParser "m * s/t" `shouldBe` unitParser "m s/t"
+        "m * s/t" `shouldParseSameAs` "m s/t"
 
 --------------------------------------------------
 
