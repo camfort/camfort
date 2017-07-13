@@ -139,7 +139,7 @@ getModFiles = maybe (pure emptyModFiles) (\d -> do
         return modFile
   return addedModFiles)
 
-isModFile = (== modFileSuffix) . fileExt
+isModFile = (== modFileSuffix) . takeExtension
 
 unitsCheck inSrc excludes m debug incDir = do
     putStrLn $ "Checking units for '" ++ inSrc ++ "'"
