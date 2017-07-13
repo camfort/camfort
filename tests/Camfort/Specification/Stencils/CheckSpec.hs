@@ -91,6 +91,10 @@ spec =
         checkTestShow exampleUnusedRegion
           "warns about unused regions"
           "(2:3)-(2:34)    Warning: Unused region 'r1'"
+        checkTestShow exampleRedefinedRegion
+          "warns about redefined"
+          "(4:3)-(4:34)    Region 'r1' already defined\n\
+          \(6:5)-(6:32)    Correct."
         checkTestShow exampleSimpleInvalidSyntax
           "warns about specification parse errors"
           "(2:3)-(2:16)    Could not parse specification at: \"... \"\n"
@@ -124,6 +128,18 @@ exampleUnusedRegion :: String
 exampleUnusedRegion =
   "program example\n\
   \  != region :: r1 = pointed(dim=1)\n\
+  \end program"
+
+exampleRedefinedRegion :: String
+exampleRedefinedRegion =
+  "program example\n\
+  \  real, dimension(10) :: a\n\
+  \  != region :: r1 = forward(depth=1,dim=1, nonpointed)\n\
+  \  != region :: r1 = pointed(dim=1)\n\
+  \  do i = 1, 10\n\
+  \    != stencil readOnce, r1 :: a\n\
+  \    a(i) = a(i+1)\n\
+  \  end do\n\
   \end program"
 
 exampleSimpleCorrect :: String
