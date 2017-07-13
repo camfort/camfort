@@ -107,6 +107,13 @@ spec =
           \        but at (10:5)-(10:17) the code behaves as\n\
           \                stencil readOnce, forward(depth=1, dim=1, nonpointed) :: a\n\n\
           \(12:3)-(12:16)    Could not parse specification at: \"... \"\n"
+        checkTestShow exampleSpecWrongVar
+          "validates that a specification is applied to the correct variables"
+          "(4:5)-(4:44)    Not well specified.\n\
+          \        Specification is:\n\
+          \                stencil readOnce, pointed(dim=1) :: b\n\n\
+          \        but at (5:5)-(5:15) the code behaves as\n\
+          \                stencil readOnce, pointed(dim=1) :: a\n"
 
 checkText text =
   either (error "received test input with invalid syntax")
@@ -156,4 +163,14 @@ exampleUnusedRegionWithOtherSpecs =
   \    a(i) = a(i+1)\n\
   \  end do\n\
   \  != stencil foo\n\
+  \end program"
+
+exampleSpecWrongVar :: String
+exampleSpecWrongVar =
+  "program example\n\
+  \  real, dimension(10) :: a\n\
+  \  do i = 1, 10\n\
+  \    != stencil readOnce, pointed(dim=1) :: b\n\
+  \    a(i) = a(i)\n\
+  \  end do\n\
   \end program"

@@ -308,11 +308,16 @@ checkOffsetsAgainstSpec :: [(Variable, Multiplicity [[Int]])]
                         -> [(Variable, Specification)]
                         -> Bool
 checkOffsetsAgainstSpec offsetMaps specMaps =
-    flip all specToVecList $
-      \case
-        (spec, Once (V.VL vs)) -> spec `C.consistent` (Once . toUNF) vs == C.Consistent
-        (spec, Mult (V.VL vs)) -> spec `C.consistent` (Mult . toUNF) vs == C.Consistent
+  variablesConsistent &&
+  all (\case
+          (spec, Once (V.VL vs)) -> spec `C.consistent` (Once . toUNF) vs == C.Consistent
+          (spec, Mult (V.VL vs)) -> spec `C.consistent` (Mult . toUNF) vs == C.Consistent)
+  specToVecList
   where
+    variablesConsistent =
+      let vs1 = sort . fmap fst $ offsetMaps
+          vs2 = sort . fmap fst $ specMaps
+      in vs1 == vs2
     toUNF :: [ V.Vec n Int64 ] -> UnionNF n Offsets
     toUNF = joins1 . map (return . fmap intToSubscript)
 
