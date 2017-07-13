@@ -45,10 +45,8 @@ module Camfort.Functionality (
   , equivalences
   ) where
 
-import System.FilePath
 import Control.Monad
-
-import Data.Binary
+import System.FilePath (takeDirectory)
 
 import Camfort.Analysis.Simple
 import Camfort.Transformation.DeadCode
@@ -105,59 +103,29 @@ equivalences inSrc excludes outSrc = do
 
 {- Units feature -}
 optsToUnitOpts :: LiteralsOpt -> Bool -> Maybe String -> IO UnitOpts
-optsToUnitOpts m debug = maybe (pure o1) (\d -> do
-  -- Figure out the camfort mod files and parse them.
-  modFileNames <- filter isModFile `fmap` rGetDirContents' d
-  assocList <- forM modFileNames $ \ modFileName -> do
-    eResult <- decodeFileOrFail (d ++ "/" ++ modFileName) -- FIXME, directory manipulation
-    case eResult of
-      Left (offset, msg) -> do
-        putStrLn $ modFileName ++ ": Error at offset " ++ show offset ++ ": " ++ msg
-        return (modFileName, emptyModFile)
-      Right modFile -> do
-        putStrLn $ modFileName ++ ": successfully parsed precompiled file."
-        return (modFileName, modFile)
-  return $ o1 { uoModFiles = M.fromList assocList })
-  -- return $ o1 { uoModFiles = M.fromList assocList `M.union` uoModFiles o })
+optsToUnitOpts m debug = maybe (pure o1)
+  (fmap (\modFiles -> o1 { uoModFiles = M.fromList modFiles }) . getModFilesWithNames)
   where o1 = unitOpts0 { uoLiterals = m
                        , uoDebug = debug
                        , uoModFiles = M.empty }
-
-
-getModFiles :: Maybe String -> IO ModFiles
-getModFiles = maybe (pure emptyModFiles) (\d -> do
-  -- Figure out the camfort mod files and parse them.
-  modFileNames <- filter isModFile `fmap` rGetDirContents' d
-  addedModFiles <- forM modFileNames $ \ modFileName -> do
-    eResult <- decodeFileOrFail (d ++ "/" ++ modFileName) -- FIXME, directory manipulation
-    case eResult of
-      Left (offset, msg) -> do
-        putStrLn $ modFileName ++ ": Error at offset " ++ show offset ++ ": " ++ msg
-        return emptyModFile
-      Right modFile -> do
-        putStrLn $ modFileName ++ ": successfully parsed precompiled file."
-        return modFile
-  return addedModFiles)
-
-isModFile = (== modFileSuffix) . takeExtension
 
 unitsCheck inSrc excludes m debug incDir = do
     putStrLn $ "Checking units for '" ++ inSrc ++ "'"
     uo <- optsToUnitOpts m debug incDir
     let rfun = concatMap (LU.checkUnits uo)
-    doAnalysisReportWithModFiles rfun putStrLn inSrc excludes =<< getModFiles incDir
+    doAnalysisReportWithModFiles rfun putStrLn inSrc incDir excludes
 
 unitsInfer inSrc excludes m debug incDir = do
     putStrLn $ "Inferring units for '" ++ inSrc ++ "'"
     uo <- optsToUnitOpts m debug incDir
     let rfun = concatMap (LU.inferUnits uo)
-    doAnalysisReportWithModFiles rfun putStrLn inSrc excludes =<< getModFiles incDir
+    doAnalysisReportWithModFiles rfun putStrLn inSrc incDir excludes
 
 unitsCompile inSrc excludes m debug incDir outSrc = do
     putStrLn $ "Compiling units for '" ++ inSrc ++ "'"
     uo <- optsToUnitOpts m debug incDir
     let rfun = LU.compileUnits uo
-    putStrLn =<< doCreateBinary rfun inSrc excludes outSrc =<< getModFiles incDir
+    putStrLn =<< doCreateBinary rfun inSrc incDir excludes outSrc
 
 
 unitsSynth inSrc excludes m debug incDir outSrc annType = do
@@ -166,7 +134,7 @@ unitsSynth inSrc excludes m debug incDir outSrc annType = do
     uo <- optsToUnitOpts m debug incDir
     let rfun =
           mapM (LU.synthesiseUnits uo marker)
-    report <- doRefactorWithModFiles rfun inSrc excludes outSrc =<< getModFiles incDir
+    report <- doRefactorWithModFiles rfun inSrc incDir excludes outSrc
     putStrLn report
 
 unitsCriticals inSrc excludes m debug incDir = do
@@ -174,7 +142,7 @@ unitsCriticals inSrc excludes m debug incDir = do
              ++ inSrc ++ "'"
     uo <- optsToUnitOpts m debug incDir
     let rfun = mapM (LU.inferCriticalVariables uo)
-    doAnalysisReportWithModFiles rfun (putStrLn . fst) inSrc excludes =<< getModFiles incDir
+    doAnalysisReportWithModFiles rfun (putStrLn . fst) inSrc incDir excludes
 
 {- Stencils feature -}
 stencilsCheck inSrc excludes = do
