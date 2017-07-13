@@ -28,7 +28,7 @@ consistent (Specification mult _) observedIxs =
       (Once _, Mult _) ->Inconsistent
         "Specification is readOnce, but there are repeated indices."
       (Mult _, Once _) -> Inconsistent
-        "Specification lacks readOnce, but the indices are inuque."
+        "Specification lacks readOnce, but the indices are unique."
   where
     specModel :: Multiplicity (Approximation (UnionNF n (Interval Standard)))
     specModel =
