@@ -306,14 +306,14 @@ parseCommentToAST ann span =
          let ?renv = renv
          case synToAst stencilComment of
            Right ast -> do
-             pfun <- either (\reg@[(var,_)] -> do -- synToAst gives [(x,y)]
+             pfun <- either (\reg@(var,_) -> do
                         exists <- regionExists var
                         if exists
                           then addResult (regionExistsError span var)
                                >> pure id
                           else addRegionToTracked span var
                                >> pure (giveRegionSpec reg))
-                     (pure . giveAstSpec) ast
+                     (pure . giveAstSpec . pure) ast
              pure . pure $ onPrev pfun ann
            Left err  -> pure . Left $ err
 
@@ -324,7 +324,7 @@ parseCommentToAST ann span =
 updateRegionEnv :: FA.Analysis A -> Checker ()
 updateRegionEnv ann =
   case getRegionSpec (FA.prevAnnotation ann) of
-    Just renv -> modify (\s -> s { regionEnv = renv ++ regionEnv s })
+    Just renv -> modify (\s -> s { regionEnv = renv : regionEnv s })
     _         -> pure ()
 
 checkOffsetsAgainstSpec :: [(Variable, Multiplicity [[Int]])]
