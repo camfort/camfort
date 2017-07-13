@@ -25,10 +25,12 @@ module Camfort.Specification.Stencils.Syntax
     -- * Datatypes and Aliases
     Linearity(..)
   , Region(..)
+  , RegionDecl
   , RegionEnv
   , RegionProd(..)
   , RegionSum(..)
   , Spatial(..)
+  , SpecDecl
   , SpecDecls
   , Specification(..)
   , IsStencil
@@ -71,13 +73,16 @@ absoluteRep = maxBound :: Int
 
 {- *** 1 . Specification syntax -}
 
+type RegionDecl = (Variable, RegionSum)
+type SpecDecl   = ([Variable], Specification)
+
 -- List of region sums associated to region variables
-type RegionEnv = [(String, RegionSum)]
+type RegionEnv = [(Variable, RegionSum)]
 
 -- List of specifications associated to variables
 -- This is not a map so there might be multiple entries for each variable
 -- use `lookupAggregate` to access it
-type SpecDecls = [([String], Specification)]
+type SpecDecls = [SpecDecl]
 
 pprintSpecDecls :: SpecDecls -> String
 pprintSpecDecls =

@@ -36,7 +36,7 @@ import Control.Monad.State.Strict
 import Control.Monad.Writer.Strict hiding (Product)
 import Data.Function (on)
 import Data.Generics.Uniplate.Operations
-import Data.List (intercalate, sort)
+import Data.List (intercalate, sort, union)
 
 import Camfort.Analysis.Annotations
 import Camfort.Analysis.CommentAnnotator
@@ -120,6 +120,7 @@ instance GetSpan StencilCheckError where
   getSpan (SynToAstError     _ srcSpan)      = srcSpan
   getSpan (NotWellSpecified  (srcSpan, _) _) = srcSpan
   getSpan (ParseError srcSpan _)             = srcSpan
+  getSpan (RegionExists srcSpan _)           = srcSpan
 
 instance GetSpan StencilCheckWarning where
   getSpan (DuplicateSpecification srcSpan) = srcSpan
@@ -139,6 +140,8 @@ data StencilCheckError
   | NotWellSpecified (FU.SrcSpan, SpecDecls) (FU.SrcSpan, SpecDecls)
   -- | The stencil could not be parsed correctly.
   | ParseError FU.SrcSpan String
+  -- | A definition for the region alias already exists.
+  | RegionExists FU.SrcSpan Variable
   deriving (Eq)
 
 -- | Create a check result informating a user of a 'SynToAstError'.
@@ -152,6 +155,10 @@ notWellSpecified got inferred = SCFail $ NotWellSpecified got inferred
 -- | Create a check result informating a user of a parse error.
 parseError :: FU.SrcSpan -> String -> StencilResult
 parseError srcSpan err = SCFail $ ParseError srcSpan err
+
+-- | Create a check result informating that a region already exists.
+regionExistsError :: FU.SrcSpan -> Variable -> StencilResult
+regionExistsError srcSpan r = SCFail $ RegionExists srcSpan r
 
 -- | Represents a non-fatal validation warning.
 data StencilCheckWarning
@@ -204,6 +211,8 @@ instance Show StencilCheckError where
                sp, "but at ", show spanInferred, " the code behaves as\n", sp, sp,
                pprintSpecDecls stencilInferred]
   show (ParseError srcSpan err) = prettyWithSpan srcSpan err
+  show (RegionExists srcSpan name) =
+    prettyWithSpan srcSpan ("Region '" ++ name ++ "' already defined")
 
 instance Show StencilCheckWarning where
   show (DuplicateSpecification srcSpan) = prettyWithSpan srcSpan
@@ -237,7 +246,9 @@ stencilChecking pf = CheckResult . snd . runWriter $
          results    = descendBiM perProgramUnitCheck pf'
 
      let addUnusedRegionsToResult = do
-           unused <- fmap unusedRegions get
+           regions'     <- fmap regions get
+           usedRegions' <- fmap usedRegions get
+           let unused = filter ((`notElem` usedRegions') . snd) regions'
            mapM_ (addResult . uncurry unusedRegion) unused
          output = checkResult $ execState (runReaderT (results >> addUnusedRegionsToResult) flowsGraph) (startState ivmap)
 
@@ -248,24 +259,28 @@ data CheckState = CheckState
   , checkResult   :: [StencilResult]
   , prog          :: Maybe F.ProgramUnitName
   , ivMap         :: FAD.InductionVarMapByASTBlock
-  , unusedRegions :: [(FU.SrcSpan, Variable)]
+  , regions       :: [(FU.SrcSpan, Variable)]
+  , usedRegions   :: [Variable]
   }
 
 addResult :: StencilResult -> Checker ()
 addResult r = modify (\s -> s { checkResult = r : checkResult s })
 
-modifyUnusedRegions :: ([(FU.SrcSpan, Variable)] -> [(FU.SrcSpan, Variable)]) -> Checker ()
-modifyUnusedRegions f = modify (\s -> s { unusedRegions = f (unusedRegions s) })
-
 -- | Remove the given regions variables from the tracked unused regions.
 informRegionsUsed :: [Variable] -> Checker ()
 informRegionsUsed regions = modify
-  (\s -> s { unusedRegions = filter ((`notElem` regions) . snd) $ unusedRegions s })
+  (\s -> s { usedRegions = usedRegions s `union` regions })
 
--- | Start tracking a region to see whether or not it gets used.
-addRegionToTracked :: FU.SrcSpan -> RegionEnv -> Checker ()
-addRegionToTracked srcSpan@(FU.SrcSpan (FU.Position o1 _ _) (FU.Position o2 _ _)) =
-  mapM_ (\(r,_) -> modify (\s -> s { unusedRegions = (srcSpan, r) : unusedRegions s }))
+-- | Start tracking a region.
+addRegionToTracked :: FU.SrcSpan -> Variable -> Checker ()
+addRegionToTracked srcSpan@(FU.SrcSpan (FU.Position o1 _ _) (FU.Position o2 _ _)) r =
+  modify (\s -> s { regions = (srcSpan, r) : regions s })
+
+-- | True if the region name is already tracked.
+regionExists :: Variable -> Checker Bool
+regionExists reg = do
+  knownNames <- fmap (fmap snd . regions) get
+  pure $ reg `elem` knownNames
 
 startState :: FAD.InductionVarMapByASTBlock -> CheckState
 startState ivmap =
@@ -273,7 +288,8 @@ startState ivmap =
              , checkResult   = []
              , prog          = Nothing
              , ivMap         = ivmap
-             , unusedRegions = []
+             , regions       = []
+             , usedRegions   = []
              }
 
 type Checker a =
@@ -290,8 +306,15 @@ parseCommentToAST ann span =
          let ?renv = renv
          case synToAst stencilComment of
            Right ast -> do
-             either (addRegionToTracked span) (const (pure ())) ast
-             pure . pure $ onPrev (either giveRegionSpec giveAstSpec ast) ann
+             pfun <- either (\reg@(var,_) -> do
+                        exists <- regionExists var
+                        if exists
+                          then addResult (regionExistsError span var)
+                               >> pure id
+                          else addRegionToTracked span var
+                               >> pure (giveRegionSpec reg))
+                     (pure . giveAstSpec . pure) ast
+             pure . pure $ onPrev pfun ann
            Left err  -> pure . Left $ err
 
     _ -> pure . pure $ ann
@@ -301,7 +324,7 @@ parseCommentToAST ann span =
 updateRegionEnv :: FA.Analysis A -> Checker ()
 updateRegionEnv ann =
   case getRegionSpec (FA.prevAnnotation ann) of
-    Just renv -> modify (\s -> s { regionEnv = renv ++ regionEnv s })
+    Just renv -> modify (\s -> s { regionEnv = renv : regionEnv s })
     _         -> pure ()
 
 checkOffsetsAgainstSpec :: [(Variable, Multiplicity [[Int]])]

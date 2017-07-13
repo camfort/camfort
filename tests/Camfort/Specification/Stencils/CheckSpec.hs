@@ -33,55 +33,55 @@ spec =
       it "parse and convert simple exact stencil (1)" $
           parseAndConvert "= stencil forward(depth=1, dim=1) :: x"
           `shouldBe`
-            (Right $ Right [(["x"], Specification
-             (Mult $ Exact (Spatial (Sum [Product [Forward 1 1 True]]))) True)])
+            (Right $ Right (["x"], Specification
+             (Mult $ Exact (Spatial (Sum [Product [Forward 1 1 True]]))) True))
 
       it "parse and convert simple exact stencil (2)" $
           parseAndConvert "= stencil forward(depth=1, dim=1) :: x, y, z"
           `shouldBe`
-            (Right $ Right [(["x","y","z"], Specification
-             (Mult $ Exact (Spatial (Sum [Product [Forward 1 1 True]]))) True)])
+            (Right $ Right (["x","y","z"], Specification
+             (Mult $ Exact (Spatial (Sum [Product [Forward 1 1 True]]))) True))
 
       it "parse and convert simple exact access spec (2)" $
           parseAndConvert "= access forward(depth=1, dim=1) :: x, y, z"
           `shouldBe`
-            (Right $ Right [(["x","y","z"], Specification
-             (Mult $ Exact (Spatial (Sum [Product [Forward 1 1 True]]))) False)])
+            (Right $ Right (["x","y","z"], Specification
+             (Mult $ Exact (Spatial (Sum [Product [Forward 1 1 True]]))) False))
 
       it "parse and convert simple exact stencil with nonpointed (2a)" $
           parseAndConvert "= stencil centered(depth=1, dim=2, nonpointed) :: x, y, z"
           `shouldBe`
-            (Right $ Right [(["x","y","z"], Specification
-             (Mult $ Exact (Spatial (Sum [Product [Centered 1 2 False]]))) True)])
+            (Right $ Right (["x","y","z"], Specification
+             (Mult $ Exact (Spatial (Sum [Product [Centered 1 2 False]]))) True))
 
       it "parse and convert simple upper bounded stencil (3)" $
           parseAndConvert "= stencil atmost, forward(depth=1, dim=1) :: x"
           `shouldBe`
-            (Right $ Right [(["x"], Specification
+            (Right $ Right (["x"], Specification
              (Mult $ Bound Nothing (Just $ Spatial
-                      (Sum [Product [Forward 1 1 True]]))) True)])
+                      (Sum [Product [Forward 1 1 True]]))) True))
 
       it "parse and convert simple upper bounded access spec (3)" $
           parseAndConvert "= access atmost, forward(depth=1, dim=1) :: x"
           `shouldBe`
-            (Right $ Right [(["x"], Specification
+            (Right $ Right (["x"], Specification
              (Mult $ Bound Nothing (Just $ Spatial
-                      (Sum [Product [Forward 1 1 True]]))) False)])
+                      (Sum [Product [Forward 1 1 True]]))) False))
 
       it "parse and convert simple lower bounded stencil (4)" $
           parseAndConvert "= stencil atleast, backward(depth=2, dim=1) :: x"
           `shouldBe`
-            (Right $ Right [(["x"], Specification
+            (Right $ Right (["x"], Specification
              (Mult $ Bound (Just $ Spatial
-                      (Sum [Product [Backward 2 1 True]])) Nothing) True)])
+                      (Sum [Product [Backward 2 1 True]])) Nothing) True))
 
       it "parse and convert stencil requiring distribution (5)" $
           parseAndConvert "= stencil readonce, atleast, forward(depth=1, dim=1) * (centered(depth=1, dim=2) + backward(depth=3, dim=4)) :: frob"
           `shouldBe`
-            (Right $ Right [(["frob"], Specification
+            (Right $ Right (["frob"], Specification
              (Once $ Bound (Just $ Spatial
                       (Sum [Product [Forward 1 1 True, Centered 1 2 True],
-                            Product [Forward 1 1 True, Backward 3 4 True]])) Nothing) True)])
+                            Product [Forward 1 1 True, Backward 3 4 True]])) Nothing) True))
 
       it "rejects stencils with undefined regions" $
          parseAndConvert "= stencil r1 :: a"
@@ -91,6 +91,10 @@ spec =
         checkTestShow exampleUnusedRegion
           "warns about unused regions"
           "(2:3)-(2:34)    Warning: Unused region 'r1'"
+        checkTestShow exampleRedefinedRegion
+          "warns about redefined"
+          "(4:3)-(4:34)    Region 'r1' already defined\n\
+          \(6:5)-(6:32)    Correct."
         checkTestShow exampleSimpleInvalidSyntax
           "warns about specification parse errors"
           "(2:3)-(2:16)    Could not parse specification at: \"... \"\n"
@@ -131,6 +135,18 @@ exampleUnusedRegion :: String
 exampleUnusedRegion =
   "program example\n\
   \  != region :: r1 = pointed(dim=1)\n\
+  \end program"
+
+exampleRedefinedRegion :: String
+exampleRedefinedRegion =
+  "program example\n\
+  \  real, dimension(10) :: a\n\
+  \  != region :: r1 = forward(depth=1,dim=1, nonpointed)\n\
+  \  != region :: r1 = pointed(dim=1)\n\
+  \  do i = 1, 10\n\
+  \    != stencil readOnce, r1 :: a\n\
+  \    a(i) = a(i+1)\n\
+  \  end do\n\
   \end program"
 
 exampleSimpleCorrect :: String

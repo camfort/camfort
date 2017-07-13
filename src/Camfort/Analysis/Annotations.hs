@@ -77,7 +77,7 @@ data SpecAnnotation
   -- | Unprocessed syntax tree.
   = ParserSpec StencilComment.Specification
   -- | Region definition.
-  | RegionDecl StencilSpec.RegionEnv
+  | RegionDecl StencilSpec.RegionDecl
   -- | Normalised AST specification.
   | ASTSpec StencilSpec.SpecDecls
   deriving (Eq, Show, Data)
@@ -86,8 +86,8 @@ data SpecAnnotation
 giveParseSpec :: StencilComment.Specification -> Annotation -> Annotation
 giveParseSpec spec ann = ann { stencilSpec = Just $ ParserSpec spec }
 
--- | Set the annotation's stencil specification to a parsed specification.
-giveRegionSpec :: StencilSpec.RegionEnv -> Annotation -> Annotation
+-- | Set the annotation's stencil specification to a region alias.
+giveRegionSpec :: StencilSpec.RegionDecl -> Annotation -> Annotation
 giveRegionSpec spec ann = ann { stencilSpec = Just $ RegionDecl spec }
 
 -- | Set the annotation's stencil specification to a normalized specification.
@@ -101,7 +101,7 @@ getParseSpec s = case stencilSpec s of
   _                        -> Nothing
 
 -- | Retrieve a region environment from an annotation.
-getRegionSpec :: Annotation -> Maybe StencilSpec.RegionEnv
+getRegionSpec :: Annotation -> Maybe StencilSpec.RegionDecl
 getRegionSpec s = case stencilSpec s of
   (Just (RegionDecl renv)) -> Just renv
   _                        -> Nothing

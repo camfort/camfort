@@ -48,14 +48,14 @@ class SynToAst s t | s -> t where
   synToAst :: (?renv :: RegionEnv) => s -> Either SynToAstError t
 
 -- Top-level conversion of declarations
-instance SynToAst SYN.Specification (Either RegionEnv SpecDecls) where
+instance SynToAst SYN.Specification (Either RegionDecl SpecDecl) where
   synToAst (SYN.SpecDec spec vars) = do
      spec' <- synToAst spec
-     return $ Right [(vars, spec')]
+     return $ Right (vars, spec')
 
   synToAst (SYN.RegionDec rvar region) = do
      spec' <- synToAst region
-     return $ Left [(rvar, spec')]
+     return $ Left (rvar, spec')
 
 -- Convert temporal or spatial specifications
 instance SynToAst SYN.SpecInner Specification where
