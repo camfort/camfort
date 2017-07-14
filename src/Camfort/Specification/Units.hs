@@ -57,6 +57,17 @@ import qualified Language.Fortran.AST as F
 import qualified Language.Fortran.Util.Position as FU
 import Language.Fortran.Util.ModFile
 
+-- | Run a unit inference.
+runInference :: UnitOpts
+             -> F.ProgramFile UA
+             -> UnitSolver a
+             -> (Either UnitException a, UnitState, UnitLogs)
+runInference uOpts pf runner = runUnitSolver uOpts pf $ do
+  let compiledUnits = combinedCompiledUnits . M.elems . uoModFiles $ uOpts
+  modifyTemplateMap  . const . cuTemplateMap  $ compiledUnits
+  modifyNameParamMap . const . cuNameParamMap $ compiledUnits
+  initInference
+  runner
 
 -- *************************************
 --   Unit inference (top - level)
@@ -93,12 +104,7 @@ inferCriticalVariables uOpts (fname, _, pf)
 
     errReport exc = logs ++ "\n" ++ fname ++ ":\n" ++ show exc
 
-    -- run inference
-    (eVars, state, logs) = runUnitSolver uOpts pfRenamed $ do
-      modifyTemplateMap . const . cuTemplateMap . combinedCompiledUnits . M.elems $ uoModFiles uOpts
-      modifyNameParamMap . const . cuNameParamMap . combinedCompiledUnits . M.elems $ uoModFiles uOpts
-      initInference
-      runCriticalVariables
+    (eVars, state, logs) = runInference uOpts pfRenamed runCriticalVariables
     pfUA = usProgramFile state -- the program file after units analysis is done
 
     -- Use the module map derived from all of the included Camfort Mod files.
@@ -230,12 +236,7 @@ checkUnits uOpts (fname, fileText, pf)
 
     errReport exc = logs ++ "\n" ++ fname ++ ":  " ++ show exc
 
-    -- run inference
-    (eCons, state, logs) = runUnitSolver uOpts pfRenamed $ do
-      modifyTemplateMap . const . cuTemplateMap . combinedCompiledUnits . M.elems $ uoModFiles uOpts
-      modifyNameParamMap . const . cuNameParamMap . combinedCompiledUnits . M.elems $ uoModFiles uOpts
-      initInference
-      runInconsistentConstraints
+    (eCons, state, logs) = runInference uOpts pfRenamed runInconsistentConstraints
     templateMap = usTemplateMap state
     pfUA :: F.ProgramFile UA
     pfUA = usProgramFile state -- the program file after units analysis is done
@@ -291,12 +292,7 @@ inferUnits uOpts (fname, fileText, pf)
 
     errReport exc = logs ++ "\n" ++ fname ++ ":  " ++ show exc
 
-    -- run inference
-    (eVars, state, logs) = runUnitSolver uOpts pfRenamed $ do
-      modifyTemplateMap . const . cuTemplateMap . combinedCompiledUnits . M.elems $ uoModFiles uOpts
-      modifyNameParamMap . const . cuNameParamMap . combinedCompiledUnits . M.elems $ uoModFiles uOpts
-      initInference
-      chooseImplicitNames `fmap` runInferVariables
+    (eVars, state, logs) = runInference uOpts pfRenamed (chooseImplicitNames <$> runInferVariables)
 
     pfUA = usProgramFile state -- the program file after units analysis is done
 
@@ -349,13 +345,7 @@ compileUnits' uOpts (fname, pf)
 
     errReport exc = ( logs ++ "\n" ++ fname ++ ":  " ++ show exc
                     , [] )
-    -- run inference
-    (eCUnits, state, logs) = runUnitSolver uOpts pfTyped $ do
-      modifyTemplateMap . const . cuTemplateMap . combinedCompiledUnits . M.elems $ uoModFiles uOpts
-      modifyNameParamMap . const . cuNameParamMap . combinedCompiledUnits . M.elems $ uoModFiles uOpts
-      initInference
-      runCompileUnits
-
+    (eCUnits, state, logs) = runInference uOpts pfTyped runCompileUnits
     pfUA = usProgramFile state -- the program file after units analysis is done
 
     -- Use the module map derived from all of the included Camfort Mod files.
@@ -384,12 +374,7 @@ synthesiseUnits uOpts marker (fname, fileText, pf)
 
     errReport exc = logs ++ "\n" ++ fname ++ ":  " ++ show exc
 
-    -- run inference
-    (eVars, state, logs) = runUnitSolver uOpts pfRenamed $ do
-      modifyTemplateMap . const . cuTemplateMap . combinedCompiledUnits . M.elems $ uoModFiles uOpts
-      modifyNameParamMap . const . cuNameParamMap . combinedCompiledUnits . M.elems $ uoModFiles uOpts
-      initInference
-      runInferVariables >>= (runSynthesis marker . chooseImplicitNames)
+    (eVars, state, logs) = runInference uOpts pfRenamed (runInferVariables >>= (runSynthesis marker . chooseImplicitNames))
 
     pfUA = usProgramFile state -- the program file after units analysis is done
     pfFinal = fmap prevAnnotation . fmap FA.prevAnnotation $ pfUA -- strip annotations
