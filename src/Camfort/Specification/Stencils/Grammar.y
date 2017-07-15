@@ -116,8 +116,6 @@ VARS :: { [String] }
 data SpecParseError
   -- | Not a valid identifier character.
   = NotAnIdentifier Char
-  -- | Specification consisted only of whitespace.
-  | EmptySpecification
   -- | Tokens do not represent a syntactically valid specification.
   | CouldNotParseSpecification [Token]
   deriving (Eq)
@@ -125,14 +123,10 @@ data SpecParseError
 instance Show SpecParseError where
   show (CouldNotParseSpecification ts) =
     "Could not parse specification at: \"" ++ prettyTokens ts ++ "\"\n"
-  show EmptySpecification = "Empty specification"
   show (NotAnIdentifier c) = "Invalid character in identifier: " ++ show c
 
 notAnIdentifier :: Char -> SpecParseError
 notAnIdentifier = NotAnIdentifier
-
-emptySpecification :: SpecParseError
-emptySpecification = EmptySpecification
 
 couldNotParseSpecification :: [Token] -> SpecParseError
 couldNotParseSpecification = CouldNotParseSpecification
