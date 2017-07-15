@@ -50,7 +50,8 @@ import Camfort.Analysis.Annotations
 import Camfort.Specification.Units.Environment
 import Camfort.Specification.Units.Monad
 import Camfort.Specification.Units.InferenceBackend
-import qualified Camfort.Specification.Units.Parser as P
+import Camfort.Specification.Units.Parser (unitParser)
+import qualified Camfort.Specification.Units.Parser.Types as P
 
 import qualified Debug.Trace as D
 import qualified Numeric.LinearAlgebra as H -- for debugging
@@ -65,7 +66,7 @@ initInference = do
   -- Parse unit annotations found in comments and link to their
   -- corresponding statements in the AST.
   let (linkedPF, parserReport) =
-        runWriter $ annotateComments P.unitParser
+        runWriter $ annotateComments unitParser
         (\srcSpan err -> tell $ "Error " ++ show srcSpan ++ ": " ++ show err) pf
   modifyProgramFile $ const linkedPF
 

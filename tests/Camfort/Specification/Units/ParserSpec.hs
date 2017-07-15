@@ -1,7 +1,8 @@
 module Camfort.Specification.Units.ParserSpec (spec) where
 
 import Camfort.Specification.Parser (runParser, SpecParseError)
-import Camfort.Specification.Units.Parser (unitParser, UnitParseError, UnitStatement)
+import Camfort.Specification.Units.Parser (unitParser, UnitParseError)
+import Camfort.Specification.Units.Parser.Types (UnitStatement)
 
 import Test.Hspec
 

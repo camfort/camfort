@@ -45,7 +45,7 @@ import Data.Data
 import Data.Maybe (isJust)
 
 import Camfort.Specification.Units.Environment
-import qualified Camfort.Specification.Units.Parser as P
+import qualified Camfort.Specification.Units.Parser.Types as P
 import Camfort.Analysis.CommentAnnotator
 import qualified Camfort.Specification.Stencils.Syntax as StencilSpec
 import qualified Camfort.Specification.Stencils.Grammar as StencilComment

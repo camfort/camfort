@@ -40,7 +40,7 @@ module Camfort.Specification.Units.Environment
 import qualified Language.Fortran.AST as F
 import qualified Language.Fortran.Analysis as FA
 
-import qualified Camfort.Specification.Units.Parser as P
+import qualified Camfort.Specification.Units.Parser.Types as P
 
 import Data.Char
 import Data.Data

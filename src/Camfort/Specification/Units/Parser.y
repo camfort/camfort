@@ -1,19 +1,16 @@
 { -- -*- Mode: Haskell -*-
 
-{-# LANGUAGE DeriveDataTypeable #-}
-module Camfort.Specification.Units.Parser ( unitParser
-                                     , UnitStatement(..)
-                                     , UnitOfMeasure(..)
-                                     , UnitParseError
-                                     , UnitPower(..)
-                                     ) where
+module Camfort.Specification.Units.Parser
+  ( unitParser
+  , UnitParseError
+  ) where
 
 import Control.Monad.Except (throwError)
-import Data.Data
-import Data.List
 import Data.Char (isLetter, isNumber, isAlphaNum, toLower)
 
 import Camfort.Specification.Parser (mkParser, SpecParser)
+import Camfort.Specification.Units.Parser.Types
+
 }
 
 %monad { UnitSpecParser } { >>= } { return }
@@ -112,42 +109,6 @@ couldNotParseSpecification :: [Token] -> UnitParseError
 couldNotParseSpecification = CouldNotParseSpecification
 
 type UnitSpecParser a = Either UnitParseError a
-
-data UnitStatement =
-   UnitAssignment (Maybe [String]) UnitOfMeasure
- | UnitAlias String UnitOfMeasure
-  deriving (Eq, Data)
-
-instance Show UnitStatement where
-  show (UnitAssignment (Just ss) uom) = "= unit (" ++ show uom ++ ") :: " ++ (intercalate "," ss)
-  show (UnitAssignment Nothing uom) = "= unit (" ++ show uom ++ ")"
-  show (UnitAlias s uom) = "= unit :: " ++ s ++ " = " ++ show uom
-
-data UnitOfMeasure =
-   Unitless
- | UnitBasic String
- | UnitProduct UnitOfMeasure UnitOfMeasure
- | UnitQuotient UnitOfMeasure UnitOfMeasure
- | UnitExponentiation UnitOfMeasure UnitPower
- | UnitRecord [(String, UnitOfMeasure)]
-  deriving (Data, Eq)
-
-instance Show UnitOfMeasure where
-  show Unitless = "1"
-  show (UnitBasic s) = s
-  show (UnitProduct uom1 uom2) = show uom1 ++ " " ++ show uom2
-  show (UnitQuotient uom1 uom2) = show uom1 ++ " / " ++ show uom2
-  show (UnitExponentiation uom exp) = show uom ++ "** (" ++ show exp ++ ")"
-  show (UnitRecord recs) = "record (" ++ intercalate ", " (map (\ (n, u) -> n ++ " :: " ++ show u) recs) ++ ")"
-
-data UnitPower =
-   UnitPowerInteger Integer
- | UnitPowerRational Integer Integer
- deriving (Data, Eq)
-
-instance Show UnitPower where
-  show (UnitPowerInteger i) = show i
-  show (UnitPowerRational i1 i2) = show i1 ++ "/" ++ show i2
 
 data Token =
    TUnit
