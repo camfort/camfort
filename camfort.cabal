@@ -44,7 +44,7 @@ executable camfort
                         Camfort.Specification.Stencils.InferenceFrontend
                         Camfort.Specification.Stencils.Model
                         Camfort.Specification.Stencils.Syntax
-                        Camfort.Specification.Stencils.Grammar
+                        Camfort.Specification.Stencils.Parser
                         Camfort.Specification.Stencils.Synthesis
                         Camfort.Specification.Stencils
                         Camfort.Specification.Units
@@ -111,7 +111,7 @@ library
                         Camfort.Specification.Stencils.Model
                         Camfort.Specification.Stencils.Syntax
                         Camfort.Specification.Stencils.Generate
-                        Camfort.Specification.Stencils.Grammar
+                        Camfort.Specification.Stencils.Parser
                         Camfort.Specification.Stencils.Synthesis
                         Camfort.Specification.Stencils
                         Camfort.Specification.Units
@@ -167,7 +167,7 @@ test-suite spec
                         Camfort.Specification.Stencils.CheckSpec
                         Camfort.Specification.Stencils.ConsistencySpec
                         Camfort.Specification.Stencils.DenotationalSemanticsSpec
-                        Camfort.Specification.Stencils.GrammarSpec
+                        Camfort.Specification.Stencils.ParserSpec
                         Camfort.Specification.Stencils.InferenceBackendSpec
                         Camfort.Specification.Stencils.ModelSpec
                         Camfort.Specification.StencilsSpec

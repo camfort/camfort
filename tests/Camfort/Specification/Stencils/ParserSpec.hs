@@ -1,10 +1,10 @@
-module Camfort.Specification.Stencils.GrammarSpec (spec) where
+module Camfort.Specification.Stencils.ParserSpec (spec) where
 
 import Data.Either (isLeft)
 
 import Camfort.Specification.Parser (runParser)
 import qualified Camfort.Specification.Parser as Parser
-import Camfort.Specification.Stencils.Grammar
+import Camfort.Specification.Stencils.Parser
 import Camfort.Specification.Stencils.Model (
     Approximation(..)
   , Multiplicity(..))
@@ -53,7 +53,7 @@ invalidStencilTestStr description stencilStr errStr =
 
 spec :: Test.Spec
 spec =
-  describe "Stencils - Grammar" $ do
+  describe "Stencils - Parser" $ do
     it "basic unmodified stencil" $
       parse (stencilString "r1 + r2")
       `shouldBe`

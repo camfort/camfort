@@ -31,7 +31,7 @@ import Data.Function (on)
 
 import Camfort.Specification.Stencils.Syntax
 import Camfort.Specification.Stencils.Model
-import qualified Camfort.Specification.Stencils.Grammar as SYN
+import qualified Camfort.Specification.Stencils.Parser as SYN
 
 data SynToAstError = RegionNotInScope String
   deriving (Eq)
@@ -42,7 +42,7 @@ regionNotInScope = RegionNotInScope
 instance Show SynToAstError where
   show (RegionNotInScope r) = "Error: region " ++ r ++ " is not in scope."
 
--- Class for functions converting from Grammar parse
+-- Class for functions converting from Parser parse
 -- syntax to the AST representation of the Syntax module
 class SynToAst s t | s -> t where
   synToAst :: (?renv :: RegionEnv) => s -> Either SynToAstError t

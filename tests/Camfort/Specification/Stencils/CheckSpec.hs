@@ -9,7 +9,7 @@ import Camfort.Specification.Parser (runParser)
 import Camfort.Specification.Stencils.CheckBackend
 import Camfort.Specification.Stencils.CheckFrontend
   (CheckResult, stencilChecking)
-import qualified Camfort.Specification.Stencils.Grammar as SYN
+import qualified Camfort.Specification.Stencils.Parser as SYN
 import Camfort.Specification.Stencils.Model
 import Camfort.Specification.Stencils.Syntax
 

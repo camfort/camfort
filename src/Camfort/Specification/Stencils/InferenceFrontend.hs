@@ -41,7 +41,7 @@ import Camfort.Specification.Stencils.Generate
 import Camfort.Specification.Stencils.InferenceBackend
 import Camfort.Specification.Stencils.Model
 import Camfort.Specification.Stencils.Syntax
-import qualified Camfort.Specification.Stencils.Grammar as Gram
+import qualified Camfort.Specification.Stencils.Parser as Gram
 import qualified Camfort.Specification.Stencils.Synthesis as Synth
 import Camfort.Analysis.Annotations
 import Camfort.Helpers (collect, descendReverseM, descendBiReverseM)
@@ -100,7 +100,7 @@ runInferer cr ivmap flTo =
   . flip runReaderT (IE (existingStencils cr) flTo)
   . runWriterT
 
--- | Attempt to convert a 'Grammar.Specification' into a 'Specification'.
+-- | Attempt to convert a 'Parser.Specification' into a 'Specification'.
 --
 -- Only performs conversions for spatial specifications.
 specToSynSpec :: Gram.SpecInner -> Maybe Specification

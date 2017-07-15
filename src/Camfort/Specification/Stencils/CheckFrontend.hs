@@ -46,7 +46,7 @@ import Camfort.Specification.Parser (SpecParseError)
 import Camfort.Specification.Stencils.CheckBackend
 import qualified Camfort.Specification.Stencils.Consistency as C
 import Camfort.Specification.Stencils.Generate
-import qualified Camfort.Specification.Stencils.Grammar as Gram
+import qualified Camfort.Specification.Stencils.Parser as Gram
 import Camfort.Specification.Stencils.Model
 import Camfort.Specification.Stencils.Syntax
 

@@ -21,7 +21,7 @@ module Camfort.Specification.Stencils.Annotation () where
 
 import Camfort.Analysis.Annotations
 import Camfort.Analysis.CommentAnnotator
-import qualified Camfort.Specification.Stencils.Grammar as Gram
+import qualified Camfort.Specification.Stencils.Parser as Gram
 
 import qualified Language.Fortran.AST as F
 import qualified Language.Fortran.Analysis as FA

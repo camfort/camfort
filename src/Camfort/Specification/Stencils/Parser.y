@@ -1,6 +1,6 @@
 { -- -*- Mode: Haskell -*-
 {-# LANGUAGE DeriveDataTypeable, PatternGuards #-}
-module Camfort.Specification.Stencils.Grammar
+module Camfort.Specification.Stencils.Parser
 ( reqRegions, specParser, Specification(..), Region(..), SpecParseError, SpecInner(..), lexer ) where
 
 import Control.Monad.Except (throwError)
