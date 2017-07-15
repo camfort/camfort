@@ -46,7 +46,8 @@ import Camfort.Specification.Parser (SpecParseError)
 import Camfort.Specification.Stencils.CheckBackend
 import qualified Camfort.Specification.Stencils.Consistency as C
 import Camfort.Specification.Stencils.Generate
-import qualified Camfort.Specification.Stencils.Parser as Gram
+import qualified Camfort.Specification.Stencils.Parser as Parser
+import Camfort.Specification.Stencils.Parser.Types (reqRegions)
 import Camfort.Specification.Stencils.Model
 import Camfort.Specification.Stencils.Syntax
 
@@ -141,7 +142,7 @@ data StencilCheckError
   -- | The existing stencil conflicts with an inferred stencil.
   | NotWellSpecified (FU.SrcSpan, SpecDecls) (FU.SrcSpan, SpecDecls)
   -- | The stencil could not be parsed correctly.
-  | ParseError FU.SrcSpan (SpecParseError Gram.SpecParseError)
+  | ParseError FU.SrcSpan (SpecParseError Parser.SpecParseError)
   -- | A definition for the region alias already exists.
   | RegionExists FU.SrcSpan Variable
   deriving (Eq)
@@ -155,7 +156,7 @@ notWellSpecified :: (FU.SrcSpan, SpecDecls) -> (FU.SrcSpan, SpecDecls) -> Stenci
 notWellSpecified got inferred = SCFail $ NotWellSpecified got inferred
 
 -- | Create a check result informating a user of a parse error.
-parseError :: FU.SrcSpan -> (SpecParseError Gram.SpecParseError) -> StencilResult
+parseError :: FU.SrcSpan -> (SpecParseError Parser.SpecParseError) -> StencilResult
 parseError srcSpan err = SCFail $ ParseError srcSpan err
 
 -- | Create a check result informating that a region already exists.
@@ -226,7 +227,7 @@ instance Show StencilCheckWarning where
 stencilChecking :: F.ProgramFile (FA.Analysis A) -> CheckResult
 stencilChecking pf = CheckResult . snd . runWriter $ do
   -- Attempt to parse comments to specifications
-  pf' <- annotateComments Gram.specParser (\srcSpan err -> tell [parseError srcSpan err]) pf
+  pf' <- annotateComments Parser.specParser (\srcSpan err -> tell [parseError srcSpan err]) pf
   let -- get map of AST-Block-ID ==> corresponding AST-Block
       bm         = FAD.genBlockMap pf'
       -- get map of program unit  ==> basic block graph
@@ -311,7 +312,7 @@ parseCommentToAST :: FA.Analysis A -> FU.SrcSpan -> Checker (Either SynToAstErro
 parseCommentToAST ann span =
   case getParseSpec (FA.prevAnnotation ann) of
     Just stencilComment -> do
-         informRegionsUsed (Gram.reqRegions stencilComment)
+         informRegionsUsed (reqRegions stencilComment)
          renv <- fmap regionEnv get
          let ?renv = renv
          case synToAst stencilComment of

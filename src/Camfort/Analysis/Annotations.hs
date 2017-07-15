@@ -48,7 +48,7 @@ import Camfort.Specification.Units.Environment
 import qualified Camfort.Specification.Units.Parser.Types as P
 import Camfort.Analysis.CommentAnnotator
 import qualified Camfort.Specification.Stencils.Syntax as StencilSpec
-import qualified Camfort.Specification.Stencils.Parser as StencilComment
+import qualified Camfort.Specification.Stencils.Parser.Types as StencilComment
 
 import qualified Language.Fortran.AST as F
 import qualified Language.Fortran.Analysis as FA

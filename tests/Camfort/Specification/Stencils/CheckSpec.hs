@@ -9,7 +9,7 @@ import Camfort.Specification.Parser (runParser)
 import Camfort.Specification.Stencils.CheckBackend
 import Camfort.Specification.Stencils.CheckFrontend
   (CheckResult, stencilChecking)
-import qualified Camfort.Specification.Stencils.Parser as SYN
+import Camfort.Specification.Stencils.Parser (specParser)
 import Camfort.Specification.Stencils.Model
 import Camfort.Specification.Stencils.Syntax
 
@@ -21,9 +21,10 @@ import qualified Language.Fortran.Util.Position     as FU
 
 import Test.Hspec
 
+parseAndConvert :: String -> Either SynToAstError (Either RegionDecl SpecDecl)
 parseAndConvert x =
     let ?renv = []
-    in case runParser SYN.specParser x of
+    in case runParser specParser x of
          Left  _  -> error "received stencil with invalid syntax in test"
          Right v  -> synToAst v
 

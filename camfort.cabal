@@ -45,6 +45,7 @@ executable camfort
                         Camfort.Specification.Stencils.Model
                         Camfort.Specification.Stencils.Syntax
                         Camfort.Specification.Stencils.Parser
+                        Camfort.Specification.Stencils.Parser.Types
                         Camfort.Specification.Stencils.Synthesis
                         Camfort.Specification.Stencils
                         Camfort.Specification.Units
@@ -112,6 +113,7 @@ library
                         Camfort.Specification.Stencils.Syntax
                         Camfort.Specification.Stencils.Generate
                         Camfort.Specification.Stencils.Parser
+                        Camfort.Specification.Stencils.Parser.Types
                         Camfort.Specification.Stencils.Synthesis
                         Camfort.Specification.Stencils
                         Camfort.Specification.Units

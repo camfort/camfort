@@ -41,7 +41,8 @@ import Camfort.Specification.Stencils.Generate
 import Camfort.Specification.Stencils.InferenceBackend
 import Camfort.Specification.Stencils.Model
 import Camfort.Specification.Stencils.Syntax
-import qualified Camfort.Specification.Stencils.Parser as Gram
+import qualified Camfort.Specification.Stencils.Parser as Parser
+import Camfort.Specification.Stencils.Parser.Types (SpecInner)
 import qualified Camfort.Specification.Stencils.Synthesis as Synth
 import Camfort.Analysis.Annotations
 import Camfort.Helpers (collect, descendReverseM, descendBiReverseM)
@@ -103,7 +104,7 @@ runInferer cr ivmap flTo =
 -- | Attempt to convert a 'Parser.Specification' into a 'Specification'.
 --
 -- Only performs conversions for spatial specifications.
-specToSynSpec :: Gram.SpecInner -> Maybe Specification
+specToSynSpec :: SpecInner -> Maybe Specification
 specToSynSpec spec = let ?renv = [] in
                        case synToAst spec of
                          Left err -> Nothing
@@ -124,7 +125,7 @@ stencilInference mode marker pf =
     -- TODO: might want to output log0 somehow (though it doesn't fit LogLine)
     (pf'@(F.ProgramFile mi pus), _log0) =
          if mode == Synth
-          then runWriter (annotateComments Gram.specParser (const . const . pure $ ()) pf)
+          then runWriter (annotateComments Parser.specParser (const . const . pure $ ()) pf)
           else (pf, [])
 
     (pus', log1)    = runWriter (transformBiM perPU pus)

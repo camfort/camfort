@@ -4,7 +4,8 @@ import Data.Either (isLeft)
 
 import Camfort.Specification.Parser (runParser)
 import qualified Camfort.Specification.Parser as Parser
-import Camfort.Specification.Stencils.Parser
+import Camfort.Specification.Stencils.Parser (specParser, SpecParseError)
+import Camfort.Specification.Stencils.Parser.Types
 import Camfort.Specification.Stencils.Model (
     Approximation(..)
   , Multiplicity(..))

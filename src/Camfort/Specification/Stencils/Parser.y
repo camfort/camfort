@@ -1,15 +1,19 @@
-{ -- -*- Mode: Haskell -*-
-{-# LANGUAGE DeriveDataTypeable, PatternGuards #-}
+{
+
 module Camfort.Specification.Stencils.Parser
-( reqRegions, specParser, Specification(..), Region(..), SpecParseError, SpecInner(..), lexer ) where
+  ( specParser
+  , SpecParseError
+  ) where
 
 import Control.Monad.Except (throwError)
 import Data.Char (isLetter, isNumber, isAlphaNum, toLower, isAlpha, isSpace)
-import Data.Data
-import Data.List (intersect, nub, sort, isPrefixOf, isInfixOf, intercalate)
+import Data.List (intercalate, isInfixOf)
 
-import Camfort.Specification.Parser (SpecParser, mkParser)
-import Camfort.Specification.Stencils.Model (Approximation(..), Multiplicity(..))
+import           Camfort.Specification.Parser
+  (SpecParser, mkParser)
+import           Camfort.Specification.Stencils.Model
+  (Approximation(..), Multiplicity(..))
+import           Camfort.Specification.Stencils.Parser.Types
 import qualified Camfort.Specification.Stencils.Syntax as Syn
 
 }
@@ -141,45 +145,6 @@ applyAttr :: (Int -> Int -> Bool -> Syn.Region)
           -> Syn.Region
 applyAttr constr (Depth d, Dim dim, irrefl) = constr d dim irrefl
 
-data Specification
-  = RegionDec String Region
-  | SpecDec SpecInner [String]
-  deriving (Show, Eq, Typeable, Data)
-
--- | Regions that are referenced in a specification.
-reqRegions :: Specification -> [Syn.Variable]
-reqRegions spec = nub . sort $
-  case spec of
-    RegionDec _ r             -> reqRegions' r
-    SpecDec (SpecInner x _) _ ->
-      case x of
-        Once a -> reqRegionsApprox a
-        Mult a -> reqRegionsApprox a
-  where
-    reqRegionsApprox (Exact r) = reqRegions' r
-    reqRegionsApprox (Bound l u) =
-      let maybeReqRegions = maybe [] reqRegions'
-      in maybeReqRegions l ++ maybeReqRegions u
-    reqRegions' :: Region -> [Syn.Variable]
-    reqRegions' RegionConst{} = []
-    reqRegions' (Or r1 r2)    = reqRegions' r1 ++ reqRegions' r2
-    reqRegions' (And r1 r2)   = reqRegions' r1 ++ reqRegions' r2
-    reqRegions' (Var v)       = [v]
-
-data Region
-  = RegionConst Syn.Region
-  | Or Region Region
-  | And Region Region
-  | Var String
-  deriving (Show, Eq, Ord, Typeable, Data)
-
-data SpecInner = SpecInner
-    (Multiplicity (Approximation Region))  -- main specification content
-    Syn.IsStencil                          -- a bool: stencil or access
-  deriving (Show, Eq, Typeable, Data)
-
---------------------------------------------------
-
 data Token
   = TDoubleColon
   | TStar
@@ -223,8 +188,6 @@ lexer (x:xs)
    isPositiveNumber x = isNumber x && x /= '0'
    aux f p = (f target :) <$> lexer rest
      where (target, rest) = span p (x:xs)
-
---------------------------------------------------
 
 specParser :: SpecParser SpecParseError Specification
 specParser = mkParser (\src -> do

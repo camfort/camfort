@@ -31,7 +31,7 @@ import Data.Function (on)
 
 import Camfort.Specification.Stencils.Syntax
 import Camfort.Specification.Stencils.Model
-import qualified Camfort.Specification.Stencils.Parser as SYN
+import qualified Camfort.Specification.Stencils.Parser.Types as SYN
 
 data SynToAstError = RegionNotInScope String
   deriving (Eq)
