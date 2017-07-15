@@ -81,6 +81,9 @@ data InferEnv = IE
     -- | Known (existing) specifications.
     ieExistingSpecs :: [(Specification, FU.SrcSpan, Variable)]
   , ieFlowsGraph    :: FAD.FlowsGraph A
+  , ieInferMode     :: InferMode
+  , ieMarker        :: Char
+  , ieMetaInfo      :: F.MetaInfo
   }
 
 
@@ -92,14 +95,24 @@ type Inferer = WriterT [LogLine]
                     (State InferState))
 
 runInferer :: CheckResult
+           -> InferMode
+           -> Char
+           -> F.MetaInfo
            -> FAD.InductionVarMapByASTBlock
            -> FAD.FlowsGraph A
            -> Inferer a
            -> (a, [LogLine])
-runInferer cr ivmap flTo =
+runInferer cr mode marker mi ivmap flTo =
     flip evalState (IS ivmap [])
-  . flip runReaderT (IE (existingStencils cr) flTo)
+  . flip runReaderT env
   . runWriterT
+  where env = IE
+          { ieExistingSpecs = existingStencils cr
+          , ieFlowsGraph    = flTo
+          , ieInferMode     = mode
+          , ieMarker        = marker
+          , ieMetaInfo      = mi
+          }
 
 -- | Attempt to convert a 'Parser.Specification' into a 'Specification'.
 --
@@ -137,7 +150,7 @@ stencilInference mode marker pf =
 
     perPU pu | Just _ <- FA.bBlocks $ F.getAnnotation pu = do
         let -- Analysis/infer on blocks of just this program unit
-            blocksM = mapM (perBlockInfer mode marker mi) (F.programUnitBody pu)
+            blocksM = mapM perBlockInfer (F.programUnitBody pu)
             -- Update the program unit body with these blocks
             pum = (F.updateProgramUnitBody pu) <$> blocksM
 
@@ -154,7 +167,7 @@ stencilInference mode marker pf =
             -- identify every loop by its back-edge
             ivMap = FAD.genInductionVarMapByASTBlock beMap gr
 
-            (pu', log) = runInferer checkRes ivMap flTo pum
+            (pu', log) = runInferer checkRes mode marker mi ivMap flTo pum
         tell log
         return pu'
 
@@ -170,12 +183,13 @@ stencilInference mode marker pf =
 {- *** 1 . Core inference over blocks -}
 
 genSpecsAndReport ::
-     InferMode -> FU.SrcSpan -> [Neighbour]
+     FU.SrcSpan -> [Neighbour]
   -> F.Block (FA.Analysis A)
   -> Inferer [([Variable], Specification)]
-genSpecsAndReport mode span lhsIxs block = do
+genSpecsAndReport span lhsIxs block = do
     (IS ivmap _) <- get
-    flowsGraph     <- fmap ieFlowsGraph ask
+    mode         <- fmap ieInferMode ask
+    flowsGraph   <- fmap ieFlowsGraph ask
     -- Generate specification for the
     let ((specs, visited), evalInfos) = runWriter $ genSpecifications flowsGraph ivmap lhsIxs block
     -- Remember which nodes were visited during this traversal
@@ -199,18 +213,18 @@ genSpecsAndReport mode span lhsIxs block = do
 
 
 -- Traverse Blocks in the AST and infer stencil specifications
-perBlockInfer :: InferMode -> Char -> F.MetaInfo
-              -> F.Block (FA.Analysis A)
+perBlockInfer :: F.Block (FA.Analysis A)
               -> Inferer (F.Block (FA.Analysis A))
 perBlockInfer = perBlockInfer' False
 -- The primed version, perBlockInfer' has a flag indicating whether
 -- the following code is inside a do-loop since we only target
 -- array computations inside loops.
 
-perBlockInfer' _ _ _ _ b@F.BlComment{} = pure b
+perBlockInfer' _ b@F.BlComment{} = pure b
 
-perBlockInfer' inDo mode marker mi b@(F.BlStatement ann span@(FU.SrcSpan lp _) _ stmnt) = do
+perBlockInfer' inDo b@(F.BlStatement ann span@(FU.SrcSpan lp _) _ stmnt) = do
     (IS ivmap visitedStmts) <- get
+    mode <- fmap ieInferMode ask
     let label = fromMaybe (-1) (FA.insLabel ann)
     if label `elem` visitedStmts
     then -- This statement has been part of a visited dataflow path
@@ -224,14 +238,14 @@ perBlockInfer' inDo mode marker mi b@(F.BlStatement ann span@(FU.SrcSpan lp _) _
          case lhs of
           -- Assignment to a variable
           (F.ExpValue _ _ (F.ValVariable _)) | inDo ->
-              genSpecsAndReport mode span [] b
+              genSpecsAndReport span [] b
 
           -- Assignment to something else...
           _ -> case isArraySubscript lhs of
              Just subs ->
                -- Left-hand side is a subscript-by relative index or by a range
                case neighbourIndex ivmap subs of
-                 Just lhs -> genSpecsAndReport mode span lhs b
+                 Just lhs -> genSpecsAndReport span lhs b
                  Nothing  -> if mode == EvalMode
                              then do
                                tell [(span , Right ("EVALMODE: LHS is an array\
@@ -241,6 +255,8 @@ perBlockInfer' inDo mode marker mi b@(F.BlStatement ann span@(FU.SrcSpan lp _) _
                              else return []
              -- Not an assign we are interested in
              _ -> return []
+      marker <- fmap ieMarker ask
+      mi     <- fmap ieMetaInfo ask
       if mode == Synth && not (null specs) && specs /= [[]]
       then
         let specComment = Synth.formatSpec mi tabs marker (span, Left specs')
@@ -260,14 +276,14 @@ perBlockInfer' inDo mode marker mi b@(F.BlStatement ann span@(FU.SrcSpan lp _) _
         in pure (F.BlComment ann' span' (F.Comment specComment))
       else return b
 
-perBlockInfer' _ mode marker mi b@(F.BlDo ann span lab cname lab' mDoSpec body tlab) = do
+perBlockInfer' _ b@(F.BlDo ann span lab cname lab' mDoSpec body tlab) = do
     -- descend into the body of the do-statement (in reverse order)
-    body' <- mapM (descendBiReverseM (perBlockInfer' True mode marker mi)) (reverse body)
+    body' <- mapM (descendBiReverseM (perBlockInfer' True)) (reverse body)
     return $ F.BlDo ann span lab cname lab' mDoSpec (reverse body') tlab
 
-perBlockInfer' inDo mode marker mi b =
+perBlockInfer' inDo b =
     -- Go inside child blocks
-    descendReverseM (descendBiReverseM (perBlockInfer' inDo mode marker mi)) b
+    descendReverseM (descendBiReverseM (perBlockInfer' inDo)) b
 
 --------------------------------------------------
 
