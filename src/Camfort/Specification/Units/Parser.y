@@ -93,7 +93,23 @@ NUM :: { String }
 
 {
 
-type UnitParseError = String
+data UnitParseError
+  -- | Not a valid identifier character.
+  = NotAnIdentifier Char
+  -- | Tokens do not represent a syntactically valid specification.
+  | CouldNotParseSpecification [Token]
+  deriving (Eq)
+
+instance Show UnitParseError where
+  show (CouldNotParseSpecification ts) =
+    "Could not parse specification at: \"" ++ show ts ++ "\"\n"
+  show (NotAnIdentifier c) = "Invalid character in identifier: " ++ show c
+
+notAnIdentifier :: Char -> UnitParseError
+notAnIdentifier = NotAnIdentifier
+
+couldNotParseSpecification :: [Token] -> UnitParseError
+couldNotParseSpecification = CouldNotParseSpecification
 
 type UnitSpecParser a = Either UnitParseError a
 
@@ -147,7 +163,7 @@ data Token =
  | TRecord
  | TId String
  | TNum String
- deriving (Show)
+ deriving (Show, Eq)
 
 addToTokens :: Token -> String -> UnitSpecParser [ Token ]
 addToTokens tok rest = do
@@ -174,7 +190,8 @@ lexer (x:xs)
  | isLetter x || x == '\'' = aux (\ c -> isAlphaNum c || c `elem` ['\'','_','-'])
                                  (\ s -> if s == "record" then TRecord else TId s)
  | isNumber x              = aux isNumber TNum
- | otherwise               = throwError $ "Not valid unit syntax at " ++ show (x:xs) ++ "\n"
+ | otherwise
+     = throwError $ notAnIdentifier x
  where
    aux p cons =
      let (target, rest) = span p xs
@@ -186,6 +203,6 @@ unitParser = mkParser (\src -> do
                           parseUnit tokens) ["unit"]
 
 happyError :: [ Token ] -> UnitSpecParser a
-happyError t = throwError $ "Could not parse unit specification at: " ++ show t ++ "\n"
+happyError = throwError . couldNotParseSpecification
 
 }
