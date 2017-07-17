@@ -8,6 +8,7 @@ import qualified Language.Fortran.AST as F
 import qualified Language.Fortran.Analysis as FA
 import Data.Generics.Uniplate.Operations
 import Camfort.Analysis.Annotations
+import Camfort.Input (readParseSrcDir)
 import Camfort.Specification.Parser (runParser)
 import Camfort.Specification.Units
 import Camfort.Specification.Units.Monad
@@ -20,6 +21,7 @@ import Data.Maybe
 import Data.Either
 import qualified Data.Map.Strict as M
 import GHC.Real
+import System.FilePath ((</>))
 
 import Test.Hspec
 
@@ -132,6 +134,31 @@ spec = do
     describe "Check that (restricted) double to ratios is consistent" $ do
       it "test all in -10/-10 ... 10/10, apart from /0" $
         do and [testDoubleToRationalSubset x y | x <- [-10..10], y <- [-10..10]]
+
+    describe "fixtures integration tests" $
+      describe "units-check" $
+        it "reports (simple) inconsistent units" $
+           "example-inconsist-1.f90" `unitsCheckReportIs` exampleInconsist1CheckReport
+
+exampleInconsist1CheckReport :: String
+exampleInconsist1CheckReport =
+  "\ntests/fixtures/Specification/Units/example-inconsist-1.f90: Inconsistent:\n\
+  \ - at 7:7: 'z' should have unit 's'\n\
+  \ - at 7:7: Units 's' and 'm' should be equal\n\n\n\
+  \(s === m,(Just \"x + \",(7:7)-(7:11)))\n\
+  \(#<Var example_z3> === s,(Just \"z = x + \",(7:3)-(7:11)))\n\
+  \(#<Var example_z3> === s && s === m,(Nothing,(1:1)-(8:19)))\n"
+
+fixturesDir :: String
+fixturesDir = "tests" </> "fixtures" </> "Specification" </> "Units"
+
+-- | Assert that the report of performing units checking on a file is as expected.
+unitsCheckReportIs :: String -> String -> Expectation
+fileName `unitsCheckReportIs` expectedReport = do
+  let file = fixturesDir </> fileName
+  [program] <- readParseSrcDir file []
+  checkUnits uOpts program `shouldBe` expectedReport
+  where uOpts = unitOpts0 { uoDebug = False, uoLiterals = LitMixed }
 
 --------------------------------------------------
 
