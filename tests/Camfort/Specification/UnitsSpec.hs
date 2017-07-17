@@ -145,9 +145,9 @@ exampleInconsist1CheckReport =
   "\ntests/fixtures/Specification/Units/example-inconsist-1.f90: Inconsistent:\n\
   \ - at 7:7: 'z' should have unit 's'\n\
   \ - at 7:7: Units 's' and 'm' should be equal\n\n\n\
-  \(s === m,(Just \"x + \",(7:7)-(7:11)))\n\
-  \(unit_of(z) === s,(Just \"z = x + \",(7:3)-(7:11)))\n\
-  \(unit_of(z) === s && s === m,(Nothing,(1:1)-(8:19)))\n"
+  \(s === m,(7:7)-(7:11))\n\
+  \(unit_of(z) === s,(7:3)-(7:11))\n\
+  \(unit_of(z) === s && s === m,(1:1)-(8:19))\n"
 
 fixturesDir :: String
 fixturesDir = "tests" </> "fixtures" </> "Specification" </> "Units"
@@ -156,8 +156,8 @@ fixturesDir = "tests" </> "fixtures" </> "Specification" </> "Units"
 unitsCheckReportIs :: String -> String -> Expectation
 fileName `unitsCheckReportIs` expectedReport = do
   let file = fixturesDir </> fileName
-  [program] <- readParseSrcDir file []
-  checkUnits uOpts program `shouldBe` expectedReport
+  [(f,_,pf)] <- readParseSrcDir file []
+  checkUnits uOpts (f,pf) `shouldBe` expectedReport
   where uOpts = unitOpts0 { uoDebug = False, uoLiterals = LitMixed }
 
 --------------------------------------------------

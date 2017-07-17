@@ -74,11 +74,12 @@ runInference uOpts pf runner = runUnitSolver uOpts pf $ do
 --
 -- *************************************
 
-inferCriticalVariables
-  :: UnitOpts -> (Filename, SourceText, F.ProgramFile Annotation) -> (Report, Int)
-
 {-| Infer one possible set of critical variables for a program -}
-inferCriticalVariables uOpts (fname, _, pf)
+inferCriticalVariables
+  :: UnitOpts
+  -> (Filename, F.ProgramFile Annotation)
+  -> (Report, Int)
+inferCriticalVariables uOpts (fname, pf)
   | Right vars <- eVars = okReport vars
   | Left exc   <- eVars = (errReport exc, -1)
   where
@@ -124,9 +125,9 @@ inferCriticalVariables uOpts (fname, _, pf)
     fromWhereMap = genUniqNameToFilenameMap . M.elems $ uoModFiles uOpts
 
 checkUnits, inferUnits
-            :: UnitOpts -> (Filename, B.ByteString, F.ProgramFile Annotation) -> Report
+            :: UnitOpts -> (Filename, F.ProgramFile Annotation) -> Report
 {-| Check units-of-measure for a program -}
-checkUnits uOpts (fname, fileText, pf)
+checkUnits uOpts (fname, pf)
   | Right mCons <- eCons = okReport mCons
   | Left exc    <- eCons = errReport exc
   where
@@ -148,10 +149,9 @@ checkUnits uOpts (fname, fileText, pf)
 
         isReflexive (ConEq u1 u2) = u1 == u2
 
-    reportError con = (span, pprintConstr srcText (orient (unrename con)) ++ additionalInfo con)
+    reportError con = (span, pprintConstr (orient (unrename con)) ++ additionalInfo con)
       where
-        srcText = findCon con >>= fst
-        span = findCon con >>= (return . snd)
+        span = findCon con
         -- Create additional info for errors
         additionalInfo con =
            if null (errorInfo con)
@@ -159,7 +159,7 @@ checkUnits uOpts (fname, fileText, pf)
            else "\n    instead" ++ intercalate "\n" (mapNotFirst (pad 10) (errorInfo con))
         -- Create additional info about inconsistencies involving variables
         errorInfo con =
-            [" '" ++ sName ++ "' is '" ++ pprintUnitInfo Nothing (unrename u) ++ "'"
+            [" '" ++ sName ++ "' is '" ++ pprintUnitInfo (unrename u) ++ "'"
               | UnitVar (vName, sName) <- universeBi con
               , u                       <- findUnitConstrFor con vName ]
         -- Find unit information for variable constraints
@@ -180,35 +180,35 @@ checkUnits uOpts (fname, fileText, pf)
 
         pad o = (++) (replicate o ' ')
 
-        srcSpan con | Just (_, ss) <- findCon con = showSrcSpan ss ++ " "
+        srcSpan con | Just ss <- findCon con = showSrcSpan ss ++ " "
                     | otherwise                   = ""
 
     -- Find a given constraint within the annotated AST. FIXME: optimise
 
-    findCon :: Constraint -> Maybe (Maybe SourceText, FU.SrcSpan)
+    findCon :: Constraint -> Maybe FU.SrcSpan
     findCon con = lookupWith (eq con) constraints
       where eq c1 c2 = or [ conParamEq c1 c2' | c2' <- universeBi c2 ]
 
 
-    constraints = [ (c, (Just (getSnippet srcSpan), srcSpan))
+    constraints = [ (c, srcSpan)
                   | x <- universeBi pfUA :: [F.Expression UA]
                   , let srcSpan = FU.getSpan x
                   , c <- maybeToList (getConstraint x)
                   ] ++
 
-                  [ (c, (Just (getSnippet srcSpan), srcSpan))
+                  [ (c, srcSpan)
                   | x <- universeBi pfUA :: [F.Statement UA]
                   , let srcSpan = FU.getSpan x
                   , c <- maybeToList (getConstraint x)
                   ] ++
 
-                  [ (c, (Just (getSnippet srcSpan), srcSpan))
+                  [ (c, srcSpan)
                   | x <- universeBi pfUA :: [F.Argument UA]
                   , let srcSpan = FU.getSpan x
                   , c <- maybeToList (getConstraint x)
                   ] ++
 
-                  [ (c, (Just (getSnippet srcSpan), srcSpan))
+                  [ (c, srcSpan)
                   | x <- universeBi pfUA :: [F.Declarator UA]
                   , let srcSpan = FU.getSpan x
                   , c <- maybeToList (getConstraint x)
@@ -216,17 +216,11 @@ checkUnits uOpts (fname, fileText, pf)
 
                   -- Why reverse? So that PUFunction and PUSubroutine appear
                   -- first in the list, before PUModule.
-                  reverse [ (c, (Nothing, srcSpan))
+                  reverse [ (c, srcSpan)
                   | x <- universeBi pfUA :: [F.ProgramUnit UA]
                   , let srcSpan = FU.getSpan x
                   , c <- maybeToList (getConstraint x)
                   ]
-
-    getSnippet srcSpan = fst $ subtext (1,1) lower upper fileText
-      where
-        (FU.SrcSpan (FU.Position _ colL lnL) (FU.Position _ colU lnU)) = srcSpan
-        lower = (lnL, colL)
-        upper = (lnU, colU)
 
     varReport     = intercalate ", " . map showVar
 
@@ -277,8 +271,8 @@ replaceImplicitNames implicitMap = transformBi replace
 
 {-| Check and infer units-of-measure for a program
     This produces an output of all the unit information for a program -}
-inferUnits uOpts (fname, fileText, pf)
-  | Right []   <- eVars = checkUnits uOpts (fname, fileText, pf)
+inferUnits uOpts (fname, pf)
+  | Right []   <- eVars = checkUnits uOpts (fname, pf)
   | Right vars <- eVars = okReport vars
   | Left exc   <- eVars = errReport exc
   where
@@ -356,11 +350,11 @@ compileUnits' uOpts (fname, pf)
 
 synthesiseUnits :: UnitOpts
                 -> Char
-                -> (Filename, B.ByteString, F.ProgramFile Annotation)
+                -> (Filename, F.ProgramFile Annotation)
                 -> (Report, (Filename, F.ProgramFile Annotation))
 {-| Synthesis unspecified units for a program (after checking) -}
-synthesiseUnits uOpts marker (fname, fileText, pf)
-  | Right []   <- eVars = (checkUnits uOpts (fname, fileText, pf), (fname, pf))
+synthesiseUnits uOpts marker (fname, pf)
+  | Right []   <- eVars = (checkUnits uOpts (fname, pf), (fname, pf))
   | Right vars <- eVars = (okReport vars, (fname, pfFinal))
   | Left exc   <- eVars = (errReport exc, (fname, pfFinal))
   where

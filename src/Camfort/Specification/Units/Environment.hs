@@ -191,26 +191,25 @@ isConcreteUnit UnitlessLit = True
 isConcreteUnit (UnitName _) = True
 isConcreteUnit _ = False
 
-pprintConstr :: Maybe SourceText -> Constraint -> String
-pprintConstr srcText (ConEq u1 u2)
+pprintConstr :: Constraint -> String
+pprintConstr (ConEq u1 u2)
   | isResolvedUnit u1 && isConcreteUnit u1 &&
     isResolvedUnit u2 && isConcreteUnit u2 =
-      "Units '" ++ pprintUnitInfo srcText u1 ++ "' and '" ++ pprintUnitInfo srcText u2 ++
+      "Units '" ++ pprintUnitInfo u1 ++ "' and '" ++ pprintUnitInfo u2 ++
       "' should be equal"
-  | isResolvedUnit u1 = "'" ++ pprintUnitInfo srcText u2 ++ "' should have unit '" ++ pprintUnitInfo srcText u1 ++ "'"
-  | isResolvedUnit u2 = "'" ++ pprintUnitInfo srcText u1 ++ "' should have unit '" ++ pprintUnitInfo srcText u2 ++ "'"
-pprintConstr srcText (ConEq u1 u2) = "'" ++ pprintUnitInfo srcText u1 ++ "' should have the same units as '" ++ pprintUnitInfo srcText u2 ++ "'"
-pprintConstr srcText (ConConj cs)  = intercalate "\n\t and " (map (pprintConstr srcText) cs)
+  | isResolvedUnit u1 = "'" ++ pprintUnitInfo u2 ++ "' should have unit '" ++ pprintUnitInfo u1 ++ "'"
+  | isResolvedUnit u2 = "'" ++ pprintUnitInfo u1 ++ "' should have unit '" ++ pprintUnitInfo u2 ++ "'"
+pprintConstr (ConEq u1 u2) = "'" ++ pprintUnitInfo u1 ++ "' should have the same units as '" ++ pprintUnitInfo u2 ++ "'"
+pprintConstr (ConConj cs)  = intercalate "\n\t and " (fmap pprintConstr cs)
 
-pprintUnitInfo :: Maybe SourceText -> UnitInfo -> String
-pprintUnitInfo _ (UnitVar (_, sName))                 = printf "%s" sName
-pprintUnitInfo _ (UnitParamVarUse (_, (_, sName), _)) = printf "%s" sName
-pprintUnitInfo _ (UnitParamPosUse ((_, fname), 0, _)) = printf "result of %s" fname
-pprintUnitInfo _ (UnitParamPosUse ((_, fname), i, _)) = printf "parameter %d to %s" i fname
-pprintUnitInfo _ (UnitParamEAPUse ((v, _), _))        = printf "explicitly annotated polymorphic unit %s" v
-pprintUnitInfo (Just srcText) (UnitLiteral _)         = B.unpack srcText
-pprintUnitInfo Nothing (UnitLiteral _)                = "literal number"
-pprintUnitInfo _ ui                                   = show ui
+pprintUnitInfo :: UnitInfo -> String
+pprintUnitInfo (UnitVar (_, sName))                 = printf "%s" sName
+pprintUnitInfo (UnitParamVarUse (_, (_, sName), _)) = printf "%s" sName
+pprintUnitInfo (UnitParamPosUse ((_, fname), 0, _)) = printf "result of %s" fname
+pprintUnitInfo (UnitParamPosUse ((_, fname), i, _)) = printf "parameter %d to %s" i fname
+pprintUnitInfo (UnitParamEAPUse ((v, _), _))        = printf "explicitly annotated polymorphic unit %s" v
+pprintUnitInfo (UnitLiteral _)                      = "literal"
+pprintUnitInfo ui                                   = show ui
 
 --------------------------------------------------
 

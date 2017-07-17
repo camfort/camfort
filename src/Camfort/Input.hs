@@ -83,7 +83,7 @@ callAndSummarise aFun =
 
 -- | Perform an analysis which reports to the user, but does not output any files.
 doAnalysisReportWithModFiles
-  :: ([(Filename, SourceText, F.ProgramFile A)] -> r)
+  :: ([(Filename, F.ProgramFile A)] -> r)
   -> (r -> IO out)
   -> FileOrDir
   -> Maybe FileOrDir
@@ -93,7 +93,7 @@ doAnalysisReportWithModFiles rFun sFun inSrc incDir excludes = do
   printExcludes inSrc excludes
   ps <- readParseSrcDirWithModFiles inSrc incDir excludes
 
-  let report = rFun ps
+  let report = rFun (fmap (\(f,_,pf) -> (f,pf)) ps)
   sFun report
 
 -- | Perform a refactoring that does not add any new files.
@@ -102,11 +102,10 @@ doRefactor :: ([FileProgram]
            -> FileOrDir -> [Filename] -> FileOrDir
            -> IO String
 doRefactor rFun inSrc excludes outSrc =
-  let rFunOnModFiles = (rFun . fmap (\(fn, _, fp) -> (fn, fp)))
-  in doRefactorWithModFiles rFunOnModFiles inSrc Nothing excludes outSrc
+  doRefactorWithModFiles rFun inSrc Nothing excludes outSrc
 
 doRefactorWithModFiles
-  :: ([(Filename, SourceText, F.ProgramFile A)] -> (String, [FileProgram]))
+  :: ([(Filename, F.ProgramFile A)] -> (String, [FileProgram]))
   -> FileOrDir
   -> Maybe FileOrDir
   -> [Filename]
@@ -115,7 +114,7 @@ doRefactorWithModFiles
 doRefactorWithModFiles rFun inSrc incDir excludes outSrc = do
   printExcludes inSrc excludes
   ps <- readParseSrcDirWithModFiles inSrc incDir excludes
-  let (report, ps') = rFun ps
+  let (report, ps') = rFun (fmap (\(f,_,pf) -> (f,pf)) ps)
   let outputs = reassociateSourceText ps ps'
   outputFiles inSrc outSrc outputs
   pure report
