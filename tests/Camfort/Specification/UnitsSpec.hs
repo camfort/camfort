@@ -145,9 +145,9 @@ exampleInconsist1CheckReport =
   "\ntests/fixtures/Specification/Units/example-inconsist-1.f90: Inconsistent:\n\
   \ - at 7:7: 'z' should have unit 's'\n\
   \ - at 7:7: Units 's' and 'm' should be equal\n\n\n\
-  \(s === m,(7:7)-(7:11))\n\
-  \(unit_of(z) === s,(7:3)-(7:11))\n\
-  \(unit_of(z) === s && s === m,(1:1)-(8:19))\n"
+  \(7:7)-(7:11): s === m\n\
+  \(7:3)-(7:11): unit_of(z) === s\n\
+  \(1:1)-(8:19): unit_of(z) === s && s === m\n"
 
 fixturesDir :: String
 fixturesDir = "tests" </> "fixtures" </> "Specification" </> "Units"

@@ -134,7 +134,9 @@ checkUnits uOpts (fname, pf)
     -- Format report
     okReport Nothing     = logs ++ "\n" ++ fname ++ ": Consistent. " ++ show nVars ++ " variables checked."
     okReport (Just cons) = logs ++ "\n" ++ fname ++ ": Inconsistent:\n" ++ reportErrors cons ++ "\n\n" ++
-                           unlines (map show constraints)
+                           unlines (map showSrcConstraint constraints)
+    showSrcConstraint :: (Constraint, FU.SrcSpan) -> String
+    showSrcConstraint (con, srcSpan) = show srcSpan ++ ": " ++ show con
 
     reportErrors cons = unlines [ maybe "" showSS ss ++ str | (ss, str) <- reports ]
       where
