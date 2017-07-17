@@ -146,8 +146,8 @@ exampleInconsist1CheckReport =
   \ - at 7:7: 'z' should have unit 's'\n\
   \ - at 7:7: Units 's' and 'm' should be equal\n\n\n\
   \(s === m,(Just \"x + \",(7:7)-(7:11)))\n\
-  \(#<Var example_z3> === s,(Just \"z = x + \",(7:3)-(7:11)))\n\
-  \(#<Var example_z3> === s && s === m,(Nothing,(1:1)-(8:19)))\n"
+  \(unit_of(z) === s,(Just \"z = x + \",(7:3)-(7:11)))\n\
+  \(unit_of(z) === s && s === m,(Nothing,(1:1)-(8:19)))\n"
 
 fixturesDir :: String
 fixturesDir = "tests" </> "fixtures" </> "Specification" </> "Units"
