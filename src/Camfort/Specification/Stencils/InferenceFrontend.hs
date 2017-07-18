@@ -195,7 +195,7 @@ genSpecsAndReport span lhsIxs block = do
   mode         <- fmap ieInferMode ask
   flowsGraph   <- fmap ieFlowsGraph ask
   -- Generate specification for the
-  let ((specs, visited), evalInfos) = runWriter $ genSpecifications flowsGraph ivmap lhsIxs block
+  let ((specs, visited), evalInfos) = runWriter $ genSpecifications flowsGraph ivs lhsIxs block
   -- Remember which nodes were visited during this traversal
   modify (\state -> state { visitedNodes = visitedNodes state ++ visited })
   -- Report the specifications
