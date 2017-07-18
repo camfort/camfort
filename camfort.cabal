@@ -173,6 +173,8 @@ test-suite spec
                         Camfort.Specification.Stencils.InferenceBackendSpec
                         Camfort.Specification.Stencils.ModelSpec
                         Camfort.Specification.StencilsSpec
+                        Camfort.Specification.Units.InferenceBackendSpec
+                        Camfort.Specification.Units.InferenceFrontendSpec
                         Camfort.Specification.Units.ParserSpec
                         Camfort.Specification.UnitsSpec
                         Camfort.Transformation.CommonSpec
