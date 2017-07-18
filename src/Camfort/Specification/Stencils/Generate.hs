@@ -20,6 +20,7 @@ module Camfort.Specification.Stencils.Generate
   (
     EvalLog
   , Neighbour(..)
+  , extractRelevantIVS
   , assocsSequence
   , genSpecifications
   , genSubscripts
@@ -103,7 +104,7 @@ neighbourIndex ivs ixs =
 
 genSpecifications ::
      FAD.FlowsGraph A
-  -> FAD.InductionVarMapByASTBlock
+  -> [Variable]
   -> [Neighbour]
   -> F.Block (FA.Analysis A)
   -> Writer EvalLog ([([Variable], Specification)], [Int])
@@ -185,11 +186,11 @@ genSubscripts flowsGraph blocks =
 
          Nothing -> error $ "Missing a label for: " ++ show block
 
--- | Given an induction variable map, and a piece of indexing syntax
+-- | Given an induction variable map, and a piece of syntax
 -- return a list of induction variables in scope for this index
-extractRelevantIVS ::
+extractRelevantIVS :: (FU.Spanned (ast (FA.Analysis A)), F.Annotated ast) =>
      FAD.InductionVarMapByASTBlock
-  -> F.Index (FA.Analysis Annotation)
+  -> ast (FA.Analysis A)
   -> [Variable]
 extractRelevantIVS ivmap f = ivsList
   where
@@ -225,7 +226,7 @@ assocsSequence maps = do
     strength (a, mb) = mb >>= (\b -> return (a, b))
 
 -- Convert list of indexing expressions to a spec
-indicesToSpec :: FAD.InductionVarMapByASTBlock
+indicesToSpec :: [Variable]
               -> Variable
               -> [Neighbour]
               -> [[F.Index (FA.Analysis Annotation)]]
@@ -301,14 +302,14 @@ expToNeighbour ivs e =
                 , let i = FA.varName e
                 , i `elem` ivs]
 
-indicesToRelativisedOffsets :: FAD.InductionVarMapByASTBlock
+indicesToRelativisedOffsets :: [Variable]
                             -> Variable
                             -> [Neighbour]
                             -> [[F.Index (FA.Analysis Annotation)]]
                             -> Writer EvalLog (Maybe (Bool, [[Int]]))
 indicesToRelativisedOffsets ivs a lhs ixs = do
    -- Convert indices to neighbourhood representation
-  let rhses = map (map (\ix -> convIxToNeighbour (extractRelevantIVS ivs ix) ix) ) ixs
+  let rhses = map (map (\ix -> convIxToNeighbour ivs ix) ) ixs
 
   -- As an optimisation, do duplicate check in front-end first
   -- so that duplicate indices don't get passed into the main engine

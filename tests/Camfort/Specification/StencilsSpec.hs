@@ -28,7 +28,6 @@ import Language.Fortran.ParserMonad
 import Camfort.Reprint
 import Camfort.Output
 
-import qualified Data.IntMap as IM
 import qualified Data.Set as S
 import Data.Functor.Identity
 import qualified Data.ByteString.Char8 as B
@@ -322,8 +321,15 @@ spec =
 \        but at (9:8)-(9:29) the code behaves as\n\
 \                access readOnce, forward(depth=1, dim=1) :: a\n"
 
+
+    describe "synth/inference works correctly with nested loops" $ do
+      assertStencilInferenceNoWarn "nestedLoops.f90" "inserts correct specification"
+
+    -- Run over all the samples and test fixtures
+
     sampleDirConts <- runIO $ listDirectory samplesDir
     expectedDirConts <- runIO $ listDirectory (samplesDir </> "expected")
+
     let hasExpectedSrcFile f = f `elem` expectedDirConts
         sampleFiles          = filter hasExpectedSrcFile sampleDirConts
 
@@ -418,8 +424,7 @@ test2DSpecVariation a b (input, expectation) =
     expectedSpec = Specification expectation True
     fromFormatToIx [ri,rj] = [ offsetToIx "i" ri, offsetToIx "j" rj ]
 
-indicesToSpec' ivs lhs = fst . runWriter . indicesToSpec ivmap "a" lhs
-  where ivmap = IM.singleton 0 (S.fromList ivs)
+indicesToSpec' ivs lhs = fst . runWriter . indicesToSpec ivs "a" lhs
 
 variations =
   [ ( [ [0,0] ]

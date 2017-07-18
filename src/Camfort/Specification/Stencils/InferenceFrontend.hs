@@ -186,8 +186,12 @@ genSpecsAndReport ::
      FU.SrcSpan -> [Neighbour]
   -> F.Block (FA.Analysis A)
   -> Inferer [([Variable], Specification)]
+
 genSpecsAndReport span lhsIxs block = do
+  -- Get the induction variables relative to the current block
   (IS ivmap _) <- get
+  let ivs = extractRelevantIVS ivmap block
+
   mode         <- fmap ieInferMode ask
   flowsGraph   <- fmap ieFlowsGraph ask
   -- Generate specification for the
@@ -208,8 +212,6 @@ genSpecsAndReport span lhsIxs block = do
       tell [ (span, Right ("EVALMODE: Cannot make spec\
                            \ (tag: emptySpec)","")) ]
   return specs
-
-
 
 -- Traverse Blocks in the AST and infer stencil specifications
 perBlockInfer :: F.Block (FA.Analysis A)

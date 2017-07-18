@@ -430,16 +430,19 @@ perBlockCheck b = do
 -- | Validate the stencil and log an appropriate result.
 checkStencil :: FAD.FlowsGraph A -> F.Block (FA.Analysis A) -> SpecDecls
   -> FU.SrcSpan -> Maybe [F.Index (FA.Analysis Annotation)] -> FU.SrcSpan -> Checker ()
-checkStencil flowsGraph s specDecls spanInferred maybeSubs span = do
+checkStencil flowsGraph block specDecls spanInferred maybeSubs span = do
   -- Work out whether this is a stencil (non empty LHS indices) or not
   let (subs, isStencil) = case maybeSubs of
                              Nothing -> ([], False)
                              Just subs -> (subs, True)
-  -- Create list of relative indices
+
+  -- Get the induction variables relative to the current block
   ivmap <- fmap ivMap get
-  -- Do analysis
+  let ivs = extractRelevantIVS ivmap block
+
+  -- Do analysis; create list of relative indices
   let lhsN         = fromMaybe [] (neighbourIndex ivmap subs)
-      relOffsets = fst . runWriter $ genOffsets flowsGraph ivmap lhsN [s]
+      relOffsets = fst . runWriter $ genOffsets flowsGraph ivs lhsN [block]
       multOffsets = map (\relOffset ->
           case relOffset of
           (var, (True, offsets)) -> (var, Mult offsets)
@@ -455,7 +458,7 @@ checkStencil flowsGraph s specDecls spanInferred maybeSubs span = do
                    if specExists then addResult (duplicateSpecification span)
                      else addResult (specOkay span s v spanInferred)) expandedDecls
     else do
-    let inferred = fst . fst . runWriter $ genSpecifications flowsGraph ivmap lhsN s
+    let inferred = fst . fst . runWriter $ genSpecifications flowsGraph ivmap lhsN block
     addResult (notWellSpecified (span, specDecls) (spanInferred, inferred))
   where
     seenBefore :: (Variable, Specification) -> Checker Bool
@@ -470,7 +473,7 @@ checkStencil flowsGraph s specDecls spanInferred maybeSubs span = do
 
 genOffsets ::
      FAD.FlowsGraph A
-  -> FAD.InductionVarMapByASTBlock
+  -> [Variable]
   -> [Neighbour]
   -> [F.Block (FA.Analysis A)]
   -> Writer EvalLog [(Variable, (Bool, [[Int]]))]
