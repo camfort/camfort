@@ -110,6 +110,9 @@ data RefactOptions = RefactOptions
 fileArgument :: Mod ArgumentFields String -> Parser String
 fileArgument m = strArgument (metavar "FILENAME" <> action "file" <> m)
 
+-- | Parser for an argument representing an individual directory.
+directoryArgument :: Mod ArgumentFields String -> Parser String
+directoryArgument m = strArgument (metavar "DIRECTORY" <> action "directory" <> m)
 
 -- | Parser for file options with multiple files specified
 -- | as a comma-separated list.
@@ -310,7 +313,8 @@ topLevelCommands = versionOption
                         <> help "show version number")
 
 cmdInit :: FilePath -> Parser Command
-cmdInit = pure . CmdInit
+cmdInit currDir = fmap CmdInit . directoryArgument $
+  help "project directory" <> value currDir
 
 projectParser :: FilePath -> Parser Command
 projectParser currDir = commandsParser "Project Commands" projectCommands
