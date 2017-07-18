@@ -43,11 +43,14 @@ module Camfort.Functionality (
   , common
   , dead
   , equivalences
+  -- ** Project Management
+  , camfortInitialize
   ) where
 
 import Control.Arrow (second)
 import Control.Monad
-import System.FilePath (takeDirectory)
+import System.Directory (createDirectoryIfMissing)
+import System.FilePath  ((</>), takeDirectory)
 
 import Camfort.Analysis (runRefactoring)
 import Camfort.Analysis.ModFile (getModFiles)
@@ -169,3 +172,8 @@ stencilsSynth inSrc excludes annType outSrc = do
    let rfun = second (fmap (pure :: a -> Either () a)) . Stencils.synth (markerChar annType)
    report <- doRefactor rfun id inSrc excludes outSrc
    putStrLn report
+
+-- | Initialize Camfort for the given project.
+camfortInitialize :: FilePath -> IO ()
+camfortInitialize projectDir =
+  createDirectoryIfMissing False (projectDir </> ".camfort")

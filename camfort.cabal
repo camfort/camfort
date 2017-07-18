@@ -110,6 +110,7 @@ test-suite spec
   hs-source-dirs:       tests
   other-modules:        Camfort.Analysis.CommentAnnotatorSpec
                         Camfort.Analysis.ModFileSpec
+                        Camfort.FunctionalitySpec
                         Camfort.ReprintSpec
                         Camfort.Specification.ParserSpec
                         Camfort.Specification.Stencils.CheckSpec

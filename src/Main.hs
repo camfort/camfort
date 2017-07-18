@@ -23,6 +23,7 @@ import Camfort.Specification.Units.Monad (LiteralsOpt(LitMixed))
 
 import Data.Maybe (fromMaybe)
 import Data.Monoid ((<>))
+import System.Directory (getCurrentDirectory)
 
 import Options.Applicative
 
@@ -41,6 +42,7 @@ data Command = CmdCount ReadOptions
              | CmdRefactCommon RefactOptions
              | CmdRefactDead RefactOptions
              | CmdRefactEquivalence RefactOptions
+             | CmdInit FilePath
              | CmdTopVersion
 
 
@@ -307,16 +309,27 @@ topLevelCommands = versionOption
                         <> short '?'
                         <> help "show version number")
 
+cmdInit :: FilePath -> Parser Command
+cmdInit = pure . CmdInit
+
+projectParser :: FilePath -> Parser Command
+projectParser currDir = commandsParser "Project Commands" projectCommands
+  where
+    projectCommands =
+      [ ("init", [], cmdInit currDir, "initialize CamFort for the project") ]
 
 -- | Collective parser for all CamFort commands.
-commandParser :: Parser Command
-commandParser =
-  helper <*> (analysesParser <|> refactoringsParser <|> topLevelCommands)
-
+commandParser :: FilePath -> Parser Command
+commandParser currDir =
+  helper <*> (    projectParser currDir
+              <|> analysesParser
+              <|> refactoringsParser
+              <|> topLevelCommands)
 
 main :: IO ()
 main = do
-  cmd <- execParser (info commandParser idm)
+  currDir <- getCurrentDirectory
+  cmd <- execParser (info (commandParser currDir) idm)
   runCommand cmd
   where
     getExcludes = fromMaybe [] . exclude
@@ -365,6 +378,7 @@ main = do
     runCommand (CmdRefactCommon rfo)      = runRFO rfo common
     runCommand (CmdRefactDead rfo)        = runRFO rfo dead
     runCommand (CmdRefactEquivalence rfo) = runRFO rfo equivalences
+    runCommand (CmdInit dir)              = camfortInitialize dir
     runCommand CmdTopVersion              = displayVersion
 
 
