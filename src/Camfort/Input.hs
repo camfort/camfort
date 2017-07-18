@@ -63,7 +63,7 @@ printExcludes inSrc excludes =
 
 -- | Perform an analysis that produces information of type @s@.
 doAnalysisSummary :: (Monoid s, Show' s)
-  => (Filename -> F.ProgramFile A -> (s, F.ProgramFile A))
+  => (FileProgram -> (s, FileProgram))
   -> FileOrDir -> [Filename] -> IO ()
 doAnalysisSummary aFun inSrc excludes = do
   printExcludes inSrc excludes
@@ -73,17 +73,17 @@ doAnalysisSummary aFun inSrc excludes = do
 
 -- | Perform an analysis that produces information of type @s@.
 callAndSummarise :: (Monoid s)
-  => (Filename -> F.ProgramFile A -> (s, a))
-  -> [(Filename, SourceText, F.ProgramFile A)]
+  => (FileProgram -> (s, a))
+  -> [(FileProgram, SourceText)]
   -> (s, [a])
 callAndSummarise aFun =
-  foldl' (\(n, pss) (f, _, ps) ->
-            let (n', ps') = aFun f ps
+  foldl' (\(n, pss) (ps, _) ->
+            let (n', ps') = aFun ps
             in (n `mappend` n', ps' : pss)) (mempty, [])
 
 -- | Perform an analysis which reports to the user, but does not output any files.
 doAnalysisReportWithModFiles
-  :: ([(Filename, F.ProgramFile A)] -> r)
+  :: ([FileProgram] -> r)
   -> (r -> IO out)
   -> FileOrDir
   -> Maybe FileOrDir
@@ -93,7 +93,7 @@ doAnalysisReportWithModFiles rFun sFun inSrc incDir excludes = do
   printExcludes inSrc excludes
   ps <- readParseSrcDirWithModFiles inSrc incDir excludes
 
-  let report = rFun (fmap (\(f,_,pf) -> (f,pf)) ps)
+  let report = rFun . fmap fst $ ps
   sFun report
 
 -- | Perform a refactoring that does not add any new files.
@@ -105,7 +105,7 @@ doRefactor rFun inSrc excludes outSrc =
   doRefactorWithModFiles rFun inSrc Nothing excludes outSrc
 
 doRefactorWithModFiles
-  :: ([(Filename, F.ProgramFile A)] -> (String, [FileProgram]))
+  :: ([FileProgram] -> (String, [FileProgram]))
   -> FileOrDir
   -> Maybe FileOrDir
   -> [Filename]
@@ -114,8 +114,8 @@ doRefactorWithModFiles
 doRefactorWithModFiles rFun inSrc incDir excludes outSrc = do
   printExcludes inSrc excludes
   ps <- readParseSrcDirWithModFiles inSrc incDir excludes
-  let (report, ps') = rFun (fmap (\(f,_,pf) -> (f,pf)) ps)
-  let outputs = reassociateSourceText ps ps'
+  let (report, ps') = rFun . fmap fst $ ps
+  let outputs = reassociateSourceText (fmap snd ps) ps'
   outputFiles inSrc outSrc outputs
   pure report
 
@@ -126,15 +126,15 @@ doRefactorAndCreate
 doRefactorAndCreate rFun inSrc excludes outSrc = do
   printExcludes inSrc excludes
   ps <- readParseSrcDir inSrc excludes
-  let (report, ps', ps'') = rFun (fmap (\(f, _, ast) -> (f, ast)) ps)
-  let outputs = reassociateSourceText ps ps'
-  let outputs' = map (\(f, pf) -> (f, B.empty, pf)) ps''
+  let (report, ps', ps'') = rFun . fmap fst $ ps
+  let outputs = reassociateSourceText (fmap snd ps) ps'
+  let outputs' = map (\pf -> (pf, B.empty)) ps''
   outputFiles inSrc outSrc outputs
   outputFiles inSrc outSrc outputs'
   pure report
 
 -- | For refactorings which create additional files.
-type FileProgram = (Filename, F.ProgramFile A)
+type FileProgram = F.ProgramFile A
 
 doCreateBinary
   :: ([FileProgram] -> (String, [(Filename, B.ByteString)]))
@@ -146,29 +146,28 @@ doCreateBinary
 doCreateBinary rFun inSrc incDir excludes outSrc = do
   printExcludes inSrc excludes
   ps <- readParseSrcDirWithModFiles inSrc incDir excludes
-  let (report, bins) = rFun (map (\ (f, _, ast) -> (f, ast)) ps)
+  let (report, bins) = rFun . fmap fst $ ps
   outputFiles inSrc outSrc bins
   pure report
 
-reassociateSourceText :: [(Filename, SourceText, a)]
-                   -> [(Filename, F.ProgramFile Annotation)]
-                   -> [(Filename, SourceText, F.ProgramFile Annotation)]
-reassociateSourceText ps ps' = zip3 (map fst ps') (map snd3 ps) (map snd ps')
-  where snd3 (_, b, _) = b
+reassociateSourceText :: [SourceText]
+                      -> [F.ProgramFile Annotation]
+                      -> [(F.ProgramFile Annotation, SourceText)]
+reassociateSourceText ps ps' = zip ps' ps
 
 -- * Source directory and file handling
 
 -- | Read files from a directory.
 readParseSrcDir :: FileOrDir  -- ^ Directory to read from.
                 -> [Filename] -- ^ Excluded files.
-                -> IO [(Filename, SourceText, F.ProgramFile A)]
+                -> IO [(FileProgram, SourceText)]
 readParseSrcDir inp excludes =
   readParseSrcDirWithModFiles inp Nothing excludes
 
 readParseSrcDirWithModFiles :: FileOrDir
                             -> Maybe FileOrDir
                             -> [Filename]
-                            -> IO [(Filename, SourceText, F.ProgramFile A)]
+                            -> IO [(FileProgram, SourceText)]
 readParseSrcDirWithModFiles inp incDir excludes = do
   isdir <- isDirectory inp
   files <-
@@ -187,13 +186,13 @@ readParseSrcDirWithModFiles inp incDir excludes = do
 
 readParseSrcFileWithModFiles :: Maybe FileOrDir
                              -> Filename
-                             -> IO (Maybe (Filename, SourceText, F.ProgramFile A))
+                             -> IO (Maybe (FileProgram, SourceText))
 readParseSrcFileWithModFiles incDir f = do
   inp <- flexReadFile f
   mods <- maybe (pure emptyModFiles) getModFiles incDir
   let result = FP.fortranParserWithModFiles mods inp f
   case result of
-    Right ast -> pure $ Just (f, inp, fmap (const unitAnnotation) ast)
+    Right ast -> pure $ Just (fmap (const unitAnnotation) ast, inp)
     Left  err -> print err >> pure Nothing
   where
     -- | Read file using ByteString library and deal with any weird characters.

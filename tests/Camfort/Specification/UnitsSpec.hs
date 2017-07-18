@@ -156,8 +156,8 @@ fixturesDir = "tests" </> "fixtures" </> "Specification" </> "Units"
 unitsCheckReportIs :: String -> String -> Expectation
 fileName `unitsCheckReportIs` expectedReport = do
   let file = fixturesDir </> fileName
-  [(f,_,pf)] <- readParseSrcDir file []
-  checkUnits uOpts (f,pf) `shouldBe` expectedReport
+  [(pf,_)] <- readParseSrcDir file []
+  checkUnits uOpts pf `shouldBe` expectedReport
   where uOpts = unitOpts0 { uoDebug = False, uoLiterals = LitMixed }
 
 --------------------------------------------------

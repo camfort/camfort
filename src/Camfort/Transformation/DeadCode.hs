@@ -41,9 +41,8 @@ import Data.Maybe
 
 -- Currently only strips out dead code through simple variable assignments
 -- but not through array-subscript assignmernts
-deadCode :: Bool -> (Filename, F.ProgramFile A)
-                 -> (Report, (Filename, F.ProgramFile A))
-deadCode flag (fname, pf) = (report, (fname, fmap FA.prevAnnotation pf'))
+deadCode :: Bool -> F.ProgramFile A -> (Report, F.ProgramFile A)
+deadCode flag pf = (report, fmap FA.prevAnnotation pf')
   where
     (report, _) = deadCode' flag lva pf'
     -- initialise analysis

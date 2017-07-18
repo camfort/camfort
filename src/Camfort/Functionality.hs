@@ -78,7 +78,7 @@ markerChar ATDefault = '='
 -- * Wrappers on all of the features
 ast d excludes = do
     xs <- readParseSrcDir d excludes
-    print (map (\(_, _, p) -> p) xs)
+    print . fmap fst $ xs
 
 countVarDecls inSrc excludes = do
     putStrLn $ "Counting variable declarations in '" ++ inSrc ++ "'"
@@ -147,7 +147,7 @@ unitsCriticals inSrc excludes m debug incDir = do
 {- Stencils feature -}
 stencilsCheck inSrc excludes = do
    putStrLn $ "Checking stencil specs for '" ++ inSrc ++ "'"
-   let rfun = \f p -> (Stencils.check f p, p)
+   let rfun p = (Stencils.check p, p)
    doAnalysisSummary rfun inSrc excludes
 
 stencilsInfer inSrc excludes inferMode = do

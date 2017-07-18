@@ -30,6 +30,6 @@ import qualified Language.Fortran.AST as F
 {-| Counts the number of declarations (of variables) in a whole program -}
 
 countVariableDeclarations ::
-    forall a . Data a => Filename -> F.ProgramFile a -> (Int, F.ProgramFile a)
-countVariableDeclarations _ x =
+    forall a . Data a => F.ProgramFile a -> (Int, F.ProgramFile a)
+countVariableDeclarations x =
     (sum [1 | _ <- universeBi x :: [F.Declarator a]], x)

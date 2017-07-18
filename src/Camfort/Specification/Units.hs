@@ -77,12 +77,13 @@ runInference uOpts pf runner = runUnitSolver uOpts pf $ do
 {-| Infer one possible set of critical variables for a program -}
 inferCriticalVariables
   :: UnitOpts
-  -> (Filename, F.ProgramFile Annotation)
+  -> F.ProgramFile Annotation
   -> (Report, Int)
-inferCriticalVariables uOpts (fname, pf)
+inferCriticalVariables uOpts pf
   | Right vars <- eVars = okReport vars
   | Left exc   <- eVars = (errReport exc, -1)
   where
+    fname = F.pfGetFilename pf
     -- Format report
     okReport []   = (logs ++ "\n" ++ fname
                          ++ ":No additional annotations are necessary.\n", 0)
@@ -124,13 +125,13 @@ inferCriticalVariables uOpts (fname, pf)
               ] `M.union` (M.unions . map (M.fromList . map (\ (a, (b, _)) -> (b, a)) . M.toList) $ M.elems mmap')
     fromWhereMap = genUniqNameToFilenameMap . M.elems $ uoModFiles uOpts
 
-checkUnits, inferUnits
-            :: UnitOpts -> (Filename, F.ProgramFile Annotation) -> Report
+checkUnits, inferUnits :: UnitOpts -> F.ProgramFile Annotation -> Report
 {-| Check units-of-measure for a program -}
-checkUnits uOpts (fname, pf)
+checkUnits uOpts pf
   | Right mCons <- eCons = okReport mCons
   | Left exc    <- eCons = errReport exc
   where
+    fname = F.pfGetFilename pf
     -- Format report
     okReport Nothing     = logs ++ "\n" ++ fname ++ ": Consistent. " ++ show nVars ++ " variables checked."
     okReport (Just cons) = logs ++ "\n" ++ fname ++ ": Inconsistent:\n" ++ reportErrors cons ++ "\n\n" ++
@@ -273,11 +274,12 @@ replaceImplicitNames implicitMap = transformBi replace
 
 {-| Check and infer units-of-measure for a program
     This produces an output of all the unit information for a program -}
-inferUnits uOpts (fname, pf)
-  | Right []   <- eVars = checkUnits uOpts (fname, pf)
+inferUnits uOpts pf
+  | Right []   <- eVars = checkUnits uOpts pf
   | Right vars <- eVars = okReport vars
   | Left exc   <- eVars = errReport exc
   where
+    fname = F.pfGetFilename pf
     -- Format report
     okReport vars = logs ++ "\n" ++ fname ++ ":\n" ++ unlines [ expReport ei | ei <- expInfo ] ++ show vars
       where
@@ -326,10 +328,11 @@ compileUnits uOpts fileprogs = (concat reports, concat bins)
                                             , let (report, bin) = compileUnits' uOpts fileprog ]
 
 compileUnits' :: UnitOpts -> FileProgram -> (String, [(Filename, B.ByteString)])
-compileUnits' uOpts (fname, pf)
+compileUnits' uOpts pf
   | Right cu <- eCUnits = okReport cu
   | Left exc <- eCUnits = errReport exc
   where
+    fname = F.pfGetFilename pf
     -- Format report
     okReport cu = ( logs ++ "\n" ++ fname ++ ":\n" ++ if uoDebug uOpts then debugInfo else []
                      -- FIXME, filename manipulation (needs to go in -I dir?)
@@ -352,14 +355,15 @@ compileUnits' uOpts (fname, pf)
 
 synthesiseUnits :: UnitOpts
                 -> Char
-                -> (Filename, F.ProgramFile Annotation)
-                -> (Report, (Filename, F.ProgramFile Annotation))
+                -> F.ProgramFile Annotation
+                -> (Report, F.ProgramFile Annotation)
 {-| Synthesis unspecified units for a program (after checking) -}
-synthesiseUnits uOpts marker (fname, pf)
-  | Right []   <- eVars = (checkUnits uOpts (fname, pf), (fname, pf))
-  | Right vars <- eVars = (okReport vars, (fname, pfFinal))
-  | Left exc   <- eVars = (errReport exc, (fname, pfFinal))
+synthesiseUnits uOpts marker pf
+  | Right []   <- eVars = (checkUnits uOpts pf, pf)
+  | Right vars <- eVars = (okReport vars, pfFinal)
+  | Left exc   <- eVars = (errReport exc, pfFinal)
   where
+    fname = F.pfGetFilename pf
     -- Format report
     okReport vars = logs ++ "\n" ++ fname ++ ":\n" ++ unlines [ expReport ei | ei <- expInfo ]
       where

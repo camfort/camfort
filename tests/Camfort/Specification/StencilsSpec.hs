@@ -245,7 +245,7 @@ spec =
                                      \+ centered(depth=1, dim=1)*pointed(dim=2) :: a"
 
       it "stencil check" $
-         fst (callAndSummarise (\f p -> (check f p, p)) program)
+         fst (callAndSummarise (\p -> (check p, p)) program)
            `shouldBe`
            "\ntests/fixtures/Specification/Stencils/example2.f\n\
             \(23:1)-(23:78)    Correct.\n(31:1)-(31:56)    Correct."
@@ -304,7 +304,7 @@ spec =
 
       assertStencilCheck "example16.f"
         "error trying to check an access spec against a stencil"
-        "\nexample16.f\n\
+        "\ntests/fixtures/Specification/Stencils/example16.f\n\
 \(8:1)-(8:50)    Not well specified.\n\
 \        Specification is:\n\
 \                access readOnce, forward(depth=1, dim=1) :: a\n\
@@ -314,7 +314,7 @@ spec =
 
       assertStencilCheck "example17.f"
         "error trying to check an access spec against a stencil"
-        "\nexample17.f\n\
+        "\ntests/fixtures/Specification/Stencils/example17.f\n\
 \(8:1)-(8:51)    Not well specified.\n\
 \        Specification is:\n\
 \                stencil readOnce, forward(depth=1, dim=1) :: a\n\
@@ -336,8 +336,8 @@ spec =
         assertStencilCheck fileName testComment expected = do
             let file = fixturesDir </> fileName
             programs <- runIO $ readParseSrcDir file []
-            let [(_, _, program)] = programs
-            it testComment $  check fileName program `shouldBe` expected
+            let [(program,_)] = programs
+            it testComment $  check program `shouldBe` expected
 
         assertStencilInferenceDir expected dir fileName testComment =
           let file         = dir </> fileName
@@ -348,9 +348,8 @@ spec =
             programSrc       <- runIO $ readFile file
             synthExpectedSrc <- runIO $ readFile expectedFile
             it testComment $
-               (map (B.unpack . runIdentity . flip (reprint (refactoring version)) (B.pack programSrc) . snd)
-               (snd $ synth AssignMode '=' (map (\(f, _, p) -> (f, p)) program))
-               )
+               (map (B.unpack . runIdentity . flip (reprint (refactoring version)) (B.pack programSrc))
+                 (snd . synth AssignMode '=' . fmap fst $ program))
                 `shouldBe` [synthExpectedSrc]
 
         assertStencilInferenceOnFile = assertStencilInferenceDir
@@ -364,7 +363,7 @@ spec =
             in do
               program          <- runIO $ readParseSrcDir file []
               programSrc       <- runIO $ readFile file
-              it testComment $ (fst $ synth AssignMode '=' (map (\(f, _, p) -> (f, p)) program))
+              it testComment $ (fst . synth AssignMode '=' . fmap fst $ program)
                 `shouldBe` expectedResponse
 
         assertStencilSynthResponseOut fileName testComment expectedResponse =
