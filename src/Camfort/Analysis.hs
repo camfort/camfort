@@ -22,29 +22,29 @@ module Camfort.Analysis
 
 -- ** Refactoring
 
--- | A @Refactoring s a a'@ refactors data of
+-- | A @Refactoring r a a'@ refactors data of
 -- type @a@ into data of type @a'@, and produces
--- information of type @s@.
-type Refactoring s a a' = a -> (s, a')
+-- a report of type @r@.
+type Refactoring r a a' = a -> (r, a')
 
 -- | Run the given 'Refactoring' on some input data.
-runRefactoring :: Refactoring s a a' -> a -> (s, a')
+runRefactoring :: Refactoring r a a' -> a -> (r, a')
 runRefactoring = id
 
 -- ** Analysis
 
 -- | An Analysis is a 'Refactoring' that only
--- produces additional information.
-type Analysis s a = Refactoring s a ()
+-- produces a report.
+type Analysis r a = Refactoring r a ()
 
 -- | Convert a function to an 'Analysis'.
-mkAnalysis :: (a -> s) -> Analysis s a
+mkAnalysis :: (a -> r) -> Analysis r a
 mkAnalysis f x = (f x, ())
 
 -- | Run the given 'Analysis' on some input data.
-runAnalysis :: Analysis s a -> a -> s
+runAnalysis :: Analysis r a -> a -> r
 runAnalysis a = fst . runRefactoring a
 
 -- | Run the given 'Analysis' on multiple data, and summarise the results.
-runAnalysisWithSummary :: (Monoid s) => Analysis s a -> [a] -> s
+runAnalysisWithSummary :: (Monoid r) => Analysis r a -> [a] -> r
 runAnalysisWithSummary analysis = mconcat . fmap (runAnalysis analysis)
