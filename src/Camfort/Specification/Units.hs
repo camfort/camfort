@@ -292,7 +292,7 @@ inferUnits' uOpts pf
   where
     fname = F.pfGetFilename pf
     -- Format report
-    okReport vars = logs ++ "\n" ++ fname ++ ":\n" ++ unlines [ expReport ei | ei <- expInfo ] ++ show vars
+    okReport vars = logs ++ "\n" ++ fname ++ ":\n" ++ unlines [ expReport ei | ei <- expInfo ]
       where
         expInfo = [ (ei, u) | ei@(ExpInfo _ vname sname) <- declVariableNames pfUA
                             , u <- maybeToList ((vname, sname) `lookup` vars) ]
