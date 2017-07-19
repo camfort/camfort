@@ -4,6 +4,7 @@ import System.FilePath ((</>))
 
 import Test.Hspec
 
+import Camfort.Analysis (runAnalysis)
 import Camfort.Input (readParseSrcDir)
 import Camfort.Specification.Units (checkUnits)
 import Camfort.Specification.Units.Monad
@@ -24,7 +25,7 @@ unitsCheckReportIs :: String -> String -> Expectation
 fileName `unitsCheckReportIs` expectedReport = do
   let file = fixturesDir </> fileName
   [(pf,_)] <- readParseSrcDir file []
-  checkUnits uOpts pf `shouldBe` expectedReport
+  runAnalysis (checkUnits uOpts) pf `shouldBe` expectedReport
   where uOpts = unitOpts0 { uoDebug = False, uoLiterals = LitMixed }
 
 exampleInconsist1CheckReport :: String

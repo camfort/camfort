@@ -31,6 +31,7 @@ import qualified Language.Fortran.Util.Position as FU
 import qualified Language.Fortran.Analysis.Renaming as FAR
 import qualified Language.Fortran.Analysis as FA
 
+import Camfort.Analysis (Refactoring)
 import Camfort.Helpers
 import Camfort.Helpers.Syntax
 import Camfort.Analysis.Annotations
@@ -40,7 +41,7 @@ import Camfort.Transformation.DeadCode
 type A1 = FA.Analysis Annotation
 type RmEqState = ([[F.Expression A1]], Int, Report)
 
-refactorEquivalences :: F.ProgramFile A -> (Report, F.ProgramFile A)
+refactorEquivalences :: Refactoring Report (F.ProgramFile A) (F.ProgramFile A)
 refactorEquivalences pf = do
    -- initialise analysis
    let pf'   = FAR.analyseRenames . FA.initAnalysis $ pf

@@ -20,6 +20,7 @@ module Camfort.Transformation.DeadCode
   ( deadCode
   ) where
 
+import Camfort.Analysis (Refactoring)
 import Camfort.Analysis.Annotations
 import qualified Language.Fortran.Analysis.DataFlow as FAD
 import qualified Language.Fortran.Analysis.Renaming as FAR
@@ -41,7 +42,7 @@ import Data.Maybe
 
 -- Currently only strips out dead code through simple variable assignments
 -- but not through array-subscript assignmernts
-deadCode :: Bool -> F.ProgramFile A -> (Report, F.ProgramFile A)
+deadCode :: Bool -> Refactoring Report (F.ProgramFile A) (F.ProgramFile A)
 deadCode flag pf = (report, fmap FA.prevAnnotation pf')
   where
     (report, _) = deadCode' flag lva pf'

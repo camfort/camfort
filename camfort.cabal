@@ -37,7 +37,8 @@ executable camfort
 library
   hs-source-dirs:       src
   build-tools:          alex, happy
-  exposed-modules:      Camfort.Analysis.Annotations
+  exposed-modules:      Camfort.Analysis
+                        Camfort.Analysis.Annotations
                         Camfort.Analysis.CommentAnnotator
                         Camfort.Analysis.Simple
                         Camfort.Specification.Parser

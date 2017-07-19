@@ -112,13 +112,13 @@ optsToUnitOpts m debug = maybe (pure o1)
 unitsCheck inSrc excludes m debug incDir = do
     putStrLn $ "Checking units for '" ++ inSrc ++ "'"
     uo <- optsToUnitOpts m debug incDir
-    let rfun = concatMap (LU.checkUnits uo)
+    let rfun = LU.checkUnits uo
     doAnalysisReportWithModFiles rfun putStrLn inSrc incDir excludes
 
 unitsInfer inSrc excludes m debug incDir = do
     putStrLn $ "Inferring units for '" ++ inSrc ++ "'"
     uo <- optsToUnitOpts m debug incDir
-    let rfun = concatMap (LU.inferUnits uo)
+    let rfun = LU.inferUnits uo
     doAnalysisReportWithModFiles rfun putStrLn inSrc incDir excludes
 
 unitsCompile inSrc excludes m debug incDir outSrc = do
@@ -141,14 +141,13 @@ unitsCriticals inSrc excludes m debug incDir = do
     putStrLn $ "Suggesting variables to annotate with unit specifications in '"
              ++ inSrc ++ "'"
     uo <- optsToUnitOpts m debug incDir
-    let rfun = mapM (LU.inferCriticalVariables uo)
+    let rfun = LU.inferCriticalVariables uo
     doAnalysisReportWithModFiles rfun (putStrLn . fst) inSrc incDir excludes
 
 {- Stencils feature -}
 stencilsCheck inSrc excludes = do
    putStrLn $ "Checking stencil specs for '" ++ inSrc ++ "'"
-   let rfun p = (Stencils.check p, p)
-   doAnalysisSummary rfun inSrc excludes
+   doAnalysisSummary Stencils.check inSrc excludes
 
 stencilsInfer inSrc excludes inferMode = do
    putStrLn $ "Inferring stencil specs for '" ++ inSrc ++ "'"

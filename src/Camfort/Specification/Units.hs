@@ -39,6 +39,8 @@ import qualified Data.ByteString.Char8 as B
 import qualified Data.ByteString.Lazy.Char8 as LB
 import GHC.Generics (Generic)
 
+import Camfort.Analysis
+  (Analysis, Refactoring, mkAnalysis, runAnalysis)
 import Camfort.Helpers
 import Camfort.Analysis.Annotations
 import Camfort.Input
@@ -77,9 +79,11 @@ runInference uOpts pf runner = runUnitSolver uOpts pf $ do
 {-| Infer one possible set of critical variables for a program -}
 inferCriticalVariables
   :: UnitOpts
-  -> F.ProgramFile Annotation
-  -> (Report, Int)
-inferCriticalVariables uOpts pf
+  -> Analysis (Report, Int) (F.ProgramFile Annotation)
+inferCriticalVariables uOpts = mkAnalysis (inferCriticalVariables' uOpts)
+
+inferCriticalVariables' :: UnitOpts -> F.ProgramFile Annotation -> (Report, Int)
+inferCriticalVariables' uOpts pf
   | Right vars <- eVars = okReport vars
   | Left exc   <- eVars = (errReport exc, -1)
   where
@@ -125,9 +129,13 @@ inferCriticalVariables uOpts pf
               ] `M.union` (M.unions . map (M.fromList . map (\ (a, (b, _)) -> (b, a)) . M.toList) $ M.elems mmap')
     fromWhereMap = genUniqNameToFilenameMap . M.elems $ uoModFiles uOpts
 
-checkUnits, inferUnits :: UnitOpts -> F.ProgramFile Annotation -> Report
+checkUnits, inferUnits :: UnitOpts -> Analysis Report (F.ProgramFile Annotation)
+
 {-| Check units-of-measure for a program -}
-checkUnits uOpts pf
+checkUnits uOpts = mkAnalysis (checkUnits' uOpts)
+
+checkUnits' :: UnitOpts -> F.ProgramFile Annotation -> Report
+checkUnits' uOpts pf
   | Right mCons <- eCons = okReport mCons
   | Left exc    <- eCons = errReport exc
   where
@@ -274,8 +282,11 @@ replaceImplicitNames implicitMap = transformBi replace
 
 {-| Check and infer units-of-measure for a program
     This produces an output of all the unit information for a program -}
-inferUnits uOpts pf
-  | Right []   <- eVars = checkUnits uOpts pf
+inferUnits uOpts = mkAnalysis (inferUnits' uOpts)
+
+inferUnits' :: UnitOpts -> F.ProgramFile Annotation -> Report
+inferUnits' uOpts pf
+  | Right []   <- eVars = runAnalysis (checkUnits uOpts) pf
   | Right vars <- eVars = okReport vars
   | Left exc   <- eVars = errReport exc
   where
@@ -321,13 +332,13 @@ genUnitsModFile pf cu = alterModFileData f unitsCompiledDataLabel $ genModFile p
   where
     f _ = Just . LB.toStrict $ encode cu
 
-compileUnits :: UnitOpts -> [FileProgram] -> (String, [(Filename, B.ByteString)])
+compileUnits :: UnitOpts -> Refactoring String [FileProgram] [(Filename, B.ByteString)]
 compileUnits uOpts fileprogs = (concat reports, concat bins)
   where
     (reports, bins) = unzip [ (report, bin) | fileprog <- fileprogs
                                             , let (report, bin) = compileUnits' uOpts fileprog ]
 
-compileUnits' :: UnitOpts -> FileProgram -> (String, [(Filename, B.ByteString)])
+compileUnits' :: UnitOpts -> Refactoring String FileProgram [(Filename, B.ByteString)]
 compileUnits' uOpts pf
   | Right cu <- eCUnits = okReport cu
   | Left exc <- eCUnits = errReport exc
@@ -355,11 +366,10 @@ compileUnits' uOpts pf
 
 synthesiseUnits :: UnitOpts
                 -> Char
-                -> F.ProgramFile Annotation
-                -> (Report, F.ProgramFile Annotation)
+                -> Refactoring Report (F.ProgramFile Annotation) (F.ProgramFile Annotation)
 {-| Synthesis unspecified units for a program (after checking) -}
 synthesiseUnits uOpts marker pf
-  | Right []   <- eVars = (checkUnits uOpts pf, pf)
+  | Right []   <- eVars = (runAnalysis (checkUnits uOpts) pf, pf)
   | Right vars <- eVars = (okReport vars, pfFinal)
   | Left exc   <- eVars = (errReport exc, pfFinal)
   where

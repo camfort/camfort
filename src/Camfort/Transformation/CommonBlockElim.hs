@@ -39,6 +39,7 @@ import qualified Language.Fortran.Util.Position as FU
 import qualified Language.Fortran.ParserMonad as PM
 import qualified Language.Fortran.PrettyPrint as PP
 
+import Camfort.Analysis (Refactoring)
 import Camfort.Helpers
 import Camfort.Helpers.Syntax
 import Camfort.Analysis.Annotations
@@ -66,12 +67,11 @@ type (:?) a (b :: k) = a
 -- Top-level functions for eliminating common blocks in a set of files
 commonElimToModules ::
        Directory
-    -> [F.ProgramFile A]
-    -> (Report, [F.ProgramFile A], [F.ProgramFile A])
+    -> Refactoring Report [F.ProgramFile A] ([F.ProgramFile A], [F.ProgramFile A])
 
 -- Eliminates common blocks in a program directory (and convert to modules)
 commonElimToModules d pfs =
-    (r ++ r', pfs'', pfM)
+    (r ++ r', (pfs'', pfM))
   where
     (pfs', (r, cg)) = runState (analyseAndRmCommons pfs) ("", [])
     meta = F.MetaInfo PM.Fortran90 ""

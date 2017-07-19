@@ -12,6 +12,7 @@ module Camfort.Specification.StencilsSpec (spec) where
 import Control.Monad.Writer.Strict hiding (Sum, Product)
 import Data.List
 
+import Camfort.Analysis (runAnalysis, runAnalysisWithSummary)
 import Camfort.Helpers.Vec
 import Camfort.Input
 import Camfort.Specification.Stencils
@@ -235,7 +236,7 @@ spec =
 
     describe "integration test on inference for example2.f" $ do
       it "stencil infer" $
-         fst (callAndSummarise (infer AssignMode '=') program)
+         runAnalysisWithSummary (infer AssignMode '=') (fmap fst program)
            `shouldBe`
            "\ntests/fixtures/Specification/Stencils/example2.f\n\
             \(32:7)-(32:26)    stencil readOnce, backward(depth=1, dim=1) :: a\n\
@@ -244,7 +245,7 @@ spec =
                                      \+ centered(depth=1, dim=1)*pointed(dim=2) :: a"
 
       it "stencil check" $
-         fst (callAndSummarise (\p -> (check p, p)) program)
+         runAnalysisWithSummary check (fmap fst program)
            `shouldBe`
            "\ntests/fixtures/Specification/Stencils/example2.f\n\
             \(23:1)-(23:78)    Correct.\n(31:1)-(31:56)    Correct."
@@ -254,7 +255,7 @@ spec =
 
     describe "integration test on inference for example4.f" $
       it "stencil infer" $
-         fst (callAndSummarise (infer AssignMode '=') program)
+         runAnalysisWithSummary (infer AssignMode '=') (fmap fst program)
            `shouldBe`
             "\ntests/fixtures/Specification/Stencils/example4.f\n\
              \(6:8)-(6:33)    stencil readOnce, pointed(dim=1) :: x"
@@ -343,7 +344,7 @@ spec =
             let file = fixturesDir </> fileName
             programs <- runIO $ readParseSrcDir file []
             let [(program,_)] = programs
-            it testComment $  check program `shouldBe` expected
+            it testComment $ runAnalysis check program `shouldBe` expected
 
         assertStencilInferenceDir expected dir fileName testComment =
           let file         = dir </> fileName

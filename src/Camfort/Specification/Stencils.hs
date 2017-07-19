@@ -22,6 +22,7 @@ import Control.Arrow ((***), first, second)
 import Camfort.Specification.Stencils.CheckFrontend hiding (LogLine)
 import Camfort.Specification.Stencils.InferenceFrontend
 import Camfort.Specification.Stencils.Synthesis
+import Camfort.Analysis (Analysis, Refactoring, mkAnalysis)
 import Camfort.Analysis.Annotations
 -- These two are redefined here for ForPar ASTs
 import Camfort.Helpers
@@ -44,15 +45,9 @@ getBlocks = FAB.analyseBBlocks . FAR.analyseRenames . FA.initAnalysis
 -- Top-level of specification inference
 infer :: InferMode
       -> Char
-      -> F.ProgramFile Annotation
-      -> (String, F.ProgramFile Annotation)
-infer mode marker pf =
-    -- Append filename to any outputs
-    if null output
-       then ("", infer1)
-       else ("\n" ++ filename ++ "\n" ++ output, infer1)
-    where
-      filename = F.pfGetFilename pf
+      -> Analysis String (F.ProgramFile Annotation)
+infer mode marker = mkAnalysis $ \pf ->
+  let filename = F.pfGetFilename pf
       output = intercalate "\n"
              . filter (not . white)
              . map formatSpecNoComment $ infer2
@@ -60,6 +55,11 @@ infer mode marker pf =
       infer' = stencilInference mode marker . getBlocks $ pf
       infer1 = fmap FA.prevAnnotation . fst $ infer'
       infer2 = snd infer'
+  in
+    -- Append filename to any outputs
+    if null output
+       then ""
+       else "\n" ++ filename ++ "\n" ++ output
 
 --------------------------------------------------
 --         Stencil specification synthesis      --
@@ -68,8 +68,7 @@ infer mode marker pf =
 -- Top-level of specification synthesis
 synth :: InferMode
       -> Char
-      -> [F.ProgramFile A]
-      -> (String, [F.ProgramFile Annotation])
+      -> Refactoring String [F.ProgramFile A] [F.ProgramFile Annotation]
 synth mode marker = first normaliseMsg . foldr buildOutput (("",""), [])
   where
     buildOutput pf =
@@ -101,13 +100,12 @@ synth mode marker = first normaliseMsg . foldr buildOutput (("",""), [])
 --         Stencil specification checking       --
 --------------------------------------------------
 
-check :: F.ProgramFile Annotation -> String
-check pf =
-    -- Append filename to any outputs
-    if null output then "" else "\n" ++ filename ++ "\n" ++ output
-    where
-     filename = F.pfGetFilename pf
-     output = show . stencilChecking . getBlocks $ pf
+check :: Analysis String (F.ProgramFile Annotation)
+check = mkAnalysis $ \pf ->
+  -- Append filename to any outputs
+  let output   = show . stencilChecking . getBlocks $ pf
+      filename = F.pfGetFilename pf
+  in if null output then "" else "\n" ++ filename ++ "\n" ++ output
 
 -- Local variables:
 -- mode: haskell

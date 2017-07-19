@@ -16,7 +16,6 @@ module Camfort.Input
     -- * Datatypes and Aliases
   , FileProgram
     -- * Builders for analysers and refactorings
-  , callAndSummarise
   , doAnalysisReportWithModFiles
   , doAnalysisSummary
   , doRefactor
@@ -43,6 +42,12 @@ import qualified Language.Fortran.AST as F
 import qualified Language.Fortran.Parser.Any as FP
 import           Language.Fortran.Util.ModFile
 
+import Camfort.Analysis
+  ( Analysis
+  , Refactoring
+  , runAnalysis
+  , runAnalysisWithSummary
+  , runRefactoring )
 import Camfort.Analysis.Annotations
 import Camfort.Helpers
 import Camfort.Output
@@ -63,27 +68,18 @@ printExcludes inSrc excludes =
 
 -- | Perform an analysis that produces information of type @s@.
 doAnalysisSummary :: (Monoid s, Show' s)
-  => (FileProgram -> (s, FileProgram))
+  => Analysis s FileProgram
   -> FileOrDir -> [Filename] -> IO ()
 doAnalysisSummary aFun inSrc excludes = do
   printExcludes inSrc excludes
   ps <- readParseSrcDir inSrc excludes
-  let (out, _) = callAndSummarise aFun ps
+  let out = runAnalysisWithSummary aFun . fmap fst $ ps
   putStrLn . show' $ out
-
--- | Perform an analysis that produces information of type @s@.
-callAndSummarise :: (Monoid s)
-  => (FileProgram -> (s, a))
-  -> [(FileProgram, SourceText)]
-  -> (s, [a])
-callAndSummarise aFun =
-  foldl' (\(n, pss) (ps, _) ->
-            let (n', ps') = aFun ps
-            in (n `mappend` n', ps' : pss)) (mempty, [])
 
 -- | Perform an analysis which reports to the user, but does not output any files.
 doAnalysisReportWithModFiles
-  :: ([FileProgram] -> r)
+  :: (Monoid r)
+  => Analysis r FileProgram
   -> (r -> IO out)
   -> FileOrDir
   -> Maybe FileOrDir
@@ -93,7 +89,7 @@ doAnalysisReportWithModFiles rFun sFun inSrc incDir excludes = do
   printExcludes inSrc excludes
   ps <- readParseSrcDirWithModFiles inSrc incDir excludes
 
-  let report = rFun . fmap fst $ ps
+  let report = runAnalysisWithSummary rFun . fmap fst $ ps
   sFun report
 
 -- | Perform a refactoring that does not add any new files.
@@ -105,7 +101,7 @@ doRefactor rFun inSrc excludes outSrc =
   doRefactorWithModFiles rFun inSrc Nothing excludes outSrc
 
 doRefactorWithModFiles
-  :: ([FileProgram] -> (String, [FileProgram]))
+  :: Refactoring String [FileProgram] [FileProgram]
   -> FileOrDir
   -> Maybe FileOrDir
   -> [Filename]
@@ -114,19 +110,19 @@ doRefactorWithModFiles
 doRefactorWithModFiles rFun inSrc incDir excludes outSrc = do
   printExcludes inSrc excludes
   ps <- readParseSrcDirWithModFiles inSrc incDir excludes
-  let (report, ps') = rFun . fmap fst $ ps
+  let (report, ps') = runRefactoring rFun . fmap fst $ ps
   let outputs = reassociateSourceText (fmap snd ps) ps'
   outputFiles inSrc outSrc outputs
   pure report
 
 -- | Perform a refactoring that may create additional files.
 doRefactorAndCreate
-  :: ([FileProgram] -> (String, [FileProgram], [FileProgram]))
+  :: Refactoring String [FileProgram] ([FileProgram], [FileProgram])
   -> FileOrDir -> [Filename] -> FileOrDir -> IO String
 doRefactorAndCreate rFun inSrc excludes outSrc = do
   printExcludes inSrc excludes
   ps <- readParseSrcDir inSrc excludes
-  let (report, ps', ps'') = rFun . fmap fst $ ps
+  let (report, (ps', ps'')) = runRefactoring rFun . fmap fst $ ps
   let outputs = reassociateSourceText (fmap snd ps) ps'
   let outputs' = map (\pf -> (pf, B.empty)) ps''
   outputFiles inSrc outSrc outputs
