@@ -27,12 +27,14 @@ module Camfort.Specification.Stencils.InferenceFrontend
     InferMode(..)
     -- * Functions
   , stencilInference
+  , stencilSynthesis
   ) where
 
 import Control.Monad.State.Strict
 import Control.Monad.Reader
 import Control.Monad.Writer.Strict hiding (Product)
 
+import Camfort.Analysis (Analysis, Refactoring, mkAnalysis, runRefactoring)
 import Camfort.Analysis.CommentAnnotator
 import Camfort.Specification.Stencils.CheckBackend (synToAst)
 import Camfort.Specification.Stencils.CheckFrontend
@@ -63,6 +65,9 @@ import qualified Data.Map as M
 import qualified Data.Set as S
 import Data.Maybe
 import Data.Monoid ((<>))
+
+type StencilsAnalysis    r a    = Analysis    r a
+type StencilsRefactoring r a a' = Refactoring r a a'
 
 -- Define modes of interaction with the inference
 data InferMode =
@@ -126,21 +131,33 @@ specToSynSpec spec = let ?renv = [] in
 -- | Main stencil inference code
 stencilInference :: InferMode
                  -> Char
-                 -> F.ProgramFile (FA.Analysis A)
-                 -> (F.ProgramFile (FA.Analysis A), [LogLine])
-stencilInference mode marker pf =
-    (F.ProgramFile mi pus', log1)
+                 -> StencilsAnalysis [LogLine] (F.ProgramFile (FA.Analysis A))
+stencilInference mode marker = mkAnalysis $ \pf ->
+  fst $ runRefactoring (stencilSynthesis' mode marker) (pf, [])
+
+stencilSynthesis :: Char
+                 -> StencilsRefactoring [LogLine]
+                    (F.ProgramFile (FA.Analysis A))
+                    (F.ProgramFile (FA.Analysis A))
+stencilSynthesis marker pf = stencilSynthesis' Synth marker (pf', _log0)
   where
     -- Parse specification annotations and include them into the syntax tree
     -- that way if generate specifications at the same place we can
     -- decide whether to synthesise or not
 
     -- TODO: might want to output log0 somehow (though it doesn't fit LogLine)
-    (pf'@(F.ProgramFile mi pus), _log0) =
-         if mode == Synth
-          then runWriter (annotateComments Parser.specParser (const . const . pure $ ()) pf)
-          else (pf, [])
+    (pf', _log0) =
+      runWriter (annotateComments Parser.specParser (const . const . pure $ ()) pf)
 
+-- | Main stencil synthesis code
+stencilSynthesis' :: InferMode
+                  -> Char
+                  -> StencilsRefactoring [LogLine]
+                     (F.ProgramFile (FA.Analysis A), [LogLine])
+                     (F.ProgramFile (FA.Analysis A))
+stencilSynthesis' mode marker (pf@(F.ProgramFile mi pus), _log0) =
+    (log1, F.ProgramFile mi pus')
+  where
     (pus', log1)    = runWriter (transformBiM perPU pus)
     checkRes        = stencilChecking pf
 
@@ -152,7 +169,7 @@ stencilInference mode marker pf =
         let -- Analysis/infer on blocks of just this program unit
             blocksM = mapM perBlockInfer (F.programUnitBody pu)
             -- Update the program unit body with these blocks
-            pum = (F.updateProgramUnitBody pu) <$> blocksM
+            pum = F.updateProgramUnitBody pu <$> blocksM
 
             -- perform reaching definitions analysis
             rd = FAD.reachingDefinitions dm gr
@@ -169,14 +186,14 @@ stencilInference mode marker pf =
 
             (pu', log) = runInferer checkRes mode marker mi ivMap flTo pum
         tell log
-        return pu'
+        pure pu'
 
-    perPU pu = return pu
+    perPU pu = pure pu
 
     -- get map of AST-Block-ID ==> corresponding AST-Block
-    bm    = FAD.genBlockMap pf'
+    bm    = FAD.genBlockMap pf
     -- get map of program unit ==> basic block graph
-    bbm   = FAB.genBBlockMap pf'
+    bbm   = FAB.genBBlockMap pf
     -- get map of variable name ==> { defining AST-Block-IDs }
     dm    = FAD.genDefMap bm
 

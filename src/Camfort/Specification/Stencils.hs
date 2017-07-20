@@ -22,7 +22,8 @@ import Control.Arrow ((***), first, second)
 import Camfort.Specification.Stencils.CheckFrontend hiding (LogLine)
 import Camfort.Specification.Stencils.InferenceFrontend
 import Camfort.Specification.Stencils.Synthesis
-import Camfort.Analysis (Analysis, Refactoring, mkAnalysis)
+import Camfort.Analysis
+  (Analysis, Refactoring, mkAnalysis, runAnalysis, runRefactoring)
 import Camfort.Analysis.Annotations
 -- These two are redefined here for ForPar ASTs
 import Camfort.Helpers
@@ -50,11 +51,9 @@ infer mode marker = mkAnalysis $ \pf ->
   let filename = F.pfGetFilename pf
       output = intercalate "\n"
              . filter (not . white)
-             . map formatSpecNoComment $ infer2
-      white = all (\x -> (x == ' ') || (x == '\t'))
-      infer' = stencilInference mode marker . getBlocks $ pf
-      infer1 = fmap FA.prevAnnotation . fst $ infer'
-      infer2 = snd infer'
+             . map formatSpecNoComment $ report
+      white  = all (\x -> (x == ' ') || (x == '\t'))
+      report = runAnalysis (stencilInference mode marker) . getBlocks $ pf
   in
     -- Append filename to any outputs
     if null output
@@ -84,7 +83,7 @@ synth mode marker = first normaliseMsg . foldr buildOutput (("",""), [])
         case checkFailure checkRes of
           Nothing  ->
             let inference = fmap FA.prevAnnotation .
-                            fst $ stencilInference Synth marker blocks
+                            snd $ runRefactoring (stencilSynthesis marker) blocks
                   in Right (maybe "" show (checkWarnings checkRes), inference)
           Just err -> Left $ show err
 
