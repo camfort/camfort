@@ -149,13 +149,13 @@ stencilsCheck inSrc excludes = do
    putStrLn $ "Checking stencil specs for '" ++ inSrc ++ "'"
    doAnalysisSummary Stencils.check inSrc excludes
 
-stencilsInfer inSrc excludes inferMode = do
+stencilsInfer inSrc excludes useEval = do
    putStrLn $ "Inferring stencil specs for '" ++ inSrc ++ "'"
-   let rfun = Stencils.infer inferMode '='
+   let rfun = Stencils.infer useEval '='
    doAnalysisSummary rfun inSrc excludes
 
-stencilsSynth inSrc excludes inferMode annType outSrc = do
+stencilsSynth inSrc excludes annType outSrc = do
    putStrLn $ "Synthesising stencil specs for '" ++ inSrc ++ "'"
-   let rfun = Stencils.synth inferMode (markerChar annType)
+   let rfun = Stencils.synth (markerChar annType)
    report <- doRefactor rfun inSrc excludes outSrc
    putStrLn report

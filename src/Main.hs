@@ -19,7 +19,6 @@ module Main (main) where
 
 import Camfort.Input (defaultValue)
 import Camfort.Functionality
-import Camfort.Specification.Stencils.InferenceFrontend (InferMode(..))
 import Camfort.Specification.Units.Monad (LiteralsOpt(LitMixed))
 
 import Data.Maybe (fromMaybe)
@@ -32,7 +31,7 @@ import Options.Applicative
 data Command = CmdCount ReadOptions
              | CmdAST ReadOptions
              | CmdStencilsCheck ReadOptions
-             | CmdStencilsInfer StencilsOptions
+             | CmdStencilsInfer StencilsInferOptions
              | CmdStencilsSynth StencilsSynthOptions
              | CmdUnitsSuggest UnitsOptions
              | CmdUnitsCheck UnitsOptions
@@ -60,13 +59,6 @@ data WriteOptions = WriteFile { _outputFile :: String }
                   | WriteInplace
 
 
--- | Options used by stencil commands.
-data StencilsOptions = StencilsOptions
-  { soReadOptions  :: ReadOptions
-  , soInferMode    :: InferMode
-  }
-
-
 -- | Options used by all unit commands.
 data UnitsOptions = UnitsOptions
   { uoReadOptions :: ReadOptions
@@ -92,8 +84,14 @@ data UnitsSynthOptions = UnitsSynthOptions
   }
 
 
+data StencilsInferOptions = StencilsInferOptions
+  { sioReadOptions :: ReadOptions
+  , sioUseEval     :: Bool
+  }
+
+
 data StencilsSynthOptions = StencilsSynthOptions
-  { ssoStencilsOptions    :: StencilsOptions
+  { ssoReadOptions        :: ReadOptions
   , ssoWriteOptions       :: WriteOptions
   , ssoAnnotationOptions  :: AnnotationOptions
   }
@@ -148,11 +146,11 @@ writeOptions = (fmap WriteFile . fileArgument $
                       <> help "write in place (replaces input files)"))
 
 
-stencilsOptions :: Parser StencilsOptions
-stencilsOptions = fmap StencilsOptions
+stencilsInferOptions :: Parser StencilsInferOptions
+stencilsInferOptions = fmap StencilsInferOptions
   readOptions <*> evalOption
   where
-    evalOption = flag AssignMode EvalMode
+    evalOption = switch
       (    long "eval"
         <> help "provide additional evaluation reporting"
         <> internal)
@@ -160,7 +158,7 @@ stencilsOptions = fmap StencilsOptions
 
 stencilsSynthOptions :: Parser StencilsSynthOptions
 stencilsSynthOptions = fmap StencilsSynthOptions
-  stencilsOptions <*> writeOptions <*> annotationOptions
+  readOptions <*> writeOptions <*> annotationOptions
 
 
 unitsOptions :: Parser UnitsOptions
@@ -216,7 +214,7 @@ cmdAST   = fmap CmdAST   readOptions
 
 cmdStencilsCheck, cmdStencilsInfer, cmdStencilsSynth :: Parser Command
 cmdStencilsCheck = fmap CmdStencilsCheck readOptions
-cmdStencilsInfer = fmap CmdStencilsInfer stencilsOptions
+cmdStencilsInfer = fmap CmdStencilsInfer stencilsInferOptions
 cmdStencilsSynth = fmap CmdStencilsSynth stencilsSynthOptions
 
 
@@ -325,15 +323,17 @@ main = do
     getOutputFile _ (WriteFile f) = f
     getOutputFile inp WriteInplace = inp
     runRO ro f = f (inputSource ro) (getExcludes ro)
-    runSO so f =
-      runRO (soReadOptions so) f (soInferMode so)
+    runSIO sio f =
+      let ro      = sioReadOptions sio
+          useEval = sioUseEval sio
+          inFile  = inputSource ro
+      in runRO ro f useEval
     runSSO sso f =
       let ao     = ssoAnnotationOptions sso
           wo     = ssoWriteOptions sso
-          so     = ssoStencilsOptions sso
-          ro     = soReadOptions so
+          ro     = ssoReadOptions sso
           inFile = inputSource ro
-      in runSO so f (annotationType ao) (getOutputFile inFile wo)
+      in runRO ro f (annotationType ao) (getOutputFile inFile wo)
     runUO uo f =
       let ro = uoReadOptions uo
       in runRO ro f (literals uo) (debug uo) (includeDir uo)
@@ -355,7 +355,7 @@ main = do
     runCommand (CmdAST ro)                = runRO ro ast
     runCommand (CmdCount ro)              = runRO ro countVarDecls
     runCommand (CmdStencilsCheck ro)      = runRO ro stencilsCheck
-    runCommand (CmdStencilsInfer so)      = runSO so stencilsInfer
+    runCommand (CmdStencilsInfer so)      = runSIO so stencilsInfer
     runCommand (CmdStencilsSynth sso)     = runSSO sso stencilsSynth
     runCommand (CmdUnitsSuggest uo)       = runUO uo unitsCriticals
     runCommand (CmdUnitsCheck uo)         = runUO uo unitsCheck

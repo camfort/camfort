@@ -23,10 +23,8 @@
 
 module Camfort.Specification.Stencils.InferenceFrontend
   (
-    -- * Datatypes and Aliases
-    InferMode(..)
     -- * Functions
-  , stencilInference
+    stencilInference
   , stencilSynthesis
   ) where
 
@@ -69,14 +67,6 @@ import Data.Monoid ((<>))
 type StencilsAnalysis    r a    = Analysis    r a
 type StencilsRefactoring r a a' = Refactoring r a a'
 
--- Define modes of interaction with the inference
-data InferMode =
-  AssignMode | EvalMode | Synth
-  deriving (Eq, Show, Data, Read)
-
-instance Default InferMode where
-    defaultValue = AssignMode
-
 data InferState = IS {
      ivMap        :: FAD.InductionVarMapByASTBlock
    , visitedNodes :: [Int]}
@@ -86,7 +76,10 @@ data InferEnv = IE
     -- | Known (existing) specifications.
     ieExistingSpecs :: [(Specification, FU.SrcSpan, Variable)]
   , ieFlowsGraph    :: FAD.FlowsGraph A
-  , ieInferMode     :: InferMode
+  -- | Provide additional evaluation information when active.
+  , ieUseEval       :: Bool
+  -- | Instruct the inferer to perform synthesis.
+  , ieDoSynth       :: Bool
   , ieMarker        :: Char
   , ieMetaInfo      :: F.MetaInfo
   }
@@ -100,24 +93,34 @@ type Inferer = WriterT [LogLine]
                     (State InferState))
 
 runInferer :: CheckResult
-           -> InferMode
+           -> Bool
+           -> Bool
            -> Char
            -> F.MetaInfo
            -> FAD.InductionVarMapByASTBlock
            -> FAD.FlowsGraph A
            -> Inferer a
            -> (a, [LogLine])
-runInferer cr mode marker mi ivmap flTo =
+runInferer cr useEval doSynth marker mi ivmap flTo =
     flip evalState (IS ivmap [])
   . flip runReaderT env
   . runWriterT
   where env = IE
           { ieExistingSpecs = existingStencils cr
           , ieFlowsGraph    = flTo
-          , ieInferMode     = mode
+          , ieUseEval       = useEval
+          , ieDoSynth       = doSynth
           , ieMarker        = marker
           , ieMetaInfo      = mi
           }
+
+-- | Run something only when eval mode is active.
+whenEval :: Inferer () -> Inferer ()
+whenEval i = fmap ieUseEval ask >>= (`when` i)
+
+-- | Run something only when we should perform synthesis.
+ifSynth :: Inferer a -> Inferer a -> Inferer a
+ifSynth t e = fmap ieDoSynth ask >>= (\doSynth -> if doSynth then t else e)
 
 -- | Attempt to convert a 'Parser.Specification' into a 'Specification'.
 --
@@ -129,17 +132,17 @@ specToSynSpec spec = let ?renv = [] in
                          Right x  -> Just x
 
 -- | Main stencil inference code
-stencilInference :: InferMode
+stencilInference :: Bool
                  -> Char
                  -> StencilsAnalysis [LogLine] (F.ProgramFile (FA.Analysis A))
-stencilInference mode marker = mkAnalysis $ \pf ->
-  fst $ runRefactoring (stencilSynthesis' mode marker) (pf, [])
+stencilInference useEval marker = mkAnalysis $ \pf ->
+  fst $ runRefactoring (stencilSynthesis' useEval False marker) (pf, [])
 
 stencilSynthesis :: Char
                  -> StencilsRefactoring [LogLine]
                     (F.ProgramFile (FA.Analysis A))
                     (F.ProgramFile (FA.Analysis A))
-stencilSynthesis marker pf = stencilSynthesis' Synth marker (pf', _log0)
+stencilSynthesis marker pf = stencilSynthesis' False True marker (pf', _log0)
   where
     -- Parse specification annotations and include them into the syntax tree
     -- that way if generate specifications at the same place we can
@@ -150,12 +153,13 @@ stencilSynthesis marker pf = stencilSynthesis' Synth marker (pf', _log0)
       runWriter (annotateComments Parser.specParser (const . const . pure $ ()) pf)
 
 -- | Main stencil synthesis code
-stencilSynthesis' :: InferMode
+stencilSynthesis' :: Bool
+                  -> Bool
                   -> Char
                   -> StencilsRefactoring [LogLine]
                      (F.ProgramFile (FA.Analysis A), [LogLine])
                      (F.ProgramFile (FA.Analysis A))
-stencilSynthesis' mode marker (pf@(F.ProgramFile mi pus), _log0) =
+stencilSynthesis' useEval doSynth marker (pf@(F.ProgramFile mi pus), _log0) =
     (log1, F.ProgramFile mi pus')
   where
     (pus', log1)    = runWriter (transformBiM perPU pus)
@@ -184,7 +188,7 @@ stencilSynthesis' mode marker (pf@(F.ProgramFile mi pus), _log0) =
             -- identify every loop by its back-edge
             ivMap = FAD.genInductionVarMapByASTBlock beMap gr
 
-            (pu', log) = runInferer checkRes mode marker mi ivMap flTo pum
+            (pu', log) = runInferer checkRes useEval doSynth marker mi ivMap flTo pum
         tell log
         pure pu'
 
@@ -208,8 +212,6 @@ genSpecsAndReport span lhsIxs block = do
   -- Get the induction variables relative to the current block
   (IS ivmap _) <- get
   let ivs = extractRelevantIVS ivmap block
-
-  mode         <- fmap ieInferMode ask
   flowsGraph   <- fmap ieFlowsGraph ask
   -- Generate specification for the
   let ((specs, visited), evalInfos) = runWriter $ genSpecifications flowsGraph ivs lhsIxs block
@@ -219,7 +221,7 @@ genSpecsAndReport span lhsIxs block = do
   tell [ (span, Left specs) ]
 
   -- Evaluation mode information reporting:
-  when (mode == EvalMode) $ do
+  whenEval $ do
     tell [ (span, Right ("EVALMODE: assign to relative array subscript\
                          \ (tag: tickAssign)","")) ]
     forM_ evalInfos $ \evalInfo ->
@@ -242,7 +244,6 @@ perBlockInfer' _ b@F.BlComment{} = pure b
 
 perBlockInfer' inDo b@(F.BlStatement ann span@(FU.SrcSpan lp _) _ stmnt) = do
   (IS ivmap visitedStmts) <- get
-  mode <- fmap ieInferMode ask
   let label = fromMaybe (-1) (FA.insLabel ann)
   if label `elem` visitedStmts
   then -- This statement has been part of a visited dataflow path
@@ -252,44 +253,45 @@ perBlockInfer' inDo b@(F.BlStatement ann span@(FU.SrcSpan lp _) _ stmnt) = do
     userSpecs <- fmap ieExistingSpecs ask
     let lhses = [lhs | (F.StExpressionAssign _ _ lhs _)
                          <- universe stmnt :: [F.Statement (FA.Analysis A)]]
-    specs <- mapM (genSpecsFor ivmap mode) lhses
+    specs <- mapM (genSpecsFor ivmap) lhses
     marker <- fmap ieMarker ask
     mi     <- fmap ieMetaInfo ask
-    if mode == Synth && not (null specs) && specs /= [[]]
-    then
-      let specComment = Synth.formatSpec mi tabs marker (span, Left specs')
-          specs' = concatMap (mapMaybe noSpecAlready) specs
+    ifSynth
+      (if not (null specs) && specs /= [[]]
+       then
+         let specComment = Synth.formatSpec mi tabs marker (span, Left specs')
+             specs' = concatMap (mapMaybe noSpecAlready) specs
 
-          noSpecAlready (vars, spec) =
-            if null vars'
-            then Nothing
-            else Just (vars', spec)
-            where vars' = filter (\v -> (spec, span, v) `notElem` userSpecs) vars
+             noSpecAlready (vars, spec) =
+               if null vars'
+               then Nothing
+               else Just (vars', spec)
+               where vars' = filter (\v -> (spec, span, v) `notElem` userSpecs) vars
 
-          -- Indentation for the specification to match the code
-          tabs  = FU.posColumn lp - 1
-          (FU.SrcSpan loc _) = span
-          span' = FU.SrcSpan (lp {FU.posColumn = 1}) (lp {FU.posColumn = 1})
-          ann'  = ann { FA.prevAnnotation = (FA.prevAnnotation ann) { refactored = Just loc } }
-      in pure (F.BlComment ann' span' (F.Comment specComment))
-    else return b
+             -- Indentation for the specification to match the code
+             tabs  = FU.posColumn lp - 1
+             (FU.SrcSpan loc _) = span
+             span' = FU.SrcSpan (lp {FU.posColumn = 1}) (lp {FU.posColumn = 1})
+             ann'  = ann { FA.prevAnnotation = (FA.prevAnnotation ann) { refactored = Just loc } }
+         in pure (F.BlComment ann' span' (F.Comment specComment))
+       else pure b)
+       (pure b)
   where
     -- Assignment to a variable
-    genSpecsFor _ _ (F.ExpValue _ _ (F.ValVariable _)) | inDo = genSpecsAndReport span [] b
+    genSpecsFor _ (F.ExpValue _ _ (F.ValVariable _)) | inDo = genSpecsAndReport span [] b
     -- Assignment to something else...
-    genSpecsFor ivmap mode lhs =
+    genSpecsFor ivmap lhs =
       case isArraySubscript lhs of
         Just subs ->
           -- Left-hand side is a subscript-by relative index or by a range
           case neighbourIndex ivmap subs of
             Just lhs -> genSpecsAndReport span lhs b
-            Nothing  -> if mode == EvalMode
-                        then do
-                          tell [(span , Right ("EVALMODE: LHS is an array\
-                                              \ subscript we can't handle \
-                                              \(tag: LHSnotHandled)",""))]
-                          pure []
-                        else pure []
+            Nothing  -> do
+              whenEval $
+                tell [(span , Right ("EVALMODE: LHS is an array\
+                                     \ subscript we can't handle \
+                                     \(tag: LHSnotHandled)",""))]
+              pure []
         -- Not an assign we are interested in
         _ -> pure []
 

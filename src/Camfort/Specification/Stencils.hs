@@ -15,7 +15,7 @@
 -}
 
 module Camfort.Specification.Stencils
- (InferMode, infer, check, synth) where
+ (infer, check, synth) where
 
 import Control.Arrow ((***), first, second)
 
@@ -44,16 +44,16 @@ getBlocks = FAB.analyseBBlocks . FAR.analyseRenames . FA.initAnalysis
 --------------------------------------------------
 
 -- Top-level of specification inference
-infer :: InferMode
+infer :: Bool
       -> Char
       -> Analysis String (F.ProgramFile Annotation)
-infer mode marker = mkAnalysis $ \pf ->
+infer useEval marker = mkAnalysis $ \pf ->
   let filename = F.pfGetFilename pf
       output = intercalate "\n"
              . filter (not . white)
              . map formatSpecNoComment $ report
       white  = all (\x -> (x == ' ') || (x == '\t'))
-      report = runAnalysis (stencilInference mode marker) . getBlocks $ pf
+      report = runAnalysis (stencilInference useEval marker) . getBlocks $ pf
   in
     -- Append filename to any outputs
     if null output
@@ -65,10 +65,9 @@ infer mode marker = mkAnalysis $ \pf ->
 --------------------------------------------------
 
 -- Top-level of specification synthesis
-synth :: InferMode
-      -> Char
+synth :: Char
       -> Refactoring String [F.ProgramFile A] [F.ProgramFile Annotation]
-synth mode marker = first normaliseMsg . foldr buildOutput (("",""), [])
+synth marker = first normaliseMsg . foldr buildOutput (("",""), [])
   where
     buildOutput pf =
       let f = F.pfGetFilename pf

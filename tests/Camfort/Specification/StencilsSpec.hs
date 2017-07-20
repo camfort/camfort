@@ -21,7 +21,6 @@ import Camfort.Specification.Stencils.Generate
 import Camfort.Specification.Stencils.Synthesis
 import Camfort.Specification.Stencils.Model
 import Camfort.Specification.Stencils.InferenceBackend
-import Camfort.Specification.Stencils.InferenceFrontend
 import Camfort.Specification.Stencils.Syntax
 import qualified Language.Fortran.AST as F
 import Language.Fortran.Parser.Any (deduceVersion)
@@ -236,7 +235,7 @@ spec =
 
     describe "integration test on inference for example2.f" $ do
       it "stencil infer" $
-         runAnalysisWithSummary (infer AssignMode '=') (fmap fst program)
+         runAnalysisWithSummary (infer False '=') (fmap fst program)
            `shouldBe`
            "\ntests/fixtures/Specification/Stencils/example2.f\n\
             \(32:7)-(32:26)    stencil readOnce, backward(depth=1, dim=1) :: a\n\
@@ -255,7 +254,7 @@ spec =
 
     describe "integration test on inference for example4.f" $
       it "stencil infer" $
-         runAnalysisWithSummary (infer AssignMode '=') (fmap fst program)
+         runAnalysisWithSummary (infer False '=') (fmap fst program)
            `shouldBe`
             "\ntests/fixtures/Specification/Stencils/example4.f\n\
              \(6:8)-(6:33)    stencil readOnce, pointed(dim=1) :: x"
@@ -324,13 +323,13 @@ spec =
 
     describe "inference" $ do
       it "provides more information with evalmode on" $
-        assertStencilInference EvalMode "example-no-specs-simple.f90"
+        assertStencilInference True "example-no-specs-simple.f90"
           "\ntests/fixtures/Specification/Stencils/example-no-specs-simple.f90\n\
           \(6:6)-(6:16)    stencil readOnce, pointed(dim=1) :: a\n\
           \(6:6)-(6:16)    EVALMODE: assign to relative array subscript (tag: tickAssign)\n\n\
           \(6:6)-(6:16)    EVALMODE: dimensionality=1 :: a\n"
       it "provides less information with evalmode off" $
-        assertStencilInference AssignMode "example-no-specs-simple.f90"
+        assertStencilInference False "example-no-specs-simple.f90"
           "\ntests/fixtures/Specification/Stencils/example-no-specs-simple.f90\n\
           \(6:6)-(6:16)    stencil readOnce, pointed(dim=1) :: a"
 
@@ -357,12 +356,12 @@ spec =
             let [(program,_)] = programs
             it testComment $ runAnalysis check program `shouldBe` expected
 
-        assertStencilInference :: InferMode -> FilePath -> String -> Expectation
-        assertStencilInference mode fileName expected =
+        assertStencilInference :: Bool -> FilePath -> String -> Expectation
+        assertStencilInference useEval fileName expected =
           let file         = fixturesDir </> fileName
           in do
             [(program,_)] <- readParseSrcDir file []
-            runAnalysis (infer mode '=') program `shouldBe` expected
+            runAnalysis (infer useEval '=') program `shouldBe` expected
 
         assertStencilSynthDir expected dir fileName testComment =
           let file         = dir </> fileName
@@ -373,8 +372,8 @@ spec =
             programSrc       <- runIO $ readFile file
             synthExpectedSrc <- runIO $ readFile expectedFile
             it testComment $
-               (map (B.unpack . runIdentity . flip (reprint (refactoring version)) (B.pack programSrc))
-                 (snd . synth AssignMode '=' . fmap fst $ program))
+               map (B.unpack . runIdentity . flip (reprint (refactoring version)) (B.pack programSrc))
+                 (snd . synth '=' . fmap fst $ program)
                 `shouldBe` [synthExpectedSrc]
 
         assertStencilSynthOnFile = assertStencilSynthDir
@@ -388,7 +387,7 @@ spec =
             in do
               program          <- runIO $ readParseSrcDir file []
               programSrc       <- runIO $ readFile file
-              it testComment $ (fst . synth AssignMode '=' . fmap fst $ program)
+              it testComment $ (fst . synth '=' . fmap fst $ program)
                 `shouldBe` expectedResponse
 
         assertStencilSynthResponseOut fileName testComment expectedResponse =
