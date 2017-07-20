@@ -262,25 +262,25 @@ spec =
 
     describe "integration test on inference for example5" $
       describe "stencil synth" $ do
-        assertStencilInferenceNoWarn "example5.f"
+        assertStencilSynthNoWarn "example5.f"
           "inserts correct comment types for old fortran"
-        assertStencilInferenceNoWarn "example5.f90"
+        assertStencilSynthNoWarn "example5.f90"
           "inserts correct comment types for modern fortran"
 
     describe "synth on files already containing stencils" $ do
-      assertStencilInferenceNoWarn "example6.f"
+      assertStencilSynthNoWarn "example6.f"
         "complements existing stencils (when second missing)"
-      assertStencilInferenceNoWarn "example7.f"
+      assertStencilSynthNoWarn "example7.f"
         "complements existing stencils (when none missing)"
-      assertStencilInferenceNoWarn "example8.f"
+      assertStencilSynthNoWarn "example8.f"
         "complements existing stencils (when first missing)"
-      assertStencilInferenceNoWarn "example9.f"
+      assertStencilSynthNoWarn "example9.f"
         "complements existing stencils (when none missing - only one stencil)"
-      assertStencilInferenceNoWarn "example10.f"
+      assertStencilSynthNoWarn "example10.f"
         "complements existing stencils (when one missing - inside if)"
-      assertStencilInferenceNoWarn "example13.f"
+      assertStencilSynthNoWarn "example13.f"
         "complements existing stencils (when using regions references)"
-      assertStencilInferenceNoWarn "example11.f"
+      assertStencilSynthNoWarn "example11.f"
         "inserts correct access specification"
       assertStencilSynthResponse "example12.f"
         "reports errors when conflicting stencil exists"
@@ -322,9 +322,20 @@ spec =
 \        but at (9:8)-(9:29) the code behaves as\n\
 \                access readOnce, forward(depth=1, dim=1) :: a\n"
 
+    describe "inference" $ do
+      it "provides more information with evalmode on" $
+        assertStencilInference EvalMode "example-no-specs-simple.f90"
+          "\ntests/fixtures/Specification/Stencils/example-no-specs-simple.f90\n\
+          \(6:6)-(6:16)    stencil readOnce, pointed(dim=1) :: a\n\
+          \(6:6)-(6:16)    EVALMODE: assign to relative array subscript (tag: tickAssign)\n\n\
+          \(6:6)-(6:16)    EVALMODE: dimensionality=1 :: a\n"
+      it "provides less information with evalmode off" $
+        assertStencilInference AssignMode "example-no-specs-simple.f90"
+          "\ntests/fixtures/Specification/Stencils/example-no-specs-simple.f90\n\
+          \(6:6)-(6:16)    stencil readOnce, pointed(dim=1) :: a"
 
     describe "synth/inference works correctly with nested loops" $ do
-      assertStencilInferenceNoWarn "nestedLoops.f90" "inserts correct specification"
+      assertStencilSynthNoWarn "nestedLoops.f90" "inserts correct specification"
 
     -- Run over all the samples and test fixtures
 
@@ -335,7 +346,7 @@ spec =
         sampleFiles          = filter hasExpectedSrcFile sampleDirConts
 
     describe "sample file tests" $
-        mapM_ (\file -> assertStencilInferenceSample
+        mapM_ (\file -> assertStencilSynthSample
                 file ("produces correct output file for " ++ file))
         sampleFiles
 
@@ -346,7 +357,14 @@ spec =
             let [(program,_)] = programs
             it testComment $ runAnalysis check program `shouldBe` expected
 
-        assertStencilInferenceDir expected dir fileName testComment =
+        assertStencilInference :: InferMode -> FilePath -> String -> Expectation
+        assertStencilInference mode fileName expected =
+          let file         = fixturesDir </> fileName
+          in do
+            [(program,_)] <- readParseSrcDir file []
+            runAnalysis (infer mode '=') program `shouldBe` expected
+
+        assertStencilSynthDir expected dir fileName testComment =
           let file         = dir </> fileName
               version      = deduceVersion file
               expectedFile = expected dir fileName
@@ -359,10 +377,10 @@ spec =
                  (snd . synth AssignMode '=' . fmap fst $ program))
                 `shouldBe` [synthExpectedSrc]
 
-        assertStencilInferenceOnFile = assertStencilInferenceDir
+        assertStencilSynthOnFile = assertStencilSynthDir
           (\d f -> d </> getExpectedSrcFileName f) fixturesDir
 
-        assertStencilInferenceSample = assertStencilInferenceDir
+        assertStencilSynthSample = assertStencilSynthDir
           (\d f -> d </> "expected" </> f) samplesDir
 
         assertStencilSynthResponse fileName testComment expectedResponse =
@@ -375,10 +393,10 @@ spec =
 
         assertStencilSynthResponseOut fileName testComment expectedResponse =
           describe testComment $ do
-            assertStencilInferenceOnFile fileName "correct synthesis"
+            assertStencilSynthOnFile fileName "correct synthesis"
             assertStencilSynthResponse fileName "correct output" expectedResponse
 
-        assertStencilInferenceNoWarn fileName testComment = assertStencilSynthResponseOut fileName testComment ""
+        assertStencilSynthNoWarn fileName testComment = assertStencilSynthResponseOut fileName testComment ""
         fixturesDir = "tests" </> "fixtures" </> "Specification" </> "Stencils"
         samplesDir  = "samples" </> "stencils"
         getExpectedSrcFileName file =
