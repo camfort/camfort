@@ -23,7 +23,6 @@ module Camfort.Analysis.Annotations
   -- * Annotation Datatype
     Annotation(..)
   , A
-  , UA
   , unitAnnotation
   -- ** Predicates
   , pRefactored
@@ -44,9 +43,6 @@ module Camfort.Analysis.Annotations
 import Data.Data
 import Data.Maybe (isJust)
 
-import Camfort.Specification.Units.Environment
-import qualified Camfort.Specification.Units.Parser.Types as P
-import Camfort.Analysis.CommentAnnotator
 import qualified Camfort.Specification.Stencils.Syntax as StencilSpec
 import qualified Camfort.Specification.Stencils.Parser.Types as StencilComment
 
@@ -116,6 +112,7 @@ getAstSpec s = case stencilSpec s of
 pRefactored :: Annotation -> Bool
 pRefactored = isJust . refactored
 
+unitAnnotation :: Annotation
 unitAnnotation = A
   { unitVar      = 0
    , number       = 0
@@ -127,25 +124,6 @@ unitAnnotation = A
  }
 
 --------------------------------------------------
--- Convenience name for a common annotation type.
-type UA = FA.Analysis (UnitAnnotation A)
-
--- Instances for embedding parsed specifications into the AST
-instance ASTEmbeddable UA P.UnitStatement where
-  annotateWithAST ann ast =
-    onPrev (\ ann -> ann { unitSpec = Just ast }) ann
-
--- Link annotation comments to declaration statements
-instance Linkable UA where
-  link ann (b@(F.BlStatement _ _ _ F.StDeclaration {})) =
-      onPrev (\ ann -> ann { unitBlock = Just b }) ann
-  link ann b = ann
-  linkPU ann (pu@(F.PUFunction {})) =
-      onPrev (\ ann -> ann { unitPU = Just pu }) ann
-  linkPU ann (pu@(F.PUSubroutine {})) =
-      onPrev (\ ann -> ann { unitPU = Just pu }) ann
-  linkPU ann b = ann
-
 -- Helpers for transforming the 'previous' annotation
 onPrev :: (a -> a) -> FA.Analysis a -> FA.Analysis a
 onPrev f ann = ann { FA.prevAnnotation = f (FA.prevAnnotation ann) }

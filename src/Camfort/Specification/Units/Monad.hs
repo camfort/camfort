@@ -39,11 +39,10 @@ import GHC.Generics (Generic)
 import qualified Data.Map.Strict as M
 import qualified Data.IntMap.Strict as IM
 import qualified Data.Set as S
-import qualified Language.Fortran.Analysis.Renaming as FAR
 import qualified Language.Fortran.AST as F
 import Language.Fortran.Util.ModFile
-import Camfort.Specification.Units.Environment (UnitInfo, Constraints(..), VV, PP)
-import Camfort.Analysis.Annotations (UA)
+import Camfort.Specification.Units.Annotation (UA)
+import Camfort.Specification.Units.Environment (UnitInfo, Constraints, VV, PP)
 
 
 -- | Some options about how to handle literals.
@@ -146,6 +145,7 @@ data UnitState = UnitState
   , usConstraints  :: Constraints }
   deriving (Show, Data)
 
+unitState0 :: F.ProgramFile UA -> UnitState
 unitState0 pf = UnitState { usProgramFile  = pf
                           , usVarUnitMap   = M.empty
                           , usGivenVarSet  = S.empty

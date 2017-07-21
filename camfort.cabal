@@ -57,6 +57,7 @@ library
                         Camfort.Specification.Stencils.Synthesis
                         Camfort.Specification.Stencils
                         Camfort.Specification.Units
+                        Camfort.Specification.Units.Annotation
                         Camfort.Specification.Units.InferenceFrontend
                         Camfort.Specification.Units.InferenceBackend
                         Camfort.Specification.Units.Environment

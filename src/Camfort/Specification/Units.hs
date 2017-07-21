@@ -53,10 +53,11 @@ import Camfort.Input
 import Camfort.Reprint (subtext)
 
 -- Provides the types and data accessors used in this module
-import Camfort.Specification.Units.Environment
-import Camfort.Specification.Units.Monad
-import Camfort.Specification.Units.InferenceFrontend
-import Camfort.Specification.Units.Synthesis (runSynthesis)
+import qualified Camfort.Specification.Units.Annotation as UA
+import           Camfort.Specification.Units.Environment
+import           Camfort.Specification.Units.InferenceFrontend
+import           Camfort.Specification.Units.Monad
+import           Camfort.Specification.Units.Synthesis (runSynthesis)
 
 import qualified Language.Fortran.Analysis.Renaming as FAR
 import qualified Language.Fortran.Analysis.Types as FAT
@@ -125,7 +126,7 @@ inferCriticalVariables' uOpts pf
 
     -- Use the module map derived from all of the included Camfort Mod files.
     mmap = combinedModuleMap (M.elems (uoModFiles uOpts))
-    pfRenamed = FAR.analyseRenamesWithModuleMap mmap . FA.initAnalysis . fmap mkUnitAnnotation $ pf
+    pfRenamed = FAR.analyseRenamesWithModuleMap mmap . FA.initAnalysis . fmap UA.mkUnitAnnotation $ pf
 
     -- Map of all declarations
     dmap = extractDeclMap pfRenamed `M.union` combinedDeclMap (M.elems (uoModFiles uOpts))
@@ -214,25 +215,25 @@ instance Show ConsistencyError where
       constraints = [ (c, srcSpan)
                     | x <- universeBi pf :: [F.Expression UA]
                     , let srcSpan = FU.getSpan x
-                    , c <- maybeToList (getConstraint x)
+                    , c <- maybeToList (UA.getConstraint x)
                     ] ++
 
                     [ (c, srcSpan)
                     | x <- universeBi pf :: [F.Statement UA]
                     , let srcSpan = FU.getSpan x
-                    , c <- maybeToList (getConstraint x)
+                    , c <- maybeToList (UA.getConstraint x)
                     ] ++
 
                     [ (c, srcSpan)
                     | x <- universeBi pf :: [F.Argument UA]
                     , let srcSpan = FU.getSpan x
-                    , c <- maybeToList (getConstraint x)
+                    , c <- maybeToList (UA.getConstraint x)
                     ] ++
 
                     [ (c, srcSpan)
                     | x <- universeBi pf :: [F.Declarator UA]
                     , let srcSpan = FU.getSpan x
-                    , c <- maybeToList (getConstraint x)
+                    , c <- maybeToList (UA.getConstraint x)
                     ] ++
 
                     -- Why reverse? So that PUFunction and PUSubroutine appear
@@ -240,7 +241,7 @@ instance Show ConsistencyError where
                     reverse [ (c, srcSpan)
                     | x <- universeBi pf :: [F.ProgramUnit UA]
                     , let srcSpan = FU.getSpan x
-                    , c <- maybeToList (getConstraint x)
+                    , c <- maybeToList (UA.getConstraint x)
                     ]
 
 
@@ -279,7 +280,7 @@ checkUnits' uOpts pf =
 
     -- Use the module map derived from all of the included Camfort Mod files.
     mmap = combinedModuleMap (M.elems (uoModFiles uOpts))
-    pfRenamed = FAR.analyseRenamesWithModuleMap mmap . FA.initAnalysis . fmap mkUnitAnnotation $ pf
+    pfRenamed = FAR.analyseRenamesWithModuleMap mmap . FA.initAnalysis . fmap UA.mkUnitAnnotation $ pf
 
 lookupWith :: (a -> Bool) -> [(a,b)] -> Maybe b
 lookupWith f = fmap snd . find (f . fst)
@@ -362,7 +363,7 @@ inferUnits' uOpts pf =
 
     -- Use the module map derived from all of the included Camfort Mod files.
     mmap = combinedModuleMap (M.elems (uoModFiles uOpts))
-    pfRenamed = FAR.analyseRenamesWithModuleMap mmap . FA.initAnalysis . fmap mkUnitAnnotation $ pf
+    pfRenamed = FAR.analyseRenamesWithModuleMap mmap . FA.initAnalysis . fmap UA.mkUnitAnnotation $ pf
     pfUA = usProgramFile state -- the program file after units analysis is done
 
 combinedCompiledUnits :: ModFiles -> CompiledUnits
@@ -417,7 +418,7 @@ compileUnits' uOpts pf
     -- Use the module map derived from all of the included Camfort Mod files.
     mmap = combinedModuleMap (M.elems (uoModFiles uOpts))
     tenv = combinedTypeEnv (M.elems (uoModFiles uOpts))
-    pfRenamed = FAR.analyseRenamesWithModuleMap mmap . FA.initAnalysis . fmap mkUnitAnnotation $ pf
+    pfRenamed = FAR.analyseRenamesWithModuleMap mmap . FA.initAnalysis . fmap UA.mkUnitAnnotation $ pf
     pfTyped = fst . FAT.analyseTypesWithEnv tenv $ pfRenamed
 
 synthesiseUnits :: UnitOpts
@@ -436,9 +437,9 @@ synthesiseUnits uOpts marker pf =
       let (eVars, state, logs) = runInference uOpts pfRenamed (runSynthesis marker . chooseImplicitNames $ inferred)
           -- Use the module map derived from all of the included Camfort Mod files.
           mmap = combinedModuleMap (M.elems (uoModFiles uOpts))
-          pfRenamed = FAR.analyseRenamesWithModuleMap mmap . FA.initAnalysis . fmap mkUnitAnnotation $ pf
+          pfRenamed = FAR.analyseRenamesWithModuleMap mmap . FA.initAnalysis . fmap UA.mkUnitAnnotation $ pf
           pfUA = usProgramFile state -- the program file after units analysis is done
-      in fmap (prevAnnotation . FA.prevAnnotation) pfUA -- strip annotations
+      in fmap (UA.prevAnnotation . FA.prevAnnotation) pfUA -- strip annotations
 
 --------------------------------------------------
 

@@ -29,10 +29,12 @@ import qualified Language.Fortran.AST as F
 import qualified Language.Fortran.Analysis as FA
 import qualified Language.Fortran.Util.Position as FU
 
-import Camfort.Analysis.Annotations hiding (Unitless)
-import Camfort.Specification.Units.Environment
-import Camfort.Specification.Units.Monad
-import Camfort.Specification.Units.InferenceFrontend (puName, puSrcName)
+import           Camfort.Analysis.Annotations hiding (Unitless)
+import           Camfort.Specification.Units.Annotation (UA)
+import qualified Camfort.Specification.Units.Annotation as UA
+import           Camfort.Specification.Units.Environment
+import           Camfort.Specification.Units.Monad
+import           Camfort.Specification.Units.InferenceFrontend (puName, puSrcName)
 
 -- | Insert unit declarations into the ProgramFile as comments.
 runSynthesis :: Char -> [(VV, UnitInfo)] -> UnitSolver [(VV, UnitInfo)]
@@ -59,8 +61,8 @@ synthBlock marker vars bs b@(F.BlStatement a (FU.SrcSpan lp _) _ (F.StDeclaratio
       | vname `S.notMember` gvSet                     -- not a member of the already-given variables
       , Just u <- lookup (vname, sname) vars -> do    -- and a unit has been inferred
         -- Create new annotation which labels this as a refactored node.
-        let newA  = a { FA.prevAnnotation = (FA.prevAnnotation a) {
-                           prevAnnotation = (prevAnnotation (FA.prevAnnotation a)) {
+        let newA  = a { FA.prevAnnotation    = (FA.prevAnnotation a) {
+                           UA.prevAnnotation = (UA.prevAnnotation (FA.prevAnnotation a)) {
                                refactored = Just lp } } }
             -- Create a zero-length span for the new comment node.
             newSS = FU.SrcSpan (lp {FU.posColumn = 0}) (lp {FU.posColumn = 0})
@@ -96,7 +98,7 @@ synthProgramUnit marker vars pus pu@(F.PUFunction a (FU.SrcSpan lp _) _ _ _ _ mr
     -- if return var has a unit & not a member of the already-given variables
     Just u | vname `S.notMember` gvSet -> do
       let newA  = a { FA.prevAnnotation = (FA.prevAnnotation a) {
-                         prevAnnotation = (prevAnnotation (FA.prevAnnotation a)) {
+                         UA.prevAnnotation = (UA.prevAnnotation (FA.prevAnnotation a)) {
                              refactored = Just lp } } }
       -- Create a zero-length span for the new comment node.
       let newSS = FU.SrcSpan (lp {FU.posColumn = 0}) (lp {FU.posColumn = 0})

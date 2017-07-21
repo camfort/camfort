@@ -22,9 +22,14 @@
 {-# LANGUAGE PatternGuards #-}
 
 module Camfort.Specification.Units.InferenceFrontend
-  ( initInference, runCriticalVariables, runInferVariables, runCompileUnits, runInconsistentConstraints, getConstraint
-  , puName, puSrcName )
-where
+  ( initInference
+  , puName
+  , puSrcName
+  , runCompileUnits
+  , runCriticalVariables
+  , runInconsistentConstraints
+  , runInferVariables
+  ) where
 
 import Data.Data (Data)
 import Data.List (nub, intercalate, partition)
@@ -47,6 +52,7 @@ import Language.Fortran.Analysis (varName, srcName)
 
 import Camfort.Analysis.CommentAnnotator (annotateComments)
 import Camfort.Analysis.Annotations
+import qualified Camfort.Specification.Units.Annotation as UA
 import Camfort.Specification.Units.Environment
 import Camfort.Specification.Units.Monad
 import Camfort.Specification.Units.InferenceBackend
@@ -115,16 +121,12 @@ initInference = do
 
   -- Remove any traces of CommentAnnotator, since the annotations can
   -- cause generic operations traversing the AST to get confused.
-  modifyProgramFile cleanLinks
+  modifyProgramFile UA.cleanLinks
 
   modify $ \ s -> s { usConstraints = cons }
 
   debugLogging
 
-cleanLinks :: F.ProgramFile UA -> F.ProgramFile UA
-cleanLinks = transformBi (\ a -> a { unitPU = Nothing, unitBlock = Nothing, unitSpec = Nothing } :: UnitAnnotation A)
-
---------------------------------------------------
 -- Inference functions
 
 -- | Return a list of critical variables as UnitInfo list (most likely
@@ -265,8 +267,8 @@ insertGivenUnits = do
       | Just (P.UnitAlias name unitsAST) <- mSpec = modifyUnitAliasMap (M.insert name (toUnitInfo unitsAST))
       | otherwise                                 = return ()
       where
-        mSpec = unitSpec (FA.prevAnnotation a)
-        mPU   = unitPU (FA.prevAnnotation a)
+        mSpec = UA.unitSpec (FA.prevAnnotation a)
+        mPU   = UA.unitPU   (FA.prevAnnotation a)
     -- Other type of ProgramUnit (e.g. one with a body of blocks)
     checkPU pu = mapM_ (checkBlockComment (getName pu)) [ b | b@(F.BlComment {}) <- universeBi (F.programUnitBody pu) ]
       where
@@ -285,8 +287,8 @@ insertGivenUnits = do
       | Just (P.UnitAlias name unitsAST) <- mSpec  = modifyUnitAliasMap (M.insert name (toUnitInfo unitsAST))
       | otherwise                                  = return ()
       where
-        mSpec  = unitSpec (FA.prevAnnotation a)
-        mBlock = unitBlock (FA.prevAnnotation a)
+        mSpec  = UA.unitSpec  (FA.prevAnnotation a)
+        mBlock = UA.unitBlock (FA.prevAnnotation a)
 
     -- Figure out the unique names of the referenced variables and
     -- then insert unit info under each of those names.
@@ -323,7 +325,7 @@ annotateAllVariables :: UnitSolver ()
 annotateAllVariables = modifyProgramFileM $ \ pf -> do
   varUnitMap <- usVarUnitMap `fmap` get
   let annotateExp e@(F.ExpValue _ _ (F.ValVariable _))
-        | Just info <- M.lookup (varName e, srcName e) varUnitMap = setUnitInfo info e
+        | Just info <- M.lookup (varName e, srcName e) varUnitMap = UA.setUnitInfo info e
       -- may need to annotate intrinsics separately
       annotateExp e = e
   return $ transformBi annotateExp pf
@@ -359,12 +361,12 @@ annotateLiteralsPU pu = do
 
     -- Set all literals to unitless.
     expUnitless e
-      | isLiteral e = return $ setUnitInfo UnitlessLit e
+      | isLiteral e = return $ UA.setUnitInfo UnitlessLit e
       | otherwise   = return e
 
     -- Set all literals to the result of given monadic computation.
     withLiterals m e
-      | isLiteral e = flip setUnitInfo e `fmap` m
+      | isLiteral e = flip UA.setUnitInfo e `fmap` m
       | otherwise   = return e
 
     isPolyCtxt = case pu of F.PUFunction {} -> True; F.PUSubroutine {} -> True; _ -> False
@@ -562,6 +564,21 @@ mainBlocks = concatMap getBlocks . universeBi
 
 --------------------------------------------------
 
+-- | Extract the unit info from a given annotated piece of AST, within
+-- the context of a multiplication expression, and given a particular
+-- mode for handling literals.
+--
+-- The point is that the unit-assignment of a literal constant can
+-- vary depending upon whether it is being multiplied by a variable
+-- with units, and possibly by global options that assume one way or
+-- the other.
+getUnitInfoMul :: LiteralsOpt -> F.Expression UA -> Maybe UnitInfo
+getUnitInfoMul LitPoly e          = UA.getUnitInfo e
+getUnitInfoMul _ e
+  | isJust (constantExpression e) = Just UnitlessLit
+  | otherwise                     = UA.getUnitInfo e
+
+
 -- | Decorate the AST with unit info.
 propagateUnits :: UnitSolver ()
 -- precondition: all variables have already been annotated
@@ -574,30 +591,30 @@ propagateExp e = fmap uoLiterals ask >>= \ lm -> case e of
   F.ExpValue _ _ _                       -> return e -- all values should already be annotated
   F.ExpBinary _ _ F.Multiplication e1 e2 -> setF2 UnitMul (getUnitInfoMul lm e1) (getUnitInfoMul lm e2)
   F.ExpBinary _ _ F.Division e1 e2       -> setF2 UnitMul (getUnitInfoMul lm e1) (flip UnitPow (-1) `fmap` (getUnitInfoMul lm e2))
-  F.ExpBinary _ _ F.Exponentiation e1 e2 -> setF2 UnitPow (getUnitInfo e1) (constantExpression e2)
-  F.ExpBinary _ _ o e1 e2 | isOp AddOp o -> setF2C ConEq  (getUnitInfo e1) (getUnitInfo e2)
-                          | isOp RelOp o -> setF2C ConEq  (getUnitInfo e1) (getUnitInfo e2)
+  F.ExpBinary _ _ F.Exponentiation e1 e2 -> setF2 UnitPow (UA.getUnitInfo e1) (constantExpression e2)
+  F.ExpBinary _ _ o e1 e2 | isOp AddOp o -> setF2C ConEq  (UA.getUnitInfo e1) (UA.getUnitInfo e2)
+                          | isOp RelOp o -> setF2C ConEq  (UA.getUnitInfo e1) (UA.getUnitInfo e2)
   F.ExpFunctionCall {}                   -> propagateFunctionCall e
-  F.ExpSubscript _ _ e1 _                -> return $ maybeSetUnitInfo (getUnitInfo e1) e
-  F.ExpUnary _ _ _ e1                    -> return $ maybeSetUnitInfo (getUnitInfo e1) e
+  F.ExpSubscript _ _ e1 _                -> return $ UA.maybeSetUnitInfo (UA.getUnitInfo e1) e
+  F.ExpUnary _ _ _ e1                    -> return $ UA.maybeSetUnitInfo (UA.getUnitInfo e1) e
   _                                      -> do
     whenDebug . tell $ "propagateExp: " ++ show (getSpan e) ++ " unhandled: " ++ show e
     return e
   where
     -- Shorter names for convenience functions.
-    setF2 f u1 u2  = return $ maybeSetUnitInfoF2 f u1 u2 e
+    setF2 f u1 u2  = return $ UA.maybeSetUnitInfoF2 f u1 u2 e
     -- Remember, not only set a constraint, but also give a unit!
-    setF2C f u1 u2 = return . maybeSetUnitInfo u1 $ maybeSetUnitConstraintF2 f u1 u2 e
+    setF2C f u1 u2 = return . UA.maybeSetUnitInfo u1 $ UA.maybeSetUnitConstraintF2 f u1 u2 e
 
 propagateFunctionCall :: F.Expression UA -> UnitSolver (F.Expression UA)
 propagateFunctionCall (F.ExpFunctionCall a s f Nothing)                     = do
   (info, _) <- callHelper f []
   let cons = intrinsicHelper info f []
-  return . setConstraint (ConConj cons) . setUnitInfo info $ F.ExpFunctionCall a s f Nothing
+  return . UA.setConstraint (ConConj cons) . UA.setUnitInfo info $ F.ExpFunctionCall a s f Nothing
 propagateFunctionCall (F.ExpFunctionCall a s f (Just (F.AList a' s' args))) = do
   (info, args') <- callHelper f args
   let cons = intrinsicHelper info f args'
-  return . setConstraint (ConConj cons) . setUnitInfo info $ F.ExpFunctionCall a s f (Just (F.AList a' s' args'))
+  return . UA.setConstraint (ConConj cons) . UA.setUnitInfo info $ F.ExpFunctionCall a s f (Just (F.AList a' s' args'))
 
 propagateStatement :: F.Statement UA -> UnitSolver (F.Statement UA)
 propagateStatement stmt = case stmt of
@@ -605,7 +622,7 @@ propagateStatement stmt = case stmt of
   F.StCall a s sub (Just (F.AList a' s' args)) -> do
     (info, args') <- callHelper sub args
     let cons = intrinsicHelper info sub args'
-    return . setConstraint (ConConj cons) $ F.StCall a s sub (Just (F.AList a' s' args'))
+    return . UA.setConstraint (ConConj cons) $ F.StCall a s sub (Just (F.AList a' s' args'))
   F.StDeclaration {}                           -> transformBiM propagateDeclarator stmt
   _                                            -> return stmt
 
@@ -618,14 +635,14 @@ propagateDeclarator decl = case decl of
 -- Allow literal assignment to overload the non-polymorphic
 -- unit-assignment of the non-zero literal.
 literalAssignmentSpecialCase e1 e2 ast
-  | u2@(Just (UnitLiteral _)) <- getUnitInfo e2 = do
-    return $ maybeSetUnitConstraintF2 ConEq (getUnitInfo e1) u2 ast
+  | u2@(Just (UnitLiteral _)) <- UA.getUnitInfo e2 = do
+    return $ UA.maybeSetUnitConstraintF2 ConEq (UA.getUnitInfo e1) u2 ast
   | isLiteralNonZero e2                         = do
     u2 <- genUnitLiteral
-    return $ maybeSetUnitConstraintF2 ConEq (getUnitInfo e1) (Just u2) ast
+    return $ UA.maybeSetUnitConstraintF2 ConEq (UA.getUnitInfo e1) (Just u2) ast
   | otherwise                                   = do
     -- otherwise express the constraint between LHS and RHS of assignment.
-    return $ maybeSetUnitConstraintF2 ConEq (getUnitInfo e1) (getUnitInfo e2) ast
+    return $ UA.maybeSetUnitConstraintF2 ConEq (UA.getUnitInfo e1) (UA.getUnitInfo e2) ast
 
 propagatePU :: F.ProgramUnit UA -> UnitSolver (F.ProgramUnit UA)
 propagatePU pu = do
@@ -655,10 +672,10 @@ propagatePU pu = do
   -- Set the unitInfo field of a function program unit to be the same
   -- as the unitInfo of its result.
   let pu' = case (pu, indexedParams pu) of
-              (F.PUFunction {}, (0, res):_) -> setUnitInfo (UnitParamPosAbs (nn, 0) `fromMaybe` M.lookup res varMap) pu
+              (F.PUFunction {}, (0, res):_) -> UA.setUnitInfo (UnitParamPosAbs (nn, 0) `fromMaybe` M.lookup res varMap) pu
               _                             -> pu
 
-  return (setConstraint (ConConj cons) pu')
+  return (UA.setConstraint (ConConj cons) pu')
 
 --------------------------------------------------
 
@@ -669,7 +686,7 @@ callHelper nexp args = do
   callId <- genCallId -- every call-site gets its own unique identifier
   let eachArg i arg@(F.Argument _ _ _ e)
         -- add site-specific parametric constraints to each argument
-        | Just u <- getUnitInfo e = setConstraint (ConEq u (UnitParamPosUse (name, i, callId))) arg
+        | Just u <- UA.getUnitInfo e = UA.setConstraint (ConEq u (UnitParamPosUse (name, i, callId))) arg
         | otherwise               = arg
   let args' = zipWith eachArg [1..] args
   -- build a site-specific parametric unit for use on a return variable, if any
@@ -710,54 +727,6 @@ genParamLit = do
   put $ s { usLitNums = i + 1 }
   return $ UnitParamLitAbs i
 
---------------------------------------------------
-
--- | Extract the unit info from a given annotated piece of AST.
-getUnitInfo :: F.Annotated f => f UA -> Maybe UnitInfo
-getUnitInfo = unitInfo . FA.prevAnnotation . F.getAnnotation
-
--- | Extract the constraint from a given annotated piece of AST.
-getConstraint :: F.Annotated f => f UA -> Maybe Constraint
-getConstraint = unitConstraint . FA.prevAnnotation . F.getAnnotation
-
--- | Extract the unit info from a given annotated piece of AST, within
--- the context of a multiplication expression, and given a particular
--- mode for handling literals.
---
--- The point is that the unit-assignment of a literal constant can
--- vary depending upon whether it is being multiplied by a variable
--- with units, and possibly by global options that assume one way or
--- the other.
-getUnitInfoMul :: LiteralsOpt -> F.Expression UA -> Maybe UnitInfo
-getUnitInfoMul LitPoly e          = getUnitInfo e
-getUnitInfoMul _ e
-  | isJust (constantExpression e) = Just UnitlessLit
-  | otherwise                     = getUnitInfo e
-
--- | Set the UnitInfo field on a piece of AST.
-setUnitInfo :: F.Annotated f => UnitInfo -> f UA -> f UA
-setUnitInfo info = F.modifyAnnotation (onPrev (\ ua -> ua { unitInfo = Just info }))
-
--- | Set the Constraint field on a piece of AST.
-setConstraint :: F.Annotated f => Constraint -> f UA -> f UA
-setConstraint (ConConj []) = id
-setConstraint c            = F.modifyAnnotation (onPrev (\ ua -> ua { unitConstraint = Just c }))
-
---------------------------------------------------
-
--- Various helper functions for setting the UnitInfo or Constraint of a piece of AST
-maybeSetUnitInfo :: F.Annotated f => Maybe UnitInfo -> f UA -> f UA
-maybeSetUnitInfo Nothing e  = e
-maybeSetUnitInfo (Just u) e = setUnitInfo u e
-
-maybeSetUnitInfoF2 :: F.Annotated f => (a -> b -> UnitInfo) -> Maybe a -> Maybe b -> f UA -> f UA
-maybeSetUnitInfoF2 f (Just u1) (Just u2) e = setUnitInfo (f u1 u2) e
-maybeSetUnitInfoF2 _ _ _ e                 = e
-
-maybeSetUnitConstraintF2 :: F.Annotated f => (a -> b -> Constraint) -> Maybe a -> Maybe b -> f UA -> f UA
-maybeSetUnitConstraintF2 f (Just u1) (Just u2) e = setConstraint (f u1 u2) e
-maybeSetUnitConstraintF2 _ _ _ e                 = e
-
 -- Operate only on the blocks of a program unit, not the contained sub-programunits.
 modifyPUBlocksM :: Monad m => ([F.Block a] -> m [F.Block a]) -> F.ProgramUnit a -> m (F.ProgramUnit a)
 modifyPUBlocksM f pu = case pu of
@@ -767,8 +736,6 @@ modifyPUBlocksM f pu = case pu of
   F.PUFunction   a s r rec n p res b subs -> flip fmap (f b) $ \ b' -> F.PUFunction a s r rec n p res b' subs
   F.PUBlockData  a s n b                  -> flip fmap (f b) $ \ b' -> F.PUBlockData  a s n b'
   F.PUComment {}                          -> return pu -- no blocks
-
---------------------------------------------------
 
 -- Fortran semantics for interpretation of constant expressions
 -- involving numeric literals.
@@ -860,10 +827,10 @@ debugLogging = whenDebug $ do
     tell $ show cons ++ "\n\n"
     forM_ (universeBi pf) $ \ pu -> case pu of
       F.PUFunction {}
-        | Just (ConConj cons) <- getConstraint pu ->
+        | Just (ConConj cons) <- UA.getConstraint pu ->
           tell . unlines $ (puName pu ++ ":"):map (\ (ConEq u1 u2) -> "    constraint: " ++ show (flattenUnits u1) ++ " === " ++ show (flattenUnits u2)) cons
       F.PUSubroutine {}
-        | Just (ConConj cons) <- getConstraint pu ->
+        | Just (ConConj cons) <- UA.getConstraint pu ->
           tell . unlines $ (puName pu ++ ":"):map (\ (ConEq u1 u2) -> "    constraint: " ++ show (flattenUnits u1) ++ " === " ++ show (flattenUnits u2)) cons
       _ -> return ()
     let (lhsM, rhsM, _, lhsColA, rhsColA) = constraintsToMatrices cons

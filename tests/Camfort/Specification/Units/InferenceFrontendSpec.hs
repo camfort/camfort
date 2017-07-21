@@ -14,10 +14,12 @@ import           Language.Fortran.ParserMonad (fromRight)
 import qualified Language.Fortran.AST as F
 import qualified Language.Fortran.Analysis as FA
 
-import Camfort.Analysis.Annotations (UA, unitAnnotation)
-import Camfort.Specification.Units (chooseImplicitNames)
-import Camfort.Specification.Units.Environment
-import Camfort.Specification.Units.InferenceFrontend
+import           Camfort.Analysis.Annotations (unitAnnotation)
+import           Camfort.Specification.Units (chooseImplicitNames)
+import           Camfort.Specification.Units.Annotation (UA)
+import qualified Camfort.Specification.Units.Annotation as UA
+import           Camfort.Specification.Units.Environment
+import           Camfort.Specification.Units.InferenceFrontend
   ( initInference
   , runInconsistentConstraints
   , runInferVariables
@@ -79,7 +81,7 @@ spec = do
 
 runUnits litMode pf m = (r, usConstraints state)
   where
-    pf' = FA.initAnalysis . fmap (mkUnitAnnotation . const unitAnnotation) $ pf
+    pf' = FA.initAnalysis . fmap (UA.mkUnitAnnotation . const unitAnnotation) $ pf
     uOpts = unitOpts0 { uoDebug = False, uoLiterals = litMode }
     (r, state, _) = runUnitSolver uOpts pf' $ initInference >> m
 
@@ -89,7 +91,7 @@ runUnitInference litMode pf = case r of
                 , usConstraints state)
   _          -> ([], usConstraints state)
   where
-    pf' = FA.initAnalysis . fmap (mkUnitAnnotation . const unitAnnotation) $ pf
+    pf' = FA.initAnalysis . fmap (UA.mkUnitAnnotation . const unitAnnotation) $ pf
     uOpts = unitOpts0 { uoDebug = False, uoLiterals = litMode }
     (r, state, _) = runUnitSolver uOpts pf' $ initInference >> fmap chooseImplicitNames runInferVariables
 
