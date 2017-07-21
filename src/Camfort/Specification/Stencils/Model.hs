@@ -282,7 +282,7 @@ unfCompare oi oi' = unsafePerformIO $ do
   where
     counterExample :: ThmResult -> IO [ Int64 ]
     counterExample thmRes =
-      case getModel thmRes of
+      case getModelAssignment thmRes of
         Right (False, ce) -> return ce
         Right (True, _) -> fail "Returned probable model."
         Left str -> fail str
