@@ -45,9 +45,11 @@ module Camfort.Functionality (
   , equivalences
   ) where
 
+import Control.Arrow (second)
 import Control.Monad
 import System.FilePath (takeDirectory)
 
+import Camfort.Analysis (runRefactoring)
 import Camfort.Analysis.Simple
 import Camfort.Transformation.DeadCode
 import Camfort.Transformation.CommonBlockElim
@@ -62,7 +64,6 @@ import Camfort.Input
 import Language.Fortran.Util.ModFile
 import qualified Camfort.Specification.Stencils as Stencils
 import qualified Data.Map.Strict as M
-
 
 data AnnotationType = ATDefault | Doxygen | Ford
 
@@ -86,7 +87,7 @@ countVarDecls inSrc excludes = do
 
 dead inSrc excludes outSrc = do
     putStrLn $ "Eliminating dead code in '" ++ inSrc ++ "'"
-    report <- doRefactor (mapM (deadCode False)) inSrc excludes outSrc
+    report <- doRefactor (mapM (second (pure :: a -> Either () a) . deadCode False)) id inSrc excludes outSrc
     putStrLn report
 
 common inSrc excludes outSrc = do
@@ -98,7 +99,7 @@ common inSrc excludes outSrc = do
 
 equivalences inSrc excludes outSrc = do
     putStrLn $ "Refactoring equivalences blocks in '" ++ inSrc ++ "'"
-    report <- doRefactor (mapM refactorEquivalences) inSrc excludes outSrc
+    report <- doRefactor (mapM (second (pure :: a -> Either () a) . refactorEquivalences)) id inSrc excludes outSrc
     putStrLn report
 
 {- Units feature -}
@@ -109,17 +110,23 @@ optsToUnitOpts m debug = maybe (pure o1)
                        , uoDebug = debug
                        , uoModFiles = M.empty }
 
+printUnitsResults :: (Show e, Show a) => [(String, Either e a)] -> IO ()
+printUnitsResults = mapM_ printResults
+  where printResults (report, Left e)  = putStrLn (report ++ show e)
+        printResults (report, Right r) = putStrLn (report ++ show r)
+
 unitsCheck inSrc excludes m debug incDir = do
     putStrLn $ "Checking units for '" ++ inSrc ++ "'"
     uo <- optsToUnitOpts m debug incDir
     let rfun = LU.checkUnits uo
-    doAnalysisReportWithModFiles rfun putStrLn inSrc incDir excludes
+    doAnalysisReportWithModFiles rfun (printUnitsResults . fmap (second (pure :: a -> Either () a)))
+                                       inSrc incDir excludes
 
 unitsInfer inSrc excludes m debug incDir = do
     putStrLn $ "Inferring units for '" ++ inSrc ++ "'"
     uo <- optsToUnitOpts m debug incDir
     let rfun = LU.inferUnits uo
-    doAnalysisReportWithModFiles rfun putStrLn inSrc incDir excludes
+    doAnalysisReportWithModFiles rfun printUnitsResults inSrc incDir excludes
 
 unitsCompile inSrc excludes m debug incDir outSrc = do
     putStrLn $ "Compiling units for '" ++ inSrc ++ "'"
@@ -132,9 +139,11 @@ unitsSynth inSrc excludes m debug incDir outSrc annType = do
     putStrLn $ "Synthesising units for '" ++ inSrc ++ "'"
     let marker = markerChar annType
     uo <- optsToUnitOpts m debug incDir
-    let rfun =
-          mapM (LU.synthesiseUnits uo marker)
-    report <- doRefactorWithModFiles rfun inSrc incDir excludes outSrc
+    let rfun = traverse (\fp ->
+                           case runRefactoring (LU.synthesiseUnits uo marker) fp of
+                             ((debug, Nothing), res) -> ([debug], res)
+                             ((debug, Just ir), res) -> ([debug ++ show ir], res))
+    report <- doRefactorWithModFiles rfun concat inSrc incDir excludes outSrc
     putStrLn report
 
 unitsCriticals inSrc excludes m debug incDir = do
@@ -142,7 +151,7 @@ unitsCriticals inSrc excludes m debug incDir = do
              ++ inSrc ++ "'"
     uo <- optsToUnitOpts m debug incDir
     let rfun = LU.inferCriticalVariables uo
-    doAnalysisReportWithModFiles rfun (putStrLn . fst) inSrc incDir excludes
+    doAnalysisReportWithModFiles rfun (mapM_ (putStrLn . fst)) inSrc incDir excludes
 
 {- Stencils feature -}
 stencilsCheck inSrc excludes = do
@@ -156,6 +165,6 @@ stencilsInfer inSrc excludes useEval = do
 
 stencilsSynth inSrc excludes annType outSrc = do
    putStrLn $ "Synthesising stencil specs for '" ++ inSrc ++ "'"
-   let rfun = Stencils.synth (markerChar annType)
-   report <- doRefactor rfun inSrc excludes outSrc
+   let rfun = second (fmap (pure :: a -> Either () a)) . Stencils.synth (markerChar annType)
+   report <- doRefactor rfun id inSrc excludes outSrc
    putStrLn report

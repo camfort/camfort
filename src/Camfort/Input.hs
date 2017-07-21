@@ -31,6 +31,7 @@ import           Control.Monad (forM)
 import           Data.Binary (decodeFileOrFail)
 import qualified Data.ByteString.Char8 as B
 import           Data.Char (toUpper)
+import           Data.Either (partitionEithers)
 import           Data.List (foldl', (\\), intercalate)
 import           Data.Maybe
 import           Data.Text.Encoding (encodeUtf8, decodeUtf8With)
@@ -78,42 +79,45 @@ doAnalysisSummary aFun inSrc excludes = do
 
 -- | Perform an analysis which reports to the user, but does not output any files.
 doAnalysisReportWithModFiles
-  :: (Monoid r)
-  => Analysis r FileProgram
-  -> (r -> IO out)
+  :: Analysis r FileProgram
+  -> ([r] -> IO ())
   -> FileOrDir
   -> Maybe FileOrDir
   -> [Filename]
-  -> IO out
+  -> IO ()
 doAnalysisReportWithModFiles rFun sFun inSrc incDir excludes = do
   printExcludes inSrc excludes
   ps <- readParseSrcDirWithModFiles inSrc incDir excludes
 
-  let report = runAnalysisWithSummary rFun . fmap fst $ ps
+  let report = fmap (runAnalysis rFun) . fmap fst $ ps
   sFun report
 
 -- | Perform a refactoring that does not add any new files.
-doRefactor :: ([FileProgram]
-           -> (String, [FileProgram]))
+doRefactor :: (Show r, Show e)
+           => Refactoring r [FileProgram] [Either e FileProgram]
+           -> (r -> String)
            -> FileOrDir -> [Filename] -> FileOrDir
            -> IO String
-doRefactor rFun inSrc excludes outSrc =
-  doRefactorWithModFiles rFun inSrc Nothing excludes outSrc
+doRefactor rFun printer inSrc excludes outSrc =
+  doRefactorWithModFiles rFun printer inSrc Nothing excludes outSrc
 
 doRefactorWithModFiles
-  :: Refactoring String [FileProgram] [FileProgram]
+  :: (Show e)
+  => Refactoring r [FileProgram] [Either e FileProgram]
+  -> (r -> String)
   -> FileOrDir
   -> Maybe FileOrDir
   -> [Filename]
   -> FileOrDir
   -> IO String
-doRefactorWithModFiles rFun inSrc incDir excludes outSrc = do
+doRefactorWithModFiles rFun printer inSrc incDir excludes outSrc = do
   printExcludes inSrc excludes
   ps <- readParseSrcDirWithModFiles inSrc incDir excludes
-  let (report, ps') = runRefactoring rFun . fmap fst $ ps
+  let (report, res)  = runRefactoring rFun . fmap fst $ ps
+      (_, ps')       = partitionEithers res
   let outputs = reassociateSourceText (fmap snd ps) ps'
   outputFiles inSrc outSrc outputs
-  pure report
+  pure $ printer report
 
 -- | Perform a refactoring that may create additional files.
 doRefactorAndCreate

@@ -18,6 +18,7 @@
 
 module Camfort.Transformation.EquivalenceElimSpec (spec) where
 
+import Control.Arrow (second)
 import System.FilePath
 import System.Directory
 
@@ -52,12 +53,13 @@ spec =
       it "it eliminates equivalence statements" $
         actual `shouldBe` expected
       ----
-      let rfun = mapM refactorEquivalences
+      let rfun = mapM (second (pure :: a -> Either () a) . refactorEquivalences)
       let infile = samplesBase </> "equiv.f90"
-      report <- runIO $ doRefactor rfun infile [] "equiv.expected.f90"
+      report <- runIO $ doRefactor rfun id infile [] "equiv.expected.f90"
       it "report is as expected" $
         report `shouldBe` expectedReport
 
+expectedReport :: String
 expectedReport =
   "6:3: removed equivalence \n\
   \14:3: added copy due to refactored equivalence\n\

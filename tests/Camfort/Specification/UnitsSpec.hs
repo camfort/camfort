@@ -28,7 +28,8 @@ unitsCheckReportIs :: String -> String -> Expectation
 fileName `unitsCheckReportIs` expectedReport = do
   let file = fixturesDir </> fileName
   [(pf,_)] <- readParseSrcDir file []
-  runAnalysis (checkUnits uOpts) pf `shouldBe` expectedReport
+  let (_, report) = runAnalysis (checkUnits uOpts) pf
+  show report `shouldBe` expectedReport
   where uOpts = unitOpts0 { uoDebug = False, uoLiterals = LitMixed }
 
 -- | Assert that the report of performing units inference on a file is as expected.
@@ -36,7 +37,8 @@ unitsInferReportIs :: String -> String -> Expectation
 fileName `unitsInferReportIs` expectedReport = do
   let file = fixturesDir </> fileName
   [(pf,_)] <- readParseSrcDir file []
-  runAnalysis (inferUnits uOpts) pf `shouldBe` expectedReport
+  let (_, Right report) = runAnalysis (inferUnits uOpts) pf
+  show report `shouldBe` expectedReport
   where uOpts = unitOpts0 { uoDebug = False, uoLiterals = LitMixed }
 
 exampleInconsist1CheckReport :: String
