@@ -5,9 +5,19 @@ cache:
 before_install:
 - sudo apt-key adv --keyserver hkp://keyserver.ubuntu.com:80 --recv-keys 575159689BEFB442
 - echo 'deb http://download.fpcomplete.com/ubuntu precise main'|sudo tee /etc/apt/sources.list.d/fpco.list
-- sudo add-apt-repository ppa:hvr/z3 -y
 - sudo apt-get update -qq
-- sudo apt-get install stack liblapack-dev libblas-dev z3 -y -qq
+- sudo apt-get install stack liblapack-dev libblas-dev -y -qq
+
+# Install Z3 from their GitHub release
+- export Z3=`wget -q -O- http://github.com/Z3Prover/bin/raw/master/releases | egrep -Po 'z3.*?x64.*?ubuntu.*?.zip(?=")' | sort -V | tail -n1`
+- echo "Linux Z3 $Z3"
+- export Z3Base=`basename $Z3 .zip`
+- wget --quiet -L -O z3.zip http://github.com/Z3Prover/bin/raw/master/releases/$Z3
+- unzip -q z3.zip -d z3_downloaded
+- /bin/rm z3.zip
+- export PATH=$PATH:$PWD/z3_downloaded/$Z3Base/bin
+- z3 --version
+
 - cd ..
 - git clone https://github.com/camfort/fortran-src
 - cd fortran-src
