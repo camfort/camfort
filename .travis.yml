@@ -9,6 +9,7 @@ before_install:
 - sudo apt-get install stack liblapack-dev libblas-dev -y -qq
 
 # Install Z3 from their GitHub release
+# Inspired from Levent Erkok's SBV TravisCI file
 - export Z3=`wget -q -O- http://github.com/Z3Prover/bin/raw/master/releases | grep -Po 'z3.*?x64.*?ubuntu.*?\.zip(?=")' | sort -V | tail -n1`
 - echo "Linux Z3 $Z3"
 - export Z3Base=`basename $Z3 .zip`
