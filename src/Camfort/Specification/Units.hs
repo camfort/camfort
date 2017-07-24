@@ -53,6 +53,8 @@ import Camfort.Input
 import Camfort.Reprint (subtext)
 
 -- Provides the types and data accessors used in this module
+import           Camfort.Specification.Units.Analysis
+  (UnitsAnalysis, UnitsRefactoring)
 import qualified Camfort.Specification.Units.Annotation as UA
 import           Camfort.Specification.Units.Environment
 import           Camfort.Specification.Units.InferenceFrontend
@@ -65,10 +67,6 @@ import qualified Language.Fortran.Analysis as FA
 import qualified Language.Fortran.AST as F
 import qualified Language.Fortran.Util.Position as FU
 import Language.Fortran.Util.ModFile
-
--- | Analysis with additional debugging information via a 'Report'.
-type UnitsAnalysis r a = Analysis (Report, r) a
-type UnitsRefactoring r a a' = Refactoring (Report, Maybe r) a a'
 
 -- | Run a unit inference.
 runInference :: UnitOpts
