@@ -25,14 +25,13 @@ module Camfort.Specification.Units.InferenceFrontend
   ( initInference
   , puName
   , puSrcName
-  , runCompileUnits
   , runCriticalVariables
   , runInconsistentConstraints
   , runInferVariables
   ) where
 
 import Data.Data (Data)
-import Data.List (nub, intercalate, partition)
+import Data.List (nub, intercalate)
 import qualified Data.Map.Strict as M
 import qualified Data.IntMap.Strict as IM
 import qualified Data.Set as S
@@ -51,7 +50,6 @@ import qualified Language.Fortran.Analysis as FA
 import Language.Fortran.Analysis (varName, srcName)
 
 import Camfort.Analysis.CommentAnnotator (annotateComments)
-import Camfort.Analysis.Annotations
 import qualified Camfort.Specification.Units.Annotation as UA
 import Camfort.Specification.Units.Environment
 import Camfort.Specification.Units.Monad
@@ -148,39 +146,6 @@ runInconsistentConstraints :: UnitSolver (Maybe Constraints)
 runInconsistentConstraints = do
   cons <- usConstraints `fmap` get
   return $ inconsistentConstraints cons
-
--- | Produce information for a "units-mod" file.
-runCompileUnits :: UnitSolver CompiledUnits
-runCompileUnits = do
-  cons <- usConstraints `fmap` get
-
-  -- Sketching some ideas about solving the unit equation for each
-  -- parameter of each function.
-  let unitAssigns = map (fmap flattenUnits) $ genUnitAssignments cons
-  let mulCons x = map (\ (UnitPow u k) -> UnitPow u (x * k))
-  let negateCons = mulCons (-1)
-  let epsilon = 0.001 -- arbitrary
-  let approxEq a b = abs (b - a) < epsilon
-  let uninvert ([UnitPow u k], rhs) | not (k `approxEq` 1) = ([UnitPow u 1], mulCons (1 / k) rhs)
-      uninvert (lhs, rhs)                                  = (lhs, rhs)
-  let shiftTerms name pos (lhs, rhs) = (lhsOk ++ negateCons rhsShift, rhsOk ++ negateCons lhsShift)
-        where
-          (lhsOk, lhsShift) = partition isLHS lhs
-          (rhsOk, rhsShift) = partition (not . isLHS) rhs
-          isLHS (UnitParamPosAbs (n, i)) | n == name && i == pos = True
-          isLHS (UnitPow u _) = isLHS u
-          isLHS _ = False
-
-  let nameParams = M.fromList [ (NPKParam name pos, rhs) | assign <- unitAssigns
-                                                         , UnitParamPosAbs (name, pos) <- universeBi assign
-                                                         , let (_, rhs) = uninvert $ shiftTerms name pos assign ]
-
-
-  let variables = M.fromList [ (NPKVariable var, units) | ([UnitPow (UnitVar var) k], units) <- unitAssigns
-                                                        , k `approxEq` 1 ]
-
-  tmap <- gets usTemplateMap
-  return $ CompiledUnits { cuTemplateMap = tmap, cuNameParamMap = nameParams `M.union` variables }
 
 --------------------------------------------------
 

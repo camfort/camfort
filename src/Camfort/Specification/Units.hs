@@ -39,10 +39,8 @@ import qualified Data.Map.Strict as M
 import Data.Data
 import Data.List (intercalate, find, sort, group, nub, inits)
 import Data.Maybe (fromMaybe, maybeToList, mapMaybe, maybe)
-import Data.Binary
 import Data.Generics.Uniplate.Operations
 import qualified Data.ByteString.Char8 as B
-import qualified Data.ByteString.Lazy.Char8 as LB
 import GHC.Generics (Generic)
 
 import Camfort.Analysis
@@ -50,7 +48,6 @@ import Camfort.Analysis
 import Camfort.Helpers
 import Camfort.Analysis.Annotations
 import Camfort.Input
-import Camfort.Reprint (subtext)
 
 -- Provides the types and data accessors used in this module
 import           Camfort.Specification.Units.Analysis
@@ -58,6 +55,8 @@ import           Camfort.Specification.Units.Analysis
 import qualified Camfort.Specification.Units.Annotation as UA
 import           Camfort.Specification.Units.Environment
 import           Camfort.Specification.Units.InferenceFrontend
+import           Camfort.Specification.Units.ModFile
+  (CompiledUnits(..), genUnitsModFile, initializeModFiles, runCompileUnits)
 import           Camfort.Specification.Units.Monad
 import           Camfort.Specification.Units.Synthesis (runSynthesis)
 
@@ -74,9 +73,7 @@ runInference :: UnitOpts
              -> UnitSolver a
              -> (Either UnitException a, UnitState, UnitLogs)
 runInference uOpts pf runner = runUnitSolver uOpts pf $ do
-  let compiledUnits = combinedCompiledUnits . M.elems . uoModFiles $ uOpts
-  modifyTemplateMap  . const . cuTemplateMap  $ compiledUnits
-  modifyNameParamMap . const . cuNameParamMap $ compiledUnits
+  initializeModFiles $ uoModFiles uOpts
   initInference
   runner
 
@@ -363,29 +360,6 @@ inferUnits' uOpts pf =
     mmap = combinedModuleMap (M.elems (uoModFiles uOpts))
     pfRenamed = FAR.analyseRenamesWithModuleMap mmap . FA.initAnalysis . fmap UA.mkUnitAnnotation $ pf
     pfUA = usProgramFile state -- the program file after units analysis is done
-
-combinedCompiledUnits :: ModFiles -> CompiledUnits
-combinedCompiledUnits mfs = CompiledUnits { cuTemplateMap = M.unions tmaps
-                                          , cuNameParamMap = M.unions nmaps }
-  where
-    cus = map mfCompiledUnits mfs
-    tmaps = map cuTemplateMap cus
-    nmaps = map cuNameParamMap cus
-
--- | Name of the labeled data within a ModFile containing unit-specific info.
-unitsCompiledDataLabel = "units-compiled-data"
-
-mfCompiledUnits :: ModFile -> CompiledUnits
-mfCompiledUnits mf = case lookupModFileData unitsCompiledDataLabel mf of
-  Nothing -> emptyCompiledUnits
-  Just bs -> case decodeOrFail (LB.fromStrict bs) of
-    Left _ -> emptyCompiledUnits
-    Right (_, _, cu) -> cu
-
-genUnitsModFile :: F.ProgramFile UA -> CompiledUnits -> ModFile
-genUnitsModFile pf cu = alterModFileData f unitsCompiledDataLabel $ genModFile pf
-  where
-    f _ = Just . LB.toStrict $ encode cu
 
 compileUnits :: UnitOpts -> Refactoring String [FileProgram] [(Filename, B.ByteString)]
 compileUnits uOpts fileprogs = (concat reports, concat bins)

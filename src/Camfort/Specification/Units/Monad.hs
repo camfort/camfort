@@ -25,8 +25,8 @@ module Camfort.Specification.Units.Monad
   , VarUnitMap, GivenVarSet, UnitAliasMap, TemplateMap, CallIdMap
   , modifyTemplateMap, modifyNameParamMap, modifyProgramFile, modifyProgramFileM, modifyCallIdRemapM
   , runUnitSolver, evalUnitSolver, execUnitSolver
-  , CompiledUnits(..), NameParamMap, NameParamKey(..), emptyCompiledUnits )
-where
+  , NameParamMap, NameParamKey(..)
+  ) where
 
 import Control.Monad.RWS.Strict
 import Control.Monad.Trans.Except
@@ -86,16 +86,6 @@ instance Binary NameParamKey
 
 -- | mapped to a list of units (to be multiplied together)
 type NameParamMap = M.Map NameParamKey [UnitInfo]
-
--- | The data-structure stored in 'fortran-src mod files'
-data CompiledUnits = CompiledUnits { cuTemplateMap  :: TemplateMap
-                                   , cuNameParamMap :: NameParamMap }
-  deriving (Ord, Eq, Show, Data, Typeable, Generic)
-
-instance Binary CompiledUnits
-
-emptyCompiledUnits :: CompiledUnits
-emptyCompiledUnits = CompiledUnits M.empty M.empty
 
 --------------------------------------------------
 
