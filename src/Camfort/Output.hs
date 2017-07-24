@@ -107,16 +107,16 @@ instance OutputFiles (Filename, SourceText) where
   isNewFile _ = True
 
 -- When there is a file to be reprinted (for refactoring)
-instance OutputFiles (Filename, SourceText, F.ProgramFile Annotation) where
-  mkOutputText _ (_, input, ast@(F.ProgramFile (F.MetaInfo version _) _)) =
+instance OutputFiles (F.ProgramFile Annotation, SourceText) where
+  mkOutputText _ (ast@(F.ProgramFile (F.MetaInfo version _) _), input) =
      -- If we are create a file, call the pretty printer directly
      if B.null input
       then B.pack $ PP.pprintAndRender version ast (Just 0)
       -- Otherwise, applying the refactoring system with reprint
       else runIdentity $ reprint (refactoring version) ast input
 
-  outputFile (f, _, _) = f
-  isNewFile (_, inp, _) = B.null inp
+  outputFile (pf, _) = F.pfGetFilename pf
+  isNewFile (_, inp) = B.null inp
 
 {- Specifies how to do specific refactorings
   (uses generic query extension - remember extQ is non-symmetric) -}

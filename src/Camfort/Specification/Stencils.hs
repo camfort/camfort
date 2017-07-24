@@ -42,15 +42,17 @@ getBlocks = FAB.analyseBBlocks . FAR.analyseRenames . FA.initAnalysis
 --------------------------------------------------
 
 -- Top-level of specification inference
-infer :: InferMode -> Char -> Filename
+infer :: InferMode
+      -> Char
       -> F.ProgramFile Annotation
       -> (String, F.ProgramFile Annotation)
-infer mode marker filename pf =
+infer mode marker pf =
     -- Append filename to any outputs
     if null output
        then ("", infer1)
        else ("\n" ++ filename ++ "\n" ++ output, infer1)
     where
+      filename = F.pfGetFilename pf
       output = intercalate "\n"
              . filter (not . white)
              . map formatSpecNoComment $ infer2
@@ -66,16 +68,17 @@ infer mode marker filename pf =
 -- Top-level of specification synthesis
 synth :: InferMode
       -> Char
-      -> [(Filename, F.ProgramFile A)]
-      -> (String, [(Filename, F.ProgramFile Annotation)])
+      -> [F.ProgramFile A]
+      -> (String, [F.ProgramFile Annotation])
 synth mode marker = first normaliseMsg . foldr buildOutput (("",""), [])
   where
-    buildOutput (f, pf) =
-      case synthWithCheck pf of
-        Left err         -> first . first  $ (++ mkMsg f err)
-        Right (warn,pf') -> second (if null warn
-                                    then id
-                                    else (++ mkMsg f warn)) *** ((f, pf'):)
+    buildOutput pf =
+      let f = F.pfGetFilename pf
+      in case synthWithCheck pf of
+           Left err         -> first . first  $ (++ mkMsg f err)
+           Right (warn,pf') -> second (if null warn
+                                       then id
+                                       else (++ mkMsg f warn)) *** (pf':)
     synthWithCheck pf =
       let blocks = getBlocks pf
           checkRes = stencilChecking blocks in
@@ -98,11 +101,12 @@ synth mode marker = first normaliseMsg . foldr buildOutput (("",""), [])
 --         Stencil specification checking       --
 --------------------------------------------------
 
-check :: Filename -> F.ProgramFile Annotation -> String
-check filename pf =
+check :: F.ProgramFile Annotation -> String
+check pf =
     -- Append filename to any outputs
     if null output then "" else "\n" ++ filename ++ "\n" ++ output
     where
+     filename = F.pfGetFilename pf
      output = show . stencilChecking . getBlocks $ pf
 
 -- Local variables:

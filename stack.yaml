@@ -2,10 +2,11 @@ flags: {}
 extra-package-dbs: []
 packages:
 - '.'
-- ../fortran-src
+# - ../fortran-src
 - ../language-while
 extra-deps:
-- fortran-src-0.1.0.7
 - language-while-0.1
+- fortran-src-0.2.0.0
 - partial-order-0.1.2
-resolver: lts-8.6
+- sbv-7.0
+resolver: lts-8.23

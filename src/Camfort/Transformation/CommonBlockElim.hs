@@ -66,8 +66,8 @@ type (:?) a (b :: k) = a
 -- Top-level functions for eliminating common blocks in a set of files
 commonElimToModules ::
        Directory
-    -> [(Filename, F.ProgramFile A)]
-    -> (Report, [(Filename, F.ProgramFile A)], [(Filename, F.ProgramFile A)])
+    -> [F.ProgramFile A]
+    -> (Report, [F.ProgramFile A], [F.ProgramFile A])
 
 -- Eliminates common blocks in a program directory (and convert to modules)
 commonElimToModules d pfs =
@@ -78,17 +78,16 @@ commonElimToModules d pfs =
     (r', pfM) = introduceModules meta d cg
     pfs'' = updateUseDecls pfs' cg
 
-analyseAndRmCommons :: [(Filename, F.ProgramFile A)]
-               -> CommonState [(Filename, F.ProgramFile A)]
+analyseAndRmCommons :: [F.ProgramFile A]
+               -> CommonState [F.ProgramFile A]
 analyseAndRmCommons = mapM analysePerPF
 
-analysePerPF ::
-   (Filename, F.ProgramFile A) -> CommonState (Filename, F.ProgramFile A)
-analysePerPF (fname, pf) = do
+analysePerPF :: F.ProgramFile A -> CommonState (F.ProgramFile A)
+analysePerPF pf = do
    let pf' = FA.initAnalysis pf
    let (pf'', tenv) = FAT.analyseTypes pf'
-   pf''' <- transformBiM (analysePerPU tenv fname) pf''
-   return (fname, fmap FA.prevAnnotation pf''')
+   pf''' <- transformBiM (analysePerPU tenv (F.pfGetFilename pf)) pf''
+   return (fmap FA.prevAnnotation pf''')
 
 analysePerPU ::
     FAT.TypeEnv -> Filename -> F.ProgramUnit A1 -> CommonState (F.ProgramUnit A1)
@@ -224,11 +223,12 @@ instance Renaming [RenamerCoercer] where
     hasRenaming v = any (hasRenaming v)
 
 updateUseDecls ::
-  [(Filename, F.ProgramFile A)] -> [TLCommon A] -> [(Filename, F.ProgramFile A)]
+  [F.ProgramFile A] -> [TLCommon A] -> [F.ProgramFile A]
 updateUseDecls fps tcs = map perPF fps
   where
-    perPF (f, p@(F.ProgramFile (F.MetaInfo v _) _)) =
-      (f, transformBi (importIncludeCommons v) $ transformBi (matchPUnit v f) p)
+    perPF p@(F.ProgramFile (F.MetaInfo v _) _) =
+      transformBi (importIncludeCommons v)
+      $ transformBi (matchPUnit v (F.pfGetFilename p)) p
     tcrs = mkTLCommonRenamers tcs
 
     inames :: F.Statement A -> Maybe String
@@ -429,16 +429,17 @@ coherentCommons' ((var1, ty1):xs) ((var2, ty2):ys)
     -- TODO - give more information in the error
 coherentCommons' _ _ = ("Common blocks of different field lengths", False)
 
-introduceModules ::
-    F.MetaInfo -> Directory -> [TLCommon A]
-                            -> (Report, [(Filename, F.ProgramFile A)])
+introduceModules :: F.MetaInfo
+                 -> Directory
+                 -> [TLCommon A]
+                 -> (Report, [F.ProgramFile A])
 introduceModules meta dir cenv =
     mapM (mkModuleFile meta dir . head . head) (groupSortCommonBlock cenv)
 
 mkModuleFile ::
-  F.MetaInfo -> Directory -> TLCommon A -> (Report, (Filename, F.ProgramFile A))
+  F.MetaInfo -> Directory -> TLCommon A -> (Report, F.ProgramFile A)
 mkModuleFile meta dir (_, (_, (name, varTys))) =
-    (r, (path, F.pfSetFilename path $ F.ProgramFile meta [mod]))
+    (r, F.pfSetFilename path $ F.ProgramFile meta [mod])
   where
     modname = commonName name
     path = dir ++ modname ++ ".f90"
