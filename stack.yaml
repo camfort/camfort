@@ -3,7 +3,9 @@ extra-package-dbs: []
 packages:
 - '.'
 - ../fortran-src
+- ../language-while
 extra-deps:
 - fortran-src-0.1.0.7
+- language-while-0.1
 - partial-order-0.1.2
 resolver: lts-8.6
