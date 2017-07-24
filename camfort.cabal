@@ -40,6 +40,7 @@ library
   exposed-modules:      Camfort.Analysis
                         Camfort.Analysis.Annotations
                         Camfort.Analysis.CommentAnnotator
+                        Camfort.Analysis.ModFile
                         Camfort.Analysis.Simple
                         Camfort.Specification.Parser
                         Camfort.Specification.Stencils.Annotation
@@ -108,6 +109,7 @@ test-suite spec
   main-is:              Spec.hs
   hs-source-dirs:       tests
   other-modules:        Camfort.Analysis.CommentAnnotatorSpec
+                        Camfort.Analysis.ModFileSpec
                         Camfort.ReprintSpec
                         Camfort.Specification.ParserSpec
                         Camfort.Specification.Stencils.CheckSpec
@@ -140,5 +142,6 @@ test-suite spec
                         lattices == 1.5.*,
                         sbv >= 7.0 && < 8,
                         partial-order >= 0.1.2.1 && < 0.1.3,
+                        temporary >= 1.2.0.4 && < 1.3,
                         camfort
   default-language: Haskell2010

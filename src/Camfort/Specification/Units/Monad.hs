@@ -66,12 +66,12 @@ instance Read LiteralsOpt where
 data UnitOpts = UnitOpts
   { uoDebug          :: Bool                      -- ^ debugging mode?
   , uoLiterals       :: LiteralsOpt               -- ^ how to handle literals
-  , uoModFiles       :: M.Map String ModFile      -- ^ map of included modules
+  , uoModFiles       :: ModFiles                  -- ^ included modules
   }
   deriving (Show, Data, Eq, Ord)
 
 unitOpts0 :: UnitOpts
-unitOpts0 = UnitOpts False LitMixed M.empty
+unitOpts0 = UnitOpts False LitMixed emptyModFiles
 
 -- | Function/subroutine name -> associated, parametric polymorphic constraints
 type TemplateMap = M.Map F.Name Constraints

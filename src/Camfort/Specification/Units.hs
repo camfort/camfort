@@ -120,11 +120,11 @@ inferCriticalVariables' uOpts pf
     pfUA = usProgramFile state -- the program file after units analysis is done
 
     -- Use the module map derived from all of the included Camfort Mod files.
-    mmap = combinedModuleMap (M.elems (uoModFiles uOpts))
+    mmap = combinedModuleMap (uoModFiles uOpts)
     pfRenamed = FAR.analyseRenamesWithModuleMap mmap . FA.initAnalysis . fmap UA.mkUnitAnnotation $ pf
 
     -- Map of all declarations
-    dmap = extractDeclMap pfRenamed `M.union` combinedDeclMap (M.elems (uoModFiles uOpts))
+    dmap = extractDeclMap pfRenamed `M.union` combinedDeclMap (uoModFiles uOpts)
 
     mmap' = extractModuleMap pfRenamed `M.union` mmap -- post-parsing
     -- unique name -> src name across modules
@@ -133,7 +133,7 @@ inferCriticalVariables' uOpts pf
                 e@(F.ExpValue _ _ F.ValVariable{}) <- universeBi pfRenamed :: [F.Expression UA]
                 -- going to ignore intrinsics here
               ] `M.union` (M.unions . map (M.fromList . map (\ (a, (b, _)) -> (b, a)) . M.toList) $ M.elems mmap')
-    fromWhereMap = genUniqNameToFilenameMap . M.elems $ uoModFiles uOpts
+    fromWhereMap = genUniqNameToFilenameMap $ uoModFiles uOpts
 
 data ConsistencyReport
     -- | All units were consistent.
@@ -274,7 +274,7 @@ checkUnits' uOpts pf =
                                    _ -> False
 
     -- Use the module map derived from all of the included Camfort Mod files.
-    mmap = combinedModuleMap (M.elems (uoModFiles uOpts))
+    mmap = combinedModuleMap (uoModFiles uOpts)
     pfRenamed = FAR.analyseRenamesWithModuleMap mmap . FA.initAnalysis . fmap UA.mkUnitAnnotation $ pf
 
 lookupWith :: (a -> Bool) -> [(a,b)] -> Maybe b
@@ -357,7 +357,7 @@ inferUnits' uOpts pf =
     (eVars, state, logs) = runInference uOpts pfRenamed (chooseImplicitNames <$> runInferVariables)
 
     -- Use the module map derived from all of the included Camfort Mod files.
-    mmap = combinedModuleMap (M.elems (uoModFiles uOpts))
+    mmap = combinedModuleMap (uoModFiles uOpts)
     pfRenamed = FAR.analyseRenamesWithModuleMap mmap . FA.initAnalysis . fmap UA.mkUnitAnnotation $ pf
     pfUA = usProgramFile state -- the program file after units analysis is done
 
@@ -388,8 +388,8 @@ compileUnits' uOpts pf
     pfUA = usProgramFile state -- the program file after units analysis is done
 
     -- Use the module map derived from all of the included Camfort Mod files.
-    mmap = combinedModuleMap (M.elems (uoModFiles uOpts))
-    tenv = combinedTypeEnv (M.elems (uoModFiles uOpts))
+    mmap = combinedModuleMap (uoModFiles uOpts)
+    tenv = combinedTypeEnv (uoModFiles uOpts)
     pfRenamed = FAR.analyseRenamesWithModuleMap mmap . FA.initAnalysis . fmap UA.mkUnitAnnotation $ pf
     pfTyped = fst . FAT.analyseTypesWithEnv tenv $ pfRenamed
 
@@ -408,7 +408,7 @@ synthesiseUnits uOpts marker pf =
     runSynth inferred =
       let (eVars, state, logs) = runInference uOpts pfRenamed (runSynthesis marker . chooseImplicitNames $ inferred)
           -- Use the module map derived from all of the included Camfort Mod files.
-          mmap = combinedModuleMap (M.elems (uoModFiles uOpts))
+          mmap = combinedModuleMap (uoModFiles uOpts)
           pfRenamed = FAR.analyseRenamesWithModuleMap mmap . FA.initAnalysis . fmap UA.mkUnitAnnotation $ pf
           pfUA = usProgramFile state -- the program file after units analysis is done
       in fmap (UA.prevAnnotation . FA.prevAnnotation) pfUA -- strip annotations

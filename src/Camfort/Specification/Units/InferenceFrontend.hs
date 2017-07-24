@@ -183,7 +183,7 @@ indexedParams pu
 insertUndeterminedUnits :: UnitSolver ()
 insertUndeterminedUnits = do
   pf   <- gets usProgramFile
-  dmap <- (M.union (extractDeclMap pf) . combinedDeclMap . M.elems) `fmap` asks uoModFiles
+  dmap <- (M.union (extractDeclMap pf) . combinedDeclMap) `fmap` asks uoModFiles
   forM_ (universeBi pf :: [F.ProgramUnit UA]) $ \ pu ->
     modifyPUBlocksM (transformBiM (insertUndeterminedUnitVar dmap)) pu
 
@@ -514,7 +514,7 @@ topLevelFuncsAndSubs (F.ProgramFile _ pus) = topLevel =<< pus
 extractConstraints :: UnitSolver Constraints
 extractConstraints = do
   pf         <- gets usProgramFile
-  dmap       <- (M.union (extractDeclMap pf) . combinedDeclMap . M.elems) `fmap` asks uoModFiles
+  dmap       <- (M.union (extractDeclMap pf) . combinedDeclMap) `fmap` asks uoModFiles
   varUnitMap <- gets usVarUnitMap
   return $ [ con | b <- mainBlocks pf, con@(ConEq {}) <- universeBi b ] ++
            [ ConEq (toUnitVar dmap v) u | (v, u) <- M.toList varUnitMap ]

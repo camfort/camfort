@@ -50,6 +50,7 @@ import Control.Monad
 import System.FilePath (takeDirectory)
 
 import Camfort.Analysis (runRefactoring)
+import Camfort.Analysis.ModFile (getModFiles)
 import Camfort.Analysis.Simple
 import Camfort.Transformation.DeadCode
 import Camfort.Transformation.CommonBlockElim
@@ -105,10 +106,10 @@ equivalences inSrc excludes outSrc = do
 {- Units feature -}
 optsToUnitOpts :: LiteralsOpt -> Bool -> Maybe String -> IO UnitOpts
 optsToUnitOpts m debug = maybe (pure o1)
-  (fmap (\modFiles -> o1 { uoModFiles = M.fromList modFiles }) . getModFilesWithNames)
+  (fmap (\modFiles -> o1 { uoModFiles = modFiles }) . getModFiles)
   where o1 = unitOpts0 { uoLiterals = m
                        , uoDebug = debug
-                       , uoModFiles = M.empty }
+                       , uoModFiles = emptyModFiles }
 
 printUnitsResults :: (Show e, Show a) => [(String, Either e a)] -> IO ()
 printUnitsResults = mapM_ printResults

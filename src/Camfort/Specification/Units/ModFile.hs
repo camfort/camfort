@@ -70,9 +70,9 @@ mfCompiledUnits mf = case lookupModFileData unitsCompiledDataLabel mf of
     Right (_, _, cu) -> cu
 
 -- | Initialize units-relevant ModFile information.
-initializeModFiles :: M.Map String ModFile -> UnitSolver ()
+initializeModFiles :: ModFiles -> UnitSolver ()
 initializeModFiles mfs = do
-  let compiledUnits = combinedCompiledUnits . M.elems $ mfs
+  let compiledUnits = combinedCompiledUnits   $ mfs
   modifyTemplateMap  . const . cuTemplateMap  $ compiledUnits
   modifyNameParamMap . const . cuNameParamMap $ compiledUnits
 

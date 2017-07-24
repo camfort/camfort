@@ -24,11 +24,8 @@ module Camfort.Input
     -- * Source directory and file handling
   , doCreateBinary
   , readParseSrcDir
-  , getModFilesWithNames
   ) where
 
-import           Control.Monad (forM)
-import           Data.Binary (decodeFileOrFail)
 import qualified Data.ByteString.Char8 as B
 import           Data.Char (toUpper)
 import           Data.Either (partitionEithers)
@@ -50,6 +47,7 @@ import Camfort.Analysis
   , runAnalysisWithSummary
   , runRefactoring )
 import Camfort.Analysis.Annotations
+import Camfort.Analysis.ModFile (getModFiles)
 import Camfort.Helpers
 import Camfort.Output
 
@@ -223,26 +221,3 @@ rGetDirContents d = do
       if isDir then do
         fmap (fmap (path </>)) (rGetDirContents dPath)
       else pure [path]
-
--- | Retrieve a list of ModFiles from the directory, each associated
--- to the name of the file they are contained within.
-getModFilesWithNames :: FileOrDir -> IO [(Filename, ModFile)]
-getModFilesWithNames dir = do
-  -- Figure out the camfort mod files and parse them.
-  modFileNames <- filter isModFile <$> rGetDirContents dir
-  forM modFileNames $ \ modFileName -> do
-    eResult <- decodeFileOrFail (dir ++ "/" ++ modFileName) -- FIXME, directory manipulation
-    case eResult of
-      Left (offset, msg) -> do
-        putStrLn $ modFileName ++ ": Error at offset " ++ show offset ++ ": " ++ msg
-        pure (modFileName, emptyModFile)
-      Right modFile -> do
-        putStrLn $ modFileName ++ ": successfully parsed precompiled file."
-        pure (modFileName, modFile)
-  where
-    isModFile :: Filename -> Bool
-    isModFile = (== modFileSuffix) . takeExtension
-
--- | Retrieve the ModFiles from a directory.
-getModFiles :: FileOrDir -> IO ModFiles
-getModFiles = fmap (fmap snd) . getModFilesWithNames
