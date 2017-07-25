@@ -7,14 +7,21 @@ import Test.Hspec
 
 import Camfort.Analysis.Fortran (analysisResult, runAnalysis)
 import Camfort.Analysis.ModFile (getModFiles)
-import Camfort.Input (readParseSrcDirWithModFiles)
-import Camfort.Specification.Units (checkUnits, inferUnits)
+import Camfort.Input (FileProgram, readParseSrcDirWithModFiles)
+import Camfort.Specification.Units
+  (checkUnits, inferCriticalVariables, inferUnits)
+import Camfort.Specification.Units.Analysis (UnitsAnalysis)
 import Camfort.Specification.Units.Monad
   (LiteralsOpt(..), unitOpts0, uoDebug, uoLiterals)
 
 spec :: Spec
 spec =
   describe "fixtures integration tests" $ do
+    describe "units-suggest" $ do
+      it "reports critical variables" $
+         "example-criticals-1.f90" `unitsCriticalsReportIs` exampleCriticals1CriticalsReport
+      it "reports when no additional variables need to be annotated" $
+         "example-criticals-2.f90" `unitsCriticalsReportIs` exampleCriticals2CriticalsReport
     describe "units-check" $
       it "reports (simple) inconsistent units" $
          "example-inconsist-1.f90" `unitsCheckReportIs` exampleInconsist1CheckReport
@@ -25,27 +32,37 @@ spec =
 fixturesDir :: String
 fixturesDir = "tests" </> "fixtures" </> "Specification" </> "Units"
 
--- | Assert that the report of performing units checking on a file is as expected.
-unitsCheckReportIs :: String -> String -> Expectation
-fileName `unitsCheckReportIs` expectedReport = do
+unitsAnalysisTest :: (Show b) => UnitsAnalysis FileProgram a -> (a -> b) -> String -> String -> Expectation
+unitsAnalysisTest analysis normF fileName expectedReport = do
   let file = fixturesDir </> fileName
   incDir <- getCurrentDirectory
   [(pf,_)] <- readParseSrcDirWithModFiles file incDir []
   modFiles <- getModFiles incDir
-  let report = analysisResult $ runAnalysis (checkUnits uOpts) modFiles pf
+  let report = normF . analysisResult $ runAnalysis (analysis uOpts) modFiles pf
   show report `shouldBe` expectedReport
   where uOpts = unitOpts0 { uoDebug = False, uoLiterals = LitMixed }
 
+-- | Assert that the report of performing units checking on a file is as expected.
+unitsCheckReportIs :: String -> String -> Expectation
+unitsCheckReportIs = unitsAnalysisTest checkUnits id
+
 -- | Assert that the report of performing units inference on a file is as expected.
 unitsInferReportIs :: String -> String -> Expectation
-fileName `unitsInferReportIs` expectedReport = do
-  let file = fixturesDir </> fileName
-  incDir <- getCurrentDirectory
-  [(pf,_)] <- readParseSrcDirWithModFiles file incDir []
-  modFiles <- getModFiles incDir
-  let (Right report) = analysisResult $ runAnalysis (inferUnits uOpts) modFiles pf
-  show report `shouldBe` expectedReport
-  where uOpts = unitOpts0 { uoDebug = False, uoLiterals = LitMixed }
+unitsInferReportIs = unitsAnalysisTest inferUnits (\(Right r) -> r)
+
+-- | Assert that the report of performing units inference on a file is as expected.
+unitsCriticalsReportIs :: String -> String -> Expectation
+unitsCriticalsReportIs = unitsAnalysisTest inferCriticalVariables id
+
+exampleCriticals1CriticalsReport :: String
+exampleCriticals1CriticalsReport =
+  "\ntests/fixtures/Specification/Units/example-criticals-1.f90: 2 variable declarations suggested to be given a specification:\n\
+  \    tests/fixtures/Specification/Units/example-criticals-1.f90 (3:17)    b\n\
+  \    tests/fixtures/Specification/Units/example-criticals-1.f90 (3:20)    c\n"
+
+exampleCriticals2CriticalsReport :: String
+exampleCriticals2CriticalsReport =
+  "\ntests/fixtures/Specification/Units/example-criticals-2.f90: No additional annotations are necessary.\n"
 
 exampleInconsist1CheckReport :: String
 exampleInconsist1CheckReport =
