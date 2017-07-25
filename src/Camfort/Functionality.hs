@@ -149,7 +149,7 @@ unitsSynth inSrc excludes m debug incDir outSrc annType = do
     uo <- optsToUnitOpts m debug incDir
     let rfun = do
           pfs <- analysisInput
-          results <- mapM (branchAnalysis (LU.synthesiseUnits uo marker)) pfs
+          results <- mapM (branchAnalysis (LU.synthesiseUnits marker uo)) pfs
           let normalizedResults =
                 (\res -> ( show (analysisDebug res) ++ either show (show . fst) (analysisResult res)
                          , case analysisResult res of

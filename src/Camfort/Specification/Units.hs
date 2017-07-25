@@ -82,9 +82,7 @@ runInference uOpts pf runner =
 -- *************************************
 
 {-| Infer one possible set of critical variables for a program -}
-inferCriticalVariables
-  :: UnitOpts
-  -> UnitsAnalysis (F.ProgramFile Annotation) Int
+inferCriticalVariables :: UnitsAnalysis (F.ProgramFile Annotation) Int
 inferCriticalVariables uOpts = do
   pf <- analysisInput
   let
@@ -239,7 +237,7 @@ instance Show ConsistencyError where
                     ]
 
 {-| Check units-of-measure for a program -}
-checkUnits :: UnitOpts -> UnitsAnalysis (F.ProgramFile Annotation) ConsistencyReport
+checkUnits :: UnitsAnalysis (F.ProgramFile Annotation) ConsistencyReport
 checkUnits uOpts = do
   pf <- analysisInput
   let
@@ -321,7 +319,7 @@ getInferred (Inferred _ vars) = vars
 
 {-| Check and infer units-of-measure for a program
     This produces an output of all the unit information for a program -}
-inferUnits :: UnitOpts -> UnitsAnalysis (F.ProgramFile Annotation) (Either ConsistencyError InferenceReport)
+inferUnits :: UnitsAnalysis (F.ProgramFile Annotation) (Either ConsistencyError InferenceReport)
 inferUnits uOpts = do
   pf <- analysisInput
   let
@@ -340,13 +338,12 @@ inferUnits uOpts = do
                Right vars   -> Right $ Inferred pfUA vars
            Inconsistent err -> Left err
 
-synthesiseUnits :: UnitOpts
-                -> Char
+synthesiseUnits :: Char
                 -> UnitsAnalysis
                    (F.ProgramFile Annotation)
                    (Either ConsistencyError (InferenceReport, F.ProgramFile Annotation))
 {-| Synthesis unspecified units for a program (after checking) -}
-synthesiseUnits uOpts marker = do
+synthesiseUnits marker uOpts = do
   infRes <- inferUnits uOpts
   case infRes of
     Left err       -> pure $ Left err

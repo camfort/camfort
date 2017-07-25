@@ -13,6 +13,7 @@ module Camfort.Specification.Units.Analysis
   ) where
 
 import Camfort.Analysis.Fortran (Analysis)
+import Camfort.Specification.Units.Monad (UnitOpts)
 
--- | Analysis with additional debugging information via a 'Report'.
-type UnitsAnalysis a a' = Analysis a a'
+-- | Analysis with access to 'UnitOpts' information.
+type UnitsAnalysis a a' = UnitOpts -> Analysis a a'
