@@ -66,11 +66,15 @@ import Language.Fortran.Util.ModFile
 
 -- | Run a unit inference.
 runInference :: UnitOpts
-             -> F.ProgramFile UA
+             -> F.ProgramFile Annotation
              -> UnitSolver a
              -> (Either UnitException a, UnitState, Report)
 runInference uOpts pf runner =
-  let (r, s, report) = runUnitSolver uOpts pf $ do
+  let
+    -- Use the module map derived from all of the included Camfort Mod files.
+    mmap      = combinedModuleMap (uoModFiles uOpts)
+    pfRenamed = FAR.analyseRenamesWithModuleMap mmap . FA.initAnalysis . fmap UA.mkUnitAnnotation $ pf
+    (r, s, report) = runUnitSolver uOpts pfRenamed $ do
         initializeModFiles $ uoModFiles uOpts
         initInference
         runner
@@ -100,7 +104,7 @@ inferCriticalVariables uOpts = do
                 e@(F.ExpValue _ _ F.ValVariable{}) <- universeBi pfRenamed :: [F.Expression UA]
                 -- going to ignore intrinsics here
               ] `M.union` (M.unions . map (M.fromList . map (\ (a, (b, _)) -> (b, a)) . M.toList) $ M.elems mmap')
-    (eVars, state, logs) = runInference uOpts pfRenamed runCriticalVariables
+    (eVars, state, logs) = runInference uOpts pf runCriticalVariables
   writeDebug logs
   case eVars of
     Right vars -> okReport fname dmap vars uniqnameMap
@@ -241,10 +245,7 @@ checkUnits :: UnitsAnalysis (F.ProgramFile Annotation) ConsistencyReport
 checkUnits uOpts = do
   pf <- analysisInput
   let
-    -- Use the module map derived from all of the included Camfort Mod files.
-    mmap = combinedModuleMap (uoModFiles uOpts)
-    pfRenamed = FAR.analyseRenamesWithModuleMap mmap . FA.initAnalysis . fmap UA.mkUnitAnnotation $ pf
-    (eCons, state, logs) = runInference uOpts pfRenamed runInconsistentConstraints
+    (eCons, state, logs) = runInference uOpts pf runInconsistentConstraints
     -- number of 'real' variables checked, e.g. not parametric
     nVars = M.size . M.filter (not . isParametricUnit) $ usVarUnitMap state
     pfUA :: F.ProgramFile UA
@@ -323,10 +324,7 @@ inferUnits :: UnitsAnalysis (F.ProgramFile Annotation) (Either ConsistencyError 
 inferUnits uOpts = do
   pf <- analysisInput
   let
-      -- Use the module map derived from all of the included Camfort Mod files.
-      mmap = combinedModuleMap (uoModFiles uOpts)
-      pfRenamed = FAR.analyseRenamesWithModuleMap mmap . FA.initAnalysis . fmap UA.mkUnitAnnotation $ pf
-      (eVars, state, logs) = runInference uOpts pfRenamed (chooseImplicitNames <$> runInferVariables)
+      (eVars, state, logs) = runInference uOpts pf (chooseImplicitNames <$> runInferVariables)
       pfUA = usProgramFile state -- the program file after units analysis is done
   consistency <- checkUnits uOpts
   writeDebug logs
@@ -352,10 +350,7 @@ synthesiseUnits marker uOpts = do
       pure . Right $ (inferred, runSynth pf (getInferred inferred))
   where
     runSynth pf inferred =
-      let (eVars, state, logs) = runInference uOpts pfRenamed (runSynthesis marker . chooseImplicitNames $ inferred)
-          -- Use the module map derived from all of the included Camfort Mod files.
-          mmap = combinedModuleMap (uoModFiles uOpts)
-          pfRenamed = FAR.analyseRenamesWithModuleMap mmap . FA.initAnalysis . fmap UA.mkUnitAnnotation $ pf
+      let (eVars, state, logs) = runInference uOpts pf (runSynthesis marker . chooseImplicitNames $ inferred)
           pfUA = usProgramFile state -- the program file after units analysis is done
       in fmap (UA.prevAnnotation . FA.prevAnnotation) pfUA -- strip annotations
 
