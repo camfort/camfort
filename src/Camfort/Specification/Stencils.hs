@@ -18,13 +18,14 @@ module Camfort.Specification.Stencils
  (infer, check, synth) where
 
 import Control.Arrow ((***), first, second)
+import Data.Maybe (catMaybes)
 
 import Camfort.Specification.Stencils.CheckFrontend hiding (LogLine)
 import Camfort.Specification.Stencils.InferenceFrontend
 import Camfort.Specification.Stencils.Synthesis
-import Camfort.Analysis
-  (Analysis, Refactoring, mkAnalysis, runAnalysis, runRefactoring)
 import Camfort.Analysis.Annotations
+import Camfort.Analysis.Fortran
+  (Analysis, analysisInput, analysisResult, branchAnalysis)
 -- These two are redefined here for ForPar ASTs
 import Camfort.Helpers
 
@@ -46,19 +47,17 @@ getBlocks = FAB.analyseBBlocks . FAR.analyseRenames . FA.initAnalysis
 -- Top-level of specification inference
 infer :: Bool
       -> Char
-      -> Analysis String (F.ProgramFile Annotation)
-infer useEval marker = mkAnalysis $ \pf ->
+      -> Analysis (F.ProgramFile Annotation) String
+infer useEval marker = do
+  pf <- analysisInput
+  report <- analysisResult <$> branchAnalysis (stencilInference useEval marker) (getBlocks pf)
   let filename = F.pfGetFilename pf
       output = intercalate "\n"
              . filter (not . white)
              . map formatSpecNoComment $ report
       white  = all (\x -> (x == ' ') || (x == '\t'))
-      report = runAnalysis (stencilInference useEval marker) . getBlocks $ pf
-  in
     -- Append filename to any outputs
-    if null output
-       then ""
-       else "\n" ++ filename ++ "\n" ++ output
+  pure $ if null output then "" else "\n" ++ filename ++ "\n" ++ output
 
 --------------------------------------------------
 --         Stencil specification synthesis      --
@@ -66,44 +65,56 @@ infer useEval marker = mkAnalysis $ \pf ->
 
 -- Top-level of specification synthesis
 synth :: Char
-      -> Refactoring String [F.ProgramFile A] [F.ProgramFile Annotation]
-synth marker = first normaliseMsg . foldr buildOutput (("",""), [])
+      -> Analysis [F.ProgramFile A] (String, [F.ProgramFile Annotation])
+synth marker = do
+  pfs <- analysisInput
+  syntheses <- unzip <$> mapM (fmap analysisResult . branchAnalysis buildOutput) pfs
+  let report = normaliseMsg (fst syntheses)
+  pure (report, catMaybes $ snd syntheses)
   where
-    buildOutput pf =
+    buildOutput :: Analysis (F.ProgramFile A) ((String, String), Maybe (F.ProgramFile Annotation))
+    buildOutput = do
+      pf <- analysisInput
       let f = F.pfGetFilename pf
-      in case synthWithCheck pf of
-           Left err         -> first . first  $ (++ mkMsg f err)
-           Right (warn,pf') -> second (if null warn
-                                       then id
-                                       else (++ mkMsg f warn)) *** (pf':)
-    synthWithCheck pf =
+      result <- synthWithCheck
+      pure $ case result of
+               Left err         -> ((mkMsg f err, ""), Nothing)
+               Right (warn,pf') -> (("", mkMsg f warn), Just pf')
+    synthWithCheck :: Analysis (F.ProgramFile A) (Either String (String, F.ProgramFile Annotation))
+    synthWithCheck = do
+      pf <- analysisInput
       let blocks = getBlocks pf
-          checkRes = stencilChecking blocks in
-        case checkFailure checkRes of
-          Nothing  ->
-            let inference = fmap FA.prevAnnotation .
-                            snd $ runRefactoring (stencilSynthesis marker) blocks
-                  in Right (maybe "" show (checkWarnings checkRes), inference)
-          Just err -> Left $ show err
+          checkRes = stencilChecking blocks
+      case checkFailure checkRes of
+        Nothing  -> do
+          res <- (snd . analysisResult) <$> branchAnalysis (stencilSynthesis marker) blocks
+          let inference = fmap FA.prevAnnotation res
+          pure $ Right (maybe "" show (checkWarnings checkRes), inference)
+        Just err -> pure . Left $ show err
 
-    mkMsg f e = "\nEncountered the following errors when checking\
-                \ stencil specs for '" ++ f ++ "'\n\n" ++ e
+    mkMsg _ "" = ""
+    mkMsg f e  = "\nEncountered the following errors when checking\
+                 \ stencil specs for '" ++ f ++ "'\n\n" ++ e
 
-    normaliseMsg ("",  warn) = warn
-    normaliseMsg (err, warn) = err ++ warn ++ "\nPlease resolve these errors, and then\
-                            \ run synthesis again."
+    normaliseMsg outs =
+      let errors = fmap fst outs
+          fullMsg = concatMap (uncurry (++)) outs
+      in if any (/="") errors then fullMsg ++ errorTrailer else fullMsg
+      where errorTrailer = "\nPlease resolve these errors, and then\
+                           \ run synthesis again."
 
 
 --------------------------------------------------
 --         Stencil specification checking       --
 --------------------------------------------------
 
-check :: Analysis String (F.ProgramFile Annotation)
-check = mkAnalysis $ \pf ->
+check :: Analysis (F.ProgramFile Annotation) String
+check = do
+  pf <- analysisInput
   -- Append filename to any outputs
   let output   = show . stencilChecking . getBlocks $ pf
       filename = F.pfGetFilename pf
-  in if null output then "" else "\n" ++ filename ++ "\n" ++ output
+  pure $ if null output then "" else "\n" ++ filename ++ "\n" ++ output
 
 -- Local variables:
 -- mode: haskell

@@ -1,11 +1,13 @@
 module Camfort.Specification.UnitsSpec (spec) where
 
+import System.Directory (getCurrentDirectory)
 import System.FilePath ((</>))
 
 import Test.Hspec
 
-import Camfort.Analysis (runAnalysis)
-import Camfort.Input (readParseSrcDir)
+import Camfort.Analysis.Fortran (analysisResult, runAnalysis)
+import Camfort.Analysis.ModFile (getModFiles)
+import Camfort.Input (readParseSrcDirWithModFiles)
 import Camfort.Specification.Units (checkUnits, inferUnits)
 import Camfort.Specification.Units.Monad
   (LiteralsOpt(..), unitOpts0, uoDebug, uoLiterals)
@@ -27,8 +29,10 @@ fixturesDir = "tests" </> "fixtures" </> "Specification" </> "Units"
 unitsCheckReportIs :: String -> String -> Expectation
 fileName `unitsCheckReportIs` expectedReport = do
   let file = fixturesDir </> fileName
-  [(pf,_)] <- readParseSrcDir file []
-  let (_, report) = runAnalysis (checkUnits uOpts) pf
+  incDir <- getCurrentDirectory
+  [(pf,_)] <- readParseSrcDirWithModFiles file incDir []
+  modFiles <- getModFiles incDir
+  let report = analysisResult $ runAnalysis (checkUnits uOpts) modFiles pf
   show report `shouldBe` expectedReport
   where uOpts = unitOpts0 { uoDebug = False, uoLiterals = LitMixed }
 
@@ -36,8 +40,10 @@ fileName `unitsCheckReportIs` expectedReport = do
 unitsInferReportIs :: String -> String -> Expectation
 fileName `unitsInferReportIs` expectedReport = do
   let file = fixturesDir </> fileName
-  [(pf,_)] <- readParseSrcDir file []
-  let (_, Right report) = runAnalysis (inferUnits uOpts) pf
+  incDir <- getCurrentDirectory
+  [(pf,_)] <- readParseSrcDirWithModFiles file incDir []
+  modFiles <- getModFiles incDir
+  let (Right report) = analysisResult $ runAnalysis (inferUnits uOpts) modFiles pf
   show report `shouldBe` expectedReport
   where uOpts = unitOpts0 { uoDebug = False, uoLiterals = LitMixed }
 

@@ -24,6 +24,8 @@ import System.Directory
 
 import Test.Hspec
 
+import Camfort.Analysis.Fortran
+  (analysisDebug, analysisInput, analysisResult, branchAnalysis)
 import Camfort.Transformation.EquivalenceElim
 import Camfort.Functionality
 import Camfort.Input
@@ -53,9 +55,14 @@ spec =
       it "it eliminates equivalence statements" $
         actual `shouldBe` expected
       ----
-      let rfun = mapM (second (pure :: a -> Either () a) . refactorEquivalences)
+      let rfun = do
+            pfs <- analysisInput
+            resA <- mapM (branchAnalysis refactorEquivalences) pfs
+            let (reports, results) = (fmap analysisDebug resA, fmap analysisResult resA)
+            pure (mconcat reports, fmap (pure :: a -> Either () a) results)
       let infile = samplesBase </> "equiv.f90"
-      report <- runIO $ doRefactor rfun id infile [] "equiv.expected.f90"
+      incDir <- runIO getCurrentDirectory
+      report <- runIO $ doRefactorWithModFiles rfun infile incDir [] "equiv.expected.f90"
       it "report is as expected" $
         report `shouldBe` expectedReport
 

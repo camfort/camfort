@@ -10,12 +10,9 @@ Stability   :  experimental
 
 module Camfort.Specification.Units.Analysis
   ( UnitsAnalysis
-  , UnitsRefactoring
   ) where
 
-import Camfort.Analysis
-import Camfort.Analysis.Annotations (Report)
+import Camfort.Analysis.Fortran (Analysis)
 
 -- | Analysis with additional debugging information via a 'Report'.
-type UnitsAnalysis r a       = Analysis    (Report,       r) a
-type UnitsRefactoring r a a' = Refactoring (Report, Maybe r) a a'
+type UnitsAnalysis a a' = Analysis a a'

@@ -47,12 +47,13 @@ module Camfort.Functionality (
   , camfortInitialize
   ) where
 
-import Control.Arrow (second)
+import Control.Arrow (first, second)
 import Control.Monad
-import System.Directory (createDirectoryIfMissing)
+import System.Directory (createDirectoryIfMissing, getCurrentDirectory)
 import System.FilePath  ((</>), takeDirectory)
 
-import Camfort.Analysis (runRefactoring)
+import Camfort.Analysis.Fortran
+  (analysisDebug, analysisInput, analysisResult, branchAnalysis)
 import Camfort.Analysis.ModFile (getModFiles)
 import Camfort.Analysis.Simple
 import Camfort.Transformation.DeadCode
@@ -82,28 +83,43 @@ markerChar ATDefault = '='
 
 -- * Wrappers on all of the features
 ast d excludes = do
-    xs <- readParseSrcDir d excludes
+    incDir <- getCurrentDirectory
+    xs <- readParseSrcDirWithModFiles d incDir excludes
     print . fmap fst $ xs
 
 countVarDecls inSrc excludes = do
     putStrLn $ "Counting variable declarations in '" ++ inSrc ++ "'"
-    doAnalysisSummary countVariableDeclarations inSrc excludes
+    incDir <- getCurrentDirectory
+    doAnalysisSummary countVariableDeclarations inSrc incDir excludes
 
 dead inSrc excludes outSrc = do
     putStrLn $ "Eliminating dead code in '" ++ inSrc ++ "'"
-    report <- doRefactor (mapM (second (pure :: a -> Either () a) . deadCode False)) id inSrc excludes outSrc
+    let rfun = do
+          pfs <- analysisInput
+          resA <- mapM (branchAnalysis $ deadCode False) pfs
+          let (reports, results) = (fmap analysisDebug resA, fmap analysisResult resA)
+          pure (mconcat reports, fmap (pure :: a -> Either () a) results)
+    incDir <- getCurrentDirectory
+    report <- doRefactorWithModFiles rfun inSrc incDir excludes outSrc
     putStrLn report
 
 common inSrc excludes outSrc = do
     putStrLn $ "Refactoring common blocks in '" ++ inSrc ++ "'"
     isDir <- isDirectory inSrc
     let rfun = commonElimToModules (takeDirectory outSrc ++ "/")
-    report <- doRefactorAndCreate rfun inSrc excludes outSrc
-    putStrLn report
+    incDir <- getCurrentDirectory
+    report <- doRefactorAndCreate rfun inSrc excludes incDir outSrc
+    print report
 
 equivalences inSrc excludes outSrc = do
     putStrLn $ "Refactoring equivalences blocks in '" ++ inSrc ++ "'"
-    report <- doRefactor (mapM (second (pure :: a -> Either () a) . refactorEquivalences)) id inSrc excludes outSrc
+    let rfun = do
+          pfs <- analysisInput
+          resA <- mapM (branchAnalysis refactorEquivalences) pfs
+          let (reports, results) = (fmap analysisDebug resA, fmap analysisResult resA)
+          pure (mconcat reports, fmap (pure :: a -> Either () a) results)
+    incDir <- getCurrentDirectory
+    report <- doRefactorWithModFiles rfun inSrc incDir excludes outSrc
     putStrLn report
 
 {- Units feature -}
@@ -114,40 +130,43 @@ optsToUnitOpts m debug = maybe (pure o1)
                        , uoDebug = debug
                        , uoModFiles = emptyModFiles }
 
-printUnitsResults :: (Show e, Show a) => [(String, Either e a)] -> IO ()
-printUnitsResults = mapM_ printResults
-  where printResults (report, Left e)  = putStrLn (report ++ show e)
-        printResults (report, Right r) = putStrLn (report ++ show r)
-
 unitsCheck inSrc excludes m debug incDir = do
     putStrLn $ "Checking units for '" ++ inSrc ++ "'"
     uo <- optsToUnitOpts m debug incDir
     let rfun = LU.checkUnits uo
-    doAnalysisReportWithModFiles rfun (printUnitsResults . fmap (second (pure :: a -> Either () a)))
-                                       inSrc incDir excludes
+    incDir' <- maybe getCurrentDirectory pure incDir
+    doAnalysisReportWithModFiles rfun inSrc incDir' excludes
 
 unitsInfer inSrc excludes m debug incDir = do
     putStrLn $ "Inferring units for '" ++ inSrc ++ "'"
     uo <- optsToUnitOpts m debug incDir
     let rfun = LU.inferUnits uo
-    doAnalysisReportWithModFiles rfun printUnitsResults inSrc incDir excludes
+    incDir' <- maybe getCurrentDirectory pure incDir
+    doAnalysisReportWithModFiles rfun inSrc incDir' excludes
 
 unitsCompile inSrc excludes m debug incDir outSrc = do
     putStrLn $ "Compiling units for '" ++ inSrc ++ "'"
     uo <- optsToUnitOpts m debug incDir
     let rfun = LU.compileUnits uo
-    putStrLn =<< doCreateBinary rfun inSrc incDir excludes outSrc
+    incDir' <- maybe getCurrentDirectory pure incDir
+    putStrLn =<< doCreateBinary rfun inSrc incDir' excludes outSrc
 
 
 unitsSynth inSrc excludes m debug incDir outSrc annType = do
     putStrLn $ "Synthesising units for '" ++ inSrc ++ "'"
     let marker = markerChar annType
     uo <- optsToUnitOpts m debug incDir
-    let rfun = traverse (\fp ->
-                           case runRefactoring (LU.synthesiseUnits uo marker) fp of
-                             ((debug, Nothing), res) -> ([debug], res)
-                             ((debug, Just ir), res) -> ([debug ++ show ir], res))
-    report <- doRefactorWithModFiles rfun concat inSrc incDir excludes outSrc
+    let rfun = do
+          pfs <- analysisInput
+          results <- mapM (branchAnalysis (LU.synthesiseUnits uo marker)) pfs
+          let normalizedResults =
+                (\res -> ( show (analysisDebug res) ++ either show (show . fst) (analysisResult res)
+                         , case analysisResult res of
+                             Left err     -> Left err
+                             Right (_,pf) -> Right pf)) <$> results
+          pure . first concat $ unzip normalizedResults
+    incDir' <- maybe getCurrentDirectory pure incDir
+    report <- doRefactorWithModFiles rfun inSrc incDir' excludes outSrc
     putStrLn report
 
 unitsCriticals inSrc excludes m debug incDir = do
@@ -155,22 +174,26 @@ unitsCriticals inSrc excludes m debug incDir = do
              ++ inSrc ++ "'"
     uo <- optsToUnitOpts m debug incDir
     let rfun = LU.inferCriticalVariables uo
-    doAnalysisReportWithModFiles rfun (mapM_ (putStrLn . fst)) inSrc incDir excludes
+    incDir' <- maybe getCurrentDirectory pure incDir
+    doAnalysisReportWithModFiles rfun inSrc incDir' excludes
 
 {- Stencils feature -}
 stencilsCheck inSrc excludes = do
    putStrLn $ "Checking stencil specs for '" ++ inSrc ++ "'"
-   doAnalysisSummary Stencils.check inSrc excludes
+   incDir <- getCurrentDirectory
+   doAnalysisSummary Stencils.check inSrc incDir excludes
 
 stencilsInfer inSrc excludes useEval = do
    putStrLn $ "Inferring stencil specs for '" ++ inSrc ++ "'"
    let rfun = Stencils.infer useEval '='
-   doAnalysisSummary rfun inSrc excludes
+   incDir <- getCurrentDirectory
+   doAnalysisSummary rfun inSrc incDir excludes
 
 stencilsSynth inSrc excludes annType outSrc = do
    putStrLn $ "Synthesising stencil specs for '" ++ inSrc ++ "'"
-   let rfun = second (fmap (pure :: a -> Either () a)) . Stencils.synth (markerChar annType)
-   report <- doRefactor rfun id inSrc excludes outSrc
+   let rfun = second (fmap (pure :: a -> Either () a)) <$> Stencils.synth (markerChar annType)
+   incDir <- getCurrentDirectory
+   report <- doRefactorWithModFiles rfun inSrc incDir excludes outSrc
    putStrLn report
 
 -- | Initialize Camfort for the given project.

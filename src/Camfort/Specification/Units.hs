@@ -43,15 +43,14 @@ import Data.Generics.Uniplate.Operations
 import qualified Data.ByteString.Char8 as B
 import GHC.Generics (Generic)
 
-import Camfort.Analysis
-  (Analysis, Refactoring, mkAnalysis, runAnalysis)
 import Camfort.Helpers
 import Camfort.Analysis.Annotations
+import Camfort.Analysis.Fortran
+  (Analysis, analysisInput, analysisResult, branchAnalysis, writeDebug)
 import Camfort.Input
 
 -- Provides the types and data accessors used in this module
-import           Camfort.Specification.Units.Analysis
-  (UnitsAnalysis, UnitsRefactoring)
+import           Camfort.Specification.Units.Analysis (UnitsAnalysis)
 import qualified Camfort.Specification.Units.Annotation as UA
 import           Camfort.Specification.Units.Environment
 import           Camfort.Specification.Units.InferenceFrontend
@@ -71,11 +70,13 @@ import Language.Fortran.Util.ModFile
 runInference :: UnitOpts
              -> F.ProgramFile UA
              -> UnitSolver a
-             -> (Either UnitException a, UnitState, UnitLogs)
-runInference uOpts pf runner = runUnitSolver uOpts pf $ do
-  initializeModFiles $ uoModFiles uOpts
-  initInference
-  runner
+             -> (Either UnitException a, UnitState, Report)
+runInference uOpts pf runner =
+  let (r, s, report) = runUnitSolver uOpts pf $ do
+        initializeModFiles $ uoModFiles uOpts
+        initInference
+        runner
+  in (r, s, mkReport report)
 
 -- *************************************
 --   Unit inference (top - level)
@@ -85,54 +86,54 @@ runInference uOpts pf runner = runUnitSolver uOpts pf $ do
 {-| Infer one possible set of critical variables for a program -}
 inferCriticalVariables
   :: UnitOpts
-  -> Analysis (Report, Int) (F.ProgramFile Annotation)
-inferCriticalVariables uOpts = mkAnalysis (inferCriticalVariables' uOpts)
-
-inferCriticalVariables' :: UnitOpts -> F.ProgramFile Annotation -> (Report, Int)
-inferCriticalVariables' uOpts pf
-  | Right vars <- eVars = okReport vars
-  | Left exc   <- eVars = (errReport exc, -1)
-  where
+  -> UnitsAnalysis (F.ProgramFile Annotation) Int
+inferCriticalVariables uOpts = do
+  pf <- analysisInput
+  let
     fname = F.pfGetFilename pf
-    -- Format report
-    okReport []   = (logs ++ "\n" ++ fname
-                         ++ ":No additional annotations are necessary.\n", 0)
-    okReport vars = ( logs ++ "\n" ++ fname ++ ": "
-                           ++ show numVars
-                           ++ " variable declarations suggested to be given a specification:\n"
-                           ++ unlines [ "    " ++ declReport d | d <- M.toList dmapSlice ]
-                    , numVars)
-      where
-        varNames  = map unitVarName vars
-        dmapSlice = M.filterWithKey (\ k _ -> k `elem` varNames) dmap
-        numVars   = M.size dmapSlice
-
-    declReport (v, (dc, ss)) = vfilename ++ " (" ++ showSrcSpan ss ++ ")    " ++ fromMaybe v (M.lookup v uniqnameMap)
-      where vfilename = fromMaybe fname $ M.lookup v fromWhereMap
-
-    unitVarName (UnitVar (v, _))                 = v
-    unitVarName (UnitParamVarUse (_, (v, _), _)) = v
-    unitVarName _                                = "<bad>"
-
-    errReport exc = logs ++ "\n" ++ fname ++ ":\n" ++ show exc
-
-    (eVars, state, logs) = runInference uOpts pfRenamed runCriticalVariables
-    pfUA = usProgramFile state -- the program file after units analysis is done
-
     -- Use the module map derived from all of the included Camfort Mod files.
     mmap = combinedModuleMap (uoModFiles uOpts)
     pfRenamed = FAR.analyseRenamesWithModuleMap mmap . FA.initAnalysis . fmap UA.mkUnitAnnotation $ pf
+    mmap' = extractModuleMap pfRenamed `M.union` mmap -- post-parsing
+    -- unique name -> src name across modules
 
     -- Map of all declarations
     dmap = extractDeclMap pfRenamed `M.union` combinedDeclMap (uoModFiles uOpts)
-
-    mmap' = extractModuleMap pfRenamed `M.union` mmap -- post-parsing
-    -- unique name -> src name across modules
     uniqnameMap = M.fromList [
                 (FA.varName e, FA.srcName e) |
                 e@(F.ExpValue _ _ F.ValVariable{}) <- universeBi pfRenamed :: [F.Expression UA]
                 -- going to ignore intrinsics here
               ] `M.union` (M.unions . map (M.fromList . map (\ (a, (b, _)) -> (b, a)) . M.toList) $ M.elems mmap')
+    (eVars, state, logs) = runInference uOpts pfRenamed runCriticalVariables
+  writeDebug logs
+  case eVars of
+    Right vars -> okReport fname dmap vars uniqnameMap
+    Left exc   -> errReport fname exc
+  where
+    -- Format report
+    okReport fname _ [] _ = do
+      writeDebug . mkReport $ concat ["\n", fname, ":No additional annotations are necessary.\n"]
+      pure 0
+    okReport fname dmap vars uniqnameMap = do
+      writeDebug . mkReport $ concat ["\n", fname, ": ", show numVars
+                                     , " variable declarations suggested to be given a specification:\n"
+                                     , unlines [ "    " ++ declReport d | d <- M.toList dmapSlice ]]
+      pure numVars
+      where
+        varNames  = map unitVarName vars
+        dmapSlice = M.filterWithKey (\ k _ -> k `elem` varNames) dmap
+        numVars   = M.size dmapSlice
+        declReport (v, (dc, ss)) = vfilename ++ " (" ++ showSrcSpan ss ++ ")    " ++ fromMaybe v (M.lookup v uniqnameMap)
+          where vfilename = fromMaybe fname $ M.lookup v fromWhereMap
+
+    unitVarName (UnitVar (v, _))                 = v
+    unitVarName (UnitParamVarUse (_, (v, _), _)) = v
+    unitVarName _                                = "<bad>"
+
+    errReport fname exc = do
+      writeDebug . mkReport $ concat ["\n", fname, ":\n", show exc]
+      pure (-1)
+
     fromWhereMap = genUniqNameToFilenameMap $ uoModFiles uOpts
 
 data ConsistencyReport
@@ -239,43 +240,29 @@ instance Show ConsistencyError where
                     , c <- maybeToList (UA.getConstraint x)
                     ]
 
-
-
-
 {-| Check units-of-measure for a program -}
-checkUnits :: UnitOpts -> UnitsAnalysis ConsistencyReport (F.ProgramFile Annotation)
-checkUnits uOpts = mkAnalysis (checkUnits' uOpts)
-
-checkUnits' :: UnitOpts -> F.ProgramFile Annotation -> (Report, ConsistencyReport)
-checkUnits' uOpts pf =
-  (logs, case eCons of
-    Right Nothing -> Consistent pf nVars
-    Right (Just cons) -> Inconsistent $ Inconsistency pfUA state cons
-    -- FIXME: What does this mean... It's not tested...?
-    Left e -> undefined)
-  where
-
-    -- Find a given constraint within the annotated AST. FIXME: optimise
-
-    varReport     = intercalate ", " . map showVar
-
-    showVar (UnitVar (_, s)) = s
-    showVar (UnitLiteral _)   = "<literal>" -- FIXME
-    showVar _                 = "<bad>"
-
-    (eCons, state, logs) = runInference uOpts pfRenamed runInconsistentConstraints
-    pfUA :: F.ProgramFile UA
-    pfUA = usProgramFile state -- the program file after units analysis is done
-
-    -- number of 'real' variables checked, e.g. not parametric
-    nVars = M.size . M.filter (not . isParametricUnit) $ usVarUnitMap state
-    isParametricUnit u = case u of UnitParamPosAbs {} -> True; UnitParamPosUse {} -> True
-                                   UnitParamVarAbs {} -> True; UnitParamVarUse {} -> True
-                                   _ -> False
-
+checkUnits :: UnitOpts -> UnitsAnalysis (F.ProgramFile Annotation) ConsistencyReport
+checkUnits uOpts = do
+  pf <- analysisInput
+  let
     -- Use the module map derived from all of the included Camfort Mod files.
     mmap = combinedModuleMap (uoModFiles uOpts)
     pfRenamed = FAR.analyseRenamesWithModuleMap mmap . FA.initAnalysis . fmap UA.mkUnitAnnotation $ pf
+    (eCons, state, logs) = runInference uOpts pfRenamed runInconsistentConstraints
+    -- number of 'real' variables checked, e.g. not parametric
+    nVars = M.size . M.filter (not . isParametricUnit) $ usVarUnitMap state
+    pfUA :: F.ProgramFile UA
+    pfUA = usProgramFile state -- the program file after units analysis is done
+  writeDebug logs
+  pure $ case eCons of
+           Right Nothing -> Consistent pf nVars
+           Right (Just cons) -> Inconsistent $ Inconsistency pfUA state cons
+           -- FIXME: What does this mean... It's not tested...?
+           Left e -> undefined
+  where
+    isParametricUnit u = case u of UnitParamPosAbs {} -> True; UnitParamPosUse {} -> True
+                                   UnitParamVarAbs {} -> True; UnitParamVarUse {} -> True
+                                   _ -> False
 
 lookupWith :: (a -> Bool) -> [(a,b)] -> Maybe b
 lookupWith f = fmap snd . find (f . fst)
@@ -336,54 +323,47 @@ getInferred (Inferred _ vars) = vars
 
 {-| Check and infer units-of-measure for a program
     This produces an output of all the unit information for a program -}
-inferUnits :: UnitOpts -> UnitsAnalysis (Either ConsistencyError InferenceReport) (F.ProgramFile Annotation)
-inferUnits uOpts = mkAnalysis (inferUnits' uOpts)
+inferUnits :: UnitOpts -> UnitsAnalysis (F.ProgramFile Annotation) (Either ConsistencyError InferenceReport)
+inferUnits uOpts = do
+  pf <- analysisInput
+  let
+      -- Use the module map derived from all of the included Camfort Mod files.
+      mmap = combinedModuleMap (uoModFiles uOpts)
+      pfRenamed = FAR.analyseRenamesWithModuleMap mmap . FA.initAnalysis . fmap UA.mkUnitAnnotation $ pf
+      (eVars, state, logs) = runInference uOpts pfRenamed (chooseImplicitNames <$> runInferVariables)
+      pfUA = usProgramFile state -- the program file after units analysis is done
+  consistency <- checkUnits uOpts
+  writeDebug logs
+  pure $ case consistency of
+           Consistent{}     ->
+             case eVars of
+               -- FIXME: What does this mean... It's not tested...?
+               Left e -> undefined
+               Right vars   -> Right $ Inferred pfUA vars
+           Inconsistent err -> Left err
 
-inferUnits' :: UnitOpts -> F.ProgramFile Annotation -> (Report, Either ConsistencyError InferenceReport)
-inferUnits' uOpts pf =
-  case runAnalysis (checkUnits uOpts) pf of
-    (debug, Consistent{})     ->
-      case eVars of
-        -- FIXME: What does this mean... It's not tested...?
-        Left e -> undefined
-        Right vars -> (debug ++ logs, pure $ Inferred pfUA vars)
-        -- (debug ++ logs, pure $ Inferred pf eVars)
-    (debug, Inconsistent err) -> (debug ++ logs, Left err)
-  where
-    fname = F.pfGetFilename pf
+compileUnits :: UnitOpts -> Analysis [FileProgram] (String, [(Filename, B.ByteString)])
+compileUnits uOpts = do
+  fileprogs <- analysisInput
+  results <- mapM (branchAnalysis (compileUnits' uOpts)) fileprogs
+  let (reports, bins) = unzip $ analysisResult <$> results
+  pure (concat reports, concat bins)
 
-    errReport exc = logs ++ "\n" ++ fname ++ ":  " ++ show exc
-
-    (eVars, state, logs) = runInference uOpts pfRenamed (chooseImplicitNames <$> runInferVariables)
-
-    -- Use the module map derived from all of the included Camfort Mod files.
-    mmap = combinedModuleMap (uoModFiles uOpts)
-    pfRenamed = FAR.analyseRenamesWithModuleMap mmap . FA.initAnalysis . fmap UA.mkUnitAnnotation $ pf
-    pfUA = usProgramFile state -- the program file after units analysis is done
-
-compileUnits :: UnitOpts -> Refactoring String [FileProgram] [(Filename, B.ByteString)]
-compileUnits uOpts fileprogs = (concat reports, concat bins)
-  where
-    (reports, bins) = unzip [ (report, bin) | fileprog <- fileprogs
-                                            , let (report, bin) = compileUnits' uOpts fileprog ]
-
-compileUnits' :: UnitOpts -> Refactoring String FileProgram [(Filename, B.ByteString)]
-compileUnits' uOpts pf
-  | Right cu <- eCUnits = okReport cu
-  | Left exc <- eCUnits = errReport exc
-  where
+compileUnits' :: UnitOpts -> Analysis FileProgram (String, [(Filename, B.ByteString)])
+compileUnits' uOpts = do
+  pf <- analysisInput
+  let
     fname = F.pfGetFilename pf
     -- Format report
-    okReport cu = ( logs ++ "\n" ++ fname ++ ":\n" ++ if uoDebug uOpts then debugInfo else []
-                     -- FIXME, filename manipulation (needs to go in -I dir?)
-                    , [(fname ++ modFileSuffix, encodeModFile (genUnitsModFile pfTyped cu))] )
+    okReport cu = ( "\n" ++ fname ++ ":\n" ++ if uoDebug uOpts then debugInfo else []
+                    -- FIXME, filename manipulation (needs to go in -I dir?)
+                  , [(fname ++ modFileSuffix, encodeModFile (genUnitsModFile pfTyped cu))] )
       where
         debugInfo = unlines [ n ++ ":\n  " ++ intercalate "\n  " (map show cs) | (n, cs) <- M.toList (cuTemplateMap cu) ] ++
                     unlines ("nameParams:" : (map show . M.toList $ cuNameParamMap cu))
 
 
-    errReport exc = ( logs ++ "\n" ++ fname ++ ":  " ++ show exc
-                    , [] )
+    errReport exc = ("\n" ++ fname ++ ":  " ++ show exc, [])
     (eCUnits, state, logs) = runInference uOpts pfTyped runCompileUnits
     pfUA = usProgramFile state -- the program file after units analysis is done
 
@@ -392,20 +372,26 @@ compileUnits' uOpts pf
     tenv = combinedTypeEnv (uoModFiles uOpts)
     pfRenamed = FAR.analyseRenamesWithModuleMap mmap . FA.initAnalysis . fmap UA.mkUnitAnnotation $ pf
     pfTyped = fst . FAT.analyseTypesWithEnv tenv $ pfRenamed
+  writeDebug logs
+  pure $ case eCUnits of
+           Right cu -> okReport cu
+           Left exc -> errReport exc
 
 synthesiseUnits :: UnitOpts
                 -> Char
-                -> UnitsRefactoring InferenceReport
+                -> UnitsAnalysis
                    (F.ProgramFile Annotation)
-                   (Either ConsistencyError (F.ProgramFile Annotation))
+                   (Either ConsistencyError (InferenceReport, F.ProgramFile Annotation))
 {-| Synthesis unspecified units for a program (after checking) -}
-synthesiseUnits uOpts marker pf =
-  case runAnalysis (inferUnits uOpts) pf of
-    (debug, Left err)       -> ((debug, Nothing), Left err)
-    (debug, Right inferred) -> ((debug, Just inferred), pure $ runSynth (getInferred inferred))
+synthesiseUnits uOpts marker = do
+  infRes <- inferUnits uOpts
+  case infRes of
+    Left err       -> pure $ Left err
+    Right inferred -> do
+      pf <- analysisInput
+      pure . Right $ (inferred, runSynth pf (getInferred inferred))
   where
-    fname = F.pfGetFilename pf
-    runSynth inferred =
+    runSynth pf inferred =
       let (eVars, state, logs) = runInference uOpts pfRenamed (runSynthesis marker . chooseImplicitNames $ inferred)
           -- Use the module map derived from all of the included Camfort Mod files.
           mmap = combinedModuleMap (uoModFiles uOpts)

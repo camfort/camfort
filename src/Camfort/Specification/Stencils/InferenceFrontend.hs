@@ -32,8 +32,14 @@ import Control.Monad.State.Strict
 import Control.Monad.Reader
 import Control.Monad.Writer.Strict hiding (Product)
 
-import Camfort.Analysis (Analysis, Refactoring, mkAnalysis, runRefactoring)
 import Camfort.Analysis.CommentAnnotator
+import Camfort.Analysis.Fortran
+  ( Analysis
+  , analysisInput
+  , analysisResult
+  , branchAnalysis
+  , runAnalysis
+  , writeDebug )
 import Camfort.Specification.Stencils.CheckBackend (synToAst)
 import Camfort.Specification.Stencils.CheckFrontend
   (CheckResult, existingStencils, stencilChecking)
@@ -64,8 +70,7 @@ import qualified Data.Set as S
 import Data.Maybe
 import Data.Monoid ((<>))
 
-type StencilsAnalysis    r a    = Analysis    r a
-type StencilsRefactoring r a a' = Refactoring r a a'
+type StencilsAnalysis a a' = Analysis a a'
 
 data InferState = IS {
      ivMap        :: FAD.InductionVarMapByASTBlock
@@ -134,72 +139,64 @@ specToSynSpec spec = let ?renv = [] in
 -- | Main stencil inference code
 stencilInference :: Bool
                  -> Char
-                 -> StencilsAnalysis [LogLine] (F.ProgramFile (FA.Analysis A))
-stencilInference useEval marker = mkAnalysis $ \pf ->
-  fst $ runRefactoring (stencilSynthesis' useEval False marker) (pf, [])
+                 -> StencilsAnalysis (F.ProgramFile (FA.Analysis A)) [LogLine]
+stencilInference useEval marker = fst <$> stencilSynthesis' useEval False marker
 
 stencilSynthesis :: Char
-                 -> StencilsRefactoring [LogLine]
+                 -> StencilsAnalysis
                     (F.ProgramFile (FA.Analysis A))
-                    (F.ProgramFile (FA.Analysis A))
-stencilSynthesis marker pf = stencilSynthesis' False True marker (pf', _log0)
-  where
-    -- Parse specification annotations and include them into the syntax tree
-    -- that way if generate specifications at the same place we can
-    -- decide whether to synthesise or not
-
-    -- TODO: might want to output log0 somehow (though it doesn't fit LogLine)
-    (pf', _log0) =
-      runWriter (annotateComments Parser.specParser (const . const . pure $ ()) pf)
+                    ([LogLine], F.ProgramFile (FA.Analysis A))
+stencilSynthesis marker = do
+  pf <- analysisInput
+  let (pf', _log0) = runWriter (annotateComments Parser.specParser (const . const . pure $ ()) pf)
+  writeDebug _log0
+  analysisResult <$> branchAnalysis (stencilSynthesis' False True marker) pf'
 
 -- | Main stencil synthesis code
 stencilSynthesis' :: Bool
                   -> Bool
                   -> Char
-                  -> StencilsRefactoring [LogLine]
-                     (F.ProgramFile (FA.Analysis A), [LogLine])
+                  -> StencilsAnalysis
                      (F.ProgramFile (FA.Analysis A))
-stencilSynthesis' useEval doSynth marker (pf@(F.ProgramFile mi pus), _log0) =
-    (log1, F.ProgramFile mi pus')
-  where
-    (pus', log1)    = runWriter (transformBiM perPU pus)
-    checkRes        = stencilChecking pf
+                     ([LogLine], F.ProgramFile (FA.Analysis A))
+stencilSynthesis' useEval doSynth marker = do
+  pf@(F.ProgramFile mi pus) <- analysisInput
+  let checkRes     = stencilChecking pf
+      (pus', log1) = runWriter (transformBiM perPU pus)
+      -- get map of AST-Block-ID ==> corresponding AST-Block
+      bm    = FAD.genBlockMap pf
+      -- get map of program unit ==> basic block graph
+      bbm   = FAB.genBBlockMap pf
+      -- get map of variable name ==> { defining AST-Block-IDs }
+      dm    = FAD.genDefMap bm
+      -- Run inference per program unit
+      perPU :: F.ProgramUnit (FA.Analysis A)
+            -> Writer [LogLine] (F.ProgramUnit (FA.Analysis A))
 
-    -- Run inference per program unit
-    perPU :: F.ProgramUnit (FA.Analysis A)
-          -> Writer [LogLine] (F.ProgramUnit (FA.Analysis A))
+      perPU pu | Just _ <- FA.bBlocks $ F.getAnnotation pu = do
+          let -- Analysis/infer on blocks of just this program unit
+              blocksM = mapM perBlockInfer (F.programUnitBody pu)
+              -- Update the program unit body with these blocks
+              pum = F.updateProgramUnitBody pu <$> blocksM
 
-    perPU pu | Just _ <- FA.bBlocks $ F.getAnnotation pu = do
-        let -- Analysis/infer on blocks of just this program unit
-            blocksM = mapM perBlockInfer (F.programUnitBody pu)
-            -- Update the program unit body with these blocks
-            pum = F.updateProgramUnitBody pu <$> blocksM
+              -- perform reaching definitions analysis
+              rd = FAD.reachingDefinitions dm gr
 
-            -- perform reaching definitions analysis
-            rd = FAD.reachingDefinitions dm gr
+              Just gr = M.lookup (FA.puName pu) bbm
+              -- create graph of definition "flows"
+              flTo = FAD.genFlowsToGraph bm dm gr rd
 
-            Just gr = M.lookup (FA.puName pu) bbm
-            -- create graph of definition "flows"
-            flTo = FAD.genFlowsToGraph bm dm gr rd
+              -- induction variable map
+              beMap = FAD.genBackEdgeMap (FAD.dominators gr) gr
 
-            -- induction variable map
-            beMap = FAD.genBackEdgeMap (FAD.dominators gr) gr
+              -- identify every loop by its back-edge
+              ivMap = FAD.genInductionVarMapByASTBlock beMap gr
 
-            -- identify every loop by its back-edge
-            ivMap = FAD.genInductionVarMapByASTBlock beMap gr
-
-            (pu', log) = runInferer checkRes useEval doSynth marker mi ivMap flTo pum
-        tell log
-        pure pu'
-
-    perPU pu = pure pu
-
-    -- get map of AST-Block-ID ==> corresponding AST-Block
-    bm    = FAD.genBlockMap pf
-    -- get map of program unit ==> basic block graph
-    bbm   = FAB.genBBlockMap pf
-    -- get map of variable name ==> { defining AST-Block-IDs }
-    dm    = FAD.genDefMap bm
+              (pu', log) = runInferer checkRes useEval doSynth marker mi ivMap flTo pum
+          tell log
+          pure pu'
+      perPU pu = pure pu
+  pure (log1, F.ProgramFile mi pus')
 
 {- *** 1 . Core inference over blocks -}
 
