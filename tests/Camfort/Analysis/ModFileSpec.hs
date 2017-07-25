@@ -3,6 +3,7 @@
 module Camfort.Analysis.ModFileSpec (spec) where
 
 import Data.Binary (encodeFile)
+import Data.List (sort)
 import System.Directory (createDirectory)
 import System.FilePath ((</>), (<.>))
 import System.IO.Temp (withSystemTempDirectory)
@@ -26,5 +27,5 @@ spec =
           encodeFile (dir </> "moda" <.> modFileSuffix) mod1
           createDirectory (dir </> "dir1")
           encodeFile (dir </> "dir1" </> "modb" <.> modFileSuffix) mod2
-          fmap (fmap $ lookupModFileData "mfs-name") . getModFiles $ dir)
-        `shouldReturn` [Just "file-b", Just "file-a"]
+          fmap (sort . fmap (lookupModFileData "mfs-name")) . getModFiles $ dir)
+        `shouldReturn` [Just "file-a", Just "file-b"]
