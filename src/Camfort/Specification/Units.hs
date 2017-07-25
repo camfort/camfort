@@ -29,7 +29,6 @@
 module Camfort.Specification.Units
   ( checkUnits
   , inferUnits
-  , compileUnits
   , synthesiseUnits
   , inferCriticalVariables
   , chooseImplicitNames
@@ -54,8 +53,7 @@ import           Camfort.Specification.Units.Analysis (UnitsAnalysis)
 import qualified Camfort.Specification.Units.Annotation as UA
 import           Camfort.Specification.Units.Environment
 import           Camfort.Specification.Units.InferenceFrontend
-import           Camfort.Specification.Units.ModFile
-  (CompiledUnits(..), genUnitsModFile, initializeModFiles, runCompileUnits)
+import           Camfort.Specification.Units.ModFile (initializeModFiles)
 import           Camfort.Specification.Units.Monad
 import           Camfort.Specification.Units.Synthesis (runSynthesis)
 
@@ -341,41 +339,6 @@ inferUnits uOpts = do
                Left e -> undefined
                Right vars   -> Right $ Inferred pfUA vars
            Inconsistent err -> Left err
-
-compileUnits :: UnitOpts -> Analysis [FileProgram] (String, [(Filename, B.ByteString)])
-compileUnits uOpts = do
-  fileprogs <- analysisInput
-  results <- mapM (branchAnalysis (compileUnits' uOpts)) fileprogs
-  let (reports, bins) = unzip $ analysisResult <$> results
-  pure (concat reports, concat bins)
-
-compileUnits' :: UnitOpts -> Analysis FileProgram (String, [(Filename, B.ByteString)])
-compileUnits' uOpts = do
-  pf <- analysisInput
-  let
-    fname = F.pfGetFilename pf
-    -- Format report
-    okReport cu = ( "\n" ++ fname ++ ":\n" ++ if uoDebug uOpts then debugInfo else []
-                    -- FIXME, filename manipulation (needs to go in -I dir?)
-                  , [(fname ++ modFileSuffix, encodeModFile (genUnitsModFile pfTyped cu))] )
-      where
-        debugInfo = unlines [ n ++ ":\n  " ++ intercalate "\n  " (map show cs) | (n, cs) <- M.toList (cuTemplateMap cu) ] ++
-                    unlines ("nameParams:" : (map show . M.toList $ cuNameParamMap cu))
-
-
-    errReport exc = ("\n" ++ fname ++ ":  " ++ show exc, [])
-    (eCUnits, state, logs) = runInference uOpts pfTyped runCompileUnits
-    pfUA = usProgramFile state -- the program file after units analysis is done
-
-    -- Use the module map derived from all of the included Camfort Mod files.
-    mmap = combinedModuleMap (uoModFiles uOpts)
-    tenv = combinedTypeEnv (uoModFiles uOpts)
-    pfRenamed = FAR.analyseRenamesWithModuleMap mmap . FA.initAnalysis . fmap UA.mkUnitAnnotation $ pf
-    pfTyped = fst . FAT.analyseTypesWithEnv tenv $ pfRenamed
-  writeDebug logs
-  pure $ case eCUnits of
-           Right cu -> okReport cu
-           Left exc -> errReport exc
 
 synthesiseUnits :: UnitOpts
                 -> Char

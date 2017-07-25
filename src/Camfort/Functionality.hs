@@ -38,7 +38,6 @@ module Camfort.Functionality (
   , unitsCheck
   , unitsInfer
   , unitsSynth
-  , unitsCompile
   -- ** Refactorings
   , common
   , dead
@@ -143,14 +142,6 @@ unitsInfer inSrc excludes m debug incDir = do
     let rfun = LU.inferUnits uo
     incDir' <- maybe getCurrentDirectory pure incDir
     doAnalysisReportWithModFiles rfun inSrc incDir' excludes
-
-unitsCompile inSrc excludes m debug incDir outSrc = do
-    putStrLn $ "Compiling units for '" ++ inSrc ++ "'"
-    uo <- optsToUnitOpts m debug incDir
-    let rfun = LU.compileUnits uo
-    incDir' <- maybe getCurrentDirectory pure incDir
-    putStrLn =<< doCreateBinary rfun inSrc incDir' excludes outSrc
-
 
 unitsSynth inSrc excludes m debug incDir outSrc annType = do
     putStrLn $ "Synthesising units for '" ++ inSrc ++ "'"

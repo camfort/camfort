@@ -38,7 +38,6 @@ data Command = CmdCount ReadOptions
              | CmdUnitsCheck UnitsOptions
              | CmdUnitsInfer UnitsOptions
              | CmdUnitsSynth UnitsSynthOptions
-             | CmdUnitsCompile UnitsWriteOptions
              | CmdRefactCommon RefactOptions
              | CmdRefactDead RefactOptions
              | CmdRefactEquivalence RefactOptions
@@ -224,12 +223,11 @@ cmdStencilsSynth = fmap CmdStencilsSynth stencilsSynthOptions
 
 
 cmdUnitsSuggest, cmdUnitsCheck, cmdUnitsInfer
-  , cmdUnitsSynth, cmdUnitsCompile :: Parser Command
+  , cmdUnitsSynth :: Parser Command
 cmdUnitsSuggest = fmap CmdUnitsSuggest unitsOptions
 cmdUnitsCheck   = fmap CmdUnitsCheck   unitsOptions
 cmdUnitsInfer   = fmap CmdUnitsInfer   unitsOptions
 cmdUnitsSynth   = fmap CmdUnitsSynth   unitsSynthOptions
-cmdUnitsCompile = fmap CmdUnitsCompile unitsWriteOptions
 
 
 cmdRefactCommon, cmdRefactDead, cmdRefactEquivalence :: Parser Command
@@ -289,10 +287,7 @@ analysesParser = commandsParser "Analysis Commands" analysesCommands
           cmdUnitsInfer,    "unit-of-measure inference")
       , ("units-synth",
           ["unit-synth", "synth-units", "synth-unit"],
-          cmdUnitsSynth,    "unit-of-measure synthesise specs")
-      , ("units-compile",
-          ["unit-compile", "compile-units", "compile-unit"],
-          cmdUnitsCompile,  "units-of-measure compile module information") ]
+          cmdUnitsSynth,    "unit-of-measure synthesise specs") ]
 
 
 refactoringsParser :: Parser Command
@@ -378,7 +373,6 @@ main = do
     runCommand (CmdUnitsCheck uo)         = runUO uo unitsCheck
     runCommand (CmdUnitsInfer uo)         = runUO uo unitsInfer
     runCommand (CmdUnitsSynth uso)        = runUSO uso unitsSynth
-    runCommand (CmdUnitsCompile uwo)      = runUWO uwo unitsCompile
     runCommand (CmdRefactCommon rfo)      = runRFO rfo common
     runCommand (CmdRefactDead rfo)        = runRFO rfo dead
     runCommand (CmdRefactEquivalence rfo) = runRFO rfo equivalences

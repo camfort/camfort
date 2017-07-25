@@ -21,7 +21,6 @@ module Camfort.Input
   , doRefactorAndCreate
   , doRefactorWithModFiles
     -- * Source directory and file handling
-  , doCreateBinary
   , readParseSrcDirWithModFiles
   ) where
 
@@ -126,21 +125,6 @@ doRefactorAndCreate rFun inSrc excludes incDir outSrc = do
 
 -- | For refactorings which create additional files.
 type FileProgram = F.ProgramFile A
-
-doCreateBinary
-  :: Analysis [FileProgram] (String, [(Filename, B.ByteString)])
-  -> FileOrDir
-  -> FileOrDir
-  -> [Filename]
-  -> FileOrDir
-  -> IO String
-doCreateBinary rFun inSrc incDir excludes outSrc = do
-  printExcludes inSrc excludes
-  ps <- readParseSrcDirWithModFiles inSrc incDir excludes
-  modFiles <- getModFiles incDir
-  let (report, bins) = analysisResult . runAnalysis rFun modFiles . fmap fst $ ps
-  outputFiles inSrc outSrc bins
-  pure report
 
 reassociateSourceText :: [SourceText]
                       -> [F.ProgramFile Annotation]
