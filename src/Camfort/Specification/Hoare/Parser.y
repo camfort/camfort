@@ -1,10 +1,12 @@
 {
-module Camfort.Specification.Hoare.Parser where
+
+module Camfort.Specification.Hoare.Parser (hoareParser) where
 
 import qualified Language.Fortran.AST as F
 
 import Language.While.Prop
 
+import qualified Camfort.Specification.Parser as Parser
 import Camfort.Specification.Hoare.Syntax
 import Camfort.Specification.Hoare.Lexer
 import Camfort.Specification.Hoare.Types
@@ -75,3 +77,13 @@ FORMULA :: { SpecFormula () }
 
 EXPR :: { F.Expression () }
 : texpr {% parseExpression $1 }
+
+{
+
+hoareParser :: Parser.SpecParser HoareParseError (Specification ())
+hoareParser = Parser.mkParser (\src -> do
+                                  tokens <- lexer src
+                                  parseHoare tokens)
+             ["static_assert", "invariant", "post", "pre", "seq"]
+
+}

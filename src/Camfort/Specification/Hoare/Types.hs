@@ -13,13 +13,13 @@ import qualified Language.Fortran.Parser.Fortran90 as F
 import qualified Language.Fortran.ParserMonad      as F
 
 
-data HoareParserError
+data HoareParseError
   = UnmatchedQuote
   | UnexpectedInput
   | MalformedExpression String
   | ParseError [Token]
 
-instance Show HoareParserError where
+instance Show HoareParseError where
   show UnmatchedQuote = "unmatched quote"
   show UnexpectedInput = "unexpected characters in input"
   show (MalformedExpression expr) = "couldn't parse expression: \"" ++ expr ++ "\""
@@ -48,7 +48,7 @@ prettyTokens = intercalate " " . map prettyToken
       TEquiv -> "<->"
       TNot -> "!"
 
-type HoareSpecParser = Either HoareParserError
+type HoareSpecParser = Either HoareParseError
 
 data Token
   = TExpr String
