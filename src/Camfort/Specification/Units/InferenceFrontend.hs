@@ -28,6 +28,7 @@ module Camfort.Specification.Units.InferenceFrontend
   , runCriticalVariables
   , runInconsistentConstraints
   , runInferVariables
+  , runInference
   ) where
 
 import Data.Data (Data)
@@ -42,19 +43,22 @@ import Control.Monad.State.Strict
 import Control.Monad.Writer.Strict
 import Control.Monad.RWS.Strict
 
-import qualified Language.Fortran.AST as F
-import Language.Fortran.Parser.Utils (readReal, readInteger)
-import Language.Fortran.Util.Position (getSpan)
-import Language.Fortran.Util.ModFile
-import qualified Language.Fortran.Analysis as FA
-import Language.Fortran.Analysis (varName, srcName)
+import qualified Language.Fortran.AST               as F
+import qualified Language.Fortran.Analysis          as FA
+import           Language.Fortran.Analysis (varName, srcName)
+import qualified Language.Fortran.Analysis.Renaming as FAR
+import           Language.Fortran.Parser.Utils (readReal, readInteger)
+import           Language.Fortran.Util.ModFile
+import           Language.Fortran.Util.Position (getSpan)
 
-import Camfort.Analysis.CommentAnnotator (annotateComments)
-import qualified Camfort.Specification.Units.Annotation as UA
-import Camfort.Specification.Units.Environment
-import Camfort.Specification.Units.Monad
-import Camfort.Specification.Units.InferenceBackend
-import Camfort.Specification.Units.Parser (unitParser)
+import           Camfort.Analysis.Annotations (Annotation, Report, mkReport)
+import           Camfort.Analysis.CommentAnnotator (annotateComments)
+import qualified Camfort.Specification.Units.Annotation   as UA
+import           Camfort.Specification.Units.Environment
+import           Camfort.Specification.Units.InferenceBackend
+import           Camfort.Specification.Units.ModFile (initializeModFiles)
+import           Camfort.Specification.Units.Monad
+import           Camfort.Specification.Units.Parser (unitParser)
 import qualified Camfort.Specification.Units.Parser.Types as P
 
 import qualified Debug.Trace as D
@@ -124,6 +128,22 @@ initInference = do
   modify $ \ s -> s { usConstraints = cons }
 
   debugLogging
+
+-- | Run a unit inference.
+runInference :: UnitOpts
+             -> F.ProgramFile Annotation
+             -> UnitSolver a
+             -> (Either UnitException a, UnitState, Report)
+runInference uOpts pf runner =
+  let
+    -- Use the module map derived from all of the included Camfort Mod files.
+    mmap      = combinedModuleMap (uoModFiles uOpts)
+    pfRenamed = FAR.analyseRenamesWithModuleMap mmap . FA.initAnalysis . fmap UA.mkUnitAnnotation $ pf
+    (r, s, report) = runUnitSolver uOpts pfRenamed $ do
+        initializeModFiles $ uoModFiles uOpts
+        initInference
+        runner
+  in (r, s, mkReport report)
 
 -- Inference functions
 

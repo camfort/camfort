@@ -39,46 +39,31 @@ import Data.Data
 import Data.List (intercalate, find, sort, group, nub, inits)
 import Data.Maybe (fromMaybe, maybeToList, mapMaybe, maybe)
 import Data.Generics.Uniplate.Operations
-import qualified Data.ByteString.Char8 as B
 import GHC.Generics (Generic)
 
-import Camfort.Helpers
 import Camfort.Analysis.Annotations
 import Camfort.Analysis.Fortran
-  (Analysis, analysisInput, analysisResult, branchAnalysis, writeDebug)
-import Camfort.Input
+  (analysisInput, writeDebug)
 
 -- Provides the types and data accessors used in this module
 import           Camfort.Specification.Units.Analysis (UnitsAnalysis)
 import qualified Camfort.Specification.Units.Annotation as UA
 import           Camfort.Specification.Units.Environment
 import           Camfort.Specification.Units.InferenceFrontend
-import           Camfort.Specification.Units.ModFile (initializeModFiles)
+  ( puName
+  , puSrcName
+  , runCriticalVariables
+  , runInconsistentConstraints
+  , runInferVariables
+  , runInference)
 import           Camfort.Specification.Units.Monad
 import           Camfort.Specification.Units.Synthesis (runSynthesis)
 
 import qualified Language.Fortran.Analysis.Renaming as FAR
-import qualified Language.Fortran.Analysis.Types as FAT
 import qualified Language.Fortran.Analysis as FA
 import qualified Language.Fortran.AST as F
 import qualified Language.Fortran.Util.Position as FU
 import Language.Fortran.Util.ModFile
-
--- | Run a unit inference.
-runInference :: UnitOpts
-             -> F.ProgramFile Annotation
-             -> UnitSolver a
-             -> (Either UnitException a, UnitState, Report)
-runInference uOpts pf runner =
-  let
-    -- Use the module map derived from all of the included Camfort Mod files.
-    mmap      = combinedModuleMap (uoModFiles uOpts)
-    pfRenamed = FAR.analyseRenamesWithModuleMap mmap . FA.initAnalysis . fmap UA.mkUnitAnnotation $ pf
-    (r, s, report) = runUnitSolver uOpts pfRenamed $ do
-        initializeModFiles $ uoModFiles uOpts
-        initInference
-        runner
-  in (r, s, mkReport report)
 
 -- *************************************
 --   Unit inference (top - level)
