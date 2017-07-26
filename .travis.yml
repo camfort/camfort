@@ -31,9 +31,11 @@ script:
 - echo $GHC_OPTIONS
 - stack haddock --test $GHC_OPTIONS
 after_success:
-- cp "$(stack exec -- which camfort)" camfort-Linux-x64
-- tar -cvzf camfort-Linux-x64.tar.gz camfort-Linux-x64
+- cp "$(stack exec -- which camfort)" camfort
+- tar -cvzf camfort-x64-Linux.tar.gz camfort
+- sha256sum camfort-x64-Linux.tar.gz
 deploy:
+  skip_cleanup: true
 - provider: releases
   api_key:
     secure: "Y/2Lbhm5E+iTY7l9Jmz0xaDwza7GiFIzakfrdim1s4jqIRqlkrlnHGU13U2g2j6i5Klx7TGrmivY8p17tXwQE9ubD5Gc1TgTMj+AaPIeKmDAA0fZ8YOxEQQEso/LTBdCPuP7pgro5vdUYi6Nuj7MDte8itAzFEzBrXn6WYwJN1nIaQR9TDc1ktCDjnxvp6zD3XrgCDlPgvopYJb+6ozD6VOKmBvNUKp2SjkCstSDn0j5/olyjzUFIpTcrtT9pGct5F9QIYuC9UnLZ1MNPMXjJZR27g+MrWI8MhAgLwqbrYewaLI6Jk2dyC7SDt30oK8+vGZ6pDN3QYmmbQvL40Etfq+ItY02Fz8DKO68qVYGxreuulM91AHSNlpWPsEv5A/oBtih/jJ1yOTe5UusC6dk2Ji95IkMeRZteaRj2NOSxWErElZZUcoQ31EWRvOzPgmmRcp7+Xmmc3QKLWQCqCqXcrGJRq++sROo12ZNzNu1TIPns/YG1D75pHjMx+y0AayoIeUF8pJND3CdZEGDchB35IRyCzzEKBkswLod1BXZKO42jWThN3t53ZkuILLVOwTxmefQK9jLXUjRTrAvCcLPFEL1aJQK1Ijf09hxDUme5IjgZZ1l09ITNbI5giCuEWyqmZLmECUoVWskBFMJ7ZZlZ7nRQQ/hVKb/Nlyj4PIhOBI="
