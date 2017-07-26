@@ -7,8 +7,7 @@ import qualified Test.Hspec as Test
 
 import Camfort.Specification.Units.Environment
 import Camfort.Specification.Units.InferenceBackend
-  ( criticalVariables
-  , flattenConstraints
+  ( flattenConstraints
   , inconsistentConstraints
   , inferVariables
   , shiftTerms )
@@ -32,18 +31,9 @@ spec = do
       inconsistentConstraints testCons2 `shouldBe` Nothing
     it "testCons3" $
       inconsistentConstraints testCons3 `shouldBe` Nothing
-  describe "Critical Variables" $ do
-    it "testCons2" $
-      criticalVariables testCons2 `shouldSatisfy` null
-    it "testCons3" $
-      criticalVariables testCons3 `shouldBe` [UnitVar ("c", "c"), UnitVar ("e", "e")]
-    it "testCons4" $
-      criticalVariables testCons4 `shouldBe` [UnitVar ("simple2_a22", "simple2_a22")]
-    it "testCons5" $
-      criticalVariables testCons5 `shouldSatisfy` null
   describe "Infer Variables" $
-    it "testCons5" $
-      show (inferVariables testCons5) `shouldBe` show testCons5_infer
+    it "testCons4" $
+      show (inferVariables testCons4) `shouldBe` show testCons4_infer
   describe "Check that (restricted) double to ratios is consistent" $
     it "test all in -10/-10 ... 10/10, apart from /0" $
       and [testDoubleToRationalSubset x y | x <- [-10..10], y <- [-10..10]]
@@ -101,19 +91,13 @@ testCons3_shifted = [([UnitPow (UnitVar ("a", "a")) 1.0,UnitPow (UnitVar ("e", "
                     ,([UnitPow (UnitVar ("d", "d")) 1.0],[UnitPow (UnitName "m") 1.0])]
 
 testCons4 = [ConEq (UnitVar ("simple2_a11", "simple2_a11")) (UnitParamPosUse (("simple2_sqr3","sqr"),0,0))
-            ,ConEq (UnitVar ("simple2_a22", "simple2_a22")) (UnitParamPosUse (("simple2_sqr3","sqr"),1,0))
-            ,ConEq (UnitVar ("simple2_a11", "simple2_a11")) (UnitVar ("simple2_a11", "simple2_a11"))
-            ,ConEq (UnitVar ("simple2_a22", "simple2_a22")) (UnitVar ("simple2_a22", "simple2_a22"))
-            ,ConEq (UnitParamPosUse (("simple2_sqr3","sqr"),0,0)) (UnitMul (UnitParamPosUse (("simple2_sqr3","sqr"),1,0)) (UnitParamPosUse (("simple2_sqr3","sqr"),1,0)))]
-
-testCons5 = [ConEq (UnitVar ("simple2_a11", "simple2_a11")) (UnitParamPosUse (("simple2_sqr3","sqr"),0,0))
             ,ConEq (UnitAlias "accel") (UnitParamPosUse (("simple2_sqr3","sqr"),1,0))
             ,ConEq (UnitVar ("simple2_a11", "simple2_a11")) (UnitVar ("simple2_a11", "simple2_a11"))
             ,ConEq (UnitVar ("simple2_a22", "simple2_a22")) (UnitAlias "accel")
             ,ConEq (UnitParamPosUse (("simple2_sqr3","sqr"),0,0)) (UnitMul (UnitParamPosUse (("simple2_sqr3","sqr"),1,0)) (UnitParamPosUse (("simple2_sqr3","sqr"),1,0)))
             ,ConEq (UnitAlias "accel") (UnitMul (UnitName "m") (UnitPow (UnitName "s") (-2.0)))]
 
-testCons5_infer = [(("simple2_a11", "simple2_a11"),UnitMul (UnitPow (UnitName "m") 2.0) (UnitPow (UnitName "s") (-4.0)))
+testCons4_infer = [(("simple2_a11", "simple2_a11"),UnitMul (UnitPow (UnitName "m") 2.0) (UnitPow (UnitName "s") (-4.0)))
                   ,(("simple2_a22", "simple2_a22"),UnitMul (UnitPow (UnitName "m") 1.0) (UnitPow (UnitName "s") (-2.0)))]
 
 testDoubleToRationalSubset :: Integer -> Integer -> Bool

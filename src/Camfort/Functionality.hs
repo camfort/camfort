@@ -60,6 +60,7 @@ import Camfort.Transformation.CommonBlockElim
 import Camfort.Transformation.EquivalenceElim
 
 import qualified Camfort.Specification.Units as LU
+import Camfort.Specification.Units.Analysis.Criticals (inferCriticalVariables)
 import Camfort.Specification.Units.Monad
 
 import Camfort.Helpers
@@ -164,7 +165,7 @@ unitsCriticals inSrc excludes m debug incDir = do
     putStrLn $ "Suggesting variables to annotate with unit specifications in '"
              ++ inSrc ++ "'"
     uo <- optsToUnitOpts m debug incDir
-    let rfun = LU.inferCriticalVariables uo
+    let rfun = inferCriticalVariables uo
     incDir' <- maybe getCurrentDirectory pure incDir
     doAnalysisReportWithModFiles rfun inSrc incDir' excludes
 

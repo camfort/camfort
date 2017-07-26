@@ -30,7 +30,6 @@ module Camfort.Specification.Units
   ( checkUnits
   , inferUnits
   , synthesiseUnits
-  , inferCriticalVariables
   , chooseImplicitNames
   ) where
 
@@ -52,99 +51,20 @@ import           Camfort.Specification.Units.Environment
 import           Camfort.Specification.Units.InferenceFrontend
   ( puName
   , puSrcName
-  , runCriticalVariables
   , runInconsistentConstraints
   , runInferVariables
   , runInference)
 import           Camfort.Specification.Units.Monad
 import           Camfort.Specification.Units.Synthesis (runSynthesis)
 
-import qualified Language.Fortran.Analysis.Renaming as FAR
 import qualified Language.Fortran.Analysis as FA
 import qualified Language.Fortran.AST as F
 import qualified Language.Fortran.Util.Position as FU
-import Language.Fortran.Util.ModFile
 
 -- *************************************
 --   Unit inference (top - level)
 --
 -- *************************************
-
--- | An inference of variables that must be provided with
--- unit annotations before units for all variables can be
--- resolved.
-data Criticals = Criticals
-  {
-    -- | 'ProgramFile' analysis was performed upon.
-    criticalsPf :: F.ProgramFile Annotation
-    -- | The inferred critical variables.
-  , criticalVariables :: [UnitInfo]
-    -- | Map of all declarations.
-  , criticalsDeclarations :: M.Map F.Name (DeclContext, FU.SrcSpan)
-    -- | Map of unique names.
-  , criticalsUniqMap :: M.Map F.Name F.Name
-    -- | Location of criticals.
-  , criticalsFromWhere :: M.Map F.Name FilePath
-  }
-
-instance Show Criticals where
-  show crits =
-    case vars of
-      []   -> concat ["\n", fname, ": No additional annotations are necessary.\n"]
-      _    -> concat ["\n", fname, ": ", show numVars
-                     , " variable declarations suggested to be given a specification:\n"
-                     , unlines [ "    " ++ declReport d | d <- M.toList dmapSlice ]]
-      where
-        fname        = F.pfGetFilename . criticalsPf $ crits
-        dmap         = criticalsDeclarations crits
-        uniqnameMap  = criticalsUniqMap crits
-        fromWhereMap = criticalsFromWhere crits
-        vars         = criticalVariables crits
-        unitVarName (UnitVar (v, _))                 = v
-        unitVarName (UnitParamVarUse (_, (v, _), _)) = v
-        unitVarName _                                = "<bad>"
-        varNames  = map unitVarName vars
-        dmapSlice = M.filterWithKey (\ k _ -> k `elem` varNames) dmap
-        numVars   = M.size dmapSlice
-        declReport (v, (dc, ss)) = vfilename ++ " (" ++ showSrcSpan ss ++ ")    " ++ fromMaybe v (M.lookup v uniqnameMap)
-          where vfilename = fromMaybe fname $ M.lookup v fromWhereMap
-
-
-{-| Infer one possible set of critical variables for a program -}
-inferCriticalVariables :: UnitsAnalysis (F.ProgramFile Annotation) Criticals
-inferCriticalVariables uOpts = do
-  pf <- analysisInput
-  let
-    -- Use the module map derived from all of the included Camfort Mod files.
-    mmap = combinedModuleMap (uoModFiles uOpts)
-    pfRenamed = FAR.analyseRenamesWithModuleMap mmap . FA.initAnalysis . fmap UA.mkUnitAnnotation $ pf
-    mmap' = extractModuleMap pfRenamed `M.union` mmap -- post-parsing
-    -- unique name -> src name across modules
-
-    -- Map of all declarations
-    dmap = extractDeclMap pfRenamed `M.union` combinedDeclMap (uoModFiles uOpts)
-    uniqnameMap = M.fromList [
-                (FA.varName e, FA.srcName e) |
-                e@(F.ExpValue _ _ F.ValVariable{}) <- universeBi pfRenamed :: [F.Expression UA]
-                -- going to ignore intrinsics here
-              ] `M.union` (M.unions . map (M.fromList . map (\ (a, (b, _)) -> (b, a)) . M.toList) $ M.elems mmap')
-    (eVars, state, logs) = runInference uOpts pf runCriticalVariables
-  writeDebug logs
-  case eVars of
-    Right vars -> okReport pf dmap vars uniqnameMap
-    Left exc   -> errReport exc
-  where
-    okReport pf dmap vars uniqnameMap =
-      pure Criticals { criticalsPf           = pf
-                     , criticalVariables     = vars
-                     , criticalsDeclarations = dmap
-                     , criticalsUniqMap      = uniqnameMap
-                     , criticalsFromWhere    = fromWhereMap
-                     }
-    -- TODO: Handle this when Analysis gets own error system.
-    errReport = undefined
-
-    fromWhereMap = genUniqNameToFilenameMap $ uoModFiles uOpts
 
 data ConsistencyReport
     -- | All units were consistent.
@@ -375,7 +295,6 @@ unrename = transformBi $ \ x -> case x of
   UnitParamEAPAbs (_, s)              -> UnitParamEAPAbs (s, s)
   UnitParamEAPUse ((_, s), i)         -> UnitParamEAPUse ((s, s), i)
   u                                   -> u
-
 
 showSrcSpan :: FU.SrcSpan -> String
 showSrcSpan (FU.SrcSpan l u) = show l

@@ -25,7 +25,6 @@ module Camfort.Specification.Units.InferenceFrontend
   ( initInference
   , puName
   , puSrcName
-  , runCriticalVariables
   , runInconsistentConstraints
   , runInferVariables
   , runInference
@@ -146,13 +145,6 @@ runInference uOpts pf runner =
   in (r, s, mkReport report)
 
 -- Inference functions
-
--- | Return a list of critical variables as UnitInfo list (most likely
--- to be of the UnitVar constructor).
-runCriticalVariables :: UnitSolver [UnitInfo]
-runCriticalVariables = do
-  cons <- usConstraints `fmap` get
-  return $ criticalVariables cons
 
 -- | Return a list of variable names mapped to their corresponding
 -- unit that was inferred.

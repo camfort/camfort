@@ -22,7 +22,7 @@
 {-# LANGUAGE ScopedTypeVariables #-}
 
 module Camfort.Specification.Units.InferenceBackend
-  ( inconsistentConstraints, criticalVariables, inferVariables
+  ( inconsistentConstraints, inferVariables
   -- mainly for debugging and testing:
   , shiftTerms, flattenConstraints, flattenUnits, constraintsToMatrix, constraintsToMatrices
   , rref, isInconsistentRREF, genUnitAssignments )
@@ -64,18 +64,6 @@ inconsistentConstraints cons
     (_, _, inconsists, _, _) = constraintsToMatrices cons
 
 --------------------------------------------------
-
--- | Identifies the variables that need to be annotated in order for
--- inference or checking to work.
-criticalVariables :: Constraints -> [UnitInfo]
-criticalVariables [] = []
-criticalVariables cons = filter (not . isUnitRHS) $ map (colA A.!) criticalIndices
-  where
-    (unsolvedM, _, colA) = constraintsToMatrix cons
-    solvedM                       = rref unsolvedM
-    uncriticalIndices             = concatMap (maybeToList . findIndex (/= 0)) $ H.toLists solvedM
-    criticalIndices               = A.indices colA \\ uncriticalIndices
-    isUnitRHS (UnitName _)       = True; isUnitRHS _ = False
 
 --------------------------------------------------
 
