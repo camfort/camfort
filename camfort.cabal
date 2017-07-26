@@ -1,5 +1,5 @@
 name:                   camfort
-version:                0.903
+version:                0.904
 synopsis:               CamFort - Cambridge Fortran infrastructure
 description:            CamFort is a tool for the analysis, transformation, verification of Fortran code.
 homepage:               https://camfort.github.io
