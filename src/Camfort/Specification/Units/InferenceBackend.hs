@@ -22,10 +22,10 @@
 {-# LANGUAGE ScopedTypeVariables #-}
 
 module Camfort.Specification.Units.InferenceBackend
-  ( inconsistentConstraints, inferVariables
+  ( inferVariables
   -- mainly for debugging and testing:
   , shiftTerms, flattenConstraints, flattenUnits, constraintsToMatrix, constraintsToMatrices
-  , rref, isInconsistentRREF, genUnitAssignments )
+  , rref, genUnitAssignments )
 where
 
 import Data.Tuple (swap)
@@ -49,23 +49,6 @@ import qualified Numeric.LinearAlgebra as H
 import Numeric.LinearAlgebra.Devel (
     newMatrix, readMatrix, writeMatrix, runSTMatrix, freezeMatrix, STMatrix
   )
-
-
---------------------------------------------------
-
--- | Returns just the list of constraints that were identified as
--- being possible candidates for inconsistency, if there is a problem.
-inconsistentConstraints :: Constraints -> Maybe Constraints
-inconsistentConstraints [] = Nothing
-inconsistentConstraints cons
-  | null inconsists = Nothing
-  | otherwise       = Just [ con | (con, i) <- zip cons [0..], i `elem` inconsists ]
-  where
-    (_, _, inconsists, _, _) = constraintsToMatrices cons
-
---------------------------------------------------
-
---------------------------------------------------
 
 -- | Returns list of formerly-undetermined variables and their units.
 inferVariables :: Constraints -> [(VV, UnitInfo)]
@@ -223,10 +206,6 @@ flattenConstraints = map (\ (ConEq u1 u2) -> (flattenUnits u1, flattenUnits u2))
 
 --------------------------------------------------
 -- Matrix solving functions based on HMatrix
-
--- | Returns True iff the given matrix in reduced row echelon form
--- represents an inconsistent system of linear equations
-isInconsistentRREF a = a @@> (rows a - 1, cols a - 1) == 1 && rank (takeColumns (cols a - 1) (dropRows (rows a - 1) a))== 0
 
 -- | Returns given matrix transformed into Reduced Row Echelon Form
 rref :: H.Matrix Double -> H.Matrix Double

@@ -60,6 +60,7 @@ library
                         Camfort.Specification.Stencils
                         Camfort.Specification.Units
                         Camfort.Specification.Units.Analysis
+                        Camfort.Specification.Units.Analysis.Consistent
                         Camfort.Specification.Units.Analysis.Criticals
                         Camfort.Specification.Units.Annotation
                         Camfort.Specification.Units.InferenceFrontend
@@ -122,6 +123,7 @@ test-suite spec
                         Camfort.Specification.Stencils.InferenceBackendSpec
                         Camfort.Specification.Stencils.ModelSpec
                         Camfort.Specification.StencilsSpec
+                        Camfort.Specification.Units.Analysis.ConsistentSpec
                         Camfort.Specification.Units.Analysis.CriticalsSpec
                         Camfort.Specification.Units.InferenceBackendSpec
                         Camfort.Specification.Units.InferenceFrontendSpec

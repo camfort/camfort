@@ -8,7 +8,6 @@ import qualified Test.Hspec as Test
 import Camfort.Specification.Units.Environment
 import Camfort.Specification.Units.InferenceBackend
   ( flattenConstraints
-  , inconsistentConstraints
   , inferVariables
   , shiftTerms )
 
@@ -24,13 +23,6 @@ spec = do
       map shiftTerms (flattenConstraints testCons2) `shouldBe` testCons2_shifted
     it "testCons3" $
       map shiftTerms (flattenConstraints testCons3) `shouldBe` testCons3_shifted
-  describe "Consistency" $ do
-    it "testCons1" $
-      inconsistentConstraints testCons1 `shouldBe` Just [ConEq (UnitName "kg") (UnitName "m")]
-    it "testCons2" $
-      inconsistentConstraints testCons2 `shouldBe` Nothing
-    it "testCons3" $
-      inconsistentConstraints testCons3 `shouldBe` Nothing
   describe "Infer Variables" $
     it "testCons4" $
       show (inferVariables testCons4) `shouldBe` show testCons4_infer

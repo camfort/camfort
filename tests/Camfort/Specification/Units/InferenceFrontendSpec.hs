@@ -20,10 +20,7 @@ import           Camfort.Specification.Units.Annotation (UA)
 import qualified Camfort.Specification.Units.Annotation as UA
 import           Camfort.Specification.Units.Environment
 import           Camfort.Specification.Units.InferenceFrontend
-  ( initInference
-  , runInconsistentConstraints
-  , runInferVariables
-  )
+  (initInference, runInferVariables)
 import Camfort.Specification.Units.Monad
   (LiteralsOpt(..), runUnitSolver, unitOpts0, uoDebug, uoLiterals, usConstraints)
 
@@ -31,18 +28,6 @@ spec :: Test.Spec
 spec = do
   let showClean = show . nub . sort . head . rights . (:[]) . fst
   describe "Unit Inference Frontend" $ do
-    describe "Literal Mode" $ do
-      it "litTest1 Mixed" $
-        fromJust (head (rights [fst (runUnits LitMixed litTest1 runInconsistentConstraints)])) `shouldSatisfy`
-          any (conParamEq (ConEq (UnitVar ("k", "k")) (UnitMul (UnitVar ("j", "j")) (UnitVar ("j", "j")))))
-      it "litTest1 Poly" $
-        fromJust (head (rights [fst (runUnits LitPoly litTest1 runInconsistentConstraints)])) `shouldSatisfy`
-          any (conParamEq (ConEq (UnitVar ("k", "k")) (UnitMul (UnitVar ("j", "j")) (UnitVar ("j", "j")))))
-      it "litTest1 Unitless" $
-        fromJust (head (rights [fst (runUnits LitUnitless litTest1 runInconsistentConstraints)])) `shouldSatisfy`
-          any (conParamEq (ConEq UnitlessLit (UnitVar ("j", "j"))))
-      it "Polymorphic non-zero literal is not OK" $
-        head (rights [fst (runUnits LitMixed inconsist1 runInconsistentConstraints)]) `shouldSatisfy` isJust
 
     describe "Polymorphic functions" $
       it "squarePoly1" $
@@ -52,11 +37,6 @@ spec = do
       it "Recursive Addition is OK" $
         showClean (runUnits LitMixed recursive1 (fmap chooseImplicitNames runInferVariables)) `shouldBe`
           "[((\"b\",\"b\"),'a),((\"n\",\"n\"),1),((\"r\",\"r\"),'a),((\"x\",\"x\"),1),((\"y\",\"y\"),m),((\"z\",\"z\"),m)]"
-
-    describe "Recursive functions" $
-      it "Recursive Multiplication is not OK" $
-        fromJust (head (rights [fst (runUnits LitMixed recursive2 runInconsistentConstraints)])) `shouldSatisfy`
-          any (conParamEq (ConEq (UnitParamPosAbs (("recur", "recur"), 0)) (UnitParamPosAbs (("recur", "recur"), 2))))
 
     describe "Explicitly annotated parametric polymorphic unit variables" $ do
       it "inside-outside" $
@@ -103,17 +83,6 @@ declVariables pf = flip mapMaybe (universeBi pf) $ \ d -> case d of
 
 fortranParser' x = fromRight . fortranParser x
 
-litTest1 = flip fortranParser' "litTest1.f90" . B.pack $ unlines
-    [ "program main"
-    , "  != unit(a) :: x"
-    , "  real :: x, j, k"
-    , ""
-    , "  j = 1 + 1"
-    , "  k = j * j"
-    , "  x = x + k"
-    , "  x = x * j ! inconsistent"
-    , "end program main" ]
-
 squarePoly1 = flip fortranParser' "squarePoly1.f90" . B.pack $ unlines
     [ "! Demonstrates parametric polymorphism through functions-calling-functions."
     , "program squarePoly"
@@ -150,23 +119,6 @@ recursive1 = flip fortranParser' "recursive1.f90" . B.pack $ unlines
     , "       r = b"
     , "    else"
     , "       r = b + recur(n - 1, b)"
-    , "    end if"
-    , "  end function recur"
-    , "end program main" ]
-
-recursive2 = flip fortranParser' "recursive2.f90" . B.pack $ unlines
-    [ "program main"
-    , "  != unit(m) :: y"
-    , "  integer :: x = 5, y = 2, z"
-    , "  z = recur(x,y)"
-    , "  print *, y"
-    , "contains"
-    , "  real recursive function recur(n, b) result(r)"
-    , "    integer :: n, b"
-    , "    if (n .EQ. 0) then"
-    , "       r = b"
-    , "    else"
-    , "       r = b * recur(n - 1, b) ! inconsistent"
     , "    end if"
     , "  end function recur"
     , "end program main" ]
@@ -252,26 +204,6 @@ inferPoly1 = flip fortranParser' "inferPoly1.f90" . B.pack $ unlines
     , "    snd = y4"
     , "  end function snd"
     , "end module inferPoly1" ]
-
--- This should be inconsistent because of the use of the literal "10"
--- in the parametric polymorphic function sqr.
-inconsist1 = flip fortranParser' "inconsist1.f90" . B.pack $ unlines
-    [ "program inconsist1"
-    , "  implicit none"
-    , "  real :: a, b"
-    , "  != unit(m) :: x"
-    , "  real :: x = 1"
-    , "  != unit(s) :: t"
-    , "  real :: t = 2"
-    , "  a = sqr(x) "
-    , "  b = sqr(t)"
-    , "  contains "
-    , "  real function sqr(y)"
-    , "    real :: y"
-    , "    real :: z = 10"
-    , "    sqr = y * y + z"
-    , "  end function"
-    , "end program inconsist1" ]
 
 -- Test intrinsic function sqrt()
 sqrtPoly = flip fortranParser' "sqrtPoly.f90" . B.pack $ unlines

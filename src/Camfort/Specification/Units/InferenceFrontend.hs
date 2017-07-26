@@ -25,7 +25,6 @@ module Camfort.Specification.Units.InferenceFrontend
   ( initInference
   , puName
   , puSrcName
-  , runInconsistentConstraints
   , runInferVariables
   , runInference
   ) where
@@ -152,12 +151,6 @@ runInferVariables :: UnitSolver [(VV, UnitInfo)]
 runInferVariables = do
   cons <- usConstraints `fmap` get
   return $ inferVariables cons
-
--- | Return a possible list of unsolvable constraints.
-runInconsistentConstraints :: UnitSolver (Maybe Constraints)
-runInconsistentConstraints = do
-  cons <- usConstraints `fmap` get
-  return $ inconsistentConstraints cons
 
 --------------------------------------------------
 

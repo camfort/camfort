@@ -60,7 +60,8 @@ import Camfort.Transformation.CommonBlockElim
 import Camfort.Transformation.EquivalenceElim
 
 import qualified Camfort.Specification.Units as LU
-import Camfort.Specification.Units.Analysis.Criticals (inferCriticalVariables)
+import Camfort.Specification.Units.Analysis.Consistent (checkUnits)
+import Camfort.Specification.Units.Analysis.Criticals  (inferCriticalVariables)
 import Camfort.Specification.Units.Monad
 
 import Camfort.Helpers
@@ -133,7 +134,7 @@ optsToUnitOpts m debug = maybe (pure o1)
 unitsCheck inSrc excludes m debug incDir = do
     putStrLn $ "Checking units for '" ++ inSrc ++ "'"
     uo <- optsToUnitOpts m debug incDir
-    let rfun = LU.checkUnits uo
+    let rfun = checkUnits uo
     incDir' <- maybe getCurrentDirectory pure incDir
     doAnalysisReportWithModFiles rfun inSrc incDir' excludes
 
