@@ -20,7 +20,7 @@
 
 {- | Defines the monad for the units-of-measure modules -}
 module Camfort.Specification.Units.Monad
-  ( UA, VV, UnitSolver, UnitOpts(..), unitOpts0, UnitLogs, UnitState(..), LiteralsOpt(..), UnitException
+  ( UA, VV, UnitSolver, UnitOpts(..), unitOpts0, UnitLogs, UnitState(..), LiteralsOpt(..)
   , whenDebug, modifyVarUnitMap, modifyGivenVarSet, modifyUnitAliasMap
   , VarUnitMap, GivenVarSet, UnitAliasMap, TemplateMap, CallIdMap
   , modifyTemplateMap, modifyNameParamMap, modifyProgramFile, modifyProgramFileM, modifyCallIdRemapM
@@ -29,7 +29,6 @@ module Camfort.Specification.Units.Monad
   ) where
 
 import Control.Monad.RWS.Strict
-import Control.Monad.Trans.Except
 import Data.Binary (Binary)
 import Data.Typeable (Typeable)
 import Data.Char (toLower)
@@ -90,12 +89,7 @@ type NameParamMap = M.Map NameParamKey [UnitInfo]
 --------------------------------------------------
 
 -- | The monad
-type UnitSolver a = ExceptT UnitException (RWS UnitOpts UnitLogs UnitState) a
-
---------------------------------------------------
-
--- Not in use, but might be useful someday.
-type UnitException = ()
+type UnitSolver a = RWS UnitOpts UnitLogs UnitState a
 
 --------------------------------------------------
 
@@ -182,13 +176,12 @@ modifyCallIdRemapM f = do
 --------------------------------------------------
 
 -- | Run the unit solver monad.
-runUnitSolver :: UnitOpts -> F.ProgramFile UA -> UnitSolver a -> (Either UnitException a, UnitState, UnitLogs)
-runUnitSolver o pf m = runRWS (runExceptT m) o (unitState0 pf)
+runUnitSolver :: UnitOpts -> F.ProgramFile UA -> UnitSolver a -> (a, UnitState, UnitLogs)
+runUnitSolver o pf m = runRWS m o (unitState0 pf)
 
-evalUnitSolver :: UnitOpts -> F.ProgramFile UA -> UnitSolver a -> (Either UnitException a, UnitLogs)
+evalUnitSolver :: UnitOpts -> F.ProgramFile UA -> UnitSolver a -> (a, UnitLogs)
 evalUnitSolver o pf m = (ea, l) where (ea, _, l) = runUnitSolver o pf m
 
-execUnitSolver :: UnitOpts -> F.ProgramFile UA -> UnitSolver a -> Either UnitException (UnitState, UnitLogs)
+execUnitSolver :: UnitOpts -> F.ProgramFile UA -> UnitSolver a -> (UnitState, UnitLogs)
 execUnitSolver o pf m = case runUnitSolver o pf m of
-  (Left e, _, _)  -> Left e
-  (Right _, s, l) -> Right (s, l)
+  (_, s, l) -> (s, l)

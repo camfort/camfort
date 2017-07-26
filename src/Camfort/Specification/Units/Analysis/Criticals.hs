@@ -122,18 +122,11 @@ inferCriticalVariables uOpts = do
               ] `M.union` (M.unions . map (M.fromList . map (\ (a, (b, _)) -> (b, a)) . M.toList) $ M.elems mmap')
     (eVars, _, logs) = runInference uOpts pf runCriticalVariables
   writeDebug logs
-  case eVars of
-    Right vars -> okReport pf dmap vars uniqnameMap
-    Left exc   -> errReport exc
+  pure Criticals { criticalsPf           = pf
+                 , criticalsVariables    = eVars
+                 , criticalsDeclarations = dmap
+                 , criticalsUniqMap      = uniqnameMap
+                 , criticalsFromWhere    = fromWhereMap
+                 }
   where
-    okReport pf dmap vars uniqnameMap =
-      pure Criticals { criticalsPf           = pf
-                     , criticalsVariables    = vars
-                     , criticalsDeclarations = dmap
-                     , criticalsUniqMap      = uniqnameMap
-                     , criticalsFromWhere    = fromWhereMap
-                     }
-    -- TODO: Handle this when Analysis gets own error system.
-    errReport = undefined
-
     fromWhereMap = genUniqNameToFilenameMap $ uoModFiles uOpts

@@ -1,7 +1,6 @@
 module Camfort.Specification.Units.InferenceFrontendSpec (spec) where
 
 import qualified Data.ByteString.Char8 as B
-import           Data.Either (rights)
 import           Data.Generics.Uniplate.Operations (universeBi)
 import           Data.List (nub, sort)
 import           Data.Maybe (fromJust, isJust, mapMaybe, maybeToList)
@@ -26,7 +25,7 @@ import Camfort.Specification.Units.Monad
 
 spec :: Test.Spec
 spec = do
-  let showClean = show . nub . sort . head . rights . (:[]) . fst
+  let showClean = show . nub . sort . fst
   describe "Unit Inference Frontend" $ do
 
     describe "Polymorphic functions" $
@@ -65,15 +64,14 @@ runUnits litMode pf m = (r, usConstraints state)
     uOpts = unitOpts0 { uoDebug = False, uoLiterals = litMode }
     (r, state, _) = runUnitSolver uOpts pf' $ initInference >> m
 
-runUnitInference litMode pf = case r of
-  Right vars -> ([ (FA.varName e, u) | e <- declVariables pf'
-                                     , u <- maybeToList ((FA.varName e, FA.srcName e) `lookup` vars) ]
-                , usConstraints state)
-  _          -> ([], usConstraints state)
+runUnitInference litMode pf =
+  ([ (FA.varName e, u) | e <- declVariables pf'
+                       , u <- maybeToList ((FA.varName e, FA.srcName e) `lookup` vars) ]
+  , usConstraints state)
   where
     pf' = FA.initAnalysis . fmap (UA.mkUnitAnnotation . const unitAnnotation) $ pf
     uOpts = unitOpts0 { uoDebug = False, uoLiterals = litMode }
-    (r, state, _) = runUnitSolver uOpts pf' $ initInference >> fmap chooseImplicitNames runInferVariables
+    (vars, state, _) = runUnitSolver uOpts pf' $ initInference >> fmap chooseImplicitNames runInferVariables
 
 declVariables :: F.ProgramFile UA -> [F.Expression UA]
 declVariables pf = flip mapMaybe (universeBi pf) $ \ d -> case d of

@@ -150,10 +150,8 @@ checkUnits uOpts = do
     pfUA = usProgramFile state -- the program file after units analysis is done
   writeDebug logs
   pure $ case eCons of
-           Right Nothing -> Consistent pf nVars
-           Right (Just cons) -> Inconsistent $ Inconsistency pfUA state cons
-           -- FIXME: What does this mean... It's not tested...?
-           Left _ -> undefined
+           Nothing     -> Consistent pf nVars
+           (Just cons) -> Inconsistent $ Inconsistency pfUA state cons
   where
     isParametricUnit u = case u of UnitParamPosAbs {} -> True; UnitParamPosUse {} -> True
                                    UnitParamVarAbs {} -> True; UnitParamVarUse {} -> True

@@ -131,7 +131,7 @@ initInference = do
 runInference :: UnitOpts
              -> F.ProgramFile Annotation
              -> UnitSolver a
-             -> (Either UnitException a, UnitState, Report)
+             -> (a, UnitState, Report)
 runInference uOpts pf runner =
   let
     -- Use the module map derived from all of the included Camfort Mod files.

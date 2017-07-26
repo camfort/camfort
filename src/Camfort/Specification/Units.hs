@@ -130,11 +130,7 @@ inferUnits uOpts = do
   consistency <- checkUnits uOpts
   writeDebug logs
   pure $ case consistency of
-           Consistent{}     ->
-             case eVars of
-               -- FIXME: What does this mean... It's not tested...?
-               Left e -> undefined
-               Right vars   -> Right $ Inferred pfUA vars
+           Consistent{}     -> Right $ Inferred pfUA eVars
            Inconsistent err -> Left err
 
 synthesiseUnits :: Char
