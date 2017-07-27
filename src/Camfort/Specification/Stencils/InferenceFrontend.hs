@@ -34,12 +34,12 @@ import Control.Monad.Writer.Strict hiding (Product)
 
 import Camfort.Analysis.CommentAnnotator
 import Camfort.Analysis.Fortran
-  ( Analysis
-  , analysisInput
+  ( analysisInput
   , analysisResult
   , branchAnalysis
   , runAnalysis
   , writeDebug )
+import Camfort.Specification.Stencils.Analysis (StencilsAnalysis)
 import Camfort.Specification.Stencils.CheckBackend (synToAst)
 import Camfort.Specification.Stencils.CheckFrontend
   (CheckResult, existingStencils, stencilChecking)
@@ -69,8 +69,6 @@ import qualified Data.Map as M
 import qualified Data.Set as S
 import Data.Maybe
 import Data.Monoid ((<>))
-
-type StencilsAnalysis a a' = Analysis a a'
 
 data InferState = IS {
      ivMap        :: FAD.InductionVarMapByASTBlock

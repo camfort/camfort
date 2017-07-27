@@ -44,6 +44,7 @@ library
                         Camfort.Analysis.ModFile
                         Camfort.Analysis.Simple
                         Camfort.Specification.Parser
+                        Camfort.Specification.Stencils.Analysis
                         Camfort.Specification.Stencils.Annotation
                         Camfort.Specification.Stencils.CheckBackend
                         Camfort.Specification.Stencils.CheckFrontend

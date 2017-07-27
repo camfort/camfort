@@ -20,12 +20,13 @@ module Camfort.Specification.Stencils
 import Control.Arrow ((***), first, second)
 import Data.Maybe (catMaybes)
 
+import Camfort.Specification.Stencils.Analysis (StencilsAnalysis)
 import Camfort.Specification.Stencils.CheckFrontend hiding (LogLine)
 import Camfort.Specification.Stencils.InferenceFrontend
 import Camfort.Specification.Stencils.Synthesis
 import Camfort.Analysis.Annotations
 import Camfort.Analysis.Fortran
-  (Analysis, analysisInput, analysisResult, branchAnalysis)
+  (analysisInput, analysisResult, branchAnalysis)
 -- These two are redefined here for ForPar ASTs
 import Camfort.Helpers
 
@@ -47,7 +48,7 @@ getBlocks = FAB.analyseBBlocks . FAR.analyseRenames . FA.initAnalysis
 -- Top-level of specification inference
 infer :: Bool
       -> Char
-      -> Analysis (F.ProgramFile Annotation) String
+      -> StencilsAnalysis (F.ProgramFile Annotation) String
 infer useEval marker = do
   pf <- analysisInput
   report <- analysisResult <$> branchAnalysis (stencilInference useEval marker) (getBlocks pf)
@@ -65,14 +66,14 @@ infer useEval marker = do
 
 -- Top-level of specification synthesis
 synth :: Char
-      -> Analysis [F.ProgramFile A] (String, [F.ProgramFile Annotation])
+      -> StencilsAnalysis [F.ProgramFile A] (String, [F.ProgramFile Annotation])
 synth marker = do
   pfs <- analysisInput
   syntheses <- unzip <$> mapM (fmap analysisResult . branchAnalysis buildOutput) pfs
   let report = normaliseMsg (fst syntheses)
   pure (report, catMaybes $ snd syntheses)
   where
-    buildOutput :: Analysis (F.ProgramFile A) ((String, String), Maybe (F.ProgramFile Annotation))
+    buildOutput :: StencilsAnalysis (F.ProgramFile A) ((String, String), Maybe (F.ProgramFile Annotation))
     buildOutput = do
       pf <- analysisInput
       let f = F.pfGetFilename pf
@@ -80,7 +81,7 @@ synth marker = do
       pure $ case result of
                Left err         -> ((mkMsg f err, ""), Nothing)
                Right (warn,pf') -> (("", mkMsg f warn), Just pf')
-    synthWithCheck :: Analysis (F.ProgramFile A) (Either String (String, F.ProgramFile Annotation))
+    synthWithCheck :: StencilsAnalysis (F.ProgramFile A) (Either String (String, F.ProgramFile Annotation))
     synthWithCheck = do
       pf <- analysisInput
       let blocks = getBlocks pf
@@ -108,7 +109,7 @@ synth marker = do
 --         Stencil specification checking       --
 --------------------------------------------------
 
-check :: Analysis (F.ProgramFile Annotation) String
+check :: StencilsAnalysis (F.ProgramFile Annotation) String
 check = do
   pf <- analysisInput
   -- Append filename to any outputs
