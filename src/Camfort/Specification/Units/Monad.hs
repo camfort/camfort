@@ -21,7 +21,7 @@
 {- | Defines the monad for the units-of-measure modules -}
 module Camfort.Specification.Units.Monad
   ( UA, VV, UnitSolver, UnitOpts(..), unitOpts0, UnitLogs, UnitState(..), LiteralsOpt(..)
-  , whenDebug, modifyVarUnitMap, modifyGivenVarSet, modifyUnitAliasMap
+  , whenDebug, writeLogs, modifyVarUnitMap, modifyGivenVarSet, modifyUnitAliasMap
   , VarUnitMap, GivenVarSet, UnitAliasMap, TemplateMap, CallIdMap
   , modifyTemplateMap, modifyNameParamMap, modifyProgramFile, modifyProgramFileM, modifyCallIdRemapM
   , runUnitSolver, evalUnitSolver, execUnitSolver
@@ -40,6 +40,17 @@ import qualified Data.IntMap.Strict as IM
 import qualified Data.Set as S
 import qualified Language.Fortran.AST as F
 import Language.Fortran.Util.ModFile
+
+import Camfort.Analysis.Annotations (Annotation, Report, mkReport)
+import Camfort.Analysis.Fortran
+  ( Analysis
+  , AnalysisResult
+  , analysisDebug
+  , analysisParams
+  , analysisResult
+  , finalState
+  , runAnalysis
+  , writeDebug)
 import Camfort.Specification.Units.Annotation (UA)
 import Camfort.Specification.Units.Environment (UnitInfo, Constraints, VV, PP)
 
@@ -88,8 +99,8 @@ type NameParamMap = M.Map NameParamKey [UnitInfo]
 
 --------------------------------------------------
 
--- | The monad
-type UnitSolver a = RWS UnitOpts UnitLogs UnitState a
+-- | UnitSolvers are analyses on 'ProgramFile's annotated with unit information.
+type UnitSolver a = Analysis UnitOpts UnitState (F.ProgramFile UA) a
 
 --------------------------------------------------
 
@@ -97,12 +108,16 @@ type UnitSolver a = RWS UnitOpts UnitLogs UnitState a
 
 -- | Only run the argument if debugging mode enabled.
 whenDebug :: UnitSolver () -> UnitSolver ()
-whenDebug m = fmap uoDebug ask >>= \ d -> when d m
+whenDebug m = fmap uoDebug analysisParams >>= \ d -> when d m
+
+-- | Add some debugging information to the analysis.
+writeLogs :: String -> UnitSolver ()
+writeLogs = writeDebug . mkReport
 
 --------------------------------------------------
 
 -- Track some logging information in the monad.
-type UnitLogs = String
+type UnitLogs = Report
 
 --------------------------------------------------
 
@@ -176,12 +191,13 @@ modifyCallIdRemapM f = do
 --------------------------------------------------
 
 -- | Run the unit solver monad.
-runUnitSolver :: UnitOpts -> F.ProgramFile UA -> UnitSolver a -> (a, UnitState, UnitLogs)
-runUnitSolver o pf m = runRWS m o (unitState0 pf)
+runUnitSolver :: UnitOpts -> F.ProgramFile UA -> UnitSolver a -> AnalysisResult UnitState a
+runUnitSolver o pf m = runAnalysis m o (unitState0 pf) (uoModFiles o) pf
 
 evalUnitSolver :: UnitOpts -> F.ProgramFile UA -> UnitSolver a -> (a, UnitLogs)
-evalUnitSolver o pf m = (ea, l) where (ea, _, l) = runUnitSolver o pf m
+evalUnitSolver o pf m = let result = runUnitSolver o pf m
+                        in (analysisResult result, analysisDebug result)
 
 execUnitSolver :: UnitOpts -> F.ProgramFile UA -> UnitSolver a -> (UnitState, UnitLogs)
-execUnitSolver o pf m = case runUnitSolver o pf m of
-  (_, s, l) -> (s, l)
+execUnitSolver o pf m = let result = runUnitSolver o pf m
+                        in (finalState result, analysisDebug result)

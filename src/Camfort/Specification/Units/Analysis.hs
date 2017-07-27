@@ -12,8 +12,8 @@ module Camfort.Specification.Units.Analysis
   ( UnitsAnalysis
   ) where
 
-import Camfort.Analysis.Fortran (Analysis)
+import Camfort.Analysis.Fortran (SimpleAnalysis)
 import Camfort.Specification.Units.Monad (UnitOpts)
 
 -- | Analysis with access to 'UnitOpts' information.
-type UnitsAnalysis a a' = UnitOpts -> Analysis a a'
+type UnitsAnalysis a a' = UnitOpts -> SimpleAnalysis a a'

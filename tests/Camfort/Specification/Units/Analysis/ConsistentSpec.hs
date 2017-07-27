@@ -6,7 +6,7 @@ import System.FilePath ((</>))
 import Test.Hspec hiding (Spec)
 import qualified Test.Hspec as Test
 
-import Camfort.Analysis.Fortran (analysisResult, runAnalysis)
+import Camfort.Analysis.Fortran (analysisResult, runSimpleAnalysis)
 import Camfort.Analysis.ModFile (getModFiles)
 import Camfort.Input (readParseSrcDirWithModFiles)
 import Camfort.Specification.Units.Analysis.Consistent (checkUnits)
@@ -40,7 +40,7 @@ unitsCheckReport lo fileName expectedReport = do
   incDir <- getCurrentDirectory
   [(pf,_)] <- readParseSrcDirWithModFiles file incDir []
   modFiles <- getModFiles incDir
-  let report = analysisResult $ runAnalysis (checkUnits uOpts) modFiles pf
+  let report = analysisResult $ runSimpleAnalysis (checkUnits uOpts) modFiles pf
   show report `shouldBe` expectedReport
   where uOpts = unitOpts0 { uoDebug = False, uoLiterals = lo }
 

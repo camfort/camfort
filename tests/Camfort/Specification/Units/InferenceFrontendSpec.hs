@@ -14,6 +14,7 @@ import qualified Language.Fortran.AST as F
 import qualified Language.Fortran.Analysis as FA
 
 import           Camfort.Analysis.Annotations (unitAnnotation)
+import           Camfort.Analysis.Fortran (analysisResult, finalState)
 import           Camfort.Specification.Units (chooseImplicitNames)
 import           Camfort.Specification.Units.Annotation (UA)
 import qualified Camfort.Specification.Units.Annotation as UA
@@ -62,7 +63,9 @@ runUnits litMode pf m = (r, usConstraints state)
   where
     pf' = FA.initAnalysis . fmap (UA.mkUnitAnnotation . const unitAnnotation) $ pf
     uOpts = unitOpts0 { uoDebug = False, uoLiterals = litMode }
-    (r, state, _) = runUnitSolver uOpts pf' $ initInference >> m
+    (r, state) =
+      let res = runUnitSolver uOpts pf' $ initInference >> m
+      in (analysisResult res, finalState res)
 
 runUnitInference litMode pf =
   ([ (FA.varName e, u) | e <- declVariables pf'
@@ -71,7 +74,9 @@ runUnitInference litMode pf =
   where
     pf' = FA.initAnalysis . fmap (UA.mkUnitAnnotation . const unitAnnotation) $ pf
     uOpts = unitOpts0 { uoDebug = False, uoLiterals = litMode }
-    (vars, state, _) = runUnitSolver uOpts pf' $ initInference >> fmap chooseImplicitNames runInferVariables
+    (vars, state) =
+      let res = runUnitSolver uOpts pf' $ initInference >> fmap chooseImplicitNames runInferVariables
+      in (analysisResult res, finalState res)
 
 declVariables :: F.ProgramFile UA -> [F.Expression UA]
 declVariables pf = flip mapMaybe (universeBi pf) $ \ d -> case d of

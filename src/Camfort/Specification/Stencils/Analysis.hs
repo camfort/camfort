@@ -12,6 +12,6 @@ module Camfort.Specification.Stencils.Analysis
   ( StencilsAnalysis
   ) where
 
-import Camfort.Analysis.Fortran (Analysis)
+import Camfort.Analysis.Fortran (SimpleAnalysis)
 
-type StencilsAnalysis a a' = Analysis a a'
+type StencilsAnalysis a a' = SimpleAnalysis a a'

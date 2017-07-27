@@ -39,7 +39,7 @@ import qualified Language.Fortran.Parser.Any as FP
 
 import Camfort.Analysis.Annotations
 import Camfort.Analysis.Fortran
-  (Analysis, analysisDebug, analysisResult, runAnalysis)
+  (SimpleAnalysis, analysisDebug, analysisResult, runSimpleAnalysis)
 import Camfort.Analysis.ModFile (getModFiles)
 import Camfort.Helpers
 import Camfort.Output
@@ -60,20 +60,20 @@ printExcludes inSrc excludes =
 
 -- | Perform an analysis that produces information of type @s@.
 doAnalysisSummary :: (Monoid s, Show' s)
-  => Analysis FileProgram s
+  => SimpleAnalysis FileProgram s
   -> FileOrDir -> FileOrDir -> [Filename] -> IO ()
 doAnalysisSummary aFun inSrc incDir excludes = do
   printExcludes inSrc excludes
   ps <- readParseSrcDirWithModFiles inSrc incDir excludes
   modFiles <- getModFiles incDir
-  let results = runAnalysis aFun modFiles . fst <$> ps
+  let results = runSimpleAnalysis aFun modFiles . fst <$> ps
       out = mconcat . fmap analysisResult $ results
   putStrLn . show' $ out
 
 -- | Perform an analysis which reports to the user, but does not output any files.
 doAnalysisReportWithModFiles
   :: (Show r)
-  => Analysis FileProgram r
+  => SimpleAnalysis FileProgram r
   -> FileOrDir
   -> FileOrDir
   -> [Filename]
@@ -82,13 +82,13 @@ doAnalysisReportWithModFiles rFun inSrc incDir excludes = do
   printExcludes inSrc excludes
   ps <- readParseSrcDirWithModFiles inSrc incDir excludes
   modFiles <- getModFiles incDir
-  let results = runAnalysis rFun modFiles . fst <$> ps
+  let results = runSimpleAnalysis rFun modFiles . fst <$> ps
       report = concatMap (\r -> show (analysisDebug r) ++ show (analysisResult r)) results
   putStrLn report
 
 doRefactorWithModFiles
   :: (Show e, Show r)
-  => Analysis [FileProgram] (r, [Either e FileProgram])
+  => SimpleAnalysis [FileProgram] (r, [Either e FileProgram])
   -> FileOrDir
   -> FileOrDir
   -> [Filename]
@@ -98,7 +98,7 @@ doRefactorWithModFiles rFun inSrc incDir excludes outSrc = do
   printExcludes inSrc excludes
   ps <- readParseSrcDirWithModFiles inSrc incDir excludes
   modFiles <- getModFiles incDir
-  let res = runAnalysis rFun modFiles . fmap fst $ ps
+  let res = runSimpleAnalysis rFun modFiles . fmap fst $ ps
       aRes = analysisResult res
       (_, ps') = partitionEithers (snd aRes)
       report = show (analysisDebug res) ++ show (fst aRes)
@@ -108,13 +108,13 @@ doRefactorWithModFiles rFun inSrc incDir excludes outSrc = do
 
 -- | Perform a refactoring that may create additional files.
 doRefactorAndCreate
-  :: Analysis [FileProgram] ([FileProgram], [FileProgram])
+  :: SimpleAnalysis [FileProgram] ([FileProgram], [FileProgram])
   -> FileOrDir -> [Filename] -> FileOrDir -> FileOrDir -> IO Report
 doRefactorAndCreate rFun inSrc excludes incDir outSrc = do
   printExcludes inSrc excludes
   ps <- readParseSrcDirWithModFiles inSrc incDir excludes
   modFiles <- getModFiles incDir
-  let res = runAnalysis rFun modFiles . fmap fst $ ps
+  let res = runSimpleAnalysis rFun modFiles . fmap fst $ ps
       report      = analysisDebug  res
       (ps', ps'') = analysisResult res
   let outputs = reassociateSourceText (fmap snd ps) ps'

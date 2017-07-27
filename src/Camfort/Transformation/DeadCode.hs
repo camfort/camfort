@@ -21,7 +21,7 @@ module Camfort.Transformation.DeadCode
   ) where
 
 import Camfort.Analysis.Annotations
-import Camfort.Analysis.Fortran (Analysis, analysisInput, writeDebug)
+import Camfort.Analysis.Fortran (SimpleAnalysis, analysisInput, writeDebug)
 import qualified Language.Fortran.Analysis.DataFlow as FAD
 import qualified Language.Fortran.Analysis.Renaming as FAR
 import qualified Language.Fortran.Analysis.BBlocks as FAB
@@ -41,7 +41,7 @@ import Data.Maybe
 
 -- Currently only strips out dead code through simple variable assignments
 -- but not through array-subscript assignmernts
-deadCode :: Bool -> Analysis (F.ProgramFile A) (F.ProgramFile A)
+deadCode :: Bool -> SimpleAnalysis (F.ProgramFile A) (F.ProgramFile A)
 deadCode flag = do
   pf <- analysisInput
   let

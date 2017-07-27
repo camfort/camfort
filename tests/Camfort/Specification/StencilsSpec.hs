@@ -13,11 +13,12 @@ import Control.Monad.Writer.Strict hiding (Sum, Product)
 import Data.List
 
 import Camfort.Analysis.Fortran
-  (Analysis, analysisResult, runAnalysis)
+  (analysisResult, runSimpleAnalysis)
 import Camfort.Analysis.ModFile (getModFiles)
 import Camfort.Helpers.Vec
 import Camfort.Input
 import Camfort.Specification.Stencils
+import Camfort.Specification.Stencils.Analysis (StencilsAnalysis)
 import Camfort.Specification.Stencils.Generate
   (Neighbour(..), indicesToSpec, convIxToNeighbour)
 import Camfort.Specification.Stencils.Synthesis
@@ -257,7 +258,7 @@ spec =
 
     describe "integration test on inference for example4.f" $
       it "stencil infer" $
-         analysisResult (runAnalysis (infer False '=') emptyModFiles program)
+         analysisResult (runSimpleAnalysis (infer False '=') emptyModFiles program)
            `shouldBe`
             "\ntests/fixtures/Specification/Stencils/example4.f\n\
              \(6:8)-(6:33)    stencil readOnce, pointed(dim=1) :: x"
@@ -357,7 +358,7 @@ spec =
             let file = fixturesDir </> fileName
             programs <- runIO $ readParseSrcDirWithModFiles file fixturesDir []
             let [(program,_)] = programs
-            it testComment $ (analysisResult . runAnalysis check emptyModFiles $ program)
+            it testComment $ (analysisResult . runSimpleAnalysis check emptyModFiles $ program)
               `shouldBe` expected
 
         assertStencilInference :: Bool -> FilePath -> String -> Expectation
@@ -365,7 +366,7 @@ spec =
           let file         = fixturesDir </> fileName
           in do
             [(program,_)] <- readParseSrcDirWithModFiles file fixturesDir []
-            (analysisResult . runAnalysis (infer useEval '=') emptyModFiles $ program)
+            (analysisResult . runSimpleAnalysis (infer useEval '=') emptyModFiles $ program)
               `shouldBe` expected
 
         assertStencilSynthDir expected dir fileName testComment =
@@ -379,7 +380,7 @@ spec =
             modFiles         <- runIO $ getModFiles dir
             it testComment $
                map (B.unpack . runIdentity . flip (reprint (refactoring version)) (B.pack programSrc))
-                 (snd . analysisResult . runAnalysis (synth '=') modFiles . fmap fst $ program)
+                 (snd . analysisResult . runSimpleAnalysis (synth '=') modFiles . fmap fst $ program)
                 `shouldBe` [synthExpectedSrc]
 
         assertStencilSynthOnFile = assertStencilSynthDir
@@ -393,7 +394,7 @@ spec =
             in do
               program    <- runIO $ readParseSrcDirWithModFiles file fixturesDir []
               modFiles   <- runIO $ getModFiles fixturesDir
-              it testComment $ (fst . analysisResult . runAnalysis (synth '=') modFiles . fmap fst $ program)
+              it testComment $ (fst . analysisResult . runSimpleAnalysis (synth '=') modFiles . fmap fst $ program)
                 `shouldBe` expectedResponse
 
         assertStencilSynthResponseOut fileName testComment expectedResponse =
@@ -408,8 +409,8 @@ spec =
           let oldExtension = takeExtension file
           in addExtension (replaceExtension file "expected") oldExtension
 
-runSingleFileAnalysis :: Analysis a b -> a -> b
-runSingleFileAnalysis a = analysisResult . runAnalysis a emptyModFiles
+runSingleFileAnalysis :: StencilsAnalysis a b -> a -> b
+runSingleFileAnalysis a = analysisResult . runSimpleAnalysis a emptyModFiles
 
 -- Indices for the 2D five point stencil (deliberately in an odd order)
 fivepoint = [ Cons (-1) (Cons 0 Nil), Cons 0 (Cons (-1) Nil)

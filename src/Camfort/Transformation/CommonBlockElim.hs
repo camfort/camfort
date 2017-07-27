@@ -39,7 +39,7 @@ import qualified Language.Fortran.Util.Position as FU
 import qualified Language.Fortran.ParserMonad as PM
 import qualified Language.Fortran.PrettyPrint as PP
 
-import Camfort.Analysis.Fortran (Analysis, analysisInput, writeDebug)
+import Camfort.Analysis.Fortran (SimpleAnalysis, analysisInput, writeDebug)
 import Camfort.Helpers
 import Camfort.Helpers.Syntax
 import Camfort.Analysis.Annotations
@@ -67,7 +67,7 @@ type (:?) a (b :: k) = a
 -- Top-level functions for eliminating common blocks in a set of files
 commonElimToModules ::
        Directory
-    -> Analysis [F.ProgramFile A] ([F.ProgramFile A], [F.ProgramFile A])
+    -> SimpleAnalysis [F.ProgramFile A] ([F.ProgramFile A], [F.ProgramFile A])
 
 -- Eliminates common blocks in a program directory (and convert to modules)
 commonElimToModules d = do

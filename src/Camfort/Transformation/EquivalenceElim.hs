@@ -32,7 +32,7 @@ import qualified Language.Fortran.Analysis.Renaming as FAR
 import qualified Language.Fortran.Analysis as FA
 
 import Camfort.Analysis.Fortran
-  (Analysis, analysisInput, analysisResult, branchAnalysis, writeDebug)
+  (SimpleAnalysis, analysisInput, analysisResult, branchAnalysis, writeDebug)
 import Camfort.Helpers.Syntax
 import Camfort.Analysis.Annotations
 import Camfort.Transformation.DeadCode
@@ -41,7 +41,7 @@ import Camfort.Transformation.DeadCode
 type A1 = FA.Analysis Annotation
 type RmEqState = ([[F.Expression A1]], Int, String)
 
-refactorEquivalences :: Analysis (F.ProgramFile A) (F.ProgramFile A)
+refactorEquivalences :: SimpleAnalysis (F.ProgramFile A) (F.ProgramFile A)
 refactorEquivalences = do
   pf <- analysisInput
   let

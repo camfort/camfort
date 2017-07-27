@@ -51,6 +51,8 @@ import           Language.Fortran.Util.Position (getSpan)
 
 import           Camfort.Analysis.Annotations (Annotation, Report, mkReport)
 import           Camfort.Analysis.CommentAnnotator (annotateComments)
+import           Camfort.Analysis.Fortran
+  (analysisDebug, analysisParams, analysisResult, finalState)
 import qualified Camfort.Specification.Units.Annotation   as UA
 import           Camfort.Specification.Units.Environment
 import           Camfort.Specification.Units.InferenceBackend
@@ -137,11 +139,11 @@ runInference uOpts pf runner =
     -- Use the module map derived from all of the included Camfort Mod files.
     mmap      = combinedModuleMap (uoModFiles uOpts)
     pfRenamed = FAR.analyseRenamesWithModuleMap mmap . FA.initAnalysis . fmap UA.mkUnitAnnotation $ pf
-    (r, s, report) = runUnitSolver uOpts pfRenamed $ do
-        initializeModFiles $ uoModFiles uOpts
-        initInference
-        runner
-  in (r, s, mkReport report)
+    res = runUnitSolver uOpts pfRenamed $ do
+      initializeModFiles $ uoModFiles uOpts
+      initInference
+      runner
+  in (analysisResult res, finalState res, analysisDebug res)
 
 -- Inference functions
 
@@ -188,7 +190,7 @@ indexedParams pu
 insertUndeterminedUnits :: UnitSolver ()
 insertUndeterminedUnits = do
   pf   <- gets usProgramFile
-  dmap <- (M.union (extractDeclMap pf) . combinedDeclMap) `fmap` asks uoModFiles
+  dmap <- (M.union (extractDeclMap pf) . combinedDeclMap . uoModFiles) <$> analysisParams
   forM_ (universeBi pf :: [F.ProgramUnit UA]) $ \ pu ->
     modifyPUBlocksM (transformBiM (insertUndeterminedUnitVar dmap)) pu
 
@@ -313,7 +315,7 @@ annotateLiterals = modifyProgramFileM (transformBiM annotateLiteralsPU)
 
 annotateLiteralsPU :: F.ProgramUnit UA -> UnitSolver (F.ProgramUnit UA)
 annotateLiteralsPU pu = do
-  mode <- asks uoLiterals
+  mode <- fmap uoLiterals analysisParams
   case mode of
     LitUnitless -> modifyPUBlocksM (transformBiM expUnitless) pu
     LitPoly     -> modifyPUBlocksM (transformBiM (withLiterals genParamLit)) pu
@@ -519,7 +521,7 @@ topLevelFuncsAndSubs (F.ProgramFile _ pus) = topLevel =<< pus
 extractConstraints :: UnitSolver Constraints
 extractConstraints = do
   pf         <- gets usProgramFile
-  dmap       <- (M.union (extractDeclMap pf) . combinedDeclMap) `fmap` asks uoModFiles
+  dmap       <- (M.union (extractDeclMap pf) . combinedDeclMap . uoModFiles) <$> analysisParams
   varUnitMap <- gets usVarUnitMap
   return $ [ con | b <- mainBlocks pf, con@(ConEq {}) <- universeBi b ] ++
            [ ConEq (toUnitVar dmap v) u | (v, u) <- M.toList varUnitMap ]
@@ -557,7 +559,7 @@ propagateUnits = modifyProgramFileM $ transformBiM propagatePU        <=<
                                       transformBiM propagateExp
 
 propagateExp :: F.Expression UA -> UnitSolver (F.Expression UA)
-propagateExp e = fmap uoLiterals ask >>= \ lm -> case e of
+propagateExp e = fmap uoLiterals analysisParams >>= \ lm -> case e of
   F.ExpValue _ _ _                       -> return e -- all values should already be annotated
   F.ExpBinary _ _ F.Multiplication e1 e2 -> setF2 UnitMul (getUnitInfoMul lm e1) (getUnitInfoMul lm e2)
   F.ExpBinary _ _ F.Division e1 e2       -> setF2 UnitMul (getUnitInfoMul lm e1) (flip UnitPow (-1) `fmap` (getUnitInfoMul lm e2))
@@ -568,7 +570,7 @@ propagateExp e = fmap uoLiterals ask >>= \ lm -> case e of
   F.ExpSubscript _ _ e1 _                -> return $ UA.maybeSetUnitInfo (UA.getUnitInfo e1) e
   F.ExpUnary _ _ _ e1                    -> return $ UA.maybeSetUnitInfo (UA.getUnitInfo e1) e
   _                                      -> do
-    whenDebug . tell $ "propagateExp: " ++ show (getSpan e) ++ " unhandled: " ++ show e
+    whenDebug . writeLogs $ "propagateExp: " ++ show (getSpan e) ++ " unhandled: " ++ show e
     return e
   where
     -- Shorter names for convenience functions.
@@ -785,49 +787,49 @@ dumpConsM str = whenDebug . D.traceM . unlines . ([replicate 50 '-', str ++ ":"]
 
 debugLogging :: UnitSolver ()
 debugLogging = whenDebug $ do
-    (tell . unlines . map (\ (ConEq u1 u2) -> "  ***AbsConstraint: " ++ show (flattenUnits u1) ++ " === " ++ show (flattenUnits u2) ++ "\n")) =<< extractConstraints
+    (writeLogs . unlines . map (\ (ConEq u1 u2) -> "  ***AbsConstraint: " ++ show (flattenUnits u1) ++ " === " ++ show (flattenUnits u2) ++ "\n")) =<< extractConstraints
     pf <- gets usProgramFile
     cons <- usConstraints `fmap` get
     vum <- usVarUnitMap `fmap` get
-    tell . unlines $ [ "  " ++ show info ++ " :: " ++ n | ((n, _), info) <- M.toList vum ]
-    tell "\n\n"
+    writeLogs . unlines $ [ "  " ++ show info ++ " :: " ++ n | ((n, _), info) <- M.toList vum ]
+    writeLogs "\n\n"
     uam <- usUnitAliasMap `fmap` get
-    tell . unlines $ [ "  " ++ n ++ " = " ++ show info | (n, info) <- M.toList uam ]
-    tell . unlines $ map (\ (ConEq u1 u2) -> "  ***Constraint: " ++ show (flattenUnits u1) ++ " === " ++ show (flattenUnits u2) ++ "\n") cons
-    tell $ show cons ++ "\n\n"
+    writeLogs . unlines $ [ "  " ++ n ++ " = " ++ show info | (n, info) <- M.toList uam ]
+    writeLogs . unlines $ map (\ (ConEq u1 u2) -> "  ***Constraint: " ++ show (flattenUnits u1) ++ " === " ++ show (flattenUnits u2) ++ "\n") cons
+    writeLogs $ show cons ++ "\n\n"
     forM_ (universeBi pf) $ \ pu -> case pu of
       F.PUFunction {}
         | Just (ConConj cons) <- UA.getConstraint pu ->
-          tell . unlines $ (puName pu ++ ":"):map (\ (ConEq u1 u2) -> "    constraint: " ++ show (flattenUnits u1) ++ " === " ++ show (flattenUnits u2)) cons
+          writeLogs . unlines $ (puName pu ++ ":"):map (\ (ConEq u1 u2) -> "    constraint: " ++ show (flattenUnits u1) ++ " === " ++ show (flattenUnits u2)) cons
       F.PUSubroutine {}
         | Just (ConConj cons) <- UA.getConstraint pu ->
-          tell . unlines $ (puName pu ++ ":"):map (\ (ConEq u1 u2) -> "    constraint: " ++ show (flattenUnits u1) ++ " === " ++ show (flattenUnits u2)) cons
+          writeLogs . unlines $ (puName pu ++ ":"):map (\ (ConEq u1 u2) -> "    constraint: " ++ show (flattenUnits u1) ++ " === " ++ show (flattenUnits u2)) cons
       _ -> return ()
     let (lhsM, rhsM, _, lhsColA, rhsColA) = constraintsToMatrices cons
-    tell "\n--------------------------------------------------\nLHS Cols:\n"
-    tell $ show lhsColA
-    tell "\n--------------------------------------------------\nRHS Cols:\n"
-    tell $ show rhsColA
-    tell "\n--------------------------------------------------\nLHS M:\n"
-    tell $ show lhsM
-    tell "\n--------------------------------------------------\nRHS M:\n"
-    tell $ show rhsM
-    tell "\n--------------------------------------------------\nSolved (RREF) M:\n"
+    writeLogs "\n--------------------------------------------------\nLHS Cols:\n"
+    writeLogs $ show lhsColA
+    writeLogs "\n--------------------------------------------------\nRHS Cols:\n"
+    writeLogs $ show rhsColA
+    writeLogs "\n--------------------------------------------------\nLHS M:\n"
+    writeLogs $ show lhsM
+    writeLogs "\n--------------------------------------------------\nRHS M:\n"
+    writeLogs $ show rhsM
+    writeLogs "\n--------------------------------------------------\nSolved (RREF) M:\n"
     let augM = if H.rows rhsM == 0 || H.cols rhsM == 0 then lhsM else H.fromBlocks [[lhsM, rhsM]]
-    tell . show . rref $ augM
-    -- tell "\n--------------------------------------------------\nSolved (SVD) M:\n"
-    -- tell $ show (H.linearSolveSVD lhsM rhsM)
-    -- tell "\n--------------------------------------------------\nSingular Values:\n"
-    -- tell $ show (H.singularValues lhsM)
-    tell "\n--------------------------------------------------\n"
-    tell $ "Rank LHS: " ++ show (H.rank lhsM) ++ "\n"
-    tell "\n--------------------------------------------------\n"
+    writeLogs . show . rref $ augM
+    -- writeLogs "\n--------------------------------------------------\nSolved (SVD) M:\n"
+    -- writeLogs $ show (H.linearSolveSVD lhsM rhsM)
+    -- writeLogs "\n--------------------------------------------------\nSingular Values:\n"
+    -- writeLogs $ show (H.singularValues lhsM)
+    writeLogs "\n--------------------------------------------------\n"
+    writeLogs $ "Rank LHS: " ++ show (H.rank lhsM) ++ "\n"
+    writeLogs "\n--------------------------------------------------\n"
     let augA = if H.rows rhsM == 0 || H.cols rhsM == 0 then lhsM else H.fromBlocks [[lhsM, rhsM]]
-    tell $ "Rank Augmented: " ++ show (H.rank augA) ++ "\n"
-    tell "\n--------------------------------------------------\nGenUnitAssignments:\n"
+    writeLogs $ "Rank Augmented: " ++ show (H.rank augA) ++ "\n"
+    writeLogs "\n--------------------------------------------------\nGenUnitAssignments:\n"
     let unitAssignments = genUnitAssignments cons
-    tell . unlines $ map (\ (u1s, u2) -> "  ***UnitAssignment: " ++ show u1s ++ " === " ++ show (flattenUnits u2) ++ "\n") unitAssignments
-    tell "\n--------------------------------------------------\n"
+    writeLogs . unlines $ map (\ (u1s, u2) -> "  ***UnitAssignment: " ++ show u1s ++ " === " ++ show (flattenUnits u2) ++ "\n") unitAssignments
+    writeLogs "\n--------------------------------------------------\n"
 
 --------------------------------------------------
 

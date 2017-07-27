@@ -37,7 +37,6 @@ import Camfort.Analysis.Fortran
   ( analysisInput
   , analysisResult
   , branchAnalysis
-  , runAnalysis
   , writeDebug )
 import Camfort.Specification.Stencils.Analysis (StencilsAnalysis)
 import Camfort.Specification.Stencils.CheckBackend (synToAst)
