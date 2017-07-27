@@ -12,6 +12,7 @@ import           Language.Fortran.Parser.Any (fortranParser)
 import           Language.Fortran.ParserMonad (fromRight)
 import qualified Language.Fortran.AST as F
 import qualified Language.Fortran.Analysis as FA
+import           Language.Fortran.Util.ModFile (emptyModFiles)
 
 import           Camfort.Analysis.Annotations (unitAnnotation)
 import           Camfort.Analysis.Fortran (analysisResult, finalState)
@@ -64,7 +65,7 @@ runUnits litMode pf m = (r, usConstraints state)
     pf' = FA.initAnalysis . fmap (UA.mkUnitAnnotation . const unitAnnotation) $ pf
     uOpts = unitOpts0 { uoDebug = False, uoLiterals = litMode }
     (r, state) =
-      let res = runUnitSolver uOpts pf' $ initInference >> m
+      let res = runUnitSolver uOpts pf' emptyModFiles $ initInference >> m
       in (analysisResult res, finalState res)
 
 runUnitInference litMode pf =
@@ -75,7 +76,7 @@ runUnitInference litMode pf =
     pf' = FA.initAnalysis . fmap (UA.mkUnitAnnotation . const unitAnnotation) $ pf
     uOpts = unitOpts0 { uoDebug = False, uoLiterals = litMode }
     (vars, state) =
-      let res = runUnitSolver uOpts pf' $ initInference >> fmap chooseImplicitNames runInferVariables
+      let res = runUnitSolver uOpts pf' emptyModFiles $ initInference >> fmap chooseImplicitNames runInferVariables
       in (analysisResult res, finalState res)
 
 declVariables :: F.ProgramFile UA -> [F.Expression UA]

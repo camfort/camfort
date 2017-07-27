@@ -26,7 +26,7 @@ import qualified Numeric.LinearAlgebra as H
 
 import Camfort.Analysis.Annotations
 import Camfort.Analysis.Fortran
-  (analysisInput, writeDebug)
+  (analysisInput, analysisModFiles, writeDebug)
 import Camfort.Specification.Units.InferenceBackend
   (constraintsToMatrix, rref)
 
@@ -106,21 +106,23 @@ runCriticalVariables = do
 inferCriticalVariables :: UnitsAnalysis (F.ProgramFile Annotation) Criticals
 inferCriticalVariables uOpts = do
   pf <- analysisInput
+  mfs <- analysisModFiles
   let
     -- Use the module map derived from all of the included Camfort Mod files.
-    mmap = combinedModuleMap (uoModFiles uOpts)
+    mmap = combinedModuleMap mfs
     pfRenamed = FAR.analyseRenamesWithModuleMap mmap . FA.initAnalysis . fmap UA.mkUnitAnnotation $ pf
     mmap' = extractModuleMap pfRenamed `M.union` mmap -- post-parsing
     -- unique name -> src name across modules
 
     -- Map of all declarations
-    dmap = extractDeclMap pfRenamed `M.union` combinedDeclMap (uoModFiles uOpts)
+    dmap = extractDeclMap pfRenamed `M.union` combinedDeclMap mfs
     uniqnameMap = M.fromList [
                 (FA.varName e, FA.srcName e) |
                 e@(F.ExpValue _ _ F.ValVariable{}) <- universeBi pfRenamed :: [F.Expression UA]
                 -- going to ignore intrinsics here
               ] `M.union` (M.unions . map (M.fromList . map (\ (a, (b, _)) -> (b, a)) . M.toList) $ M.elems mmap')
-    (eVars, _, logs) = runInference uOpts pf runCriticalVariables
+    (eVars, _, logs) = runInference uOpts mfs pf runCriticalVariables
+    fromWhereMap = genUniqNameToFilenameMap mfs
   writeDebug logs
   pure Criticals { criticalsPf           = pf
                  , criticalsVariables    = eVars
@@ -128,5 +130,3 @@ inferCriticalVariables uOpts = do
                  , criticalsUniqMap      = uniqnameMap
                  , criticalsFromWhere    = fromWhereMap
                  }
-  where
-    fromWhereMap = genUniqNameToFilenameMap $ uoModFiles uOpts

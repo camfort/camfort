@@ -24,6 +24,7 @@ import           GHC.Generics (Generic)
 
 import           Language.Fortran.Util.ModFile
 
+import Camfort.Analysis.Fortran (analysisModFiles)
 import Camfort.Specification.Units.Monad
 
 -- | The data-structure stored in 'fortran-src mod files'
@@ -57,8 +58,9 @@ mfCompiledUnits mf = case lookupModFileData unitsCompiledDataLabel mf of
     Right (_, _, cu) -> cu
 
 -- | Initialize units-relevant ModFile information.
-initializeModFiles :: ModFiles -> UnitSolver ()
-initializeModFiles mfs = do
+initializeModFiles :: UnitSolver ()
+initializeModFiles = do
+  mfs <- analysisModFiles
   let compiledUnits = combinedCompiledUnits   $ mfs
   modifyTemplateMap  . const . cuTemplateMap  $ compiledUnits
   modifyNameParamMap . const . cuNameParamMap $ compiledUnits

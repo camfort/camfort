@@ -39,7 +39,7 @@ import qualified Data.Map.Strict as M
 import qualified Data.IntMap.Strict as IM
 import qualified Data.Set as S
 import qualified Language.Fortran.AST as F
-import Language.Fortran.Util.ModFile
+import Language.Fortran.Util.ModFile (ModFiles)
 
 import Camfort.Analysis.Annotations (Annotation, Report, mkReport)
 import Camfort.Analysis.Fortran
@@ -76,12 +76,11 @@ instance Read LiteralsOpt where
 data UnitOpts = UnitOpts
   { uoDebug          :: Bool                      -- ^ debugging mode?
   , uoLiterals       :: LiteralsOpt               -- ^ how to handle literals
-  , uoModFiles       :: ModFiles                  -- ^ included modules
   }
   deriving (Show, Data, Eq, Ord)
 
 unitOpts0 :: UnitOpts
-unitOpts0 = UnitOpts False LitMixed emptyModFiles
+unitOpts0 = UnitOpts False LitMixed
 
 -- | Function/subroutine name -> associated, parametric polymorphic constraints
 type TemplateMap = M.Map F.Name Constraints
@@ -191,13 +190,13 @@ modifyCallIdRemapM f = do
 --------------------------------------------------
 
 -- | Run the unit solver monad.
-runUnitSolver :: UnitOpts -> F.ProgramFile UA -> UnitSolver a -> AnalysisResult UnitState a
-runUnitSolver o pf m = runAnalysis m o (unitState0 pf) (uoModFiles o) pf
+runUnitSolver :: UnitOpts -> F.ProgramFile UA -> ModFiles -> UnitSolver a -> AnalysisResult UnitState a
+runUnitSolver o pf mfs m = runAnalysis m o (unitState0 pf) mfs pf
 
-evalUnitSolver :: UnitOpts -> F.ProgramFile UA -> UnitSolver a -> (a, UnitLogs)
-evalUnitSolver o pf m = let result = runUnitSolver o pf m
+evalUnitSolver :: UnitOpts -> F.ProgramFile UA -> ModFiles -> UnitSolver a -> (a, UnitLogs)
+evalUnitSolver o pf mfs m = let result = runUnitSolver o pf mfs m
                         in (analysisResult result, analysisDebug result)
 
-execUnitSolver :: UnitOpts -> F.ProgramFile UA -> UnitSolver a -> (UnitState, UnitLogs)
-execUnitSolver o pf m = let result = runUnitSolver o pf m
+execUnitSolver :: UnitOpts -> F.ProgramFile UA -> ModFiles -> UnitSolver a -> (UnitState, UnitLogs)
+execUnitSolver o pf mfs m = let result = runUnitSolver o pf mfs m
                         in (finalState result, analysisDebug result)

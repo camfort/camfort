@@ -24,7 +24,8 @@ import qualified Data.Map.Strict as M
 import           Data.Maybe (maybeToList, mapMaybe, maybe)
 
 import           Camfort.Analysis.Annotations
-import           Camfort.Analysis.Fortran (analysisInput, writeDebug)
+import           Camfort.Analysis.Fortran
+  (analysisInput, analysisModFiles, writeDebug)
 import           Camfort.Specification.Units.Analysis (UnitsAnalysis)
 import qualified Camfort.Specification.Units.Annotation as UA
 import           Camfort.Specification.Units.Environment
@@ -142,8 +143,9 @@ instance Show ConsistencyError where
 checkUnits :: UnitsAnalysis (F.ProgramFile Annotation) ConsistencyReport
 checkUnits uOpts = do
   pf <- analysisInput
+  mfs <- analysisModFiles
   let
-    (eCons, state, logs) = runInference uOpts pf runInconsistentConstraints
+    (eCons, state, logs) = runInference uOpts mfs pf runInconsistentConstraints
     -- number of 'real' variables checked, e.g. not parametric
     nVars = M.size . M.filter (not . isParametricUnit) $ usVarUnitMap state
     pfUA :: F.ProgramFile UA

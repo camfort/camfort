@@ -124,23 +124,22 @@ equivalences inSrc excludes outSrc = do
     putStrLn report
 
 {- Units feature -}
-optsToUnitOpts :: LiteralsOpt -> Bool -> Maybe String -> IO UnitOpts
-optsToUnitOpts m debug = maybe (pure o1)
-  (fmap (\modFiles -> o1 { uoModFiles = modFiles }) . getModFiles)
+optsToUnitOpts :: LiteralsOpt -> Bool -> UnitOpts
+optsToUnitOpts m debug = o1
   where o1 = unitOpts0 { uoLiterals = m
                        , uoDebug = debug
-                       , uoModFiles = emptyModFiles }
+                       }
 
 unitsCheck inSrc excludes m debug incDir = do
     putStrLn $ "Checking units for '" ++ inSrc ++ "'"
-    uo <- optsToUnitOpts m debug incDir
+    let uo = optsToUnitOpts m debug
     let rfun = checkUnits uo
     incDir' <- maybe getCurrentDirectory pure incDir
     doAnalysisReportWithModFiles rfun inSrc incDir' excludes
 
 unitsInfer inSrc excludes m debug incDir = do
     putStrLn $ "Inferring units for '" ++ inSrc ++ "'"
-    uo <- optsToUnitOpts m debug incDir
+    let uo = optsToUnitOpts m debug
     let rfun = LU.inferUnits uo
     incDir' <- maybe getCurrentDirectory pure incDir
     doAnalysisReportWithModFiles rfun inSrc incDir' excludes
@@ -148,7 +147,7 @@ unitsInfer inSrc excludes m debug incDir = do
 unitsSynth inSrc excludes m debug incDir outSrc annType = do
     putStrLn $ "Synthesising units for '" ++ inSrc ++ "'"
     let marker = markerChar annType
-    uo <- optsToUnitOpts m debug incDir
+    let uo = optsToUnitOpts m debug
     let rfun = do
           pfs <- analysisInput
           results <- mapM (branchAnalysis (LU.synthesiseUnits marker uo)) pfs
@@ -165,7 +164,7 @@ unitsSynth inSrc excludes m debug incDir outSrc annType = do
 unitsCriticals inSrc excludes m debug incDir = do
     putStrLn $ "Suggesting variables to annotate with unit specifications in '"
              ++ inSrc ++ "'"
-    uo <- optsToUnitOpts m debug incDir
+    let uo = optsToUnitOpts m debug
     let rfun = inferCriticalVariables uo
     incDir' <- maybe getCurrentDirectory pure incDir
     doAnalysisReportWithModFiles rfun inSrc incDir' excludes

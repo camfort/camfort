@@ -19,6 +19,7 @@ module Camfort.Analysis.Fortran
   , SimpleAnalysis
   , analysisDebug
   , analysisInput
+  , analysisModFiles
   , analysisParams
   , analysisResult
   , branchAnalysis

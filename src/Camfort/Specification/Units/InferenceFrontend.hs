@@ -52,7 +52,7 @@ import           Language.Fortran.Util.Position (getSpan)
 import           Camfort.Analysis.Annotations (Annotation, Report, mkReport)
 import           Camfort.Analysis.CommentAnnotator (annotateComments)
 import           Camfort.Analysis.Fortran
-  (analysisDebug, analysisParams, analysisResult, finalState)
+  (analysisDebug, analysisModFiles, analysisParams, analysisResult, finalState)
 import qualified Camfort.Specification.Units.Annotation   as UA
 import           Camfort.Specification.Units.Environment
 import           Camfort.Specification.Units.InferenceBackend
@@ -131,16 +131,17 @@ initInference = do
 
 -- | Run a unit inference.
 runInference :: UnitOpts
+             -> ModFiles
              -> F.ProgramFile Annotation
              -> UnitSolver a
              -> (a, UnitState, Report)
-runInference uOpts pf runner =
+runInference uOpts mfs pf runner =
   let
     -- Use the module map derived from all of the included Camfort Mod files.
-    mmap      = combinedModuleMap (uoModFiles uOpts)
+    mmap      = combinedModuleMap mfs
     pfRenamed = FAR.analyseRenamesWithModuleMap mmap . FA.initAnalysis . fmap UA.mkUnitAnnotation $ pf
-    res = runUnitSolver uOpts pfRenamed $ do
-      initializeModFiles $ uoModFiles uOpts
+    res = runUnitSolver uOpts pfRenamed mfs $ do
+      initializeModFiles
       initInference
       runner
   in (analysisResult res, finalState res, analysisDebug res)
@@ -190,7 +191,7 @@ indexedParams pu
 insertUndeterminedUnits :: UnitSolver ()
 insertUndeterminedUnits = do
   pf   <- gets usProgramFile
-  dmap <- (M.union (extractDeclMap pf) . combinedDeclMap . uoModFiles) <$> analysisParams
+  dmap <- (M.union (extractDeclMap pf) . combinedDeclMap) <$> analysisModFiles
   forM_ (universeBi pf :: [F.ProgramUnit UA]) $ \ pu ->
     modifyPUBlocksM (transformBiM (insertUndeterminedUnitVar dmap)) pu
 
@@ -521,7 +522,7 @@ topLevelFuncsAndSubs (F.ProgramFile _ pus) = topLevel =<< pus
 extractConstraints :: UnitSolver Constraints
 extractConstraints = do
   pf         <- gets usProgramFile
-  dmap       <- (M.union (extractDeclMap pf) . combinedDeclMap . uoModFiles) <$> analysisParams
+  dmap       <- (M.union (extractDeclMap pf) . combinedDeclMap) <$> analysisModFiles
   varUnitMap <- gets usVarUnitMap
   return $ [ con | b <- mainBlocks pf, con@(ConEq {}) <- universeBi b ] ++
            [ ConEq (toUnitVar dmap v) u | (v, u) <- M.toList varUnitMap ]
