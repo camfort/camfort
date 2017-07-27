@@ -41,7 +41,7 @@ import GHC.Generics (Generic)
 
 import Camfort.Analysis.Annotations
 import Camfort.Analysis.Fortran
-  (analysisInput, analysisModFiles, writeDebug)
+  (analysisInput, analysisModFiles, analysisParams, writeDebug)
 
 -- Provides the types and data accessors used in this module
 import           Camfort.Specification.Units.Analysis (UnitsAnalysis)
@@ -122,13 +122,14 @@ getInferred (Inferred _ vars) = vars
 {-| Check and infer units-of-measure for a program
     This produces an output of all the unit information for a program -}
 inferUnits :: UnitsAnalysis (F.ProgramFile Annotation) (Either ConsistencyError InferenceReport)
-inferUnits uOpts = do
+inferUnits = do
   pf <- analysisInput
   mfs <- analysisModFiles
+  uOpts <- analysisParams
   let
       (eVars, state, logs) = runInference uOpts mfs pf (chooseImplicitNames <$> runInferVariables)
       pfUA = usProgramFile state -- the program file after units analysis is done
-  consistency <- checkUnits uOpts
+  consistency <- checkUnits
   writeDebug logs
   pure $ case consistency of
            Consistent{}     -> Right $ Inferred pfUA eVars
@@ -139,9 +140,10 @@ synthesiseUnits :: Char
                    (F.ProgramFile Annotation)
                    (Either ConsistencyError (InferenceReport, F.ProgramFile Annotation))
 {-| Synthesis unspecified units for a program (after checking) -}
-synthesiseUnits marker uOpts = do
-  infRes <- inferUnits uOpts
+synthesiseUnits marker = do
+  infRes <- inferUnits
   mfs <- analysisModFiles
+  uOpts <- analysisParams
   let runSynth pf inferred =
         let (eVars, state, logs) = runInference uOpts mfs pf (runSynthesis marker . chooseImplicitNames $ inferred)
             pfUA = usProgramFile state -- the program file after units analysis is done

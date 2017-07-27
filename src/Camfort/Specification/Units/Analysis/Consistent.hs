@@ -25,7 +25,7 @@ import           Data.Maybe (maybeToList, mapMaybe, maybe)
 
 import           Camfort.Analysis.Annotations
 import           Camfort.Analysis.Fortran
-  (analysisInput, analysisModFiles, writeDebug)
+  (analysisInput, analysisModFiles, analysisParams, writeDebug)
 import           Camfort.Specification.Units.Analysis (UnitsAnalysis)
 import qualified Camfort.Specification.Units.Annotation as UA
 import           Camfort.Specification.Units.Environment
@@ -141,9 +141,10 @@ instance Show ConsistencyError where
 
 {-| Check units-of-measure for a program -}
 checkUnits :: UnitsAnalysis (F.ProgramFile Annotation) ConsistencyReport
-checkUnits uOpts = do
+checkUnits = do
   pf <- analysisInput
   mfs <- analysisModFiles
+  uOpts <- analysisParams
   let
     (eCons, state, logs) = runInference uOpts mfs pf runInconsistentConstraints
     -- number of 'real' variables checked, e.g. not parametric

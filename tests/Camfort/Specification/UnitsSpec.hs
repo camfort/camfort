@@ -5,10 +5,11 @@ import System.FilePath ((</>))
 
 import Test.Hspec
 
-import Camfort.Analysis.Fortran (analysisResult, runSimpleAnalysis)
+import Camfort.Analysis.Fortran (analysisResult)
 import Camfort.Analysis.ModFile (getModFiles)
 import Camfort.Input (readParseSrcDirWithModFiles)
 import Camfort.Specification.Units (inferUnits)
+import Camfort.Specification.Units.Analysis (runUnitsAnalysis)
 import Camfort.Specification.Units.Monad
   (LiteralsOpt(..), unitOpts0, uoDebug, uoLiterals)
 
@@ -29,7 +30,7 @@ unitsInferReportIs fileName expectedReport = do
   incDir <- getCurrentDirectory
   [(pf,_)] <- readParseSrcDirWithModFiles file incDir []
   modFiles <- getModFiles incDir
-  let (Right report) = analysisResult $ runSimpleAnalysis (inferUnits uOpts) modFiles pf
+  let (Right report) = analysisResult $ runUnitsAnalysis inferUnits uOpts modFiles pf
   show report `shouldBe` expectedReport
   where uOpts = unitOpts0 { uoDebug = False, uoLiterals = LitMixed }
 

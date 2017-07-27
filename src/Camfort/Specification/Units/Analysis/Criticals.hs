@@ -26,7 +26,7 @@ import qualified Numeric.LinearAlgebra as H
 
 import Camfort.Analysis.Annotations
 import Camfort.Analysis.Fortran
-  (analysisInput, analysisModFiles, writeDebug)
+  (analysisInput, analysisModFiles, analysisParams, writeDebug)
 import Camfort.Specification.Units.InferenceBackend
   (constraintsToMatrix, rref)
 
@@ -104,9 +104,10 @@ runCriticalVariables = do
 
 -- | Infer one possible set of critical variables for a program.
 inferCriticalVariables :: UnitsAnalysis (F.ProgramFile Annotation) Criticals
-inferCriticalVariables uOpts = do
+inferCriticalVariables = do
   pf <- analysisInput
   mfs <- analysisModFiles
+  uOpts <- analysisParams
   let
     -- Use the module map derived from all of the included Camfort Mod files.
     mmap = combinedModuleMap mfs

@@ -10,10 +10,17 @@ Stability   :  experimental
 
 module Camfort.Specification.Units.Analysis
   ( UnitsAnalysis
+  , runUnitsAnalysis
   ) where
 
-import Camfort.Analysis.Fortran (SimpleAnalysis)
+import Language.Fortran.Util.ModFile (ModFiles)
+
+import Camfort.Analysis.Fortran
+  (Analysis, AnalysisResult, runAnalysis)
 import Camfort.Specification.Units.Monad (UnitOpts)
 
 -- | Analysis with access to 'UnitOpts' information.
-type UnitsAnalysis a a' = UnitOpts -> SimpleAnalysis a a'
+type UnitsAnalysis a a' = Analysis UnitOpts () a a'
+
+runUnitsAnalysis :: UnitsAnalysis a b -> UnitOpts -> ModFiles -> a -> AnalysisResult () b
+runUnitsAnalysis analysis uo = runAnalysis analysis uo ()

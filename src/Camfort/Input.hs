@@ -39,7 +39,7 @@ import qualified Language.Fortran.Parser.Any as FP
 
 import Camfort.Analysis.Annotations
 import Camfort.Analysis.Fortran
-  (SimpleAnalysis, analysisDebug, analysisResult, runSimpleAnalysis)
+  (Analysis, SimpleAnalysis, analysisDebug, analysisResult, runAnalysis, runSimpleAnalysis)
 import Camfort.Analysis.ModFile (getModFiles)
 import Camfort.Helpers
 import Camfort.Output
@@ -72,33 +72,35 @@ doAnalysisSummary aFun inSrc incDir excludes = do
 
 -- | Perform an analysis which reports to the user, but does not output any files.
 doAnalysisReportWithModFiles
-  :: (Show r)
-  => SimpleAnalysis FileProgram r
+  :: (Show b)
+  => Analysis r () FileProgram b
+  -> r
   -> FileOrDir
   -> FileOrDir
   -> [Filename]
   -> IO ()
-doAnalysisReportWithModFiles rFun inSrc incDir excludes = do
+doAnalysisReportWithModFiles rFun env inSrc incDir excludes = do
   printExcludes inSrc excludes
   ps <- readParseSrcDirWithModFiles inSrc incDir excludes
   modFiles <- getModFiles incDir
-  let results = runSimpleAnalysis rFun modFiles . fst <$> ps
+  let results = runAnalysis rFun env () modFiles . fst <$> ps
       report = concatMap (\r -> show (analysisDebug r) ++ show (analysisResult r)) results
   putStrLn report
 
 doRefactorWithModFiles
-  :: (Show e, Show r)
-  => SimpleAnalysis [FileProgram] (r, [Either e FileProgram])
+  :: (Show e, Show b)
+  => Analysis r () [FileProgram] (b, [Either e FileProgram])
+  -> r
   -> FileOrDir
   -> FileOrDir
   -> [Filename]
   -> FileOrDir
   -> IO String
-doRefactorWithModFiles rFun inSrc incDir excludes outSrc = do
+doRefactorWithModFiles rFun env inSrc incDir excludes outSrc = do
   printExcludes inSrc excludes
   ps <- readParseSrcDirWithModFiles inSrc incDir excludes
   modFiles <- getModFiles incDir
-  let res = runSimpleAnalysis rFun modFiles . fmap fst $ ps
+  let res = runAnalysis rFun env () modFiles . fmap fst $ ps
       aRes = analysisResult res
       (_, ps') = partitionEithers (snd aRes)
       report = show (analysisDebug res) ++ show (fst aRes)

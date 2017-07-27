@@ -101,7 +101,7 @@ dead inSrc excludes outSrc = do
           let (reports, results) = (fmap analysisDebug resA, fmap analysisResult resA)
           pure (mconcat reports, fmap (pure :: a -> Either () a) results)
     incDir <- getCurrentDirectory
-    report <- doRefactorWithModFiles rfun inSrc incDir excludes outSrc
+    report <- doRefactorWithModFiles rfun () inSrc incDir excludes outSrc
     putStrLn report
 
 common inSrc excludes outSrc = do
@@ -120,7 +120,7 @@ equivalences inSrc excludes outSrc = do
           let (reports, results) = (fmap analysisDebug resA, fmap analysisResult resA)
           pure (mconcat reports, fmap (pure :: a -> Either () a) results)
     incDir <- getCurrentDirectory
-    report <- doRefactorWithModFiles rfun inSrc incDir excludes outSrc
+    report <- doRefactorWithModFiles rfun () inSrc incDir excludes outSrc
     putStrLn report
 
 {- Units feature -}
@@ -133,16 +133,14 @@ optsToUnitOpts m debug = o1
 unitsCheck inSrc excludes m debug incDir = do
     putStrLn $ "Checking units for '" ++ inSrc ++ "'"
     let uo = optsToUnitOpts m debug
-    let rfun = checkUnits uo
     incDir' <- maybe getCurrentDirectory pure incDir
-    doAnalysisReportWithModFiles rfun inSrc incDir' excludes
+    doAnalysisReportWithModFiles checkUnits uo inSrc incDir' excludes
 
 unitsInfer inSrc excludes m debug incDir = do
     putStrLn $ "Inferring units for '" ++ inSrc ++ "'"
     let uo = optsToUnitOpts m debug
-    let rfun = LU.inferUnits uo
     incDir' <- maybe getCurrentDirectory pure incDir
-    doAnalysisReportWithModFiles rfun inSrc incDir' excludes
+    doAnalysisReportWithModFiles LU.inferUnits uo inSrc incDir' excludes
 
 unitsSynth inSrc excludes m debug incDir outSrc annType = do
     putStrLn $ "Synthesising units for '" ++ inSrc ++ "'"
@@ -150,7 +148,7 @@ unitsSynth inSrc excludes m debug incDir outSrc annType = do
     let uo = optsToUnitOpts m debug
     let rfun = do
           pfs <- analysisInput
-          results <- mapM (branchAnalysis (LU.synthesiseUnits marker uo)) pfs
+          results <- mapM (branchAnalysis (LU.synthesiseUnits marker)) pfs
           let normalizedResults =
                 (\res -> ( show (analysisDebug res) ++ either show (show . fst) (analysisResult res)
                          , case analysisResult res of
@@ -158,16 +156,15 @@ unitsSynth inSrc excludes m debug incDir outSrc annType = do
                              Right (_,pf) -> Right pf)) <$> results
           pure . first concat $ unzip normalizedResults
     incDir' <- maybe getCurrentDirectory pure incDir
-    report <- doRefactorWithModFiles rfun inSrc incDir' excludes outSrc
+    report <- doRefactorWithModFiles rfun uo inSrc incDir' excludes outSrc
     putStrLn report
 
 unitsCriticals inSrc excludes m debug incDir = do
     putStrLn $ "Suggesting variables to annotate with unit specifications in '"
              ++ inSrc ++ "'"
     let uo = optsToUnitOpts m debug
-    let rfun = inferCriticalVariables uo
     incDir' <- maybe getCurrentDirectory pure incDir
-    doAnalysisReportWithModFiles rfun inSrc incDir' excludes
+    doAnalysisReportWithModFiles inferCriticalVariables uo inSrc incDir' excludes
 
 {- Stencils feature -}
 stencilsCheck inSrc excludes = do
@@ -185,7 +182,7 @@ stencilsSynth inSrc excludes annType outSrc = do
    putStrLn $ "Synthesising stencil specs for '" ++ inSrc ++ "'"
    let rfun = second (fmap (pure :: a -> Either () a)) <$> Stencils.synth (markerChar annType)
    incDir <- getCurrentDirectory
-   report <- doRefactorWithModFiles rfun inSrc incDir excludes outSrc
+   report <- doRefactorWithModFiles rfun () inSrc incDir excludes outSrc
    putStrLn report
 
 -- | Initialize Camfort for the given project.
