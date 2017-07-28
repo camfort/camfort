@@ -20,13 +20,31 @@
 
 {- | Defines the monad for the units-of-measure modules -}
 module Camfort.Specification.Units.Monad
-  ( UA, VV, UnitSolver, UnitOpts(..), unitOpts0, UnitLogs, UnitState(..), LiteralsOpt(..)
+  ( UA, VV, UnitSolver, UnitOpts(..), unitOpts0, UnitLogs, UnitState, LiteralsOpt(..)
   , whenDebug, writeLogs
   , VarUnitMap, GivenVarSet, UnitAliasMap, TemplateMap, CallIdMap
   , NameParamMap, NameParamKey(..)
     -- ** State Helpers
   , freshId
+    -- *** Getters
+  , getConstraints
+  , getNameParamMap
+  , getProgramFile
+  , getTemplateMap
+  , getUnitAliasMap
+  , getVarUnitMap
+  , usCallIdRemap
+  , usConstraints
+  , usGivenVarSet
+  , usNameParamMap
+  , usProgramFile
+  , usTemplateMap
+  , usUnitAliasMap
+  , usVarUnitMap
+    -- *** Modifiers
+  , modifyCallIdRemap
   , modifyCallIdRemapM
+  , modifyConstraints
   , modifyGivenVarSet
   , modifyNameParamMap
   , modifyProgramFile
@@ -176,8 +194,32 @@ freshId = do
   put $ s { usNextUnique = i + 1 }
   pure i
 
+getConstraints :: UnitSolver Constraints
+getConstraints = gets usConstraints
+
+getNameParamMap :: UnitSolver NameParamMap
+getNameParamMap = gets usNameParamMap
+
+getProgramFile :: UnitSolver (F.ProgramFile UA)
+getProgramFile = gets usProgramFile
+
+getTemplateMap :: UnitSolver TemplateMap
+getTemplateMap = gets usTemplateMap
+
+getUnitAliasMap :: UnitSolver UnitAliasMap
+getUnitAliasMap = gets usUnitAliasMap
+
+getVarUnitMap :: UnitSolver VarUnitMap
+getVarUnitMap = gets usVarUnitMap
+
 modifyVarUnitMap :: (VarUnitMap -> VarUnitMap) -> UnitSolver ()
 modifyVarUnitMap f = modify (\ s -> s { usVarUnitMap = f (usVarUnitMap s) })
+
+modifyCallIdRemap :: (CallIdMap -> CallIdMap) -> UnitSolver ()
+modifyCallIdRemap f = modify (\ s -> s { usCallIdRemap = f (usCallIdRemap s) })
+
+modifyConstraints :: (Constraints -> Constraints) -> UnitSolver ()
+modifyConstraints f = modify (\ s -> s { usConstraints = f (usConstraints s) })
 
 modifyGivenVarSet :: (GivenVarSet -> GivenVarSet) -> UnitSolver ()
 modifyGivenVarSet f = modify (\ s -> s { usGivenVarSet = f (usGivenVarSet s) })
@@ -204,7 +246,7 @@ modifyCallIdRemapM :: (CallIdMap -> UnitSolver (a, CallIdMap)) -> UnitSolver a
 modifyCallIdRemapM f = do
   idMap <- gets usCallIdRemap
   (x, idMap') <- f idMap
-  modify (\ s -> s { usCallIdRemap = idMap' })
+  modifyCallIdRemap (const idMap')
   return x
 
 --------------------------------------------------

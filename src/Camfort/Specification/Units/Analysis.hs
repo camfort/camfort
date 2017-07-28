@@ -67,7 +67,7 @@ runUnitsAnalysis analysis uo = runAnalysis analysis uo ()
 -- | Prepare to run an inference function.
 initInference :: UnitSolver ()
 initInference = do
-  pf <- gets usProgramFile
+  pf <- getProgramFile
 
   -- Parse unit annotations found in comments and link to their
   -- corresponding statements in the AST.
@@ -123,7 +123,7 @@ initInference = do
   -- cause generic operations traversing the AST to get confused.
   modifyProgramFile UA.cleanLinks
 
-  modify $ \ s -> s { usConstraints = cons }
+  modifyConstraints (const cons)
 
   debugLogging
 
@@ -149,7 +149,7 @@ runInference solver = do
 -- already have units, and insert parametric units for them into the
 -- map of variables to UnitInfo.
 insertParametricUnits :: UnitSolver ()
-insertParametricUnits = gets usProgramFile >>= (mapM_ paramPU . universeBi)
+insertParametricUnits = getProgramFile >>= (mapM_ paramPU . universeBi)
   where
     paramPU pu =
       forM_ (indexedParams pu) $ \ (i, param) ->
@@ -178,7 +178,7 @@ indexedParams pu
 -- variables are inside of a function or subroutine.
 insertUndeterminedUnits :: UnitSolver ()
 insertUndeterminedUnits = do
-  pf   <- gets usProgramFile
+  pf   <- getProgramFile
   dmap <- (M.union (extractDeclMap pf) . combinedDeclMap) <$> analysisModFiles
   forM_ (universeBi pf :: [F.ProgramUnit UA]) $ \ pu ->
     modifyPUBlocksM (transformBiM (insertUndeterminedUnitVar dmap)) pu
@@ -215,7 +215,7 @@ transformExplicitPolymorphism _ u                                      = u
 -- will be incorporated into the VarUnitMap.
 insertGivenUnits :: UnitSolver ()
 insertGivenUnits = do
-  pf <- gets usProgramFile
+  pf <- getProgramFile
   mapM_ checkPU (universeBi pf)
   where
     -- Look through each Program Unit for the comments
@@ -287,7 +287,7 @@ insertGivenUnits = do
 -- annotate every variable expression in the AST.
 annotateAllVariables :: UnitSolver ()
 annotateAllVariables = modifyProgramFileM $ \ pf -> do
-  varUnitMap <- usVarUnitMap <$> get
+  varUnitMap <- getVarUnitMap
   let annotateExp e@(F.ExpValue _ _ (F.ValVariable _))
         | Just info <- M.lookup (varName e, srcName e) varUnitMap = UA.setUnitInfo info e
       -- may need to annotate intrinsics separately
@@ -361,7 +361,7 @@ applyTemplates cons = do
   -- 'toplevel' function and subroutine is thoroughly expanded and
   -- analysed, even if it is not used in the current ProgramFile. (It
   -- might be part of a library module, for instance).
-  pf <- gets usProgramFile
+  pf <- getProgramFile
   dummies <- forM (topLevelFuncsAndSubs pf) $ \ pu -> do
     ident <- freshId
     pure (puName pu, ident)
@@ -379,7 +379,7 @@ applyTemplates cons = do
   -- Also include aliases in the final set of constraints, where
   -- aliases are implemented by simply asserting that they are equal
   -- to their definition.
-  aliasMap <- usUnitAliasMap <$> get
+  aliasMap <- getUnitAliasMap
   let aliases = [ ConEq (UnitAlias name) def | (name, def) <- M.toList aliasMap ]
   let transAlias (UnitName a) | a `M.member` aliasMap = UnitAlias a
       transAlias u                                    = u
@@ -393,7 +393,7 @@ applyTemplates cons = do
 -- calls that have already been seen in the current call stack.
 substInstance :: Bool -> [F.Name] -> Constraints -> (F.Name, Int) -> UnitSolver Constraints
 substInstance isDummy callStack output (name, callId) = do
-  tmap <- gets usTemplateMap
+  tmap <- getTemplateMap
 
   -- Look up the templates associated with the given function or
   -- subroutine name. And then transform the templates by generating
@@ -410,7 +410,7 @@ substInstance isDummy callStack output (name, callId) = do
 
   -- Reset the usCallIdRemap field so that it is ready for the next
   -- set of templates.
-  modify $ \ s -> s { usCallIdRemap = IM.empty }
+  modifyCallIdRemap (const IM.empty)
 
   -- If any new instances are discovered, also process them, unless recursive.
   let instances = nub [ (name', i) | UnitParamPosUse ((name', _), _, i) <- universeBi template ]
@@ -427,7 +427,7 @@ substInstance isDummy callStack output (name, callId) = do
 
   -- Get constraints for any imported variables
   let filterForVars (NPKVariable _) _ = True; filterForVars _ _ = False
-  nmap <- M.filterWithKey filterForVars <$> gets usNameParamMap
+  nmap <- M.filterWithKey filterForVars <$> getNameParamMap
   let importedVariables = [ ConEq (UnitVar vv) (foldUnits units) | (NPKVariable vv, units) <- M.toList nmap ]
 
   -- Convert abstract parametric units into concrete ones.
@@ -458,7 +458,7 @@ foldUnits units
 -- nameParamConstraints fname = do
 --   let filterForName (NPKParam (n, _) _) _ = n == fname
 --       filterForName _ _                   = False
---   nlst <- (M.toList . M.filterWithKey filterForName) <$> gets usNameParamMap
+--   nlst <- (M.toList . M.filterWithKey filterForName) <$> getNameParamMap
 --   pure [ ConEq (UnitParamPosAbs (n, pos)) (foldUnits units) | (NPKParam n pos, units) <- nlst ]
 
 -- | If given a usage of a parametric unit, rewrite the callId field
@@ -513,9 +513,9 @@ topLevelFuncsAndSubs (F.ProgramFile _ pus) = topLevel =<< pus
 -- | Gather all constraints from the main blocks of the AST, as well as from the varUnitMap
 extractConstraints :: UnitSolver Constraints
 extractConstraints = do
-  pf         <- gets usProgramFile
+  pf         <- getProgramFile
   dmap       <- (M.union (extractDeclMap pf) . combinedDeclMap) <$> analysisModFiles
-  varUnitMap <- gets usVarUnitMap
+  varUnitMap <- getVarUnitMap
   pure $ [ con | b <- mainBlocks pf, con@ConEq{} <- universeBi b ] ++
            [ ConEq (toUnitVar dmap v) u | (v, u) <- M.toList varUnitMap ]
 
@@ -620,7 +620,7 @@ propagatePU pu = do
   let nn       = (name, sname)
   let bodyCons = [ con | con@ConEq{} <- universeBi pu ] -- Constraints within the PU.
 
-  varMap <- gets usVarUnitMap
+  varMap <- getVarUnitMap
 
   -- If any of the function/subroutine parameters was given an
   -- explicit unit annotation, then create a constraint between that
@@ -774,12 +774,12 @@ dumpConsM str = whenDebug . writeLogs . unlines . ([replicate 50 '-', str ++ ":"
 debugLogging :: UnitSolver ()
 debugLogging = whenDebug $ do
     (writeLogs . unlines . map (\ (ConEq u1 u2) -> "  ***AbsConstraint: " ++ show (flattenUnits u1) ++ " === " ++ show (flattenUnits u2) ++ "\n")) =<< extractConstraints
-    pf <- gets usProgramFile
-    cons <- usConstraints <$> get
-    vum <- usVarUnitMap <$> get
+    pf   <- getProgramFile
+    cons <- getConstraints
+    vum  <- getVarUnitMap
     writeLogs . unlines $ [ "  " ++ show info ++ " :: " ++ n | ((n, _), info) <- M.toList vum ]
     writeLogs "\n\n"
-    uam <- usUnitAliasMap <$> get
+    uam <- getUnitAliasMap
     writeLogs . unlines $ [ "  " ++ n ++ " = " ++ show info | (n, info) <- M.toList uam ]
     writeLogs . unlines $ map (\ (ConEq u1 u2) -> "  ***Constraint: " ++ show (flattenUnits u1) ++ " === " ++ show (flattenUnits u2) ++ "\n") cons
     writeLogs $ show cons ++ "\n\n"

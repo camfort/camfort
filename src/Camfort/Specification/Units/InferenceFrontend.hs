@@ -22,8 +22,6 @@ module Camfort.Specification.Units.InferenceFrontend
   ( runInferVariables
   ) where
 
-import Control.Monad.State (get)
-
 import           Camfort.Specification.Units.Environment
 import           Camfort.Specification.Units.InferenceBackend
 import           Camfort.Specification.Units.Monad
@@ -31,6 +29,4 @@ import           Camfort.Specification.Units.Monad
 -- | Return a list of variable names mapped to their corresponding
 -- unit that was inferred.
 runInferVariables :: UnitSolver [(VV, UnitInfo)]
-runInferVariables = do
-  cons <- usConstraints <$> get
-  return $ inferVariables cons
+runInferVariables = inferVariables <$> getConstraints
