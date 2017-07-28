@@ -85,7 +85,8 @@ markerChar ATDefault = '='
 -- * Wrappers on all of the features
 ast d excludes = do
     incDir <- getCurrentDirectory
-    xs <- readParseSrcDirWithModFiles d incDir excludes
+    modFiles <- getModFiles incDir
+    xs <- readParseSrcDir modFiles d excludes
     print . fmap fst $ xs
 
 countVarDecls inSrc excludes = do

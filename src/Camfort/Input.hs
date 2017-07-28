@@ -21,7 +21,7 @@ module Camfort.Input
   , doRefactorAndCreate
   , doRefactorWithModFiles
     -- * Source directory and file handling
-  , readParseSrcDirWithModFiles
+  , readParseSrcDir
   ) where
 
 import qualified Data.ByteString.Char8 as B
@@ -36,6 +36,7 @@ import           System.FilePath ((</>), takeExtension)
 
 import qualified Language.Fortran.AST as F
 import qualified Language.Fortran.Parser.Any as FP
+import           Language.Fortran.Util.ModFile (ModFiles)
 
 import Camfort.Analysis.Annotations
 import Camfort.Analysis.Fortran
@@ -64,8 +65,8 @@ doAnalysisSummary :: (Monoid s, Show' s)
   -> FileOrDir -> FileOrDir -> [Filename] -> IO ()
 doAnalysisSummary aFun inSrc incDir excludes = do
   printExcludes inSrc excludes
-  ps <- readParseSrcDirWithModFiles inSrc incDir excludes
   modFiles <- getModFiles incDir
+  ps <- readParseSrcDir modFiles inSrc excludes
   let results = runSimpleAnalysis aFun modFiles . fst <$> ps
       out = mconcat . fmap analysisResult $ results
   putStrLn . show' $ out
@@ -81,8 +82,8 @@ doAnalysisReportWithModFiles
   -> IO ()
 doAnalysisReportWithModFiles rFun env inSrc incDir excludes = do
   printExcludes inSrc excludes
-  ps <- readParseSrcDirWithModFiles inSrc incDir excludes
   modFiles <- getModFiles incDir
+  ps <- readParseSrcDir modFiles inSrc excludes
   let results = runAnalysis rFun env () modFiles . fst <$> ps
       report = concatMap (\r -> show (analysisDebug r) ++ show (analysisResult r)) results
   putStrLn report
@@ -98,8 +99,8 @@ doRefactorWithModFiles
   -> IO String
 doRefactorWithModFiles rFun env inSrc incDir excludes outSrc = do
   printExcludes inSrc excludes
-  ps <- readParseSrcDirWithModFiles inSrc incDir excludes
   modFiles <- getModFiles incDir
+  ps <- readParseSrcDir modFiles inSrc excludes
   let res = runAnalysis rFun env () modFiles . fmap fst $ ps
       aRes = analysisResult res
       (_, ps') = partitionEithers (snd aRes)
@@ -114,8 +115,8 @@ doRefactorAndCreate
   -> FileOrDir -> [Filename] -> FileOrDir -> FileOrDir -> IO Report
 doRefactorAndCreate rFun inSrc excludes incDir outSrc = do
   printExcludes inSrc excludes
-  ps <- readParseSrcDirWithModFiles inSrc incDir excludes
   modFiles <- getModFiles incDir
+  ps <- readParseSrcDir modFiles inSrc excludes
   let res = runSimpleAnalysis rFun modFiles . fmap fst $ ps
       report      = analysisDebug  res
       (ps', ps'') = analysisResult res
@@ -135,11 +136,11 @@ reassociateSourceText ps ps' = zip ps' ps
 
 -- * Source directory and file handling
 
-readParseSrcDirWithModFiles :: FileOrDir
-                            -> FileOrDir
-                            -> [Filename]
-                            -> IO [(FileProgram, SourceText)]
-readParseSrcDirWithModFiles inp incDir excludes = do
+readParseSrcDir :: ModFiles
+                -> FileOrDir
+                -> [Filename]
+                -> IO [(FileProgram, SourceText)]
+readParseSrcDir mods inp excludes = do
   isdir <- isDirectory inp
   files <-
     if isdir
@@ -150,17 +151,14 @@ readParseSrcDirWithModFiles inp incDir excludes = do
       let excludes' = excludes ++ map (\x -> inp ++ "/" ++ x) excludes
       pure $ map (\y -> inp ++ "/" ++ y) files \\ excludes'
     else pure [inp]
-  mapMaybeM (readParseSrcFileWithModFiles incDir) files
+  mapMaybeM (readParseSrcFile mods) files
   where
     mapMaybeM :: Monad m => (a -> m (Maybe b)) -> [a] -> m [b]
     mapMaybeM f = fmap catMaybes . mapM f
 
-readParseSrcFileWithModFiles :: FileOrDir
-                             -> Filename
-                             -> IO (Maybe (FileProgram, SourceText))
-readParseSrcFileWithModFiles incDir f = do
+readParseSrcFile :: ModFiles -> Filename -> IO (Maybe (FileProgram, SourceText))
+readParseSrcFile mods f = do
   inp <- flexReadFile f
-  mods <- getModFiles incDir
   let result = FP.fortranParserWithModFiles mods inp f
   case result of
     Right ast -> pure $ Just (fmap (const unitAnnotation) ast, inp)

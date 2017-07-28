@@ -6,9 +6,11 @@ import System.FilePath ((</>))
 import Test.Hspec hiding (Spec)
 import qualified Test.Hspec as Test
 
+import Language.Fortran.Util.ModFile (emptyModFiles)
+
 import Camfort.Analysis.Fortran (analysisResult)
 import Camfort.Analysis.ModFile (getModFiles)
-import Camfort.Input (readParseSrcDirWithModFiles)
+import Camfort.Input (readParseSrcDir)
 import Camfort.Specification.Units.Analysis (runUnitsAnalysis)
 import Camfort.Specification.Units.Analysis.Criticals (inferCriticalVariables)
 import Camfort.Specification.Units.Monad
@@ -30,8 +32,8 @@ unitsCriticalsReportIs :: String -> String -> Expectation
 unitsCriticalsReportIs fileName expectedReport = do
   let file = fixturesDir </> fileName
   incDir <- getCurrentDirectory
-  [(pf,_)] <- readParseSrcDirWithModFiles file incDir []
-  modFiles <- getModFiles incDir
+  let modFiles = emptyModFiles
+  [(pf,_)] <- readParseSrcDir modFiles file []
   let report = analysisResult $ runUnitsAnalysis inferCriticalVariables uOpts modFiles pf
   show report `shouldBe` expectedReport
   where uOpts = unitOpts0 { uoDebug = False, uoLiterals = LitMixed }

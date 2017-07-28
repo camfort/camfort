@@ -235,7 +235,7 @@ spec =
     -------------------------
 
     let example2In = fixturesDir </> "example2.f"
-    [(program,_)] <- runIO $ readParseSrcDirWithModFiles example2In fixturesDir []
+    [(program,_)] <- runIO $ readParseSrcDir emptyModFiles example2In []
 
     describe "integration test on inference for example2.f" $ do
       it "stencil infer" $
@@ -254,7 +254,7 @@ spec =
             \(23:1)-(23:78)    Correct.\n(31:1)-(31:56)    Correct."
 
     let example4In = fixturesDir </> "example4.f"
-    [(program,_)] <- runIO $ readParseSrcDirWithModFiles example4In fixturesDir []
+    [(program,_)] <- runIO $ readParseSrcDir emptyModFiles example4In []
 
     describe "integration test on inference for example4.f" $
       it "stencil infer" $
@@ -356,7 +356,7 @@ spec =
   where -- Helpers go here for loading files and running analyses
         assertStencilCheck fileName testComment expected = do
             let file = fixturesDir </> fileName
-            programs <- runIO $ readParseSrcDirWithModFiles file fixturesDir []
+            programs <- runIO $ readParseSrcDir emptyModFiles file []
             let [(program,_)] = programs
             it testComment $ (analysisResult . runSimpleAnalysis check emptyModFiles $ program)
               `shouldBe` expected
@@ -365,7 +365,7 @@ spec =
         assertStencilInference useEval fileName expected =
           let file         = fixturesDir </> fileName
           in do
-            [(program,_)] <- readParseSrcDirWithModFiles file fixturesDir []
+            [(program,_)] <- readParseSrcDir emptyModFiles file []
             (analysisResult . runSimpleAnalysis (infer useEval '=') emptyModFiles $ program)
               `shouldBe` expected
 
@@ -374,7 +374,7 @@ spec =
               version      = deduceVersion file
               expectedFile = expected dir fileName
           in do
-            program          <- runIO $ readParseSrcDirWithModFiles file dir []
+            program          <- runIO $ readParseSrcDir emptyModFiles file []
             programSrc       <- runIO $ readFile file
             synthExpectedSrc <- runIO $ readFile expectedFile
             modFiles         <- runIO $ getModFiles dir
@@ -392,7 +392,7 @@ spec =
         assertStencilSynthResponse fileName testComment expectedResponse =
             let file = fixturesDir </> fileName
             in do
-              program    <- runIO $ readParseSrcDirWithModFiles file fixturesDir []
+              program    <- runIO $ readParseSrcDir emptyModFiles file []
               modFiles   <- runIO $ getModFiles fixturesDir
               it testComment $ (fst . analysisResult . runSimpleAnalysis (synth '=') modFiles . fmap fst $ program)
                 `shouldBe` expectedResponse
