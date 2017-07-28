@@ -1,17 +1,15 @@
 module Camfort.Specification.Units.Analysis.ConsistentSpec (spec) where
 
-import System.Directory (getCurrentDirectory)
 import System.FilePath ((</>))
 
 import Test.Hspec hiding (Spec)
 import qualified Test.Hspec as Test
 
-import Language.Fortran.Util.ModFile (emptyModFiles)
+import Language.Fortran.Util.ModFile (ModFile, emptyModFiles)
 
 import Camfort.Analysis.Fortran (analysisResult)
-import Camfort.Analysis.ModFile (getModFiles)
 import Camfort.Input (readParseSrcDir)
-import Camfort.Specification.Units.Analysis (runUnitsAnalysis)
+import Camfort.Specification.Units.Analysis (compileUnits, runUnitsAnalysis)
 import Camfort.Specification.Units.Analysis.Consistent (checkUnits)
 import Camfort.Specification.Units.Monad
   (LiteralsOpt(..), unitOpts0, uoDebug, uoLiterals)
@@ -27,29 +25,47 @@ spec =
        "inconsistRecMult.f90" `unitsCheckReportIs` inconsistRecMultReport
     describe "reports with varying Literal Modes" $ do
       it "LitMixed" $
-        unitsCheckReport LitMixed    "inconsist3.f90" inconsist3LitMixedReport
+        unitsCheckReportNoMod LitMixed    "inconsist3.f90" inconsist3LitMixedReport
       it "LitPoly" $
-        unitsCheckReport LitPoly     "inconsist3.f90" inconsist3LitPolyReport
+        unitsCheckReportNoMod LitPoly     "inconsist3.f90" inconsist3LitPolyReport
       it "LitUnitless" $
-        unitsCheckReport LitUnitless "inconsist3.f90" inconsist3LitUnitlessReport
+        unitsCheckReportNoMod LitUnitless "inconsist3.f90" inconsist3LitUnitlessReport
+    describe "cross-module" $
+      it "basic inconsistent" $
+        unitsCheckReportWithMod ["cross-module-a/crossmoduleprovider.f90"] "cross-module-a/crossmoduleuser.f90"
+          crossModuleInconsistBasicReport
 
 fixturesDir :: String
 fixturesDir = "tests" </> "fixtures" </> "Specification" </> "Units"
 
 -- | Assert that the report of performing units checking on a file is as expected.
-unitsCheckReport :: LiteralsOpt -> String -> String -> Expectation
-unitsCheckReport lo fileName expectedReport = do
+unitsCheckReport :: LiteralsOpt -> [String] -> String -> String -> Expectation
+unitsCheckReport lo modNames fileName expectedReport = do
   let file = fixturesDir </> fileName
-  incDir <- getCurrentDirectory
-  let modFiles = emptyModFiles
+      modPaths = fmap (fixturesDir </>) modNames
+  modFiles <- mapM mkTestModFile modPaths
   [(pf,_)] <- readParseSrcDir modFiles file []
   let report = analysisResult $ runUnitsAnalysis checkUnits uOpts modFiles pf
   show report `shouldBe` expectedReport
   where uOpts = unitOpts0 { uoDebug = False, uoLiterals = lo }
 
+unitsCheckReportWithMod :: [String] -> String -> String -> Expectation
+unitsCheckReportWithMod = unitsCheckReport LitMixed
+
+unitsCheckReportNoMod :: LiteralsOpt -> String -> String -> Expectation
+unitsCheckReportNoMod lo = unitsCheckReport lo []
+
 -- | Assert that the report of performing units checking on a file is as expected.
 unitsCheckReportIs :: String -> String -> Expectation
-unitsCheckReportIs = unitsCheckReport LitMixed
+unitsCheckReportIs = unitsCheckReport LitMixed []
+
+-- | Helper for producing a basic ModFile from a (terminal) module file.
+mkTestModFile :: String -> IO ModFile
+mkTestModFile file = do
+  let modFiles = emptyModFiles
+  [(pf,_)] <- readParseSrcDir modFiles file []
+  let res = runUnitsAnalysis compileUnits unitOpts0 modFiles pf
+  pure $ analysisResult res
 
 exampleInconsist1CheckReport :: String
 exampleInconsist1CheckReport =
@@ -90,3 +106,11 @@ inconsistRecMultReport =
   \ - at 4:15: 'literal' should have unit 'm'\n\
   \ - at 9:9: 'x' should have the same units as 'parameter 1 to recur'\n\
   \ - at 10:8: 'parameter 2 to recur' should have unit 'm'\n"
+
+crossModuleInconsistBasicReport :: String
+crossModuleInconsistBasicReport =
+  "\ntests/fixtures/Specification/Units/cross-module-a/crossmoduleuser.f90: Inconsistent:\n\
+  \ - at 7:3: 'literal' should have unit 'm'\n\
+  \ - at 7:3: 'parameter 1 to add' should have unit 'm'\n\
+  \ - at 8:3: 'literal' should have unit 's'\n\
+  \ - at 9:3: 'z' should have the same units as 'result of add'\n"
