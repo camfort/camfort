@@ -44,16 +44,13 @@ import Camfort.Analysis.Fortran
   (analysisInput, analysisModFiles, analysisParams, writeDebug)
 
 -- Provides the types and data accessors used in this module
-import           Camfort.Specification.Units.Analysis (UnitsAnalysis)
+import           Camfort.Specification.Units.Analysis
+  (UnitsAnalysis, puName, puSrcName, runInference)
 import           Camfort.Specification.Units.Analysis.Consistent
   (ConsistencyError, ConsistencyReport(Consistent, Inconsistent), checkUnits)
 import qualified Camfort.Specification.Units.Annotation as UA
 import           Camfort.Specification.Units.Environment
-import           Camfort.Specification.Units.InferenceFrontend
-  ( puName
-  , puSrcName
-  , runInferVariables
-  , runInference)
+import           Camfort.Specification.Units.InferenceFrontend (runInferVariables)
 import           Camfort.Specification.Units.Monad
 import           Camfort.Specification.Units.Synthesis (runSynthesis)
 

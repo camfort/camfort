@@ -30,11 +30,11 @@ import qualified Language.Fortran.Analysis as FA
 import qualified Language.Fortran.Util.Position as FU
 
 import           Camfort.Analysis.Annotations hiding (Unitless)
+import           Camfort.Specification.Units.Analysis (puName, puSrcName)
 import           Camfort.Specification.Units.Annotation (UA)
 import qualified Camfort.Specification.Units.Annotation as UA
 import           Camfort.Specification.Units.Environment
 import           Camfort.Specification.Units.Monad
-import           Camfort.Specification.Units.InferenceFrontend (puName, puSrcName)
 
 -- | Insert unit declarations into the ProgramFile as comments.
 runSynthesis :: Char -> [(VV, UnitInfo)] -> UnitSolver [(VV, UnitInfo)]

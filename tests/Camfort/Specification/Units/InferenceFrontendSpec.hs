@@ -17,11 +17,12 @@ import           Language.Fortran.Util.ModFile (emptyModFiles)
 import           Camfort.Analysis.Annotations (unitAnnotation)
 import           Camfort.Analysis.Fortran (analysisResult, finalState)
 import           Camfort.Specification.Units (chooseImplicitNames)
+import           Camfort.Specification.Units.Analysis (initInference)
 import           Camfort.Specification.Units.Annotation (UA)
 import qualified Camfort.Specification.Units.Annotation as UA
 import           Camfort.Specification.Units.Environment
 import           Camfort.Specification.Units.InferenceFrontend
-  (initInference, runInferVariables)
+  (runInferVariables)
 import Camfort.Specification.Units.Monad
   (LiteralsOpt(..), runUnitSolver, unitOpts0, uoDebug, uoLiterals, usConstraints)
 

@@ -31,10 +31,9 @@ import Camfort.Specification.Units.InferenceBackend
   (constraintsToMatrix, rref)
 
 -- Provides the types and data accessors used in this module
-import           Camfort.Specification.Units.Analysis (UnitsAnalysis)
+import           Camfort.Specification.Units.Analysis (UnitsAnalysis, runInference)
 import qualified Camfort.Specification.Units.Annotation as UA
 import           Camfort.Specification.Units.Environment
-import           Camfort.Specification.Units.InferenceFrontend (runInference)
 import           Camfort.Specification.Units.Monad
 
 import qualified Language.Fortran.AST               as F

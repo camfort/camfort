@@ -26,10 +26,9 @@ import           Data.Maybe (maybeToList, mapMaybe, maybe)
 import           Camfort.Analysis.Annotations
 import           Camfort.Analysis.Fortran
   (analysisInput, analysisModFiles, analysisParams, writeDebug)
-import           Camfort.Specification.Units.Analysis (UnitsAnalysis)
+import           Camfort.Specification.Units.Analysis (UnitsAnalysis, runInference)
 import qualified Camfort.Specification.Units.Annotation as UA
 import           Camfort.Specification.Units.Environment
-import           Camfort.Specification.Units.InferenceFrontend (runInference)
 import           Camfort.Specification.Units.InferenceBackend  (constraintsToMatrices)
 import           Camfort.Specification.Units.Monad
 
