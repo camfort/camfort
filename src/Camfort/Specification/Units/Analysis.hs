@@ -363,7 +363,7 @@ applyTemplates cons = do
   -- might be part of a library module, for instance).
   pf <- gets usProgramFile
   dummies <- forM (topLevelFuncsAndSubs pf) $ \ pu -> do
-    ident <- genCallId
+    ident <- freshId
     pure (puName pu, ident)
 
   whenDebug $ do
@@ -468,19 +468,19 @@ callIdRemap :: UnitInfo -> UnitSolver UnitInfo
 callIdRemap info = modifyCallIdRemapM $ \ idMap -> case info of
     UnitParamPosUse (n, p, i)
       | Just i' <- IM.lookup i idMap -> pure (UnitParamPosUse (n, p, i'), idMap)
-      | otherwise                    -> genCallId >>= \ i' ->
+      | otherwise                    -> freshId >>= \ i' ->
                                           pure (UnitParamPosUse (n, p, i'), IM.insert i i' idMap)
     UnitParamVarUse (n, v, i)
       | Just i' <- IM.lookup i idMap -> pure (UnitParamVarUse (n, v, i'), idMap)
-      | otherwise                    -> genCallId >>= \ i' ->
+      | otherwise                    -> freshId >>= \ i' ->
                                           pure (UnitParamVarUse (n, v, i'), IM.insert i i' idMap)
     UnitParamLitUse (l, i)
       | Just i' <- IM.lookup i idMap -> pure (UnitParamLitUse (l, i'), idMap)
-      | otherwise                    -> genCallId >>= \ i' ->
+      | otherwise                    -> freshId >>= \ i' ->
                                           pure (UnitParamLitUse (l, i'), IM.insert i i' idMap)
     UnitParamEAPUse (v, i)
       | Just i' <- IM.lookup i idMap -> pure (UnitParamEAPUse (v, i'), idMap)
-      | otherwise                    -> genCallId >>= \ i' ->
+      | otherwise                    -> freshId >>= \ i' ->
                                           pure (UnitParamEAPUse (v, i'), IM.insert i i' idMap)
 
     _                                -> pure (info, idMap)
@@ -652,7 +652,7 @@ propagatePU pu = do
 callHelper :: F.Expression UA -> [F.Argument UA] -> UnitSolver (UnitInfo, [F.Argument UA])
 callHelper nexp args = do
   let name = (varName nexp, srcName nexp)
-  callId <- genCallId -- every call-site gets its own unique identifier
+  callId <- freshId -- every call-site gets its own unique identifier
   let eachArg i arg@(F.Argument _ _ _ e)
         -- add site-specific parametric constraints to each argument
         | Just u <- UA.getUnitInfo e = UA.setConstraint (ConEq u (UnitParamPosUse (name, i, callId))) arg
@@ -672,21 +672,6 @@ intrinsicHelper (UnitParamPosUse (_, _, callId)) f@(F.ExpValue _ _ (F.ValIntrins
     vname       = varName f
     eachArg i u = ConEq (UnitParamPosUse ((vname, sname), i, callId)) (instantiate callId u)
 intrinsicHelper _ _ _ = []
-
--- | Generate a unique identifier for a call-site.
-genCallId :: UnitSolver Int
-genCallId = do
-  st <- get
-  let callId = usCallIds st
-  put $ st { usCallIds = callId + 1 }
-  pure callId
-
-freshId :: UnitSolver Int
-freshId = do
-  s <- get
-  let i = usLitNums s
-  put $ s { usLitNums = i + 1 }
-  pure i
 
 -- | Generate a unique identifier for a literal encountered in the code.
 genUnitLiteral :: UnitSolver UnitInfo

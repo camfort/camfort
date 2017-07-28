@@ -21,11 +21,23 @@
 {- | Defines the monad for the units-of-measure modules -}
 module Camfort.Specification.Units.Monad
   ( UA, VV, UnitSolver, UnitOpts(..), unitOpts0, UnitLogs, UnitState(..), LiteralsOpt(..)
-  , whenDebug, writeLogs, modifyVarUnitMap, modifyGivenVarSet, modifyUnitAliasMap
+  , whenDebug, writeLogs
   , VarUnitMap, GivenVarSet, UnitAliasMap, TemplateMap, CallIdMap
-  , modifyTemplateMap, modifyNameParamMap, modifyProgramFile, modifyProgramFileM, modifyCallIdRemapM
-  , runUnitSolver, evalUnitSolver, execUnitSolver
   , NameParamMap, NameParamKey(..)
+    -- ** State Helpers
+  , freshId
+  , modifyCallIdRemapM
+  , modifyGivenVarSet
+  , modifyNameParamMap
+  , modifyProgramFile
+  , modifyProgramFileM
+  , modifyTemplateMap
+  , modifyUnitAliasMap
+  , modifyVarUnitMap
+    -- ** Runners
+  , evalUnitSolver
+  , execUnitSolver
+  , runUnitSolver
   ) where
 
 import Control.Monad.RWS.Strict
@@ -137,9 +149,9 @@ data UnitState = UnitState
   , usUnitAliasMap :: UnitAliasMap
   , usTemplateMap  :: TemplateMap
   , usNameParamMap :: NameParamMap
-  , usLitNums      :: Int
-  , usCallIds      :: Int
   , usCallIdRemap  :: CallIdMap
+    -- | Next number to returned by 'freshId'.
+  , usNextUnique   :: Int
   , usConstraints  :: Constraints }
   deriving (Show, Data)
 
@@ -150,12 +162,20 @@ unitState0 pf = UnitState { usProgramFile  = pf
                           , usUnitAliasMap = M.empty
                           , usTemplateMap  = M.empty
                           , usNameParamMap = M.empty
-                          , usLitNums      = 0
-                          , usCallIds      = 0
+                          , usNextUnique   = 0
                           , usCallIdRemap  = IM.empty
                           , usConstraints  = [] }
 
 -- helper functions
+
+-- | Generate a number guaranteed to be unique in the current analysis.
+freshId :: UnitSolver Int
+freshId = do
+  s <- get
+  let i = usNextUnique s
+  put $ s { usNextUnique = i + 1 }
+  pure i
+
 modifyVarUnitMap :: (VarUnitMap -> VarUnitMap) -> UnitSolver ()
 modifyVarUnitMap f = modify (\ s -> s { usVarUnitMap = f (usVarUnitMap s) })
 
