@@ -369,7 +369,7 @@ main = do
 
 
 -- | Current CamFort version.
-version = "0.904"
+version = "0.905"
 
 
 -- | Full CamFort version string.
