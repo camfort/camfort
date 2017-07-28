@@ -19,9 +19,9 @@ module Camfort.Specification.Units.Analysis.Consistent
 import           Control.Monad.State (get)
 import           Data.Data
 import           Data.Generics.Uniplate.Operations
-import           Data.List (find, group, intercalate, sort)
+import           Data.List (find, group, sort)
 import qualified Data.Map.Strict as M
-import           Data.Maybe (maybeToList, mapMaybe, maybe)
+import           Data.Maybe (maybeToList, maybe)
 
 import           Camfort.Analysis.Annotations
 import           Camfort.Analysis.Fortran
@@ -48,15 +48,12 @@ instance Show ConsistencyReport where
   show (Inconsistent e) = show e
 
 data ConsistencyError =
-  Inconsistency (F.ProgramFile UA) UnitState Constraints
+  Inconsistency (F.ProgramFile UA) Constraints
 
 instance Show ConsistencyError where
-  show (Inconsistency pf state cons) = concat [ "\n", fname, ": Inconsistent:\n", reportErrors, "\n\n"
-                                       , unlines (map showSrcConstraint constraints)]
+  show (Inconsistency pf cons) = concat [ "\n", fname, ": Inconsistent:\n", reportErrors ]
     where
       fname = F.pfGetFilename pf
-      showSrcConstraint :: (Constraint, FU.SrcSpan) -> String
-      showSrcConstraint (con, srcSpan) = show srcSpan ++ ": " ++ show con
       reportErrors = unlines [ maybe "" showSS ss ++ str | (ss, str) <- reports ]
         where
           reports = map head . group . sort . map reportError . filter relevantConstraints $ cons
@@ -71,41 +68,16 @@ instance Show ConsistencyError where
           isReflexive (ConEq u1 u2) = u1 == u2
           isReflexive _ = error "isReflexive without ConEq"
 
-      reportError con = (errSpan, pprintConstr (orient (unrename con)) ++ additionalInfo)
+      reportError con = (errSpan, pprintConstr . orient . unrename $ con)
         where
           errSpan = findCon con
-          -- Create additional info for errors
-          additionalInfo =
-             if null errorInfo
-             then ""
-             else "\n    instead" ++ intercalate "\n" (mapNotFirst (pad 10) errorInfo)
-          -- Create additional info about inconsistencies involving variables
-          errorInfo =
-              [" '" ++ sName ++ "' is '" ++ pprintUnitInfo (unrename u) ++ "'"
-                | UnitVar (vName, sName) <- universeBi con
-                , u                       <- findUnitConstrFor vName ]
-          -- Find unit information for variable constraints
-          findUnitConstrFor v = mapMaybe (\con' -> if con == con'
-                                                   then Nothing
-                                                   else constrainedTo v con')
-                                (concat $ M.elems templateMap)
-          constrainedTo v (ConEq (UnitVar (v', _)) u) | v == v' = Just u
-          constrainedTo v (ConEq u (UnitVar (v', _))) | v == v' = Just u
-          constrainedTo _ _ = Nothing
-
-          mapNotFirst _ [] = []
-          mapNotFirst f (x : xs) =  x : fmap f xs
-
           orient (ConEq u (UnitVar v)) = ConEq (UnitVar v) u
           orient (ConEq u (UnitParamVarUse v)) = ConEq (UnitParamVarUse v) u
           orient c = c
 
-          pad o = (++) (replicate o ' ')
-
       findCon :: Constraint -> Maybe FU.SrcSpan
       findCon con = lookupWith (eq con) constraints
         where eq c1 c2 = or [ conParamEq c1 c2' | c2' <- universeBi c2 ]
-      templateMap = usTemplateMap state
       constraints = [ (c, srcSpan)
                     | x <- universeBi pf :: [F.Expression UA]
                     , let srcSpan = FU.getSpan x
@@ -151,7 +123,7 @@ checkUnits = do
   writeDebug logs
   pure $ case eCons of
            Nothing     -> Consistent pf nVars
-           (Just cons) -> Inconsistent $ Inconsistency pfUA state cons
+           (Just cons) -> Inconsistent $ Inconsistency pfUA cons
   where
     isParametricUnit u = case u of UnitParamPosAbs {} -> True; UnitParamPosUse {} -> True
                                    UnitParamVarAbs {} -> True; UnitParamVarUse {} -> True
