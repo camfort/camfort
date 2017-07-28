@@ -28,7 +28,6 @@ import           Data.List (nub, intercalate)
 import qualified Data.Map.Strict as M
 import           Data.Maybe (isJust, fromMaybe)
 import qualified Data.Set as S
-import qualified Debug.Trace as D
 import qualified Numeric.LinearAlgebra as H -- for debugging
 
 import qualified Language.Fortran.AST               as F
@@ -368,8 +367,8 @@ applyTemplates cons = do
     pure (puName pu, ident)
 
   whenDebug $ do
-    D.traceM ("instances: " ++ show instances ++ "\n")
-    D.traceM ("dummies: " ++ show dummies ++ "\n")
+    writeLogs ("instances: " ++ show instances ++ "\n")
+    writeLogs ("dummies: " ++ show dummies ++ "\n")
 
   -- Work through the instances, expanding their templates, and
   -- substituting the callId into the abstract parameters.
@@ -782,7 +781,7 @@ binOpKind (F.BinCustom _)    = RelOp
 --------------------------------------------------
 
 dumpConsM :: String -> Constraints -> UnitSolver ()
-dumpConsM str = whenDebug . D.traceM . unlines . ([replicate 50 '-', str ++ ":"]++) . (++[replicate 50 '^']) . map f
+dumpConsM str = whenDebug . writeLogs . unlines . ([replicate 50 '-', str ++ ":"]++) . (++[replicate 50 '^']) . map f
   where
     f (ConEq u1 u2)  = show (flattenUnits u1) ++ " === " ++ show (flattenUnits u2)
     f (ConConj cons) = intercalate " && " (map f cons)
