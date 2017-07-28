@@ -399,7 +399,6 @@ perBlockCheck b@(F.BlComment ann span _) = do
   case ast of
     Left err -> addResult (synToAstError err span) *> pure b
     Right ann' -> do
-      flowsGraph <- ask
       updateRegionEnv ann'
       let b' = F.setAnnotation ann' b
       case (getAstSpec $ FA.prevAnnotation ann', stencilBlock $ FA.prevAnnotation ann') of
@@ -407,7 +406,7 @@ perBlockCheck b@(F.BlComment ann span _) = do
         (Just specDecls, Just block) ->
          case block of
           s@(F.BlStatement _ span' _ (F.StExpressionAssign _ _ lhs _)) -> do
-             checkStencil flowsGraph s specDecls span' (isArraySubscript lhs) span
+             checkStencil s specDecls span' (isArraySubscript lhs) span
              return b'
 
           -- Stub, maybe collect stencils inside 'do' block
@@ -428,9 +427,9 @@ perBlockCheck b = do
   return b
 
 -- | Validate the stencil and log an appropriate result.
-checkStencil :: FAD.FlowsGraph A -> F.Block (FA.Analysis A) -> SpecDecls
+checkStencil :: F.Block (FA.Analysis A) -> SpecDecls
   -> FU.SrcSpan -> Maybe [F.Index (FA.Analysis Annotation)] -> FU.SrcSpan -> Checker ()
-checkStencil flowsGraph block specDecls spanInferred maybeSubs span = do
+checkStencil block specDecls spanInferred maybeSubs span = do
   -- Work out whether this is a stencil (non empty LHS indices) or not
   let (subs, isStencil) = case maybeSubs of
                              Nothing -> ([], False)
@@ -441,6 +440,7 @@ checkStencil flowsGraph block specDecls spanInferred maybeSubs span = do
   let ivs = extractRelevantIVS ivmap block
 
   -- Do analysis; create list of relative indices
+  flowsGraph <- ask
   let lhsN         = fromMaybe [] (neighbourIndex ivmap subs)
       relOffsets = fst . runWriter $ genOffsets flowsGraph ivs lhsN [block]
       multOffsets = map (\relOffset ->
