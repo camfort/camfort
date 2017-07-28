@@ -107,7 +107,7 @@ inferCriticalVariables :: UnitsAnalysis (F.ProgramFile Annotation) Criticals
 inferCriticalVariables = do
   pf <- analysisInput
   mfs <- analysisModFiles
-  uOpts <- analysisParams
+  (eVars, _, logs) <- runInference runCriticalVariables
   let
     -- Use the module map derived from all of the included Camfort Mod files.
     mmap = combinedModuleMap mfs
@@ -122,7 +122,6 @@ inferCriticalVariables = do
                 e@(F.ExpValue _ _ F.ValVariable{}) <- universeBi pfRenamed :: [F.Expression UA]
                 -- going to ignore intrinsics here
               ] `M.union` (M.unions . map (M.fromList . map (\ (a, (b, _)) -> (b, a)) . M.toList) $ M.elems mmap')
-    (eVars, _, logs) = runInference uOpts mfs pf runCriticalVariables
     fromWhereMap = genUniqNameToFilenameMap mfs
   writeDebug logs
   pure Criticals { criticalsPf           = pf

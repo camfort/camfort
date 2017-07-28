@@ -123,14 +123,10 @@ getInferred (Inferred _ vars) = vars
     This produces an output of all the unit information for a program -}
 inferUnits :: UnitsAnalysis (F.ProgramFile Annotation) (Either ConsistencyError InferenceReport)
 inferUnits = do
-  pf <- analysisInput
-  mfs <- analysisModFiles
-  uOpts <- analysisParams
-  let
-      (eVars, state, logs) = runInference uOpts mfs pf (chooseImplicitNames <$> runInferVariables)
-      pfUA = usProgramFile state -- the program file after units analysis is done
+  (eVars, state, logs) <- runInference (chooseImplicitNames <$> runInferVariables)
   consistency <- checkUnits
   writeDebug logs
+  let pfUA = usProgramFile state -- the program file after units analysis is done
   pure $ case consistency of
            Consistent{}     -> Right $ Inferred pfUA eVars
            Inconsistent err -> Left err
@@ -142,18 +138,14 @@ synthesiseUnits :: Char
 {-| Synthesis unspecified units for a program (after checking) -}
 synthesiseUnits marker = do
   infRes <- inferUnits
-  mfs <- analysisModFiles
-  uOpts <- analysisParams
-  let runSynth pf inferred =
-        let (eVars, state, logs) = runInference uOpts mfs pf (runSynthesis marker . chooseImplicitNames $ inferred)
-            pfUA = usProgramFile state -- the program file after units analysis is done
-        in fmap (UA.prevAnnotation . FA.prevAnnotation) pfUA -- strip annotations
   case infRes of
     Left err       -> pure $ Left err
     Right inferred -> do
-      pf <- analysisInput
-      pure . Right $ (inferred, runSynth pf (getInferred inferred))
-  where
+      (_, state, logs) <- runInference
+        (runSynthesis marker . chooseImplicitNames . getInferred $ inferred)
+      let pfUA    = usProgramFile state -- the program file after units analysis is done
+          pfFinal = fmap (UA.prevAnnotation . FA.prevAnnotation) pfUA -- strip annotations
+      pure . Right $ (inferred, pfFinal)
 
 --------------------------------------------------
 

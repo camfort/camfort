@@ -143,11 +143,9 @@ instance Show ConsistencyError where
 checkUnits :: UnitsAnalysis (F.ProgramFile Annotation) ConsistencyReport
 checkUnits = do
   pf <- analysisInput
-  mfs <- analysisModFiles
-  uOpts <- analysisParams
-  let
-    (eCons, state, logs) = runInference uOpts mfs pf runInconsistentConstraints
+  (eCons, state, logs) <- runInference runInconsistentConstraints
     -- number of 'real' variables checked, e.g. not parametric
+  let
     nVars = M.size . M.filter (not . isParametricUnit) $ usVarUnitMap state
     pfUA :: F.ProgramFile UA
     pfUA = usProgramFile state -- the program file after units analysis is done

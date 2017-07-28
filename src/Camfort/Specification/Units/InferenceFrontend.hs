@@ -52,7 +52,13 @@ import           Language.Fortran.Util.Position (getSpan)
 import           Camfort.Analysis.Annotations (Annotation, Report, mkReport)
 import           Camfort.Analysis.CommentAnnotator (annotateComments)
 import           Camfort.Analysis.Fortran
-  (analysisDebug, analysisModFiles, analysisParams, analysisResult, finalState)
+  ( analysisDebug
+  , analysisInput
+  , analysisModFiles
+  , analysisParams
+  , analysisResult
+  , finalState )
+import           Camfort.Specification.Units.Analysis (UnitsAnalysis)
 import qualified Camfort.Specification.Units.Annotation   as UA
 import           Camfort.Specification.Units.Environment
 import           Camfort.Specification.Units.InferenceBackend
@@ -129,13 +135,12 @@ initInference = do
 
   debugLogging
 
--- | Run a unit inference.
-runInference :: UnitOpts
-             -> ModFiles
-             -> F.ProgramFile Annotation
-             -> UnitSolver a
-             -> (a, UnitState, Report)
-runInference uOpts mfs pf runner =
+-- | Run a 'UnitSolver' analysis within a 'UnitsAnalysis'.
+runInference :: UnitSolver a -> UnitsAnalysis (F.ProgramFile Annotation) (a, UnitState, UnitLogs)
+runInference solver = do
+  pf    <- analysisInput
+  mfs   <- analysisModFiles
+  uOpts <- analysisParams
   let
     -- Use the module map derived from all of the included Camfort Mod files.
     mmap      = combinedModuleMap mfs
@@ -143,8 +148,8 @@ runInference uOpts mfs pf runner =
     res = runUnitSolver uOpts pfRenamed mfs $ do
       initializeModFiles
       initInference
-      runner
-  in (analysisResult res, finalState res, analysisDebug res)
+      solver
+  pure (analysisResult res, finalState res, analysisDebug res)
 
 -- Inference functions
 
