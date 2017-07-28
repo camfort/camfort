@@ -94,7 +94,7 @@ instance Show UnitInfo where
     UnitlessVar                         -> "1"
     UnitName name                       -> name
     UnitAlias name                      -> name
-    UnitVar (_, vName)                  -> printf "unit_of(%s)" vName
+    UnitVar (vName, _)                  -> printf "#<Var %s>" vName
     UnitRecord recs                     -> "record (" ++ intercalate ", " (map (\ (n, u) -> n ++ " :: " ++ show u) recs) ++ ")"
     UnitMul u1 (UnitPow u2 k)
       | k < 0                           -> maybeParen u1 ++ " / " ++ maybeParen (UnitPow u2 (-k))
