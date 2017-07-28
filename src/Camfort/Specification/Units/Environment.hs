@@ -203,6 +203,7 @@ pprintUnitInfo (UnitParamPosUse ((_, fname), 0, _)) = printf "result of %s" fnam
 pprintUnitInfo (UnitParamPosUse ((_, fname), i, _)) = printf "parameter %d to %s" i fname
 pprintUnitInfo (UnitParamEAPUse ((v, _), _))        = printf "explicitly annotated polymorphic unit %s" v
 pprintUnitInfo (UnitLiteral _)                      = "literal"
+pprintUnitInfo (UnitMul u1 u2)                      = pprintUnitInfo u1 ++ " * " ++ pprintUnitInfo u2
 pprintUnitInfo ui                                   = show ui
 
 --------------------------------------------------

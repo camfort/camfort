@@ -60,12 +60,12 @@ inconsist3LitMixedReport =
   "\ntests/fixtures/Specification/Units/inconsist3.f90: Inconsistent:\n\
   \ - at 5:7: 'j' should have unit 'literal'\n\
   \ - at 5:7: 'literal' should have unit 'literal'\n\
-  \ - at 7:7: 'k' should have the same units as '(unit_of(j)) (unit_of(j))'\n"
+  \ - at 7:7: 'k' should have the same units as 'j * j'\n"
 
 inconsist3LitPolyReport :: String
 inconsist3LitPolyReport =
   "\ntests/fixtures/Specification/Units/inconsist3.f90: Inconsistent:\n\
-  \ - at 7:7: 'k' should have the same units as '(unit_of(j)) (unit_of(j))'\n"
+  \ - at 7:7: 'k' should have the same units as 'j * j'\n"
 
 inconsist3LitUnitlessReport :: String
 inconsist3LitUnitlessReport =
