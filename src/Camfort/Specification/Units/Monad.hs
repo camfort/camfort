@@ -53,8 +53,6 @@ module Camfort.Specification.Units.Monad
   , modifyUnitAliasMap
   , modifyVarUnitMap
     -- ** Runners
-  , evalUnitSolver
-  , execUnitSolver
   , runUnitSolver
   ) where
 
@@ -254,11 +252,3 @@ modifyCallIdRemapM f = do
 -- | Run the unit solver monad.
 runUnitSolver :: UnitOpts -> F.ProgramFile UA -> ModFiles -> UnitSolver a -> AnalysisResult UnitState a
 runUnitSolver o pf mfs m = runAnalysis m o (unitState0 pf) mfs pf
-
-evalUnitSolver :: UnitOpts -> F.ProgramFile UA -> ModFiles -> UnitSolver a -> (a, UnitLogs)
-evalUnitSolver o pf mfs m = let result = runUnitSolver o pf mfs m
-                        in (analysisResult result, analysisDebug result)
-
-execUnitSolver :: UnitOpts -> F.ProgramFile UA -> ModFiles -> UnitSolver a -> (UnitState, UnitLogs)
-execUnitSolver o pf mfs m = let result = runUnitSolver o pf mfs m
-                        in (finalState result, analysisDebug result)
