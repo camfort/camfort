@@ -40,7 +40,7 @@ import           Language.Fortran.Parser.Utils (readReal, readInteger)
 import           Language.Fortran.Util.ModFile
 import           Language.Fortran.Util.Position (getSpan)
 
-import           Camfort.Analysis.Annotations (Annotation)
+import           Camfort.Analysis.Annotations (Annotation, Report)
 import           Camfort.Analysis.CommentAnnotator (annotateComments)
 import           Camfort.Analysis.Fortran
   ( Analysis
@@ -62,9 +62,9 @@ import           Camfort.Specification.Units.Parser (unitParser)
 import qualified Camfort.Specification.Units.Parser.Types as P
 
 -- | Analysis with access to 'UnitOpts' information.
-type UnitsAnalysis a a' = Analysis UnitOpts () a a'
+type UnitsAnalysis a a' = Analysis UnitOpts Report () a a'
 
-runUnitsAnalysis :: UnitsAnalysis a b -> UnitOpts -> ModFiles -> a -> AnalysisResult () b
+runUnitsAnalysis :: UnitsAnalysis a b -> UnitOpts -> ModFiles -> a -> AnalysisResult Report () b
 runUnitsAnalysis analysis uo = runAnalysis analysis uo ()
 
 -- | Prepare to run an inference function.

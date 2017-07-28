@@ -73,8 +73,8 @@ doAnalysisSummary aFun inSrc incDir excludes = do
 
 -- | Perform an analysis which reports to the user, but does not output any files.
 doAnalysisReportWithModFiles
-  :: (Show b)
-  => Analysis r () FileProgram b
+  :: (Monoid d, Show d, Show b)
+  => Analysis r d () FileProgram b
   -> r
   -> FileOrDir
   -> FileOrDir
@@ -89,8 +89,8 @@ doAnalysisReportWithModFiles rFun env inSrc incDir excludes = do
   putStrLn report
 
 doRefactorWithModFiles
-  :: (Show e, Show b)
-  => Analysis r () [FileProgram] (b, [Either e FileProgram])
+  :: (Monoid d, Show d, Show e, Show b)
+  => Analysis r d () [FileProgram] (b, [Either e FileProgram])
   -> r
   -> FileOrDir
   -> FileOrDir

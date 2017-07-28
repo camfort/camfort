@@ -127,7 +127,7 @@ type NameParamMap = M.Map NameParamKey [UnitInfo]
 --------------------------------------------------
 
 -- | UnitSolvers are analyses on 'ProgramFile's annotated with unit information.
-type UnitSolver a = Analysis UnitOpts UnitState (F.ProgramFile UA) a
+type UnitSolver a = Analysis UnitOpts Report UnitState (F.ProgramFile UA) a
 
 --------------------------------------------------
 
@@ -250,5 +250,5 @@ modifyCallIdRemapM f = do
 --------------------------------------------------
 
 -- | Run the unit solver monad.
-runUnitSolver :: UnitOpts -> F.ProgramFile UA -> ModFiles -> UnitSolver a -> AnalysisResult UnitState a
+runUnitSolver :: UnitOpts -> F.ProgramFile UA -> ModFiles -> UnitSolver a -> AnalysisResult Report UnitState a
 runUnitSolver o pf mfs m = runAnalysis m o (unitState0 pf) mfs pf

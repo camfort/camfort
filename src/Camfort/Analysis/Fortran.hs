@@ -56,36 +56,37 @@ mkAnalysisEnv r mfs x =
 -- | An @Analysis r s a a'@ performs an analysis on an
 -- @a@ to produce a result of type @a'@. The analysis
 -- may additionally access read-only information of type
--- @r@ and read-write information of type @s@.
-newtype Analysis r s a a' = Analysis
-  { getAnalysis :: WriterT Report (StateT s (Reader (AnalysisEnv r a))) a' }
+-- @r@, read-write information of type @s@, and may log
+-- information of type @d@.
+newtype Analysis r d s a a' = Analysis
+  { getAnalysis :: WriterT d (StateT s (Reader (AnalysisEnv r a))) a' }
   deriving ( Functor, Applicative, Monad
            , MonadReader (AnalysisEnv r a)
            , MonadState s
-           , MonadWriter Report)
+           , MonadWriter d)
 
 -- | An 'Analysis' without any additional state or parameters.
-type SimpleAnalysis a a' = Analysis () () a a'
+type SimpleAnalysis = Analysis () Report ()
 
-data AnalysisResult s a =
+data AnalysisResult d s a =
   AR { -- | The result of an analysis.
        analysisResult :: a
        -- | The final state after the analysis has been performed.
      , finalState     :: s
        -- | Debugging information produced in the analysis.
-     , analysisDebug :: Report
+     , analysisDebug :: d
      }
 
 -- | Retrieve the state of the analysis.
-analysisState :: Analysis r s a s
+analysisState :: (Monoid d) => Analysis r d s a s
 analysisState = get
 
 -- | Retrieve the additional parameters to the analysis.
-analysisParams :: Analysis r s a r
+analysisParams :: (Monoid d) => Analysis r d s a r
 analysisParams = asks aEnvEnv
 
 -- | Run the given analysis.
-runAnalysis :: Analysis r s a a' -> r -> s -> MF.ModFiles -> a -> AnalysisResult s a'
+runAnalysis :: (Monoid d) => Analysis r d s a a' -> r -> s -> MF.ModFiles -> a -> AnalysisResult d s a'
 runAnalysis a r s mfs x =
   let ((result, report), state) = runReader (runStateT (runWriterT $ getAnalysis a) s) env
   in AR { analysisResult = result
@@ -95,11 +96,11 @@ runAnalysis a r s mfs x =
   where env = mkAnalysisEnv r mfs x
 
 -- | Run a 'SimpleAnalysis'.
-runSimpleAnalysis :: SimpleAnalysis a a' -> MF.ModFiles -> a -> AnalysisResult () a'
+runSimpleAnalysis :: SimpleAnalysis a a' -> MF.ModFiles -> a -> AnalysisResult Report () a'
 runSimpleAnalysis analysis = runAnalysis analysis () ()
 
 -- | Run a separate analysis with a new input, but maintaining other information.
-branchAnalysis :: Analysis r s b b' -> b -> Analysis r s a (AnalysisResult s b')
+branchAnalysis :: (Monoid d) => Analysis r d s b b' -> b -> Analysis r d s a (AnalysisResult d s b')
 branchAnalysis branch input = do
   modFiles <- analysisModFiles
   env      <- analysisParams
@@ -107,13 +108,13 @@ branchAnalysis branch input = do
   pure $ runAnalysis branch env state modFiles input
 
 -- | Retrieve the input data to the analysis.
-analysisInput :: Analysis r s a a
+analysisInput :: (Monoid d) => Analysis r d s a a
 analysisInput = asks aEnvInput
 
 -- | Retrieve the ModFiles available in the analysis.
-analysisModFiles :: Analysis r s a MF.ModFiles
+analysisModFiles :: (Monoid d) => Analysis r d s a MF.ModFiles
 analysisModFiles = asks aEnvModFiles
 
 -- | Write some debugging information.
-writeDebug :: Report -> Analysis r s a ()
+writeDebug :: (Monoid d) => d -> Analysis r d s a ()
 writeDebug = tell
