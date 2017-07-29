@@ -35,6 +35,7 @@ import Control.Monad.Writer.Strict hiding (Product)
 import Data.Function (on)
 import Data.Generics.Uniplate.Operations
 import Data.List (intercalate, sort, union)
+import Data.Maybe
 
 import           Camfort.Analysis.Annotations
 import           Camfort.Analysis.CommentAnnotator
@@ -51,9 +52,6 @@ import qualified Language.Fortran.Analysis          as FA
 import qualified Language.Fortran.Analysis.BBlocks  as FAB
 import qualified Language.Fortran.Analysis.DataFlow as FAD
 import qualified Language.Fortran.Util.Position     as FU
-
-import qualified Data.Map as M
-import Data.Maybe
 
 newtype CheckResult = CheckResult [StencilResult]
 
@@ -418,18 +416,6 @@ checkStencil block specDecls spanInferred maybeSubs span = do
                                     , scVar = var}
                                 -> spec' == spec && bspan == spanInferred && v == var
                               _ -> False) checkLog
-
-genOffsets ::
-     FAD.FlowsGraph A
-  -> [Variable]
-  -> [Neighbour]
-  -> [F.Block (FA.Analysis A)]
-  -> Writer EvalLog [(Variable, (Bool, [[Int]]))]
-genOffsets flowsGraph ivs lhs blocks = do
-    let (subscripts, _) = genSubscripts flowsGraph blocks
-    assocsSequence $ mkOffsets subscripts
-  where
-    mkOffsets = M.mapWithKey (\v -> indicesToRelativisedOffsets ivs v lhs)
 
 existingStencils :: CheckResult -> [(Specification, FU.SrcSpan, Variable)]
 existingStencils = mapMaybe getExistingStencil . getCheckResult

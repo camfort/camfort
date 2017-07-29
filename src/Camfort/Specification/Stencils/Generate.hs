@@ -22,8 +22,8 @@ module Camfort.Specification.Stencils.Generate
   , Neighbour(..)
   , extractRelevantIVS
   , assocsSequence
+  , genOffsets
   , genSpecifications
-  , genSubscripts
   , isArraySubscript
   , neighbourIndex
   , isVariableExpr
@@ -135,6 +135,18 @@ genSpecifications flowsGraph ivs lhs block = do
          [(vs, Specification (Once (Bound (Just l) Nothing)) isStencil),
           (vs, Specification (Once (Bound Nothing (Just u))) isStencil)]
       splitUpperAndLower' x = [x]
+
+genOffsets ::
+     FAD.FlowsGraph A
+  -> [Variable]
+  -> [Neighbour]
+  -> [F.Block (FA.Analysis A)]
+  -> Writer EvalLog [(Variable, (Bool, [[Int]]))]
+genOffsets flowsGraph ivs lhs blocks = do
+    let (subscripts, _) = genSubscripts flowsGraph blocks
+    assocsSequence $ mkOffsets subscripts
+  where
+    mkOffsets = M.mapWithKey (\v -> indicesToRelativisedOffsets ivs v lhs)
 
 {-| genSubscripts
    Takes * a flows graph
