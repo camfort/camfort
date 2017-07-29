@@ -46,7 +46,7 @@ import qualified Language.Fortran.Analysis.DataFlow as FAD
 import           Language.Fortran.Util.ModFile (ModFiles)
 import qualified Language.Fortran.Util.Position     as FU
 
-import           Camfort.Analysis.Annotations (A, Annotation)
+import           Camfort.Analysis.Annotations (A)
 import           Camfort.Analysis.Fortran
   (Analysis, analysisDebug, analysisParams, analysisResult, runAnalysis)
 import           Camfort.Helpers (collect)
@@ -228,7 +228,7 @@ extractRelevantIVS ivmap f = ivsList
    its Neighbour representation
    e.g., for the expression a(i+1,j-1) then this function gets
    passed expr = i + 1   (returning +1) and expr = j - 1 (returning -1) -}
-convIxToNeighbour :: [Variable] -> F.Index (FA.Analysis Annotation) -> Neighbour
+convIxToNeighbour :: [Variable] -> F.Index (FA.Analysis A) -> Neighbour
 convIxToNeighbour _ (F.IxRange _ _ Nothing Nothing Nothing)     = Neighbour "" 0
 convIxToNeighbour _ (F.IxRange _ _ Nothing Nothing
                   (Just (F.ExpValue _ _ (F.ValInteger "1")))) = Neighbour "" 0
@@ -249,7 +249,7 @@ assocsSequence maps = do
 -- Convert list of indexing expressions to a spec
 indicesToSpec :: Variable
               -> [Neighbour]
-              -> [[F.Index (FA.Analysis Annotation)]]
+              -> [[F.Index (FA.Analysis A)]]
               -> StencilInferer (Maybe Specification)
 indicesToSpec a lhs ixs = do
   mMultOffsets <- indicesToRelativisedOffsets a lhs ixs
@@ -324,7 +324,7 @@ expToNeighbour ivs expr =
 
 indicesToRelativisedOffsets :: Variable
                             -> [Neighbour]
-                            -> [[F.Index (FA.Analysis Annotation)]]
+                            -> [[F.Index (FA.Analysis A)]]
                             -> StencilInferer (Maybe (Bool, [[Int]]))
 indicesToRelativisedOffsets a lhs ixs = do
   ivs <- getIvs
