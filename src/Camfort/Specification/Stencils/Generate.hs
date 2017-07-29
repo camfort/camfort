@@ -20,18 +20,13 @@ module Camfort.Specification.Stencils.Generate
   (
     EvalLog
   , Neighbour(..)
+  , convIxToNeighbour
   , extractRelevantIVS
-  , assocsSequence
   , genOffsets
   , genSpecifications
+  , indicesToSpec
   , isArraySubscript
   , neighbourIndex
-  , isVariableExpr
-  , convIxToNeighbour
-  , indicesToRelativisedOffsets
-  , indicesToSpec
-  , neighbourToOffset
-  , relativise
   , runStencilInferer
   ) where
 
