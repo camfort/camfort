@@ -58,6 +58,7 @@ import qualified Language.Fortran.AST as F
 import qualified Language.Fortran.Analysis as FA
 import qualified Language.Fortran.Analysis.BBlocks as FAB
 import qualified Language.Fortran.Analysis.DataFlow as FAD
+import           Language.Fortran.Util.ModFile (emptyModFiles)
 import qualified Language.Fortran.Util.Position as FU
 
 import Data.Data
@@ -158,41 +159,42 @@ stencilSynthesis' :: Bool
                      ([LogLine], F.ProgramFile (FA.Analysis A))
 stencilSynthesis' useEval doSynth marker = do
   pf@(F.ProgramFile mi pus) <- analysisInput
-  let checkRes     = stencilChecking pf
-      (pus', log1) = runWriter (transformBiM perPU pus)
-      -- get map of AST-Block-ID ==> corresponding AST-Block
-      bm    = FAD.genBlockMap pf
-      -- get map of program unit ==> basic block graph
-      bbm   = FAB.genBBlockMap pf
-      -- get map of variable name ==> { defining AST-Block-IDs }
-      dm    = FAD.genDefMap bm
-      -- Run inference per program unit
-      perPU :: F.ProgramUnit (FA.Analysis A)
-            -> Writer [LogLine] (F.ProgramUnit (FA.Analysis A))
+  checkRes <- stencilChecking
+  let
+    (pus', log1) = runWriter (transformBiM perPU pus)
+    -- get map of AST-Block-ID ==> corresponding AST-Block
+    bm    = FAD.genBlockMap pf
+    -- get map of program unit ==> basic block graph
+    bbm   = FAB.genBBlockMap pf
+    -- get map of variable name ==> { defining AST-Block-IDs }
+    dm    = FAD.genDefMap bm
+    -- Run inference per program unit
+    perPU :: F.ProgramUnit (FA.Analysis A)
+          -> Writer [LogLine] (F.ProgramUnit (FA.Analysis A))
 
-      perPU pu | Just _ <- FA.bBlocks $ F.getAnnotation pu = do
-          let -- Analysis/infer on blocks of just this program unit
-              blocksM = mapM perBlockInfer (F.programUnitBody pu)
-              -- Update the program unit body with these blocks
-              pum = F.updateProgramUnitBody pu <$> blocksM
+    perPU pu | Just _ <- FA.bBlocks $ F.getAnnotation pu = do
+        let -- Analysis/infer on blocks of just this program unit
+            blocksM = mapM perBlockInfer (F.programUnitBody pu)
+            -- Update the program unit body with these blocks
+            pum = F.updateProgramUnitBody pu <$> blocksM
 
-              -- perform reaching definitions analysis
-              rd = FAD.reachingDefinitions dm gr
+            -- perform reaching definitions analysis
+            rd = FAD.reachingDefinitions dm gr
 
-              Just gr = M.lookup (FA.puName pu) bbm
-              -- create graph of definition "flows"
-              flTo = FAD.genFlowsToGraph bm dm gr rd
+            Just gr = M.lookup (FA.puName pu) bbm
+            -- create graph of definition "flows"
+            flTo = FAD.genFlowsToGraph bm dm gr rd
 
-              -- induction variable map
-              beMap = FAD.genBackEdgeMap (FAD.dominators gr) gr
+            -- induction variable map
+            beMap = FAD.genBackEdgeMap (FAD.dominators gr) gr
 
-              -- identify every loop by its back-edge
-              ivMap = FAD.genInductionVarMapByASTBlock beMap gr
+            -- identify every loop by its back-edge
+            ivMap = FAD.genInductionVarMapByASTBlock beMap gr
 
-              (pu', log) = runInferer checkRes useEval doSynth marker mi ivMap flTo pum
-          tell log
-          pure pu'
-      perPU pu = pure pu
+            (pu', log) = runInferer checkRes useEval doSynth marker mi ivMap flTo pum
+        tell log
+        pure pu'
+    perPU pu = pure pu
   pure (log1, F.ProgramFile mi pus')
 
 {- *** 1 . Core inference over blocks -}
@@ -208,7 +210,7 @@ genSpecsAndReport span lhsIxs block = do
   let ivs = extractRelevantIVS ivmap block
   flowsGraph   <- fmap ieFlowsGraph ask
   -- Generate specification for the
-  let ((specs, visited), evalInfos) = runStencilInferer (genSpecifications lhsIxs block) ivs flowsGraph
+  let ((specs, visited), evalInfos) = runStencilInferer (genSpecifications lhsIxs block) ivs flowsGraph emptyModFiles
   -- Remember which nodes were visited during this traversal
   modify (\state -> state { visitedNodes = visitedNodes state ++ visited })
   -- Report the specifications

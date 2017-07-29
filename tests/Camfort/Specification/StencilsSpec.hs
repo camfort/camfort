@@ -453,7 +453,7 @@ test2DSpecVariation a b (input, expectation) =
     expectedSpec = Specification expectation True
     fromFormatToIx [ri,rj] = [ offsetToIx "i" ri, offsetToIx "j" rj ]
 
-indicesToSpec' ivs lhs ixs = fst $ runStencilInferer (indicesToSpec "a" lhs ixs) ivs Gr.empty
+indicesToSpec' ivs lhs ixs = fst $ runStencilInferer (indicesToSpec "a" lhs ixs) ivs Gr.empty emptyModFiles
 
 variations =
   [ ( [ [0,0] ]

@@ -85,7 +85,7 @@ synth marker = do
     synthWithCheck = do
       pf <- analysisInput
       let blocks = getBlocks pf
-          checkRes = stencilChecking blocks
+      checkRes <- analysisResult <$> branchAnalysis stencilChecking blocks
       case checkFailure checkRes of
         Nothing  -> do
           res <- (snd . analysisResult) <$> branchAnalysis (stencilSynthesis marker) blocks
@@ -112,8 +112,9 @@ synth marker = do
 check :: StencilsAnalysis (F.ProgramFile Annotation) String
 check = do
   pf <- analysisInput
+  res <- branchAnalysis stencilChecking (getBlocks pf)
   -- Append filename to any outputs
-  let output   = show . stencilChecking . getBlocks $ pf
+  let output   = show (analysisResult res)
       filename = F.pfGetFilename pf
   pure $ if null output then "" else "\n" ++ filename ++ "\n" ++ output
 

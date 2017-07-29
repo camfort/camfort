@@ -39,7 +39,16 @@ import Data.Maybe
 
 import           Camfort.Analysis.Annotations
 import           Camfort.Analysis.CommentAnnotator
+import           Camfort.Analysis.Fortran
+  ( Analysis
+  , AnalysisResult
+  , analysisInput
+  , analysisModFiles
+  , analysisParams
+  , finalState
+  , runAnalysis)
 import           Camfort.Specification.Parser (SpecParseError)
+import           Camfort.Specification.Stencils.Analysis (StencilsAnalysis)
 import           Camfort.Specification.Stencils.CheckBackend
 import           Camfort.Specification.Stencils.Generate
 import           Camfort.Specification.Stencils.Model
@@ -51,6 +60,7 @@ import qualified Language.Fortran.AST               as F
 import qualified Language.Fortran.Analysis          as FA
 import qualified Language.Fortran.Analysis.BBlocks  as FAB
 import qualified Language.Fortran.Analysis.DataFlow as FAD
+import qualified Language.Fortran.Util.ModFile      as MF
 import qualified Language.Fortran.Util.Position     as FU
 
 newtype CheckResult = CheckResult [StencilResult]
@@ -214,42 +224,42 @@ instance Show StencilCheckWarning where
     "Warning: Unused region '" ++ name ++ "'"
 
 -- Entry point
-stencilChecking :: F.ProgramFile (FA.Analysis A) -> CheckResult
-stencilChecking pf = CheckResult . snd . runWriter $ do
-  -- Attempt to parse comments to specifications
-  pf' <- annotateComments Parser.specParser (\srcSpan err -> tell [parseError srcSpan err]) pf
-  let -- get map of AST-Block-ID ==> corresponding AST-Block
-      bm         = FAD.genBlockMap pf'
-      -- get map of program unit  ==> basic block graph
-      bbm        = FAB.genBBlockMap pf'
-      -- build the supergraph of global dependency
-      sgr        = FAB.genSuperBBGr bbm
-      -- extract the supergraph itself
-      gr         = FAB.superBBGrGraph sgr
-      -- get map of variable name ==> { defining AST-Block-IDs }
-      dm         = FAD.genDefMap bm
-      -- perform reaching definitions analysis
-      rd         = FAD.reachingDefinitions dm gr
-      -- create graph of definition "flows"
-      flowsGraph =  FAD.genFlowsToGraph bm dm gr rd
-      -- identify every loop by its back-edge
-      beMap      = FAD.genBackEdgeMap (FAD.dominators gr) gr
-      ivmap      = FAD.genInductionVarMapByASTBlock beMap gr
-      -- results :: Checker (F.ProgramFile (F.ProgramFile (FA.Analysis A)))
-      results    = descendBiM perProgramUnitCheck pf'
+stencilChecking :: StencilsAnalysis (F.ProgramFile (FA.Analysis A)) CheckResult
+stencilChecking = do
+  pf  <- analysisInput
+  mfs <- analysisModFiles
+  pure $ CheckResult . snd . runWriter $ do
+    -- Attempt to parse comments to specifications
+    pf' <- annotateComments Parser.specParser (\srcSpan err -> tell [parseError srcSpan err]) pf
+    let -- get map of AST-Block-ID ==> corresponding AST-Block
+        bm         = FAD.genBlockMap pf'
+        -- get map of program unit  ==> basic block graph
+        bbm        = FAB.genBBlockMap pf'
+        -- build the supergraph of global dependency
+        sgr        = FAB.genSuperBBGr bbm
+        -- extract the supergraph itself
+        gr         = FAB.superBBGrGraph sgr
+        -- get map of variable name ==> { defining AST-Block-IDs }
+        dm         = FAD.genDefMap bm
+        -- perform reaching definitions analysis
+        rd         = FAD.reachingDefinitions dm gr
+        -- create graph of definition "flows"
+        flowsGraph =  FAD.genFlowsToGraph bm dm gr rd
+        -- identify every loop by its back-edge
+        beMap      = FAD.genBackEdgeMap (FAD.dominators gr) gr
+        ivmap      = FAD.genInductionVarMapByASTBlock beMap gr
+        -- results :: Checker (F.ProgramFile (F.ProgramFile (FA.Analysis A)))
+        results    = descendBiM perProgramUnitCheck pf'
 
-  let addUnusedRegionsToResult = do
-        regions'     <- fmap regions get
-        usedRegions' <- fmap usedRegions get
-        let unused = filter ((`notElem` usedRegions') . snd) regions'
-        mapM_ (addResult . uncurry unusedRegion) unused
-      output = checkResult $ execState
-        (runReaderT
-          (runChecker (results >> addUnusedRegionsToResult))
-          flowsGraph)
-        (startState ivmap)
+    let addUnusedRegionsToResult = do
+          regions'     <- fmap regions get
+          usedRegions' <- fmap usedRegions get
+          let unused = filter ((`notElem` usedRegions') . snd) regions'
+          mapM_ (addResult . uncurry unusedRegion) unused
+        output = checkResult . finalState $
+          runChecker (results >> addUnusedRegionsToResult) flowsGraph (startState ivmap) mfs
 
-  tell output
+    tell output
 
 data CheckState = CheckState
   { regionEnv     :: RegionEnv
@@ -289,12 +299,13 @@ startState ivmap =
              , usedRegions   = []
              }
 
-newtype Checker a =
-  Checker { runChecker :: ReaderT (FAD.FlowsGraph A) (State CheckState) a }
-  deriving ( Functor, Applicative, Monad
-           , MonadReader (FAD.FlowsGraph A)
-           , MonadState CheckState
-           )
+type Checker = Analysis (FAD.FlowsGraph A) () CheckState ()
+
+runChecker :: Checker a -> FAD.FlowsGraph A -> CheckState -> MF.ModFiles -> AnalysisResult () CheckState a
+runChecker c flows state modFiles = runAnalysis c flows state modFiles ()
+
+getFlowsGraph :: Checker (FAD.FlowsGraph A)
+getFlowsGraph = analysisParams
 
 -- If the annotation contains an unconverted stencil specification syntax tree
 -- then convert it and return an updated annotation containing the AST
@@ -386,9 +397,10 @@ checkStencil block specDecls spanInferred maybeSubs span = do
   let ivs = extractRelevantIVS ivmap block
 
   -- Do analysis; create list of relative indices
-  flowsGraph <- ask
+  flowsGraph <- getFlowsGraph
+  mfs <- analysisModFiles
   let lhsN         = fromMaybe [] (neighbourIndex ivmap subs)
-      relOffsets = fst $ runStencilInferer (genOffsets lhsN [block]) ivs flowsGraph
+      relOffsets = fst $ runStencilInferer (genOffsets lhsN [block]) ivs flowsGraph mfs
       multOffsets = map (\relOffset ->
           case relOffset of
           (var, (True, offsets)) -> (var, Mult offsets)
@@ -404,7 +416,7 @@ checkStencil block specDecls spanInferred maybeSubs span = do
                    if specExists then addResult (duplicateSpecification span)
                      else addResult (specOkay span s v spanInferred)) expandedDecls
     else do
-    let inferred = fst . fst $ runStencilInferer (genSpecifications lhsN block) ivs flowsGraph
+    let inferred = fst . fst $ runStencilInferer (genSpecifications lhsN block) ivs flowsGraph mfs
     addResult (notWellSpecified (span, specDecls) (spanInferred, inferred))
   where
     seenBefore :: (Variable, Specification) -> Checker Bool

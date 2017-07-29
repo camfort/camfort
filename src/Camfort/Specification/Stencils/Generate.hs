@@ -43,7 +43,7 @@ import qualified Data.Set as S
 import qualified Language.Fortran.AST               as F
 import qualified Language.Fortran.Analysis          as FA
 import qualified Language.Fortran.Analysis.DataFlow as FAD
-import           Language.Fortran.Util.ModFile (emptyModFiles)
+import           Language.Fortran.Util.ModFile (ModFiles)
 import qualified Language.Fortran.Util.Position     as FU
 
 import           Camfort.Analysis.Annotations (A, Annotation)
@@ -86,10 +86,9 @@ getIvs = sieIvs <$> analysisParams
 getFlowsGraph :: StencilInferer (FAD.FlowsGraph A)
 getFlowsGraph = sieFlowsGraph <$> analysisParams
 
--- TODO: Can we use ModFile information here?
-runStencilInferer :: StencilInferer a -> [Variable] -> FAD.FlowsGraph A -> (a, EvalLog)
-runStencilInferer si ivs flowsGraph =
-  let res = runAnalysis si senv () emptyModFiles ()
+runStencilInferer :: StencilInferer a -> [Variable] -> FAD.FlowsGraph A -> ModFiles -> (a, EvalLog)
+runStencilInferer si ivs flowsGraph mfs =
+  let res = runAnalysis si senv () mfs ()
   in (analysisResult res, analysisDebug res)
   where senv = SIEnv { sieIvs = ivs, sieFlowsGraph = flowsGraph }
 
