@@ -388,7 +388,7 @@ checkStencil block specDecls spanInferred maybeSubs span = do
   -- Do analysis; create list of relative indices
   flowsGraph <- ask
   let lhsN         = fromMaybe [] (neighbourIndex ivmap subs)
-      relOffsets = fst . runWriter $ genOffsets flowsGraph ivs lhsN [block]
+      relOffsets = fst $ runStencilInferer (genOffsets lhsN [block]) ivs flowsGraph
       multOffsets = map (\relOffset ->
           case relOffset of
           (var, (True, offsets)) -> (var, Mult offsets)
@@ -404,7 +404,7 @@ checkStencil block specDecls spanInferred maybeSubs span = do
                    if specExists then addResult (duplicateSpecification span)
                      else addResult (specOkay span s v spanInferred)) expandedDecls
     else do
-    let inferred = fst . fst . runWriter $ genSpecifications flowsGraph ivs lhsN block
+    let inferred = fst . fst $ runStencilInferer (genSpecifications lhsN block) ivs flowsGraph
     addResult (notWellSpecified (span, specDecls) (spanInferred, inferred))
   where
     seenBefore :: (Variable, Specification) -> Checker Bool

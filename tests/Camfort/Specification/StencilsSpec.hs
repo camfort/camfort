@@ -9,8 +9,9 @@
 module Camfort.Specification.StencilsSpec (spec) where
 
 
-import Control.Monad.Writer.Strict hiding (Sum, Product)
-import Data.List
+import           Control.Monad.Writer.Strict hiding (Sum, Product)
+import qualified Data.Graph.Inductive.Graph as Gr
+import           Data.List
 
 import Camfort.Analysis.Fortran
   (analysisResult, runSimpleAnalysis)
@@ -20,7 +21,7 @@ import Camfort.Input
 import Camfort.Specification.Stencils
 import Camfort.Specification.Stencils.Analysis (StencilsAnalysis)
 import Camfort.Specification.Stencils.Generate
-  (Neighbour(..), indicesToSpec, convIxToNeighbour)
+  (Neighbour(..), indicesToSpec, convIxToNeighbour, runStencilInferer)
 import Camfort.Specification.Stencils.Synthesis
 import Camfort.Specification.Stencils.Model
 import Camfort.Specification.Stencils.InferenceBackend
@@ -452,7 +453,7 @@ test2DSpecVariation a b (input, expectation) =
     expectedSpec = Specification expectation True
     fromFormatToIx [ri,rj] = [ offsetToIx "i" ri, offsetToIx "j" rj ]
 
-indicesToSpec' ivs lhs = fst . runWriter . indicesToSpec ivs "a" lhs
+indicesToSpec' ivs lhs ixs = fst $ runStencilInferer (indicesToSpec "a" lhs ixs) ivs Gr.empty
 
 variations =
   [ ( [ [0,0] ]

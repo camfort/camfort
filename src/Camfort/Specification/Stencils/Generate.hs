@@ -32,6 +32,7 @@ module Camfort.Specification.Stencils.Generate
   , indicesToSpec
   , neighbourToOffset
   , relativise
+  , runStencilInferer
   ) where
 
 import Control.Monad (void, when, zipWithM)
@@ -50,9 +51,12 @@ import qualified Data.Set as S
 import qualified Language.Fortran.Analysis as FA
 import qualified Language.Fortran.Analysis.DataFlow as FAD
 import qualified Language.Fortran.AST as F
+import           Language.Fortran.Util.ModFile (emptyModFiles)
 import qualified Language.Fortran.Util.Position as FU
 
 import Camfort.Analysis.Annotations (A, Annotation)
+import Camfort.Analysis.Fortran
+  (Analysis, analysisDebug, analysisParams, analysisResult, runAnalysis)
 import Camfort.Helpers (collect)
 import qualified Camfort.Helpers.Vec as V
 import Camfort.Specification.Stencils.Model
@@ -71,7 +75,33 @@ import Camfort.Specification.Stencils.Syntax
 
 import Camfort.Specification.Stencils.CheckBackend
 import Camfort.Specification.Stencils.InferenceBackend
+
 type EvalLog = [(String, Variable)]
+
+data SIEnv = SIEnv
+  {
+    -- | In-scope induction variables.
+    sieIvs :: [Variable]
+  , sieFlowsGraph :: FAD.FlowsGraph A
+  }
+
+-- | Analysis for working with low-level stencil inference.
+type StencilInferer = Analysis SIEnv EvalLog () ()
+
+-- | Get the list of in-scope induction variables.
+getIvs :: StencilInferer [Variable]
+getIvs = sieIvs <$> analysisParams
+
+-- | Get the FlowsGraph for the current analysis.
+getFlowsGraph :: StencilInferer (FAD.FlowsGraph A)
+getFlowsGraph = sieFlowsGraph <$> analysisParams
+
+-- TODO: Can we use ModFile information here?
+runStencilInferer :: StencilInferer a -> [Variable] -> FAD.FlowsGraph A -> (a, EvalLog)
+runStencilInferer si ivs flowsGraph =
+  let res = runAnalysis si senv () emptyModFiles ()
+  in (analysisResult res, analysisDebug res)
+  where senv = SIEnv { sieIvs = ivs, sieFlowsGraph = flowsGraph }
 
 {-| Representation for indices as either:
      * neighbour indices
@@ -103,14 +133,14 @@ neighbourIndex ivs ixs =
       neighbours = map (\ix -> convIxToNeighbour (extractRelevantIVS ivs ix) ix) ixs
 
 genSpecifications ::
-     FAD.FlowsGraph A
-  -> [Variable]
-  -> [Neighbour]
+     [Neighbour]
   -> F.Block (FA.Analysis A)
-  -> Writer EvalLog ([([Variable], Specification)], [Int])
-genSpecifications flowsGraph ivs lhs block = do
-    let (subscripts, visitedNodes) = genSubscripts flowsGraph [block]
-    varToSpecs <- assocsSequence $ mkSpecs subscripts
+  -> StencilInferer ([([Variable], Specification)], [Int])
+genSpecifications lhs block = do
+    flowsGraph <- getFlowsGraph
+    ivs        <- getIvs
+    (subscripts, visitedNodes) <- genSubscripts [block]
+    varToSpecs <- assocsSequence $ mkSpecs ivs subscripts
     case varToSpecs of
       [] -> do
          tell [("EVALMODE: Empty specification (tag: emptySpec)", "")]
@@ -119,7 +149,7 @@ genSpecifications flowsGraph ivs lhs block = do
          let varsToSpecs = groupKeyBy varToSpecs
          return (splitUpperAndLower varsToSpecs, visitedNodes)
     where
-      mkSpecs = M.mapWithKey (\v -> indicesToSpec ivs v lhs)
+      mkSpecs ivs = M.mapWithKey (\v -> indicesToSpec v lhs)
 
       splitUpperAndLower = concatMap splitUpperAndLower'
       splitUpperAndLower' (vs, Specification (Mult (Bound (Just l) (Just u))) isStencil)
@@ -136,33 +166,29 @@ genSpecifications flowsGraph ivs lhs block = do
           (vs, Specification (Once (Bound Nothing (Just u))) isStencil)]
       splitUpperAndLower' x = [x]
 
-genOffsets ::
-     FAD.FlowsGraph A
-  -> [Variable]
-  -> [Neighbour]
+genOffsets
+  :: [Neighbour]
   -> [F.Block (FA.Analysis A)]
-  -> Writer EvalLog [(Variable, (Bool, [[Int]]))]
-genOffsets flowsGraph ivs lhs blocks = do
-    let (subscripts, _) = genSubscripts flowsGraph blocks
-    assocsSequence $ mkOffsets subscripts
+  -> StencilInferer [(Variable, (Bool, [[Int]]))]
+genOffsets lhs blocks = do
+  (subscripts, _) <- genSubscripts blocks
+  assocsSequence $ mkOffsets subscripts
   where
-    mkOffsets = M.mapWithKey (\v -> indicesToRelativisedOffsets ivs v lhs)
+    mkOffsets = M.mapWithKey (\v -> indicesToRelativisedOffsets v lhs)
 
 {-| genSubscripts
-   Takes * a flows graph
-         * a list of blocks representing an RHS
+   Takes * a list of blocks representing an RHS
    Returns a map from array variables to indices, and a list of
    nodes that were visited when computing this information -}
-genSubscripts ::
-     FAD.FlowsGraph A
-  -> [F.Block (FA.Analysis A)]
-  -> (M.Map Variable [[F.Index (FA.Analysis A)]], [Int])
-genSubscripts flowsGraph blocks =
-    (subscripts, visitedNodes)
+genSubscripts
+  :: [F.Block (FA.Analysis A)]
+  -> StencilInferer (M.Map Variable [[F.Index (FA.Analysis A)]], [Int])
+genSubscripts blocks = do
+    flowsGraph <- getFlowsGraph
+    let (maps, visitedNodes) = runState (mapM (genSubscripts' True flowsGraph) blocks) []
+        subscripts = M.unionsWith (++) maps
+    pure (subscripts, visitedNodes)
   where
-    (maps, visitedNodes) = runState (mapM (genSubscripts' True flowsGraph) blocks) []
-    subscripts = M.unionsWith (++) maps
-
     -- Generate all subscripting expressions (that are translations on
     -- induction variables) that flow to this block
     -- The State monad provides a list of the visited nodes so far
@@ -238,13 +264,13 @@ assocsSequence maps = do
     strength (a, mb) = mb >>= (\b -> return (a, b))
 
 -- Convert list of indexing expressions to a spec
-indicesToSpec :: [Variable]
-              -> Variable
+indicesToSpec :: Variable
               -> [Neighbour]
               -> [[F.Index (FA.Analysis Annotation)]]
-              -> Writer EvalLog (Maybe Specification)
-indicesToSpec ivs a lhs ixs = do
-    mMultOffsets <- indicesToRelativisedOffsets ivs a lhs ixs
+              -> StencilInferer (Maybe Specification)
+indicesToSpec a lhs ixs = do
+    ivs <- getIvs
+    mMultOffsets <- indicesToRelativisedOffsets a lhs ixs
     return $ do
       (mult, offsets) <- mMultOffsets
       spec <- relativeIxsToSpec offsets
@@ -314,12 +340,12 @@ expToNeighbour ivs e =
                 , let i = FA.varName e
                 , i `elem` ivs]
 
-indicesToRelativisedOffsets :: [Variable]
-                            -> Variable
+indicesToRelativisedOffsets :: Variable
                             -> [Neighbour]
                             -> [[F.Index (FA.Analysis Annotation)]]
-                            -> Writer EvalLog (Maybe (Bool, [[Int]]))
-indicesToRelativisedOffsets ivs a lhs ixs = do
+                            -> StencilInferer (Maybe (Bool, [[Int]]))
+indicesToRelativisedOffsets a lhs ixs = do
+  ivs <- getIvs
    -- Convert indices to neighbourhood representation
   let rhses = map (map (\ix -> convIxToNeighbour ivs ix) ) ixs
 

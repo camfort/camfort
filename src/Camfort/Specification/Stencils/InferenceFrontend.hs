@@ -208,7 +208,7 @@ genSpecsAndReport span lhsIxs block = do
   let ivs = extractRelevantIVS ivmap block
   flowsGraph   <- fmap ieFlowsGraph ask
   -- Generate specification for the
-  let ((specs, visited), evalInfos) = runWriter $ genSpecifications flowsGraph ivs lhsIxs block
+  let ((specs, visited), evalInfos) = runStencilInferer (genSpecifications lhsIxs block) ivs flowsGraph
   -- Remember which nodes were visited during this traversal
   modify (\state -> state { visitedNodes = visitedNodes state ++ visited })
   -- Report the specifications
