@@ -16,8 +16,6 @@
 
 {-# LANGUAGE GeneralizedNewtypeDeriving #-}
 {-# LANGUAGE ImplicitParams #-}
-{-# LANGUAGE LambdaCase #-}
-{-# LANGUAGE TupleSections #-}
 
 module Camfort.Specification.Stencils.CheckFrontend
   (
@@ -31,7 +29,6 @@ module Camfort.Specification.Stencils.CheckFrontend
   , existingStencils
   ) where
 
-import Control.Arrow
 import Control.Monad.Reader (MonadReader, ReaderT, ask, runReaderT)
 import Control.Monad.State.Strict
 import Control.Monad.Writer.Strict hiding (Product)
@@ -39,29 +36,24 @@ import Data.Function (on)
 import Data.Generics.Uniplate.Operations
 import Data.List (intercalate, sort, union)
 
-import Camfort.Analysis.Annotations
-import Camfort.Analysis.CommentAnnotator
-import qualified Camfort.Helpers.Vec as V
-import Camfort.Specification.Parser (SpecParseError)
-import Camfort.Specification.Stencils.CheckBackend
-import qualified Camfort.Specification.Stencils.Consistency as C
-import Camfort.Specification.Stencils.Generate
+import           Camfort.Analysis.Annotations
+import           Camfort.Analysis.CommentAnnotator
+import           Camfort.Specification.Parser (SpecParseError)
+import           Camfort.Specification.Stencils.CheckBackend
+import           Camfort.Specification.Stencils.Generate
+import           Camfort.Specification.Stencils.Model
 import qualified Camfort.Specification.Stencils.Parser as Parser
-import Camfort.Specification.Stencils.Parser.Types (reqRegions)
-import Camfort.Specification.Stencils.Model
-import Camfort.Specification.Stencils.Syntax
+import           Camfort.Specification.Stencils.Parser.Types (reqRegions)
+import           Camfort.Specification.Stencils.Syntax
 
-import qualified Language.Fortran.AST as F
-import qualified Language.Fortran.Analysis as FA
-import qualified Language.Fortran.Analysis.BBlocks as FAB
+import qualified Language.Fortran.AST               as F
+import qualified Language.Fortran.Analysis          as FA
+import qualified Language.Fortran.Analysis.BBlocks  as FAB
 import qualified Language.Fortran.Analysis.DataFlow as FAD
-import qualified Language.Fortran.Util.Position as FU
+import qualified Language.Fortran.Util.Position     as FU
 
 import qualified Data.Map as M
 import Data.Maybe
-import Algebra.Lattice (joins1)
-import Data.Int
-import qualified Data.Set as S
 
 newtype CheckResult = CheckResult [StencilResult]
 
@@ -156,7 +148,7 @@ notWellSpecified :: (FU.SrcSpan, SpecDecls) -> (FU.SrcSpan, SpecDecls) -> Stenci
 notWellSpecified got inferred = SCFail $ NotWellSpecified got inferred
 
 -- | Create a check result informating a user of a parse error.
-parseError :: FU.SrcSpan -> (SpecParseError Parser.SpecParseError) -> StencilResult
+parseError :: FU.SrcSpan -> SpecParseError Parser.SpecParseError -> StencilResult
 parseError srcSpan err = SCFail $ ParseError srcSpan err
 
 -- | Create a check result informating that a region already exists.
@@ -337,50 +329,6 @@ updateRegionEnv ann =
   case getRegionSpec (FA.prevAnnotation ann) of
     Just renv -> modify (\s -> s { regionEnv = renv : regionEnv s })
     _         -> pure ()
-
-checkOffsetsAgainstSpec :: [(Variable, Multiplicity [[Int]])]
-                        -> [(Variable, Specification)]
-                        -> Bool
-checkOffsetsAgainstSpec offsetMaps specMaps =
-  variablesConsistent &&
-  all (\case
-          (spec, Once (V.VL vs)) -> spec `C.consistent` (Once . toUNF) vs == C.Consistent
-          (spec, Mult (V.VL vs)) -> spec `C.consistent` (Mult . toUNF) vs == C.Consistent)
-  specToVecList
-  where
-    variablesConsistent =
-      let vs1 = sort . fmap fst $ offsetMaps
-          vs2 = sort . fmap fst $ specMaps
-      in vs1 == vs2
-    toUNF :: [ V.Vec n Int64 ] -> UnionNF n Offsets
-    toUNF = joins1 . map (return . fmap intToSubscript)
-
-    -- This function generates the special offsets subspace, subscript,
-    -- that either had one element or is the whole set.
-    intToSubscript :: Int64 -> Offsets
-    intToSubscript i
-      | fromIntegral i == absoluteRep = SetOfIntegers
-      | otherwise = Offsets . S.singleton $ i
-
-    -- Convert list of list of indices into vectors and wrap them around
-    -- existential so that we don't have to prove they are all of the same
-    -- size.
-    specToVecList :: [ (Specification, Multiplicity (V.VecList Int64)) ]
-    specToVecList = map (second (fmap V.fromLists)) specToIxs
-
-    specToIxs :: [ (Specification, Multiplicity [ [ Int64 ] ]) ]
-    specToIxs = pairWithFst specMaps (map (second toInt64) offsetMaps)
-
-    toInt64 :: Multiplicity [ [ Int ] ] -> Multiplicity [ [ Int64 ] ]
-    toInt64 = fmap (map (map fromIntegral))
-
-    -- Given two maps for each key in the first map generate a set of
-    -- tuples matching the (val,val') where val and val' are corresponding
-    -- values from each set.
-    pairWithFst :: Eq a => [ (a, b) ] -> [ (a, c) ] -> [ (b, c) ]
-    pairWithFst [] _ = []
-    pairWithFst ((key, val):xs) ys =
-      map ((val,) . snd) (filter ((key ==) . fst) ys) ++ pairWithFst xs ys
 
 -- Go into the program units first and record the module name when
 -- entering into a module

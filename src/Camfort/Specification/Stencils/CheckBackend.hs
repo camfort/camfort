@@ -14,9 +14,10 @@
    limitations under the License.
 -}
 
-{-# LANGUAGE FlexibleInstances #-}
+{-# LANGUAGE FlexibleInstances      #-}
 {-# LANGUAGE FunctionalDependencies #-}
-{-# LANGUAGE ImplicitParams #-}
+{-# LANGUAGE ImplicitParams         #-}
+{-# LANGUAGE TupleSections          #-}
 
 module Camfort.Specification.Stencils.CheckBackend
   (
@@ -25,13 +26,22 @@ module Camfort.Specification.Stencils.CheckBackend
     -- * Errors
   , SynToAstError
   , regionNotInScope
+    -- * Helpers
+  , checkOffsetsAgainstSpec
   ) where
 
-import Data.Function (on)
+import           Algebra.Lattice (joins1)
+import           Control.Arrow (second)
+import           Data.Function (on)
+import           Data.Int (Int64)
+import           Data.List (sort)
+import qualified Data.Set as S
 
-import Camfort.Specification.Stencils.Syntax
-import Camfort.Specification.Stencils.Model
+import qualified Camfort.Helpers.Vec as V
+import qualified Camfort.Specification.Stencils.Consistency as C
+import           Camfort.Specification.Stencils.Model
 import qualified Camfort.Specification.Stencils.Parser.Types as SYN
+import           Camfort.Specification.Stencils.Syntax
 
 data SynToAstError = RegionNotInScope String
   deriving (Eq)
@@ -100,6 +110,52 @@ dnf (SYN.Var v)              =
     case lookup v ?renv of
       Nothing -> Left (RegionNotInScope v)
       Just rs -> return rs
+
+-- *** Other Helpers
+
+checkOffsetsAgainstSpec :: [(Variable, Multiplicity [[Int]])]
+                        -> [(Variable, Specification)]
+                        -> Bool
+checkOffsetsAgainstSpec offsetMaps specMaps =
+  variablesConsistent && all specConsistent specToVecList
+  where
+    variablesConsistent =
+      let vs1 = sort . fmap fst $ offsetMaps
+          vs2 = sort . fmap fst $ specMaps
+      in vs1 == vs2
+    specConsistent spec =
+      case spec of
+        (spec', Once (V.VL vs)) -> spec' `C.consistent` (Once . toUNF) vs == C.Consistent
+        (spec', Mult (V.VL vs)) -> spec' `C.consistent` (Mult . toUNF) vs == C.Consistent
+    toUNF :: [ V.Vec n Int64 ] -> UnionNF n Offsets
+    toUNF = joins1 . map (return . fmap intToSubscript)
+
+    -- This function generates the special offsets subspace, subscript,
+    -- that either had one element or is the whole set.
+    intToSubscript :: Int64 -> Offsets
+    intToSubscript i
+      | fromIntegral i == absoluteRep = SetOfIntegers
+      | otherwise = Offsets . S.singleton $ i
+
+    -- Convert list of list of indices into vectors and wrap them around
+    -- existential so that we don't have to prove they are all of the same
+    -- size.
+    specToVecList :: [ (Specification, Multiplicity (V.VecList Int64)) ]
+    specToVecList = map (second (fmap V.fromLists)) specToIxs
+
+    specToIxs :: [ (Specification, Multiplicity [ [ Int64 ] ]) ]
+    specToIxs = pairWithFst specMaps (map (second toInt64) offsetMaps)
+
+    toInt64 :: Multiplicity [ [ Int ] ] -> Multiplicity [ [ Int64 ] ]
+    toInt64 = fmap (map (map fromIntegral))
+
+    -- Given two maps for each key in the first map generate a set of
+    -- tuples matching the (val,val') where val and val' are corresponding
+    -- values from each set.
+    pairWithFst :: Eq a => [ (a, b) ] -> [ (a, c) ] -> [ (b, c) ]
+    pairWithFst [] _ = []
+    pairWithFst ((key, val):xs) ys =
+      map ((val,) . snd) (filter ((key ==) . fst) ys) ++ pairWithFst xs ys
 
 -- Local variables:
 -- mode: haskell
