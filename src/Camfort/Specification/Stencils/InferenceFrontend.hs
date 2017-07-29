@@ -15,7 +15,6 @@
 -}
 
 {-# LANGUAGE FlexibleContexts #-}
-{-# LANGUAGE DeriveDataTypeable #-}
 {-# LANGUAGE ImplicitParams #-}
 {-# LANGUAGE PatternGuards #-}
 {-# LANGUAGE ScopedTypeVariables #-}
@@ -29,14 +28,18 @@ module Camfort.Specification.Stencils.InferenceFrontend
   ) where
 
 import Control.Monad.State.Strict
-import Control.Monad.Reader
 import Control.Monad.Writer.Strict hiding (Product)
 
 import Camfort.Analysis.CommentAnnotator
 import Camfort.Analysis.Fortran
-  ( analysisInput
+  ( Analysis
+  , analysisDebug
+  , analysisInput
+  , analysisModFiles
+  , analysisParams
   , analysisResult
   , branchAnalysis
+  , runAnalysis
   , writeDebug )
 import Camfort.Specification.Stencils.Analysis (StencilsAnalysis)
 import Camfort.Specification.Stencils.CheckBackend (synToAst)
@@ -58,7 +61,7 @@ import qualified Language.Fortran.AST as F
 import qualified Language.Fortran.Analysis as FA
 import qualified Language.Fortran.Analysis.BBlocks as FAB
 import qualified Language.Fortran.Analysis.DataFlow as FAD
-import           Language.Fortran.Util.ModFile (emptyModFiles)
+import           Language.Fortran.Util.ModFile (ModFiles)
 import qualified Language.Fortran.Util.Position as FU
 
 import Data.Data
@@ -91,9 +94,26 @@ data InferEnv = IE
 -- The inferer returns information as a LogLine
 type LogLine = (FU.SrcSpan, Either [([Variable], Specification)] (String,Variable))
 -- The core of the inferer works within this monad
-type Inferer = WriterT [LogLine]
-                 (ReaderT InferEnv
-                    (State InferState))
+
+type Inferer = Analysis InferEnv [LogLine] InferState ()
+
+getExistingSpecs :: Inferer [(Specification, FU.SrcSpan, Variable)]
+getExistingSpecs = ieExistingSpecs <$> analysisParams
+
+getFlowsGraph :: Inferer (FAD.FlowsGraph A)
+getFlowsGraph = ieFlowsGraph <$> analysisParams
+
+getMetaInfo :: Inferer F.MetaInfo
+getMetaInfo = ieMetaInfo <$> analysisParams
+
+getMarker :: Inferer Char
+getMarker = ieMarker <$> analysisParams
+
+getUseEval :: Inferer Bool
+getUseEval = ieUseEval <$> analysisParams
+
+getDoSynth :: Inferer Bool
+getDoSynth = ieDoSynth <$> analysisParams
 
 runInferer :: CheckResult
            -> Bool
@@ -102,12 +122,12 @@ runInferer :: CheckResult
            -> F.MetaInfo
            -> FAD.InductionVarMapByASTBlock
            -> FAD.FlowsGraph A
+           -> ModFiles
            -> Inferer a
            -> (a, [LogLine])
-runInferer cr useEval doSynth marker mi ivmap flTo =
-    flip evalState (IS ivmap [])
-  . flip runReaderT env
-  . runWriterT
+runInferer cr useEval doSynth marker mi ivmap flTo mfs inferer =
+  let res = runAnalysis inferer env (IS ivmap []) mfs ()
+  in (analysisResult res, analysisDebug res)
   where env = IE
           { ieExistingSpecs = existingStencils cr
           , ieFlowsGraph    = flTo
@@ -119,11 +139,11 @@ runInferer cr useEval doSynth marker mi ivmap flTo =
 
 -- | Run something only when eval mode is active.
 whenEval :: Inferer () -> Inferer ()
-whenEval i = fmap ieUseEval ask >>= (`when` i)
+whenEval i = getUseEval >>= (`when` i)
 
 -- | Run something only when we should perform synthesis.
 ifSynth :: Inferer a -> Inferer a -> Inferer a
-ifSynth t e = fmap ieDoSynth ask >>= (\doSynth -> if doSynth then t else e)
+ifSynth t e = getDoSynth >>= (\doSynth -> if doSynth then t else e)
 
 -- | Attempt to convert a 'Parser.Specification' into a 'Specification'.
 --
@@ -160,6 +180,7 @@ stencilSynthesis' :: Bool
 stencilSynthesis' useEval doSynth marker = do
   pf@(F.ProgramFile mi pus) <- analysisInput
   checkRes <- stencilChecking
+  mfs <- analysisModFiles
   let
     (pus', log1) = runWriter (transformBiM perPU pus)
     -- get map of AST-Block-ID ==> corresponding AST-Block
@@ -191,7 +212,7 @@ stencilSynthesis' useEval doSynth marker = do
             -- identify every loop by its back-edge
             ivMap = FAD.genInductionVarMapByASTBlock beMap gr
 
-            (pu', log) = runInferer checkRes useEval doSynth marker mi ivMap flTo pum
+            (pu', log) = runInferer checkRes useEval doSynth marker mi ivMap flTo mfs pum
         tell log
         pure pu'
     perPU pu = pure pu
@@ -208,9 +229,10 @@ genSpecsAndReport span lhsIxs block = do
   -- Get the induction variables relative to the current block
   (IS ivmap _) <- get
   let ivs = extractRelevantIVS ivmap block
-  flowsGraph   <- fmap ieFlowsGraph ask
+  flowsGraph   <- getFlowsGraph
   -- Generate specification for the
-  let ((specs, visited), evalInfos) = runStencilInferer (genSpecifications lhsIxs block) ivs flowsGraph emptyModFiles
+  mfs <- analysisModFiles
+  let ((specs, visited), evalInfos) = runStencilInferer (genSpecifications lhsIxs block) ivs flowsGraph mfs
   -- Remember which nodes were visited during this traversal
   modify (\state -> state { visitedNodes = visitedNodes state ++ visited })
   -- Report the specifications
@@ -246,12 +268,12 @@ perBlockInfer' inDo b@(F.BlStatement ann span@(FU.SrcSpan lp _) _ stmnt) = do
     return b
   else do
     -- On all StExpressionAssigns that occur in stmt....
-    userSpecs <- fmap ieExistingSpecs ask
+    userSpecs <- getExistingSpecs
     let lhses = [lhs | (F.StExpressionAssign _ _ lhs _)
                          <- universe stmnt :: [F.Statement (FA.Analysis A)]]
     specs <- mapM (genSpecsFor ivmap) lhses
-    marker <- fmap ieMarker ask
-    mi     <- fmap ieMetaInfo ask
+    marker <- getMarker
+    mi     <- getMetaInfo
     ifSynth
       (if not (null specs) && specs /= [[]]
        then
