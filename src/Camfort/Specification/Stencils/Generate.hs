@@ -66,6 +66,8 @@ import           Camfort.Specification.Stencils.Syntax
   , Specification(..)
   , Variable)
 
+type Indices = [[F.Index (FA.Analysis A)]]
+
 type EvalLog = [(String, Variable)]
 
 data SIEnv = SIEnv
@@ -169,7 +171,7 @@ genOffsets lhs blocks = do
    nodes that were visited when computing this information -}
 genSubscripts
   :: [F.Block (FA.Analysis A)]
-  -> StencilInferer (M.Map Variable [[F.Index (FA.Analysis A)]], [Int])
+  -> StencilInferer (M.Map Variable Indices, [Int])
 genSubscripts blocks = do
   flowsGraph <- getFlowsGraph
   let (maps, visitedNodes) = runState (mapM (genSubscripts' True flowsGraph) blocks) []
@@ -183,7 +185,7 @@ genSubscripts blocks = do
         Bool
      -> FAD.FlowsGraph A
      -> F.Block (FA.Analysis A)
-     -> State [Int] (M.Map Variable [[F.Index (FA.Analysis A)]])
+     -> State [Int] (M.Map Variable Indices)
 
     genSubscripts' False _ (F.BlStatement _ _ _ (F.StExpressionAssign _ _ e _))
        | isJust $ isArraySubscript e
@@ -249,7 +251,7 @@ assocsSequence maps = do
 -- Convert list of indexing expressions to a spec
 indicesToSpec :: Variable
               -> [Neighbour]
-              -> [[F.Index (FA.Analysis A)]]
+              -> Indices
               -> StencilInferer (Maybe Specification)
 indicesToSpec a lhs ixs = do
   mMultOffsets <- indicesToRelativisedOffsets a lhs ixs
@@ -263,7 +265,7 @@ indicesToSpec a lhs ixs = do
 -- return as a map from (source name) variables to a list of relative indices
 genRHSsubscripts ::
      F.Block (FA.Analysis A)
-  -> M.Map Variable [[F.Index (FA.Analysis A)]]
+  -> M.Map Variable Indices
 genRHSsubscripts block = genRHSsubscripts' (transformBi replaceModulo block)
   where
     -- Any occurence of an subscript "modulo(e, e')" is replaced with "e"
@@ -324,7 +326,7 @@ expToNeighbour ivs expr =
 
 indicesToRelativisedOffsets :: Variable
                             -> [Neighbour]
-                            -> [[F.Index (FA.Analysis A)]]
+                            -> Indices
                             -> StencilInferer (Maybe (Bool, [[Int]]))
 indicesToRelativisedOffsets a lhs ixs = do
   ivs <- getIvs
