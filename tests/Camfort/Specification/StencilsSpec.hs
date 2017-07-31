@@ -13,13 +13,16 @@ import           Control.Monad.Writer.Strict hiding (Sum, Product)
 import qualified Data.Graph.Inductive.Graph as Gr
 import           Data.List
 
+import Language.Fortran.Util.ModFile (ModFile)
+
 import Camfort.Analysis.Fortran
   (analysisResult, runSimpleAnalysis)
 import Camfort.Analysis.ModFile (getModFiles)
 import Camfort.Helpers.Vec
 import Camfort.Input
 import Camfort.Specification.Stencils
-import Camfort.Specification.Stencils.Analysis (StencilsAnalysis)
+import Camfort.Specification.Stencils.Analysis
+  (StencilsAnalysis, compileStencils, runStencilsAnalysis)
 import Camfort.Specification.Stencils.Generate
   (Neighbour(..), indicesToSpec, convIxToNeighbour, runStencilInferer)
 import Camfort.Specification.Stencils.Synthesis
@@ -341,6 +344,11 @@ spec =
     describe "synth/inference works correctly with nested loops" $ do
       assertStencilSynthNoWarn "nestedLoops.f90" "inserts correct specification"
 
+    describe "inference with modules" $
+      it "infers correctly with cross-module type declarations" $
+        inferReportWithMod ["cross-module-a/provider.f90"] "cross-module-a/user.f90"
+          crossModuleAUserReport
+
     -- Run over all the samples and test fixtures
 
     sampleDirConts <- runIO $ listDirectory samplesDir
@@ -412,6 +420,32 @@ spec =
 
 runSingleFileAnalysis :: StencilsAnalysis a b -> a -> b
 runSingleFileAnalysis a = analysisResult . runSimpleAnalysis a emptyModFiles
+
+fixturesDir :: FilePath
+fixturesDir = "tests" </> "fixtures" </> "Specification" </> "Stencils"
+
+-- | Assert that the report of performing units checking on a file is as expected.
+inferReportWithMod :: [String] -> String -> String -> Expectation
+inferReportWithMod modNames fileName expectedReport = do
+  let file = fixturesDir </> fileName
+      modPaths = fmap (fixturesDir </>) modNames
+  modFiles <- mapM mkTestModFile modPaths
+  [(pf,_)] <- readParseSrcDir modFiles file []
+  let report = analysisResult $ runStencilsAnalysis (infer False '=') modFiles pf
+  report `shouldBe` expectedReport
+
+-- | Helper for producing a basic ModFile from a (terminal) module file.
+mkTestModFile :: String -> IO ModFile
+mkTestModFile file = do
+  let modFiles = emptyModFiles
+  [(pf,_)] <- readParseSrcDir modFiles file []
+  let res = runStencilsAnalysis compileStencils modFiles pf
+  pure $ analysisResult res
+
+crossModuleAUserReport :: String
+crossModuleAUserReport =
+  "\ntests/fixtures/Specification/Stencils/cross-module-a/user.f90\n\
+  \(7:6)-(7:16)    stencil readOnce, pointed(dim=1) :: b"
 
 -- Indices for the 2D five point stencil (deliberately in an odd order)
 fivepoint = [ Cons (-1) (Cons 0 Nil), Cons 0 (Cons (-1) Nil)
