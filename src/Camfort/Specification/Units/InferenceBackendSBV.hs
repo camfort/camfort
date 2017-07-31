@@ -43,7 +43,9 @@ import Control.Arrow (first, second)
 import qualified Data.Map.Strict as M
 import qualified Data.Array as A
 import System.IO.Unsafe (unsafePerformIO)
-import Data.SBV
+import Data.SBV ( smtFile, SatResult(..), SMTResult(Unknown), Symbolic, SBool, SInteger, SBV
+                , satWith, z3, getModelDictionary, fromCW, true, namedConstraint, (.==)
+                , sInteger, literal )
 
 import Camfort.Specification.Units.Environment
 
