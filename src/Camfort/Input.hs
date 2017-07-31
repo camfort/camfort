@@ -60,16 +60,11 @@ printExcludes inSrc excludes =
 -- * Builders for analysers and refactorings
 
 -- | Perform an analysis that produces information of type @s@.
-doAnalysisSummary :: (Monoid s, Show' s)
+doAnalysisSummary :: (Monoid s, Show s)
   => SimpleAnalysis FileProgram s
   -> FileOrDir -> FileOrDir -> [Filename] -> IO ()
 doAnalysisSummary aFun inSrc incDir excludes = do
-  printExcludes inSrc excludes
-  modFiles <- getModFiles incDir
-  ps <- readParseSrcDir modFiles inSrc excludes
-  let results = runSimpleAnalysis aFun modFiles . fst <$> ps
-      out = mconcat . fmap analysisResult $ results
-  putStrLn . show' $ out
+  doAnalysisReportWithModFiles aFun () inSrc incDir excludes
 
 -- | Perform an analysis which reports to the user, but does not output any files.
 doAnalysisReportWithModFiles
@@ -81,12 +76,44 @@ doAnalysisReportWithModFiles
   -> [Filename]
   -> IO ()
 doAnalysisReportWithModFiles rFun env inSrc incDir excludes = do
+  results <- doInitAnalysis' rFun env inSrc incDir excludes
+  let report = concatMap (\(rep,res) -> show rep ++ show res) results
+  putStrLn report
+
+getModsAndPs :: FileOrDir -> FileOrDir -> [Filename] -> IO (ModFiles, [(FileProgram, B.ByteString)])
+getModsAndPs inSrc incDir excludes = do
   printExcludes inSrc excludes
   modFiles <- getModFiles incDir
   ps <- readParseSrcDir modFiles inSrc excludes
-  let results = runAnalysis rFun env () modFiles . fst <$> ps
-      report = concatMap (\r -> show (analysisDebug r) ++ show (analysisResult r)) results
-  putStrLn report
+  pure (modFiles, ps)
+
+doInitAnalysis
+  :: (Monoid w)
+  => Analysis r w () [FileProgram] b
+  -> r
+  -> FileOrDir
+  -> FileOrDir
+  -> [Filename]
+  -> IO ([(FileProgram, B.ByteString)], w, b)
+doInitAnalysis analysis env inSrc incDir excludes = do
+  (modFiles, ps) <- getModsAndPs inSrc incDir excludes
+  let res = runAnalysis analysis env () modFiles . fmap fst $ ps
+      report = analysisDebug res
+      ps' = analysisResult res
+  pure (ps, report, ps')
+
+doInitAnalysis'
+  :: (Monoid w)
+  => Analysis r w () FileProgram b
+  -> r
+  -> FileOrDir
+  -> FileOrDir
+  -> [Filename]
+  -> IO [(w, b)]
+doInitAnalysis' analysis env inSrc incDir excludes = do
+  (modFiles, ps) <- getModsAndPs inSrc incDir excludes
+  let res = runAnalysis analysis env () modFiles . fst <$> ps
+  pure $ fmap (\r -> (analysisDebug r, analysisResult r)) res
 
 doRefactorWithModFiles
   :: (Monoid d, Show d, Show e, Show b)
@@ -98,13 +125,9 @@ doRefactorWithModFiles
   -> FileOrDir
   -> IO String
 doRefactorWithModFiles rFun env inSrc incDir excludes outSrc = do
-  printExcludes inSrc excludes
-  modFiles <- getModFiles incDir
-  ps <- readParseSrcDir modFiles inSrc excludes
-  let res = runAnalysis rFun env () modFiles . fmap fst $ ps
-      aRes = analysisResult res
-      (_, ps') = partitionEithers (snd aRes)
-      report = show (analysisDebug res) ++ show (fst aRes)
+  (ps, report1, aRes) <- doInitAnalysis rFun env inSrc incDir excludes
+  let (_, ps') = partitionEithers (snd aRes)
+      report = show report1 ++ show (fst aRes)
   let outputs = reassociateSourceText (fmap snd ps) ps'
   outputFiles inSrc outSrc outputs
   pure report
@@ -114,12 +137,7 @@ doRefactorAndCreate
   :: SimpleAnalysis [FileProgram] ([FileProgram], [FileProgram])
   -> FileOrDir -> [Filename] -> FileOrDir -> FileOrDir -> IO Report
 doRefactorAndCreate rFun inSrc excludes incDir outSrc = do
-  printExcludes inSrc excludes
-  modFiles <- getModFiles incDir
-  ps <- readParseSrcDir modFiles inSrc excludes
-  let res = runSimpleAnalysis rFun modFiles . fmap fst $ ps
-      report      = analysisDebug  res
-      (ps', ps'') = analysisResult res
+  (ps, report, (ps', ps'')) <- doInitAnalysis rFun () inSrc incDir excludes
   let outputs = reassociateSourceText (fmap snd ps) ps'
   let outputs' = map (\pf -> (pf, B.empty)) ps''
   outputFiles inSrc outSrc outputs
