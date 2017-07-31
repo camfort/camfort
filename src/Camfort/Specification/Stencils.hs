@@ -20,15 +20,15 @@ module Camfort.Specification.Stencils
 import Control.Arrow ((***), first, second)
 import Data.Maybe (catMaybes)
 
-import Camfort.Specification.Stencils.Analysis (StencilsAnalysis)
-import Camfort.Specification.Stencils.CheckFrontend hiding (LogLine)
-import Camfort.Specification.Stencils.InferenceFrontend
-import Camfort.Specification.Stencils.Synthesis
-import Camfort.Analysis.Annotations
-import Camfort.Analysis.Fortran
+import           Camfort.Analysis.Annotations
+import           Camfort.Analysis.Fortran
   (analysisInput, analysisResult, branchAnalysis)
--- These two are redefined here for ForPar ASTs
-import Camfort.Helpers
+import           Camfort.Helpers
+import           Camfort.Specification.Stencils.Analysis (StencilsAnalysis)
+import qualified Camfort.Specification.Stencils.Annotation as SA
+import           Camfort.Specification.Stencils.CheckFrontend hiding (LogLine)
+import           Camfort.Specification.Stencils.InferenceFrontend
+import           Camfort.Specification.Stencils.Synthesis
 
 import qualified Language.Fortran.AST as F
 import qualified Language.Fortran.Analysis as FA
@@ -39,7 +39,7 @@ import Data.List
 
 
 -- | Helper for retrieving analysed blocks.
-getBlocks = FAB.analyseBBlocks . FAR.analyseRenames . FA.initAnalysis
+getBlocks = FAB.analyseBBlocks . FAR.analyseRenames . FA.initAnalysis . fmap SA.mkStencilAnnotation
 
 --------------------------------------------------
 --         Stencil specification inference      --
@@ -89,7 +89,7 @@ synth marker = do
       case checkFailure checkRes of
         Nothing  -> do
           res <- (snd . analysisResult) <$> branchAnalysis (stencilSynthesis marker) blocks
-          let inference = fmap FA.prevAnnotation res
+          let inference = fmap SA.getBaseAnnotation res
           pure $ Right (maybe "" show (checkWarnings checkRes), inference)
         Just err -> pure . Left $ show err
 

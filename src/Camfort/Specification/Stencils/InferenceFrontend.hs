@@ -30,8 +30,9 @@ module Camfort.Specification.Stencils.InferenceFrontend
 import Control.Monad.State.Strict
 import Control.Monad.Writer.Strict hiding (Product)
 
-import Camfort.Analysis.CommentAnnotator
-import Camfort.Analysis.Fortran
+import           Camfort.Analysis.Annotations
+import           Camfort.Analysis.CommentAnnotator
+import           Camfort.Analysis.Fortran
   ( Analysis
   , analysisDebug
   , analysisInput
@@ -41,28 +42,29 @@ import Camfort.Analysis.Fortran
   , branchAnalysis
   , runAnalysis
   , writeDebug )
-import Camfort.Specification.Stencils.Analysis (StencilsAnalysis)
-import Camfort.Specification.Stencils.CheckBackend (synToAst)
-import Camfort.Specification.Stencils.CheckFrontend
-  (CheckResult, existingStencils, stencilChecking)
-import Camfort.Specification.Stencils.Generate
-import Camfort.Specification.Stencils.InferenceBackend
-import Camfort.Specification.Stencils.Model
-import Camfort.Specification.Stencils.Syntax
-import qualified Camfort.Specification.Stencils.Parser as Parser
-import Camfort.Specification.Stencils.Parser.Types (SpecInner)
-import qualified Camfort.Specification.Stencils.Synthesis as Synth
-import Camfort.Analysis.Annotations
-import Camfort.Helpers (collect, descendReverseM, descendBiReverseM)
+import           Camfort.Helpers (collect, descendReverseM, descendBiReverseM)
 import qualified Camfort.Helpers.Vec as V
-import Camfort.Input
+import           Camfort.Input
+import           Camfort.Specification.Stencils.Analysis (StencilsAnalysis)
+import           Camfort.Specification.Stencils.Annotation (SA)
+import qualified Camfort.Specification.Stencils.Annotation as SA
+import           Camfort.Specification.Stencils.CheckBackend (synToAst)
+import           Camfort.Specification.Stencils.CheckFrontend
+  (CheckResult, existingStencils, stencilChecking)
+import           Camfort.Specification.Stencils.Generate
+import           Camfort.Specification.Stencils.InferenceBackend
+import           Camfort.Specification.Stencils.Model
+import qualified Camfort.Specification.Stencils.Parser as Parser
+import           Camfort.Specification.Stencils.Parser.Types (SpecInner)
+import           Camfort.Specification.Stencils.Syntax
+import qualified Camfort.Specification.Stencils.Synthesis as Synth
 
-import qualified Language.Fortran.AST as F
-import qualified Language.Fortran.Analysis as FA
-import qualified Language.Fortran.Analysis.BBlocks as FAB
+import qualified Language.Fortran.AST               as F
+import qualified Language.Fortran.Analysis          as FA
+import qualified Language.Fortran.Analysis.BBlocks  as FAB
 import qualified Language.Fortran.Analysis.DataFlow as FAD
 import           Language.Fortran.Util.ModFile (ModFiles)
-import qualified Language.Fortran.Util.Position as FU
+import qualified Language.Fortran.Util.Position     as FU
 
 import Data.Data
 import Data.Foldable
@@ -81,7 +83,7 @@ data InferEnv = IE
   {
     -- | Known (existing) specifications.
     ieExistingSpecs :: [(Specification, FU.SrcSpan, Variable)]
-  , ieFlowsGraph    :: FAD.FlowsGraph A
+  , ieFlowsGraph    :: FAD.FlowsGraph (SA.StencilAnnotation A)
   -- | Provide additional evaluation information when active.
   , ieUseEval       :: Bool
   -- | Instruct the inferer to perform synthesis.
@@ -100,7 +102,7 @@ type Inferer = Analysis InferEnv [LogLine] InferState ()
 getExistingSpecs :: Inferer [(Specification, FU.SrcSpan, Variable)]
 getExistingSpecs = ieExistingSpecs <$> analysisParams
 
-getFlowsGraph :: Inferer (FAD.FlowsGraph A)
+getFlowsGraph :: Inferer (FAD.FlowsGraph (SA.StencilAnnotation A))
 getFlowsGraph = ieFlowsGraph <$> analysisParams
 
 getMetaInfo :: Inferer F.MetaInfo
@@ -121,7 +123,7 @@ runInferer :: CheckResult
            -> Char
            -> F.MetaInfo
            -> FAD.InductionVarMapByASTBlock
-           -> FAD.FlowsGraph A
+           -> FAD.FlowsGraph (SA.StencilAnnotation A)
            -> ModFiles
            -> Inferer a
            -> (a, [LogLine])
@@ -157,13 +159,13 @@ specToSynSpec spec = let ?renv = [] in
 -- | Main stencil inference code
 stencilInference :: Bool
                  -> Char
-                 -> StencilsAnalysis (F.ProgramFile (FA.Analysis A)) [LogLine]
+                 -> StencilsAnalysis (F.ProgramFile SA) [LogLine]
 stencilInference useEval marker = fst <$> stencilSynthesis' useEval False marker
 
 stencilSynthesis :: Char
                  -> StencilsAnalysis
-                    (F.ProgramFile (FA.Analysis A))
-                    ([LogLine], F.ProgramFile (FA.Analysis A))
+                    (F.ProgramFile SA)
+                    ([LogLine], F.ProgramFile SA)
 stencilSynthesis marker = do
   pf <- analysisInput
   let (pf', _log0) = runWriter (annotateComments Parser.specParser (const . const . pure $ ()) pf)
@@ -175,8 +177,8 @@ stencilSynthesis' :: Bool
                   -> Bool
                   -> Char
                   -> StencilsAnalysis
-                     (F.ProgramFile (FA.Analysis A))
-                     ([LogLine], F.ProgramFile (FA.Analysis A))
+                     (F.ProgramFile SA)
+                     ([LogLine], F.ProgramFile SA)
 stencilSynthesis' useEval doSynth marker = do
   pf@(F.ProgramFile mi pus) <- analysisInput
   checkRes <- stencilChecking
@@ -190,8 +192,8 @@ stencilSynthesis' useEval doSynth marker = do
     -- get map of variable name ==> { defining AST-Block-IDs }
     dm    = FAD.genDefMap bm
     -- Run inference per program unit
-    perPU :: F.ProgramUnit (FA.Analysis A)
-          -> Writer [LogLine] (F.ProgramUnit (FA.Analysis A))
+    perPU :: F.ProgramUnit SA
+          -> Writer [LogLine] (F.ProgramUnit SA)
 
     perPU pu | Just _ <- FA.bBlocks $ F.getAnnotation pu = do
         let -- Analysis/infer on blocks of just this program unit
@@ -222,7 +224,7 @@ stencilSynthesis' useEval doSynth marker = do
 
 genSpecsAndReport ::
      FU.SrcSpan -> [Neighbour]
-  -> F.Block (FA.Analysis A)
+  -> F.Block SA
   -> Inferer [([Variable], Specification)]
 
 genSpecsAndReport span lhsIxs block = do
@@ -251,8 +253,8 @@ genSpecsAndReport span lhsIxs block = do
   return specs
 
 -- Traverse Blocks in the AST and infer stencil specifications
-perBlockInfer :: F.Block (FA.Analysis A)
-              -> Inferer (F.Block (FA.Analysis A))
+perBlockInfer :: F.Block SA
+              -> Inferer (F.Block SA)
 perBlockInfer = perBlockInfer' False
 -- The primed version, perBlockInfer' has a flag indicating whether
 -- the following code is inside a do-loop since we only target
@@ -270,7 +272,7 @@ perBlockInfer' inDo b@(F.BlStatement ann span@(FU.SrcSpan lp _) _ stmnt) = do
     -- On all StExpressionAssigns that occur in stmt....
     userSpecs <- getExistingSpecs
     let lhses = [lhs | (F.StExpressionAssign _ _ lhs _)
-                         <- universe stmnt :: [F.Statement (FA.Analysis A)]]
+                         <- universe stmnt :: [F.Statement SA]]
     specs <- mapM (genSpecsFor ivmap) lhses
     marker <- getMarker
     mi     <- getMetaInfo
@@ -290,12 +292,13 @@ perBlockInfer' inDo b@(F.BlStatement ann span@(FU.SrcSpan lp _) _ stmnt) = do
              tabs  = FU.posColumn lp - 1
              (FU.SrcSpan loc _) = span
              span' = FU.SrcSpan (lp {FU.posColumn = 1}) (lp {FU.posColumn = 1})
-             ann'  = ann { FA.prevAnnotation = (FA.prevAnnotation ann) { refactored = Just loc } }
+             ann'  = SA.modifyBaseAnnotation (\ba -> ba { refactored = Just loc }) ann
          in pure (F.BlComment ann' span' (F.Comment specComment))
        else pure b)
        (pure b)
   where
     -- Assignment to a variable
+    genSpecsFor :: FAD.InductionVarMapByASTBlock -> F.Expression SA -> Inferer [([Variable], Specification)]
     genSpecsFor _ (F.ExpValue _ _ (F.ValVariable _)) | inDo = genSpecsAndReport span [] b
     -- Assignment to something else...
     genSpecsFor ivmap lhs =

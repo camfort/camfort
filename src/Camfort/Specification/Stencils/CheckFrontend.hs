@@ -49,6 +49,8 @@ import           Camfort.Analysis.Fortran
   , runAnalysis)
 import           Camfort.Specification.Parser (SpecParseError)
 import           Camfort.Specification.Stencils.Analysis (StencilsAnalysis)
+import           Camfort.Specification.Stencils.Annotation (SA)
+import qualified Camfort.Specification.Stencils.Annotation as SA
 import           Camfort.Specification.Stencils.CheckBackend
 import           Camfort.Specification.Stencils.Generate
 import           Camfort.Specification.Stencils.Model
@@ -224,7 +226,7 @@ instance Show StencilCheckWarning where
     "Warning: Unused region '" ++ name ++ "'"
 
 -- Entry point
-stencilChecking :: StencilsAnalysis (F.ProgramFile (FA.Analysis A)) CheckResult
+stencilChecking :: StencilsAnalysis (F.ProgramFile SA) CheckResult
 stencilChecking = do
   pf  <- analysisInput
   mfs <- analysisModFiles
@@ -299,19 +301,19 @@ startState ivmap =
              , usedRegions   = []
              }
 
-type Checker = Analysis (FAD.FlowsGraph A) () CheckState ()
+type Checker = Analysis (FAD.FlowsGraph (SA.StencilAnnotation A)) () CheckState ()
 
-runChecker :: Checker a -> FAD.FlowsGraph A -> CheckState -> MF.ModFiles -> AnalysisResult () CheckState a
+runChecker :: Checker a -> FAD.FlowsGraph (SA.StencilAnnotation A) -> CheckState -> MF.ModFiles -> AnalysisResult () CheckState a
 runChecker c flows state modFiles = runAnalysis c flows state modFiles ()
 
-getFlowsGraph :: Checker (FAD.FlowsGraph A)
+getFlowsGraph :: Checker (FAD.FlowsGraph (SA.StencilAnnotation A))
 getFlowsGraph = analysisParams
 
 -- If the annotation contains an unconverted stencil specification syntax tree
 -- then convert it and return an updated annotation containing the AST
-parseCommentToAST :: FA.Analysis A -> FU.SrcSpan -> Checker (Either SynToAstError (FA.Analysis A))
+parseCommentToAST :: SA -> FU.SrcSpan -> Checker (Either SynToAstError SA)
 parseCommentToAST ann span =
-  case getParseSpec (FA.prevAnnotation ann) of
+  case SA.getParseSpec ann of
     Just stencilComment -> do
          informRegionsUsed (reqRegions stencilComment)
          renv <- fmap regionEnv get
@@ -324,32 +326,32 @@ parseCommentToAST ann span =
                           then addResult (regionExistsError span var)
                                >> pure id
                           else addRegionToTracked span var
-                               >> pure (giveRegionSpec reg))
-                     (pure . giveAstSpec . pure) ast
-             pure . pure $ onPrev pfun ann
+                               >> pure (SA.giveRegionSpec reg))
+                     (pure . SA.giveAstSpec . pure) ast
+             pure . pure $ pfun ann
            Left err  -> pure . Left $ err
 
     _ -> pure . pure $ ann
 
 -- If the annotation contains an encapsulated region environment, extract it
 -- and add it to current region environment in scope
-updateRegionEnv :: FA.Analysis A -> Checker ()
+updateRegionEnv :: SA -> Checker ()
 updateRegionEnv ann =
-  case getRegionSpec (FA.prevAnnotation ann) of
+  case SA.getRegionSpec ann of
     Just renv -> modify (\s -> s { regionEnv = renv : regionEnv s })
     _         -> pure ()
 
 -- Go into the program units first and record the module name when
 -- entering into a module
 perProgramUnitCheck ::
-   F.ProgramUnit (FA.Analysis A) -> Checker (F.ProgramUnit (FA.Analysis A))
+   F.ProgramUnit SA -> Checker (F.ProgramUnit SA)
 
 perProgramUnitCheck p@F.PUModule{} = do
     modify (\s -> s { prog = Just $ FA.puName p })
     descendBiM perBlockCheck p
 perProgramUnitCheck p = descendBiM perBlockCheck p
 
-perBlockCheck :: F.Block (FA.Analysis A) -> Checker (F.Block (FA.Analysis A))
+perBlockCheck :: F.Block SA -> Checker (F.Block SA)
 
 perBlockCheck b@(F.BlComment ann span _) = do
   ast       <- parseCommentToAST ann span
@@ -358,7 +360,7 @@ perBlockCheck b@(F.BlComment ann span _) = do
     Right ann' -> do
       updateRegionEnv ann'
       let b' = F.setAnnotation ann' b
-      case (getAstSpec $ FA.prevAnnotation ann', stencilBlock $ FA.prevAnnotation ann') of
+      case (SA.getAstSpec ann', SA.getStencilBlock ann') of
         -- Comment contains a specification and an Associated block
         (Just specDecls, Just block) ->
          case block of
@@ -384,8 +386,8 @@ perBlockCheck b = do
   return b
 
 -- | Validate the stencil and log an appropriate result.
-checkStencil :: F.Block (FA.Analysis A) -> SpecDecls
-  -> FU.SrcSpan -> Maybe [F.Index (FA.Analysis Annotation)] -> FU.SrcSpan -> Checker ()
+checkStencil :: F.Block SA -> SpecDecls
+  -> FU.SrcSpan -> Maybe [F.Index SA] -> FU.SrcSpan -> Checker ()
 checkStencil block specDecls spanInferred maybeSubs span = do
   -- Work out whether this is a stencil (non empty LHS indices) or not
   let (subs, isStencil) = case maybeSubs of
