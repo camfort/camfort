@@ -25,23 +25,17 @@ module Camfort.Input
   ) where
 
 import qualified Data.ByteString.Char8 as B
-import           Data.Char (toUpper)
 import           Data.Either (partitionEithers)
-import           Data.List ((\\), intercalate)
-import           Data.Maybe
-import           Data.Text.Encoding (encodeUtf8, decodeUtf8With)
-import           Data.Text.Encoding.Error (replace)
-import           System.Directory
-import           System.FilePath ((</>), takeExtension)
+import           Data.List (intercalate)
 
 import qualified Language.Fortran.AST as F
-import qualified Language.Fortran.Parser.Any as FP
 import           Language.Fortran.Util.ModFile (ModFiles)
 
 import Camfort.Analysis.Annotations
 import Camfort.Analysis.Fortran
-  (Analysis, SimpleAnalysis, analysisDebug, analysisResult, runAnalysis, runSimpleAnalysis)
-import Camfort.Analysis.ModFile (getModFiles)
+  (Analysis, SimpleAnalysis, analysisDebug, analysisResult, runAnalysis)
+import Camfort.Analysis.ModFile
+  (MFCompiler, genModFiles, readParseSrcDir, simpleCompiler)
 import Camfort.Helpers
 import Camfort.Output
 
@@ -63,40 +57,45 @@ printExcludes inSrc excludes =
 doAnalysisSummary :: (Monoid s, Show s)
   => SimpleAnalysis FileProgram s
   -> FileOrDir -> FileOrDir -> [Filename] -> IO ()
-doAnalysisSummary aFun inSrc incDir excludes = do
-  doAnalysisReportWithModFiles aFun () inSrc incDir excludes
+doAnalysisSummary aFun =
+  doAnalysisReportWithModFiles aFun simpleCompiler ()
 
 -- | Perform an analysis which reports to the user, but does not output any files.
 doAnalysisReportWithModFiles
   :: (Monoid d, Show d, Show b)
   => Analysis r d () FileProgram b
+  -> MFCompiler r
   -> r
   -> FileOrDir
   -> FileOrDir
   -> [Filename]
   -> IO ()
-doAnalysisReportWithModFiles rFun env inSrc incDir excludes = do
-  results <- doInitAnalysis' rFun env inSrc incDir excludes
+doAnalysisReportWithModFiles rFun mfc env inSrc incDir excludes = do
+  results <- doInitAnalysis' rFun mfc env inSrc incDir excludes
   let report = concatMap (\(rep,res) -> show rep ++ show res) results
   putStrLn report
 
-getModsAndPs :: FileOrDir -> FileOrDir -> [Filename] -> IO (ModFiles, [(FileProgram, B.ByteString)])
-getModsAndPs inSrc incDir excludes = do
+getModsAndPs
+  :: MFCompiler r -> r
+  -> FileOrDir -> FileOrDir -> [Filename]
+  -> IO (ModFiles, [(FileProgram, B.ByteString)])
+getModsAndPs mfc env inSrc incDir excludes = do
   printExcludes inSrc excludes
-  modFiles <- getModFiles incDir
+  modFiles <- genModFiles mfc env incDir excludes
   ps <- readParseSrcDir modFiles inSrc excludes
   pure (modFiles, ps)
 
 doInitAnalysis
   :: (Monoid w)
   => Analysis r w () [FileProgram] b
+  -> MFCompiler r
   -> r
   -> FileOrDir
   -> FileOrDir
   -> [Filename]
   -> IO ([(FileProgram, B.ByteString)], w, b)
-doInitAnalysis analysis env inSrc incDir excludes = do
-  (modFiles, ps) <- getModsAndPs inSrc incDir excludes
+doInitAnalysis analysis mfc env inSrc incDir excludes = do
+  (modFiles, ps) <- getModsAndPs mfc env inSrc incDir excludes
   let res = runAnalysis analysis env () modFiles . fmap fst $ ps
       report = analysisDebug res
       ps' = analysisResult res
@@ -105,27 +104,29 @@ doInitAnalysis analysis env inSrc incDir excludes = do
 doInitAnalysis'
   :: (Monoid w)
   => Analysis r w () FileProgram b
+  -> MFCompiler r
   -> r
   -> FileOrDir
   -> FileOrDir
   -> [Filename]
   -> IO [(w, b)]
-doInitAnalysis' analysis env inSrc incDir excludes = do
-  (modFiles, ps) <- getModsAndPs inSrc incDir excludes
+doInitAnalysis' analysis mfc env inSrc incDir excludes = do
+  (modFiles, ps) <- getModsAndPs mfc env inSrc incDir excludes
   let res = runAnalysis analysis env () modFiles . fst <$> ps
   pure $ fmap (\r -> (analysisDebug r, analysisResult r)) res
 
 doRefactorWithModFiles
   :: (Monoid d, Show d, Show e, Show b)
   => Analysis r d () [FileProgram] (b, [Either e FileProgram])
+  -> MFCompiler r
   -> r
   -> FileOrDir
   -> FileOrDir
   -> [Filename]
   -> FileOrDir
   -> IO String
-doRefactorWithModFiles rFun env inSrc incDir excludes outSrc = do
-  (ps, report1, aRes) <- doInitAnalysis rFun env inSrc incDir excludes
+doRefactorWithModFiles rFun mfc env inSrc incDir excludes outSrc = do
+  (ps, report1, aRes) <- doInitAnalysis rFun mfc env inSrc incDir excludes
   let (_, ps') = partitionEithers (snd aRes)
       report = show report1 ++ show (fst aRes)
   let outputs = reassociateSourceText (fmap snd ps) ps'
@@ -137,7 +138,7 @@ doRefactorAndCreate
   :: SimpleAnalysis [FileProgram] ([FileProgram], [FileProgram])
   -> FileOrDir -> [Filename] -> FileOrDir -> FileOrDir -> IO Report
 doRefactorAndCreate rFun inSrc excludes incDir outSrc = do
-  (ps, report, (ps', ps'')) <- doInitAnalysis rFun () inSrc incDir excludes
+  (ps, report, (ps', ps'')) <- doInitAnalysis rFun simpleCompiler () inSrc incDir excludes
   let outputs = reassociateSourceText (fmap snd ps) ps'
   let outputs' = map (\pf -> (pf, B.empty)) ps''
   outputFiles inSrc outSrc outputs
@@ -151,62 +152,3 @@ reassociateSourceText :: [SourceText]
                       -> [F.ProgramFile Annotation]
                       -> [(F.ProgramFile Annotation, SourceText)]
 reassociateSourceText ps ps' = zip ps' ps
-
--- * Source directory and file handling
-
-readParseSrcDir :: ModFiles
-                -> FileOrDir
-                -> [Filename]
-                -> IO [(FileProgram, SourceText)]
-readParseSrcDir mods inp excludes = do
-  isdir <- isDirectory inp
-  files <-
-    if isdir
-    then do
-      files <- getFortranFiles inp
-      -- Compute alternate list of excludes with the
-      -- the directory appended
-      let excludes' = excludes ++ map (\x -> inp ++ "/" ++ x) excludes
-      pure $ map (\y -> inp ++ "/" ++ y) files \\ excludes'
-    else pure [inp]
-  mapMaybeM (readParseSrcFile mods) files
-  where
-    mapMaybeM :: Monad m => (a -> m (Maybe b)) -> [a] -> m [b]
-    mapMaybeM f = fmap catMaybes . mapM f
-
-readParseSrcFile :: ModFiles -> Filename -> IO (Maybe (FileProgram, SourceText))
-readParseSrcFile mods f = do
-  inp <- flexReadFile f
-  let result = FP.fortranParserWithModFiles mods inp f
-  case result of
-    Right ast -> pure $ Just (fmap (const unitAnnotation) ast, inp)
-    Left  err -> print err >> pure Nothing
-  where
-    -- | Read file using ByteString library and deal with any weird characters.
-    flexReadFile :: String -> IO B.ByteString
-    flexReadFile = fmap (encodeUtf8 . decodeUtf8With (replace ' ')) . B.readFile
-
-getFortranFiles :: FileOrDir -> IO [String]
-getFortranFiles =
-  fmap (filter isFortran) . rGetDirContents
-  where
-    -- | True if the file has a valid fortran extension.
-    isFortran :: Filename -> Bool
-    isFortran x = takeExtension x `elem` (exts ++ extsUpper)
-      where exts = [".f", ".f90", ".f77", ".cmn", ".inc"]
-            extsUpper = map (map toUpper) exts
-
--- | Recursively get the contents of a directory.
-rGetDirContents :: FileOrDir -> IO [Filename]
-rGetDirContents d = do
-  ds <- listDirectory d
-  fmap concat . mapM rGetDirContents' $ ds
-  where
-    -- | Get contents of directory if path points to a valid
-    -- directory, otherwise return the path (a file).
-    rGetDirContents' path = do
-      let dPath = d </> path
-      isDir <- doesDirectoryExist dPath
-      if isDir then
-        fmap (fmap (path </>)) (rGetDirContents dPath)
-      else pure [path]

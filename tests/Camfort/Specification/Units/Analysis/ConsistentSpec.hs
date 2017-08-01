@@ -8,6 +8,7 @@ import qualified Test.Hspec as Test
 import Language.Fortran.Util.ModFile (ModFile, emptyModFiles)
 
 import Camfort.Analysis.Fortran (analysisResult)
+import Camfort.Analysis.ModFile (genModFiles)
 import Camfort.Input (readParseSrcDir)
 import Camfort.Specification.Units.Analysis (compileUnits, runUnitsAnalysis)
 import Camfort.Specification.Units.Analysis.Consistent (checkUnits)
@@ -61,11 +62,7 @@ unitsCheckReportIs = unitsCheckReport LitMixed []
 
 -- | Helper for producing a basic ModFile from a (terminal) module file.
 mkTestModFile :: String -> IO ModFile
-mkTestModFile file = do
-  let modFiles = emptyModFiles
-  [(pf,_)] <- readParseSrcDir modFiles file []
-  let res = runUnitsAnalysis compileUnits unitOpts0 modFiles pf
-  pure $ analysisResult res
+mkTestModFile file = head <$> genModFiles compileUnits unitOpts0 file []
 
 exampleInconsist1CheckReport :: String
 exampleInconsist1CheckReport =

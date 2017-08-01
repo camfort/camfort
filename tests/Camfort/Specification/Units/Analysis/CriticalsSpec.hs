@@ -9,8 +9,7 @@ import qualified Test.Hspec as Test
 import Language.Fortran.Util.ModFile (emptyModFiles)
 
 import Camfort.Analysis.Fortran (analysisResult)
-import Camfort.Analysis.ModFile (getModFiles)
-import Camfort.Input (readParseSrcDir)
+import Camfort.Analysis.ModFile (readParseSrcDir)
 import Camfort.Specification.Units.Analysis (runUnitsAnalysis)
 import Camfort.Specification.Units.Analysis.Criticals (inferCriticalVariables)
 import Camfort.Specification.Units.Monad

@@ -17,7 +17,7 @@ import Language.Fortran.Util.ModFile (ModFile)
 
 import Camfort.Analysis.Fortran
   (analysisResult, runSimpleAnalysis)
-import Camfort.Analysis.ModFile (getModFiles)
+import Camfort.Analysis.ModFile (genModFiles)
 import Camfort.Helpers.Vec
 import Camfort.Input
 import Camfort.Specification.Stencils
@@ -383,10 +383,10 @@ spec =
               version      = deduceVersion file
               expectedFile = expected dir fileName
           in do
-            program          <- runIO $ readParseSrcDir emptyModFiles file []
+            let modFiles = emptyModFiles
+            program          <- runIO $ readParseSrcDir modFiles file []
             programSrc       <- runIO $ readFile file
             synthExpectedSrc <- runIO $ readFile expectedFile
-            modFiles         <- runIO $ getModFiles dir
             it testComment $
                map (B.unpack . runIdentity . flip (reprint (refactoring version)) (B.pack programSrc))
                  (snd . analysisResult . runSimpleAnalysis (synth '=') modFiles . fmap fst $ program)
@@ -401,8 +401,8 @@ spec =
         assertStencilSynthResponse fileName testComment expectedResponse =
             let file = fixturesDir </> fileName
             in do
-              program    <- runIO $ readParseSrcDir emptyModFiles file []
-              modFiles   <- runIO $ getModFiles fixturesDir
+              let modFiles = emptyModFiles
+              program    <- runIO $ readParseSrcDir modFiles file []
               it testComment $ (fst . analysisResult . runSimpleAnalysis (synth '=') modFiles . fmap fst $ program)
                 `shouldBe` expectedResponse
 
@@ -436,11 +436,7 @@ inferReportWithMod modNames fileName expectedReport = do
 
 -- | Helper for producing a basic ModFile from a (terminal) module file.
 mkTestModFile :: String -> IO ModFile
-mkTestModFile file = do
-  let modFiles = emptyModFiles
-  [(pf,_)] <- readParseSrcDir modFiles file []
-  let res = runStencilsAnalysis compileStencils modFiles pf
-  pure $ analysisResult res
+mkTestModFile file = head <$> genModFiles compileStencils () file []
 
 crossModuleAUserReport :: String
 crossModuleAUserReport =

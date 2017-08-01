@@ -26,6 +26,7 @@ import Test.Hspec
 
 import Camfort.Analysis.Fortran
   (analysisDebug, analysisInput, analysisResult, branchAnalysis)
+import Camfort.Analysis.ModFile (simpleCompiler)
 import Camfort.Transformation.EquivalenceElim
 import Camfort.Functionality
 import Camfort.Input
@@ -62,7 +63,7 @@ spec =
             pure (mconcat reports, fmap (pure :: a -> Either () a) results)
       let infile = samplesBase </> "equiv.f90"
       incDir <- runIO getCurrentDirectory
-      report <- runIO $ doRefactorWithModFiles rfun () infile incDir [] "equiv.expected.f90"
+      report <- runIO $ doRefactorWithModFiles rfun simpleCompiler () infile incDir [] "equiv.expected.f90"
       it "report is as expected" $
         report `shouldBe` expectedReport
 

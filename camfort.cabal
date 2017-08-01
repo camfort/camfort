@@ -150,6 +150,7 @@ test-suite spec
                         lattices == 1.5.*,
                         sbv >= 7.0 && < 8,
                         partial-order >= 0.1.2.1 && < 0.1.3,
+                        silently == 1.2.*,
                         temporary >= 1.2.0.4 && < 1.3,
                         camfort
   default-language: Haskell2010

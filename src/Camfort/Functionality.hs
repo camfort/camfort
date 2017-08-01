@@ -46,30 +46,31 @@ module Camfort.Functionality (
   , camfortInitialize
   ) where
 
-import Control.Arrow (first, second)
-import Control.Monad
-import System.Directory (createDirectoryIfMissing, getCurrentDirectory)
-import System.FilePath  ((</>), takeDirectory)
-
-import Camfort.Analysis.Fortran
-  (analysisDebug, analysisInput, analysisResult, branchAnalysis)
-import Camfort.Analysis.ModFile (getModFiles)
-import Camfort.Analysis.Simple
-import Camfort.Transformation.DeadCode
-import Camfort.Transformation.CommonBlockElim
-import Camfort.Transformation.EquivalenceElim
-
-import qualified Camfort.Specification.Units as LU
-import Camfort.Specification.Units.Analysis.Consistent (checkUnits)
-import Camfort.Specification.Units.Analysis.Criticals  (inferCriticalVariables)
-import Camfort.Specification.Units.Monad
-
-import Camfort.Helpers
-import Camfort.Input
-
-import Language.Fortran.Util.ModFile
-import qualified Camfort.Specification.Stencils as Stencils
+import           Control.Arrow (first, second)
+import           Control.Monad
 import qualified Data.Map.Strict as M
+import           System.Directory (createDirectoryIfMissing, getCurrentDirectory)
+import           System.FilePath  ((</>), takeDirectory)
+
+import           Language.Fortran.Util.ModFile
+
+import           Camfort.Analysis.Fortran
+  (analysisDebug, analysisInput, analysisResult, branchAnalysis)
+import           Camfort.Analysis.ModFile
+  (genModFiles, readParseSrcDir, simpleCompiler)
+import           Camfort.Analysis.Simple
+import           Camfort.Helpers
+import           Camfort.Input
+import qualified Camfort.Specification.Stencils as Stencils
+import           Camfort.Specification.Stencils.Analysis (compileStencils)
+import qualified Camfort.Specification.Units as LU
+import           Camfort.Specification.Units.Analysis (compileUnits)
+import           Camfort.Specification.Units.Analysis.Consistent (checkUnits)
+import           Camfort.Specification.Units.Analysis.Criticals  (inferCriticalVariables)
+import           Camfort.Specification.Units.Monad
+import           Camfort.Transformation.CommonBlockElim
+import           Camfort.Transformation.DeadCode
+import           Camfort.Transformation.EquivalenceElim
 
 data AnnotationType = ATDefault | Doxygen | Ford
 
@@ -85,7 +86,7 @@ markerChar ATDefault = '='
 -- * Wrappers on all of the features
 ast d excludes = do
     incDir <- getCurrentDirectory
-    modFiles <- getModFiles incDir
+    modFiles <- genModFiles simpleCompiler () incDir excludes
     xs <- readParseSrcDir modFiles d excludes
     print . fmap fst $ xs
 
@@ -102,7 +103,7 @@ dead inSrc excludes outSrc = do
           let (reports, results) = (fmap analysisDebug resA, fmap analysisResult resA)
           pure (mconcat reports, fmap (pure :: a -> Either () a) results)
     incDir <- getCurrentDirectory
-    report <- doRefactorWithModFiles rfun () inSrc incDir excludes outSrc
+    report <- doRefactorWithModFiles rfun simpleCompiler () inSrc incDir excludes outSrc
     putStrLn report
 
 common inSrc excludes outSrc = do
@@ -121,7 +122,7 @@ equivalences inSrc excludes outSrc = do
           let (reports, results) = (fmap analysisDebug resA, fmap analysisResult resA)
           pure (mconcat reports, fmap (pure :: a -> Either () a) results)
     incDir <- getCurrentDirectory
-    report <- doRefactorWithModFiles rfun () inSrc incDir excludes outSrc
+    report <- doRefactorWithModFiles rfun simpleCompiler () inSrc incDir excludes outSrc
     putStrLn report
 
 {- Units feature -}
@@ -135,13 +136,13 @@ unitsCheck inSrc excludes m debug incDir = do
     putStrLn $ "Checking units for '" ++ inSrc ++ "'"
     let uo = optsToUnitOpts m debug
     incDir' <- maybe getCurrentDirectory pure incDir
-    doAnalysisReportWithModFiles checkUnits uo inSrc incDir' excludes
+    doAnalysisReportWithModFiles checkUnits compileUnits uo inSrc incDir' excludes
 
 unitsInfer inSrc excludes m debug incDir = do
     putStrLn $ "Inferring units for '" ++ inSrc ++ "'"
     let uo = optsToUnitOpts m debug
     incDir' <- maybe getCurrentDirectory pure incDir
-    doAnalysisReportWithModFiles LU.inferUnits uo inSrc incDir' excludes
+    doAnalysisReportWithModFiles LU.inferUnits compileUnits uo inSrc incDir' excludes
 
 unitsSynth inSrc excludes m debug incDir outSrc annType = do
     putStrLn $ "Synthesising units for '" ++ inSrc ++ "'"
@@ -157,7 +158,7 @@ unitsSynth inSrc excludes m debug incDir outSrc annType = do
                              Right (_,pf) -> Right pf)) <$> results
           pure . first concat $ unzip normalizedResults
     incDir' <- maybe getCurrentDirectory pure incDir
-    report <- doRefactorWithModFiles rfun uo inSrc incDir' excludes outSrc
+    report <- doRefactorWithModFiles rfun compileUnits uo inSrc incDir' excludes outSrc
     putStrLn report
 
 unitsCriticals inSrc excludes m debug incDir = do
@@ -165,7 +166,7 @@ unitsCriticals inSrc excludes m debug incDir = do
              ++ inSrc ++ "'"
     let uo = optsToUnitOpts m debug
     incDir' <- maybe getCurrentDirectory pure incDir
-    doAnalysisReportWithModFiles inferCriticalVariables uo inSrc incDir' excludes
+    doAnalysisReportWithModFiles inferCriticalVariables compileUnits uo inSrc incDir' excludes
 
 {- Stencils feature -}
 stencilsCheck inSrc excludes = do
@@ -183,7 +184,7 @@ stencilsSynth inSrc excludes annType outSrc = do
    putStrLn $ "Synthesising stencil specs for '" ++ inSrc ++ "'"
    let rfun = second (fmap (pure :: a -> Either () a)) <$> Stencils.synth (markerChar annType)
    incDir <- getCurrentDirectory
-   report <- doRefactorWithModFiles rfun () inSrc incDir excludes outSrc
+   report <- doRefactorWithModFiles rfun compileStencils () inSrc incDir excludes outSrc
    putStrLn report
 
 -- | Initialize Camfort for the given project.

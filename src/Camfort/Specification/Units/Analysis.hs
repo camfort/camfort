@@ -920,15 +920,13 @@ intrinsicUnits =
 -- Others: reshape, merge need special handling
 
 -- | Compile a program to a 'ModFile' containing units information.
-compileUnits :: UnitsAnalysis (F.ProgramFile Annotation) ModFile
-compileUnits = do
-  pf  <- analysisInput
-  mfs <- analysisModFiles
-  let
+compileUnits :: UnitOpts -> ModFiles -> F.ProgramFile Annotation -> ModFile
+compileUnits uo mfs pf =
+  genUnitsModFile pfTyped cu
+  where
     -- Use the module map derived from all of the included Camfort Mod files.
     mmap = combinedModuleMap mfs
     tenv = combinedTypeEnv mfs
     pfRenamed = FAR.analyseRenamesWithModuleMap mmap . FA.initAnalysis . fmap UA.mkUnitAnnotation $ pf
     pfTyped = fst . FAT.analyseTypesWithEnv tenv $ pfRenamed
-  (cu, _, _) <- runInference runCompileUnits
-  pure $ genUnitsModFile pfTyped cu
+    (cu,_,_) = analysisResult . runAnalysis (runInference runCompileUnits) uo () mfs $ pf
