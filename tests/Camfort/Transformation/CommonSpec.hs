@@ -29,7 +29,8 @@ spec =
       expectedMod <- runIO $ readSample "cmn.expected.f90"
 
       let outFile = samplesBase </> "common.f90.out"
-      runIO $ common (samplesBase </> "common.f90") [] outFile
+          commonFile = samplesBase </> "common.f90"
+      runIO $ common commonFile (Just commonFile) [] outFile
 
       actual    <- runIO $ readSample "common.f90.out"
       actualMod <- runIO $ readSample "cmn.f90"

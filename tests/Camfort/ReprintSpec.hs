@@ -70,11 +70,15 @@ spec =
         `shouldBe` (B.pack $ unlines $ take 3 text2)
 
     context "Integration test with synthesising a spec" $ do
-       runIO $ unitsSynth ("tests" </> "fixtures" </> "simple.f90") []
-         LitMixed False Nothing
-         ("tests" </> "fixtures" </> "simple.f90.out") ATDefault
-       actual <- runIO $ readFile ("tests" </> "fixtures" </> "simple.f90.out")
-       expected <- runIO $ readFile ("tests" </> "fixtures" </> "simple.expected.f90")
+       let simpleDir = "tests" </> "fixtures"
+           simpleIn  = simpleDir </> "simple.f90"
+           simpleExpected = simpleDir </> "simple.expected.f90"
+           simpleOut = simpleDir </> "simple.f90.out"
+       runIO $ unitsSynth simpleIn (Just simpleIn) []
+         LitMixed False
+         simpleOut ATDefault
+       actual <- runIO $ readFile simpleOut
+       expected <- runIO $ readFile simpleExpected
        it "Unit synth" $ actual `shouldBe` expected
 
 ----

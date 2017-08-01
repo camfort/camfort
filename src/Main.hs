@@ -48,6 +48,7 @@ data Command = CmdCount ReadOptions
 -- | Options for reading files.
 data ReadOptions = ReadOptions
   { inputSource :: String
+  , includeDir  :: Maybe String
   , exclude     :: Maybe [String]
   }
 
@@ -65,7 +66,6 @@ data UnitsOptions = UnitsOptions
   { uoReadOptions :: ReadOptions
   , literals      :: LiteralsOpt
   , debug         :: Bool
-  , includeDir    :: Maybe String
   }
 
 
@@ -137,7 +137,14 @@ excludeOption = optional $ multiFileOption $
 readOptions :: Parser ReadOptions
 readOptions = fmap ReadOptions
   (fileArgument $ help "input file")
+  <*> optional includeDirOption
   <*> excludeOption
+  where
+    dirOption m = strOption (metavar "DIR" <> action "directory" <> m)
+    includeDirOption = dirOption
+      (   long "include-dir"
+       <> short 'I'
+       <> help "directory to search for precompiled files")
 
 
 -- | User must specify either an ouput file, or say that the file
@@ -170,7 +177,6 @@ unitsOptions = fmap UnitsOptions
       readOptions
   <*> literalsOption
   <*> debugOption
-  <*> optional includeDirOption
   where
     literalsOption = option parseLiterals $
                      long "units-literals"
@@ -181,11 +187,6 @@ unitsOptions = fmap UnitsOptions
                      <> help "units-of-measure literals mode. ID = Unitless, Poly, or Mixed"
     parseLiterals = fmap read str
     debugOption = switch (long "debug" <> help "enable debug mode")
-    dirOption m = strOption (metavar "DIR" <> action "directory" <> m)
-    includeDirOption = dirOption
-      (   long "include-dir"
-       <> short 'I'
-       <> help "directory to search for precompiled files")
 
 
 unitsWriteOptions :: Parser UnitsWriteOptions
@@ -334,7 +335,7 @@ main = do
     getExcludes = fromMaybe [] . exclude
     getOutputFile _ (WriteFile f) = f
     getOutputFile inp WriteInplace = inp
-    runRO ro f = f (inputSource ro) (getExcludes ro)
+    runRO ro f = f (inputSource ro) (includeDir ro) (getExcludes ro)
     runSIO sio f =
       let ro      = sioReadOptions sio
           useEval = sioUseEval sio
@@ -348,7 +349,7 @@ main = do
       in runRO ro f (annotationType ao) (getOutputFile inFile wo)
     runUO uo f =
       let ro = uoReadOptions uo
-      in runRO ro f (literals uo) (debug uo) (includeDir uo)
+      in runRO ro f (literals uo) (debug uo)
     runUWO uwo f =
       let uo     = uwoUnitsOptions uwo
           ro     = uoReadOptions uo

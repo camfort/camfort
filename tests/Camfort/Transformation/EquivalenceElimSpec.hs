@@ -43,7 +43,7 @@ readActual :: FilePath -> IO String
 readActual argumentFilename = do
   let argumentPath = samplesBase </> argumentFilename
   let outFile = argumentPath `addExtension` "out"
-  equivalences argumentPath [] outFile
+  equivalences argumentPath Nothing [] outFile
   actual <- readFile outFile
   removeFile outFile
   return actual
@@ -62,8 +62,7 @@ spec =
             let (reports, results) = (fmap analysisDebug resA, fmap analysisResult resA)
             pure (mconcat reports, fmap (pure :: a -> Either () a) results)
       let infile = samplesBase </> "equiv.f90"
-      incDir <- runIO getCurrentDirectory
-      report <- runIO $ doRefactorWithModFiles rfun simpleCompiler () infile incDir [] "equiv.expected.f90"
+      report <- runIO $ doRefactorWithModFiles rfun simpleCompiler () infile infile [] "equiv.expected.f90"
       it "report is as expected" $
         report `shouldBe` expectedReport
 

@@ -28,7 +28,7 @@ unitsCheckTestCrossModuleInconsistBasic =
   (\d -> do
       copyFile (unitsFixturesModuleDir </> "crossmoduleuser.f90") (d </> "crossmoduleuser.f90")
       copyFile (unitsFixturesModuleDir </> "crossmoduleprovider.f90") (d </> "crossmoduleprovider.f90")
-      (unlines . tail. tail . tail . lines) <$> capture_ (unitsCheck (d </> "crossmoduleuser.f90") [] LitMixed False (Just d)))
+      (unlines . tail. tail . tail . lines) <$> capture_ (unitsCheck (d </> "crossmoduleuser.f90") (Just d) [] LitMixed False))
   where unitsFixturesModuleDir =
           "tests" </> "fixtures" </> "Specification" </> "Units" </> "cross-module-a"
 
