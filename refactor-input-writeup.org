@@ -1,1 +1,87 @@
 #+TITLE: Changes from the gd/refactor-input branch
+
+* Overview
+
+** New Features
+
+*** ModFile support for Stencils
+
+Previously, stencils could not access modfile information at all,
+now they (like Units) can access modfile information automatically.
+
+** Changes
+
+*** ModFile Generation
+
+Previously, the only way to generate ~ModFiles~ would be to use ~units-compile~
+to generate ~.fsmod~ files, then
+
+Currently, a 'brute-force' approach is used to generate ~ModFiles~:
+
+First, we recursively fetch all Fortran files from the ~includeDir~
+(accessible via the ~--include-dir~ command-line option), then parse
+them to ~ProgramFile Annotation~ types, and finally convert these to
+~ModFiles~ using the appropriate ~MFCompiler~.
+
+See [[Possible ModFile Changes]] for suggestions on other methods of dealing
+with this.
+
+*** Command-Line Interface
+
++ All analysis/refactoring commands can now use the ~--include-dir~ option,
+  as they may all use modfiles.
+
+** Removed Features
+
+*** Removed the ~units-compile~ command
+
+This is obsolete as we now automatically generate modfiles.
+
+** Possible Future Changes
+
+*** ModFiles
+    #+NAME: Possible ModFile Changes
+
+**** ModFile Directory
+
+Rather than keeping modfiles in memory, and regenerating
+every run, we could store ~.fsmod~ files in a ~.camfort~ directory.
+
+We already have a command (~camfort init~) that allows us to do any
+initialisation we might want to do, including creating a ~.camfort~
+directory.
+
+Additionally, when any CamFort command is run, we could search up the
+path for the ~.camfort~ directory to find the 'root' of the project.
+
+**** Regenerating ModFiles
+
+Once we are creating physical ~.fsmod~ files, we will likely not want
+to re-generate them every single time an analysis is run
+(unless they have changed), I present two suggestions dealing for this:
+
+***** ModFile Resolution
+
+For any particular analysis, on any particular Fortran file, the only
+modfiles we will need to use are those that are dependencies (directly
+or indirectly) of the file to be analysed.
+
+Knowing this, we could design a mechanism (or use an existing one if
+available) for resolving the dependency graph of the program, then
+building modfiles in the required order to ensure that all subsequent
+dependencies have access to the required modfiles, and ultimately only
+the necessary modfiles are used in the analysis.
+
+***** ModFile Hashing
+
+To prevent re-building modfiles every time the analysis is run, we could
+include a hash (of the source text or ~ProgramFile~) as one of the
+additional pieces of information stored in the modfile. We could then compare
+this hash against a new source hash when gathering modfiles to ensure the modfile
+is not out-of-date, and if it is, re-build it.
+
+I also had an idea to include a separate hash for each piece of additional information,
+but upon reflection and discussion with Dominic, I'm not sure what this would gain, but
+it may be worth bearing in mind. I believe the original rationale was that we could compile
+only the necessary information for each analysis at each stage, but I no longer see how this
+could happen without needing to regenerate the whole ModFile (due to main hash changing).
