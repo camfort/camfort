@@ -20,8 +20,8 @@ module Camfort.Transformation.DeadCode
   ( deadCode
   ) where
 
+import Camfort.Analysis (SimpleAnalysis, analysisInput, writeDebug)
 import Camfort.Analysis.Annotations
-import Camfort.Analysis.Fortran (SimpleAnalysis, analysisInput, writeDebug)
 import qualified Language.Fortran.Analysis.DataFlow as FAD
 import qualified Language.Fortran.Analysis.Renaming as FAR
 import qualified Language.Fortran.Analysis.BBlocks as FAB

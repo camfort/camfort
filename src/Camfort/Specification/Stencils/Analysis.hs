@@ -19,9 +19,9 @@ import qualified Language.Fortran.Analysis.Renaming as FAR
 import qualified Language.Fortran.Analysis.Types    as FAT
 import qualified Language.Fortran.Util.ModFile      as MF
 
+import qualified Camfort.Analysis as AF
 import           Camfort.Analysis.Annotations (Report)
 import           Camfort.Analysis.ModFile (MFCompiler)
-import qualified Camfort.Analysis.Fortran as AF
 
 type StencilsAnalysis a a' = AF.SimpleAnalysis a a'
 

@@ -14,8 +14,8 @@ import qualified Language.Fortran.AST as F
 import qualified Language.Fortran.Analysis as FA
 import           Language.Fortran.Util.ModFile (emptyModFiles)
 
+import           Camfort.Analysis (analysisResult, finalState)
 import           Camfort.Analysis.Annotations (unitAnnotation)
-import           Camfort.Analysis.Fortran (analysisResult, finalState)
 import           Camfort.Specification.Units (chooseImplicitNames)
 import           Camfort.Specification.Units.Analysis (initInference)
 import           Camfort.Specification.Units.Annotation (UA)

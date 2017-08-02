@@ -26,7 +26,7 @@ import Data.Generics.Uniplate.Operations
 
 import qualified Language.Fortran.AST as F
 
-import Camfort.Analysis.Fortran (SimpleAnalysis, analysisInput)
+import Camfort.Analysis (SimpleAnalysis, analysisInput)
 
 {-| Counts the number of declarations (of variables) in a whole program -}
 

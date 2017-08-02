@@ -24,7 +24,7 @@ import System.Directory
 
 import Test.Hspec
 
-import Camfort.Analysis.Fortran
+import Camfort.Analysis
   (analysisDebug, analysisInput, analysisResult, branchAnalysis)
 import Camfort.Analysis.ModFile (simpleCompiler)
 import Camfort.Transformation.EquivalenceElim

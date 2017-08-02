@@ -39,9 +39,9 @@ import Data.Maybe (fromMaybe, maybeToList, mapMaybe)
 import Data.Generics.Uniplate.Operations
 import GHC.Generics (Generic)
 
-import Camfort.Analysis.Annotations
-import Camfort.Analysis.Fortran
+import Camfort.Analysis
   (analysisInput, analysisModFiles, analysisParams, writeDebug)
+import Camfort.Analysis.Annotations
 
 -- Provides the types and data accessors used in this module
 import           Camfort.Specification.Units.Analysis

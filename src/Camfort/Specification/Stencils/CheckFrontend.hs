@@ -37,9 +37,7 @@ import Data.Generics.Uniplate.Operations
 import Data.List (intercalate, sort, union)
 import Data.Maybe
 
-import           Camfort.Analysis.Annotations
-import           Camfort.Analysis.CommentAnnotator
-import           Camfort.Analysis.Fortran
+import           Camfort.Analysis
   ( Analysis
   , AnalysisResult
   , analysisInput
@@ -47,6 +45,8 @@ import           Camfort.Analysis.Fortran
   , analysisParams
   , finalState
   , runAnalysis)
+import           Camfort.Analysis.Annotations
+import           Camfort.Analysis.CommentAnnotator
 import           Camfort.Specification.Parser (SpecParseError)
 import           Camfort.Specification.Stencils.Analysis (StencilsAnalysis)
 import           Camfort.Specification.Stencils.Annotation (SA)

@@ -24,9 +24,9 @@ import qualified Data.Map.Strict       as M
 import           Data.Maybe (fromMaybe, mapMaybe)
 import qualified Numeric.LinearAlgebra as H
 
-import Camfort.Analysis.Annotations
-import Camfort.Analysis.Fortran
+import Camfort.Analysis
   (analysisInput, analysisModFiles, analysisParams, writeDebug)
+import Camfort.Analysis.Annotations
 import Camfort.Specification.Units.InferenceBackend
   (constraintsToMatrix, rref)
 

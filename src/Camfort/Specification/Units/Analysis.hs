@@ -40,9 +40,7 @@ import           Language.Fortran.Parser.Utils (readReal, readInteger)
 import           Language.Fortran.Util.ModFile
 import           Language.Fortran.Util.Position (getSpan)
 
-import           Camfort.Analysis.Annotations (Annotation, Report)
-import           Camfort.Analysis.CommentAnnotator (annotateComments)
-import           Camfort.Analysis.Fortran
+import           Camfort.Analysis
   ( Analysis
   , AnalysisResult
   , analysisDebug
@@ -52,6 +50,8 @@ import           Camfort.Analysis.Fortran
   , analysisResult
   , finalState
   , runAnalysis )
+import           Camfort.Analysis.Annotations (Annotation, Report)
+import           Camfort.Analysis.CommentAnnotator (annotateComments)
 import qualified Camfort.Specification.Units.Annotation   as UA
 import           Camfort.Specification.Units.Environment
 import           Camfort.Specification.Units.InferenceBackend

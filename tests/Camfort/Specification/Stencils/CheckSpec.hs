@@ -4,8 +4,8 @@ module Camfort.Specification.Stencils.CheckSpec (spec) where
 
 import qualified Data.ByteString.Internal as BS
 
+import           Camfort.Analysis (analysisResult, runSimpleAnalysis)
 import           Camfort.Analysis.Annotations (unitAnnotation)
-import           Camfort.Analysis.Fortran (analysisResult, runSimpleAnalysis)
 import           Camfort.Specification.Parser (runParser)
 import qualified Camfort.Specification.Stencils.Annotation as SA
 import           Camfort.Specification.Stencils.CheckBackend

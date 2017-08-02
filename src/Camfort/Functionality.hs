@@ -54,7 +54,7 @@ import           System.FilePath  ((</>), takeDirectory)
 
 import           Language.Fortran.Util.ModFile
 
-import           Camfort.Analysis.Fortran
+import           Camfort.Analysis
   (analysisDebug, analysisInput, analysisResult, branchAnalysis)
 import           Camfort.Analysis.ModFile
   (genModFiles, readParseSrcDir, simpleCompiler)

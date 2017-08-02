@@ -20,9 +20,9 @@ module Camfort.Specification.Stencils
 import Control.Arrow ((***), first, second)
 import Data.Maybe (catMaybes)
 
-import           Camfort.Analysis.Annotations
-import           Camfort.Analysis.Fortran
+import           Camfort.Analysis
   (analysisInput, analysisResult, branchAnalysis)
+import           Camfort.Analysis.Annotations
 import           Camfort.Helpers
 import           Camfort.Specification.Stencils.Analysis (StencilsAnalysis)
 import qualified Camfort.Specification.Stencils.Annotation as SA

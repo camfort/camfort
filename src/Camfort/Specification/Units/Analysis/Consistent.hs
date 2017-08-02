@@ -23,9 +23,9 @@ import           Data.List (find, group, sort)
 import qualified Data.Map.Strict as M
 import           Data.Maybe (maybeToList, maybe)
 
-import           Camfort.Analysis.Annotations
-import           Camfort.Analysis.Fortran
+import           Camfort.Analysis
   (analysisInput, analysisModFiles, analysisParams, writeDebug)
+import           Camfort.Analysis.Annotations
 import           Camfort.Specification.Units.Analysis (UnitsAnalysis, runInference)
 import qualified Camfort.Specification.Units.Annotation as UA
 import           Camfort.Specification.Units.Environment

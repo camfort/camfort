@@ -46,7 +46,7 @@ import qualified Language.Fortran.Analysis.DataFlow as FAD
 import           Language.Fortran.Util.ModFile (ModFiles)
 import qualified Language.Fortran.Util.Position     as FU
 
-import           Camfort.Analysis.Fortran
+import           Camfort.Analysis
   (Analysis, analysisDebug, analysisParams, analysisResult, runAnalysis)
 import           Camfort.Helpers (collect)
 import qualified Camfort.Helpers.Vec as V

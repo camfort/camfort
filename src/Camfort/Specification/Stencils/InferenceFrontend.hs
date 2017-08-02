@@ -30,9 +30,7 @@ module Camfort.Specification.Stencils.InferenceFrontend
 import Control.Monad.State.Strict
 import Control.Monad.Writer.Strict hiding (Product)
 
-import           Camfort.Analysis.Annotations
-import           Camfort.Analysis.CommentAnnotator
-import           Camfort.Analysis.Fortran
+import           Camfort.Analysis
   ( Analysis
   , analysisDebug
   , analysisInput
@@ -42,6 +40,8 @@ import           Camfort.Analysis.Fortran
   , branchAnalysis
   , runAnalysis
   , writeDebug )
+import           Camfort.Analysis.Annotations
+import           Camfort.Analysis.CommentAnnotator
 import           Camfort.Helpers (collect, descendReverseM, descendBiReverseM)
 import qualified Camfort.Helpers.Vec as V
 import           Camfort.Input

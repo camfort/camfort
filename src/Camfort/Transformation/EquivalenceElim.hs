@@ -31,7 +31,7 @@ import qualified Language.Fortran.Util.Position as FU
 import qualified Language.Fortran.Analysis.Renaming as FAR
 import qualified Language.Fortran.Analysis as FA
 
-import Camfort.Analysis.Fortran
+import Camfort.Analysis
   (SimpleAnalysis, analysisInput, analysisResult, branchAnalysis, writeDebug)
 import Camfort.Helpers.Syntax
 import Camfort.Analysis.Annotations

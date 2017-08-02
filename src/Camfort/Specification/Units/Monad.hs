@@ -69,8 +69,7 @@ import qualified Data.Set as S
 import qualified Language.Fortran.AST as F
 import Language.Fortran.Util.ModFile (ModFiles)
 
-import Camfort.Analysis.Annotations (Annotation, Report, mkReport)
-import Camfort.Analysis.Fortran
+import Camfort.Analysis
   ( Analysis
   , AnalysisResult
   , analysisDebug
@@ -79,6 +78,7 @@ import Camfort.Analysis.Fortran
   , finalState
   , runAnalysis
   , writeDebug)
+import Camfort.Analysis.Annotations (Annotation, Report, mkReport)
 import Camfort.Specification.Units.Annotation (UA)
 import Camfort.Specification.Units.Environment (UnitInfo, Constraints, VV, PP)
 

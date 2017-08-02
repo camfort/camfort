@@ -15,7 +15,7 @@ import           Data.List
 
 import Language.Fortran.Util.ModFile (ModFile)
 
-import Camfort.Analysis.Fortran
+import Camfort.Analysis
   (analysisResult, runSimpleAnalysis)
 import Camfort.Analysis.ModFile (genModFiles)
 import Camfort.Helpers.Vec

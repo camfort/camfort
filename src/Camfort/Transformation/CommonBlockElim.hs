@@ -39,7 +39,7 @@ import qualified Language.Fortran.Util.Position as FU
 import qualified Language.Fortran.ParserMonad as PM
 import qualified Language.Fortran.PrettyPrint as PP
 
-import Camfort.Analysis.Fortran (SimpleAnalysis, analysisInput, writeDebug)
+import Camfort.Analysis (SimpleAnalysis, analysisInput, writeDebug)
 import Camfort.Helpers
 import Camfort.Helpers.Syntax
 import Camfort.Analysis.Annotations

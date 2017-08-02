@@ -1,5 +1,5 @@
 {- |
-Module      :  Camfort.Analysis.Fortran
+Module      :  Camfort.Analysis
 Description :  Analysis on fortran files.
 Copyright   :  (c) 2017, Dominic Orchard, Andrew Rice, Mistral Contrastin, Matthew Danish
 License     :  Apache-2.0
@@ -13,7 +13,7 @@ This module defines functionality for aiding in analysing fortran files.
 {-# LANGUAGE DeriveFunctor              #-}
 {-# LANGUAGE GeneralizedNewtypeDeriving #-}
 
-module Camfort.Analysis.Fortran
+module Camfort.Analysis
   ( Analysis
   , AnalysisResult
   , SimpleAnalysis

@@ -31,7 +31,7 @@ import           GHC.Generics (Generic)
 import qualified Language.Fortran.AST as F
 import           Language.Fortran.Util.ModFile
 
-import Camfort.Analysis.Fortran (analysisModFiles)
+import Camfort.Analysis (analysisModFiles)
 import Camfort.Specification.Units.Annotation (UA)
 import Camfort.Specification.Units.Environment (UnitInfo(..))
 import Camfort.Specification.Units.InferenceBackend (flattenUnits, genUnitAssignments)

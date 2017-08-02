@@ -31,9 +31,9 @@ import           Data.List (intercalate)
 import qualified Language.Fortran.AST as F
 import           Language.Fortran.Util.ModFile (ModFiles)
 
-import Camfort.Analysis.Annotations
-import Camfort.Analysis.Fortran
+import Camfort.Analysis
   (Analysis, SimpleAnalysis, analysisDebug, analysisResult, runAnalysis)
+import Camfort.Analysis.Annotations
 import Camfort.Analysis.ModFile
   (MFCompiler, genModFiles, readParseSrcDir)
 import Camfort.Helpers
