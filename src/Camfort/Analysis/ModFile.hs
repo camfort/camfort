@@ -27,9 +27,11 @@ import           System.Directory (doesDirectoryExist, listDirectory)
 import           System.FilePath ((</>), takeExtension)
 
 
-import qualified Language.Fortran.AST        as F
-import qualified Language.Fortran.Analysis   as FA
-import qualified Language.Fortran.Parser.Any as FP
+import qualified Language.Fortran.AST               as F
+import qualified Language.Fortran.Analysis          as FA
+import qualified Language.Fortran.Analysis.Renaming as FAR
+import qualified Language.Fortran.Analysis.Types    as FAT
+import qualified Language.Fortran.Parser.Any        as FP
 import           Language.Fortran.Util.ModFile
 
 import Camfort.Analysis.Annotations (A, unitAnnotation)
@@ -40,7 +42,14 @@ type MFCompiler r = r -> ModFiles -> F.ProgramFile A -> ModFile
 
 -- | Compile the Modfile with only basic information.
 simpleCompiler :: MFCompiler ()
-simpleCompiler _ _ = genModFile . FA.initAnalysis
+simpleCompiler () mfs pf =
+  let
+    -- Use the module map derived from all of the included Camfort Mod files.
+    mmap = combinedModuleMap mfs
+    tenv = combinedTypeEnv mfs
+    pfRenamed = FAR.analyseRenamesWithModuleMap mmap . FA.initAnalysis $ pf
+    pfTyped = fst . FAT.analyseTypesWithEnv tenv $ pfRenamed
+  in genModFile pfTyped
 
 genCModFile :: MFCompiler r -> r -> ModFiles -> F.ProgramFile A -> ModFile
 genCModFile = id

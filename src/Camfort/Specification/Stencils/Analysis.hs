@@ -14,14 +14,11 @@ module Camfort.Specification.Stencils.Analysis
   , runStencilsAnalysis
   ) where
 
-import qualified Language.Fortran.Analysis          as FA
-import qualified Language.Fortran.Analysis.Renaming as FAR
-import qualified Language.Fortran.Analysis.Types    as FAT
 import qualified Language.Fortran.Util.ModFile      as MF
 
 import qualified Camfort.Analysis as AF
 import           Camfort.Analysis.Annotations (Report)
-import           Camfort.Analysis.ModFile (MFCompiler)
+import           Camfort.Analysis.ModFile (MFCompiler, simpleCompiler)
 
 type StencilsAnalysis a a' = AF.SimpleAnalysis a a'
 
@@ -31,11 +28,4 @@ runStencilsAnalysis analysis = AF.runAnalysis analysis () ()
 
 -- | Compile a program to a 'ModFile' containing stencils information.
 compileStencils :: MFCompiler ()
-compileStencils () mfs pf =
-  let
-    -- Use the module map derived from all of the included Camfort Mod files.
-    mmap = MF.combinedModuleMap mfs
-    tenv = MF.combinedTypeEnv mfs
-    pfRenamed = FAR.analyseRenamesWithModuleMap mmap . FA.initAnalysis $ pf
-    pfTyped = fst . FAT.analyseTypesWithEnv tenv $ pfRenamed
-  in MF.genModFile pfTyped
+compileStencils = simpleCompiler
