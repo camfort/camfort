@@ -1,12 +1,15 @@
-{-# LANGUAGE LambdaCase #-}
+{-# LANGUAGE DeriveDataTypeable #-}
+{-# LANGUAGE LambdaCase         #-}
 {-# OPTIONS_GHC -Wall #-}
 
 module Camfort.Specification.Hoare.Types where
 
 import           Control.Monad.Except
+import           Data.Data
 import           Data.List                         (intercalate)
 
 import qualified Data.ByteString.Char8             as B
+
 import qualified Language.Fortran.AST              as F
 import qualified Language.Fortran.Lexer.FreeForm   as F
 import qualified Language.Fortran.Parser.Fortran90 as F
@@ -18,12 +21,15 @@ data HoareParseError
   | UnexpectedInput
   | MalformedExpression String
   | ParseError [Token]
+  | LexError String
+  deriving (Eq, Ord, Typeable, Data)
 
 instance Show HoareParseError where
   show UnmatchedQuote = "unmatched quote"
   show UnexpectedInput = "unexpected characters in input"
   show (MalformedExpression expr) = "couldn't parse expression: \"" ++ expr ++ "\""
   show (ParseError tokens) = "unable to parse input: " ++ prettyTokens tokens
+  show (LexError xs) = "unable to lex input: " ++ xs
 
 prettyTokens :: [Token] -> String
 prettyTokens = intercalate " " . map prettyToken
@@ -69,10 +75,7 @@ data Token
   | TImpl
   | TEquiv
   | TNot
-  deriving (Show)
-
-parseError :: [Token] -> HoareSpecParser a
-parseError = throwError . ParseError
+  deriving (Show, Eq, Ord, Typeable, Data)
 
 -- TODO: Make this report errors and deal with source position better
 parseExpression :: String -> HoareSpecParser (F.Expression ())

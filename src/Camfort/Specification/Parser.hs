@@ -9,6 +9,7 @@ Stability   :  experimental
 -}
 
 {-# LANGUAGE FlexibleContexts #-}
+{-# LANGUAGE DeriveDataTypeable #-}
 
 module Camfort.Specification.Parser
   (
@@ -23,14 +24,15 @@ module Camfort.Specification.Parser
   ) where
 
 import           Control.Monad.Except (throwError)
-import           Data.List (isPrefixOf)
-import qualified Data.Text as T
+import           Data.Data
+import           Data.List            (isPrefixOf)
+import qualified Data.Text            as T
 
 data SpecParseError e
   = ParseError e
   | InvalidSpecificationCharacter Char
   | MissingSpecificationCharacter
-  deriving (Eq)
+  deriving (Eq, Typeable, Data)
 
 instance (Show e) => Show (SpecParseError e) where
   show (InvalidSpecificationCharacter c) =

@@ -2,6 +2,8 @@
 
 module Camfort.Specification.Hoare.Parser (hoareParser) where
 
+import           Control.Monad.Except
+
 import qualified Language.Fortran.AST as F
 
 import Language.While.Prop
@@ -39,7 +41,10 @@ import Camfort.Specification.Hoare.Types
 
 
 %left '|'
+%nonassoc '<->'
+%right '->'
 %left '&'
+%left '!'
 %nonassoc '<=' '>=' '<' '>' '='
 
 
@@ -47,7 +52,7 @@ import Camfort.Specification.Hoare.Types
 
 
 HOARE :: { Specification () }
-: static_assert SPEC { $2 }
+: '=' static_assert SPEC { $3 }
 
 
 SPEC :: { Specification () }
@@ -79,6 +84,9 @@ EXPR :: { F.Expression () }
 : texpr {% parseExpression $1 }
 
 {
+
+parseError :: [Token] -> HoareSpecParser a
+parseError = throwError . ParseError
 
 hoareParser :: Parser.SpecParser HoareParseError (Specification ())
 hoareParser = Parser.mkParser (\src -> do

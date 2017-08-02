@@ -1,4 +1,6 @@
 {-# LANGUAGE TupleSections #-}
+{-# OPTIONS_GHC -Wall #-}
+
 module Camfort.Specification.Hoare.Lexer where
 
 import Data.Monoid (Alt(..))
@@ -7,7 +9,6 @@ import Data.Coerce
 import Control.Monad.State
 import Control.Monad.Except
 
-import Camfort.Specification.Parser
 import Camfort.Specification.Hoare.Types
 
 addToTokens :: Token -> String -> HoareSpecParser [Token]
@@ -22,9 +23,10 @@ lexer ('\t' : xs) = lexer xs
 lexer xs
   | Just (tok, rest) <- lexSymbol xs
   = addToTokens tok rest
-lexer ('(' : xs) = do
+lexer ('"' : xs) = do
   (tok, rest) <- lexExpr xs
   addToTokens tok rest
+lexer xs = throwError (LexError xs)
 
 
 lexSymbol :: String -> Maybe (Token, String)
@@ -67,7 +69,7 @@ lexExpr input = do
       go xs
 
   (rest, expr) <- runStateT (go input) []
-  return (TExpr expr, rest)
+  return (TExpr (reverse expr), rest)
 
 
 stripPrefix :: (Eq a) => [a] -> [a] -> Maybe [a]

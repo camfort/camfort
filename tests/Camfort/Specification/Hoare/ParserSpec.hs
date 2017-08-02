@@ -1,114 +1,107 @@
+{-# LANGUAGE FlexibleContexts      #-}
+
 module Camfort.Specification.Hoare.ParserSpec (spec) where
 
-import Data.Either (isLeft)
+import           Data.Either                        (isLeft)
+import           Data.Foldable                      (traverse_)
 
-import qualified Camfort.Specification.Parser as Parser
-import Camfort.Specification.Parser (runParser)
-import Camfort.Specification.Hoare.Parser
-import Camfort.Specification.Hoare.Types
-import Camfort.Specification.Hoare.Syntax
+import           Data.Generics.Uniplate.Operations  (Biplate, transformBi)
 
-import Test.Hspec hiding (Spec)
-import qualified Test.Hspec as Test
+import           Camfort.Specification.Hoare.Lexer
+import           Camfort.Specification.Hoare.Parser
+import           Camfort.Specification.Hoare.Syntax
+import           Camfort.Specification.Hoare.Types
+import           Camfort.Specification.Parser       (runParser)
+import qualified Camfort.Specification.Parser       as Parser
+import qualified Language.Fortran.AST               as F
+import qualified Language.Fortran.Util.Position     as F
+
+import           Language.While.Prop
+
+import           Test.Hspec                         hiding (Spec)
+import qualified Test.Hspec                         as Test
 
 spec :: Test.Spec
-spec = undefined
-  -- describe "Stencils - Parser" $ do
-  --   it "basic unmodified stencil" $
-  --     parse (stencilString "r1 + r2")
-  --     `shouldBe`
-  --       mkSpec (Mult . Exact $ Or (Var "r1") (Var "r2"))
+spec = describe "Hoare - Parser" $ do
+  let (.->) = (,)
 
-  --   context "with modifiers" $ do
-  --     modifierTest "readOnce,"          (Once . Exact)
-  --     modifierTest "atLeast,"           (Mult . (`Bound` Nothing) . Just)
-  --     modifierTest "atMost,"            (Mult . Bound Nothing . Just)
-  --     modifierTest "readOnce, atLeast," (Once . (`Bound` Nothing) . Just)
-  --     modifierTest "readOnce, atMost,"  (Once . Bound Nothing . Just)
+  it "lexes" $ do
+    let runTest (input, output) =
+          lexer input `shouldBe` Right output
 
-  --   describe "modifiers are case insensitive" $ do
-  --     modifierTest "readOnce, atLeast," (Once . (`Bound` Nothing) . Just)
-  --     modifierTest "readOnce, atMost,"  (Once . Bound Nothing . Just)
-  --     modifierTest "readonce, atleast," (Once . (`Bound` Nothing) . Just)
-  --     modifierTest "readonce, atmost,"  (Once . Bound Nothing . Just)
+        tests =
+          [ "\"x\"" .-> [TExpr "x"]
+          , "\"x + y - 347\"" .-> [TExpr "x + y - 347"]
+          , "= static_assert invariant(\"x\" = \"4)7\" )" .->
+            [ TEquals, TStaticAssert, TInvariant
+            , TLParen, TExpr "x", TEquals, TExpr "4)7", TRParen]
+          ]
 
-  --   let dimDepthTest (depth, dim) =
-  --         let depthDim = concat ["depth=", depth, ", dim=", dim]
-  --         in it depthDim $
-  --         parse (stencilString $ concat ["forward(", depthDim, ")"])
-  --         `shouldBe` mkSpec (Mult . Exact $ RegionConst $
-  --                                    Syn.Forward (read depth) (read dim) True)
+    traverse_ runTest tests
 
-  --   describe "depth and dim" $
-  --       mapM_ dimDepthTest [("1", "1"), ("10", "20")]
+    lexer "= static_assert post(\"missing close quote)" `shouldSatisfy` isLeft
 
-  --   describe "invalid stencils" $ do
-  --     invalidStencilTest "approximation before multiplicity"
-  --       "atLeast, readOnce r1"
-  --     invalidStencilTest "repeated multiplicities"
-  --       "readOnce, readOnce r1"
-  --     invalidStencilTest "repeated approximations"
-  --       "atLeast, atLeast, r1"
-  --     invalidStencilTest "multiple approximations"
-  --       "atLeast, atMost, r1"
-  --     invalidStencilTest "zero dim"
-  --       "forward(depth=1, dim=0)"
-  --     invalidStencilTest "zero depth"
-  --       "forward(depth=0, dim=1)"
-  --     invalidStencilTest "negative dim"
-  --       "forward(depth=1, dim=-1)"
-  --     invalidStencilTest "negative depth"
-  --       "forward(depth=-1, dim=1)"
-  --     invalidStencilTest "just pointed stencil"
-  --       "pointed(dims=1,2)"
-  --     invalidStencilTest "basic monfieid stencil (2)"
-  --       "atleast, pointed(dims=1,2), forward(depth=1, dim=1)"
-  --     invalidStencilTest "basic stencil with pointed and nonpointed"
-  --       "atleast, pointed(dims=2),  \
-  --           \        nonpointed(dims=1), forward(depth=1, dim=1)"
-  --     invalidStencilTest "complex stencil"
-  --       "atleast, pointed(dims=1,2), readonce, \
-  --           \ (forward(depth=1, dim=1) + r) * backward(depth=3, dim=4)"
-  --     invalidStencilTest "pointed/nonpointed on same dim"
-  --       "atleast, nonpointed(dims=2), pointed(dims=1,2), \
-  --            \ forward(depth=1, dim=1)"
-  --     invalidStencilTest' "empty specification"
-  --       "= stencil"
-  --     invalidStencilTest' "only identifier"
-  --       "= stencil foo"
+  it "parses" $ do
+    let runTest (input, output) =
+          parse input `shouldMatch` Right output
 
-  --   it "basic modified stencil (1)" $
-  --     parse (stencilString "      readonce, r1 + r2")
-  --     `shouldBe`
-  --       mkSpec (Once . Exact $ Or (Var "r1") (Var "r2"))
+        var n = F.ExpValue () defSpan (F.ValVariable n)
+        x = var "x"
+        y = var "y"
+        z = var "z"
+
+        num n = F.ExpValue () defSpan (F.ValInteger (show n))
+
+        bin o e1 e2 = F.ExpBinary () defSpan o e1 e2
+        add = bin F.Addition
+        sub = bin F.Subtraction
+
+        xA3 = x `add` num 3
+        ySz = y `sub` z
+        yAz = y `add` z
+
+        tests =
+          [ "!= static_assert pre(\"x\" = \"y\")"
+            .->
+            Specification SpecPre (x `FEq` y)
+
+          , "!= static_assert invariant(\"x + 3\" < \"y - z\" & \"x + 3\" > \"y + z\")"
+            .->
+            Specification SpecInvariant
+            ((xA3 `FLT` ySz) `PAnd` (xA3 `FGT` yAz))
+
+          , "!= static_assert post(\"x + 3\" < \"y - z\" & \"x + 3\" > \"y + z\" | \"x\" >= \"7\")"
+            .->
+            Specification SpecPost
+            (((xA3 `FLT` ySz) `PAnd` (xA3 `FGT` yAz)) `POr`
+              (x `FGE` num 7)
+            )
+
+          , "!= static_assert seq(\"x + 3\" < \"y - z\" -> \"x + 3\" > \"y + z\" -> \"x\" >= \"7\")"
+            .->
+            Specification SpecSeq
+            ((xA3 `FLT` ySz) `PImpl`
+              (((xA3 `FGT` yAz)) `PImpl` (x `FGE` num 7))
+            )
+
+          ]
+
+    traverse_ runTest tests
 
 
-  --   let regionTestCase isRefl =
-  --         Right (RegionDec "r"
-  --                 (Or (RegionConst (Syn.Forward 1 1 isRefl))
-  --                  (RegionConst (Syn.Backward 2 2 isRefl))))
-  --   it "region defn" $
-  --     parse "= region :: r = forward(depth=1, dim=1) + backward(depth=2, dim=2)"
-  --     `shouldBe`
-  --       regionTestCase True
+shouldMatch :: (Biplate from F.SrcSpan, Eq from, Show from) => from -> from -> Expectation
+shouldMatch a b = a `shouldSatisfy` matches b
 
-  --   it "region defn syntactic permutation" $
-  --     parse "= region :: r = forward(dim=1,depth=1) + backward(depth=2, dim=2)"
-  --     `shouldBe`
-  --       regionTestCase True
+stripSpans :: Biplate from F.SrcSpan => from -> from
+stripSpans = transformBi (const defSpan)
 
-  --   it "region defn irreflx syntactic permutation" $
-  --     parse "= region :: r = forward(nonpointed,dim=1,depth=1) + backward(depth=2,nonpointed,dim=2)"
-  --     `shouldBe`
-  --       regionTestCase False
+-- | Check if the two inputs are equal after removing all source spans, which
+-- this test suite doesn't care about.
+matches :: (Biplate from F.SrcSpan, Eq from) => from -> from -> Bool
+matches a b =
+  stripSpans a == stripSpans b
 
-  --   describe "error messages" $ do
-  --     invalidStencilTestStr "invalid identifier"
-  --       "= stencil foo$ :: a"
-  --       "Invalid character in identifier: '$'"
-  --     invalidStencilTestStr "invalid syntax"
-  --       "= stencil readonce, readonce, pointed(dim=1) :: a"
-  --       "Could not parse specification at: \"readonce... \"\n"
+defSpan = F.SrcSpan (F.Position 0 0 0) (F.Position 0 0 0)
 
 parse :: String -> Either (Parser.SpecParseError HoareParseError) (Specification ())
 parse = runParser hoareParser

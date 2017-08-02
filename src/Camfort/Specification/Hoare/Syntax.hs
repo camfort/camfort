@@ -23,6 +23,7 @@ data SpecKind
   | SpecPost
   | SpecSeq
   | SpecInvariant
+  deriving (Show, Eq, Typeable, Data)
 
 
 data SpecOp a
@@ -31,7 +32,7 @@ data SpecOp a
   | OpLE a a
   | OpGT a a
   | OpGE a a
-  deriving (Show, Data, Typeable, Functor, Foldable, Traversable)
+  deriving (Show, Eq, Data, Typeable, Functor, Foldable, Traversable)
 
 
 type SpecFormula a = Prop (SpecOp (F.Expression a))
@@ -65,4 +66,5 @@ data Specification a =
   { _specType    :: SpecKind
   , _specFormula :: SpecFormula a
   }
+  deriving (Show, Eq, Typeable, Data, Functor)
 
