@@ -82,6 +82,13 @@ markerChar Doxygen   = '<'
 markerChar Ford      = '!'
 markerChar ATDefault = '='
 
+runFunctionality description runner analysis compiler env inSrc incDir excludes = do
+  putStrLn $ description ++ " '" ++ inSrc ++ "'"
+  incDir' <- maybe getCurrentDirectory pure incDir
+  runner analysis compiler env inSrc incDir' excludes
+
+withOutRunner runner outSrc analysis compiler env inSrc incDir excludes
+  = runner analysis compiler env inSrc incDir excludes outSrc
 
 -- * Wrappers on all of the features
 ast d incDir excludes = do
@@ -90,97 +97,83 @@ ast d incDir excludes = do
     xs <- readParseSrcDir modFiles d excludes
     print . fmap fst $ xs
 
-countVarDecls inSrc incDir excludes = do
-    putStrLn $ "Counting variable declarations in '" ++ inSrc ++ "'"
-    incDir' <- maybe getCurrentDirectory pure incDir
-    doAnalysisReport countVariableDeclarations simpleCompiler () inSrc incDir' excludes
+countVarDecls =
+  runFunctionality "Counting variable declarations in"
+    doAnalysisReport countVariableDeclarations simpleCompiler ()
 
-dead inSrc incDir excludes outSrc = do
-    putStrLn $ "Eliminating dead code in '" ++ inSrc ++ "'"
-    let rfun = do
-          pfs <- analysisInput
-          resA <- mapM (branchAnalysis $ deadCode False) pfs
-          let (reports, results) = (fmap analysisDebug resA, fmap analysisResult resA)
-          pure (mconcat reports, fmap (pure :: a -> Either () a) results)
-    incDir' <- maybe getCurrentDirectory pure incDir
-    doRefactor rfun simpleCompiler () inSrc incDir' excludes outSrc
+dead inSrc incDir excludes outSrc =
+  let rfun = do
+        pfs <- analysisInput
+        resA <- mapM (branchAnalysis $ deadCode False) pfs
+        let (reports, results) = (fmap analysisDebug resA, fmap analysisResult resA)
+        pure (mconcat reports, fmap (pure :: a -> Either () a) results)
+  in runFunctionality "Eliminating dead code in" (withOutRunner doRefactor outSrc)
+     rfun simpleCompiler () inSrc incDir excludes
 
-common inSrc incDir excludes outSrc = do
-    putStrLn $ "Refactoring common blocks in '" ++ inSrc ++ "'"
-    isDir <- isDirectory inSrc
-    let rfun = commonElimToModules (takeDirectory outSrc ++ "/")
-    incDir' <- maybe getCurrentDirectory pure incDir
-    doRefactorAndCreate rfun simpleCompiler () inSrc incDir' excludes outSrc
+common inSrc incDir excludes outSrc =
+  let rfun = commonElimToModules (takeDirectory outSrc ++ "/")
+  in runFunctionality "Refactoring common blocks in"
+     (withOutRunner doRefactorAndCreate outSrc) rfun simpleCompiler () inSrc incDir excludes
 
 equivalences inSrc incDir excludes outSrc = do
-    putStrLn $ "Refactoring equivalences blocks in '" ++ inSrc ++ "'"
-    let rfun = do
-          pfs <- analysisInput
-          resA <- mapM (branchAnalysis refactorEquivalences) pfs
-          let (reports, results) = (fmap analysisDebug resA, fmap analysisResult resA)
-          pure (mconcat reports, fmap (pure :: a -> Either () a) results)
-    incDir' <- maybe getCurrentDirectory pure incDir
-    doRefactor rfun simpleCompiler () inSrc incDir' excludes outSrc
+  let rfun = do
+        pfs <- analysisInput
+        resA <- mapM (branchAnalysis refactorEquivalences) pfs
+        let (reports, results) = (fmap analysisDebug resA, fmap analysisResult resA)
+        pure (mconcat reports, fmap (pure :: a -> Either () a) results)
+  runFunctionality "Refactoring equivalences blocks in"
+    (withOutRunner doRefactor outSrc) rfun simpleCompiler () inSrc incDir excludes
 
 {- Units feature -}
+
+runUnitsFunctionality description runner analysis inSrc incDir excludes m debug =
+  let uo = optsToUnitOpts m debug
+  in runFunctionality description runner analysis compileUnits uo inSrc incDir excludes
+
 optsToUnitOpts :: LiteralsOpt -> Bool -> UnitOpts
 optsToUnitOpts m debug = o1
   where o1 = unitOpts0 { uoLiterals = m
                        , uoDebug = debug
                        }
 
-unitsCheck inSrc incDir excludes m debug = do
-    putStrLn $ "Checking units for '" ++ inSrc ++ "'"
-    let uo = optsToUnitOpts m debug
-    incDir' <- maybe getCurrentDirectory pure incDir
-    doAnalysisReport checkUnits compileUnits uo inSrc incDir' excludes
+unitsCheck = runUnitsFunctionality "Checking units for" doAnalysisReport checkUnits
 
-unitsInfer inSrc incDir excludes m debug = do
-    putStrLn $ "Inferring units for '" ++ inSrc ++ "'"
-    let uo = optsToUnitOpts m debug
-    incDir' <- maybe getCurrentDirectory pure incDir
-    doAnalysisReport LU.inferUnits compileUnits uo inSrc incDir' excludes
+unitsInfer = runUnitsFunctionality "Inferring units for" doAnalysisReport LU.inferUnits
 
-unitsSynth inSrc incDir excludes m debug outSrc annType = do
-    putStrLn $ "Synthesising units for '" ++ inSrc ++ "'"
-    let marker = markerChar annType
-    let uo = optsToUnitOpts m debug
-    let rfun = do
-          pfs <- analysisInput
-          results <- mapM (branchAnalysis (LU.synthesiseUnits marker)) pfs
-          let normalizedResults =
-                (\res -> ( show (analysisDebug res) ++ either show (show . fst) (analysisResult res)
-                         , case analysisResult res of
-                             Left err     -> Left err
-                             Right (_,pf) -> Right pf)) <$> results
-          pure . first concat $ unzip normalizedResults
-    incDir' <- maybe getCurrentDirectory pure incDir
-    doRefactor rfun compileUnits uo inSrc incDir' excludes outSrc
+unitsSynth inSrc incDir excludes m debug outSrc annType =
+  let marker = markerChar annType
+      rfun = do
+        pfs <- analysisInput
+        results <- mapM (branchAnalysis (LU.synthesiseUnits marker)) pfs
+        let normalizedResults =
+              (\res -> ( show (analysisDebug res) ++ either show (show . fst) (analysisResult res)
+                       , case analysisResult res of
+                           Left err     -> Left err
+                           Right (_,pf) -> Right pf)) <$> results
+        pure . first concat $ unzip normalizedResults
+      runner' = withOutRunner doRefactor outSrc
+  in runUnitsFunctionality "Synthesising units for" runner' rfun inSrc incDir excludes m debug
 
-unitsCriticals inSrc incDir excludes m debug = do
-    putStrLn $ "Suggesting variables to annotate with unit specifications in '"
-             ++ inSrc ++ "'"
-    let uo = optsToUnitOpts m debug
-    incDir' <- maybe getCurrentDirectory pure incDir
-    doAnalysisReport inferCriticalVariables compileUnits uo inSrc incDir' excludes
+unitsCriticals =
+  runUnitsFunctionality "Suggesting variables to annotate with unit specifications in"
+    doAnalysisReport inferCriticalVariables
 
 {- Stencils feature -}
-stencilsCheck inSrc incDir excludes = do
-   putStrLn $ "Checking stencil specs for '" ++ inSrc ++ "'"
-   incDir' <- maybe getCurrentDirectory pure incDir
-   doAnalysisReport Stencils.check compileStencils () inSrc incDir' excludes
 
-stencilsInfer inSrc incDir excludes useEval = do
-   putStrLn $ "Inferring stencil specs for '" ++ inSrc ++ "'"
-   let rfun = Stencils.infer useEval '='
-   incDir' <- maybe getCurrentDirectory pure incDir
-   doAnalysisReport rfun compileStencils () inSrc incDir' excludes
+runStencilsFunctionality description runner analysis =
+  runFunctionality description runner analysis compileStencils ()
 
-stencilsSynth inSrc incDir excludes annType outSrc = do
-   putStrLn $ "Synthesising stencil specs for '" ++ inSrc ++ "'"
-   let rfun = second (fmap (pure :: a -> Either () a)) <$> Stencils.synth (markerChar annType)
-   incDir' <- maybe getCurrentDirectory pure incDir
-   doRefactor rfun compileStencils () inSrc incDir' excludes outSrc
+stencilsCheck =
+  runStencilsFunctionality "Checking stencil specs for" doAnalysisReport Stencils.check
+
+stencilsInfer inSrc incDir excludes useEval =
+  let rfun = Stencils.infer useEval '='
+  in runStencilsFunctionality "Inferring stencil specs for" doAnalysisReport rfun inSrc incDir excludes
+
+stencilsSynth inSrc incDir excludes annType outSrc =
+  let rfun = second (fmap (pure :: a -> Either () a)) <$> Stencils.synth (markerChar annType)
+      runner' = withOutRunner doRefactor outSrc
+  in runStencilsFunctionality "Synthesising stencil specs for" runner' rfun inSrc incDir excludes
 
 -- | Initialize Camfort for the given project.
 camfortInitialize :: FilePath -> IO ()
