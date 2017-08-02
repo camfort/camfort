@@ -19,11 +19,11 @@ module Main (main) where
 
 import Camfort.Input (defaultValue)
 import Camfort.Functionality
-import Camfort.Specification.Stencils.InferenceFrontend (InferMode(..))
 import Camfort.Specification.Units.Monad (LiteralsOpt(LitMixed))
 
 import Data.Maybe (fromMaybe)
 import Data.Monoid ((<>))
+import System.Directory (getCurrentDirectory)
 
 import Options.Applicative
 
@@ -32,22 +32,23 @@ import Options.Applicative
 data Command = CmdCount ReadOptions
              | CmdAST ReadOptions
              | CmdStencilsCheck ReadOptions
-             | CmdStencilsInfer StencilsOptions
+             | CmdStencilsInfer StencilsInferOptions
              | CmdStencilsSynth StencilsSynthOptions
              | CmdUnitsSuggest UnitsOptions
              | CmdUnitsCheck UnitsOptions
              | CmdUnitsInfer UnitsOptions
              | CmdUnitsSynth UnitsSynthOptions
-             | CmdUnitsCompile UnitsWriteOptions
              | CmdRefactCommon RefactOptions
              | CmdRefactDead RefactOptions
              | CmdRefactEquivalence RefactOptions
+             | CmdInit FilePath
              | CmdTopVersion
 
 
 -- | Options for reading files.
 data ReadOptions = ReadOptions
   { inputSource :: String
+  , includeDir  :: Maybe String
   , exclude     :: Maybe [String]
   }
 
@@ -60,19 +61,11 @@ data WriteOptions = WriteFile { _outputFile :: String }
                   | WriteInplace
 
 
--- | Options used by stencil commands.
-data StencilsOptions = StencilsOptions
-  { soReadOptions  :: ReadOptions
-  , soInferMode    :: InferMode
-  }
-
-
 -- | Options used by all unit commands.
 data UnitsOptions = UnitsOptions
   { uoReadOptions :: ReadOptions
   , literals      :: LiteralsOpt
   , debug         :: Bool
-  , includeDir    :: Maybe String
   }
 
 
@@ -92,8 +85,14 @@ data UnitsSynthOptions = UnitsSynthOptions
   }
 
 
+data StencilsInferOptions = StencilsInferOptions
+  { sioReadOptions :: ReadOptions
+  , sioUseEval     :: Bool
+  }
+
+
 data StencilsSynthOptions = StencilsSynthOptions
-  { ssoStencilsOptions    :: StencilsOptions
+  { ssoReadOptions        :: ReadOptions
   , ssoWriteOptions       :: WriteOptions
   , ssoAnnotationOptions  :: AnnotationOptions
   }
@@ -110,6 +109,9 @@ data RefactOptions = RefactOptions
 fileArgument :: Mod ArgumentFields String -> Parser String
 fileArgument m = strArgument (metavar "FILENAME" <> action "file" <> m)
 
+-- | Parser for an argument representing an individual directory.
+directoryArgument :: Mod ArgumentFields String -> Parser String
+directoryArgument m = strArgument (metavar "DIRECTORY" <> action "directory" <> m)
 
 -- | Parser for file options with multiple files specified
 -- | as a comma-separated list.
@@ -135,7 +137,14 @@ excludeOption = optional $ multiFileOption $
 readOptions :: Parser ReadOptions
 readOptions = fmap ReadOptions
   (fileArgument $ help "input file")
+  <*> optional includeDirOption
   <*> excludeOption
+  where
+    dirOption m = strOption (metavar "DIR" <> action "directory" <> m)
+    includeDirOption = dirOption
+      (   long "include-dir"
+       <> short 'I'
+       <> help "directory to search for precompiled files")
 
 
 -- | User must specify either an ouput file, or say that the file
@@ -148,11 +157,11 @@ writeOptions = (fmap WriteFile . fileArgument $
                       <> help "write in place (replaces input files)"))
 
 
-stencilsOptions :: Parser StencilsOptions
-stencilsOptions = fmap StencilsOptions
+stencilsInferOptions :: Parser StencilsInferOptions
+stencilsInferOptions = fmap StencilsInferOptions
   readOptions <*> evalOption
   where
-    evalOption = flag AssignMode EvalMode
+    evalOption = switch
       (    long "eval"
         <> help "provide additional evaluation reporting"
         <> internal)
@@ -160,7 +169,7 @@ stencilsOptions = fmap StencilsOptions
 
 stencilsSynthOptions :: Parser StencilsSynthOptions
 stencilsSynthOptions = fmap StencilsSynthOptions
-  stencilsOptions <*> writeOptions <*> annotationOptions
+  readOptions <*> writeOptions <*> annotationOptions
 
 
 unitsOptions :: Parser UnitsOptions
@@ -168,7 +177,6 @@ unitsOptions = fmap UnitsOptions
       readOptions
   <*> literalsOption
   <*> debugOption
-  <*> optional includeDirOption
   where
     literalsOption = option parseLiterals $
                      long "units-literals"
@@ -179,11 +187,6 @@ unitsOptions = fmap UnitsOptions
                      <> help "units-of-measure literals mode. ID = Unitless, Poly, or Mixed"
     parseLiterals = fmap read str
     debugOption = switch (long "debug" <> help "enable debug mode")
-    dirOption m = strOption (metavar "DIR" <> action "directory" <> m)
-    includeDirOption = dirOption
-      (   long "include-dir"
-       <> short 'I'
-       <> help "directory to search for precompiled files")
 
 
 unitsWriteOptions :: Parser UnitsWriteOptions
@@ -216,17 +219,16 @@ cmdAST   = fmap CmdAST   readOptions
 
 cmdStencilsCheck, cmdStencilsInfer, cmdStencilsSynth :: Parser Command
 cmdStencilsCheck = fmap CmdStencilsCheck readOptions
-cmdStencilsInfer = fmap CmdStencilsInfer stencilsOptions
+cmdStencilsInfer = fmap CmdStencilsInfer stencilsInferOptions
 cmdStencilsSynth = fmap CmdStencilsSynth stencilsSynthOptions
 
 
 cmdUnitsSuggest, cmdUnitsCheck, cmdUnitsInfer
-  , cmdUnitsSynth, cmdUnitsCompile :: Parser Command
+  , cmdUnitsSynth :: Parser Command
 cmdUnitsSuggest = fmap CmdUnitsSuggest unitsOptions
 cmdUnitsCheck   = fmap CmdUnitsCheck   unitsOptions
 cmdUnitsInfer   = fmap CmdUnitsInfer   unitsOptions
 cmdUnitsSynth   = fmap CmdUnitsSynth   unitsSynthOptions
-cmdUnitsCompile = fmap CmdUnitsCompile unitsWriteOptions
 
 
 cmdRefactCommon, cmdRefactDead, cmdRefactEquivalence :: Parser Command
@@ -286,10 +288,7 @@ analysesParser = commandsParser "Analysis Commands" analysesCommands
           cmdUnitsInfer,    "unit-of-measure inference")
       , ("units-synth",
           ["unit-synth", "synth-units", "synth-unit"],
-          cmdUnitsSynth,    "unit-of-measure synthesise specs")
-      , ("units-compile",
-          ["unit-compile", "compile-units", "compile-unit"],
-          cmdUnitsCompile,  "units-of-measure compile module information") ]
+          cmdUnitsSynth,    "unit-of-measure synthesise specs") ]
 
 
 refactoringsParser :: Parser Command
@@ -309,34 +308,48 @@ topLevelCommands = versionOption
                         <> short '?'
                         <> help "show version number")
 
+cmdInit :: FilePath -> Parser Command
+cmdInit currDir = fmap CmdInit . directoryArgument $
+  help "project directory" <> value currDir
+
+projectParser :: FilePath -> Parser Command
+projectParser currDir = commandsParser "Project Commands" projectCommands
+  where
+    projectCommands =
+      [ ("init", [], cmdInit currDir, "initialize CamFort for the project") ]
 
 -- | Collective parser for all CamFort commands.
-commandParser :: Parser Command
-commandParser =
-  helper <*> (analysesParser <|> refactoringsParser <|> topLevelCommands)
-
+commandParser :: FilePath -> Parser Command
+commandParser currDir =
+  helper <*> (    projectParser currDir
+              <|> analysesParser
+              <|> refactoringsParser
+              <|> topLevelCommands)
 
 main :: IO ()
 main = do
-  cmd <- execParser (info commandParser idm)
+  currDir <- getCurrentDirectory
+  cmd <- execParser (info (commandParser currDir) idm)
   runCommand cmd
   where
     getExcludes = fromMaybe [] . exclude
     getOutputFile _ (WriteFile f) = f
     getOutputFile inp WriteInplace = inp
-    runRO ro f = f (inputSource ro) (getExcludes ro)
-    runSO so f =
-      runRO (soReadOptions so) f (soInferMode so)
+    runRO ro f = f (inputSource ro) (includeDir ro) (getExcludes ro)
+    runSIO sio f =
+      let ro      = sioReadOptions sio
+          useEval = sioUseEval sio
+          inFile  = inputSource ro
+      in runRO ro f useEval
     runSSO sso f =
       let ao     = ssoAnnotationOptions sso
           wo     = ssoWriteOptions sso
-          so     = ssoStencilsOptions sso
-          ro     = soReadOptions so
+          ro     = ssoReadOptions sso
           inFile = inputSource ro
-      in runSO so f (annotationType ao) (getOutputFile inFile wo)
+      in runRO ro f (annotationType ao) (getOutputFile inFile wo)
     runUO uo f =
       let ro = uoReadOptions uo
-      in runRO ro f (literals uo) (debug uo) (includeDir uo)
+      in runRO ro f (literals uo) (debug uo)
     runUWO uwo f =
       let uo     = uwoUnitsOptions uwo
           ro     = uoReadOptions uo
@@ -355,21 +368,21 @@ main = do
     runCommand (CmdAST ro)                = runRO ro ast
     runCommand (CmdCount ro)              = runRO ro countVarDecls
     runCommand (CmdStencilsCheck ro)      = runRO ro stencilsCheck
-    runCommand (CmdStencilsInfer so)      = runSO so stencilsInfer
+    runCommand (CmdStencilsInfer so)      = runSIO so stencilsInfer
     runCommand (CmdStencilsSynth sso)     = runSSO sso stencilsSynth
     runCommand (CmdUnitsSuggest uo)       = runUO uo unitsCriticals
     runCommand (CmdUnitsCheck uo)         = runUO uo unitsCheck
     runCommand (CmdUnitsInfer uo)         = runUO uo unitsInfer
     runCommand (CmdUnitsSynth uso)        = runUSO uso unitsSynth
-    runCommand (CmdUnitsCompile uwo)      = runUWO uwo unitsCompile
     runCommand (CmdRefactCommon rfo)      = runRFO rfo common
     runCommand (CmdRefactDead rfo)        = runRFO rfo dead
     runCommand (CmdRefactEquivalence rfo) = runRFO rfo equivalences
+    runCommand (CmdInit dir)              = camfortInitialize dir
     runCommand CmdTopVersion              = displayVersion
 
 
 -- | Current CamFort version.
-version = "0.903"
+version = "0.905"
 
 
 -- | Full CamFort version string.

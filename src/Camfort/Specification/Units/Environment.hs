@@ -23,13 +23,11 @@ module Camfort.Specification.Units.Environment
     -- * Datatypes and Aliases
     Constraint(..)
   , Constraints
-  , UnitAnnotation(..)
   , UnitInfo(..)
   , VV, PP
     -- * Helpers
   , conParamEq
   , doubleToRationalSubset
-  , mkUnitAnnotation
   , pprintConstr
   , pprintUnitInfo
   , toUnitInfo
@@ -37,22 +35,18 @@ module Camfort.Specification.Units.Environment
   , module Data.Data
   ) where
 
+import           Data.Binary
+import           Data.Char
+import           Data.Data
+import           Data.List
+import           Data.Ratio
+import           GHC.Generics (Generic)
+import           Text.Printf
+
 import qualified Language.Fortran.AST as F
-import qualified Language.Fortran.Analysis as FA
 
 import qualified Camfort.Specification.Units.Parser.Types as P
 
-import Data.Char
-import Data.Data
-import Data.List
-import Data.Ratio
-import Data.Binary
-import GHC.Generics (Generic)
-
-import Camfort.Helpers (SourceText)
-import qualified Data.ByteString.Char8 as B
-
-import Text.Printf
 
 -- | A (unique name, source name) variable
 type VV = (F.Name, F.Name)
@@ -100,7 +94,7 @@ instance Show UnitInfo where
     UnitlessVar                         -> "1"
     UnitName name                       -> name
     UnitAlias name                      -> name
-    UnitVar (_, vName)                  -> printf "unit_of(%s)" vName
+    UnitVar (vName, _)                  -> printf "#<Var %s>" vName
     UnitRecord recs                     -> "record (" ++ intercalate ", " (map (\ (n, u) -> n ++ " :: " ++ show u) recs) ++ ")"
     UnitMul u1 (UnitPow u2 k)
       | k < 0                           -> maybeParen u1 ++ " / " ++ maybeParen (UnitPow u2 (-k))
@@ -209,6 +203,7 @@ pprintUnitInfo (UnitParamPosUse ((_, fname), 0, _)) = printf "result of %s" fnam
 pprintUnitInfo (UnitParamPosUse ((_, fname), i, _)) = printf "parameter %d to %s" i fname
 pprintUnitInfo (UnitParamEAPUse ((v, _), _))        = printf "explicitly annotated polymorphic unit %s" v
 pprintUnitInfo (UnitLiteral _)                      = "literal"
+pprintUnitInfo (UnitMul u1 u2)                      = pprintUnitInfo u1 ++ " * " ++ pprintUnitInfo u2
 pprintUnitInfo ui                                   = show ui
 
 --------------------------------------------------
@@ -236,23 +231,6 @@ unitParamEq (UnitMul u1 u2)               (UnitMul u1' u2')             = unitPa
                                                                           unitParamEq u1 u2' && unitParamEq u2 u1'
 unitParamEq (UnitPow u p)                 (UnitPow u' p')               = unitParamEq u u' && p == p'
 unitParamEq u1 u2 = u1 == u2
-
---------------------------------------------------
-
--- The annotation on the AST used for solving units.
-data UnitAnnotation a = UnitAnnotation {
-    prevAnnotation :: a,
-    unitSpec       :: Maybe P.UnitStatement,
-    unitConstraint :: Maybe Constraint,
-    unitInfo       :: Maybe UnitInfo,
-    unitBlock      :: Maybe (F.Block (FA.Analysis (UnitAnnotation a))), -- ^ linked variable declaration
-    unitPU         :: Maybe (F.ProgramUnit (FA.Analysis (UnitAnnotation a))) -- ^ linked program unit
-  } deriving (Data, Typeable, Show)
-
-mkUnitAnnotation :: a -> UnitAnnotation a
-mkUnitAnnotation a = UnitAnnotation a Nothing Nothing Nothing Nothing Nothing
-
---------------------------------------------------
 
 -- | Convert parser units to UnitInfo
 toUnitInfo   :: P.UnitOfMeasure -> UnitInfo

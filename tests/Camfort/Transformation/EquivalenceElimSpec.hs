@@ -18,11 +18,15 @@
 
 module Camfort.Transformation.EquivalenceElimSpec (spec) where
 
+import Control.Arrow (second)
 import System.FilePath
 import System.Directory
 
 import Test.Hspec
 
+import Camfort.Analysis
+  (analysisDebug, analysisInput, analysisResult, branchAnalysis)
+import Camfort.Analysis.ModFile (simpleCompiler)
 import Camfort.Transformation.EquivalenceElim
 import Camfort.Functionality
 import Camfort.Input
@@ -39,7 +43,7 @@ readActual :: FilePath -> IO String
 readActual argumentFilename = do
   let argumentPath = samplesBase </> argumentFilename
   let outFile = argumentPath `addExtension` "out"
-  equivalences argumentPath [] outFile
+  equivalences argumentPath Nothing [] outFile
   actual <- readFile outFile
   removeFile outFile
   return actual
@@ -52,12 +56,17 @@ spec =
       it "it eliminates equivalence statements" $
         actual `shouldBe` expected
       ----
-      let rfun = mapM refactorEquivalences
+      let rfun = do
+            pfs <- analysisInput
+            resA <- mapM (branchAnalysis refactorEquivalences) pfs
+            let (reports, results) = (fmap analysisDebug resA, fmap analysisResult resA)
+            pure (mconcat reports, fmap (pure :: a -> Either () a) results)
       let infile = samplesBase </> "equiv.f90"
-      report <- runIO $ doRefactor rfun infile [] "equiv.expected.f90"
+      report <- runIO $ doRefactor rfun simpleCompiler () infile infile [] "equiv.expected.f90"
       it "report is as expected" $
         report `shouldBe` expectedReport
 
+expectedReport :: String
 expectedReport =
   "6:3: removed equivalence \n\
   \14:3: added copy due to refactored equivalence\n\

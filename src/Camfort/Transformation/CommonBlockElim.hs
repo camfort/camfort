@@ -39,6 +39,7 @@ import qualified Language.Fortran.Util.Position as FU
 import qualified Language.Fortran.ParserMonad as PM
 import qualified Language.Fortran.PrettyPrint as PP
 
+import Camfort.Analysis (SimpleAnalysis, analysisInput, writeDebug)
 import Camfort.Helpers
 import Camfort.Helpers.Syntax
 import Camfort.Analysis.Annotations
@@ -58,7 +59,7 @@ type TCommon p = (Maybe F.Name, [(F.Name, F.BaseType)])
 type TLCommon p = (Filename, (F.Name, TCommon p))
 
 type A1 = FA.Analysis Annotation
-type CommonState = State (Report, [TLCommon A])
+type CommonState = State (String, [TLCommon A])
 
 -- | Type for type-level annotations giving documentation
 type (:?) a (b :: k) = a
@@ -66,17 +67,18 @@ type (:?) a (b :: k) = a
 -- Top-level functions for eliminating common blocks in a set of files
 commonElimToModules ::
        Directory
-    -> [F.ProgramFile A]
-    -> (Report, [F.ProgramFile A], [F.ProgramFile A])
+    -> SimpleAnalysis [F.ProgramFile A] ([F.ProgramFile A], [F.ProgramFile A])
 
 -- Eliminates common blocks in a program directory (and convert to modules)
-commonElimToModules d pfs =
-    (r ++ r', pfs'', pfM)
+commonElimToModules d = do
+  pfs <- analysisInput
+  let (pfs', (r, cg)) = runState (analyseAndRmCommons pfs) ("", [])
+      (r', pfM)       = introduceModules meta d cg
+      pfs''           = updateUseDecls pfs' cg
+  writeDebug . mkReport $ r ++ r'
+  pure (pfs'', pfM)
   where
-    (pfs', (r, cg)) = runState (analyseAndRmCommons pfs) ("", [])
     meta = F.MetaInfo PM.Fortran90 ""
-    (r', pfM) = introduceModules meta d cg
-    pfs'' = updateUseDecls pfs' cg
 
 analyseAndRmCommons :: [F.ProgramFile A]
                -> CommonState [F.ProgramFile A]
@@ -395,7 +397,7 @@ mkRenamerCoercer (name1, vtys1) (name2, vtys2)
              typR = if ty1  ==  ty2 then Nothing else Just (ty1, ty2)
         generate _ _ _ = error "Common blocks of different field length\n"
 
-allCoherentCommons :: [TLCommon A] -> (Report, Bool)
+allCoherentCommons :: [TLCommon A] -> (String, Bool)
 allCoherentCommons commons =
    foldM (\p (c1, c2) -> coherentCommons c1 c2 >>= \p' -> return $ p && p')
      True (pairs commons)
@@ -406,14 +408,14 @@ allCoherentCommons commons =
     pairs (x:xs) = zip (repeat x) xs ++ pairs xs
 
 
-coherentCommons :: TLCommon A -> TLCommon A -> (Report, Bool)
+coherentCommons :: TLCommon A -> TLCommon A -> (String, Bool)
 coherentCommons (_, (_, (n1, vtys1))) (_, (_, (n2, vtys2))) =
     if n1 == n2
     then coherentCommons' vtys1 vtys2
     else error $ "Trying to compare differently named common blocks: "
                ++ show n1 ++ " and " ++ show n2 ++ "\n"
 
-coherentCommons' ::  [(F.Name, F.BaseType)] -> [(F.Name, F.BaseType)] -> (Report, Bool)
+coherentCommons' ::  [(F.Name, F.BaseType)] -> [(F.Name, F.BaseType)] -> (String, Bool)
 coherentCommons' []               []                = ("", True)
 coherentCommons' ((var1, ty1):xs) ((var2, ty2):ys)
       | af ty1 == af ty2 = let (r', c) = coherentCommons' xs ys
@@ -432,12 +434,12 @@ coherentCommons' _ _ = ("Common blocks of different field lengths", False)
 introduceModules :: F.MetaInfo
                  -> Directory
                  -> [TLCommon A]
-                 -> (Report, [F.ProgramFile A])
+                 -> (String, [F.ProgramFile A])
 introduceModules meta dir cenv =
     mapM (mkModuleFile meta dir . head . head) (groupSortCommonBlock cenv)
 
 mkModuleFile ::
-  F.MetaInfo -> Directory -> TLCommon A -> (Report, F.ProgramFile A)
+  F.MetaInfo -> Directory -> TLCommon A -> (String, F.ProgramFile A)
 mkModuleFile meta dir (_, (_, (name, varTys))) =
     (r, F.pfSetFilename path $ F.ProgramFile meta [mod])
   where

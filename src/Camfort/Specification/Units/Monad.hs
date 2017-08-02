@@ -20,16 +20,43 @@
 
 {- | Defines the monad for the units-of-measure modules -}
 module Camfort.Specification.Units.Monad
-  ( UA, VV, UnitSolver, UnitOpts(..), unitOpts0, UnitLogs, UnitState(..), LiteralsOpt(..), UnitException
-  , whenDebug, modifyVarUnitMap, modifyGivenVarSet, modifyUnitAliasMap
+  ( UA, VV, UnitSolver, UnitOpts(..), unitOpts0, UnitLogs, UnitState, LiteralsOpt(..)
+  , whenDebug, writeLogs
   , VarUnitMap, GivenVarSet, UnitAliasMap, TemplateMap, CallIdMap
-  , modifyTemplateMap, modifyNameParamMap, modifyProgramFile, modifyProgramFileM, modifyCallIdRemapM
-  , runUnitSolver, evalUnitSolver, execUnitSolver
-  , CompiledUnits(..), NameParamMap, NameParamKey(..), emptyCompiledUnits )
-where
+  , NameParamMap, NameParamKey(..)
+    -- ** State Helpers
+  , freshId
+    -- *** Getters
+  , getConstraints
+  , getNameParamMap
+  , getProgramFile
+  , getTemplateMap
+  , getUnitAliasMap
+  , getVarUnitMap
+  , usCallIdRemap
+  , usConstraints
+  , usGivenVarSet
+  , usNameParamMap
+  , usProgramFile
+  , usTemplateMap
+  , usUnitAliasMap
+  , usVarUnitMap
+    -- *** Modifiers
+  , modifyCallIdRemap
+  , modifyCallIdRemapM
+  , modifyConstraints
+  , modifyGivenVarSet
+  , modifyNameParamMap
+  , modifyProgramFile
+  , modifyProgramFileM
+  , modifyTemplateMap
+  , modifyUnitAliasMap
+  , modifyVarUnitMap
+    -- ** Runners
+  , runUnitSolver
+  ) where
 
 import Control.Monad.RWS.Strict
-import Control.Monad.Trans.Except
 import Data.Binary (Binary)
 import Data.Typeable (Typeable)
 import Data.Char (toLower)
@@ -39,11 +66,21 @@ import GHC.Generics (Generic)
 import qualified Data.Map.Strict as M
 import qualified Data.IntMap.Strict as IM
 import qualified Data.Set as S
-import qualified Language.Fortran.Analysis.Renaming as FAR
 import qualified Language.Fortran.AST as F
-import Language.Fortran.Util.ModFile
-import Camfort.Specification.Units.Environment (UnitInfo, Constraints(..), VV, PP)
-import Camfort.Analysis.Annotations (UA)
+import Language.Fortran.Util.ModFile (ModFiles)
+
+import Camfort.Analysis
+  ( Analysis
+  , AnalysisResult
+  , analysisDebug
+  , analysisParams
+  , analysisResult
+  , finalState
+  , runAnalysis
+  , writeDebug)
+import Camfort.Analysis.Annotations (Annotation, Report, mkReport)
+import Camfort.Specification.Units.Annotation (UA)
+import Camfort.Specification.Units.Environment (UnitInfo, Constraints, VV, PP)
 
 
 -- | Some options about how to handle literals.
@@ -67,12 +104,11 @@ instance Read LiteralsOpt where
 data UnitOpts = UnitOpts
   { uoDebug          :: Bool                      -- ^ debugging mode?
   , uoLiterals       :: LiteralsOpt               -- ^ how to handle literals
-  , uoModFiles       :: M.Map String ModFile      -- ^ map of included modules
   }
   deriving (Show, Data, Eq, Ord)
 
 unitOpts0 :: UnitOpts
-unitOpts0 = UnitOpts False LitMixed M.empty
+unitOpts0 = UnitOpts False LitMixed
 
 -- | Function/subroutine name -> associated, parametric polymorphic constraints
 type TemplateMap = M.Map F.Name Constraints
@@ -88,25 +124,10 @@ instance Binary NameParamKey
 -- | mapped to a list of units (to be multiplied together)
 type NameParamMap = M.Map NameParamKey [UnitInfo]
 
--- | The data-structure stored in 'fortran-src mod files'
-data CompiledUnits = CompiledUnits { cuTemplateMap  :: TemplateMap
-                                   , cuNameParamMap :: NameParamMap }
-  deriving (Ord, Eq, Show, Data, Typeable, Generic)
-
-instance Binary CompiledUnits
-
-emptyCompiledUnits :: CompiledUnits
-emptyCompiledUnits = CompiledUnits M.empty M.empty
-
 --------------------------------------------------
 
--- | The monad
-type UnitSolver a = ExceptT UnitException (RWS UnitOpts UnitLogs UnitState) a
-
---------------------------------------------------
-
--- Not in use, but might be useful someday.
-type UnitException = ()
+-- | UnitSolvers are analyses on 'ProgramFile's annotated with unit information.
+type UnitSolver a = Analysis UnitOpts Report UnitState (F.ProgramFile UA) a
 
 --------------------------------------------------
 
@@ -114,12 +135,16 @@ type UnitException = ()
 
 -- | Only run the argument if debugging mode enabled.
 whenDebug :: UnitSolver () -> UnitSolver ()
-whenDebug m = fmap uoDebug ask >>= \ d -> when d m
+whenDebug m = fmap uoDebug analysisParams >>= \ d -> when d m
+
+-- | Add some debugging information to the analysis.
+writeLogs :: String -> UnitSolver ()
+writeLogs = writeDebug . mkReport
 
 --------------------------------------------------
 
 -- Track some logging information in the monad.
-type UnitLogs = String
+type UnitLogs = Report
 
 --------------------------------------------------
 
@@ -140,26 +165,59 @@ data UnitState = UnitState
   , usUnitAliasMap :: UnitAliasMap
   , usTemplateMap  :: TemplateMap
   , usNameParamMap :: NameParamMap
-  , usLitNums      :: Int
-  , usCallIds      :: Int
   , usCallIdRemap  :: CallIdMap
+    -- | Next number to returned by 'freshId'.
+  , usNextUnique   :: Int
   , usConstraints  :: Constraints }
   deriving (Show, Data)
 
+unitState0 :: F.ProgramFile UA -> UnitState
 unitState0 pf = UnitState { usProgramFile  = pf
                           , usVarUnitMap   = M.empty
                           , usGivenVarSet  = S.empty
                           , usUnitAliasMap = M.empty
                           , usTemplateMap  = M.empty
                           , usNameParamMap = M.empty
-                          , usLitNums      = 0
-                          , usCallIds      = 0
+                          , usNextUnique   = 0
                           , usCallIdRemap  = IM.empty
                           , usConstraints  = [] }
 
 -- helper functions
+
+-- | Generate a number guaranteed to be unique in the current analysis.
+freshId :: UnitSolver Int
+freshId = do
+  s <- get
+  let i = usNextUnique s
+  put $ s { usNextUnique = i + 1 }
+  pure i
+
+getConstraints :: UnitSolver Constraints
+getConstraints = gets usConstraints
+
+getNameParamMap :: UnitSolver NameParamMap
+getNameParamMap = gets usNameParamMap
+
+getProgramFile :: UnitSolver (F.ProgramFile UA)
+getProgramFile = gets usProgramFile
+
+getTemplateMap :: UnitSolver TemplateMap
+getTemplateMap = gets usTemplateMap
+
+getUnitAliasMap :: UnitSolver UnitAliasMap
+getUnitAliasMap = gets usUnitAliasMap
+
+getVarUnitMap :: UnitSolver VarUnitMap
+getVarUnitMap = gets usVarUnitMap
+
 modifyVarUnitMap :: (VarUnitMap -> VarUnitMap) -> UnitSolver ()
 modifyVarUnitMap f = modify (\ s -> s { usVarUnitMap = f (usVarUnitMap s) })
+
+modifyCallIdRemap :: (CallIdMap -> CallIdMap) -> UnitSolver ()
+modifyCallIdRemap f = modify (\ s -> s { usCallIdRemap = f (usCallIdRemap s) })
+
+modifyConstraints :: (Constraints -> Constraints) -> UnitSolver ()
+modifyConstraints f = modify (\ s -> s { usConstraints = f (usConstraints s) })
 
 modifyGivenVarSet :: (GivenVarSet -> GivenVarSet) -> UnitSolver ()
 modifyGivenVarSet f = modify (\ s -> s { usGivenVarSet = f (usGivenVarSet s) })
@@ -186,19 +244,11 @@ modifyCallIdRemapM :: (CallIdMap -> UnitSolver (a, CallIdMap)) -> UnitSolver a
 modifyCallIdRemapM f = do
   idMap <- gets usCallIdRemap
   (x, idMap') <- f idMap
-  modify (\ s -> s { usCallIdRemap = idMap' })
+  modifyCallIdRemap (const idMap')
   return x
 
 --------------------------------------------------
 
 -- | Run the unit solver monad.
-runUnitSolver :: UnitOpts -> F.ProgramFile UA -> UnitSolver a -> (Either UnitException a, UnitState, UnitLogs)
-runUnitSolver o pf m = runRWS (runExceptT m) o (unitState0 pf)
-
-evalUnitSolver :: UnitOpts -> F.ProgramFile UA -> UnitSolver a -> (Either UnitException a, UnitLogs)
-evalUnitSolver o pf m = (ea, l) where (ea, _, l) = runUnitSolver o pf m
-
-execUnitSolver :: UnitOpts -> F.ProgramFile UA -> UnitSolver a -> Either UnitException (UnitState, UnitLogs)
-execUnitSolver o pf m = case runUnitSolver o pf m of
-  (Left e, _, _)  -> Left e
-  (Right _, s, l) -> Right (s, l)
+runUnitSolver :: UnitOpts -> F.ProgramFile UA -> ModFiles -> UnitSolver a -> AnalysisResult Report UnitState a
+runUnitSolver o pf mfs m = runAnalysis m o (unitState0 pf) mfs pf

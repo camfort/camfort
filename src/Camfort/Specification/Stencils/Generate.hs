@@ -8,57 +8,53 @@ Maintainer  :  dom.orchard@gmail.com
 Stability   :  experimental
 -}
 
-{-# LANGUAGE ConstraintKinds #-}
-{-# LANGUAGE FlexibleContexts #-}
-{-# LANGUAGE ImplicitParams #-}
-{-# LANGUAGE LambdaCase #-}
-{-# LANGUAGE PatternGuards #-}
-{-# LANGUAGE ScopedTypeVariables #-}
-{-# LANGUAGE TupleSections #-}
+{-# LANGUAGE ConstraintKinds           #-}
+{-# LANGUAGE FlexibleContexts          #-}
+{-# LANGUAGE PatternGuards             #-}
+{-# LANGUAGE ScopedTypeVariables       #-}
 
 module Camfort.Specification.Stencils.Generate
   (
     EvalLog
   , Neighbour(..)
+  , convIxToNeighbour
   , extractRelevantIVS
-  , assocsSequence
+  , genOffsets
   , genSpecifications
-  , genSubscripts
+  , indicesToSpec
   , isArraySubscript
   , neighbourIndex
-  , isVariableExpr
-  , convIxToNeighbour
-  , indicesToRelativisedOffsets
-  , indicesToSpec
-  , neighbourToOffset
-  , relativise
+  , runStencilInferer
   ) where
 
-import Control.Monad (void, when, zipWithM)
-import Control.Monad.State.Strict (get, put, runState, State)
-import Control.Monad.Writer.Strict (tell, Writer)
-import Data.Data (Data)
-import Data.Foldable (foldrM)
-import Data.Generics.Uniplate.Operations (transformBi, universeBi)
-import Data.Graph.Inductive.Graph (lab, pre)
+import           Control.Monad (void, when, zipWithM)
+import           Control.Monad.State.Strict (get, put, runState, State)
+import           Control.Monad.Writer.Strict (tell)
+import           Data.Data (Data)
+import           Data.Foldable (foldrM)
+import           Data.Generics.Uniplate.Operations (transformBi, universeBi)
+import           Data.Graph.Inductive.Graph (lab, pre)
 import qualified Data.IntMap as IM
 import qualified Data.Map as M
-import Data.Maybe (fromJust, fromMaybe, isJust, mapMaybe)
-import Data.Monoid ((<>))
+import           Data.Maybe (fromJust, fromMaybe, isJust, mapMaybe)
+import           Data.Monoid ((<>))
 import qualified Data.Set as S
 
-import qualified Language.Fortran.Analysis as FA
+import qualified Language.Fortran.AST               as F
+import qualified Language.Fortran.Analysis          as FA
 import qualified Language.Fortran.Analysis.DataFlow as FAD
-import qualified Language.Fortran.AST as F
-import qualified Language.Fortran.Util.Position as FU
+import           Language.Fortran.Util.ModFile (ModFiles)
+import qualified Language.Fortran.Util.Position     as FU
 
-import Camfort.Analysis.Annotations (A, Annotation)
-import Camfort.Helpers (collect)
+import           Camfort.Analysis
+  (Analysis, analysisDebug, analysisParams, analysisResult, runAnalysis)
+import           Camfort.Helpers (collect)
 import qualified Camfort.Helpers.Vec as V
-import Camfort.Specification.Stencils.Model
+import           Camfort.Specification.Stencils.Annotation ()
+import           Camfort.Specification.Stencils.InferenceBackend
+import           Camfort.Specification.Stencils.Model
   (Approximation(..), Multiplicity(..))
-import Camfort.Specification.Stencils.Annotation ()
-import Camfort.Specification.Stencils.Syntax
+import           Camfort.Specification.Stencils.Syntax
   ( absoluteRep
   , fromBool
   , groupKeyBy
@@ -69,9 +65,33 @@ import Camfort.Specification.Stencils.Syntax
   , Specification(..)
   , Variable)
 
-import Camfort.Specification.Stencils.CheckBackend
-import Camfort.Specification.Stencils.InferenceBackend
+type Indices a = [[F.Index (FA.Analysis a)]]
+
 type EvalLog = [(String, Variable)]
+
+data SIEnv ann = SIEnv
+  {
+    -- | In-scope induction variables.
+    sieIvs :: [Variable]
+  , sieFlowsGraph :: FAD.FlowsGraph ann
+  }
+
+-- | Analysis for working with low-level stencil inference.
+type StencilInferer ann = Analysis (SIEnv ann) EvalLog () ()
+
+-- | Get the list of in-scope induction variables.
+getIvs :: StencilInferer ann [Variable]
+getIvs = sieIvs <$> analysisParams
+
+-- | Get the FlowsGraph for the current analysis.
+getFlowsGraph :: StencilInferer ann (FAD.FlowsGraph ann)
+getFlowsGraph = sieFlowsGraph <$> analysisParams
+
+runStencilInferer :: StencilInferer ann a -> [Variable] -> FAD.FlowsGraph ann -> ModFiles -> (a, EvalLog)
+runStencilInferer si ivs flowsGraph mfs =
+  let res = runAnalysis si senv () mfs ()
+  in (analysisResult res, analysisDebug res)
+  where senv = SIEnv { sieIvs = ivs, sieFlowsGraph = flowsGraph }
 
 {-| Representation for indices as either:
      * neighbour indices
@@ -84,7 +104,7 @@ data Neighbour = Neighbour Variable Int
 
 {-| Match expressions which are array subscripts, returning Just of their
     index expressions, else Nothing -}
-isArraySubscript :: F.Expression (FA.Analysis A) -> Maybe [F.Index (FA.Analysis A)]
+isArraySubscript :: F.Expression (FA.Analysis a) -> Maybe [F.Index (FA.Analysis a)]
 isArraySubscript (F.ExpSubscript _ _ (F.ExpValue _ _ (F.ValVariable _)) subs) =
    Just $ F.aStrip subs
 isArraySubscript (F.ExpDataRef _ _ e e') =
@@ -94,7 +114,10 @@ isArraySubscript _ = Nothing
 {-| Given an induction-variable-map, convert a list of indices to
     Maybe a list of constant or neighbourhood indices.
     If any are non neighbourhood then return Nothing -}
-neighbourIndex :: FAD.InductionVarMapByASTBlock -> [F.Index (FA.Analysis A)] -> Maybe [Neighbour]
+neighbourIndex :: (Data a)
+               => FAD.InductionVarMapByASTBlock
+               -> [F.Index (FA.Analysis a)]
+               -> Maybe [Neighbour]
 neighbourIndex ivs ixs =
   if NonNeighbour `notElem` neighbours
   then Just neighbours
@@ -102,63 +125,73 @@ neighbourIndex ivs ixs =
     where
       neighbours = map (\ix -> convIxToNeighbour (extractRelevantIVS ivs ix) ix) ixs
 
-genSpecifications ::
-     FAD.FlowsGraph A
-  -> [Variable]
-  -> [Neighbour]
-  -> F.Block (FA.Analysis A)
-  -> Writer EvalLog ([([Variable], Specification)], [Int])
-genSpecifications flowsGraph ivs lhs block = do
-    let (subscripts, visitedNodes) = genSubscripts flowsGraph [block]
-    varToSpecs <- assocsSequence $ mkSpecs subscripts
-    case varToSpecs of
-      [] -> do
-         tell [("EVALMODE: Empty specification (tag: emptySpec)", "")]
-         return ([], visitedNodes)
-      _ -> do
-         let varsToSpecs = groupKeyBy varToSpecs
-         return (splitUpperAndLower varsToSpecs, visitedNodes)
-    where
-      mkSpecs = M.mapWithKey (\v -> indicesToSpec ivs v lhs)
+genSpecifications
+  :: (Data a, Show a, Eq a)
+  => [Neighbour]
+  -> F.Block (FA.Analysis a)
+  -> StencilInferer a ([([Variable], Specification)], [Int])
+genSpecifications lhs block = do
+  (subscripts, visitedNodes) <- genSubscripts [block]
+  varToSpecs <- assocsSequence . mkSpecs $ subscripts
+  case varToSpecs of
+    [] -> do
+       tell [("EVALMODE: Empty specification (tag: emptySpec)", "")]
+       return ([], visitedNodes)
+    _ -> do
+       let varsToSpecs = groupKeyBy varToSpecs
+       return (splitUpperAndLower varsToSpecs, visitedNodes)
+  where
+    mkSpecs = M.mapWithKey (`indicesToSpec` lhs)
 
-      splitUpperAndLower = concatMap splitUpperAndLower'
-      splitUpperAndLower' (vs, Specification (Mult (Bound (Just l) (Just u))) isStencil)
-        | isUnit l =
-         [(vs, Specification (Mult (Bound Nothing (Just u))) isStencil)]
-        | otherwise =
-         [(vs, Specification (Mult (Bound (Just l) Nothing)) isStencil),
-          (vs, Specification (Mult (Bound Nothing (Just u))) isStencil)]
-      splitUpperAndLower' (vs, Specification (Once (Bound (Just l) (Just u))) isStencil)
-        | isUnit l =
-         [(vs, Specification (Mult (Bound Nothing (Just u))) isStencil)]
-        | otherwise =
-         [(vs, Specification (Once (Bound (Just l) Nothing)) isStencil),
-          (vs, Specification (Once (Bound Nothing (Just u))) isStencil)]
-      splitUpperAndLower' x = [x]
+    splitUpperAndLower = concatMap splitUpperAndLower'
+    splitUpperAndLower' (vs, Specification (Mult (Bound (Just l) (Just u))) isStencil)
+      | isUnit l =
+       [(vs, Specification (Mult (Bound Nothing (Just u))) isStencil)]
+      | otherwise =
+       [(vs, Specification (Mult (Bound (Just l) Nothing)) isStencil),
+        (vs, Specification (Mult (Bound Nothing (Just u))) isStencil)]
+    splitUpperAndLower' (vs, Specification (Once (Bound (Just l) (Just u))) isStencil)
+      | isUnit l =
+       [(vs, Specification (Mult (Bound Nothing (Just u))) isStencil)]
+      | otherwise =
+       [(vs, Specification (Once (Bound (Just l) Nothing)) isStencil),
+        (vs, Specification (Once (Bound Nothing (Just u))) isStencil)]
+    splitUpperAndLower' x = [x]
+
+genOffsets
+  :: (Data a, Show a, Eq a)
+  => [Neighbour]
+  -> [F.Block (FA.Analysis a)]
+  -> StencilInferer a [(Variable, (Bool, [[Int]]))]
+genOffsets lhs blocks = do
+  (subscripts, _) <- genSubscripts blocks
+  assocsSequence . mkOffsets $ subscripts
+  where
+    mkOffsets = M.mapWithKey (`indicesToRelativisedOffsets` lhs)
 
 {-| genSubscripts
-   Takes * a flows graph
-         * a list of blocks representing an RHS
+   Takes * a list of blocks representing an RHS
    Returns a map from array variables to indices, and a list of
    nodes that were visited when computing this information -}
-genSubscripts ::
-     FAD.FlowsGraph A
-  -> [F.Block (FA.Analysis A)]
-  -> (M.Map Variable [[F.Index (FA.Analysis A)]], [Int])
-genSubscripts flowsGraph blocks =
-    (subscripts, visitedNodes)
+genSubscripts
+  :: (Data a, Show a, Eq a)
+  => [F.Block (FA.Analysis a)]
+  -> StencilInferer a (M.Map Variable (Indices a), [Int])
+genSubscripts blocks = do
+  flowsGraph <- getFlowsGraph
+  let (maps, visitedNodes) = runState (mapM (genSubscripts' True flowsGraph) blocks) []
+      subscripts = M.unionsWith (++) maps
+  pure (subscripts, visitedNodes)
   where
-    (maps, visitedNodes) = runState (mapM (genSubscripts' True flowsGraph) blocks) []
-    subscripts = M.unionsWith (++) maps
-
     -- Generate all subscripting expressions (that are translations on
     -- induction variables) that flow to this block
     -- The State monad provides a list of the visited nodes so far
-    genSubscripts' ::
-        Bool
-     -> FAD.FlowsGraph A
-     -> F.Block (FA.Analysis A)
-     -> State [Int] (M.Map Variable [[F.Index (FA.Analysis A)]])
+    genSubscripts'
+      :: (Data a, Show a, Eq a)
+      => Bool
+      -> FAD.FlowsGraph a
+      -> F.Block (FA.Analysis a)
+      -> State [Int] (M.Map Variable (Indices a))
 
     genSubscripts' False _ (F.BlStatement _ _ _ (F.StExpressionAssign _ _ e _))
        | isJust $ isArraySubscript e
@@ -178,9 +211,7 @@ genSubscripts flowsGraph blocks =
             put $ node : visited
             let blocksFlowingIn = mapMaybe (lab flowsGraph) $ pre flowsGraph node
             -- Try to get the block from the flowsGraph before analysis its rhses
-            let blockG = case (lab flowsGraph node) of
-                           Nothing -> block
-                           Just b  -> b
+            let blockG = fromMaybe block (lab flowsGraph node)
             dependencies <- mapM (genSubscripts' False flowsGraph) blocksFlowingIn
             return $ M.unionsWith (++) (genRHSsubscripts blockG : dependencies)
 
@@ -188,17 +219,15 @@ genSubscripts flowsGraph blocks =
 
 -- | Given an induction variable map, and a piece of syntax
 -- return a list of induction variables in scope for this index
-extractRelevantIVS :: (FU.Spanned (ast (FA.Analysis A)), F.Annotated ast) =>
+extractRelevantIVS :: (FU.Spanned (ast (FA.Analysis a)), F.Annotated ast) =>
      FAD.InductionVarMapByASTBlock
-  -> ast (FA.Analysis A)
+  -> ast (FA.Analysis a)
   -> [Variable]
 extractRelevantIVS ivmap f = ivsList
   where
     ivsList = S.toList $ fromMaybe S.empty $ IM.lookup label ivmap
 
-    label   = case (FA.insLabel . F.getAnnotation $ f) of
-                Just label -> label
-                Nothing    -> error errorMsg
+    label   = fromMaybe (error errorMsg) (FA.insLabel . F.getAnnotation $ f)
     -- For debugging purposes
     errorMsg = show (FU.getSpan f)
             ++ " get IVs associated to labelled index "
@@ -207,47 +236,46 @@ extractRelevantIVS ivmap f = ivsList
    its Neighbour representation
    e.g., for the expression a(i+1,j-1) then this function gets
    passed expr = i + 1   (returning +1) and expr = j - 1 (returning -1) -}
-convIxToNeighbour :: [Variable] -> F.Index (FA.Analysis Annotation) -> Neighbour
+convIxToNeighbour :: (Data a) => [Variable] -> F.Index (FA.Analysis a) -> Neighbour
 convIxToNeighbour _ (F.IxRange _ _ Nothing Nothing Nothing)     = Neighbour "" 0
 convIxToNeighbour _ (F.IxRange _ _ Nothing Nothing
                   (Just (F.ExpValue _ _ (F.ValInteger "1")))) = Neighbour "" 0
 
-convIxToNeighbour ivs (F.IxSingle _ _ _ exp)  = expToNeighbour ivs exp
+convIxToNeighbour ivs (F.IxSingle _ _ _ expr)  = expToNeighbour ivs expr
 convIxToNeighbour _ _ = NonNeighbour -- indexing expression is a range
 
 -- Combinator for reducing a map with effects and partiality inside
 -- into an effectful list of key-value pairs
 assocsSequence :: Monad m => M.Map k (m (Maybe a)) -> m [(k, a)]
 assocsSequence maps = do
-    assocs <- mapM strength . M.toList $ maps
-    return . mapMaybe strength $ assocs
+  assocs <- mapM strength . M.toList $ maps
+  return . mapMaybe strength $ assocs
   where
     strength :: Monad m => (a, m b) -> m (a, b)
     strength (a, mb) = mb >>= (\b -> return (a, b))
 
 -- Convert list of indexing expressions to a spec
-indicesToSpec :: [Variable]
-              -> Variable
+indicesToSpec :: (Data a)
+              => Variable
               -> [Neighbour]
-              -> [[F.Index (FA.Analysis Annotation)]]
-              -> Writer EvalLog (Maybe Specification)
-indicesToSpec ivs a lhs ixs = do
-    mMultOffsets <- indicesToRelativisedOffsets ivs a lhs ixs
-    return $ do
-      (mult, offsets) <- mMultOffsets
-      spec <- relativeIxsToSpec offsets
-      let spec' = setLinearity (fromBool mult) spec
-      return $ setType lhs spec'
+              -> Indices a
+              -> StencilInferer a (Maybe Specification)
+indicesToSpec a lhs ixs = do
+  mMultOffsets <- indicesToRelativisedOffsets a lhs ixs
+  return $ do
+    (mult, offsets) <- mMultOffsets
+    spec <- relativeIxsToSpec offsets
+    let spec' = setLinearity (fromBool mult) spec
+    return $ setType lhs spec'
 
 -- Get all RHS subscript which are translated induction variables
 -- return as a map from (source name) variables to a list of relative indices
-genRHSsubscripts ::
-     F.Block (FA.Analysis A)
-  -> M.Map Variable [[F.Index (FA.Analysis A)]]
-genRHSsubscripts b = genRHSsubscripts' (transformBi replaceModulo b)
+genRHSsubscripts :: forall a. (Data a, Eq a)
+                 => F.Block (FA.Analysis a) -> M.Map Variable (Indices a)
+genRHSsubscripts block = genRHSsubscripts' (transformBi replaceModulo block)
   where
     -- Any occurence of an subscript "modulo(e, e')" is replaced with "e"
-    replaceModulo :: F.Expression (FA.Analysis A) -> F.Expression (FA.Analysis A)
+    replaceModulo :: F.Expression (FA.Analysis a) -> F.Expression (FA.Analysis a)
     replaceModulo (F.ExpFunctionCall _ _
                       (F.ExpValue _ _ (F.ValIntrinsic iname)) subs)
         | iname `elem` ["modulo", "mod", "amod", "dmod"]
@@ -257,9 +285,9 @@ genRHSsubscripts b = genRHSsubscripts' (transformBi replaceModulo b)
     replaceModulo e = e
 
     genRHSsubscripts' b =
-       collect [ (FA.srcName exp, e)
-         | F.ExpSubscript _ _ exp subs <- FA.rhsExprs b
-         , isVariableExpr exp
+       collect [ (FA.srcName expr, e)
+         | F.ExpSubscript _ _ expr subs <- FA.rhsExprs b
+         , isVariableExpr expr
          , let e = F.aStrip subs
          , not (null e)]
 
@@ -291,25 +319,26 @@ expToNeighbour ivs (F.ExpBinary _ _ F.Subtraction
          Neighbour (FA.varName e) (if x < 0 then abs x else (- x))
              where x = read offs
 
-expToNeighbour ivs e =
+expToNeighbour ivs expr =
   -- Record when there is some kind of relative index on an inducion variable
   -- but that is not a neighbourhood index by our definitions
   if null ivs' then Constant (F.ValInteger "0") else NonNeighbour
   where
     -- set of all induction variables involved in this expression
     ivs' = [i | e@(F.ExpValue _ _ F.ValVariable{})
-                 <- universeBi e :: [F.Expression (FA.Analysis a)]
+                 <- universeBi expr :: [F.Expression (FA.Analysis a)]
                 , let i = FA.varName e
                 , i `elem` ivs]
 
-indicesToRelativisedOffsets :: [Variable]
-                            -> Variable
+indicesToRelativisedOffsets :: (Data a)
+                            => Variable
                             -> [Neighbour]
-                            -> [[F.Index (FA.Analysis Annotation)]]
-                            -> Writer EvalLog (Maybe (Bool, [[Int]]))
-indicesToRelativisedOffsets ivs a lhs ixs = do
+                            -> Indices a
+                            -> StencilInferer a (Maybe (Bool, [[Int]]))
+indicesToRelativisedOffsets a lhs ixs = do
+  ivs <- getIvs
    -- Convert indices to neighbourhood representation
-  let rhses = map (map (\ix -> convIxToNeighbour ivs ix) ) ixs
+  let rhses = fmap (fmap (convIxToNeighbour ivs)) ixs
 
   -- As an optimisation, do duplicate check in front-end first
   -- so that duplicate indices don't get passed into the main engine
@@ -341,8 +370,8 @@ indicesToRelativisedOffsets ivs a lhs ixs = do
 -- Convert list of relative offsets to a spec
 relativeIxsToSpec :: [[Int]] -> Maybe Specification
 relativeIxsToSpec ixs =
-    if isEmpty exactSpec then Nothing else Just exactSpec
-    where exactSpec = inferFromIndicesWithoutLinearity . V.fromLists $ ixs
+  if isEmpty exactSpec then Nothing else Just exactSpec
+  where exactSpec = inferFromIndicesWithoutLinearity . V.fromLists $ ixs
 
 {-| Set the type of Specification (stencil or access) based on the lhs
     set of neighbourhood indices; empty implies this is an access
@@ -355,13 +384,13 @@ setType _  (Specification spec _)  = Specification spec True
 -- and a list of size-n lists of offsets, relativise the offsets
 relativise :: [Neighbour] -> [[Neighbour]] -> [[Neighbour]]
 relativise lhs rhses = foldr relativiseRHS rhses lhs
-    where
-      relativiseRHS (Neighbour lhsIV i) rhses =
-          map (map (relativiseBy lhsIV i)) rhses
-      relativiseRHS _ rhses = rhses
+  where
+    relativiseRHS (Neighbour lhsIV i) rs =
+        map (map (relativiseBy lhsIV i)) rs
+    relativiseRHS _ rs = rs
 
-      relativiseBy v i (Neighbour u j) | v == u = Neighbour u (j - i)
-      relativiseBy _ _ x = x
+    relativiseBy v i (Neighbour u j) | v == u = Neighbour u (j - i)
+    relativiseBy _ _ x = x
 
 -- Helper predicates
 isVariableExpr :: F.Expression a -> Bool

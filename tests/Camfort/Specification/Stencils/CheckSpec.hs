@@ -4,19 +4,22 @@ module Camfort.Specification.Stencils.CheckSpec (spec) where
 
 import qualified Data.ByteString.Internal as BS
 
-import Camfort.Analysis.Annotations (unitAnnotation)
-import Camfort.Specification.Parser (runParser)
-import Camfort.Specification.Stencils.CheckBackend
-import Camfort.Specification.Stencils.CheckFrontend
+import           Camfort.Analysis (analysisResult, runSimpleAnalysis)
+import           Camfort.Analysis.Annotations (unitAnnotation)
+import           Camfort.Specification.Parser (runParser)
+import qualified Camfort.Specification.Stencils.Annotation as SA
+import           Camfort.Specification.Stencils.CheckBackend
+import           Camfort.Specification.Stencils.CheckFrontend
   (CheckResult, stencilChecking)
-import Camfort.Specification.Stencils.Parser (specParser)
-import Camfort.Specification.Stencils.Model
-import Camfort.Specification.Stencils.Syntax
+import           Camfort.Specification.Stencils.Parser (specParser)
+import           Camfort.Specification.Stencils.Model
+import           Camfort.Specification.Stencils.Syntax
 
 import qualified Language.Fortran.Analysis          as FA
 import qualified Language.Fortran.Analysis.BBlocks  as FAB
 import qualified Language.Fortran.Analysis.Renaming as FAR
 import           Language.Fortran.Parser.Any (fortranParser)
+import           Language.Fortran.Util.ModFile (emptyModFiles)
 import qualified Language.Fortran.Util.Position     as FU
 
 import Test.Hspec
@@ -123,8 +126,9 @@ spec =
 
 checkText text =
   either (error "received test input with invalid syntax")
-     (stencilChecking . getBlocks . fmap (const unitAnnotation)) $ fortranParser text "example"
-  where getBlocks = FAB.analyseBBlocks . FAR.analyseRenames . FA.initAnalysis
+     (analysisResult . runSimpleAnalysis stencilChecking emptyModFiles . getBlocks . fmap (const unitAnnotation))
+  $ fortranParser text "example"
+  where getBlocks = FAB.analyseBBlocks . FAR.analyseRenames . FA.initAnalysis . fmap SA.mkStencilAnnotation
 
 runCheck :: String -> CheckResult
 runCheck = checkText . BS.packChars

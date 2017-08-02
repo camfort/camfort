@@ -9,22 +9,30 @@
 module Camfort.Specification.StencilsSpec (spec) where
 
 
-import Control.Monad.Writer.Strict hiding (Sum, Product)
-import Data.List
+import           Control.Monad.Writer.Strict hiding (Sum, Product)
+import qualified Data.Graph.Inductive.Graph as Gr
+import           Data.List
 
+import Language.Fortran.Util.ModFile (ModFile)
+
+import Camfort.Analysis
+  (analysisResult, runSimpleAnalysis)
+import Camfort.Analysis.ModFile (genModFiles)
 import Camfort.Helpers.Vec
 import Camfort.Input
 import Camfort.Specification.Stencils
+import Camfort.Specification.Stencils.Analysis
+  (StencilsAnalysis, compileStencils, runStencilsAnalysis)
 import Camfort.Specification.Stencils.Generate
-  (Neighbour(..), indicesToSpec, convIxToNeighbour)
+  (Neighbour(..), indicesToSpec, convIxToNeighbour, runStencilInferer)
 import Camfort.Specification.Stencils.Synthesis
 import Camfort.Specification.Stencils.Model
 import Camfort.Specification.Stencils.InferenceBackend
-import Camfort.Specification.Stencils.InferenceFrontend
 import Camfort.Specification.Stencils.Syntax
 import qualified Language.Fortran.AST as F
 import Language.Fortran.Parser.Any (deduceVersion)
 import Language.Fortran.ParserMonad
+import Language.Fortran.Util.ModFile (emptyModFiles)
 import Camfort.Reprint
 import Camfort.Output
 
@@ -231,11 +239,11 @@ spec =
     -------------------------
 
     let example2In = fixturesDir </> "example2.f"
-    program <- runIO $ readParseSrcDir example2In []
+    [(program,_)] <- runIO $ readParseSrcDir emptyModFiles example2In []
 
     describe "integration test on inference for example2.f" $ do
       it "stencil infer" $
-         fst (callAndSummarise (infer AssignMode '=') program)
+         show (runSingleFileAnalysis (infer False '=') program)
            `shouldBe`
            "\ntests/fixtures/Specification/Stencils/example2.f\n\
             \(32:7)-(32:26)    stencil readOnce, backward(depth=1, dim=1) :: a\n\
@@ -244,42 +252,42 @@ spec =
                                      \+ centered(depth=1, dim=1)*pointed(dim=2) :: a"
 
       it "stencil check" $
-         fst (callAndSummarise (\p -> (check p, p)) program)
+         show (runSingleFileAnalysis check program)
            `shouldBe`
            "\ntests/fixtures/Specification/Stencils/example2.f\n\
             \(23:1)-(23:78)    Correct.\n(31:1)-(31:56)    Correct."
 
     let example4In = fixturesDir </> "example4.f"
-    program <- runIO $ readParseSrcDir example4In []
+    [(program,_)] <- runIO $ readParseSrcDir emptyModFiles example4In []
 
     describe "integration test on inference for example4.f" $
       it "stencil infer" $
-         fst (callAndSummarise (infer AssignMode '=') program)
+         show (analysisResult $ runSimpleAnalysis (infer False '=') emptyModFiles program)
            `shouldBe`
             "\ntests/fixtures/Specification/Stencils/example4.f\n\
              \(6:8)-(6:33)    stencil readOnce, pointed(dim=1) :: x"
 
     describe "integration test on inference for example5" $
       describe "stencil synth" $ do
-        assertStencilInferenceNoWarn "example5.f"
+        assertStencilSynthNoWarn "example5.f"
           "inserts correct comment types for old fortran"
-        assertStencilInferenceNoWarn "example5.f90"
+        assertStencilSynthNoWarn "example5.f90"
           "inserts correct comment types for modern fortran"
 
     describe "synth on files already containing stencils" $ do
-      assertStencilInferenceNoWarn "example6.f"
+      assertStencilSynthNoWarn "example6.f"
         "complements existing stencils (when second missing)"
-      assertStencilInferenceNoWarn "example7.f"
+      assertStencilSynthNoWarn "example7.f"
         "complements existing stencils (when none missing)"
-      assertStencilInferenceNoWarn "example8.f"
+      assertStencilSynthNoWarn "example8.f"
         "complements existing stencils (when first missing)"
-      assertStencilInferenceNoWarn "example9.f"
+      assertStencilSynthNoWarn "example9.f"
         "complements existing stencils (when none missing - only one stencil)"
-      assertStencilInferenceNoWarn "example10.f"
+      assertStencilSynthNoWarn "example10.f"
         "complements existing stencils (when one missing - inside if)"
-      assertStencilInferenceNoWarn "example13.f"
+      assertStencilSynthNoWarn "example13.f"
         "complements existing stencils (when using regions references)"
-      assertStencilInferenceNoWarn "example11.f"
+      assertStencilSynthNoWarn "example11.f"
         "inserts correct access specification"
       assertStencilSynthResponse "example12.f"
         "reports errors when conflicting stencil exists"
@@ -321,9 +329,25 @@ spec =
 \        but at (9:8)-(9:29) the code behaves as\n\
 \                access readOnce, forward(depth=1, dim=1) :: a\n"
 
+    describe "inference" $ do
+      it "provides more information with evalmode on" $
+        assertStencilInference True "example-no-specs-simple.f90"
+          "\ntests/fixtures/Specification/Stencils/example-no-specs-simple.f90\n\
+          \(6:6)-(6:16)    stencil readOnce, pointed(dim=1) :: a\n\
+          \(6:6)-(6:16)    EVALMODE: assign to relative array subscript (tag: tickAssign)\n\n\
+          \(6:6)-(6:16)    EVALMODE: dimensionality=1 :: a\n"
+      it "provides less information with evalmode off" $
+        assertStencilInference False "example-no-specs-simple.f90"
+          "\ntests/fixtures/Specification/Stencils/example-no-specs-simple.f90\n\
+          \(6:6)-(6:16)    stencil readOnce, pointed(dim=1) :: a"
 
     describe "synth/inference works correctly with nested loops" $ do
-      assertStencilInferenceNoWarn "nestedLoops.f90" "inserts correct specification"
+      assertStencilSynthNoWarn "nestedLoops.f90" "inserts correct specification"
+
+    describe "inference with modules" $
+      it "infers correctly with cross-module type declarations" $
+        inferReportWithMod ["cross-module-a/provider.f90"] "cross-module-a/user.f90"
+          crossModuleAUserReport
 
     -- Run over all the samples and test fixtures
 
@@ -334,55 +358,90 @@ spec =
         sampleFiles          = filter hasExpectedSrcFile sampleDirConts
 
     describe "sample file tests" $
-        mapM_ (\file -> assertStencilInferenceSample
+        mapM_ (\file -> assertStencilSynthSample
                 file ("produces correct output file for " ++ file))
         sampleFiles
 
   where -- Helpers go here for loading files and running analyses
         assertStencilCheck fileName testComment expected = do
             let file = fixturesDir </> fileName
-            programs <- runIO $ readParseSrcDir file []
+            programs <- runIO $ readParseSrcDir emptyModFiles file []
             let [(program,_)] = programs
-            it testComment $  check program `shouldBe` expected
+            it testComment $ (show . analysisResult . runSimpleAnalysis check emptyModFiles $ program)
+              `shouldBe` expected
 
-        assertStencilInferenceDir expected dir fileName testComment =
+        assertStencilInference :: Bool -> FilePath -> String -> Expectation
+        assertStencilInference useEval fileName expected =
+          let file         = fixturesDir </> fileName
+          in do
+            [(program,_)] <- readParseSrcDir emptyModFiles file []
+            (show . analysisResult . runSimpleAnalysis (infer useEval '=') emptyModFiles $ program)
+              `shouldBe` expected
+
+        assertStencilSynthDir expected dir fileName testComment =
           let file         = dir </> fileName
               version      = deduceVersion file
               expectedFile = expected dir fileName
           in do
-            program          <- runIO $ readParseSrcDir file []
+            let modFiles = emptyModFiles
+            program          <- runIO $ readParseSrcDir modFiles file []
             programSrc       <- runIO $ readFile file
             synthExpectedSrc <- runIO $ readFile expectedFile
             it testComment $
-               (map (B.unpack . runIdentity . flip (reprint (refactoring version)) (B.pack programSrc))
-                 (snd . synth AssignMode '=' . fmap fst $ program))
+               map (B.unpack . runIdentity . flip (reprint (refactoring version)) (B.pack programSrc))
+                 (snd . analysisResult . runSimpleAnalysis (synth '=') modFiles . fmap fst $ program)
                 `shouldBe` [synthExpectedSrc]
 
-        assertStencilInferenceOnFile = assertStencilInferenceDir
+        assertStencilSynthOnFile = assertStencilSynthDir
           (\d f -> d </> getExpectedSrcFileName f) fixturesDir
 
-        assertStencilInferenceSample = assertStencilInferenceDir
+        assertStencilSynthSample = assertStencilSynthDir
           (\d f -> d </> "expected" </> f) samplesDir
 
         assertStencilSynthResponse fileName testComment expectedResponse =
             let file = fixturesDir </> fileName
             in do
-              program          <- runIO $ readParseSrcDir file []
-              programSrc       <- runIO $ readFile file
-              it testComment $ (fst . synth AssignMode '=' . fmap fst $ program)
+              let modFiles = emptyModFiles
+              program    <- runIO $ readParseSrcDir modFiles file []
+              it testComment $ (show . fst . analysisResult . runSimpleAnalysis (synth '=') modFiles . fmap fst $ program)
                 `shouldBe` expectedResponse
 
         assertStencilSynthResponseOut fileName testComment expectedResponse =
           describe testComment $ do
-            assertStencilInferenceOnFile fileName "correct synthesis"
+            assertStencilSynthOnFile fileName "correct synthesis"
             assertStencilSynthResponse fileName "correct output" expectedResponse
 
-        assertStencilInferenceNoWarn fileName testComment = assertStencilSynthResponseOut fileName testComment ""
+        assertStencilSynthNoWarn fileName testComment = assertStencilSynthResponseOut fileName testComment ""
         fixturesDir = "tests" </> "fixtures" </> "Specification" </> "Stencils"
         samplesDir  = "samples" </> "stencils"
         getExpectedSrcFileName file =
           let oldExtension = takeExtension file
           in addExtension (replaceExtension file "expected") oldExtension
+
+runSingleFileAnalysis :: StencilsAnalysis a b -> a -> b
+runSingleFileAnalysis a = analysisResult . runSimpleAnalysis a emptyModFiles
+
+fixturesDir :: FilePath
+fixturesDir = "tests" </> "fixtures" </> "Specification" </> "Stencils"
+
+-- | Assert that the report of performing units checking on a file is as expected.
+inferReportWithMod :: [String] -> String -> String -> Expectation
+inferReportWithMod modNames fileName expectedReport = do
+  let file = fixturesDir </> fileName
+      modPaths = fmap (fixturesDir </>) modNames
+  modFiles <- mapM mkTestModFile modPaths
+  [(pf,_)] <- readParseSrcDir modFiles file []
+  let report = analysisResult $ runStencilsAnalysis (infer False '=') modFiles pf
+  show report `shouldBe` expectedReport
+
+-- | Helper for producing a basic ModFile from a (terminal) module file.
+mkTestModFile :: String -> IO ModFile
+mkTestModFile file = head <$> genModFiles compileStencils () file []
+
+crossModuleAUserReport :: String
+crossModuleAUserReport =
+  "\ntests/fixtures/Specification/Stencils/cross-module-a/user.f90\n\
+  \(7:6)-(7:16)    stencil readOnce, pointed(dim=1) :: b"
 
 -- Indices for the 2D five point stencil (deliberately in an odd order)
 fivepoint = [ Cons (-1) (Cons 0 Nil), Cons 0 (Cons (-1) Nil)
@@ -424,7 +483,7 @@ test2DSpecVariation a b (input, expectation) =
     expectedSpec = Specification expectation True
     fromFormatToIx [ri,rj] = [ offsetToIx "i" ri, offsetToIx "j" rj ]
 
-indicesToSpec' ivs lhs = fst . runWriter . indicesToSpec ivs "a" lhs
+indicesToSpec' ivs lhs ixs = fst $ runStencilInferer (indicesToSpec "a" lhs ixs) ivs Gr.empty emptyModFiles
 
 variations =
   [ ( [ [0,0] ]

@@ -20,6 +20,7 @@ module Camfort.Transformation.DeadCode
   ( deadCode
   ) where
 
+import Camfort.Analysis (SimpleAnalysis, analysisInput, writeDebug)
 import Camfort.Analysis.Annotations
 import qualified Language.Fortran.Analysis.DataFlow as FAD
 import qualified Language.Fortran.Analysis.Renaming as FAR
@@ -27,7 +28,6 @@ import qualified Language.Fortran.Analysis.BBlocks as FAB
 import qualified Language.Fortran.AST as F
 import qualified Language.Fortran.Util.Position as FU
 import qualified Language.Fortran.Analysis as FA
-import Camfort.Helpers
 import Camfort.Helpers.Syntax
 
 import qualified Data.IntMap as IM
@@ -41,9 +41,10 @@ import Data.Maybe
 
 -- Currently only strips out dead code through simple variable assignments
 -- but not through array-subscript assignmernts
-deadCode :: Bool -> F.ProgramFile A -> (Report, F.ProgramFile A)
-deadCode flag pf = (report, fmap FA.prevAnnotation pf')
-  where
+deadCode :: Bool -> SimpleAnalysis (F.ProgramFile A) (F.ProgramFile A)
+deadCode flag = do
+  pf <- analysisInput
+  let
     (report, _) = deadCode' flag lva pf'
     -- initialise analysis
     pf'   = FAB.analyseBBlocks . FAR.analyseRenames . FA.initAnalysis $ pf
@@ -55,12 +56,14 @@ deadCode flag pf = (report, fmap FA.prevAnnotation pf')
     gr    = FAB.superBBGrGraph sgr
     -- live variables
     lva   = FAD.liveVariableAnalysis gr
+  writeDebug report
+  pure $ fmap FA.prevAnnotation pf'
 
 deadCode' :: Bool -> FAD.InOutMap (S.Set F.Name)
                   -> F.ProgramFile (FA.Analysis A)
                   -> (Report, F.ProgramFile (FA.Analysis A))
 deadCode' flag lva pf =
-    if null report
+    if report == mempty
       then (report, pf')
       else (report, pf') >>= deadCode' flag lva
   where
@@ -72,14 +75,14 @@ perStmt :: Bool
         -> F.Statement (FA.Analysis A) -> (Report, F.Statement (FA.Analysis A))
 perStmt flag lva x@(F.StExpressionAssign a sp@(FU.SrcSpan s1 _) e1 e2)
      | pRefactored (FA.prevAnnotation a) == flag =
-  fromMaybe ("", x) $
+  fromMaybe (mkReport "", x) $
     do label <- FA.insLabel a
        (_, out) <- IM.lookup label lva
        assignedName <- extractVariable e1
        if assignedName `S.member` out
          then Nothing
          else -- Dead assignment
-           Just (report, F.StExpressionAssign a' (dropLine sp) e1 e2)
+           Just (mkReport report, F.StExpressionAssign a' (dropLine sp) e1 e2)
              where report =  "o" ++ show s1 ++ ": removed dead code\n"
                    -- Set annotation to mark statement for elimination in
                    -- the reprinter

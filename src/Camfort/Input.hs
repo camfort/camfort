@@ -16,34 +16,26 @@ module Camfort.Input
     -- * Datatypes and Aliases
   , FileProgram
     -- * Builders for analysers and refactorings
-  , callAndSummarise
-  , doAnalysisReportWithModFiles
+  , doAnalysisReport
   , doAnalysisSummary
   , doRefactor
   , doRefactorAndCreate
-  , doRefactorWithModFiles
     -- * Source directory and file handling
-  , doCreateBinary
   , readParseSrcDir
-  , getModFilesWithNames
   ) where
 
-import           Control.Monad (forM)
-import           Data.Binary (decodeFileOrFail)
 import qualified Data.ByteString.Char8 as B
-import           Data.Char (toUpper)
-import           Data.List (foldl', (\\), intercalate)
-import           Data.Maybe
-import           Data.Text.Encoding (encodeUtf8, decodeUtf8With)
-import           Data.Text.Encoding.Error (replace)
-import           System.Directory
-import           System.FilePath ((</>), takeExtension)
+import           Data.Either (partitionEithers)
+import           Data.List (intercalate)
 
 import qualified Language.Fortran.AST as F
-import qualified Language.Fortran.Parser.Any as FP
-import           Language.Fortran.Util.ModFile
+import           Language.Fortran.Util.ModFile (ModFiles)
 
+import Camfort.Analysis
+  (Analysis, SimpleAnalysis, analysisDebug, analysisResult, runAnalysis)
 import Camfort.Analysis.Annotations
+import Camfort.Analysis.ModFile
+  (MFCompiler, genModFiles, readParseSrcDir)
 import Camfort.Helpers
 import Camfort.Output
 
@@ -62,71 +54,93 @@ printExcludes inSrc excludes =
 -- * Builders for analysers and refactorings
 
 -- | Perform an analysis that produces information of type @s@.
-doAnalysisSummary :: (Monoid s, Show' s)
-  => (FileProgram -> (s, FileProgram))
-  -> FileOrDir -> [Filename] -> IO ()
-doAnalysisSummary aFun inSrc excludes = do
-  printExcludes inSrc excludes
-  ps <- readParseSrcDir inSrc excludes
-  let (out, _) = callAndSummarise aFun ps
-  putStrLn . show' $ out
-
--- | Perform an analysis that produces information of type @s@.
-callAndSummarise :: (Monoid s)
-  => (FileProgram -> (s, a))
-  -> [(FileProgram, SourceText)]
-  -> (s, [a])
-callAndSummarise aFun =
-  foldl' (\(n, pss) (ps, _) ->
-            let (n', ps') = aFun ps
-            in (n `mappend` n', ps' : pss)) (mempty, [])
+doAnalysisSummary :: (Monoid s, Show s)
+  => SimpleAnalysis FileProgram s
+  -> MFCompiler ()
+  -> FileOrDir -> FileOrDir -> [Filename] -> IO ()
+doAnalysisSummary aFun mfc =
+  doAnalysisReport aFun mfc ()
 
 -- | Perform an analysis which reports to the user, but does not output any files.
-doAnalysisReportWithModFiles
-  :: ([FileProgram] -> r)
-  -> (r -> IO out)
+doAnalysisReport
+  :: (Monoid d, Show d, Show b)
+  => Analysis r d () FileProgram b
+  -> MFCompiler r
+  -> r
   -> FileOrDir
-  -> Maybe FileOrDir
+  -> FileOrDir
   -> [Filename]
-  -> IO out
-doAnalysisReportWithModFiles rFun sFun inSrc incDir excludes = do
+  -> IO ()
+doAnalysisReport rFun mfc env inSrc incDir excludes = do
+  results <- doInitAnalysis' rFun mfc env inSrc incDir excludes
+  let report = concatMap (\(rep,res) -> show rep ++ show res) results
+  putStrLn report
+
+getModsAndPs
+  :: MFCompiler r -> r
+  -> FileOrDir -> FileOrDir -> [Filename]
+  -> IO (ModFiles, [(FileProgram, B.ByteString)])
+getModsAndPs mfc env inSrc incDir excludes = do
   printExcludes inSrc excludes
-  ps <- readParseSrcDirWithModFiles inSrc incDir excludes
+  modFiles <- genModFiles mfc env incDir excludes
+  ps <- readParseSrcDir modFiles inSrc excludes
+  pure (modFiles, ps)
 
-  let report = rFun . fmap fst $ ps
-  sFun report
-
--- | Perform a refactoring that does not add any new files.
-doRefactor :: ([FileProgram]
-           -> (String, [FileProgram]))
-           -> FileOrDir -> [Filename] -> FileOrDir
-           -> IO String
-doRefactor rFun inSrc excludes outSrc =
-  doRefactorWithModFiles rFun inSrc Nothing excludes outSrc
-
-doRefactorWithModFiles
-  :: ([FileProgram] -> (String, [FileProgram]))
+doInitAnalysis
+  :: (Monoid w)
+  => Analysis r w () [FileProgram] b
+  -> MFCompiler r
+  -> r
   -> FileOrDir
-  -> Maybe FileOrDir
+  -> FileOrDir
+  -> [Filename]
+  -> IO ([(FileProgram, B.ByteString)], w, b)
+doInitAnalysis analysis mfc env inSrc incDir excludes = do
+  (modFiles, ps) <- getModsAndPs mfc env inSrc incDir excludes
+  let res = runAnalysis analysis env () modFiles . fmap fst $ ps
+      report = analysisDebug res
+      ps' = analysisResult res
+  pure (ps, report, ps')
+
+doInitAnalysis'
+  :: (Monoid w)
+  => Analysis r w () FileProgram b
+  -> MFCompiler r
+  -> r
+  -> FileOrDir
+  -> FileOrDir
+  -> [Filename]
+  -> IO [(w, b)]
+doInitAnalysis' analysis mfc env inSrc incDir excludes = do
+  (modFiles, ps) <- getModsAndPs mfc env inSrc incDir excludes
+  let res = runAnalysis analysis env () modFiles . fst <$> ps
+  pure $ fmap (\r -> (analysisDebug r, analysisResult r)) res
+
+doRefactor
+  :: (Monoid d, Show d, Show e, Show b)
+  => Analysis r d () [FileProgram] (b, [Either e FileProgram])
+  -> MFCompiler r
+  -> r
+  -> FileOrDir
+  -> FileOrDir
   -> [Filename]
   -> FileOrDir
   -> IO String
-doRefactorWithModFiles rFun inSrc incDir excludes outSrc = do
-  printExcludes inSrc excludes
-  ps <- readParseSrcDirWithModFiles inSrc incDir excludes
-  let (report, ps') = rFun . fmap fst $ ps
+doRefactor rFun mfc env inSrc incDir excludes outSrc = do
+  (ps, report1, aRes) <- doInitAnalysis rFun mfc env inSrc incDir excludes
+  let (_, ps') = partitionEithers (snd aRes)
+      report = show report1 ++ show (fst aRes)
   let outputs = reassociateSourceText (fmap snd ps) ps'
   outputFiles inSrc outSrc outputs
   pure report
 
 -- | Perform a refactoring that may create additional files.
 doRefactorAndCreate
-  :: ([FileProgram] -> (String, [FileProgram], [FileProgram]))
-  -> FileOrDir -> [Filename] -> FileOrDir -> IO String
-doRefactorAndCreate rFun inSrc excludes outSrc = do
-  printExcludes inSrc excludes
-  ps <- readParseSrcDir inSrc excludes
-  let (report, ps', ps'') = rFun . fmap fst $ ps
+  :: SimpleAnalysis [FileProgram] ([FileProgram], [FileProgram])
+  -> MFCompiler ()
+  -> FileOrDir -> [Filename] -> FileOrDir -> FileOrDir -> IO Report
+doRefactorAndCreate rFun mfc inSrc excludes incDir outSrc = do
+  (ps, report, (ps', ps'')) <- doInitAnalysis rFun mfc () inSrc incDir excludes
   let outputs = reassociateSourceText (fmap snd ps) ps'
   let outputs' = map (\pf -> (pf, B.empty)) ps''
   outputFiles inSrc outSrc outputs
@@ -136,113 +150,7 @@ doRefactorAndCreate rFun inSrc excludes outSrc = do
 -- | For refactorings which create additional files.
 type FileProgram = F.ProgramFile A
 
-doCreateBinary
-  :: ([FileProgram] -> (String, [(Filename, B.ByteString)]))
-  -> FileOrDir
-  -> Maybe FileOrDir
-  -> [Filename]
-  -> FileOrDir
-  -> IO String
-doCreateBinary rFun inSrc incDir excludes outSrc = do
-  printExcludes inSrc excludes
-  ps <- readParseSrcDirWithModFiles inSrc incDir excludes
-  let (report, bins) = rFun . fmap fst $ ps
-  outputFiles inSrc outSrc bins
-  pure report
-
 reassociateSourceText :: [SourceText]
                       -> [F.ProgramFile Annotation]
                       -> [(F.ProgramFile Annotation, SourceText)]
 reassociateSourceText ps ps' = zip ps' ps
-
--- * Source directory and file handling
-
--- | Read files from a directory.
-readParseSrcDir :: FileOrDir  -- ^ Directory to read from.
-                -> [Filename] -- ^ Excluded files.
-                -> IO [(FileProgram, SourceText)]
-readParseSrcDir inp excludes =
-  readParseSrcDirWithModFiles inp Nothing excludes
-
-readParseSrcDirWithModFiles :: FileOrDir
-                            -> Maybe FileOrDir
-                            -> [Filename]
-                            -> IO [(FileProgram, SourceText)]
-readParseSrcDirWithModFiles inp incDir excludes = do
-  isdir <- isDirectory inp
-  files <-
-    if isdir
-    then do
-      files <- getFortranFiles inp
-      -- Compute alternate list of excludes with the
-      -- the directory appended
-      let excludes' = excludes ++ map (\x -> inp ++ "/" ++ x) excludes
-      pure $ map (\y -> inp ++ "/" ++ y) files \\ excludes'
-    else pure [inp]
-  mapMaybeM (readParseSrcFileWithModFiles incDir) files
-  where
-    mapMaybeM :: Monad m => (a -> m (Maybe b)) -> [a] -> m [b]
-    mapMaybeM f = fmap catMaybes . mapM f
-
-readParseSrcFileWithModFiles :: Maybe FileOrDir
-                             -> Filename
-                             -> IO (Maybe (FileProgram, SourceText))
-readParseSrcFileWithModFiles incDir f = do
-  inp <- flexReadFile f
-  mods <- maybe (pure emptyModFiles) getModFiles incDir
-  let result = FP.fortranParserWithModFiles mods inp f
-  case result of
-    Right ast -> pure $ Just (fmap (const unitAnnotation) ast, inp)
-    Left  err -> print err >> pure Nothing
-  where
-    -- | Read file using ByteString library and deal with any weird characters.
-    flexReadFile :: String -> IO B.ByteString
-    flexReadFile = fmap (encodeUtf8 . decodeUtf8With (replace ' ')) . B.readFile
-
-getFortranFiles :: FileOrDir -> IO [String]
-getFortranFiles =
-  fmap (filter isFortran) . rGetDirContents
-  where
-    -- | True if the file has a valid fortran extension.
-    isFortran :: Filename -> Bool
-    isFortran x = takeExtension x `elem` (exts ++ extsUpper)
-      where exts = [".f", ".f90", ".f77", ".cmn", ".inc"]
-            extsUpper = map (map toUpper) exts
-
--- | Recursively get the contents of a directory.
-rGetDirContents :: FileOrDir -> IO [Filename]
-rGetDirContents d = do
-  ds <- listDirectory d
-  fmap concat . mapM rGetDirContents' $ ds
-  where
-    -- | Get contents of directory if path points to a valid
-    -- directory, otherwise return the path (a file).
-    rGetDirContents' path = do
-      let dPath = d </> path
-      isDir <- doesDirectoryExist dPath
-      if isDir then do
-        fmap (fmap (path </>)) (rGetDirContents dPath)
-      else pure [path]
-
--- | Retrieve a list of ModFiles from the directory, each associated
--- to the name of the file they are contained within.
-getModFilesWithNames :: FileOrDir -> IO [(Filename, ModFile)]
-getModFilesWithNames dir = do
-  -- Figure out the camfort mod files and parse them.
-  modFileNames <- filter isModFile <$> rGetDirContents dir
-  forM modFileNames $ \ modFileName -> do
-    eResult <- decodeFileOrFail (dir ++ "/" ++ modFileName) -- FIXME, directory manipulation
-    case eResult of
-      Left (offset, msg) -> do
-        putStrLn $ modFileName ++ ": Error at offset " ++ show offset ++ ": " ++ msg
-        pure (modFileName, emptyModFile)
-      Right modFile -> do
-        putStrLn $ modFileName ++ ": successfully parsed precompiled file."
-        pure (modFileName, modFile)
-  where
-    isModFile :: Filename -> Bool
-    isModFile = (== modFileSuffix) . takeExtension
-
--- | Retrieve the ModFiles from a directory.
-getModFiles :: FileOrDir -> IO ModFiles
-getModFiles = fmap (fmap snd) . getModFilesWithNames
