@@ -85,3 +85,18 @@ but upon reflection and discussion with Dominic, I'm not sure what this would ga
 it may be worth bearing in mind. I believe the original rationale was that we could compile
 only the necessary information for each analysis at each stage, but I no longer see how this
 could happen without needing to regenerate the whole ModFile (due to main hash changing).
+
+* Internal Changes
+
+** Analysis Type
+
+We now have an ~Analysis~ type, defined in ~Camfort.Analysis~.
+
+~Analysis~ takes the form of ~Analysis r w s a b~ where ~r~ is additional
+~Reader~ environment, ~w~ is for logging (semantically intended for 'debugging'),
+~s~ is state, ~a~ is the input type to the analysis, and ~b~ is the output type.
+
+The intention of ~Analysis~ is to provide a means of covering many use cases of
+read/write/state monads in CamFort, whilst providing access to certain pieces
+of information such as modfiles available to the analysis, the original input
+data (often a form of ~ProgramFile~), and provide a consistent debugging interface.
