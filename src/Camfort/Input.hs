@@ -35,7 +35,7 @@ import Camfort.Analysis.Annotations
 import Camfort.Analysis.Fortran
   (Analysis, SimpleAnalysis, analysisDebug, analysisResult, runAnalysis)
 import Camfort.Analysis.ModFile
-  (MFCompiler, genModFiles, readParseSrcDir, simpleCompiler)
+  (MFCompiler, genModFiles, readParseSrcDir)
 import Camfort.Helpers
 import Camfort.Output
 
@@ -56,9 +56,10 @@ printExcludes inSrc excludes =
 -- | Perform an analysis that produces information of type @s@.
 doAnalysisSummary :: (Monoid s, Show s)
   => SimpleAnalysis FileProgram s
+  -> MFCompiler ()
   -> FileOrDir -> FileOrDir -> [Filename] -> IO ()
-doAnalysisSummary aFun =
-  doAnalysisReportWithModFiles aFun simpleCompiler ()
+doAnalysisSummary aFun mfc =
+  doAnalysisReportWithModFiles aFun mfc ()
 
 -- | Perform an analysis which reports to the user, but does not output any files.
 doAnalysisReportWithModFiles
@@ -136,9 +137,10 @@ doRefactorWithModFiles rFun mfc env inSrc incDir excludes outSrc = do
 -- | Perform a refactoring that may create additional files.
 doRefactorAndCreate
   :: SimpleAnalysis [FileProgram] ([FileProgram], [FileProgram])
+  -> MFCompiler ()
   -> FileOrDir -> [Filename] -> FileOrDir -> FileOrDir -> IO Report
-doRefactorAndCreate rFun inSrc excludes incDir outSrc = do
-  (ps, report, (ps', ps'')) <- doInitAnalysis rFun simpleCompiler () inSrc incDir excludes
+doRefactorAndCreate rFun mfc inSrc excludes incDir outSrc = do
+  (ps, report, (ps', ps'')) <- doInitAnalysis rFun mfc () inSrc incDir excludes
   let outputs = reassociateSourceText (fmap snd ps) ps'
   let outputs' = map (\pf -> (pf, B.empty)) ps''
   outputFiles inSrc outSrc outputs

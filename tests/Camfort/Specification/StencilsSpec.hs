@@ -243,7 +243,7 @@ spec =
 
     describe "integration test on inference for example2.f" $ do
       it "stencil infer" $
-         runSingleFileAnalysis (infer False '=') program
+         show (runSingleFileAnalysis (infer False '=') program)
            `shouldBe`
            "\ntests/fixtures/Specification/Stencils/example2.f\n\
             \(32:7)-(32:26)    stencil readOnce, backward(depth=1, dim=1) :: a\n\
@@ -252,7 +252,7 @@ spec =
                                      \+ centered(depth=1, dim=1)*pointed(dim=2) :: a"
 
       it "stencil check" $
-         runSingleFileAnalysis check program
+         show (runSingleFileAnalysis check program)
            `shouldBe`
            "\ntests/fixtures/Specification/Stencils/example2.f\n\
             \(23:1)-(23:78)    Correct.\n(31:1)-(31:56)    Correct."
@@ -262,7 +262,7 @@ spec =
 
     describe "integration test on inference for example4.f" $
       it "stencil infer" $
-         analysisResult (runSimpleAnalysis (infer False '=') emptyModFiles program)
+         show (analysisResult $ runSimpleAnalysis (infer False '=') emptyModFiles program)
            `shouldBe`
             "\ntests/fixtures/Specification/Stencils/example4.f\n\
              \(6:8)-(6:33)    stencil readOnce, pointed(dim=1) :: x"
@@ -367,7 +367,7 @@ spec =
             let file = fixturesDir </> fileName
             programs <- runIO $ readParseSrcDir emptyModFiles file []
             let [(program,_)] = programs
-            it testComment $ (analysisResult . runSimpleAnalysis check emptyModFiles $ program)
+            it testComment $ (show . analysisResult . runSimpleAnalysis check emptyModFiles $ program)
               `shouldBe` expected
 
         assertStencilInference :: Bool -> FilePath -> String -> Expectation
@@ -375,7 +375,7 @@ spec =
           let file         = fixturesDir </> fileName
           in do
             [(program,_)] <- readParseSrcDir emptyModFiles file []
-            (analysisResult . runSimpleAnalysis (infer useEval '=') emptyModFiles $ program)
+            (show . analysisResult . runSimpleAnalysis (infer useEval '=') emptyModFiles $ program)
               `shouldBe` expected
 
         assertStencilSynthDir expected dir fileName testComment =
@@ -403,7 +403,7 @@ spec =
             in do
               let modFiles = emptyModFiles
               program    <- runIO $ readParseSrcDir modFiles file []
-              it testComment $ (fst . analysisResult . runSimpleAnalysis (synth '=') modFiles . fmap fst $ program)
+              it testComment $ (show . fst . analysisResult . runSimpleAnalysis (synth '=') modFiles . fmap fst $ program)
                 `shouldBe` expectedResponse
 
         assertStencilSynthResponseOut fileName testComment expectedResponse =
@@ -432,7 +432,7 @@ inferReportWithMod modNames fileName expectedReport = do
   modFiles <- mapM mkTestModFile modPaths
   [(pf,_)] <- readParseSrcDir modFiles file []
   let report = analysisResult $ runStencilsAnalysis (infer False '=') modFiles pf
-  report `shouldBe` expectedReport
+  show report `shouldBe` expectedReport
 
 -- | Helper for producing a basic ModFile from a (terminal) module file.
 mkTestModFile :: String -> IO ModFile

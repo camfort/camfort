@@ -93,7 +93,7 @@ ast d incDir excludes = do
 countVarDecls inSrc incDir excludes = do
     putStrLn $ "Counting variable declarations in '" ++ inSrc ++ "'"
     incDir' <- maybe getCurrentDirectory pure incDir
-    doAnalysisSummary countVariableDeclarations inSrc incDir' excludes
+    doAnalysisSummary countVariableDeclarations simpleCompiler inSrc incDir' excludes
 
 dead inSrc incDir excludes outSrc = do
     putStrLn $ "Eliminating dead code in '" ++ inSrc ++ "'"
@@ -111,7 +111,7 @@ common inSrc incDir excludes outSrc = do
     isDir <- isDirectory inSrc
     let rfun = commonElimToModules (takeDirectory outSrc ++ "/")
     incDir' <- maybe getCurrentDirectory pure incDir
-    report <- doRefactorAndCreate rfun inSrc excludes incDir' outSrc
+    report <- doRefactorAndCreate rfun simpleCompiler inSrc excludes incDir' outSrc
     print report
 
 equivalences inSrc incDir excludes outSrc = do
@@ -172,13 +172,13 @@ unitsCriticals inSrc incDir excludes m debug = do
 stencilsCheck inSrc incDir excludes = do
    putStrLn $ "Checking stencil specs for '" ++ inSrc ++ "'"
    incDir' <- maybe getCurrentDirectory pure incDir
-   doAnalysisSummary Stencils.check inSrc incDir' excludes
+   doAnalysisSummary Stencils.check compileStencils inSrc incDir' excludes
 
 stencilsInfer inSrc incDir excludes useEval = do
    putStrLn $ "Inferring stencil specs for '" ++ inSrc ++ "'"
    let rfun = Stencils.infer useEval '='
    incDir' <- maybe getCurrentDirectory pure incDir
-   doAnalysisSummary rfun inSrc incDir' excludes
+   doAnalysisSummary rfun compileStencils inSrc incDir' excludes
 
 stencilsSynth inSrc incDir excludes annType outSrc = do
    putStrLn $ "Synthesising stencil specs for '" ++ inSrc ++ "'"

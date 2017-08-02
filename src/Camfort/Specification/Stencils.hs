@@ -48,7 +48,7 @@ getBlocks = FAB.analyseBBlocks . FAR.analyseRenames . FA.initAnalysis . fmap SA.
 -- Top-level of specification inference
 infer :: Bool
       -> Char
-      -> StencilsAnalysis (F.ProgramFile Annotation) String
+      -> StencilsAnalysis (F.ProgramFile Annotation) Report
 infer useEval marker = do
   pf <- analysisInput
   report <- analysisResult <$> branchAnalysis (stencilInference useEval marker) (getBlocks pf)
@@ -58,7 +58,7 @@ infer useEval marker = do
              . map formatSpecNoComment $ report
       white  = all (\x -> (x == ' ') || (x == '\t'))
     -- Append filename to any outputs
-  pure $ if null output then "" else "\n" ++ filename ++ "\n" ++ output
+  pure . mkReport $ if null output then "" else "\n" ++ filename ++ "\n" ++ output
 
 --------------------------------------------------
 --         Stencil specification synthesis      --
@@ -66,11 +66,11 @@ infer useEval marker = do
 
 -- Top-level of specification synthesis
 synth :: Char
-      -> StencilsAnalysis [F.ProgramFile A] (String, [F.ProgramFile Annotation])
+      -> StencilsAnalysis [F.ProgramFile A] (Report, [F.ProgramFile Annotation])
 synth marker = do
   pfs <- analysisInput
   syntheses <- unzip <$> mapM (fmap analysisResult . branchAnalysis buildOutput) pfs
-  let report = normaliseMsg (fst syntheses)
+  let report = mkReport . normaliseMsg . fst $ syntheses
   pure (report, catMaybes $ snd syntheses)
   where
     buildOutput :: StencilsAnalysis (F.ProgramFile A) ((String, String), Maybe (F.ProgramFile Annotation))
@@ -109,14 +109,14 @@ synth marker = do
 --         Stencil specification checking       --
 --------------------------------------------------
 
-check :: StencilsAnalysis (F.ProgramFile Annotation) String
+check :: StencilsAnalysis (F.ProgramFile Annotation) Report
 check = do
   pf <- analysisInput
   res <- branchAnalysis stencilChecking (getBlocks pf)
   -- Append filename to any outputs
   let output   = show (analysisResult res)
       filename = F.pfGetFilename pf
-  pure $ if null output then "" else "\n" ++ filename ++ "\n" ++ output
+  pure . mkReport $ if null output then "" else "\n" ++ filename ++ "\n" ++ output
 
 -- Local variables:
 -- mode: haskell
