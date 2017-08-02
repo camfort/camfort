@@ -100,3 +100,24 @@ The intention of ~Analysis~ is to provide a means of covering many use cases of
 read/write/state monads in CamFort, whilst providing access to certain pieces
 of information such as modfiles available to the analysis, the original input
 data (often a form of ~ProgramFile~), and provide a consistent debugging interface.
+
+** Stencils/Units Consistency
+
+As the code for both Stencils and Units has a fair bit in common,
+I have attempted to bring them both more in-line, to better show
+patterns common to both that might indicate good places for further
+refactoring, or potentially new methods of performing the analysis
+that may help when introducing future analyses.
+
+A possible structure for the future might look like this:
+
++ Camfort.Specification.Stencils :: wraps analyses to produce nice multi-file output for users.
++ Camfort.Specification.Stencils.Analysis :: defines ~Stencils~-specific analysis helpers and types.
++ Camfort.Specification.Stencils.Analysis.Analysis1 :: defines functionality for the ~Analysis1~ analysis.
++ Camfort.Specification.Stencils.Analysis.Analysis1.Backend :: defines low-level functionality for the ~Analysis1~ analysis, if required.
+
+etc. and likewise for ~Units~ and other analyses.
+
+To clean up the namespace a bit, we may wish to split analyses from
+e.g., ~Camfort.Transformation...~ and ~Camfort.Specification...~
+to ~Camfort.Analysis.Transformation...~, ~Camfort.Analysis.Specification...~, etc.
