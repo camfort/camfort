@@ -103,7 +103,7 @@ dead inSrc incDir excludes outSrc = do
           let (reports, results) = (fmap analysisDebug resA, fmap analysisResult resA)
           pure (mconcat reports, fmap (pure :: a -> Either () a) results)
     incDir' <- maybe getCurrentDirectory pure incDir
-    report <- doRefactorWithModFiles rfun simpleCompiler () inSrc incDir' excludes outSrc
+    report <- doRefactor rfun simpleCompiler () inSrc incDir' excludes outSrc
     putStrLn report
 
 common inSrc incDir excludes outSrc = do
@@ -122,7 +122,7 @@ equivalences inSrc incDir excludes outSrc = do
           let (reports, results) = (fmap analysisDebug resA, fmap analysisResult resA)
           pure (mconcat reports, fmap (pure :: a -> Either () a) results)
     incDir' <- maybe getCurrentDirectory pure incDir
-    report <- doRefactorWithModFiles rfun simpleCompiler () inSrc incDir' excludes outSrc
+    report <- doRefactor rfun simpleCompiler () inSrc incDir' excludes outSrc
     putStrLn report
 
 {- Units feature -}
@@ -136,13 +136,13 @@ unitsCheck inSrc incDir excludes m debug = do
     putStrLn $ "Checking units for '" ++ inSrc ++ "'"
     let uo = optsToUnitOpts m debug
     incDir' <- maybe getCurrentDirectory pure incDir
-    doAnalysisReportWithModFiles checkUnits compileUnits uo inSrc incDir' excludes
+    doAnalysisReport checkUnits compileUnits uo inSrc incDir' excludes
 
 unitsInfer inSrc incDir excludes m debug = do
     putStrLn $ "Inferring units for '" ++ inSrc ++ "'"
     let uo = optsToUnitOpts m debug
     incDir' <- maybe getCurrentDirectory pure incDir
-    doAnalysisReportWithModFiles LU.inferUnits compileUnits uo inSrc incDir' excludes
+    doAnalysisReport LU.inferUnits compileUnits uo inSrc incDir' excludes
 
 unitsSynth inSrc incDir excludes m debug outSrc annType = do
     putStrLn $ "Synthesising units for '" ++ inSrc ++ "'"
@@ -158,7 +158,7 @@ unitsSynth inSrc incDir excludes m debug outSrc annType = do
                              Right (_,pf) -> Right pf)) <$> results
           pure . first concat $ unzip normalizedResults
     incDir' <- maybe getCurrentDirectory pure incDir
-    report <- doRefactorWithModFiles rfun compileUnits uo inSrc incDir' excludes outSrc
+    report <- doRefactor rfun compileUnits uo inSrc incDir' excludes outSrc
     putStrLn report
 
 unitsCriticals inSrc incDir excludes m debug = do
@@ -166,7 +166,7 @@ unitsCriticals inSrc incDir excludes m debug = do
              ++ inSrc ++ "'"
     let uo = optsToUnitOpts m debug
     incDir' <- maybe getCurrentDirectory pure incDir
-    doAnalysisReportWithModFiles inferCriticalVariables compileUnits uo inSrc incDir' excludes
+    doAnalysisReport inferCriticalVariables compileUnits uo inSrc incDir' excludes
 
 {- Stencils feature -}
 stencilsCheck inSrc incDir excludes = do
@@ -184,7 +184,7 @@ stencilsSynth inSrc incDir excludes annType outSrc = do
    putStrLn $ "Synthesising stencil specs for '" ++ inSrc ++ "'"
    let rfun = second (fmap (pure :: a -> Either () a)) <$> Stencils.synth (markerChar annType)
    incDir' <- maybe getCurrentDirectory pure incDir
-   report <- doRefactorWithModFiles rfun compileStencils () inSrc incDir' excludes outSrc
+   report <- doRefactor rfun compileStencils () inSrc incDir' excludes outSrc
    putStrLn report
 
 -- | Initialize Camfort for the given project.

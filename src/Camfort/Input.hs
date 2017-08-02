@@ -16,10 +16,10 @@ module Camfort.Input
     -- * Datatypes and Aliases
   , FileProgram
     -- * Builders for analysers and refactorings
-  , doAnalysisReportWithModFiles
+  , doAnalysisReport
   , doAnalysisSummary
+  , doRefactor
   , doRefactorAndCreate
-  , doRefactorWithModFiles
     -- * Source directory and file handling
   , readParseSrcDir
   ) where
@@ -59,10 +59,10 @@ doAnalysisSummary :: (Monoid s, Show s)
   -> MFCompiler ()
   -> FileOrDir -> FileOrDir -> [Filename] -> IO ()
 doAnalysisSummary aFun mfc =
-  doAnalysisReportWithModFiles aFun mfc ()
+  doAnalysisReport aFun mfc ()
 
 -- | Perform an analysis which reports to the user, but does not output any files.
-doAnalysisReportWithModFiles
+doAnalysisReport
   :: (Monoid d, Show d, Show b)
   => Analysis r d () FileProgram b
   -> MFCompiler r
@@ -71,7 +71,7 @@ doAnalysisReportWithModFiles
   -> FileOrDir
   -> [Filename]
   -> IO ()
-doAnalysisReportWithModFiles rFun mfc env inSrc incDir excludes = do
+doAnalysisReport rFun mfc env inSrc incDir excludes = do
   results <- doInitAnalysis' rFun mfc env inSrc incDir excludes
   let report = concatMap (\(rep,res) -> show rep ++ show res) results
   putStrLn report
@@ -116,7 +116,7 @@ doInitAnalysis' analysis mfc env inSrc incDir excludes = do
   let res = runAnalysis analysis env () modFiles . fst <$> ps
   pure $ fmap (\r -> (analysisDebug r, analysisResult r)) res
 
-doRefactorWithModFiles
+doRefactor
   :: (Monoid d, Show d, Show e, Show b)
   => Analysis r d () [FileProgram] (b, [Either e FileProgram])
   -> MFCompiler r
@@ -126,7 +126,7 @@ doRefactorWithModFiles
   -> [Filename]
   -> FileOrDir
   -> IO String
-doRefactorWithModFiles rFun mfc env inSrc incDir excludes outSrc = do
+doRefactor rFun mfc env inSrc incDir excludes outSrc = do
   (ps, report1, aRes) <- doInitAnalysis rFun mfc env inSrc incDir excludes
   let (_, ps') = partitionEithers (snd aRes)
       report = show report1 ++ show (fst aRes)

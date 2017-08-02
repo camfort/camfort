@@ -62,7 +62,7 @@ spec =
             let (reports, results) = (fmap analysisDebug resA, fmap analysisResult resA)
             pure (mconcat reports, fmap (pure :: a -> Either () a) results)
       let infile = samplesBase </> "equiv.f90"
-      report <- runIO $ doRefactorWithModFiles rfun simpleCompiler () infile infile [] "equiv.expected.f90"
+      report <- runIO $ doRefactor rfun simpleCompiler () infile infile [] "equiv.expected.f90"
       it "report is as expected" $
         report `shouldBe` expectedReport
 
