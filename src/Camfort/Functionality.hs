@@ -93,7 +93,7 @@ ast d incDir excludes = do
 countVarDecls inSrc incDir excludes = do
     putStrLn $ "Counting variable declarations in '" ++ inSrc ++ "'"
     incDir' <- maybe getCurrentDirectory pure incDir
-    doAnalysisSummary countVariableDeclarations simpleCompiler inSrc incDir' excludes
+    doAnalysisReport countVariableDeclarations simpleCompiler () inSrc incDir' excludes
 
 dead inSrc incDir excludes outSrc = do
     putStrLn $ "Eliminating dead code in '" ++ inSrc ++ "'"
@@ -103,16 +103,14 @@ dead inSrc incDir excludes outSrc = do
           let (reports, results) = (fmap analysisDebug resA, fmap analysisResult resA)
           pure (mconcat reports, fmap (pure :: a -> Either () a) results)
     incDir' <- maybe getCurrentDirectory pure incDir
-    report <- doRefactor rfun simpleCompiler () inSrc incDir' excludes outSrc
-    putStrLn report
+    doRefactor rfun simpleCompiler () inSrc incDir' excludes outSrc
 
 common inSrc incDir excludes outSrc = do
     putStrLn $ "Refactoring common blocks in '" ++ inSrc ++ "'"
     isDir <- isDirectory inSrc
     let rfun = commonElimToModules (takeDirectory outSrc ++ "/")
     incDir' <- maybe getCurrentDirectory pure incDir
-    report <- doRefactorAndCreate rfun simpleCompiler inSrc excludes incDir' outSrc
-    print report
+    doRefactorAndCreate rfun simpleCompiler () inSrc incDir' excludes outSrc
 
 equivalences inSrc incDir excludes outSrc = do
     putStrLn $ "Refactoring equivalences blocks in '" ++ inSrc ++ "'"
@@ -122,8 +120,7 @@ equivalences inSrc incDir excludes outSrc = do
           let (reports, results) = (fmap analysisDebug resA, fmap analysisResult resA)
           pure (mconcat reports, fmap (pure :: a -> Either () a) results)
     incDir' <- maybe getCurrentDirectory pure incDir
-    report <- doRefactor rfun simpleCompiler () inSrc incDir' excludes outSrc
-    putStrLn report
+    doRefactor rfun simpleCompiler () inSrc incDir' excludes outSrc
 
 {- Units feature -}
 optsToUnitOpts :: LiteralsOpt -> Bool -> UnitOpts
@@ -158,8 +155,7 @@ unitsSynth inSrc incDir excludes m debug outSrc annType = do
                              Right (_,pf) -> Right pf)) <$> results
           pure . first concat $ unzip normalizedResults
     incDir' <- maybe getCurrentDirectory pure incDir
-    report <- doRefactor rfun compileUnits uo inSrc incDir' excludes outSrc
-    putStrLn report
+    doRefactor rfun compileUnits uo inSrc incDir' excludes outSrc
 
 unitsCriticals inSrc incDir excludes m debug = do
     putStrLn $ "Suggesting variables to annotate with unit specifications in '"
@@ -172,20 +168,19 @@ unitsCriticals inSrc incDir excludes m debug = do
 stencilsCheck inSrc incDir excludes = do
    putStrLn $ "Checking stencil specs for '" ++ inSrc ++ "'"
    incDir' <- maybe getCurrentDirectory pure incDir
-   doAnalysisSummary Stencils.check compileStencils inSrc incDir' excludes
+   doAnalysisReport Stencils.check compileStencils () inSrc incDir' excludes
 
 stencilsInfer inSrc incDir excludes useEval = do
    putStrLn $ "Inferring stencil specs for '" ++ inSrc ++ "'"
    let rfun = Stencils.infer useEval '='
    incDir' <- maybe getCurrentDirectory pure incDir
-   doAnalysisSummary rfun compileStencils inSrc incDir' excludes
+   doAnalysisReport rfun compileStencils () inSrc incDir' excludes
 
 stencilsSynth inSrc incDir excludes annType outSrc = do
    putStrLn $ "Synthesising stencil specs for '" ++ inSrc ++ "'"
    let rfun = second (fmap (pure :: a -> Either () a)) <$> Stencils.synth (markerChar annType)
    incDir' <- maybe getCurrentDirectory pure incDir
-   report <- doRefactor rfun compileStencils () inSrc incDir' excludes outSrc
-   putStrLn report
+   doRefactor rfun compileStencils () inSrc incDir' excludes outSrc
 
 -- | Initialize Camfort for the given project.
 camfortInitialize :: FilePath -> IO ()

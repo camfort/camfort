@@ -21,6 +21,7 @@ module Camfort.Transformation.EquivalenceElimSpec (spec) where
 import Control.Arrow (second)
 import System.FilePath
 import System.Directory
+import System.IO.Silently (capture_)
 
 import Test.Hspec
 
@@ -62,12 +63,13 @@ spec =
             let (reports, results) = (fmap analysisDebug resA, fmap analysisResult resA)
             pure (mconcat reports, fmap (pure :: a -> Either () a) results)
       let infile = samplesBase </> "equiv.f90"
-      report <- runIO $ doRefactor rfun simpleCompiler () infile infile [] "equiv.expected.f90"
+      report <- runIO . capture_ $ doRefactor rfun simpleCompiler () infile infile [] "equiv.expected.f90"
       it "report is as expected" $
         report `shouldBe` expectedReport
 
 expectedReport :: String
 expectedReport =
-  "6:3: removed equivalence \n\
+  "Writing equiv.expected.f90\n\
+  \6:3: removed equivalence \n\
   \14:3: added copy due to refactored equivalence\n\
-  \15:3: added copy due to refactored equivalence\n"
+  \15:3: added copy due to refactored equivalence\n\n"
