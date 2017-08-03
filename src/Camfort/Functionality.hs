@@ -147,7 +147,7 @@ unitsSynth inSrc incDir excludes m debug outSrc annType =
                        , case analysisResult res of
                            Left err     -> Left err
                            Right (_,pf) -> Right pf)) <$> results
-        pure . first concat $ unzip normalizedResults
+        pure . first (mkReport . concat) $ unzip normalizedResults
       runner' = withOutRunner doRefactor outSrc
   in runUnitsFunctionality "Synthesising units for" runner' rfun inSrc incDir excludes m debug
 
