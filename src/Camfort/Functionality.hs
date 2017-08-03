@@ -51,6 +51,7 @@ import System.FilePath  ((</>), takeDirectory)
 
 import           Camfort.Analysis
   (analysisDebug, analysisInput, analysisResult, branchAnalysis)
+import           Camfort.Analysis.Annotations (mkReport)
 import           Camfort.Analysis.ModFile
   (genModFiles, readParseSrcDir, simpleCompiler)
 import           Camfort.Analysis.Simple
@@ -133,7 +134,8 @@ optsToUnitOpts m debug = o1
 
 unitsCheck = runUnitsFunctionality "Checking units for" doAnalysisReport checkUnits
 
-unitsInfer = runUnitsFunctionality "Inferring units for" doAnalysisReport inferUnits
+unitsInfer = runUnitsFunctionality "Inferring units for" doAnalysisReport inferUnits'
+  where inferUnits' = (mkReport . either show show) <$> inferUnits
 
 unitsSynth inSrc incDir excludes m debug outSrc annType =
   let marker = markerChar annType
