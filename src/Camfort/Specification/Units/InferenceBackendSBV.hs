@@ -33,19 +33,19 @@ where
 
 import Data.Char
 import Data.Tuple (swap)
-import Data.Maybe (maybeToList)
-import Data.List ((\\), isPrefixOf, findIndex, partition, sortBy, group, tails, transpose)
+import Data.Maybe (maybeToList, catMaybes, fromMaybe)
+import Data.List ((\\), isPrefixOf, findIndex, partition, sortBy, group, tails, transpose, nub)
 import Data.Generics.Uniplate.Operations (rewrite)
-import Debug.Trace (trace)
+import Debug.Trace (trace, traceShowM, traceM)
 import Control.Monad
 import Control.Monad.ST
 import Control.Arrow (first, second)
 import qualified Data.Map.Strict as M
 import qualified Data.Array as A
 import System.IO.Unsafe (unsafePerformIO)
-import Data.SBV ( smtFile, SatResult(..), SMTResult(Unknown), Symbolic, SBool, SInteger, SBV
+import Data.SBV ( transcript, SatResult(..), SMTResult(Unknown), Symbolic, SBool, SInteger, SBV
                 , satWith, z3, getModelDictionary, fromCW, true, namedConstraint, (.==)
-                , sInteger, literal )
+                , sInteger, literal, bAnd, Predicate, getModelValue )
 
 import Camfort.Specification.Units.Environment
 
@@ -71,11 +71,11 @@ criticalVariables _ = [] -- STUB
 
 -- | Returns list of formerly-undetermined variables and their units.
 inferVariablesSBV :: Constraints -> [(VV, UnitInfo)]
-inferVariablesSBV cons = unsafePerformIO $ do
+inferVariablesSBV cons = inferVariablesSBV' cons ++ (unsafePerformIO $ do
   unitAssignments <- genUnitAssignmentsSBV cons
   -- Find the rows corresponding to the distilled "unit :: var"
   -- information for ordinary (non-polymorphic) variables.
-  return [ (var, units) | (UnitVar var, units) <- unitAssignments ]
+  return [ (var, units) | (UnitVar var, units) <- unitAssignments ])
 
 
 -- Convert a set of constraints into a matrix of co-efficients, and a
@@ -114,7 +114,7 @@ solveSMT :: (H.Matrix Double, H.Matrix Double, A.Array Int UnitInfo, A.Array Int
 solveSMT (lhsM, rhsM, lhsCols, rhsCols) = do
 
     satResult <- satWith
-                   z3{smtFile=Just "model.smt2"} -- SMT-LIB dump
+                   z3{transcript=Just "model.smt2"} -- SMT-LIB dump
                    predicate
 
     case satResult of
@@ -321,3 +321,130 @@ shiftTerms (lhs, rhs) = (lhsOk ++ negateCons rhsShift, rhsOk ++ negateCons lhsSh
 -- | Translate all constraints into a LHS, RHS side of units.
 flattenConstraints :: Constraints -> [([UnitInfo], [UnitInfo])]
 flattenConstraints = map (\ (ConEq u1 u2) -> (flattenUnits u1, flattenUnits u2))
+
+--------------------------------------------------
+
+type Z3 a = Symbolic a
+type Symbol = SInteger
+
+type UnitZ3Map = M.Map (UnitInfo, UnitInfo) Symbol
+
+type LhsUnit = UnitInfo
+type RhsUnit = UnitInfo
+type UnitInfoNameMap = M.Map String (LhsUnit, RhsUnit)
+
+
+gatherRhsUnitInfoNames :: [[UnitInfo]] -> [(String, RhsUnit)]
+gatherRhsUnitInfoNames = concatMap eachRow
+  where
+    eachRow               = map eachCol
+
+    eachCol (UnitPow u _) = (show u, u)
+    eachCol u             = (show u, u)
+
+gatherLhsUnitInfoNames :: (String, RhsUnit) -> [[UnitInfo]] -> [(String, (LhsUnit, RhsUnit))]
+gatherLhsUnitInfoNames (rhsName, rhsUnit) = concatMap eachRow
+  where
+    eachRow               = map eachCol
+
+    eachCol (UnitPow u _) = (show u ++ "_" ++ rhsName, (u, rhsUnit))
+    eachCol u             = (show u ++ "_" ++ rhsName, (u, rhsUnit))
+
+gatherUnitInfoNameMap :: [([UnitInfo], [UnitInfo])] -> UnitInfoNameMap
+gatherUnitInfoNameMap shiftedCons = M.fromListWith (curry fst) lhsNames
+  where
+    lhsNames = concatMap (flip gatherLhsUnitInfoNames lhsRows) rhsNames
+    lhsRows  = map fst shiftedCons
+
+    rhsNames = gatherRhsUnitInfoNames rhsRows
+    rhsRows  = map snd shiftedCons
+
+-- returns the unitinfo and the generated unit-AST, integer-power-AST
+rhsUnitInfoToZ3 :: UnitInfo -> Z3 (UnitInfo, (String, Integer))
+rhsUnitInfoToZ3 (UnitPow u p) = do
+  (u', (uName, _)) <- rhsUnitInfoToZ3 u
+  return (u', (uName, floor p))
+rhsUnitInfoToZ3 u = do
+  return (u, (show u, 1))
+
+lhsUnitInfoToZ3 :: String -> UnitInfo -> Z3 (UnitInfo, (Symbol, Integer))
+lhsUnitInfoToZ3 rhsName (UnitPow u p) = do
+  (u', (uSym, _)) <- lhsUnitInfoToZ3 rhsName u
+  return (u', (uSym, floor p))
+lhsUnitInfoToZ3 rhsName u = do
+  s <- sInteger (show u ++ "_" ++ rhsName)
+  return (u, (s, 1))
+
+constraintsToZ3 :: Constraints -> Z3 (UnitZ3Map, SBool)
+constraintsToZ3 cons = do
+  let shiftedCons = map shiftTerms $ flattenConstraints cons
+  traceShowM $ gatherUnitInfoNameMap shiftedCons
+
+  -- for each constraint having a set of LHS terms and a set of RHS terms:
+  mapEqs <- fmap concat . forM shiftedCons $ \ (lhs, rhs) -> do
+    unitRhses <- mapM rhsUnitInfoToZ3 rhs
+    -- for each RHS symbol and corresponding power build an equation of the form:
+    --   lhs1_RHS * pow1 + lhs2_RHS * pow2 + ... + lhsN_RHS powN = pow_RHS
+    fmap catMaybes . forM unitRhses $ \ (rhsU, (rhsName, rhsPow)) -> do
+      unitLhses <- mapM (lhsUnitInfoToZ3 rhsName) lhs
+      let m = M.fromList [ ((lhsU, rhsU), lhsSym) | (lhsU, (lhsSym, _)) <- unitLhses ]
+
+      -- lhsTerms = [lhs1_RHS * pow1, lhs2_RHS * pow2, ..., lhsN_RHS powN]
+      lhsTerms <- forM (map snd unitLhses) $ \ (lhsSym, lhsPow) -> do
+        return $ lhsSym * literal lhsPow
+
+      case lhsTerms of
+        [] -> return Nothing
+        _  -> return $ Just (m, sum lhsTerms .== literal rhsPow)
+
+  let m = M.unions (map fst mapEqs)
+  let constraintsAST = map snd mapEqs
+
+  return (m, bAnd constraintsAST)
+
+inferVariablesSBV' :: Constraints -> [(VV, UnitInfo)]
+inferVariablesSBV' cons = unsafePerformIO $ do
+  let shiftedCons = map shiftTerms $ flattenConstraints cons
+  let uiNameMap = gatherUnitInfoNameMap shiftedCons
+  traceShowM shiftedCons
+  let genVar name = (name,) <$> sInteger name
+  let pred :: Predicate
+      pred = do
+        uiSymMap <- M.fromList <$> mapM genVar (M.keys uiNameMap)
+
+        let rhsUnitInfoToZ3 :: UnitInfo -> (String, Integer)
+            rhsUnitInfoToZ3 (UnitPow u p) = (uName, floor p)
+              where (uName, _) = rhsUnitInfoToZ3 u
+            rhsUnitInfoToZ3 u = (show u, 1)
+
+        let lhsUnitInfoToZ3 :: String -> UnitInfo -> (Symbol, Integer)
+            lhsUnitInfoToZ3 rhsName (UnitPow u p) = (uSym, floor p)
+              where (uSym, _) = lhsUnitInfoToZ3 rhsName u
+            lhsUnitInfoToZ3 rhsName u = (s, 1)
+              where n = show u ++ "_" ++ rhsName
+                    s = error ("missing variable for " ++ n) `fromMaybe` M.lookup n uiSymMap
+
+        -- for each constraint having a set of LHS terms and a set of RHS terms:
+        eqs <- fmap concat . forM shiftedCons $ \ (lhs, rhs) -> do
+          let unitRhses = map rhsUnitInfoToZ3 rhs
+          -- for each RHS symbol and corresponding power build an equation of the form:
+          --   lhs1_RHS * pow1 + lhs2_RHS * pow2 + ... + lhsN_RHS powN = pow_RHS
+          fmap catMaybes . forM unitRhses $ \ (rhsName, rhsPow) -> do
+            let unitLhses = map (lhsUnitInfoToZ3 rhsName) lhs
+
+            -- lhsTerms = [lhs1_RHS * pow1, lhs2_RHS * pow2, ..., lhsN_RHS powN]
+            let lhsTerms = flip map unitLhses $ \ (lhsSym, lhsPow) -> lhsSym * literal lhsPow
+
+            case lhsTerms of
+              [] -> return Nothing
+              _  -> return . Just $ sum lhsTerms .== literal rhsPow
+
+        return $ bAnd eqs
+
+  satResult <- satWith z3 { transcript = Just "mrd.smt2" } -- SMT-LIB dump
+               pred
+
+  -- interpret results
+  forM (M.keys uiNameMap) $ \ name -> print (name, getModelValue name satResult :: Maybe Integer)
+
+  return []
