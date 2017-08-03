@@ -18,7 +18,6 @@
    with the input -> output procedures -}
 
 {-# LANGUAGE DoAndIfThenElse #-}
-{-# LANGUAGE DeriveDataTypeable #-}
 {-# LANGUAGE TypeSynonymInstances #-}
 {-# LANGUAGE FlexibleInstances #-}
 {-# LANGUAGE ScopedTypeVariables #-}
@@ -46,20 +45,15 @@ module Camfort.Functionality (
   , camfortInitialize
   ) where
 
-import           Control.Arrow (first, second)
-import           Control.Monad
-import qualified Data.Map.Strict as M
-import           System.Directory (createDirectoryIfMissing, getCurrentDirectory)
-import           System.FilePath  ((</>), takeDirectory)
-
-import           Language.Fortran.Util.ModFile
+import Control.Arrow (first, second)
+import System.Directory (createDirectoryIfMissing, getCurrentDirectory)
+import System.FilePath  ((</>), takeDirectory)
 
 import           Camfort.Analysis
   (analysisDebug, analysisInput, analysisResult, branchAnalysis)
 import           Camfort.Analysis.ModFile
   (genModFiles, readParseSrcDir, simpleCompiler)
 import           Camfort.Analysis.Simple
-import           Camfort.Helpers
 import           Camfort.Input
 import qualified Camfort.Specification.Stencils as Stencils
 import           Camfort.Specification.Stencils.Analysis (compileStencils)
@@ -67,6 +61,7 @@ import qualified Camfort.Specification.Units as LU
 import           Camfort.Specification.Units.Analysis (compileUnits)
 import           Camfort.Specification.Units.Analysis.Consistent (checkUnits)
 import           Camfort.Specification.Units.Analysis.Criticals  (inferCriticalVariables)
+import           Camfort.Specification.Units.Analysis.Infer      (inferUnits)
 import           Camfort.Specification.Units.Monad
 import           Camfort.Transformation.CommonBlockElim
 import           Camfort.Transformation.DeadCode
@@ -138,7 +133,7 @@ optsToUnitOpts m debug = o1
 
 unitsCheck = runUnitsFunctionality "Checking units for" doAnalysisReport checkUnits
 
-unitsInfer = runUnitsFunctionality "Inferring units for" doAnalysisReport LU.inferUnits
+unitsInfer = runUnitsFunctionality "Inferring units for" doAnalysisReport inferUnits
 
 unitsSynth inSrc incDir excludes m debug outSrc annType =
   let marker = markerChar annType
