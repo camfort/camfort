@@ -1,98 +1,43 @@
 module Camfort.Specification.Units.Analysis.InferSpec (spec) where
 
-import qualified Data.ByteString.Char8 as B
-import           Data.Generics.Uniplate.Operations (universeBi)
-import           Data.List (nub, sort)
-import           Data.Maybe (mapMaybe, maybeToList)
-import           System.FilePath ((</>))
+import System.FilePath ((</>))
 
 import           Test.Hspec hiding (Spec)
 import qualified Test.Hspec as Test
 
-import qualified Language.Fortran.AST as F
-import qualified Language.Fortran.Analysis as FA
-import           Language.Fortran.Parser.Any (fortranParser)
-import           Language.Fortran.ParserMonad (fromRight)
-import           Language.Fortran.Util.ModFile (emptyModFiles)
+import Language.Fortran.Util.ModFile (emptyModFiles)
 
-import           Camfort.Analysis (analysisResult, finalState)
+import           Camfort.Analysis (analysisResult)
 import           Camfort.Analysis.ModFile (readParseSrcDir)
-import           Camfort.Analysis.Annotations (unitAnnotation)
-import           Camfort.Specification.Units.Analysis
-  (initInference, runUnitsAnalysis)
-import           Camfort.Specification.Units.Analysis.Infer
-  (inferUnits, runInferVariables)
-import           Camfort.Specification.Units.Annotation (UA)
-import qualified Camfort.Specification.Units.Annotation as UA
-import           Camfort.Specification.Units.Environment
-  (Constraints, UnitInfo)
-import           Camfort.Specification.Units.InferenceBackend (chooseImplicitNames)
+import           Camfort.Specification.Units.Analysis (runUnitsAnalysis)
+import           Camfort.Specification.Units.Analysis.Infer (inferUnits)
 import           Camfort.Specification.Units.Monad
-  ( LiteralsOpt(..)
-  , UnitSolver, runUnitSolver
-  , unitOpts0, uoDebug, uoLiterals
-  , usConstraints )
+  (LiteralsOpt(..), unitOpts0, uoDebug, uoLiterals)
 
 spec :: Test.Spec
-spec = do
-  let showClean = show . nub . sort . fst
-  describe "runInferVariables" $ do
+spec =
+  describe "fixtures integration tests" $ do
+    it "infers correctly based on simple addition" $
+       "example-simple-1.f90" `unitsInferReportIs` exampleInferSimple1Report
     describe "Polymorphic functions" $
       it "squarePoly1" $
-        showClean (runUnits LitMixed squarePoly1 (fmap chooseImplicitNames runInferVariables)) `shouldBe`
-          "[((\"a\",\"a\"),m),((\"b\",\"b\"),s),((\"m\",\"m\"),'b),((\"n\",\"n\"),'a),((\"square\",\"square\"),('a)**2),((\"squarep\",\"squarep\"),('b)**2),((\"x\",\"x\"),m**2),((\"y\",\"y\"),s**2)]"
+        "squarePoly1.f90" `unitsInferReportIs` squarePoly1Report
     describe "Recursive functions" $
       it "Recursive Addition is OK" $
-        showClean (runUnits LitMixed recursive1 (fmap chooseImplicitNames runInferVariables)) `shouldBe`
-          "[((\"b\",\"b\"),'a),((\"n\",\"n\"),1),((\"r\",\"r\"),'a),((\"x\",\"x\"),1),((\"y\",\"y\"),m),((\"z\",\"z\"),m)]"
+        "recursive1.f90" `unitsInferReportIs` recursive1Report
     describe "Explicitly annotated parametric polymorphic unit variables" $ do
       it "inside-outside" $
-        showClean (runUnits LitMixed insideOutside runInferVariables) `shouldBe`
-          "[((\"inside\",\"inside\"),('a)**2),((\"k\",\"k\"),'a),((\"m\",\"m\"),('a)**2),((\"outside\",\"outside\"),('a)**2),((\"x\",\"x\"),'a),((\"y\",\"y\"),'a)]"
+        "insideOutside.f90" `unitsInferReportIs` insideOutsideReport
       it "eapVarScope" $
-        show (sort (fst (runUnitInference LitMixed eapVarScope))) `shouldBe`
-          "[(\"f\",('a)**3),(\"g\",'a),(\"j\",'a),(\"k\",('a)**3),(\"x\",'a),(\"y\",'a)]"
+        "eapVarScope.f90" `unitsInferReportIs` eapVarScopeReport
       it "eapVarApp" $
-        show (sort (fst (runUnitInference LitMixed eapVarApp))) `shouldBe`
-          "[(\"f\",('a)**2),(\"fj\",'a),(\"fk\",('a)**2),(\"fl\",('a)**4),(\"fx\",'a),(\"g\",'b),(\"gm\",'b),(\"gn\",'b),(\"gx\",'b),(\"h\",m**2),(\"hx\",m),(\"hy\",m**2)]"
+        "eapVarApp.f90" `unitsInferReportIs` eapVarAppReport
     describe "Implicit parametric polymorphic unit variables" $
       it "inferPoly1" $
-        show (sort (fst (runUnitInference LitMixed inferPoly1))) `shouldBe`
-          "[(\"fst\",'a),(\"id\",'c),(\"snd\",'d),(\"sqr\",('f)**2),(\"x1\",'c),(\"x2\",'f),(\"x3\",'a),(\"x4\",'e),(\"y3\",'b),(\"y4\",'d)]"
+        "inferPoly1.f90" `unitsInferReportIs` inferPoly1Report
     describe "Intrinsic functions" $
       it "sqrtPoly" $
-        show (sort (fst (runUnitInference LitMixed sqrtPoly))) `shouldBe`
-          "[(\"a\",m**2),(\"b\",s**4),(\"c\",j**2),(\"n\",'a),(\"x\",m),(\"y\",s),(\"z\",j)]"
-  describe "fixtures integration tests" $
-    describe "units-infer" $
-      it "infers correctly based on simple addition" $
-         "example-simple-1.f90" `unitsInferReportIs` exampleInferSimple1Report
-
-runUnits :: LiteralsOpt
-            -> F.ProgramFile b
-            -> UnitSolver t
-            -> (t, Constraints)
-runUnits litMode pf m = (r, usConstraints state)
-  where
-    pf' = FA.initAnalysis . fmap (UA.mkUnitAnnotation . const unitAnnotation) $ pf
-    uOpts = unitOpts0 { uoDebug = False, uoLiterals = litMode }
-    (r, state) =
-      let res = runUnitSolver uOpts pf' emptyModFiles $ initInference >> m
-      in (analysisResult res, finalState res)
-
-runUnitInference :: LiteralsOpt
-                 -> F.ProgramFile b
-                 -> ([(String, UnitInfo)], Constraints)
-runUnitInference litMode pf =
-  ([ (FA.varName e, u) | e <- declVariables pf'
-                       , u <- maybeToList ((FA.varName e, FA.srcName e) `lookup` vars) ]
-  , usConstraints state)
-  where
-    pf' = FA.initAnalysis . fmap (UA.mkUnitAnnotation . const unitAnnotation) $ pf
-    uOpts = unitOpts0 { uoDebug = False, uoLiterals = litMode }
-    (vars, state) =
-      let res = runUnitSolver uOpts pf' emptyModFiles $ initInference >> fmap chooseImplicitNames runInferVariables
-      in (analysisResult res, finalState res)
+        "sqrtPoly.f90" `unitsInferReportIs` sqrtPolyReport
 
 fixturesDir :: String
 fixturesDir = "tests" </> "fixtures" </> "Specification" </> "Units"
@@ -113,163 +58,82 @@ exampleInferSimple1Report =
   \  3:14 unit s :: x\n\
   \  3:17 unit s :: y\n"
 
-declVariables :: F.ProgramFile UA -> [F.Expression UA]
-declVariables pf = flip mapMaybe (universeBi pf) $ \ d -> case d of
-  F.DeclVariable _ _ v@(F.ExpValue _ _ (F.ValVariable _)) _ _   -> Just v
-  F.DeclArray    _ _ v@(F.ExpValue _ _ (F.ValVariable _)) _ _ _ -> Just v
-  _                                                             -> Nothing
+inferReport :: String -> String -> String
+inferReport fname res = concat ["\n", fixturesDir </> fname, ":\n", res]
 
-fortranParser' :: B.ByteString -> String -> F.ProgramFile F.A0
-fortranParser' x = fromRight . fortranParser x
+squarePoly1Report :: String
+squarePoly1Report = inferReport "squarePoly1.f90"
+  "  4:11 unit m**2 :: x\n\
+  \  5:11 unit s**2 :: y\n\
+  \  7:11 unit m :: a\n\
+  \  9:11 unit s :: b\n\
+  \  13:3 unit ('a)**2 :: square\n\
+  \  14:13 unit 'a :: n\n\
+  \  17:3 unit ('b)**2 :: squarep\n\
+  \  18:13 unit 'b :: m\n"
 
-squarePoly1 :: F.ProgramFile F.A0
-squarePoly1 = flip fortranParser' "squarePoly1.f90" . B.pack $ unlines
-    [ "! Demonstrates parametric polymorphism through functions-calling-functions."
-    , "program squarePoly"
-    , "  implicit none"
-    , "  real :: x"
-    , "  real :: y"
-    , "  != unit(m) :: a"
-    , "  real :: a"
-    , "  != unit(s) :: b"
-    , "  real :: b"
-    , "  x = squareP(a)"
-    , "  y = squareP(b)"
-    , "  contains"
-    , "  real function square(n)"
-    , "    real :: n"
-    , "    square = n * n"
-    , "  end function"
-    , "  real function squareP(m)"
-    , "    real :: m"
-    , "    squareP = square(m)"
-    , "  end function"
-    , "end program" ]
+recursive1Report :: String
+recursive1Report = inferReport "recursive1.f90"
+  "  3:14 unit 1 :: x\n\
+  \  3:21 unit m :: y\n\
+  \  3:28 unit m :: z\n\
+  \  7:3 unit 'a :: r\n\
+  \  8:16 unit 1 :: n\n\
+  \  8:19 unit 'a :: b\n"
 
-recursive1 :: F.ProgramFile F.A0
-recursive1 = flip fortranParser' "recursive1.f90" . B.pack $ unlines
-    [ "program main"
-    , "  != unit(m) :: y"
-    , "  integer :: x = 5, y = 2, z"
-    , "  z = recur(x,y)"
-    , "  print *, y"
-    , "contains"
-    , "  real recursive function recur(n, b) result(r)"
-    , "    integer :: n, b"
-    , "    if (n .EQ. 0) then"
-    , "       r = b"
-    , "    else"
-    , "       r = b + recur(n - 1, b)"
-    , "    end if"
-    , "  end function recur"
-    , "end program main" ]
+insideOutsideReport :: String
+insideOutsideReport = inferReport "insideOutside.f90"
+  "  5:13 unit 'a :: x\n\
+  \  5:16 unit 'a :: k\n\
+  \  5:19 unit ('a)**2 :: m\n\
+  \  5:22 unit ('a)**2 :: outside\n\
+  \  12:15 unit 'a :: y\n\
+  \  12:18 unit ('a)**2 :: inside\n"
 
-insideOutside :: F.ProgramFile F.A0
-insideOutside = flip fortranParser' "insideOutside.f90" . B.pack $ unlines
-    [ "module insideOutside"
-    , "contains"
-    , "  function outside(x)"
-    , "    != unit 'a :: x"
-    , "    real :: x, k, m, outside"
-    , "    k = x"
-    , "    outside = inside(k) * 2"
-    , "    m = outside"
-    , "  contains"
-    , "    function inside(y)"
-    , "      != unit 'a ** 2 :: inside"
-    , "      real :: y, inside"
-    , "      inside = y * y"
-    , "    end function inside"
-    , "  end function outside"
-    , "end module insideOutside" ]
+eapVarScopeReport :: String
+eapVarScopeReport = inferReport "eapVarScope.f90"
+  "  5:13 unit 'a :: x\n\
+  \  5:16 unit ('a)**3 :: k\n\
+  \  5:19 unit ('a)**3 :: f\n\
+  \  11:13 unit 'a :: y\n\
+  \  11:16 unit 'a :: j\n\
+  \  11:19 unit 'a :: g\n"
 
-eapVarScope :: F.ProgramFile F.A0
-eapVarScope = flip fortranParser' "eapVarScope.f90" . B.pack $ unlines
-    [ "module eapVarScope"
-    , "contains"
-    , "  function f(x)"
-    , "    != unit 'a :: x"
-    , "    real :: x, k, f"
-    , "    k = g(x) * g(x * x)"
-    , "    f = k"
-    , "  end function f"
-    , "  function g(y)"
-    , "    != unit 'a :: y"
-    , "    real :: y, j, g"
-    , "    j = y"
-    , "    g = j"
-    , "  end function g"
-    , "end module eapVarScope" ]
+eapVarAppReport :: String
+eapVarAppReport = inferReport "eapVarApp.f90"
+  "  5:13 unit 'a :: fx\n\
+  \  5:17 unit 'a :: fj\n\
+  \  5:21 unit ('a)**2 :: fk\n\
+  \  5:25 unit ('a)**4 :: fl\n\
+  \  5:29 unit ('a)**2 :: f\n\
+  \  13:13 unit 'b :: gx\n\
+  \  13:17 unit 'b :: gn\n\
+  \  13:21 unit 'b :: gm\n\
+  \  13:25 unit 'b :: g\n\
+  \  20:13 unit m :: hx\n\
+  \  20:17 unit m**2 :: h\n\
+  \  20:20 unit m**2 :: hy\n"
 
-eapVarApp :: F.ProgramFile F.A0
-eapVarApp = flip fortranParser' "eapVarApp.f90" . B.pack $ unlines
-    [ "module eapVarApp"
-    , "contains"
-    , "  function f(fx)"
-    , "    != unit 'a :: fx"
-    , "    real :: fx, fj, fk, fl, f"
-    , "    fj = fx"
-    , "    fk = g(fj*fj)"
-    , "    fl = fj * g(fj * fj * fj)"
-    , "    f = fk"
-    , "  end function f"
-    , "  function g(gx)"
-    , "    != unit 'b :: gx"
-    , "    real :: gx, gn, gm, g"
-    , "    gm = gx"
-    , "    gn = gm"
-    , "    g = gn"
-    , "  end function g"
-    , "  function h(hx)"
-    , "    != unit m :: hx"
-    , "    real :: hx, h, hy"
-    , "    hy = f(hx)"
-    , "    h = hy"
-    , "  end function h"
-    , "end module eapVarApp" ]
+inferPoly1Report :: String
+inferPoly1Report = inferReport "inferPoly1.f90"
+  "  4:13 unit 'c :: x1\n\
+  \  4:17 unit 'c :: id\n\
+  \  8:13 unit 'f :: x2\n\
+  \  8:17 unit ('f)**2 :: sqr\n\
+  \  12:13 unit 'a :: x3\n\
+  \  12:17 unit 'b :: y3\n\
+  \  12:21 unit 'a :: fst\n\
+  \  16:13 unit 'e :: x4\n\
+  \  16:17 unit 'd :: y4\n\
+  \  16:21 unit 'd :: snd\n"
 
-inferPoly1 :: F.ProgramFile F.A0
-inferPoly1 = flip fortranParser' "inferPoly1.f90" . B.pack $ unlines
-    [ "module inferPoly1"
-    , "contains"
-    , "  function id(x1)"
-    , "    real :: x1, id"
-    , "    id = x1"
-    , "  end function id"
-    , "  function sqr(x2)"
-    , "    real :: x2, sqr"
-    , "    sqr = x2 * x2"
-    , "  end function sqr"
-    , "  function fst(x3,y3)"
-    , "    real :: x3, y3, fst"
-    , "    fst = x3"
-    , "  end function fst"
-    , "  function snd(x4,y4)"
-    , "    real :: x4, y4, snd"
-    , "    snd = y4"
-    , "  end function snd"
-    , "end module inferPoly1" ]
-
--- Test intrinsic function sqrt()
-sqrtPoly :: F.ProgramFile F.A0
-sqrtPoly = flip fortranParser' "sqrtPoly.f90" . B.pack $ unlines
-    [ "program sqrtPoly"
-    , "  implicit none"
-    , "  != unit m :: x"
-    , "  real :: x"
-    , "  != unit s :: y"
-    , "  real :: y"
-    , "  != unit J :: z"
-    , "  real :: z"
-    , "  integer :: a"
-    , "  integer :: b"
-    , "  integer :: c"
-    , "  x = sqrt(a)"
-    , "  y = sqrt(sqrt(b))"
-    , "  z = sqrt(square(sqrt(c)))"
-    , "contains"
-    , "  real function square(n)"
-    , "    real :: n"
-    , "    square = n * n"
-    , "  end function square"
-    , "end program sqrtPoly" ]
+sqrtPolyReport :: String
+sqrtPolyReport = inferReport "sqrtPoly.f90"
+  "  4:11 unit m :: x\n\
+  \  6:11 unit s :: y\n\
+  \  8:11 unit j :: z\n\
+  \  9:14 unit m**2 :: a\n\
+  \  10:14 unit s**4 :: b\n\
+  \  11:14 unit j**2 :: c\n\
+  \  16:3 unit ('a)**2 :: square\n\
+  \  17:13 unit 'a :: n\n"

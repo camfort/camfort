@@ -15,8 +15,6 @@ module Camfort.Specification.Units.Analysis.Infer
   ( InferenceReport
   , getInferred
   , inferUnits
-    -- * For testing
-  , runInferVariables
   ) where
 
 import           Data.Data (Data)
