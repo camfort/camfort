@@ -77,7 +77,8 @@ library
                         Camfort.Specification.Hoare.Parser
                         Camfort.Specification.Hoare.Lexer
                         Camfort.Specification.Hoare.Syntax
-                        Camfort.Specification.Hoare.Translation
+                        Camfort.Specification.Hoare.Translate
+                        Camfort.Specification.Hoare.Translate.Types
                         Camfort.Transformation.CommonBlockElim
                         Camfort.Transformation.DeadCode
                         Camfort.Transformation.EquivalenceElim
