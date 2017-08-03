@@ -14,11 +14,13 @@ module Camfort.Analysis.ModFile
   , getModFiles
   , readParseSrcDir
   , simpleCompiler
+  , withCombinedEnvironment
   ) where
 
 import           Control.Monad (forM)
 import qualified Data.ByteString as B
 import           Data.Char (toUpper)
+import           Data.Data (Data)
 import           Data.List ((\\))
 import           Data.Maybe (catMaybes)
 import           Data.Text.Encoding (encodeUtf8, decodeUtf8With)
@@ -42,14 +44,18 @@ type MFCompiler r = r -> ModFiles -> F.ProgramFile A -> ModFile
 
 -- | Compile the Modfile with only basic information.
 simpleCompiler :: MFCompiler ()
-simpleCompiler () mfs pf =
+simpleCompiler () mfs = genModFile . withCombinedEnvironment mfs
+
+-- | Normalize the 'ProgramFile' to include environment information from
+-- the 'ModFiles'.
+withCombinedEnvironment :: (Data a) => ModFiles -> F.ProgramFile a -> F.ProgramFile (FA.Analysis a)
+withCombinedEnvironment mfs pf =
   let
     -- Use the module map derived from all of the included Camfort Mod files.
     mmap = combinedModuleMap mfs
     tenv = combinedTypeEnv mfs
     pfRenamed = FAR.analyseRenamesWithModuleMap mmap . FA.initAnalysis $ pf
-    pfTyped = fst . FAT.analyseTypesWithEnv tenv $ pfRenamed
-  in genModFile pfTyped
+  in fst . FAT.analyseTypesWithEnv tenv $ pfRenamed
 
 genCModFile :: MFCompiler r -> r -> ModFiles -> F.ProgramFile A -> ModFile
 genCModFile = id

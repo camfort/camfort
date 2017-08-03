@@ -31,11 +31,9 @@ import           Data.Maybe (isJust, fromMaybe)
 import qualified Data.Set as S
 import qualified Numeric.LinearAlgebra as H -- for debugging
 
-import qualified Language.Fortran.AST               as F
-import qualified Language.Fortran.Analysis          as FA
+import qualified Language.Fortran.AST      as F
+import qualified Language.Fortran.Analysis as FA
 import           Language.Fortran.Analysis (varName, srcName)
-import qualified Language.Fortran.Analysis.Renaming as FAR
-import qualified Language.Fortran.Analysis.Types    as FAT
 import           Language.Fortran.Parser.Utils (readReal, readInteger)
 import           Language.Fortran.Util.ModFile
 import           Language.Fortran.Util.Position (getSpan)
@@ -52,6 +50,7 @@ import           Camfort.Analysis
   , runAnalysis )
 import           Camfort.Analysis.Annotations (Annotation, Report)
 import           Camfort.Analysis.CommentAnnotator (annotateComments)
+import           Camfort.Analysis.ModFile (withCombinedEnvironment)
 import qualified Camfort.Specification.Units.Annotation   as UA
 import           Camfort.Specification.Units.Environment
 import           Camfort.Specification.Units.InferenceBackend
@@ -137,12 +136,8 @@ runInference solver = do
   mfs   <- analysisModFiles
   uOpts <- analysisParams
   let
-    -- Use the module map derived from all of the included Camfort Mod files.
-    mmap      = combinedModuleMap mfs
-    tenv      = combinedTypeEnv mfs
-    pfRenamed = FAR.analyseRenamesWithModuleMap mmap . FA.initAnalysis . fmap UA.mkUnitAnnotation $ pf
-    pfTyped = fst . FAT.analyseTypesWithEnv tenv $ pfRenamed
-    res = runUnitSolver uOpts pfTyped mfs $ do
+    pf' = withCombinedEnvironment mfs . fmap UA.mkUnitAnnotation $ pf
+    res = runUnitSolver uOpts pf' mfs $ do
       initializeModFiles
       initInference
       solver
@@ -922,11 +917,6 @@ intrinsicUnits =
 -- | Compile a program to a 'ModFile' containing units information.
 compileUnits :: UnitOpts -> ModFiles -> F.ProgramFile Annotation -> ModFile
 compileUnits uo mfs pf =
-  genUnitsModFile pfTyped cu
-  where
-    -- Use the module map derived from all of the included Camfort Mod files.
-    mmap = combinedModuleMap mfs
-    tenv = combinedTypeEnv mfs
-    pfRenamed = FAR.analyseRenamesWithModuleMap mmap . FA.initAnalysis . fmap UA.mkUnitAnnotation $ pf
-    pfTyped = fst . FAT.analyseTypesWithEnv tenv $ pfRenamed
-    (cu,_,_) = analysisResult . runAnalysis (runInference runCompileUnits) uo () mfs $ pf
+  let pf'      = withCombinedEnvironment mfs . fmap UA.mkUnitAnnotation $ pf
+      (cu,_,_) = analysisResult . runAnalysis (runInference runCompileUnits) uo () mfs $ pf
+  in genUnitsModFile pf' cu
