@@ -7,11 +7,11 @@ import qualified Test.Hspec as Test
 
 import Language.Fortran.Util.ModFile (emptyModFiles)
 
-import           Camfort.Analysis (analysisResult)
-import           Camfort.Analysis.ModFile (readParseSrcDir)
-import           Camfort.Specification.Units.Analysis (runUnitsAnalysis)
-import           Camfort.Specification.Units.Analysis.Infer (inferUnits)
-import           Camfort.Specification.Units.Monad
+import Camfort.Analysis (analysisResult)
+import Camfort.Analysis.ModFile (readParseSrcDir)
+import Camfort.Specification.Units.Analysis (runUnitsAnalysis)
+import Camfort.Specification.Units.Analysis.Infer (inferUnits)
+import Camfort.Specification.Units.Monad
   (LiteralsOpt(..), unitOpts0, uoDebug, uoLiterals)
 
 spec :: Test.Spec
