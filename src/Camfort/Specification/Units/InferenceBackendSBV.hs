@@ -34,7 +34,7 @@ where
 import Data.Char
 import Data.Tuple (swap)
 import Data.Maybe (maybeToList, catMaybes, fromMaybe)
-import Data.List ((\\), isPrefixOf, findIndex, partition, sortBy, group, tails, transpose, nub)
+import Data.List ((\\), isPrefixOf, findIndex, partition, sortBy, group, groupBy, tails, transpose, nub)
 import Data.Generics.Uniplate.Operations (rewrite)
 import Debug.Trace (trace, traceShowM, traceM)
 import Control.Monad
@@ -46,6 +46,8 @@ import System.IO.Unsafe (unsafePerformIO)
 import Data.SBV ( transcript, SatResult(..), SMTResult(Unknown), Symbolic, SBool, SInteger, SBV
                 , satWith, z3, getModelDictionary, fromCW, true, namedConstraint, (.==)
                 , sInteger, literal, bAnd, Predicate, getModelValue )
+import Data.Ord (comparing)
+import Data.Function (on)
 
 import Camfort.Specification.Units.Environment
 
@@ -70,13 +72,12 @@ criticalVariables _ = [] -- STUB
 --------------------------------------------------
 
 -- | Returns list of formerly-undetermined variables and their units.
-inferVariablesSBV :: Constraints -> [(VV, UnitInfo)]
-inferVariablesSBV cons = inferVariablesSBV' cons ++ (unsafePerformIO $ do
+inferVariablesSBV' :: Constraints -> [(VV, UnitInfo)]
+inferVariablesSBV' cons = unsafePerformIO $ do
   unitAssignments <- genUnitAssignmentsSBV cons
   -- Find the rows corresponding to the distilled "unit :: var"
   -- information for ordinary (non-polymorphic) variables.
-  return [ (var, units) | (UnitVar var, units) <- unitAssignments ])
-
+  return [ (var, units) | (UnitVar var, units) <- unitAssignments ]
 
 -- Convert a set of constraints into a matrix of co-efficients, and a
 -- reverse mapping of column numbers to units.
@@ -402,11 +403,10 @@ constraintsToZ3 cons = do
 
   return (m, bAnd constraintsAST)
 
-inferVariablesSBV' :: Constraints -> [(VV, UnitInfo)]
-inferVariablesSBV' cons = unsafePerformIO $ do
+inferVariablesSBV :: Constraints -> [(VV, UnitInfo)]
+inferVariablesSBV cons = unsafePerformIO $ do
   let shiftedCons = map shiftTerms $ flattenConstraints cons
   let uiNameMap = gatherUnitInfoNameMap shiftedCons
-  traceShowM shiftedCons
   let genVar name = (name,) <$> sInteger name
   let pred :: Predicate
       pred = do
@@ -444,7 +444,40 @@ inferVariablesSBV' cons = unsafePerformIO $ do
   satResult <- satWith z3 { transcript = Just "mrd.smt2" } -- SMT-LIB dump
                pred
 
-  -- interpret results
-  forM (M.keys uiNameMap) $ \ name -> print (name, getModelValue name satResult :: Maybe Integer)
+  -- Interpret results.
 
-  return []
+  -- The uiNameMap stores the mapping between each SInteger name and
+  -- its corresponding (lhsU, rhsU). Therefore we sort and group each
+  -- entry by its lhsU, and then check the solved integer value of the
+  -- SInteger name. That solved integer value corresponds to rhsU raised
+  -- to that power. Take all of the rhsUs, raised to their respective
+  -- powers, and combine them into a single UnitMul for each lhsU.
+
+  let lhsU = fst . snd
+  let unitGroups = groupBy ((==) `on` lhsU) . sortBy (comparing lhsU) $ M.toList uiNameMap
+
+  -- unitGroups =
+  --   [ [(name1_1, (lhs1, rhs1)), (name1_2, (lhs1, rhs2)), ...]
+  --   , [(name2_1, (lhs2, rhs1)), (name2_2, (lhs2, rhs2)), ...]
+  --   , ...]
+
+  let eachName (lhsName, (lhsU, rhsU))
+        | x == 0    = Nothing
+        | otherwise = Just $ UnitPow rhsU (fromInteger x)
+        where x = error "inferVariables missing piece of model" `fromMaybe` getModelValue lhsName satResult
+
+  let eachGroup unitGroup = (lhsU, solvedUnit)
+        where
+          (_, (lhsU, _)):_ = unitGroup -- grouped by lhsU, so pick out one of them
+          solvedUnit = simplifyUnits . foldUnits . catMaybes $ map eachName unitGroup
+
+  let solvedUnits = map eachGroup unitGroups
+
+  -- We are only interested in reporting the solutions to variables.
+  let solvedVars = [ (vv, unit) | v@(UnitVar vv, unit) <- solvedUnits ]
+  return solvedVars
+
+
+foldUnits units
+  | null units = UnitlessVar
+  | otherwise  = foldl1 UnitMul units
