@@ -323,6 +323,10 @@ shiftTerms (lhs, rhs) = (lhsOk ++ negateCons rhsShift, rhsOk ++ negateCons lhsSh
 flattenConstraints :: Constraints -> [([UnitInfo], [UnitInfo])]
 flattenConstraints = map (\ (ConEq u1 u2) -> (flattenUnits u1, flattenUnits u2))
 
+foldUnits units
+  | null units = UnitlessVar
+  | otherwise  = foldl1 UnitMul units
+
 --------------------------------------------------
 
 type Z3 a = Symbolic a
@@ -333,7 +337,6 @@ type UnitZ3Map = M.Map (UnitInfo, UnitInfo) Symbol
 type LhsUnit = UnitInfo
 type RhsUnit = UnitInfo
 type UnitInfoNameMap = M.Map String (LhsUnit, RhsUnit)
-
 
 gatherRhsUnitInfoNames :: [[UnitInfo]] -> [(String, RhsUnit)]
 gatherRhsUnitInfoNames = concatMap eachRow
@@ -360,86 +363,62 @@ gatherUnitInfoNameMap shiftedCons = M.fromListWith (curry fst) lhsNames
     rhsNames = gatherRhsUnitInfoNames rhsRows
     rhsRows  = map snd shiftedCons
 
--- returns the unitinfo and the generated unit-AST, integer-power-AST
-rhsUnitInfoToZ3 :: UnitInfo -> Z3 (UnitInfo, (String, Integer))
-rhsUnitInfoToZ3 (UnitPow u p) = do
-  (u', (uName, _)) <- rhsUnitInfoToZ3 u
-  return (u', (uName, floor p))
-rhsUnitInfoToZ3 u = do
-  return (u, (show u, 1))
-
-lhsUnitInfoToZ3 :: String -> UnitInfo -> Z3 (UnitInfo, (Symbol, Integer))
-lhsUnitInfoToZ3 rhsName (UnitPow u p) = do
-  (u', (uSym, _)) <- lhsUnitInfoToZ3 rhsName u
-  return (u', (uSym, floor p))
-lhsUnitInfoToZ3 rhsName u = do
-  s <- sInteger (show u ++ "_" ++ rhsName)
-  return (u, (s, 1))
-
-constraintsToZ3 :: Constraints -> Z3 (UnitZ3Map, SBool)
-constraintsToZ3 cons = do
-  let shiftedCons = map shiftTerms $ flattenConstraints cons
-  traceShowM $ gatherUnitInfoNameMap shiftedCons
-
-  -- for each constraint having a set of LHS terms and a set of RHS terms:
-  mapEqs <- fmap concat . forM shiftedCons $ \ (lhs, rhs) -> do
-    unitRhses <- mapM rhsUnitInfoToZ3 rhs
-    -- for each RHS symbol and corresponding power build an equation of the form:
-    --   lhs1_RHS * pow1 + lhs2_RHS * pow2 + ... + lhsN_RHS powN = pow_RHS
-    fmap catMaybes . forM unitRhses $ \ (rhsU, (rhsName, rhsPow)) -> do
-      unitLhses <- mapM (lhsUnitInfoToZ3 rhsName) lhs
-      let m = M.fromList [ ((lhsU, rhsU), lhsSym) | (lhsU, (lhsSym, _)) <- unitLhses ]
-
-      -- lhsTerms = [lhs1_RHS * pow1, lhs2_RHS * pow2, ..., lhsN_RHS powN]
-      lhsTerms <- forM (map snd unitLhses) $ \ (lhsSym, lhsPow) -> do
-        return $ lhsSym * literal lhsPow
-
-      case lhsTerms of
-        [] -> return Nothing
-        _  -> return $ Just (m, sum lhsTerms .== literal rhsPow)
-
-  let m = M.unions (map fst mapEqs)
-  let constraintsAST = map snd mapEqs
-
-  return (m, bAnd constraintsAST)
-
 inferVariablesSBV :: Constraints -> [(VV, UnitInfo)]
 inferVariablesSBV cons = unsafePerformIO $ do
-  let shiftedCons = map shiftTerms $ flattenConstraints cons
+  let shiftedCons :: [([UnitInfo], [UnitInfo])]
+      shiftedCons = map shiftTerms $ flattenConstraints cons
+
   let uiNameMap = gatherUnitInfoNameMap shiftedCons
-  let genVar name = (name,) <$> sInteger name
+
+  let genVar :: String -> Symbolic (String, SInteger)
+      genVar name = (name,) <$> sInteger name
+
+  let rhsNames :: [(String, UnitInfo)]
+      rhsNames = gatherRhsUnitInfoNames (map snd shiftedCons)
+
+  -- start off with every RHS mapped to a power of zero.
+  let baseRhsMap = M.fromList [ (name, 0) | (name, _) <- rhsNames ]
+
   let pred :: Predicate
       pred = do
+        -- pregenerate all of the necessary existentials
         uiSymMap <- M.fromList <$> mapM genVar (M.keys uiNameMap)
 
-        let rhsUnitInfoToZ3 :: UnitInfo -> (String, Integer)
-            rhsUnitInfoToZ3 (UnitPow u p) = (uName, floor p)
-              where (uName, _) = rhsUnitInfoToZ3 u
-            rhsUnitInfoToZ3 u = (show u, 1)
+        let getRhsDetails :: UnitInfo -> (String, Integer)
+            getRhsDetails (UnitPow u p) = (uName, floor p * p')
+              where (uName, p') = getRhsDetails u
+            getRhsDetails u = (show u, 1)
 
-        let lhsUnitInfoToZ3 :: String -> UnitInfo -> (Symbol, Integer)
-            lhsUnitInfoToZ3 rhsName (UnitPow u p) = (uSym, floor p)
-              where (uSym, _) = lhsUnitInfoToZ3 rhsName u
-            lhsUnitInfoToZ3 rhsName u = (s, 1)
+        let getLhsSymbol :: String -> UnitInfo -> (Symbol, Integer)
+            getLhsSymbol rhsName (UnitPow u p) = (uSym, floor p * p')
+              where (uSym, p') = getLhsSymbol rhsName u
+            getLhsSymbol rhsName u = (s, 1)
               where n = show u ++ "_" ++ rhsName
                     s = error ("missing variable for " ++ n) `fromMaybe` M.lookup n uiSymMap
 
+        -- for each RHS name and corresponding power build an equation of the form:
+        --   lhs1_RHS * pow1 + lhs2_RHS * pow2 + ... + lhsN_RHS powN = pow_RHS
+        let eachRhs :: [UnitInfo] -> (String, Integer) -> Maybe SBool
+            eachRhs lhs (rhsName, rhsPow)
+              | null lhsTerms = Nothing
+              | otherwise     = Just (sum lhsTerms .== literal rhsPow)
+              where
+                -- lhsTerms = [lhs1_RHS * pow1, lhs2_RHS * pow2, ..., lhsN_RHS powN]
+                lhsTerms :: [SInteger]
+                lhsTerms = [ lhsSym * literal lhsPow | lhs_i <- lhs
+                                                     , let (lhsSym, lhsPow) = getLhsSymbol rhsName lhs_i ]
+
         -- for each constraint having a set of LHS terms and a set of RHS terms:
-        eqs <- fmap concat . forM shiftedCons $ \ (lhs, rhs) -> do
-          let unitRhses = map rhsUnitInfoToZ3 rhs
-          -- for each RHS symbol and corresponding power build an equation of the form:
-          --   lhs1_RHS * pow1 + lhs2_RHS * pow2 + ... + lhsN_RHS powN = pow_RHS
-          fmap catMaybes . forM unitRhses $ \ (rhsName, rhsPow) -> do
-            let unitLhses = map (lhsUnitInfoToZ3 rhsName) lhs
+        let eachConstraint :: ([UnitInfo], [UnitInfo]) -> [SBool]
+            eachConstraint (lhs, rhs) = res
+              where
+                msg       = "eachConstraint " ++ show (lhs, rhs) ++ " = " ++ show res
+                res       = catMaybes . map (eachRhs lhs) $ rhsPowers
+                -- map every RHS to its corresponding power (including 0 for those not mentioned)
+                rhsPowers = M.toList . M.unionWith (+) baseRhsMap . M.fromList . map getRhsDetails $ rhs
 
-            -- lhsTerms = [lhs1_RHS * pow1, lhs2_RHS * pow2, ..., lhsN_RHS powN]
-            let lhsTerms = flip map unitLhses $ \ (lhsSym, lhsPow) -> lhsSym * literal lhsPow
-
-            case lhsTerms of
-              [] -> return Nothing
-              _  -> return . Just $ sum lhsTerms .== literal rhsPow
-
-        return $ bAnd eqs
+        -- conjunction of all constraints
+        return . bAnd $ concatMap eachConstraint shiftedCons
 
   satResult <- satWith z3 { transcript = Just "mrd.smt2" } -- SMT-LIB dump
                pred
@@ -476,8 +455,3 @@ inferVariablesSBV cons = unsafePerformIO $ do
   -- We are only interested in reporting the solutions to variables.
   let solvedVars = [ (vv, unit) | v@(UnitVar vv, unit) <- solvedUnits ]
   return solvedVars
-
-
-foldUnits units
-  | null units = UnitlessVar
-  | otherwise  = foldl1 UnitMul units
