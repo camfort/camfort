@@ -1,7 +1,6 @@
 program fahrenheit
 
   != unit fah :: f
-  != unit cel :: c
   != unit(fah / cel) :: s
   real :: f, s, c, a
   !s = 1.8
