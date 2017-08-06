@@ -59,7 +59,7 @@ import           Camfort.Specification.Units.ModFile
 import           Camfort.Specification.Units.Monad
 import           Camfort.Specification.Units.Parser (unitParser)
 import qualified Camfort.Specification.Units.Parser.Types as P
-import Camfort.Specification.Units.InferenceBackendSBV (inferVariablesSBV)
+import Camfort.Specification.Units.InferenceBackendSBV (inferVariablesSBV, genUnitAssignmentsSBV)
 
 -- | Analysis with access to 'UnitOpts' information.
 type UnitsAnalysis a a' = Analysis UnitOpts Report () a a'
@@ -872,6 +872,9 @@ debugLogging = whenDebug $ do
     let unitAssignments = genUnitAssignments cons
     writeLogs . unlines $ map (\ (u1s, u2) -> "  ***UnitAssignment: " ++ show u1s ++ " === " ++ show (flattenUnits u2) ++ "\n") unitAssignments
     writeLogs "\n--------------------------------------------------\n"
+    let unitAssignments = genUnitAssignmentsSBV cons
+    writeLogs . unlines $ map (\ (u1s, u2) -> "  ***UnitAssignmentSBV: " ++ show u1s ++ " === " ++ show (flattenUnits u2) ++ "\n") unitAssignments
+    writeLogs "\n--------------------------------------------------\n"    
 
 --------------------------------------------------
 

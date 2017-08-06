@@ -21,7 +21,7 @@ tested-with:            GHC >= 7.8
 
 extra-source-files:     tests/fixtures/Specification/Stencils/*.f
                         tests/fixtures/Specification/Units/*.f90
-			tests/fixtures/Transformation/*.f90
+                        tests/fixtures/Transformation/*.f90
 
 source-repository head
   type: git
@@ -66,6 +66,7 @@ library
                         Camfort.Specification.Units.Analysis.Infer
                         Camfort.Specification.Units.Annotation
                         Camfort.Specification.Units.InferenceBackend
+                        Camfort.Specification.Units.InferenceBackendSBV
                         Camfort.Specification.Units.Environment
                         Camfort.Specification.Units.ModFile
                         Camfort.Specification.Units.Monad
