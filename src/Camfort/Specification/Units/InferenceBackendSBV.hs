@@ -80,9 +80,13 @@ simplifyUnits = rewrite rw
     rw (UnitMul u1 u2) | u1 == u2                            = Just $ UnitPow u1 2
     rw (UnitPow (UnitPow u1 p1) p2)                          = Just $ UnitPow u1 (p1 * p2)
     rw (UnitMul (UnitPow u1 p1) (UnitPow u2 p2)) | u1 == u2  = Just $ UnitPow u1 (p1 + p2)
+    rw (UnitPow UnitlessLit _)                               = Just UnitlessLit
+    rw (UnitPow UnitlessVar _)                               = Just UnitlessVar
     rw (UnitPow _ p) | p `approxEq` 0                        = Just UnitlessLit
     rw (UnitMul UnitlessLit u)                               = Just u
     rw (UnitMul u UnitlessLit)                               = Just u
+    rw (UnitMul UnitlessVar u)                               = Just u
+    rw (UnitMul u UnitlessVar)                               = Just u
     rw _                                                     = Nothing
 
 flattenUnits :: UnitInfo -> [UnitInfo]
