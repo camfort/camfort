@@ -243,25 +243,56 @@ genUnitAssignmentsSBV cons = unsafePerformIO $ do
           namedConstraint ("c"++show i) sbool
 
         query $ do
-          cs <- checkSat
-          case cs of
-            Unsat -> Left <$> getUnsatCore
-            Sat -> do
-              nvMap <- extractSIntValues uiSymMap
+          e_nvMap <- computeInitialNVMap uiSymMap
+          case e_nvMap of
+            Left core -> return $ Left core
+            Right nvMap -> do
+              push 1
               disallowValues uiSymMap nvMap
               cs <- checkSat
               case cs of
+                Unsat -> Right <$> interpret uiNameMap nvMap
                 Sat -> do
-                  io $ putStrLn "Yes there are multiple solutions"
                   nvMap' <- extractSIntValues uiSymMap
-                  let m = M.unionWith (S.union) (M.map S.singleton nvMap) (M.map S.singleton nvMap')
-                  io $ print m
-                _   -> io $ putStrLn "No bupkis"
-
-              Right <$> interpret uiNameMap nvMap
-            -- try to compute multiple satisfiable assignments
-            -- if there is more than 1 that means either poly/units-suggest
-            _ -> error "unknown"
+                  let nvMap'' = M.unionWith nvUnion nvMap nvMap'
+                  io $ print nvMap''
+                  let units = identifyMultipleVISet uiNameMap nvMap''
+                  io $ print units
+                  Right <$> interpret uiNameMap nvMap''
+          -- cs <- checkSat
+          -- case cs of
+          --   Unsat -> Left <$> getUnsatCore
+          --   Sat -> do
+          --     nvMap <- extractSIntValues uiSymMap
+          --     push 1
+          --     disallowValues uiSymMap nvMap
+          --     cs <- checkSat
+          --     case cs of
+          --       Sat -> do
+          --         io $ putStrLn "Yes there are multiple solutions"
+          --         nvMap' <- extractSIntValues uiSymMap
+          --         let nvMap'' = M.unionWith nvUnion nvMap nvMap'
+          --         io $ print nvMap''
+          --         pop 1
+          --         let name:_ = M.keys $ M.filter isMultipleVISet nvMap''
+          --         let Just (lhsU, rhsU) = M.lookup name uiNameMap
+          --         let Just sInt = M.lookup name uiSymMap
+          --         constrain $ sInt .== 12
+          --         cs <- checkSat
+          --         io $ putStrLn $ "turning it to 12: " ++ name ++ ": " ++ show (lhsU, rhsU)
+          --         case cs of
+          --           Sat -> do
+          --             nvMap3 <- extractSIntValues uiSymMap
+          --             io $ putStrLn "rock on"
+          --             io $ print nvMap3
+          --           _ -> io $ putStrLn "bummer"
+          --         Right <$> interpret uiNameMap nvMap''
+          --       _   -> do
+          --         io $ putStrLn "bupkis"
+          --         Right <$> interpret uiNameMap nvMap
+          --   -- try to compute multiple satisfiable assignments
+          --   -- if there is more than 1 that means either poly/units-suggest
+          --   _ -> error "unknown"
 
 
 
@@ -327,14 +358,46 @@ data ValueInfo
 
 type NameValueInfoMap = M.Map String ValueInfo
 
-type NameValueMap = M.Map String Integer
+computeInitialNVMap :: NameSIntegerMap -> Query (Either [String] NameValueInfoMap)
+computeInitialNVMap uiSymMap = do
+  cs <- checkSat
+  case cs of
+    Unsat -> Left <$> getUnsatCore
+    Sat -> do
+      nvMap <- extractSIntValues uiSymMap
+      push 1
+      disallowValues uiSymMap nvMap
+      cs <- checkSat
+      case cs of
+        Sat -> do
+          nvMap' <- extractSIntValues uiSymMap
+          let nvMap'' = M.unionWith nvUnion nvMap nvMap'
+          pop 1
+          return $ Right nvMap''
+        _   -> do
+          pop 1
+          return $ Right nvMap
+    _ -> error "unknown"
 
-extractSIntValues :: NameSIntegerMap -> Query NameValueMap
-extractSIntValues = (M.fromList <$>) . mapM (\ (name, sInt) -> (name,) <$> getValue sInt) . M.toList
+identifyMultipleVISet :: UnitInfoNameMap -> NameValueInfoMap -> [UnitInfo]
+identifyMultipleVISet nameUIMap = nub . map fst . catMaybes . map (`M.lookup` nameUIMap) . M.keys . M.filter isMultipleVISet
 
-disallowValues :: NameSIntegerMap -> NameValueMap -> Query ()
+isMultipleVISet (VISet (_:_:_)) = True
+isMultipleVISet _               = False
+
+nvUnion (VISet xs) (VISet ys) = VISet . nub $ xs ++ ys
+nvUnion x y = error $ "nvUnion on (" ++ show x ++ ", " ++ show y ++ ")"
+
+extractSIntValues :: NameSIntegerMap -> Query NameValueInfoMap
+extractSIntValues = (M.fromList <$>) . mapM convert . M.toList
+  where convert (name, sInt) = ((name,) . VISet . (:[])) <$> getValue sInt
+
+disallowValues :: NameSIntegerMap -> NameValueInfoMap -> Query ()
 disallowValues uiSIntMap nvMap = constrain . bOr . catMaybes $ map mkNotEq (M.toList nvMap)
-  where mkNotEq (name, value) = (./= literal value) <$> M.lookup name uiSIntMap
+  where
+    mkNotEq (name, VISet vs@(_:_))
+      | Just sInt <- M.lookup name uiSIntMap = Just . bAnd $ map ((sInt ./=) . literal) vs
+    mkNotEq _                                = Nothing
 
 disallowCurrentValues :: NameSIntegerMap -> Query ()
 disallowCurrentValues uiSIntMap = extractSIntValues uiSIntMap >>= disallowValues uiSIntMap
@@ -348,7 +411,7 @@ disallowCurrentValues uiSIntMap = extractSIntValues uiSIntMap >>= disallowValues
 -- to that power. Take all of the rhsUs, raised to their respective
 -- powers, and combine them into a single UnitMul for each lhsU.
 
-interpret :: UnitInfoNameMap -> NameValueMap -> Query [(UnitInfo, UnitInfo)]
+interpret :: UnitInfoNameMap -> NameValueInfoMap -> Query [(UnitInfo, UnitInfo)]
 interpret uiNameMap nvMap = do
   let lhsU = fst . snd
   let unitGroups = groupBy ((==) `on` lhsU) . sortBy (comparing lhsU) $ M.toList uiNameMap
@@ -361,18 +424,20 @@ interpret uiNameMap nvMap = do
   let eachName :: (String, (LhsUnit, RhsUnit)) -> Query (Maybe UnitInfo)
       eachName (lhsName, (lhsU, rhsU)) = do
         case M.lookup lhsName nvMap of
-          Nothing -> return Nothing
-          Just 0  -> return Nothing
-          Just x  -> return . Just $ UnitPow rhsU (fromInteger x)
+          Just (VISet [0]) -> return . Just $ UnitlessVar
+          Just (VISet [x]) -> return . Just $ UnitPow rhsU (fromInteger x)
+          _                -> return Nothing
 
   -- each group corresponds to a LHS variable
-  let eachGroup :: [(String, (LhsUnit, RhsUnit))] -> Query (LhsUnit, UnitInfo)
+  let eachGroup :: [(String, (LhsUnit, RhsUnit))] -> Query (Maybe (LhsUnit, UnitInfo))
       eachGroup unitGroup = do
         let (_, (lhsU, _)):_ = unitGroup -- grouped by lhsU, so pick out one of them
-        solvedUnit <- (simplifyUnits . foldUnits . catMaybes) <$> mapM eachName unitGroup
-        return (lhsU, solvedUnit)
+        rawUnits <- catMaybes <$> mapM eachName unitGroup
+        case rawUnits of
+          [] -> return Nothing
+          _  -> return $ Just (lhsU, simplifyUnits . foldUnits $ rawUnits)
 
-  mapM eachGroup unitGroups
+  catMaybes <$> mapM eachGroup unitGroups
 
 
 inferVariablesSBV :: Constraints -> [(VV, UnitInfo)]
