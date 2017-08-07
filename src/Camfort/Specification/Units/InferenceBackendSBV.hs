@@ -35,7 +35,7 @@ import Data.Char
 import Data.Tuple (swap)
 import Data.Maybe (maybeToList, catMaybes, fromMaybe)
 import Data.List ((\\), isPrefixOf, findIndex, partition, sortBy, group, groupBy, tails, transpose, nub, intercalate)
-import Data.Generics.Uniplate.Operations (rewrite)
+import Data.Generics.Uniplate.Operations (rewrite, transformBi)
 import Debug.Trace (trace, traceShowM, traceM)
 import Control.Monad
 import Control.Monad.ST
@@ -125,8 +125,11 @@ isUnitRHS2 (UnitPow (UnitParamEAPAbs _) _) = True
 isUnitRHS2 (UnitPow (UnitParamPosAbs _) _) = True
 isUnitRHS2 _                               = False
 
+type ShiftedConstraint = ([UnitInfo], [UnitInfo])
+type ShiftedConstraints = [ShiftedConstraint]
+
 -- | Shift UnitNames/EAPAbs poly units to the RHS, and all else to the LHS.
-shiftTerms :: (UnitInfo -> Bool) -> ([UnitInfo], [UnitInfo]) -> ([UnitInfo], [UnitInfo])
+shiftTerms :: (UnitInfo -> Bool) -> ([UnitInfo], [UnitInfo]) -> ShiftedConstraint
 shiftTerms isUnitRHS (lhs, rhs) = (lhsOk ++ negateCons rhsShift, rhsOk ++ negateCons lhsShift)
   where
     (lhsOk, lhsShift)           = partition (not . isUnitRHS) lhs
@@ -149,7 +152,7 @@ type UnitZ3Map = M.Map (UnitInfo, UnitInfo) Symbol
 
 type LhsUnit         = UnitInfo
 type RhsUnit         = UnitInfo
-type UnitInfoNameMap = M.Map String (LhsUnit, RhsUnit)
+type NameUnitInfoMap = M.Map String (LhsUnit, RhsUnit)
 type NameSIntegerMap = M.Map String SInteger
 
 gatherRhsUnitInfoNames :: [[UnitInfo]] -> [(String, RhsUnit)]
@@ -168,8 +171,8 @@ gatherLhsUnitInfoNames (rhsName, rhsUnit) = concatMap eachRow
     eachCol (UnitPow u _) = (show u ++ "_" ++ rhsName, (u, rhsUnit))
     eachCol u             = (show u ++ "_" ++ rhsName, (u, rhsUnit))
 
-gatherUnitInfoNameMap :: [([UnitInfo], [UnitInfo])] -> UnitInfoNameMap
-gatherUnitInfoNameMap shiftedCons = M.fromListWith (curry fst) lhsNames
+gatherNameUnitInfoMap :: [([UnitInfo], [UnitInfo])] -> NameUnitInfoMap
+gatherNameUnitInfoMap shiftedCons = M.fromListWith (curry fst) lhsNames
   where
     lhsNames                      = concatMap (flip gatherLhsUnitInfoNames lhsRows) rhsNames
     lhsRows                       = map fst shiftedCons
@@ -177,119 +180,97 @@ gatherUnitInfoNameMap shiftedCons = M.fromListWith (curry fst) lhsNames
     rhsNames = gatherRhsUnitInfoNames rhsRows
     rhsRows = map snd shiftedCons
 
+-- | Map of RHS Names to initial powers (0). Forms the basis of the
+-- solution for every unit variable.
+type BasisMap = M.Map String Integer
+
+genBasisMap :: ShiftedConstraints -> BasisMap
+genBasisMap shiftedCons = baseRhsMap
+  where
+    rhsNames :: [(String, UnitInfo)]
+    rhsNames = gatherRhsUnitInfoNames (map snd shiftedCons)
+    -- start off with every RHS mapped to a power of zero.
+    baseRhsMap = M.fromList [ (name, 0) | (name, _) <- rhsNames ]
+
 genUnitAssignmentsSBV :: Constraints -> [(UnitInfo, UnitInfo)]
 genUnitAssignmentsSBV cons = unsafePerformIO $ do
-  let shiftedCons :: [([UnitInfo], [UnitInfo])]
+  let shiftedCons :: ShiftedConstraints
       shiftedCons = map (shiftTerms isUnitRHS1) $ flattenConstraints cons
-  traceShowM cons
-  traceShowM shiftedCons
-  let uiNameMap = gatherUnitInfoNameMap shiftedCons
+
+  let nameUIMap = gatherNameUnitInfoMap shiftedCons
 
   let genVar :: String -> Symbolic (String, SInteger)
       genVar name = (name,) <$> sInteger name
 
-  let rhsNames :: [(String, UnitInfo)]
-      rhsNames = gatherRhsUnitInfoNames (map snd shiftedCons)
-
-  -- start off with every RHS mapped to a power of zero.
-  let baseRhsMap = M.fromList [ (name, 0) | (name, _) <- rhsNames ]
+  let basisMap = genBasisMap shiftedCons
 
   let pred :: Symbolic (Either [String] [(UnitInfo, UnitInfo)])
       pred = do
         setOption $ ProduceUnsatCores True
         -- pregenerate all of the necessary existentials
-        uiSymMap <- M.fromList <$> mapM genVar (M.keys uiNameMap)
+        nameSIntMap <- M.fromList <$> mapM genVar (M.keys nameUIMap)
 
-        let getRhsDetails :: UnitInfo -> (String, Integer)
-            getRhsDetails (UnitPow u p) = (uName, floor p * p')
-              where (uName, p') = getRhsDetails u
-            getRhsDetails u = (show u, 1)
-
-        let getLhsSymbol :: String -> UnitInfo -> (Symbol, Integer)
-            getLhsSymbol rhsName (UnitPow u p) = (uSym, floor p * p')
-              where (uSym, p') = getLhsSymbol rhsName u
-            getLhsSymbol rhsName u = (s, 1)
-              where n = show u ++ "_" ++ rhsName
-                    s = error ("missing variable for " ++ n) `fromMaybe` M.lookup n uiSymMap
-
-        -- for each RHS name and corresponding power build an equation of the form:
-        --   lhs1_RHS * pow1 + lhs2_RHS * pow2 + ... + lhsN_RHS powN = pow_RHS
-        let eachRhs :: [UnitInfo] -> (String, Integer) -> Maybe (SBool, String)
-            eachRhs lhs (rhsName, rhsPow)
-              | null lhsTerms = Nothing
-              | otherwise     = Just (sum lhsTerms .== literal rhsPow, msg)
-              where
-                -- lhsTerms = [lhs1_RHS * pow1, lhs2_RHS * pow2, ..., lhsN_RHS powN]
-                lhsTerms :: [SInteger]
-                lhsTerms = [ lhsSym * literal lhsPow | lhs_i <- lhs
-                                                     , let (lhsSym, lhsPow) = getLhsSymbol rhsName lhs_i ]
-                msg = intercalate " + " [ lhsName ++ "(" ++ rhsName ++ ") * " ++ show lhsPow
-                                        | lhs_i <- lhs
-                                        , let (lhsName, lhsPow) = getRhsDetails lhs_i ] ++
-                      " == " ++ rhsName ++ " * " ++ show rhsPow
-
-        -- for each constraint having a set of LHS terms and a set of RHS terms:
-        let eachConstraint :: ([UnitInfo], [UnitInfo]) -> [(SBool, String)]
-            eachConstraint (lhs, rhs) = res
-              where
-                msg       = "eachConstraint " ++ show (lhs, rhs) ++ " = " ++ show res
-                res       = catMaybes . map (eachRhs lhs) $ rhsPowers
-                -- map every RHS to its corresponding power (including 0 for those not mentioned)
-                rhsPowers = M.toList . M.unionWith (+) baseRhsMap . M.fromListWith (+) . map getRhsDetails $ rhs
-        -- conjunction of all constraints
-        let sbools = concatMap eachConstraint shiftedCons
+        let sbools = encodeConstraints basisMap nameUIMap nameSIntMap shiftedCons
         forM_ (zip [1..] sbools) $ \ (i, (sbool, msg)) -> do
-          traceM $ "c"++show i++": " ++ msg
+          -- traceM $ "c"++show i++": " ++ msg
           namedConstraint ("c"++show i) sbool
 
         query $ do
-          e_nvMap <- computeInitialNVMap uiSymMap
+          e_nvMap <- computeInitialNVMap nameSIntMap
           case e_nvMap of
             Left core -> return $ Left core
             Right nvMap -> do
               push 1
-              disallowValues uiSymMap nvMap
+              disallowValues nameSIntMap nvMap
               cs <- checkSat
-              case cs of
-                Unsat -> Right <$> interpret uiNameMap nvMap
+              Right assigns <- case cs of
+                Unsat -> Right <$> interpret nameUIMap nvMap
                 Sat -> do
-                  nvMap' <- extractSIntValues uiSymMap
+                  nvMap' <- extractSIntValues nameSIntMap
                   let nvMap'' = M.unionWith nvUnion nvMap nvMap'
                   io $ print nvMap''
-                  let units = identifyMultipleVISet uiNameMap nvMap''
+                  let units = identifyMultipleVISet nameUIMap nvMap''
                   io $ print units
-                  Right <$> interpret uiNameMap nvMap''
+                  Right <$> interpret nameUIMap nvMap''
+              let substMap = M.fromList assigns
+              let shiftedCons' = map (shiftTerms isUnitRHS1) . flip map shiftedCons $ \ (lhs, rhs) ->
+                                   (transformBi (\ l -> l `fromMaybe` M.lookup l substMap) lhs, rhs)
+              io . putStrLn . unlines $ "shiftedCons:":showConstraints basisMap shiftedCons
+              io . putStrLn . unlines $ "shiftedCons':":showConstraints basisMap shiftedCons'
+              let shiftedCons'' = flip map shiftedCons' $ \ (lhs, rhs) -> (flattenUnits (foldUnits lhs), rhs)
+              io . putStrLn . unlines $ "shiftedCons'':":showConstraints basisMap shiftedCons''
+              return $ Right assigns
           -- cs <- checkSat
           -- case cs of
           --   Unsat -> Left <$> getUnsatCore
           --   Sat -> do
-          --     nvMap <- extractSIntValues uiSymMap
+          --     nvMap <- extractSIntValues nameSIntMap
           --     push 1
-          --     disallowValues uiSymMap nvMap
+          --     disallowValues nameSIntMap nvMap
           --     cs <- checkSat
           --     case cs of
           --       Sat -> do
           --         io $ putStrLn "Yes there are multiple solutions"
-          --         nvMap' <- extractSIntValues uiSymMap
+          --         nvMap' <- extractSIntValues nameSIntMap
           --         let nvMap'' = M.unionWith nvUnion nvMap nvMap'
           --         io $ print nvMap''
           --         pop 1
           --         let name:_ = M.keys $ M.filter isMultipleVISet nvMap''
-          --         let Just (lhsU, rhsU) = M.lookup name uiNameMap
-          --         let Just sInt = M.lookup name uiSymMap
+          --         let Just (lhsU, rhsU) = M.lookup name nameUIMap
+          --         let Just sInt = M.lookup name nameSIntMap
           --         constrain $ sInt .== 12
           --         cs <- checkSat
           --         io $ putStrLn $ "turning it to 12: " ++ name ++ ": " ++ show (lhsU, rhsU)
           --         case cs of
           --           Sat -> do
-          --             nvMap3 <- extractSIntValues uiSymMap
+          --             nvMap3 <- extractSIntValues nameSIntMap
           --             io $ putStrLn "rock on"
           --             io $ print nvMap3
           --           _ -> io $ putStrLn "bummer"
-          --         Right <$> interpret uiNameMap nvMap''
+          --         Right <$> interpret nameUIMap nvMap''
           --       _   -> do
           --         io $ putStrLn "bupkis"
-          --         Right <$> interpret uiNameMap nvMap
+          --         Right <$> interpret nameUIMap nvMap
           --   -- try to compute multiple satisfiable assignments
           --   -- if there is more than 1 that means either poly/units-suggest
           --   _ -> error "unknown"
@@ -326,7 +307,7 @@ genUnitAssignmentsSBV cons = unsafePerformIO $ do
       --   let satResult = SatResult smtResult
       --   traceShowM satResult
       --   let lhsU = fst . snd
-      --   let unitGroups = groupBy ((==) `on` lhsU) . sortBy (comparing lhsU) $ M.toList uiNameMap
+      --   let unitGroups = groupBy ((==) `on` lhsU) . sortBy (comparing lhsU) $ M.toList nameUIMap
 
       --   -- unitGroups =
       --   --   [ [(name1_1, (lhs1, rhs1)), (name1_2, (lhs1, rhs2)), ...]
@@ -350,6 +331,66 @@ genUnitAssignmentsSBV cons = unsafePerformIO $ do
 
       --   return $ map eachGroup unitGroups
 
+-- bit of a misnomer, need a better name
+-- assumes unitinfo was already simplified & flattened
+-- extracts a name and power
+getRhsDetails :: UnitInfo -> (String, Integer)
+getRhsDetails (UnitPow u p) = (uName, floor p * p')
+  where (uName, p') = getRhsDetails u
+getRhsDetails u = (show u, 1)
+
+encodeConstraints :: BasisMap -> NameUnitInfoMap -> NameSIntegerMap -> ShiftedConstraints -> [(SBool, String)]
+encodeConstraints basisMap nameUIMap nameSIntMap shiftedCons = do
+  let getLhsSymbol :: String -> UnitInfo -> (Symbol, Integer)
+      getLhsSymbol rhsName (UnitPow u p) = (uSym, floor p * p')
+        where (uSym, p') = getLhsSymbol rhsName u
+      getLhsSymbol rhsName u = (s, 1)
+        where n = show u ++ "_" ++ rhsName
+              s = error ("missing variable for " ++ n) `fromMaybe` M.lookup n nameSIntMap
+
+  -- for each RHS name and corresponding power build an equation of the form:
+  --   lhs1_RHS * pow1 + lhs2_RHS * pow2 + ... + lhsN_RHS powN = pow_RHS
+  let eachRhs :: [UnitInfo] -> (String, Integer) -> Maybe (SBool, String)
+      eachRhs lhs (rhsName, rhsPow)
+        | null lhsTerms = Nothing
+        | otherwise     = Just (sum lhsTerms .== literal rhsPow, msg)
+        where
+          -- lhsTerms = [lhs1_RHS * pow1, lhs2_RHS * pow2, ..., lhsN_RHS powN]
+          lhsTerms :: [SInteger]
+          lhsTerms = [ lhsSym * literal lhsPow | lhs_i <- lhs
+                                               , let (lhsSym, lhsPow) = getLhsSymbol rhsName lhs_i ]
+          msg = intercalate " + " [ lhsName ++ "(" ++ rhsName ++ ") * " ++ show lhsPow
+                                  | lhs_i <- lhs
+                                  , let (lhsName, lhsPow) = getRhsDetails lhs_i ] ++
+                " == " ++ rhsName ++ " * " ++ show rhsPow
+
+  -- for each constraint having a set of LHS terms and a set of RHS terms:
+  let eachConstraint :: ([UnitInfo], [UnitInfo]) -> [(SBool, String)]
+      eachConstraint (lhs, rhs) = res
+        where
+          msg       = "eachConstraint " ++ show (lhs, rhs) ++ " = " ++ show res
+          res       = catMaybes . map (eachRhs lhs) $ rhsPowers
+          -- map every RHS to its corresponding power (including 0 for those not mentioned)
+          rhsPowers = M.toList . M.unionWith (+) basisMap . M.fromListWith (+) . map getRhsDetails $ rhs
+
+  concatMap eachConstraint shiftedCons
+
+showConstraints :: BasisMap -> ShiftedConstraints -> [String]
+showConstraints basisMap = map mkMsg
+  where
+--    mkMsg ([], rhs) = ""
+    mkMsg (lhs, rhs) = intercalate "\n" . filter (not . null) $ map (perRhs lhs) rhsPowers
+      where
+        rhsPowers = M.toList . M.unionWith (+) basisMap . M.fromListWith (+) . map getRhsDetails $ rhs
+
+    perRhs lhs (rhsName, rhsPow) = msg
+      where
+        msg = intercalate " + " [ lhsName ++ "(" ++ rhsName ++ ") * " ++ show lhsPow
+                                | lhs_i <- lhs
+                                , let (lhsName, lhsPow) = getRhsDetails lhs_i ] ++
+              " == " ++ rhsName ++ " * " ++ show rhsPow
+
+
 data ValueInfo
   = VISet [Integer]
   | VISuggest
@@ -359,18 +400,18 @@ data ValueInfo
 type NameValueInfoMap = M.Map String ValueInfo
 
 computeInitialNVMap :: NameSIntegerMap -> Query (Either [String] NameValueInfoMap)
-computeInitialNVMap uiSymMap = do
+computeInitialNVMap nameSIntMap = do
   cs <- checkSat
   case cs of
     Unsat -> Left <$> getUnsatCore
     Sat -> do
-      nvMap <- extractSIntValues uiSymMap
+      nvMap <- extractSIntValues nameSIntMap
       push 1
-      disallowValues uiSymMap nvMap
+      disallowValues nameSIntMap nvMap
       cs <- checkSat
       case cs of
         Sat -> do
-          nvMap' <- extractSIntValues uiSymMap
+          nvMap' <- extractSIntValues nameSIntMap
           let nvMap'' = M.unionWith nvUnion nvMap nvMap'
           pop 1
           return $ Right nvMap''
@@ -379,7 +420,7 @@ computeInitialNVMap uiSymMap = do
           return $ Right nvMap
     _ -> error "unknown"
 
-identifyMultipleVISet :: UnitInfoNameMap -> NameValueInfoMap -> [UnitInfo]
+identifyMultipleVISet :: NameUnitInfoMap -> NameValueInfoMap -> [UnitInfo]
 identifyMultipleVISet nameUIMap = nub . map fst . catMaybes . map (`M.lookup` nameUIMap) . M.keys . M.filter isMultipleVISet
 
 isMultipleVISet (VISet (_:_:_)) = True
@@ -393,28 +434,28 @@ extractSIntValues = (M.fromList <$>) . mapM convert . M.toList
   where convert (name, sInt) = ((name,) . VISet . (:[])) <$> getValue sInt
 
 disallowValues :: NameSIntegerMap -> NameValueInfoMap -> Query ()
-disallowValues uiSIntMap nvMap = constrain . bOr . catMaybes $ map mkNotEq (M.toList nvMap)
+disallowValues nameSIntMap nvMap = constrain . bOr . catMaybes $ map mkNotEq (M.toList nvMap)
   where
     mkNotEq (name, VISet vs@(_:_))
-      | Just sInt <- M.lookup name uiSIntMap = Just . bAnd $ map ((sInt ./=) . literal) vs
+      | Just sInt <- M.lookup name nameSIntMap = Just . bAnd $ map ((sInt ./=) . literal) vs
     mkNotEq _                                = Nothing
 
 disallowCurrentValues :: NameSIntegerMap -> Query ()
-disallowCurrentValues uiSIntMap = extractSIntValues uiSIntMap >>= disallowValues uiSIntMap
+disallowCurrentValues nameSIntMap = extractSIntValues nameSIntMap >>= disallowValues nameSIntMap
 
 -- Interpret results.
 
--- The uiNameMap stores the mapping between each SInteger name and
+-- The nameUIMap stores the mapping between each SInteger name and
 -- its corresponding (lhsU, rhsU). Therefore we sort and group each
 -- entry by its lhsU, and then check the solved integer value of the
 -- SInteger name. That solved integer value corresponds to rhsU raised
 -- to that power. Take all of the rhsUs, raised to their respective
 -- powers, and combine them into a single UnitMul for each lhsU.
 
-interpret :: UnitInfoNameMap -> NameValueInfoMap -> Query [(UnitInfo, UnitInfo)]
-interpret uiNameMap nvMap = do
+interpret :: NameUnitInfoMap -> NameValueInfoMap -> Query [(UnitInfo, UnitInfo)]
+interpret nameUIMap nvMap = do
   let lhsU = fst . snd
-  let unitGroups = groupBy ((==) `on` lhsU) . sortBy (comparing lhsU) $ M.toList uiNameMap
+  let unitGroups = groupBy ((==) `on` lhsU) . sortBy (comparing lhsU) $ M.toList nameUIMap
 
   -- unitGroups =
   --   [ [(name1_1, (lhs1, rhs1)), (name1_2, (lhs1, rhs2)), ...]
@@ -463,3 +504,17 @@ inferVariablesSBV cons = solvedVars
 -- yes, there are multiple values for both parametric & critical-vars
 -- the multiple values are equationally linked to each other if the variables are
 -- could potentially identify all parametric variables in parallel by constraining to prime numbers
+
+
+-- in the matrix version we solved for a reduced row echelon form, which is a unique 'normal' form
+-- that means that even the equations with a 0 on the RHS were normalised into some form
+-- e.g. if there were two ways to express it, then one was picked
+--   a - b = 0
+--   x - b = 0
+--   y - a = 0
+-- would become
+--   a - b = 0
+--   x - a = 0
+--   y - a = 0
+
+-- kennedy has some rules on normalisation, preferred forms (e.g. parameters vs return vars)
