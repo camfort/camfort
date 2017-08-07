@@ -91,7 +91,7 @@ simplifyUnits = rewrite rw
 
 flattenUnits :: UnitInfo -> [UnitInfo]
 flattenUnits = map (uncurry UnitPow) . M.toList
-             . M.filterWithKey (\ u _ -> u /= UnitlessLit)
+             . M.filterWithKey (\ u _ -> u /= UnitlessLit && u /= UnitlessVar)
              . M.filter (not . approxEq 0)
              . M.fromListWith (+)
              . map (first simplifyUnits)
