@@ -34,7 +34,7 @@ where
 import Data.Char
 import Data.Tuple (swap)
 import Data.Maybe (maybeToList, catMaybes, fromMaybe)
-import Data.List ((\\), isPrefixOf, findIndex, partition, sortBy, group, groupBy, tails, transpose, nub, intercalate)
+import Data.List ((\\), isPrefixOf, findIndex, partition, sortBy, group, groupBy, tails, transpose, nub, intercalate, foldl')
 import Data.Generics.Uniplate.Operations (rewrite, transformBi)
 import Debug.Trace (trace, traceShowM, traceM)
 import Control.Monad
@@ -204,7 +204,7 @@ genUnitAssignmentsSBV cons = unsafePerformIO $ do
 
   let basisMap = genBasisMap shiftedCons
 
-  let pred :: Symbolic (Either [String] [(UnitInfo, UnitInfo)])
+  let pred :: Symbolic (Either [String] Sub)
       pred = do
         setOption $ ProduceUnsatCores True
         -- pregenerate all of the necessary existentials
@@ -212,7 +212,7 @@ genUnitAssignmentsSBV cons = unsafePerformIO $ do
 
         let sbools = encodeConstraints basisMap nameUIMap nameSIntMap shiftedCons
         forM_ (zip [1..] sbools) $ \ (i, (sbool, msg)) -> do
-          -- traceM $ "c"++show i++": " ++ msg
+          traceM $ "c"++show i++": " ++ msg
           namedConstraint ("c"++show i) sbool
 
         query $ do
@@ -223,7 +223,7 @@ genUnitAssignmentsSBV cons = unsafePerformIO $ do
               push 1
               disallowValues nameSIntMap nvMap
               cs <- checkSat
-              Right assigns <- case cs of
+              Right assignSub <- case cs of
                 Unsat -> Right <$> interpret nameUIMap nvMap
                 Sat -> do
                   nvMap' <- extractSIntValues nameSIntMap
@@ -232,14 +232,24 @@ genUnitAssignmentsSBV cons = unsafePerformIO $ do
                   let units = identifyMultipleVISet nameUIMap nvMap''
                   io $ print units
                   Right <$> interpret nameUIMap nvMap''
-              let substMap = M.fromList assigns
-              let shiftedCons' = map (shiftTerms isUnitRHS1) . flip map shiftedCons $ \ (lhs, rhs) ->
-                                   (transformBi (\ l -> l `fromMaybe` M.lookup l substMap) lhs, rhs)
-              io . putStrLn . unlines $ "shiftedCons:":showConstraints basisMap shiftedCons
-              io . putStrLn . unlines $ "shiftedCons':":showConstraints basisMap shiftedCons'
-              let shiftedCons'' = flip map shiftedCons' $ \ (lhs, rhs) -> (flattenUnits (foldUnits lhs), rhs)
-              io . putStrLn . unlines $ "shiftedCons'':":showConstraints basisMap shiftedCons''
-              return $ Right assigns
+              let dims = map (\ (lhs, rhs) -> (dimFromUnitInfos (lhs ++ negateCons rhs))) shiftedCons
+              let dims' = map (applySub assignSub) dims
+              io . putStrLn . unlines $ "cons:":map show cons
+              io . putStrLn . unlines $ "shiftedCons:":map show shiftedCons
+              io . putStrLn . unlines $ "dims:":map show (dims) -- showConstraints basisMap shiftedCons
+              io . putStrLn . unlines $ "dims':":map show (dims') -- showConstraints basisMap shiftedCons
+              io . putStrLn . unlines $ "assignSub:":map show (M.toList assignSub)
+              return $ Right assignSub
+
+              -- let shiftedCons' = map (shiftTerms isUnitRHS1) . flip map shiftedCons $ \ (lhs, rhs) ->
+              --                      (transformBi (\ l -> l `fromMaybe` M.lookup l substMap) lhs, rhs)
+              -- io . putStrLn . unlines $ "cons:":map show cons -- showConstraints basisMap shiftedCons
+              -- io . putStrLn . unlines $ "shiftedCons:":map show shiftedCons -- showConstraints basisMap shiftedCons
+              -- io . putStrLn . unlines $ "assigns:":map show assigns
+              -- io . putStrLn . unlines $ "shiftedCons':":showConstraints basisMap shiftedCons'
+              -- let shiftedCons'' = flip map shiftedCons' $ \ (lhs, rhs) -> (flattenUnits (foldUnits lhs), rhs)
+              -- io . putStrLn . unlines $ "shiftedCons'':":showConstraints basisMap shiftedCons''
+              -- return $ Right assigns
           -- cs <- checkSat
           -- case cs of
           --   Unsat -> Left <$> getUnsatCore
@@ -296,7 +306,7 @@ genUnitAssignmentsSBV cons = unsafePerformIO $ do
     Left core -> do
       putStrLn $ "Unsatisfiable: " ++ show core
       return []
-    Right assigns -> return assigns
+    Right assigns -> return $ subToList assigns
 
       -- -- FIXME: refactor so it doesn't run twice
       -- allSatRes <- allSatWith z3 { transcript = Just "mrd.smt2" } -- SMT-LIB dump
@@ -452,7 +462,7 @@ disallowCurrentValues nameSIntMap = extractSIntValues nameSIntMap >>= disallowVa
 -- to that power. Take all of the rhsUs, raised to their respective
 -- powers, and combine them into a single UnitMul for each lhsU.
 
-interpret :: NameUnitInfoMap -> NameValueInfoMap -> Query [(UnitInfo, UnitInfo)]
+interpret :: NameUnitInfoMap -> NameValueInfoMap -> Query Sub
 interpret nameUIMap nvMap = do
   let lhsU = fst . snd
   let unitGroups = groupBy ((==) `on` lhsU) . sortBy (comparing lhsU) $ M.toList nameUIMap
@@ -470,15 +480,15 @@ interpret nameUIMap nvMap = do
           _                -> return Nothing
 
   -- each group corresponds to a LHS variable
-  let eachGroup :: [(String, (LhsUnit, RhsUnit))] -> Query (Maybe (LhsUnit, UnitInfo))
+  let eachGroup :: [(String, (LhsUnit, RhsUnit))] -> Query (Maybe (LhsUnit, Dim))
       eachGroup unitGroup = do
         let (_, (lhsU, _)):_ = unitGroup -- grouped by lhsU, so pick out one of them
         rawUnits <- catMaybes <$> mapM eachName unitGroup
         case rawUnits of
           [] -> return Nothing
-          _  -> return $ Just (lhsU, simplifyUnits . foldUnits $ rawUnits)
+          _  -> return $ Just (lhsU, dimFromUnitInfos rawUnits)
 
-  catMaybes <$> mapM eachGroup unitGroups
+  (subFromList . catMaybes) <$> mapM eachGroup unitGroups
 
 
 inferVariablesSBV :: Constraints -> [(VV, UnitInfo)]
@@ -517,4 +527,129 @@ inferVariablesSBV cons = solvedVars
 --   x - a = 0
 --   y - a = 0
 
--- kennedy has some rules on normalisation, preferred forms (e.g. parameters vs return vars)
+-- kennedy has some rules on simplification, preferred forms (e.g. parameters vs return vars)
+-- type simplification algorithm
+
+--    The original motivation for designing this algorithm was the need for a ‘most
+--    natural’ form for type schemes. This is the way that we describe the algorithm
+--    initially. However, it turned out that the canonical form which it calculates
+--    corresponds directly to a well-known form in matrix theory. This in turn explains
+--    its application to the generalisation procedure as a ‘change of basis’.
+
+--    Simplify a type t from left to right, and for each dimension compo-
+--    nent d attempt to reduce as much as possible the number of dimen-
+--    sion variables, the size of its exponents, and the number of negative
+--    exponents.
+
+type UnitSet = S.Set UnitInfo
+type Dim = M.Map UnitInfo Integer
+type Sub = M.Map UnitInfo Dim
+
+removeZeroes :: Dim -> Dim
+removeZeroes = M.filterWithKey f
+  where
+    f _ 0           = False
+    f UnitlessVar _ = False
+    f UnitlessLit _ = False
+    f _ _           = True
+
+getUnitPow :: UnitInfo -> (UnitInfo, Integer)
+getUnitPow (UnitPow u p) = (u', floor p * p')
+  where (u', p') = getUnitPow u
+getUnitPow u = (u, 1)
+
+dimFromUnitInfos :: [UnitInfo] -> Dim
+dimFromUnitInfos = dimFromList . map getUnitPow
+
+dimFromUnitInfo :: UnitInfo -> Dim
+dimFromUnitInfo = dimFromUnitInfos . flattenUnits
+
+dimToUnitInfos :: Dim -> [UnitInfo]
+dimToUnitInfos = map (\ (u, p) -> UnitPow u (fromInteger p)) . M.toList
+
+dimToUnitInfo :: Dim -> UnitInfo
+dimToUnitInfo = foldUnits . dimToUnitInfos
+
+dimFromList :: [(UnitInfo, Integer)] -> Dim
+dimFromList = removeZeroes . M.fromListWith (+)
+
+subFromList :: [(UnitInfo, Dim)] -> Sub
+subFromList = foldl' composeSubs identSub . map (uncurry M.singleton)
+
+subToList :: Sub -> [(UnitInfo, UnitInfo)]
+subToList = map (fmap dimToUnitInfo) . M.toList
+
+identSub :: Sub
+identSub = M.empty
+
+identSubWith :: [UnitInfo] -> Sub
+identSubWith = M.fromList . map (\ u -> (u, dimFromList [(u, 1)]))
+
+applySub :: Sub -> Dim -> Dim
+applySub sub dim =
+  removeZeroes $ M.unionsWith (+) [ M.map (*p) (M.singleton ui 1 `fromMaybe` M.lookup ui sub) | (ui, p) <- M.toList dim ]
+
+composeSubs :: Sub -> Sub -> Sub
+composeSubs sub1 sub2 = M.map (applySub sub1) (M.unionWith (curry snd) ident1 sub2)
+  where
+    ident1 = identSubWith (M.keys sub1)
+
+-- = M.unionWith ((removeZeroes .) . M.unionWith (*))
+
+prop_composition :: Dim -> Sub -> Sub -> Bool
+prop_composition d s1 s2 = applySub s1 (applySub s2 d) == applySub (composeSubs s1 s2) d
+
+freeDimVars :: Dim -> [UnitInfo]
+freeDimVars = filter isVar . M.keys
+  where
+    isVar (UnitParamPosAbs {}) = True
+    isVar (UnitParamPosUse {}) = True
+    isVar (UnitParamVarAbs {}) = True
+    isVar (UnitParamVarUse {}) = True
+    isVar (UnitParamLitAbs {}) = True
+    isVar (UnitParamLitUse {}) = True
+    isVar (UnitLiteral {})     = True
+    isVar (UnitVar {})         = True
+    isVar _                    = False
+
+-- Kennedy Fig 3.4
+dimSimplify :: UnitSet -> Dim -> Sub
+dimSimplify excludes dim
+  | null valids = identSub
+
+  | (u, x):_ <- valids, x < 0
+  , sub1     <- M.singleton u (M.singleton u (-1))
+  , sub2     <- dimSimplify excludes (applySub sub1 dim) = tr $ composeSubs sub2 sub1
+
+  | (u, x):[] <- valids = tr $ M.singleton u (dimFromList ((u, 1):[(v, -div y x) | (v, y) <- invals]))
+
+  | (u, x):_ <- valids
+  , sub1     <- M.singleton u (dimFromList ((u, 1):[(v, -div y x) | (v, y) <- M.toList dim, v /= u]))
+  , sub2     <- dimSimplify excludes (applySub sub1 dim) = tr $ composeSubs sub2 sub1
+
+  where
+    valids   = sortBy (comparing (abs . snd)) . filter ((`S.notMember` excludes) . fst) $ M.toList dim
+    validSet = S.fromList (map fst valids)
+    invals   = filter ((`S.notMember` validSet) . fst) $ M.toList dim
+    -- tr x = trace ("\ndimSimplify (" ++ show excludes ++ ") (" ++ show dim ++ ") = " ++ show x ++ "\nvalids = "++show valids++"\n\n") x
+    tr x = x
+testVar x = UnitVar (x, x)
+
+u0 = testVar "u0"
+u1 = testVar "u1"
+u2 = testVar "u2"
+u3 = testVar "u3"
+u4 = testVar "u4"
+
+dim1 = dimFromList [(u1, 6), (u2, 15), (u3, -7), (u4, 12)]
+
+test1 = applySub (dimSimplify (S.fromList [u3,u4]) dim1) dim1 == dimFromList [(u2, 3), (u3, 2)]
+
+test2 =  (dimSimplify (S.fromList [u0]) (dimFromList [(u0, 1), (u1, -2)]))
+
+--------------------------------------------------
+
+-- can the constraints solved by Z3 be modified to include a
+-- disjunction for each parametric polymorphic unit variable
+-- suggesting that it could be a RHS unit but it's okay for it to be
+-- equal to another RHS unit if the solver determines that?
