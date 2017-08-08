@@ -352,7 +352,7 @@ encodeConstraints basisMap nameUIMap nameSIntMap shiftedCons = do
   --   lhs1_RHS * pow1 + lhs2_RHS * pow2 + ... + lhsN_RHS powN = pow_RHS
   let eachRhs :: [UnitInfo] -> (String, Integer) -> Maybe (SBool, String)
       eachRhs lhs (rhsName, rhsPow)
-        | null lhsTerms = Nothing
+        | null lhsTerms = Just (0 .== literal rhsPow, "0" ++ msg)
         | otherwise     = Just (sum lhsTerms .== literal rhsPow, msg)
         where
           -- lhsTerms = [lhs1_RHS * pow1, lhs2_RHS * pow2, ..., lhsN_RHS powN]
