@@ -29,9 +29,10 @@ module Camfort.Analysis
   , writeDebug
   ) where
 
-import Control.Monad.Reader (MonadReader, Reader, asks, runReader)
+import Control.Monad.Reader (MonadReader, ReaderT, asks, runReaderT)
 import Control.Monad.State  (MonadState, StateT, get, runStateT)
 import Control.Monad.Writer (MonadWriter, WriterT, runWriterT, tell)
+import Control.Monad.IO.Class (MonadIO(..))
 
 import qualified Language.Fortran.Util.ModFile as MF
 
@@ -59,11 +60,13 @@ mkAnalysisEnv r mfs x =
 -- @r@, read-write information of type @s@, and may log
 -- information of type @d@.
 newtype Analysis r d s a a' = Analysis
-  { getAnalysis :: WriterT d (StateT s (Reader (AnalysisEnv r a))) a' }
+  { getAnalysis :: WriterT d (StateT s (ReaderT (AnalysisEnv r a) IO)) a' }
   deriving ( Functor, Applicative, Monad
            , MonadReader (AnalysisEnv r a)
            , MonadState s
-           , MonadWriter d)
+           , MonadWriter d
+           , MonadIO
+           )
 
 -- | An 'Analysis' without any additional state or parameters.
 type SimpleAnalysis = Analysis () Report ()
@@ -86,17 +89,17 @@ analysisParams :: (Monoid d) => Analysis r d s a r
 analysisParams = asks aEnvEnv
 
 -- | Run the given analysis.
-runAnalysis :: (Monoid d) => Analysis r d s a a' -> r -> s -> MF.ModFiles -> a -> AnalysisResult d s a'
-runAnalysis a r s mfs x =
-  let ((result, report), state) = runReader (runStateT (runWriterT $ getAnalysis a) s) env
-  in AR { analysisResult = result
-        , analysisDebug  = report
-        , finalState     = state
-        }
-  where env = mkAnalysisEnv r mfs x
+runAnalysis :: (Monoid d) => Analysis r d s a a' -> r -> s -> MF.ModFiles -> a -> IO (AnalysisResult d s a')
+runAnalysis a r s mfs x = do
+  let env = mkAnalysisEnv r mfs x
+  ((result, report), state) <- runReaderT (runStateT (runWriterT $ getAnalysis a) s) env
+  return $ AR { analysisResult = result
+              , analysisDebug  = report
+              , finalState     = state
+              }
 
 -- | Run a 'SimpleAnalysis'.
-runSimpleAnalysis :: SimpleAnalysis a a' -> MF.ModFiles -> a -> AnalysisResult Report () a'
+runSimpleAnalysis :: SimpleAnalysis a a' -> MF.ModFiles -> a -> IO (AnalysisResult Report () a')
 runSimpleAnalysis analysis = runAnalysis analysis () ()
 
 -- | Run a separate analysis with a new input, but maintaining other information.
@@ -105,7 +108,7 @@ branchAnalysis branch input = do
   modFiles <- analysisModFiles
   env      <- analysisParams
   state    <- analysisState
-  pure $ runAnalysis branch env state modFiles input
+  liftIO $ runAnalysis branch env state modFiles input
 
 -- | Retrieve the input data to the analysis.
 analysisInput :: (Monoid d) => Analysis r d s a a

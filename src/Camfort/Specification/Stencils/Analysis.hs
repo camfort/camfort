@@ -23,7 +23,7 @@ import           Camfort.Analysis.ModFile (MFCompiler, simpleCompiler)
 type StencilsAnalysis a a' = AF.SimpleAnalysis a a'
 
 -- | Run a 'StencilsAnalysis' analysis.
-runStencilsAnalysis :: StencilsAnalysis a a' -> MF.ModFiles -> a -> AF.AnalysisResult Report () a'
+runStencilsAnalysis :: StencilsAnalysis a a' -> MF.ModFiles -> a -> IO (AF.AnalysisResult Report () a')
 runStencilsAnalysis analysis = AF.runAnalysis analysis () ()
 
 -- | Compile a program to a 'ModFile' containing stencils information.

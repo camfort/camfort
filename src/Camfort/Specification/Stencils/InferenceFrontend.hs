@@ -126,18 +126,18 @@ runInferer :: CheckResult
            -> FAD.FlowsGraph (SA.StencilAnnotation A)
            -> ModFiles
            -> Inferer a
-           -> (a, [LogLine])
-runInferer cr useEval doSynth marker mi ivmap flTo mfs inferer =
-  let res = runAnalysis inferer env (IS ivmap []) mfs ()
-  in (analysisResult res, analysisDebug res)
-  where env = IE
-          { ieExistingSpecs = existingStencils cr
-          , ieFlowsGraph    = flTo
-          , ieUseEval       = useEval
-          , ieDoSynth       = doSynth
-          , ieMarker        = marker
-          , ieMetaInfo      = mi
-          }
+           -> IO (a, [LogLine])
+runInferer cr useEval doSynth marker mi ivmap flTo mfs inferer = do
+  let env = IE
+        { ieExistingSpecs = existingStencils cr
+        , ieFlowsGraph    = flTo
+        , ieUseEval       = useEval
+        , ieDoSynth       = doSynth
+        , ieMarker        = marker
+        , ieMetaInfo      = mi
+        }
+  res <- runAnalysis inferer env (IS ivmap []) mfs ()
+  return (analysisResult res, analysisDebug res)
 
 -- | Run something only when eval mode is active.
 whenEval :: Inferer () -> Inferer ()
@@ -183,18 +183,18 @@ stencilSynthesis' useEval doSynth marker = do
   pf@(F.ProgramFile mi pus) <- analysisInput
   checkRes <- stencilChecking
   mfs <- analysisModFiles
+
   let
-    (pus', log1) = runWriter (transformBiM perPU pus)
     -- get map of AST-Block-ID ==> corresponding AST-Block
     bm    = FAD.genBlockMap pf
     -- get map of program unit ==> basic block graph
     bbm   = FAB.genBBlockMap pf
     -- get map of variable name ==> { defining AST-Block-IDs }
     dm    = FAD.genDefMap bm
+
     -- Run inference per program unit
     perPU :: F.ProgramUnit SA
-          -> Writer [LogLine] (F.ProgramUnit SA)
-
+          -> WriterT [LogLine] IO (F.ProgramUnit SA)
     perPU pu | Just _ <- FA.bBlocks $ F.getAnnotation pu = do
         let -- Analysis/infer on blocks of just this program unit
             blocksM = mapM perBlockInfer (F.programUnitBody pu)
@@ -214,10 +214,13 @@ stencilSynthesis' useEval doSynth marker = do
             -- identify every loop by its back-edge
             ivMap = FAD.genInductionVarMapByASTBlock beMap gr
 
-            (pu', log) = runInferer checkRes useEval doSynth marker mi ivMap flTo mfs pum
+        (pu', log) <- liftIO $ runInferer checkRes useEval doSynth marker mi ivMap flTo mfs pum
         tell log
         pure pu'
     perPU pu = pure pu
+
+  (pus', log1) <- liftIO $ runWriterT (transformBiM perPU pus)
+
   pure (log1, F.ProgramFile mi pus')
 
 {- *** 1 . Core inference over blocks -}
@@ -234,7 +237,7 @@ genSpecsAndReport span lhsIxs block = do
   flowsGraph   <- getFlowsGraph
   -- Generate specification for the
   mfs <- analysisModFiles
-  let ((specs, visited), evalInfos) = runStencilInferer (genSpecifications lhsIxs block) ivs flowsGraph mfs
+  ((specs, visited), evalInfos) <- liftIO $ runStencilInferer (genSpecifications lhsIxs block) ivs flowsGraph mfs
   -- Remember which nodes were visited during this traversal
   modify (\state -> state { visitedNodes = visitedNodes state ++ visited })
   -- Report the specifications

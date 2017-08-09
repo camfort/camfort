@@ -250,5 +250,5 @@ modifyCallIdRemapM f = do
 --------------------------------------------------
 
 -- | Run the unit solver monad.
-runUnitSolver :: UnitOpts -> F.ProgramFile UA -> ModFiles -> UnitSolver a -> AnalysisResult Report UnitState a
+runUnitSolver :: UnitOpts -> F.ProgramFile UA -> ModFiles -> UnitSolver a -> IO (AnalysisResult Report UnitState a)
 runUnitSolver o pf mfs m = runAnalysis m o (unitState0 pf) mfs pf

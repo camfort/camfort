@@ -63,7 +63,7 @@ import qualified Camfort.Specification.Units.Parser.Types as P
 -- | Analysis with access to 'UnitOpts' information.
 type UnitsAnalysis a a' = Analysis UnitOpts Report () a a'
 
-runUnitsAnalysis :: UnitsAnalysis a b -> UnitOpts -> ModFiles -> a -> AnalysisResult Report () b
+runUnitsAnalysis :: UnitsAnalysis a b -> UnitOpts -> ModFiles -> a -> IO (AnalysisResult Report () b)
 runUnitsAnalysis analysis uo = runAnalysis analysis uo ()
 
 -- | Prepare to run an inference function.
@@ -135,12 +135,14 @@ runInference solver = do
   pf    <- analysisInput
   mfs   <- analysisModFiles
   uOpts <- analysisParams
-  let
-    pf' = withCombinedEnvironment mfs . fmap UA.mkUnitAnnotation $ pf
-    res = runUnitSolver uOpts pf' mfs $ do
-      initializeModFiles
-      initInference
-      solver
+
+  let pf' = withCombinedEnvironment mfs . fmap UA.mkUnitAnnotation $ pf
+
+  res <- liftIO $ runUnitSolver uOpts pf' mfs $ do
+    initializeModFiles
+    initInference
+    solver
+
   pure (analysisResult res, finalState res, analysisDebug res)
 
 -- Inference functions
@@ -915,8 +917,10 @@ intrinsicUnits =
 -- Others: reshape, merge need special handling
 
 -- | Compile a program to a 'ModFile' containing units information.
-compileUnits :: UnitOpts -> ModFiles -> F.ProgramFile Annotation -> ModFile
-compileUnits uo mfs pf =
+compileUnits :: UnitOpts -> ModFiles -> F.ProgramFile Annotation -> IO ModFile
+compileUnits uo mfs pf = do
   let pf'      = withCombinedEnvironment mfs . fmap UA.mkUnitAnnotation $ pf
-      (cu,_,_) = analysisResult . runAnalysis (runInference runCompileUnits) uo () mfs $ pf
-  in genUnitsModFile pf' cu
+
+  (cu,_,_) <- analysisResult <$> runAnalysis (runInference runCompileUnits) uo () mfs pf
+
+  return $ genUnitsModFile pf' cu

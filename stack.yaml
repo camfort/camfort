@@ -2,7 +2,7 @@ flags: {}
 extra-package-dbs: []
 packages:
 - '.'
-- ../fortran-src
+# - ../fortran-src
 extra-deps:
 - fortran-src-0.2.0.0
 - partial-order-0.1.2.1
