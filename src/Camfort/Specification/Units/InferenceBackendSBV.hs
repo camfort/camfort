@@ -1,5 +1,5 @@
 {-
-   Copyright 2016, Dominic Orchard, Andrew Rice, Mistral Contrastin, Matthew Danish
+   Copyright 2017, Matthew Danish, Vilem Liepelt, Dominic Orchard, Andrew Rice, Mistral Contrastin
 
    Licensed under the Apache License, Version 2.0 (the "License");
    you may not use this file except in compliance with the License.
@@ -14,21 +14,12 @@
    limitations under the License.
 -}
 
-{-
-  Units of measure extension to Fortran: backend
-      -- declare-const -> exists / mkExistVars
-      -- define-fun -> namedConstraint
--}
-
 {-# LANGUAGE TupleSections #-}
 {-# LANGUAGE ScopedTypeVariables #-}
 {-# LANGUAGE FlexibleContexts #-}
 
 module Camfort.Specification.Units.InferenceBackendSBV
-  -- ( inconsistentConstraints, criticalVariables, inferVariables
-  -- -- mainly for debugging and testing:
-  -- , shiftTerms, flattenConstraints, flattenUnits, constraintsToMatrix, constraintsToMatrices
-  -- , rref, isInconsistentRREF, genUnitAssignments )
+  ( inconsistentConstraints, criticalVariables, inferVariables, genUnitAssignments )
 where
 
 import Data.Char
@@ -47,11 +38,13 @@ import System.IO.Unsafe (unsafePerformIO)
 import Data.SBV -- ( transcript, SatResult(..), SMTResult(Unknown), Symbolic, SBool, SInteger, SBV
                 -- , satWith, z3, getModelDictionary, fromCW, true, namedConstraint, (.==)
                 -- , sInteger, literal, bAnd, Predicate, getModelValue, setOption )
+  hiding (engine)
 import Data.SBV.Control
 import Data.Ord (comparing)
 import Data.Function (on)
 
 import Camfort.Specification.Units.Environment
+import qualified Camfort.Specification.Units.InferenceBackend as MatrixBackend
 
 import Numeric.LinearAlgebra (
     atIndex, (<>), rank, (?), rows, cols,
@@ -69,7 +62,27 @@ import Numeric.LinearAlgebra.Devel (
 -- | Identifies the variables that need to be annotated in order for
 -- inference or checking to work.
 criticalVariables :: Constraints -> [UnitInfo]
-criticalVariables _ = [] -- STUB
+criticalVariables cons = case engine cons of
+  Left (core, labeledCons) -> trace (unlines $ map show labeledCons ++ ["Unsatisfiable: " ++ show core]) $ []
+  Right (_, suggests) -> suggests
+
+-- | Returns just the list of constraints that were identified as
+-- being possible candidates for inconsistency, if there is a problem.
+inconsistentConstraints :: Constraints -> Maybe Constraints
+inconsistentConstraints [] = Nothing
+inconsistentConstraints cons = case engine cons of
+  -- assuming that SBV provides a list of label names in its unsat 'core'
+  Left (core, labeledCons) -> Just . map fst . catMaybes . map (flip lookup labeledCons) $ core
+  Right (_, _) -> Nothing
+
+-- | Returns list of formerly-undetermined variables and their units.
+inferVariables :: Constraints -> [(VV, UnitInfo)]
+inferVariables cons = solvedVars
+  where
+    -- We are only interested in reporting the solutions to variables.
+    solvedVars = [ (vv, unit) | v@(UnitVar vv, unit) <- unitAssignments ] ++
+                 [ (vv, unit) | v@(UnitParamVarAbs (_, vv), unit) <- unitAssignments ]
+    unitAssignments = genUnitAssignments cons
 
 --------------------------------------------------
 
@@ -114,16 +127,10 @@ negatePosAbs u                               = u
 --------------------------------------------------
 
 -- Units that should appear on the right-hand-side of the equations during solving
-isUnitRHS1, isUnitRHS2 :: UnitInfo -> Bool
-isUnitRHS1 (UnitPow (UnitName _) _)        = True
-isUnitRHS1 (UnitPow (UnitParamEAPAbs _) _) = True
-isUnitRHS1 _                               = False
-
--- during interpretation
-isUnitRHS2 (UnitPow (UnitName _) _)        = True
-isUnitRHS2 (UnitPow (UnitParamEAPAbs _) _) = True
-isUnitRHS2 (UnitPow (UnitParamPosAbs _) _) = True
-isUnitRHS2 _                               = False
+isUnitRHS :: UnitInfo -> Bool
+isUnitRHS (UnitPow (UnitName _) _)        = True
+isUnitRHS (UnitPow (UnitParamEAPAbs _) _) = True
+isUnitRHS _                               = False
 
 type ShiftedConstraint = ([UnitInfo], [UnitInfo])
 type ShiftedConstraints = [ShiftedConstraint]
@@ -192,164 +199,86 @@ genBasisMap shiftedCons = baseRhsMap
     -- start off with every RHS mapped to a power of zero.
     baseRhsMap = M.fromList [ (name, 0) | (name, _) <- rhsNames ]
 
-genUnitAssignmentsSBV :: Constraints -> [(UnitInfo, UnitInfo)]
-genUnitAssignmentsSBV cons = unsafePerformIO $ do
+genUnitAssignments :: Constraints -> [(UnitInfo, UnitInfo)]
+genUnitAssignments cons = case engine cons of
+  Left (core, labeledCons) -> trace (unlines $ map show labeledCons ++ ["Unsatisfiable: " ++ show core]) $ []
+  Right (sub, _) -> subToList sub
+
+type EngineResult = Either ([String], [(String, AugConstraint)]) (Sub, [UnitInfo])
+
+-- main working function
+engine :: Constraints -> EngineResult
+engine cons = unsafePerformIO $ do
   let shiftedCons :: ShiftedConstraints
-      shiftedCons = map (shiftTerms isUnitRHS1) $ flattenConstraints cons
+      shiftedCons = map (shiftTerms isUnitRHS) $ flattenConstraints cons
 
   let nameUIMap = gatherNameUnitInfoMap shiftedCons
 
   let genVar :: String -> Symbolic (String, SInteger)
       genVar name = (name,) <$> sInteger name
 
+  -- basis of the solution, a.k.a. the primitive units specified by the user
   let basisMap = genBasisMap shiftedCons
 
-  let pred :: Symbolic (Either [String] Sub)
+  let pred :: Symbolic EngineResult
       pred = do
         setOption $ ProduceUnsatCores True
         -- pregenerate all of the necessary existentials
         nameSIntMap <- M.fromList <$> mapM genVar (M.keys nameUIMap)
 
-        let sbools = encodeConstraints basisMap nameUIMap nameSIntMap shiftedCons
-        forM_ (zip [1..] sbools) $ \ (i, (sbool, msg)) -> do
-          traceM $ "c"++show i++": " ++ msg
+        -- temporary arrangement for now to identify constraints
+        let encCons = encodeConstraints basisMap nameUIMap nameSIntMap shiftedCons
+        labeledCons <- forM (zip [1..] encCons) $ \ (i, (sbool, augCon)) -> do
           namedConstraint ("c"++show i) sbool
+          return ("c"++show i, augCon)
 
         query $ do
+          -- obtain
           e_nvMap <- computeInitialNVMap nameSIntMap
           case e_nvMap of
-            Left core -> return $ Left core
+            Left core -> return $ Left (core, labeledCons)
             Right nvMap -> do
-              push 1
-              disallowValues nameSIntMap nvMap
-              cs <- checkSat
-              Right assignSub <- case cs of
-                Unsat -> Right <$> interpret nameUIMap nvMap
-                Sat -> do
-                  nvMap' <- extractSIntValues nameSIntMap
-                  let nvMap'' = M.unionWith nvUnion nvMap nvMap'
-                  io $ print nvMap''
-                  let units = identifyMultipleVISet nameUIMap nvMap''
-                  io $ print units
-                  Right <$> interpret nameUIMap nvMap''
+              let underdet = identifyMultipleVISet nameUIMap nvMap
+
+              -- for now we'll suggest all underdetermined units but
+              -- this should be cut down by considering the
+              -- relationships between variables, much like we would
+              -- do for polymorphic vars.
+              let suggests = [ v | v@(UnitVar {}) <- underdet ] ++
+                             [ v | v@(UnitParamVarUse {}) <- underdet ]
+
+              assignSubs <- interpret nameUIMap nvMap
+              -- convert to Dim format
               let dims = map (\ (lhs, rhs) -> (dimFromUnitInfos (lhs ++ negateCons rhs))) shiftedCons
-              let dims' = map (applySub assignSub) dims
-              io . putStrLn . unlines $ "cons:":map show cons
-              io . putStrLn . unlines $ "shiftedCons:":map show shiftedCons
-              io . putStrLn . unlines $ "dims:":map show (dims) -- showConstraints basisMap shiftedCons
-              io . putStrLn . unlines $ "dims':":map show (dims') -- showConstraints basisMap shiftedCons
-              io . putStrLn . unlines $ "assignSub:":map show (M.toList assignSub)
-              return $ Right assignSub
 
-              -- let shiftedCons' = map (shiftTerms isUnitRHS1) . flip map shiftedCons $ \ (lhs, rhs) ->
-              --                      (transformBi (\ l -> l `fromMaybe` M.lookup l substMap) lhs, rhs)
-              -- io . putStrLn . unlines $ "cons:":map show cons -- showConstraints basisMap shiftedCons
-              -- io . putStrLn . unlines $ "shiftedCons:":map show shiftedCons -- showConstraints basisMap shiftedCons
-              -- io . putStrLn . unlines $ "assigns:":map show assigns
-              -- io . putStrLn . unlines $ "shiftedCons':":showConstraints basisMap shiftedCons'
-              -- let shiftedCons'' = flip map shiftedCons' $ \ (lhs, rhs) -> (flattenUnits (foldUnits lhs), rhs)
-              -- io . putStrLn . unlines $ "shiftedCons'':":showConstraints basisMap shiftedCons''
-              -- return $ Right assigns
-          -- cs <- checkSat
-          -- case cs of
-          --   Unsat -> Left <$> getUnsatCore
-          --   Sat -> do
-          --     nvMap <- extractSIntValues nameSIntMap
-          --     push 1
-          --     disallowValues nameSIntMap nvMap
-          --     cs <- checkSat
-          --     case cs of
-          --       Sat -> do
-          --         io $ putStrLn "Yes there are multiple solutions"
-          --         nvMap' <- extractSIntValues nameSIntMap
-          --         let nvMap'' = M.unionWith nvUnion nvMap nvMap'
-          --         io $ print nvMap''
-          --         pop 1
-          --         let name:_ = M.keys $ M.filter isMultipleVISet nvMap''
-          --         let Just (lhsU, rhsU) = M.lookup name nameUIMap
-          --         let Just sInt = M.lookup name nameSIntMap
-          --         constrain $ sInt .== 12
-          --         cs <- checkSat
-          --         io $ putStrLn $ "turning it to 12: " ++ name ++ ": " ++ show (lhsU, rhsU)
-          --         case cs of
-          --           Sat -> do
-          --             nvMap3 <- extractSIntValues nameSIntMap
-          --             io $ putStrLn "rock on"
-          --             io $ print nvMap3
-          --           _ -> io $ putStrLn "bummer"
-          --         Right <$> interpret nameUIMap nvMap''
-          --       _   -> do
-          --         io $ putStrLn "bupkis"
-          --         Right <$> interpret nameUIMap nvMap
-          --   -- try to compute multiple satisfiable assignments
-          --   -- if there is more than 1 that means either poly/units-suggest
-          --   _ -> error "unknown"
+              -- apply known substitutions from solver
+              let dims' = filter (not . isIdentDim) $ map (applySub assignSubs) dims
 
+              -- convert to Constraint format
+              let polyCons = map dimToConstraint dims'
 
+              -- feed back into old solver to figure out polymorphic equations
+              let polyAssigns = MatrixBackend.genUnitAssignments polyCons
 
+              -- convert polymorphic assignments into substitution format
+              let polySubs = subFromList [ (u, dimFromUnitInfo units) | ([UnitPow u@(UnitParamVarAbs _) k], units) <- polyAssigns, k `approxEq` 1 ]
 
-  satResult <- runSMTWith z3 { transcript = Just "mrd.smt2" } -- SMT-LIB dump
-               pred
+              return . Right . (,suggests) $ composeSubs polySubs assignSubs
 
-  case satResult of
-    -- SatResult (Unknown _ msg) -> do
-    --   putStrLn $ "Solver returned unknown error: " ++ msg
-    --   return []
-    -- SatResult (ProofError _ msgs) -> do
-    --   putStrLn $ "Solver errored: " ++ intercalate ", " msgs
-    --   return []
-    -- SatResult (Unsatisfiable _) -> do
-    --   -- core <- getUnsatCore
-    --   -- putStrLn $ "Unsatisfiable: " ++ show core
-    --   return []
-    -- SatResult (Satisfiable _ _) -> do
-    Left core -> do
-      putStrLn $ "Unsatisfiable: " ++ show core
-      return []
-    Right assigns -> return $ subToList assigns
+  runSMTWith z3 { transcript = Just "backend-sbv.smt2" } -- SMT-LIB dump
+             pred
 
-      -- -- FIXME: refactor so it doesn't run twice
-      -- allSatRes <- allSatWith z3 { transcript = Just "mrd.smt2" } -- SMT-LIB dump
-      --              pred
-      -- let AllSatResult (maxModelLimit, prefixExis, smtResults) = allSatRes
-      -- traceM $ "maxModelLimit = " ++ show maxModelLimit ++ ", prefixExis = " ++ show prefixExis
-      -- fmap concat . forM smtResults $ \ smtResult -> do
-      --   let satResult = SatResult smtResult
-      --   traceShowM satResult
-      --   let lhsU = fst . snd
-      --   let unitGroups = groupBy ((==) `on` lhsU) . sortBy (comparing lhsU) $ M.toList nameUIMap
+-- Assumes unitinfo was already simplified & flattened: extracts a
+-- name and power
+getUnitNamePow :: UnitInfo -> (String, Integer)
+getUnitNamePow (UnitPow u p) = (uName, floor p * p')
+  where (uName, p') = getUnitNamePow u
+getUnitNamePow u = (show u, 1)
 
-      --   -- unitGroups =
-      --   --   [ [(name1_1, (lhs1, rhs1)), (name1_2, (lhs1, rhs2)), ...]
-      --   --   , [(name2_1, (lhs2, rhs1)), (name2_2, (lhs2, rhs2)), ...]
-      --   --   , ...]
+-- augmented constraint also includes the "RHS name"
+type AugConstraint = (Constraint, String)
 
-      --   -- each name corresponds to an LHS/RHS combo encoded into the solver
-      --   let eachName :: (String, (LhsUnit, RhsUnit)) -> Maybe UnitInfo
-      --       eachName (lhsName, (lhsU, rhsU))
-      --         | x == 0    = Nothing
-      --         | otherwise = Just $ UnitPow rhsU (fromInteger x)
-      --         where
-      --           x = error "inferVariables missing piece of model" `fromMaybe` getModelValue lhsName satResult
-
-      --   -- each group corresponds to a LHS variable
-      --   let eachGroup :: [(String, (LhsUnit, RhsUnit))] -> (LhsUnit, UnitInfo)
-      --       eachGroup unitGroup = (lhsU, solvedUnit)
-      --         where
-      --           (_, (lhsU, _)):_ = unitGroup -- grouped by lhsU, so pick out one of them
-      --           solvedUnit = simplifyUnits . foldUnits . catMaybes $ map eachName unitGroup
-
-      --   return $ map eachGroup unitGroups
-
--- bit of a misnomer, need a better name
--- assumes unitinfo was already simplified & flattened
--- extracts a name and power
-getRhsDetails :: UnitInfo -> (String, Integer)
-getRhsDetails (UnitPow u p) = (uName, floor p * p')
-  where (uName, p') = getRhsDetails u
-getRhsDetails u = (show u, 1)
-
-encodeConstraints :: BasisMap -> NameUnitInfoMap -> NameSIntegerMap -> ShiftedConstraints -> [(SBool, String)]
+encodeConstraints :: BasisMap -> NameUnitInfoMap -> NameSIntegerMap -> ShiftedConstraints -> [(SBool, AugConstraint)]
 encodeConstraints basisMap nameUIMap nameSIntMap shiftedCons = do
   let getLhsSymbol :: String -> UnitInfo -> (Symbol, Integer)
       getLhsSymbol rhsName (UnitPow u p) = (uSym, floor p * p')
@@ -360,10 +289,10 @@ encodeConstraints basisMap nameUIMap nameSIntMap shiftedCons = do
 
   -- for each RHS name and corresponding power build an equation of the form:
   --   lhs1_RHS * pow1 + lhs2_RHS * pow2 + ... + lhsN_RHS powN = pow_RHS
-  let eachRhs :: [UnitInfo] -> (String, Integer) -> Maybe (SBool, String)
-      eachRhs lhs (rhsName, rhsPow)
-        | null lhsTerms = Just (0 .== literal rhsPow, "0" ++ msg)
-        | otherwise     = Just (sum lhsTerms .== literal rhsPow, msg)
+  let eachRhs :: Constraint -> [UnitInfo] -> (String, Integer) -> Maybe (SBool, AugConstraint)
+      eachRhs con lhs (rhsName, rhsPow)
+        | null lhsTerms = Just (0 .== literal rhsPow, (con, rhsName))
+        | otherwise     = Just (sum lhsTerms .== literal rhsPow, (con, rhsName))
         where
           -- lhsTerms = [lhs1_RHS * pow1, lhs2_RHS * pow2, ..., lhsN_RHS powN]
           lhsTerms :: [SInteger]
@@ -371,17 +300,18 @@ encodeConstraints basisMap nameUIMap nameSIntMap shiftedCons = do
                                                , let (lhsSym, lhsPow) = getLhsSymbol rhsName lhs_i ]
           msg = intercalate " + " [ lhsName ++ "(" ++ rhsName ++ ") * " ++ show lhsPow
                                   | lhs_i <- lhs
-                                  , let (lhsName, lhsPow) = getRhsDetails lhs_i ] ++
+                                  , let (lhsName, lhsPow) = getUnitNamePow lhs_i ] ++
                 " == " ++ rhsName ++ " * " ++ show rhsPow
 
   -- for each constraint having a set of LHS terms and a set of RHS terms:
-  let eachConstraint :: ([UnitInfo], [UnitInfo]) -> [(SBool, String)]
+  let eachConstraint :: ([UnitInfo], [UnitInfo]) -> [(SBool, AugConstraint)]
       eachConstraint (lhs, rhs) = res
         where
+          con       = ConEq (foldUnits lhs) (foldUnits rhs)
           msg       = "eachConstraint " ++ show (lhs, rhs) ++ " = " ++ show res
-          res       = catMaybes . map (eachRhs lhs) $ rhsPowers
+          res       = catMaybes . map (eachRhs con lhs) $ rhsPowers
           -- map every RHS to its corresponding power (including 0 for those not mentioned)
-          rhsPowers = M.toList . M.unionWith (+) basisMap . M.fromListWith (+) . map getRhsDetails $ rhs
+          rhsPowers = M.toList . M.unionWith (+) basisMap . M.fromListWith (+) . map getUnitNamePow $ rhs
 
   concatMap eachConstraint shiftedCons
 
@@ -391,13 +321,13 @@ showConstraints basisMap = map mkMsg
 --    mkMsg ([], rhs) = ""
     mkMsg (lhs, rhs) = intercalate "\n" . filter (not . null) $ map (perRhs lhs) rhsPowers
       where
-        rhsPowers = M.toList . M.unionWith (+) basisMap . M.fromListWith (+) . map getRhsDetails $ rhs
+        rhsPowers = M.toList . M.unionWith (+) basisMap . M.fromListWith (+) . map getUnitNamePow $ rhs
 
     perRhs lhs (rhsName, rhsPow) = msg
       where
         msg = intercalate " + " [ lhsName ++ "(" ++ rhsName ++ ") * " ++ show lhsPow
                                 | lhs_i <- lhs
-                                , let (lhsName, lhsPow) = getRhsDetails lhs_i ] ++
+                                , let (lhsName, lhsPow) = getUnitNamePow lhs_i ] ++
               " == " ++ rhsName ++ " * " ++ show rhsPow
 
 
@@ -491,14 +421,6 @@ interpret nameUIMap nvMap = do
   (subFromList . catMaybes) <$> mapM eachGroup unitGroups
 
 
-inferVariablesSBV :: Constraints -> [(VV, UnitInfo)]
-inferVariablesSBV cons = solvedVars
-  where
-    -- We are only interested in reporting the solutions to variables.
-    solvedVars = [ (vv, unit) | v@(UnitVar vv, unit) <- unitAssignments ] ++
-                 [ (vv, unit) | v@(UnitParamVarAbs (_, vv), unit) <- unitAssignments ]
-    unitAssignments = genUnitAssignmentsSBV cons
-
 
 ----
 
@@ -558,6 +480,12 @@ getUnitPow (UnitPow u p) = (u', floor p * p')
   where (u', p') = getUnitPow u
 getUnitPow u = (u, 1)
 
+identDim :: Dim
+identDim = M.empty
+
+isIdentDim :: Dim -> Bool
+isIdentDim = M.null . removeZeroes
+
 dimFromUnitInfos :: [UnitInfo] -> Dim
 dimFromUnitInfos = dimFromList . map getUnitPow
 
@@ -569,6 +497,9 @@ dimToUnitInfos = map (\ (u, p) -> UnitPow u (fromInteger p)) . M.toList
 
 dimToUnitInfo :: Dim -> UnitInfo
 dimToUnitInfo = foldUnits . dimToUnitInfos
+
+dimToConstraint :: Dim -> Constraint
+dimToConstraint = ConEq UnitlessLit . dimToUnitInfo
 
 dimFromList :: [(UnitInfo, Integer)] -> Dim
 dimFromList = removeZeroes . M.fromListWith (+)
@@ -653,3 +584,10 @@ test2 =  (dimSimplify (S.fromList [u0]) (dimFromList [(u0, 1), (u1, -2)]))
 -- disjunction for each parametric polymorphic unit variable
 -- suggesting that it could be a RHS unit but it's okay for it to be
 -- equal to another RHS unit if the solver determines that?
+
+
+--------------------------------------------------
+
+-- I can't generate a new RHS unit for every possible parametric
+-- polymorphic unit. That would overwhelm the solver. This needs to be
+-- done with subproblems.
