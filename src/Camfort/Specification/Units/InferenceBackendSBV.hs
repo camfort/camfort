@@ -131,9 +131,14 @@ type NameUnitInfoMap = M.Map String (LhsUnit, RhsUnit)
 type NameSIntegerMap = M.Map String SInteger
 
 gatherRhsUnitInfoNames :: [[UnitInfo]] -> [(String, RhsUnit)]
-gatherRhsUnitInfoNames = concatMap eachRow
+gatherRhsUnitInfoNames rhses
+  | null rhsNames = [("bogus", UnitName "bogus")]
+  | otherwise     = rhsNames
+
   where
-    eachRow            = map eachCol
+    rhsNames = concatMap eachRow rhses
+
+    eachRow  = map eachCol
 
     eachCol (UnitPow u _) = (show u, u)
     eachCol u             = (show u, u)
@@ -164,6 +169,7 @@ genBasisMap shiftedCons = baseRhsMap
   where
     rhsNames :: [(String, UnitInfo)]
     rhsNames = gatherRhsUnitInfoNames (map snd shiftedCons)
+
     -- start off with every RHS mapped to a power of zero.
     baseRhsMap = M.fromList [ (name, 0) | (name, _) <- rhsNames ]
 
