@@ -6,10 +6,10 @@ import           Test.Hspec hiding (Spec)
 import qualified Test.Hspec as Test
 
 import Camfort.Specification.Units.Environment
-import Camfort.Specification.Units.InferenceBackend
-  ( flattenConstraints
-  , inferVariables
-  , shiftTerms )
+import Camfort.Specification.Units.InferenceBackendSBV ( criticalVariables, inconsistentConstraints, inferVariables )
+import Camfort.Specification.Units.InferenceBackend ( flattenConstraints, shiftTerms )
+import Camfort.Specification.Units.BackendTypes (constraintToDim, dimParamEq, Dim, dimFromList)
+import Data.Maybe (fromJust)
 
 spec :: Test.Spec
 spec = do
@@ -23,6 +23,23 @@ spec = do
       map shiftTerms (flattenConstraints testCons2) `shouldBe` testCons2_shifted
     it "testCons3" $
       map shiftTerms (flattenConstraints testCons3) `shouldBe` testCons3_shifted
+  describe "Consistency" $ do
+    it "testCons1" $
+      (constraintToDim . head . fromJust $ inconsistentConstraints testCons1) `shouldSatisfy`
+        dimParamEq (dimFromList [(UnitName "kg", -1), (UnitName "m", 1)])
+    it "testCons2" $
+      inconsistentConstraints testCons2 `shouldBe` Nothing
+    it "testCons3" $
+      inconsistentConstraints testCons3 `shouldBe` Nothing
+  describe "Critical Variables" $ do
+    it "testCons2" $
+      criticalVariables testCons2 `shouldSatisfy` null
+    it "testCons3" $
+      criticalVariables testCons3 `shouldBe` [UnitVar ("c", "c"), UnitVar ("e", "e")]
+    it "testCons4" $
+      criticalVariables testCons4 `shouldBe` [UnitVar ("simple2_a22", "simple2_a22")]
+    it "testCons5" $
+      criticalVariables testCons5 `shouldSatisfy` null
   describe "Infer Variables" $
     it "testCons4" $
       show (inferVariables testCons4) `shouldBe` show testCons4_infer
@@ -83,6 +100,12 @@ testCons3_shifted = [([UnitPow (UnitVar ("a", "a")) 1.0,UnitPow (UnitVar ("e", "
                     ,([UnitPow (UnitVar ("d", "d")) 1.0],[UnitPow (UnitName "m") 1.0])]
 
 testCons4 = [ConEq (UnitVar ("simple2_a11", "simple2_a11")) (UnitParamPosUse (("simple2_sqr3","sqr"),0,0))
+            ,ConEq (UnitVar ("simple2_a22", "simple2_a22")) (UnitParamPosUse (("simple2_sqr3","sqr"),1,0))
+            -- ,ConEq (UnitVar ("simple2_a11", "simple2_a11")) (UnitVar ("simple2_a11", "simple2_a11"))
+            -- ,ConEq (UnitVar ("simple2_a22", "simple2_a22")) (UnitVar ("simple2_a22", "simple2_a22"))
+            ,ConEq (UnitParamPosUse (("simple2_sqr3","sqr"),0,0)) (UnitMul (UnitParamPosUse (("simple2_sqr3","sqr"),1,0)) (UnitParamPosUse (("simple2_sqr3","sqr"),1,0)))]
+
+testCons5 = [ConEq (UnitVar ("simple2_a11", "simple2_a11")) (UnitParamPosUse (("simple2_sqr3","sqr"),0,0))
             ,ConEq (UnitAlias "accel") (UnitParamPosUse (("simple2_sqr3","sqr"),1,0))
             ,ConEq (UnitVar ("simple2_a11", "simple2_a11")) (UnitVar ("simple2_a11", "simple2_a11"))
             ,ConEq (UnitVar ("simple2_a22", "simple2_a22")) (UnitAlias "accel")
