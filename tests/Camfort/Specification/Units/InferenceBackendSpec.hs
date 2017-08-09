@@ -42,7 +42,7 @@ spec = do
       criticalVariables testCons5 `shouldSatisfy` null
   describe "Infer Variables" $
     it "testCons4" $
-      show (inferVariables testCons4) `shouldBe` show testCons4_infer
+      show (inferVariables testCons5) `shouldBe` show testCons5_infer
   describe "Check that (restricted) double to ratios is consistent" $
     it "test all in -10/-10 ... 10/10, apart from /0" $
       and [testDoubleToRationalSubset x y | x <- [-10..10], y <- [-10..10]]
@@ -112,7 +112,7 @@ testCons5 = [ConEq (UnitVar ("simple2_a11", "simple2_a11")) (UnitParamPosUse (("
             ,ConEq (UnitParamPosUse (("simple2_sqr3","sqr"),0,0)) (UnitMul (UnitParamPosUse (("simple2_sqr3","sqr"),1,0)) (UnitParamPosUse (("simple2_sqr3","sqr"),1,0)))
             ,ConEq (UnitAlias "accel") (UnitMul (UnitName "m") (UnitPow (UnitName "s") (-2.0)))]
 
-testCons4_infer = [(("simple2_a11", "simple2_a11"),UnitMul (UnitPow (UnitName "m") 2.0) (UnitPow (UnitName "s") (-4.0)))
+testCons5_infer = [(("simple2_a11", "simple2_a11"),UnitMul (UnitPow (UnitName "m") 2.0) (UnitPow (UnitName "s") (-4.0)))
                   ,(("simple2_a22", "simple2_a22"),UnitMul (UnitPow (UnitName "m") 1.0) (UnitPow (UnitName "s") (-2.0)))]
 
 testDoubleToRationalSubset :: Integer -> Integer -> Bool
