@@ -46,7 +46,7 @@ unitsCheckReport lo modNames fileName expectedReport = do
       modPaths = fmap (fixturesDir </>) modNames
   modFiles <- mapM mkTestModFile modPaths
   [(pf,_)] <- readParseSrcDir modFiles file []
-  let report = analysisResult $ runUnitsAnalysis checkUnits uOpts modFiles pf
+  report <- analysisResult <$> runUnitsAnalysis checkUnits uOpts modFiles pf
   show report `shouldBe` expectedReport
   where uOpts = unitOpts0 { uoDebug = False, uoLiterals = lo }
 
