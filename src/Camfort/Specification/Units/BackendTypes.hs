@@ -146,13 +146,13 @@ dimSimplify excludes dim
 
   | (u, x):_ <- valids, x < 0
   , sub1     <- M.singleton u (M.singleton u (-1))
-  , sub2     <- dimSimplify excludes (applySub sub1 dim) = tr $ composeSubs sub2 sub1
+  , sub2     <- dimSimplify excludes (applySub sub1 dim) = composeSubs sub2 sub1
 
-  | (u, x):[] <- valids = tr $ M.singleton u (dimFromList ((u, 1):[(v, -div y x) | (v, y) <- invals]))
+  | (u, x):[] <- valids = M.singleton u (dimFromList ((u, 1):[(v, -div y x) | (v, y) <- invals]))
 
   | (u, x):_ <- valids
   , sub1     <- M.singleton u (dimFromList ((u, 1):[(v, -div y x) | (v, y) <- M.toList dim, v /= u]))
-  , sub2     <- dimSimplify excludes (applySub sub1 dim) = tr $ composeSubs sub2 sub1
+  , sub2     <- dimSimplify excludes (applySub sub1 dim) = composeSubs sub2 sub1
 
   where
     valids   = sortBy (comparing (abs . snd)) . filter ((`S.notMember` excludes) . fst) $ M.toList dim
