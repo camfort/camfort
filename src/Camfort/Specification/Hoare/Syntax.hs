@@ -1,21 +1,60 @@
-{-# LANGUAGE DeriveDataTypeable #-}
-{-# LANGUAGE DeriveGeneric      #-}
-{-# LANGUAGE DeriveTraversable  #-}
-{-# LANGUAGE LambdaCase         #-}
-{-# LANGUAGE PatternSynonyms         #-}
+{-# LANGUAGE DataKinds                 #-}
+{-# LANGUAGE DeriveDataTypeable        #-}
+{-# LANGUAGE DeriveGeneric             #-}
+{-# LANGUAGE DeriveTraversable         #-}
+{-# LANGUAGE ExistentialQuantification #-}
+{-# LANGUAGE FlexibleInstances         #-}
+{-# LANGUAGE LambdaCase                #-}
+{-# LANGUAGE MultiParamTypeClasses     #-}
+{-# LANGUAGE NamedFieldPuns            #-}
+{-# LANGUAGE PatternSynonyms           #-}
+{-# LANGUAGE StandaloneDeriving        #-}
+{-# LANGUAGE TemplateHaskell           #-}
+{-# LANGUAGE TypeFamilies              #-}
 
 module Camfort.Specification.Hoare.Syntax where
 
 import           Control.Monad                     (ap, join)
 import           Data.Data
+import           Data.Functor.Classes              (Eq1 (..))
 import           GHC.Generics
 
+import           Control.Lens
 import           Data.Generics.Uniplate.Operations
 
 import qualified Language.Fortran.AST              as F
 import qualified Language.Fortran.Util.Position    as F
 
-import           Language.While.Prop
+import           Language.Expression.Ops.Classes   (SymValue (..))
+import           Language.Expression.Ops.Standard
+import           Language.Expression.Pretty
+import           Language.Verification             hiding (Prop)
+
+
+data PrimComp a
+  = PCLess a a
+  | PCGreater a a
+  | PCLessEq a a
+  | PCGreaterEq a a
+  | PCEq a a
+  | PCNeq a a
+  deriving (Typeable, Data, Show, Eq, Functor, Foldable, Traversable)
+
+data PrimLogic a
+  = PLAnd a a
+  | PLOr a a
+  | PLImpl a a
+  | PLEquiv a a
+  | PLNot a
+  | PLLit Bool
+  deriving (Typeable, Data, Show, Eq, Functor, Foldable, Traversable)
+
+
+data PrimFormula ann
+  = PFExpr (F.Expression ann)
+  | PFCompare (PrimComp (F.Expression ann))
+  | PFLogical (PrimLogic (PrimFormula ann))
+  deriving (Typeable, Data, Show, Eq)
 
 
 data SpecKind
@@ -26,45 +65,22 @@ data SpecKind
   deriving (Show, Eq, Typeable, Data)
 
 
-data SpecOp a
-  = OpEq a a
-  | OpLT a a
-  | OpLE a a
-  | OpGT a a
-  | OpGE a a
-  deriving (Show, Eq, Data, Typeable, Functor, Foldable, Traversable)
-
-
-type SpecFormula a = Prop (SpecOp (F.Expression a))
-
-pattern FEq a b = PEmbed (OpEq a b)
-pattern FLT a b = PEmbed (OpLT a b)
-pattern FLE a b = PEmbed (OpLE a b)
-pattern FGT a b = PEmbed (OpGT a b)
-pattern FGE a b = PEmbed (OpGE a b)
-
-
-bindExpVars
-  :: (Data a, Monad m)
-  => (a -> F.SrcSpan -> F.Name -> m (F.Expression a))
-  -> F.Expression a
-  -> m (F.Expression a)
-bindExpVars f = transformM $ \case
-  F.ExpValue ann span (F.ValVariable nm) -> f ann span nm
-  exp -> pure exp
-
-
-bindFormula
-  :: (Data a, Monad m)
-  => (a -> F.SrcSpan -> F.Name -> m (F.Expression a))
-  -> SpecFormula a -> m (SpecFormula a)
-bindFormula = traverse . traverse . bindExpVars
-
-
 data Specification a =
   Specification
   { _specType    :: SpecKind
-  , _specFormula :: SpecFormula a
+  , _specFormula :: a
   }
-  deriving (Show, Eq, Typeable, Data, Functor)
+  deriving (Typeable, Data, Eq, Functor)
 
+type PrimSpec ann = Specification (PrimFormula ann)
+
+instance Show a => Pretty (PrimFormula a) where pretty = show
+
+instance (Pretty a) => Show (Specification a) where
+  show Specification { _specType, _specFormula } =
+    "Specification { " ++
+    "_specType = " ++ show _specType ++ ", " ++
+    "_specFormula = " ++ pretty _specFormula ++
+    " }"
+
+makeLenses ''Specification

@@ -8,4 +8,6 @@ extra-deps:
 - fortran-src-0.2.0.0
 - partial-order-0.1.2.1
 - sbv-7.0
+- vinyl-0.6.0
+- union-0.1.1.2
 resolver: lts-8.23

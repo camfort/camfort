@@ -9,7 +9,7 @@ import Data.Coerce
 import Control.Monad.State
 import Control.Monad.Except
 
-import Camfort.Specification.Hoare.Types
+import Camfort.Specification.Hoare.Parser.Types
 
 addToTokens :: Token -> String -> HoareSpecParser [Token]
 addToTokens tok rest = do
@@ -47,6 +47,8 @@ lexSymbol xs =
         , ("<->", TEquiv)
         , ("->", TImpl)
         , ("!", TNot)
+        , ("t", TTrue)
+        , ("f", TFalse)
         , ("(", TLParen)
         , (")", TRParen)
         ]
@@ -77,3 +79,4 @@ stripPrefix (p : refix) (s : tring)
   | p == s = stripPrefix refix tring
   | otherwise = Nothing
 stripPrefix [] string = Just string
+stripPrefix _ [] = Nothing

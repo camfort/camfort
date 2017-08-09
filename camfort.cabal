@@ -73,8 +73,12 @@ library
                         Camfort.Specification.Units.Parser.Types
                         Camfort.Specification.Units.Synthesis
                         Camfort.Specification.Hoare
+                        Camfort.Specification.Hoare.Annotation
+                        Camfort.Specification.Hoare.CheckFrontend
+                        Camfort.Specification.Hoare.CheckBackend
                         Camfort.Specification.Hoare.Types
                         Camfort.Specification.Hoare.Parser
+                        Camfort.Specification.Hoare.Parser.Types
                         Camfort.Specification.Hoare.Lexer
                         Camfort.Specification.Hoare.Syntax
                         Camfort.Specification.Hoare.Translate

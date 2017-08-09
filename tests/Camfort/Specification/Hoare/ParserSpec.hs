@@ -1,7 +1,8 @@
-{-# LANGUAGE FlexibleContexts      #-}
+{-# LANGUAGE FlexibleContexts #-}
 
 module Camfort.Specification.Hoare.ParserSpec (spec) where
 
+import           Data.Data                          (Data)
 import           Data.Either                        (isLeft)
 import           Data.Foldable                      (traverse_)
 
@@ -15,8 +16,6 @@ import           Camfort.Specification.Parser       (runParser)
 import qualified Camfort.Specification.Parser       as Parser
 import qualified Language.Fortran.AST               as F
 import qualified Language.Fortran.Util.Position     as F
-
-import           Language.While.Prop
 
 import           Test.Hspec                         hiding (Spec)
 import qualified Test.Hspec                         as Test
@@ -32,23 +31,25 @@ spec = describe "Hoare - Parser" $ do
         tests =
           [ "\"x\"" .-> [TExpr "x"]
           , "\"x + y - 347\"" .-> [TExpr "x + y - 347"]
-          , "= static_assert invariant(\"x\" = \"4)7\" )" .->
-            [ TEquals, TStaticAssert, TInvariant
+          , "static_assert invariant(\"x\" = \"4)7\" )" .->
+            [ TStaticAssert, TInvariant
             , TLParen, TExpr "x", TEquals, TExpr "4)7", TRParen]
+          , "static_assert pre(t)" .->
+            [ TStaticAssert, TPre, TLParen, TTrue, TRParen]
           ]
 
     traverse_ runTest tests
 
-    lexer "= static_assert post(\"missing close quote)" `shouldSatisfy` isLeft
+    lexer "static_assert post(\"missing close quote)" `shouldSatisfy` isLeft
 
   it "parses" $ do
     let runTest (input, output) =
-          parse input `shouldMatch` Right output
+          parse input `shouldSatisfy` (matches (Right output))
 
-        var n = F.ExpValue () defSpan (F.ValVariable n)
-        x = var "x"
-        y = var "y"
-        z = var "z"
+        fvar n = F.ExpValue () defSpan (F.ValVariable n)
+        x = fvar "x"
+        y = fvar "y"
+        z = fvar "z"
 
         num n = F.ExpValue () defSpan (F.ValInteger (show n))
 
@@ -60,28 +61,41 @@ spec = describe "Hoare - Parser" $ do
         ySz = y `sub` z
         yAz = y `add` z
 
-        tests =
-          [ "!= static_assert pre(\"x\" = \"y\")"
-            .->
-            Specification SpecPre (x `FEq` y)
+        x .== y = PFCompare (PCEq x y)
+        x .< y = PFCompare (PCLess x y)
+        x .> y = PFCompare (PCGreater x y)
+        x .>= y = PFCompare (PCGreaterEq x y)
 
-          , "!= static_assert invariant(\"x + 3\" < \"y - z\" & \"x + 3\" > \"y + z\")"
+        x *&& y = PFLogical (PLAnd x y)
+        x *|| y = PFLogical (PLOr x y)
+        x *-> y = PFLogical (PLImpl x y)
+
+        tests =
+          [ "! static_assert pre(\"x\" = \"y\")"
+            .->
+            Specification SpecPre (x .== y)
+
+          , "! static_assert pre(t)"
+            .->
+            Specification SpecPre (PFLogical (PLLit True))
+
+          , "! static_assert invariant(\"x + 3\" < \"y - z\" & \"x + 3\" > \"y + z\")"
             .->
             Specification SpecInvariant
-            ((xA3 `FLT` ySz) `PAnd` (xA3 `FGT` yAz))
+            ((xA3 .< ySz) *&& (xA3 .> yAz))
 
-          , "!= static_assert post(\"x + 3\" < \"y - z\" & \"x + 3\" > \"y + z\" | \"x\" >= \"7\")"
+          , "! static_assert post(\"x + 3\" < \"y - z\" & \"x + 3\" > \"y + z\" | \"x\" >= \"7\")"
             .->
             Specification SpecPost
-            (((xA3 `FLT` ySz) `PAnd` (xA3 `FGT` yAz)) `POr`
-              (x `FGE` num 7)
+            (((xA3 .< ySz) *&& (xA3 .> yAz)) *||
+              (x .>= (num 7))
             )
 
-          , "!= static_assert seq(\"x + 3\" < \"y - z\" -> \"x + 3\" > \"y + z\" -> \"x\" >= \"7\")"
+          , "! static_assert seq(\"x + 3\" < \"y - z\" -> \"x + 3\" > \"y + z\" -> \"x\" >= \"7\")"
             .->
             Specification SpecSeq
-            ((xA3 `FLT` ySz) `PImpl`
-              (((xA3 `FGT` yAz)) `PImpl` (x `FGE` num 7))
+            ((xA3 .< ySz) *->
+              (((xA3 .> yAz)) *-> (x .>= (num 7)))
             )
 
           ]
@@ -89,19 +103,16 @@ spec = describe "Hoare - Parser" $ do
     traverse_ runTest tests
 
 
-shouldMatch :: (Biplate from F.SrcSpan, Eq from, Show from) => from -> from -> Expectation
-shouldMatch a b = a `shouldSatisfy` matches b
-
-stripSpans :: Biplate from F.SrcSpan => from -> from
+stripSpans :: Data from => from -> from
 stripSpans = transformBi (const defSpan)
 
 -- | Check if the two inputs are equal after removing all source spans, which
 -- this test suite doesn't care about.
-matches :: (Biplate from F.SrcSpan, Eq from) => from -> from -> Bool
+matches :: (Eq a, Data a) => a -> a -> Bool
 matches a b =
   stripSpans a == stripSpans b
 
 defSpan = F.SrcSpan (F.Position 0 0 0) (F.Position 0 0 0)
 
-parse :: String -> Either (Parser.SpecParseError HoareParseError) (Specification ())
+parse :: String -> Either (Parser.SpecParseError HoareParseError) (PrimSpec ())
 parse = runParser hoareParser

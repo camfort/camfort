@@ -6,12 +6,13 @@ import           Control.Monad.Except
 
 import qualified Language.Fortran.AST as F
 
-import Language.While.Prop
+import           Language.Verification
+import           Language.Expression.DSL hiding (Prop)
 
 import qualified Camfort.Specification.Parser as Parser
 import Camfort.Specification.Hoare.Syntax
 import Camfort.Specification.Hoare.Lexer
-import Camfort.Specification.Hoare.Types
+import Camfort.Specification.Hoare.Parser.Types
 
 }
 
@@ -25,6 +26,8 @@ import Camfort.Specification.Hoare.Types
   post          { TPost         }
   pre           { TPre          }
   seq           { TSeq          }
+  true          { TTrue         }
+  false         { TFalse        }
   '<='          { TLE           }
   '>='          { TGE           }
   '<'           { TLT           }
@@ -51,11 +54,11 @@ import Camfort.Specification.Hoare.Types
 %%
 
 
-HOARE :: { Specification () }
-: '=' static_assert SPEC { $3 }
+HOARE :: { PrimSpec () }
+: static_assert SPEC { $2 }
 
 
-SPEC :: { Specification () }
+SPEC :: { PrimSpec () }
 : KIND '(' FORMULA ')' { Specification $1 $3 }
 
 
@@ -66,19 +69,21 @@ KIND :: { SpecKind }
 | invariant { SpecInvariant }
 
 
-FORMULA :: { SpecFormula () }
-: FORMULA '&' FORMULA   { $1 `PAnd` $3 }
-| FORMULA '|' FORMULA   { $1 `POr` $3 }
-| FORMULA '->' FORMULA  { $1 `PImpl` $3 }
-| FORMULA '<->' FORMULA { $1 `PEquiv` $3 }
-| '!' FORMULA           { PNot $2 }
+FORMULA :: { PrimFormula () }
+: true                  { PFLogical (PLLit True) }
+| false                 { PFLogical (PLLit False) }
+| FORMULA '&' FORMULA   { PFLogical (PLAnd $1 $3) }
+| FORMULA '|' FORMULA   { PFLogical (PLOr $1 $3) }
+| FORMULA '->' FORMULA  { PFLogical (PLImpl $1 $3) }
+| FORMULA '<->' FORMULA { PFLogical (PLEquiv $1 $3) }
+| '!' FORMULA           { PFLogical (PLNot $2) }
 | '(' FORMULA ')'       { $2 }
-| EXPR '=' EXPR         { $1 `FEq` $3 }
-| EXPR '<' EXPR         { $1 `FLT` $3 }
-| EXPR '>' EXPR         { $1 `FGT` $3 }
-| EXPR '<=' EXPR        { $1 `FLE` $3 }
-| EXPR '>=' EXPR        { $1 `FGE` $3 }
-
+| EXPR '=' EXPR         { PFCompare (PCEq $1 $3) }
+-- | EXPR '!=' EXPR         { PFCompare (PCNeq $1 $3) }
+| EXPR '<' EXPR         { PFCompare (PCLess $1 $3) }
+| EXPR '>' EXPR         { PFCompare (PCGreater $1 $3) }
+| EXPR '<=' EXPR        { PFCompare (PCLessEq $1 $3) }
+| EXPR '>=' EXPR        { PFCompare (PCGreaterEq $1 $3) }
 
 EXPR :: { F.Expression () }
 : texpr {% parseExpression $1 }
@@ -88,7 +93,7 @@ EXPR :: { F.Expression () }
 parseError :: [Token] -> HoareSpecParser a
 parseError = throwError . ParseError
 
-hoareParser :: Parser.SpecParser HoareParseError (Specification ())
+hoareParser :: Parser.SpecParser HoareParseError (PrimSpec ())
 hoareParser = Parser.mkParser (\src -> do
                                   tokens <- lexer src
                                   parseHoare tokens)

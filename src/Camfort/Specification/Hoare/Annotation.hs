@@ -1,40 +1,49 @@
+{-# LANGUAGE DeriveDataTypeable    #-}
+{-# LANGUAGE DeriveFunctor         #-}
+{-# LANGUAGE FlexibleInstances     #-}
 {-# LANGUAGE MultiParamTypeClasses #-}
-{-# LANGUAGE DeriveFunctor #-}
-{-# LANGUAGE DeriveDataTypeable #-}
-{-# LANGUAGE FlexibleInstances    #-}
-{-# LANGUAGE TypeSynonymInstances #-}
-{-# LANGUAGE TemplateHaskell #-}
+{-# LANGUAGE TemplateHaskell       #-}
+{-# LANGUAGE TypeSynonymInstances  #-}
 {-# OPTIONS_GHC -Wall #-}
 
 module Camfort.Specification.Hoare.Annotation where
 
-import Data.Data
+import           Data.Data
 
-import Control.Lens
+import           Control.Lens
 
 import qualified Language.Fortran.Analysis          as F
+import qualified Language.Fortran.AST               as F
 
-import           Camfort.Analysis.Annotations (onPrev)
+import qualified Camfort.Analysis.Annotations       as Ann
 import           Camfort.Analysis.CommentAnnotator
 
 import           Camfort.Specification.Hoare.Syntax
 
-data Annotation a =
-  A
-  { _annHoareSpec :: Maybe (Specification a)
+data HoareAnnotation a =
+  HoareAnnotation
+  { _hoarePrevAnnotation  :: a
+  , _hoareSpec :: Maybe (PrimSpec ())
+  , _hoarePUName :: Maybe F.ProgramUnitName
   }
-  deriving (Show, Eq, Typeable, Data, Functor)
+  deriving (Show, Eq, Typeable, Data)
 
-makeLenses ''Annotation
+makeLenses ''HoareAnnotation
 
-type A = Annotation
+type HA = F.Analysis (HoareAnnotation (Ann.A))
 
-type Analysis a = F.Analysis (A a)
-
-instance Linkable (Analysis a) where
+instance Linkable HA where
   link ann _ = ann
-  linkPU ann _ = ann
 
-instance ASTEmbeddable (Analysis a) (Specification a) where
+  linkPU ann pu = Ann.onPrev (hoarePUName .~ Just (F.puName pu)) ann
+
+instance ASTEmbeddable HA (PrimSpec ()) where
   annotateWithAST ann ast =
-    onPrev (annHoareSpec .~ Just ast) ann
+    Ann.onPrev (hoareSpec .~ Just ast) ann
+
+
+hoareAnn0 :: a -> HoareAnnotation a
+hoareAnn0 x = HoareAnnotation { _hoarePrevAnnotation = x, _hoareSpec = Nothing, _hoarePUName = Nothing }
+
+-- ha0 :: HA
+-- ha0 = F.analysis0 (hoareAnn0 Ann.unitAnnotation)
