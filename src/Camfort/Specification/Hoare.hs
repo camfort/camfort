@@ -1,6 +1,7 @@
 module Camfort.Specification.Hoare where
 
 import           Control.Monad.Except
+import           Data.List (intersperse)
 
 import qualified Language.Fortran.Analysis                 as FA
 import qualified Language.Fortran.Analysis.BBlocks         as FAB
@@ -22,16 +23,15 @@ getBlocks = FAB.analyseBBlocks . FAR.analyseRenames . FA.initAnalysis . fmap hoa
 check :: SimpleAnalysis (F.ProgramFile Annotation) Report
 check = do
   pf <- analysisInput
-  res <- branchAnalysis invariantChecking (getBlocks pf)
+  res <- branchAnalysis prettyInvariantChecking (getBlocks pf)
   -- Append filename to any outputs
-  let output   = show (analysisResult res)
+  let output   = mconcat . intersperse (mkReport "\n\n") . analysisResult $ res
       dbg      = show (analysisDebug res)
       filename = F.pfGetFilename pf
-  pure . mkReport $ if null output && null dbg then "" else "\n" ++ filename ++ "\n" ++ dbg ++ "\n" ++ output
 
-
+  pure $ (mkReport $ "\n" ++ filename ++ "\n" ++ dbg ++ "\n") `mappend` output
 
 testOn :: FilePath -> IO ()
-testOn fp = doAnalysisSummary check simpleCompiler fp "." []
+testOn fp = doAnalysisReport check simpleCompiler () fp "." []
 
 testHoare = testOn "samples/invariants/invariants.f90"

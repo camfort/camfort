@@ -10,10 +10,10 @@ module Camfort.Specification.Hoare.CheckFrontend where
 import           Control.Lens
 import           Control.Monad.Writer.Strict              hiding (Product)
 import           Data.Either                              (partitionEithers)
-import           Data.Foldable                            (traverse_)
 import           Data.Generics.Uniplate.Operations
 import           Data.Map                                 (Map)
 import qualified Data.Map                                 as Map
+import Control.Exception
 
 -- import qualified Language.Fortran.Analysis.BBlocks        as F
 -- import qualified Language.Fortran.Analysis.DataFlow       as F
@@ -32,15 +32,14 @@ import           Camfort.Specification.Hoare.CheckBackend
 import           Camfort.Specification.Hoare.Parser
 import           Camfort.Specification.Hoare.Parser.Types (HoareParseError)
 import           Camfort.Specification.Hoare.Syntax
-import           Camfort.Specification.Hoare.Types
 
 --------------------------------------------------------------------------------
 --  Results and errors
 --------------------------------------------------------------------------------
 
 data HoareResult
-  = HOkay HoareCheckResult
-  | HFail HoareFrontendError
+  = HOkay HoareCheckResult Report
+  | HFail HoareFrontendError Report
   deriving (Show)
 
 data HoareFrontendError
@@ -49,8 +48,16 @@ data HoareFrontendError
   | BackendError HoareBackendError
   deriving (Show)
 
+instance Exception HoareFrontendError where
+  displayException = \case
+    ParseError sp spe -> "at " ++ show sp ++ " parse error: " ++ displayException spe
+    InvalidPUConditions sp nm conds ->
+      "at " ++ show sp ++ " invalid specification types attached to PU with name " ++ show nm ++ ": " ++
+      show conds
+    BackendError e -> displayException e
+
 parseError :: F.SrcSpan -> SpecParseError HoareParseError -> HoareResult
-parseError sp err = HFail (ParseError sp err)
+parseError sp err = HFail (ParseError sp err) mempty
 
 debugLog :: String -> CA.SimpleAnalysis a ()
 debugLog = tell . mkReport . (++ "\n")
@@ -111,15 +118,34 @@ invariantChecking = do
 
       (errors, annotatedPUs) = findAnnotatedPUs pf'
 
-      checkAndReport action = do
-        action' <- runCheckHoare action
-        case action' of
-          Right ok -> return (HOkay ok)
-          Left err -> return (HFail (BackendError err))
+      checkAndReport apu = do
+        let nm = F.puName (apu ^. apuPU)
+            prettyName = case F.puSrcName (apu ^. apuPU) of
+              F.Named x -> x
+              _         -> show nm
+        (result, logs) <- checkPU apu
 
-  checkResults <- traverse (checkAndReport . checkPU) annotatedPUs
+        let
+          logsHead = mkReport $ "Verifying program unit: " ++ prettyName ++ "\n"
+          logs' = logsHead <> logs
 
-  return (annResults ++ checkResults ++ map HFail errors)
+        case result of
+          Right ok -> return (HOkay ok logs')
+          Left err -> return (HFail (BackendError err) logs')
+
+  checkResults <- traverse checkAndReport annotatedPUs
+
+  return (annResults ++ checkResults ++ map (flip HFail mempty) errors)
+
+prettyInvariantChecking :: CA.SimpleAnalysis (F.ProgramFile HA) [Report]
+prettyInvariantChecking = do
+  results <- invariantChecking
+
+  let prettyResult (HOkay (HoareCheckResult b) logs) =
+        logs <> mkReport (if b then " - OK" else " - Cannot verify")
+      prettyResult (HFail e logs) = logs <> mkReport (displayException e)
+
+  return $ map prettyResult results
 
 --------------------------------------------------------------------------------
 --  Other

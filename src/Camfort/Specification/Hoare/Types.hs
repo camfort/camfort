@@ -4,5 +4,5 @@
 
 module Camfort.Specification.Hoare.Types where
 
-import qualified Camfort.Analysis                       as CA
+-- import qualified Camfort.Analysis                       as CA
 

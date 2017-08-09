@@ -6,6 +6,7 @@ module Camfort.Specification.Hoare.Parser.Types where
 
 import           Control.Monad.Except
 import           Data.Data
+import           Control.Exception
 import           Data.List                         (intercalate)
 
 import qualified Data.ByteString.Char8             as B
@@ -30,6 +31,8 @@ instance Show HoareParseError where
   show (MalformedExpression expr) = "couldn't parse expression: \"" ++ expr ++ "\""
   show (ParseError tokens) = "unable to parse input: " ++ prettyTokens tokens
   show (LexError xs) = "unable to lex input: " ++ xs
+
+instance Exception HoareParseError where
 
 prettyTokens :: [Token] -> String
 prettyTokens = intercalate " " . map prettyToken

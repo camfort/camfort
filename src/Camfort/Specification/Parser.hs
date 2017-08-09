@@ -24,6 +24,7 @@ module Camfort.Specification.Parser
   ) where
 
 import           Control.Monad.Except (throwError)
+import           Control.Exception (Exception(..))
 import           Data.Data
 import           Data.List            (isPrefixOf)
 import qualified Data.Text            as T
@@ -39,6 +40,12 @@ instance (Show e) => Show (SpecParseError e) where
     "Invalid character at start of specification: " ++ show c
   show MissingSpecificationCharacter = "missing start of specification"
   show (ParseError e) = show e
+
+instance Exception e => Exception (SpecParseError e) where
+  displayException (InvalidSpecificationCharacter c) =
+    "Invalid character at start of specification: " ++ show c
+  displayException MissingSpecificationCharacter = "missing start of specification"
+  displayException (ParseError e) = displayException e
 
 -- | Embed an error as a specification parse error.
 parseError :: e -> SpecParseError e

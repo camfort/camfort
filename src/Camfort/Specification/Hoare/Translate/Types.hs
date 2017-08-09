@@ -66,9 +66,14 @@ someVarName :: Location l => SomeVar l -> String
 someVarName (Some v) = varName v
 
 newtype SourceName = SourceName { getSourceName :: F.Name }
-  deriving (Eq, Ord, Show)
+  deriving (Eq, Ord)
+
+instance Show SourceName where show = show . getSourceName
+
 newtype UniqueName = UniqueName { getUniqueName :: F.Name }
-  deriving (Eq, Ord, Show)
+  deriving (Eq, Ord)
+
+instance Show UniqueName where show = show . getUniqueName
 
 -- | A 'NamePair' represents the name of some part of a Fortran program,
 -- including the human-readable source name and the unique name.
