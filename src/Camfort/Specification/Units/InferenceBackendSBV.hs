@@ -16,7 +16,6 @@
 
 {-# LANGUAGE TupleSections #-}
 {-# LANGUAGE ScopedTypeVariables #-}
-{-# LANGUAGE FlexibleContexts #-}
 
 module Camfort.Specification.Units.InferenceBackendSBV
   ( inconsistentConstraints, criticalVariables, inferVariables, genUnitAssignments )
@@ -45,6 +44,7 @@ import Data.Function (on)
 
 import Camfort.Specification.Units.Environment
 import qualified Camfort.Specification.Units.InferenceBackend as MatrixBackend
+import Camfort.Specification.Units.BackendTypes
 
 import Numeric.LinearAlgebra (
     atIndex, (<>), rank, (?), rows, cols,
@@ -86,34 +86,6 @@ inferVariables cons = solvedVars
 
 --------------------------------------------------
 
-simplifyUnits :: UnitInfo -> UnitInfo
-simplifyUnits = rewrite rw
-  where
-    rw (UnitMul (UnitMul u1 u2) u3)                          = Just $ UnitMul u1 (UnitMul u2 u3)
-    rw (UnitMul u1 u2) | u1 == u2                            = Just $ UnitPow u1 2
-    rw (UnitPow (UnitPow u1 p1) p2)                          = Just $ UnitPow u1 (p1 * p2)
-    rw (UnitMul (UnitPow u1 p1) (UnitPow u2 p2)) | u1 == u2  = Just $ UnitPow u1 (p1 + p2)
-    rw (UnitPow UnitlessLit _)                               = Just UnitlessLit
-    rw (UnitPow UnitlessVar _)                               = Just UnitlessVar
-    rw (UnitPow _ p) | p `approxEq` 0                        = Just UnitlessLit
-    rw (UnitMul UnitlessLit u)                               = Just u
-    rw (UnitMul u UnitlessLit)                               = Just u
-    rw (UnitMul UnitlessVar u)                               = Just u
-    rw (UnitMul u UnitlessVar)                               = Just u
-    rw _                                                     = Nothing
-
-flattenUnits :: UnitInfo -> [UnitInfo]
-flattenUnits = map (uncurry UnitPow) . M.toList
-             . M.filterWithKey (\ u _ -> u /= UnitlessLit && u /= UnitlessVar)
-             . M.filter (not . approxEq 0)
-             . M.fromListWith (+)
-             . map (first simplifyUnits)
-             . flatten
-  where
-    flatten (UnitMul u1 u2) = flatten u1 ++ flatten u2
-    flatten (UnitPow u p)   = map (second (p*)) $ flatten u
-    flatten u               = [(u, 1)]
-
 approxEq a b = abs (b - a) < epsilon
 epsilon = 0.001 -- arbitrary
 
@@ -145,10 +117,6 @@ shiftTerms isUnitRHS (lhs, rhs) = (lhsOk ++ negateCons rhsShift, rhsOk ++ negate
 -- | Translate all constraints into a LHS, RHS side of units.
 flattenConstraints :: Constraints         -> [([UnitInfo], [UnitInfo])]
 flattenConstraints = map (\ (ConEq u1 u2) -> (flattenUnits u1, flattenUnits u2))
-
-foldUnits units
-  | null units = UnitlessVar
-  | otherwise  = foldl1 UnitMul units
 
 --------------------------------------------------
 
@@ -419,175 +387,3 @@ interpret nameUIMap nvMap = do
           _  -> return $ Just (lhsU, dimFromUnitInfos rawUnits)
 
   (subFromList . catMaybes) <$> mapM eachGroup unitGroups
-
-
-
-----
-
--- Unification: we solve under the assumption of more concrete RHS
---   units but if we find in the results that certain ParamPosAbs are
---   still left 'free' in some sense then they are potentially
---   parametric?
-
---   indeed, such ParamPosAbs variables are valid with any value it seems. underdetermined.
---   how many values is enough ? 2?
---   can I subset the underdetermined equations?
-
--- yes, there are multiple values for both parametric & critical-vars
--- the multiple values are equationally linked to each other if the variables are
--- could potentially identify all parametric variables in parallel by constraining to prime numbers
-
-
--- in the matrix version we solved for a reduced row echelon form, which is a unique 'normal' form
--- that means that even the equations with a 0 on the RHS were normalised into some form
--- e.g. if there were two ways to express it, then one was picked
---   a - b = 0
---   x - b = 0
---   y - a = 0
--- would become
---   a - b = 0
---   x - a = 0
---   y - a = 0
-
--- kennedy has some rules on simplification, preferred forms (e.g. parameters vs return vars)
--- type simplification algorithm
-
---    The original motivation for designing this algorithm was the need for a ‘most
---    natural’ form for type schemes. This is the way that we describe the algorithm
---    initially. However, it turned out that the canonical form which it calculates
---    corresponds directly to a well-known form in matrix theory. This in turn explains
---    its application to the generalisation procedure as a ‘change of basis’.
-
---    Simplify a type t from left to right, and for each dimension compo-
---    nent d attempt to reduce as much as possible the number of dimen-
---    sion variables, the size of its exponents, and the number of negative
---    exponents.
-
-type UnitSet = S.Set UnitInfo
-type Dim = M.Map UnitInfo Integer
-type Sub = M.Map UnitInfo Dim
-
-removeZeroes :: Dim -> Dim
-removeZeroes = M.filterWithKey f
-  where
-    f _ 0           = False
-    f UnitlessVar _ = False
-    f UnitlessLit _ = False
-    f _ _           = True
-
-getUnitPow :: UnitInfo -> (UnitInfo, Integer)
-getUnitPow (UnitPow u p) = (u', floor p * p')
-  where (u', p') = getUnitPow u
-getUnitPow u = (u, 1)
-
-identDim :: Dim
-identDim = M.empty
-
-isIdentDim :: Dim -> Bool
-isIdentDim = M.null . removeZeroes
-
-dimFromUnitInfos :: [UnitInfo] -> Dim
-dimFromUnitInfos = dimFromList . map getUnitPow
-
-dimFromUnitInfo :: UnitInfo -> Dim
-dimFromUnitInfo = dimFromUnitInfos . flattenUnits
-
-dimToUnitInfos :: Dim -> [UnitInfo]
-dimToUnitInfos = map (\ (u, p) -> UnitPow u (fromInteger p)) . M.toList
-
-dimToUnitInfo :: Dim -> UnitInfo
-dimToUnitInfo = foldUnits . dimToUnitInfos
-
-dimToConstraint :: Dim -> Constraint
-dimToConstraint = ConEq UnitlessLit . dimToUnitInfo
-
-dimFromList :: [(UnitInfo, Integer)] -> Dim
-dimFromList = removeZeroes . M.fromListWith (+)
-
-subFromList :: [(UnitInfo, Dim)] -> Sub
-subFromList = foldl' composeSubs identSub . map (uncurry M.singleton)
-
-subToList :: Sub -> [(UnitInfo, UnitInfo)]
-subToList = map (fmap dimToUnitInfo) . M.toList
-
-identSub :: Sub
-identSub = M.empty
-
-identSubWith :: [UnitInfo] -> Sub
-identSubWith = M.fromList . map (\ u -> (u, dimFromList [(u, 1)]))
-
-applySub :: Sub -> Dim -> Dim
-applySub sub dim =
-  removeZeroes $ M.unionsWith (+) [ M.map (*p) (M.singleton ui 1 `fromMaybe` M.lookup ui sub) | (ui, p) <- M.toList dim ]
-
-composeSubs :: Sub -> Sub -> Sub
-composeSubs sub1 sub2 = M.map (applySub sub1) (M.unionWith (curry snd) ident1 sub2)
-  where
-    ident1 = identSubWith (M.keys sub1)
-
--- = M.unionWith ((removeZeroes .) . M.unionWith (*))
-
-prop_composition :: Dim -> Sub -> Sub -> Bool
-prop_composition d s1 s2 = applySub s1 (applySub s2 d) == applySub (composeSubs s1 s2) d
-
-freeDimVars :: Dim -> [UnitInfo]
-freeDimVars = filter isVar . M.keys
-  where
-    isVar (UnitParamPosAbs {}) = True
-    isVar (UnitParamPosUse {}) = True
-    isVar (UnitParamVarAbs {}) = True
-    isVar (UnitParamVarUse {}) = True
-    isVar (UnitParamLitAbs {}) = True
-    isVar (UnitParamLitUse {}) = True
-    isVar (UnitLiteral {})     = True
-    isVar (UnitVar {})         = True
-    isVar _                    = False
-
--- Kennedy Fig 3.4
-dimSimplify :: UnitSet -> Dim -> Sub
-dimSimplify excludes dim
-  | null valids = identSub
-
-  | (u, x):_ <- valids, x < 0
-  , sub1     <- M.singleton u (M.singleton u (-1))
-  , sub2     <- dimSimplify excludes (applySub sub1 dim) = tr $ composeSubs sub2 sub1
-
-  | (u, x):[] <- valids = tr $ M.singleton u (dimFromList ((u, 1):[(v, -div y x) | (v, y) <- invals]))
-
-  | (u, x):_ <- valids
-  , sub1     <- M.singleton u (dimFromList ((u, 1):[(v, -div y x) | (v, y) <- M.toList dim, v /= u]))
-  , sub2     <- dimSimplify excludes (applySub sub1 dim) = tr $ composeSubs sub2 sub1
-
-  where
-    valids   = sortBy (comparing (abs . snd)) . filter ((`S.notMember` excludes) . fst) $ M.toList dim
-    validSet = S.fromList (map fst valids)
-    invals   = filter ((`S.notMember` validSet) . fst) $ M.toList dim
-    -- tr x = trace ("\ndimSimplify (" ++ show excludes ++ ") (" ++ show dim ++ ") = " ++ show x ++ "\nvalids = "++show valids++"\n\n") x
-    tr x = x
-testVar x = UnitVar (x, x)
-
-u0 = testVar "u0"
-u1 = testVar "u1"
-u2 = testVar "u2"
-u3 = testVar "u3"
-u4 = testVar "u4"
-
-dim1 = dimFromList [(u1, 6), (u2, 15), (u3, -7), (u4, 12)]
-
-test1 = applySub (dimSimplify (S.fromList [u3,u4]) dim1) dim1 == dimFromList [(u2, 3), (u3, 2)]
-
-test2 =  (dimSimplify (S.fromList [u0]) (dimFromList [(u0, 1), (u1, -2)]))
-
---------------------------------------------------
-
--- can the constraints solved by Z3 be modified to include a
--- disjunction for each parametric polymorphic unit variable
--- suggesting that it could be a RHS unit but it's okay for it to be
--- equal to another RHS unit if the solver determines that?
-
-
---------------------------------------------------
-
--- I can't generate a new RHS unit for every possible parametric
--- polymorphic unit. That would overwhelm the solver. This needs to be
--- done with subproblems.
