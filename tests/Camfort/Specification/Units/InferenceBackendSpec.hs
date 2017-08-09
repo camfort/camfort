@@ -8,11 +8,15 @@ import qualified Test.Hspec as Test
 import Camfort.Specification.Units.Environment
 import Camfort.Specification.Units.InferenceBackendSBV ( criticalVariables, inconsistentConstraints, inferVariables )
 import Camfort.Specification.Units.InferenceBackend ( flattenConstraints, shiftTerms )
-import Camfort.Specification.Units.BackendTypes (constraintToDim, dimParamEq, Dim, dimFromList)
+import Camfort.Specification.Units.BackendTypes (constraintToDim, dimParamEq, Dim, dimFromList, prop_composition)
 import Data.Maybe (fromJust)
+import Test.QuickCheck
 
 spec :: Test.Spec
 spec = do
+  describe "Backend Types" $
+    it "Substitution composition" $ property $
+      prop_composition
   describe "Flatten constraints" $
     it "testCons1" $
       flattenConstraints testCons1 `shouldBe` testCons1_flattened
@@ -46,6 +50,11 @@ spec = do
   describe "Check that (restricted) double to ratios is consistent" $
     it "test all in -10/-10 ... 10/10, apart from /0" $
       and [testDoubleToRationalSubset x y | x <- [-10..10], y <- [-10..10]]
+
+instance Arbitrary UnitInfo where
+  arbitrary = do
+    name <- arbitrary
+    return $ UnitVar (name, name)
 
 testCons1 = [ ConEq (UnitName "kg") (UnitName "m")
             , ConEq (UnitVar ("x", "x")) (UnitName "m")
