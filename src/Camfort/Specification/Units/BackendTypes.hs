@@ -16,17 +16,18 @@
 
 {-# LANGUAGE TupleSections #-}
 {-# LANGUAGE ScopedTypeVariables #-}
+{-# LANGUAGE PatternGuards #-}
 
 module Camfort.Specification.Units.BackendTypes
   ( UnitSet, Dim, Sub, identDim, isIdentDim, dimFromUnitInfo, dimFromUnitInfos, dimToUnitInfo, dimToUnitInfos
   , subFromList, subToList, identSub, applySub, composeSubs, prop_composition, freeDimVars, dimSimplify
-  , dimToConstraint )
+  , dimToConstraint, constraintToDim, dimMultiply, dimRaisePow, dimParamEq, dimFromList )
 where
 
 import qualified Data.Map.Strict as M
 import qualified Data.Set as S
-import Camfort.Specification.Units.Environment (UnitInfo(..), Constraint(..), flattenUnits, foldUnits)
-import Data.List (foldl', sortBy)
+import Camfort.Specification.Units.Environment (UnitInfo(..), Constraint(..), flattenUnits, foldUnits, unitParamEq)
+import Data.List (partition, foldl', foldl1', sortBy, maximumBy)
 import Data.Ord (comparing)
 import Data.Maybe (fromMaybe)
 
@@ -80,6 +81,52 @@ dimToUnitInfos = map (\ (u, p) -> UnitPow u (fromInteger p)) . M.toList
 -- | Convert a Dim into a UnitInfo.
 dimToUnitInfo :: Dim -> UnitInfo
 dimToUnitInfo = foldUnits . dimToUnitInfos
+
+-- | Convert a Constraint into a Dim where lhs/rhs = 1. Also normalise
+-- the powers by dividing by the gcd and making the largest absolute
+-- value power be positive.
+constraintToDim :: Constraint -> Dim
+constraintToDim (ConEq lhs rhs) = normalise (dimFromUnitInfo lhs `dimMultiply` dimRaisePow (-1) (dimFromUnitInfo rhs))
+  where
+    normalise dim
+      | M.null dim = dim
+      | otherwise  = M.map (`div` divisor) dim
+      where
+        divisor = (maxPow `div` abs(maxPow)) * gcds (M.elems dim)
+        maxPow  = maximumBy (comparing abs) (M.elems dim)
+
+    gcds []  = 1
+    gcds [x] = x
+    gcds xs  = foldl1' gcd xs
+
+-- | Multiply two Dims
+dimMultiply :: Dim -> Dim -> Dim
+dimMultiply d1 d2 = removeZeroes $ M.unionWith (+) d1 d2
+
+-- | Raise the dimension to the given power
+dimRaisePow :: Integer -> Dim -> Dim
+dimRaisePow 0 d = identDim
+dimRaisePow k d = M.map (* k) d
+
+-- | Compare two Dims, not minding the difference between
+-- UnitParam*Abs and UnitParam*Use versions of the polymorphic
+-- constructors. Varies from a 'constraint parametric equality'
+-- operator because it doesn't assume that dimRaisePow can be used
+-- arbitrarily. You may want a constraint parametric equality (TODO).
+dimParamEq :: Dim -> Dim -> Bool
+dimParamEq d1 d2 = dimParamEq' (M.toList d1) (M.toList d2)
+
+dimParamEq' :: [(UnitInfo, Integer)] -> [(UnitInfo, Integer)] -> Bool
+dimParamEq' [] []             = True
+dimParamEq' [] _              = False
+dimParamEq' ((u1, p1):d1') d2 = case partition (unitParamEq u1 . fst) d2 of
+  ((u2, p2):d2', d2'') -> dimParamEq' (rem1 ++ d1') (rem2 ++ d2' ++ d2'')
+    where
+      (rem1, rem2) | p1 == p2 = ([], [])
+                   | p1 < p2  = ([], [(u2, p2 - p1)])
+                   | p1 > p2  = ([(u1, p1 - p2)], [])
+
+  _                    -> False
 
 -- | Create a constraint that the given Dim is equal to the identity unit.
 dimToConstraint :: Dim -> Constraint
@@ -168,6 +215,7 @@ u3 = testVar "u3"
 u4 = testVar "u4"
 
 dim1 = dimFromList [(u1, 6), (u2, 15), (u3, -7), (u4, 12)]
+dim2 = dimFromList [(u1, 2), (u2, 15), (u3, -9)]
 
 test1 = applySub (dimSimplify (S.fromList [u3,u4]) dim1) dim1 == dimFromList [(u2, 3), (u3, 2)]
 
