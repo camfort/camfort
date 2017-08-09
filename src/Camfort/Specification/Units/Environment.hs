@@ -46,6 +46,7 @@ import           Data.List
 import           Data.Ratio
 import           GHC.Generics (Generic)
 import           Text.Printf
+import           Control.Arrow (first, second)
 
 import qualified Language.Fortran.AST as F
 import qualified Camfort.Specification.Units.Parser.Types as P
