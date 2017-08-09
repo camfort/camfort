@@ -33,7 +33,7 @@ unitsCriticalsReportIs fileName expectedReport = do
   incDir <- getCurrentDirectory
   let modFiles = emptyModFiles
   [(pf,_)] <- readParseSrcDir modFiles file []
-  let report = analysisResult $ runUnitsAnalysis inferCriticalVariables uOpts modFiles pf
+  report <- analysisResult <$> runUnitsAnalysis inferCriticalVariables uOpts modFiles pf
   show report `shouldBe` expectedReport
   where uOpts = unitOpts0 { uoDebug = False, uoLiterals = LitMixed }
 

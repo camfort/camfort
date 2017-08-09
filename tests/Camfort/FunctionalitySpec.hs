@@ -8,7 +8,11 @@ import System.IO.Temp   (withSystemTempDirectory)
 import           Test.Hspec hiding (Spec)
 import qualified Test.Hspec as Test
 
-import Camfort.Functionality (camfortInitialize, stencilsInfer, unitsCheck)
+import Camfort.Functionality
+  ( AnnotationType(ATDefault)
+  , camfortInitialize
+  , stencilsInfer
+  , unitsCheck, unitsInfer, unitsSynth )
 import Camfort.Specification.Units.Monad (LiteralsOpt(LitMixed))
 
 spec :: Test.Spec
@@ -16,42 +20,107 @@ spec = do
   describe "camfortInitialize" $
     it "creates a .camfort directory" $
       withSystemTempDirectory "camfort-test-tmp"
-        (\d -> (camfortInitialize d >> doesDirectoryExist (d </> ".camfort")))
+        (\d -> camfortInitialize d >> doesDirectoryExist (d </> ".camfort"))
       `shouldReturn` True
   describe "units-check" $
-    it "correctly detects basic cross-module inconsistent" $
-      unitsCheckTestCrossModuleInconsistBasic `shouldReturn` unitsCheckTestCrossModuleInconsistBasicReport
+    it "correctly detects basic cross-module inconsistent"
+      unitsCheckTestCrossModuleInconsistBasic
+  describe "units-infer" $
+    it "shows consistency error with inconsistent program"
+      unitsInferTestCrossModuleInconsistBasic
+  describe "units-synth" $
+    it "correct synth output with basic, consistent file"
+      unitsSynthTestBasic
   describe "stencils-infer" $
-    it "correctly infers with basic cross-module" $
-      stencilsInferTestCrossModuleBasic `shouldReturn` stencilsInferCrossModuleBasicReport
+    it "correctly infers with basic cross-module"
+      stencilsInferTestCrossModuleBasic
 
-unitsCheckTestCrossModuleInconsistBasic :: IO String
-unitsCheckTestCrossModuleInconsistBasic =
+analysisWithTmpFilesTest
+  :: FilePath -> [FilePath] -> FilePath
+  -> (FilePath -> Maybe FilePath -> [t] -> IO a)
+  -> (FilePath -> String)
+  -> Expectation
+analysisWithTmpFilesTest dir files file analysis expected =
   withSystemTempDirectory "camfort-test-tmp"
   (\d -> do
-      copyFile (unitsFixturesModuleDir </> "crossmoduleuser.f90") (d </> "crossmoduleuser.f90")
-      copyFile (unitsFixturesModuleDir </> "crossmoduleprovider.f90") (d </> "crossmoduleprovider.f90")
-      (unlines . tail. tail . tail . lines) <$> capture_ (unitsCheck (d </> "crossmoduleuser.f90") (Just d) [] LitMixed False))
-  where unitsFixturesModuleDir =
-          "tests" </> "fixtures" </> "Specification" </> "Units" </> "cross-module-a"
+      mapM_ (\fname -> copyFile (dir </> fname) (d </> fname)) files
+      let actFile = d </> file
+      res <- capture_ $ analysis actFile (Just d) []
+      res `shouldBe` expected actFile)
 
-unitsCheckTestCrossModuleInconsistBasicReport :: String
-unitsCheckTestCrossModuleInconsistBasicReport =
-  " - at 7:3: 'literal' should have unit 'm'\n\
+fixturesDir :: FilePath
+fixturesDir = "tests" </> "fixtures" </> "Specification"
+
+unitsFixturesDir :: FilePath
+unitsFixturesDir = fixturesDir </> "Units"
+
+unitsWithTmpFilesTest
+  :: FilePath -> [FilePath] -> FilePath
+  -> (FilePath -> Maybe FilePath -> [t] -> LiteralsOpt -> Bool -> IO a)
+  -> (FilePath -> String)
+  -> Expectation
+unitsWithTmpFilesTest dir files file analysis =
+  analysisWithTmpFilesTest dir files file analysis'
+  where analysis' inSrc incDir excludes = analysis inSrc incDir excludes LitMixed False
+
+basicUnitsCrossModuleTestHelper
+  :: (FilePath -> Maybe FilePath -> [t] -> LiteralsOpt -> Bool -> IO a)
+  -> (FilePath -> String)
+  -> Expectation
+basicUnitsCrossModuleTestHelper =
+  unitsWithTmpFilesTest unitsFixturesModuleDir
+    ["crossmoduleuser.f90", "crossmoduleprovider.f90"] "crossmoduleuser.f90"
+  where unitsFixturesModuleDir = unitsFixturesDir </> "cross-module-a"
+
+unitsCheckTestCrossModuleInconsistBasic :: Expectation
+unitsCheckTestCrossModuleInconsistBasic =
+  basicUnitsCrossModuleTestHelper unitsCheck unitsCheckTestCrossModuleInconsistBasicReport
+
+unitsInferTestCrossModuleInconsistBasic :: Expectation
+unitsInferTestCrossModuleInconsistBasic =
+  basicUnitsCrossModuleTestHelper unitsInfer unitsInferTestCrossModuleInconsistBasicReport
+
+unitsSynthTestBasic :: Expectation
+unitsSynthTestBasic =
+  unitsWithTmpFilesTest unitsFixturesDir
+    ["example-simple-1.f90"] "example-simple-1.f90" unitsSynth' unitsSynthBasicReport
+  where unitsSynth' inSrc incDir excludes m debug =
+          unitsSynth inSrc incDir excludes m debug inSrc ATDefault
+
+unitsCheckTestCrossModuleInconsistBasicReport :: FilePath -> String
+unitsCheckTestCrossModuleInconsistBasicReport fp =
+  "Checking units for '" ++ fp ++ "'\n\n" ++
+  fp ++ ": Inconsistent:\n\
+  \ - at 7:3: 'literal' should have unit 'm'\n\
   \ - at 7:3: 'parameter 1 to add' should have unit 'm'\n\
   \ - at 8:3: 'literal' should have unit 's'\n\
   \ - at 9:3: 'z' should have the same units as 'result of add'\n\n"
 
-stencilsInferTestCrossModuleBasic :: IO String
-stencilsInferTestCrossModuleBasic =
-  withSystemTempDirectory "camfort-test-tmp"
-  (\d -> do
-      copyFile (stencilsFixturesModuleDir </> "user.f90") (d </> "user.f90")
-      copyFile (stencilsFixturesModuleDir </> "provider.f90") (d </> "provider.f90")
-      (unlines . tail . tail . tail . lines) <$> capture_ (stencilsInfer (d </> "user.f90") (Just d) [] False))
-  where stencilsFixturesModuleDir =
-          "tests" </> "fixtures" </> "Specification" </> "Stencils" </> "cross-module-a"
+unitsInferTestCrossModuleInconsistBasicReport :: FilePath -> String
+unitsInferTestCrossModuleInconsistBasicReport fp =
+  "Inferring units for '" ++ fp ++ "'\n\n" ++
+  fp ++ ": Inconsistent:\n\
+  \ - at 7:3: 'literal' should have unit 'm'\n\
+  \ - at 7:3: 'parameter 1 to add' should have unit 'm'\n\
+  \ - at 8:3: 'literal' should have unit 's'\n\
+  \ - at 9:3: 'z' should have the same units as 'result of add'\n\n"
 
-stencilsInferCrossModuleBasicReport :: String
-stencilsInferCrossModuleBasicReport =
-  "(7:6)-(7:16)    stencil readOnce, pointed(dim=1) :: b\n"
+unitsSynthBasicReport :: FilePath -> String
+unitsSynthBasicReport fp =
+  "Synthesising units for '" ++ fp ++ "'\n" ++
+  "Writing " ++ fp ++ "\n\n" ++
+  fp ++ ":\n" ++
+  "  3:14 unit s :: x\n\
+  \  3:17 unit s :: y\n\n"
+
+stencilsInferTestCrossModuleBasic :: Expectation
+stencilsInferTestCrossModuleBasic =
+  analysisWithTmpFilesTest stencilsFixturesModuleDir
+    ["user.f90", "provider.f90"] "user.f90" stencilsInfer' stencilsInferCrossModuleBasicReport
+  where stencilsFixturesModuleDir = fixturesDir </> "Stencils" </> "cross-module-a"
+        stencilsInfer' inSrc incDir excludes = stencilsInfer inSrc incDir excludes False
+
+stencilsInferCrossModuleBasicReport :: FilePath -> String
+stencilsInferCrossModuleBasicReport fp =
+  "Inferring stencil specs for '" ++ fp ++ "'\n\n" ++
+  fp ++ "\n(7:6)-(7:16)    stencil readOnce, pointed(dim=1) :: b\n"

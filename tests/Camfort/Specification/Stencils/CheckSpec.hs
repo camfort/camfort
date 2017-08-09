@@ -125,17 +125,19 @@ spec =
           \                stencil readOnce, pointed(dim=1) :: a\n"
 
 checkText text =
-  either (error "received test input with invalid syntax")
-     (analysisResult . runSimpleAnalysis stencilChecking emptyModFiles . getBlocks . fmap (const unitAnnotation))
+  either (fail "received test input with invalid syntax")
+     (fmap analysisResult . runSimpleAnalysis stencilChecking emptyModFiles . getBlocks . fmap (const unitAnnotation))
   $ fortranParser text "example"
   where getBlocks = FAB.analyseBBlocks . FAR.analyseRenames . FA.initAnalysis . fmap SA.mkStencilAnnotation
 
-runCheck :: String -> CheckResult
+runCheck :: String -> IO CheckResult
 runCheck = checkText . BS.packChars
 
 checkTestShow :: String -> String -> String -> SpecWith ()
 checkTestShow exampleText testDescription expected =
-  it testDescription $ show (runCheck exampleText) `shouldBe` expected
+  it testDescription $ do
+    res <- runCheck exampleText
+    show res `shouldBe` expected
 
 exampleUnusedRegion :: String
 exampleUnusedRegion =

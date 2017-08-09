@@ -22,33 +22,44 @@
 {-# LANGUAGE ScopedTypeVariables #-}
 
 module Camfort.Specification.Units.InferenceBackend
-  ( inferVariables
+  ( chooseImplicitNames
+  , inferVariables
   -- mainly for debugging and testing:
-  , shiftTerms, flattenConstraints, flattenUnits, constraintsToMatrix, constraintsToMatrices
-  , rref, genUnitAssignments )
-where
+  , shiftTerms
+  , flattenConstraints
+  , flattenUnits
+  , constraintsToMatrix
+  , constraintsToMatrices
+  , rref
+  , genUnitAssignments
+  ) where
 
-import Data.Tuple (swap)
-import Data.Maybe (maybeToList)
-import Data.List ((\\), findIndex, partition, sortBy, group, tails)
-import Data.Generics.Uniplate.Operations (rewrite)
-import Control.Monad
-import Control.Monad.ST
-import Control.Arrow (first, second)
-import qualified Data.Map.Strict as M
+import           Control.Arrow (first, second)
+import           Control.Monad
+import           Control.Monad.ST
 import qualified Data.Array as A
-
-import Camfort.Specification.Units.Environment
-
-import Numeric.LinearAlgebra (
-    atIndex, (<>), rank, (?), rows, cols,
-    takeColumns, dropRows, subMatrix, diag, fromBlocks,
-    ident,
+import           Data.Generics.Uniplate.Operations
+  (rewrite, transformBi, universeBi)
+import           Data.List
+  ((\\), findIndex, inits, nub, partition, sortBy, group, tails)
+import qualified Data.Map.Strict as M
+import           Data.Maybe (fromMaybe)
+import           Data.Tuple (swap)
+import           Numeric.LinearAlgebra
+  ( atIndex, (<>)
+  , rank, (?)
+  , rows, cols
+  , subMatrix, diag
+  , fromBlocks, ident
   )
 import qualified Numeric.LinearAlgebra as H
-import Numeric.LinearAlgebra.Devel (
-    newMatrix, readMatrix, writeMatrix, runSTMatrix, freezeMatrix, STMatrix
+import           Numeric.LinearAlgebra.Devel
+  ( newMatrix, readMatrix
+  , writeMatrix, runSTMatrix
+  , freezeMatrix, STMatrix
   )
+
+import Camfort.Specification.Units.Environment
 
 -- | Returns list of formerly-undetermined variables and their units.
 inferVariables :: Constraints -> [(VV, UnitInfo)]
@@ -299,3 +310,23 @@ findInconsistentRows coA augA = [0..(rows augA - 1)] \\ consistent
 
 extractRows = flip (?) -- hmatrix 0.17 changed interface
 m @@> i = m `atIndex` i
+
+-- | Create unique names for all of the inferred implicit polymorphic
+-- unit variables.
+chooseImplicitNames :: [(VV, UnitInfo)] -> [(VV, UnitInfo)]
+chooseImplicitNames vars = replaceImplicitNames (genImplicitNamesMap vars) vars
+
+genImplicitNamesMap :: Data a => a -> M.Map UnitInfo UnitInfo
+genImplicitNamesMap x = M.fromList [ (absU, UnitParamEAPAbs (newN, newN)) | (absU, newN) <- zip absUnits newNames ]
+  where
+    absUnits = nub [ u | u@(UnitParamPosAbs _)             <- universeBi x ]
+    eapNames = nub $ [ n | u@(UnitParamEAPAbs (_, n))      <- universeBi x ] ++
+                     [ n | u@(UnitParamEAPUse ((_, n), _)) <- universeBi x ]
+    newNames = filter (`notElem` eapNames) . map ('\'':) $ nameGen
+    nameGen  = concatMap sequence . tail . inits $ repeat ['a'..'z']
+
+replaceImplicitNames :: Data a => M.Map UnitInfo UnitInfo -> a -> a
+replaceImplicitNames implicitMap = transformBi replace
+  where
+    replace u@(UnitParamPosAbs _) = fromMaybe u $ M.lookup u implicitMap
+    replace u                     = u

@@ -164,75 +164,75 @@ spec =
       it "isomorphism" $ property prop_extract_synth_inverse
 
     describe "Inconsistent induction variable usage tests" $ do
-      it "consistent (1) a(i,j) = b(i+1,j+1) + b(i,j)" $
-        indicesToSpec' ["i", "j"]
-                       [Neighbour "i" 0, Neighbour "j" 0]
-                       [[offsetToIx "i" 1, offsetToIx "j" 1],
-                        [offsetToIx "i" 0, offsetToIx "j" 0]]
-         `shouldBe` (Just $ Specification (Once $ Exact
+      it "consistent (1) a(i,j) = b(i+1,j+1) + b(i,j)" $ do
+        res <- indicesToSpec' ["i", "j"]
+               [Neighbour "i" 0, Neighbour "j" 0]
+               [[offsetToIx "i" 1, offsetToIx "j" 1],
+                 [offsetToIx "i" 0, offsetToIx "j" 0]]
+        res `shouldBe` (Just $ Specification (Once $ Exact
                        (Spatial
                          (Sum [Product [Forward 1 1 False, Forward 1 2 False],
                                Product [Centered 0 1 True, Centered 0 2 True]]))) True)
       it "consistent (2) a(i,c,j) = b(i,j+1) + b(i,j) \
-                        \:: forward(depth=1,dim=2)*pointed(dim=1)" $
-        indicesToSpec' ["i", "j"]
-                        [Neighbour "i" 0, Constant (F.ValInteger "0"), Neighbour "j" 0]
-                        [[offsetToIx "i" 0, offsetToIx "j" 1],
-                         [offsetToIx "i" 0, offsetToIx "j" 0]]
-         `shouldBe` (Just $ Specification (Once $ Exact
+                        \:: forward(depth=1,dim=2)*pointed(dim=1)" $ do
+        res <- indicesToSpec' ["i", "j"]
+               [Neighbour "i" 0, Constant (F.ValInteger "0"), Neighbour "j" 0]
+               [[offsetToIx "i" 0, offsetToIx "j" 1],
+                 [offsetToIx "i" 0, offsetToIx "j" 0]]
+        res `shouldBe` (Just $ Specification (Once $ Exact
                        (Spatial
                          (Sum [Product [Centered 0 1 True, Forward 1 2 True]]))) True)
 
       it "consistent (3) a(i+1,c,j) = b(j,i+1) + b(j,i) \
-                        \:: backward(depth=1,dim=2)*pointed(dim=1)" $
-        indicesToSpec' ["i", "j"]
-                        [Neighbour "i" 1, Constant (F.ValInteger "0"), Neighbour "j" 0]
-                        [[offsetToIx "j" 0, offsetToIx "i" 1],
-                         [offsetToIx "j" 0, offsetToIx "i" 0]]
-         `shouldBe` (Just $ Specification (Once $ Exact
+                        \:: backward(depth=1,dim=2)*pointed(dim=1)" $ do
+        res <- indicesToSpec' ["i", "j"]
+               [Neighbour "i" 1, Constant (F.ValInteger "0"), Neighbour "j" 0]
+               [[offsetToIx "j" 0, offsetToIx "i" 1],
+                 [offsetToIx "j" 0, offsetToIx "i" 0]]
+        res `shouldBe` (Just $ Specification (Once $ Exact
                        (Spatial
                          (Sum [Product [Centered 0 1 True, Backward 1 2 True]]))) True)
 
       it "consistent (4) a(i+1,j) = b(0,i+1) + b(0,i) \
-                         \:: backward(depth=1,dim=2)" $
-        indicesToSpec' ["i", "j"]
-                        [Neighbour "i" 1, Neighbour "j" 0]
-                        [[offsetToIx "j" absoluteRep, offsetToIx "i" 1],
-                         [offsetToIx "j" absoluteRep, offsetToIx "i" 0]]
-         `shouldBe` (Just $ Specification (Once $ Exact
+                         \:: backward(depth=1,dim=2)" $ do
+        res <- indicesToSpec' ["i", "j"]
+               [Neighbour "i" 1, Neighbour "j" 0]
+               [[offsetToIx "j" absoluteRep, offsetToIx "i" 1],
+                 [offsetToIx "j" absoluteRep, offsetToIx "i" 0]]
+        res `shouldBe` (Just $ Specification (Once $ Exact
                        (Spatial
                          (Sum [Product [Backward 1 2 True]]))) True)
 
       it "consistent (5) a(i) = b(i,i+1) \
-                        \:: pointed(dim=1)*forward(depth=1,dim=2,nonpointed)" $
-        indicesToSpec' ["i", "j"]
-                        [Neighbour "i" 0]
-                        [[offsetToIx "i" 0, offsetToIx "i" 1]]
-         `shouldBe` (Just $ Specification (Once $ Exact
+                        \:: pointed(dim=1)*forward(depth=1,dim=2,nonpointed)" $ do
+        res <- indicesToSpec' ["i", "j"]
+               [Neighbour "i" 0]
+               [[offsetToIx "i" 0, offsetToIx "i" 1]]
+        res `shouldBe` (Just $ Specification (Once $ Exact
                        (Spatial
                          (Sum [Product [Centered 0 1 True,
                                         Forward 1 2 False]]))) True)
 
       it "consistent (6) a(i) = b(i) + b(0) \
-                        \:: pointed(dim=1)" $
-        indicesToSpec' ["i", "j"]
-                        [Neighbour "i" 0]
-                        [[offsetToIx "i" 0], [offsetToIx "i" absoluteRep]]
-         `shouldBe` Nothing
+                        \:: pointed(dim=1)" $ do
+        res <- indicesToSpec' ["i", "j"]
+               [Neighbour "i" 0]
+               [[offsetToIx "i" 0], [offsetToIx "i" absoluteRep]]
+        res `shouldBe` Nothing
 
-      it "inconsistent (1) RHS" $
-        indicesToSpec' ["i", "j"]
-                        [Neighbour "i" 0, Neighbour "j" 0]
-                        [[offsetToIx "i" 1, offsetToIx "j" 1],
-                         [offsetToIx "j" 0, offsetToIx "i" 0]]
-         `shouldBe` Nothing
+      it "inconsistent (1) RHS" $ do
+        res <- indicesToSpec' ["i", "j"]
+               [Neighbour "i" 0, Neighbour "j" 0]
+               [[offsetToIx "i" 1, offsetToIx "j" 1],
+                 [offsetToIx "j" 0, offsetToIx "i" 0]]
+        res `shouldBe` Nothing
 
-      it "inconsistent (2) RHS to LHS" $
-        indicesToSpec' ["i", "j"]
-                        [Neighbour "i" 0]
-                        [[offsetToIx "i" 1, offsetToIx "j" 1],
-                         [offsetToIx "j" 0, offsetToIx "i" 0]]
-         `shouldBe` Nothing
+      it "inconsistent (2) RHS to LHS" $ do
+        res <- indicesToSpec' ["i", "j"]
+               [Neighbour "i" 0]
+               [[offsetToIx "i" 1, offsetToIx "j" 1],
+                 [offsetToIx "j" 0, offsetToIx "i" 0]]
+        res `shouldBe` Nothing
 
     -------------------------
     -- Some integration tests
@@ -242,8 +242,9 @@ spec =
     [(program,_)] <- runIO $ readParseSrcDir emptyModFiles example2In []
 
     describe "integration test on inference for example2.f" $ do
-      it "stencil infer" $
-         show (runSingleFileAnalysis (infer False '=') program)
+      it "stencil infer" $ do
+        res <- runSingleFileAnalysis (infer False '=') program
+        show res
            `shouldBe`
            "\ntests/fixtures/Specification/Stencils/example2.f\n\
             \(32:7)-(32:26)    stencil readOnce, backward(depth=1, dim=1) :: a\n\
@@ -251,8 +252,9 @@ spec =
             \(24:8)-(24:53)    stencil readOnce, pointed(dim=1)*centered(depth=1, dim=2) \
                                      \+ centered(depth=1, dim=1)*pointed(dim=2) :: a"
 
-      it "stencil check" $
-         show (runSingleFileAnalysis check program)
+      it "stencil check" $ do
+        res <- runSingleFileAnalysis check program
+        show res
            `shouldBe`
            "\ntests/fixtures/Specification/Stencils/example2.f\n\
             \(23:1)-(23:78)    Correct.\n(31:1)-(31:56)    Correct."
@@ -261,8 +263,9 @@ spec =
     [(program,_)] <- runIO $ readParseSrcDir emptyModFiles example4In []
 
     describe "integration test on inference for example4.f" $
-      it "stencil infer" $
-         show (analysisResult $ runSimpleAnalysis (infer False '=') emptyModFiles program)
+      it "stencil infer" $ do
+         res <- analysisResult <$> runSimpleAnalysis (infer False '=') emptyModFiles program
+         show res
            `shouldBe`
             "\ntests/fixtures/Specification/Stencils/example4.f\n\
              \(6:8)-(6:33)    stencil readOnce, pointed(dim=1) :: x"
@@ -367,16 +370,17 @@ spec =
             let file = fixturesDir </> fileName
             programs <- runIO $ readParseSrcDir emptyModFiles file []
             let [(program,_)] = programs
-            it testComment $ (show . analysisResult . runSimpleAnalysis check emptyModFiles $ program)
-              `shouldBe` expected
+            it testComment $ do
+              res <- analysisResult <$> runSimpleAnalysis check emptyModFiles program
+              show res `shouldBe` expected
 
         assertStencilInference :: Bool -> FilePath -> String -> Expectation
         assertStencilInference useEval fileName expected =
           let file         = fixturesDir </> fileName
           in do
             [(program,_)] <- readParseSrcDir emptyModFiles file []
-            (show . analysisResult . runSimpleAnalysis (infer useEval '=') emptyModFiles $ program)
-              `shouldBe` expected
+            res <- analysisResult <$> runSimpleAnalysis (infer useEval '=') emptyModFiles program
+            show res `shouldBe` expected
 
         assertStencilSynthDir expected dir fileName testComment =
           let file         = dir </> fileName
@@ -387,9 +391,10 @@ spec =
             program          <- runIO $ readParseSrcDir modFiles file []
             programSrc       <- runIO $ readFile file
             synthExpectedSrc <- runIO $ readFile expectedFile
-            it testComment $
-               map (B.unpack . runIdentity . flip (reprint (refactoring version)) (B.pack programSrc))
-                 (snd . analysisResult . runSimpleAnalysis (synth '=') modFiles . fmap fst $ program)
+            it testComment $ do
+              res <- analysisResult <$> runSimpleAnalysis (synth '=') modFiles (fmap fst $ program)
+              map (B.unpack . runIdentity . flip (reprint (refactoring version)) (B.pack programSrc))
+                 (snd res)
                 `shouldBe` [synthExpectedSrc]
 
         assertStencilSynthOnFile = assertStencilSynthDir
@@ -403,8 +408,9 @@ spec =
             in do
               let modFiles = emptyModFiles
               program    <- runIO $ readParseSrcDir modFiles file []
-              it testComment $ (show . fst . analysisResult . runSimpleAnalysis (synth '=') modFiles . fmap fst $ program)
-                `shouldBe` expectedResponse
+              it testComment $ do
+                res <- analysisResult <$> runSimpleAnalysis (synth '=') modFiles (fmap fst program)
+                (show . fst $ res) `shouldBe` expectedResponse
 
         assertStencilSynthResponseOut fileName testComment expectedResponse =
           describe testComment $ do
@@ -418,8 +424,8 @@ spec =
           let oldExtension = takeExtension file
           in addExtension (replaceExtension file "expected") oldExtension
 
-runSingleFileAnalysis :: StencilsAnalysis a b -> a -> b
-runSingleFileAnalysis a = analysisResult . runSimpleAnalysis a emptyModFiles
+runSingleFileAnalysis :: StencilsAnalysis a b -> a -> IO b
+runSingleFileAnalysis a = fmap analysisResult . runSimpleAnalysis a emptyModFiles
 
 fixturesDir :: FilePath
 fixturesDir = "tests" </> "fixtures" </> "Specification" </> "Stencils"
@@ -431,7 +437,7 @@ inferReportWithMod modNames fileName expectedReport = do
       modPaths = fmap (fixturesDir </>) modNames
   modFiles <- mapM mkTestModFile modPaths
   [(pf,_)] <- readParseSrcDir modFiles file []
-  let report = analysisResult $ runStencilsAnalysis (infer False '=') modFiles pf
+  report <- analysisResult <$> runStencilsAnalysis (infer False '=') modFiles pf
   show report `shouldBe` expectedReport
 
 -- | Helper for producing a basic ModFile from a (terminal) module file.
@@ -475,15 +481,15 @@ instance (Arbitrary (Vec n a), Arbitrary a) => Arbitrary (Vec (S n) a) where
                    return $ Cons x xs
 
 test2DSpecVariation a b (input, expectation) =
-    it ("format=" ++ show input) $
-       -- Test inference
-       indicesToSpec' ["i", "j"] [a, b] (map fromFormatToIx input)
-          `shouldBe` Just expectedSpec
+    it ("format=" ++ show input) $ do
+      -- Test inference
+      res <- indicesToSpec' ["i", "j"] [a, b] (map fromFormatToIx input)
+      res `shouldBe` Just expectedSpec
   where
     expectedSpec = Specification expectation True
     fromFormatToIx [ri,rj] = [ offsetToIx "i" ri, offsetToIx "j" rj ]
 
-indicesToSpec' ivs lhs ixs = fst $ runStencilInferer (indicesToSpec "a" lhs ixs) ivs Gr.empty emptyModFiles
+indicesToSpec' ivs lhs ixs = fst <$> runStencilInferer (indicesToSpec "a" lhs ixs) ivs Gr.empty emptyModFiles
 
 variations =
   [ ( [ [0,0] ]
@@ -553,12 +559,12 @@ variationsRel =
   ]
 
 test3DSpecVariation (input, expectation) =
-    it ("format=" ++ show input) $
+    it ("format=" ++ show input) $ do
       -- Test inference
-      indicesToSpec' ["i", "j", "k"]
-                     [Neighbour "i" 0, Neighbour "j" 0, Neighbour "k" 0]
-                     (map fromFormatToIx input)
-           `shouldBe` Just expectedSpec
+      res <- indicesToSpec' ["i", "j", "k"]
+             [Neighbour "i" 0, Neighbour "j" 0, Neighbour "k" 0]
+             (map fromFormatToIx input)
+      res `shouldBe` Just expectedSpec
 
   where
     expectedSpec = Specification expectation True
