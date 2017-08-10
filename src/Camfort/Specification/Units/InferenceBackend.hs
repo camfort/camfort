@@ -23,6 +23,7 @@
 
 module Camfort.Specification.Units.InferenceBackend
   ( chooseImplicitNames
+  , criticalVariables
   , inferVariables
   -- mainly for debugging and testing:
   , shiftTerms
@@ -43,7 +44,7 @@ import           Data.Generics.Uniplate.Operations
 import           Data.List
   ((\\), findIndex, inits, nub, partition, sortBy, group, tails)
 import qualified Data.Map.Strict as M
-import           Data.Maybe (fromMaybe)
+import           Data.Maybe (fromMaybe, mapMaybe)
 import           Data.Tuple (swap)
 import           Numeric.LinearAlgebra
   ( atIndex, (<>)
@@ -308,3 +309,15 @@ replaceImplicitNames implicitMap = transformBi replace
   where
     replace u@(UnitParamPosAbs _) = fromMaybe u $ M.lookup u implicitMap
     replace u                     = u
+
+-- | Identifies the variables that need to be annotated in order for
+-- inference or checking to work.
+criticalVariables :: Constraints -> [UnitInfo]
+criticalVariables [] = []
+criticalVariables cons = filter (not . isUnitRHS) $ map (colA A.!) criticalIndices
+  where
+    (unsolvedM, _, colA)          = constraintsToMatrix cons
+    solvedM                       = rref unsolvedM
+    uncriticalIndices             = mapMaybe (findIndex (/= 0)) $ H.toLists solvedM
+    criticalIndices               = A.indices colA \\ uncriticalIndices
+    isUnitRHS (UnitName _)        = True; isUnitRHS _ = False

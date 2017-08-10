@@ -17,18 +17,14 @@ module Camfort.Specification.Units.Analysis.Criticals
   ) where
 
 import           Control.Monad.State (get)
-import qualified Data.Array            as A
 import           Data.Generics.Uniplate.Operations
-import           Data.List ((\\), findIndex)
 import qualified Data.Map.Strict       as M
-import           Data.Maybe (fromMaybe, mapMaybe)
-import qualified Numeric.LinearAlgebra as H
+import           Data.Maybe (fromMaybe)
 
 import Camfort.Analysis
-  (analysisInput, analysisModFiles, analysisParams, writeDebug)
+  (analysisInput, analysisModFiles, writeDebug)
 import Camfort.Analysis.Annotations
-import Camfort.Specification.Units.InferenceBackend
-  (constraintsToMatrix, rref)
+import Camfort.Specification.Units.InferenceBackend (criticalVariables)
 
 -- Provides the types and data accessors used in this module
 import           Camfort.Specification.Units.Analysis (UnitsAnalysis, runInference)
@@ -81,18 +77,6 @@ instance Show Criticals where
         declReport (v, (_, ss)) = vfilename ++ " (" ++ showSpanStart ss ++ ")    " ++ fromMaybe v (M.lookup v uniqnameMap)
           where vfilename = fromMaybe fname $ M.lookup v fromWhereMap
                 showSpanStart (FU.SrcSpan l _) = show l
-
--- | Identifies the variables that need to be annotated in order for
--- inference or checking to work.
-criticalVariables :: Constraints -> [UnitInfo]
-criticalVariables [] = []
-criticalVariables cons = filter (not . isUnitRHS) $ map (colA A.!) criticalIndices
-  where
-    (unsolvedM, _, colA)          = constraintsToMatrix cons
-    solvedM                       = rref unsolvedM
-    uncriticalIndices             = mapMaybe (findIndex (/= 0)) $ H.toLists solvedM
-    criticalIndices               = A.indices colA \\ uncriticalIndices
-    isUnitRHS (UnitName _)        = True; isUnitRHS _ = False
 
 -- | Return a list of critical variables as UnitInfo list (most likely
 -- to be of the UnitVar constructor).
