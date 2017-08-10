@@ -18,7 +18,8 @@ subroutine example(x, y, q, r)
   end do
 end subroutine example
 
-!= static_assert post(("x" <= "y" -> "min" = "x") & ("y" <= "x" -> "min" = "y"))
+!= static_assert post("x" <= "y" -> "min" = "x")
+!= static_assert post("y" <= "x" -> "min" = "y")
 integer function min(x, y)
   implicit none
 
@@ -50,7 +51,7 @@ integer function multiply(x, y)
 
   r = 0
   n = 0
-  != static_assert seq("d * l" = "x * y" & "n" = "0" & "r" = "0" & "n" <= "l")
+  != static_assert seq("l * d" = "x * y" & "n" = "0" & "r" = "0" & "n" <= "l")
   do while (n < l)
      != static_assert invariant("l * d" = "x * y" & "r" = "n * d" & "n" <= "l")
      r = r + d
@@ -59,3 +60,48 @@ integer function multiply(x, y)
 
   multiply = r
 end function multiply
+
+!= static_assert pre("x" >= "0")
+!= static_assert post("2 * halve " > "x - 2")
+!= static_assert post("2 * halve" <= "x")
+integer function halve(x)
+  implicit none
+
+  integer :: x
+  integer :: n, q
+
+  n = 2
+  q = 0
+
+  != static_assert seq("n" = "2" & "q" = "0" & "n" <= "x + 2")
+  do while (n <= x)
+     != static_assert invariant("n" <= "x + 2" & "2 * q" = "n - 2")
+     q = q + 1
+     n = n + 2
+  end do
+
+  halve = q
+end function halve
+
+! Performs (positive) integer division, rounded down.
+!= static_assert pre("x" >= "0" & "y" > "0")
+!= static_assert post("y * div" > "x - y")
+!= static_assert post("y * div" <= "x")
+integer function div(x, y)
+
+  integer :: x, y
+  integer :: n, q
+
+  n = y
+  q = 0
+
+  != static_assert seq("y" > "0" & "n" = "y" & "q" = "0" & "n" <= "x + y")
+  do while (n <= x)
+     != static_assert invariant("y" > "0" & "n" <= "x + y" & "y * q" = "n - y")
+     q = q + 1
+     n = n + y
+  end do
+
+  div = q
+
+end function div
