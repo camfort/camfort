@@ -24,7 +24,7 @@ import           Data.Maybe (fromMaybe)
 import Camfort.Analysis
   (analysisInput, analysisModFiles, writeDebug)
 import Camfort.Analysis.Annotations
-import Camfort.Specification.Units.InferenceBackend (criticalVariables)
+import Camfort.Specification.Units.InferenceBackendSBV (criticalVariables)
 
 -- Provides the types and data accessors used in this module
 import           Camfort.Specification.Units.Analysis (UnitsAnalysis, runInference)

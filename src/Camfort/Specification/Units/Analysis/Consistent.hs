@@ -28,7 +28,7 @@ import           Camfort.Analysis.Annotations
 import           Camfort.Specification.Units.Analysis (UnitsAnalysis, runInference)
 import qualified Camfort.Specification.Units.Annotation as UA
 import           Camfort.Specification.Units.Environment
-import           Camfort.Specification.Units.InferenceBackend (inconsistentConstraints)
+import           Camfort.Specification.Units.InferenceBackendSBV (inconsistentConstraints)
 import           Camfort.Specification.Units.Monad
 
 import qualified Language.Fortran.AST           as F

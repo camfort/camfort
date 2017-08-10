@@ -36,7 +36,8 @@ import Camfort.Specification.Units.Analysis
 import Camfort.Specification.Units.Analysis.Consistent
   (ConsistencyError, ConsistencyReport(..), checkUnits)
 import Camfort.Specification.Units.Environment
-import Camfort.Specification.Units.InferenceBackend
+import Camfort.Specification.Units.InferenceBackendSBV (inferVariables)
+import Camfort.Specification.Units.InferenceBackend (chooseImplicitNames)
 import Camfort.Specification.Units.Monad
 
 data ExpInfo = ExpInfo
