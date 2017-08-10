@@ -36,12 +36,11 @@ module Camfort.Specification.Units.InferenceBackend
   , genUnitAssignments
   ) where
 
-import           Control.Arrow (first, second)
 import           Control.Monad
 import           Control.Monad.ST
 import qualified Data.Array as A
 import           Data.Generics.Uniplate.Operations
-  (rewrite, transformBi, universeBi)
+  (transformBi, universeBi)
 import           Data.List
   ((\\), findIndex, inits, nub, partition, sortBy, group, tails)
 import qualified Data.Map.Strict as M
