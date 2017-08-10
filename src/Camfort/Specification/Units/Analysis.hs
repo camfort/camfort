@@ -50,7 +50,7 @@ import           Camfort.Analysis
   , runAnalysis )
 import           Camfort.Analysis.Annotations (Annotation, Report)
 import           Camfort.Analysis.CommentAnnotator (annotateComments)
-import           Camfort.Analysis.ModFile (withCombinedEnvironment)
+import           Camfort.Analysis.ModFile (MFCompiler, withCombinedEnvironment)
 import qualified Camfort.Specification.Units.Annotation   as UA
 import           Camfort.Specification.Units.Environment
 import           Camfort.Specification.Units.InferenceBackend
@@ -914,7 +914,7 @@ intrinsicUnits =
 -- Others: reshape, merge need special handling
 
 -- | Compile a program to a 'ModFile' containing units information.
-compileUnits :: UnitOpts -> ModFiles -> F.ProgramFile Annotation -> ModFile
+compileUnits :: MFCompiler UnitOpts
 compileUnits uo mfs pf =
   let pf'      = withCombinedEnvironment mfs . fmap UA.mkUnitAnnotation $ pf
       (cu,_,_) = analysisResult . runAnalysis (runInference runCompileUnits) uo () mfs $ pf
