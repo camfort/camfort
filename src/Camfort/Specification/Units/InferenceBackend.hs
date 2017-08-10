@@ -24,6 +24,7 @@
 module Camfort.Specification.Units.InferenceBackend
   ( chooseImplicitNames
   , criticalVariables
+  , inconsistentConstraints
   , inferVariables
   -- mainly for debugging and testing:
   , shiftTerms
@@ -321,3 +322,13 @@ criticalVariables cons = filter (not . isUnitRHS) $ map (colA A.!) criticalIndic
     uncriticalIndices             = mapMaybe (findIndex (/= 0)) $ H.toLists solvedM
     criticalIndices               = A.indices colA \\ uncriticalIndices
     isUnitRHS (UnitName _)        = True; isUnitRHS _ = False
+
+-- | Returns just the list of constraints that were identified as
+-- being possible candidates for inconsistency, if there is a problem.
+inconsistentConstraints :: Constraints -> Maybe Constraints
+inconsistentConstraints [] = Nothing
+inconsistentConstraints cons
+  | null inconsists = Nothing
+  | otherwise       = Just [ con | (con, i) <- zip cons [0..], i `elem` inconsists ]
+  where
+    (_, _, inconsists, _, _) = constraintsToMatrices cons
