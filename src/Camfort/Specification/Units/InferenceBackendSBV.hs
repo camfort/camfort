@@ -72,8 +72,10 @@ inconsistentConstraints :: Constraints -> Maybe Constraints
 inconsistentConstraints [] = Nothing
 inconsistentConstraints cons = case engine cons of
   -- assuming that SBV provides a list of label names in its unsat 'core'
-  Left (core, labeledCons) -> Just . map fst . catMaybes . map (flip lookup labeledCons) $ core
+  Left (core, labeledCons) -> Just . normalise . map fst . catMaybes . map (flip lookup labeledCons) $ core
   Right (_, _) -> Nothing
+  where
+    normalise = map (dimToConstraint . constraintToDim)
 
 -- | Returns list of formerly-undetermined variables and their units.
 inferVariables :: Constraints -> [(VV, UnitInfo)]
