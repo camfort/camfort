@@ -130,7 +130,9 @@ dimParamEq' ((u1, p1):d1') d2 = case partition (unitParamEq u1 . fst) d2 of
 
 -- | Create a constraint that the given Dim is equal to the identity unit.
 dimToConstraint :: Dim -> Constraint
-dimToConstraint = ConEq UnitlessLit . dimToUnitInfo
+dimToConstraint d = ConEq (dimToUnitInfo positives) (dimToUnitInfo (M.map (* (-1)) negatives))
+  where
+    (negatives, positives) = M.partition (< 0) d
 
 -- | Convert a list of units paired with their corresponding power into a Dim.
 dimFromList :: [(UnitInfo, Integer)] -> Dim
