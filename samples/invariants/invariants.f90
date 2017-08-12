@@ -84,7 +84,7 @@ integer function halve(x)
 end function halve
 
 ! Performs (positive) integer division, rounded down.
-!= static_assert pre("x" >= "0" & "y" > "0")
+!= static_assert pre("x" >= "0")
 != static_assert post("y * div" > "x - y")
 != static_assert post("y * div" <= "x")
 integer function div(x, y)
@@ -95,9 +95,9 @@ integer function div(x, y)
   n = y
   q = 0
 
-  != static_assert seq("y" > "0" & "n" = "y" & "q" = "0" & "n" <= "x + y")
+  != static_assert seq("n" = "y" & "q" = "0" & "n" <= "x + y")
   do while (n <= x)
-     != static_assert invariant("y" > "0" & "n" <= "x + y" & "y * q" = "n - y")
+     != static_assert invariant("n" <= "x + y" & "y * q" = "n - y")
      q = q + 1
      n = n + y
   end do

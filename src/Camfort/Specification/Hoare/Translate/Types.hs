@@ -136,7 +136,7 @@ data TranslateError a
   | ErrInvalidVarType TypeRep
   -- ^ Tried to make a variable representing a value of a type that can't be
   -- stored in a variable.
-  | ErrInvalidOperatorApplication (F.Expression a) (F.Expression a) (LangPart a)
+  | ErrInvalidOperatorApplication (F.Expression a, TypeRep) (F.Expression a, TypeRep) (LangPart a)
   -- ^ Tried to apply an operator to arguments with the wrong type.
   | ErrVarNotInScope F.Name
   -- ^ Reference to a variable that's not currently in scope
@@ -212,9 +212,10 @@ instance (Typeable ann, Show ann) => Exception (TranslateError ann) where
     ErrInvalidVarType ty ->
       "Tried to make a variable containing unsupported variable type: " ++ show ty
 
-    ErrInvalidOperatorApplication e1 e2 lp ->
+    ErrInvalidOperatorApplication (e1, ty1) (e2, ty2) lp ->
       "Tried to apply operator to arguments of the wrong type. Operator was: " ++ displayLangPart lp ++
-      ". Left operand was: " ++ displayExpression e1 ++ ". Right operand was: " ++ displayExpression e2
+      ". Left operand was: " ++ displayExpression e1 ++ " of type " ++ show ty1 ++
+      ". Right operand was: " ++ displayExpression e2 ++ " of type " ++ show ty2
 
     ErrVarNotInScope nm ->
       "Reference to variable '" ++ nm ++ "' which is not in scope."
@@ -240,7 +241,7 @@ errUnexpectedType lp = throwError . ErrUnexpectedType lp
 errInvalidVarType :: MonadError (TranslateError ann) m => TypeRep -> m x
 errInvalidVarType = throwError . ErrInvalidVarType
 
-errInvalidOperatorApplication :: MonadError (TranslateError ann) m => F.Expression ann -> F.Expression ann -> LangPart ann -> m x
+errInvalidOperatorApplication :: MonadError (TranslateError ann) m => (F.Expression ann, TypeRep) -> (F.Expression ann, TypeRep) -> LangPart ann -> m x
 errInvalidOperatorApplication e1 e2 lp = throwError (ErrInvalidOperatorApplication e1 e2 lp)
 
 errVarNotInScope :: MonadError (TranslateError ann) m => F.Name -> m x
