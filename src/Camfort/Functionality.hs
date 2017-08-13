@@ -89,7 +89,7 @@ withOutRunner runner outSrc analysis compiler env inSrc incDir excludes
 -- * Wrappers on all of the features
 ast d incDir excludes = do
     incDir' <- maybe getCurrentDirectory pure incDir
-    modFiles <- genModFiles simpleCompiler () incDir' excludes
+    modFiles <- genModFiles simpleCompiler () d incDir' excludes
     xs <- readParseSrcDir modFiles d excludes
     print . fmap fst $ xs
 

@@ -436,7 +436,7 @@ inferReportWithMod modNames fileName expectedReport = do
 
 -- | Helper for producing a basic ModFile from a (terminal) module file.
 mkTestModFile :: String -> IO ModFile
-mkTestModFile file = head <$> genModFiles compileStencils () file []
+mkTestModFile file = head <$> genModFiles compileStencils () file file []
 
 crossModuleAUserReport :: String
 crossModuleAUserReport =

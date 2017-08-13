@@ -62,7 +62,7 @@ unitsCheckReportIs = unitsCheckReport LitMixed []
 
 -- | Helper for producing a basic ModFile from a (terminal) module file.
 mkTestModFile :: String -> IO ModFile
-mkTestModFile file = head <$> genModFiles compileUnits unitOpts0 file []
+mkTestModFile file = head <$> genModFiles compileUnits unitOpts0 file file []
 
 exampleInconsist1CheckReport :: String
 exampleInconsist1CheckReport =

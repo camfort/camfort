@@ -78,7 +78,7 @@ getModsAndPs
   -> IO (ModFiles, [(FileProgram, B.ByteString)])
 getModsAndPs mfc env inSrc incDir excludes = do
   printExcludes inSrc excludes
-  modFiles <- genModFiles mfc env incDir excludes
+  modFiles <- genModFiles mfc env inSrc incDir excludes
   ps <- readParseSrcDir modFiles inSrc excludes
   pure (modFiles, ps)
 

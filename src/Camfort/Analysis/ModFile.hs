@@ -21,12 +21,14 @@ import           Control.Monad (forM)
 import qualified Data.ByteString as B
 import           Data.Char (toUpper)
 import           Data.Data (Data)
-import           Data.List ((\\))
+import           Data.Either (partitionEithers)
+import           Data.Generics.Uniplate.Operations (universe)
+import           Data.List ((\\), nub)
 import           Data.Maybe (catMaybes)
 import           Data.Text.Encoding (encodeUtf8, decodeUtf8With)
 import           Data.Text.Encoding.Error (replace)
 import           System.Directory (doesDirectoryExist, listDirectory)
-import           System.FilePath ((</>), takeExtension)
+import           System.FilePath ((</>), takeBaseName, takeExtension)
 
 
 import qualified Language.Fortran.AST               as F
@@ -60,10 +62,13 @@ withCombinedEnvironment mfs pf =
 genCModFile :: MFCompiler r -> r -> ModFiles -> F.ProgramFile A -> ModFile
 genCModFile = id
 
-genModFiles :: MFCompiler r -> r -> FilePath -> [Filename] -> IO ModFiles
-genModFiles mfc env fp excludes = do
-  fortranFiles <- fmap fst <$> readParseSrcDir emptyModFiles fp excludes
-  pure $ genCModFile mfc env emptyModFiles <$> fortranFiles
+-- | Generate the ModFiles required to analyse the given file or directory.
+genModFiles :: MFCompiler r -> r -> FilePath -> FilePath -> [Filename] -> IO ModFiles
+genModFiles mfc env inSrc incDir excludes = do
+  fortranFiles <- fmap fst <$> readParseSrcDir emptyModFiles inSrc excludes
+  dependencyTrees <- mapM (buildDependencyTree incDir) fortranFiles
+  let (_, deps) = partitionEithers dependencyTrees
+  pure $ concatMap (buildModFiles mfc env) deps
 
 -- | Retrieve the ModFiles under a given path.
 getModFiles :: FilePath -> IO ModFiles
@@ -139,3 +144,69 @@ getFortranFiles dir =
     isFortran x = takeExtension x `elem` (exts ++ extsUpper)
       where exts = [".f", ".f90", ".f77", ".cmn", ".inc"]
             extsUpper = map (map toUpper) exts
+
+-- | Find and parse a module file, by the module name.
+--
+-- Does not account for existing ModFiles.
+readParseModuleByName :: FilePath -> String -> IO (Maybe (F.ProgramFile A))
+readParseModuleByName workDir modName = do
+  ffiles <- getFortranFiles workDir
+  let [candidate] = filter (\fp -> equalIgnoreCase (takeBaseName fp) modName) ffiles
+  parsed <- readParseSrcFile emptyModFiles candidate
+  case parsed of
+    Nothing      -> pure Nothing
+    Just (pf, _) -> pure $ Just pf
+  where equalIgnoreCase xs ys = let upper = fmap toUpper in upper xs == upper ys
+
+data Rose a = Rose a [Rose a]
+
+-- | Create a new 'Rose' tree.
+mkRose :: a -> [Rose a] -> Rose a
+mkRose = Rose
+
+-- | 'Rose' tree representing module dependencies for ProgramFiles.
+type DependencyTree = Rose (F.ProgramFile A)
+
+-- | An error that may arise when resolving dependencies.
+data DependencyError = CyclicDependency | CouldNotParseDependency
+
+-- | Convert a 'DependencyTree' into 'ModFiles'.
+buildModFiles :: MFCompiler r -> r -> DependencyTree -> ModFiles
+buildModFiles mfc env (Rose v []) =
+  if isModule v then pure $ genCModFile mfc env emptyModFiles v else []
+buildModFiles mfc env (Rose v vs) =
+  let deps = concatMap (buildModFiles mfc env) vs
+  in nub $ if isModule v then genCModFile mfc env deps v : deps else deps
+
+-- | True if the ProgramFile contains a module declaration.
+isModule :: F.ProgramFile a -> Bool
+isModule (F.ProgramFile _ pus) = any isModulePU pus
+  where isModulePU F.PUModule{} = True
+        isModulePU _            = False
+
+-- | Build a 'DependencyTree' containing the dependencies for the given 'ProgramFile'.
+buildDependencyTree :: FilePath -> F.ProgramFile A -> IO (Either DependencyError DependencyTree)
+buildDependencyTree workDir pf = buildDependencyTree' workDir [pf] pf
+
+buildDependencyTree' :: FilePath -> [F.ProgramFile A] -> F.ProgramFile A
+                   -> IO (Either DependencyError DependencyTree)
+buildDependencyTree' workDir seen pf = do
+  let reqMods = reqModFiles pf
+  parsedPfs <- sequence <$> mapM (readParseModuleByName workDir) reqMods
+  case parsedPfs of
+    Nothing -> pure $ Left CouldNotParseDependency
+    Just depPfs ->
+      if any (`elem` seen) depPfs
+      then pure $ Left CyclicDependency
+      else do
+        depTree <- sequence <$> mapM (buildDependencyTree' workDir (pf : seen)) depPfs
+        pure $ case depTree of
+                 Left err   -> Left err
+                 Right deps -> Right $ mkRose pf deps
+
+-- | List of module names required for analysis on the given program.
+reqModFiles :: (Data a) => F.ProgramFile a -> [String]
+reqModFiles (F.ProgramFile _ pu) =
+  let blocks = concatMap F.programUnitBody pu
+      stmts  = [stmt | block <- blocks, (F.BlStatement _ _ _ stmt) <- universe block]
+  in nub [name | (F.StUse _ _ (F.ExpValue _ _ (F.ValVariable name)) _ Nothing) <- stmts]
