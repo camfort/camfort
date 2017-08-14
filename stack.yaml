@@ -5,6 +5,7 @@ packages:
 - ../fortran-src
 extra-deps:
 - fortran-src-0.2.0.0
-- partial-order-0.1.2.1
-- sbv-7.0
-resolver: lts-8.23
+- GenericPretty-1.2.1
+- hmatrix-0.18.1.0
+- syz-0.2.0.0
+resolver: nightly-2017-08-12

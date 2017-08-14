@@ -28,6 +28,7 @@ module Camfort.Specification.Stencils.InferenceBackend
   ) where
 
 import Data.List
+import qualified Data.List.NonEmpty as NE
 import Data.Maybe
 import Algebra.Lattice (joins1)
 
@@ -47,7 +48,7 @@ spansToApproxSpatial spans = sequence . fmap intervalsToRegions $ approxUnion
   where
     approxVecs =
       toApprox . map (fmap absRepToInf . transposeVecInterval) $ spans
-    approxUnion = fmap (optimise . joins1 . map return) approxVecs
+    approxUnion = fmap (optimise . joins1 . fmap return . NE.fromList) approxVecs
 
     toApprox :: [ V.Vec n (Interval Arbitrary) ]
              -> Approximation [ V.Vec n (Interval Standard) ]
