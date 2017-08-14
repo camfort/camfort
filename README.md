@@ -14,7 +14,7 @@ in the wiki.
 ### Tab Completion
 
 To enable bash autocompletion for camfort, add
-`eval "$(camfort --bash-completion-script=$(which camfort))"` to your .bashrc.
+`eval "$(camfort --bash-completion-script=$(which camfort))"` to either your .bashrc or .bash_profile file.
 
 ## Usage
 
