@@ -1,0 +1,72 @@
+Thoughts & comments while working on SBV backend.
+
+--------------------------------------------------
+
+-- Unification: we solve under the assumption of more concrete RHS
+--   units but if we find in the results that certain ParamPosAbs are
+--   still left 'free' in some sense then they are potentially
+--   parametric?
+
+--   indeed, such ParamPosAbs variables are valid with any value it seems. underdetermined.
+--   how many values is enough ? 2?
+--   can I subset the underdetermined equations?
+
+-- yes, there are multiple values for both parametric & critical-vars
+-- the multiple values are equationally linked to each other if the variables are
+-- could potentially identify all parametric variables in parallel by constraining to prime numbers
+
+--------------------------------------------------
+
+-- in the matrix version we solved for a reduced row echelon form, which is a unique 'normal' form
+-- that means that even the equations with a 0 on the RHS were normalised into some form
+-- e.g. if there were two ways to express it, then one was picked
+--   a - b = 0
+--   x - b = 0
+--   y - a = 0
+-- would become
+--   a - b = 0
+--   x - a = 0
+--   y - a = 0
+
+--------------------------------------------------
+
+-- kennedy has some rules on simplification, preferred forms (e.g. parameters vs return vars)
+-- type simplification algorithm
+
+--    The original motivation for designing this algorithm was the need for a ‘most
+--    natural’ form for type schemes. This is the way that we describe the algorithm
+--    initially. However, it turned out that the canonical form which it calculates
+--    corresponds directly to a well-known form in matrix theory. This in turn explains
+--    its application to the generalisation procedure as a ‘change of basis’.
+
+--    Simplify a type t from left to right, and for each dimension compo-
+--    nent d attempt to reduce as much as possible the number of dimen-
+--    sion variables, the size of its exponents, and the number of negative
+--    exponents.
+
+--------------------------------------------------
+
+-- can the constraints solved by Z3 be modified to include a
+-- disjunction for each parametric polymorphic unit variable
+-- suggesting that it could be a RHS unit but it's okay for it to be
+-- equal to another RHS unit if the solver determines that?
+
+--------------------------------------------------
+
+-- I can't generate a new RHS unit for every possible parametric
+-- polymorphic unit. That would overwhelm the solver. This needs to be
+-- done with subproblems.
+
+--------------------------------------------------
+
+-- We could use a universal quantifier in addition to our existentials.
+-- e.g. exists (x_{j},...,y_{j}). forall w. ... + a_{i,j} * (y_{j} * w + x_{j}) + ... = b_{i}
+
+-- what's Z3's performance on exists-forall problems?
+
+--------------------------------------------------
+
+-- in Linear Algebra terms what we really want is to compute the
+-- kernel of the underdetermined submatrix and use that to describe
+-- the subspace carved out by the infinite sequence of solutions to
+-- the parametric polymorphic unit variables.

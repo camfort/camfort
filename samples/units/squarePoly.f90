@@ -12,16 +12,16 @@ program squarePoly
   real :: b
 
   real :: c
-  
+
   x = square(a)
   y = square(b)
   z = square(c)
-  
+
 contains
 
   real function square(x)
-  real :: x
-  square = x * x
-  end function
+    real :: x
+    square = x * x
+  end function square
 
-  end program
+end program
