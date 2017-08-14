@@ -1,3 +1,4 @@
+{-# LANGUAGE TypeOperators #-}
 {-# LANGUAGE DataKinds                  #-}
 {-# LANGUAGE FlexibleContexts           #-}
 {-# LANGUAGE FlexibleInstances          #-}
@@ -21,6 +22,8 @@ module Language.Fortran.TypeModel.Operators
   , Op2Result(..)
   ) where
 
+import           Data.Typeable ((:~:)(..))
+
 import           Data.SBV                             hiding (KReal, Kind)
 
 import           Language.Expression
@@ -37,11 +40,15 @@ data OpKind
   | OpEquality
   | OpRelational
   | OpLogical
+  | OpProp
+  -- ^ A dummy operator type for embedding Fortran expressions in propositions
   deriving (Show)
 
 data Op1 k where
   OpPos, OpNeg :: Op1 'OpNum
   OpNot :: Op1 'OpLogical
+
+  OpEmbedProp :: Op1 'OpProp
 
 deriving instance Show (Op1 k)
 
@@ -53,27 +60,28 @@ data Op2 k where
 
 deriving instance Show (Op2 k)
 
-data Op1Result ok k1 k2 where
-  Op1Num :: Numeric k => Op1Result 'OpNum k k
+data Op1Result ok (p1 :: Precision) k1 (p2 :: Precision) k2 where
+  Op1Num :: Numeric k => Op1Result 'OpNum p k p k
 
-  Op1Logical :: Op1Result 'OpLogical 'KLogical 'KLogical
+  Op1Logical :: Op1Result 'OpLogical p 'KLogical p 'KLogical
 
-deriving instance Show (Op1Result ok k1 k2)
+  Op1Prop :: Op1Result 'OpProp p 'KLogical 'P64 'KProp
 
-data Op2Result ok k1 p1 k2 p2 k3 p3 where
-  Op2Num :: Op2Result 'OpNum k1 p1 k2 p2 (NumKindMax k1 k2) (PrecMax p1 p2)
-  Op2Eq :: Comparable k1 k2 => Op2Result 'OpEquality k1 p1 k2 p2 'KLogical 'P8
-  Op2Rel :: Comparable k1 k2 => Op2Result 'OpRelational k1 p1 k2 p2 'KLogical 'P8
-  Op2Logical
-    :: Op2Result 'OpLogical 'KLogical p1 'KLogical p2
-                 'KLogical (PrecMax p1 p2)
+deriving instance Show (Op1Result ok p1 k1 p2 k2)
+
+data Op2Result ok p1 k1 p2 k2 p3 k3 where
+  Op2Num :: Op2Result 'OpNum p1 k1 p2 k2 (PrecMax p1 p2) (NumKindMax k1 k2)
+  Op2Eq :: Comparable k1 k2 => Op2Result 'OpEquality p1 k1 p2 k2 'P8 'KLogical
+  Op2Rel :: Comparable k1 k2 => Op2Result 'OpRelational p1 k1 p2 k2 'P8 'KLogical
+  Op2Logical :: Op2Result 'OpLogical p1 'KLogical p2 'KLogical
+                                     (PrecMax p1 p2) 'KLogical
 
 
 data FortranOp t a where
-  Op1 :: Op1 ok -> Op1Result ok k1 k2
-      -> D p k1 a -> D p k2 a
-      -> t a -> FortranOp t a
-  Op2 :: Op2 ok -> Op2Result ok k1 p1 k2 p2 k3 p3
+  Op1 :: Op1 ok -> Op1Result ok p1 k1 p2 k2
+      -> D p1 k1 a -> D p2 k2 b
+      -> t a -> FortranOp t b
+  Op2 :: Op2 ok -> Op2Result ok p1 k1 p2 k2 p3 k3
       -> D p1 k1 a -> D p2 k2 b -> D p3 k3 c
       -> t a -> t b -> FortranOp t c
 
@@ -84,6 +92,10 @@ instance Operator FortranOp where
 
 instance (Applicative f) => EvalOp f SBV FortranOp where
   evalOp f = \case
+    Op1 OpEmbedProp opr d1 d2 x ->
+      case op1C opr d1 d2 of
+        Op1CProp -> toSBool <$> f x
+
     Op1 OpPos opr d1 d2 x -> withOp1Num (op1C opr d1 d2) id <$> f x
     Op1 OpNeg opr d1 d2 x -> withOp1Num (op1C opr d1 d2) negate <$> f x
     Op1 OpNot opr d1 d2 x -> withOp1Logical (op1C opr d1 d2) bnot <$> f x
@@ -127,17 +139,23 @@ instance (Applicative f) => EvalOp f SBV FortranOp where
 data Op1C ok a b where
   Op1CNum :: (Num a, SymWord a, UDiv (SBV a)) => Op1C 'OpNum a a
   Op1CLogical :: SymBool a => Op1C 'OpLogical a a
+  Op1CProp :: SymBool a => Op1C 'OpProp a Bool
 
-op1C :: Op1Result ok k1 k2 -> D p1 k1 a -> D p2 k2 a -> Op1C ok a a
+op1C :: Op1Result ok p1 k1 p2 k2 -> D p1 k1 a -> D p2 k2 b -> Op1C ok a b
 op1C Op1Num d1 d2 =
-  case (getC d1, getC d2) of
-    (CInt, CInt) -> Op1CNum
-    (CReal, CReal) -> Op1CNum
+  case (dequiv d1 d2, getC d1, getC d2) of
+    (Refl, CInt, CInt) -> Op1CNum
+    (Refl, CReal, CReal) -> Op1CNum
     _ -> error "impossible"
 
 op1C Op1Logical d1 d2 =
+  case (dequiv d1 d2, getC d1, getC d2) of
+    (Refl, CLogical, CLogical) -> Op1CLogical
+
+op1C Op1Prop d1 d2 =
   case (getC d1, getC d2) of
-    (CLogical, CLogical) -> Op1CLogical
+    (CLogical, CProp) -> Op1CProp
+
 
 data Op2C ok a b c where
   Op2CNum :: (Num c, SymWord c, UDiv (SBV c))
@@ -153,7 +171,7 @@ data Op2C ok a b c where
               => Convert a c -> Convert b c -> Op2C 'OpLogical a b c
 
 op2C
-  :: Op2Result ok k1 p1 k2 p2 k3 p3
+  :: Op2Result ok p1 k1 p2 k2 p3 k3
   -> D p1 k1 a -> D p2 k2 b -> D p3 k3 c
   -> Op2C ok a b c
 op2C Op2Num d1 d2 d3 =
@@ -212,15 +230,15 @@ op2C Op2Logical d1 d2 d3 =
       Op2CLogical (fromSBool . toSBool) (fromSBool . toSBool)
 
 withOp1Num
-  :: Op1C 'OpNum a a
+  :: Op1C 'OpNum a b
   -> ((Num a, SymWord a) => SBV a -> SBV a)
-  -> SBV a -> SBV a
+  -> SBV a -> SBV b
 withOp1Num Op1CNum f = f
 
 withOp1Logical
-  :: Op1C 'OpLogical a a
+  :: Op1C 'OpLogical a b
   -> (SBool -> SBool)
-  -> SBV a -> SBV a
+  -> SBV a -> SBV b
 withOp1Logical Op1CLogical f = fromSBool . f . toSBool
 
 withOp2CNum

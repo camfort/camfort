@@ -93,6 +93,10 @@ library
                         Camfort.Input
                         Camfort.Output
                         Camfort.Reprint
+                        Language.Fortran.TypeModel
+                        Language.Fortran.TypeModel.Basic
+                        Language.Fortran.TypeModel.Machinery
+                        Language.Fortran.TypeModel.Operators
 
   build-depends:        base >= 4.6 && < 5,
                         ghc-prim >= 0.3.1.0 && < 0.6,

@@ -1,3 +1,4 @@
+{-# LANGUAGE TypeOperators #-}
 {-# LANGUAGE MultiParamTypeClasses #-}
 {-# LANGUAGE DataKinds         #-}
 {-# LANGUAGE DefaultSignatures #-}
@@ -9,6 +10,8 @@
 {-# OPTIONS_GHC -Wall #-}
 
 module Language.Fortran.TypeModel.Machinery where
+
+import           Data.Typeable ((:~:)(..))
 
 import           Data.SBV                         hiding (KReal, Kind)
 
@@ -116,6 +119,23 @@ maxD DDouble DInt64  = SomeD DDouble
 maxD DDouble DFloat  = SomeD DDouble
 maxD _ _             = error "maxD on non-numeric kinds"
 
+
+-- | Proof that two types with the same precision and kind have the same
+-- representation.
+dequiv :: D p k a -> D p k b -> a :~: b
+dequiv DInt8 DInt8 = Refl
+dequiv DInt16 DInt16 = Refl
+dequiv DInt32 DInt32 = Refl
+dequiv DInt64 DInt64 = Refl
+dequiv DFloat DFloat = Refl
+dequiv DDouble DDouble = Refl
+dequiv DBool8 DBool8 = Refl
+dequiv DBool16 DBool16 = Refl
+dequiv DBool32 DBool32 = Refl
+dequiv DBool64 DBool64 = Refl
+dequiv DChar DChar = Refl
+dequiv DProp DProp = Refl
+
 --------------------------------------------------------------------------------
 -- * Type Classes
 --------------------------------------------------------------------------------
@@ -164,6 +184,8 @@ data C k a where
   CLogical :: SymBool a => C 'KLogical a
   CChar :: C 'KChar Char8
 
+  CProp :: C 'KProp Bool
+
 getC :: D p k a -> C k a
 getC DInt8   = CInt
 getC DInt16  = CInt
@@ -176,7 +198,7 @@ getC DBool16 = CLogical
 getC DBool32 = CLogical
 getC DBool64 = CLogical
 getC DChar   = CChar
-
+getC DProp   = CProp
 
 --------------------------------------------------------------------------------
 -- * Up-casting

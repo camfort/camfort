@@ -156,6 +156,8 @@ data Kind
   | KInt
   | KLogical
   | KChar
+  | KProp
+  -- ^ A dummy data kind for embedding Fortran expressions in propositions
 
 -- | Lists the allowed Fortran types, with corresponding constraints on
 -- precision, kind and semantic Haskell type.
@@ -174,6 +176,9 @@ data D p k a where
   DDouble        :: D 'P64  'KReal    Double
 
   DChar          :: D 'P8   'KChar    Char8
+
+  DProp          :: D 'P64  'KProp    Bool
+
 deriving instance Show (D p k a)
 deriving instance Typeable (D p k a)
 

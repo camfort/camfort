@@ -21,6 +21,9 @@ type FExpr = Expr FortranOp
 var :: v a -> FExpr v a
 var = EVar
 
+asProp :: Logicalops1 a => FExpr v a -> FExpr v Bool
+asProp = EOp . propop1 OpEmbedProp
+
 --------------------------------------------------------------------------------
 --  Numeric
 --------------------------------------------------------------------------------
@@ -152,6 +155,9 @@ class (HasRepr a, Numeric (ReprKind a)) => Numops1 a where
 class (HasRepr a, ReprKind a ~ 'KLogical) => Logicalops1 a where
   logicalop1 :: Op1 'OpLogical -> t a -> FortranOp t a
   logicalop1 op x = Op1 op Op1Logical (getD x) (getD x) x
+
+  propop1 :: Op1 'OpProp -> t a -> FortranOp t Bool
+  propop1 op x = Op1 op Op1Prop (getD x) DProp x
 
 instance (HasRepr a, Numeric (ReprKind a)) => Numops1 a
 instance (HasRepr a, ReprKind a ~ 'KLogical) => Logicalops1 a
