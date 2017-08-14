@@ -23,13 +23,12 @@ import           Data.List (find, group, sort)
 import qualified Data.Map.Strict as M
 import           Data.Maybe (maybeToList, maybe)
 
-import           Camfort.Analysis
-  (analysisInput, analysisModFiles, analysisParams, writeDebug)
+import           Camfort.Analysis (analysisInput, writeDebug)
 import           Camfort.Analysis.Annotations
 import           Camfort.Specification.Units.Analysis (UnitsAnalysis, runInference)
 import qualified Camfort.Specification.Units.Annotation as UA
 import           Camfort.Specification.Units.Environment
-import           Camfort.Specification.Units.InferenceBackend  (constraintsToMatrices)
+import           Camfort.Specification.Units.InferenceBackendSBV (inconsistentConstraints)
 import           Camfort.Specification.Units.Monad
 
 import qualified Language.Fortran.AST           as F
@@ -151,13 +150,3 @@ unrename = transformBi $ \ x -> case x of
 -- | Show only the start position of the 'SrcSpan'.
 showSpanStart :: FU.SrcSpan -> String
 showSpanStart (FU.SrcSpan l _) = show l
-
--- | Returns just the list of constraints that were identified as
--- being possible candidates for inconsistency, if there is a problem.
-inconsistentConstraints :: Constraints -> Maybe Constraints
-inconsistentConstraints [] = Nothing
-inconsistentConstraints cons
-  | null inconsists = Nothing
-  | otherwise       = Just [ con | (con, i) <- zip cons [0..], i `elem` inconsists ]
-  where
-    (_, _, inconsists, _, _) = constraintsToMatrices cons

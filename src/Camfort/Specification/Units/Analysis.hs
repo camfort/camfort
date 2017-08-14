@@ -59,6 +59,7 @@ import           Camfort.Specification.Units.ModFile
 import           Camfort.Specification.Units.Monad
 import           Camfort.Specification.Units.Parser (unitParser)
 import qualified Camfort.Specification.Units.Parser.Types as P
+import qualified Camfort.Specification.Units.InferenceBackendSBV as BackendSBV
 
 -- | Analysis with access to 'UnitOpts' information.
 type UnitsAnalysis a a' = Analysis UnitOpts Report () a a'
@@ -145,7 +146,7 @@ runInference solver = do
 
   pure (analysisResult res, finalState res, analysisDebug res)
 
--- Inference functions
+--------------------------------------------------
 
 -- | Seek out any parameters to functions or subroutines that do not
 -- already have units, and insert parametric units for them into the
@@ -449,11 +450,6 @@ substInstance isDummy callStack output (name, callId) = do
   dumpConsM ("final output for " ++ show (name, callId)) output'
 
   pure output'
-
-foldUnits :: Foldable t => t UnitInfo -> UnitInfo
-foldUnits units
-  | null units = UnitlessVar
-  | otherwise  = foldl1 UnitMul units
 
 -- -- | Generate constraints from a NameParamMap entry.
 -- nameParamConstraints :: F.Name -> UnitSolver Constraints
@@ -818,6 +814,9 @@ debugLogging = whenDebug $ do
     let unitAssignments = genUnitAssignments cons
     writeLogs . unlines $ map (\ (u1s, u2) -> "  ***UnitAssignment: " ++ show u1s ++ " === " ++ show (flattenUnits u2) ++ "\n") unitAssignments
     writeLogs "\n--------------------------------------------------\n"
+    let unitAssignments = BackendSBV.genUnitAssignments cons
+    writeLogs . unlines $ map (\ (u1s, u2) -> "  ***UnitAssignmentSBV: " ++ show u1s ++ " === " ++ show (flattenUnits u2) ++ "\n") unitAssignments
+    writeLogs "\n--------------------------------------------------\n"    
 
 --------------------------------------------------
 

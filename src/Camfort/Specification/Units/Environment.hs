@@ -27,10 +27,14 @@ module Camfort.Specification.Units.Environment
   , VV, PP
     -- * Helpers
   , conParamEq
+  , unitParamEq
   , doubleToRationalSubset
   , pprintConstr
   , pprintUnitInfo
   , toUnitInfo
+  , foldUnits
+  , flattenUnits
+  , simplifyUnits
     -- * Modules (instances)
   , module Data.Data
   ) where
@@ -42,11 +46,12 @@ import           Data.List
 import           Data.Ratio
 import           GHC.Generics (Generic)
 import           Text.Printf
+import           Control.Arrow (first, second)
 
 import qualified Language.Fortran.AST as F
-
 import qualified Camfort.Specification.Units.Parser.Types as P
-
+import Data.Generics.Uniplate.Operations (rewrite)
+import qualified Data.Map.Strict as M
 
 -- | A (unique name, source name) variable
 type VV = (F.Name, F.Name)
@@ -76,6 +81,42 @@ data UnitInfo
   | UnitPow UnitInfo Double               -- a unit raised to a constant power
   | UnitRecord [(String, UnitInfo)]       -- 'record'-type of units
   deriving (Eq, Ord, Data, Typeable, Generic)
+
+simplifyUnits :: UnitInfo -> UnitInfo
+simplifyUnits = rewrite rw
+  where
+    rw (UnitMul (UnitMul u1 u2) u3)                          = Just $ UnitMul u1 (UnitMul u2 u3)
+    rw (UnitMul u1 u2) | u1 == u2                            = Just $ UnitPow u1 2
+    rw (UnitPow (UnitPow u1 p1) p2)                          = Just $ UnitPow u1 (p1 * p2)
+    rw (UnitMul (UnitPow u1 p1) (UnitPow u2 p2)) | u1 == u2  = Just $ UnitPow u1 (p1 + p2)
+    rw (UnitPow UnitlessLit _)                               = Just UnitlessLit
+    rw (UnitPow UnitlessVar _)                               = Just UnitlessVar
+    rw (UnitPow _ p) | p `approxEq` 0                        = Just UnitlessLit
+    rw (UnitMul UnitlessLit u)                               = Just u
+    rw (UnitMul u UnitlessLit)                               = Just u
+    rw (UnitMul UnitlessVar u)                               = Just u
+    rw (UnitMul u UnitlessVar)                               = Just u
+    rw _                                                     = Nothing
+
+flattenUnits :: UnitInfo -> [UnitInfo]
+flattenUnits = map (uncurry UnitPow) . M.toList
+             . M.filterWithKey (\ u _ -> u /= UnitlessLit && u /= UnitlessVar)
+             . M.filter (not . approxEq 0)
+             . M.fromListWith (+)
+             . map (first simplifyUnits)
+             . flatten
+  where
+    flatten (UnitMul u1 u2) = flatten u1 ++ flatten u2
+    flatten (UnitPow u p)   = map (second (p*)) $ flatten u
+    flatten u               = [(u, 1)]
+
+foldUnits units
+  | null units = UnitlessVar
+  | otherwise  = foldl1 UnitMul units
+
+approxEq a b = abs (b - a) < epsilon
+epsilon = 0.001 -- arbitrary
+
 
 instance Binary UnitInfo
 
