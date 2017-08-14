@@ -74,15 +74,15 @@ library
                         Camfort.Specification.Units.Synthesis
                         Camfort.Specification.Hoare
                         Camfort.Specification.Hoare.Annotation
-                        Camfort.Specification.Hoare.CheckFrontend
-                        Camfort.Specification.Hoare.CheckBackend
                         Camfort.Specification.Hoare.Types
                         Camfort.Specification.Hoare.Parser
                         Camfort.Specification.Hoare.Parser.Types
                         Camfort.Specification.Hoare.Lexer
                         Camfort.Specification.Hoare.Syntax
-                        Camfort.Specification.Hoare.Translate
-                        Camfort.Specification.Hoare.Translate.Types
+                        -- Camfort.Specification.Hoare.Translate
+                        -- Camfort.Specification.Hoare.Translate.Types
+                        -- Camfort.Specification.Hoare.CheckFrontend
+                        -- Camfort.Specification.Hoare.CheckBackend
                         Camfort.Transformation.CommonBlockElim
                         Camfort.Transformation.DeadCode
                         Camfort.Transformation.EquivalenceElim
@@ -97,6 +97,7 @@ library
                         Language.Fortran.TypeModel.Basic
                         Language.Fortran.TypeModel.Machinery
                         Language.Fortran.TypeModel.Operators
+                        Language.Fortran.TypeModel.DSL
 
   build-depends:        base >= 4.6 && < 5,
                         ghc-prim >= 0.3.1.0 && < 0.6,
