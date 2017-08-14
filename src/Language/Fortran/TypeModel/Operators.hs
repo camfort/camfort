@@ -54,17 +54,16 @@ data Op2 k where
 deriving instance Show (Op2 k)
 
 data Op1Result ok k1 k2 where
-  Op1NumInt :: Op1Result 'OpNum 'KInt 'KInt
-  Op1NumReal :: Op1Result 'OpNum 'KReal 'KReal
+  Op1Num :: Numeric k => Op1Result 'OpNum k k
 
-  Op1LogicalLogical :: Op1Result 'OpLogical 'KLogical 'KLogical
+  Op1Logical :: Op1Result 'OpLogical 'KLogical 'KLogical
 
 deriving instance Show (Op1Result ok k1 k2)
 
 data Op2Result ok k1 p1 k2 p2 k3 p3 where
   Op2Num :: Op2Result 'OpNum k1 p1 k2 p2 (NumKindMax k1 k2) (PrecMax p1 p2)
-  Op2Eq :: Comparable k1 k2 -> Op2Result 'OpEquality k1 p1 k2 p2 'KLogical 'P8
-  Op2Rel :: Comparable k1 k2 -> Op2Result 'OpRelational k1 p1 k2 p2 'KLogical 'P8
+  Op2Eq :: Comparable k1 k2 => Op2Result 'OpEquality k1 p1 k2 p2 'KLogical 'P8
+  Op2Rel :: Comparable k1 k2 => Op2Result 'OpRelational k1 p1 k2 p2 'KLogical 'P8
   Op2Logical
     :: Op2Result 'OpLogical 'KLogical p1 'KLogical p2
                  'KLogical (PrecMax p1 p2)
@@ -130,15 +129,13 @@ data Op1C ok a b where
   Op1CLogical :: SymBool a => Op1C 'OpLogical a a
 
 op1C :: Op1Result ok k1 k2 -> D p1 k1 a -> D p2 k2 a -> Op1C ok a a
-op1C Op1NumInt d1 d2 =
+op1C Op1Num d1 d2 =
   case (getC d1, getC d2) of
     (CInt, CInt) -> Op1CNum
-
-op1C Op1NumReal d1 d2 =
-  case (getC d1, getC d2) of
     (CReal, CReal) -> Op1CNum
+    _ -> error "impossible"
 
-op1C Op1LogicalLogical d1 d2 =
+op1C Op1Logical d1 d2 =
   case (getC d1, getC d2) of
     (CLogical, CLogical) -> Op1CLogical
 
@@ -167,7 +164,7 @@ op2C Op2Num d1 d2 d3 =
     (CReal, CReal, CReal) -> uncurry Op2CNum (numUpcast d1 d2 d3)
     _ -> error "impossible"
 
-op2C (Op2Eq _) d1 d2 d3 =
+op2C Op2Eq d1 d2 d3 =
   case (getC d1, getC d2, getC d3) of
     (CInt, CInt, CLogical) ->
       case maxD d1 d2 of
@@ -188,7 +185,7 @@ op2C (Op2Eq _) d1 d2 d3 =
     (CChar, CChar, CLogical) -> Op2CEq id id
     _ -> error "impossible"
 
-op2C (Op2Rel _) d1 d2 d3 =
+op2C Op2Rel d1 d2 d3 =
   case (getC d1, getC d2, getC d3) of
     (CInt, CInt, CLogical) ->
       case maxD d1 d2 of

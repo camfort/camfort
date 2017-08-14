@@ -1,3 +1,4 @@
+{-# LANGUAGE MultiParamTypeClasses #-}
 {-# LANGUAGE DataKinds         #-}
 {-# LANGUAGE DefaultSignatures #-}
 {-# LANGUAGE FlexibleContexts  #-}
@@ -55,12 +56,18 @@ type family NumKindMax k1 k2 where
   NumKindMax 'KReal 'KReal = 'KReal
 
 
-type family Comparable k1 k2 where
-  Comparable 'KInt  'KInt  = ()
-  Comparable 'KInt  'KReal = ()
-  Comparable 'KReal 'KInt  = ()
-  Comparable 'KReal 'KReal = ()
-  Comparable 'KChar 'KChar = ()
+class Comparable (k1 :: Kind) (k2 :: Kind)
+
+instance Comparable 'KInt 'KInt
+instance Comparable 'KInt 'KReal
+instance Comparable 'KReal 'KInt
+instance Comparable 'KReal 'KReal
+instance Comparable 'KChar 'KChar
+
+
+class Numeric (k :: Kind)
+instance Numeric 'KInt
+instance Numeric 'KReal
 
 --------------------------------------------------------------------------------
 -- * Existential type specs
@@ -218,4 +225,3 @@ numUpcast DDouble DFloat DDouble  = (id, toSDouble sRTZ)
 numUpcast DDouble DDouble DDouble = (id, id)
 numUpcast _ _ _                   =
   error "Can't upcast something that isn't a number"
-
