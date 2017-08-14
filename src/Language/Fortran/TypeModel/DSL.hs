@@ -24,6 +24,9 @@ var = EVar
 asProp :: Logicalops1 a => FExpr v a -> FExpr v Bool
 asProp = EOp . propop1 OpEmbedProp
 
+lit :: HasRepr a => a -> FExpr v a
+lit x = EOp (OpLit (dForType [x]) x)
+
 --------------------------------------------------------------------------------
 --  Numeric
 --------------------------------------------------------------------------------
@@ -92,72 +95,72 @@ pos = EOp . numop1 OpPos
 --  Classes
 --------------------------------------------------------------------------------
 
-class HasRepr a where
+class (PrecSing (ReprPrec a), KindSing (ReprKind a)) => HasRepr a where
   type ReprPrec a :: Precision
   type ReprKind a :: Kind
 
-  getD :: proxy a -> D (ReprPrec a) (ReprKind a) a
+  dForType :: proxy a -> D (ReprPrec a) (ReprKind a) a
 
 
 instance HasRepr Int8 where
   type ReprPrec Int8 = 'P8
   type ReprKind Int8 = 'KInt
-  getD _ = DInt8
+  dForType _ = DInt8
 instance HasRepr Int16 where
   type ReprPrec Int16 = 'P16
   type ReprKind Int16 = 'KInt
-  getD _ = DInt16
+  dForType _ = DInt16
 instance HasRepr Int32 where
   type ReprPrec Int32 = 'P32
   type ReprKind Int32 = 'KInt
-  getD _ = DInt32
+  dForType _ = DInt32
 instance HasRepr Int64 where
   type ReprPrec Int64 = 'P64
   type ReprKind Int64 = 'KInt
-  getD _ = DInt64
+  dForType _ = DInt64
 
 instance HasRepr Float where
   type ReprPrec Float = 'P32
   type ReprKind Float = 'KReal
-  getD _ = DFloat
+  dForType _ = DFloat
 instance HasRepr Double where
   type ReprPrec Double = 'P64
   type ReprKind Double = 'KReal
-  getD _ = DDouble
+  dForType _ = DDouble
 
 instance HasRepr Bool8 where
   type ReprPrec Bool8 = 'P8
   type ReprKind Bool8 = 'KLogical
-  getD _ = DBool8
+  dForType _ = DBool8
 instance HasRepr Bool16 where
   type ReprPrec Bool16 = 'P16
   type ReprKind Bool16 = 'KLogical
-  getD _ = DBool16
+  dForType _ = DBool16
 instance HasRepr Bool32 where
   type ReprPrec Bool32 = 'P32
   type ReprKind Bool32 = 'KLogical
-  getD _ = DBool32
+  dForType _ = DBool32
 instance HasRepr Bool64 where
   type ReprPrec Bool64 = 'P64
   type ReprKind Bool64 = 'KLogical
-  getD _ = DBool64
+  dForType _ = DBool64
 
 instance HasRepr Char8 where
   type ReprPrec Char8 = 'P8
   type ReprKind Char8 = 'KChar
-  getD _ = DChar
+  dForType _ = DChar
 
 
 class (HasRepr a, Numeric (ReprKind a)) => Numops1 a where
   numop1 :: Op1 'OpNum -> t a -> FortranOp t a
-  numop1 op x = Op1 op Op1Num (getD x) (getD x) x
+  numop1 op x = Op1 op Op1Num (dForType x) (dForType x) x
 
 class (HasRepr a, ReprKind a ~ 'KLogical) => Logicalops1 a where
   logicalop1 :: Op1 'OpLogical -> t a -> FortranOp t a
-  logicalop1 op x = Op1 op Op1Logical (getD x) (getD x) x
+  logicalop1 op x = Op1 op Op1Logical (dForType x) (dForType x) x
 
   propop1 :: Op1 'OpProp -> t a -> FortranOp t Bool
-  propop1 op x = Op1 op Op1Prop (getD x) DProp x
+  propop1 op x = Op1 op Op1Prop (dForType x) DProp x
 
 instance (HasRepr a, Numeric (ReprKind a)) => Numops1 a
 instance (HasRepr a, ReprKind a ~ 'KLogical) => Logicalops1 a
@@ -169,7 +172,7 @@ class (HasRepr a, HasRepr b, HasRepr c,
       Numops2 a b c | a b -> c where
 
   numop2 :: Op2 'OpNum -> t a -> t b -> FortranOp t c
-  numop2 op x y = Op2 op Op2Num (getD x) (getD y) (getD (Proxy :: Proxy c)) x y
+  numop2 op x y = Op2 op Op2Num (dForType x) (dForType y) (dForType (Proxy :: Proxy c)) x y
 
 class (HasRepr a, HasRepr b, HasRepr c,
        ReprKind c ~ 'KLogical,
@@ -178,7 +181,7 @@ class (HasRepr a, HasRepr b, HasRepr c,
       Eqops2 a b c | a b -> c where
 
   eqop2 :: Op2 'OpEquality -> t a -> t b -> FortranOp t c
-  eqop2 op x y = Op2 op Op2Eq (getD x) (getD y) (getD (Proxy :: Proxy c)) x y
+  eqop2 op x y = Op2 op Op2Eq (dForType x) (dForType y) (dForType (Proxy :: Proxy c)) x y
 
 class (HasRepr a, HasRepr b, HasRepr c,
        ReprKind c ~ 'KLogical,
@@ -187,7 +190,7 @@ class (HasRepr a, HasRepr b, HasRepr c,
       Relops2 a b c | a b -> c where
 
   relop2 :: Op2 'OpRelational -> t a -> t b -> FortranOp t c
-  relop2 op x y = Op2 op Op2Rel (getD x) (getD y) (getD (Proxy :: Proxy c)) x y
+  relop2 op x y = Op2 op Op2Rel (dForType x) (dForType y) (dForType (Proxy :: Proxy c)) x y
 
 class (HasRepr a, HasRepr b, HasRepr c,
        ReprKind a ~ 'KLogical,
@@ -197,7 +200,7 @@ class (HasRepr a, HasRepr b, HasRepr c,
       Logicalops2 a b c | a b -> c where
 
   logicalop2 :: Op2 'OpLogical -> t a -> t b -> FortranOp t c
-  logicalop2 op x y = Op2 op Op2Logical (getD x) (getD y) (getD (Proxy :: Proxy c)) x y
+  logicalop2 op x y = Op2 op Op2Logical (dForType x) (dForType y) (dForType (Proxy :: Proxy c)) x y
 
 
 instance (HasRepr a, HasRepr b, HasRepr c,

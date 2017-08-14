@@ -29,8 +29,9 @@ module Language.Fortran.TypeModel.Basic
   , Bool64(..)
   -- * Model of Fortran Types
   , D(..)
-  -- * Type Classes
+  -- * Helpers
   , SymBool(..)
+  , Boolean(..)
   ) where
 
 import           Data.Data
@@ -60,15 +61,16 @@ newtype Bool64 = Bool64 { bool64Val :: Int64 }
 class SymBool a where
   toSBool :: SBV a -> SBool
   fromSBool :: SBool -> SBV a
+  toBool :: a -> Bool
 
 numTrue :: Num a => a
 numTrue = 1
 
-numNot :: Num a => a -> a
-numNot = negate
+numFalse :: Num a => a
+numFalse = 0
 
 numAnd :: Num a => a -> a -> a
-numAnd x y = signum (x * y)
+numAnd x y = signum x * signum y
 
 instance SymWord Char8
 
@@ -78,15 +80,16 @@ instance SymWord Bool8
 instance SymBool Bool8 where
   toSBool x = x .> 0
   fromSBool b = ite b true false
+  toBool x = x > 0
 
 instance Boolean Bool8 where
   true = numTrue
-  bnot = numNot
+  bnot b = if b == numFalse then numTrue else numFalse
   (&&&) = numAnd
 
 instance Boolean (SBV Bool8) where
   true = numTrue
-  bnot = numNot
+  bnot b = ite (b .== 0) numTrue numFalse
   (&&&) = numAnd
 
 
@@ -95,15 +98,16 @@ instance SymWord Bool16
 instance SymBool Bool16 where
   toSBool x = x .> 0
   fromSBool b = ite b true false
+  toBool x = x > 0
 
 instance Boolean Bool16 where
   true = numTrue
-  bnot = numNot
+  bnot b = if b == numFalse then numTrue else numFalse
   (&&&) = numAnd
 
 instance Boolean (SBV Bool16) where
   true = numTrue
-  bnot = numNot
+  bnot b = ite (b .== 0) numTrue numFalse
   (&&&) = numAnd
 
 
@@ -112,15 +116,16 @@ instance SymWord Bool32
 instance SymBool Bool32 where
   toSBool x = x .> 0
   fromSBool b = ite b true false
+  toBool x = x > 0
 
 instance Boolean Bool32 where
   true = numTrue
-  bnot = numNot
+  bnot b = if b == numFalse then numTrue else numFalse
   (&&&) = numAnd
 
 instance Boolean (SBV Bool32) where
   true = numTrue
-  bnot = numNot
+  bnot b = ite (b .== 0) numTrue numFalse
   (&&&) = numAnd
 
 
@@ -129,15 +134,16 @@ instance SymWord Bool64
 instance SymBool Bool64 where
   toSBool x = x .> 0
   fromSBool b = ite b true false
+  toBool x = x > 0
 
 instance Boolean Bool64 where
   true = numTrue
-  bnot = numNot
+  bnot b = if b == numFalse then numTrue else numFalse
   (&&&) = numAnd
 
 instance Boolean (SBV Bool64) where
   true = numTrue
-  bnot = numNot
+  bnot b = ite (b .== 0) numTrue numFalse
   (&&&) = numAnd
 
 --------------------------------------------------------------------------------

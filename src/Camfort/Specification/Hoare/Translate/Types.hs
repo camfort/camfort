@@ -1,4 +1,5 @@
 {-# LANGUAGE ConstraintKinds            #-}
+{-# LANGUAGE PatternSynonyms            #-}
 {-# LANGUAGE DataKinds                  #-}
 {-# LANGUAGE FlexibleContexts           #-}
 {-# LANGUAGE FlexibleInstances          #-}
@@ -16,54 +17,62 @@
 
 module Camfort.Specification.Hoare.Translate.Types where
 
-import           Control.Exception               (Exception (..))
-import           Data.Typeable                   (Proxy (..), TypeRep, Typeable,
-                                                  gcast, typeRep)
+import           Control.Exception          (Exception (..))
+import           Data.Typeable              (TypeRep, Typeable, Proxy(..), gcast, typeRep)
 
-import           Data.Map                        (Map)
+import           Data.Map                   (Map)
 
-import           Control.Lens                    hiding (op)
+import           Control.Lens               hiding (op)
 import           Control.Monad.Except
 import           Control.Monad.Reader
 
-import qualified Language.Fortran.AST            as F
+import qualified Language.Fortran.AST       as F
 
-import           Language.Expression.Constraints
-import           Language.Expression.Dict
 import           Language.Expression.DSL
 import           Language.Expression.Pretty
 import           Language.Verification
+
+import           Language.Fortran.TypeModel
+import           Language.Fortran.TypeModel.DSL hiding (FExpr)
 
 --------------------------------------------------------------------------------
 --  General types
 --------------------------------------------------------------------------------
 
-data Some p f where
-  Some :: (p a, Typeable a) => f a -> Some p f
+data Some c f where
+  Some :: (c a, Typeable a) => D p k a -> f a -> Some c f
 
-_Some :: (p a, Typeable a, p b, Typeable b) => Prism (Some p f) (Some p f) (f a) (f b)
-_Some = prism Some extract
+_Some
+  :: (p a, Typeable a, p b, Typeable b, HasRepr a, HasRepr b)
+  => Prism (Some p f) (Some p f) (f a) (f b)
+_Some = prism (Some (dForType Proxy)) extract
   where
     extract :: (p a, Typeable a) => Some p f -> Either (Some p f) (f a)
-    extract (Some e) = maybe (Left (Some e)) Right (gcast e)
+    extract (Some d e) = maybe (Left (Some d e)) Right (gcast e)
 
-traverseSome :: Applicative m => (forall a. (p a, Typeable a) => f a -> m (g a)) -> Some p f -> m (Some p g)
-traverseSome f (Some x) = Some <$> f x
+traverseSome
+  :: Applicative m
+  => (forall a p k. (c a, Typeable a) => D p k a -> f a -> m (g a))
+  -> Some c f -> m (Some c g)
+traverseSome f (Some d x) = Some d <$> f d x
 
-mapSome :: (forall a. (p a, Typeable a) => f a -> g a) -> Some p f -> Some p g
-mapSome f = runIdentity . traverseSome (Identity . f)
+mapSome :: (forall a p k. (c a, Typeable a) => D p k a -> f a -> g a) -> Some c f -> Some c g
+mapSome f = runIdentity . traverseSome (\d -> Identity . f d)
 
 -- | @'Some' f p@ contains an @f a@ for some @a@. This function gets the
 -- 'TypeRep' of @a@.
 someTypeRep :: Some p f -> TypeRep
-someTypeRep (Some x) = typeRep x
+someTypeRep (Some _ x) = typeRep x
 
-type SomeExpr = Some SymValue FortranExpr
 type SomeVar l = Some Verifiable (Var l)
-type SomeType = Some Verifiable (Const ())
+type SomeExpr = Some SymWord FortranExpr
+type SomeType = Some SymWord (Const ())
+
+someType :: (Typeable a, SymWord a) => D p k a -> SomeType
+someType d = Some d (Const ())
 
 someVarName :: Location l => SomeVar l -> String
-someVarName (Some v) = varName v
+someVarName (Some _ v) = varName v
 
 newtype SourceName = SourceName { getSourceName :: F.Name }
   deriving (Eq, Ord)
@@ -98,25 +107,24 @@ instance Pretty NamePair where
 
 data TranslateEnv =
   TranslateEnv
-  { _teImplictVars      :: Bool
-  , _teVarsInScope      :: Map SourceName (SomeVar NamePair)
-
-  , _teSymNumInstances  :: Dictmap SymNum
-  , _teSymBoolInstances :: Dictmap SymBool
-  , _teSymEqInstances   :: Dictmap2 SymEq
-  , _teSymOrdInstances  :: Dictmap2 SymOrd
+  { _teImplictVars :: Bool
+  , _teVarsInScope :: Map SourceName (SomeVar NamePair)
   }
 
 newtype MonadTranslate ann a =
-  MonadTranslate { getMonadTranslate :: ReaderT TranslateEnv (Either (TranslateError ann)) a }
-  deriving (Functor, Applicative, Monad, MonadError (TranslateError ann), MonadReader TranslateEnv)
+  MonadTranslate
+  { getMonadTranslate
+    :: ReaderT TranslateEnv (Either (TranslateError ann)) a
+  }
+  deriving ( Functor, Applicative, Monad
+           , MonadError (TranslateError ann)
+           , MonadReader TranslateEnv)
 
-runMonadTranslate :: MonadTranslate ann a -> TranslateEnv -> Either (TranslateError ann) a
+runMonadTranslate
+  :: MonadTranslate ann a -> TranslateEnv -> Either (TranslateError ann) a
 runMonadTranslate (MonadTranslate action) env = runReaderT action env
 
-type FortranOps = CoerceOp : StandardOps
-
-type FortranExpr = Expr' FortranOps (Var NamePair)
+type FortranExpr = Expr FortranOp (Var NamePair)
 
 type TransFormula = PropOver FortranExpr
 
@@ -188,7 +196,7 @@ displayBinaryOp = \case
   F.LT -> "<"
   F.LTE -> "<="
   F.EQ -> "=="
-  F.NE -> "!="
+  F.NE -> "/="
   F.Or -> "||"
   F.And -> "&&"
   F.Equivalent -> "=== <equivalent>"
@@ -198,27 +206,27 @@ displayBinaryOp = \case
 instance (Typeable ann, Show ann) => Exception (TranslateError ann) where
   displayException = \case
     ErrUnsupportedItem lp ->
-      "Unsupported language item: " ++ displayLangPart lp
+      "Unsupported language item " ++ displayLangPart lp
 
     ErrBadLiteral v ->
-      "Found a literal value that couldn't be translated." ++
-      "It might be invalid Fortran or it might use unsupported language features: " ++
+      "Found a literal value that couldn't be translated;" ++
+      "it might be invalid Fortran or it might use unsupported language features: " ++
       displayValue v
 
     ErrUnexpectedType lp ty ->
-      "Language item had unexpected type. Language item was: " ++ displayLangPart lp ++
-      ". Expected type was: " ++ show ty ++ "."
+      "Language item had unexpected type: language item was " ++ displayLangPart lp ++
+      "; expected type was " ++ show ty
 
     ErrInvalidVarType ty ->
-      "Tried to make a variable containing unsupported variable type: " ++ show ty
+      "Tried to make a variable containing unsupported variable type " ++ show ty
 
     ErrInvalidOperatorApplication (e1, ty1) (e2, ty2) lp ->
-      "Tried to apply operator to arguments of the wrong type. Operator was: " ++ displayLangPart lp ++
-      ". Left operand was: " ++ displayExpression e1 ++ " of type " ++ show ty1 ++
-      ". Right operand was: " ++ displayExpression e2 ++ " of type " ++ show ty2
+      "Tried to apply operator to arguments of the wrong type: Operator was " ++ displayLangPart lp ++
+      "; left operand was " ++ displayExpression e1 ++ " of type " ++ show ty1 ++
+      "; right operand was " ++ displayExpression e2 ++ " of type " ++ show ty2
 
     ErrVarNotInScope nm ->
-      "Reference to variable '" ++ nm ++ "' which is not in scope."
+      "Reference to variable '" ++ nm ++ "' which is not in scope"
 
 errUnsupportedItem :: MonadError (TranslateError ann) m => LangPart ann -> m x
 errUnsupportedItem = throwError . ErrUnsupportedItem
@@ -253,11 +261,6 @@ errVarNotInScope = throwError . ErrVarNotInScope
 
 makeLenses ''TranslateEnv
 
-instance HasTypemap (Dict1 SymNum) TranslateEnv where typemap = teSymNumInstances
-instance HasTypemap (Dict1 SymBool) TranslateEnv where typemap = teSymBoolInstances
-instance HasTypemap2 (Dict2 SymEq) TranslateEnv where typemap2 = teSymEqInstances
-instance HasTypemap2 (Dict2 SymOrd) TranslateEnv where typemap2 = teSymOrdInstances
-
 makeWrapped ''SourceName
 makeWrapped ''UniqueName
 makeLenses ''NamePair
@@ -271,20 +274,4 @@ defaultTranslateEnv =
   TranslateEnv
   { _teImplictVars = False
   , _teVarsInScope = mempty
-  , _teSymBoolInstances = defaultSymBoolInstances
-  , _teSymNumInstances = defaultSymNumInstances
-  , _teSymEqInstances = defaultSymEqInstances
-  , _teSymOrdInstances = defaultSymOrdInstances
   }
-
-defaultSymNumInstances :: Dictmap SymNum
-defaultSymNumInstances = dictmap (Proxy :: Proxy '[Integer, Double])
-
-defaultSymBoolInstances :: Dictmap SymBool
-defaultSymBoolInstances = dictmap (Proxy :: Proxy '[Bool])
-
-defaultSymEqInstances :: Dictmap2 SymEq
-defaultSymEqInstances = toDictmap2 (dictmap (Proxy :: Proxy '[Bool, Integer, Double]) :: Dictmap (SymEq Bool))
-
-defaultSymOrdInstances :: Dictmap2 SymOrd
-defaultSymOrdInstances = toDictmap2 (dictmap (Proxy :: Proxy '[Bool, Integer, Double]) :: Dictmap (SymOrd Bool))
