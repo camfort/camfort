@@ -28,11 +28,6 @@ import Camfort.Specification.Hoare.Parser.Types
   seq           { TSeq          }
   true          { TTrue         }
   false         { TFalse        }
-  '<='          { TLE           }
-  '>='          { TGE           }
-  '<'           { TLT           }
-  '>'           { TGT           }
-  '='           { TEquals       }
   '&'           { TAnd          }
   '|'           { TOr           }
   '->'          { TImpl         }
@@ -78,12 +73,7 @@ FORMULA :: { PrimFormula () }
 | FORMULA '<->' FORMULA { PFLogical (PLEquiv $1 $3) }
 | '!' FORMULA           { PFLogical (PLNot $2) }
 | '(' FORMULA ')'       { $2 }
-| EXPR '=' EXPR         { PFCompare (PCEq $1 $3) }
--- | EXPR '!=' EXPR         { PFCompare (PCNeq $1 $3) }
-| EXPR '<' EXPR         { PFCompare (PCLess $1 $3) }
-| EXPR '>' EXPR         { PFCompare (PCGreater $1 $3) }
-| EXPR '<=' EXPR        { PFCompare (PCLessEq $1 $3) }
-| EXPR '>=' EXPR        { PFCompare (PCGreaterEq $1 $3) }
+| EXPR                  { PFExpr $1 }
 
 EXPR :: { F.Expression () }
 : texpr {% parseExpression $1 }
@@ -100,3 +90,10 @@ hoareParser = Parser.mkParser (\src -> do
              ["static_assert", "invariant", "post", "pre", "seq"]
 
 }
+
+{-
+-*- mode: Haskell -*-
+Local variables:
+eval: (flycheck-mode nil)
+End:
+-}

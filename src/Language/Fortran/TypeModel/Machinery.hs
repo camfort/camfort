@@ -1,3 +1,4 @@
+{-# LANGUAGE RankNTypes #-}
 {-# LANGUAGE DataKinds             #-}
 {-# LANGUAGE DefaultSignatures     #-}
 {-# LANGUAGE FlexibleContexts      #-}
@@ -13,47 +14,92 @@
 module Language.Fortran.TypeModel.Machinery where
 
 import           Control.Applicative              (Alternative (..))
-import           Data.Typeable                    ((:~:) (..), Proxy (..),
-                                                   Typeable, gcast)
+import           Data.Typeable                    ((:~:) (..), Typeable, gcast)
 
-import           Data.SBV                         hiding (KReal, Kind)
+import           Data.Singletons
 
 import           Language.Fortran.TypeModel.Basic
+import           Language.Fortran.TypeModel.Singletons
+import           Language.Fortran.TypeModel.SBV
 
 --------------------------------------------------------------------------------
--- * Singletons for precisions and kinds
+-- * Types that have D
 
-data SingPrec p where
-  SingP8   :: SingPrec 'P8
-  SingP16  :: SingPrec 'P16
-  SingP32  :: SingPrec 'P32
-  SingP64  :: SingPrec 'P64
-  SingP128 :: SingPrec 'P128
+class (SingI (ReprPrec a), SingI (ReprKind a), SymWord a) => HasRepr a where
+  type ReprPrec a :: Precision
+  type ReprKind a :: Kind
 
-class PrecSing p where
-  precSing :: proxy p -> SingPrec p
+  dForType :: proxy a -> D (ReprPrec a) (ReprKind a) a
 
-instance PrecSing 'P8   where precSing _ = SingP8
-instance PrecSing 'P16  where precSing _ = SingP16
-instance PrecSing 'P32  where precSing _ = SingP32
-instance PrecSing 'P64  where precSing _ = SingP64
-instance PrecSing 'P128 where precSing _ = SingP128
+withRepr :: D p k a -> (HasRepr a => b) -> b
+withRepr DInt8 x = x
+withRepr DInt16 x = x
+withRepr DInt32 x = x
+withRepr DInt64 x = x
+withRepr DFloat x = x
+withRepr DDouble x = x
+withRepr DBool8 x = x
+withRepr DBool16 x = x
+withRepr DBool32 x = x
+withRepr DBool64 x = x
+withRepr DChar x = x
+withRepr DProp x = x
 
-data SingKind k where
-  SingKInt     :: SingKind 'KInt
-  SingKReal    :: SingKind 'KReal
-  SingKLogical :: SingKind 'KLogical
-  SingKChar    :: SingKind 'KChar
-  SingKProp    :: SingKind 'KProp
+literalD :: D p k a -> a -> SBV a
+literalD d = withRepr d literal
 
-class KindSing k where
-  kindSing :: proxy k -> SingKind k
+instance HasRepr Int8 where
+  type ReprPrec Int8 = 'P8
+  type ReprKind Int8 = 'KInt
+  dForType _ = DInt8
+instance HasRepr Int16 where
+  type ReprPrec Int16 = 'P16
+  type ReprKind Int16 = 'KInt
+  dForType _ = DInt16
+instance HasRepr Int32 where
+  type ReprPrec Int32 = 'P32
+  type ReprKind Int32 = 'KInt
+  dForType _ = DInt32
+instance HasRepr Int64 where
+  type ReprPrec Int64 = 'P64
+  type ReprKind Int64 = 'KInt
+  dForType _ = DInt64
 
-instance KindSing 'KInt     where kindSing _ = SingKInt
-instance KindSing 'KReal    where kindSing _ = SingKReal
-instance KindSing 'KLogical where kindSing _ = SingKLogical
-instance KindSing 'KChar    where kindSing _ = SingKChar
-instance KindSing 'KProp    where kindSing _ = SingKProp
+instance HasRepr Float where
+  type ReprPrec Float = 'P32
+  type ReprKind Float = 'KReal
+  dForType _ = DFloat
+instance HasRepr Double where
+  type ReprPrec Double = 'P64
+  type ReprKind Double = 'KReal
+  dForType _ = DDouble
+
+instance HasRepr Bool8 where
+  type ReprPrec Bool8 = 'P8
+  type ReprKind Bool8 = 'KLogical
+  dForType _ = DBool8
+instance HasRepr Bool16 where
+  type ReprPrec Bool16 = 'P16
+  type ReprKind Bool16 = 'KLogical
+  dForType _ = DBool16
+instance HasRepr Bool32 where
+  type ReprPrec Bool32 = 'P32
+  type ReprKind Bool32 = 'KLogical
+  dForType _ = DBool32
+instance HasRepr Bool64 where
+  type ReprPrec Bool64 = 'P64
+  type ReprKind Bool64 = 'KLogical
+  dForType _ = DBool64
+
+instance HasRepr Char8 where
+  type ReprPrec Char8 = 'P8
+  type ReprKind Char8 = 'KChar
+  dForType _ = DChar
+
+instance HasRepr Bool where
+  type ReprPrec Bool = 'P64
+  type ReprKind Bool = 'KProp
+  dForType _ = DProp
 
 --------------------------------------------------------------------------------
 -- * Type Families
@@ -88,43 +134,39 @@ type family PrecMax a b where
   PrecMax 'P128 'P64 = 'P128
 
 
-precMax :: (PrecSing p1, PrecSing p2) => proxy1 p1 -> proxy2 p2 -> SingPrec (PrecMax p1 p2)
-precMax p1 p2 = case (precSing p1, precSing p2) of
- (SingP8  , SingP8  ) -> SingP8
- (SingP8  , SingP16 ) -> SingP16
- (SingP8  , SingP32 ) -> SingP32
- (SingP8  , SingP64 ) -> SingP64
- (SingP8  , SingP128) -> SingP128
- (SingP16 , SingP16 ) -> SingP16
- (SingP16 , SingP32 ) -> SingP32
- (SingP16 , SingP64 ) -> SingP64
- (SingP16 , SingP128) -> SingP128
- (SingP32 , SingP32 ) -> SingP32
- (SingP32 , SingP64 ) -> SingP64
- (SingP32 , SingP128) -> SingP128
- (SingP64 , SingP64 ) -> SingP64
- (SingP64 , SingP128) -> SingP128
- (SingP128, SingP128) -> SingP128
- (SingP16 , SingP8  ) -> SingP16
- (SingP32 , SingP8  ) -> SingP32
- (SingP64 , SingP8  ) -> SingP64
- (SingP128, SingP8  ) -> SingP128
- (SingP32 , SingP16 ) -> SingP32
- (SingP64 , SingP16 ) -> SingP64
- (SingP128, SingP16 ) -> SingP128
- (SingP64 , SingP32 ) -> SingP64
- (SingP128, SingP32 ) -> SingP128
- (SingP128, SingP64 ) -> SingP128
+precMax :: Sing p1 -> Sing p2 -> Sing (PrecMax p1 p2)
+precMax p1 p2 = case (p1, p2) of
+ (SP8  , SP8  ) -> sing
+ (SP8  , SP16 ) -> sing
+ (SP8  , SP32 ) -> sing
+ (SP8  , SP64 ) -> sing
+ (SP8  , SP128) -> sing
+ (SP16 , SP16 ) -> sing
+ (SP16 , SP32 ) -> sing
+ (SP16 , SP64 ) -> sing
+ (SP16 , SP128) -> sing
+ (SP32 , SP32 ) -> sing
+ (SP32 , SP64 ) -> sing
+ (SP32 , SP128) -> sing
+ (SP64 , SP64 ) -> sing
+ (SP64 , SP128) -> sing
+ (SP128, SP128) -> sing
+ (SP16 , SP8  ) -> sing
+ (SP32 , SP8  ) -> sing
+ (SP64 , SP8  ) -> sing
+ (SP128, SP8  ) -> sing
+ (SP32 , SP16 ) -> sing
+ (SP64 , SP16 ) -> sing
+ (SP128, SP16 ) -> sing
+ (SP64 , SP32 ) -> sing
+ (SP128, SP32 ) -> sing
+ (SP128, SP64 ) -> sing
 
-
--- | Finds the 'maximum' of two numeric kinds, where 'maximum' means the result
--- kind when a binary operation is applied values of the two input kinds.
 type family NumKindMax k1 k2 where
   NumKindMax 'KInt 'KInt = 'KInt
   NumKindMax 'KInt 'KReal = 'KReal
   NumKindMax 'KReal 'KInt = 'KReal
   NumKindMax 'KReal 'KReal = 'KReal
-
 
 class Comparable (k1 :: Kind) (k2 :: Kind)
 
@@ -140,13 +182,15 @@ instance Numeric 'KInt
 instance Numeric 'KReal
 
 
-numKindMax :: (Numeric k1, Numeric k2, KindSing k1, KindSing k2) => proxy1 k1 -> proxy2 k2 -> SingKind (NumKindMax k1 k2)
+numKindMax
+  :: (Numeric k1, Numeric k2)
+  => Sing k1 -> Sing k2 -> Sing (NumKindMax k1 k2)
 numKindMax k1 k2 =
-  case (kindSing k1, kindSing k2) of
-    (SingKInt, SingKInt) -> SingKInt
-    (SingKInt, SingKReal) -> SingKReal
-    (SingKReal, SingKInt) -> SingKReal
-    (SingKReal, SingKReal) -> SingKReal
+  case (k1, k2) of
+    (SKInt, SKInt) -> sing
+    (SKInt, SKReal) -> sing
+    (SKReal, SKInt) -> sing
+    (SKReal, SKReal) -> sing
     _ -> error "Impossible: numKindMax with non-numeric input kinds"
 
 --------------------------------------------------------------------------------
@@ -155,12 +199,12 @@ numKindMax k1 k2 =
 -- | The result of matching on the kind of a 'D'. Comes packaged with
 -- constraints that all members of the matched kind satisfy.
 data MatchKind k a where
-  MKInt  :: (SIntegral a, Integral a, OrdSymbolic (SBV a), UDiv (SBV a))
+  MKInt  :: (HasRepr a, SIntegral a, Integral a, OrdSymbolic (SBV a), UDiv (SBV a))
         => MatchKind 'KInt a
-  MKReal :: (IEEEFloating a, IEEEFloatConvertable a,
+  MKReal :: (HasRepr a, IEEEFloating a, IEEEFloatConvertable a,
             OrdSymbolic (SBV a), UDiv (SBV a))
         => MatchKind 'KReal a
-  MKLogical :: SymBool a => MatchKind 'KLogical a
+  MKLogical :: (HasRepr a, SymBool a) => MatchKind 'KLogical a
   MKChar :: MatchKind 'KChar Char8
 
   MKProp :: MatchKind 'KProp Bool
@@ -182,11 +226,11 @@ matchKind DProp   = MKProp
 --------------------------------------------------------------------------------
 -- * Existential D
 
-data DWithParams p k where
-  DWithParams :: Typeable a => D p k a -> DWithParams p k
+data DWithParams (p :: Precision) (k :: Kind) where
+  DWithParams :: (Typeable a, HasRepr a) => D p k a -> DWithParams p k
 
 data DWithType a where
-  DWithType :: (PrecSing p, KindSing k) => D p k a -> DWithType a
+  DWithType :: (SingI p, SingI k) => D p k a -> DWithType a
 
 
 -- | Two types with the same precision and kind have the same representation.
@@ -207,20 +251,20 @@ dequiv DProp DProp     = Refl
 
 -- | If the particular precision and kind are inhabited by a Fortran type, get
 -- the type.
-getDWithParams :: SingPrec p -> SingKind k -> Maybe (DWithParams p k)
+getDWithParams :: Sing p -> Sing k -> Maybe (DWithParams p k)
 getDWithParams p k = case (p, k) of
-  (SingP8  , SingKInt)     -> Just (DWithParams DInt8)
-  (SingP16 , SingKInt)     -> Just (DWithParams DInt16)
-  (SingP32 , SingKInt)     -> Just (DWithParams DInt32)
-  (SingP64 , SingKInt)     -> Just (DWithParams DInt64)
-  (SingP32 , SingKReal)    -> Just (DWithParams DFloat)
-  (SingP64 , SingKReal)    -> Just (DWithParams DDouble)
-  (SingP8  , SingKLogical) -> Just (DWithParams DBool8)
-  (SingP16 , SingKLogical) -> Just (DWithParams DBool16)
-  (SingP32 , SingKLogical) -> Just (DWithParams DBool32)
-  (SingP64 , SingKLogical) -> Just (DWithParams DBool64)
-  (SingP8  , SingKChar)    -> Just (DWithParams DChar)
-  (SingP64 , SingKProp)    -> Just (DWithParams DProp)
+  (SP8  , SKInt)     -> Just (DWithParams DInt8)
+  (SP16 , SKInt)     -> Just (DWithParams DInt16)
+  (SP32 , SKInt)     -> Just (DWithParams DInt32)
+  (SP64 , SKInt)     -> Just (DWithParams DInt64)
+  (SP32 , SKReal)    -> Just (DWithParams DFloat)
+  (SP64 , SKReal)    -> Just (DWithParams DDouble)
+  (SP8  , SKLogical) -> Just (DWithParams DBool8)
+  (SP16 , SKLogical) -> Just (DWithParams DBool16)
+  (SP32 , SKLogical) -> Just (DWithParams DBool32)
+  (SP64 , SKLogical) -> Just (DWithParams DBool64)
+  (SP8  , SKChar)    -> Just (DWithParams DChar)
+  (SP64 , SKProp)    -> Just (DWithParams DProp)
   _                        -> Nothing
 
 
@@ -241,14 +285,13 @@ getDWithType _ =
 
 -- | Maximises the D with respect to precision and kind.
 maxD
-  :: (PrecSing p1, PrecSing p2,
-      KindSing k1, KindSing k2,
+  :: (SingI p1, SingI p2,
+      SingI k1, SingI k2,
       Numeric k1, Numeric k2)
   => D p1 k1 a -> D p2 k2 b -> DWithParams (PrecMax p1 p2) (NumKindMax k1 k2)
 maxD (_ :: D p1 k1 a) (_ :: D p2 k2 b) =
-  let prec = precMax (Proxy :: Proxy p1) (Proxy :: Proxy p2)
-      kind = numKindMax (Proxy :: Proxy k1) (Proxy :: Proxy k2)
-  in case getDWithParams prec kind of
+  case getDWithParams (precMax (sing :: Sing p1) (sing :: Sing p2))
+                      (numKindMax (sing :: Sing k1) (sing :: Sing k2)) of
     Just d  -> d
     Nothing -> error "impossible: maxD result doesn't exist"
 
@@ -266,13 +309,18 @@ class UDiv a where
   umod :: a -> a -> a
   umod x y = snd (udivMod x y)
 
-  default udivMod :: SDivisible a => a -> a -> (a, a)
-  udivMod = sDivMod
+wrappingUdivMod
+  :: WrappedSym a
+  => (SBV (UnwrappedSym a) -> SBV (UnwrappedSym a) -> (SBV (UnwrappedSym a), SBV (UnwrappedSym a)))
+  -> (SBV a -> SBV a -> (SBV a, SBV a))
+wrappingUdivMod f x y =
+  let (q, r) = f (unwrapSym x) (unwrapSym y)
+  in (wrapSym q, wrapSym r)
 
-instance UDiv (SBV Int8)
-instance UDiv (SBV Int16)
-instance UDiv (SBV Int32)
-instance UDiv (SBV Int64)
+instance UDiv (SBV Int8)  where udivMod = wrappingUdivMod sDivMod
+instance UDiv (SBV Int16) where udivMod = wrappingUdivMod sDivMod
+instance UDiv (SBV Int32) where udivMod = wrappingUdivMod sDivMod
+instance UDiv (SBV Int64) where udivMod = wrappingUdivMod sDivMod
 
 instance UDiv (SBV Float) where
   udivMod x y = (udiv x y, umod x y)

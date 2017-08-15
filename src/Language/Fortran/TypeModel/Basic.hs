@@ -3,7 +3,10 @@
 {-# LANGUAGE FlexibleInstances          #-}
 {-# LANGUAGE GADTs                      #-}
 {-# LANGUAGE GeneralizedNewtypeDeriving #-}
+{-# LANGUAGE KindSignatures             #-}
 {-# LANGUAGE StandaloneDeriving         #-}
+{-# LANGUAGE TemplateHaskell            #-}
+{-# LANGUAGE TypeFamilies               #-}
 
 {-# OPTIONS_GHC -Wall #-}
 
@@ -29,16 +32,13 @@ module Language.Fortran.TypeModel.Basic
   , Bool64(..)
   -- * Model of Fortran Types
   , D(..)
-  -- * Helpers
-  , SymBool(..)
-  , Boolean(..)
   ) where
+import           Data.Typeable
+import           Data.Bits
 
-import           Data.Data
-import           Data.Int
-import           Data.Word
-
-import           Data.SBV  hiding (KReal, Kind)
+import           Language.Fortran.TypeModel.Singletons
+import           Language.Fortran.TypeModel.TH
+import           Language.Fortran.TypeModel.SBV
 
 -- TODO: Complex numbers
 
@@ -46,124 +46,42 @@ import           Data.SBV  hiding (KReal, Kind)
 --  Semantic type wrappers
 --------------------------------------------------------------------------------
 
-newtype Char8 = Char8 { char8Val :: Word8 }
-  deriving (HasKind, Eq, Ord, Show, Num, Read, Data)
+symWrapper ''Bool "Bool8" []
+symWrapper ''Bool "Bool16" []
+symWrapper ''Bool "Bool32" []
+symWrapper ''Bool "Bool64" []
 
-newtype Bool8 = Bool8 { bool8Val :: Int8 }
-  deriving (HasKind, Eq, Ord, Show, Num, Read, Data)
-newtype Bool16 = Bool16 { bool16Val :: Int16 }
-  deriving (HasKind, Eq, Ord, Show, Num, Read, Data)
-newtype Bool32 = Bool32 { bool32Val :: Int32 }
-  deriving (HasKind, Eq, Ord, Show, Num, Read, Data)
-newtype Bool64 = Bool64 { bool64Val :: Int64 }
-  deriving (HasKind, Eq, Ord, Show, Num, Read, Data)
+symWrapper ''Integer "Int8" [''Num, ''Real, ''Enum, ''Integral, ''Bits, ''SIntegral]
+symWrapper ''Integer "Int16" [''Num, ''Real, ''Enum, ''Integral, ''Bits, ''SIntegral]
+symWrapper ''Integer "Int32" [''Num, ''Real, ''Enum, ''Integral, ''Bits, ''SIntegral]
+symWrapper ''Integer "Int64" [''Num, ''Real, ''Enum, ''Integral, ''Bits, ''SIntegral]
 
-class SymBool a where
-  toSBool :: SBV a -> SBool
-  fromSBool :: SBool -> SBV a
-  toBool :: a -> Bool
+symWrapper ''Float "Float32"
+  [''Real, ''Fractional, ''Floating, ''RealFrac,
+   ''RealFloat, ''IEEEFloating, ''IEEEFloatConvertable, ''Num]
+symWrapper ''Double "Float64"
+  [''Real, ''Fractional, ''Floating, ''RealFrac,
+   ''RealFloat, ''IEEEFloating, ''IEEEFloatConvertable, ''Num]
 
-numTrue :: Num a => a
-numTrue = 1
+symWrapper ''Integer "Char8" []
 
-numFalse :: Num a => a
-numFalse = 0
-
-numAnd :: Num a => a -> a -> a
-numAnd x y = signum x * signum y
-
-instance SymWord Char8
-
-
-instance SymWord Bool8
 
 instance SymBool Bool8 where
-  toSBool x = x .> 0
-  fromSBool b = ite b true false
-  toBool x = x > 0
-
-instance Boolean Bool8 where
-  true = numTrue
-  bnot b = if b == numFalse then numTrue else numFalse
-  (&&&) = numAnd
-
-instance Boolean (SBV Bool8) where
-  true = numTrue
-  bnot b = ite (b .== 0) numTrue numFalse
-  (&&&) = numAnd
-
-
-instance SymWord Bool16
-
+  fromSBool = wrapSym
+  toSBool = unwrapSym
 instance SymBool Bool16 where
-  toSBool x = x .> 0
-  fromSBool b = ite b true false
-  toBool x = x > 0
-
-instance Boolean Bool16 where
-  true = numTrue
-  bnot b = if b == numFalse then numTrue else numFalse
-  (&&&) = numAnd
-
-instance Boolean (SBV Bool16) where
-  true = numTrue
-  bnot b = ite (b .== 0) numTrue numFalse
-  (&&&) = numAnd
-
-
-instance SymWord Bool32
-
+  fromSBool = wrapSym
+  toSBool = unwrapSym
 instance SymBool Bool32 where
-  toSBool x = x .> 0
-  fromSBool b = ite b true false
-  toBool x = x > 0
-
-instance Boolean Bool32 where
-  true = numTrue
-  bnot b = if b == numFalse then numTrue else numFalse
-  (&&&) = numAnd
-
-instance Boolean (SBV Bool32) where
-  true = numTrue
-  bnot b = ite (b .== 0) numTrue numFalse
-  (&&&) = numAnd
-
-
-instance SymWord Bool64
-
+  fromSBool = wrapSym
+  toSBool = unwrapSym
 instance SymBool Bool64 where
-  toSBool x = x .> 0
-  fromSBool b = ite b true false
-  toBool x = x > 0
-
-instance Boolean Bool64 where
-  true = numTrue
-  bnot b = if b == numFalse then numTrue else numFalse
-  (&&&) = numAnd
-
-instance Boolean (SBV Bool64) where
-  true = numTrue
-  bnot b = ite (b .== 0) numTrue numFalse
-  (&&&) = numAnd
+  fromSBool = wrapSym
+  toSBool = unwrapSym
 
 --------------------------------------------------------------------------------
 --  Model of Fortran Types
 --------------------------------------------------------------------------------
-
-data Precision
-  = P8
-  | P16
-  | P32
-  | P64
-  | P128
-
-data Kind
-  = KReal
-  | KInt
-  | KLogical
-  | KChar
-  | KProp
-  -- ^ A dummy data kind for embedding Fortran expressions in propositions
 
 -- | Lists the allowed Fortran types, with corresponding constraints on
 -- precision, kind and semantic Haskell type.
@@ -187,5 +105,3 @@ data D p k a where
 
 deriving instance Show (D p k a)
 deriving instance Typeable (D p k a)
-
--- deriving instance Show (Op2Result ok k1 p1 k2 p2 k3 p3)

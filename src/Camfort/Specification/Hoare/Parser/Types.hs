@@ -44,11 +44,6 @@ prettyTokens = intercalate " " . map prettyToken
       TPost -> "post"
       TInvariant -> "invariant"
       TSeq -> "seq"
-      TEquals -> "="
-      TGT -> ">"
-      TLT -> "<"
-      TGE -> ">="
-      TLE -> "<="
       TRParen -> ")"
       TLParen -> "("
       TAnd -> "&"
@@ -68,11 +63,6 @@ data Token
   | TPost
   | TInvariant
   | TSeq
-  | TEquals
-  | TGT
-  | TLT
-  | TGE
-  | TLE
   | TRParen
   | TLParen
   | TAnd

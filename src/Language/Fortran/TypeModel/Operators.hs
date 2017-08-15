@@ -7,8 +7,10 @@
 {-# LANGUAGE MultiParamTypeClasses      #-}
 {-# LANGUAGE RankNTypes                 #-}
 {-# LANGUAGE StandaloneDeriving         #-}
+{-# LANGUAGE ScopedTypeVariables         #-}
 {-# LANGUAGE TypeFamilies               #-}
-
+{-# LANGUAGE PolyKinds               #-}
+{-# LANGUAGE TemplateHaskell               #-}
 {-# OPTIONS_GHC -Wall #-}
 
 module Language.Fortran.TypeModel.Operators
@@ -21,35 +23,31 @@ module Language.Fortran.TypeModel.Operators
   , Op1Result(..)
   , Op2Result(..)
   -- * Type machinery
-  , OpKindSing(..)
-  , SingOpKind(..)
   , SomeOp1Result(..)
   , SomeOp2Result(..)
   , getOp1Result
   , getOp2Result
+  , getDFromOp1Result
+  , getDFromOp2Result
   ) where
 
 import           Data.Typeable ((:~:)(..))
+import           Data.Functor.Classes
 
 import           Data.SBV                             hiding (KReal, Kind)
+import           Data.Singletons
 
 import           Language.Expression
+import           Language.Expression.Pretty
 
 import           Language.Fortran.TypeModel.Basic
+import           Language.Fortran.TypeModel.Singletons
 import           Language.Fortran.TypeModel.Machinery
+import           Language.Fortran.TypeModel.SBV
 
 --------------------------------------------------------------------------------
 --  Model of Fortran operators
 --------------------------------------------------------------------------------
-
-data OpKind
-  = OpNum
-  | OpEquality
-  | OpRelational
-  | OpLogical
-  | OpProp
-  -- ^ A dummy operator type for embedding Fortran expressions in propositions
-  deriving (Show)
 
 data Op1 k where
   OpPos, OpNeg :: Op1 'OpNum
@@ -79,31 +77,30 @@ deriving instance Show (Op1Result ok p1 k1 p2 k2)
 
 data Op2Result ok p1 k1 p2 k2 p3 k3 where
   Op2Num
-    :: (PrecSing p1, PrecSing p2, KindSing k1, KindSing k2)
+    :: (Numeric k1, Numeric k2)
     => Op2Result 'OpNum p1 k1 p2 k2 (PrecMax p1 p2) (NumKindMax k1 k2)
   Op2Eq
-    :: (PrecSing p1, PrecSing p2, KindSing k1, KindSing k2, Comparable k1 k2)
+    :: (Comparable k1 k2)
     => Op2Result 'OpEquality p1 k1 p2 k2 'P8 'KLogical
   Op2Rel
-    :: (PrecSing p1, PrecSing p2, KindSing k1, KindSing k2, Comparable k1 k2)
+    :: (Comparable k1 k2)
     => Op2Result 'OpRelational p1 k1 p2 k2 'P8 'KLogical
   Op2Logical
-    :: (PrecSing p1, PrecSing p2)
-    => Op2Result 'OpLogical p1 'KLogical p2 'KLogical
+    :: Op2Result 'OpLogical p1 'KLogical p2 'KLogical
                             (PrecMax p1 p2) 'KLogical
 
 
 data FortranOp t a where
   OpLit
-    :: (PrecSing p, KindSing k)
+    :: (SingI p, SingI k)
     => D p k a -> a -> FortranOp t a
   Op1
-    :: (PrecSing p1, PrecSing p2, KindSing k1, KindSing k2)
+    :: (SingI p1, SingI p2, SingI k1, SingI k2)
     => Op1 ok -> Op1Result ok p1 k1 p2 k2
     -> D p1 k1 a -> D p2 k2 b
     -> t a -> FortranOp t b
   Op2
-    :: (PrecSing p1, PrecSing p2, PrecSing p3, KindSing k1, KindSing k2, KindSing k3)
+    :: (SingI p1, SingI p2, SingI p3, SingI k1, SingI k2, SingI k3)
     => Op2 ok -> Op2Result ok p1 k1 p2 k2 p3 k3
     -> D p1 k1 a -> D p2 k2 b -> D p3 k3 c
     -> t a -> t b -> FortranOp t c
@@ -116,7 +113,7 @@ instance Operator FortranOp where
 
 instance (Applicative f) => EvalOp f SBV FortranOp where
   evalOp f = \case
-    OpLit d x -> pure (dToSBV d x)
+    OpLit d x -> pure (literalD d x)
 
     Op1 OpEmbedProp opr d1 d2 x ->
       case matchOp1Result opr d1 d2 of
@@ -165,9 +162,9 @@ instance (Applicative f) => EvalOp f SBV FortranOp where
 -- | The result of matching on a unary operator result. Packages constraints
 -- that will always be satisfied by the operands and result.
 data MatchOp1Result ok a b where
-  MOp1RNum :: (Num a, SymWord a, UDiv (SBV a)) => MatchOp1Result 'OpNum a a
-  MOp1RLogical :: SymBool a => MatchOp1Result 'OpLogical a a
-  MOp1RProp :: SymBool a => MatchOp1Result 'OpProp a Bool
+  MOp1RNum :: (HasRepr a, Num a, UDiv (SBV a)) => MatchOp1Result 'OpNum a a
+  MOp1RLogical :: (HasRepr a, SymBool a) => MatchOp1Result 'OpLogical a a
+  MOp1RProp :: (HasRepr a, SymBool a) => MatchOp1Result 'OpProp a Bool
 
 matchOp1Result :: Op1Result ok p1 k1 p2 k2 -> D p1 k1 a -> D p2 k2 b -> MatchOp1Result ok a b
 matchOp1Result Op1Num d1 d2 =
@@ -189,23 +186,23 @@ matchOp1Result Op1Prop d1 d2 =
 -- that will always be satisfied by the operands and result.
 data MatchOp2Result ok a b c where
   MOp2RNum
-    :: (Num c, SymWord c, UDiv (SBV c))
+    :: (HasRepr c, Num c, UDiv (SBV c))
     => Convert a c -> Convert b c -> MatchOp2Result 'OpNum a b c
 
   MOp2REq
-    :: (SymBool c, EqSymbolic (SBV d))
+    :: (HasRepr c, SymBool c, EqSymbolic (SBV d))
     => Convert a d -> Convert b d -> MatchOp2Result 'OpEquality a b c
 
   MOp2RRel
-    :: (SymBool c, OrdSymbolic (SBV d))
+    :: (HasRepr c, SymBool c, OrdSymbolic (SBV d))
     => Convert a d -> Convert b d -> MatchOp2Result 'OpRelational a b c
 
   MOp2RLogical
-    :: (SymBool c)
+    :: (SymBool a, SymBool b, SymBool c)
     => Convert a c -> Convert b c -> MatchOp2Result 'OpLogical a b c
 
 matchOp2Result
-  :: (PrecSing p1, PrecSing p2, PrecSing p3, KindSing k1, KindSing k2, KindSing k3)
+  :: (SingI p1, SingI p2, SingI p3, SingI k1, SingI k2, SingI k3)
   => Op2Result ok p1 k1 p2 k2 p3 k3
   -> D p1 k1 a -> D p2 k2 b -> D p3 k3 c
   -> MatchOp2Result ok a b c
@@ -266,7 +263,7 @@ matchOp2Result Op2Logical d1 d2 d3 =
 
 withOp1Num
   :: MatchOp1Result 'OpNum a b
-  -> ((Num a, SymWord a) => SBV a -> SBV a)
+  -> ((HasRepr a, Num a) => SBV a -> SBV a)
   -> SBV a -> SBV b
 withOp1Num MOp1RNum f = f
 
@@ -278,7 +275,7 @@ withOp1Logical MOp1RLogical f = fromSBool . f . toSBool
 
 withOp2Num
   :: MatchOp2Result 'OpNum a b c
-  -> ((Num c, SymWord c, UDiv (SBV c)) => SBV c -> SBV c -> SBV c)
+  -> ((HasRepr c, Num c, UDiv (SBV c)) => SBV c -> SBV c -> SBV c)
   -> SBV a -> SBV b -> SBV c
 withOp2Num (MOp2RNum ac bc) f x y = f (ac x) (bc y)
 
@@ -302,62 +299,30 @@ withOp2Logical (MOp2RLogical ac bc) f x y =
   fromSBool $ f (toSBool $ ac x) (toSBool $ bc y)
 
 
--- TODO: Fill in errors
-dToSBV :: D p k a -> a -> SBV a
-dToSBV DInt8 = fromIntegral
-dToSBV DInt16 = fromIntegral
-dToSBV DInt32 = fromIntegral
-dToSBV DInt64 = fromIntegral
-dToSBV DFloat = error "float to SBV"
-dToSBV DDouble = error "double to SBV"
-dToSBV DBool8 = fromBool . toBool
-dToSBV DBool16 = fromBool . toBool
-dToSBV DBool32 = fromBool . toBool
-dToSBV DBool64 = fromBool . toBool
-dToSBV DChar = error "char to SBV"
-dToSBV DProp = fromBool
-
 --------------------------------------------------------------------------------
 --  Existential Results
 --------------------------------------------------------------------------------
 
-data SingOpKind ok where
-  SingOpNum :: SingOpKind 'OpNum
-  SingOpEquality :: SingOpKind 'OpEquality
-  SingOpRelational :: SingOpKind 'OpRelational
-  SingOpLogical :: SingOpKind 'OpLogical
-  SingOpProp :: SingOpKind 'OpProp
-
-class OpKindSing ok where
-  opKindSing :: proxy ok -> SingOpKind ok
-
-instance OpKindSing 'OpNum where opKindSing _ = SingOpNum
-instance OpKindSing 'OpEquality where opKindSing _ = SingOpEquality
-instance OpKindSing 'OpRelational where opKindSing _ = SingOpRelational
-instance OpKindSing 'OpLogical where opKindSing _ = SingOpLogical
-instance OpKindSing 'OpProp where opKindSing _ = SingOpProp
-
-
 data SomeOp1Result ok p1 k1 where
-  SomeOp1Result :: Op1Result ok p1 k1 p2 k2 -> SomeOp1Result ok p1 k1
+  SomeOp1Result :: (SingI p2, SingI k2) => Op1Result ok p1 k1 p2 k2 -> SomeOp1Result ok p1 k1
 
 data SomeOp2Result ok p1 k1 p2 k2 where
-  SomeOp2Result :: Op2Result ok p1 k1 p2 k2 p3 k3 -> SomeOp2Result ok p1 k1 p2 k2
+  SomeOp2Result :: (SingI p3, SingI k3) => Op2Result ok p1 k1 p2 k2 p3 k3 -> SomeOp2Result ok p1 k1 p2 k2
 
 
-getOp1Result :: OpKindSing ok => proxy ok -> D p1 k1 a -> Maybe (SomeOp1Result ok p1 k1)
+getOp1Result :: (SingI ok, SingI p1, SingI k1) => proxy ok -> D p1 k1 a -> Maybe (SomeOp1Result ok p1 k1)
 getOp1Result op d =
-  case opKindSing op of
-    SingOpNum ->
+  case singByProxy op of
+    SOpNum ->
       case matchKind d of
         MKInt -> Just (SomeOp1Result Op1Num)
         MKReal -> Just (SomeOp1Result Op1Num)
         _ -> Nothing
-    SingOpLogical ->
+    SOpLogical ->
       case matchKind d of
         MKLogical -> Just (SomeOp1Result Op1Logical)
         _ -> Nothing
-    SingOpProp ->
+    SOpProp ->
       case matchKind d of
         MKLogical -> Just (SomeOp1Result Op1Prop)
         _ -> Nothing
@@ -365,18 +330,19 @@ getOp1Result op d =
 
 
 getOp2Result
-  :: (OpKindSing ok, PrecSing p1, PrecSing p2, KindSing k1, KindSing k2)
-  => proxy ok -> D p1 k1 a -> D p2 k2 b -> Maybe (SomeOp2Result ok p1 k1 p2 k2)
-getOp2Result op d1 d2 =
-  case opKindSing op of
-    SingOpNum ->
+  :: (SingI p1, SingI p2, SingI k1, SingI k2)
+  => Sing ok -> D p1 k1 a -> D p2 k2 b -> Maybe (SomeOp2Result ok p1 k1 p2 k2)
+getOp2Result op (d1 :: D p1 k1 a) (d2 :: D p2 k2 b) =
+  case op of
+    SOpNum ->
+      withSingI (precMax (sing :: Sing p1) (sing :: Sing p2)) $
       case (matchKind d1, matchKind d2) of
         (MKInt, MKInt) -> Just (SomeOp2Result Op2Num)
         (MKInt, MKReal) -> Just (SomeOp2Result Op2Num)
         (MKReal, MKInt) -> Just (SomeOp2Result Op2Num)
         (MKReal, MKReal) -> Just (SomeOp2Result Op2Num)
         _ -> Nothing
-    SingOpEquality ->
+    SOpEquality ->
       case (matchKind d1, matchKind d2) of
         (MKInt, MKInt) -> Just (SomeOp2Result Op2Eq)
         (MKInt, MKReal) -> Just (SomeOp2Result Op2Eq)
@@ -384,7 +350,7 @@ getOp2Result op d1 d2 =
         (MKReal, MKReal) -> Just (SomeOp2Result Op2Eq)
         (MKChar, MKChar) -> Just (SomeOp2Result Op2Eq)
         _ -> Nothing
-    SingOpRelational ->
+    SOpRelational ->
       case (matchKind d1, matchKind d2) of
         (MKInt, MKInt) -> Just (SomeOp2Result Op2Rel)
         (MKInt, MKReal) -> Just (SomeOp2Result Op2Rel)
@@ -392,8 +358,107 @@ getOp2Result op d1 d2 =
         (MKReal, MKReal) -> Just (SomeOp2Result Op2Rel)
         (MKChar, MKChar) -> Just (SomeOp2Result Op2Rel)
         _ -> Nothing
-    SingOpLogical ->
+    SOpLogical ->
+      withSingI (precMax (sing :: Sing p1) (sing :: Sing p2)) $
       case (matchKind d1, matchKind d2) of
         (MKLogical, MKLogical) -> Just (SomeOp2Result Op2Logical)
         _ -> Nothing
     _ -> Nothing
+
+
+getDFromOp1Result
+  :: (SingI p2, SingI k2)
+  => Op1Result ok p1 k1 p2 k2 -> Maybe (DWithParams p2 k2)
+getDFromOp1Result _ = getDWithParams sing sing
+
+getDFromOp2Result
+  :: (SingI p3, SingI k3)
+  => Op2Result ok p1 k1 p2 k2 p3 k3 -> Maybe (DWithParams p3 k3)
+getDFromOp2Result _ = getDWithParams sing sing
+
+--------------------------------------------------------------------------------
+--  Extra instances
+--------------------------------------------------------------------------------
+
+showsDPrec :: Int -> D p k a -> a -> ShowS
+showsDPrec p = \case
+  DInt8 -> showsPrec p
+  DInt16 -> showsPrec p
+  DInt32 -> showsPrec p
+  DInt64 -> showsPrec p
+  DFloat -> showsPrec p
+  DDouble -> showsPrec p
+  DBool8 -> showsPrec p
+  DBool16 -> showsPrec p
+  DBool32 -> showsPrec p
+  DBool64 -> showsPrec p
+  DChar -> showsPrec p
+  DProp -> showsPrec p
+
+instance Pretty2 FortranOp where
+  prettys2Prec p = \case
+    OpLit d x -> showsDPrec p d x
+    Op1 op _ _ _ x -> case op of
+      OpNeg -> prettys1PrecUnop 9 "-" p x
+      OpPos -> prettys1PrecUnop 9 "+" p x
+      OpNot -> prettys1PrecUnop 9 "!" p x
+      OpEmbedProp -> prettys1Prec p x
+    Op2 op _ _ _ _ x y -> case op of
+      OpAdd      -> prettys1PrecBinop 5 " + "    p x y
+      OpSub      -> prettys1PrecBinop 5 " + "    p x y
+      OpMul      -> prettys1PrecBinop 6 " + "    p x y
+      OpDiv      -> prettys1PrecBinop 6 " + "    p x y
+      OpEq       -> prettys1PrecBinop 4 " == "   p x y
+      OpNE       -> prettys1PrecBinop 4 " /= "   p x y
+      OpLT       -> prettys1PrecBinop 4 " < "    p x y
+      OpLE       -> prettys1PrecBinop 4 " <= "   p x y
+      OpGT       -> prettys1PrecBinop 4 " > "    p x y
+      OpGE       -> prettys1PrecBinop 4 " >= "   p x y
+      OpAnd      -> prettys1PrecBinop 3 " && "   p x y
+      OpOr       -> prettys1PrecBinop 2 " || "   p x y
+      OpEquiv    -> prettys1PrecBinop 1 " <=> "  p x y
+      OpNotEquiv -> prettys1PrecBinop 1 " </=> " p x y
+
+eqD :: D p1 k1 a -> D p2 k2 b -> a -> b -> Bool
+eqD DInt8 DInt8 = (==)
+eqD DInt16 DInt16 = (==)
+eqD DInt32 DInt32 = (==)
+eqD DInt64 DInt64 = (==)
+eqD DFloat DFloat = (==)
+eqD DDouble DDouble = (==)
+eqD DBool8 DBool8 = (==)
+eqD DBool16 DBool16 = (==)
+eqD DBool32 DBool32 = (==)
+eqD DBool64 DBool64 = (==)
+eqD DChar DChar = (==)
+eqD DProp DProp = (==)
+eqD _ _ = \_ _ -> False
+
+instance HEq FortranOp where
+  liftHEq le eq x y = case (x, y) of
+    (OpLit _ x1, OpLit _ x2) -> eq x1 x2
+    (Op1 op1 _ d1 _ x1, Op1 op2 _ d2 _ x2) -> case (op1, op2) of
+      (OpNeg, OpNeg) -> le (eqD d1 d2) x1 x2
+      (OpPos, OpPos) -> le (eqD d1 d2) x1 x2
+      (OpNot, OpNot) -> le (eqD d1 d2) x1 x2
+      _ -> False
+    (Op2 op1 _ dx1 dy1 _ x1 y1, Op2 op2 _ dx2 dy2 _ x2 y2) -> case (op1, op2) of
+      (OpAdd     , OpAdd) -> le (eqD dx1 dx2) x1 x2 && le (eqD dy1 dy2) y1 y2
+      (OpSub     , OpSub) -> le (eqD dx1 dx2) x1 x2 && le (eqD dy1 dy2) y1 y2
+      (OpMul     , OpMul) -> le (eqD dx1 dx2) x1 x2 && le (eqD dy1 dy2) y1 y2
+      (OpDiv     , OpDiv) -> le (eqD dx1 dx2) x1 x2 && le (eqD dy1 dy2) y1 y2
+      (OpEq      , OpEq) -> le (eqD dx1 dx2) x1 x2 && le (eqD dy1 dy2) y1 y2
+      (OpNE      , OpNE) -> le (eqD dx1 dx2) x1 x2 && le (eqD dy1 dy2) y1 y2
+      (OpLT      , OpLT) -> le (eqD dx1 dx2) x1 x2 && le (eqD dy1 dy2) y1 y2
+      (OpLE      , OpLE) -> le (eqD dx1 dx2) x1 x2 && le (eqD dy1 dy2) y1 y2
+      (OpGT      , OpGT) -> le (eqD dx1 dx2) x1 x2 && le (eqD dy1 dy2) y1 y2
+      (OpGE      , OpGE) -> le (eqD dx1 dx2) x1 x2 && le (eqD dy1 dy2) y1 y2
+      (OpAnd     , OpAnd) -> le (eqD dx1 dx2) x1 x2 && le (eqD dy1 dy2) y1 y2
+      (OpOr      , OpOr) -> le (eqD dx1 dx2) x1 x2 && le (eqD dy1 dy2) y1 y2
+      (OpEquiv   , OpEquiv) -> le (eqD dx1 dx2) x1 x2 && le (eqD dy1 dy2) y1 y2
+      (OpNotEquiv, OpNotEquiv) -> le (eqD dx1 dx2) x1 x2 && le (eqD dy1 dy2) y1 y2
+      _ -> False
+    _ -> False
+
+instance (Eq1 t) => Eq1 (FortranOp t) where liftEq = liftLiftEq
+instance (Eq1 t, Eq a) => Eq (FortranOp t a) where (==) = eq1

@@ -1,6 +1,7 @@
 {-# LANGUAGE ConstraintKinds            #-}
 {-# LANGUAGE PatternSynonyms            #-}
 {-# LANGUAGE DataKinds                  #-}
+{-# LANGUAGE ScopedTypeVariables                  #-}
 {-# LANGUAGE FlexibleContexts           #-}
 {-# LANGUAGE FlexibleInstances          #-}
 {-# LANGUAGE GADTs                      #-}
@@ -18,7 +19,7 @@
 module Camfort.Specification.Hoare.Translate.Types where
 
 import           Control.Exception          (Exception (..))
-import           Data.Typeable              (TypeRep, Typeable, Proxy(..), gcast, typeRep)
+import           Data.Typeable              (TypeRep, Typeable, gcast, typeRep)
 
 import           Data.Map                   (Map)
 
@@ -33,46 +34,46 @@ import           Language.Expression.Pretty
 import           Language.Verification
 
 import           Language.Fortran.TypeModel
-import           Language.Fortran.TypeModel.DSL hiding (FExpr)
+import           Language.Fortran.TypeModel.Machinery
 
 --------------------------------------------------------------------------------
 --  General types
 --------------------------------------------------------------------------------
 
 data Some c f where
-  Some :: (c a, Typeable a) => D p k a -> f a -> Some c f
+  Some :: (c a, Typeable a, HasRepr a) => f a -> Some c f
 
 _Some
   :: (p a, Typeable a, p b, Typeable b, HasRepr a, HasRepr b)
   => Prism (Some p f) (Some p f) (f a) (f b)
-_Some = prism (Some (dForType Proxy)) extract
+_Some = prism Some extract
   where
     extract :: (p a, Typeable a) => Some p f -> Either (Some p f) (f a)
-    extract (Some d e) = maybe (Left (Some d e)) Right (gcast e)
+    extract (Some e) = maybe (Left (Some e)) Right (gcast e)
 
 traverseSome
   :: Applicative m
-  => (forall a p k. (c a, Typeable a) => D p k a -> f a -> m (g a))
+  => (forall a. (c a, Typeable a, HasRepr a) => f a -> m (g a))
   -> Some c f -> m (Some c g)
-traverseSome f (Some d x) = Some d <$> f d x
+traverseSome f (Some x) = Some <$> f x
 
-mapSome :: (forall a p k. (c a, Typeable a) => D p k a -> f a -> g a) -> Some c f -> Some c g
-mapSome f = runIdentity . traverseSome (\d -> Identity . f d)
+mapSome :: (forall a. (c a, Typeable a, HasRepr a) => f a -> g a) -> Some c f -> Some c g
+mapSome f = runIdentity . traverseSome (Identity . f)
 
 -- | @'Some' f p@ contains an @f a@ for some @a@. This function gets the
 -- 'TypeRep' of @a@.
 someTypeRep :: Some p f -> TypeRep
-someTypeRep (Some _ x) = typeRep x
+someTypeRep (Some x) = typeRep x
 
 type SomeVar l = Some Verifiable (Var l)
-type SomeExpr = Some SymWord FortranExpr
-type SomeType = Some SymWord (Const ())
+type SomeExpr = Some Verifiable FortranExpr
+type SomeType = Some Verifiable (Const ())
 
-someType :: (Typeable a, SymWord a) => D p k a -> SomeType
-someType d = Some d (Const ())
+someType :: (Typeable a, SymWord a, HasRepr a) => proxy a -> SomeType
+someType (_ :: proxy a) = Some (Const () :: Const () a)
 
 someVarName :: Location l => SomeVar l -> String
-someVarName (Some _ v) = varName v
+someVarName (Some v) = varName v
 
 newtype SourceName = SourceName { getSourceName :: F.Name }
   deriving (Eq, Ord)
@@ -138,14 +139,16 @@ data TranslateError a
   | ErrBadLiteral (F.Value a)
   -- ^ Found a literal value that we didn't know how to translate. May or may
   -- not be valid Fortran.
-  | ErrUnexpectedType (LangPart a) TypeRep
+  | ErrUnexpectedType (LangPart a) TypeRep TypeRep
   -- ^ Tried to translate a FORTRAN language part into the wrong expression
   -- type, and it wasn't coercible to the correct type.
   | ErrInvalidVarType TypeRep
   -- ^ Tried to make a variable representing a value of a type that can't be
   -- stored in a variable.
-  | ErrInvalidOperatorApplication (F.Expression a, TypeRep) (F.Expression a, TypeRep) (LangPart a)
-  -- ^ Tried to apply an operator to arguments with the wrong type.
+  | ErrInvalidBinopApplication (F.Expression a, TypeRep) (F.Expression a, TypeRep) (LangPart a)
+  -- ^ Tried to apply a binary operator to arguments with the wrong types.
+  | ErrInvalidUnopApplication (F.Expression a, TypeRep) (LangPart a)
+  -- ^ Tried to apply a unary operator to an argument with the wrong type.
   | ErrVarNotInScope F.Name
   -- ^ Reference to a variable that's not currently in scope
   deriving (Typeable, Show)
@@ -209,21 +212,25 @@ instance (Typeable ann, Show ann) => Exception (TranslateError ann) where
       "Unsupported language item " ++ displayLangPart lp
 
     ErrBadLiteral v ->
-      "Found a literal value that couldn't be translated;" ++
+      "Found a literal value that couldn't be translated; " ++
       "it might be invalid Fortran or it might use unsupported language features: " ++
       displayValue v
 
-    ErrUnexpectedType lp ty ->
+    ErrUnexpectedType lp ty1 ty2 ->
       "Language item had unexpected type: language item was " ++ displayLangPart lp ++
-      "; expected type was " ++ show ty
+      "; expected type was " ++ show ty1 ++ "; actual type was " ++ show ty2
 
     ErrInvalidVarType ty ->
       "Tried to make a variable containing unsupported variable type " ++ show ty
 
-    ErrInvalidOperatorApplication (e1, ty1) (e2, ty2) lp ->
+    ErrInvalidBinopApplication (e1, ty1) (e2, ty2) lp ->
       "Tried to apply operator to arguments of the wrong type: Operator was " ++ displayLangPart lp ++
       "; left operand was " ++ displayExpression e1 ++ " of type " ++ show ty1 ++
       "; right operand was " ++ displayExpression e2 ++ " of type " ++ show ty2
+
+    ErrInvalidUnopApplication (e, ty) lp ->
+      "Tried to apply unary operator to arguments of the wrong type: Operator was " ++ displayLangPart lp ++
+      "; operand was " ++ displayExpression e ++ " of type " ++ show ty
 
     ErrVarNotInScope nm ->
       "Reference to variable '" ++ nm ++ "' which is not in scope"
@@ -243,14 +250,21 @@ errUnsupportedTypeSpec = errUnsupportedItem . LpTypeSpec
 errBadLiteral :: MonadError (TranslateError ann) m => (F.Value ann) -> m x
 errBadLiteral = throwError . ErrBadLiteral
 
-errUnexpectedType :: MonadError (TranslateError ann) m => LangPart ann -> TypeRep -> m x
-errUnexpectedType lp = throwError . ErrUnexpectedType lp
+errUnexpectedType :: MonadError (TranslateError ann) m => LangPart ann -> TypeRep -> TypeRep -> m x
+errUnexpectedType lp tye = throwError . ErrUnexpectedType lp tye
 
 errInvalidVarType :: MonadError (TranslateError ann) m => TypeRep -> m x
 errInvalidVarType = throwError . ErrInvalidVarType
 
-errInvalidOperatorApplication :: MonadError (TranslateError ann) m => (F.Expression ann, TypeRep) -> (F.Expression ann, TypeRep) -> LangPart ann -> m x
-errInvalidOperatorApplication e1 e2 lp = throwError (ErrInvalidOperatorApplication e1 e2 lp)
+errInvalidBinopApplication
+  :: MonadError (TranslateError ann) m
+  => (F.Expression ann, TypeRep) -> (F.Expression ann, TypeRep) -> LangPart ann -> m x
+errInvalidBinopApplication e1 e2 lp = throwError (ErrInvalidBinopApplication e1 e2 lp)
+
+errInvalidUnopApplication
+  :: MonadError (TranslateError ann) m
+  => (F.Expression ann, TypeRep) -> LangPart ann -> m x
+errInvalidUnopApplication e lp = throwError (ErrInvalidUnopApplication e lp)
 
 errVarNotInScope :: MonadError (TranslateError ann) m => F.Name -> m x
 errVarNotInScope = throwError . ErrVarNotInScope

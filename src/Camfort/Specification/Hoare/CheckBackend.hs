@@ -41,6 +41,7 @@ import           Camfort.Analysis.Annotations           (Report, mkReport)
 import           Camfort.Specification.Hoare.Annotation
 import           Camfort.Specification.Hoare.Syntax
 import           Camfort.Specification.Hoare.Translate
+import           Language.Fortran.TypeModel.DSL
 
 import           Language.Expression.DSL
 import           Language.Expression.Pretty
@@ -59,7 +60,7 @@ data AnnotatedProgramUnit =
   }
 
 data HoareBackendErrorKind
-  = VerifierError (VerifierError NamePair (Expr' FortranOps))
+  = VerifierError (VerifierError NamePair FExpr)
   | TranslateError0 (TranslateError ())
   -- ^ Unit errors come from translating annotation formulae
   | TranslateError1 (TranslateError HA)
@@ -145,12 +146,14 @@ checkPU :: AnnotatedProgramUnit -> CA.SimpleAnalysis x (Either HoareBackendError
 checkPU apu = runCheckHoare $ do
 
   (bodyTriple, env) <- flip runStateT emptyEnv $ do
-    logCheck $ " - Initial setup"
+    logCheck $ " - Setting up"
 
     body <- initialSetup (apu ^. apuPU)
 
     preconds <- readerOfState $ doTranslate $ traverse translateFormula (apu ^. apuPreconditions)
     postconds <- readerOfState $ doTranslate $ traverse translateFormula (apu ^. apuPostconditions)
+
+    logCheck $ " - Interpreting pre- and postconditions"
 
     let precond = propAnd preconds
         postcond = propAnd postconds
@@ -159,6 +162,8 @@ checkPU apu = runCheckHoare $ do
     logCheck $ " - Found postconditions: " ++ pretty postcond
 
     return (precond, postcond, body)
+
+  logCheck $ " - Computing verification conditions"
 
   (_, vcs) <- runGenM env (genBody bodyTriple)
 
@@ -290,6 +295,7 @@ reportErrorAt :: (MonadError HoareBackendError m, F.Spanned a) => a -> HoareBack
 reportErrorAt x err = throwError (HoareBackendError (Just (F.getSpan x)) err)
 
 verifyVc :: TransFormula Bool -> CheckHoare Bool
+-- verifyVc prop = return False
 verifyVc prop = do
   res <- liftIO . runVerifier . query . checkProp $ prop
   case res of
@@ -315,7 +321,7 @@ newtype GenM a = GenM (RWST CheckHoareEnv [TransFormula Bool] CheckHoareState Ch
 runGenM :: CheckHoareEnv -> GenM a -> CheckHoare (a, [TransFormula Bool])
 runGenM env (GenM action) = evalRWST action env initialState
 
-type FortranTriplet a = Triplet (Expr' FortranOps) (Var NamePair) a
+type FortranTriplet a = Triplet FExpr (Var NamePair) a
 
 logGen :: String -> GenM ()
 logGen = GenM . lift . logCheck
@@ -328,32 +334,32 @@ genBlock (precond, postcond, bl) = do
   setCursor bl
   case bl of
     F.BlIf _ _ _ _ conds bodies _ -> do
-      condsExprs <- traverse (traverse (doTranslate . translateExpression')) conds
+      condsExprs <- traverse (traverse (doTranslate . translateBoolExpression)) conds
       multiIfVCs genBody expr (precond, postcond, (zip condsExprs bodies))
 
     F.BlDoWhile _ _ _ _ cond body _ -> do
       primInvariant <-
         case body of
-          b : _ | Just (Specification SpecInvariant f) <- getAnnSpec (F.getAnnotation b) -> return f
-          _ -> reportError (MissingWhileInvariant bl)
+         b : _ | Just (Specification SpecInvariant f) <- getAnnSpec (F.getAnnotation b) -> return f
+         _ -> reportError (MissingWhileInvariant bl)
 
       invariant <- doTranslate (translateFormula primInvariant)
-      condExpr <- doTranslate (translateExpression' cond)
+      condExpr <- doTranslate (translateBoolExpression cond)
 
       whileVCs genBody expr invariant (precond, postcond, (condExpr, body))
 
     F.BlComment _ _ _ -> return ()
     _ -> reportError (UnsupportedBlock bl)
 
-bodyToSequence :: [F.Block HA] -> GenM (AnnSeq (Expr' FortranOps) (Var NamePair) (F.Block HA))
+bodyToSequence :: [F.Block HA] -> GenM (AnnSeq FExpr (Var NamePair) (F.Block HA))
 bodyToSequence blocks = do
   setCursor blocks
   foldlM combineBlockSequence emptyAnnSeq blocks
 
 combineBlockSequence
-  :: AnnSeq (Expr' FortranOps) (Var NamePair) (F.Block HA)
+  :: AnnSeq FExpr (Var NamePair) (F.Block HA)
   -> F.Block HA
-  -> GenM (AnnSeq (Expr' FortranOps) (Var NamePair) (F.Block HA))
+  -> GenM (AnnSeq FExpr (Var NamePair) (F.Block HA))
 combineBlockSequence prevSeq bl = do
   setCursor bl
   blSeq <- blockToSequence bl
@@ -363,7 +369,7 @@ combineBlockSequence prevSeq bl = do
     Nothing -> reportError (AnnotationError bl)
 
 
-blockToSequence :: F.Block HA -> GenM (AnnSeq (Expr' FortranOps) (Var NamePair) (F.Block HA))
+blockToSequence :: F.Block HA -> GenM (AnnSeq FExpr (Var NamePair) (F.Block HA))
 blockToSequence bl = do
   setCursor bl
 
@@ -393,7 +399,7 @@ blockToSequence bl = do
         Nothing -> chooseFrom rest
 
 
-assignmentBlock :: F.Block HA -> GenM (Maybe (Assignment (Expr' FortranOps) (Var NamePair)))
+assignmentBlock :: F.Block HA -> GenM (Maybe (Assignment FExpr (Var NamePair)))
 assignmentBlock bl = do
   setCursor bl
   case bl of

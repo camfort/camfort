@@ -30,16 +30,6 @@ import           Language.Expression.Ops.Standard
 import           Language.Expression.Pretty
 import           Language.Verification             hiding (Prop)
 
-
-data PrimComp a
-  = PCLess a a
-  | PCGreater a a
-  | PCLessEq a a
-  | PCGreaterEq a a
-  | PCEq a a
-  | PCNeq a a
-  deriving (Typeable, Data, Show, Eq, Functor, Foldable, Traversable)
-
 data PrimLogic a
   = PLAnd a a
   | PLOr a a
@@ -52,7 +42,6 @@ data PrimLogic a
 
 data PrimFormula ann
   = PFExpr (F.Expression ann)
-  | PFCompare (PrimComp (F.Expression ann))
   | PFLogical (PrimLogic (PrimFormula ann))
   deriving (Typeable, Data, Show, Eq)
 

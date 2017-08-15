@@ -95,61 +95,6 @@ pos = EOp . numop1 OpPos
 --  Classes
 --------------------------------------------------------------------------------
 
-class (PrecSing (ReprPrec a), KindSing (ReprKind a)) => HasRepr a where
-  type ReprPrec a :: Precision
-  type ReprKind a :: Kind
-
-  dForType :: proxy a -> D (ReprPrec a) (ReprKind a) a
-
-
-instance HasRepr Int8 where
-  type ReprPrec Int8 = 'P8
-  type ReprKind Int8 = 'KInt
-  dForType _ = DInt8
-instance HasRepr Int16 where
-  type ReprPrec Int16 = 'P16
-  type ReprKind Int16 = 'KInt
-  dForType _ = DInt16
-instance HasRepr Int32 where
-  type ReprPrec Int32 = 'P32
-  type ReprKind Int32 = 'KInt
-  dForType _ = DInt32
-instance HasRepr Int64 where
-  type ReprPrec Int64 = 'P64
-  type ReprKind Int64 = 'KInt
-  dForType _ = DInt64
-
-instance HasRepr Float where
-  type ReprPrec Float = 'P32
-  type ReprKind Float = 'KReal
-  dForType _ = DFloat
-instance HasRepr Double where
-  type ReprPrec Double = 'P64
-  type ReprKind Double = 'KReal
-  dForType _ = DDouble
-
-instance HasRepr Bool8 where
-  type ReprPrec Bool8 = 'P8
-  type ReprKind Bool8 = 'KLogical
-  dForType _ = DBool8
-instance HasRepr Bool16 where
-  type ReprPrec Bool16 = 'P16
-  type ReprKind Bool16 = 'KLogical
-  dForType _ = DBool16
-instance HasRepr Bool32 where
-  type ReprPrec Bool32 = 'P32
-  type ReprKind Bool32 = 'KLogical
-  dForType _ = DBool32
-instance HasRepr Bool64 where
-  type ReprPrec Bool64 = 'P64
-  type ReprKind Bool64 = 'KLogical
-  dForType _ = DBool64
-
-instance HasRepr Char8 where
-  type ReprPrec Char8 = 'P8
-  type ReprKind Char8 = 'KChar
-  dForType _ = DChar
-
 
 class (HasRepr a, Numeric (ReprKind a)) => Numops1 a where
   numop1 :: Op1 'OpNum -> t a -> FortranOp t a
@@ -167,6 +112,8 @@ instance (HasRepr a, ReprKind a ~ 'KLogical) => Logicalops1 a
 
 
 class (HasRepr a, HasRepr b, HasRepr c,
+       Numeric (ReprKind a),
+       Numeric (ReprKind b),
        ReprKind c ~ NumKindMax (ReprKind a) (ReprKind b),
        ReprPrec c ~ PrecMax (ReprPrec a) (ReprPrec b)) =>
       Numops2 a b c | a b -> c where
@@ -204,6 +151,8 @@ class (HasRepr a, HasRepr b, HasRepr c,
 
 
 instance (HasRepr a, HasRepr b, HasRepr c,
+       Numeric (ReprKind a),
+       Numeric (ReprKind b),
        ReprKind c ~ NumKindMax (ReprKind a) (ReprKind b),
        ReprPrec c ~ PrecMax (ReprPrec a) (ReprPrec b)) =>
       Numops2 a b c

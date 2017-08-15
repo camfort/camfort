@@ -81,10 +81,10 @@ library
                         Camfort.Specification.Hoare.Parser.Types
                         Camfort.Specification.Hoare.Lexer
                         Camfort.Specification.Hoare.Syntax
-                        -- Camfort.Specification.Hoare.Translate
-                        -- Camfort.Specification.Hoare.Translate.Types
-                        -- Camfort.Specification.Hoare.CheckFrontend
-                        -- Camfort.Specification.Hoare.CheckBackend
+                        Camfort.Specification.Hoare.Translate
+                        Camfort.Specification.Hoare.Translate.Types
+                        Camfort.Specification.Hoare.CheckFrontend
+                        Camfort.Specification.Hoare.CheckBackend
                         Camfort.Transformation.CommonBlockElim
                         Camfort.Transformation.DeadCode
                         Camfort.Transformation.EquivalenceElim
@@ -100,6 +100,9 @@ library
                         Language.Fortran.TypeModel.Machinery
                         Language.Fortran.TypeModel.Operators
                         Language.Fortran.TypeModel.DSL
+                        Language.Fortran.TypeModel.Singletons
+                        Language.Fortran.TypeModel.SBV
+                        Language.Fortran.TypeModel.TH
 
   build-depends:        base >= 4.6 && < 5,
                         ghc-prim >= 0.3.1.0 && < 0.6,
@@ -125,6 +128,8 @@ library
                         sbv >= 7.0 && < 8,
                         partial-order >= 0.1.2.1 && < 0.1.3,
                         lens >= 4.12 && < 5,
+                        singletons >= 2.2 && < 3,
+                        template-haskell >= 2.11 && < 3,
                         language-while
   default-language: Haskell2010
 
