@@ -204,6 +204,7 @@ instance Show Constraint where
   show (ConConj cs) = intercalate " && " (map show cs)
 
 isUnresolvedUnit (UnitVar _)         = True
+isUnresolvedUnit (UnitLiteral _)     = True
 isUnresolvedUnit (UnitParamVarUse _) = True
 isUnresolvedUnit (UnitParamVarAbs _) = True
 isUnresolvedUnit (UnitParamPosUse _) = True
@@ -234,7 +235,7 @@ pprintConstr (ConEq u1 u2)
       "' should be equal"
   | isResolvedUnit u1 = "'" ++ pprintUnitInfo u2 ++ "' should have unit '" ++ pprintUnitInfo u1 ++ "'"
   | isResolvedUnit u2 = "'" ++ pprintUnitInfo u1 ++ "' should have unit '" ++ pprintUnitInfo u2 ++ "'"
-pprintConstr (ConEq u1 u2) = "'" ++ pprintUnitInfo u1 ++ "' should have the same units as '" ++ pprintUnitInfo u2 ++ "'"
+  | otherwise = "'" ++ pprintUnitInfo u1 ++ "' should have the same units as '" ++ pprintUnitInfo u2 ++ "'"
 pprintConstr (ConConj cs)  = intercalate "\n\t and " (fmap pprintConstr cs)
 
 pprintUnitInfo :: UnitInfo -> String
@@ -243,7 +244,7 @@ pprintUnitInfo (UnitParamVarUse (_, (_, sName), _)) = printf "%s" sName
 pprintUnitInfo (UnitParamPosUse ((_, fname), 0, _)) = printf "result of %s" fname
 pprintUnitInfo (UnitParamPosUse ((_, fname), i, _)) = printf "parameter %d to %s" i fname
 pprintUnitInfo (UnitParamEAPUse ((v, _), _))        = printf "explicitly annotated polymorphic unit %s" v
-pprintUnitInfo (UnitLiteral _)                      = "literal"
+pprintUnitInfo (UnitLiteral _)                      = "literal number"
 pprintUnitInfo (UnitMul u1 u2)                      = pprintUnitInfo u1 ++ " * " ++ pprintUnitInfo u2
 pprintUnitInfo (UnitPow u k) | k `approxEq` 0       = "1"
                              | otherwise            =
