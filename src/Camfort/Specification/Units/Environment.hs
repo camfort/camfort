@@ -245,6 +245,33 @@ pprintUnitInfo (UnitParamPosUse ((_, fname), i, _)) = printf "parameter %d to %s
 pprintUnitInfo (UnitParamEAPUse ((v, _), _))        = printf "explicitly annotated polymorphic unit %s" v
 pprintUnitInfo (UnitLiteral _)                      = "literal"
 pprintUnitInfo (UnitMul u1 u2)                      = pprintUnitInfo u1 ++ " * " ++ pprintUnitInfo u2
+pprintUnitInfo (UnitPow u k) | k `approxEq` 0       = "1"
+                             | otherwise            =
+    case doubleToRationalSubset k of
+          Just r
+            | e <- showRational r
+            , e /= "1"  -> printf "%s**%s" (maybeParen u) e
+            | otherwise -> pprintUnitInfo u
+          Nothing -> error $
+                      printf "Irrational unit exponent: %s**%f" (maybeParen u) k
+  where
+    showRational r
+      | r < 0     = printf "(%s)" (showRational' r)
+      | otherwise = showRational' r
+    showRational' r
+      | denominator r == 1 = show (numerator r)
+      | otherwise = printf "(%d / %d)" (numerator r) (denominator r)
+
+    maybeParen x
+      | all isAlphaNum s = s
+      | otherwise        = "(" ++ s ++ ")"
+      where s = pprintUnitInfo x
+    maybeParenS x
+      | all isUnitMulOk s = s
+      | otherwise         = "(" ++ s ++ ")"
+      where s = pprintUnitInfo x
+    isUnitMulOk c = isSpace c || isAlphaNum c || c `elem` "*."
+
 pprintUnitInfo ui                                   = show ui
 
 --------------------------------------------------
