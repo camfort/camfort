@@ -21,7 +21,7 @@
 module Camfort.Specification.Units.BackendTypes
   ( UnitSet, Dim, Sub, identDim, isIdentDim, dimFromUnitInfo, dimFromUnitInfos, dimToUnitInfo, dimToUnitInfos
   , subFromList, subToList, identSub, applySub, composeSubs, prop_composition, freeDimVars, dimSimplify
-  , dimToConstraint, constraintToDim, dimMultiply, dimRaisePow, dimParamEq, dimFromList )
+  , dimToConstraint, constraintToDim, dimMultiply, dimRaisePow, dimParamEq, dimParamEqCon, normaliseDim, dimFromList )
 where
 
 import qualified Data.Map.Strict as M
@@ -82,18 +82,21 @@ dimToUnitInfos = map (\ (u, p) -> UnitPow u (fromInteger p)) . M.toList
 dimToUnitInfo :: Dim -> UnitInfo
 dimToUnitInfo = foldUnits . dimToUnitInfos
 
--- | Convert a Constraint into a Dim where lhs/rhs = 1. Also normalise
--- the powers by dividing by the gcd and making the largest absolute
--- value power be positive.
+-- | Convert a Constraint into a Dim where lhs/rhs is implicitly equal
+-- to 1. Also normalise the powers by dividing by the gcd and making
+-- the largest absolute value power be positive.
 constraintToDim :: Constraint -> Dim
-constraintToDim (ConEq lhs rhs) = normalise (dimFromUnitInfo lhs `dimMultiply` dimRaisePow (-1) (dimFromUnitInfo rhs))
+constraintToDim (ConEq lhs rhs) = normaliseDim (dimFromUnitInfo lhs `dimMultiply` dimRaisePow (-1) (dimFromUnitInfo rhs))
+constraintToDim (ConConj cons)  = foldl' dimMultiply identDim $ map constraintToDim cons
+
+-- | Divide the powers of a dimension by their collective GCD.
+normaliseDim :: Dim -> Dim
+normaliseDim dim
+  | M.null dim = dim
+  | otherwise  = M.map (`div` divisor) dim
   where
-    normalise dim
-      | M.null dim = dim
-      | otherwise  = M.map (`div` divisor) dim
-      where
-        divisor = (maxPow `div` abs(maxPow)) * gcds (M.elems dim)
-        maxPow  = maximumBy (comparing abs) (M.elems dim)
+    divisor = (maxPow `div` abs(maxPow)) * gcds (M.elems dim)
+    maxPow  = maximumBy (comparing abs) (M.elems dim)
 
     gcds []  = 1
     gcds [x] = x
@@ -112,7 +115,7 @@ dimRaisePow k d = M.map (* k) d
 -- UnitParam*Abs and UnitParam*Use versions of the polymorphic
 -- constructors. Varies from a 'constraint parametric equality'
 -- operator because it doesn't assume that dimRaisePow can be used
--- arbitrarily. You may want a constraint parametric equality (TODO).
+-- arbitrarily.
 dimParamEq :: Dim -> Dim -> Bool
 dimParamEq d1 d2 = dimParamEq' (M.toList d1) (M.toList d2)
 
@@ -127,6 +130,13 @@ dimParamEq' ((u1, p1):d1') d2 = case partition (unitParamEq u1 . fst) d2 of
                    | p1 > p2  = ([(u1, p1 - p2)], [])
 
   _                    -> False
+
+-- | Similar to dimParamEq but assume that dimRaisePow can be
+-- arbitrarily applied to each of the parameters, because they now
+-- represent the unit equation 'd = 1'. In practice this means
+-- computing the GCD of the powers and dividing.
+dimParamEqCon :: Dim -> Dim -> Bool
+dimParamEqCon d1 d2 = normaliseDim d1 `dimParamEq` normaliseDim d2
 
 -- | Create a constraint that the given Dim is equal to the identity unit.
 dimToConstraint :: Dim -> Constraint
