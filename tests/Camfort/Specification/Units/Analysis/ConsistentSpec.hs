@@ -67,7 +67,6 @@ mkTestModFile file = head <$> genModFiles compileUnits unitOpts0 file []
 exampleInconsist1CheckReport :: String
 exampleInconsist1CheckReport =
   "\ntests/fixtures/Specification/Units/example-inconsist-1.f90: Inconsistent:\n\
-  \ - at 7:7: 'z' should have unit 's'\n\
   \ - at 7:7: Units 's' and 'm' should be equal\n"
 
 inconsist3LitMixedReport :: String
