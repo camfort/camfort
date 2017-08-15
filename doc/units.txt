@@ -59,4 +59,3 @@ That's basically the process in a nutshell.
 The problem with linearSolveSVD is that it produces 'real' number
 solutions when the system is underconstrained, which makes life a bit
 difficult.
-

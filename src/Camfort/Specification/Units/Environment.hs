@@ -27,10 +27,14 @@ module Camfort.Specification.Units.Environment
   , VV, PP
     -- * Helpers
   , conParamEq
+  , unitParamEq
   , doubleToRationalSubset
   , pprintConstr
   , pprintUnitInfo
   , toUnitInfo
+  , foldUnits
+  , flattenUnits
+  , simplifyUnits
     -- * Modules (instances)
   , module Data.Data
   ) where
@@ -42,11 +46,12 @@ import           Data.List
 import           Data.Ratio
 import           GHC.Generics (Generic)
 import           Text.Printf
+import           Control.Arrow (first, second)
 
 import qualified Language.Fortran.AST as F
-
 import qualified Camfort.Specification.Units.Parser.Types as P
-
+import Data.Generics.Uniplate.Operations (rewrite)
+import qualified Data.Map.Strict as M
 
 -- | A (unique name, source name) variable
 type VV = (F.Name, F.Name)
@@ -76,6 +81,42 @@ data UnitInfo
   | UnitPow UnitInfo Double               -- a unit raised to a constant power
   | UnitRecord [(String, UnitInfo)]       -- 'record'-type of units
   deriving (Eq, Ord, Data, Typeable, Generic)
+
+simplifyUnits :: UnitInfo -> UnitInfo
+simplifyUnits = rewrite rw
+  where
+    rw (UnitMul (UnitMul u1 u2) u3)                          = Just $ UnitMul u1 (UnitMul u2 u3)
+    rw (UnitMul u1 u2) | u1 == u2                            = Just $ UnitPow u1 2
+    rw (UnitPow (UnitPow u1 p1) p2)                          = Just $ UnitPow u1 (p1 * p2)
+    rw (UnitMul (UnitPow u1 p1) (UnitPow u2 p2)) | u1 == u2  = Just $ UnitPow u1 (p1 + p2)
+    rw (UnitPow UnitlessLit _)                               = Just UnitlessLit
+    rw (UnitPow UnitlessVar _)                               = Just UnitlessVar
+    rw (UnitPow _ p) | p `approxEq` 0                        = Just UnitlessLit
+    rw (UnitMul UnitlessLit u)                               = Just u
+    rw (UnitMul u UnitlessLit)                               = Just u
+    rw (UnitMul UnitlessVar u)                               = Just u
+    rw (UnitMul u UnitlessVar)                               = Just u
+    rw _                                                     = Nothing
+
+flattenUnits :: UnitInfo -> [UnitInfo]
+flattenUnits = map (uncurry UnitPow) . M.toList
+             . M.filterWithKey (\ u _ -> u /= UnitlessLit && u /= UnitlessVar)
+             . M.filter (not . approxEq 0)
+             . M.fromListWith (+)
+             . map (first simplifyUnits)
+             . flatten
+  where
+    flatten (UnitMul u1 u2) = flatten u1 ++ flatten u2
+    flatten (UnitPow u p)   = map (second (p*)) $ flatten u
+    flatten u               = [(u, 1)]
+
+foldUnits units
+  | null units = UnitlessVar
+  | otherwise  = foldl1 UnitMul units
+
+approxEq a b = abs (b - a) < epsilon
+epsilon = 0.001 -- arbitrary
+
 
 instance Binary UnitInfo
 
@@ -163,6 +204,7 @@ instance Show Constraint where
   show (ConConj cs) = intercalate " && " (map show cs)
 
 isUnresolvedUnit (UnitVar _)         = True
+isUnresolvedUnit (UnitLiteral _)     = True
 isUnresolvedUnit (UnitParamVarUse _) = True
 isUnresolvedUnit (UnitParamVarAbs _) = True
 isUnresolvedUnit (UnitParamPosUse _) = True
@@ -193,7 +235,7 @@ pprintConstr (ConEq u1 u2)
       "' should be equal"
   | isResolvedUnit u1 = "'" ++ pprintUnitInfo u2 ++ "' should have unit '" ++ pprintUnitInfo u1 ++ "'"
   | isResolvedUnit u2 = "'" ++ pprintUnitInfo u1 ++ "' should have unit '" ++ pprintUnitInfo u2 ++ "'"
-pprintConstr (ConEq u1 u2) = "'" ++ pprintUnitInfo u1 ++ "' should have the same units as '" ++ pprintUnitInfo u2 ++ "'"
+  | otherwise = "'" ++ pprintUnitInfo u1 ++ "' should have the same units as '" ++ pprintUnitInfo u2 ++ "'"
 pprintConstr (ConConj cs)  = intercalate "\n\t and " (fmap pprintConstr cs)
 
 pprintUnitInfo :: UnitInfo -> String
@@ -202,8 +244,35 @@ pprintUnitInfo (UnitParamVarUse (_, (_, sName), _)) = printf "%s" sName
 pprintUnitInfo (UnitParamPosUse ((_, fname), 0, _)) = printf "result of %s" fname
 pprintUnitInfo (UnitParamPosUse ((_, fname), i, _)) = printf "parameter %d to %s" i fname
 pprintUnitInfo (UnitParamEAPUse ((v, _), _))        = printf "explicitly annotated polymorphic unit %s" v
-pprintUnitInfo (UnitLiteral _)                      = "literal"
+pprintUnitInfo (UnitLiteral _)                      = "literal number"
 pprintUnitInfo (UnitMul u1 u2)                      = pprintUnitInfo u1 ++ " * " ++ pprintUnitInfo u2
+pprintUnitInfo (UnitPow u k) | k `approxEq` 0       = "1"
+                             | otherwise            =
+    case doubleToRationalSubset k of
+          Just r
+            | e <- showRational r
+            , e /= "1"  -> printf "%s**%s" (maybeParen u) e
+            | otherwise -> pprintUnitInfo u
+          Nothing -> error $
+                      printf "Irrational unit exponent: %s**%f" (maybeParen u) k
+  where
+    showRational r
+      | r < 0     = printf "(%s)" (showRational' r)
+      | otherwise = showRational' r
+    showRational' r
+      | denominator r == 1 = show (numerator r)
+      | otherwise = printf "(%d / %d)" (numerator r) (denominator r)
+
+    maybeParen x
+      | all isAlphaNum s = s
+      | otherwise        = "(" ++ s ++ ")"
+      where s = pprintUnitInfo x
+    maybeParenS x
+      | all isUnitMulOk s = s
+      | otherwise         = "(" ++ s ++ ")"
+      where s = pprintUnitInfo x
+    isUnitMulOk c = isSpace c || isAlphaNum c || c `elem` "*."
+
 pprintUnitInfo ui                                   = show ui
 
 --------------------------------------------------
