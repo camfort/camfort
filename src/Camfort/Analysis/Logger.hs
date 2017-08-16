@@ -1,10 +1,11 @@
+{-# LANGUAGE ScopedTypeVariables #-}
+{-# LANGUAGE TypeFamilies #-}
 {-# LANGUAGE DefaultSignatures          #-}
 {-# LANGUAGE DeriveFunctor              #-}
 {-# LANGUAGE FlexibleInstances          #-}
 {-# LANGUAGE FunctionalDependencies     #-}
 {-# LANGUAGE GeneralizedNewtypeDeriving #-}
 {-# LANGUAGE MultiParamTypeClasses      #-}
-{-# LANGUAGE NoMonomorphismRestriction  #-}
 {-# LANGUAGE OverloadedStrings          #-}
 {-# LANGUAGE TemplateHaskell            #-}
 {-# LANGUAGE UndecidableInstances       #-}
@@ -17,7 +18,7 @@ module Camfort.Analysis.Logger
     Describe(..)
   -- * Messages
   , Origin
-  , LogLevel
+  , LogLevel(..)
   , LogMessage(..)
   , lmOrigin
   , lmMsg
@@ -28,10 +29,11 @@ module Camfort.Analysis.Logger
   , _MsgDebug
   -- * Logging monad
   , MonadLogger(..)
+  , noOriginObj
   , LoggerT
   -- * Running a logger
   , LogOutput
-  , logOutputStdout
+  , logOutputStd
   , runLoggerT
   ) where
 
@@ -39,10 +41,12 @@ import           Data.Monoid                    ((<>))
 
 import           Control.Lens
 
-import           Control.Monad.IO.Class
+import           Control.Monad.Except
 import           Control.Monad.Reader
-import           Control.Monad.State
-import           Control.Monad.Writer
+import qualified Control.Monad.State            as Lazy
+import           Control.Monad.State.Strict
+import qualified Control.Monad.Writer           as Lazy
+import           Control.Monad.Writer.Strict
 
 import           Data.Text                      (Text)
 import qualified Data.Text.IO                   as Text
@@ -53,6 +57,9 @@ import qualified Data.Text.Lazy.Builder         as Builder
 import qualified Language.Fortran.AST           as F
 import qualified Language.Fortran.Util.Position as F
 
+--------------------------------------------------------------------------------
+--  'Describe' class
+--------------------------------------------------------------------------------
 
 class Describe a where
   describe :: a -> Text
@@ -66,6 +73,9 @@ instance Describe F.SrcSpan
 instance Describe Text where
   describeBuilder = Builder.fromText
 
+--------------------------------------------------------------------------------
+--  Messages
+--------------------------------------------------------------------------------
 
 data Origin =
   Origin
@@ -119,10 +129,21 @@ data SomeMessage e w
 
 makePrisms ''SomeMessage
 
+--------------------------------------------------------------------------------
+--  'MonadLogger' class
+--------------------------------------------------------------------------------
+
 -- TODO: Consider adding methods to change source file and current log level
 
-class MonadLogger e w m | m -> e w where
+class Monad m => MonadLogger e w m | m -> e w where
+  createLogMessage :: (F.Spanned o) => Maybe o -> a -> m (LogMessage a)
+  recordLogMessage :: SomeMessage e w -> m ()
+
   logGeneral :: (F.Spanned o) => (LogMessage a -> SomeMessage e w) -> Maybe o -> a -> m ()
+  logGeneral mkMsg o =
+    createLogMessage o >=>
+    return . mkMsg >=>
+    recordLogMessage
 
   logError ::
     (F.Spanned o) =>
@@ -130,29 +151,48 @@ class MonadLogger e w m | m -> e w where
   logError = logGeneral MsgError
 
   logError' :: e -> m ()
-  logError' = logError (Nothing :: Maybe (F.Expression ()))
+  logError' = logError noOriginObj
 
 
   logWarn :: (F.Spanned o) => Maybe o -> w -> m ()
   logWarn = logGeneral MsgWarn
 
   logWarn' :: w -> m ()
-  logWarn' = logWarn (Nothing :: Maybe (F.Expression ()))
+  logWarn' = logWarn noOriginObj
 
 
   logInfo :: (F.Spanned o) => Maybe o -> Text -> m ()
   logInfo = logGeneral MsgInfo
 
   logInfo' :: Text -> m ()
-  logInfo' = logInfo (Nothing :: Maybe (F.Expression ()))
+  logInfo' = logInfo noOriginObj
 
 
   logDebug :: (F.Spanned o) => Maybe o -> Text -> m ()
   logDebug = logGeneral MsgDebug
 
   logDebug' :: Text -> m ()
-  logDebug' = logDebug (Nothing :: Maybe (F.Expression ()))
+  logDebug' = logDebug noOriginObj
 
+  default createLogMessage :: (MonadTrans t, MonadLogger e w m', F.Spanned o, m ~ t m') => Maybe o -> a -> m (LogMessage a)
+  default recordLogMessage :: (MonadTrans t, MonadLogger e w m', m ~ t m') => SomeMessage e w -> m ()
+
+  createLogMessage o = lift . createLogMessage o
+  recordLogMessage = lift . recordLogMessage
+
+instance MonadLogger e w m => MonadLogger e w (ReaderT r m)
+instance MonadLogger e w m => MonadLogger e w (ExceptT e' m)
+instance MonadLogger e w m => MonadLogger e w (StateT s m)
+instance (MonadLogger e w m, Monoid w') => MonadLogger e w (WriterT w' m)
+instance MonadLogger e w m => MonadLogger e w (Lazy.StateT s m)
+instance (MonadLogger e w m, Monoid w') => MonadLogger e w (Lazy.WriterT w' m)
+
+noOriginObj :: Maybe (F.Expression ())
+noOriginObj = Nothing
+
+--------------------------------------------------------------------------------
+--  'LoggerT' monad
+--------------------------------------------------------------------------------
 
 data LoggerState m e w =
   LoggerState
@@ -171,8 +211,10 @@ newtype LoggerT e w m a = LoggerT (StateT (LoggerState m e w) m a)
     ( Functor
     , Applicative
     , Monad
+    , MonadIO
     , MonadReader r
     , MonadWriter w'
+    , MonadError e'
     )
 
 instance MonadTrans (LoggerT e w) where
@@ -184,21 +226,21 @@ instance (MonadState s m) => MonadState s (LoggerT e w m) where
   state = lift . state
 
 instance (Monad m) => MonadLogger e w (LoggerT e w m) where
-  logGeneral mkMsg originObject msg = do
+  recordLogMessage msg = do
+    LoggerT $ lsMessages %= (msg :)
+    putSomeMessage msg
+
+  createLogMessage originObject msg = do
     sourceFile <- LoggerT $ use lsSourceFile
 
     let origin = Origin sourceFile . F.getSpan <$> originObject
-        fullMsg = mkMsg (LogMessage origin msg)
-
-    LoggerT $ lsMessages %= (fullMsg :)
-
-    putSomeMessage fullMsg
+    return $ LogMessage origin msg
 
 
 type LogOutput m = Text -> m ()
 
-logOutputStdout :: MonadIO m => LogOutput m
-logOutputStdout = liftIO . Text.putStrLn
+logOutputStd :: MonadIO m => LogOutput m
+logOutputStd = liftIO . Text.putStrLn
 
 
 runLoggerT
@@ -219,17 +261,16 @@ runLoggerT sourceFile output logLevel (LoggerT action) = do
 
   return (x, st' ^. lsMessages)
 
-
 --------------------------------------------------------------------------------
 --  Internal
 --------------------------------------------------------------------------------
 
-
 setLogLevel'
   :: (Describe e, Describe w, Monad m)
   => LogOutput m -> LogLevel -> LoggerState m e w -> LoggerState m e w
-setLogLevel' output lvl =
-  let putMessage prefix msg =
+setLogLevel' (output :: LogOutput m) lvl =
+  let putMessage :: Describe a => Builder -> a -> m ()
+      putMessage prefix msg =
         output . Lazy.toStrict . Builder.toLazyText $ prefix <> describeBuilder msg
 
       noOp = const $ return ()
