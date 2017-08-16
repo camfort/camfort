@@ -1,9 +1,6 @@
-{-# LANGUAGE DefaultSignatures          #-}
-{-# LANGUAGE DeriveFunctor              #-}
 {-# LANGUAGE FlexibleInstances          #-}
 {-# LANGUAGE GeneralizedNewtypeDeriving #-}
 {-# LANGUAGE MultiParamTypeClasses      #-}
-{-# LANGUAGE OverloadedStrings          #-}
 {-# LANGUAGE TemplateHaskell            #-}
 {-# LANGUAGE UndecidableInstances       #-}
 
@@ -108,7 +105,7 @@ instance MonadError e' m => MonadError e' (AnalysisT e w m) where
 --  Early exit
 --------------------------------------------------------------------------------
 
--- | Report a critical error in the analysis, at a particular source location
+-- | Report a critical error in the analysis at a particular source location
 -- and exit early.
 failAnalysis :: (Monad m, F.Spanned o) => Maybe o -> e -> AnalysisT e w m a
 failAnalysis originObj e = do
