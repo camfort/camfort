@@ -5,7 +5,6 @@
 {-# LANGUAGE GeneralizedNewtypeDeriving #-}
 {-# LANGUAGE MultiParamTypeClasses      #-}
 {-# LANGUAGE OverloadedStrings          #-}
-{-# LANGUAGE ScopedTypeVariables        #-}
 {-# LANGUAGE TemplateHaskell            #-}
 {-# LANGUAGE TypeFamilies               #-}
 {-# LANGUAGE UndecidableInstances       #-}
@@ -29,7 +28,8 @@ module Camfort.Analysis.Logger
   , _MsgDebug
   -- * Logging monad
   , MonadLogger(..)
-  , noOriginObj
+  , atSpanned
+  , atSpannedInFile
   , LoggerT
   -- * Running a logger
   , LogOutput
@@ -54,7 +54,6 @@ import qualified Data.Text.Lazy                 as Lazy
 import           Data.Text.Lazy.Builder         (Builder)
 import qualified Data.Text.Lazy.Builder         as Builder
 
-import qualified Language.Fortran.AST           as F
 import qualified Language.Fortran.Util.Position as F
 
 --------------------------------------------------------------------------------
@@ -108,7 +107,7 @@ instance Describe LogLevel where
 
 data LogMessage a =
   LogMessage
-  { _lmOrigin :: Maybe Origin
+  { _lmOrigin :: Origin
   , _lmMsg    :: a
   }
   deriving (Show, Eq, Functor)
@@ -117,7 +116,7 @@ makeLenses ''LogMessage
 
 instance Describe a => Describe (LogMessage a) where
   describeBuilder msg =
-    maybe "" (\origin -> " " <> describeBuilder origin) (msg ^. lmOrigin) <>
+    describeBuilder (msg ^. lmOrigin) <>
     ": " <> describeBuilder (msg ^. lmMsg)
 
 
@@ -129,56 +128,75 @@ data SomeMessage e w
 
 makePrisms ''SomeMessage
 
+instance (Describe e, Describe w) => Describe (SomeMessage e w) where
+  describeBuilder msg = case msg of
+    MsgError m -> "ERROR: " <> describeBuilder m
+    MsgWarn  m -> "WARN: "  <> describeBuilder m
+    MsgInfo  m -> "INFO: "  <> describeBuilder m
+    MsgDebug m -> "DEBUG: " <> describeBuilder m
+
 --------------------------------------------------------------------------------
 --  'MonadLogger' class
 --------------------------------------------------------------------------------
 
--- TODO: Consider adding methods to change source file and current log level
+atSpanned :: (MonadLogger e w m, F.Spanned a) => a -> m Origin
+atSpanned astElem = do
+  sf <- getDefaultSourceFile
+  let sp = F.getSpan astElem
+  return $ Origin sf sp
+
+atSpannedInFile :: (MonadLogger e w m, F.Spanned a) => FilePath -> a -> m Origin
+atSpannedInFile sf = pure . Origin sf . F.getSpan
+
+-- TODO: Consider methods to change current log level
 
 class Monad m => MonadLogger e w m | m -> e w where
-  createLogMessage :: (F.Spanned o) => Maybe o -> a -> m (LogMessage a)
+  setDefaultSourceFile :: FilePath -> m ()
+  getDefaultSourceFile :: m FilePath
+
   recordLogMessage :: SomeMessage e w -> m ()
 
-  logGeneral :: (F.Spanned o) => (LogMessage a -> SomeMessage e w) -> Maybe o -> a -> m ()
-  logGeneral mkMsg o =
-    createLogMessage o >=>
-    return . mkMsg >=>
-    recordLogMessage
+  logGeneral :: (LogMessage a -> SomeMessage e w) -> m Origin -> a -> m ()
+  logGeneral mkMsg makeOrigin msg = do
+    origin <- makeOrigin
+    let message = LogMessage origin msg
+    recordLogMessage (mkMsg message)
 
   logError ::
-    (F.Spanned o) =>
-    Maybe o -> e -> m ()
+    m Origin -> e -> m ()
   logError = logGeneral MsgError
 
-  logError' :: e -> m ()
-  logError' = logError noOriginObj
+  logError' :: (F.Spanned a) => a -> e -> m ()
+  logError' = logError . atSpanned
 
 
-  logWarn :: (F.Spanned o) => Maybe o -> w -> m ()
+  logWarn :: m Origin -> w -> m ()
   logWarn = logGeneral MsgWarn
 
-  logWarn' :: w -> m ()
-  logWarn' = logWarn noOriginObj
+  logWarn' :: (F.Spanned a) => a -> w -> m ()
+  logWarn' = logWarn . atSpanned
 
 
-  logInfo :: (F.Spanned o) => Maybe o -> Text -> m ()
+  logInfo :: m Origin -> Text -> m ()
   logInfo = logGeneral MsgInfo
 
-  logInfo' :: Text -> m ()
-  logInfo' = logInfo noOriginObj
+  logInfo' :: (F.Spanned a) => a -> Text -> m ()
+  logInfo' = logInfo . atSpanned
 
 
-  logDebug :: (F.Spanned o) => Maybe o -> Text -> m ()
+  logDebug :: m Origin -> Text -> m ()
   logDebug = logGeneral MsgDebug
 
-  logDebug' :: Text -> m ()
-  logDebug' = logDebug noOriginObj
+  logDebug' :: (F.Spanned a) => a -> Text -> m ()
+  logDebug' = logDebug . atSpanned
 
-  default createLogMessage :: (MonadTrans t, MonadLogger e w m', F.Spanned o, m ~ t m') => Maybe o -> a -> m (LogMessage a)
   default recordLogMessage :: (MonadTrans t, MonadLogger e w m', m ~ t m') => SomeMessage e w -> m ()
+  default setDefaultSourceFile :: (MonadTrans t, MonadLogger e w m', m ~ t m') => FilePath -> m ()
+  default getDefaultSourceFile :: (MonadTrans t, MonadLogger e w m', m ~ t m') => m FilePath
 
-  createLogMessage o = lift . createLogMessage o
   recordLogMessage = lift . recordLogMessage
+  setDefaultSourceFile = lift . setDefaultSourceFile
+  getDefaultSourceFile = lift getDefaultSourceFile
 
 instance MonadLogger e w m => MonadLogger e w (ReaderT r m)
 instance MonadLogger e w m => MonadLogger e w (ExceptT e' m)
@@ -187,21 +205,18 @@ instance (MonadLogger e w m, Monoid w') => MonadLogger e w (WriterT w' m)
 instance MonadLogger e w m => MonadLogger e w (Lazy.StateT s m)
 instance (MonadLogger e w m, Monoid w') => MonadLogger e w (Lazy.WriterT w' m)
 
-noOriginObj :: Maybe (F.Expression ())
-noOriginObj = Nothing
-
 --------------------------------------------------------------------------------
 --  'LoggerT' monad
 --------------------------------------------------------------------------------
 
 data LoggerState m e w =
   LoggerState
-  { _lsMessages   :: ![SomeMessage e w]
-  , _lsLogError   :: !(LogMessage e -> m ())
-  , _lsLogWarn    :: !(LogMessage w -> m ())
-  , _lsLogInfo    :: !(LogMessage Text -> m ())
-  , _lsLogDebug   :: !(LogMessage Text -> m ())
-  , _lsSourceFile :: !FilePath
+  { _lsMessages          :: ![SomeMessage e w]
+  , _lsLogError          :: !(LogMessage e -> m ())
+  , _lsLogWarn           :: !(LogMessage w -> m ())
+  , _lsLogInfo           :: !(LogMessage Text -> m ())
+  , _lsLogDebug          :: !(LogMessage Text -> m ())
+  , _lsDefaultSourceFile :: !FilePath
   }
 
 makeLenses ''LoggerState
@@ -226,15 +241,12 @@ instance (MonadState s m) => MonadState s (LoggerT e w m) where
   state = lift . state
 
 instance (Monad m) => MonadLogger e w (LoggerT e w m) where
+  setDefaultSourceFile = LoggerT . (lsDefaultSourceFile .=)
+  getDefaultSourceFile = LoggerT (use lsDefaultSourceFile)
+
   recordLogMessage msg = do
     LoggerT $ lsMessages %= (msg :)
     putSomeMessage msg
-
-  createLogMessage originObject msg = do
-    sourceFile <- LoggerT $ use lsSourceFile
-
-    let origin = Origin sourceFile . F.getSpan <$> originObject
-    return $ LogMessage origin msg
 
 
 type LogOutput m = Text -> m ()
@@ -254,7 +266,7 @@ runLoggerT sourceFile output logLevel (LoggerT action) = do
         , _lsLogWarn = const (return ())
         , _lsLogInfo = const (return ())
         , _lsLogDebug = const (return ())
-        , _lsSourceFile = sourceFile
+        , _lsDefaultSourceFile = sourceFile
         }
 
   (x, st') <- runStateT action st
@@ -268,16 +280,15 @@ runLoggerT sourceFile output logLevel (LoggerT action) = do
 setLogLevel'
   :: (Describe e, Describe w, Monad m)
   => LogOutput m -> LogLevel -> LoggerState m e w -> LoggerState m e w
-setLogLevel' (output :: LogOutput m) lvl =
-  let putMessage :: Describe a => Builder -> a -> m ()
-      putMessage prefix msg =
-        output . Lazy.toStrict . Builder.toLazyText $ prefix <> describeBuilder msg
+setLogLevel' output lvl =
+  let putMessage msg =
+        output . Lazy.toStrict . Builder.toLazyText $ describeBuilder msg
 
       noOp = const $ return ()
-      le = putMessage "ERROR"
-      lw = if lvl >= LogWarn then putMessage "WARN" else noOp
-      li = if lvl >= LogInfo then putMessage "INFO" else noOp
-      ld = if lvl >= LogDebug then putMessage "DEBUG" else noOp
+      le = putMessage . MsgError
+      lw = if lvl >= LogWarn then putMessage . MsgWarn else noOp
+      li = if lvl >= LogInfo then putMessage . MsgInfo else noOp
+      ld = if lvl >= LogDebug then putMessage . MsgDebug else noOp
   in (lsLogError .~ le) .
      (lsLogWarn .~ lw) .
      (lsLogInfo .~ li) .

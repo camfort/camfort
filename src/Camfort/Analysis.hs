@@ -49,6 +49,8 @@ module Camfort.Analysis
     , logDebug
     , logDebug'
     )
+  , atSpanned
+  , atSpannedInFile
   , LogOutput
   , logOutputStd
   , Describe(..)
@@ -107,23 +109,25 @@ instance MonadError e' m => MonadError e' (AnalysisT e w m) where
 
 -- | Report a critical error in the analysis at a particular source location
 -- and exit early.
-failAnalysis :: (Monad m, F.Spanned o) => Maybe o -> e -> AnalysisT e w m a
-failAnalysis originObj e = do
-  msg <- createLogMessage originObj e
+failAnalysis :: (Monad m) => Origin -> e -> AnalysisT e w m a
+failAnalysis origin e = do
+  let msg = LogMessage origin e
   recordLogMessage (MsgError msg)
   AnalysisT (throwError msg)
 
 -- | Report a critical failure in the analysis at no particular source location
 -- and exit early.
-failAnalysis' :: (Monad m) => e -> AnalysisT e w m a
-failAnalysis' = failAnalysis noOriginObj
+failAnalysis' :: (Monad m, F.Spanned o) => o -> e -> AnalysisT e w m a
+failAnalysis' originElem e = do
+  origin <- atSpanned originElem
+  failAnalysis origin e
 
 --------------------------------------------------------------------------------
 --  Analysis Results
 --------------------------------------------------------------------------------
 
 data AnalysisResult e r
-  = ARFailure (Maybe Origin) e
+  = ARFailure Origin e
   | ARSuccess r
 
 makePrisms ''AnalysisResult
