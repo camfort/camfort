@@ -39,6 +39,7 @@ library
   hs-source-dirs:       src
   build-tools:          alex, happy
   exposed-modules:      Camfort.Analysis
+                        Camfort.Analysis.Logger
                         Camfort.Analysis.Annotations
                         Camfort.Analysis.CommentAnnotator
                         Camfort.Analysis.ModFile
@@ -107,7 +108,8 @@ library
                         binary >= 0.8.3.0 && < 0.9,
                         lattices == 1.5.*,
                         sbv >= 7.0 && < 8,
-                        partial-order >= 0.1.2.1 && < 0.1.3
+                        partial-order >= 0.1.2.1 && < 0.1.3,
+                        lens
   default-language: Haskell2010
 
 test-suite spec
