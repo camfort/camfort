@@ -1,8 +1,10 @@
+{-# LANGUAGE FlexibleContexts #-}
 {-# LANGUAGE FlexibleInstances          #-}
 {-# LANGUAGE GeneralizedNewtypeDeriving #-}
 {-# LANGUAGE MultiParamTypeClasses      #-}
 {-# LANGUAGE TemplateHaskell            #-}
 {-# LANGUAGE UndecidableInstances       #-}
+{-# LANGUAGE OverloadedStrings          #-}
 
 {-# OPTIONS_GHC -Wall            #-}
 
@@ -23,8 +25,6 @@ module Camfort.Analysis
   -- * Analysis monad
     AnalysisT
   , PureAnalysis
-  , FileAnalysis
-  , PureFileAnalysis
   -- * Early exit
   , failAnalysis
   , failAnalysis'
@@ -35,9 +35,10 @@ module Camfort.Analysis
   , AnalysisReport(..)
   , arMessages
   , arResult
+  , describeReport
+  , putDescribeReport
   -- * Running analyses
-  , runFileAnalysis
-  , runFileAnalysisPure
+  , runAnalysisT
   -- * Logging
   , MonadLogger
     ( logError
@@ -59,12 +60,14 @@ module Camfort.Analysis
 import           Control.Monad.Except
 import           Control.Monad.Reader.Class
 import           Control.Monad.State.Class
-import           Control.Monad.Writer.Class
+import           Control.Monad.Writer.Strict
 
 import           Control.Lens
 
-import qualified Language.Fortran.AST           as F
-import qualified Language.Fortran.Util.ModFile  as MF
+import qualified Data.Text.Lazy.Builder         as Builder
+import qualified Data.Text.Lazy as Lazy
+import qualified Data.Text.Lazy.IO as Lazy
+
 import qualified Language.Fortran.Util.Position as F
 
 import           Camfort.Analysis.Logger
@@ -90,9 +93,6 @@ newtype AnalysisT e w m a =
     )
 
 type PureAnalysis e w = AnalysisT e w Identity
-
-type FileAnalysis ann e w m a = MF.ModFiles -> F.ProgramFile ann -> AnalysisT e w m a
-type PureFileAnalysis ann e w a = MF.ModFiles -> F.ProgramFile ann -> PureAnalysis e w a
 
 instance MonadTrans (AnalysisT e w) where
   lift = AnalysisT . lift . lift
@@ -134,51 +134,85 @@ makePrisms ''AnalysisResult
 
 data AnalysisReport e w r =
   AnalysisReport
-  { _arMessages :: [SomeMessage e w]
-  , _arResult   :: AnalysisResult e r
+  { _arSourceFile :: !FilePath
+  , _arMessages :: ![SomeMessage e w]
+  , _arResult   :: !(AnalysisResult e r)
   }
 
 makeLenses ''AnalysisReport
+
+instance (Describe e, Describe r) => Describe (AnalysisResult e r) where
+  describeBuilder (ARFailure origin e) =
+    "CRITICAL ERROR " <> describeBuilder origin <> ": " <> describeBuilder e
+
+  describeBuilder (ARSuccess r) =
+    "OK: " <> describeBuilder r
+
+
+describeReport :: (Describe e, Describe w, Describe r) => Maybe LogLevel -> AnalysisReport e w r -> Lazy.Text
+describeReport level report = Builder.toLazyText . execWriter $ do
+  let describeMessage lvl msg = do
+        let tell' x = do
+              tell " -"
+              tellDescribe x
+              tell "\n"
+        case msg of
+          m@(MsgError _) -> tell' m
+          m@(MsgWarn  _) | lvl >= LogWarn -> tell' m
+          m@(MsgInfo  _) | lvl >= LogInfo -> tell' m
+          m@(MsgDebug _) | lvl >= LogDebug -> tell' m
+          _ -> return ()
+
+  -- Output file name
+  tellDescribe (report ^. arSourceFile)
+  tell "\n"
+
+  -- Output logs if requested
+  case level of
+    Just lvl -> do
+      tell $ "Logs:\n"
+      forM_ (report ^. arMessages) (describeMessage lvl)
+    Nothing -> return ()
+
+  -- Output results
+  tell "\n"
+  tell "Result:\n"
+  tell " -"
+  tellDescribe (report ^. arResult)
+
+
+putDescribeReport
+  :: (Describe e, Describe w, Describe r, MonadIO m)
+  => Maybe LogLevel -> AnalysisReport e w r -> m ()
+putDescribeReport level = liftIO . Lazy.putStrLn . describeReport level
+
 
 --------------------------------------------------------------------------------
 --  Running Analyses
 --------------------------------------------------------------------------------
 
--- | Run a file analysis with an arbitrary underlying monad (e.g. 'IO').
-runFileAnalysis
+-- | Run an analysis computation and collect the report.
+runAnalysisT
   :: (Monad m, Describe e, Describe w)
-  => MF.ModFiles
-  -> F.ProgramFile ann
+  => FilePath
   -> LogOutput m
-  -- ^ e.g. 'logOutputStd' to log to standard output
   -> LogLevel
-  -> FileAnalysis ann e w m a
+  -> AnalysisT e w m a
   -> m (AnalysisReport e w a)
-runFileAnalysis modfiles pf output logLevel analysis = do
-  let fileName = F.pfGetFilename pf
+runAnalysisT fileName output logLevel analysis = do
 
   (res1, messages) <-
-    runLoggerT fileName output logLevel $
-    runExceptT $
+    runLoggerT fileName output logLevel .
+    runExceptT .
     getAnalysisT $
-    analysis modfiles pf
+    analysis
 
   let result = case res1 of
         Left (LogMessage origin e) -> ARFailure origin e
         Right x                    -> ARSuccess x
 
   return $ AnalysisReport
-    { _arMessages = messages
+    { _arSourceFile = fileName
+    , _arMessages = messages
     , _arResult = result
     }
-
--- | Run a pure file analysis. Don't output the logs as we go along. Messages
--- are collected for later inspection.
-runFileAnalysisPure
-  :: (Describe e, Describe w)
-  => MF.ModFiles
-  -> F.ProgramFile ann
-  -> (PureFileAnalysis ann e w a)
-  -> AnalysisReport e w a
-runFileAnalysisPure modfiles pf =
-  runIdentity . runFileAnalysis modfiles pf (const (return ())) LogInfo

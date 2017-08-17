@@ -1,3 +1,4 @@
+{-# LANGUAGE FlexibleContexts #-}
 {-# LANGUAGE DefaultSignatures          #-}
 {-# LANGUAGE DeriveFunctor              #-}
 {-# LANGUAGE FlexibleInstances          #-}
@@ -15,6 +16,11 @@ module Camfort.Analysis.Logger
   (
   -- * Conversion to text description
     Describe(..)
+  , tellDescribe
+  , builderToStrict
+  , Builder
+  , Text
+  , (<>)
   -- * Messages
   , Origin
   , LogLevel(..)
@@ -65,12 +71,20 @@ class Describe a where
   describeBuilder :: a -> Builder
 
   default describeBuilder :: Show a => a -> Builder
-  describe = Lazy.toStrict . Builder.toLazyText . describeBuilder
+  describe = builderToStrict . describeBuilder
   describeBuilder = Builder.fromString . show
 
 instance Describe F.SrcSpan
 instance Describe Text where
   describeBuilder = Builder.fromText
+instance Describe [Char] where
+  describeBuilder = Builder.fromString
+
+builderToStrict :: Builder -> Text
+builderToStrict = Lazy.toStrict . Builder.toLazyText
+
+tellDescribe :: (MonadWriter Builder m, Describe a) => a -> m ()
+tellDescribe = tell . describeBuilder
 
 --------------------------------------------------------------------------------
 --  Messages
