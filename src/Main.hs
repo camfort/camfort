@@ -17,6 +17,7 @@
 
 module Main (main) where
 
+import Camfort.Analysis.Logger (LogLevel(..))
 import Camfort.Input (defaultValue)
 import Camfort.Functionality
 import Camfort.Specification.Units.Monad (LiteralsOpt(LitMixed))
@@ -328,43 +329,55 @@ commandParser currDir =
 
 main :: IO ()
 main = do
-  currDir <- getCurrentDirectory
-  cmd <- execParser (info (commandParser currDir) idm)
+  currentDir <- getCurrentDirectory
+  cmd <- execParser (info (commandParser currentDir) idm)
   runCommand cmd
   where
+    env ro = CamfortEnv
+      { ceInputSources = inputSource ro
+      , ceIncludeDir = includeDir ro
+      , ceExcludeFiles = getExcludes ro
+      , ceLogLevel = LogDebug
+      -- TODO: make log level configurable
+      }
+
     getExcludes = fromMaybe [] . exclude
+
     getOutputFile _ (WriteFile f) = f
     getOutputFile inp WriteInplace = inp
-    runRO ro f = f (inputSource ro) (includeDir ro) (getExcludes ro)
+
+    runRO ro f = f (env ro)
     runSIO sio f =
       let ro      = sioReadOptions sio
           useEval = sioUseEval sio
           inFile  = inputSource ro
-      in runRO ro f useEval
+      in runRO ro (f useEval)
     runSSO sso f =
       let ao     = ssoAnnotationOptions sso
           wo     = ssoWriteOptions sso
           ro     = ssoReadOptions sso
           inFile = inputSource ro
-      in runRO ro f (annotationType ao) (getOutputFile inFile wo)
+      in runRO ro (f (annotationType ao) (getOutputFile inFile wo))
     runUO uo f =
       let ro = uoReadOptions uo
-      in runRO ro f (literals uo) (debug uo)
+      in runRO ro (f (literals uo) (debug uo))
     runUWO uwo f =
       let uo     = uwoUnitsOptions uwo
           ro     = uoReadOptions uo
           wo     = uwoWriteOptions uwo
           inFile = inputSource ro
-      in runUO uo f (getOutputFile inFile wo)
+      in runUO uo (f (getOutputFile inFile wo))
     runUSO uso f =
       let uwo = usoUnitsWriteOptions uso
           ao  = usoAnnotationOptions uso
-      in runUWO uwo f (annotationType ao)
+      in runUWO uwo (f (annotationType ao))
     runRFO rfo f =
       let ro     = rfoReadOptions rfo
           wo     = rfoWriteOptions rfo
           inFile = inputSource ro
-      in runRO ro f (getOutputFile inFile wo)
+      in runRO ro (f (getOutputFile inFile wo))
+
+    runCommand :: Command -> IO ()
     runCommand (CmdAST ro)                = runRO ro ast
     runCommand (CmdCount ro)              = runRO ro countVarDecls
     runCommand (CmdStencilsCheck ro)      = runRO ro stencilsCheck

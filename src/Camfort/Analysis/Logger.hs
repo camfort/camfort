@@ -1,6 +1,7 @@
-{-# LANGUAGE FlexibleContexts #-}
+{-# LANGUAGE DeriveTraversable #-}
 {-# LANGUAGE DefaultSignatures          #-}
 {-# LANGUAGE DeriveFunctor              #-}
+{-# LANGUAGE FlexibleContexts           #-}
 {-# LANGUAGE FlexibleInstances          #-}
 {-# LANGUAGE FunctionalDependencies     #-}
 {-# LANGUAGE GeneralizedNewtypeDeriving #-}
@@ -17,6 +18,7 @@ module Camfort.Analysis.Logger
   -- * Conversion to text description
     Describe(..)
   , tellDescribe
+  , describeShow
   , builderToStrict
   , Builder
   , Text
@@ -37,6 +39,7 @@ module Camfort.Analysis.Logger
   , atSpanned
   , atSpannedInFile
   , LoggerT
+  , generalizeLogger
   -- * Running a logger
   , LogOutput
   , logOutputStd
@@ -44,6 +47,7 @@ module Camfort.Analysis.Logger
   ) where
 
 import           Data.Monoid                    ((<>))
+import           Data.Void                      (Void)
 
 import           Control.Lens
 
@@ -79,12 +83,22 @@ instance Describe Text where
   describeBuilder = Builder.fromText
 instance Describe [Char] where
   describeBuilder = Builder.fromString
+instance Describe () where
+  describeBuilder = const mempty
+instance Describe Int
+instance Describe Integer
+instance Describe Float
+instance Describe Double
+instance Describe Void
 
 builderToStrict :: Builder -> Text
 builderToStrict = Lazy.toStrict . Builder.toLazyText
 
 tellDescribe :: (MonadWriter Builder m, Describe a) => a -> m ()
 tellDescribe = tell . describeBuilder
+
+describeShow :: (Show a) => a -> Text
+describeShow = describe . show
 
 --------------------------------------------------------------------------------
 --  Messages
@@ -121,16 +135,16 @@ instance Describe LogLevel where
 
 data LogMessage a =
   LogMessage
-  { _lmOrigin :: Origin
+  { _lmOrigin :: Maybe Origin
   , _lmMsg    :: a
   }
-  deriving (Show, Eq, Functor)
+  deriving (Show, Eq, Functor, Foldable, Traversable)
 
 makeLenses ''LogMessage
 
 instance Describe a => Describe (LogMessage a) where
   describeBuilder msg =
-    describeBuilder (msg ^. lmOrigin) <>
+    maybe "" describeBuilder (msg ^. lmOrigin) <>
     ": " <> describeBuilder (msg ^. lmMsg)
 
 
@@ -139,6 +153,7 @@ data SomeMessage e w
   | MsgWarn (LogMessage w)
   | MsgInfo (LogMessage Text)
   | MsgDebug (LogMessage Text)
+  deriving (Show, Eq)
 
 makePrisms ''SomeMessage
 
@@ -159,8 +174,13 @@ atSpanned astElem = do
   let sp = F.getSpan astElem
   return $ Origin sf sp
 
-atSpannedInFile :: (MonadLogger e w m, F.Spanned a) => FilePath -> a -> m Origin
-atSpannedInFile sf = pure . Origin sf . F.getSpan
+withSpannedOrigin :: (MonadLogger e w m, F.Spanned a) => (Origin -> b -> m c) -> a -> b -> m c
+withSpannedOrigin f x m = do
+  origin <- atSpanned x
+  f origin m
+
+atSpannedInFile :: (F.Spanned a) => FilePath -> a -> Origin
+atSpannedInFile sf = Origin sf . F.getSpan
 
 -- TODO: Consider methods to change current log level
 
@@ -170,39 +190,39 @@ class Monad m => MonadLogger e w m | m -> e w where
 
   recordLogMessage :: SomeMessage e w -> m ()
 
-  logGeneral :: (LogMessage a -> SomeMessage e w) -> m Origin -> a -> m ()
-  logGeneral mkMsg makeOrigin msg = do
-    origin <- makeOrigin
-    let message = LogMessage origin msg
-    recordLogMessage (mkMsg message)
+  logGeneral :: (LogMessage a -> SomeMessage e w) -> Origin -> a -> m ()
+  logGeneral mkMsg origin msg =
+    recordLogMessage (mkMsg (LogMessage (Just origin) msg))
 
-  logError ::
-    m Origin -> e -> m ()
+  logError :: Origin -> e -> m ()
   logError = logGeneral MsgError
 
   logError' :: (F.Spanned a) => a -> e -> m ()
-  logError' = logError . atSpanned
+  logError' = withSpannedOrigin logError
 
 
-  logWarn :: m Origin -> w -> m ()
+  logWarn :: Origin -> w -> m ()
   logWarn = logGeneral MsgWarn
 
   logWarn' :: (F.Spanned a) => a -> w -> m ()
-  logWarn' = logWarn . atSpanned
+  logWarn' = withSpannedOrigin logWarn
 
 
-  logInfo :: m Origin -> Text -> m ()
+  logInfo :: Origin -> Text -> m ()
   logInfo = logGeneral MsgInfo
 
   logInfo' :: (F.Spanned a) => a -> Text -> m ()
-  logInfo' = logInfo . atSpanned
+  logInfo' = withSpannedOrigin logInfo
+
+  logInfoNoOrigin :: Text -> m ()
+  logInfoNoOrigin msg = recordLogMessage (MsgInfo (LogMessage Nothing msg))
 
 
-  logDebug :: m Origin -> Text -> m ()
+  logDebug :: Origin -> Text -> m ()
   logDebug = logGeneral MsgDebug
 
   logDebug' :: (F.Spanned a) => a -> Text -> m ()
-  logDebug' = logDebug . atSpanned
+  logDebug' = withSpannedOrigin logDebug
 
   default recordLogMessage :: (MonadTrans t, MonadLogger e w m', m ~ t m') => SomeMessage e w -> m ()
   default setDefaultSourceFile :: (MonadTrans t, MonadLogger e w m', m ~ t m') => FilePath -> m ()
@@ -235,6 +255,17 @@ data LoggerState m e w =
 
 makeLenses ''LoggerState
 
+ungeneralizeState :: (Monad n) => LoggerState m e w -> LoggerState n e w
+ungeneralizeState ls =
+  LoggerState
+  { _lsMessages = ls ^. lsMessages
+  , _lsLogError = const (return ())
+  , _lsLogWarn = const (return ())
+  , _lsLogInfo = const (return ())
+  , _lsLogDebug = const (return ())
+  , _lsDefaultSourceFile = ls ^. lsDefaultSourceFile
+  }
+
 newtype LoggerT e w m a = LoggerT (StateT (LoggerState m e w) m a)
   deriving
     ( Functor
@@ -261,6 +292,17 @@ instance (Monad m) => MonadLogger e w (LoggerT e w m) where
   recordLogMessage msg = do
     LoggerT $ lsMessages %= (msg :)
     putSomeMessage msg
+
+
+-- | Generalize a pure logger to an arbitrary monad. Notice the input logger
+-- cannot print any logs directly because it is a pure computation. It still
+-- collects logs.
+generalizeLogger :: (Monad m) => LoggerT e w Identity a -> LoggerT e w m a
+generalizeLogger (LoggerT x) = do
+  ls <- LoggerT get
+  let (res, ls') = runState x (ungeneralizeState ls)
+  LoggerT $ put (ls & lsMessages .~ ls' ^. lsMessages & lsDefaultSourceFile .~ ls' ^. lsDefaultSourceFile)
+  return res
 
 
 type LogOutput m = Text -> m ()

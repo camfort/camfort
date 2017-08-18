@@ -20,8 +20,8 @@
 
 {- | Defines the monad for the units-of-measure modules -}
 module Camfort.Specification.Units.Monad
-  ( UA, VV, UnitSolver, UnitOpts(..), unitOpts0, UnitLogs, UnitState, LiteralsOpt(..)
-  , whenDebug, writeLogs
+  ( UA, VV, UnitSolver, UnitOpts(..), unitOpts0, UnitState, LiteralsOpt(..)
+  , whenDebug
   , VarUnitMap, GivenVarSet, UnitAliasMap, TemplateMap, CallIdMap
   , NameParamMap, NameParamKey(..)
     -- ** State Helpers
@@ -54,80 +54,30 @@ module Camfort.Specification.Units.Monad
   , modifyVarUnitMap
     -- ** Runners
   , runUnitSolver
+  , runUnitAnalysis
   ) where
 
-import Control.Monad.RWS.Strict
+import Control.Monad.State.Strict
+import Control.Monad.Reader
 import Data.Binary (Binary)
 import Data.Typeable (Typeable)
 import Data.Char (toLower)
 import Data.Data (Data)
 import Data.List (find, isPrefixOf)
 import GHC.Generics (Generic)
-import qualified Data.Map.Strict as M
-import qualified Data.IntMap.Strict as IM
-import qualified Data.Set as S
 import qualified Language.Fortran.AST as F
 import Language.Fortran.Util.ModFile (ModFiles)
 
 import Camfort.Analysis
-  ( Analysis
-  , AnalysisResult
-  , analysisDebug
-  , analysisParams
-  , analysisResult
-  , finalState
-  , runAnalysis
-  , writeDebug)
-import Camfort.Analysis.Annotations (Annotation, Report, mkReport)
+import Camfort.Input
+import Camfort.Analysis.Annotations (Annotation)
 import Camfort.Specification.Units.Annotation (UA)
 import Camfort.Specification.Units.Environment (UnitInfo, Constraints, VV, PP)
 
-
--- | Some options about how to handle literals.
-data LiteralsOpt
-  = LitPoly     -- ^ All literals are polymorphic.
-  | LitUnitless -- ^ All literals are unitless.
-  | LitMixed    -- ^ The literal "0" or "0.0" is fully parametric
-                -- polymorphic. All other literals are monomorphic,
-                -- possibly unitless.
-  deriving (Show, Eq, Ord, Data)
-
-instance Read LiteralsOpt where
-  readsPrec _ s = case find ((`isPrefixOf` map toLower s) . fst) ms of
-                    Just (str, con) -> [(con, drop (length str) s)]
-                    Nothing         -> []
-    where
-      ms = [ ("poly", LitPoly), ("unitless", LitUnitless), ("mixed", LitMixed)
-           , ("litpoly", LitPoly), ("litunitless", LitUnitless), ("litmixed", LitMixed) ]
-
--- | Options for the unit solver
-data UnitOpts = UnitOpts
-  { uoDebug          :: Bool                      -- ^ debugging mode?
-  , uoLiterals       :: LiteralsOpt               -- ^ how to handle literals
-  }
-  deriving (Show, Data, Eq, Ord)
+import Camfort.Specification.Units.MonadTypes
 
 unitOpts0 :: UnitOpts
 unitOpts0 = UnitOpts False LitMixed
-
--- | Function/subroutine name -> associated, parametric polymorphic constraints
-type TemplateMap = M.Map F.Name Constraints
-
--- | Things that can be exported from modules
-data NameParamKey
-  = NPKParam PP Int     -- ^ Function/subroutine name, position of parameter
-  | NPKVariable VV      -- ^ variable
-  deriving (Ord, Eq, Show, Data, Typeable, Generic)
-
-instance Binary NameParamKey
-
--- | mapped to a list of units (to be multiplied together)
-type NameParamMap = M.Map NameParamKey [UnitInfo]
-
---------------------------------------------------
-
--- | UnitSolvers are analyses on 'ProgramFile's annotated with unit information.
-type UnitSolver a = Analysis UnitOpts Report UnitState (F.ProgramFile UA) a
 
 --------------------------------------------------
 
@@ -135,51 +85,19 @@ type UnitSolver a = Analysis UnitOpts Report UnitState (F.ProgramFile UA) a
 
 -- | Only run the argument if debugging mode enabled.
 whenDebug :: UnitSolver () -> UnitSolver ()
-whenDebug m = fmap uoDebug analysisParams >>= \ d -> when d m
-
--- | Add some debugging information to the analysis.
-writeLogs :: String -> UnitSolver ()
-writeLogs = writeDebug . mkReport
+whenDebug m = fmap uoDebug (asks unitOpts) >>= \ d -> when d m
 
 --------------------------------------------------
-
--- Track some logging information in the monad.
-type UnitLogs = Report
-
---------------------------------------------------
-
--- | Variable => unit
-type VarUnitMap   = M.Map VV UnitInfo
--- | Set of variables given explicit unit annotations
-type GivenVarSet  = S.Set F.Name
--- | Alias name => definition
-type UnitAliasMap = M.Map String UnitInfo
--- | Map of CallId to CallId
-type CallIdMap    = IM.IntMap Int
-
--- | Working state for the monad
-data UnitState = UnitState
-  { usProgramFile  :: F.ProgramFile UA
-  , usVarUnitMap   :: VarUnitMap
-  , usGivenVarSet  :: GivenVarSet
-  , usUnitAliasMap :: UnitAliasMap
-  , usTemplateMap  :: TemplateMap
-  , usNameParamMap :: NameParamMap
-  , usCallIdRemap  :: CallIdMap
-    -- | Next number to returned by 'freshId'.
-  , usNextUnique   :: Int
-  , usConstraints  :: Constraints }
-  deriving (Show, Data)
 
 unitState0 :: F.ProgramFile UA -> UnitState
 unitState0 pf = UnitState { usProgramFile  = pf
-                          , usVarUnitMap   = M.empty
-                          , usGivenVarSet  = S.empty
-                          , usUnitAliasMap = M.empty
-                          , usTemplateMap  = M.empty
-                          , usNameParamMap = M.empty
+                          , usVarUnitMap   = mempty
+                          , usGivenVarSet  = mempty
+                          , usUnitAliasMap = mempty
+                          , usTemplateMap  = mempty
+                          , usNameParamMap = mempty
                           , usNextUnique   = 0
-                          , usCallIdRemap  = IM.empty
+                          , usCallIdRemap  = mempty
                           , usConstraints  = [] }
 
 -- helper functions
@@ -249,6 +167,21 @@ modifyCallIdRemapM f = do
 
 --------------------------------------------------
 
--- | Run the unit solver monad.
-runUnitSolver :: UnitOpts -> F.ProgramFile UA -> ModFiles -> UnitSolver a -> IO (AnalysisResult Report UnitState a)
-runUnitSolver o pf mfs m = runAnalysis m o (unitState0 pf) mfs pf
+-- | Runs the stateful part of the unit solver.
+runUnitSolver :: F.ProgramFile UA -> UnitSolver a -> UnitAnalysis (a, UnitState)
+runUnitSolver pf solver = do
+  runStateT solver (unitState0 pf)
+
+runUnitAnalysis :: UnitEnv -> UnitAnalysis a -> AnalysisT () () IO a
+runUnitAnalysis env = flip runReaderT env
+
+-- -- | Run the unit solver monad to produce an analysis.
+-- runUnitSolver :: UnitOpts -> F.ProgramFile UA -> UnitSolver a -> AnalysisT () () IO (a, UnitState)
+-- runUnitSolver opts pf = flip runReaderT opts . flip runStateT (unitState0 pf)
+
+-- -- | Given a unit solver program, produce an analysis program.
+-- unitSolverProgram
+--   :: UnitOpts
+--   -> (ModFiles -> F.ProgramFile UA -> UnitSolver a)
+--   -> AnalysisProgram () () IO (F.ProgramFile UA) (a, UnitState)
+-- unitSolverProgram opts program modfiles pf = runUnitSolver opts pf (program modfiles pf)

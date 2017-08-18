@@ -13,6 +13,7 @@ Stability   :  experimental
 
 module Camfort.Specification.Units.Analysis.Infer
   ( InferenceReport
+  , InferenceResult(..)
   , getInferred
   , inferUnits
   ) where
@@ -29,10 +30,10 @@ import qualified Language.Fortran.AST           as F
 import qualified Language.Fortran.Analysis      as FA
 import qualified Language.Fortran.Util.Position as FU
 
-import Camfort.Analysis (writeDebug)
+import Camfort.Analysis (Describe(..))
 import Camfort.Analysis.Annotations (Annotation)
 import Camfort.Specification.Units.Analysis
-  (UnitsAnalysis, puName, puSrcName, runInference)
+  (UnitAnalysis, puName, puSrcName, runInference)
 import Camfort.Specification.Units.Analysis.Consistent
   (ConsistencyError, ConsistencyReport(..), checkUnits)
 import Camfort.Specification.Units.Environment
@@ -47,11 +48,15 @@ data ExpInfo = ExpInfo
   } deriving (Show, Eq, Ord, Typeable, Data, Generic)
 
 -- | Report from unit inference.
-data InferenceReport =
-  Inferred (F.ProgramFile UA) [(VV, UnitInfo)]
+data InferenceReport
+  = InferenceReport (F.ProgramFile UA) [(VV, UnitInfo)]
+
+data InferenceResult
+  = Inferred InferenceReport
+  | InfInconsistent ConsistencyError
 
 instance Show InferenceReport where
-  show (Inferred pf vars) =
+  show (InferenceReport pf vars) =
     concat ["\n", fname, ":\n", unlines [ expReport ei | ei <- expInfo ]]
     where
       expReport (ei, u) = "  " ++ showSrcSpan (eiSrcSpan ei) ++ " unit " ++ show u ++ " :: " ++ eiSName ei
@@ -77,21 +82,27 @@ instance Show InferenceReport where
         F.PUFunction _ ss _ _ _ _ Nothing _ _                                     -> Just (ExpInfo ss (puName pu) (puSrcName pu))
         _                                                                         -> Nothing
 
+instance Show InferenceResult where
+  show (Inferred report) = show report
+  show (InfInconsistent err) = show err
+
+instance Describe InferenceReport
+instance Describe InferenceResult
+
 getInferred :: InferenceReport -> [(VV, UnitInfo)]
-getInferred (Inferred _ vars) = vars
+getInferred (InferenceReport _ vars) = vars
 
 -- | Check and infer units-of-measure for a program
 --
 -- This produces an output of all the unit information for a program.
-inferUnits :: UnitsAnalysis (F.ProgramFile Annotation) (Either ConsistencyError InferenceReport)
+inferUnits :: UnitAnalysis InferenceResult
 inferUnits = do
-  (eVars, state, logs) <- runInference (chooseImplicitNames <$> runInferVariables)
+  (eVars, state) <- runInference (chooseImplicitNames <$> runInferVariables)
   consistency <- checkUnits
-  writeDebug logs
   let pfUA = usProgramFile state -- the program file after units analysis is done
   pure $ case consistency of
-           Consistent{}     -> Right $ Inferred pfUA eVars
-           Inconsistent err -> Left err
+           Consistent{}     -> Inferred (InferenceReport pfUA eVars)
+           Inconsistent err -> InfInconsistent err
 
 -- | Return a list of variable names mapped to their corresponding
 -- unit that was inferred.

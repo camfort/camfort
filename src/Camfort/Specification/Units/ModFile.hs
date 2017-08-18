@@ -31,7 +31,6 @@ import           GHC.Generics (Generic)
 import qualified Language.Fortran.AST as F
 import           Language.Fortran.Util.ModFile
 
-import Camfort.Analysis (analysisModFiles)
 import Camfort.Specification.Units.Annotation (UA)
 import Camfort.Specification.Units.Environment (UnitInfo(..))
 import Camfort.Specification.Units.InferenceBackend (flattenUnits, genUnitAssignments)
@@ -68,9 +67,8 @@ mfCompiledUnits mf = case lookupModFileData unitsCompiledDataLabel mf of
     Right (_, _, cu) -> cu
 
 -- | Initialize units-relevant ModFile information.
-initializeModFiles :: UnitSolver ()
-initializeModFiles = do
-  mfs <- analysisModFiles
+initializeModFiles :: ModFiles -> UnitSolver ()
+initializeModFiles mfs = do
   let compiledUnits = combinedCompiledUnits mfs
   modifyTemplateMap  . const . cuTemplateMap  $ compiledUnits
   modifyNameParamMap . const . cuNameParamMap $ compiledUnits

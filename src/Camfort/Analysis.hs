@@ -1,10 +1,11 @@
-{-# LANGUAGE FlexibleContexts #-}
+{-# LANGUAGE DeriveFunctor #-}
+{-# LANGUAGE FlexibleContexts           #-}
 {-# LANGUAGE FlexibleInstances          #-}
 {-# LANGUAGE GeneralizedNewtypeDeriving #-}
 {-# LANGUAGE MultiParamTypeClasses      #-}
+{-# LANGUAGE OverloadedStrings          #-}
 {-# LANGUAGE TemplateHaskell            #-}
 {-# LANGUAGE UndecidableInstances       #-}
-{-# LANGUAGE OverloadedStrings          #-}
 
 {-# OPTIONS_GHC -Wall            #-}
 
@@ -39,7 +40,8 @@ module Camfort.Analysis
   , putDescribeReport
   -- * Running analyses
   , runAnalysisT
-  -- * Logging
+  , generalizePureAnalysis
+  -- ** Logging
   , MonadLogger
     ( logError
     , logError'
@@ -47,26 +49,34 @@ module Camfort.Analysis
     , logWarn'
     , logInfo
     , logInfo'
+    , logInfoNoOrigin
     , logDebug
     , logDebug'
     )
+  -- * Messages origins
+  , Origin
   , atSpanned
   , atSpannedInFile
+  -- * Log outputs
   , LogOutput
   , logOutputStd
+  -- * 'Describe' class
   , Describe(..)
+  , describeShow
+  , (<>)
   ) where
 
 import           Control.Monad.Except
+import           Control.Monad.Morph
 import           Control.Monad.Reader.Class
 import           Control.Monad.State.Class
 import           Control.Monad.Writer.Strict
 
 import           Control.Lens
 
+import qualified Data.Text.Lazy                 as Lazy
 import qualified Data.Text.Lazy.Builder         as Builder
-import qualified Data.Text.Lazy as Lazy
-import qualified Data.Text.Lazy.IO as Lazy
+import qualified Data.Text.Lazy.IO              as Lazy
 
 import qualified Language.Fortran.Util.Position as F
 
@@ -111,7 +121,7 @@ instance MonadError e' m => MonadError e' (AnalysisT e w m) where
 -- and exit early.
 failAnalysis :: (Monad m) => Origin -> e -> AnalysisT e w m a
 failAnalysis origin e = do
-  let msg = LogMessage origin e
+  let msg = LogMessage (Just origin) e
   recordLogMessage (MsgError msg)
   AnalysisT (throwError msg)
 
@@ -129,15 +139,17 @@ failAnalysis' originElem e = do
 data AnalysisResult e r
   = ARFailure Origin e
   | ARSuccess r
+  deriving (Show, Eq, Functor)
 
 makePrisms ''AnalysisResult
 
 data AnalysisReport e w r =
   AnalysisReport
   { _arSourceFile :: !FilePath
-  , _arMessages :: ![SomeMessage e w]
-  , _arResult   :: !(AnalysisResult e r)
+  , _arMessages   :: ![SomeMessage e w]
+  , _arResult     :: !(AnalysisResult e r)
   }
+  deriving (Show, Eq, Functor)
 
 makeLenses ''AnalysisReport
 
@@ -161,7 +173,7 @@ describeReport level report = Builder.toLazyText . execWriter $ do
           m@(MsgWarn  _) | lvl >= LogWarn -> tell' m
           m@(MsgInfo  _) | lvl >= LogInfo -> tell' m
           m@(MsgDebug _) | lvl >= LogDebug -> tell' m
-          _ -> return ()
+          _              -> return ()
 
   -- Output file name
   tellDescribe (report ^. arSourceFile)
@@ -208,11 +220,18 @@ runAnalysisT fileName output logLevel analysis = do
     analysis
 
   let result = case res1 of
-        Left (LogMessage origin e) -> ARFailure origin e
-        Right x                    -> ARSuccess x
+        Right x -> ARSuccess x
+        Left (LogMessage (Just origin) e) -> ARFailure origin e
+        Left _ -> error "impossible: failure without origin"
 
   return $ AnalysisReport
     { _arSourceFile = fileName
     , _arMessages = messages
     , _arResult = result
     }
+
+-- | Generalize a pure analysis to run in an arbitrary monad. The input analysis
+-- cannot output any logs directly because it is pure. It does collect them into
+-- the report at the end, however.
+generalizePureAnalysis :: (Monad m) => PureAnalysis e w a -> AnalysisT e w m a
+generalizePureAnalysis = AnalysisT . hoist generalizeLogger . getAnalysisT

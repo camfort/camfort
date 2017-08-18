@@ -17,20 +17,21 @@ module Camfort.Specification.Units.Analysis.Criticals
   ) where
 
 import           Control.Monad.State (get)
+import           Control.Monad.Reader (asks)
 import           Data.Generics.Uniplate.Operations
 import qualified Data.Map.Strict       as M
 import           Data.Maybe (fromMaybe)
 
 import Camfort.Analysis
-  (analysisInput, analysisModFiles, writeDebug)
 import Camfort.Analysis.Annotations
 import Camfort.Specification.Units.InferenceBackendSBV (criticalVariables)
 
 -- Provides the types and data accessors used in this module
-import           Camfort.Specification.Units.Analysis (UnitsAnalysis, runInference)
+import           Camfort.Specification.Units.Analysis (UnitAnalysis, runInference)
 import qualified Camfort.Specification.Units.Annotation as UA
 import           Camfort.Specification.Units.Environment
 import           Camfort.Specification.Units.Monad
+import           Camfort.Specification.Units.MonadTypes
 
 import qualified Language.Fortran.AST               as F
 import qualified Language.Fortran.Analysis          as FA
@@ -78,6 +79,8 @@ instance Show Criticals where
           where vfilename = fromMaybe fname $ M.lookup v fromWhereMap
                 showSpanStart (FU.SrcSpan l _) = show l
 
+instance Describe Criticals
+
 -- | Return a list of critical variables as UnitInfo list (most likely
 -- to be of the UnitVar constructor).
 runCriticalVariables :: UnitSolver [UnitInfo]
@@ -86,11 +89,11 @@ runCriticalVariables = do
   return $ criticalVariables cons
 
 -- | Infer one possible set of critical variables for a program.
-inferCriticalVariables :: UnitsAnalysis (F.ProgramFile Annotation) Criticals
+inferCriticalVariables :: UnitAnalysis Criticals
 inferCriticalVariables = do
-  pf <- analysisInput
-  mfs <- analysisModFiles
-  (eVars, _, logs) <- runInference runCriticalVariables
+  mfs <- asks unitModfiles
+  pf <- asks unitProgramFile
+  (eVars, _) <- runInference runCriticalVariables
   let
     -- Use the module map derived from all of the included Camfort Mod files.
     mmap = combinedModuleMap mfs
@@ -106,7 +109,6 @@ inferCriticalVariables = do
                 -- going to ignore intrinsics here
               ] `M.union` (M.unions . map (M.fromList . map (\ (a, (b, _)) -> (b, a)) . M.toList) $ M.elems mmap')
     fromWhereMap = genUniqNameToFilenameMap mfs
-  writeDebug logs
   pure Criticals { criticalsPf           = pf
                  , criticalsVariables    = eVars
                  , criticalsDeclarations = dmap

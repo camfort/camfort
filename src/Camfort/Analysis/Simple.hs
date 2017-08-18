@@ -26,9 +26,9 @@ import Data.Generics.Uniplate.Operations
 
 import qualified Language.Fortran.AST as F
 
-import Camfort.Analysis (PureFileAnalysis)
+import Camfort.Analysis (PureAnalysis)
 
 {-| Counts the number of declarations (of variables) in a whole program -}
 
-countVariableDeclarations :: forall a. Data a => PureFileAnalysis a () () Int
+countVariableDeclarations :: forall a x. Data a => x -> F.ProgramFile a -> PureAnalysis () () Int
 countVariableDeclarations _ pf = return $ length (universeBi pf :: [F.Declarator a])

@@ -22,33 +22,35 @@
 
 module Camfort.Specification.Units (synthesiseUnits) where
 
+import Control.Monad.Reader (asks)
+
 import qualified Language.Fortran.AST      as F
 import qualified Language.Fortran.Analysis as FA
 
 import           Camfort.Analysis.Annotations
 import           Camfort.Specification.Units.Analysis
-  (UnitsAnalysis, runInference)
+  (UnitAnalysis, runInference)
 import           Camfort.Specification.Units.Analysis.Consistent
   (ConsistencyError)
 import           Camfort.Specification.Units.Analysis.Infer
-  (InferenceReport, getInferred, inferUnits)
+  (InferenceReport, InferenceResult(..), getInferred, inferUnits)
 import qualified Camfort.Specification.Units.Annotation as UA
 import           Camfort.Specification.Units.InferenceBackend (chooseImplicitNames)
 import           Camfort.Specification.Units.Monad
+import           Camfort.Specification.Units.MonadTypes (UnitEnv(..))
 import           Camfort.Specification.Units.Synthesis (runSynthesis)
 
-synthesiseUnits :: Char
-                -> UnitsAnalysis
-                   (F.ProgramFile Annotation)
-                   (Either ConsistencyError (InferenceReport, F.ProgramFile Annotation))
 {-| Synthesis unspecified units for a program (after checking) -}
+synthesiseUnits
+  :: Char -> UnitAnalysis (Either ConsistencyError (InferenceReport, F.ProgramFile Annotation))
 synthesiseUnits marker = do
   infRes <- inferUnits
+  pfOriginal <- asks unitProgramFile
   case infRes of
-    Left err       -> pure $ Left err
-    Right inferred -> do
-      (_, state, _logs) <- runInference
-        (runSynthesis marker . chooseImplicitNames . getInferred $ inferred)
+    InfInconsistent err       -> pure $ Left err
+    Inferred report -> do
+      (_, state) <- runInference
+        (runSynthesis marker . chooseImplicitNames . getInferred $ report)
       let pfUA    = usProgramFile state -- the program file after units analysis is done
           pfFinal = fmap (UA.prevAnnotation . FA.prevAnnotation) pfUA -- strip annotations
-      pure . Right $ (inferred, pfFinal)
+      pure . Right $ (report, pfFinal)

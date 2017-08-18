@@ -31,8 +31,6 @@ module Camfort.Analysis.Annotations
   , onPrev
   -- ** Specification Annotation Helpers
   -- * Other Helpers
-  , Report
-  , mkReport
   , buildCommentText
   ) where
 
@@ -43,16 +41,6 @@ import qualified Language.Fortran.AST as F
 import qualified Language.Fortran.Analysis as FA
 import Language.Fortran.ParserMonad (FortranVersion(Fortran90))
 import qualified Language.Fortran.Util.Position as FU
-
-newtype Report = Report { getReport :: String }
-  deriving (Eq, Monoid)
-
-instance Show Report where
-  show = getReport
-
--- | Create a new report from a string.
-mkReport :: String -> Report
-mkReport = Report
 
 type A = Annotation
 data Annotation =

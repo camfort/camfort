@@ -17,16 +17,18 @@
 {- This module collects together stubs that connect analysis/transformations
    with the input -> output procedures -}
 
-{-# LANGUAGE DoAndIfThenElse #-}
+{-# LANGUAGE DoAndIfThenElse      #-}
+{-# LANGUAGE FlexibleInstances    #-}
+{-# LANGUAGE OverloadedStrings    #-}
+{-# LANGUAGE ScopedTypeVariables  #-}
+{-# LANGUAGE TupleSections        #-}
 {-# LANGUAGE TypeSynonymInstances #-}
-{-# LANGUAGE FlexibleInstances #-}
-{-# LANGUAGE ScopedTypeVariables #-}
 
-{-# OPTIONS_GHC -Wall #-}
-
-module Camfort.Functionality (
+module Camfort.Functionality
+  (
   -- * Datatypes
     AnnotationType(..)
+  , CamfortEnv(..)
   -- * Commands
   , ast
   , countVarDecls
@@ -47,32 +49,52 @@ module Camfort.Functionality (
   , camfortInitialize
   ) where
 
-import Control.Arrow (first, second)
-import System.Directory (createDirectoryIfMissing, getCurrentDirectory)
-import System.FilePath  ((</>), takeDirectory)
+import           Control.Arrow                                   (first, second)
+import           Data.List                                       (intersperse)
+import           Data.Void                                       (Void)
+import           System.Directory                                (createDirectoryIfMissing,
+                                                                  getCurrentDirectory)
+import           System.FilePath                                 (takeDirectory,
+                                                                  (</>))
+
+import           Control.Lens
+import           Control.Monad.Reader.Class
+
+import qualified Language.Fortran.AST                            as F
 
 import           Camfort.Analysis
-  (analysisDebug, analysisInput, analysisResult, branchAnalysis)
-import           Camfort.Analysis.Annotations (mkReport)
-import           Camfort.Analysis.ModFile
-  (genModFiles, readParseSrcDir, simpleCompiler, MFCompiler)
+import           Camfort.Analysis.Annotations                    (Annotation)
+import           Camfort.Analysis.Logger
+import           Camfort.Analysis.ModFile                        (MFCompiler,
+                                                                  genModFiles,
+                                                                  readParseSrcDir,
+                                                                  simpleCompiler)
 import           Camfort.Analysis.Simple
 import           Camfort.Input
-import qualified Camfort.Specification.Stencils as Stencils
-import           Camfort.Specification.Stencils.Analysis (compileStencils)
-import qualified Camfort.Specification.Units as LU
-import           Camfort.Specification.Units.Analysis (compileUnits)
+import qualified Camfort.Specification.Stencils                  as Stencils
+import           Camfort.Specification.Stencils.Analysis         (compileStencils)
+import qualified Camfort.Specification.Units                     as LU
+import           Camfort.Specification.Units.Analysis            (compileUnits)
 import           Camfort.Specification.Units.Analysis.Consistent (checkUnits)
 import           Camfort.Specification.Units.Analysis.Criticals  (inferCriticalVariables)
 import           Camfort.Specification.Units.Analysis.Infer      (inferUnits)
-import           Camfort.Specification.Units.Monad
+import           Camfort.Specification.Units.Monad               (runUnitAnalysis,
+                                                                  unitOpts0)
+import           Camfort.Specification.Units.MonadTypes          (LiteralsOpt,
+                                                                  UnitAnalysis,
+                                                                  UnitEnv (..),
+                                                                  UnitOpts (..))
 import           Camfort.Transformation.CommonBlockElim
 import           Camfort.Transformation.DeadCode
 import           Camfort.Transformation.EquivalenceElim
 
-import           Camfort.Helpers (Filename, FileOrDir)
+import           Camfort.Helpers                                 (FileOrDir,
+                                                                  Filename)
 
 data AnnotationType = ATDefault | Doxygen | Ford
+
+
+-- TODO: Fix every function that is defined as `error ...`
 
 
 -- | Retrieve the marker character compatible with the given
@@ -82,97 +104,132 @@ markerChar Doxygen   = '<'
 markerChar Ford      = '!'
 markerChar ATDefault = '='
 
-runFunctionality
-  :: String
-  -> (analysis -> MFCompiler r -> r -> FileOrDir -> FileOrDir -> [Filename] -> IO a)
-  -> analysis
-  -> MFCompiler r
-  -> r
-  -> FileOrDir
-  -> Maybe FileOrDir
-  -> [Filename]
-  -> IO a
-runFunctionality description runner analysis compiler env inSrc incDir excludes = do
-  putStrLn $ description ++ " '" ++ inSrc ++ "'"
-  incDir' <- maybe getCurrentDirectory pure incDir
-  runner analysis compiler env inSrc incDir' excludes
+data CamfortEnv =
+  CamfortEnv
+  { ceInputSources :: FileOrDir
+  , ceIncludeDir   :: Maybe FileOrDir
+  , ceExcludeFiles :: [Filename]
+  , ceLogLevel     :: LogLevel
+  }
 
-withOutRunner
-  :: (analysis -> MFCompiler r -> r -> FileOrDir -> FileOrDir -> [Filename] -> FilePath -> a)
+--------------------------------------------------------------------------------
+-- *  Running Functionality
+
+runWithOutput
+  :: (Describe e, Describe w)
+  => String
+  -- ^ Functionality desription
+  -> AnalysisProgram e w IO a b
+  -- ^ Analysis program
+  -> (FileOrDir -> FilePath -> AnalysisRunner e w IO a b r)
+  -- ^ Analysis runner
+  -> MFCompiler i IO
+  -- ^ Mod file compiler
+  -> i
+  -- ^ Mod file input
   -> FilePath
-  -> analysis
-  -> MFCompiler r
-  -> r
-  -> FileOrDir
-  -> FileOrDir
-  -> [Filename]
-  -> a
-withOutRunner runner outSrc analysis compiler env inSrc incDir excludes
-  = runner analysis compiler env inSrc incDir excludes outSrc
+  -> CamfortEnv
+  -> IO r
+runWithOutput description program runner mfCompiler mfInput outSrc env =
+  let runner' = runner (ceInputSources env) outSrc
+  in runFunctionality description program runner' mfCompiler mfInput env
 
+
+runFunctionality
+  :: (Describe e, Describe w)
+  => String
+  -- ^ Functionality desription
+  -> AnalysisProgram e w IO a b
+  -- ^ Analysis program
+  -> AnalysisRunner e w IO a b r
+  -- ^ Analysis runner
+  -> MFCompiler i IO
+  -- ^ Mod file compiler
+  -> i
+  -- ^ Mod file input
+  -> CamfortEnv
+  -> IO r
+runFunctionality description program runner mfCompiler mfInput env = do
+  putStrLn $ description ++ " '" ++ ceInputSources env ++ "'"
+  incDir <- maybe getCurrentDirectory pure (ceIncludeDir env)
+  modFiles <- genModFiles mfCompiler mfInput incDir (ceExcludeFiles env)
+  pfsTexts <- readParseSrcDir modFiles (ceInputSources env) (ceExcludeFiles env)
+  runner program logOutputStd (ceLogLevel env) modFiles pfsTexts
+
+
+--------------------------------------------------------------------------------
 -- * Wrappers on all of the features
-ast :: FileOrDir -> Maybe FilePath -> [Filename] -> IO ()
-ast d incDir excludes = do
-    incDir' <- maybe getCurrentDirectory pure incDir
-    modFiles <- genModFiles simpleCompiler () incDir' excludes
-    xs <- readParseSrcDir modFiles d excludes
+
+ast :: CamfortEnv -> IO ()
+ast env = do
+    incDir' <- maybe getCurrentDirectory pure (ceIncludeDir env)
+    modFiles <- genModFiles simpleCompiler () incDir' (ceExcludeFiles env)
+    xs <- readParseSrcDir modFiles (ceInputSources env) (ceExcludeFiles env)
     print . fmap fst $ xs
 
-countVarDecls :: String -> Maybe FilePath -> [Filename] -> IO ()
+
+countVarDecls :: CamfortEnv -> IO ()
 countVarDecls =
-  runFunctionality "Counting variable declarations in"
-    doAnalysisReport countVariableDeclarations simpleCompiler ()
+  runFunctionality
+  "Counting variable declarations in"
+  (generalizePureAnalysisProgram countVariableDeclarations)
+  describePerFileAnalysis
+  simpleCompiler ()
 
-dead ::
-  String -> Maybe FilePath -> [Filename] -> FileOrDir -> IO ()
-dead inSrc incDir excludes outSrc =
-  let rfun = do
-        pfs <- analysisInput
-        resA <- mapM (branchAnalysis $ deadCode False) pfs
-        let (reports, results) = (fmap analysisDebug resA, fmap analysisResult resA)
-        pure (mconcat reports, fmap (pure :: a -> Either () a) results)
-  in runFunctionality "Eliminating dead code in" (withOutRunner doRefactor outSrc)
-     rfun simpleCompiler () inSrc incDir excludes
 
-common
-  :: String -> Maybe FilePath -> [Filename] -> FileOrDir -> IO ()
-common inSrc incDir excludes outSrc =
-  let rfun = commonElimToModules (takeDirectory outSrc ++ "/")
-  in runFunctionality "Refactoring common blocks in"
-     (withOutRunner doRefactorAndCreate outSrc) rfun simpleCompiler () inSrc incDir excludes
+perFileRefactoring
+  :: (Monad m)
+  => AnalysisProgram e w m ProgramFile ProgramFile
+  -> AnalysisProgram e w m [ProgramFile] ((), [Either e ProgramFile])
+perFileRefactoring program modfiles pfs = do
+  pfs' <- mapM (program modfiles) pfs
+  return ((), fmap pure pfs')
 
-equivalences
-  :: String -> Maybe FilePath -> [Filename] -> FileOrDir -> IO ()
-equivalences inSrc incDir excludes outSrc = do
-  let rfun = do
-        pfs <- analysisInput
-        resA <- mapM (branchAnalysis refactorEquivalences) pfs
-        let (reports, results) = (fmap analysisDebug resA, fmap analysisResult resA)
-        pure (mconcat reports, fmap (pure :: a -> Either () a) results)
-  runFunctionality "Refactoring equivalences blocks in"
-    (withOutRunner doRefactor outSrc) rfun simpleCompiler () inSrc incDir excludes
 
-{- Units feature -}
+dead :: FileOrDir -> CamfortEnv -> IO ()
+dead =
+  runWithOutput
+  "Eliminating dead code in"
+  (generalizePureAnalysisProgram . perFileRefactoring . const $ deadCode False)
+  doRefactor
+  simpleCompiler ()
+
+
+common :: FileOrDir -> CamfortEnv -> IO ()
+common outSrc =
+  runWithOutput
+  "Refactoring common blocks in"
+  (generalizePureAnalysisProgram $ \_ -> commonElimToModules (takeDirectory outSrc ++ "/"))
+  doRefactorAndCreate
+  simpleCompiler ()
+  outSrc
+
+
+equivalences :: FileOrDir -> CamfortEnv -> IO ()
+equivalences =
+  runWithOutput
+  "Refactoring equivalences blocks in"
+  (generalizePureAnalysisProgram . perFileRefactoring . const $ refactorEquivalences)
+  doRefactor
+  simpleCompiler ()
+
+-- {- Units feature -}
+
+
+-- TODO: Get rid of debug option and replace with log level
 
 runUnitsFunctionality
-  :: String
-     -> (analysis
-         -> MFCompiler UnitOpts
-         -> UnitOpts
-         -> FileOrDir
-         -> FileOrDir
-         -> [Filename]
-         -> IO a)
-     -> analysis
-     -> FileOrDir
-     -> Maybe FileOrDir
-     -> [Filename]
-     -> LiteralsOpt
-     -> Bool
-     -> IO a
-runUnitsFunctionality description runner analysis inSrc incDir excludes m debug =
-  let uo = optsToUnitOpts m debug
-  in runFunctionality description runner analysis compileUnits uo inSrc incDir excludes
+  :: (Describe e, Describe w)
+  => String
+  -> (UnitOpts -> AnalysisProgram e w IO a b)
+  -> AnalysisRunner e w IO a b r
+  -> LiteralsOpt
+  -> Bool
+  -> CamfortEnv
+  -> IO r
+runUnitsFunctionality description unitsProgram runner opts debug =
+  let uo = optsToUnitOpts opts debug
+  in runFunctionality description (unitsProgram uo) runner compileUnits uo
 
 optsToUnitOpts :: LiteralsOpt -> Bool -> UnitOpts
 optsToUnitOpts m debug = o1
@@ -180,84 +237,115 @@ optsToUnitOpts m debug = o1
                        , uoDebug = debug
                        }
 
-unitsCheck ::
-  FileOrDir
-  -> Maybe FileOrDir -> [Filename] -> LiteralsOpt -> Bool -> IO ()
-unitsCheck = runUnitsFunctionality "Checking units for" doAnalysisReport checkUnits
+singlePfUnits :: UnitAnalysis a -> UnitOpts -> AnalysisProgram () () IO ProgramFile a
+singlePfUnits unitAnalysis opts modfiles pf =
+  let ue = UnitEnv
+        { unitOpts = opts
+        , unitModfiles = modfiles
+        , unitProgramFile = pf
+        }
+  in runUnitAnalysis ue unitAnalysis
 
-unitsInfer ::
-  FileOrDir
-  -> Maybe FileOrDir -> [Filename] -> LiteralsOpt -> Bool -> IO ()
-unitsInfer = runUnitsFunctionality "Inferring units for" doAnalysisReport inferUnits'
-  where inferUnits' = (mkReport . either show show) <$> inferUnits
+multiPfUnits
+  :: (Describe a)
+  => UnitAnalysis (Either e (a, b))
+  -> UnitOpts
+  -> AnalysisProgram () () IO [ProgramFile] (Text, [Either e b])
+multiPfUnits unitAnalysis opts modfiles pfs = do
+  let ue pf = UnitEnv
+        { unitOpts = opts
+        , unitModfiles = modfiles
+        , unitProgramFile = pf
+        }
 
-unitsSynth
-  :: String -> Maybe FilePath -> [Filename]
-  -> LiteralsOpt -> Bool
-  -> FileOrDir
-  -> AnnotationType
-  -> IO ()
-unitsSynth inSrc incDir excludes m debug outSrc annType =
-  let marker = markerChar annType
-      rfun = do
-        pfs <- analysisInput
-        results <- mapM (branchAnalysis (LU.synthesiseUnits marker)) pfs
-        let normalizedResults =
-              (\res -> ( show (analysisDebug res) ++ either show (show . fst) (analysisResult res)
-                       , case analysisResult res of
-                           Left err     -> Left err
-                           Right (_,pf) -> Right pf)) <$> results
-        pure . first (mkReport . concat) $ unzip normalizedResults
-      runner' = withOutRunner doRefactor outSrc
-  in runUnitsFunctionality "Synthesising units for" runner' rfun inSrc incDir excludes m debug
+  results <- traverse (\pf -> runUnitAnalysis (ue pf) unitAnalysis) pfs
+  let (rs, ps) = traverse (traverse (\(x, y) -> ([x], y))) results
 
-unitsCriticals ::
-  FileOrDir
-  -> Maybe FileOrDir -> [Filename] -> LiteralsOpt -> Bool -> IO ()
+      rs' = mconcat . intersperse "\n" . map describe $ rs
+
+  return (rs', ps)
+
+unitsCheck :: LiteralsOpt -> Bool -> CamfortEnv -> IO ()
+unitsCheck =
+  runUnitsFunctionality
+  "Checking units for"
+  (singlePfUnits checkUnits)
+  describePerFileAnalysis
+
+
+unitsInfer :: LiteralsOpt -> Bool -> CamfortEnv -> IO ()
+unitsInfer =
+  runUnitsFunctionality
+  "Inferring units for"
+  (singlePfUnits inferUnits)
+  describePerFileAnalysis
+
+
+unitsSynth :: AnnotationType -> FileOrDir -> LiteralsOpt -> Bool -> CamfortEnv -> IO ()
+unitsSynth annType outSrc opts debug env =
+  runUnitsFunctionality
+  "Synthesising units for"
+  (multiPfUnits $ LU.synthesiseUnits (markerChar annType))
+  (doRefactor (ceInputSources env) outSrc)
+  opts
+  debug
+  env
+
+
+unitsCriticals :: LiteralsOpt -> Bool -> CamfortEnv -> IO ()
 unitsCriticals =
-  runUnitsFunctionality "Suggesting variables to annotate with unit specifications in"
-    doAnalysisReport inferCriticalVariables
+  runUnitsFunctionality
+  "Suggesting variables to annotate with unit specifications in"
+  (singlePfUnits inferCriticalVariables)
+  describePerFileAnalysis
+
 
 {- Stencils feature -}
 
-runStencilsFunctionality
-  :: String
-     -> (analysis
-         -> MFCompiler ()
-         -> ()
-         -> FileOrDir
-         -> FileOrDir
-         -> [Filename]
-         -> IO a)
-     -> analysis
-     -> FileOrDir
-     -> Maybe FileOrDir
-     -> [Filename]
-     -> IO a
-runStencilsFunctionality description runner analysis =
-  runFunctionality description runner analysis compileStencils ()
+-- runStencilsFunctionality
+--   :: String
+--      -> (analysis
+--          -> MFCompiler ()
+--          -> ()
+--          -> FileOrDir
+--          -> FileOrDir
+--          -> [Filename]
+--          -> IO a)
+--      -> analysis
+--      -> FileOrDir
+--      -> Maybe FileOrDir
+--      -> [Filename]
+--      -> IO a
+-- runStencilsFunctionality description runner analysis =
+--   runFunctionality description runner analysis compileStencils ()
 
-stencilsCheck :: String -> Maybe FilePath -> [Filename] -> IO ()
-stencilsCheck =
-  runStencilsFunctionality "Checking stencil specs for" doAnalysisReport Stencils.check
+stencilsCheck :: CamfortEnv -> IO ()
+stencilsCheck = error "stencils check"
+-- stencilsCheck :: String -> Maybe FilePath -> [Filename] -> IO ()
+-- stencilsCheck =
+--   runStencilsFunctionality "Checking stencil specs for" doAnalysisReport Stencils.check
 
-stencilsInfer
-  :: String -> Maybe FilePath -> [Filename] -> Bool -> IO ()
-stencilsInfer inSrc incDir excludes useEval =
-  let rfun = Stencils.infer useEval '='
-  in runStencilsFunctionality "Inferring stencil specs for" doAnalysisReport rfun inSrc incDir excludes
+stencilsInfer :: Bool -> CamfortEnv -> IO ()
+stencilsInfer useEval = error "stencils infer"
+-- stencilsInfer
+--   :: String -> Maybe FilePath -> [Filename] -> Bool -> IO ()
+-- stencilsInfer inSrc incDir excludes useEval =
+--   let rfun = Stencils.infer useEval '='
+--   in runStencilsFunctionality "Inferring stencil specs for" doAnalysisReport rfun inSrc incDir excludes
 
-stencilsSynth
-  :: String
-  -> Maybe FilePath
-  -> [Filename]
-  -> AnnotationType
-  -> FileOrDir
-  -> IO ()
-stencilsSynth inSrc incDir excludes annType outSrc =
-  let rfun = second (fmap (pure :: a -> Either () a)) <$> Stencils.synth (markerChar annType)
-      runner' = withOutRunner doRefactor outSrc
-  in runStencilsFunctionality "Synthesising stencil specs for" runner' rfun inSrc incDir excludes
+stencilsSynth :: AnnotationType -> FileOrDir -> CamfortEnv -> IO ()
+stencilsSynth annType outSrc = error "stencils synthesis"
+-- stencilsSynth
+--   :: String
+--   -> Maybe FilePath
+--   -> [Filename]
+--   -> AnnotationType
+--   -> FileOrDir
+--   -> IO ()
+-- stencilsSynth inSrc incDir excludes annType outSrc =
+--   let rfun = second (fmap (pure :: a -> Either () a)) <$> Stencils.synth (markerChar annType)
+--       runner' = withOutRunner doRefactor outSrc
+--   in runStencilsFunctionality "Synthesising stencil specs for" runner' rfun inSrc incDir excludes
 
 -- | Initialize Camfort for the given project.
 camfortInitialize :: FilePath -> IO ()
