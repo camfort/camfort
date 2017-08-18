@@ -362,9 +362,8 @@ applyTemplates cons = do
     ident <- freshId
     pure (puName pu, ident)
 
-  whenDebug $ do
-    logInfoNoOrigin ("instances: " <> describeShow instances <> "\n")
-    logInfoNoOrigin ("dummies: " <> describeShow dummies <> "\n")
+  logDebug' pf $ ("instances: " <> describeShow instances)
+  logDebug' pf $ ("dummies: " <> describeShow dummies)
 
   -- Work through the instances, expanding their templates, and
   -- substituting the callId into the abstract parameters.

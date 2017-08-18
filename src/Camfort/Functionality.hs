@@ -221,17 +221,15 @@ runUnitsFunctionality
   -> (UnitOpts -> AnalysisProgram e w IO a b)
   -> AnalysisRunner e w IO a b r
   -> LiteralsOpt
-  -> Bool
   -> CamfortEnv
   -> IO r
-runUnitsFunctionality description unitsProgram runner opts debug =
-  let uo = optsToUnitOpts opts debug
+runUnitsFunctionality description unitsProgram runner opts =
+  let uo = optsToUnitOpts opts
   in runFunctionality description (unitsProgram uo) runner compileUnits uo
 
-optsToUnitOpts :: LiteralsOpt -> Bool -> UnitOpts
-optsToUnitOpts m debug = o1
+optsToUnitOpts :: LiteralsOpt -> UnitOpts
+optsToUnitOpts m = o1
   where o1 = unitOpts0 { uoLiterals = m
-                       , uoDebug = debug
                        }
 
 singlePfUnits :: UnitAnalysis a -> UnitOpts -> AnalysisProgram () () IO ProgramFile a
@@ -260,7 +258,7 @@ multiPfUnits unitAnalysis opts pfs = do
 
   return (rs', ps)
 
-unitsCheck :: LiteralsOpt -> Bool -> CamfortEnv -> IO ()
+unitsCheck :: LiteralsOpt -> CamfortEnv -> IO ()
 unitsCheck =
   runUnitsFunctionality
   "Checking units for"
@@ -268,7 +266,7 @@ unitsCheck =
   describePerFileAnalysis
 
 
-unitsInfer :: LiteralsOpt -> Bool -> CamfortEnv -> IO ()
+unitsInfer :: LiteralsOpt -> CamfortEnv -> IO ()
 unitsInfer =
   runUnitsFunctionality
   "Inferring units for"
@@ -276,18 +274,17 @@ unitsInfer =
   describePerFileAnalysis
 
 
-unitsSynth :: AnnotationType -> FileOrDir -> LiteralsOpt -> Bool -> CamfortEnv -> IO ()
-unitsSynth annType outSrc opts debug env =
+unitsSynth :: AnnotationType -> FileOrDir -> LiteralsOpt -> CamfortEnv -> IO ()
+unitsSynth annType outSrc opts env =
   runUnitsFunctionality
   "Synthesising units for"
   (multiPfUnits $ LU.synthesiseUnits (markerChar annType))
   (doRefactor (ceInputSources env) outSrc)
   opts
-  debug
   env
 
 
-unitsCriticals :: LiteralsOpt -> Bool -> CamfortEnv -> IO ()
+unitsCriticals :: LiteralsOpt -> CamfortEnv -> IO ()
 unitsCriticals =
   runUnitsFunctionality
   "Suggesting variables to annotate with unit specifications in"

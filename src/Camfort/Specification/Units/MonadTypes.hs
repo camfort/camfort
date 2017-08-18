@@ -47,8 +47,7 @@ instance Read LiteralsOpt where
 
 -- | Options for the unit solver
 data UnitOpts = UnitOpts
-  { uoDebug    :: Bool                      -- ^ debugging mode?
-  , uoLiterals :: LiteralsOpt               -- ^ how to handle literals
+  { uoLiterals :: LiteralsOpt               -- ^ how to handle literals
   }
   deriving (Show, Data, Eq, Ord)
 

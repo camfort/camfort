@@ -30,9 +30,9 @@ import Options.Applicative
 
 
 -- | Commands supported by CamFort.
-data Command = CmdCount ReadOptions
-             | CmdAST ReadOptions
-             | CmdStencilsCheck ReadOptions
+data Command = CmdCount ReadOptions LogOptions
+             | CmdAST ReadOptions LogOptions
+             | CmdStencilsCheck ReadOptions LogOptions
              | CmdStencilsInfer StencilsInferOptions
              | CmdStencilsSynth StencilsSynthOptions
              | CmdUnitsSuggest UnitsOptions
@@ -54,6 +54,11 @@ data ReadOptions = ReadOptions
   }
 
 
+data LogOptions = LogOptions
+  { logLevel :: LogLevel
+  }
+
+
 -- | Options for writing to files.
 --
 -- User can choose to either specify which file to write, or have
@@ -65,8 +70,8 @@ data WriteOptions = WriteFile { _outputFile :: String }
 -- | Options used by all unit commands.
 data UnitsOptions = UnitsOptions
   { uoReadOptions :: ReadOptions
+  , uoLogOptions  :: LogOptions
   , literals      :: LiteralsOpt
-  , debug         :: Bool
   }
 
 
@@ -88,12 +93,14 @@ data UnitsSynthOptions = UnitsSynthOptions
 
 data StencilsInferOptions = StencilsInferOptions
   { sioReadOptions :: ReadOptions
+  , sioLogOptions  :: LogOptions
   , sioUseEval     :: Bool
   }
 
 
 data StencilsSynthOptions = StencilsSynthOptions
   { ssoReadOptions        :: ReadOptions
+  , ssoLogOptions         :: LogOptions
   , ssoWriteOptions       :: WriteOptions
   , ssoAnnotationOptions  :: AnnotationOptions
   }
@@ -102,6 +109,7 @@ data StencilsSynthOptions = StencilsSynthOptions
 -- | Options used by refactoring commands.
 data RefactOptions = RefactOptions
   { rfoReadOptions  :: ReadOptions
+  , rfoLogOptions   :: LogOptions
   , rfoWriteOptions :: WriteOptions
   }
 
@@ -148,6 +156,14 @@ readOptions = fmap ReadOptions
        <> help "directory to search for precompiled files")
 
 
+logOptions :: Parser LogOptions
+logOptions = LogOptions <$> logLevelOption
+  where
+    logLevelOption =
+      let toLogLevel debug = if debug then LogDebug else LogInfo
+      in toLogLevel <$> switch (long "debug" <> help "enable debug output")
+
+
 -- | User must specify either an ouput file, or say that the file
 -- | should be rewritten in place.
 writeOptions :: Parser WriteOptions
@@ -160,7 +176,7 @@ writeOptions = (fmap WriteFile . fileArgument $
 
 stencilsInferOptions :: Parser StencilsInferOptions
 stencilsInferOptions = fmap StencilsInferOptions
-  readOptions <*> evalOption
+  readOptions <*> logOptions <*> evalOption
   where
     evalOption = switch
       (    long "eval"
@@ -170,14 +186,14 @@ stencilsInferOptions = fmap StencilsInferOptions
 
 stencilsSynthOptions :: Parser StencilsSynthOptions
 stencilsSynthOptions = fmap StencilsSynthOptions
-  readOptions <*> writeOptions <*> annotationOptions
+  readOptions <*> logOptions <*> writeOptions <*> annotationOptions
 
 
 unitsOptions :: Parser UnitsOptions
 unitsOptions = fmap UnitsOptions
       readOptions
+  <*> logOptions
   <*> literalsOption
-  <*> debugOption
   where
     literalsOption = option parseLiterals $
                      long "units-literals"
@@ -187,7 +203,6 @@ unitsOptions = fmap UnitsOptions
                      <> value LitMixed
                      <> help "units-of-measure literals mode. ID = Unitless, Poly, or Mixed"
     parseLiterals = fmap read str
-    debugOption = switch (long "debug" <> help "enable debug mode")
 
 
 unitsWriteOptions :: Parser UnitsWriteOptions
@@ -210,16 +225,16 @@ unitsSynthOptions = fmap UnitsSynthOptions
 
 refactOptions :: Parser RefactOptions
 refactOptions = fmap RefactOptions
-  readOptions <*> writeOptions
+  readOptions <*> logOptions <*> writeOptions
 
 
 cmdCount, cmdAST :: Parser Command
-cmdCount = fmap CmdCount readOptions
-cmdAST   = fmap CmdAST   readOptions
+cmdCount = fmap CmdCount readOptions <*> logOptions
+cmdAST   = fmap CmdAST   readOptions <*> logOptions
 
 
 cmdStencilsCheck, cmdStencilsInfer, cmdStencilsSynth :: Parser Command
-cmdStencilsCheck = fmap CmdStencilsCheck readOptions
+cmdStencilsCheck = fmap CmdStencilsCheck readOptions <*> logOptions
 cmdStencilsInfer = fmap CmdStencilsInfer stencilsInferOptions
 cmdStencilsSynth = fmap CmdStencilsSynth stencilsSynthOptions
 
@@ -333,12 +348,11 @@ main = do
   cmd <- execParser (info (commandParser currentDir) idm)
   runCommand cmd
   where
-    env ro = CamfortEnv
+    env ro lo = CamfortEnv
       { ceInputSources = inputSource ro
       , ceIncludeDir = includeDir ro
       , ceExcludeFiles = getExcludes ro
-      , ceLogLevel = LogDebug
-      -- TODO: make log level configurable
+      , ceLogLevel = logLevel lo
       }
 
     getExcludes = fromMaybe [] . exclude
@@ -346,21 +360,24 @@ main = do
     getOutputFile _ (WriteFile f) = f
     getOutputFile inp WriteInplace = inp
 
-    runRO ro f = f (env ro)
+    runRO ro lo f = f (env ro lo)
     runSIO sio f =
       let ro      = sioReadOptions sio
+          lo      = sioLogOptions sio
           useEval = sioUseEval sio
           inFile  = inputSource ro
-      in runRO ro (f useEval)
+      in runRO ro lo (f useEval)
     runSSO sso f =
       let ao     = ssoAnnotationOptions sso
           wo     = ssoWriteOptions sso
           ro     = ssoReadOptions sso
+          lo     = ssoLogOptions sso
           inFile = inputSource ro
-      in runRO ro (f (annotationType ao) (getOutputFile inFile wo))
+      in runRO ro lo (f (annotationType ao) (getOutputFile inFile wo))
     runUO uo f =
       let ro = uoReadOptions uo
-      in runRO ro (f (literals uo) (debug uo))
+          lo = uoLogOptions uo
+      in runRO ro lo (f (literals uo))
     runUWO uwo f =
       let uo     = uwoUnitsOptions uwo
           ro     = uoReadOptions uo
@@ -373,14 +390,15 @@ main = do
       in runUWO uwo (f (annotationType ao))
     runRFO rfo f =
       let ro     = rfoReadOptions rfo
+          lo     = rfoLogOptions rfo
           wo     = rfoWriteOptions rfo
           inFile = inputSource ro
-      in runRO ro (f (getOutputFile inFile wo))
+      in runRO ro lo (f (getOutputFile inFile wo))
 
     runCommand :: Command -> IO ()
-    runCommand (CmdAST ro)                = runRO ro ast
-    runCommand (CmdCount ro)              = runRO ro countVarDecls
-    runCommand (CmdStencilsCheck ro)      = runRO ro stencilsCheck
+    runCommand (CmdAST ro lo)             = runRO ro lo ast
+    runCommand (CmdCount ro lo)           = runRO ro lo countVarDecls
+    runCommand (CmdStencilsCheck ro lo)   = runRO ro lo stencilsCheck
     runCommand (CmdStencilsInfer so)      = runSIO so stencilsInfer
     runCommand (CmdStencilsSynth sso)     = runSSO sso stencilsSynth
     runCommand (CmdUnitsSuggest uo)       = runUO uo unitsCriticals

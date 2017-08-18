@@ -21,7 +21,6 @@
 {- | Defines the monad for the units-of-measure modules -}
 module Camfort.Specification.Units.Monad
   ( UA, VV, UnitSolver, UnitOpts(..), unitOpts0, UnitState, LiteralsOpt(..)
-  , whenDebug
   , VarUnitMap, GivenVarSet, UnitAliasMap, TemplateMap, CallIdMap
   , NameParamMap, NameParamKey(..)
     -- ** State Helpers
@@ -77,15 +76,7 @@ import Camfort.Specification.Units.Environment (UnitInfo, Constraints, VV, PP)
 import Camfort.Specification.Units.MonadTypes
 
 unitOpts0 :: UnitOpts
-unitOpts0 = UnitOpts False LitMixed
-
---------------------------------------------------
-
--- Read-only options for the unit solver.
-
--- | Only run the argument if debugging mode enabled.
-whenDebug :: UnitSolver () -> UnitSolver ()
-whenDebug m = fmap uoDebug (asks unitOpts) >>= \ d -> when d m
+unitOpts0 = UnitOpts LitMixed
 
 --------------------------------------------------
 
