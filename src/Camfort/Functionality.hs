@@ -169,7 +169,7 @@ countVarDecls :: CamfortEnv -> IO ()
 countVarDecls =
   runFunctionality
   "Counting variable declarations in"
-  (generalizePureAnalysisProgram countVariableDeclarations)
+  (generalizePureAnalysis . countVariableDeclarations)
   describePerFileAnalysis
   simpleCompiler ()
 
@@ -178,8 +178,8 @@ perFileRefactoring
   :: (Monad m)
   => AnalysisProgram e w m ProgramFile ProgramFile
   -> AnalysisProgram e w m [ProgramFile] ((), [Either e ProgramFile])
-perFileRefactoring program modfiles pfs = do
-  pfs' <- mapM (program modfiles) pfs
+perFileRefactoring program pfs = do
+  pfs' <- mapM program pfs
   return ((), fmap pure pfs')
 
 
@@ -187,7 +187,7 @@ dead :: FileOrDir -> CamfortEnv -> IO ()
 dead =
   runWithOutput
   "Eliminating dead code in"
-  (generalizePureAnalysisProgram . perFileRefactoring . const $ deadCode False)
+  (fmap generalizePureAnalysis . perFileRefactoring $ deadCode False)
   doRefactor
   simpleCompiler ()
 
@@ -196,7 +196,7 @@ common :: FileOrDir -> CamfortEnv -> IO ()
 common outSrc =
   runWithOutput
   "Refactoring common blocks in"
-  (generalizePureAnalysisProgram $ \_ -> commonElimToModules (takeDirectory outSrc ++ "/"))
+  (generalizePureAnalysis . commonElimToModules (takeDirectory outSrc ++ "/"))
   doRefactorAndCreate
   simpleCompiler ()
   outSrc
@@ -206,7 +206,7 @@ equivalences :: FileOrDir -> CamfortEnv -> IO ()
 equivalences =
   runWithOutput
   "Refactoring equivalences blocks in"
-  (generalizePureAnalysisProgram . perFileRefactoring . const $ refactorEquivalences)
+  (fmap generalizePureAnalysis . perFileRefactoring $ refactorEquivalences)
   doRefactor
   simpleCompiler ()
 
@@ -235,10 +235,9 @@ optsToUnitOpts m debug = o1
                        }
 
 singlePfUnits :: UnitAnalysis a -> UnitOpts -> AnalysisProgram () () IO ProgramFile a
-singlePfUnits unitAnalysis opts modfiles pf =
+singlePfUnits unitAnalysis opts pf =
   let ue = UnitEnv
         { unitOpts = opts
-        , unitModfiles = modfiles
         , unitProgramFile = pf
         }
   in runUnitAnalysis ue unitAnalysis
@@ -248,10 +247,9 @@ multiPfUnits
   => UnitAnalysis (Either e (a, b))
   -> UnitOpts
   -> AnalysisProgram () () IO [ProgramFile] (Text, [Either e b])
-multiPfUnits unitAnalysis opts modfiles pfs = do
+multiPfUnits unitAnalysis opts pfs = do
   let ue pf = UnitEnv
         { unitOpts = opts
-        , unitModfiles = modfiles
         , unitProgramFile = pf
         }
 
@@ -304,7 +302,7 @@ stencilsCheck :: CamfortEnv -> IO ()
 stencilsCheck =
   runFunctionality
   "Checking stencil specs for"
-  (generalizePureAnalysisProgram Stencils.check)
+  (generalizePureAnalysis . Stencils.check)
   describePerFileAnalysis
   compileStencils ()
 
@@ -313,7 +311,7 @@ stencilsInfer :: Bool -> CamfortEnv -> IO ()
 stencilsInfer useEval =
   runFunctionality
   "Inferring stencil specs for"
-  (generalizePureAnalysisProgram (Stencils.infer useEval '='))
+  (generalizePureAnalysis . Stencils.infer useEval '=')
   describePerFileAnalysis
   compileStencils ()
 
@@ -322,8 +320,8 @@ stencilsSynth :: AnnotationType -> FileOrDir -> CamfortEnv -> IO ()
 stencilsSynth annType =
   let
     program :: AnalysisProgram () () IO [ProgramFile] ((), [Either () ProgramFile])
-    program pfs modfiles = generalizePureAnalysis $ do
-      pfs' <- Stencils.synth (markerChar annType) pfs modfiles
+    program pfs = generalizePureAnalysis $ do
+      pfs' <- Stencils.synth (markerChar annType) pfs
       return ((), map Right pfs')
 
   in runWithOutput

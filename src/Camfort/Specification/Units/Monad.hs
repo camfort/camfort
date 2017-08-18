@@ -174,14 +174,3 @@ runUnitSolver pf solver = do
 
 runUnitAnalysis :: UnitEnv -> UnitAnalysis a -> AnalysisT () () IO a
 runUnitAnalysis env = flip runReaderT env
-
--- -- | Run the unit solver monad to produce an analysis.
--- runUnitSolver :: UnitOpts -> F.ProgramFile UA -> UnitSolver a -> AnalysisT () () IO (a, UnitState)
--- runUnitSolver opts pf = flip runReaderT opts . flip runStateT (unitState0 pf)
-
--- -- | Given a unit solver program, produce an analysis program.
--- unitSolverProgram
---   :: UnitOpts
---   -> (ModFiles -> F.ProgramFile UA -> UnitSolver a)
---   -> AnalysisProgram () () IO (F.ProgramFile UA) (a, UnitState)
--- unitSolverProgram opts program modfiles pf = runUnitSolver opts pf (program modfiles pf)

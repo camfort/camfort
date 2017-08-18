@@ -129,7 +129,7 @@ initInference = do
 runInference :: UnitSolver a -> UnitAnalysis (a, UnitState)
 runInference solver = do
   uOpts <- asks unitOpts
-  mfs <- asks unitModfiles
+  mfs <- lift analysisModFiles
   pf <- asks unitProgramFile
 
   let pf' = withCombinedEnvironment mfs . fmap UA.mkUnitAnnotation $ pf
@@ -175,7 +175,7 @@ indexedParams pu
 insertUndeterminedUnits :: UnitSolver ()
 insertUndeterminedUnits = do
   pf   <- getProgramFile
-  dmap <- (M.union (extractDeclMap pf) . combinedDeclMap) <$> asks unitModfiles
+  dmap <- lift . lift $ M.union (extractDeclMap pf) . combinedDeclMap <$> analysisModFiles
   forM_ (universeBi pf :: [F.ProgramUnit UA]) $ \ pu ->
     modifyPUBlocksM (transformBiM (insertUndeterminedUnitVar dmap)) pu
 
@@ -505,7 +505,7 @@ topLevelFuncsAndSubs (F.ProgramFile _ pus) = topLevel =<< pus
 extractConstraints :: UnitSolver Constraints
 extractConstraints = do
   pf         <- getProgramFile
-  dmap       <- (M.union (extractDeclMap pf) . combinedDeclMap) <$> asks unitModfiles
+  dmap       <- lift . lift $ M.union (extractDeclMap pf) . combinedDeclMap <$> analysisModFiles
   varUnitMap <- getVarUnitMap
   pure $ [ con | b <- mainBlocks pf, con@ConEq{} <- universeBi b ] ++
            [ ConEq (toUnitVar dmap v) u | (v, u) <- M.toList varUnitMap ]
@@ -921,11 +921,10 @@ compileUnits uo mfs pf = do
   let analysis = runReaderT (runInference runCompileUnits) $
         UnitEnv
         { unitOpts = uo
-        , unitModfiles = mfs
         , unitProgramFile = pf
         }
 
-  report <- runAnalysisT (F.pfGetFilename pf) (const (return ())) LogError analysis
+  report <- runAnalysisT (F.pfGetFilename pf) (const (return ())) LogError mfs analysis
 
   case report ^? arResult . _ARSuccess . _1 of
     Just cu -> return (genUnitsModFile pf' cu)

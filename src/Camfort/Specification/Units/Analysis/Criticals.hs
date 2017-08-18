@@ -17,7 +17,7 @@ module Camfort.Specification.Units.Analysis.Criticals
   ) where
 
 import           Control.Monad.State (get)
-import           Control.Monad.Reader (asks)
+import           Control.Monad.Reader (asks, lift)
 import           Data.Generics.Uniplate.Operations
 import qualified Data.Map.Strict       as M
 import           Data.Maybe (fromMaybe)
@@ -91,7 +91,7 @@ runCriticalVariables = do
 -- | Infer one possible set of critical variables for a program.
 inferCriticalVariables :: UnitAnalysis Criticals
 inferCriticalVariables = do
-  mfs <- asks unitModfiles
+  mfs <- lift analysisModFiles
   pf <- asks unitProgramFile
   (eVars, _) <- runInference runCriticalVariables
   let

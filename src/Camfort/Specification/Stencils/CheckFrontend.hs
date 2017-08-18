@@ -222,8 +222,8 @@ instance Show StencilCheckWarning where
     "Warning: Unused region '" ++ name ++ "'"
 
 -- Entry point
-stencilChecking :: F.ProgramFile SA -> MF.ModFiles -> StencilsAnalysis CheckResult
-stencilChecking pf mfs = do
+stencilChecking :: F.ProgramFile SA -> StencilsAnalysis CheckResult
+stencilChecking pf = do
   fmap (CheckResult . snd) . runWriterT $ do
     -- Attempt to parse comments to specifications
     pf' <- annotateComments Parser.specParser (\srcSpan err -> tell [parseError srcSpan err]) pf
@@ -254,7 +254,7 @@ stencilChecking pf mfs = do
           mapM_ (addResult . uncurry unusedRegion) unused
 
     output <- lift $ checkResult . snd <$>
-          runChecker (results >> addUnusedRegionsToResult) flowsGraph (startState ivmap) mfs
+          runChecker (results >> addUnusedRegionsToResult) flowsGraph (startState ivmap)
 
     tell output
 
@@ -298,24 +298,21 @@ startState ivmap =
              }
 
 
-type CheckerEnv = (MF.ModFiles, FAD.FlowsGraph (SA.StencilAnnotation A))
+type CheckerEnv = FAD.FlowsGraph (SA.StencilAnnotation A)
 type Checker = ReaderT CheckerEnv (StateT CheckState StencilsAnalysis)
 
 
 runChecker
   :: Checker a
-  -> FAD.FlowsGraph (SA.StencilAnnotation A) -> CheckState -> MF.ModFiles
+  -> FAD.FlowsGraph (SA.StencilAnnotation A) -> CheckState
   -> StencilsAnalysis (a, CheckState)
-runChecker c flows state mfs =
-  let env = (mfs, flows)
-  in runStateT (runReaderT c env) state
+runChecker c flows state = do
+  let env = flows
+  runStateT (runReaderT c env) state
 
 
 getFlowsGraph :: Checker (FAD.FlowsGraph (SA.StencilAnnotation A))
-getFlowsGraph = asks snd
-
-getModFiles :: Checker MF.ModFiles
-getModFiles = asks fst
+getFlowsGraph = asks id
 
 -- If the annotation contains an unconverted stencil specification syntax tree
 -- then convert it and return an updated annotation containing the AST
@@ -410,8 +407,7 @@ checkStencil block specDecls spanInferred maybeSubs span = do
   flowsGraph <- getFlowsGraph
   let lhsN         = fromMaybe [] (neighbourIndex ivmap subs)
 
-  mfs <- getModFiles
-  relOffsets <- lift . lift $ fst <$> runStencilInferer (genOffsets lhsN [block]) ivs flowsGraph mfs
+  relOffsets <- lift . lift $ fst <$> runStencilInferer (genOffsets lhsN [block]) ivs flowsGraph
 
   let multOffsets = map (\relOffset ->
           case relOffset of
@@ -428,7 +424,7 @@ checkStencil block specDecls spanInferred maybeSubs span = do
                    if specExists then addResult (duplicateSpecification span)
                      else addResult (specOkay span s v spanInferred)) expandedDecls
     else do
-    inferred <- lift . lift $ fst . fst <$> runStencilInferer (genSpecifications lhsN block) ivs flowsGraph mfs
+    inferred <- lift . lift $ fst . fst <$> runStencilInferer (genSpecifications lhsN block) ivs flowsGraph
     addResult (notWellSpecified (span, specDecls) (spanInferred, inferred))
   where
     seenBefore :: (Variable, Specification) -> Checker Bool

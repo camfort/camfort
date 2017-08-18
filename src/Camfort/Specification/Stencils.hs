@@ -48,11 +48,10 @@ getBlocks = FAB.analyseBBlocks . FAR.analyseRenames . FA.initAnalysis . fmap SA.
 -- Top-level of specification inference
 infer :: Bool
       -> Char
-      -> MF.ModFiles
       -> F.ProgramFile Annotation
       -> StencilsAnalysis ()
-infer useEval marker mfs pf = do
-  logs <- stencilInference useEval marker (getBlocks pf) mfs
+infer useEval marker pf = do
+  logs <- stencilInference useEval marker (getBlocks pf)
   let filename = F.pfGetFilename pf
       output = intercalate "\n"
              . filter (not . white)
@@ -67,10 +66,9 @@ infer useEval marker mfs pf = do
 
 -- Top-level of specification synthesis
 synth :: Char
-      -> MF.ModFiles
       -> [F.ProgramFile A]
       -> StencilsAnalysis ([F.ProgramFile A])
-synth marker mfs pfs = do
+synth marker pfs = do
   syntheses <- unzip <$> traverse buildOutput pfs
   logInfo' pfs $ describe . normaliseMsg . fst $ syntheses
   pure (catMaybes $ snd syntheses)
@@ -85,10 +83,10 @@ synth marker mfs pfs = do
     synthWithCheck :: F.ProgramFile A -> StencilsAnalysis (Either String (String, F.ProgramFile Annotation))
     synthWithCheck pf = do
       let blocks = getBlocks pf
-      checkRes <- stencilChecking blocks mfs
+      checkRes <- stencilChecking blocks
       case checkFailure checkRes of
         Nothing  -> do
-          res <- fst <$> stencilSynthesis marker blocks mfs
+          res <- fst <$> stencilSynthesis marker blocks
           let inference = fmap SA.getBaseAnnotation res
           pure $ Right (maybe "" show (checkWarnings checkRes), inference)
         Just err -> pure . Left $ show err
@@ -109,8 +107,8 @@ synth marker mfs pfs = do
 --         Stencil specification checking       --
 --------------------------------------------------
 
-check :: MF.ModFiles -> F.ProgramFile Annotation -> StencilsAnalysis CheckResult
-check mfs pf = stencilChecking (getBlocks pf) mfs
+check :: F.ProgramFile Annotation -> StencilsAnalysis CheckResult
+check = stencilChecking . getBlocks
 
 -- Local variables:
 -- mode: haskell

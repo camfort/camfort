@@ -27,7 +27,6 @@ module Camfort.Input
     -- * Source directory and file handling
   , readParseSrcDir
     -- * Combinators
-  , generalizePureAnalysisProgram
   , runThen
   ) where
 
@@ -50,7 +49,7 @@ import           Camfort.Analysis.ModFile      (MFCompiler, genModFiles,
 import           Camfort.Helpers
 import           Camfort.Output
 
-type AnalysisProgram e w m a b = ModFiles -> a -> AnalysisT e w m b
+type AnalysisProgram e w m a b = a -> AnalysisT e w m b
 
 type AnalysisRunner e w m a b r =
   AnalysisProgram e w m a b -> LogOutput m -> LogLevel -> ModFiles -> [(ProgramFile, SourceText)] -> m r
@@ -68,13 +67,14 @@ runPerFileAnalysis program logOutput logLevel modFiles =
       (F.pfGetFilename pf)
       logOutput
       logLevel
-      (program modFiles pf)) . map fst
+      modFiles
+      (program pf)) . map fst
 
 runMultiFileAnalysis
   :: (Monad m, Describe e, Describe w)
   => AnalysisRunner e w m [ProgramFile] b (AnalysisReport e w b)
 runMultiFileAnalysis program logOutput logLevel modFiles
-  = runAnalysisT "<unknown>" logOutput logLevel . program modFiles . map fst
+  = runAnalysisT "<unknown>" logOutput logLevel modFiles . program . map fst
 
 --------------------------------------------------------------------------------
 --  Complex Runners
@@ -169,12 +169,6 @@ runThen
   -> AnalysisRunner e w m a b r'
 runThen runner withResult program output level modFiles programFiles =
   runner program output level modFiles programFiles >>= withResult
-
-generalizePureAnalysisProgram
-  :: (Monad m)
-  => AnalysisProgram e w Identity a b -> AnalysisProgram e w m a b
-generalizePureAnalysisProgram program modFiles input =
-  generalizePureAnalysis (program modFiles input)
 
 --------------------------------------------------------------------------------
 --  Misc

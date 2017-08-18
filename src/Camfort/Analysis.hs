@@ -29,6 +29,8 @@ module Camfort.Analysis
   -- * Early exit
   , failAnalysis
   , failAnalysis'
+  -- * Combinators
+  , analysisModFiles
   -- * Analysis results
   , AnalysisResult(..)
   , _ARFailure
@@ -68,7 +70,7 @@ module Camfort.Analysis
 
 import           Control.Monad.Except
 import           Control.Monad.Morph
-import           Control.Monad.Reader.Class
+import           Control.Monad.Reader
 import           Control.Monad.State.Class
 import           Control.Monad.Writer.Strict
 
@@ -79,6 +81,7 @@ import qualified Data.Text.Lazy.Builder         as Builder
 import qualified Data.Text.Lazy.IO              as Lazy
 
 import qualified Language.Fortran.Util.Position as F
+import qualified Language.Fortran.Util.ModFile  as F
 
 import           Camfort.Analysis.Logger
 
@@ -89,14 +92,13 @@ import           Camfort.Analysis.Logger
 newtype AnalysisT e w m a =
   AnalysisT
   { getAnalysisT ::
-      ExceptT (LogMessage e) (LoggerT e w m) a
+      ReaderT F.ModFiles (ExceptT (LogMessage e) (LoggerT e w m)) a
   }
   deriving
     ( Functor
     , Applicative
     , Monad
     , MonadIO
-    , MonadReader r
     , MonadState s
     , MonadWriter w'
     , MonadLogger e w
@@ -105,13 +107,26 @@ newtype AnalysisT e w m a =
 type PureAnalysis e w = AnalysisT e w Identity
 
 instance MonadTrans (AnalysisT e w) where
-  lift = AnalysisT . lift . lift
+  lift = AnalysisT . lift . lift . lift
 
 instance MonadError e' m => MonadError e' (AnalysisT e w m) where
   throwError = lift . throwError
-  catchError action handle = AnalysisT . ExceptT $
-    let run = runExceptT . getAnalysisT
+  catchError action handle = AnalysisT . ReaderT $ \r -> ExceptT $
+    let run = runExceptT . flip runReaderT r . getAnalysisT
     in catchError (run action) (run . handle)
+
+instance MonadReader r m => MonadReader r (AnalysisT e w m) where
+  ask = lift ask
+
+  local f x = AnalysisT . ReaderT $ \mfs ->
+    local f . flip runReaderT mfs . getAnalysisT $ x
+
+--------------------------------------------------------------------------------
+--  Environment
+--------------------------------------------------------------------------------
+
+analysisModFiles :: (Monad m) => AnalysisT e w m F.ModFiles
+analysisModFiles = AnalysisT ask
 
 --------------------------------------------------------------------------------
 --  Early exit
@@ -209,13 +224,15 @@ runAnalysisT
   => FilePath
   -> LogOutput m
   -> LogLevel
+  -> F.ModFiles
   -> AnalysisT e w m a
   -> m (AnalysisReport e w a)
-runAnalysisT fileName output logLevel analysis = do
+runAnalysisT fileName output logLevel mfs analysis = do
 
   (res1, messages) <-
     runLoggerT fileName output logLevel .
     runExceptT .
+    flip runReaderT mfs .
     getAnalysisT $
     analysis
 
@@ -234,4 +251,4 @@ runAnalysisT fileName output logLevel analysis = do
 -- cannot output any logs directly because it is pure. It does collect them into
 -- the report at the end, however.
 generalizePureAnalysis :: (Monad m) => PureAnalysis e w a -> AnalysisT e w m a
-generalizePureAnalysis = AnalysisT . hoist generalizeLogger . getAnalysisT
+generalizePureAnalysis = AnalysisT . hoist (hoist generalizeLogger) . getAnalysisT

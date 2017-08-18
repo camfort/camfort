@@ -88,8 +88,8 @@ getIvs = asks sieIvs
 getFlowsGraph :: StencilInferer ann (FAD.FlowsGraph ann)
 getFlowsGraph = asks sieFlowsGraph
 
-runStencilInferer :: StencilInferer ann a -> [Variable] -> FAD.FlowsGraph ann -> ModFiles -> StencilsAnalysis (a, EvalLog)
-runStencilInferer si ivs flowsGraph mfs = do
+runStencilInferer :: StencilInferer ann a -> [Variable] -> FAD.FlowsGraph ann -> StencilsAnalysis (a, EvalLog)
+runStencilInferer si ivs flowsGraph = do
   let senv = SIEnv { sieIvs = ivs, sieFlowsGraph = flowsGraph }
   runWriterT $ runReaderT si senv
 

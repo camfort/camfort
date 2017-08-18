@@ -54,7 +54,6 @@ import qualified Language.Fortran.AST               as F
 import qualified Language.Fortran.Analysis          as FA
 import qualified Language.Fortran.Analysis.BBlocks  as FAB
 import qualified Language.Fortran.Analysis.DataFlow as FAD
-import           Language.Fortran.Util.ModFile (ModFiles)
 import qualified Language.Fortran.Util.Position     as FU
 
 import Data.Data
@@ -81,7 +80,6 @@ data InferEnv = IE
   , ieDoSynth       :: Bool
   , ieMarker        :: Char
   , ieMetaInfo      :: F.MetaInfo
-  , ieModFiles      :: ModFiles
   }
 
 
@@ -109,9 +107,6 @@ getUseEval = asks ieUseEval
 getDoSynth :: Inferer Bool
 getDoSynth = asks ieDoSynth
 
-getModFiles :: Inferer ModFiles
-getModFiles = asks ieModFiles
-
 runInferer :: CheckResult
            -> Bool
            -> Bool
@@ -119,10 +114,9 @@ runInferer :: CheckResult
            -> F.MetaInfo
            -> FAD.InductionVarMapByASTBlock
            -> FAD.FlowsGraph (SA.StencilAnnotation A)
-           -> ModFiles
            -> Inferer a
            -> StencilsAnalysis (a, [LogLine])
-runInferer cr useEval doSynth marker mi ivmap flTo mfs inferer = do
+runInferer cr useEval doSynth marker mi ivmap flTo inferer = do
   let env = IE
         { ieExistingSpecs = existingStencils cr
         , ieFlowsGraph    = flTo
@@ -130,7 +124,6 @@ runInferer cr useEval doSynth marker mi ivmap flTo mfs inferer = do
         , ieDoSynth       = doSynth
         , ieMarker        = marker
         , ieMetaInfo      = mi
-        , ieModFiles      = mfs
         }
 
   evalRWST inferer env (IS ivmap [])
@@ -156,29 +149,26 @@ specToSynSpec spec = let ?renv = [] in
 stencilInference :: Bool
                  -> Char
                  -> F.ProgramFile SA
-                 -> ModFiles
                  -> StencilsAnalysis [LogLine]
-stencilInference useEval marker pf mfs = execWriterT $ stencilSynthesis' useEval False marker pf mfs
+stencilInference useEval marker pf = execWriterT $ stencilSynthesis' useEval False marker pf
 
 stencilSynthesis :: Char
                  -> F.ProgramFile SA
-                 -> ModFiles
                  -> StencilsAnalysis (F.ProgramFile SA, [LogLine])
-stencilSynthesis marker pf mfs = do
+stencilSynthesis marker pf = do
   let (pf', _log0 :: String) = runWriter (annotateComments Parser.specParser (const . const . pure $ ()) pf)
   logDebug' pf $ describe _log0
-  runWriterT $ stencilSynthesis' False True marker pf' mfs
+  runWriterT $ stencilSynthesis' False True marker pf'
 
 -- | Main stencil synthesis code
 stencilSynthesis' :: Bool
                   -> Bool
                   -> Char
                   -> F.ProgramFile SA
-                  -> ModFiles
                   -> WriterT [LogLine] StencilsAnalysis
                      (F.ProgramFile SA)
-stencilSynthesis' useEval doSynth marker pf@(F.ProgramFile mi pus) mfs = do
-  checkRes <- lift $ stencilChecking pf mfs
+stencilSynthesis' useEval doSynth marker pf@(F.ProgramFile mi pus) = do
+  checkRes <- lift $ stencilChecking pf
 
   let
     -- get map of AST-Block-ID ==> corresponding AST-Block
@@ -210,7 +200,7 @@ stencilSynthesis' useEval doSynth marker pf@(F.ProgramFile mi pus) mfs = do
             -- identify every loop by its back-edge
             ivMap = FAD.genInductionVarMapByASTBlock beMap gr
 
-        (pu', log) <- lift $ runInferer checkRes useEval doSynth marker mi ivMap flTo mfs pum
+        (pu', log) <- lift $ runInferer checkRes useEval doSynth marker mi ivMap flTo pum
         tell log
         pure pu'
     perPU pu = pure pu
@@ -231,9 +221,8 @@ genSpecsAndReport span lhsIxs block = do
   (IS ivmap _) <- get
   let ivs = extractRelevantIVS ivmap block
   flowsGraph   <- getFlowsGraph
-  mfs <- getModFiles
   -- Generate specification for the
-  ((specs, visited), evalInfos) <- lift $ runStencilInferer (genSpecifications lhsIxs block) ivs flowsGraph mfs
+  ((specs, visited), evalInfos) <- lift $ runStencilInferer (genSpecifications lhsIxs block) ivs flowsGraph
   -- Remember which nodes were visited during this traversal
   modify (\state -> state { visitedNodes = visitedNodes state ++ visited })
   -- Report the specifications

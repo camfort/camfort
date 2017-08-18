@@ -54,7 +54,6 @@ data UnitOpts = UnitOpts
 
 data UnitEnv = UnitEnv
   { unitOpts     :: UnitOpts
-  , unitModfiles :: ModFiles
   , unitProgramFile :: F.ProgramFile Annotation
   }
 

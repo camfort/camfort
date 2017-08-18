@@ -30,5 +30,5 @@ import Camfort.Analysis (PureAnalysis)
 
 {-| Counts the number of declarations (of variables) in a whole program -}
 
-countVariableDeclarations :: forall a x. Data a => x -> F.ProgramFile a -> PureAnalysis () () Int
-countVariableDeclarations _ pf = return $ length (universeBi pf :: [F.Declarator a])
+countVariableDeclarations :: forall a. Data a => F.ProgramFile a -> PureAnalysis () () Int
+countVariableDeclarations pf = return $ length (universeBi pf :: [F.Declarator a])
