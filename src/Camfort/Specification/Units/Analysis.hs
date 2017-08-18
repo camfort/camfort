@@ -129,13 +129,13 @@ initInference = do
 runInference :: UnitSolver a -> UnitAnalysis (a, UnitState)
 runInference solver = do
   uOpts <- asks unitOpts
-  mfs <- lift analysisModFiles
   pf <- asks unitProgramFile
+  mfs <- lift analysisModFiles
 
   let pf' = withCombinedEnvironment mfs . fmap UA.mkUnitAnnotation $ pf
 
   runUnitSolver pf' $ do
-    initializeModFiles mfs
+    initializeModFiles
     initInference
     solver
 

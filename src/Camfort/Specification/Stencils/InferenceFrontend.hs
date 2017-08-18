@@ -117,16 +117,15 @@ runInferer :: CheckResult
            -> Inferer a
            -> StencilsAnalysis (a, [LogLine])
 runInferer cr useEval doSynth marker mi ivmap flTo inferer = do
-  let env = IE
-        { ieExistingSpecs = existingStencils cr
-        , ieFlowsGraph    = flTo
-        , ieUseEval       = useEval
-        , ieDoSynth       = doSynth
-        , ieMarker        = marker
-        , ieMetaInfo      = mi
-        }
-
   evalRWST inferer env (IS ivmap [])
+  where env = IE
+          { ieExistingSpecs = existingStencils cr
+          , ieFlowsGraph    = flTo
+          , ieUseEval       = useEval
+          , ieDoSynth       = doSynth
+          , ieMarker        = marker
+          , ieMetaInfo      = mi
+          }
 
 -- | Run something only when eval mode is active.
 whenEval :: Inferer () -> Inferer ()

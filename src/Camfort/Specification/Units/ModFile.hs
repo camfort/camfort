@@ -18,7 +18,7 @@ module Camfort.Specification.Units.ModFile
   , runCompileUnits
   ) where
 
-import           Control.Monad.State (get, gets)
+import           Control.Monad.State (get, gets, lift)
 import           Data.Binary (Binary, decodeOrFail, encode)
 import qualified Data.ByteString.Lazy.Char8 as LB
 import           Data.Data (Data)
@@ -31,6 +31,7 @@ import           GHC.Generics (Generic)
 import qualified Language.Fortran.AST as F
 import           Language.Fortran.Util.ModFile
 
+import Camfort.Analysis (analysisModFiles)
 import Camfort.Specification.Units.Annotation (UA)
 import Camfort.Specification.Units.Environment (UnitInfo(..))
 import Camfort.Specification.Units.InferenceBackend (flattenUnits, genUnitAssignments)
@@ -67,8 +68,9 @@ mfCompiledUnits mf = case lookupModFileData unitsCompiledDataLabel mf of
     Right (_, _, cu) -> cu
 
 -- | Initialize units-relevant ModFile information.
-initializeModFiles :: ModFiles -> UnitSolver ()
-initializeModFiles mfs = do
+initializeModFiles :: UnitSolver ()
+initializeModFiles = do
+  mfs <- lift . lift $ analysisModFiles
   let compiledUnits = combinedCompiledUnits mfs
   modifyTemplateMap  . const . cuTemplateMap  $ compiledUnits
   modifyNameParamMap . const . cuNameParamMap $ compiledUnits

@@ -91,8 +91,8 @@ runCriticalVariables = do
 -- | Infer one possible set of critical variables for a program.
 inferCriticalVariables :: UnitAnalysis Criticals
 inferCriticalVariables = do
-  mfs <- lift analysisModFiles
   pf <- asks unitProgramFile
+  mfs <- lift analysisModFiles
   (eVars, _) <- runInference runCriticalVariables
   let
     -- Use the module map derived from all of the included Camfort Mod files.
