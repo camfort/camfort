@@ -14,8 +14,8 @@
    limitations under the License.
 -}
 
-module Camfort.Specification.Stencils where
- -- (infer, check, synth) where
+module Camfort.Specification.Stencils
+ (infer, check, synth) where
 
 import Control.Arrow ((***), first, second)
 import Data.Maybe (catMaybes)
@@ -48,11 +48,10 @@ getBlocks = FAB.analyseBBlocks . FAR.analyseRenames . FA.initAnalysis . fmap SA.
 -- Top-level of specification inference
 infer :: Bool
       -> Char
-      -> F.ProgramFile Annotation
       -> MF.ModFiles
+      -> F.ProgramFile Annotation
       -> StencilsAnalysis ()
-infer useEval marker pf mfs = do
-  -- report <- analysisResult <$> branchAnalysis (stencilInference useEval marker) (getBlocks pf)
+infer useEval marker mfs pf = do
   logs <- stencilInference useEval marker (getBlocks pf) mfs
   let filename = F.pfGetFilename pf
       output = intercalate "\n"
@@ -68,10 +67,10 @@ infer useEval marker pf mfs = do
 
 -- Top-level of specification synthesis
 synth :: Char
-      -> [F.ProgramFile A]
       -> MF.ModFiles
-      -> StencilsAnalysis ([F.ProgramFile Annotation])
-synth marker pfs mfs = do
+      -> [F.ProgramFile A]
+      -> StencilsAnalysis ([F.ProgramFile A])
+synth marker mfs pfs = do
   syntheses <- unzip <$> traverse buildOutput pfs
   logInfo' pfs $ describe . normaliseMsg . fst $ syntheses
   pure (catMaybes $ snd syntheses)
@@ -110,8 +109,8 @@ synth marker pfs mfs = do
 --         Stencil specification checking       --
 --------------------------------------------------
 
-check :: F.ProgramFile Annotation -> MF.ModFiles -> StencilsAnalysis CheckResult
-check pf mfs = stencilChecking (getBlocks pf) mfs
+check :: MF.ModFiles -> F.ProgramFile Annotation -> StencilsAnalysis CheckResult
+check mfs pf = stencilChecking (getBlocks pf) mfs
 
 -- Local variables:
 -- mode: haskell

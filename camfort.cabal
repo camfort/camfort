@@ -72,6 +72,7 @@ library
                         Camfort.Specification.Units.Environment
                         Camfort.Specification.Units.ModFile
                         Camfort.Specification.Units.Monad
+                        Camfort.Specification.Units.MonadTypes
                         Camfort.Specification.Units.Parser
                         Camfort.Specification.Units.Parser.Types
                         Camfort.Specification.Units.Synthesis

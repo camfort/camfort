@@ -18,6 +18,9 @@ import qualified Language.Fortran.Util.ModFile as MF
 import           Camfort.Analysis
 import           Camfort.Analysis.ModFile      (MFCompiler, simpleCompiler)
 
+-- TODO:
+-- type StencilsAnalysis = PureAnalysis StencilCheckError StencilCheckWarning
+
 type StencilsAnalysis = PureAnalysis () ()
 
 -- | Compile a program to a 'ModFile' containing stencils information.

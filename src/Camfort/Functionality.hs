@@ -94,9 +94,6 @@ import           Camfort.Helpers                                 (FileOrDir,
 data AnnotationType = ATDefault | Doxygen | Ford
 
 
--- TODO: Fix every function that is defined as `error ...`
-
-
 -- | Retrieve the marker character compatible with the given
 -- type of annotation.
 markerChar :: AnnotationType -> Char
@@ -302,50 +299,39 @@ unitsCriticals =
 
 {- Stencils feature -}
 
--- runStencilsFunctionality
---   :: String
---      -> (analysis
---          -> MFCompiler ()
---          -> ()
---          -> FileOrDir
---          -> FileOrDir
---          -> [Filename]
---          -> IO a)
---      -> analysis
---      -> FileOrDir
---      -> Maybe FileOrDir
---      -> [Filename]
---      -> IO a
--- runStencilsFunctionality description runner analysis =
---   runFunctionality description runner analysis compileStencils ()
 
 stencilsCheck :: CamfortEnv -> IO ()
-stencilsCheck = error "stencils check"
--- stencilsCheck :: String -> Maybe FilePath -> [Filename] -> IO ()
--- stencilsCheck =
---   runStencilsFunctionality "Checking stencil specs for" doAnalysisReport Stencils.check
+stencilsCheck =
+  runFunctionality
+  "Checking stencil specs for"
+  (generalizePureAnalysisProgram Stencils.check)
+  describePerFileAnalysis
+  compileStencils ()
+
 
 stencilsInfer :: Bool -> CamfortEnv -> IO ()
-stencilsInfer useEval = error "stencils infer"
--- stencilsInfer
---   :: String -> Maybe FilePath -> [Filename] -> Bool -> IO ()
--- stencilsInfer inSrc incDir excludes useEval =
---   let rfun = Stencils.infer useEval '='
---   in runStencilsFunctionality "Inferring stencil specs for" doAnalysisReport rfun inSrc incDir excludes
+stencilsInfer useEval =
+  runFunctionality
+  "Inferring stencil specs for"
+  (generalizePureAnalysisProgram (Stencils.infer useEval '='))
+  describePerFileAnalysis
+  compileStencils ()
+
 
 stencilsSynth :: AnnotationType -> FileOrDir -> CamfortEnv -> IO ()
-stencilsSynth annType outSrc = error "stencils synthesis"
--- stencilsSynth
---   :: String
---   -> Maybe FilePath
---   -> [Filename]
---   -> AnnotationType
---   -> FileOrDir
---   -> IO ()
--- stencilsSynth inSrc incDir excludes annType outSrc =
---   let rfun = second (fmap (pure :: a -> Either () a)) <$> Stencils.synth (markerChar annType)
---       runner' = withOutRunner doRefactor outSrc
---   in runStencilsFunctionality "Synthesising stencil specs for" runner' rfun inSrc incDir excludes
+stencilsSynth annType =
+  let
+    program :: AnalysisProgram () () IO [ProgramFile] ((), [Either () ProgramFile])
+    program pfs modfiles = generalizePureAnalysis $ do
+      pfs' <- Stencils.synth (markerChar annType) pfs modfiles
+      return ((), map Right pfs')
+
+  in runWithOutput
+     "Synthesising stencil specs for"
+     program
+     doRefactor
+     compileStencils ()
+
 
 -- | Initialize Camfort for the given project.
 camfortInitialize :: FilePath -> IO ()

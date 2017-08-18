@@ -365,7 +365,7 @@ main = do
       let uo     = uwoUnitsOptions uwo
           ro     = uoReadOptions uo
           wo     = uwoWriteOptions uwo
-          inFile = inputSource ro
+          inFile = inputSource ro 
       in runUO uo (f (getOutputFile inFile wo))
     runUSO uso f =
       let uwo = usoUnitsWriteOptions uso

@@ -1,6 +1,6 @@
-{-# LANGUAGE DeriveTraversable #-}
 {-# LANGUAGE DefaultSignatures          #-}
 {-# LANGUAGE DeriveFunctor              #-}
+{-# LANGUAGE DeriveTraversable          #-}
 {-# LANGUAGE FlexibleContexts           #-}
 {-# LANGUAGE FlexibleInstances          #-}
 {-# LANGUAGE FunctionalDependencies     #-}
@@ -53,6 +53,8 @@ import           Control.Lens
 
 import           Control.Monad.Except
 import           Control.Monad.Reader
+import qualified Control.Monad.RWS              as Lazy
+import           Control.Monad.RWS.Strict       (RWST)
 import qualified Control.Monad.State            as Lazy
 import           Control.Monad.State.Strict
 import qualified Control.Monad.Writer           as Lazy
@@ -238,6 +240,8 @@ instance MonadLogger e w m => MonadLogger e w (StateT s m)
 instance (MonadLogger e w m, Monoid w') => MonadLogger e w (WriterT w' m)
 instance MonadLogger e w m => MonadLogger e w (Lazy.StateT s m)
 instance (MonadLogger e w m, Monoid w') => MonadLogger e w (Lazy.WriterT w' m)
+instance (MonadLogger e w m, Monoid w') => MonadLogger e w (RWST r w' s m)
+instance (MonadLogger e w m, Monoid w') => MonadLogger e w (Lazy.RWST r w' s m)
 
 --------------------------------------------------------------------------------
 --  'LoggerT' monad
@@ -291,7 +295,7 @@ instance (Monad m) => MonadLogger e w (LoggerT e w m) where
 
   recordLogMessage msg = do
     LoggerT $ lsMessages %= (msg :)
-    putSomeMessage msg
+    logSomeMessage msg
 
 
 -- | Generalize a pure logger to an arbitrary monad. Notice the input logger
@@ -351,8 +355,8 @@ setLogLevel' output lvl =
      (lsLogDebug .~ ld)
 
 
-putSomeMessage :: (Monad m) => SomeMessage e w -> LoggerT e w m ()
-putSomeMessage msg = do
+logSomeMessage :: (Monad m) => SomeMessage e w -> LoggerT e w m ()
+logSomeMessage msg = do
   st <- LoggerT get
   lift $ case msg of
     MsgError m -> view lsLogError st m

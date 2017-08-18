@@ -34,6 +34,7 @@ import           Data.Maybe (isJust, fromMaybe)
 import qualified Data.Set as S
 import qualified Numeric.LinearAlgebra as H -- for debugging
 import           Data.Text (Text)
+import           Control.Lens ((^?), _1)
 
 import qualified Language.Fortran.AST      as F
 import qualified Language.Fortran.Analysis as FA
@@ -43,6 +44,7 @@ import           Language.Fortran.Util.ModFile
 import           Language.Fortran.Util.Position (getSpan)
 
 import           Camfort.Analysis
+import           Camfort.Analysis.Logger (LogLevel(..))
 import           Camfort.Analysis.Annotations (Annotation)
 import           Camfort.Analysis.CommentAnnotator (annotateComments)
 import           Camfort.Analysis.ModFile (withCombinedEnvironment)
@@ -916,7 +918,15 @@ compileUnits :: UnitOpts -> ModFiles -> F.ProgramFile Annotation -> IO ModFile
 compileUnits uo mfs pf = do
   let pf'      = withCombinedEnvironment mfs . fmap UA.mkUnitAnnotation $ pf
 
-  -- (cu,_,_) <- analysisResult <$> runAnalysis (runInference runCompileUnits) uo () mfs pf
-  cu <- error "TODO: compileUnits"
+  let analysis = runReaderT (runInference runCompileUnits) $
+        UnitEnv
+        { unitOpts = uo
+        , unitModfiles = mfs
+        , unitProgramFile = pf
+        }
 
-  return $ genUnitsModFile pf' cu
+  report <- runAnalysisT (F.pfGetFilename pf) (const (return ())) LogError analysis
+
+  case report ^? arResult . _ARSuccess . _1 of
+    Just cu -> return (genUnitsModFile pf' cu)
+    Nothing -> fail "compileUnits: units analysis failed"

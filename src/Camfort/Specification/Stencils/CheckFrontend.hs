@@ -190,6 +190,7 @@ prettyWithSpan srcSpan s = show srcSpan ++ "    " ++ s
 
 instance Show CheckResult where
   show = intercalate "\n" . fmap show . getCheckResult
+instance Describe CheckResult
 
 instance Show CheckError where
   show = intercalate "\n" . fmap show . getCheckError
