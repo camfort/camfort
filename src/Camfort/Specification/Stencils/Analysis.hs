@@ -11,21 +11,15 @@ Stability   :  experimental
 module Camfort.Specification.Stencils.Analysis
   ( StencilsAnalysis
   , compileStencils
-  , runStencilsAnalysis
   ) where
 
-import qualified Language.Fortran.Util.ModFile      as MF
+import qualified Language.Fortran.Util.ModFile as MF
 
-import qualified Camfort.Analysis as AF
-import           Camfort.Analysis.Annotations (Report)
-import           Camfort.Analysis.ModFile (MFCompiler, simpleCompiler)
+import           Camfort.Analysis
+import           Camfort.Analysis.ModFile      (MFCompiler, simpleCompiler)
 
-type StencilsAnalysis a a' = AF.SimpleAnalysis a a'
-
--- | Run a 'StencilsAnalysis' analysis.
-runStencilsAnalysis :: StencilsAnalysis a a' -> MF.ModFiles -> a -> IO (AF.AnalysisResult Report () a')
-runStencilsAnalysis analysis = AF.runAnalysis analysis () ()
+type StencilsAnalysis = PureAnalysis () ()
 
 -- | Compile a program to a 'ModFile' containing stencils information.
-compileStencils :: MFCompiler ()
+compileStencils :: Monad m => MFCompiler () m
 compileStencils = simpleCompiler

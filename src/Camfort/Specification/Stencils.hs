@@ -14,14 +14,13 @@
    limitations under the License.
 -}
 
-module Camfort.Specification.Stencils
- (infer, check, synth) where
+module Camfort.Specification.Stencils where
+ -- (infer, check, synth) where
 
 import Control.Arrow ((***), first, second)
 import Data.Maybe (catMaybes)
 
 import           Camfort.Analysis
-  (analysisInput, analysisResult, branchAnalysis)
 import           Camfort.Analysis.Annotations
 import           Camfort.Helpers
 import           Camfort.Specification.Stencils.Analysis (StencilsAnalysis)
@@ -32,6 +31,7 @@ import           Camfort.Specification.Stencils.Synthesis
 
 import qualified Language.Fortran.AST as F
 import qualified Language.Fortran.Analysis as FA
+import qualified Language.Fortran.Util.ModFile as MF
 import qualified Language.Fortran.Analysis.Renaming as FAR
 import qualified Language.Fortran.Analysis.BBlocks as FAB
 
@@ -48,17 +48,19 @@ getBlocks = FAB.analyseBBlocks . FAR.analyseRenames . FA.initAnalysis . fmap SA.
 -- Top-level of specification inference
 infer :: Bool
       -> Char
-      -> StencilsAnalysis (F.ProgramFile Annotation) Report
-infer useEval marker = do
-  pf <- analysisInput
-  report <- analysisResult <$> branchAnalysis (stencilInference useEval marker) (getBlocks pf)
+      -> F.ProgramFile Annotation
+      -> MF.ModFiles
+      -> StencilsAnalysis ()
+infer useEval marker pf mfs = do
+  -- report <- analysisResult <$> branchAnalysis (stencilInference useEval marker) (getBlocks pf)
+  logs <- stencilInference useEval marker (getBlocks pf) mfs
   let filename = F.pfGetFilename pf
       output = intercalate "\n"
              . filter (not . white)
-             . map formatSpecNoComment $ report
+             . map formatSpecNoComment $ logs
       white  = all (\x -> (x == ' ') || (x == '\t'))
-    -- Append filename to any outputs
-  pure . mkReport $ if null output then "" else "\n" ++ filename ++ "\n" ++ output
+
+  logInfo' pf $ describe output
 
 --------------------------------------------------
 --         Stencil specification synthesis      --
@@ -66,29 +68,28 @@ infer useEval marker = do
 
 -- Top-level of specification synthesis
 synth :: Char
-      -> StencilsAnalysis [F.ProgramFile A] (Report, [F.ProgramFile Annotation])
-synth marker = do
-  pfs <- analysisInput
-  syntheses <- unzip <$> mapM (fmap analysisResult . branchAnalysis buildOutput) pfs
-  let report = mkReport . normaliseMsg . fst $ syntheses
-  pure (report, catMaybes $ snd syntheses)
+      -> [F.ProgramFile A]
+      -> MF.ModFiles
+      -> StencilsAnalysis ([F.ProgramFile Annotation])
+synth marker pfs mfs = do
+  syntheses <- unzip <$> traverse buildOutput pfs
+  logInfo' pfs $ describe . normaliseMsg . fst $ syntheses
+  pure (catMaybes $ snd syntheses)
   where
-    buildOutput :: StencilsAnalysis (F.ProgramFile A) ((String, String), Maybe (F.ProgramFile Annotation))
-    buildOutput = do
-      pf <- analysisInput
+    buildOutput :: F.ProgramFile A -> StencilsAnalysis ((String, String), Maybe (F.ProgramFile Annotation))
+    buildOutput pf = do
       let f = F.pfGetFilename pf
-      result <- synthWithCheck
+      result <- synthWithCheck pf
       pure $ case result of
                Left err         -> ((mkMsg f err, ""), Nothing)
                Right (warn,pf') -> (("", mkMsg f warn), Just pf')
-    synthWithCheck :: StencilsAnalysis (F.ProgramFile A) (Either String (String, F.ProgramFile Annotation))
-    synthWithCheck = do
-      pf <- analysisInput
+    synthWithCheck :: F.ProgramFile A -> StencilsAnalysis (Either String (String, F.ProgramFile Annotation))
+    synthWithCheck pf = do
       let blocks = getBlocks pf
-      checkRes <- analysisResult <$> branchAnalysis stencilChecking blocks
+      checkRes <- stencilChecking blocks mfs
       case checkFailure checkRes of
         Nothing  -> do
-          res <- (snd . analysisResult) <$> branchAnalysis (stencilSynthesis marker) blocks
+          res <- fst <$> stencilSynthesis marker blocks mfs
           let inference = fmap SA.getBaseAnnotation res
           pure $ Right (maybe "" show (checkWarnings checkRes), inference)
         Just err -> pure . Left $ show err
@@ -109,14 +110,8 @@ synth marker = do
 --         Stencil specification checking       --
 --------------------------------------------------
 
-check :: StencilsAnalysis (F.ProgramFile Annotation) Report
-check = do
-  pf <- analysisInput
-  res <- branchAnalysis stencilChecking (getBlocks pf)
-  -- Append filename to any outputs
-  let output   = show (analysisResult res)
-      filename = F.pfGetFilename pf
-  pure . mkReport $ if null output then "" else "\n" ++ filename ++ "\n" ++ output
+check :: F.ProgramFile Annotation -> MF.ModFiles -> StencilsAnalysis CheckResult
+check pf mfs = stencilChecking (getBlocks pf) mfs
 
 -- Local variables:
 -- mode: haskell
