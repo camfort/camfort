@@ -35,7 +35,7 @@ import qualified Language.Fortran.Util.Position as FU
 import qualified Language.Fortran.ParserMonad as FPM
 
 import Camfort.Analysis.Annotations
-import Camfort.Reprint
+import qualified Camfort.Reprint as R
 import Camfort.Helpers
 import Camfort.Helpers.Syntax
 
@@ -113,7 +113,7 @@ instance OutputFiles (F.ProgramFile Annotation, SourceText) where
      if B.null input
       then B.pack $ PP.pprintAndRender version ast (Just 0)
       -- Otherwise, applying the refactoring system with reprint
-      else runIdentity $ reprint (refactoring version) ast input
+      else runIdentity $ R.reprint (refactoring version) ast input
 
   outputFile (pf, _) = F.pfGetFilename pf
   isNewFile (_, inp) = B.null inp
@@ -123,117 +123,102 @@ instance OutputFiles (F.ProgramFile Annotation, SourceText) where
 
 refactoring :: Typeable a
             => FPM.FortranVersion
-            -> a -> SourceText -> StateT FU.Position Identity (SourceText, Bool)
-refactoring v z inp = ((catchAll inp `extQ` refactoringsForProgramUnits v inp) `extQ` refactoringsForBlocks v inp) $ z
-  where
-    catchAll :: SourceText -> a -> StateT FU.Position Identity (SourceText, Bool)
-    catchAll _ _ = return (B.empty, False)
+            -> a -> Identity R.ReprintingOut
+refactoring v z = R.catchAll
+                    `extQ` refactoringsForProgramUnits v
+                    `extQ` refactoringsForBlocks v $ z
 
 refactoringsForProgramUnits :: FPM.FortranVersion
-                            -> SourceText
                             -> F.ProgramUnit Annotation
-                            -> StateT FU.Position Identity (SourceText, Bool)
-refactoringsForProgramUnits v inp z =
-   mapStateT (\n -> Identity $ n `evalState` 0) (refactorProgramUnits v inp z)
+                            -> Identity (Maybe (R.RefactorType, SourceText, (FU.Position, FU.Position)))
+refactoringsForProgramUnits v z =
+   Identity $ evalState (refactorProgramUnits v z) 0
 
 refactorProgramUnits :: FPM.FortranVersion
-                     -> SourceText
                      -> F.ProgramUnit Annotation
-                     -> StateT FU.Position (State Int) (SourceText, Bool)
+                     -> State Int R.ReprintingOut
 -- Output comments
-refactorProgramUnits _ inp (F.PUComment ann span (F.Comment comment)) = do
-    cursor <- get
+refactorProgramUnits _ (F.PUComment ann (FU.SrcSpan lb ub) (F.Comment comment)) = do
     if pRefactored ann
-     then    let (FU.SrcSpan lb ub) = span
-                 (p0, _)  = splitBySpan (cursor, lb) inp
-                 nl       = if null comment then B.empty else B.pack "\n"
-             in (put ub >> return (B.concat [p0, B.pack comment, nl], True))
-     else return (B.empty, False)
+     then    let nl = if null comment then B.empty else B.pack "\n"
+             in return $ Just (R.Replace, B.concat [B.pack comment, nl], (lb, ub))
+     else return Nothing
 
-refactorProgramUnits _ _ _ = return (B.empty, False)
+refactorProgramUnits _ _ = return Nothing
 
 refactoringsForBlocks :: FPM.FortranVersion
-                      -> SourceText
                       -> F.Block Annotation
-                      -> StateT FU.Position Identity (SourceText, Bool)
-refactoringsForBlocks v inp z =
-   mapStateT (\n -> Identity $ n `evalState` 0) (refactorBlocks v inp z)
+                      -> Identity R.ReprintingOut
+refactoringsForBlocks v z =
+   Identity $ evalState (refactorBlocks v z) 0
 
 refactorBlocks :: FPM.FortranVersion
-               -> SourceText
                -> F.Block Annotation
-               -> StateT FU.Position (State Int) (SourceText, Bool)
+               -> State Int R.ReprintingOut
 -- Output comments
-refactorBlocks _ inp (F.BlComment ann span (F.Comment comment)) = do
-    cursor <- get
+refactorBlocks _ (F.BlComment ann span (F.Comment comment)) = do
     if pRefactored ann
      then    let (FU.SrcSpan lb ub) = span
-                 (p0, _)  = splitBySpan (cursor, lb) inp
                  nl       = if null comment then B.empty else B.pack "\n"
-             in put ub >> return (B.concat [p0, B.pack comment, nl], True)
-     else return (B.empty, False)
+             in return $ Just (R.Replace, B.concat [B.pack comment, nl], (lb, ub))
+     else return Nothing
 
 -- Refactor use statements
-refactorBlocks v inp b@(F.BlStatement _ _ _ u@F.StUse{}) = do
-    cursor <- get
+refactorBlocks v b@(F.BlStatement _ _ _ u@F.StUse{}) = do
     case refactored $ F.getAnnotation u of
            Just (FU.Position _ rCol _) -> do
                let (FU.SrcSpan lb _) = FU.getSpan u
-               let (p0, _) = splitBySpan (cursor, lb) inp
                let out  = B.pack $ PP.pprintAndRender v b (Just (rCol -1))
-               added <- lift get
+               added <- get
                when (newNode $ F.getAnnotation u)
-                    (lift $ put $ added + countLines out)
-               put $ toCol0 lb
-               return (p0 `B.append` out, True)
-           Nothing -> return (B.empty, False)
+                    (put $ added + countLines out)
+               return $ Just (R.Replace, out, (lb, toCol0 lb))
+           Nothing -> return Nothing
 
 -- Common blocks, equivalence statements, and declarations can all
 -- be refactored by the default refactoring
-refactorBlocks v inp (F.BlStatement _ _ _ s@F.StEquivalence{}) =
-    refactorStatements v inp s
-refactorBlocks v inp (F.BlStatement _ _ _ s@F.StCommon{}) =
-    refactorStatements v inp s
-refactorBlocks v inp (F.BlStatement _ _ _ s@F.StDeclaration{}) =
-    refactorStatements v inp s
+refactorBlocks v (F.BlStatement _ _ _ s@F.StEquivalence{}) =
+    refactorStatements v s
+refactorBlocks v (F.BlStatement _ _ _ s@F.StCommon{}) =
+    refactorStatements v s
+refactorBlocks v (F.BlStatement _ _ _ s@F.StDeclaration{}) =
+    refactorStatements v s
 -- Arbitrary statements can be refactored *as blocks* (in order to
 -- get good indenting)
-refactorBlocks v inp b@F.BlStatement {} = refactorSyntax v inp b
-refactorBlocks _ _ _ = return (B.empty, False)
+refactorBlocks v b@F.BlStatement {} = refactorSyntax v b
+refactorBlocks _ _ = return Nothing
 
 -- Wrapper to fix the type of refactorSyntax to deal with statements
-refactorStatements :: FPM.FortranVersion -> SourceText
-                   -> F.Statement A -> StateT FU.Position (State Int) (SourceText, Bool)
+refactorStatements :: FPM.FortranVersion
+                   -> F.Statement A -> State Int R.ReprintingOut
 refactorStatements = refactorSyntax
 
 refactorSyntax ::
    (Typeable s, F.Annotated s, FU.Spanned (s A), PP.IndentablePretty (s A))
-   => FPM.FortranVersion -> SourceText
-   -> s A -> StateT FU.Position (State Int) (SourceText, Bool)
-refactorSyntax v inp e = do
-    cursor <- get
+   => FPM.FortranVersion
+   -> s A -> State Int R.ReprintingOut
+refactorSyntax v e = do
     let a = F.getAnnotation e
     case refactored a of
-      Nothing -> return (B.empty, False)
+      Nothing -> return Nothing
       Just (FU.Position _ rCol _) -> do
         let (FU.SrcSpan lb ub) = FU.getSpan e
-        let (pre, _) = splitBySpan (cursor, lb) inp
+
         let indent = if newNode a then Just (rCol - 1) else Nothing
         let output = if deleteNode a then B.empty
                                      else B.pack $ PP.pprintAndRender v e indent
         out <- if newNode a then do
                   -- If a new node is begin created then
-                  numAdded <- lift get
+                  numAdded <- get
                   let diff = linesCovered ub lb
                   -- remove empty newlines here if extra lines were added
                   let (out, numRemoved) = if numAdded <= diff
                                            then removeNewLines output numAdded
                                            else removeNewLines output diff
-                  lift $ put (numAdded - numRemoved)
+                  put (numAdded - numRemoved)
                   return out
                 else return output
-        put ub
-        return (B.concat [pre, out], True)
+        return $ Just (R.Replace, out, (lb, ub))
 
 countLines xs =
   case B.uncons xs of
