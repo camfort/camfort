@@ -48,25 +48,25 @@ spec =
       \(l,c) -> \s -> (fst $ subtext (l,c) (l,c) (l,c) s) == B.empty
 
 {-
-    it "takeBounds is the same as old one" $ property $
-      \p   -> takeBoundsOld (FU.initPosition, p) btext
-           == takeBounds    (FU.initPosition, p) btext
+    it "splitBySpan is the same as old one" $ property $
+      \p   -> splitBySpanOld (FU.initPosition, p) btext
+           == splitBySpan    (FU.initPosition, p) btext
 
-    it "takeBounds is the same as old one, with different start pos" $ property $
-      \p   -> takeBoundsOld (FU.Position 0 2 2, unwrapPO p) btext
-           == takeBounds    (FU.Position 0 2 2, unwrapPO p) btext
+    it "splitBySpan is the same as old one, with different start pos" $ property $
+      \p   -> splitBySpanOld (FU.Position 0 2 2, unwrapPO p) btext
+           == splitBySpan    (FU.Position 0 2 2, unwrapPO p) btext
 -}
 
-    it "takeBounds test 1" $
-      (fst $ takeBounds (FU.Position 0 2 2, FU.Position 0 5 2) btext)
+    it "splitBySpan test 1" $
+      (fst $ splitBySpan (FU.Position 0 2 2, FU.Position 0 5 2) btext)
         `shouldBe` (B.pack "A B")
 
-    it "takeBounds test 2" $
-      (fst $ takeBounds (FU.Position 0 2 2, FU.Position 0 1 3) btext)
+    it "splitBySpan test 2" $
+      (fst $ splitBySpan (FU.Position 0 2 2, FU.Position 0 1 3) btext)
         `shouldBe` (B.pack "A B C D\n")
 
     it "takeBound test 3" $
-      (fst $ takeBounds (FU.Position 1 1 1, FU.Position 1 5 3) btext2)
+      (fst $ splitBySpan (FU.Position 1 1 1, FU.Position 1 5 3) btext2)
         `shouldBe` (B.pack $ unlines $ take 3 text2)
 
     context "Integration test with synthesising a spec" $ do
@@ -122,15 +122,15 @@ text2 = ["A B C D"
 {-
 -- Given a lower-bound and upper-bound pair of FU.Positions, split the
 -- incoming SourceText based on the distanceF between the FU.Position pairs
-takeBoundsOld :: (FU.Position, FU.Position) -> SourceText -> (SourceText, SourceText)
-takeBoundsOld (l, u) = takeBounds' ((ll, lc), (ul, uc)) B.empty
+splitBySpanOld :: (FU.Position, FU.Position) -> SourceText -> (SourceText, SourceText)
+splitBySpanOld (l, u) = splitBySpan' ((ll, lc), (ul, uc)) B.empty
   where (FU.Position _ lc ll) = l
         (FU.Position _ uc ul) = u
-        takeBounds' ((ll, lc), (ul, uc)) tk inp  =
+        splitBySpan' ((ll, lc), (ul, uc)) tk inp  =
           if (ll == ul && lc == uc) || (ll > ul) then (B.reverse tk, inp)
           else
             case B.uncons inp of
               Nothing         -> (B.reverse tk, inp)
-              Just ('\n', ys) -> takeBounds' ((ll+1, 1), (ul, uc))  (B.cons '\n' tk) ys
-              Just (x, xs)    -> takeBounds' ((ll, lc+1), (ul, uc)) (B.cons x tk) xs
+              Just ('\n', ys) -> splitBySpan' ((ll+1, 1), (ul, uc))  (B.cons '\n' tk) ys
+              Just (x, xs)    -> splitBySpan' ((ll, lc+1), (ul, uc)) (B.cons x tk) xs
 -}

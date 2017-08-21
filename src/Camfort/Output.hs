@@ -145,7 +145,7 @@ refactorProgramUnits _ inp (F.PUComment ann span (F.Comment comment)) = do
     cursor <- get
     if pRefactored ann
      then    let (FU.SrcSpan lb ub) = span
-                 (p0, _)  = takeBounds (cursor, lb) inp
+                 (p0, _)  = splitBySpan (cursor, lb) inp
                  nl       = if null comment then B.empty else B.pack "\n"
              in (put ub >> return (B.concat [p0, B.pack comment, nl], True))
      else return (B.empty, False)
@@ -168,7 +168,7 @@ refactorBlocks _ inp (F.BlComment ann span (F.Comment comment)) = do
     cursor <- get
     if pRefactored ann
      then    let (FU.SrcSpan lb ub) = span
-                 (p0, _)  = takeBounds (cursor, lb) inp
+                 (p0, _)  = splitBySpan (cursor, lb) inp
                  nl       = if null comment then B.empty else B.pack "\n"
              in put ub >> return (B.concat [p0, B.pack comment, nl], True)
      else return (B.empty, False)
@@ -179,7 +179,7 @@ refactorBlocks v inp b@(F.BlStatement _ _ _ u@F.StUse{}) = do
     case refactored $ F.getAnnotation u of
            Just (FU.Position _ rCol _) -> do
                let (FU.SrcSpan lb _) = FU.getSpan u
-               let (p0, _) = takeBounds (cursor, lb) inp
+               let (p0, _) = splitBySpan (cursor, lb) inp
                let out  = B.pack $ PP.pprintAndRender v b (Just (rCol -1))
                added <- lift get
                when (newNode $ F.getAnnotation u)
@@ -217,7 +217,7 @@ refactorSyntax v inp e = do
       Nothing -> return (B.empty, False)
       Just (FU.Position _ rCol _) -> do
         let (FU.SrcSpan lb ub) = FU.getSpan e
-        let (pre, _) = takeBounds (cursor, lb) inp
+        let (pre, _) = splitBySpan (cursor, lb) inp
         let indent = if newNode a then Just (rCol - 1) else Nothing
         let output = if deleteNode a then B.empty
                                      else B.pack $ PP.pprintAndRender v e indent

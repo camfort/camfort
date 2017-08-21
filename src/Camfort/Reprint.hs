@@ -19,7 +19,7 @@
 module Camfort.Reprint
   ( reprint
   , subtext
-  , takeBounds
+  , splitBySpan
   ) where
 
 import Data.Generics.Zipper
@@ -97,7 +97,7 @@ enter refactoring z = do
         then do
           -- If the node was refactored then...
           -- cut out the portion of source text consumed by the refactoring
-          (_, inp') <- return $ takeBounds (cursor, cursor') inp
+          (_, inp') <- return $ splitBySpan (cursor, cursor') inp
           put (cursor', inp')
           return B.empty
         else do
@@ -131,8 +131,8 @@ enterRight refactoring z =
 
 -- Given a lower-bound and upper-bound pair of FU.Positions, split the
 -- incoming SourceText based on the distanceF between the FU.Position pairs
-takeBounds :: (FU.Position, FU.Position) -> SourceText -> (SourceText, SourceText)
-takeBounds (l, u) = subtext (ll, lc) (ll, lc) (ul, uc)
+splitBySpan :: (FU.Position, FU.Position) -> SourceText -> (SourceText, SourceText)
+splitBySpan (l, u) = subtext (ll, lc) (ll, lc) (ul, uc)
   where (FU.Position _ lc ll) = l
         (FU.Position _ uc ul) = u
 
