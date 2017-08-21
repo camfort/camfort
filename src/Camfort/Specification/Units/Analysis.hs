@@ -15,7 +15,7 @@ module Camfort.Specification.Units.Analysis
   , compileUnits
   , initInference
   , runInference
-  -- , runUnitAnalysis
+  , runUnitAnalysis
     -- ** Helpers
   , puName
   , puSrcName
@@ -58,9 +58,6 @@ import           Camfort.Specification.Units.MonadTypes
 import           Camfort.Specification.Units.Parser (unitParser)
 import qualified Camfort.Specification.Units.Parser.Types as P
 import qualified Camfort.Specification.Units.InferenceBackendSBV as BackendSBV
-
--- runUnitAnalysis :: UnitAnalysis a b -> UnitOpts -> ModFiles -> a -> IO (AnalysisResult Report () b)
--- runUnitAnalysis analysis uo = runAnalysis analysis uo ()
 
 -- | Prepare to run an inference function.
 initInference :: UnitSolver ()

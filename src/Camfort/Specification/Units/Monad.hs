@@ -20,7 +20,7 @@
 
 {- | Defines the monad for the units-of-measure modules -}
 module Camfort.Specification.Units.Monad
-  ( UA, VV, UnitSolver, UnitOpts(..), unitOpts0, UnitState, LiteralsOpt(..)
+  ( UA, VV, UnitSolver, UnitOpts(..), unitOpts0, UnitState, UnitEnv(..), LiteralsOpt(..)
   , VarUnitMap, GivenVarSet, UnitAliasMap, TemplateMap, CallIdMap
   , NameParamMap, NameParamKey(..)
     -- ** State Helpers
