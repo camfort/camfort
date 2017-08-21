@@ -1,3 +1,4 @@
+{-# LANGUAGE RankNTypes #-}
 {-# LANGUAGE DefaultSignatures          #-}
 {-# LANGUAGE DeriveFunctor              #-}
 {-# LANGUAGE DeriveTraversable          #-}
@@ -24,7 +25,9 @@ module Camfort.Analysis.Logger
   , Text
   , (<>)
   -- * Messages
-  , Origin
+  , Origin(..)
+  , oFile
+  , oSpan
   , LogLevel(..)
   , LogMessage(..)
   , lmOrigin
@@ -39,7 +42,6 @@ module Camfort.Analysis.Logger
   , atSpanned
   , atSpannedInFile
   , LoggerT
-  , generalizeLogger
   -- * Running a logger
   , LogOutput
   , logOutputStd
@@ -59,6 +61,7 @@ import qualified Control.Monad.State            as Lazy
 import           Control.Monad.State.Strict
 import qualified Control.Monad.Writer           as Lazy
 import           Control.Monad.Writer.Strict
+import           Control.Monad.Morph
 
 import           Data.Text                      (Text)
 import qualified Data.Text.IO                   as Text
@@ -176,7 +179,9 @@ atSpanned astElem = do
   let sp = F.getSpan astElem
   return $ Origin sf sp
 
-withSpannedOrigin :: (MonadLogger e w m, F.Spanned a) => (Origin -> b -> m c) -> a -> b -> m c
+withSpannedOrigin
+  :: (MonadLogger e w m, F.Spanned a)
+  => (Origin -> b -> m c) -> a -> b -> m c
 withSpannedOrigin f x m = do
   origin <- atSpanned x
   f origin m
@@ -226,9 +231,12 @@ class Monad m => MonadLogger e w m | m -> e w where
   logDebug' :: (F.Spanned a) => a -> Text -> m ()
   logDebug' = withSpannedOrigin logDebug
 
-  default recordLogMessage :: (MonadTrans t, MonadLogger e w m', m ~ t m') => SomeMessage e w -> m ()
-  default setDefaultSourceFile :: (MonadTrans t, MonadLogger e w m', m ~ t m') => FilePath -> m ()
-  default getDefaultSourceFile :: (MonadTrans t, MonadLogger e w m', m ~ t m') => m FilePath
+  default recordLogMessage
+    :: (MonadTrans t, MonadLogger e w m', m ~ t m') => SomeMessage e w -> m ()
+  default setDefaultSourceFile
+    :: (MonadTrans t, MonadLogger e w m', m ~ t m') => FilePath -> m ()
+  default getDefaultSourceFile
+    :: (MonadTrans t, MonadLogger e w m', m ~ t m') => m FilePath
 
   recordLogMessage = lift . recordLogMessage
   setDefaultSourceFile = lift . setDefaultSourceFile
@@ -247,49 +255,52 @@ instance (MonadLogger e w m, Monoid w') => MonadLogger e w (Lazy.RWST r w' s m)
 --  'LoggerT' monad
 --------------------------------------------------------------------------------
 
-data LoggerState m e w =
+data LoggerState e w =
   LoggerState
   { _lsMessages          :: ![SomeMessage e w]
-  , _lsLogError          :: !(LogMessage e -> m ())
-  , _lsLogWarn           :: !(LogMessage w -> m ())
-  , _lsLogInfo           :: !(LogMessage Text -> m ())
-  , _lsLogDebug          :: !(LogMessage Text -> m ())
+  , _lsLogLevel :: LogLevel
   , _lsDefaultSourceFile :: !FilePath
   }
 
-makeLenses ''LoggerState
-
-ungeneralizeState :: (Monad n) => LoggerState m e w -> LoggerState n e w
-ungeneralizeState ls =
-  LoggerState
-  { _lsMessages = ls ^. lsMessages
-  , _lsLogError = const (return ())
-  , _lsLogWarn = const (return ())
-  , _lsLogInfo = const (return ())
-  , _lsLogDebug = const (return ())
-  , _lsDefaultSourceFile = ls ^. lsDefaultSourceFile
+data LoggerEnv m =
+  LoggerEnv
+  { _leLogFunc :: !(LogLevel -> LogLevel -> Text -> m ())
   }
 
-newtype LoggerT e w m a = LoggerT (StateT (LoggerState m e w) m a)
+makeLenses ''LoggerState
+makeLenses ''LoggerEnv
+
+hoistEnv :: (m () -> n ()) -> LoggerEnv m -> LoggerEnv n
+hoistEnv f = leLogFunc %~ \logFunc l1 l2 msg -> f $ logFunc l1 l2 msg
+
+newtype LoggerT e w m a =
+  LoggerT (
+    ReaderT (LoggerEnv m) (
+    StateT (LoggerState e w)
+    m) a)
   deriving
     ( Functor
     , Applicative
     , Monad
     , MonadIO
-    , MonadReader r
     , MonadWriter w'
     , MonadError e'
     )
 
 instance MonadTrans (LoggerT e w) where
-  lift = LoggerT . lift
+  lift = LoggerT . lift . lift
 
 instance (MonadState s m) => MonadState s (LoggerT e w m) where
   get = lift get
   put = lift . put
   state = lift . state
 
-instance (Monad m) => MonadLogger e w (LoggerT e w m) where
+instance (MonadReader r m) => MonadReader r (LoggerT e w m) where
+  ask = lift ask
+  local f (LoggerT (ReaderT k)) = LoggerT $ ReaderT $ local f . k
+
+instance (Monad m, Describe e, Describe w) =>
+         MonadLogger e w (LoggerT e w m) where
   setDefaultSourceFile = LoggerT . (lsDefaultSourceFile .=)
   getDefaultSourceFile = LoggerT (use lsDefaultSourceFile)
 
@@ -298,15 +309,13 @@ instance (Monad m) => MonadLogger e w (LoggerT e w m) where
     logSomeMessage msg
 
 
--- | Generalize a pure logger to an arbitrary monad. Notice the input logger
--- cannot print any logs directly because it is a pure computation. It still
--- collects logs.
-generalizeLogger :: (Monad m) => LoggerT e w Identity a -> LoggerT e w m a
-generalizeLogger (LoggerT x) = do
-  ls <- LoggerT get
-  let (res, ls') = runState x (ungeneralizeState ls)
-  LoggerT $ put (ls & lsMessages .~ ls' ^. lsMessages & lsDefaultSourceFile .~ ls' ^. lsDefaultSourceFile)
-  return res
+-- | This doesn't behave quite as you may think. When a 'LoggerT' is hoisted,
+-- the resulting 'LoggerT' cannot output as it goes. It still collects logs to
+-- be inspected when it finishes.
+instance MFunctor (LoggerT e w) where
+  hoist f (LoggerT (ReaderT k)) = LoggerT $ ReaderT $ \env ->
+    let env' = hoistEnv (const (return ())) env
+    in hoist f (k env')
 
 
 type LogOutput m = Text -> m ()
@@ -317,19 +326,19 @@ logOutputStd = liftIO . Text.putStrLn
 
 runLoggerT
   :: (Monad m, Describe e, Describe w)
-  => FilePath -> LogOutput m -> LogLevel -> LoggerT e w m a -> m (a, [SomeMessage e w])
+  => FilePath -> LogOutput m -> LogLevel
+  -> LoggerT e w m a
+  -> m (a, [SomeMessage e w])
 runLoggerT sourceFile output logLevel (LoggerT action) = do
-  let st = setLogLevel' output logLevel $
-        LoggerState
+  let st = LoggerState
         { _lsMessages = []
-        , _lsLogError = const (return ())
-        , _lsLogWarn = const (return ())
-        , _lsLogInfo = const (return ())
-        , _lsLogDebug = const (return ())
+        , _lsLogLevel = logLevel
         , _lsDefaultSourceFile = sourceFile
         }
 
-  (x, st') <- runStateT action st
+      env = LoggerEnv { _leLogFunc = logFuncFrom output }
+
+  (x, st') <- runStateT (runReaderT action env) st
 
   return (x, st' ^. lsMessages)
 
@@ -337,29 +346,32 @@ runLoggerT sourceFile output logLevel (LoggerT action) = do
 --  Internal
 --------------------------------------------------------------------------------
 
-setLogLevel'
-  :: (Describe e, Describe w, Monad m)
-  => LogOutput m -> LogLevel -> LoggerState m e w -> LoggerState m e w
-setLogLevel' output lvl =
-  let putMessage msg =
-        output . Lazy.toStrict . Builder.toLazyText $ describeBuilder msg
-
-      noOp = const $ return ()
-      le = putMessage . MsgError
-      lw = if lvl >= LogWarn then putMessage . MsgWarn else noOp
-      li = if lvl >= LogInfo then putMessage . MsgInfo else noOp
-      ld = if lvl >= LogDebug then putMessage . MsgDebug else noOp
-  in (lsLogError .~ le) .
-     (lsLogWarn .~ lw) .
-     (lsLogInfo .~ li) .
-     (lsLogDebug .~ ld)
+logFuncFrom
+  :: (Monad m)
+  => LogOutput m
+  -> (LogLevel -> LogLevel -> Text -> m ())
+logFuncFrom output = lf
+  where
+    lf maxLevel level msg
+      | level <= maxLevel = output msg
+      | otherwise = return ()
 
 
-logSomeMessage :: (Monad m) => SomeMessage e w -> LoggerT e w m ()
+someLogLevel :: SomeMessage e w -> LogLevel
+someLogLevel (MsgError _) = LogError
+someLogLevel (MsgWarn _) = LogWarn
+someLogLevel (MsgInfo _) = LogInfo
+someLogLevel (MsgDebug _) = LogDebug
+
+
+logSomeMessage
+  :: (Monad m, Describe e, Describe w)
+  => SomeMessage e w -> LoggerT e w m ()
 logSomeMessage msg = do
-  st <- LoggerT get
-  lift $ case msg of
-    MsgError m -> view lsLogError st m
-    MsgWarn m  -> view lsLogWarn st m
-    MsgDebug m -> view lsLogDebug st m
-    MsgInfo m  -> view lsLogInfo st m
+  let msgText = describe msg
+      msgLevel = someLogLevel msg
+
+  logFunc <- LoggerT $ view leLogFunc
+  logLevel <- LoggerT $ use lsLogLevel
+
+  lift $ logFunc logLevel msgLevel msgText

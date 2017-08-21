@@ -69,6 +69,7 @@ spec =
       (fst $ takeBounds (FU.Position 1 1 1, FU.Position 1 5 3) btext2)
         `shouldBe` (B.pack $ unlines $ take 3 text2)
 
+    -- TODO: Fix this
     context "Integration test with synthesising a spec" $ do
        let simpleDir = "tests" </> "fixtures"
            simpleIn  = simpleDir </> "simple.f90"

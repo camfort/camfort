@@ -15,6 +15,7 @@
 -}
 {-# LANGUAGE ScopedTypeVariables #-}
 {-# LANGUAGE FlexibleContexts #-}
+{-# LANGUAGE OverloadedStrings #-}
 
 module Camfort.Transformation.EquivalenceElim
   ( refactorEquivalences
@@ -56,7 +57,9 @@ refactorEquivalences pf = do
   -- existing code)
   deadCode True (fmap FA.prevAnnotation pf''')
   where
-    refactoring :: FAT.TypeEnv -> F.ProgramFile A1 -> EquivalenceRefactoring (F.ProgramFile A1)
+    refactoring
+      :: FAT.TypeEnv -> F.ProgramFile A1
+      -> EquivalenceRefactoring (F.ProgramFile A1)
     refactoring tenv pf = do
       (pf', _) <- runStateT equiv ([], 0)
       return pf'
@@ -64,12 +67,16 @@ refactorEquivalences pf = do
          equiv = do pf' <- transformBiM perBlockRmEquiv pf
                     descendBiM (addCopysPerBlockGroup tenv) pf'
 
-addCopysPerBlockGroup :: FAT.TypeEnv -> [F.Block A1] -> StateT RmEqState EquivalenceRefactoring [F.Block A1]
+addCopysPerBlockGroup
+  :: FAT.TypeEnv -> [F.Block A1]
+  -> StateT RmEqState EquivalenceRefactoring [F.Block A1]
 addCopysPerBlockGroup tenv blocks = do
     blockss <- mapM (addCopysPerBlock tenv) blocks
     return $ concat blockss
 
-addCopysPerBlock :: FAT.TypeEnv -> F.Block A1 -> StateT RmEqState EquivalenceRefactoring [F.Block A1]
+addCopysPerBlock
+  :: FAT.TypeEnv -> F.Block A1
+  -> StateT RmEqState EquivalenceRefactoring [F.Block A1]
 addCopysPerBlock tenv x@(F.BlStatement _ _ _
                  (F.StExpressionAssign a sp@(FU.SrcSpan s1 _) dstE _))
   | not (pRefactored $ FA.prevAnnotation a) = do
@@ -90,13 +97,14 @@ addCopysPerBlock tenv x@(F.BlStatement _ _ _
         let pos = afterAligned sp
         let copies = map (mkCopy tenv pos dstE) eqs'
 
-        -- Reporting
-        let (FU.Position _ c l) = s1
-        let reportF i = show (l + i) ++ ":" ++ show c
-                    ++ ": added copy due to refactored equivalence"
-        let report n = concatMap reportF [n..(n + length copies - 1)]
+        let (FU.Position ao c l) = s1
+            reportSpan i =
+              let pos = FU.Position (ao + i) c (l + i)
+              in (FU.SrcSpan pos pos)
 
-        logInfo' x $ describe $ report n
+        forM_ [n..(n + length copies - 1)] $ \i -> do
+          origin <- atSpanned (reportSpan i)
+          logInfo origin $ "added copy due to refactored equivalence"
 
         -- Update refactoring state
         put (equivs, n + length eqs')
@@ -148,11 +156,14 @@ mkCopy tenv pos srcE dstE = FA.initAnalysis $
 perBlockRmEquiv :: F.Block A1 -> StateT RmEqState EquivalenceRefactoring (F.Block A1)
 perBlockRmEquiv = transformBiM perStatementRmEquiv
 
-perStatementRmEquiv :: F.Statement A1 -> StateT RmEqState EquivalenceRefactoring (F.Statement A1)
+perStatementRmEquiv
+  :: F.Statement A1
+  -> StateT RmEqState EquivalenceRefactoring (F.Statement A1)
 perStatementRmEquiv x@(F.StEquivalence a sp@(FU.SrcSpan spL _) equivs) = do
     (ess, n) <- get
 
-    logInfo' x $ describe $ show spL ++ ": removed equivalence"
+    let spL' = FU.SrcSpan spL spL
+    logInfo' spL' $ "removed equivalence"
 
     put (((map F.aStrip) . F.aStrip $ equivs) ++ ess, n - 1)
     let a' = onPrev (\ap -> ap {refactored = Just spL, deleteNode = True}) a
@@ -161,7 +172,9 @@ perStatementRmEquiv f = return f
 
 -- 'equivalents e' returns a list of variables/memory cells
 -- that have been equivalenced with "e".
-equivalentsToExpr :: F.Expression A1 -> StateT RmEqState EquivalenceRefactoring [F.Expression A1]
+equivalentsToExpr
+  :: F.Expression A1
+  -> StateT RmEqState EquivalenceRefactoring [F.Expression A1]
 equivalentsToExpr x = do
     (equivs, _) <- get
     return (inGroup x equivs)

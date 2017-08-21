@@ -1,8 +1,9 @@
 flags: {}
 extra-package-dbs: []
 packages:
-- '.'
-- ../fortran-src
+- location: '.'
+- location: ../fortran-src
+  extra-dep: true
 extra-deps:
 - fortran-src-0.2.0.1
 - partial-order-0.1.2.1

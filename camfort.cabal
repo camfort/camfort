@@ -118,9 +118,10 @@ test-suite spec
   type:                 exitcode-stdio-1.0
   main-is:              Spec.hs
   hs-source-dirs:       tests
-  other-modules:        Camfort.Analysis.CommentAnnotatorSpec
+  other-modules:        Camfort.Analysis.TestUtils
+                        Camfort.Analysis.CommentAnnotatorSpec
                         Camfort.Analysis.ModFileSpec
-                        Camfort.FunctionalitySpec
+                        -- Camfort.FunctionalitySpec
                         Camfort.ReprintSpec
                         Camfort.Specification.ParserSpec
                         Camfort.Specification.Stencils.CheckSpec

@@ -24,6 +24,7 @@ module Camfort.Input
   , describePerFileAnalysis
   , doRefactor
   , doRefactorAndCreate
+  , perFileRefactoring
     -- * Source directory and file handling
   , readParseSrcDir
     -- * Combinators
@@ -125,6 +126,14 @@ doRefactorAndCreate inSrc outSrc program logOutput logLevel modFiles pfsTexts = 
     -- If the refactoring succeeded, change the files
     Just fs -> finishRefactorAndCreate inSrc outSrc (map snd pfsTexts) fs
     Nothing -> return ()
+
+perFileRefactoring
+  :: (Monad m)
+  => AnalysisProgram e w m ProgramFile ProgramFile
+  -> AnalysisProgram e w m [ProgramFile] ((), [Either e ProgramFile])
+perFileRefactoring program pfs = do
+  pfs' <- mapM program pfs
+  return ((), fmap pure pfs')
 
 --------------------------------------------------------------------------------
 --  Refactoring Combinators

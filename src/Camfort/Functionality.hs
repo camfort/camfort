@@ -154,6 +154,7 @@ runFunctionality description program runner mfCompiler mfInput env = do
   runner program logOutputStd (ceLogLevel env) modFiles pfsTexts
 
 
+
 --------------------------------------------------------------------------------
 -- * Wrappers on all of the features
 
@@ -172,15 +173,6 @@ countVarDecls =
   (generalizePureAnalysis . countVariableDeclarations)
   describePerFileAnalysis
   simpleCompiler ()
-
-
-perFileRefactoring
-  :: (Monad m)
-  => AnalysisProgram e w m ProgramFile ProgramFile
-  -> AnalysisProgram e w m [ProgramFile] ((), [Either e ProgramFile])
-perFileRefactoring program pfs = do
-  pfs' <- mapM program pfs
-  return ((), fmap pure pfs')
 
 
 dead :: FileOrDir -> CamfortEnv -> IO ()
@@ -210,10 +202,7 @@ equivalences =
   doRefactor
   simpleCompiler ()
 
--- {- Units feature -}
-
-
--- TODO: Get rid of debug option and replace with log level
+{- Units feature -}
 
 runUnitsFunctionality
   :: (Describe e, Describe w)
@@ -232,7 +221,9 @@ optsToUnitOpts m = o1
   where o1 = unitOpts0 { uoLiterals = m
                        }
 
-singlePfUnits :: UnitAnalysis a -> UnitOpts -> AnalysisProgram () () IO ProgramFile a
+singlePfUnits
+  :: UnitAnalysis a -> UnitOpts
+  -> AnalysisProgram () () IO ProgramFile a
 singlePfUnits unitAnalysis opts pf =
   let ue = UnitEnv
         { unitOpts = opts
