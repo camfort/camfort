@@ -10,13 +10,14 @@ subroutine bar(X)
 
     11 c = 0.1    
 
-    forall(i = 0:x) &
-       & A(i) = i
+    do i = 0, x 
+       A(i) = i
+    end do
 
-    forall(i = 0:x) 
+    do i = 0, x
        A(i) = i
        A(i-1) = i
-    end forall
+    end do
 
     if (i .EQ. 0) then
       i = 0
