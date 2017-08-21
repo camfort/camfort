@@ -18,9 +18,9 @@ import Camfort.Specification.Units.Monad (LiteralsOpt(LitMixed))
 
 spec :: Test.Spec
 spec = do
-  describe "camfortInitialize" $
-    xit "creates a .camfort directory" $
-      return ()
+  describe "camfortInitialize" $ return ()
+    -- xit "creates a .camfort directory" $
+    --   return ()
       -- withSystemTempDirectory "camfort-test-tmp"
       --   (\d -> camfortInitialize d >> doesDirectoryExist (d </> ".camfort"))
       -- `shouldReturn` True

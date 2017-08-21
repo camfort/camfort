@@ -121,7 +121,7 @@ test-suite spec
   other-modules:        Camfort.Analysis.TestUtils
                         Camfort.Analysis.CommentAnnotatorSpec
                         Camfort.Analysis.ModFileSpec
-                        -- Camfort.FunctionalitySpec
+                        Camfort.FunctionalitySpec
                         Camfort.ReprintSpec
                         Camfort.Specification.ParserSpec
                         Camfort.Specification.Stencils.CheckSpec
@@ -132,8 +132,8 @@ test-suite spec
                         Camfort.Specification.Stencils.ModelSpec
                         Camfort.Specification.StencilsSpec
                         Camfort.Specification.Units.Analysis.ConsistentSpec
-                        -- Camfort.Specification.Units.Analysis.CriticalsSpec
-                        -- Camfort.Specification.Units.Analysis.InferSpec
+                        Camfort.Specification.Units.Analysis.CriticalsSpec
+                        Camfort.Specification.Units.Analysis.InferSpec
                         Camfort.Specification.Units.InferenceBackendSpec
                         Camfort.Specification.Units.ParserSpec
                         Camfort.Transformation.CommonSpec
