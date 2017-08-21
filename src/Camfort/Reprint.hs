@@ -174,3 +174,25 @@ subtext cursor (lowerLn, lowerCol) (upperLn, upperCol) =
 -- | Logical implication operator.
 (==>) :: Bool -> Bool -> Bool; infix 2 ==>
 a ==> b = a <= b
+
+-- Infrastructure for building the reprinter "plugins"
+
+data RefactorType = Before | After | Replace
+
+class Refactorable t where
+  isRefactored :: t -> Maybe RefactorType
+  getSpan      :: t -> (Position, Position)
+
+-- Essentially wraps the refactorable interface
+genReprinting :: (Monad m, Refactorable t, Typeable t)
+    => (t -> m Source)
+    -> t -> m (Maybe (RefactorType, Source, (Position, Position)))
+genReprinting f z = do
+  case isRefactored z of
+    Nothing -> return Nothing
+    Just refactorType -> do
+      output <- f z
+      return $ Just (refactorType, output, getSpan z)
+
+catchAll :: Monad m => a -> m (Maybe b)
+catchAll _ = return Nothing
