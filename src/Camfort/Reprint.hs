@@ -29,6 +29,7 @@ import Camfort.Helpers
 import qualified Data.ByteString.Char8 as B
 import Data.Data
 import Control.Monad.Trans.State.Lazy
+import Control.Monad.Trans.Class (lift)
 import qualified Language.Fortran.Util.Position as FU
 
 {-
@@ -70,63 +71,61 @@ reprint refactoring tree input
    let cursor0 = FU.initPosition
    -- Enter the top-node of a zipper for 'tree'
    -- setting the cursor at the start of the file
-   (out, cursorn) <- runStateT (enter refactoring (toZipper tree) input) cursor0
-   -- Remove from the input the portion covered by the main algorithm
-   -- leaving the rest of the file not covered within the bounds of
-   -- the tree
-   let (_, remaining)  = takeBounds (cursor0, cursorn) input
+   (out, (_, remaining)) <- runStateT (enter refactoring (toZipper tree)) (cursor0, input)
+   -- Add to the output source the reamining input source
    return $ out `B.append` remaining
 
 -- The enter, enterDown, enterRight each take a refactoring and a
--- zipper producing a stateful SourceText transformer with FU.Position
+-- zipper producing a stateful computation with (FU.Position, SourceText)
 -- state.
 
 enter, enterDown, enterRight
   :: Monad m
-  => Refactoring m -> Zipper a -> SourceText -> StateT FU.Position m SourceText
+  => Refactoring m -> Zipper a -> StateT (FU.Position, SourceText) m SourceText
 
 -- `enter` applies the generic refactoring to the current context
 -- of the zipper
-enter refactoring z inp = do
+enter refactoring z = do
 
   -- Part 1.
   -- Apply a refactoring
-  cursor     <- get
-  (p1, refactored) <- query (`refactoring` inp) z
+  (cursor, inp)     <- get
+  ((p1, refactored), cursor') <- lift $ runStateT (query (`refactoring` inp) z) cursor
 
   -- Part 2.
-  -- Cut out the portion of source text consumed by the refactoring
-  cursor'    <- get
-  (_, inp')  <- return $ takeBounds (cursor, cursor') inp
-  -- If a refactoring was not output,
-  -- Enter the children of the current context
-  p2         <- if refactored
-                   then return B.empty
-                   else enterDown refactoring z inp'
+  p2 <- if refactored
+        then do
+          -- If the node was refactored then...
+          -- cut out the portion of source text consumed by the refactoring
+          (_, inp') <- return $ takeBounds (cursor, cursor') inp
+          put (cursor', inp')
+          return B.empty
+        else do
+          -- If a refactoring was not output,
+          -- enter the children of the current context
+          put (cursor', inp)
+          enterDown refactoring z
 
   -- Part 3.
-  -- Cut out the portion of source text consumed by the children
-  -- then enter the right sibling of the current context
-  cursor''   <- get
-  (_, inp'') <- return $ takeBounds (cursor', cursor'') inp'
-  p3         <- enterRight refactoring z inp''
+  -- Enter the right sibling of the current context
+  p3 <- enterRight refactoring z
 
-  -- Conat the output for the current context, children, and right sibling
+  -- Concat the output for the current context, children, and right sibling
   return $ B.concat [p1, p2, p3]
 
 -- `enterDown` navigates to the children of the current context
-enterDown refactoring z inp =
+enterDown refactoring z =
   case down' z of
     -- Go to children
-    Just dz -> enter refactoring dz inp
+    Just dz -> enter refactoring dz
     -- No children
     Nothing -> return B.empty
 
 -- `enterRight` navigates to the right sibling of the current context
-enterRight refactoring z inp =
+enterRight refactoring z =
   case right z of
     -- Go to right sibling
-    Just rz -> enter refactoring rz inp
+    Just rz -> enter refactoring rz
     -- No right sibling
     Nothing -> return B.empty
 
