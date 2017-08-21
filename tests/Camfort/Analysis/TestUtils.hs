@@ -11,9 +11,11 @@ module Camfort.Analysis.TestUtils
     -- * Running Tests
   , testSingleFileAnalysis
   , testMultiFileAnalysis
+  , testMultiFileAnalysisWithSrc
   ) where
 
 import           Control.Monad                 (forM_)
+import           Control.Monad.IO.Class
 import           System.Directory              (getCurrentDirectory)
 
 import           Control.Lens
@@ -25,8 +27,6 @@ import           Camfort.Analysis
 import           Camfort.Analysis.ModFile
 import           Camfort.Helpers
 import           Camfort.Input
-
-import           Test.Hspec
 
 
 data TestInput =
@@ -43,7 +43,7 @@ testInputSources inputSources =
   TestInput
   { _tiInputSources = inputSources
   , _tiExcludeFiles = []
-  , _tiIncludeDir = Nothing
+  , _tiIncludeDir = Just inputSources
   }
 
 
@@ -59,16 +59,16 @@ loadInput input = do
 
 
 testSingleFileAnalysis
-  :: (Describe e, Describe w)
+  :: (Describe e, Describe w, MonadIO m)
   => TestInput
   -> AnalysisProgram e w IO ProgramFile b
-  -> (AnalysisReport e w b -> Spec)
-  -> Spec
+  -> (AnalysisReport e w b -> m ())
+  -> m ()
 testSingleFileAnalysis input program testReport = do
-  (mfs, pfsSources) <- runIO $ loadInput input
+  (mfs, pfsSources) <- liftIO $ loadInput input
 
   forM_ pfsSources $ \ (pf, _) -> do
-    report <- runIO $
+    report <- liftIO $
       runAnalysisT
       (F.pfGetFilename pf)
       (const (return ()))
@@ -79,21 +79,30 @@ testSingleFileAnalysis input program testReport = do
 
 
 testMultiFileAnalysis
-  :: (Describe e, Describe w)
+  :: (Describe e, Describe w, MonadIO m)
   => TestInput
   -> AnalysisProgram e w IO [ProgramFile] b
-  -> (AnalysisReport e w b -> Spec)
-  -> Spec
-testMultiFileAnalysis input program testReport = do
-  (mfs, (pfs, _)) <- fmap (over _2 unzip) $ runIO $ loadInput input
+  -> (AnalysisReport e w b -> m ())
+  -> m ()
+testMultiFileAnalysis input program = testMultiFileAnalysisWithSrc input program . const
+
+
+testMultiFileAnalysisWithSrc
+  :: (Describe e, Describe w, MonadIO m)
+  => TestInput
+  -> AnalysisProgram e w IO [ProgramFile] b
+  -> ([SourceText] -> AnalysisReport e w b -> m ())
+  -> m ()
+testMultiFileAnalysisWithSrc input program testReport = do
+  (mfs, (pfs, sources)) <- fmap (over _2 unzip) $ liftIO $ loadInput input
 
   let fname = maybe "" F.pfGetFilename (pfs ^? _head)
 
-  report <- runIO $
+  report <- liftIO $
     runAnalysisT
     fname
     (const (return ()))
     LogError
     mfs
     (program pfs)
-  testReport report
+  testReport sources report

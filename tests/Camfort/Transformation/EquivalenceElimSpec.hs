@@ -78,26 +78,26 @@ spec =
 
           input = testInputSources infile & tiIncludeDir .~ Just infile
 
-      testSingleFileAnalysis input (generalizePureAnalysis . refactorEquivalences) $ \report -> do
-        let infoLogs = report ^.. arMessages . traverse . _MsgInfo
+      it "log is as expected" $
+        testSingleFileAnalysis input (generalizePureAnalysis . refactorEquivalences) $ \report -> do
+          let infoLogs = report ^.. arMessages . traverse . _MsgInfo
 
-            addCopyMsg = "added copy due to refactored equivalence"
-            removeMsg = "removed equivalence"
+              addCopyMsg = "added copy due to refactored equivalence"
+              removeMsg = "removed equivalence"
 
-            expectedLogs =
-              [ ((15, 3), addCopyMsg)
-              , ((14, 3), addCopyMsg)
-              , ((6, 3), removeMsg)
-              ]
+              expectedLogs =
+                [ ((15, 3), addCopyMsg)
+                , ((14, 3), addCopyMsg)
+                , ((6, 3), removeMsg)
+                ]
 
-            spanMatches (pl, pc) (FU.SrcSpan (FU.Position _ pc1 pl1) (FU.Position _ pc2 pl2)) =
-              pl == pl1 && pl == pl2 &&
-              pc == pc1 && pc == pc2
+              spanMatches (pl, pc) (FU.SrcSpan (FU.Position _ pc1 pl1) (FU.Position _ pc2 pl2)) =
+                pl == pl1 && pl == pl2 &&
+                pc == pc1 && pc == pc2
 
-            matchesExpected (expectedSpan, expectedText) message =
-              spanMatches expectedSpan (message ^?! lmOrigin . _Just . oSpan) &&
-              expectedText == message ^. lmMsg
+              matchesExpected (expectedSpan, expectedText) message =
+                spanMatches expectedSpan (message ^?! lmOrigin . _Just . oSpan) &&
+                expectedText == message ^. lmMsg
 
-        it "log is as expected" $
           forM_ (zip infoLogs expectedLogs) $ \(message, expectedMessage) ->
             message `shouldSatisfy` matchesExpected expectedMessage

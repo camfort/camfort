@@ -131,9 +131,9 @@ test-suite spec
                         Camfort.Specification.Stencils.InferenceBackendSpec
                         Camfort.Specification.Stencils.ModelSpec
                         Camfort.Specification.StencilsSpec
-                        Camfort.Specification.Units.Analysis.ConsistentSpec
-                        Camfort.Specification.Units.Analysis.CriticalsSpec
-                        Camfort.Specification.Units.Analysis.InferSpec
+                        -- Camfort.Specification.Units.Analysis.ConsistentSpec
+                        -- Camfort.Specification.Units.Analysis.CriticalsSpec
+                        -- Camfort.Specification.Units.Analysis.InferSpec
                         Camfort.Specification.Units.InferenceBackendSpec
                         Camfort.Specification.Units.ParserSpec
                         Camfort.Transformation.CommonSpec
@@ -158,5 +158,7 @@ test-suite spec
                         partial-order >= 0.1.2.1 && < 0.1.3,
                         silently == 1.2.*,
                         temporary >= 1.2.0.4 && < 1.3,
+                        lens >= 4.15.1 && < 5,
+                        time,
                         camfort
   default-language: Haskell2010

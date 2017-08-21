@@ -67,7 +67,7 @@ infer useEval marker pf = do
 -- Top-level of specification synthesis
 synth :: Char
       -> [F.ProgramFile A]
-      -> StencilsAnalysis ([F.ProgramFile A])
+      -> StencilsAnalysis [F.ProgramFile A]
 synth marker pfs = do
   syntheses <- unzip <$> traverse buildOutput pfs
   logInfo' pfs $ describe . normaliseMsg . fst $ syntheses
