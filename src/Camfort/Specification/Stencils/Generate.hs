@@ -87,11 +87,11 @@ getIvs = sieIvs <$> analysisParams
 getFlowsGraph :: StencilInferer ann (FAD.FlowsGraph ann)
 getFlowsGraph = sieFlowsGraph <$> analysisParams
 
-runStencilInferer :: StencilInferer ann a -> [Variable] -> FAD.FlowsGraph ann -> ModFiles -> (a, EvalLog)
-runStencilInferer si ivs flowsGraph mfs =
-  let res = runAnalysis si senv () mfs ()
-  in (analysisResult res, analysisDebug res)
-  where senv = SIEnv { sieIvs = ivs, sieFlowsGraph = flowsGraph }
+runStencilInferer :: StencilInferer ann a -> [Variable] -> FAD.FlowsGraph ann -> ModFiles -> IO (a, EvalLog)
+runStencilInferer si ivs flowsGraph mfs = do
+  let senv = SIEnv { sieIvs = ivs, sieFlowsGraph = flowsGraph }
+  res <- runAnalysis si senv () mfs ()
+  return (analysisResult res, analysisDebug res)
 
 {-| Representation for indices as either:
      * neighbour indices

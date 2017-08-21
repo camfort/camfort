@@ -48,7 +48,7 @@ unitsInferReportIs fileName expectedReport = do
   let file = fixturesDir </> fileName
   let modFiles = emptyModFiles
   [(pf,_)] <- readParseSrcDir modFiles file []
-  let (Right report) = analysisResult $ runUnitsAnalysis inferUnits uOpts modFiles pf
+  Right report <- analysisResult <$> runUnitsAnalysis inferUnits uOpts modFiles pf
   show report `shouldBe` expectedReport
   where uOpts = unitOpts0 { uoDebug = False, uoLiterals = LitMixed }
 

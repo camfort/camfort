@@ -29,6 +29,7 @@ module Camfort.Specification.Stencils.CheckFrontend
   , existingStencils
   ) where
 
+import Control.Monad.IO.Class (MonadIO(..))
 import Control.Monad.Reader (MonadReader, ReaderT, ask, runReaderT)
 import Control.Monad.State.Strict
 import Control.Monad.Writer.Strict hiding (Product)
@@ -45,6 +46,7 @@ import           Camfort.Analysis
   , analysisParams
   , finalState
   , runAnalysis)
+
 import           Camfort.Analysis.Annotations
 import           Camfort.Analysis.CommentAnnotator
 import           Camfort.Specification.Parser (SpecParseError)
@@ -230,7 +232,7 @@ stencilChecking :: StencilsAnalysis (F.ProgramFile SA) CheckResult
 stencilChecking = do
   pf  <- analysisInput
   mfs <- analysisModFiles
-  pure $ CheckResult . snd . runWriter $ do
+  liftIO $ fmap (CheckResult . snd) . runWriterT $ do
     -- Attempt to parse comments to specifications
     pf' <- annotateComments Parser.specParser (\srcSpan err -> tell [parseError srcSpan err]) pf
     let -- get map of AST-Block-ID ==> corresponding AST-Block
@@ -258,7 +260,8 @@ stencilChecking = do
           usedRegions' <- fmap usedRegions get
           let unused = filter ((`notElem` usedRegions') . snd) regions'
           mapM_ (addResult . uncurry unusedRegion) unused
-        output = checkResult . finalState $
+
+    output <- liftIO $ checkResult . finalState <$>
           runChecker (results >> addUnusedRegionsToResult) flowsGraph (startState ivmap) mfs
 
     tell output
@@ -303,7 +306,7 @@ startState ivmap =
 
 type Checker = Analysis (FAD.FlowsGraph (SA.StencilAnnotation A)) () CheckState ()
 
-runChecker :: Checker a -> FAD.FlowsGraph (SA.StencilAnnotation A) -> CheckState -> MF.ModFiles -> AnalysisResult () CheckState a
+runChecker :: Checker a -> FAD.FlowsGraph (SA.StencilAnnotation A) -> CheckState -> MF.ModFiles -> IO (AnalysisResult () CheckState a)
 runChecker c flows state modFiles = runAnalysis c flows state modFiles ()
 
 getFlowsGraph :: Checker (FAD.FlowsGraph (SA.StencilAnnotation A))
@@ -402,8 +405,10 @@ checkStencil block specDecls spanInferred maybeSubs span = do
   flowsGraph <- getFlowsGraph
   mfs <- analysisModFiles
   let lhsN         = fromMaybe [] (neighbourIndex ivmap subs)
-      relOffsets = fst $ runStencilInferer (genOffsets lhsN [block]) ivs flowsGraph mfs
-      multOffsets = map (\relOffset ->
+
+  relOffsets <- liftIO $ fst <$> runStencilInferer (genOffsets lhsN [block]) ivs flowsGraph mfs
+
+  let multOffsets = map (\relOffset ->
           case relOffset of
           (var, (True, offsets)) -> (var, Mult offsets)
           (var, (False, offsets)) -> (var, Once offsets)) relOffsets
@@ -418,7 +423,7 @@ checkStencil block specDecls spanInferred maybeSubs span = do
                    if specExists then addResult (duplicateSpecification span)
                      else addResult (specOkay span s v spanInferred)) expandedDecls
     else do
-    let inferred = fst . fst $ runStencilInferer (genSpecifications lhsN block) ivs flowsGraph mfs
+    inferred <- liftIO $ fst . fst <$> runStencilInferer (genSpecifications lhsN block) ivs flowsGraph mfs
     addResult (notWellSpecified (span, specDecls) (spanInferred, inferred))
   where
     seenBefore :: (Variable, Specification) -> Checker Bool

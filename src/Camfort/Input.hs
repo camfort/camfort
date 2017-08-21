@@ -57,16 +57,19 @@ printExcludes inSrc excludes =
 type AnalysisRunner r w a b f =
   Analysis r w () a b -> MFCompiler r -> r
   -> FileOrDir -> FileOrDir -> [Filename]
-  -> f
+  -> IO f
 
 -- | Alias for 'AnalysisRunner' with an output source.
 type AnalysisRunnerWithOut r w a b f =
-  AnalysisRunner r w a b (FileOrDir -> f)
+  Analysis r w () a b -> MFCompiler r -> r
+  -> FileOrDir -> FileOrDir -> [Filename]
+  -> FileOrDir
+  -> IO f
 
 -- | Perform an analysis which reports to the user, but does not output any files.
 doAnalysisReport
   :: (Monoid w, Show w, Show b)
-  => AnalysisRunner r w FileProgram b (IO ())
+  => AnalysisRunner r w FileProgram b ()
 doAnalysisReport rFun mfc env inSrc incDir excludes = do
   results <- doInitAnalysis' rFun mfc env inSrc incDir excludes
   let report = concatMap (\(rep,res) -> show rep ++ show res) results
@@ -84,25 +87,25 @@ getModsAndPs mfc env inSrc incDir excludes = do
 
 doInitAnalysis
   :: (Monoid w)
-  => AnalysisRunner r w [FileProgram] b (IO ([(FileProgram, B.ByteString)], w, b))
+  => AnalysisRunner r w [FileProgram] b ([(FileProgram, B.ByteString)], w, b)
 doInitAnalysis analysis mfc env inSrc incDir excludes = do
   (modFiles, ps) <- getModsAndPs mfc env inSrc incDir excludes
-  let res = runAnalysis analysis env () modFiles . fmap fst $ ps
-      report = analysisDebug res
+  res <- runAnalysis analysis env () modFiles . fmap fst $ ps
+  let report = analysisDebug res
       ps' = analysisResult res
   pure (ps, report, ps')
 
 doInitAnalysis'
   :: (Monoid w)
-  => AnalysisRunner r w FileProgram b (IO [(w, b)])
+  => AnalysisRunner r w FileProgram b [(w, b)]
 doInitAnalysis' analysis mfc env inSrc incDir excludes = do
   (modFiles, ps) <- getModsAndPs mfc env inSrc incDir excludes
-  let res = runAnalysis analysis env () modFiles . fst <$> ps
+  res <- traverse (runAnalysis analysis env () modFiles . fst) ps
   pure $ fmap (\r -> (analysisDebug r, analysisResult r)) res
 
 doRefactor
   :: (Monoid w, Show w, Show e, Show b)
-  => AnalysisRunnerWithOut r w [FileProgram] (b, [Either e FileProgram]) (IO ())
+  => AnalysisRunnerWithOut r w [FileProgram] (b, [Either e FileProgram]) ()
 doRefactor rFun mfc env inSrc incDir excludes outSrc = do
   (ps, report1, aRes) <- doInitAnalysis rFun mfc env inSrc incDir excludes
   let (_, ps') = partitionEithers (snd aRes)
@@ -114,7 +117,7 @@ doRefactor rFun mfc env inSrc incDir excludes outSrc = do
 -- | Perform a refactoring that may create additional files.
 doRefactorAndCreate
   :: (Monoid w, Show w)
-  => AnalysisRunnerWithOut r w [FileProgram] ([FileProgram], [FileProgram]) (IO ())
+  => AnalysisRunnerWithOut r w [FileProgram] ([FileProgram], [FileProgram]) ()
 doRefactorAndCreate rFun mfc env inSrc incDir excludes outSrc = do
   (ps, report, (ps', ps'')) <- doInitAnalysis rFun mfc env inSrc incDir excludes
   let outputs = reassociateSourceText (fmap snd ps) ps'
