@@ -17,38 +17,43 @@ module Camfort.Analysis.ModFile
   , withCombinedEnvironment
   ) where
 
-import           Control.Monad (forM)
-import qualified Data.ByteString as B
-import           Data.Char (toUpper)
-import           Data.Data (Data)
-import           Data.List ((\\))
-import           Data.Maybe (catMaybes)
-import           Data.Text.Encoding (encodeUtf8, decodeUtf8With)
-import           Data.Text.Encoding.Error (replace)
-import           System.Directory (doesDirectoryExist, listDirectory)
-import           System.FilePath ((</>), takeExtension)
+import           Control.Monad                      (forM)
+import           Control.Monad.IO.Class
+import qualified Data.ByteString                    as B
+import           Data.Char                          (toUpper)
+import           Data.Data                          (Data)
+import           Data.List                          ((\\))
+import           Data.Maybe                         (catMaybes)
+import           Data.Text.Encoding                 (decodeUtf8With, encodeUtf8)
+import           Data.Text.Encoding.Error           (replace)
+import           System.Directory                   (doesDirectoryExist,
+                                                     listDirectory)
+import           System.FilePath                    (takeExtension, (</>))
 
 
-import qualified Language.Fortran.AST               as F
 import qualified Language.Fortran.Analysis          as FA
 import qualified Language.Fortran.Analysis.Renaming as FAR
 import qualified Language.Fortran.Analysis.Types    as FAT
+import qualified Language.Fortran.AST               as F
 import qualified Language.Fortran.Parser.Any        as FP
 import           Language.Fortran.Util.ModFile
 
-import Camfort.Analysis.Annotations (A, unitAnnotation)
-import Camfort.Helpers
+import           Camfort.Analysis.Annotations       (A, unitAnnotation)
+import           Camfort.Helpers
 
--- | Compiler for ModFile information.
-type MFCompiler r = r -> ModFiles -> F.ProgramFile A -> ModFile
+-- | Compiler for ModFile information, parameterised over an underlying monad
+-- and the input to the compiler.
+type MFCompiler r m = r -> ModFiles -> F.ProgramFile A -> m ModFile
 
 -- | Compile the Modfile with only basic information.
-simpleCompiler :: MFCompiler ()
-simpleCompiler () mfs = genModFile . withCombinedEnvironment mfs
+simpleCompiler :: (Monad m) => MFCompiler () m
+simpleCompiler () mfs = return . genModFile . withCombinedEnvironment mfs
 
 -- | Normalize the 'ProgramFile' to include environment information from
 -- the 'ModFiles'.
-withCombinedEnvironment :: (Data a) => ModFiles -> F.ProgramFile a -> F.ProgramFile (FA.Analysis a)
+withCombinedEnvironment
+  :: (Data a)
+  => ModFiles -> F.ProgramFile a -> F.ProgramFile (FA.Analysis a)
 withCombinedEnvironment mfs pf =
   let
     -- Use the module map derived from all of the included Camfort Mod files.
@@ -57,13 +62,15 @@ withCombinedEnvironment mfs pf =
     pfRenamed = FAR.analyseRenamesWithModuleMap mmap . FA.initAnalysis $ pf
   in fst . FAT.analyseTypesWithEnv tenv $ pfRenamed
 
-genCModFile :: MFCompiler r -> r -> ModFiles -> F.ProgramFile A -> ModFile
+genCModFile :: MFCompiler r m -> r -> ModFiles -> F.ProgramFile A -> m ModFile
 genCModFile = id
 
-genModFiles :: MFCompiler r -> r -> FilePath -> [Filename] -> IO ModFiles
+genModFiles
+  :: (MonadIO m)
+  => MFCompiler r m -> r -> FilePath -> [Filename] -> m ModFiles
 genModFiles mfc env fp excludes = do
-  fortranFiles <- fmap fst <$> readParseSrcDir emptyModFiles fp excludes
-  pure $ genCModFile mfc env emptyModFiles <$> fortranFiles
+  fortranFiles <- liftIO $ fmap fst <$> readParseSrcDir emptyModFiles fp excludes
+  traverse (genCModFile mfc env emptyModFiles) fortranFiles
 
 -- | Retrieve the ModFiles under a given path.
 getModFiles :: FilePath -> IO ModFiles

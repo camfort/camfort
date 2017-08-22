@@ -18,7 +18,7 @@ module Camfort.Specification.Units.ModFile
   , runCompileUnits
   ) where
 
-import           Control.Monad.State (get, gets)
+import           Control.Monad.State (get, gets, lift)
 import           Data.Binary (Binary, decodeOrFail, encode)
 import qualified Data.ByteString.Lazy.Char8 as LB
 import           Data.Data (Data)
@@ -70,7 +70,7 @@ mfCompiledUnits mf = case lookupModFileData unitsCompiledDataLabel mf of
 -- | Initialize units-relevant ModFile information.
 initializeModFiles :: UnitSolver ()
 initializeModFiles = do
-  mfs <- analysisModFiles
+  mfs <- lift . lift $ analysisModFiles
   let compiledUnits = combinedCompiledUnits mfs
   modifyTemplateMap  . const . cuTemplateMap  $ compiledUnits
   modifyNameParamMap . const . cuNameParamMap $ compiledUnits

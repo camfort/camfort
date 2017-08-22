@@ -8,12 +8,14 @@ Maintainer  :  dom.orchard@gmail.com
 Stability   :  experimental
 -}
 
+{-# LANGUAGE OverloadedStrings #-}
+
 module Camfort.Specification.Units.Analysis
-  ( UnitsAnalysis
+  ( UnitAnalysis
   , compileUnits
   , initInference
   , runInference
-  , runUnitsAnalysis
+  , runUnitAnalysis
     -- ** Helpers
   , puName
   , puSrcName
@@ -22,6 +24,7 @@ module Camfort.Specification.Units.Analysis
 import           Control.Monad
 import           Control.Monad.State.Strict
 import           Control.Monad.Writer.Strict
+import           Control.Monad.Reader
 import           Data.Data (Data)
 import qualified Data.IntMap.Strict as IM
 import           Data.Generics.Uniplate.Operations
@@ -30,6 +33,8 @@ import qualified Data.Map.Strict as M
 import           Data.Maybe (isJust, fromMaybe)
 import qualified Data.Set as S
 import qualified Numeric.LinearAlgebra as H -- for debugging
+import           Data.Text (Text)
+import           Control.Lens ((^?), _1)
 
 import qualified Language.Fortran.AST      as F
 import qualified Language.Fortran.Analysis as FA
@@ -39,16 +44,8 @@ import           Language.Fortran.Util.ModFile
 import           Language.Fortran.Util.Position (getSpan)
 
 import           Camfort.Analysis
-  ( Analysis
-  , AnalysisResult
-  , analysisDebug
-  , analysisInput
-  , analysisModFiles
-  , analysisParams
-  , analysisResult
-  , finalState
-  , runAnalysis )
-import           Camfort.Analysis.Annotations (Annotation, Report)
+import           Camfort.Analysis.Logger (LogLevel(..))
+import           Camfort.Analysis.Annotations (Annotation)
 import           Camfort.Analysis.CommentAnnotator (annotateComments)
 import           Camfort.Analysis.ModFile (withCombinedEnvironment)
 import qualified Camfort.Specification.Units.Annotation   as UA
@@ -57,15 +54,10 @@ import           Camfort.Specification.Units.InferenceBackend
 import           Camfort.Specification.Units.ModFile
   (genUnitsModFile, initializeModFiles, runCompileUnits)
 import           Camfort.Specification.Units.Monad
+import           Camfort.Specification.Units.MonadTypes
 import           Camfort.Specification.Units.Parser (unitParser)
 import qualified Camfort.Specification.Units.Parser.Types as P
 import qualified Camfort.Specification.Units.InferenceBackendSBV as BackendSBV
-
--- | Analysis with access to 'UnitOpts' information.
-type UnitsAnalysis a a' = Analysis UnitOpts Report () a a'
-
-runUnitsAnalysis :: UnitsAnalysis a b -> UnitOpts -> ModFiles -> a -> AnalysisResult Report () b
-runUnitsAnalysis analysis uo = runAnalysis analysis uo ()
 
 -- | Prepare to run an inference function.
 initInference :: UnitSolver ()
@@ -131,18 +123,18 @@ initInference = do
   debugLogging
 
 -- | Run a 'UnitSolver' analysis within a 'UnitsAnalysis'.
-runInference :: UnitSolver a -> UnitsAnalysis (F.ProgramFile Annotation) (a, UnitState, UnitLogs)
+runInference :: UnitSolver a -> UnitAnalysis (a, UnitState)
 runInference solver = do
-  pf    <- analysisInput
-  mfs   <- analysisModFiles
-  uOpts <- analysisParams
-  let
-    pf' = withCombinedEnvironment mfs . fmap UA.mkUnitAnnotation $ pf
-    res = runUnitSolver uOpts pf' mfs $ do
-      initializeModFiles
-      initInference
-      solver
-  pure (analysisResult res, finalState res, analysisDebug res)
+  uOpts <- asks unitOpts
+  pf <- asks unitProgramFile
+  mfs <- lift analysisModFiles
+
+  let pf' = withCombinedEnvironment mfs . fmap UA.mkUnitAnnotation $ pf
+
+  runUnitSolver pf' $ do
+    initializeModFiles
+    initInference
+    solver
 
 --------------------------------------------------
 
@@ -180,7 +172,7 @@ indexedParams pu
 insertUndeterminedUnits :: UnitSolver ()
 insertUndeterminedUnits = do
   pf   <- getProgramFile
-  dmap <- (M.union (extractDeclMap pf) . combinedDeclMap) <$> analysisModFiles
+  dmap <- lift . lift $ M.union (extractDeclMap pf) . combinedDeclMap <$> analysisModFiles
   forM_ (universeBi pf :: [F.ProgramUnit UA]) $ \ pu ->
     modifyPUBlocksM (transformBiM (insertUndeterminedUnitVar dmap)) pu
 
@@ -308,7 +300,7 @@ annotateLiterals = modifyProgramFileM (transformBiM annotateLiteralsPU)
 
 annotateLiteralsPU :: F.ProgramUnit UA -> UnitSolver (F.ProgramUnit UA)
 annotateLiteralsPU pu = do
-  mode <- fmap uoLiterals analysisParams
+  mode <- asks (uoLiterals . unitOpts)
   case mode of
     LitUnitless -> modifyPUBlocksM (transformBiM expUnitless) pu
     LitPoly     -> modifyPUBlocksM (transformBiM (withLiterals genParamLit)) pu
@@ -367,9 +359,8 @@ applyTemplates cons = do
     ident <- freshId
     pure (puName pu, ident)
 
-  whenDebug $ do
-    writeLogs ("instances: " ++ show instances ++ "\n")
-    writeLogs ("dummies: " ++ show dummies ++ "\n")
+  logDebug' pf $ ("instances: " <> describeShow instances)
+  logDebug' pf $ ("dummies: " <> describeShow dummies)
 
   -- Work through the instances, expanding their templates, and
   -- substituting the callId into the abstract parameters.
@@ -510,7 +501,7 @@ topLevelFuncsAndSubs (F.ProgramFile _ pus) = topLevel =<< pus
 extractConstraints :: UnitSolver Constraints
 extractConstraints = do
   pf         <- getProgramFile
-  dmap       <- (M.union (extractDeclMap pf) . combinedDeclMap) <$> analysisModFiles
+  dmap       <- lift . lift $ M.union (extractDeclMap pf) . combinedDeclMap <$> analysisModFiles
   varUnitMap <- getVarUnitMap
   pure $ [ con | b <- mainBlocks pf, con@ConEq{} <- universeBi b ] ++
            [ ConEq (toUnitVar dmap v) u | (v, u) <- M.toList varUnitMap ]
@@ -548,7 +539,7 @@ propagateUnits = modifyProgramFileM $ transformBiM propagatePU        <=<
                                       transformBiM propagateExp
 
 propagateExp :: F.Expression UA -> UnitSolver (F.Expression UA)
-propagateExp e = fmap uoLiterals analysisParams >>= \ lm -> case e of
+propagateExp e = asks (uoLiterals . unitOpts) >>= \ lm -> case e of
   F.ExpValue{}                           -> pure e -- all values should already be annotated
   F.ExpBinary _ _ F.Multiplication e1 e2 -> setF2 UnitMul (getUnitInfoMul lm e1) (getUnitInfoMul lm e2)
   F.ExpBinary _ _ F.Division e1 e2       -> setF2 UnitMul (getUnitInfoMul lm e1) (flip UnitPow (-1) <$> getUnitInfoMul lm e2)
@@ -559,7 +550,7 @@ propagateExp e = fmap uoLiterals analysisParams >>= \ lm -> case e of
   F.ExpSubscript _ _ e1 _                -> pure $ UA.maybeSetUnitInfo (UA.getUnitInfo e1) e
   F.ExpUnary _ _ _ e1                    -> pure $ UA.maybeSetUnitInfo (UA.getUnitInfo e1) e
   _                                      -> do
-    whenDebug . writeLogs $ "propagateExp: " ++ show (getSpan e) ++ " unhandled: " ++ show e
+    logDebug' e $ "progagateExp: unhandled " <> describeShow e
     pure e
   where
     -- Shorter names for convenience functions.
@@ -761,60 +752,65 @@ binOpKind (F.BinCustom _)    = RelOp
 
 --------------------------------------------------
 
+logDebugNoOrigin :: Text -> UnitSolver ()
+logDebugNoOrigin msg = do
+  pf <- gets usProgramFile
+  logDebug' pf msg
+
 dumpConsM :: String -> Constraints -> UnitSolver ()
-dumpConsM str = whenDebug . writeLogs . unlines . ([replicate 50 '-', str ++ ":"]++) . (++[replicate 50 '^']) . map f
+dumpConsM str = logDebugNoOrigin . describe . unlines . ([replicate 50 '-', str ++ ":"]++) . (++[replicate 50 '^']) . map f
   where
     f (ConEq u1 u2)  = show (flattenUnits u1) ++ " === " ++ show (flattenUnits u2)
     f (ConConj cons) = intercalate " && " (map f cons)
 
 debugLogging :: UnitSolver ()
-debugLogging = whenDebug $ do
-    (writeLogs . unlines . map (\ (ConEq u1 u2) -> "  ***AbsConstraint: " ++ show (flattenUnits u1) ++ " === " ++ show (flattenUnits u2) ++ "\n")) =<< extractConstraints
+debugLogging = do
+    (logDebugNoOrigin . describe . unlines . map (\ (ConEq u1 u2) -> "  ***AbsConstraint: " ++ show (flattenUnits u1) ++ " === " ++ show (flattenUnits u2))) =<< extractConstraints
     pf   <- getProgramFile
     cons <- getConstraints
     vum  <- getVarUnitMap
-    writeLogs . unlines $ [ "  " ++ show info ++ " :: " ++ n | ((n, _), info) <- M.toList vum ]
-    writeLogs "\n\n"
+    logDebugNoOrigin . describe . unlines $ [ "  " ++ show info ++ " :: " ++ n | ((n, _), info) <- M.toList vum ]
+    logDebugNoOrigin ""
     uam <- getUnitAliasMap
-    writeLogs . unlines $ [ "  " ++ n ++ " = " ++ show info | (n, info) <- M.toList uam ]
-    writeLogs . unlines $ map (\ (ConEq u1 u2) -> "  ***Constraint: " ++ show (flattenUnits u1) ++ " === " ++ show (flattenUnits u2) ++ "\n") cons
-    writeLogs $ show cons ++ "\n\n"
+    logDebugNoOrigin . describe . unlines $ [ "  " ++ n ++ " = " ++ show info | (n, info) <- M.toList uam ]
+    logDebugNoOrigin . describe . unlines $ map (\ (ConEq u1 u2) -> "  ***Constraint: " ++ show (flattenUnits u1) ++ " === " ++ show (flattenUnits u2)) cons
+    logDebugNoOrigin $ describeShow cons <> "\n"
     forM_ (universeBi pf) $ \ pu -> case pu of
       F.PUFunction {}
         | Just (ConConj con) <- UA.getConstraint pu ->
-          writeLogs . unlines $ (puName pu ++ ":"):map (\ (ConEq u1 u2) -> "    constraint: " ++ show (flattenUnits u1) ++ " === " ++ show (flattenUnits u2)) con
+          logDebugNoOrigin . describe . unlines $ (puName pu ++ ":"):map (\ (ConEq u1 u2) -> "    constraint: " ++ show (flattenUnits u1) ++ " === " ++ show (flattenUnits u2)) con
       F.PUSubroutine {}
         | Just (ConConj con) <- UA.getConstraint pu ->
-          writeLogs . unlines $ (puName pu ++ ":"):map (\ (ConEq u1 u2) -> "    constraint: " ++ show (flattenUnits u1) ++ " === " ++ show (flattenUnits u2)) con
+          logDebugNoOrigin . describe . unlines $ (puName pu ++ ":"):map (\ (ConEq u1 u2) -> "    constraint: " ++ show (flattenUnits u1) ++ " === " ++ show (flattenUnits u2)) con
       _ -> pure ()
     let (lhsM, rhsM, _, lhsColA, rhsColA) = constraintsToMatrices cons
-    writeLogs "\n--------------------------------------------------\nLHS Cols:\n"
-    writeLogs $ show lhsColA
-    writeLogs "\n--------------------------------------------------\nRHS Cols:\n"
-    writeLogs $ show rhsColA
-    writeLogs "\n--------------------------------------------------\nLHS M:\n"
-    writeLogs $ show lhsM
-    writeLogs "\n--------------------------------------------------\nRHS M:\n"
-    writeLogs $ show rhsM
-    writeLogs "\n--------------------------------------------------\nSolved (RREF) M:\n"
+    logDebugNoOrigin "--------------------------------------------------\nLHS Cols:"
+    logDebugNoOrigin $ describeShow lhsColA
+    logDebugNoOrigin "--------------------------------------------------\nRHS Cols:"
+    logDebugNoOrigin $ describeShow rhsColA
+    logDebugNoOrigin "--------------------------------------------------\nLHS M:"
+    logDebugNoOrigin $ describeShow lhsM
+    logDebugNoOrigin "--------------------------------------------------\nRHS M:"
+    logDebugNoOrigin $ describeShow rhsM
+    logDebugNoOrigin "--------------------------------------------------\nSolved (RREF) M:"
     let augM = if H.rows rhsM == 0 || H.cols rhsM == 0 then lhsM else H.fromBlocks [[lhsM, rhsM]]
-    writeLogs . show . rref $ augM
-    -- writeLogs "\n--------------------------------------------------\nSolved (SVD) M:\n"
-    -- writeLogs $ show (H.linearSolveSVD lhsM rhsM)
-    -- writeLogs "\n--------------------------------------------------\nSingular Values:\n"
-    -- writeLogs $ show (H.singularValues lhsM)
-    writeLogs "\n--------------------------------------------------\n"
-    writeLogs $ "Rank LHS: " ++ show (H.rank lhsM) ++ "\n"
-    writeLogs "\n--------------------------------------------------\n"
+    logDebugNoOrigin . describeShow . rref $ augM
+    -- logDebugNoOrigin "--------------------------------------------------\nSolved (SVD) M:"
+    -- logDebugNoOrigin $ show (H.linearSolveSVD lhsM rhsM)
+    -- logDebugNoOrigin "--------------------------------------------------\nSingular Values:"
+    -- logDebugNoOrigin $ show (H.singularValues lhsM)
+    logDebugNoOrigin "--------------------------------------------------"
+    logDebugNoOrigin $ "Rank LHS: " <> describeShow (H.rank lhsM)
+    logDebugNoOrigin "--------------------------------------------------"
     let augA = if H.rows rhsM == 0 || H.cols rhsM == 0 then lhsM else H.fromBlocks [[lhsM, rhsM]]
-    writeLogs $ "Rank Augmented: " ++ show (H.rank augA) ++ "\n"
-    writeLogs "\n--------------------------------------------------\nGenUnitAssignments:\n"
+    logDebugNoOrigin $ "Rank Augmented: " <> describeShow (H.rank augA)
+    logDebugNoOrigin "--------------------------------------------------\nGenUnitAssignments:"
     let unitAssignments = genUnitAssignments cons
-    writeLogs . unlines $ map (\ (u1s, u2) -> "  ***UnitAssignment: " ++ show u1s ++ " === " ++ show (flattenUnits u2) ++ "\n") unitAssignments
-    writeLogs "\n--------------------------------------------------\n"
+    logDebugNoOrigin . describe . unlines $ map (\ (u1s, u2) -> "  ***UnitAssignment: " ++ show u1s ++ " === " ++ show (flattenUnits u2) ++ "\n") unitAssignments
+    logDebugNoOrigin "--------------------------------------------------"
     let unitAssignments = BackendSBV.genUnitAssignments cons
-    writeLogs . unlines $ map (\ (u1s, u2) -> "  ***UnitAssignmentSBV: " ++ show u1s ++ " === " ++ show (flattenUnits u2) ++ "\n") unitAssignments
-    writeLogs "\n--------------------------------------------------\n"    
+    logDebugNoOrigin . describe . unlines $ map (\ (u1s, u2) -> "  ***UnitAssignmentSBV: " ++ show u1s ++ " === " ++ show (flattenUnits u2)) unitAssignments
+    logDebugNoOrigin "--------------------------------------------------"
 
 --------------------------------------------------
 
@@ -914,8 +910,18 @@ intrinsicUnits =
 -- Others: reshape, merge need special handling
 
 -- | Compile a program to a 'ModFile' containing units information.
-compileUnits :: UnitOpts -> ModFiles -> F.ProgramFile Annotation -> ModFile
-compileUnits uo mfs pf =
+compileUnits :: UnitOpts -> ModFiles -> F.ProgramFile Annotation -> IO ModFile
+compileUnits uo mfs pf = do
   let pf'      = withCombinedEnvironment mfs . fmap UA.mkUnitAnnotation $ pf
-      (cu,_,_) = analysisResult . runAnalysis (runInference runCompileUnits) uo () mfs $ pf
-  in genUnitsModFile pf' cu
+
+  let analysis = runReaderT (runInference runCompileUnits) $
+        UnitEnv
+        { unitOpts = uo
+        , unitProgramFile = pf
+        }
+
+  report <- runAnalysisT (F.pfGetFilename pf) (const (return ())) LogError mfs analysis
+
+  case report ^? arResult . _ARSuccess . _1 of
+    Just cu -> return (genUnitsModFile pf' cu)
+    Nothing -> fail "compileUnits: units analysis failed"

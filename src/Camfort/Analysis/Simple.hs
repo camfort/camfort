@@ -26,10 +26,9 @@ import Data.Generics.Uniplate.Operations
 
 import qualified Language.Fortran.AST as F
 
-import Camfort.Analysis (SimpleAnalysis, analysisInput)
+import Camfort.Analysis (PureAnalysis)
 
 {-| Counts the number of declarations (of variables) in a whole program -}
 
-countVariableDeclarations ::
-    forall a. Data a => SimpleAnalysis (F.ProgramFile a) Int
-countVariableDeclarations = fmap (\pf -> sum [1 | _ <- universeBi pf :: [F.Declarator a]]) analysisInput
+countVariableDeclarations :: forall a. Data a => F.ProgramFile a -> PureAnalysis () () Int
+countVariableDeclarations pf = return $ length (universeBi pf :: [F.Declarator a])

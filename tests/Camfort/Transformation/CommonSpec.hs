@@ -1,11 +1,12 @@
 module Camfort.Transformation.CommonSpec (spec) where
 
-import System.FilePath
-import System.Directory
+import           System.Directory
+import           System.FilePath
 
-import Test.Hspec
+import           Test.Hspec
 
-import Camfort.Functionality
+import           Camfort.Analysis.Logger (LogLevel (..))
+import           Camfort.Functionality
 
 samplesBase :: FilePath
 samplesBase = "tests" </> "fixtures" </> "Transformation"
@@ -30,7 +31,15 @@ spec =
 
       let outFile = samplesBase </> "common.f90.out"
           commonFile = samplesBase </> "common.f90"
-      runIO $ common commonFile (Just commonFile) [] outFile
+
+          env = CamfortEnv
+            { ceInputSources = commonFile
+            , ceIncludeDir = Just commonFile
+            , ceExcludeFiles = []
+            , ceLogLevel = LogDebug
+            }
+
+      runIO $ common outFile env
 
       actual    <- runIO $ readSample "common.f90.out"
       actualMod <- runIO $ readSample "cmn.f90"

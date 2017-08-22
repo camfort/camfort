@@ -8,35 +8,180 @@ Maintainer  :  dom.orchard@gmail.com
 -}
 
 {-# LANGUAGE DoAndIfThenElse #-}
+{-# LANGUAGE NoMonomorphismRestriction #-}
 
 module Camfort.Input
   (
     -- * Classes
     Default(..)
     -- * Datatypes and Aliases
-  , FileProgram
+  , ProgramFile
+  , AnalysisProgram
+  , AnalysisRunner
     -- * Builders for analysers and refactorings
-  , doAnalysisReport
+  , runPerFileAnalysis
+  , runMultiFileAnalysis
+  , describePerFileAnalysis
   , doRefactor
   , doRefactorAndCreate
+  , perFileRefactoring
     -- * Source directory and file handling
   , readParseSrcDir
+    -- * Combinators
+  , runThen
   ) where
 
-import qualified Data.ByteString.Char8 as B
-import           Data.Either (partitionEithers)
-import           Data.List (intercalate)
+import           Control.Monad.IO.Class
+import qualified Data.ByteString.Char8         as B
+import           Data.Either                   (partitionEithers)
+import           Data.List                     (intercalate)
 
-import qualified Language.Fortran.AST as F
+import           Control.Lens
+
+import qualified Language.Fortran.AST          as F
 import           Language.Fortran.Util.ModFile (ModFiles)
 
-import Camfort.Analysis
-  (Analysis, analysisDebug, analysisResult, runAnalysis)
-import Camfort.Analysis.Annotations
-import Camfort.Analysis.ModFile
-  (MFCompiler, genModFiles, readParseSrcDir)
-import Camfort.Helpers
-import Camfort.Output
+import           Camfort.Analysis
+import           Camfort.Analysis.Logger
+  -- (Analysis, analysisDebug, analysisResult, runAnalysis)
+import           Camfort.Analysis.Annotations
+import           Camfort.Analysis.ModFile      (MFCompiler, genModFiles,
+                                                readParseSrcDir)
+import           Camfort.Helpers
+import           Camfort.Output
+
+type AnalysisProgram e w m a b = a -> AnalysisT e w m b
+
+type AnalysisRunner e w m a b r =
+  AnalysisProgram e w m a b -> LogOutput m -> LogLevel -> ModFiles -> [(ProgramFile, SourceText)] -> m r
+
+--------------------------------------------------------------------------------
+--  Simple runners
+--------------------------------------------------------------------------------
+
+runPerFileAnalysis
+  :: (Monad m, Describe e, Describe w)
+  => AnalysisRunner e w m ProgramFile b [AnalysisReport e w b]
+runPerFileAnalysis program logOutput logLevel modFiles =
+  traverse (\pf ->
+    runAnalysisT
+      (F.pfGetFilename pf)
+      logOutput
+      logLevel
+      modFiles
+      (program pf)) . map fst
+
+runMultiFileAnalysis
+  :: (Monad m, Describe e, Describe w)
+  => AnalysisRunner e w m [ProgramFile] b (AnalysisReport e w b)
+runMultiFileAnalysis program logOutput logLevel modFiles
+  = runAnalysisT "<unknown>" logOutput logLevel modFiles . program . map fst
+
+--------------------------------------------------------------------------------
+--  Complex Runners
+--------------------------------------------------------------------------------
+
+describePerFileAnalysis ::
+  (MonadIO m, Describe r, Describe w, Describe e) =>
+  AnalysisRunner e w m ProgramFile r ()
+describePerFileAnalysis = runPerFileAnalysis `runThen` mapM_ (putDescribeReport Nothing)
+
+
+doRefactor
+  :: (Describe e, Describe e', Describe w, Describe r)
+  => FileOrDir -> FilePath
+  -> AnalysisRunner e w IO [ProgramFile] (r, [Either e' ProgramFile]) ()
+doRefactor inSrc outSrc program logOutput logLevel modFiles pfsTexts = do
+  report <- runMultiFileAnalysis program logOutput logLevel modFiles pfsTexts
+
+  let
+    -- Get the user-facing output from the report
+    report' = fmap fst report
+    -- Get the refactoring result form the report
+    resultFiles = report ^? arResult . _ARSuccess . _2
+
+  putDescribeReport Nothing report'
+
+  -- If the refactoring succeeded, change the files
+  case resultFiles of
+    Just fs -> finishRefactor inSrc outSrc (map snd pfsTexts) fs
+    Nothing -> return ()
+
+doRefactorAndCreate
+  :: (Describe e, Describe w)
+  => FileOrDir -> FilePath
+  -> AnalysisRunner e w IO [ProgramFile] ([ProgramFile], [ProgramFile]) ()
+doRefactorAndCreate inSrc outSrc program logOutput logLevel modFiles pfsTexts = do
+  report <- runMultiFileAnalysis program logOutput logLevel modFiles pfsTexts
+
+  let
+    -- Get the user-facing output from the report
+    report' = fmap (const ()) report
+    -- Get the refactoring result form the report
+    resultFiles = report ^? arResult . _ARSuccess
+
+  putDescribeReport Nothing report'
+
+  case resultFiles of
+    -- If the refactoring succeeded, change the files
+    Just fs -> finishRefactorAndCreate inSrc outSrc (map snd pfsTexts) fs
+    Nothing -> return ()
+
+perFileRefactoring
+  :: (Monad m)
+  => AnalysisProgram e w m ProgramFile ProgramFile
+  -> AnalysisProgram e w m [ProgramFile] ((), [Either e ProgramFile])
+perFileRefactoring program pfs = do
+  pfs' <- mapM program pfs
+  return ((), fmap pure pfs')
+
+--------------------------------------------------------------------------------
+--  Refactoring Combinators
+--------------------------------------------------------------------------------
+
+finishRefactor
+  :: FileOrDir -> FilePath
+  -> [SourceText]
+  -- ^ Original source from the input files
+  -> [Either e ProgramFile]
+  -- ^ Changed input files (or errors)
+  -> IO ()
+finishRefactor inSrc outSrc inputText analysisOutput = do
+  let (_, ps') = partitionEithers analysisOutput
+      outputs = reassociateSourceText inputText ps'
+
+  outputFiles inSrc outSrc outputs
+
+
+finishRefactorAndCreate
+  :: FileOrDir -> FilePath
+  -> [SourceText]
+  -- ^ Original source from the input files
+  -> ([ProgramFile], [ProgramFile])
+  -- ^ Changed input files, newly created files
+  -> IO ()
+finishRefactorAndCreate inSrc outSrc inputText analysisOutput = do
+
+  let changedFiles = reassociateSourceText inputText (fst analysisOutput)
+      newFiles = map (\pf -> (pf, B.empty)) (snd analysisOutput)
+
+  outputFiles inSrc outSrc changedFiles
+  outputFiles inSrc outSrc newFiles
+
+--------------------------------------------------------------------------------
+--  Combinators
+--------------------------------------------------------------------------------
+
+runThen
+  :: (Monad m)
+  => AnalysisRunner e w m a b r -> (r -> m r')
+  -> AnalysisRunner e w m a b r'
+runThen runner withResult program output level modFiles programFiles =
+  runner program output level modFiles programFiles >>= withResult
+
+--------------------------------------------------------------------------------
+--  Misc
+--------------------------------------------------------------------------------
 
 -- | Class for default values of some type 't'
 class Default t where
@@ -50,83 +195,27 @@ printExcludes _ [""]         = pure ()
 printExcludes inSrc excludes =
   putStrLn $ concat ["Excluding ", intercalate "," excludes, " from ", inSrc, "/"]
 
--- * Builders for analysers and refactorings
-
--- | Alias for functions that run an 'Analysis' using a standard argument
--- format.
-type AnalysisRunner r w a b f =
-  Analysis r w () a b -> MFCompiler r -> r
-  -> FileOrDir -> FileOrDir -> [Filename]
-  -> f
-
--- | Alias for 'AnalysisRunner' with an output source.
-type AnalysisRunnerWithOut r w a b f =
-  AnalysisRunner r w a b (FileOrDir -> f)
-
--- | Perform an analysis which reports to the user, but does not output any files.
-doAnalysisReport
-  :: (Monoid w, Show w, Show b)
-  => AnalysisRunner r w FileProgram b (IO ())
-doAnalysisReport rFun mfc env inSrc incDir excludes = do
-  results <- doInitAnalysis' rFun mfc env inSrc incDir excludes
-  let report = concatMap (\(rep,res) -> show rep ++ show res) results
-  putStrLn report
-
-getModsAndPs
-  :: MFCompiler r -> r
-  -> FileOrDir -> FileOrDir -> [Filename]
-  -> IO (ModFiles, [(FileProgram, B.ByteString)])
-getModsAndPs mfc env inSrc incDir excludes = do
-  printExcludes inSrc excludes
-  modFiles <- genModFiles mfc env incDir excludes
-  ps <- readParseSrcDir modFiles inSrc excludes
-  pure (modFiles, ps)
-
-doInitAnalysis
-  :: (Monoid w)
-  => AnalysisRunner r w [FileProgram] b (IO ([(FileProgram, B.ByteString)], w, b))
-doInitAnalysis analysis mfc env inSrc incDir excludes = do
-  (modFiles, ps) <- getModsAndPs mfc env inSrc incDir excludes
-  let res = runAnalysis analysis env () modFiles . fmap fst $ ps
-      report = analysisDebug res
-      ps' = analysisResult res
-  pure (ps, report, ps')
-
-doInitAnalysis'
-  :: (Monoid w)
-  => AnalysisRunner r w FileProgram b (IO [(w, b)])
-doInitAnalysis' analysis mfc env inSrc incDir excludes = do
-  (modFiles, ps) <- getModsAndPs mfc env inSrc incDir excludes
-  let res = runAnalysis analysis env () modFiles . fst <$> ps
-  pure $ fmap (\r -> (analysisDebug r, analysisResult r)) res
-
-doRefactor
-  :: (Monoid w, Show w, Show e, Show b)
-  => AnalysisRunnerWithOut r w [FileProgram] (b, [Either e FileProgram]) (IO ())
-doRefactor rFun mfc env inSrc incDir excludes outSrc = do
-  (ps, report1, aRes) <- doInitAnalysis rFun mfc env inSrc incDir excludes
-  let (_, ps') = partitionEithers (snd aRes)
-      report = show report1 ++ show (fst aRes)
-  let outputs = reassociateSourceText (fmap snd ps) ps'
-  outputFiles inSrc outSrc outputs
-  putStrLn report
-
--- | Perform a refactoring that may create additional files.
-doRefactorAndCreate
-  :: (Monoid w, Show w)
-  => AnalysisRunnerWithOut r w [FileProgram] ([FileProgram], [FileProgram]) (IO ())
-doRefactorAndCreate rFun mfc env inSrc incDir excludes outSrc = do
-  (ps, report, (ps', ps'')) <- doInitAnalysis rFun mfc env inSrc incDir excludes
-  let outputs = reassociateSourceText (fmap snd ps) ps'
-  let outputs' = map (\pf -> (pf, B.empty)) ps''
-  outputFiles inSrc outSrc outputs
-  outputFiles inSrc outSrc outputs'
-  print report
 
 -- | For refactorings which create additional files.
-type FileProgram = F.ProgramFile A
+type ProgramFile = F.ProgramFile A
 
-reassociateSourceText :: [SourceText]
-                      -> [F.ProgramFile Annotation]
-                      -> [(F.ProgramFile Annotation, SourceText)]
+reassociateSourceText
+  :: [SourceText]
+  -> [F.ProgramFile Annotation]
+  -> [(F.ProgramFile Annotation, SourceText)]
 reassociateSourceText ps ps' = zip ps' ps
+
+
+loadModAndProgramFiles
+  :: (MonadIO m)
+  => MFCompiler r m -> r
+  -> FileOrDir -- ^ Input source file or directory
+  -> FileOrDir -- ^ Include path
+  -> [Filename] -- ^ Excluded files
+  -> m (ModFiles, [(ProgramFile, SourceText)])
+loadModAndProgramFiles mfc env inSrc incDir excludes = do
+  liftIO $ printExcludes inSrc excludes
+  modFiles <- genModFiles mfc env incDir excludes
+  ps <- liftIO $ readParseSrcDir modFiles inSrc excludes
+  pure (modFiles, ps)
+

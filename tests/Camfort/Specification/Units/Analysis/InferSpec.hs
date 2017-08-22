@@ -2,21 +2,22 @@ module Camfort.Specification.Units.Analysis.InferSpec (spec) where
 
 import System.FilePath ((</>))
 
+import Control.Lens
+
 import           Test.Hspec hiding (Spec)
 import qualified Test.Hspec as Test
 
 import Language.Fortran.Util.ModFile (emptyModFiles)
 
-import Camfort.Analysis (analysisResult)
+import Camfort.Analysis hiding (describe)
 import Camfort.Analysis.ModFile (readParseSrcDir)
-import Camfort.Specification.Units.Analysis (runUnitsAnalysis)
 import Camfort.Specification.Units.Analysis.Infer (inferUnits)
 import Camfort.Specification.Units.Monad
-  (LiteralsOpt(..), unitOpts0, uoDebug, uoLiterals)
+  (LiteralsOpt(..), unitOpts0, uoLiterals, runUnitAnalysis, UnitEnv(..))
 
 spec :: Test.Spec
 spec =
-  describe "fixtures integration tests" $ do
+  xdescribe "fixtures integration tests" $ do
     it "infers correctly based on simple addition" $
        "example-simple-1.f90" `unitsInferReportIs` exampleInferSimple1Report
     describe "Polymorphic functions" $
@@ -46,11 +47,16 @@ fixturesDir = "tests" </> "fixtures" </> "Specification" </> "Units"
 unitsInferReportIs :: String -> String -> Expectation
 unitsInferReportIs fileName expectedReport = do
   let file = fixturesDir </> fileName
-  let modFiles = emptyModFiles
+      modFiles = emptyModFiles
   [(pf,_)] <- readParseSrcDir modFiles file []
-  let (Right report) = analysisResult $ runUnitsAnalysis inferUnits uOpts modFiles pf
-  show report `shouldBe` expectedReport
-  where uOpts = unitOpts0 { uoDebug = False, uoLiterals = LitMixed }
+
+  let uEnv = UnitEnv { unitOpts = uOpts, unitProgramFile = pf }
+
+  report <- runAnalysisT file (const (return ())) LogError modFiles $ runUnitAnalysis uEnv $ inferUnits
+  let res = report ^?! arResult . _ARSuccess
+
+  show res `shouldBe` expectedReport
+  where uOpts = unitOpts0 { uoLiterals = LitMixed }
 
 exampleInferSimple1Report :: String
 exampleInferSimple1Report =

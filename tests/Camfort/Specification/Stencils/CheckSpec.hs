@@ -4,7 +4,9 @@ module Camfort.Specification.Stencils.CheckSpec (spec) where
 
 import qualified Data.ByteString.Internal as BS
 
-import           Camfort.Analysis (analysisResult, runSimpleAnalysis)
+import Control.Lens
+
+import           Camfort.Analysis hiding (describe)
 import           Camfort.Analysis.Annotations (unitAnnotation)
 import           Camfort.Specification.Parser (runParser)
 import qualified Camfort.Specification.Stencils.Annotation as SA
@@ -124,18 +126,27 @@ spec =
           \        but at (5:5)-(5:15) the code behaves as\n\
           \                stencil readOnce, pointed(dim=1) :: a\n"
 
-checkText text =
-  either (error "received test input with invalid syntax")
-     (analysisResult . runSimpleAnalysis stencilChecking emptyModFiles . getBlocks . fmap (const unitAnnotation))
-  $ fortranParser text "example"
-  where getBlocks = FAB.analyseBBlocks . FAR.analyseRenames . FA.initAnalysis . fmap SA.mkStencilAnnotation
+checkText :: BS.ByteString -> IO CheckResult
+checkText text = do
+  pf <- either (fail "received test input with invalid syntax") return $
+        fortranParser text "example"
 
-runCheck :: String -> CheckResult
+  let pf' = getBlocks . fmap (const unitAnnotation) $ pf
+
+  return (runChecking pf' ^?! arResult . _ARSuccess)
+
+  where
+    runChecking = runIdentity . runAnalysisT "example" (const (return ())) LogInfo emptyModFiles . stencilChecking
+    getBlocks = FAB.analyseBBlocks . FAR.analyseRenames . FA.initAnalysis . fmap SA.mkStencilAnnotation
+
+runCheck :: String -> IO CheckResult
 runCheck = checkText . BS.packChars
 
 checkTestShow :: String -> String -> String -> SpecWith ()
 checkTestShow exampleText testDescription expected =
-  it testDescription $ show (runCheck exampleText) `shouldBe` expected
+  it testDescription $ do
+    res <- runCheck exampleText
+    show res `shouldBe` expected
 
 exampleUnusedRegion :: String
 exampleUnusedRegion =

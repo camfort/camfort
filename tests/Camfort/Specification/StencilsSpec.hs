@@ -5,6 +5,9 @@
 {-# LANGUAGE RankNTypes #-}
 {-# LANGUAGE UndecidableInstances #-}
 {-# LANGUAGE TypeOperators #-}
+{-# LANGUAGE OverloadedStrings #-}
+
+-- TODO: Fix this
 
 module Camfort.Specification.StencilsSpec (spec) where
 
@@ -13,16 +16,21 @@ import           Control.Monad.Writer.Strict hiding (Sum, Product)
 import qualified Data.Graph.Inductive.Graph as Gr
 import           Data.List
 
+import Control.Lens
+
+import qualified Data.Text as Text
+
 import Language.Fortran.Util.ModFile (ModFile)
 
-import Camfort.Analysis
-  (analysisResult, runSimpleAnalysis)
+import Camfort.Analysis.TestUtils
+import Camfort.Analysis hiding (describe)
+import qualified Camfort.Analysis.Logger as L
 import Camfort.Analysis.ModFile (genModFiles)
-import Camfort.Helpers.Vec
+import Camfort.Helpers.Vec hiding (zipWith)
 import Camfort.Input
 import Camfort.Specification.Stencils
 import Camfort.Specification.Stencils.Analysis
-  (StencilsAnalysis, compileStencils, runStencilsAnalysis)
+  (StencilsAnalysis, compileStencils)
 import Camfort.Specification.Stencils.Generate
   (Neighbour(..), indicesToSpec, convIxToNeighbour, runStencilInferer)
 import Camfort.Specification.Stencils.Synthesis
@@ -166,49 +174,49 @@ spec =
     describe "Inconsistent induction variable usage tests" $ do
       it "consistent (1) a(i,j) = b(i+1,j+1) + b(i,j)" $
         indicesToSpec' ["i", "j"]
-                       [Neighbour "i" 0, Neighbour "j" 0]
-                       [[offsetToIx "i" 1, offsetToIx "j" 1],
-                        [offsetToIx "i" 0, offsetToIx "j" 0]]
-         `shouldBe` (Just $ Specification (Once $ Exact
+               [Neighbour "i" 0, Neighbour "j" 0]
+               [[offsetToIx "i" 1, offsetToIx "j" 1],
+                 [offsetToIx "i" 0, offsetToIx "j" 0]]
+          `shouldBe` (Just $ Specification (Once $ Exact
                        (Spatial
                          (Sum [Product [Forward 1 1 False, Forward 1 2 False],
                                Product [Centered 0 1 True, Centered 0 2 True]]))) True)
       it "consistent (2) a(i,c,j) = b(i,j+1) + b(i,j) \
                         \:: forward(depth=1,dim=2)*pointed(dim=1)" $
         indicesToSpec' ["i", "j"]
-                        [Neighbour "i" 0, Constant (F.ValInteger "0"), Neighbour "j" 0]
-                        [[offsetToIx "i" 0, offsetToIx "j" 1],
-                         [offsetToIx "i" 0, offsetToIx "j" 0]]
-         `shouldBe` (Just $ Specification (Once $ Exact
+               [Neighbour "i" 0, Constant (F.ValInteger "0"), Neighbour "j" 0]
+               [[offsetToIx "i" 0, offsetToIx "j" 1],
+                 [offsetToIx "i" 0, offsetToIx "j" 0]]
+          `shouldBe` (Just $ Specification (Once $ Exact
                        (Spatial
                          (Sum [Product [Centered 0 1 True, Forward 1 2 True]]))) True)
 
       it "consistent (3) a(i+1,c,j) = b(j,i+1) + b(j,i) \
                         \:: backward(depth=1,dim=2)*pointed(dim=1)" $
         indicesToSpec' ["i", "j"]
-                        [Neighbour "i" 1, Constant (F.ValInteger "0"), Neighbour "j" 0]
-                        [[offsetToIx "j" 0, offsetToIx "i" 1],
-                         [offsetToIx "j" 0, offsetToIx "i" 0]]
-         `shouldBe` (Just $ Specification (Once $ Exact
+               [Neighbour "i" 1, Constant (F.ValInteger "0"), Neighbour "j" 0]
+               [[offsetToIx "j" 0, offsetToIx "i" 1],
+                 [offsetToIx "j" 0, offsetToIx "i" 0]]
+          `shouldBe` (Just $ Specification (Once $ Exact
                        (Spatial
                          (Sum [Product [Centered 0 1 True, Backward 1 2 True]]))) True)
 
       it "consistent (4) a(i+1,j) = b(0,i+1) + b(0,i) \
                          \:: backward(depth=1,dim=2)" $
         indicesToSpec' ["i", "j"]
-                        [Neighbour "i" 1, Neighbour "j" 0]
-                        [[offsetToIx "j" absoluteRep, offsetToIx "i" 1],
-                         [offsetToIx "j" absoluteRep, offsetToIx "i" 0]]
-         `shouldBe` (Just $ Specification (Once $ Exact
+               [Neighbour "i" 1, Neighbour "j" 0]
+               [[offsetToIx "j" absoluteRep, offsetToIx "i" 1],
+                 [offsetToIx "j" absoluteRep, offsetToIx "i" 0]]
+          `shouldBe` (Just $ Specification (Once $ Exact
                        (Spatial
                          (Sum [Product [Backward 1 2 True]]))) True)
 
       it "consistent (5) a(i) = b(i,i+1) \
                         \:: pointed(dim=1)*forward(depth=1,dim=2,nonpointed)" $
         indicesToSpec' ["i", "j"]
-                        [Neighbour "i" 0]
-                        [[offsetToIx "i" 0, offsetToIx "i" 1]]
-         `shouldBe` (Just $ Specification (Once $ Exact
+               [Neighbour "i" 0]
+               [[offsetToIx "i" 0, offsetToIx "i" 1]]
+          `shouldBe` (Just $ Specification (Once $ Exact
                        (Spatial
                          (Sum [Product [Centered 0 1 True,
                                         Forward 1 2 False]]))) True)
@@ -216,56 +224,59 @@ spec =
       it "consistent (6) a(i) = b(i) + b(0) \
                         \:: pointed(dim=1)" $
         indicesToSpec' ["i", "j"]
-                        [Neighbour "i" 0]
-                        [[offsetToIx "i" 0], [offsetToIx "i" absoluteRep]]
-         `shouldBe` Nothing
+               [Neighbour "i" 0]
+               [[offsetToIx "i" 0], [offsetToIx "i" absoluteRep]]
+          `shouldBe` Nothing
 
       it "inconsistent (1) RHS" $
         indicesToSpec' ["i", "j"]
-                        [Neighbour "i" 0, Neighbour "j" 0]
-                        [[offsetToIx "i" 1, offsetToIx "j" 1],
-                         [offsetToIx "j" 0, offsetToIx "i" 0]]
-         `shouldBe` Nothing
+               [Neighbour "i" 0, Neighbour "j" 0]
+               [[offsetToIx "i" 1, offsetToIx "j" 1],
+                 [offsetToIx "j" 0, offsetToIx "i" 0]]
+          `shouldBe` Nothing
 
       it "inconsistent (2) RHS to LHS" $
         indicesToSpec' ["i", "j"]
-                        [Neighbour "i" 0]
-                        [[offsetToIx "i" 1, offsetToIx "j" 1],
-                         [offsetToIx "j" 0, offsetToIx "i" 0]]
-         `shouldBe` Nothing
+               [Neighbour "i" 0]
+               [[offsetToIx "i" 1, offsetToIx "j" 1],
+                 [offsetToIx "j" 0, offsetToIx "i" 0]]
+          `shouldBe` Nothing
 
     -------------------------
     -- Some integration tests
     -------------------------
 
-    let example2In = fixturesDir </> "example2.f"
-    [(program,_)] <- runIO $ readParseSrcDir emptyModFiles example2In []
+    let example2In = testInputSources (fixturesDir </> "example2.f")
 
     describe "integration test on inference for example2.f" $ do
       it "stencil infer" $
-         show (runSingleFileAnalysis (infer False '=') program)
-           `shouldBe`
-           "\ntests/fixtures/Specification/Stencils/example2.f\n\
-            \(32:7)-(32:26)    stencil readOnce, backward(depth=1, dim=1) :: a\n\
-            \(26:8)-(26:29)    stencil readOnce, pointed(dim=1)*pointed(dim=2) :: a\n\
-            \(24:8)-(24:53)    stencil readOnce, pointed(dim=1)*centered(depth=1, dim=2) \
-                                     \+ centered(depth=1, dim=1)*pointed(dim=2) :: a"
+        testSingleFileAnalysis example2In (generalizePureAnalysis . infer False '=') $ \report -> do
+          let logs = report ^.. arMessages . traverse . L._MsgInfo . L.lmMsg
+          map (L.describe) logs
+            `shouldBe` [unlines'
+            [ "(32:7)-(32:26)    stencil readOnce, backward(depth=1, dim=1) :: a"
+            , "(26:8)-(26:29)    stencil readOnce, pointed(dim=1)*pointed(dim=2) :: a"
+            , "(24:8)-(24:53)    stencil readOnce, pointed(dim=1)*centered(depth=1, dim=2) \
+                                     \+ centered(depth=1, dim=1)*pointed(dim=2) :: a"]
+            ]
 
       it "stencil check" $
-         show (runSingleFileAnalysis check program)
-           `shouldBe`
-           "\ntests/fixtures/Specification/Stencils/example2.f\n\
-            \(23:1)-(23:78)    Correct.\n(31:1)-(31:56)    Correct."
+        testSingleFileAnalysis example2In (generalizePureAnalysis . check) $ \report -> do
+          let res = report ^?! arResult . _ARSuccess
+          show res
+            `shouldBe`
+            "(23:1)-(23:78)    Correct.\n(31:1)-(31:56)    Correct."
 
-    let example4In = fixturesDir </> "example4.f"
-    [(program,_)] <- runIO $ readParseSrcDir emptyModFiles example4In []
+    let example4In = testInputSources (fixturesDir </> "example4.f")
 
     describe "integration test on inference for example4.f" $
       it "stencil infer" $
-         show (analysisResult $ runSimpleAnalysis (infer False '=') emptyModFiles program)
-           `shouldBe`
-            "\ntests/fixtures/Specification/Stencils/example4.f\n\
-             \(6:8)-(6:33)    stencil readOnce, pointed(dim=1) :: x"
+        testSingleFileAnalysis example4In (generalizePureAnalysis . infer False '=') $ \report -> do
+          let logs = report ^.. arMessages . traverse . L._MsgInfo . L.lmMsg
+          logs
+            `shouldBe`
+             [ "(6:8)-(6:33)    stencil readOnce, pointed(dim=1) :: x"
+             ]
 
     describe "integration test on inference for example5" $
       describe "stencil synth" $ do
@@ -291,55 +302,71 @@ spec =
         "inserts correct access specification"
       assertStencilSynthResponse "example12.f"
         "reports errors when conflicting stencil exists"
-        "\nEncountered the following errors when checking stencil specs for 'tests/fixtures/Specification/Stencils/example12.f'\n\n\
-\(8:1)-(8:52)    Not well specified.\n\
-\        Specification is:\n\
-\                stencil readOnce, backward(depth=1, dim=1) :: a\n\
-\\n\
-\        but at (9:8)-(9:32) the code behaves as\n\
-\                stencil readOnce, forward(depth=1, dim=1) :: a\n\n\
-\Please resolve these errors, and then run synthesis again."
+        [unlines'
+         [ ""
+         , "Encountered the following errors when checking stencil specs for 'tests/fixtures/Specification/Stencils/example12.f'"
+         , ""
+         , "(8:1)-(8:52)    Not well specified."
+         , "        Specification is:"
+         , "                stencil readOnce, backward(depth=1, dim=1) :: a"
+         , ""
+         , "        but at (9:8)-(9:32) the code behaves as"
+         , "                stencil readOnce, forward(depth=1, dim=1) :: a"
+         , ""
+         , "Please resolve these errors, and then run synthesis again."
+         ]]
       assertStencilSynthResponseOut "example14.f"
         "warns when duplicate stencils exist, but continues"
-        "\nEncountered the following errors when checking stencil specs for 'tests/fixtures/Specification/Stencils/example14.f'\n\n\
-\(10:1)-(10:49)    Warning: Duplicate specification."
+        [unlines'
+         [ ""
+         , "Encountered the following errors when checking stencil specs for 'tests/fixtures/Specification/Stencils/example14.f'"
+         , ""
+         , "(10:1)-(10:49)    Warning: Duplicate specification."
+         ]]
 
       assertStencilSynthResponseOut "example15.f"
         "warns when duplicate stencils exist (combined stencils), but continues"
-        "\nEncountered the following errors when checking stencil specs for 'tests/fixtures/Specification/Stencils/example15.f'\n\n\
-\(9:1)-(9:49)    Warning: Duplicate specification."
+        [unlines'
+         [ ""
+         , "Encountered the following errors when checking stencil specs for 'tests/fixtures/Specification/Stencils/example15.f'"
+         , ""
+         , "(9:1)-(9:49)    Warning: Duplicate specification."
+         ]]
 
       assertStencilCheck "example16.f"
-        "error trying to check an access spec against a stencil"
-        "\ntests/fixtures/Specification/Stencils/example16.f\n\
-\(8:1)-(8:50)    Not well specified.\n\
-\        Specification is:\n\
-\                access readOnce, forward(depth=1, dim=1) :: a\n\
-\\n\
-\        but at (9:8)-(9:32) the code behaves as\n\
-\                stencil readOnce, forward(depth=1, dim=1) :: a\n"
+        "error trying to check an access spec against a stencil" $ unlines $
+        [ "(8:1)-(8:50)    Not well specified."
+        , "        Specification is:"
+        , "                access readOnce, forward(depth=1, dim=1) :: a"
+        , ""
+        , "        but at (9:8)-(9:32) the code behaves as"
+        , "                stencil readOnce, forward(depth=1, dim=1) :: a"
+        ]
 
       assertStencilCheck "example17.f"
-        "error trying to check an access spec against a stencil"
-        "\ntests/fixtures/Specification/Stencils/example17.f\n\
-\(8:1)-(8:51)    Not well specified.\n\
-\        Specification is:\n\
-\                stencil readOnce, forward(depth=1, dim=1) :: a\n\
-\\n\
-\        but at (9:8)-(9:29) the code behaves as\n\
-\                access readOnce, forward(depth=1, dim=1) :: a\n"
+        "error trying to check an access spec against a stencil" $ unlines $
+        [ "(8:1)-(8:51)    Not well specified."
+        , "        Specification is:"
+        , "                stencil readOnce, forward(depth=1, dim=1) :: a"
+        , ""
+        , "        but at (9:8)-(9:29) the code behaves as"
+        , "                access readOnce, forward(depth=1, dim=1) :: a"
+        ]
 
     describe "inference" $ do
       it "provides more information with evalmode on" $
-        assertStencilInference True "example-no-specs-simple.f90"
-          "\ntests/fixtures/Specification/Stencils/example-no-specs-simple.f90\n\
-          \(6:6)-(6:16)    stencil readOnce, pointed(dim=1) :: a\n\
-          \(6:6)-(6:16)    EVALMODE: assign to relative array subscript (tag: tickAssign)\n\n\
-          \(6:6)-(6:16)    EVALMODE: dimensionality=1 :: a\n"
+        assertStencilInference True "example-no-specs-simple.f90" $
+          [Text.unlines
+           [ "(6:6)-(6:16)    stencil readOnce, pointed(dim=1) :: a"
+           , "(6:6)-(6:16)    EVALMODE: assign to relative array subscript (tag: tickAssign)"
+           , ""
+           , "(6:6)-(6:16)    EVALMODE: dimensionality=1 :: a"
+           ]]
+
       it "provides less information with evalmode off" $
         assertStencilInference False "example-no-specs-simple.f90"
-          "\ntests/fixtures/Specification/Stencils/example-no-specs-simple.f90\n\
-          \(6:6)-(6:16)    stencil readOnce, pointed(dim=1) :: a"
+          [unlines' [ "(6:6)-(6:16)    stencil readOnce, pointed(dim=1) :: a"]
+          ]
 
     describe "synth/inference works correctly with nested loops" $ do
       assertStencilSynthNoWarn "nestedLoops.f90" "inserts correct specification"
@@ -364,33 +391,33 @@ spec =
 
   where -- Helpers go here for loading files and running analyses
         assertStencilCheck fileName testComment expected = do
-            let file = fixturesDir </> fileName
-            programs <- runIO $ readParseSrcDir emptyModFiles file []
-            let [(program,_)] = programs
-            it testComment $ (show . analysisResult . runSimpleAnalysis check emptyModFiles $ program)
-              `shouldBe` expected
+          let input = testInputSources (fixturesDir </> fileName)
+          it "testComment" $
+            testSingleFileAnalysis input (generalizePureAnalysis . check) $ \report -> do
+              let res = report ^?! arResult . _ARSuccess
+              show res `shouldBe` expected
 
-        assertStencilInference :: Bool -> FilePath -> String -> Expectation
-        assertStencilInference useEval fileName expected =
-          let file         = fixturesDir </> fileName
-          in do
-            [(program,_)] <- readParseSrcDir emptyModFiles file []
-            (show . analysisResult . runSimpleAnalysis (infer useEval '=') emptyModFiles $ program)
-              `shouldBe` expected
+        assertStencilInference :: Bool -> FilePath -> [L.Text] -> Expectation
+        assertStencilInference useEval fileName expected = do
+          let input = testInputSources (fixturesDir </> fileName)
+          testSingleFileAnalysis input (generalizePureAnalysis . infer useEval '=') $ \report -> do
+            let logs = report ^.. arMessages . traverse . L._MsgInfo . L.lmMsg
+            logs `shouldBe` expected
 
         assertStencilSynthDir expected dir fileName testComment =
-          let file         = dir </> fileName
-              version      = deduceVersion file
+          let input        = testInputSources (dir </> fileName)
+              version      = deduceVersion (dir </> fileName)
               expectedFile = expected dir fileName
           in do
-            let modFiles = emptyModFiles
-            program          <- runIO $ readParseSrcDir modFiles file []
-            programSrc       <- runIO $ readFile file
             synthExpectedSrc <- runIO $ readFile expectedFile
             it testComment $
-               map (B.unpack . runIdentity . flip (reprint (refactoring version)) (B.pack programSrc))
-                 (snd . analysisResult . runSimpleAnalysis (synth '=') modFiles . fmap fst $ program)
-                `shouldBe` [synthExpectedSrc]
+              testMultiFileAnalysisWithSrc input (generalizePureAnalysis . synth '=') $ \sources report -> do
+                let res = report ^?! arResult . _ARSuccess
+
+                    refactorings =
+                      zipWith (\pf -> B.unpack . runIdentity . reprint (refactoring version) pf) res sources
+
+                refactorings `shouldBe` [synthExpectedSrc]
 
         assertStencilSynthOnFile = assertStencilSynthDir
           (\d f -> d </> getExpectedSrcFileName f) fixturesDir
@@ -399,49 +426,51 @@ spec =
           (\d f -> d </> "expected" </> f) samplesDir
 
         assertStencilSynthResponse fileName testComment expectedResponse =
-            let file = fixturesDir </> fileName
-            in do
-              let modFiles = emptyModFiles
-              program    <- runIO $ readParseSrcDir modFiles file []
-              it testComment $ (show . fst . analysisResult . runSimpleAnalysis (synth '=') modFiles . fmap fst $ program)
-                `shouldBe` expectedResponse
+          let input = testInputSources (fixturesDir </> fileName)
+              modFiles = emptyModFiles
+          in do
+            it testComment $
+              testMultiFileAnalysis input (generalizePureAnalysis . synth '=') $ \report -> do
+                let logs = report ^.. arMessages . traverse . L._MsgInfo . L.lmMsg
+                logs `shouldBe` expectedResponse
 
         assertStencilSynthResponseOut fileName testComment expectedResponse =
           describe testComment $ do
             assertStencilSynthOnFile fileName "correct synthesis"
             assertStencilSynthResponse fileName "correct output" expectedResponse
 
-        assertStencilSynthNoWarn fileName testComment = assertStencilSynthResponseOut fileName testComment ""
+        assertStencilSynthNoWarn fileName testComment = assertStencilSynthResponseOut fileName testComment [""]
         fixturesDir = "tests" </> "fixtures" </> "Specification" </> "Stencils"
         samplesDir  = "samples" </> "stencils"
         getExpectedSrcFileName file =
           let oldExtension = takeExtension file
           in addExtension (replaceExtension file "expected") oldExtension
 
-runSingleFileAnalysis :: StencilsAnalysis a b -> a -> b
-runSingleFileAnalysis a = analysisResult . runSimpleAnalysis a emptyModFiles
-
 fixturesDir :: FilePath
 fixturesDir = "tests" </> "fixtures" </> "Specification" </> "Stencils"
 
 -- | Assert that the report of performing units checking on a file is as expected.
-inferReportWithMod :: [String] -> String -> String -> Expectation
+inferReportWithMod :: [String] -> String -> [L.Text] -> Expectation
 inferReportWithMod modNames fileName expectedReport = do
   let file = fixturesDir </> fileName
       modPaths = fmap (fixturesDir </>) modNames
+
   modFiles <- mapM mkTestModFile modPaths
-  [(pf,_)] <- readParseSrcDir modFiles file []
-  let report = analysisResult $ runStencilsAnalysis (infer False '=') modFiles pf
-  show report `shouldBe` expectedReport
+  [(pf, _)] <- readParseSrcDir modFiles file []
+
+  let report = runIdentity $ runAnalysisT (F.pfGetFilename pf) (const (return ())) LogError modFiles (infer False '=' pf)
+      logs = report ^.. arMessages . traverse . L._MsgInfo . L.lmMsg
+
+  map L.describe logs `shouldBe` expectedReport
 
 -- | Helper for producing a basic ModFile from a (terminal) module file.
 mkTestModFile :: String -> IO ModFile
 mkTestModFile file = head <$> genModFiles compileStencils () file []
 
-crossModuleAUserReport :: String
+crossModuleAUserReport :: [L.Text]
 crossModuleAUserReport =
-  "\ntests/fixtures/Specification/Stencils/cross-module-a/user.f90\n\
-  \(7:6)-(7:16)    stencil readOnce, pointed(dim=1) :: b"
+  [unlines' [ "(7:6)-(7:16)    stencil readOnce, pointed(dim=1) :: b"]
+  ]
 
 -- Indices for the 2D five point stencil (deliberately in an odd order)
 fivepoint = [ Cons (-1) (Cons 0 Nil), Cons 0 (Cons (-1) Nil)
@@ -475,15 +504,19 @@ instance (Arbitrary (Vec n a), Arbitrary a) => Arbitrary (Vec (S n) a) where
                    return $ Cons x xs
 
 test2DSpecVariation a b (input, expectation) =
-    it ("format=" ++ show input) $
-       -- Test inference
-       indicesToSpec' ["i", "j"] [a, b] (map fromFormatToIx input)
-          `shouldBe` Just expectedSpec
+    it ("format=" ++ show input) $ do
+      -- Test inference
+      indicesToSpec' ["i", "j"] [a, b] (map fromFormatToIx input)
+        `shouldBe` Just expectedSpec
   where
     expectedSpec = Specification expectation True
     fromFormatToIx [ri,rj] = [ offsetToIx "i" ri, offsetToIx "j" rj ]
 
-indicesToSpec' ivs lhs ixs = fst $ runStencilInferer (indicesToSpec "a" lhs ixs) ivs Gr.empty emptyModFiles
+indicesToSpec' ivs lhs ixs =
+  let inferer = indicesToSpec "a" lhs ixs
+      analysis = runStencilInferer inferer ivs Gr.empty
+      report = runIdentity $ runAnalysisT "example" (const (return ())) LogError emptyModFiles analysis
+  in report ^?! arResult . _ARSuccess . _1
 
 variations =
   [ ( [ [0,0] ]
@@ -556,9 +589,9 @@ test3DSpecVariation (input, expectation) =
     it ("format=" ++ show input) $
       -- Test inference
       indicesToSpec' ["i", "j", "k"]
-                     [Neighbour "i" 0, Neighbour "j" 0, Neighbour "k" 0]
-                     (map fromFormatToIx input)
-           `shouldBe` Just expectedSpec
+             [Neighbour "i" 0, Neighbour "j" 0, Neighbour "k" 0]
+             (map fromFormatToIx input)
+        `shouldBe` Just expectedSpec
 
   where
     expectedSpec = Specification expectation True
@@ -581,6 +614,8 @@ variations3D =
 prop_extract_synth_inverse :: F.Name -> Int -> Bool
 prop_extract_synth_inverse v o =
      convIxToNeighbour [v] (offsetToIx v o) == Neighbour v o
+
+unlines' = Text.init . Text.unlines
 
 -- Local variables:
 -- mode: haskell

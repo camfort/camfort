@@ -12,7 +12,13 @@
 .*.swp
 .*.swo
 
+# Emacs files
+.dir-locals.el
+
 # build files files
 /camfort
 /dist
 /.stack-work
+
+# test files
+/equiv.expected.f90
