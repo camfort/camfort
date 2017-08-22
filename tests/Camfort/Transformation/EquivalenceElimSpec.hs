@@ -13,24 +13,33 @@
    See the License for the specific language governing permissions and
    limitations under the License.
 -}
+{-# LANGUAGE FlexibleContexts    #-}
+{-# LANGUAGE OverloadedStrings   #-}
 {-# LANGUAGE ScopedTypeVariables #-}
-{-# LANGUAGE FlexibleContexts #-}
 
 module Camfort.Transformation.EquivalenceElimSpec (spec) where
 
-import Control.Arrow (second)
-import System.FilePath
-import System.Directory
-import System.IO.Silently (capture_)
+import           Control.Arrow                          (second)
+import           Control.Monad                          (forM_)
+import           System.Directory
+import           System.FilePath
+import           System.IO.Silently                     (capture_)
 
-import Test.Hspec
+import           Control.Lens
 
-import Camfort.Analysis
-  (analysisDebug, analysisInput, analysisResult, branchAnalysis)
-import Camfort.Analysis.ModFile (simpleCompiler)
-import Camfort.Transformation.EquivalenceElim
-import Camfort.Functionality
-import Camfort.Input
+import           Test.Hspec
+
+import qualified Language.Fortran.Util.Position         as FU
+
+import           Camfort.Analysis                       hiding (describe)
+import           Camfort.Analysis.Logger                hiding (describe)
+import           Camfort.Analysis.ModFile               (MFCompiler,
+                                                         genModFiles,
+                                                         simpleCompiler)
+import           Camfort.Analysis.TestUtils
+import           Camfort.Functionality
+import           Camfort.Input
+import           Camfort.Transformation.EquivalenceElim
 
 samplesBase :: FilePath
 samplesBase = "tests" </> "fixtures" </> "Transformation"
@@ -43,8 +52,16 @@ readExpected filename = do
 readActual :: FilePath -> IO String
 readActual argumentFilename = do
   let argumentPath = samplesBase </> argumentFilename
-  let outFile = argumentPath `addExtension` "out"
-  equivalences argumentPath Nothing [] outFile
+      outFile = argumentPath `addExtension` "out"
+
+      env = CamfortEnv
+        { ceInputSources = argumentPath
+        , ceIncludeDir = Nothing
+        , ceExcludeFiles = []
+        , ceLogLevel = LogInfo
+        }
+
+  equivalences outFile env
   actual <- readFile outFile
   removeFile outFile
   return actual
@@ -56,20 +73,31 @@ spec =
       actual <- runIO $ readActual "equiv.f90"
       it "it eliminates equivalence statements" $
         actual `shouldBe` expected
-      ----
-      let rfun = do
-            pfs <- analysisInput
-            resA <- mapM (branchAnalysis refactorEquivalences) pfs
-            let (reports, results) = (fmap analysisDebug resA, fmap analysisResult resA)
-            pure (mconcat reports, fmap (pure :: a -> Either () a) results)
-      let infile = samplesBase </> "equiv.f90"
-      report <- runIO . capture_ $ doRefactor rfun simpleCompiler () infile infile [] "equiv.expected.f90"
-      it "report is as expected" $
-        report `shouldBe` expectedReport
 
-expectedReport :: String
-expectedReport =
-  "Writing equiv.expected.f90\n\
-  \6:3: removed equivalence \n\
-  \14:3: added copy due to refactored equivalence\n\
-  \15:3: added copy due to refactored equivalence\n\n"
+      let infile = samplesBase </> "equiv.f90"
+
+          input = testInputSources infile & tiIncludeDir .~ Just infile
+
+      it "log is as expected" $
+        testSingleFileAnalysis input (generalizePureAnalysis . refactorEquivalences) $ \report -> do
+          let infoLogs = report ^.. arMessages . traverse . _MsgInfo
+
+              addCopyMsg = "added copy due to refactored equivalence"
+              removeMsg = "removed equivalence"
+
+              expectedLogs =
+                [ ((15, 3), addCopyMsg)
+                , ((14, 3), addCopyMsg)
+                , ((6, 3), removeMsg)
+                ]
+
+              spanMatches (pl, pc) (FU.SrcSpan (FU.Position _ pc1 pl1) (FU.Position _ pc2 pl2)) =
+                pl == pl1 && pl == pl2 &&
+                pc == pc1 && pc == pc2
+
+              matchesExpected (expectedSpan, expectedText) message =
+                spanMatches expectedSpan (message ^?! lmOrigin . _Just . oSpan) &&
+                expectedText == message ^. lmMsg
+
+          forM_ (zip infoLogs expectedLogs) $ \(message, expectedMessage) ->
+            message `shouldSatisfy` matchesExpected expectedMessage

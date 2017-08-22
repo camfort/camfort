@@ -17,19 +17,22 @@ module Camfort.Specification.Units.Analysis.Consistent
   ) where
 
 import           Control.Monad.State (get)
+import           Control.Monad.Reader (asks)
 import           Data.Data
 import           Data.Generics.Uniplate.Operations
 import           Data.List (find, group, sort)
 import qualified Data.Map.Strict as M
 import           Data.Maybe (maybeToList, maybe)
 
-import           Camfort.Analysis (analysisInput, writeDebug)
+import           Camfort.Analysis (Describe(..))
 import           Camfort.Analysis.Annotations
-import           Camfort.Specification.Units.Analysis (UnitsAnalysis, runInference)
+import           Camfort.Specification.Units.Analysis (UnitAnalysis, runInference)
 import qualified Camfort.Specification.Units.Annotation as UA
 import           Camfort.Specification.Units.Environment
 import           Camfort.Specification.Units.InferenceBackendSBV (inconsistentConstraints)
 import           Camfort.Specification.Units.Monad
+import           Camfort.Specification.Units.MonadTypes
+import qualified Camfort.Specification.Units.BackendTypes as B
 
 import qualified Language.Fortran.AST           as F
 import qualified Language.Fortran.Util.Position as FU
@@ -45,6 +48,8 @@ instance Show ConsistencyReport where
   show (Consistent pf nVars) = concat ["\n", fname, ": Consistent ", show nVars, " variables checked."]
     where fname = F.pfGetFilename pf
   show (Inconsistent e) = show e
+
+instance Describe ConsistencyReport
 
 data ConsistencyError =
   Inconsistency (F.ProgramFile UA) Constraints
@@ -76,7 +81,8 @@ instance Show ConsistencyError where
 
       findCon :: Constraint -> Maybe FU.SrcSpan
       findCon con = lookupWith (eq con) constraints
-        where eq c1 c2 = or [ conParamEq c1 c2' | c2' <- universeBi c2 ]
+        where -- constraintToDim normalises as it builds the Dim, so we can use dimParamEq directly.
+              eq c1 c2 = or [ B.constraintToDim c1 `B.dimParamEq` B.constraintToDim c2' | c2' <- universeBi c2 ]
       constraints = [ (c, srcSpan)
                     | x <- universeBi pf :: [F.Expression UA]
                     , let srcSpan = FU.getSpan x
@@ -109,17 +115,19 @@ instance Show ConsistencyError where
                     , c <- maybeToList (UA.getConstraint x)
                     ]
 
+instance Describe ConsistencyError
+
 {-| Check units-of-measure for a program -}
-checkUnits :: UnitsAnalysis (F.ProgramFile Annotation) ConsistencyReport
+checkUnits :: UnitAnalysis ConsistencyReport
 checkUnits = do
-  pf <- analysisInput
-  (eCons, state, logs) <- runInference runInconsistentConstraints
+  pf <- asks unitProgramFile
+  (eCons, state) <- runInference runInconsistentConstraints
     -- number of 'real' variables checked, e.g. not parametric
   let
     nVars = M.size . M.filter (not . isParametricUnit) $ usVarUnitMap state
     pfUA :: F.ProgramFile UA
     pfUA = usProgramFile state -- the program file after units analysis is done
-  writeDebug logs
+
   pure $ case eCons of
            Nothing     -> Consistent pf nVars
            (Just cons) -> Inconsistent $ Inconsistency pfUA cons

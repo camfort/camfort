@@ -27,19 +27,10 @@ module Camfort.Specification.Stencils.InferenceFrontend
   , stencilSynthesis
   ) where
 
-import Control.Monad.State.Strict
-import Control.Monad.Writer.Strict hiding (Product)
+import Control.Monad.RWS.Strict
+import Control.Monad.Writer.Strict
 
 import           Camfort.Analysis
-  ( Analysis
-  , analysisDebug
-  , analysisInput
-  , analysisModFiles
-  , analysisParams
-  , analysisResult
-  , branchAnalysis
-  , runAnalysis
-  , writeDebug )
 import           Camfort.Analysis.Annotations
 import           Camfort.Analysis.CommentAnnotator
 import           Camfort.Helpers (collect, descendReverseM, descendBiReverseM)
@@ -63,7 +54,6 @@ import qualified Language.Fortran.AST               as F
 import qualified Language.Fortran.Analysis          as FA
 import qualified Language.Fortran.Analysis.BBlocks  as FAB
 import qualified Language.Fortran.Analysis.DataFlow as FAD
-import           Language.Fortran.Util.ModFile (ModFiles)
 import qualified Language.Fortran.Util.Position     as FU
 
 import Data.Data
@@ -97,25 +87,25 @@ data InferEnv = IE
 type LogLine = (FU.SrcSpan, Either [([Variable], Specification)] (String,Variable))
 -- The core of the inferer works within this monad
 
-type Inferer = Analysis InferEnv [LogLine] InferState ()
+type Inferer = RWST InferEnv [LogLine] InferState StencilsAnalysis
 
 getExistingSpecs :: Inferer [(Specification, FU.SrcSpan, Variable)]
-getExistingSpecs = ieExistingSpecs <$> analysisParams
+getExistingSpecs = asks ieExistingSpecs
 
 getFlowsGraph :: Inferer (FAD.FlowsGraph (SA.StencilAnnotation A))
-getFlowsGraph = ieFlowsGraph <$> analysisParams
+getFlowsGraph = asks ieFlowsGraph
 
 getMetaInfo :: Inferer F.MetaInfo
-getMetaInfo = ieMetaInfo <$> analysisParams
+getMetaInfo = asks ieMetaInfo
 
 getMarker :: Inferer Char
-getMarker = ieMarker <$> analysisParams
+getMarker = asks ieMarker
 
 getUseEval :: Inferer Bool
-getUseEval = ieUseEval <$> analysisParams
+getUseEval = asks ieUseEval
 
 getDoSynth :: Inferer Bool
-getDoSynth = ieDoSynth <$> analysisParams
+getDoSynth = asks ieDoSynth
 
 runInferer :: CheckResult
            -> Bool
@@ -124,20 +114,18 @@ runInferer :: CheckResult
            -> F.MetaInfo
            -> FAD.InductionVarMapByASTBlock
            -> FAD.FlowsGraph (SA.StencilAnnotation A)
-           -> ModFiles
            -> Inferer a
-           -> IO (a, [LogLine])
-runInferer cr useEval doSynth marker mi ivmap flTo mfs inferer = do
-  let env = IE
-        { ieExistingSpecs = existingStencils cr
-        , ieFlowsGraph    = flTo
-        , ieUseEval       = useEval
-        , ieDoSynth       = doSynth
-        , ieMarker        = marker
-        , ieMetaInfo      = mi
-        }
-  res <- runAnalysis inferer env (IS ivmap []) mfs ()
-  return (analysisResult res, analysisDebug res)
+           -> StencilsAnalysis (a, [LogLine])
+runInferer cr useEval doSynth marker mi ivmap flTo inferer = do
+  evalRWST inferer env (IS ivmap [])
+  where env = IE
+          { ieExistingSpecs = existingStencils cr
+          , ieFlowsGraph    = flTo
+          , ieUseEval       = useEval
+          , ieDoSynth       = doSynth
+          , ieMarker        = marker
+          , ieMetaInfo      = mi
+          }
 
 -- | Run something only when eval mode is active.
 whenEval :: Inferer () -> Inferer ()
@@ -159,30 +147,27 @@ specToSynSpec spec = let ?renv = [] in
 -- | Main stencil inference code
 stencilInference :: Bool
                  -> Char
-                 -> StencilsAnalysis (F.ProgramFile SA) [LogLine]
-stencilInference useEval marker = fst <$> stencilSynthesis' useEval False marker
+                 -> F.ProgramFile SA
+                 -> StencilsAnalysis [LogLine]
+stencilInference useEval marker pf = execWriterT $ stencilSynthesis' useEval False marker pf
 
 stencilSynthesis :: Char
-                 -> StencilsAnalysis
-                    (F.ProgramFile SA)
-                    ([LogLine], F.ProgramFile SA)
-stencilSynthesis marker = do
-  pf <- analysisInput
-  let (pf', _log0) = runWriter (annotateComments Parser.specParser (const . const . pure $ ()) pf)
-  writeDebug _log0
-  analysisResult <$> branchAnalysis (stencilSynthesis' False True marker) pf'
+                 -> F.ProgramFile SA
+                 -> StencilsAnalysis (F.ProgramFile SA, [LogLine])
+stencilSynthesis marker pf = do
+  let (pf', _log0 :: String) = runWriter (annotateComments Parser.specParser (const . const . pure $ ()) pf)
+  logDebug' pf $ describe _log0
+  runWriterT $ stencilSynthesis' False True marker pf'
 
 -- | Main stencil synthesis code
 stencilSynthesis' :: Bool
                   -> Bool
                   -> Char
-                  -> StencilsAnalysis
+                  -> F.ProgramFile SA
+                  -> WriterT [LogLine] StencilsAnalysis
                      (F.ProgramFile SA)
-                     ([LogLine], F.ProgramFile SA)
-stencilSynthesis' useEval doSynth marker = do
-  pf@(F.ProgramFile mi pus) <- analysisInput
-  checkRes <- stencilChecking
-  mfs <- analysisModFiles
+stencilSynthesis' useEval doSynth marker pf@(F.ProgramFile mi pus) = do
+  checkRes <- lift $ stencilChecking pf
 
   let
     -- get map of AST-Block-ID ==> corresponding AST-Block
@@ -192,9 +177,9 @@ stencilSynthesis' useEval doSynth marker = do
     -- get map of variable name ==> { defining AST-Block-IDs }
     dm    = FAD.genDefMap bm
 
-    -- Run inference per program unit
+    -- -- Run inference per program unit
     perPU :: F.ProgramUnit SA
-          -> WriterT [LogLine] IO (F.ProgramUnit SA)
+          -> WriterT [LogLine] StencilsAnalysis (F.ProgramUnit SA)
     perPU pu | Just _ <- FA.bBlocks $ F.getAnnotation pu = do
         let -- Analysis/infer on blocks of just this program unit
             blocksM = mapM perBlockInfer (F.programUnitBody pu)
@@ -214,14 +199,14 @@ stencilSynthesis' useEval doSynth marker = do
             -- identify every loop by its back-edge
             ivMap = FAD.genInductionVarMapByASTBlock beMap gr
 
-        (pu', log) <- liftIO $ runInferer checkRes useEval doSynth marker mi ivMap flTo mfs pum
+        (pu', log) <- lift $ runInferer checkRes useEval doSynth marker mi ivMap flTo pum
         tell log
         pure pu'
     perPU pu = pure pu
 
-  (pus', log1) <- liftIO $ runWriterT (transformBiM perPU pus)
+  pus' <- transformBiM perPU pus
 
-  pure (log1, F.ProgramFile mi pus')
+  pure (F.ProgramFile mi pus')
 
 {- *** 1 . Core inference over blocks -}
 
@@ -236,8 +221,7 @@ genSpecsAndReport span lhsIxs block = do
   let ivs = extractRelevantIVS ivmap block
   flowsGraph   <- getFlowsGraph
   -- Generate specification for the
-  mfs <- analysisModFiles
-  ((specs, visited), evalInfos) <- liftIO $ runStencilInferer (genSpecifications lhsIxs block) ivs flowsGraph mfs
+  ((specs, visited), evalInfos) <- lift $ runStencilInferer (genSpecifications lhsIxs block) ivs flowsGraph
   -- Remember which nodes were visited during this traversal
   modify (\state -> state { visitedNodes = visitedNodes state ++ visited })
   -- Report the specifications

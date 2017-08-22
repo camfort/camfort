@@ -28,8 +28,9 @@ module Camfort.Specification.Stencils.Generate
   ) where
 
 import           Control.Monad (void, when, zipWithM)
-import           Control.Monad.State.Strict (get, put, runState, State)
-import           Control.Monad.Writer.Strict (tell)
+import           Control.Monad.State.Strict (State, get, put, runState)
+import           Control.Monad.Writer.Strict (WriterT, runWriterT, tell)
+import           Control.Monad.Reader (ReaderT, runReaderT, asks)
 import           Data.Data (Data)
 import           Data.Foldable (foldrM)
 import           Data.Generics.Uniplate.Operations (transformBi, universeBi)
@@ -47,10 +48,10 @@ import           Language.Fortran.Util.ModFile (ModFiles)
 import qualified Language.Fortran.Util.Position     as FU
 
 import           Camfort.Analysis
-  (Analysis, analysisDebug, analysisParams, analysisResult, runAnalysis)
 import           Camfort.Helpers (collect)
 import qualified Camfort.Helpers.Vec as V
 import           Camfort.Specification.Stencils.Annotation ()
+import           Camfort.Specification.Stencils.Analysis
 import           Camfort.Specification.Stencils.InferenceBackend
 import           Camfort.Specification.Stencils.Model
   (Approximation(..), Multiplicity(..))
@@ -77,21 +78,20 @@ data SIEnv ann = SIEnv
   }
 
 -- | Analysis for working with low-level stencil inference.
-type StencilInferer ann = Analysis (SIEnv ann) EvalLog () ()
+type StencilInferer ann = ReaderT (SIEnv ann) (WriterT EvalLog StencilsAnalysis)
 
 -- | Get the list of in-scope induction variables.
 getIvs :: StencilInferer ann [Variable]
-getIvs = sieIvs <$> analysisParams
+getIvs = asks sieIvs
 
 -- | Get the FlowsGraph for the current analysis.
 getFlowsGraph :: StencilInferer ann (FAD.FlowsGraph ann)
-getFlowsGraph = sieFlowsGraph <$> analysisParams
+getFlowsGraph = asks sieFlowsGraph
 
-runStencilInferer :: StencilInferer ann a -> [Variable] -> FAD.FlowsGraph ann -> ModFiles -> IO (a, EvalLog)
-runStencilInferer si ivs flowsGraph mfs = do
+runStencilInferer :: StencilInferer ann a -> [Variable] -> FAD.FlowsGraph ann -> StencilsAnalysis (a, EvalLog)
+runStencilInferer si ivs flowsGraph = do
   let senv = SIEnv { sieIvs = ivs, sieFlowsGraph = flowsGraph }
-  res <- runAnalysis si senv () mfs ()
-  return (analysisResult res, analysisDebug res)
+  runWriterT $ runReaderT si senv
 
 {-| Representation for indices as either:
      * neighbour indices

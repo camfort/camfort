@@ -27,6 +27,7 @@ import Control.Monad.State.Lazy
 import Control.Monad.Writer.Strict (execWriter, tell)
 
 import Data.Data
+import Data.Void
 import Data.Function (on)
 import Data.List
 import qualified Data.Map as M
@@ -39,7 +40,7 @@ import qualified Language.Fortran.Util.Position as FU
 import qualified Language.Fortran.ParserMonad as PM
 import qualified Language.Fortran.PrettyPrint as PP
 
-import Camfort.Analysis (SimpleAnalysis, analysisInput, writeDebug)
+import Camfort.Analysis
 import Camfort.Helpers
 import Camfort.Helpers.Syntax
 import Camfort.Analysis.Annotations
@@ -67,15 +68,15 @@ type (:?) a (b :: k) = a
 -- Top-level functions for eliminating common blocks in a set of files
 commonElimToModules ::
        Directory
-    -> SimpleAnalysis [F.ProgramFile A] ([F.ProgramFile A], [F.ProgramFile A])
+    -> [F.ProgramFile A]
+    -> PureAnalysis Void Void ([F.ProgramFile A], [F.ProgramFile A])
 
 -- Eliminates common blocks in a program directory (and convert to modules)
-commonElimToModules d = do
-  pfs <- analysisInput
+commonElimToModules d pfs = do
   let (pfs', (r, cg)) = runState (analyseAndRmCommons pfs) ("", [])
       (r', pfM)       = introduceModules meta d cg
       pfs''           = updateUseDecls pfs' cg
-  writeDebug . mkReport $ r ++ r'
+  logDebug' pfs $ describe $ r ++ r'
   pure (pfs'', pfM)
   where
     meta = F.MetaInfo PM.Fortran90 ""

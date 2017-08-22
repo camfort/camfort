@@ -15,12 +15,13 @@
 -}
 {-# LANGUAGE FlexibleInstances #-}
 {-# LANGUAGE FlexibleContexts #-}
+{-# LANGUAGE OverloadedStrings #-}
 
 module Camfort.Transformation.DeadCode
   ( deadCode
   ) where
 
-import Camfort.Analysis (SimpleAnalysis, analysisInput, writeDebug)
+import Camfort.Analysis
 import Camfort.Analysis.Annotations
 import qualified Language.Fortran.Analysis.DataFlow as FAD
 import qualified Language.Fortran.Analysis.Renaming as FAR
@@ -34,6 +35,12 @@ import qualified Data.IntMap as IM
 import qualified Data.Set as S
 import Data.Generics.Uniplate.Operations
 import Data.Maybe
+import Control.Monad (guard)
+import Control.Monad.Trans.Writer (WriterT, runWriterT, tell)
+import Data.Monoid (Any(..), (<>))
+import Data.Void (Void)
+
+type DeadCodeAnalysis = PureAnalysis Void Void
 
 
 -- Eliminate dead code from a program, based on the fortran-src
@@ -41,11 +48,9 @@ import Data.Maybe
 
 -- Currently only strips out dead code through simple variable assignments
 -- but not through array-subscript assignmernts
-deadCode :: Bool -> SimpleAnalysis (F.ProgramFile A) (F.ProgramFile A)
-deadCode flag = do
-  pf <- analysisInput
+deadCode :: Bool -> F.ProgramFile A -> DeadCodeAnalysis (F.ProgramFile A)
+deadCode flag pf = do
   let
-    (report, _) = deadCode' flag lva pf'
     -- initialise analysis
     pf'   = FAB.analyseBBlocks . FAR.analyseRenames . FA.initAnalysis $ pf
     -- get map of program unit ==> basic block graph
@@ -56,35 +61,35 @@ deadCode flag = do
     gr    = FAB.superBBGrGraph sgr
     -- live variables
     lva   = FAD.liveVariableAnalysis gr
-  writeDebug report
+
+  deadCode' flag lva pf'
   pure $ fmap FA.prevAnnotation pf'
 
 deadCode' :: Bool -> FAD.InOutMap (S.Set F.Name)
                   -> F.ProgramFile (FA.Analysis A)
-                  -> (Report, F.ProgramFile (FA.Analysis A))
-deadCode' flag lva pf =
-    if report == mempty
-      then (report, pf')
-      else (report, pf') >>= deadCode' flag lva
-  where
-    (report, pf') = transformBiM (perStmt flag lva) pf
+                  -> DeadCodeAnalysis (F.ProgramFile (FA.Analysis A))
+deadCode' flag lva pf = do
+  (pf', Any eliminated) <- runWriterT $ transformBiM (perStmt flag lva) pf
+  if eliminated
+    then deadCode' flag lva pf'
+    else return pf'
 
 -- Core of the transformation happens here on assignment statements
 perStmt :: Bool
         -> FAD.InOutMap (S.Set F.Name)
-        -> F.Statement (FA.Analysis A) -> (Report, F.Statement (FA.Analysis A))
+        -> F.Statement (FA.Analysis A) -> WriterT Any DeadCodeAnalysis (F.Statement (FA.Analysis A))
 perStmt flag lva x@(F.StExpressionAssign a sp@(FU.SrcSpan s1 _) e1 e2)
      | pRefactored (FA.prevAnnotation a) == flag =
-  fromMaybe (mkReport "", x) $
-    do label <- FA.insLabel a
-       (_, out) <- IM.lookup label lva
-       assignedName <- extractVariable e1
-       if assignedName `S.member` out
-         then Nothing
-         else -- Dead assignment
-           Just (mkReport report, F.StExpressionAssign a' (dropLine sp) e1 e2)
-             where report =  "o" ++ show s1 ++ ": removed dead code\n"
-                   -- Set annotation to mark statement for elimination in
-                   -- the reprinter
-                   a' = onPrev (\ap -> ap {refactored = Just s1}) a
+       let output = do
+             logInfo' x $ "o" <> describe (show s1) <> ": removed dead code"
+             tell (Any True)
+             return $ F.StExpressionAssign a' (dropLine sp) e1 e2
+               where a' = onPrev (\ap -> ap {refactored = Just s1}) a
+                    -- Set annotation to mark statement for elimination in
+                    -- the reprinter
+       in maybe (return x) (const output) $ do
+         label <- FA.insLabel a
+         (_, out) <- IM.lookup label lva
+         assignedName <- extractVariable e1
+         guard (not (assignedName `S.member` out))
 perStmt _ _ x = return x

@@ -63,7 +63,7 @@ import Numeric.LinearAlgebra.Devel (
 -- inference or checking to work.
 criticalVariables :: Constraints -> [UnitInfo]
 criticalVariables cons = case engine cons of
-  Left (core, labeledCons) -> trace (unlines $ map show labeledCons ++ ["Unsatisfiable: " ++ show core]) $ []
+  Left (core, labeledCons) -> []
   Right (_, suggests) -> suggests
 
 -- | Returns just the list of constraints that were identified as
@@ -209,21 +209,14 @@ engine cons = unsafePerformIO $ do
           return ("c"++show i, augCon)
 
         query $ do
-          -- obtain
+          -- obtain at least 1 name, value mapping for each variable if consistent
           e_nvMap <- computeInitialNVMap nameSIntMap
           case e_nvMap of
-            Left core -> return $ Left (core, labeledCons)
+            Left core -> return $ Left (core, labeledCons) -- inconsistent
             Right nvMap -> do
-              let underdet = identifyMultipleVISet nameUIMap nvMap
-
-              -- for now we'll suggest all underdetermined units but
-              -- this should be cut down by considering the
-              -- relationships between variables, much like we would
-              -- do for polymorphic vars.
-              let suggests = [ v | v@(UnitVar {}) <- underdet ] ++
-                             [ v | v@(UnitParamVarUse {}) <- underdet ]
-
+              -- interpret the suggested values as a list of substitutions
               assignSubs <- interpret nameUIMap nvMap
+
               -- convert to Dim format
               let dims = map (\ (lhs, rhs) -> (dimFromUnitInfos (lhs ++ negateCons rhs))) shiftedCons
 
@@ -237,7 +230,18 @@ engine cons = unsafePerformIO $ do
               let polyAssigns = MatrixBackend.genUnitAssignments polyCons
 
               -- convert polymorphic assignments into substitution format
-              let polySubs = subFromList [ (u, dimFromUnitInfo units) | ([UnitPow u@(UnitParamVarAbs _) k], units) <- polyAssigns, k `approxEq` 1 ]
+              let polySubs = subFromList [ (u, dimFromUnitInfo units)
+                                         | ([UnitPow u@(UnitParamVarAbs _) k], units) <- polyAssigns
+                                         , k `approxEq` 1 ]
+
+              let criticals = MatrixBackend.criticalVariables polyCons
+
+              -- for now we'll suggest all underdetermined units but
+              -- this should be cut down by considering the
+              -- relationships between variables, much like we would
+              -- do for polymorphic vars.
+              let suggests = [ v | v@(UnitVar {}) <- criticals ] ++
+                             [ v | v@(UnitParamVarUse {}) <- criticals ]
 
               return . Right . (,suggests) $ composeSubs polySubs assignSubs
 

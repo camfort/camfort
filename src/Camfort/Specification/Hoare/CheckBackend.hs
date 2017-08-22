@@ -1,13 +1,18 @@
 {-# LANGUAGE FlexibleContexts           #-}
 {-# LANGUAGE FlexibleInstances          #-}
+{-# LANGUAGE FunctionalDependencies     #-}
 {-# LANGUAGE GeneralizedNewtypeDeriving #-}
 {-# LANGUAGE LambdaCase                 #-}
+{-# LANGUAGE MultiParamTypeClasses      #-}
 {-# LANGUAGE NamedFieldPuns             #-}
+{-# LANGUAGE OverloadedStrings          #-}
 {-# LANGUAGE ScopedTypeVariables        #-}
 {-# LANGUAGE TemplateHaskell            #-}
 {-# LANGUAGE TypeSynonymInstances       #-}
 {-# OPTIONS_GHC -Wall #-}
 {-# OPTIONS_GHC -fno-warn-unused-top-binds #-}
+
+-- TODO: More precise error and logging origins
 
 module Camfort.Specification.Hoare.CheckBackend
   ( AnnotatedProgramUnit(..)
@@ -16,18 +21,16 @@ module Camfort.Specification.Hoare.CheckBackend
   , apuPU
   , HoareCheckResult(..)
   , HoareBackendError(..)
-  , HoareBackendErrorKind(..)
   , checkPU
   ) where
 
 import           Control.Exception                      (Exception (..))
 import           Control.Lens
-import           Data.Foldable (foldlM)
 import           Control.Monad.Except
 import           Control.Monad.Reader
-import           Control.Monad.Writer.Strict
-import           Control.Monad.State.Strict
 import           Control.Monad.RWS.Strict
+import           Control.Monad.State.Strict
+import           Data.Foldable                          (foldlM)
 import           Data.Generics.Uniplate.Operations
 import           Data.Map                               (Map)
 import           Data.Maybe                             (isJust)
@@ -36,8 +39,8 @@ import qualified Language.Fortran.Analysis              as F
 import qualified Language.Fortran.AST                   as F
 import qualified Language.Fortran.Util.Position         as F
 
-import qualified Camfort.Analysis                       as CA
-import           Camfort.Analysis.Annotations           (Report, mkReport)
+import           Camfort.Analysis
+import           Camfort.Analysis.Logger                (Text)
 import           Camfort.Specification.Hoare.Annotation
 import           Camfort.Specification.Hoare.Syntax
 import           Camfort.Specification.Hoare.Translate
@@ -59,7 +62,7 @@ data AnnotatedProgramUnit =
   , _apuPU             :: F.ProgramUnit HA
   }
 
-data HoareBackendErrorKind
+data HoareBackendError
   = VerifierError (VerifierError NamePair FExpr)
   | TranslateError0 (TranslateError ())
   -- ^ Unit errors come from translating annotation formulae
@@ -79,7 +82,7 @@ data HoareBackendErrorKind
   -- ^ The while block had no associated invariant
   deriving (Show)
 
-instance Exception HoareBackendErrorKind where
+instance Exception HoareBackendError where
   displayException = \case
     VerifierError e -> "verifier error: " ++ displayException e
     TranslateError0 te -> "translation error: " ++ displayException te
@@ -95,24 +98,17 @@ instance Exception HoareBackendErrorKind where
       "found a `do while` block with no invariant; " ++
       "invariant annotations must appear at the start of every `do while` loop"
 
-data HoareBackendError =
-  HoareBackendError
-  { hbeSpan :: Maybe F.SrcSpan
-  , hbeKind :: HoareBackendErrorKind
-  }
-  deriving (Show)
+instance Describe HoareBackendError where
+  describe = describe . displayException
 
-instance Exception HoareBackendError where
-  displayException HoareBackendError{ hbeSpan, hbeKind }
-    | Just sp <- hbeSpan = "error at " ++ show sp ++ ": " ++ displayException hbeKind
-    | otherwise = "error: " ++ displayException hbeKind
+type HoareAnalysis = AnalysisT HoareBackendError () IO
 
 data HoareCheckResult = HoareCheckResult Bool
   deriving (Show)
 
 data CheckHoareState =
   CheckHoareState
-  { _hsCursor :: Maybe F.SrcSpan
+  { _hsCursor :: F.SrcSpan
   }
 
 type ScopeVars = Map SourceName (SomeVar NamePair)
@@ -120,15 +116,15 @@ type ScopeVars = Map SourceName (SomeVar NamePair)
 data CheckHoareEnv =
   CheckHoareEnv
   { _heImplicitVars :: Bool
-  , _heVarsInScope :: ScopeVars
+  , _heVarsInScope  :: ScopeVars
   -- ^ The variables in scope. Keyed by source name, and values have unique
   -- names.
   }
 
-initialState :: CheckHoareState
-initialState =
+initialState :: F.SrcSpan -> CheckHoareState
+initialState sp =
   CheckHoareState
-  { _hsCursor = Nothing
+  { _hsCursor = sp
   }
 
 emptyEnv :: CheckHoareEnv
@@ -142,38 +138,46 @@ makeLenses ''CheckHoareEnv
 --  Main function
 --------------------------------------------------------------------------------
 
-checkPU :: AnnotatedProgramUnit -> CA.SimpleAnalysis x (Either HoareBackendError HoareCheckResult, Report)
-checkPU apu = runCheckHoare $ do
+checkPU :: AnnotatedProgramUnit -> HoareAnalysis HoareCheckResult
+checkPU apu = do
+
+  let pu = apu ^. apuPU
 
   (bodyTriple, env) <- flip runStateT emptyEnv $ do
-    logCheck $ " - Setting up"
+    logInfo' pu $ " - Setting up"
 
     body <- initialSetup (apu ^. apuPU)
 
-    preconds <- readerOfState $ doTranslate $ traverse translateFormula (apu ^. apuPreconditions)
-    postconds <- readerOfState $ doTranslate $ traverse translateFormula (apu ^. apuPostconditions)
+    let translateFormulae =
+            readerOfState
+          . doTranslate (lift . lift . failAnalysis' pu)
+          . traverse translateFormula
 
-    logCheck $ " - Interpreting pre- and postconditions"
+    preconds <- translateFormulae (apu ^. apuPreconditions)
+    postconds <- translateFormulae (apu ^. apuPostconditions)
+
+    logInfo' pu $ " - Interpreting pre- and postconditions"
 
     let precond = propAnd preconds
         postcond = propAnd postconds
 
-    logCheck $ " - Found preconditions: " ++ pretty precond
-    logCheck $ " - Found postconditions: " ++ pretty postcond
+    logInfo' pu $ " - Found preconditions: " <> describe (pretty precond)
+    logInfo' pu $ " - Found postconditions: " <> describe (pretty postcond)
 
     return (precond, postcond, body)
 
-  logCheck $ " - Computing verification conditions"
+  logInfo' pu $ " - Computing verification conditions"
 
-  (_, vcs) <- runGenM env (genBody bodyTriple)
+  (_, vcs) <- runGenM env (F.getSpan pu) (genBody bodyTriple)
 
-  logCheck $ " - Computed verification conditions:"
+  logInfo' pu $ " - Computed verification conditions:"
 
-  results <- traverse verifyVc vcs
+  -- TODO: More precise error origins
+  results <- traverse (verifyVc (failAnalysis' pu)) vcs
 
   forM_ (zip [1..] (zip results vcs)) $ \(i :: Int, (result, vc)) -> do
-    logCheck $ "   " ++ show i ++ ". " ++ pretty vc
-    unless result $ logCheck $ "    - Failed!"
+    logInfo' pu $ "   " <> describeShow i <> ". " <> describe (pretty vc)
+    unless result $ logInfo' pu $ "    - Failed!"
 
   return $ HoareCheckResult $ and results
 
@@ -181,23 +185,8 @@ checkPU apu = runCheckHoare $ do
 --  Check Monad
 --------------------------------------------------------------------------------
 
-newtype CheckHoare a = CheckHoare (ExceptT HoareBackendError (WriterT String IO) a)
-  deriving
-    ( Functor
-    , Applicative
-    , Monad
-    , MonadError HoareBackendError
-    , MonadWriter String
-    , MonadIO
-    )
+type CheckHoare = HoareAnalysis
 
-runCheckHoare :: CheckHoare a -> CA.SimpleAnalysis x (Either HoareBackendError a, Report)
-runCheckHoare (CheckHoare action) = do
-  (result, logs) <- liftIO $ runWriterT (runExceptT action)
-  return (result, mkReport logs)
-
-logCheck :: (MonadWriter String m) => String -> m ()
-logCheck = tell . (++ "\n")
 
 -- | Sets up the environment for checking the program unit, including reading
 -- past variable declarations. Returns the blocks after the variable declarations.
@@ -212,7 +201,7 @@ initialSetup pu = do
   -- need to treat as variables.
   mArgNames <- case pu of
     F.PUFunction _ _ (Just rettype) _ _ funargs retvalue _ _ -> do
-      rettype' <- runReaderT (doTranslate (translateTypeSpec rettype)) emptyEnv
+      rettype' <- runReaderT (doTranslate (lift . lift . failAnalysis' pu) (translateTypeSpec rettype)) emptyEnv
 
       heVarsInScope %= case retvalue of
         Just rv -> newVar rv rettype'
@@ -230,7 +219,7 @@ initialSetup pu = do
   -- Verify that all argument names have types associated with them.
   forM_ argNames $ \argName -> do
     hasType <- isJust <$> use (heVarsInScope . at argName)
-    unless hasType $ reportErrorAt pu (ArgWithoutDecl argName)
+    unless hasType $ lift $ failAnalysis' pu (ArgWithoutDecl argName)
 
   return restBody
 
@@ -242,6 +231,7 @@ readInitialBlocks = dropWhileM readInitialBlock
   where
     -- This function should return 'True' if the block may be part of the setup,
     -- and 'False' otherwise.
+    readInitialBlock :: F.Block HA -> StateT CheckHoareEnv CheckHoare Bool
     readInitialBlock bl = case bl of
       F.BlStatement _ _ _ st ->
         case st of
@@ -249,9 +239,9 @@ readInitialBlocks = dropWhileM readInitialBlock
             declVars <- forM (F.aStrip decls) $ \case
               -- TODO: Deal with declarations that include assignments
               F.DeclVariable _ _ e Nothing Nothing -> return e
-              _ -> reportErrorAt bl (UnsupportedBlock bl)
+              _ -> lift $ failAnalysis' bl (UnsupportedBlock bl)
 
-            declTy' <- readerOfState $ doTranslate $ translateTypeSpec declTy
+            declTy' <- readerOfState $ doTranslate (lift . lift . failAnalysis' bl) $ translateTypeSpec declTy
 
             forM_ declVars $ \v -> heVarsInScope %= newVar v declTy'
 
@@ -260,7 +250,7 @@ readInitialBlocks = dropWhileM readInitialBlock
           F.StImplicit _ _ Nothing -> do
             -- TODO: Deal with implicits properly
             return True
-          F.StImplicit _ _ (Just _) -> reportErrorAt bl (UnsupportedBlock bl)
+          F.StImplicit _ _ (Just _) -> lift $ failAnalysis' bl (UnsupportedBlock bl)
           _ -> return False
 
       F.BlComment{} -> return True
@@ -288,19 +278,12 @@ newFunctionVar pu ty =
 
   in at srcName .~ Just theVar
 
-reportErrorSimple :: (MonadError HoareBackendError m) => HoareBackendErrorKind -> m x
-reportErrorSimple err = throwError (HoareBackendError Nothing err)
-
-reportErrorAt :: (MonadError HoareBackendError m, F.Spanned a) => a -> HoareBackendErrorKind -> m x
-reportErrorAt x err = throwError (HoareBackendError (Just (F.getSpan x)) err)
-
-verifyVc :: TransFormula Bool -> CheckHoare Bool
--- verifyVc prop = return False
-verifyVc prop = do
+verifyVc :: (HoareBackendError -> CheckHoare Bool) -> TransFormula Bool -> CheckHoare Bool
+verifyVc handle prop = do
   res <- liftIO . runVerifier . query . checkProp $ prop
   case res of
     Right b -> return b
-    Left e -> reportErrorSimple (VerifierError e)
+    Left e  -> handle (VerifierError e)
 
 --------------------------------------------------------------------------------
 --  Generation Monad
@@ -311,50 +294,52 @@ newtype GenM a = GenM (RWST CheckHoareEnv [TransFormula Bool] CheckHoareState Ch
     ( Functor
     , Applicative
     , Monad
-    , MonadError HoareBackendError
     , MonadState CheckHoareState
     , MonadReader CheckHoareEnv
     , MonadWriter [TransFormula Bool]
     , MonadIO
     )
 
-runGenM :: CheckHoareEnv -> GenM a -> CheckHoare (a, [TransFormula Bool])
-runGenM env (GenM action) = evalRWST action env initialState
+
+runGenM :: CheckHoareEnv -> F.SrcSpan -> GenM a -> CheckHoare (a, [TransFormula Bool])
+runGenM env initialSpan (GenM action) = evalRWST action env (initialState initialSpan)
+
 
 type FortranTriplet a = Triplet FExpr (Var NamePair) a
 
-logGen :: String -> GenM ()
-logGen = GenM . lift . logCheck
 
 genBody :: FortranTriplet [F.Block HA] -> GenM ()
 genBody = traverseOf _3 bodyToSequence >=> void . sequenceVCs genBlock
+
 
 genBlock :: FortranTriplet (F.Block HA) -> GenM ()
 genBlock (precond, postcond, bl) = do
   setCursor bl
   case bl of
     F.BlIf _ _ _ _ conds bodies _ -> do
-      condsExprs <- traverse (traverse (doTranslate . translateBoolExpression)) conds
+      condsExprs <- traverse (traverse (doTranslate failAtCursor . translateBoolExpression)) conds
       multiIfVCs genBody expr (precond, postcond, (zip condsExprs bodies))
 
     F.BlDoWhile _ _ _ _ cond body _ -> do
       primInvariant <-
         case body of
          b : _ | Just (Specification SpecInvariant f) <- getAnnSpec (F.getAnnotation b) -> return f
-         _ -> reportError (MissingWhileInvariant bl)
+         _ -> failAtCursor (MissingWhileInvariant bl)
 
-      invariant <- doTranslate (translateFormula primInvariant)
-      condExpr <- doTranslate (translateBoolExpression cond)
+      invariant <- doTranslate failAtCursor $ translateFormula primInvariant
+      condExpr <- doTranslate failAtCursor $ translateBoolExpression cond
 
       whileVCs genBody expr invariant (precond, postcond, (condExpr, body))
 
     F.BlComment _ _ _ -> return ()
-    _ -> reportError (UnsupportedBlock bl)
+    _ -> failAtCursor (UnsupportedBlock bl)
+
 
 bodyToSequence :: [F.Block HA] -> GenM (AnnSeq FExpr (Var NamePair) (F.Block HA))
 bodyToSequence blocks = do
   setCursor blocks
   foldlM combineBlockSequence emptyAnnSeq blocks
+
 
 combineBlockSequence
   :: AnnSeq FExpr (Var NamePair) (F.Block HA)
@@ -366,7 +351,7 @@ combineBlockSequence prevSeq bl = do
 
   case prevSeq `joinAnnSeq` blSeq of
     Just r  -> return r
-    Nothing -> reportError (AnnotationError bl)
+    Nothing -> failAtCursor (AnnotationError bl)
 
 
 blockToSequence :: F.Block HA -> GenM (AnnSeq FExpr (Var NamePair) (F.Block HA))
@@ -380,7 +365,7 @@ blockToSequence bl = do
     sequenceSpec =
       case getAnnSpec (F.getAnnotation bl) of
         Just (Specification SpecSeq m) -> do
-          m' <- doTranslate $ translateFormula m
+          m' <- doTranslate failAtCursor $ translateFormula m
           return $ Just $ propAnnSeq m'
         _ -> return Nothing
 
@@ -391,11 +376,11 @@ blockToSequence bl = do
     -- Tries each action in the list, using the first that works and otherwise
     -- reporting an error.
     chooseFrom :: [GenM (Maybe a)] -> GenM a
-    chooseFrom [] = reportError $ AnnotationError bl
+    chooseFrom [] = failAtCursor $ AnnotationError bl
     chooseFrom (action : rest) = do
       m <- action
       case m of
-        Just x -> return x
+        Just x  -> return x
         Nothing -> chooseFrom rest
 
 
@@ -407,7 +392,7 @@ assignmentBlock bl = do
       let lnames = varNames lvalue
       Some theVar <- varFromScope lnames
 
-      theExpr <- doTranslate $ translateExpression' rvalue
+      theExpr <- doTranslate failAtCursor $ translateExpression' rvalue
 
       return (Just (Assignment theVar theExpr))
 
@@ -420,34 +405,42 @@ varFromScope np = do
   mscoped <- view (heVarsInScope . at src)
   case mscoped of
     Just v  -> return v
-    Nothing -> reportError (VarNotInScope np)
+    Nothing -> failAtCursor (VarNotInScope np)
 
 
 setCursor :: (F.Spanned a) => a -> GenM ()
-setCursor x = hsCursor .= Just (F.getSpan x)
+setCursor x = hsCursor .= F.getSpan x
 
 
-reportError :: HoareBackendErrorKind -> GenM x
-reportError err = do
+failAtCursor :: HoareBackendError -> GenM x
+failAtCursor err = do
   cursor <- use hsCursor
-  throwError (HoareBackendError cursor err)
+  GenM . lift $ failAnalysis' cursor err
+
+
+infoAtCursor :: Text -> GenM ()
+infoAtCursor msg = do
+  cursor <- use hsCursor
+  GenM . lift $ logInfo' cursor msg
 
 --------------------------------------------------------------------------------
 --  Translation
 --------------------------------------------------------------------------------
 
-class ReportAnn a where reportTranslateError :: (MonadError HoareBackendError m) => TranslateError a -> m x
-instance ReportAnn HA where reportTranslateError = reportErrorSimple . TranslateError1
-instance ReportAnn () where reportTranslateError = reportErrorSimple . TranslateError0
+class ReportAnn a where fromTranslateError :: TranslateError a -> HoareBackendError
+instance ReportAnn HA where fromTranslateError = TranslateError1
+instance ReportAnn () where fromTranslateError = TranslateError0
+
 
 doTranslate
-  :: (MonadReader CheckHoareEnv m, MonadError HoareBackendError m, ReportAnn ann)
-  => MonadTranslate ann a -> m a
-doTranslate action = do
+  :: (MonadReader CheckHoareEnv m, ReportAnn ann)
+  => (HoareBackendError -> m a) -> MonadTranslate ann a -> m a
+doTranslate handle action = do
   env <- asks toTranslateEnv
   case runMonadTranslate action env of
     Right x  -> return x
-    Left err -> reportTranslateError err
+    Left err -> handle (fromTranslateError err)
+
 
 toTranslateEnv :: CheckHoareEnv -> TranslateEnv
 toTranslateEnv env =
@@ -483,28 +476,3 @@ readerOfState :: (MonadState s m) => ReaderT s m a -> m a
 readerOfState action = do
   st <- get
   runReaderT action st
-
--- -- statementInfo :: F.Statement HA -> String
--- -- statementInfo = \case
--- --   F.StDeclaration _ _ _ _ _ -> "declaration"
--- --   F.StImplicit _ _ _ -> "implicit"
--- --   F.StExpressionAssign _ _ _ _ -> "expression assign"
--- --   _ -> "unrecognised statement"
-
--- -- blockInfoLines :: F.Block HA -> [String]
--- -- blockInfoLines bl =
--- --   let ann = F.getAnnotation bl
--- --       hasSpec = isJust $ getAnnSpec ann
-
--- --       (blName, blInternal) = case bl of
--- --         F.BlStatement _ _ _ st -> (statementInfo st, [])
--- --         F.BlComment{} -> ("comment", [])
--- --         F.BlIf _ _ _ _ _ bodies _ -> ("if", do body <- bodies; block <- body; blockInfoLines block)
--- --         F.BlDo _ _ _ _ _ _ body _ -> ("do", blockInfoLines =<< body)
--- --         F.BlDoWhile _ _ _ _ _ body _ -> ("while", blockInfoLines =<< body)
--- --         _ -> ("unrecognised block", [])
-
--- --   in [blName ++ if hasSpec then " with spec" else ""] ++ map ("  " ++) blInternal
-
--- -- putBlockInfo :: F.Block HA -> CheckHoare ()
--- -- putBlockInfo = mapM_ logGen . blockInfoLines
