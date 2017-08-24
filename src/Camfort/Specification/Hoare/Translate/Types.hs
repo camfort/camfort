@@ -34,9 +34,10 @@ import qualified Language.Fortran.AST       as F
 
 import           Language.Expression.DSL
 import           Language.Expression.Pretty
-import           Language.Verification
 
 import           Language.Fortran.TypeModel
+import           Language.Fortran.TypeModel.Vars
+
 
 --------------------------------------------------------------------------------
 --  Lifting Logical Values
@@ -78,8 +79,10 @@ instance Pretty2 FLiftLogical where
 --  General types
 --------------------------------------------------------------------------------
 
-type FortranExpr = Expr FortranOp (Var NamePair)
-type TransFormula = PropOver (Expr FLiftLogical FortranExpr)
+type FortranExpr = Expr FortranOp FortranVar
+
+type FExpr = Expr' '[FortranOp, FLiftLogical]
+type TransFormula = PropOver (FExpr FortranVar)
 
 data Some f where
   Some :: D a -> f a -> Some f
@@ -103,42 +106,15 @@ mapSome f = runIdentity . traverseSome (Identity . f)
 class Trivial a
 instance Trivial a
 
-type SomeVar l = Some (Var l)
+type SomeVar = Some FortranVar
 type SomeExpr = Some FortranExpr
 type SomeType = Some D
 
 someType :: D a -> SomeType
 someType d = Some d d
 
-someVarName :: Location l => SomeVar l -> String
-someVarName (Some _ v) = varName v
-
-newtype SourceName = SourceName { getSourceName :: F.Name }
-  deriving (Eq, Ord)
-
-instance Show SourceName where show = show . getSourceName
-
-newtype UniqueName = UniqueName { getUniqueName :: F.Name }
-  deriving (Eq, Ord)
-
-instance Show UniqueName where show = show . getUniqueName
-
--- | A 'NamePair' represents the name of some part of a Fortran program,
--- including the human-readable source name and the unique name.
-data NamePair =
-  NamePair
-  { _npUnique :: UniqueName
-  , _npSource :: SourceName
-  }
-  deriving (Eq, Ord, Show)
-
--- | The location name of a 'NamePair' is its unique name.
-instance Location NamePair where
-  locationName (NamePair { _npUnique }) = getUniqueName _npUnique
-
--- | The pretty version of a 'NamePair' is its source name.
-instance Pretty NamePair where
-  pretty (NamePair { _npSource }) = getSourceName _npSource
+someVarName :: SomeVar -> String
+someVarName (Some _ (FortranVar _ np)) = getUniqueName $ _npUnique np
 
 --------------------------------------------------------------------------------
 --  Translate Monad
@@ -147,7 +123,7 @@ instance Pretty NamePair where
 data TranslateEnv =
   TranslateEnv
   { _teImplictVars :: Bool
-  , _teVarsInScope :: Map SourceName (SomeVar NamePair)
+  , _teVarsInScope :: Map SourceName SomeVar
   }
 
 newtype MonadTranslate ann a =
@@ -308,10 +284,6 @@ errVarNotInScope = throwError . ErrVarNotInScope
 --------------------------------------------------------------------------------
 
 makeLenses ''TranslateEnv
-
-makeWrapped ''SourceName
-makeWrapped ''UniqueName
-makeLenses ''NamePair
 
 --------------------------------------------------------------------------------
 --  Translation Environments

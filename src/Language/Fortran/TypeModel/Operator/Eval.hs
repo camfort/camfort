@@ -53,10 +53,8 @@ evalFortranOp op opr = case opr of
 --------------------------------------------------------------------------------
 
 primToVal :: Prim p k a -> SymRepr a -> SVal
-primToVal p r = primS p $ \_ -> case r of
+primToVal p = primS p $ const $ \case
   SRPrim (DPrim _) v -> v
-  _ -> error "primToVal: primitive type has non-primitive representation;\
-             \this is a bug"
 
 primFromVal :: Prim p k a -> SVal -> SymRepr a
 primFromVal p v = primS p $ \p' -> SRPrim (DPrim p') v

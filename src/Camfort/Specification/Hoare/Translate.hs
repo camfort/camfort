@@ -36,6 +36,7 @@ import qualified Language.Fortran.AST                        as F
 
 import           Language.Expression.DSL
 import           Language.Fortran.TypeModel
+import           Language.Fortran.TypeModel.Vars
 import           Language.Fortran.TypeModel.Match
 import           Language.Fortran.TypeModel.Singletons
 
@@ -65,7 +66,7 @@ translateFormula :: PrimFormula ann -> MonadTranslate ann (TransFormula Bool)
 translateFormula = \case
   PFExpr e -> do
     e' <- translateBoolExpression e
-    return (expr e')
+    return $ expr $ e'
 
   PFLogical x -> translateLogical <$> traverse translateFormula x
 
@@ -86,11 +87,11 @@ translateExpression = \case
 
 translateBoolExpression
   :: F.Expression ann
-  -> MonadTranslate ann (Expr FLiftLogical FortranExpr Bool)
+  -> MonadTranslate ann (FExpr FortranVar Bool)
 translateBoolExpression e = do
   Some d1 e' <- translateExpression e
 
-  case matchPrim d1 of
+  resUnsquashed :: Expr FLiftLogical FortranExpr Bool <- case matchPrim d1 of
     Just (MatchPrim _ SKLogical prim1) -> return $ EOp $
       case prim1 of
         PBool8  -> FLL8 (EVar e')
@@ -98,6 +99,8 @@ translateBoolExpression e = do
         PBool32 -> FLL32 (EVar e')
         PBool64 -> FLL64 (EVar e')
     _ -> errUnexpectedType (LpExpression e) (someType (DPrim PBool8)) (someType d1)
+
+  return (squashExpression resUnsquashed)
 
 
 translateExpression'
@@ -126,6 +129,7 @@ translateValue = \case
   v@(F.ValString s) -> errUnsupportedValue v
   v@(F.ValHollerith s) -> errUnsupportedValue v
 
+  -- TODO: Auxiliary variables
   v@(F.ValVariable nm) -> do
     theVar <- view (teVarsInScope . at (SourceName nm))
     case theVar of

@@ -1,6 +1,8 @@
+{-# LANGUAGE DataKinds                  #-}
 {-# LANGUAGE FlexibleContexts           #-}
 {-# LANGUAGE FlexibleInstances          #-}
 {-# LANGUAGE FunctionalDependencies     #-}
+{-# LANGUAGE GADTs                      #-}
 {-# LANGUAGE GeneralizedNewtypeDeriving #-}
 {-# LANGUAGE LambdaCase                 #-}
 {-# LANGUAGE MultiParamTypeClasses      #-}
@@ -19,6 +21,7 @@ module Camfort.Specification.Hoare.CheckBackend
   , apuPreconditions
   , apuPostconditions
   , apuPU
+  , HoareAnalysis
   , HoareCheckResult(..)
   , HoareBackendError(..)
   , checkPU
@@ -35,6 +38,8 @@ import           Data.Generics.Uniplate.Operations
 import           Data.Map                               (Map)
 import           Data.Maybe                             (isJust)
 
+import           Data.SBV                               (SBool)
+
 import qualified Language.Fortran.Analysis              as F
 import qualified Language.Fortran.AST                   as F
 import qualified Language.Fortran.Util.Position         as F
@@ -44,8 +49,10 @@ import           Camfort.Analysis.Logger                (Text)
 import           Camfort.Specification.Hoare.Annotation
 import           Camfort.Specification.Hoare.Syntax
 import           Camfort.Specification.Hoare.Translate
-import           Language.Fortran.TypeModel.DSL
+import           Language.Fortran.TypeModel
+import           Language.Fortran.TypeModel.Vars
 
+import           Language.Expression
 import           Language.Expression.DSL
 import           Language.Expression.Pretty
 import           Language.Verification
@@ -63,7 +70,7 @@ data AnnotatedProgramUnit =
   }
 
 data HoareBackendError
-  = VerifierError (VerifierError NamePair FExpr)
+  = VerifierError (VerifierError FortranVar (Expr' '[FortranOp, FLiftLogical]))
   | TranslateError0 (TranslateError ())
   -- ^ Unit errors come from translating annotation formulae
   | TranslateError1 (TranslateError HA)
@@ -111,7 +118,7 @@ data CheckHoareState =
   { _hsCursor :: F.SrcSpan
   }
 
-type ScopeVars = Map SourceName (SomeVar NamePair)
+type ScopeVars = Map SourceName SomeVar
 
 data CheckHoareEnv =
   CheckHoareEnv
@@ -258,13 +265,16 @@ readInitialBlocks = dropWhileM readInitialBlock
 
 -- TODO: Maybe report a warning when two variables have the same source name.
 
+varOfType :: NamePair -> SomeType -> SomeVar
+varOfType names (Some d _) = Some d (FortranVar d names)
+
+-- | Create a variable from the given expression containing a variable value.
 newVar :: F.Expression (F.Analysis x) -> SomeType -> ScopeVars -> ScopeVars
 newVar e ty =
   let names = varNames e
-      theVar = mapSome (const (Var names)) ty
+  in at (names ^. npSource) .~ Just (varOfType (varNames e) ty)
 
-  in at (names ^. npSource) .~ Just theVar
-
+-- | Create a variable from the return value of the given function.
 newFunctionVar :: F.ProgramUnit (F.Analysis x) -> SomeType -> ScopeVars -> ScopeVars
 newFunctionVar pu ty =
   let uniqueName = case F.puName pu of
@@ -274,13 +284,14 @@ newFunctionVar pu ty =
         F.Named n -> SourceName n
         _         -> error "Impossible: function has no name"
 
-      theVar = mapSome (const (Var (NamePair uniqueName srcName))) ty
-
-  in at srcName .~ Just theVar
+  in at srcName .~ Just (varOfType (NamePair uniqueName srcName) ty)
 
 verifyVc :: (HoareBackendError -> CheckHoare Bool) -> TransFormula Bool -> CheckHoare Bool
 verifyVc handle prop = do
-  res <- liftIO . runVerifier . query . checkProp $ prop
+  let getSrProp :: SymRepr Bool -> SBool
+      getSrProp (SRProp x) = x
+
+  res <- liftIO . runVerifier . query . checkPropWith getSrProp id $ prop
   case res of
     Right b -> return b
     Left e  -> handle (VerifierError e)
@@ -305,7 +316,7 @@ runGenM :: CheckHoareEnv -> F.SrcSpan -> GenM a -> CheckHoare (a, [TransFormula 
 runGenM env initialSpan (GenM action) = evalRWST action env (initialState initialSpan)
 
 
-type FortranTriplet a = Triplet FExpr (Var NamePair) a
+type FortranTriplet a = Triplet FExpr FortranVar a
 
 
 genBody :: FortranTriplet [F.Block HA] -> GenM ()
@@ -335,16 +346,16 @@ genBlock (precond, postcond, bl) = do
     _ -> failAtCursor (UnsupportedBlock bl)
 
 
-bodyToSequence :: [F.Block HA] -> GenM (AnnSeq FExpr (Var NamePair) (F.Block HA))
+bodyToSequence :: [F.Block HA] -> GenM (AnnSeq FExpr FortranVar (F.Block HA))
 bodyToSequence blocks = do
   setCursor blocks
   foldlM combineBlockSequence emptyAnnSeq blocks
 
 
 combineBlockSequence
-  :: AnnSeq FExpr (Var NamePair) (F.Block HA)
+  :: AnnSeq FExpr FortranVar (F.Block HA)
   -> F.Block HA
-  -> GenM (AnnSeq FExpr (Var NamePair) (F.Block HA))
+  -> GenM (AnnSeq FExpr FortranVar (F.Block HA))
 combineBlockSequence prevSeq bl = do
   setCursor bl
   blSeq <- blockToSequence bl
@@ -354,7 +365,7 @@ combineBlockSequence prevSeq bl = do
     Nothing -> failAtCursor (AnnotationError bl)
 
 
-blockToSequence :: F.Block HA -> GenM (AnnSeq FExpr (Var NamePair) (F.Block HA))
+blockToSequence :: F.Block HA -> GenM (AnnSeq FExpr FortranVar (F.Block HA))
 blockToSequence bl = do
   setCursor bl
 
@@ -384,22 +395,25 @@ blockToSequence bl = do
         Nothing -> chooseFrom rest
 
 
-assignmentBlock :: F.Block HA -> GenM (Maybe (Assignment FExpr (Var NamePair)))
+assignmentBlock :: F.Block HA -> GenM (Maybe (Assignment FExpr FortranVar))
 assignmentBlock bl = do
   setCursor bl
   case bl of
+    -- TODO: Handle assigning to particular array indices
     F.BlStatement _ _ _ (F.StExpressionAssign _ _ lvalue rvalue) -> do
       let lnames = varNames lvalue
-      Some theVar <- varFromScope lnames
+      Some varD theVar <- varFromScope lnames
 
-      theExpr <- doTranslate failAtCursor $ translateExpression' rvalue
+      theExpr <- doTranslate failAtCursor $ translateExpression' varD rvalue
 
-      return (Just (Assignment theVar theExpr))
+      let theExpr' = Expr' $ mapOperators (review chooseOp) theExpr
+
+      return (Just (Assignment theVar theExpr'))
 
     _ -> return Nothing
 
 
-varFromScope :: NamePair -> GenM (SomeVar NamePair)
+varFromScope :: NamePair -> GenM SomeVar
 varFromScope np = do
   let src = np ^. npSource
   mscoped <- view (heVarsInScope . at src)
