@@ -1,7 +1,5 @@
 {-# LANGUAGE ConstraintKinds            #-}
-{-# LANGUAGE PatternSynonyms            #-}
 {-# LANGUAGE DataKinds                  #-}
-{-# LANGUAGE ScopedTypeVariables                  #-}
 {-# LANGUAGE FlexibleContexts           #-}
 {-# LANGUAGE FlexibleInstances          #-}
 {-# LANGUAGE GADTs                      #-}
@@ -9,7 +7,9 @@
 {-# LANGUAGE LambdaCase                 #-}
 {-# LANGUAGE MultiParamTypeClasses      #-}
 {-# LANGUAGE NamedFieldPuns             #-}
+{-# LANGUAGE PatternSynonyms            #-}
 {-# LANGUAGE RankNTypes                 #-}
+{-# LANGUAGE ScopedTypeVariables        #-}
 {-# LANGUAGE TemplateHaskell            #-}
 {-# LANGUAGE TypeFamilies               #-}
 {-# LANGUAGE TypeOperators              #-}
@@ -19,13 +19,16 @@
 module Camfort.Specification.Hoare.Translate.Types where
 
 import           Control.Exception          (Exception (..))
-import           Data.Typeable              (TypeRep, Typeable, gcast, typeRep)
+import           Data.Typeable              (Typeable)
 
 import           Data.Map                   (Map)
 
 import           Control.Lens               hiding (op)
 import           Control.Monad.Except
 import           Control.Monad.Reader
+
+import           Data.SBV.Dynamic           (svFalse, svGreaterThan)
+import           Data.SBV.Internals         (SBV (SBV))
 
 import qualified Language.Fortran.AST       as F
 
@@ -34,46 +37,81 @@ import           Language.Expression.Pretty
 import           Language.Verification
 
 import           Language.Fortran.TypeModel
-import           Language.Fortran.TypeModel.Machinery
+
+--------------------------------------------------------------------------------
+--  Lifting Logical Values
+--------------------------------------------------------------------------------
+
+-- | Propositions expect values of type 'Bool', so this is necessary to do the
+-- conversion.
+data FLiftLogical t a where
+  FLL8  :: t (PrimS Bool8) -> FLiftLogical t Bool
+  FLL16 :: t (PrimS Bool16) -> FLiftLogical t Bool
+  FLL32 :: t (PrimS Bool32) -> FLiftLogical t Bool
+  FLL64 :: t (PrimS Bool64) -> FLiftLogical t Bool
+
+instance Operator FLiftLogical where
+  htraverseOp f = \case
+    FLL8 x -> FLL8 <$> f x
+    FLL16 x -> FLL16 <$> f x
+    FLL32 x -> FLL32 <$> f x
+    FLL64 x -> FLL64 <$> f x
+
+instance (Applicative f) => EvalOp f SymRepr FLiftLogical where
+  evalOp f = \case
+    FLL8  x -> primToBool <$> f x
+    FLL16 x -> primToBool <$> f x
+    FLL32 x -> primToBool <$> f x
+    FLL64 x -> primToBool <$> f x
+    where
+      primToBool :: SymRepr (PrimS a) -> SymRepr Bool
+      primToBool (SRPrim _ v) = SRProp (SBV (v `svGreaterThan` svFalse))
+
+instance Pretty2 FLiftLogical where
+  prettys2Prec p = \case
+    FLL8  x -> prettys1Prec p x
+    FLL16 x -> prettys1Prec p x
+    FLL32 x -> prettys1Prec p x
+    FLL64 x -> prettys1Prec p x
 
 --------------------------------------------------------------------------------
 --  General types
 --------------------------------------------------------------------------------
 
-data Some c f where
-  Some :: (c a, Typeable a, HasRepr a) => f a -> Some c f
+type FortranExpr = Expr FortranOp (Var NamePair)
+type TransFormula = PropOver (Expr FLiftLogical FortranExpr)
 
-_Some
-  :: (p a, Typeable a, p b, Typeable b, HasRepr a, HasRepr b)
-  => Prism (Some p f) (Some p f) (f a) (f b)
-_Some = prism Some extract
-  where
-    extract :: (p a, Typeable a) => Some p f -> Either (Some p f) (f a)
-    extract (Some e) = maybe (Left (Some e)) Right (gcast e)
+data Some f where
+  Some :: D a -> f a -> Some f
+
+instance Pretty1 f => Pretty (Some f) where
+  prettysPrec p = \case
+    Some _ x -> prettys1Prec p x
+
+instance Pretty1 f => Show (Some f) where
+  show = pretty
 
 traverseSome
   :: Applicative m
-  => (forall a. (c a, Typeable a, HasRepr a) => f a -> m (g a))
-  -> Some c f -> m (Some c g)
-traverseSome f (Some x) = Some <$> f x
+  => (forall a. f a -> m (g a))
+  -> Some f -> m (Some g)
+traverseSome f (Some d x) = Some d <$> f x
 
-mapSome :: (forall a. (c a, Typeable a, HasRepr a) => f a -> g a) -> Some c f -> Some c g
+mapSome :: (forall a. f a -> g a) -> Some f -> Some g
 mapSome f = runIdentity . traverseSome (Identity . f)
 
--- | @'Some' f p@ contains an @f a@ for some @a@. This function gets the
--- 'TypeRep' of @a@.
-someTypeRep :: Some p f -> TypeRep
-someTypeRep (Some x) = typeRep x
+class Trivial a
+instance Trivial a
 
-type SomeVar l = Some Verifiable (Var l)
-type SomeExpr = Some Verifiable FortranExpr
-type SomeType = Some Verifiable (Const ())
+type SomeVar l = Some (Var l)
+type SomeExpr = Some FortranExpr
+type SomeType = Some D
 
-someType :: (Typeable a, SymWord a, HasRepr a) => proxy a -> SomeType
-someType (_ :: proxy a) = Some (Const () :: Const () a)
+someType :: D a -> SomeType
+someType d = Some d d
 
 someVarName :: Location l => SomeVar l -> String
-someVarName (Some v) = varName v
+someVarName (Some _ v) = varName v
 
 newtype SourceName = SourceName { getSourceName :: F.Name }
   deriving (Eq, Ord)
@@ -125,10 +163,6 @@ runMonadTranslate
   :: MonadTranslate ann a -> TranslateEnv -> Either (TranslateError ann) a
 runMonadTranslate (MonadTranslate action) env = runReaderT action env
 
-type FortranExpr = Expr FortranOp (Var NamePair)
-
-type TransFormula = PropOver FortranExpr
-
 --------------------------------------------------------------------------------
 --  Errors
 --------------------------------------------------------------------------------
@@ -139,15 +173,15 @@ data TranslateError a
   | ErrBadLiteral (F.Value a)
   -- ^ Found a literal value that we didn't know how to translate. May or may
   -- not be valid Fortran.
-  | ErrUnexpectedType (LangPart a) TypeRep TypeRep
+  | ErrUnexpectedType (LangPart a) SomeType SomeType
   -- ^ Tried to translate a FORTRAN language part into the wrong expression
   -- type, and it wasn't coercible to the correct type.
-  | ErrInvalidVarType TypeRep
+  | ErrInvalidVarType SomeType
   -- ^ Tried to make a variable representing a value of a type that can't be
   -- stored in a variable.
-  | ErrInvalidBinopApplication (F.Expression a, TypeRep) (F.Expression a, TypeRep) (LangPart a)
+  | ErrInvalidBinopApplication (F.Expression a, SomeType) (F.Expression a, SomeType) (LangPart a)
   -- ^ Tried to apply a binary operator to arguments with the wrong types.
-  | ErrInvalidUnopApplication (F.Expression a, TypeRep) (LangPart a)
+  | ErrInvalidUnopApplication (F.Expression a, SomeType) (LangPart a)
   -- ^ Tried to apply a unary operator to an argument with the wrong type.
   | ErrVarNotInScope F.Name
   -- ^ Reference to a variable that's not currently in scope
@@ -250,20 +284,20 @@ errUnsupportedTypeSpec = errUnsupportedItem . LpTypeSpec
 errBadLiteral :: MonadError (TranslateError ann) m => (F.Value ann) -> m x
 errBadLiteral = throwError . ErrBadLiteral
 
-errUnexpectedType :: MonadError (TranslateError ann) m => LangPart ann -> TypeRep -> TypeRep -> m x
+errUnexpectedType :: MonadError (TranslateError ann) m => LangPart ann -> SomeType -> SomeType -> m x
 errUnexpectedType lp tye = throwError . ErrUnexpectedType lp tye
 
-errInvalidVarType :: MonadError (TranslateError ann) m => TypeRep -> m x
+errInvalidVarType :: MonadError (TranslateError ann) m => SomeType -> m x
 errInvalidVarType = throwError . ErrInvalidVarType
 
 errInvalidBinopApplication
   :: MonadError (TranslateError ann) m
-  => (F.Expression ann, TypeRep) -> (F.Expression ann, TypeRep) -> LangPart ann -> m x
+  => (F.Expression ann, SomeType) -> (F.Expression ann, SomeType) -> LangPart ann -> m x
 errInvalidBinopApplication e1 e2 lp = throwError (ErrInvalidBinopApplication e1 e2 lp)
 
 errInvalidUnopApplication
   :: MonadError (TranslateError ann) m
-  => (F.Expression ann, TypeRep) -> LangPart ann -> m x
+  => (F.Expression ann, SomeType) -> LangPart ann -> m x
 errInvalidUnopApplication e lp = throwError (ErrInvalidUnopApplication e lp)
 
 errVarNotInScope :: MonadError (TranslateError ann) m => F.Name -> m x

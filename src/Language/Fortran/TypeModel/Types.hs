@@ -1,28 +1,40 @@
+{-# LANGUAGE DataKinds                  #-}
+{-# LANGUAGE DeriveDataTypeable         #-}
+{-# LANGUAGE FlexibleInstances          #-}
+{-# LANGUAGE GADTs                      #-}
 {-# LANGUAGE GeneralizedNewtypeDeriving #-}
-{-# LANGUAGE RankNTypes #-}
-{-# LANGUAGE ScopedTypeVariables #-}
-{-# LANGUAGE DataKinds      #-}
-{-# LANGUAGE GADTs          #-}
-{-# LANGUAGE KindSignatures #-}
-{-# LANGUAGE LambdaCase     #-}
-{-# LANGUAGE PolyKinds      #-}
+{-# LANGUAGE KindSignatures             #-}
+{-# LANGUAGE LambdaCase                 #-}
+{-# LANGUAGE MultiParamTypeClasses      #-}
+{-# LANGUAGE PolyKinds                  #-}
+{-# LANGUAGE RankNTypes                 #-}
+{-# LANGUAGE ScopedTypeVariables        #-}
+
+{-# OPTIONS_GHC -Wall #-}
 
 -- TODO: Complex Numbers
 
 module Language.Fortran.TypeModel.Types where
 
+import           Data.Function                         (on)
 import           Data.Int                              (Int16, Int32, Int64,
                                                         Int8)
-import           Data.Typeable
+import           Data.Typeable                         (Typeable)
 import           Data.Word                             (Word8)
+import Data.Monoid (Endo(..))
+import Data.List (intersperse)
 
-import           Data.Singletons
 import           Data.Singletons.TypeLits
-import           GHC.TypeLits
 
+import           Data.SBV                              (Boolean (..), SBool)
 import           Data.SBV.Dynamic                      hiding (KReal)
 
 import           Data.Vinyl
+import           Data.Vinyl.Functor
+
+import           Language.Expression
+import           Language.Expression.Pretty
+import           Language.Expression.Ops.Standard
 
 import           Language.Fortran.TypeModel.Singletons
 
@@ -30,21 +42,21 @@ import           Language.Fortran.TypeModel.Singletons
 --  Semantic Types
 --------------------------------------------------------------------------------
 
-newtype Bool8  = Bool8 { getBool8 :: Int8 } deriving (Show, Num, Eq)
-newtype Bool16 = Bool16 { getBool16 :: Int16 } deriving (Show, Num, Eq)
-newtype Bool32 = Bool32 { getBool32 :: Int32 } deriving (Show, Num, Eq)
-newtype Bool64 = Bool64 { getBool64 :: Int64 } deriving (Show, Num, Eq)
-newtype Char8  = Char8 { getChar8 :: Word8 } deriving (Show, Num, Eq)
+newtype Bool8  = Bool8 { getBool8 :: Int8 } deriving (Show, Num, Eq, Typeable)
+newtype Bool16 = Bool16 { getBool16 :: Int16 } deriving (Show, Num, Eq, Typeable)
+newtype Bool32 = Bool32 { getBool32 :: Int32 } deriving (Show, Num, Eq, Typeable)
+newtype Bool64 = Bool64 { getBool64 :: Int64 } deriving (Show, Num, Eq, Typeable)
+newtype Char8  = Char8 { getChar8 :: Word8 } deriving (Show, Num, Eq, Typeable)
 
 --------------------------------------------------------------------------------
 --  Primitive Types
 --------------------------------------------------------------------------------
 
 newtype PrimS a = PrimS a
-  deriving (Show, Eq)
+  deriving (Show, Eq, Typeable)
 
--- | Lists the allowed primitive Fortran types, with corresponding constraints
--- on precision, kind and semantic Haskell type.
+-- | Lists the allowed primitive Fortran types, with corresponding (phantom)
+-- constraints on precision, kind and semantic Haskell type.
 data Prim p k a where
   PInt8          :: Prim 'P8   'KInt     (PrimS Int8)
   PInt16         :: Prim 'P16  'KInt     (PrimS Int16)
@@ -102,6 +114,8 @@ data Record name fields where
 
 -- TODO: Support arrays of non-primitive values
 
+-- | A Fortran type, with a phantom type variable indicating the Haskell type
+-- that it semantically corresponds to.
 data D a where
   DPrim :: Prim p k (PrimS a) -> D (PrimS a)
   DArray :: Index i -> Prim p k a -> D (Array i a)
@@ -129,6 +143,66 @@ data SymRepr a where
     :: D (Record name fs)
     -> Rec FieldRepr fs
     -> SymRepr (Record name fs)
+
+  SRProp
+    :: SBool
+    -> SymRepr Bool
+
+instance Applicative f => EvalOp f SymRepr LogicOp where
+  evalOp f = \case
+    LogLit x -> pure $ SRProp (fromBool x)
+    LogNot x -> SRProp . bnot . getSrProp <$> f x
+    LogAnd x y -> appBinop (&&&) x y
+    LogOr x y -> appBinop (|||) x y
+    LogImpl x y -> appBinop (==>) x y
+    LogEquiv x y -> appBinop (<=>) x y
+
+    where
+      appBinop g x y = fmap SRProp $ (g `on` getSrProp) <$> f x <*> f y
+      getSrProp :: SymRepr Bool -> SBool
+      getSrProp (SRProp x) = x
+
+--------------------------------------------------------------------------------
+--  Pretty Printing
+--------------------------------------------------------------------------------
+
+instance Pretty1 (Prim p k) where
+  prettys1Prec p = \case
+    PInt8   -> showString "integer8"
+    PInt16  -> showString "integer16"
+    PInt32  -> showString "integer32"
+    PInt64  -> showString "integer64"
+    PFloat  -> showString "real"
+    PDouble -> showParen (p > 8) $ showString "double precision"
+    PBool8  -> showString "logical8"
+    PBool16 -> showString "logical16"
+    PBool32 -> showString "logical32"
+    PBool64 -> showString "logical64"
+    PChar   -> showString "character"
+
+instance Pretty1 RField where
+  prettys1Prec _ = \case
+    RField fname fd ->
+      prettys1Prec 0 fd .
+      showString " " .
+      withKnownSymbol fname (showString (symbolVal fname))
+
+-- | e.g. "type custom_type { character a, integer array b }"
+instance Pretty1 D where
+  prettys1Prec p = \case
+    DPrim px -> prettys1Prec p px
+    DArray _ pv -> prettys1Prec p pv . showString " array"
+    DData rname fields ->
+        showParen (p > 8)
+      $ showString "type "
+      . withKnownSymbol rname (showString (symbolVal rname))
+      . showString "{ "
+      . appEndo ( mconcat
+              . intersperse (Endo $ showString ", ")
+              . recordToList
+              . rmap (Const . Endo . prettys1Prec 0)
+              $ fields)
+      . showString " }"
 
 -- --------------------------------------------------------------------------------
 -- --  Dynamic Types

@@ -37,7 +37,7 @@ data ComparableKinds k1 k2 where
 --------------------------------------------------------------------------------
 
 data OpResult ok args result where
-  -- TODO: non-primitive literals
+  -- TODO: non-primitive literals (initialization)
   ORLit
     :: Prim p k (PrimS a)
     -> a

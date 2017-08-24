@@ -10,7 +10,13 @@
 
 {-# OPTIONS_GHC -Wall #-}
 
-module Language.Fortran.TypeModel.Operator (FortranOp(..)) where
+module Language.Fortran.TypeModel.Operator
+  (
+    FortranOp(..)
+  , Op(..)
+  , OpKind(..)
+  , OpResult(..)
+  ) where
 
 import           Data.Singletons.Prelude.List
 import           Data.Singletons.TypeLits
@@ -23,6 +29,7 @@ import           Language.Expression.Pretty
 
 import           Language.Fortran.TypeModel.Operator.Core
 import           Language.Fortran.TypeModel.Operator.Eval
+import           Language.Fortran.TypeModel.Singletons
 import           Language.Fortran.TypeModel.Types
 
 

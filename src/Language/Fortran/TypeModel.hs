@@ -1,7 +1,9 @@
+{-# OPTIONS_GHC -Wall #-}
+
 module Language.Fortran.TypeModel
-  ( module Basic
-  , module Operators
+  ( module Types
+  , module Operator
   ) where
 
-import Language.Fortran.TypeModel.Basic as Basic
-import Language.Fortran.TypeModel.Operators as Operators
+import Language.Fortran.TypeModel.Types as Types
+import Language.Fortran.TypeModel.Operator as Operator

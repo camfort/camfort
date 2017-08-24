@@ -99,11 +99,13 @@ library
                         Camfort.Reprint
                         Data.Vinyl.Curry
                         Language.Fortran.TypeModel
+                        Language.Fortran.TypeModel.Match
                         Language.Fortran.TypeModel.Operator
                         Language.Fortran.TypeModel.Operator.Core
                         Language.Fortran.TypeModel.Operator.Eval
                         Language.Fortran.TypeModel.Singletons
                         Language.Fortran.TypeModel.Types
+                        Language.Fortran.TypeModel.Util
 
   build-depends:        base >= 4.6 && < 5,
                         ghc-prim >= 0.3.1.0 && < 0.6,
