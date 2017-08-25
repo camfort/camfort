@@ -18,20 +18,20 @@ import           Camfort.Specification.Hoare.Annotation
 import           Camfort.Specification.Hoare.CheckFrontend
 import           Camfort.Specification.Hoare.Parser
 
-getBlocks = FAB.analyseBBlocks . FAR.analyseRenames . FA.initAnalysis . fmap hoareAnn0
+-- getBlocks = FAB.analyseBBlocks . FAR.analyseRenames . FA.initAnalysis . fmap hoareAnn0
 
-check :: SimpleAnalysis (F.ProgramFile Annotation) Report
-check = do
-  pf <- analysisInput
-  res <- branchAnalysis prettyInvariantChecking (getBlocks pf)
-  -- Append filename to any outputs
-  let output   = mconcat . intersperse (mkReport "\n\n") . analysisResult $ res
-      dbg      = show (analysisDebug res)
-      filename = F.pfGetFilename pf
+-- check :: SimpleAnalysis (F.ProgramFile Annotation) Report
+-- check = do
+--   pf <- analysisInput
+--   res <- branchAnalysis prettyInvariantChecking (getBlocks pf)
+--   -- Append filename to any outputs
+--   let output   = mconcat . intersperse (mkReport "\n\n") . analysisResult $ res
+--       dbg      = show (analysisDebug res)
+--       filename = F.pfGetFilename pf
 
-  pure $ (mkReport $ "\n" ++ filename ++ "\n" ++ dbg ++ "\n") `mappend` output
+--   pure $ (mkReport $ "\n" ++ filename ++ "\n" ++ dbg ++ "\n") `mappend` output
 
-testOn :: FilePath -> IO ()
-testOn fp = doAnalysisReport check simpleCompiler () fp "." []
+-- testOn :: FilePath -> IO ()
+-- testOn fp = doAnalysisReport check simpleCompiler () fp "." []
 
-testHoare = testOn "samples/invariants/invariants.f90"
+-- testHoare = testOn "samples/invariants/invariants.f90"

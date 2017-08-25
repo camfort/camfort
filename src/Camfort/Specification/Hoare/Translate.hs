@@ -165,12 +165,14 @@ translateLiteral v pa readLit
 data SomeOp (f :: OpKind -> *) where
   SomeOp :: f ok -> SomeOp f
 
+
 getUopOp :: F.UnaryOp -> Maybe (SomeOp (Op 1))
 getUopOp = \case
   F.Minus -> Just (SomeOp OpNeg)
   F.Plus -> Just (SomeOp OpPos)
   F.Not -> Just (SomeOp OpNot)
   _ -> Nothing
+
 
 getBopOp :: F.BinaryOp -> Maybe (SomeOp (Op 2))
 getBopOp = \case

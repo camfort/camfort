@@ -23,7 +23,6 @@ import qualified Language.Fortran.Util.Position           as F
 
 import           Camfort.Analysis                         hiding (Analysis)
 import qualified Camfort.Analysis                         as CA
-import           Camfort.Analysis.Annotations             (Report, mkReport)
 import           Camfort.Analysis.CommentAnnotator
 import           Camfort.Specification.Parser             (SpecParseError)
 
@@ -33,18 +32,15 @@ import           Camfort.Specification.Hoare.Parser
 import           Camfort.Specification.Hoare.Parser.Types (HoareParseError)
 import           Camfort.Specification.Hoare.Syntax
 
+-- TODO: Update frontend!
+
 --------------------------------------------------------------------------------
 --  Results and errors
 --------------------------------------------------------------------------------
 
-data HoareResult
-  = HOkay HoareCheckResult Report
-  | HFail HoareFrontendError Report
-  deriving (Show)
-
 data HoareFrontendError
-  = ParseError F.SrcSpan (SpecParseError HoareParseError)
-  | InvalidPUConditions F.SrcSpan F.ProgramUnitName [PrimSpec ()]
+  = ParseError (SpecParseError HoareParseError)
+  | InvalidPUConditions F.ProgramUnitName [PrimSpec ()]
   | BackendError HoareBackendError
   deriving (Show)
 
@@ -56,12 +52,8 @@ instance Exception HoareFrontendError where
       show conds
     BackendError e -> displayException e
 
-parseError :: F.SrcSpan -> SpecParseError HoareParseError -> HoareResult
+parseError :: F.SrcSpan -> SpecParseError HoareParseError -> HoareCheckResult
 parseError sp err = HFail (ParseError sp err) mempty
-
-debugLog :: String -> CA.SimpleAnalysis a ()
-debugLog = tell . mkReport . (++ "\n")
-
 
 -- | Finds all annotated program units in the given program file. Returns errors
 -- for program units that are incorrectly annotated, along with a list of
@@ -109,7 +101,7 @@ findAnnotatedPUs pf =
   in partitionEithers (map collectOrReport pusWithSpecs)
 
 
-invariantChecking :: CA.SimpleAnalysis (F.ProgramFile HA) [HoareResult]
+invariantChecking :: F.ProgramFile HA -> HoareAnalysis HoareCheckResult
 invariantChecking = do
   pf <- analysisInput
 
@@ -137,15 +129,15 @@ invariantChecking = do
 
   return (annResults ++ checkResults ++ map (flip HFail mempty) errors)
 
-prettyInvariantChecking :: CA.SimpleAnalysis (F.ProgramFile HA) [Report]
-prettyInvariantChecking = do
-  results <- invariantChecking
+-- prettyInvariantChecking :: CA.SimpleAnalysis (F.ProgramFile HA) [Report]
+-- prettyInvariantChecking = do
+--   results <- invariantChecking
 
-  let prettyResult (HOkay (HoareCheckResult b) logs) =
-        logs <> mkReport (if b then " - OK" else " - Cannot verify")
-      prettyResult (HFail e logs) = logs <> mkReport (displayException e)
+--   let prettyResult (HOkay (HoareCheckResult b) logs) =
+--         logs <> mkReport (if b then " - OK" else " - Cannot verify")
+--       prettyResult (HFail e logs) = logs <> mkReport (displayException e)
 
-  return $ map prettyResult results
+--   return $ map prettyResult results
 
 --------------------------------------------------------------------------------
 --  Other
