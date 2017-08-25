@@ -52,7 +52,7 @@ unitsCheckReport lo modNames fileName expectedReport = do
 
   let uEnv = UnitEnv { unitOpts = uOpts, unitProgramFile = pf }
 
-  report <- runAnalysisT file (const (return ())) LogError modFiles $ runUnitAnalysis uEnv $ checkUnits
+  report <- runAnalysisT file logOutputNone LogError modFiles $ runUnitAnalysis uEnv $ checkUnits
   let res = report ^?! arResult . _ARSuccess
 
   show res `shouldBe` expectedReport

@@ -52,7 +52,7 @@ unitsInferReportIs fileName expectedReport = do
 
   let uEnv = UnitEnv { unitOpts = uOpts, unitProgramFile = pf }
 
-  report <- runAnalysisT file (const (return ())) LogError modFiles $ runUnitAnalysis uEnv $ inferUnits
+  report <- runAnalysisT file logOutputNone LogError modFiles $ runUnitAnalysis uEnv $ inferUnits
   let res = report ^?! arResult . _ARSuccess
 
   show res `shouldBe` expectedReport

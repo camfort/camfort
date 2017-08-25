@@ -7,9 +7,6 @@ License     :  Apache-2.0
 Maintainer  :  dom.orchard@gmail.com
 -}
 
-{-# LANGUAGE DoAndIfThenElse #-}
-{-# LANGUAGE NoMonomorphismRestriction #-}
-
 module Camfort.Input
   (
     -- * Classes
@@ -42,16 +39,22 @@ import qualified Language.Fortran.AST          as F
 import           Language.Fortran.Util.ModFile (ModFiles)
 
 import           Camfort.Analysis
-import           Camfort.Analysis.Logger
-  -- (Analysis, analysisDebug, analysisResult, runAnalysis)
 import           Camfort.Analysis.Annotations
+import           Camfort.Analysis.Logger
 import           Camfort.Analysis.ModFile      (MFCompiler, genModFiles,
                                                 readParseSrcDir)
 import           Camfort.Helpers
 import           Camfort.Output
 
+-- | An analysis program which accepts inputs of type @a@ and produces results
+-- of type @b@.
+--
+-- Has error messages of type @e@ and warnings of type @w@. Runs in the base
+-- monad @m@.
 type AnalysisProgram e w m a b = a -> AnalysisT e w m b
 
+-- | An 'AnalysisRunner' is a function to run an 'AnalysisProgram' in a
+-- particular way. Produces a final result of type @r@.
 type AnalysisRunner e w m a b r =
   AnalysisProgram e w m a b -> LogOutput m -> LogLevel -> ModFiles -> [(ProgramFile, SourceText)] -> m r
 
@@ -59,6 +62,8 @@ type AnalysisRunner e w m a b r =
 --  Simple runners
 --------------------------------------------------------------------------------
 
+-- | Given an analysis program for a single file, run it over every input file
+-- and collect the reports. Doesn't produce any output.
 runPerFileAnalysis
   :: (Monad m, Describe e, Describe w)
   => AnalysisRunner e w m ProgramFile b [AnalysisReport e w b]
@@ -71,6 +76,8 @@ runPerFileAnalysis program logOutput logLevel modFiles =
       modFiles
       (program pf)) . map fst
 
+-- | Run an analysis program over every input file and get the report. Doesn't
+-- produce any output.
 runMultiFileAnalysis
   :: (Monad m, Describe e, Describe w)
   => AnalysisRunner e w m [ProgramFile] b (AnalysisReport e w b)
@@ -81,12 +88,17 @@ runMultiFileAnalysis program logOutput logLevel modFiles
 --  Complex Runners
 --------------------------------------------------------------------------------
 
+-- | Given an analysis program for a single file, run it over every input file
+-- and collect the reports, then print those reports to standard output.
 describePerFileAnalysis ::
   (MonadIO m, Describe r, Describe w, Describe e) =>
   AnalysisRunner e w m ProgramFile r ()
 describePerFileAnalysis = runPerFileAnalysis `runThen` mapM_ (putDescribeReport Nothing)
 
 
+-- | Accepts an analysis program for multiple input files which produces a
+-- result value along with refactored files. Performs the refactoring, and
+-- prints the result value with the report.
 doRefactor
   :: (Describe e, Describe e', Describe w, Describe r)
   => FileOrDir -> FilePath
@@ -107,6 +119,8 @@ doRefactor inSrc outSrc program logOutput logLevel modFiles pfsTexts = do
     Just fs -> finishRefactor inSrc outSrc (map snd pfsTexts) fs
     Nothing -> return ()
 
+-- | Accepts an analysis program for multiple input files which produces
+-- refactored files and creates new files. Performs the refactoring.
 doRefactorAndCreate
   :: (Describe e, Describe w)
   => FileOrDir -> FilePath
@@ -127,6 +141,8 @@ doRefactorAndCreate inSrc outSrc program logOutput logLevel modFiles pfsTexts = 
     Just fs -> finishRefactorAndCreate inSrc outSrc (map snd pfsTexts) fs
     Nothing -> return ()
 
+-- | Accepts an analysis program to refactor a single file and returns an
+-- analysis program to refactor each input file with that refactoring.
 perFileRefactoring
   :: (Monad m)
   => AnalysisProgram e w m ProgramFile ProgramFile
@@ -172,6 +188,7 @@ finishRefactorAndCreate inSrc outSrc inputText analysisOutput = do
 --  Combinators
 --------------------------------------------------------------------------------
 
+-- | Monadic bind for analysis runners.
 runThen
   :: (Monad m)
   => AnalysisRunner e w m a b r -> (r -> m r')
