@@ -86,9 +86,9 @@ spec =
               removeMsg = "removed equivalence"
 
               expectedLogs =
-                [ ((15, 3), addCopyMsg)
+                [ ((6, 3), removeMsg)
                 , ((14, 3), addCopyMsg)
-                , ((6, 3), removeMsg)
+                , ((15, 3), addCopyMsg)
                 ]
 
               spanMatches (pl, pc) (FU.SrcSpan (FU.Position _ pc1 pl1) (FU.Position _ pc2 pl2)) =
@@ -98,6 +98,8 @@ spec =
               matchesExpected (expectedSpan, expectedText) message =
                 spanMatches expectedSpan (message ^?! lmOrigin . _Just . oSpan) &&
                 expectedText == message ^. lmMsg
+
+          (putStrLn . show $ infoLogs)
 
           forM_ (zip infoLogs expectedLogs) $ \(message, expectedMessage) ->
             message `shouldSatisfy` matchesExpected expectedMessage
