@@ -52,8 +52,9 @@ instance Exception HoareFrontendError where
       show conds
     BackendError e -> displayException e
 
-parseError :: F.SrcSpan -> SpecParseError HoareParseError -> HoareCheckResult
-parseError sp err = HFail (ParseError sp err) mempty
+parseError :: F.SrcSpan -> SpecParseError HoareParseError -> HoareAnalysis ()
+parseError sp err = logError' sp (ParseError err)
+  -- HFail (ParseError sp err) mempty
 
 -- | Finds all annotated program units in the given program file. Returns errors
 -- for program units that are incorrectly annotated, along with a list of
@@ -102,9 +103,7 @@ findAnnotatedPUs pf =
 
 
 invariantChecking :: F.ProgramFile HA -> HoareAnalysis HoareCheckResult
-invariantChecking = do
-  pf <- analysisInput
-
+invariantChecking pf = do
     -- Attempt to parse comments to specifications
   let (pf', annResults) = runWriter $ annotateComments hoareParser (\srcSpan err -> tell [parseError srcSpan err]) pf
 
