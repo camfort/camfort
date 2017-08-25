@@ -24,6 +24,7 @@ module Camfort.Input
   , perFileRefactoring
     -- * Source directory and file handling
   , readParseSrcDir
+  , loadModAndProgramFiles
     -- * Combinators
   , runThen
   ) where
@@ -90,10 +91,10 @@ runMultiFileAnalysis program logOutput logLevel modFiles
 
 -- | Given an analysis program for a single file, run it over every input file
 -- and collect the reports, then print those reports to standard output.
-describePerFileAnalysis ::
-  (MonadIO m, Describe r, Describe w, Describe e) =>
-  AnalysisRunner e w m ProgramFile r ()
-describePerFileAnalysis = runPerFileAnalysis `runThen` mapM_ (putDescribeReport Nothing)
+describePerFileAnalysis
+  :: (MonadIO m, Describe r, Describe w, Describe e)
+  => Text -> AnalysisRunner e w m ProgramFile r ()
+describePerFileAnalysis analysisName = runPerFileAnalysis `runThen` mapM_ (putDescribeReport analysisName Nothing)
 
 
 -- | Accepts an analysis program for multiple input files which produces a
@@ -101,9 +102,10 @@ describePerFileAnalysis = runPerFileAnalysis `runThen` mapM_ (putDescribeReport 
 -- prints the result value with the report.
 doRefactor
   :: (Describe e, Describe e', Describe w, Describe r)
-  => FileOrDir -> FilePath
+  => Text
+  -> FileOrDir -> FilePath
   -> AnalysisRunner e w IO [ProgramFile] (r, [Either e' ProgramFile]) ()
-doRefactor inSrc outSrc program logOutput logLevel modFiles pfsTexts = do
+doRefactor analysisName inSrc outSrc program logOutput logLevel modFiles pfsTexts = do
   report <- runMultiFileAnalysis program logOutput logLevel modFiles pfsTexts
 
   let
@@ -112,7 +114,7 @@ doRefactor inSrc outSrc program logOutput logLevel modFiles pfsTexts = do
     -- Get the refactoring result form the report
     resultFiles = report ^? arResult . _ARSuccess . _2
 
-  putDescribeReport Nothing report'
+  putDescribeReport analysisName Nothing report'
 
   -- If the refactoring succeeded, change the files
   case resultFiles of
@@ -123,9 +125,10 @@ doRefactor inSrc outSrc program logOutput logLevel modFiles pfsTexts = do
 -- refactored files and creates new files. Performs the refactoring.
 doRefactorAndCreate
   :: (Describe e, Describe w)
-  => FileOrDir -> FilePath
+  => Text
+  -> FileOrDir -> FilePath
   -> AnalysisRunner e w IO [ProgramFile] ([ProgramFile], [ProgramFile]) ()
-doRefactorAndCreate inSrc outSrc program logOutput logLevel modFiles pfsTexts = do
+doRefactorAndCreate analysisName inSrc outSrc program logOutput logLevel modFiles pfsTexts = do
   report <- runMultiFileAnalysis program logOutput logLevel modFiles pfsTexts
 
   let
@@ -134,7 +137,7 @@ doRefactorAndCreate inSrc outSrc program logOutput logLevel modFiles pfsTexts = 
     -- Get the refactoring result form the report
     resultFiles = report ^? arResult . _ARSuccess
 
-  putDescribeReport Nothing report'
+  putDescribeReport analysisName Nothing report'
 
   case resultFiles of
     -- If the refactoring succeeded, change the files

@@ -171,7 +171,7 @@ countVarDecls =
   runFunctionality
   "Counting variable declarations in"
   (generalizePureAnalysis . countVariableDeclarations)
-  describePerFileAnalysis
+  (describePerFileAnalysis "count variable declarations")
   simpleCompiler ()
 
 
@@ -180,7 +180,7 @@ dead =
   runWithOutput
   "Eliminating dead code in"
   (fmap generalizePureAnalysis . perFileRefactoring $ deadCode False)
-  doRefactor
+  (doRefactor "dead code elimination")
   simpleCompiler ()
 
 
@@ -189,7 +189,7 @@ common outSrc =
   runWithOutput
   "Refactoring common blocks in"
   (generalizePureAnalysis . commonElimToModules (takeDirectory outSrc ++ "/"))
-  doRefactorAndCreate
+  (doRefactorAndCreate "common block refactoring")
   simpleCompiler ()
   outSrc
 
@@ -199,7 +199,7 @@ equivalences =
   runWithOutput
   "Refactoring equivalences blocks in"
   (fmap generalizePureAnalysis . perFileRefactoring $ refactorEquivalences)
-  doRefactor
+  (doRefactor "equivalence block refactoring")
   simpleCompiler ()
 
 {- Units feature -}
@@ -254,7 +254,7 @@ unitsCheck =
   runUnitsFunctionality
   "Checking units for"
   (singlePfUnits checkUnits)
-  describePerFileAnalysis
+  (describePerFileAnalysis "unit checking")
 
 
 unitsInfer :: LiteralsOpt -> CamfortEnv -> IO ()
@@ -262,7 +262,7 @@ unitsInfer =
   runUnitsFunctionality
   "Inferring units for"
   (singlePfUnits inferUnits)
-  describePerFileAnalysis
+  (describePerFileAnalysis "unit inference")
 
 
 unitsSynth :: AnnotationType -> FileOrDir -> LiteralsOpt -> CamfortEnv -> IO ()
@@ -270,7 +270,7 @@ unitsSynth annType outSrc opts env =
   runUnitsFunctionality
   "Synthesising units for"
   (multiPfUnits $ LU.synthesiseUnits (markerChar annType))
-  (doRefactor (ceInputSources env) outSrc)
+  (doRefactor "unit synthesis" (ceInputSources env) outSrc)
   opts
   env
 
@@ -280,7 +280,7 @@ unitsCriticals =
   runUnitsFunctionality
   "Suggesting variables to annotate with unit specifications in"
   (singlePfUnits inferCriticalVariables)
-  describePerFileAnalysis
+  (describePerFileAnalysis "unit critical variable analysis")
 
 
 {- Stencils feature -}
@@ -291,7 +291,7 @@ stencilsCheck =
   runFunctionality
   "Checking stencil specs for"
   (generalizePureAnalysis . Stencils.check)
-  describePerFileAnalysis
+  (describePerFileAnalysis "stencil checking")
   compileStencils ()
 
 
@@ -300,7 +300,7 @@ stencilsInfer useEval =
   runFunctionality
   "Inferring stencil specs for"
   (generalizePureAnalysis . Stencils.infer useEval '=')
-  describePerFileAnalysis
+  (describePerFileAnalysis "stencil inference")
   compileStencils ()
 
 
@@ -315,7 +315,7 @@ stencilsSynth annType =
   in runWithOutput
      "Synthesising stencil specs for"
      program
-     doRefactor
+     (doRefactor "stencil synthesis")
      compileStencils ()
 
 

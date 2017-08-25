@@ -236,16 +236,16 @@ makeLenses ''AnalysisReport
 
 instance (Describe e, Describe r) => Describe (AnalysisResult e r) where
   describeBuilder (ARFailure origin e) =
-    "CRITICAL ERROR " <> describeBuilder origin <> ": " <> describeBuilder e
+    "CRITICAL ERROR:\n" <> describeBuilder origin <> ": " <> describeBuilder e
 
   describeBuilder (ARSuccess r) =
-    "OK: " <> describeBuilder r
+    "OK:\n" <> describeBuilder r
 
 
 -- | Produce a human-readable version of an 'AnalysisReport', at the given
 -- verbosity level. Giving 'Nothing' for the log level hides all logs.
-describeReport :: (Describe e, Describe w, Describe r) => Maybe LogLevel -> AnalysisReport e w r -> Lazy.Text
-describeReport level report = Builder.toLazyText . execWriter $ do
+describeReport :: (Describe e, Describe w, Describe r) => Text -> Maybe LogLevel -> AnalysisReport e w r -> Lazy.Text
+describeReport analysisName level report = Builder.toLazyText . execWriter $ do
   let describeMessage lvl msg = do
         let tell' x = do
               tell " -"
@@ -259,6 +259,9 @@ describeReport level report = Builder.toLazyText . execWriter $ do
           _              -> return ()
 
   -- Output file name
+  tell "Running "
+  tellDescribe analysisName
+  tell " on input: "
   tellDescribe (report ^. arSourceFile)
   tell "\n"
 
@@ -267,19 +270,18 @@ describeReport level report = Builder.toLazyText . execWriter $ do
     Just lvl -> do
       tell $ "Logs:\n"
       forM_ (report ^. arMessages) (describeMessage lvl)
+      tell "\n"
+      tell "Result:\n"
     Nothing -> return ()
 
   -- Output results
-  tell "\n"
-  tell "Result:\n"
-  tell " -"
   tellDescribe (report ^. arResult)
 
 
 putDescribeReport
   :: (Describe e, Describe w, Describe r, MonadIO m)
-  => Maybe LogLevel -> AnalysisReport e w r -> m ()
-putDescribeReport level = liftIO . Lazy.putStrLn . describeReport level
+  => Text -> Maybe LogLevel -> AnalysisReport e w r -> m ()
+putDescribeReport analysisName level = liftIO . Lazy.putStrLn . describeReport analysisName level
 
 
 --------------------------------------------------------------------------------
