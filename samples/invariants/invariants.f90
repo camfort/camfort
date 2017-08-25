@@ -120,3 +120,32 @@ integer function div(x, y)
   div = q
 
 end function div
+
+!= static_assert post("multiplyf == x * y")
+real function multiplyf(x, y)
+  implicit none
+
+  integer :: x
+  real :: y
+  integer :: l, n
+  real :: d, r
+
+  if (x >= 0) then
+     d = y
+     l = x
+  else
+     d = - y
+     l = - x
+  end if
+
+  r = 0.0
+  n = 0
+  != static_assert seq("l * d == x * y" & "n == 0" & "r == 0" & "n <= l")
+  do while (n < l)
+     != static_assert invariant("l * d == x * y" & "r == n * d" & "n <= l")
+     r = r + d
+     n = n + 1
+  end do
+
+  multiplyf = r
+end function multiplyf

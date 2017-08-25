@@ -37,6 +37,7 @@ import           Language.Verification
 
 import           Language.Fortran.TypeModel.Match
 import           Language.Fortran.TypeModel.Types
+import           Language.Fortran.TypeModel.Operator.Eval
 
 --------------------------------------------------------------------------------
 --  Names
@@ -108,31 +109,11 @@ instance Pretty1 FortranVar where
 --  Internals
 --------------------------------------------------------------------------------
 
-data PrimSymWord a where
-  PrimSymWord :: SymWord b => Proxy b -> PrimSymWord a
-
-primSymWord :: Prim p k a -> PrimSymWord a
-primSymWord = \case
-  PInt8   -> PrimSymWord (Proxy :: Proxy Int8)
-  PInt16  -> PrimSymWord (Proxy :: Proxy Int16)
-  PInt32  -> PrimSymWord (Proxy :: Proxy Int32)
-  PInt64  -> PrimSymWord (Proxy :: Proxy Int64)
-  PFloat  -> PrimSymWord (Proxy :: Proxy Float)
-  PDouble -> PrimSymWord (Proxy :: Proxy Double)
-  PBool8  -> PrimSymWord (Proxy :: Proxy Int8)
-  PBool16 -> PrimSymWord (Proxy :: Proxy Int16)
-  PBool32 -> PrimSymWord (Proxy :: Proxy Int32)
-  PBool64 -> PrimSymWord (Proxy :: Proxy Int64)
-  PChar   -> PrimSymWord (Proxy :: Proxy Word8)
-
-symbolicPrim :: String -> PrimSymWord a -> Symbolic SVal
-symbolicPrim s (PrimSymWord (_ :: Proxy b)) = unSBV <$> (symbolic s :: Symbolic (SBV b))
-
 varForPrim :: String -> Prim p k a -> Symbolic SVal
-varForPrim s = symbolicPrim s . primSymWord
+varForPrim = flip primSymbolic
 
 varForArray :: String -> Index i -> Prim p k a -> Symbolic SArr
-varForArray s (Index ixPrim) valPrim =
-  case (primSymWord ixPrim, primSymWord valPrim) of
-    (PrimSymWord (_ :: Proxy iw), PrimSymWord (_ :: Proxy vw)) ->
-      unSArray <$> (newArray s :: Symbolic (SArray iw vw))
+varForArray nm (Index ixPrim) valPrim =
+  let k1 = primSBVKind ixPrim
+      k2 = primSBVKind valPrim
+  in newSArr (k1, k2) (const nm)

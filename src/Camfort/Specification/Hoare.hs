@@ -1,3 +1,5 @@
+{-# LANGUAGE OverloadedStrings #-}
+
 module Camfort.Specification.Hoare where
 
 import           Control.Monad.Except
@@ -16,22 +18,22 @@ import           Camfort.Helpers
 import           Camfort.Input
 import           Camfort.Specification.Hoare.Annotation
 import           Camfort.Specification.Hoare.CheckFrontend
+import           Camfort.Specification.Hoare.CheckBackend
 import           Camfort.Specification.Hoare.Parser
 
--- getBlocks = FAB.analyseBBlocks . FAR.analyseRenames . FA.initAnalysis . fmap hoareAnn0
+getBlocks = FAB.analyseBBlocks . FAR.analyseRenames . FA.initAnalysis . fmap hoareAnn0
 
--- check :: SimpleAnalysis (F.ProgramFile Annotation) Report
--- check = do
---   pf <- analysisInput
---   res <- branchAnalysis prettyInvariantChecking (getBlocks pf)
---   -- Append filename to any outputs
---   let output   = mconcat . intersperse (mkReport "\n\n") . analysisResult $ res
---       dbg      = show (analysisDebug res)
---       filename = F.pfGetFilename pf
+check :: F.ProgramFile Annotation -> HoareAnalysis [HoareCheckResult]
+check = invariantChecking . getBlocks
 
---   pure $ (mkReport $ "\n" ++ filename ++ "\n" ++ dbg ++ "\n") `mappend` output
+newtype HoareCheckResults = HoareCheckResults [HoareCheckResult]
 
--- testOn :: FilePath -> IO ()
--- testOn fp = doAnalysisReport check simpleCompiler () fp "." []
+instance Describe HoareCheckResults where
+  describeBuilder (HoareCheckResults rs) = mconcat . intersperse "\n" . map describeBuilder $ rs
 
--- testHoare = testOn "samples/invariants/invariants.f90"
+testOn :: FilePath -> IO ()
+testOn fp = do
+  (mfs, pfsSources) <- loadModAndProgramFiles simpleCompiler () fp fp []
+  describePerFileAnalysis "invariant checking" (fmap HoareCheckResults . check) logOutputStd LogDebug mfs pfsSources
+
+testHoare = testOn "samples/invariants/invariants.f90"

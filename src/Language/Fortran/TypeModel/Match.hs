@@ -36,25 +36,32 @@ import           Language.Fortran.TypeModel.Util
 --  Matching on properties of types
 --------------------------------------------------------------------------------
 
-data MatchPrim a where
-  MatchPrim :: Sing p -> Sing k -> Prim p k (PrimS a) -> MatchPrim (PrimS a)
+data MatchPrim p k a where
+  MatchPrim :: Sing p -> Sing k -> MatchPrim p k (PrimS a)
+
+matchPrim :: Prim p k a -> MatchPrim p k a
+matchPrim = \case
+  PInt8   -> MatchPrim sing sing
+  PInt16  -> MatchPrim sing sing
+  PInt32  -> MatchPrim sing sing
+  PInt64  -> MatchPrim sing sing
+  PFloat  -> MatchPrim sing sing
+  PDouble -> MatchPrim sing sing
+  PBool8  -> MatchPrim sing sing
+  PBool16 -> MatchPrim sing sing
+  PBool32 -> MatchPrim sing sing
+  PBool64 -> MatchPrim sing sing
+  PChar   -> MatchPrim sing sing
+
+
+data MatchPrimD a where
+  MatchPrimD :: MatchPrim p k a -> Prim p k a -> MatchPrimD a
 
 -- | Checks if the given type is primitive, and if so returns a proof of that
 -- fact.
-matchPrim :: D a -> Maybe (MatchPrim a)
-matchPrim = \case
-  DPrim p -> case p of
-    PInt8   -> Just (MatchPrim sing sing p)
-    PInt16  -> Just (MatchPrim sing sing p)
-    PInt32  -> Just (MatchPrim sing sing p)
-    PInt64  -> Just (MatchPrim sing sing p)
-    PFloat  -> Just (MatchPrim sing sing p)
-    PDouble -> Just (MatchPrim sing sing p)
-    PBool8  -> Just (MatchPrim sing sing p)
-    PBool16 -> Just (MatchPrim sing sing p)
-    PBool32 -> Just (MatchPrim sing sing p)
-    PBool64 -> Just (MatchPrim sing sing p)
-    PChar   -> Just (MatchPrim sing sing p)
+matchPrimD :: D a -> Maybe (MatchPrimD a)
+matchPrimD = \case
+  DPrim p -> Just (MatchPrimD (matchPrim p) p)
   _ -> Nothing
 
 
@@ -85,9 +92,9 @@ data MatchNumType a where
 -- | Checks if the given type is numeric, and if so returns a proof of that
 -- fact.
 matchNumType :: D a -> Maybe (MatchNumType a)
-matchNumType = matchPrim >=> \case
-  MatchPrim sp SKInt p -> Just (MatchNumType sp SKInt NKInt p)
-  MatchPrim sp SKReal p -> Just (MatchNumType sp SKReal NKReal p)
+matchNumType = matchPrimD >=> \case
+  MatchPrimD (MatchPrim sp SKInt) p -> Just (MatchNumType sp SKInt NKInt p)
+  MatchPrimD (MatchPrim sp SKReal) p -> Just (MatchNumType sp SKReal NKReal p)
   _ -> Nothing
 
 
@@ -107,6 +114,10 @@ matchNumR = matchingWith2 matchNumType matchNumType $ \case
     makePrim (sPrecMax sp1 sp2) (sKindMax sk1 sk2) <$$> \case
       MakePrim prim3 -> MatchNumR nk1 nk2 prim1 prim2 prim3
 
+primCeil :: Prim p1 k1 a -> Prim p2 k2 b -> Maybe (MakePrim (PrecMax p1 p2) (KindMax k1 k2))
+primCeil prim1 prim2 = case (matchPrim prim1, matchPrim prim2) of
+  (MatchPrim p1 k1, MatchPrim p2 k2) -> makePrim (sPrecMax p1 p2) (sKindMax k1 k2)
+
 
 data MatchCompareR a b where
   MatchCompareR :: ComparableKinds k1 k2 -> Prim p1 k1 a -> Prim p2 k2 b -> MatchCompareR a b
@@ -119,10 +130,10 @@ matchCompareR =
   (matchingWithBoth matchNumR $ Just . \case
       MatchNumR nk1 nk2 p1 p2 _ -> MatchCompareR (CKNum nk1 nk2) p1 p2
   ) `alt2`
-  (matchingWith2 matchPrim matchPrim $ \case
-      (MatchPrim _ SKLogical p1, MatchPrim _ SKLogical p2) ->
+  (matchingWith2 matchPrimD matchPrimD $ \case
+      (MatchPrimD (MatchPrim _ SKLogical) p1, MatchPrimD (MatchPrim _ SKLogical) p2) ->
         Just (MatchCompareR CKBool p1 p2)
-      (MatchPrim _ SKChar p1, MatchPrim _ SKChar p2) ->
+      (MatchPrimD (MatchPrim _ SKChar) p1, MatchPrimD (MatchPrim _ SKChar) p2) ->
         Just (MatchCompareR CKChar p1 p2)
       _ -> Nothing
   )
@@ -150,7 +161,7 @@ matchOpR op argTypes =
         MatchNumType _ _ nk p :& RNil -> MatchOpR (ORNum1 nk p p) d1
 
       OpNot -> argsPrim >>= \case
-        MatchPrim _ SKLogical p :& RNil -> Just $ MatchOpR (ORLogical1 p PBool8) (DPrim PBool8)
+        MatchPrimD (MatchPrim _ SKLogical) p :& RNil -> Just $ MatchOpR (ORLogical1 p PBool8) (DPrim PBool8)
         _ -> Nothing
 
       -- In the deref case, we don't have access to a particular field to
@@ -168,19 +179,19 @@ matchOpR op argTypes =
           MatchNumR nk1 nk2 p1 p2 p3 -> MatchOpR (ORNum2 nk1 nk2 p1 p2 p3) (DPrim p3)
 
       OpAnd -> argsPrim >>= \case
-        MatchPrim _ SKLogical p1 :& MatchPrim _ SKLogical p2 :& RNil ->
+        MatchPrimD (MatchPrim _ SKLogical) p1 :& MatchPrimD (MatchPrim _ SKLogical) p2 :& RNil ->
           Just $ MatchOpR (ORLogical2 p1 p2 PBool8) (DPrim PBool8)
         _ -> Nothing
       OpOr -> argsPrim >>= \case
-        MatchPrim _ SKLogical p1 :& MatchPrim _ SKLogical p2 :& RNil ->
+        MatchPrimD (MatchPrim _ SKLogical) p1 :& MatchPrimD (MatchPrim _ SKLogical) p2 :& RNil ->
           Just $ MatchOpR (ORLogical2 p1 p2 PBool8) (DPrim PBool8)
         _ -> Nothing
       OpEquiv -> argsPrim >>= \case
-        MatchPrim _ SKLogical p1 :& MatchPrim _ SKLogical p2 :& RNil ->
+        MatchPrimD (MatchPrim _ SKLogical) p1 :& MatchPrimD (MatchPrim _ SKLogical) p2 :& RNil ->
           Just $ MatchOpR (ORLogical2 p1 p2 PBool8) (DPrim PBool8)
         _ -> Nothing
       OpNotEquiv -> argsPrim >>= \case
-        MatchPrim _ SKLogical p1 :& MatchPrim _ SKLogical p2 :& RNil ->
+        MatchPrimD (MatchPrim _ SKLogical) p1 :& MatchPrimD (MatchPrim _ SKLogical) p2 :& RNil ->
           Just $ MatchOpR (ORLogical2 p1 p2 PBool8) (DPrim PBool8)
         _ -> Nothing
 
@@ -197,8 +208,8 @@ matchOpR op argTypes =
       OpGE -> matchCompareR d1 d2 <$$> \case
         MatchCompareR cmp p1 p2 -> MatchOpR (ORRel cmp p1 p2 PBool8) (DPrim PBool8)
 
-      OpLookup -> traverse matchPrim (d1, d2) >>= \case
-        (DArray (Index pi1) pv, MatchPrim _ _ pi2) -> case eqPrim pi1 pi2 of
+      OpLookup -> traverse matchPrimD (d1, d2) >>= \case
+        (DArray (Index pi1) pv, MatchPrimD (MatchPrim _ _) pi2) -> case eqPrim pi1 pi2 of
           Just Refl -> Just $ MatchOpR (ORLookup d1) (primS pv DPrim)
           _         -> Nothing
         _ -> Nothing
@@ -207,7 +218,7 @@ matchOpR op argTypes =
 
   where
     argsNumeric = rtraverse matchNumType argTypes
-    argsPrim = rtraverse matchPrim argTypes
+    argsPrim = rtraverse matchPrimD argTypes
 
 --------------------------------------------------------------------------------
 --  Equality of Fortran types

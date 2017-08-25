@@ -91,8 +91,8 @@ translateBoolExpression
 translateBoolExpression e = do
   Some d1 e' <- translateExpression e
 
-  resUnsquashed :: Expr FLiftLogical FortranExpr Bool <- case matchPrim d1 of
-    Just (MatchPrim _ SKLogical prim1) -> return $ EOp $
+  resUnsquashed :: Expr FLiftLogical FortranExpr Bool <- case matchPrimD d1 of
+    Just (MatchPrimD (MatchPrim _ SKLogical) prim1) -> return $ EOp $
       case prim1 of
         PBool8  -> FLL8 (EVar e')
         PBool16 -> FLL16 (EVar e')
@@ -123,7 +123,7 @@ translateValue :: F.Value ann -> MonadTranslate ann SomeExpr
 translateValue = \case
   v@(F.ValInteger s) -> translateLiteral v PInt64 readMaybe s
 
-  v@(F.ValReal s) -> translateLiteral v PDouble readMaybe s
+  v@(F.ValReal s) -> translateLiteral v PFloat readMaybe s
 
   v@(F.ValComplex realPart complexPart) -> errUnsupportedValue v
   v@(F.ValString s) -> errUnsupportedValue v

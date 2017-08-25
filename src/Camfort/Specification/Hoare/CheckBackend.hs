@@ -21,7 +21,7 @@ module Camfort.Specification.Hoare.CheckBackend
   , apuPreconditions
   , apuPostconditions
   , apuPU
-  , HoareAnalysis
+  , BackendAnalysis
   , HoareCheckResult(..)
   , HoareBackendError(..)
   , checkPU
@@ -37,15 +37,16 @@ import           Data.Foldable                          (foldlM)
 import           Data.Generics.Uniplate.Operations
 import           Data.Map                               (Map)
 import           Data.Maybe                             (isJust)
+import           Data.Void                              (Void)
 
-import           Data.SBV                               (SBool)
+import           Data.SBV                               (SBool, defaultSMTCfg)
 
 import qualified Language.Fortran.Analysis              as F
 import qualified Language.Fortran.AST                   as F
 import qualified Language.Fortran.Util.Position         as F
 
 import           Camfort.Analysis
-import           Camfort.Analysis.Logger                (Text)
+import           Camfort.Analysis.Logger                (Text, Builder)
 import           Camfort.Specification.Hoare.Annotation
 import           Camfort.Specification.Hoare.Syntax
 import           Camfort.Specification.Hoare.Translate
@@ -87,31 +88,38 @@ data HoareBackendError
   -- ^ The variable was referenced in an assignment but not in scope
   | MissingWhileInvariant (F.Block HA)
   -- ^ The while block had no associated invariant
-  deriving (Show)
-
-instance Exception HoareBackendError where
-  displayException = \case
-    VerifierError e -> "verifier error: " ++ displayException e
-    TranslateError0 te -> "translation error: " ++ displayException te
-    TranslateError1 te -> "translation error: " ++ displayException te
-    UnsupportedBlock _ -> "encountered unsupported block"
-    UnexpectedBlock _ -> "a block was found in an illegal location"
-    ArgWithoutDecl nm -> "argument " ++ show nm ++ " doesn't have an associated type declaration"
-    AnnotationError _ ->
-      "the program was insufficiently annotated; " ++
-      "`seq` annotations must appear before each command which is not an assignment"
-    VarNotInScope nm -> "variable " ++ pretty nm ++ " is being assigned to but is not in scope"
-    MissingWhileInvariant _ ->
-      "found a `do while` block with no invariant; " ++
-      "invariant annotations must appear at the start of every `do while` loop"
 
 instance Describe HoareBackendError where
-  describe = describe . displayException
+  describeBuilder = \case
+    VerifierError e -> "verifier error: " <> describeBuilder (displayException e)
+    TranslateError0 te -> "translation error: " <> describeBuilder (displayException te)
+    TranslateError1 te -> "translation error: " <> describeBuilder (displayException te)
+    UnsupportedBlock _ -> "encountered unsupported block"
+    UnexpectedBlock _ -> "a block was found in an illegal location"
+    ArgWithoutDecl nm -> "argument " <> describeBuilder (show nm) <> " doesn't have an associated type declaration"
+    AnnotationError _ ->
+      "the program was insufficiently annotated; " <>
+      "`seq` annotations must appear before each command which is not an assignment"
+    VarNotInScope nm -> "variable " <> describeBuilder (pretty nm) <> " is being assigned to but is not in scope"
+    MissingWhileInvariant _ ->
+      "found a `do while` block with no invariant; " <>
+      "invariant annotations must appear at the start of every `do while` loop"
 
-type HoareAnalysis = AnalysisT HoareBackendError () IO
+type BackendAnalysis = AnalysisT HoareBackendError Void IO
 
-data HoareCheckResult = HoareCheckResult Bool
+data HoareCheckResult = HoareCheckResult (F.ProgramUnit HA) Bool
   deriving (Show)
+
+describePuName :: F.ProgramUnitName -> Builder
+describePuName (F.Named n) = describeBuilder n
+describePuName F.NamelessBlockData = "<nameless block data>"
+describePuName F.NamelessComment = "<nameless comment>"
+describePuName F.NamelessMain = "<nameless main>"
+
+instance Describe HoareCheckResult where
+  describeBuilder (HoareCheckResult pu result) =
+    "Program unit '" <> describePuName (F.puSrcName pu) <> "': " <>
+    (if result then "verified!" else "unverifiable!")
 
 data CheckHoareState =
   CheckHoareState
@@ -145,7 +153,7 @@ makeLenses ''CheckHoareEnv
 --  Main function
 --------------------------------------------------------------------------------
 
-checkPU :: AnnotatedProgramUnit -> HoareAnalysis HoareCheckResult
+checkPU :: AnnotatedProgramUnit -> BackendAnalysis HoareCheckResult
 checkPU apu = do
 
   let pu = apu ^. apuPU
@@ -168,7 +176,7 @@ checkPU apu = do
     let precond = propAnd preconds
         postcond = propAnd postconds
 
-    logInfo' pu $ " - Found preconditions: " <> describe (pretty precond)
+    logInfo' pu $ " - Found preconditions: "  <> describe (pretty precond)
     logInfo' pu $ " - Found postconditions: " <> describe (pretty postcond)
 
     return (precond, postcond, body)
@@ -177,22 +185,30 @@ checkPU apu = do
 
   (_, vcs) <- runGenM env (F.getSpan pu) (genBody bodyTriple)
 
-  logInfo' pu $ " - Computed verification conditions:"
+  logInfo' pu $ " - Verifying conditions:"
 
-  -- TODO: More precise error origins
-  results <- traverse (verifyVc (failAnalysis' pu)) vcs
+  let checkVcs _ [] = return True
+      checkVcs i (vc : rest) = do
+        logInfo' pu $ "   " <> describeShow i <> ". " <> describe (pretty vc)
+        result <- verifyVc (failAnalysis' pu) vc
+        if result
+          then checkVcs (1 + i) rest
+          else do
+          logInfo' pu "    - Failed!"
+          zipWithM_ printUnchecked [(1 + i)..] vcs
+          return False
 
-  forM_ (zip [1..] (zip results vcs)) $ \(i :: Int, (result, vc)) -> do
-    logInfo' pu $ "   " <> describeShow i <> ". " <> describe (pretty vc)
-    unless result $ logInfo' pu $ "    - Failed!"
+      printUnchecked i vc = do
+        logInfo' pu $ "   " <> describeShow i <> ". " <> describe (pretty vc)
+        logInfo' pu   "    - Unchecked"
 
-  return $ HoareCheckResult $ and results
+  HoareCheckResult pu <$> checkVcs (1 :: Int) vcs
 
 --------------------------------------------------------------------------------
 --  Check Monad
 --------------------------------------------------------------------------------
 
-type CheckHoare = HoareAnalysis
+type CheckHoare = BackendAnalysis
 
 
 -- | Sets up the environment for checking the program unit, including reading
@@ -279,10 +295,10 @@ newFunctionVar :: F.ProgramUnit (F.Analysis x) -> SomeType -> ScopeVars -> Scope
 newFunctionVar pu ty =
   let uniqueName = case F.puName pu of
         F.Named n -> UniqueName n
-        _         -> error "Impossible: function has no name"
+        _         -> error "impossible: function has no name"
       srcName = case F.puSrcName pu of
         F.Named n -> SourceName n
-        _         -> error "Impossible: function has no name"
+        _         -> error "impossible: function has no name"
 
   in at srcName .~ Just (varOfType (NamePair uniqueName srcName) ty)
 
@@ -291,7 +307,12 @@ verifyVc handle prop = do
   let getSrProp :: SymRepr Bool -> SBool
       getSrProp (SRProp x) = x
 
-  res <- liftIO . runVerifier . query . checkPropWith getSrProp id $ prop
+  let debug = False
+      cfg
+        | debug = defaultSMTCfg { verbose = True, transcript = Just "transcript.smt2" }
+        | otherwise = defaultSMTCfg
+
+  res <- liftIO . runVerifierWith cfg . query . checkPropWith getSrProp id $ prop
   case res of
     Right b -> return b
     Left e  -> handle (VerifierError e)

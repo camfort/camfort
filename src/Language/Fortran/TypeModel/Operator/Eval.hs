@@ -1,5 +1,6 @@
 {-# LANGUAGE DataKinds             #-}
 {-# LANGUAGE FlexibleContexts      #-}
+{-# LANGUAGE TemplateHaskell      #-}
 {-# LANGUAGE GADTs                 #-}
 {-# LANGUAGE KindSignatures        #-}
 {-# LANGUAGE LambdaCase            #-}
@@ -12,7 +13,17 @@
 
 module Language.Fortran.TypeModel.Operator.Eval where
 
-import           Data.SBV.Dynamic                         hiding (KReal)
+import           Data.Word                                (Word8)
+-- import           Data.Int                                (Int8, Int16, Int32, Int64)
+
+import           Control.Lens.TH
+
+import           Data.SBV                                 (SDouble, SFloat,
+                                                           SReal, sRTZ)
+import qualified Data.SBV                                 as SBV
+import           Data.SBV.Dynamic                         (SArr, SVal)
+import qualified Data.SBV.Dynamic                         as SBV
+import           Data.SBV.Internals                       (SBV (..))
 
 import           Data.Singletons
 import           Data.Singletons.Prelude.List
@@ -24,27 +35,28 @@ import           Data.Vinyl.Curry
 import           Language.Fortran.TypeModel.Operator.Core
 import           Language.Fortran.TypeModel.Singletons
 import           Language.Fortran.TypeModel.Types
+import           Language.Fortran.TypeModel.Match
 
 evalFortranOp :: Op (Length args) ok -> OpResult ok args result -> Rec SymRepr args -> SymRepr result
 evalFortranOp op opr = case opr of
   ORLit px x -> \_ -> primFromVal px (primLit px x)
 
   ORNum1 _ p1 p2 ->
-    primUnop p1 p2 (numUnop op)
+    primUnop True p1 p2 (numUnop op)
   ORNum2 nk1 nk2 p1 p2 p3 ->
-    primBinop p1 p2 p3 (numBinop (nkBothInts nk1 nk2) op)
+    primBinop True p1 p2 p3 (numBinop (nkBothInts nk1 nk2) op)
 
-  ORLogical1 p1 p2 -> primUnop p1 p2 (logicalUnop op)
-  ORLogical2 p1 p2 p3 -> primBinop p1 p2 p3 (logicalBinop op)
+  ORLogical1 p1 p2 -> primUnop True p1 p2 (logicalUnop op)
+  ORLogical2 p1 p2 p3 -> primBinop True p1 p2 p3 (logicalBinop op)
 
-  OREq cmp p1 p2 p3 -> primBinop p1 p2 p3 (eqBinop cmp op)
-  ORRel cmp p1 p2 p3 -> primBinop p1 p2 p3 (relBinop cmp op)
+  OREq cmp p1 p2 p3 -> primBinop False p1 p2 p3 (eqBinop cmp op)
+  ORRel cmp p1 p2 p3 -> primBinop False p1 p2 p3 (relBinop cmp op)
 
   ORLookup (DArray (Index indexPrim) elPrim) ->
     runcurry $ \xs index ->
       let xsArr = toArr xs
           indexVal = primToVal indexPrim index
-      in primFromVal elPrim (readSArr xsArr indexVal)
+      in primFromVal elPrim (SBV.readSArr xsArr indexVal)
 
   ORDeref _ fname -> runcurry (\r -> derefRec (toRec r) fname)
 
@@ -69,47 +81,114 @@ toRec :: SymRepr (Record rname fields) -> Rec FieldRepr fields
 toRec (SRData _ x) = x
 
 primUnop
-  :: Prim p1 k1 a -> Prim p2 k2 b
+  :: Bool
+  -> Prim p1 k1 a -> Prim p2 k2 b
   -> (SVal -> SVal)
   -> Rec SymRepr '[a] -> SymRepr b
-primUnop p1 p2 f = primFromVal p2 . runcurry (f . primToVal p1)
+primUnop shouldCoerce p1 p2 f = primFromVal p2 . runcurry (f . maybeCoerce . primToVal p1)
+  where
+    maybeCoerce
+      | shouldCoerce = coerceSBVNum p2
+      | otherwise = id
 
 primBinop
-  :: Prim p1 k1 a -> Prim p2 k2 b -> Prim p3 k3 c
+  :: Bool
+  -- ^ True to coerce arguments to result value. False to coerce arguments to
+  -- ceiling of each.
+  -> Prim p1 k1 a -> Prim p2 k2 b -> Prim p3 k3 c
   -> (SVal -> SVal -> SVal)
   -> Rec SymRepr '[a, b] -> SymRepr c
-primBinop p1 p2 p3 f = primFromVal p3 . runcurry (\x y -> f (primToVal p1 x) (primToVal p2 y))
+primBinop takesResultVal p1 p2 p3 (.*.) =
+  primFromVal p3 .
+  runcurry (\x y -> (coerceArg $ primToVal p1 x) .*. (coerceArg $ primToVal p2 y))
+
+  where
+    coerceToCeil = case primCeil p1 p2 of
+      Just (MakePrim pCeil) -> coerceSBVNum pCeil
+      _ -> id
+
+    coerceArg
+      | takesResultVal = coerceSBVNum p3
+      | otherwise = coerceToCeil
+
+--------------------------------------------------------------------------------
+--  SBV Kinds
+--------------------------------------------------------------------------------
+
+coerceBy :: (SBV a -> SBV b) -> SVal -> SVal
+coerceBy f x = unSBV (f (SBV x))
+
+coerceNumKinds :: SBV.Kind -> SBV.Kind -> (SVal -> SVal)
+coerceNumKinds SBV.KReal   SBV.KReal = id
+coerceNumKinds SBV.KFloat  SBV.KReal = coerceBy (SBV.fromSFloat sRTZ :: SFloat -> SReal)
+coerceNumKinds SBV.KDouble SBV.KReal = coerceBy (SBV.fromSDouble sRTZ :: SDouble -> SReal)
+coerceNumKinds _        k2@SBV.KReal = SBV.svFromIntegral k2
+
+coerceNumKinds SBV.KReal   SBV.KDouble = coerceBy (SBV.toSDouble sRTZ :: SReal -> SDouble)
+coerceNumKinds SBV.KDouble SBV.KDouble = id
+coerceNumKinds SBV.KFloat  SBV.KDouble = coerceBy (SBV.toSDouble sRTZ :: SFloat -> SDouble)
+coerceNumKinds _        k2@SBV.KDouble = SBV.svFromIntegral k2
+
+coerceNumKinds SBV.KReal   SBV.KFloat = coerceBy (SBV.toSFloat sRTZ :: SReal -> SFloat)
+coerceNumKinds SBV.KDouble SBV.KFloat = coerceBy (SBV.toSFloat sRTZ :: SDouble -> SFloat)
+coerceNumKinds SBV.KFloat  SBV.KFloat = id
+coerceNumKinds _        k2@SBV.KFloat = SBV.svFromIntegral k2
+
+coerceNumKinds _ k2 = SBV.svFromIntegral k2
+
+coerceSBVNum :: Prim p k a -> SVal -> SVal
+coerceSBVNum p v =
+  let k2 = primSBVKind p
+      k1 = SBV.kindOf v
+  in coerceNumKinds k1 k2 v
 
 --------------------------------------------------------------------------------
 --  Literals
 --------------------------------------------------------------------------------
 
-primLit :: Prim p k (PrimS a) -> a -> SVal
-primLit = \case
-  PInt8  -> svIntegral
-  PInt16 -> svIntegral
-  PInt32 -> svIntegral
-  PInt64 -> svIntegral
+data PrimSymSpec a =
+  PrimSymSpec
+  { _pssKind :: SBV.Kind
+  , _pssLiteral :: a -> SVal
+  , _pssSymbolic :: String -> SBV.Symbolic SVal
+  }
 
-  PBool8  -> svBool' . getBool8
-  PBool16 -> svBool' . getBool16
-  PBool32 -> svBool' . getBool32
-  PBool64 -> svBool' . getBool64
-
-  PFloat -> svFloat
-  PDouble -> svDouble
-
-  PChar -> svIntegral . getChar8
-
+primSymSpec :: Prim p k (PrimS a) -> PrimSymSpec a
+primSymSpec = \case
+  PInt8   -> bySymWord (0 :: Integer) fromIntegral
+  PInt16  -> bySymWord (0 :: Integer) fromIntegral
+  PInt32  -> bySymWord (0 :: Integer) fromIntegral
+  PInt64  -> bySymWord (0 :: Integer) fromIntegral
+  PFloat  -> bySymWord (0 :: Float) id
+  PDouble -> bySymWord (0 :: Double) id
+  PBool8  -> bySymWord (False :: Bool) (toBool . getBool8)
+  PBool16 -> bySymWord (False :: Bool) (toBool . getBool16)
+  PBool32 -> bySymWord (False :: Bool) (toBool . getBool32)
+  PBool64 -> bySymWord (False :: Bool) (toBool . getBool64)
+  PChar   -> bySymWord (0 :: Word8) getChar8
   where
-    svIntegral x = svInteger (kindOf x) (fromIntegral x)
+    bySymWord :: (SBV.SymWord b) => b -> (a -> b) -> PrimSymSpec a
+    bySymWord (repValue :: b) fromPrim =
+      PrimSymSpec
+      { _pssKind = SBV.kindOf repValue
+      , _pssLiteral = unSBV . SBV.literal . fromPrim
+      , _pssSymbolic = fmap (unSBV :: SBV b -> SVal) . SBV.symbolic
+      }
 
-    -- Representing 1-bit truth values compactly when possible makes everything
-    -- much faster.
-    svBool' x
-      | x == 0 = svFalse
-      | x == 1 = svTrue
-      | otherwise = svIntegral x
+    toBool :: (Ord a, Num a) => a -> Bool
+    toBool x = x > 0
+
+
+primSBVKind :: Prim p k a -> SBV.Kind
+primSBVKind p = primS p (_pssKind . primSymSpec)
+
+
+primLit :: Prim p k (PrimS a) -> a -> SVal
+primLit = _pssLiteral . primSymSpec
+
+
+primSymbolic :: Prim p k a -> String -> SBV.Symbolic SVal
+primSymbolic p = primS p (_pssSymbolic . primSymSpec)
 
 --------------------------------------------------------------------------------
 --  Numeric
@@ -123,15 +202,15 @@ nkBothInts _ _         = False
 
 numUnop :: Op 1 'OKNum -> SVal -> SVal
 numUnop = \case
-  OpNeg -> svUNeg
+  OpNeg -> SBV.svUNeg
   OpPos -> id
 
 numBinop :: Bool -> Op 2 'OKNum -> SVal -> SVal -> SVal
 numBinop isInt = \case
-  OpAdd -> svPlus
-  OpSub -> svMinus
-  OpMul -> svTimes
-  OpDiv -> if isInt then svQuot else svDivide
+  OpAdd -> SBV.svPlus
+  OpSub -> SBV.svMinus
+  OpMul -> SBV.svTimes
+  OpDiv -> if isInt then SBV.svQuot else SBV.svDivide
 
 --------------------------------------------------------------------------------
 --  Logical
@@ -141,17 +220,17 @@ numBinop isInt = \case
 
 logicalUnop :: Op 1 'OKLogical -> SVal -> SVal
 logicalUnop = \case
-  OpNot -> svNot
+  OpNot -> SBV.svNot
 
 logicalBinop :: Op 2 'OKLogical -> SVal -> SVal -> SVal
 logicalBinop = \case
-  OpAnd -> svAnd
-  OpOr -> svOr
+  OpAnd -> SBV.svAnd
+  OpOr -> SBV.svOr
   OpEquiv -> svEquiv
   OpNotEquiv -> svNotEquiv
   where
-    svEquiv x y = (x `svAnd` y) `svOr` (svNot x `svAnd` svNot y)
-    svNotEquiv x y = svNot (x `svEquiv` y)
+    svEquiv x y = (x `SBV.svAnd` y) `SBV.svOr` (SBV.svNot x `SBV.svAnd` SBV.svNot y)
+    svNotEquiv x y = SBV.svNot (x `svEquiv` y)
 
 --------------------------------------------------------------------------------
 --  Equality
@@ -161,8 +240,8 @@ logicalBinop = \case
 
 eqBinop :: ComparableKinds k1 k2 -> Op 2 'OKEq -> SVal -> SVal -> SVal
 eqBinop _ = \case
-  OpEq -> svEqual
-  OpNE -> svNotEqual
+  OpEq -> SBV.svEqual
+  OpNE -> SBV.svNotEqual
 
 --------------------------------------------------------------------------------
 --  Relational
@@ -172,10 +251,10 @@ eqBinop _ = \case
 
 relBinop :: ComparableKinds k1 k2 -> Op 2 'OKRel -> SVal -> SVal -> SVal
 relBinop _ = \case
-  OpLT -> svLessThan
-  OpLE -> svLessEq
-  OpGT -> svGreaterThan
-  OpGE -> svGreaterEq
+  OpLT -> SBV.svLessThan
+  OpLE -> SBV.svLessEq
+  OpGT -> SBV.svGreaterThan
+  OpGE -> SBV.svGreaterEq
 
 --------------------------------------------------------------------------------
 --  Deref
@@ -187,88 +266,14 @@ derefRec r _ =
     FR _ x -> x
 
 --------------------------------------------------------------------------------
---  Equality of operators
+--  Lenses
 --------------------------------------------------------------------------------
 
--- eqPrim :: Prim p1 k1 a -> Prim p2 k2 b -> Bool
--- eqPrim p1 p2 = case (p1, p2) of
---   (PInt8, PInt8) -> True
---   (PInt16, PInt16) -> True
---   (PInt32, PInt32) -> True
---   (PInt64, PInt64) -> True
---   (PBool8, PBool8) -> True
---   (PBool16, PBool16) -> True
---   (PBool32, PBool32) -> True
---   (PBool64, PBool64) -> True
---   (PFloat, PFloat) -> True
---   (PDouble, PDouble) -> True
---   (PChar, PChar) -> True
---   _ -> False
+makeLenses ''PrimSymSpec
 
--- eqPrimS :: Prim p1 k1 a -> Prim p2 k2 b -> a -> b -> Bool
--- eqPrimS p1 p2 = case (p1, p2) of
---   (PInt8, PInt8) -> (==)
---   (PInt16, PInt16) -> (==)
---   (PInt32, PInt32) -> (==)
---   (PInt64, PInt64) -> (==)
---   (PBool8, PBool8) -> (==)
---   (PBool16, PBool16) -> (==)
---   (PBool32, PBool32) -> (==)
---   (PBool64, PBool64) -> (==)
---   (PFloat, PFloat) -> (==)
---   (PDouble, PDouble) -> (==)
---   (PChar, PChar) -> (==)
---   _ -> \_ _ -> False
-
--- eqSymbol :: SSymbol n1 -> SSymbol n2 -> Bool
--- eqSymbol n1 n2 = withKnownSymbol n1 $ withKnownSymbol n2 $ symbolVal n1 == symbolVal n2
-
--- eqD :: D a -> D b -> Bool
--- eqD d1 d2 = case (d1, d2) of
---   (DPrim p1, DPrim p2) -> eqPrim p1 p2
---   (DArray (Index i1) p1, DArray (Index i2) p2) -> eqPrim i1 i2 && eqPrim p1 p2
---   (DData n1 r1, DData n2 r2) -> eqSymbol n1 n2 && liftEqRec eqField r1 r2
---   _ -> False
-
--- eqField :: RField a -> RField b -> Bool
--- eqField (RField n1 d1) (RField n2 d2) = eqSymbol n1 n2 && eqD d1 d2
-
--- eqOp :: Op n1 ok1 -> Op n2 ok2 -> Bool
--- eqOp o1 o2 = case (o1, o2) of
---   (OpLit, OpLit) -> True
---   (OpNeg, OpNeg) -> True
---   (OpPos, OpPos) -> True
---   (OpAdd, OpAdd) -> True
---   (OpSub, OpSub) -> True
---   (OpMul, OpMul) -> True
---   (OpDiv, OpDiv) -> True
---   (OpEq, OpEq) -> True
---   (OpNE, OpNE) -> True
---   (OpLT, OpLT) -> True
---   (OpLE, OpLE) -> True
---   (OpGT, OpGT) -> True
---   (OpGE, OpGE) -> True
---   (OpNot, OpNot) -> True
---   (OpAnd, OpAnd) -> True
---   (OpOr, OpOr) -> True
---   (OpEquiv, OpEquiv) -> True
---   (OpNotEquiv, OpNotEquiv) -> True
---   (OpLookup, OpLookup) -> True
---   (OpDeref, OpDeref) -> True
---   (_, _) -> False
-
--- eqOpR :: OpResult ok1 args1 r1 -> OpResult ok2 args2 r2 -> Bool
--- eqOpR o1 o2 = case (o1, o2) of
---   (ORLit p1 x1, ORLit p2 x2) -> eqPrimS p1 p2 (PrimS x1) (PrimS x2)
---   (ORNum1 _ px1 px2, ORNum1 _ py1 py2) -> eqPrim px1 py1 && eqPrim px2 py2
---   (ORNum2 _ _ px1 px2 px3, ORNum2 _ _ py1 py2 py3) -> eqPrim px1 py1 && eqPrim px2 py2 && eqPrim px3 py3
---   (ORLogical1 px1 px2, ORLogical1 py1 py2) -> eqPrim px1 py1 && eqPrim px2 py2
---   (ORLogical2 px1 px2 px3, ORLogical2 py1 py2 py3) -> eqPrim px1 py1 && eqPrim px2 py2 && eqPrim px3 py3
---   (OREq _ px1 px2 px3, OREq _ py1 py2 py3) -> eqPrim px1 py1 && eqPrim px2 py2 && eqPrim px3 py3
---   (ORRel _ px1 px2 px3, ORRel _ py1 py2 py3) -> eqPrim px1 py1 && eqPrim px2 py2 && eqPrim px3 py3
---   (ORLookup d1, ORLookup d2) -> eqD d1 d2
---   (ORDeref d1 n1, ORDeref d2 n2) -> eqD d1 d2 && eqSymbol n1 n2
---   _ -> False
+--------------------------------------------------------------------------------
+--  Equality of operators
+--------------------------------------------------------------------------------
 
 -- eqOpRArgs
 --   :: (forall x y. (x -> y -> Bool) -> f x -> g y -> Bool)

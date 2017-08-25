@@ -1,28 +1,28 @@
-{-# LANGUAGE NamedFieldPuns #-}
 {-# LANGUAGE FlexibleContexts           #-}
 {-# LANGUAGE GeneralizedNewtypeDeriving #-}
 {-# LANGUAGE LambdaCase                 #-}
+{-# LANGUAGE NamedFieldPuns             #-}
+{-# LANGUAGE OverloadedStrings          #-}
 
 {-# OPTIONS_GHC -Wall #-}
 
 module Camfort.Specification.Hoare.CheckFrontend where
 
+import           Control.Exception
 import           Control.Lens
 import           Control.Monad.Writer.Strict              hiding (Product)
 import           Data.Either                              (partitionEithers)
 import           Data.Generics.Uniplate.Operations
 import           Data.Map                                 (Map)
 import qualified Data.Map                                 as Map
-import Control.Exception
+import           Data.Maybe                               (catMaybes)
+import           Data.Void                                (Void)
 
--- import qualified Language.Fortran.Analysis.BBlocks        as F
--- import qualified Language.Fortran.Analysis.DataFlow       as F
 import qualified Language.Fortran.Analysis                as F
 import qualified Language.Fortran.AST                     as F
 import qualified Language.Fortran.Util.Position           as F
 
-import           Camfort.Analysis                         hiding (Analysis)
-import qualified Camfort.Analysis                         as CA
+import           Camfort.Analysis
 import           Camfort.Analysis.CommentAnnotator
 import           Camfort.Specification.Parser             (SpecParseError)
 
@@ -32,34 +32,33 @@ import           Camfort.Specification.Hoare.Parser
 import           Camfort.Specification.Hoare.Parser.Types (HoareParseError)
 import           Camfort.Specification.Hoare.Syntax
 
--- TODO: Update frontend!
-
 --------------------------------------------------------------------------------
 --  Results and errors
 --------------------------------------------------------------------------------
+
+type HoareAnalysis = AnalysisT HoareFrontendError Void IO
 
 data HoareFrontendError
   = ParseError (SpecParseError HoareParseError)
   | InvalidPUConditions F.ProgramUnitName [PrimSpec ()]
   | BackendError HoareBackendError
-  deriving (Show)
+  -- deriving (Show)
 
-instance Exception HoareFrontendError where
-  displayException = \case
-    ParseError sp spe -> "at " ++ show sp ++ " parse error: " ++ displayException spe
-    InvalidPUConditions sp nm conds ->
-      "at " ++ show sp ++ " invalid specification types attached to PU with name " ++ show nm ++ ": " ++
-      show conds
-    BackendError e -> displayException e
+instance Describe HoareFrontendError where
+  describeBuilder = \case
+    ParseError spe -> "parse error: " <> describeBuilder (displayException spe)
+    InvalidPUConditions nm conds ->
+      "invalid specification types attached to PU with name " <> describeBuilder (show nm) <> ": " <>
+      describeBuilder (show conds)
+    BackendError e -> describeBuilder e
 
 parseError :: F.SrcSpan -> SpecParseError HoareParseError -> HoareAnalysis ()
 parseError sp err = logError' sp (ParseError err)
-  -- HFail (ParseError sp err) mempty
 
 -- | Finds all annotated program units in the given program file. Returns errors
 -- for program units that are incorrectly annotated, along with a list of
 -- program units which are correctly annotated at the top level.
-findAnnotatedPUs :: F.ProgramFile HA -> ([HoareFrontendError], [AnnotatedProgramUnit])
+findAnnotatedPUs :: F.ProgramFile HA -> HoareAnalysis [AnnotatedProgramUnit]
 findAnnotatedPUs pf =
   let pusByName :: Map F.ProgramUnitName (F.ProgramUnit HA)
       pusByName = Map.fromList [(F.puName pu, pu) | pu <- universeBi pf]
@@ -84,59 +83,40 @@ findAnnotatedPUs pf =
       preOrPost :: PrimSpec () -> Either (PrimSpec ()) (Either (PrimFormula ()) (PrimFormula ()))
       preOrPost spec@(Specification { _specType = ty, _specFormula = f }) =
         case ty of
-          SpecPre -> Right (Left f)
+          SpecPre  -> Right (Left f)
           SpecPost -> Right (Right f)
-          _ -> Left spec
+          _        -> Left spec
 
       -- For a given program unit and list of associated specifications, either
       -- create an annotated program unit, or report an error if something is
       -- wrong.
-      collectOrReport :: (F.ProgramUnit HA, [PrimSpec ()]) -> Either HoareFrontendError AnnotatedProgramUnit
-      collectOrReport (pu, specs) =
+      collectUnit :: (F.ProgramUnit HA, [PrimSpec ()]) -> HoareAnalysis (Maybe AnnotatedProgramUnit)
+      collectUnit (pu, specs) =
         let (errors, results) = partitionEithers (map preOrPost specs)
             (preconds, postconds) = partitionEithers results
         in if null errors
-           then Right (AnnotatedProgramUnit preconds postconds pu)
-           else Left (InvalidPUConditions (F.getSpan pu) (F.puName pu) errors)
+           then return (Just (AnnotatedProgramUnit preconds postconds pu))
+           else logError' pu (InvalidPUConditions (F.puName pu) errors) >> return Nothing
 
-  in partitionEithers (map collectOrReport pusWithSpecs)
+  in catMaybes <$> traverse collectUnit pusWithSpecs
 
 
-invariantChecking :: F.ProgramFile HA -> HoareAnalysis HoareCheckResult
+invariantChecking :: F.ProgramFile HA -> HoareAnalysis [HoareCheckResult]
 invariantChecking pf = do
     -- Attempt to parse comments to specifications
-  let (pf', annResults) = runWriter $ annotateComments hoareParser (\srcSpan err -> tell [parseError srcSpan err]) pf
+  pf' <- annotateComments hoareParser parseError pf
 
-      (errors, annotatedPUs) = findAnnotatedPUs pf'
+  annotatedPUs <- findAnnotatedPUs pf'
 
-      checkAndReport apu = do
+  let checkAndReport apu = do
         let nm = F.puName (apu ^. apuPU)
-            prettyName = case F.puSrcName (apu ^. apuPU) of
+            prettyName = describe $ case F.puSrcName (apu ^. apuPU) of
               F.Named x -> x
               _         -> show nm
-        (result, logs) <- checkPU apu
+        logInfo' (apu ^. apuPU) $ "Verifying program unit: " <> prettyName
+        loggingAnalysisError . mapAnalysisT BackendError id $ checkPU apu
 
-        let
-          logsHead = mkReport $ "Verifying program unit: " ++ prettyName ++ "\n"
-          logs' = logsHead <> logs
-
-        case result of
-          Right ok -> return (HOkay ok logs')
-          Left err -> return (HFail (BackendError err) logs')
-
-  checkResults <- traverse checkAndReport annotatedPUs
-
-  return (annResults ++ checkResults ++ map (flip HFail mempty) errors)
-
--- prettyInvariantChecking :: CA.SimpleAnalysis (F.ProgramFile HA) [Report]
--- prettyInvariantChecking = do
---   results <- invariantChecking
-
---   let prettyResult (HOkay (HoareCheckResult b) logs) =
---         logs <> mkReport (if b then " - OK" else " - Cannot verify")
---       prettyResult (HFail e logs) = logs <> mkReport (displayException e)
-
---   return $ map prettyResult results
+  catMaybes <$> traverse checkAndReport annotatedPUs
 
 --------------------------------------------------------------------------------
 --  Other
