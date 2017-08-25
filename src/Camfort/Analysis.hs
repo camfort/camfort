@@ -18,7 +18,14 @@ License     :  Apache-2.0
 Maintainer  :  dom.orchard@gmail.com
 Stability   :  experimental
 
-This module defines functionality for aiding in analysing fortran files.
+This module defines the 'AnalysisT' monad transformer, which encapsulates common
+functionality for analyses:
+
+- Logging via the 'MonadLogger' class
+- Early exit via 'failAnalysis' or 'failAnalysis\''
+- Error recovery via 'catchAnalysisT' or 'loggingAnalysisError'
+- Providing access to the analysis environment via 'analysisModFiles'
+
 -}
 
 module Camfort.Analysis
@@ -26,12 +33,13 @@ module Camfort.Analysis
   -- * Analysis monad
     AnalysisT
   , PureAnalysis
-  -- * Early exit
-  , failAnalysis
-  , failAnalysis'
   -- * Combinators
   , analysisModFiles
   , generalizePureAnalysis
+  , failAnalysis
+  , failAnalysis'
+  , catchAnalysisT
+  , loggingAnalysisError
   -- * Analysis results
   , AnalysisResult(..)
   , _ARFailure
@@ -43,7 +51,9 @@ module Camfort.Analysis
   , putDescribeReport
   -- * Running analyses
   , runAnalysisT
-  -- ** Logging
+  -- * Logging
+  -- | See "Camfort.Analysis.Logger" for more detailed documentation.
+
   , MonadLogger
     ( logError
     , logError'
@@ -55,16 +65,17 @@ module Camfort.Analysis
     , logDebug
     , logDebug'
     )
-  -- * Messages origins
+  -- ** Message origins
   , Origin(..)
   , atSpanned
   , atSpannedInFile
-  -- * Log outputs
+  -- ** Log outputs
   , LogOutput
   , logOutputStd
-  -- * Log levels
+  , logOutputNone
+  -- ** Log levels
   , LogLevel(..)
-  -- * 'Describe' class
+  -- ** 'Describe' class
   , Describe(..)
   , describeShow
   , (<>)
@@ -91,6 +102,10 @@ import           Camfort.Analysis.Logger
 --  Analysis Monad
 --------------------------------------------------------------------------------
 
+-- | The analysis monad transformer. Will usually be based on 'Identity' (see
+-- 'PureAnalysis') or 'IO'.
+--
+-- Has error messages of type @e@ and warnings of type @w@.
 newtype AnalysisT e w m a =
   AnalysisT
   { getAnalysisT ::
@@ -106,6 +121,7 @@ newtype AnalysisT e w m a =
     , MonadLogger e w
     )
 
+-- | A pure analysis computation which cannot do any 'IO'.
 type PureAnalysis e w = AnalysisT e w Identity
 
 instance MonadTrans (AnalysisT e w) where
@@ -132,15 +148,16 @@ instance MonadReader r m => MonadReader r (AnalysisT e w m) where
 --  Combinators
 --------------------------------------------------------------------------------
 
+-- | Get the 'F.ModFiles' from the analysis environment.
 analysisModFiles :: (Monad m) => AnalysisT e w m F.ModFiles
 analysisModFiles = AnalysisT ask
 
+-- | Given a pure analysis action, it can be generalized to run in any 'Monad'.
+-- Since the original analysis was pure, it could not have logged anything as it
+-- ran. The new analysis cannot log anything as it runs either, even it is based
+-- on 'IO'.
 generalizePureAnalysis :: (Monad m) => PureAnalysis e w a -> AnalysisT e w m a
 generalizePureAnalysis = hoist generalize
-
---------------------------------------------------------------------------------
---  Early exit
---------------------------------------------------------------------------------
 
 -- | Report a critical error in the analysis at a particular source location
 -- and exit early.
@@ -161,6 +178,28 @@ failAnalysis' originElem e = do
   origin <- atSpanned originElem
   failAnalysis origin e
 
+-- | Run the given analysis and recover with the given handler function if it
+-- fails.
+catchAnalysisT
+  :: (Monad m)
+  => (LogMessage e -> AnalysisT e w m a) -> AnalysisT e w m a -> AnalysisT e w m a
+catchAnalysisT handle action =
+  AnalysisT (catchError (getAnalysisT action) (getAnalysisT . handle))
+
+-- | Run the given analysis. If it succeeds, return its result value. Otherwise,
+-- log the error it creates and return 'Nothing'.
+--
+-- This allows errors in analysis sub-programs to be collected rather than
+-- halting the entire analysis.
+loggingAnalysisError
+  :: (Monad m, Describe w, Describe e)
+  => AnalysisT e w m a -> AnalysisT e w m (Maybe a)
+loggingAnalysisError =
+  catchAnalysisT ( fmap (const Nothing)
+                 . recordLogMessage
+                 . MsgError)
+  . fmap Just
+
 --------------------------------------------------------------------------------
 --  Analysis Results
 --------------------------------------------------------------------------------
@@ -172,6 +211,9 @@ data AnalysisResult e r
 
 makePrisms ''AnalysisResult
 
+-- | When an analysis is run, it produces a report consisting of the logs it
+-- collect as it ran. In addition, it either fails at a certain location or
+-- succeeds with a result value.
 data AnalysisReport e w r =
   AnalysisReport
   { _arSourceFile :: !FilePath
@@ -190,6 +232,8 @@ instance (Describe e, Describe r) => Describe (AnalysisResult e r) where
     "OK: " <> describeBuilder r
 
 
+-- | Produce a human-readable version of an 'AnalysisReport', at the given
+-- verbosity level. Giving 'Nothing' for the log level hides all logs.
 describeReport :: (Describe e, Describe w, Describe r) => Maybe LogLevel -> AnalysisReport e w r -> Lazy.Text
 describeReport level report = Builder.toLazyText . execWriter $ do
   let describeMessage lvl msg = do
@@ -236,10 +280,17 @@ putDescribeReport level = liftIO . Lazy.putStrLn . describeReport level
 runAnalysisT
   :: (Monad m, Describe e, Describe w)
   => FilePath
+  -- ^ The name of the file the analysis is being run on. This is only used for
+  -- logging.
   -> LogOutput m
+  -- ^ The logging output function, e.g. 'logOutputStd' for standard output or
+  -- 'logOutputNone' for no output.
   -> LogLevel
+  -- ^ The logging verbosity level.
   -> F.ModFiles
+  -- ^ The list of analysis modfiles.
   -> AnalysisT e w m a
+  -- ^ The analysis transformer to run.
   -> m (AnalysisReport e w a)
 runAnalysisT fileName output logLevel mfs analysis = do
 

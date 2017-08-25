@@ -36,7 +36,7 @@ unitsCriticalsReportIs fileName expectedReport = do
 
   let uEnv = UnitEnv { unitOpts = uOpts, unitProgramFile = pf }
 
-  report <- runAnalysisT file (const (return ())) LogError modFiles $ runUnitAnalysis uEnv $ inferCriticalVariables
+  report <- runAnalysisT file logOutputNone LogError modFiles $ runUnitAnalysis uEnv $ inferCriticalVariables
   let res = report ^?! arResult . _ARSuccess
 
   show res `shouldBe` expectedReport

@@ -920,7 +920,7 @@ compileUnits uo mfs pf = do
         , unitProgramFile = pf
         }
 
-  report <- runAnalysisT (F.pfGetFilename pf) (const (return ())) LogError mfs analysis
+  report <- runAnalysisT (F.pfGetFilename pf) logOutputNone LogError mfs analysis
 
   case report ^? arResult . _ARSuccess . _1 of
     Just cu -> return (genUnitsModFile pf' cu)
