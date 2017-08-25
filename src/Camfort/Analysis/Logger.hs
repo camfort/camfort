@@ -66,6 +66,7 @@ module Camfort.Analysis.Logger
   , atSpanned
   , atSpannedInFile
   , LoggerT
+  , mapLoggerT
   -- * Running a logger
   , LogOutput
   , logOutputStd
@@ -82,7 +83,7 @@ import           Control.Monad.Except
 import           Control.Monad.Morph
 import           Control.Monad.Reader
 import qualified Control.Monad.RWS              as Lazy
-import           Control.Monad.RWS.Strict       (RWST)
+import           Control.Monad.RWS.Strict
 import qualified Control.Monad.State            as Lazy
 import           Control.Monad.State.Strict
 import qualified Control.Monad.Writer           as Lazy
@@ -325,12 +326,19 @@ instance (MonadLogger e w m, Monoid w') => MonadLogger e w (Lazy.RWST r w' s m)
 --  'LoggerT' monad
 --------------------------------------------------------------------------------
 
-data LoggerState e w =
+data LoggerState =
   LoggerState
-  { _lsMessages          :: [SomeMessage e w]
-  , _lsLogLevel          :: !LogLevel
+  { _lsLogLevel          :: !LogLevel
   , _lsDefaultSourceFile :: !FilePath
   }
+
+data OpMonoid a = OpMonoid { getOpMonoid :: a }
+
+makeWrapped ''OpMonoid
+
+instance Monoid a => Monoid (OpMonoid a) where
+  mempty = OpMonoid mempty
+  OpMonoid x `mappend` OpMonoid y = OpMonoid (y `mappend` x)
 
 data LoggerEnv m =
   LoggerEnv
@@ -346,21 +354,17 @@ hoistEnv f = leLogFunc %~ \logFunc l1 l2 msg -> f $ logFunc l1 l2 msg
 -- | The logging monad transformer, containing errors of type @e@ and warnings
 -- of type @w@.
 newtype LoggerT e w m a =
-  LoggerT (
-    ReaderT (LoggerEnv m) (
-    StateT (LoggerState e w)
-    m) a)
+  LoggerT (RWST (LoggerEnv m) (OpMonoid [SomeMessage e w]) LoggerState m a)
   deriving
     ( Functor
     , Applicative
     , Monad
     , MonadIO
-    , MonadWriter w'
     , MonadError e'
     )
 
 instance MonadTrans (LoggerT e w) where
-  lift = LoggerT . lift . lift
+  lift = LoggerT . lift
 
 instance (MonadState s m) => MonadState s (LoggerT e w m) where
   get = lift get
@@ -369,7 +373,17 @@ instance (MonadState s m) => MonadState s (LoggerT e w m) where
 
 instance (MonadReader r m) => MonadReader r (LoggerT e w m) where
   ask = lift ask
-  local f (LoggerT (ReaderT k)) = LoggerT $ ReaderT $ local f . k
+  local f (LoggerT (RWST k)) = LoggerT $ RWST $ \e -> local f . k e
+
+instance (MonadWriter w' m) => MonadWriter w' (LoggerT e w m) where
+  tell = lift . tell
+
+  listen (LoggerT (RWST k)) = LoggerT $ RWST $ \e s -> do
+    ((x, w, s'), w') <- listen (k e s)
+    return ((x, w'), w, s')
+
+  pass (LoggerT (RWST k)) = LoggerT $ RWST $ \e s ->
+    pass $ (\((x, f), w, s') -> ((x, w, s'), f)) <$> k e s
 
 instance (Monad m, Describe e, Describe w) =>
          MonadLogger e w (LoggerT e w m) where
@@ -377,7 +391,7 @@ instance (Monad m, Describe e, Describe w) =>
   getDefaultSourceFile = LoggerT (use lsDefaultSourceFile)
 
   recordLogMessage msg = do
-    LoggerT $ lsMessages %= (msg :)
+    LoggerT (tell (OpMonoid [msg]))
     logSomeMessage msg
 
 
@@ -385,9 +399,9 @@ instance (Monad m, Describe e, Describe w) =>
 -- the resulting 'LoggerT' cannot output as it goes. It still collects logs to
 -- be inspected when it finishes.
 instance MFunctor (LoggerT e w) where
-  hoist f (LoggerT (ReaderT k)) = LoggerT $ ReaderT $ \env ->
-    let env' = hoistEnv (const (return ())) env
-    in hoist f (k env')
+  hoist f (LoggerT (RWST k)) = LoggerT $ RWST $ \e s ->
+    let e' = hoistEnv (const (return ())) e
+    in f (k e' s)
 
 
 -- | A function to output logs in a particular monad @m@.
@@ -420,16 +434,28 @@ runLoggerT
   -> m (a, [SomeMessage e w])
 runLoggerT sourceFile output logLevel (LoggerT action) = do
   let st = LoggerState
-        { _lsMessages = []
-        , _lsLogLevel = logLevel
+        { _lsLogLevel = logLevel
         , _lsDefaultSourceFile = sourceFile
         }
 
       env = LoggerEnv { _leLogFunc = logFuncFrom output }
 
-  (x, st') <- runStateT (runReaderT action env) st
+  (x, _, logs) <- runRWST action env st
 
-  return (x, st' ^. lsMessages)
+  return (x, reverse (getOpMonoid logs))
+
+
+-- | Change the error and warning types in a logger computation. To change the
+-- underlying monad use 'hoist'.
+mapLoggerT
+  :: (Functor m)
+  => (e -> e') -> (w -> w')
+  -> LoggerT e w m a -> LoggerT e' w' m a
+mapLoggerT mapErr mapWarn (LoggerT x) = LoggerT (mapRWST mapInner x)
+  where
+    mapInner =
+      let messages ty = _3 . _Wrapped . traverse . ty . lmMsg
+      in fmap (over (messages _MsgWarn) mapWarn . over (messages _MsgError) mapErr)
 
 --------------------------------------------------------------------------------
 --  Internal
