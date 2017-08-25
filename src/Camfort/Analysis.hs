@@ -34,6 +34,7 @@ module Camfort.Analysis
     AnalysisT
   , PureAnalysis
   -- * Combinators
+  , mapAnalysisT
   , analysisModFiles
   , generalizePureAnalysis
   , failAnalysis
@@ -147,6 +148,15 @@ instance MonadReader r m => MonadReader r (AnalysisT e w m) where
 --------------------------------------------------------------------------------
 --  Combinators
 --------------------------------------------------------------------------------
+
+-- | Change the error and warning types in an analysis. To change the
+-- underlying monad use 'hoist'.
+mapAnalysisT :: (Monad m) => (e -> e') -> (w -> w') -> AnalysisT e w m a -> AnalysisT e' w' m a
+mapAnalysisT mapError mapWarn =
+  AnalysisT .
+  (hoist (hoist (mapLoggerT mapError mapWarn)) . withExceptT (over lmMsg mapError)) .
+  getAnalysisT
+
 
 -- | Get the 'F.ModFiles' from the analysis environment.
 analysisModFiles :: (Monad m) => AnalysisT e w m F.ModFiles
