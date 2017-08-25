@@ -1,4 +1,3 @@
-{-# LANGUAGE RankNTypes #-}
 {-# LANGUAGE DefaultSignatures          #-}
 {-# LANGUAGE DeriveFunctor              #-}
 {-# LANGUAGE DeriveTraversable          #-}
@@ -8,12 +7,37 @@
 {-# LANGUAGE GeneralizedNewtypeDeriving #-}
 {-# LANGUAGE MultiParamTypeClasses      #-}
 {-# LANGUAGE OverloadedStrings          #-}
+{-# LANGUAGE RankNTypes                 #-}
 {-# LANGUAGE TemplateHaskell            #-}
 {-# LANGUAGE TypeFamilies               #-}
 {-# LANGUAGE UndecidableInstances       #-}
 
 {-# OPTIONS_GHC -Wall            #-}
 
+{-|
+
+Provides logging for analyses. 'MonadLogger' is a type class for monads which
+support logging. 'LoggerT' is a concrete monad transformer instantiating the
+class.
+
+As a logger runs, it may print out log messages on the fly (depending on the
+provided 'LogOutput' function). It also collects logs to be inspected at the end
+of the computation.
+
+A log message must usually include an 'Origin', which describes where in a
+Fortran source file the message originated. This is made more convenient via
+functions such as 'logWarn\'', which produces an 'Origin' based on a piece of
+Fortran syntax, along with a default source file stored in the environment.
+
+Log messages each come with an associated 'LogLevel':
+
+- 'LogError' is for hard errors which will often cause the computation to fail.
+- 'LogWarn' is for messages about things that are likely to cause problems.
+- 'LogInfo' is for general information about what the computation is doing.
+- 'LogDebug' is for extra-verbose output that helps with debugging, but which
+  will be uninteresting to most users.
+
+-}
 module Camfort.Analysis.Logger
   (
   -- * Conversion to text description
@@ -45,6 +69,7 @@ module Camfort.Analysis.Logger
   -- * Running a logger
   , LogOutput
   , logOutputStd
+  , logOutputNone
   , runLoggerT
   ) where
 
@@ -54,6 +79,7 @@ import           Data.Void                      (Void)
 import           Control.Lens
 
 import           Control.Monad.Except
+import           Control.Monad.Morph
 import           Control.Monad.Reader
 import qualified Control.Monad.RWS              as Lazy
 import           Control.Monad.RWS.Strict       (RWST)
@@ -61,7 +87,6 @@ import qualified Control.Monad.State            as Lazy
 import           Control.Monad.State.Strict
 import qualified Control.Monad.Writer           as Lazy
 import           Control.Monad.Writer.Strict
-import           Control.Monad.Morph
 
 import           Data.Text                      (Text)
 import qualified Data.Text.IO                   as Text
@@ -75,8 +100,17 @@ import qualified Language.Fortran.Util.Position as F
 --  'Describe' class
 --------------------------------------------------------------------------------
 
+-- TODO: More 'Describe' instances for built-in types.
+
+-- | A type class for efficiently converting values to human-readable output.
+-- Can be automatically instantiated for 'Show' types, but this will not be very
+-- human-readable for a lot of types.
 class Describe a where
+  -- | Convert the value to a human-readable output as a strict 'Text' value.
   describe :: a -> Text
+
+  -- | Convert the value to human-readable output in a text 'Builder' which can
+  -- be efficiently concatenated with other 'Builder's.
   describeBuilder :: a -> Builder
 
   default describeBuilder :: Show a => a -> Builder
@@ -96,12 +130,17 @@ instance Describe Float
 instance Describe Double
 instance Describe Void
 
+-- | A convenience combinator to directly convert a lazy text 'Builder' to a
+-- strict 'Text' value.
 builderToStrict :: Builder -> Text
 builderToStrict = Lazy.toStrict . Builder.toLazyText
 
+-- | Write a 'Describe'-able value directly into a writer monad.
 tellDescribe :: (MonadWriter Builder m, Describe a) => a -> m ()
 tellDescribe = tell . describeBuilder
 
+-- | Convert a 'Show'-able value directly to strict 'Text'. Useful when you have
+-- a 'Show' instance but not a 'Describe' instance.
 describeShow :: (Show a) => a -> Text
 describeShow = describe . show
 
@@ -109,6 +148,7 @@ describeShow = describe . show
 --  Messages
 --------------------------------------------------------------------------------
 
+-- | A message origin, containing a file and a source span.
 data Origin =
   Origin
   { _oFile :: FilePath
@@ -123,12 +163,17 @@ instance Describe Origin where
     "at [" <> Builder.fromString (origin ^. oFile) <>
     ", " <> describeBuilder (origin ^. oSpan) <> "]"
 
-
+-- | A logging level. At each logging level, only produce output at that level or lower.
 data LogLevel
   = LogError
+  -- ^ At level 'LogError', only error messages are shown.
   | LogWarn
+  -- ^ At level 'LogWarn', error and warning messages are shown.
   | LogInfo
+  -- ^ At level 'LogInfo', error, warning and information messages are shown.
   | LogDebug
+  -- ^ At level 'LogDebug', error, warning, information and debug output is
+  -- shown.
   deriving (Show, Eq, Ord)
 
 instance Describe LogLevel where
@@ -137,7 +182,7 @@ instance Describe LogLevel where
   describeBuilder LogInfo  = "INFO"
   describeBuilder LogDebug = "DEBUG"
 
-
+-- | A logged message with an origin and a message value.
 data LogMessage a =
   LogMessage
   { _lmOrigin :: Maybe Origin
@@ -152,7 +197,7 @@ instance Describe a => Describe (LogMessage a) where
     maybe "" describeBuilder (msg ^. lmOrigin) <>
     ": " <> describeBuilder (msg ^. lmMsg)
 
-
+-- | A message at one of the four 'LogLevel's.
 data SomeMessage e w
   = MsgError (LogMessage e)
   | MsgWarn (LogMessage w)
@@ -173,61 +218,75 @@ instance (Describe e, Describe w) => Describe (SomeMessage e w) where
 --  'MonadLogger' class
 --------------------------------------------------------------------------------
 
+-- | Make an origin at the source span of a piece of Fortran syntax, in the
+-- current file.
 atSpanned :: (MonadLogger e w m, F.Spanned a) => a -> m Origin
 atSpanned astElem = do
   sf <- getDefaultSourceFile
   let sp = F.getSpan astElem
   return $ Origin sf sp
 
-withSpannedOrigin
-  :: (MonadLogger e w m, F.Spanned a)
-  => (Origin -> b -> m c) -> a -> b -> m c
-withSpannedOrigin f x m = do
-  origin <- atSpanned x
-  f origin m
-
+-- | Make an origin at the source span of a piece of Fortran syntax, in the given
+-- file.
 atSpannedInFile :: (F.Spanned a) => FilePath -> a -> Origin
 atSpannedInFile sf = Origin sf . F.getSpan
 
--- TODO: Consider methods to change current log level
-
+-- | MTL-style type class for monads that support logging.
 class Monad m => MonadLogger e w m | m -> e w where
+  -- | Set the default source file, i.e. the file in which messages originate by
+  -- default.
   setDefaultSourceFile :: FilePath -> m ()
+
+  -- | Get the current default source file, i.e. the file in which messages
+  -- originate by default.
   getDefaultSourceFile :: m FilePath
 
+  -- | Record a log message. Output it based on the 'LogOutput' function used
+  -- and store it in the collected logs.
   recordLogMessage :: SomeMessage e w -> m ()
 
-  logGeneral :: (LogMessage a -> SomeMessage e w) -> Origin -> a -> m ()
-  logGeneral mkMsg origin msg =
-    recordLogMessage (mkMsg (LogMessage (Just origin) msg))
-
+  -- | Log an error message at the given 'Origin'.
   logError :: Origin -> e -> m ()
   logError = logGeneral MsgError
 
+  -- | Log an error message. The origin is the current default source file, with
+  -- the source span of the given piece of Fortran syntax.
   logError' :: (F.Spanned a) => a -> e -> m ()
   logError' = withSpannedOrigin logError
 
 
+  -- | Log a warning message at the given 'Origin'.
   logWarn :: Origin -> w -> m ()
   logWarn = logGeneral MsgWarn
 
+  -- | Log a warning message. The origin is the current default source file, with
+  -- the source span of the given piece of Fortran syntax.
   logWarn' :: (F.Spanned a) => a -> w -> m ()
   logWarn' = withSpannedOrigin logWarn
 
 
+  -- | Log an information message at the given 'Origin'.
   logInfo :: Origin -> Text -> m ()
   logInfo = logGeneral MsgInfo
 
+  -- | Log an information message. The origin is the current default source
+  -- file, with the source span of the given piece of Fortran syntax.
   logInfo' :: (F.Spanned a) => a -> Text -> m ()
   logInfo' = withSpannedOrigin logInfo
 
+  -- | Log an information message with no origin. For example, use this when
+  -- printing output about the progress of an analysis which cannot be
+  -- associated with a particular bit of source code.
   logInfoNoOrigin :: Text -> m ()
   logInfoNoOrigin msg = recordLogMessage (MsgInfo (LogMessage Nothing msg))
 
 
+  -- | Log a debugging message at the given 'Origin'.
   logDebug :: Origin -> Text -> m ()
   logDebug = logGeneral MsgDebug
 
+  -- | Log a debugging message. The origin is the current default source
+  -- file, with the source span of the given piece of Fortran syntax.
   logDebug' :: (F.Spanned a) => a -> Text -> m ()
   logDebug' = withSpannedOrigin logDebug
 
@@ -241,6 +300,17 @@ class Monad m => MonadLogger e w m | m -> e w where
   recordLogMessage = lift . recordLogMessage
   setDefaultSourceFile = lift . setDefaultSourceFile
   getDefaultSourceFile = lift getDefaultSourceFile
+
+logGeneral :: (MonadLogger e w m) => (LogMessage a -> SomeMessage e w) -> Origin -> a -> m ()
+logGeneral mkMsg origin msg =
+  recordLogMessage (mkMsg (LogMessage (Just origin) msg))
+
+withSpannedOrigin
+  :: (MonadLogger e w m, F.Spanned a)
+  => (Origin -> b -> m c) -> a -> b -> m c
+withSpannedOrigin f x m = do
+  origin <- atSpanned x
+  f origin m
 
 instance MonadLogger e w m => MonadLogger e w (ReaderT r m)
 instance MonadLogger e w m => MonadLogger e w (ExceptT e' m)
@@ -257,8 +327,8 @@ instance (MonadLogger e w m, Monoid w') => MonadLogger e w (Lazy.RWST r w' s m)
 
 data LoggerState e w =
   LoggerState
-  { _lsMessages          :: ![SomeMessage e w]
-  , _lsLogLevel :: LogLevel
+  { _lsMessages          :: [SomeMessage e w]
+  , _lsLogLevel          :: !LogLevel
   , _lsDefaultSourceFile :: !FilePath
   }
 
@@ -273,6 +343,8 @@ makeLenses ''LoggerEnv
 hoistEnv :: (m () -> n ()) -> LoggerEnv m -> LoggerEnv n
 hoistEnv f = leLogFunc %~ \logFunc l1 l2 msg -> f $ logFunc l1 l2 msg
 
+-- | The logging monad transformer, containing errors of type @e@ and warnings
+-- of type @w@.
 newtype LoggerT e w m a =
   LoggerT (
     ReaderT (LoggerEnv m) (
@@ -318,16 +390,33 @@ instance MFunctor (LoggerT e w) where
     in hoist f (k env')
 
 
+-- | A function to output logs in a particular monad @m@.
 type LogOutput m = Text -> m ()
 
+
+-- | Output logs to standard output (i.e. the console).
 logOutputStd :: MonadIO m => LogOutput m
 logOutputStd = liftIO . Text.putStrLn
 
+-- | Output no logs.
+logOutputNone :: Monad m => LogOutput m
+logOutputNone = const (return ())
 
+
+-- | Run the logging monad transformer. Returns the action's result value and a
+-- list of logs which were collected as it ran.
 runLoggerT
   :: (Monad m, Describe e, Describe w)
-  => FilePath -> LogOutput m -> LogLevel
+  => FilePath
+  -- ^ The initial default source file. This is only used for displaying message
+  -- origins.
+  -> LogOutput m
+  -- ^ The logging output function. E.g. 'logOutputStd' or 'logOutputNone'.
+  -> LogLevel
+  -- ^ The log level for on-the-fly logging. Doesn't affect which logs are
+  -- collected at the end.
   -> LoggerT e w m a
+  -- ^ The logging action to run.
   -> m (a, [SomeMessage e w])
 runLoggerT sourceFile output logLevel (LoggerT action) = do
   let st = LoggerState
@@ -359,8 +448,8 @@ logFuncFrom output = lf
 
 someLogLevel :: SomeMessage e w -> LogLevel
 someLogLevel (MsgError _) = LogError
-someLogLevel (MsgWarn _) = LogWarn
-someLogLevel (MsgInfo _) = LogInfo
+someLogLevel (MsgWarn _)  = LogWarn
+someLogLevel (MsgInfo _)  = LogInfo
 someLogLevel (MsgDebug _) = LogDebug
 
 
@@ -375,3 +464,4 @@ logSomeMessage msg = do
   logLevel <- LoggerT $ use lsLogLevel
 
   lift $ logFunc logLevel msgLevel msgText
+
