@@ -109,6 +109,15 @@ data CamfortEnv =
   , ceLogLevel     :: LogLevel
   }
 
+-- | Provides a default include directory if none is specified.
+envIncludeDir :: CamfortEnv -> IO FileOrDir
+envIncludeDir env = maybe defaultIncludeDir return (ceIncludeDir env)
+  where
+    defaultIncludeDir = return (ceInputSources env)
+
+    -- alternative default
+    -- defaultIncludeDir = getCurrentDirectory
+
 --------------------------------------------------------------------------------
 -- *  Running Functionality
 
@@ -148,11 +157,10 @@ runFunctionality
   -> IO r
 runFunctionality description program runner mfCompiler mfInput env = do
   putStrLn $ description ++ " '" ++ ceInputSources env ++ "'"
-  incDir <- maybe getCurrentDirectory pure (ceIncludeDir env)
+  incDir <- envIncludeDir env
   modFiles <- genModFiles mfCompiler mfInput incDir (ceExcludeFiles env)
   pfsTexts <- readParseSrcDir modFiles (ceInputSources env) (ceExcludeFiles env)
   runner program logOutputStd (ceLogLevel env) modFiles pfsTexts
-
 
 
 --------------------------------------------------------------------------------
@@ -160,7 +168,7 @@ runFunctionality description program runner mfCompiler mfInput env = do
 
 ast :: CamfortEnv -> IO ()
 ast env = do
-    incDir' <- maybe getCurrentDirectory pure (ceIncludeDir env)
+    incDir' <- envIncludeDir env
     modFiles <- genModFiles simpleCompiler () incDir' (ceExcludeFiles env)
     xs <- readParseSrcDir modFiles (ceInputSources env) (ceExcludeFiles env)
     print . fmap fst $ xs
