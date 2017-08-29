@@ -1,11 +1,16 @@
+{-# LANGUAGE DataKinds             #-}
+{-# LANGUAGE FlexibleContexts      #-}
 {-# LANGUAGE FlexibleInstances     #-}
 {-# LANGUAGE GADTs                 #-}
 {-# LANGUAGE LambdaCase            #-}
 {-# LANGUAGE MultiParamTypeClasses #-}
 {-# LANGUAGE NamedFieldPuns        #-}
+{-# LANGUAGE PolyKinds             #-}
 {-# LANGUAGE ScopedTypeVariables   #-}
 {-# LANGUAGE TemplateHaskell       #-}
 {-# LANGUAGE TypeFamilies          #-}
+
+{-# OPTIONS_GHC -Wall #-}
 
 -- TODO: Variables for user-defined data types
 
@@ -18,26 +23,29 @@ module Language.Fortran.TypeModel.Vars
   , UniqueName(..)
     -- * Variables
   , FortranVar(..)
+    -- * Variable updates
+  , VarUpdate(..)
+  , applyVarUpdate
   ) where
 
-import           Data.Int                         (Int16, Int32, Int64, Int8)
-import           Data.Typeable                    ((:~:) (..), Proxy (..))
-import           Data.Word                        (Word8)
+import           Data.Typeable                            ((:~:) (..),
+                                                           Proxy (..))
 
-import           Control.Lens                     hiding (Index, op)
+import           Control.Lens                             hiding (Index, op)
 
-import           Data.SBV                         (SymWord (..), newArray)
 import           Data.SBV.Dynamic
-import           Data.SBV.Internals               (SArray (..), SBV (..))
 
-import qualified Language.Fortran.AST             as F
+import           Data.Singletons.TypeLits
+import           Data.Vinyl.Lens
+
+import qualified Language.Fortran.AST                     as F
 
 import           Language.Expression.Pretty
 import           Language.Verification
 
 import           Language.Fortran.TypeModel.Match
-import           Language.Fortran.TypeModel.Types
 import           Language.Fortran.TypeModel.Operator.Eval
+import           Language.Fortran.TypeModel.Types
 
 --------------------------------------------------------------------------------
 --  Names
@@ -85,7 +93,7 @@ instance VerifiableVar FortranVar where
   symForVar (FortranVar d np) =
     case d of
       DPrim prim -> SRPrim d <$> varForPrim uniqueName prim
-      DArray ix val -> SRArray d <$> varForArray uniqueName ix val
+      DArray i val -> SRArray d <$> varForArray uniqueName i val
       DData _ _ -> fail "User-defined data type variables are not supported yet"
     where
       uniqueName = np ^. npUnique . _Wrapped
@@ -106,6 +114,42 @@ instance Pretty1 FortranVar where
   pretty1 (FortranVar _ np) = pretty np
 
 --------------------------------------------------------------------------------
+--  Updating variables
+--------------------------------------------------------------------------------
+
+data VarUpdate t a where
+  UpdatePrim
+    :: t (PrimS a) -- ^ New value
+    -> VarUpdate t (PrimS a)
+
+  UpdateArray
+    :: Index i
+    -> t (PrimS i) -- ^ Index to update at
+    -> t (PrimS v) -- ^ New values at that index
+    -> VarUpdate t (Array i v)
+
+  UpdateData
+    :: RElem '(fieldName, a) fields i
+    => SSymbol fieldName -- ^ Field to update
+    -> VarUpdate t a     -- ^ Update to apply to that field
+    -> VarUpdate t (Record recordName fields)
+
+applyVarUpdate :: VarUpdate SymRepr a -> SymRepr a -> SymRepr a
+applyVarUpdate = \case
+  -- For primitives, just replace old value with new
+  UpdatePrim _ -> id
+
+  -- For arrays, replace the old array with one updated at the particular index.
+  UpdateArray (Index _) (SRPrim _ ixVal) (SRPrim _ aVal) -> \case
+    SRArray arrD arr -> SRArray arrD (writeSArr arr ixVal aVal)
+
+  UpdateData sFieldName valUpdate -> \case
+    SRData dRecord record ->
+      let fieldProxy = pairProxy sFieldName valUpdate
+          update = overFieldRepr (applyVarUpdate valUpdate)
+      in SRData dRecord (record & rlens fieldProxy %~ update)
+
+--------------------------------------------------------------------------------
 --  Internals
 --------------------------------------------------------------------------------
 
@@ -117,3 +161,6 @@ varForArray nm (Index ixPrim) valPrim =
   let k1 = primSBVKind ixPrim
       k2 = primSBVKind valPrim
   in newSArr (k1, k2) (const nm)
+
+pairProxy :: p1 a -> p2 b -> Proxy '(a, b)
+pairProxy _ _ = Proxy

@@ -43,10 +43,11 @@ import           Data.SBV                               (SBool, defaultSMTCfg)
 
 import qualified Language.Fortran.Analysis              as F
 import qualified Language.Fortran.AST                   as F
+import qualified Language.Fortran.LValue                as F
 import qualified Language.Fortran.Util.Position         as F
 
 import           Camfort.Analysis
-import           Camfort.Analysis.Logger                (Text, Builder)
+import           Camfort.Analysis.Logger                (Builder)
 import           Camfort.Specification.Hoare.Annotation
 import           Camfort.Specification.Hoare.Syntax
 import           Camfort.Specification.Hoare.Translate
@@ -88,6 +89,8 @@ data HoareBackendError
   -- ^ The variable was referenced in an assignment but not in scope
   | MissingWhileInvariant (F.Block HA)
   -- ^ The while block had no associated invariant
+  | ExpectedArray SomeType
+  -- ^ Expected array type but got the given type instead
 
 instance Describe HoareBackendError where
   describeBuilder = \case
@@ -104,6 +107,10 @@ instance Describe HoareBackendError where
     MissingWhileInvariant _ ->
       "found a `do while` block with no invariant; " <>
       "invariant annotations must appear at the start of every `do while` loop"
+    ExpectedArray otherTy ->
+      "expected variable with an array type for an array assignment, " <>
+      "but got a non-array type; got " <>
+      describeBuilder (pretty otherTy)
 
 type BackendAnalysis = AnalysisT HoareBackendError Void IO
 
@@ -351,22 +358,22 @@ genBlock (precond, postcond, bl) = do
   setCursor bl
   case bl of
     F.BlIf _ _ _ _ conds bodies _ -> do
-      condsExprs <- traverse (traverse (doTranslate failAtCursor . translateBoolExpression)) conds
+      condsExprs <- traverse (traverse (doTranslate (atCursor failAnalysis') . translateBoolExpression)) conds
       multiIfVCs genBody expr (precond, postcond, (zip condsExprs bodies))
 
     F.BlDoWhile _ _ _ _ cond body _ -> do
       primInvariant <-
         case body of
          b : _ | Just (Specification SpecInvariant f) <- getAnnSpec (F.getAnnotation b) -> return f
-         _ -> failAtCursor (MissingWhileInvariant bl)
+         _ -> atCursor failAnalysis' $ MissingWhileInvariant bl
 
-      invariant <- doTranslate failAtCursor $ translateFormula primInvariant
-      condExpr <- doTranslate failAtCursor $ translateBoolExpression cond
+      invariant <- doTranslate (atCursor failAnalysis') $ translateFormula primInvariant
+      condExpr <- doTranslate (atCursor failAnalysis') $ translateBoolExpression cond
 
       whileVCs genBody expr invariant (precond, postcond, (condExpr, body))
 
     F.BlComment _ _ _ -> return ()
-    _ -> failAtCursor (UnsupportedBlock bl)
+    _ -> atCursor failAnalysis' $ UnsupportedBlock bl
 
 
 bodyToSequence :: [F.Block HA] -> GenM (AnnSeq FExpr FortranVar (F.Block HA))
@@ -385,7 +392,7 @@ combineBlockSequence prevSeq bl = do
 
   case prevSeq `joinAnnSeq` blSeq of
     Just r  -> return r
-    Nothing -> failAtCursor (AnnotationError bl)
+    Nothing -> atCursor failAnalysis' $ AnnotationError bl
 
 
 blockToSequence :: F.Block HA -> GenM (AnnSeq FExpr FortranVar (F.Block HA))
@@ -399,7 +406,7 @@ blockToSequence bl = do
     sequenceSpec =
       case getAnnSpec (F.getAnnotation bl) of
         Just (Specification SpecSeq m) -> do
-          m' <- doTranslate failAtCursor $ translateFormula m
+          m' <- doTranslate (atCursor failAnalysis') $ translateFormula m
           return $ Just $ propAnnSeq m'
         _ -> return Nothing
 
@@ -410,7 +417,7 @@ blockToSequence bl = do
     -- Tries each action in the list, using the first that works and otherwise
     -- reporting an error.
     chooseFrom :: [GenM (Maybe a)] -> GenM a
-    chooseFrom [] = failAtCursor $ AnnotationError bl
+    chooseFrom [] = atCursor failAnalysis' $ AnnotationError bl
     chooseFrom (action : rest) = do
       m <- action
       case m of
@@ -418,20 +425,40 @@ blockToSequence bl = do
         Nothing -> chooseFrom rest
 
 
+normalAssignment :: (ReportAnn ann) => NamePair -> F.Expression ann -> GenM (Assignment FExpr FortranVar)
+normalAssignment nm rvalue = do
+  Some varD varV <- varFromScope nm
+  rvalue' <- doTranslate (atCursor failAnalysis') $ translateExpression' varD rvalue
+  let rvalue'' = Expr' $ mapOperators (review chooseOp) rvalue'
+  return (Assignment varV rvalue'')
+
+arrayAssignment :: (ReportAnn ann) => NamePair -> F.Expression ann -> F.Expression ann -> GenM (Assignment FExpr FortranVar)
+arrayAssignment arrName ixAst rvalAst = do
+  Some varD varV <- varFromScope arrName
+
+  -- case varV of
+  --   FortranVar (DArray (Index iPrim) vPrim) _ -> _
+  --   _ -> atCursor failAnalysis' $ ExpectedArray (someType varD)
+
+  undefined
+
+
 assignmentBlock :: F.Block HA -> GenM (Maybe (Assignment FExpr FortranVar))
 assignmentBlock bl = do
   setCursor bl
   case bl of
-    -- TODO: Handle assigning to particular array indices
-    F.BlStatement _ _ _ (F.StExpressionAssign _ _ lvalue rvalue) -> do
-      let lnames = varNames lvalue
-      Some varD theVar <- varFromScope lnames
+    F.BlStatement _ _ _ (F.StExpressionAssign _ _ lexp rvalue) -> do
+      -- TODO: better error
+      lvalue <- maybe (fail "not an lvalue") return (F.toLValue lexp)
+      case lvalue of
+        F.LvSimpleVar {} -> Just <$> normalAssignment (varNames lexp) rvalue
+        F.LvSubscript _ _ lvar@(F.LvSimpleVar {}) ixs ->
+          case ixs of
+            F.AList _ _ [F.IxSingle _ _ _ ixExpr] ->
+              Just <$> arrayAssignment (lvVarNames lvar) ixExpr rvalue
 
-      theExpr <- doTranslate failAtCursor $ translateExpression' varD rvalue
-
-      let theExpr' = Expr' $ mapOperators (review chooseOp) theExpr
-
-      return (Just (Assignment theVar theExpr'))
+            _ -> return Nothing -- TODO: throw an error about special indices being unsupported
+        _ -> return Nothing -- TODO: throw an error about other assignment types being unsupported
 
     _ -> return Nothing
 
@@ -442,23 +469,16 @@ varFromScope np = do
   mscoped <- view (heVarsInScope . at src)
   case mscoped of
     Just v  -> return v
-    Nothing -> failAtCursor (VarNotInScope np)
+    Nothing -> atCursor failAnalysis' $ VarNotInScope np
 
 
 setCursor :: (F.Spanned a) => a -> GenM ()
 setCursor x = hsCursor .= F.getSpan x
 
-
-failAtCursor :: HoareBackendError -> GenM x
-failAtCursor err = do
+atCursor :: (F.SrcSpan -> a -> GenM b) -> a -> GenM b
+atCursor f x = do
   cursor <- use hsCursor
-  failAnalysis' cursor err
-
-
-infoAtCursor :: Text -> GenM ()
-infoAtCursor msg = do
-  cursor <- use hsCursor
-  logInfo' cursor msg
+  f cursor x
 
 --------------------------------------------------------------------------------
 --  Translation
@@ -506,6 +526,12 @@ varNames :: F.Expression (F.Analysis x) -> NamePair
 varNames e =
   let uniqueName = UniqueName $ F.varName e
       srcName = SourceName $ F.srcName e
+  in NamePair uniqueName srcName
+
+lvVarNames :: F.LValue (F.Analysis x) -> NamePair
+lvVarNames e =
+  let uniqueName = UniqueName $ F.lvVarName e
+      srcName = SourceName $ F.lvSrcName e
   in NamePair uniqueName srcName
 
 

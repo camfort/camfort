@@ -125,8 +125,11 @@ data D a where
 --  SBV Representations
 --------------------------------------------------------------------------------
 
-data FieldRepr (field :: (Symbol, *)) where
+data FieldRepr field where
   FR :: SSymbol name -> SymRepr a -> FieldRepr '(name, a)
+
+overFieldRepr :: (SymRepr a -> SymRepr b) -> FieldRepr '(name, a) -> FieldRepr '(name, b)
+overFieldRepr f (FR n x) = FR n (f x)
 
 data SymRepr a where
   SRPrim
@@ -147,6 +150,13 @@ data SymRepr a where
   SRProp
     :: SBool
     -> SymRepr Bool
+
+getReprD :: SymRepr a -> Maybe (D a)
+getReprD = \case
+  SRPrim d _ -> Just d
+  SRArray d _ -> Just d
+  SRData d _ -> Just d
+  SRProp _ -> Nothing
 
 instance Applicative f => EvalOp f SymRepr LogicOp where
   evalOp f = \case
