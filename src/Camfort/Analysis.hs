@@ -1,3 +1,4 @@
+{-# LANGUAGE DefaultSignatures          #-}
 {-# LANGUAGE DeriveFunctor              #-}
 {-# LANGUAGE FlexibleContexts           #-}
 {-# LANGUAGE FlexibleInstances          #-}
@@ -5,6 +6,7 @@
 {-# LANGUAGE MultiParamTypeClasses      #-}
 {-# LANGUAGE OverloadedStrings          #-}
 {-# LANGUAGE TemplateHaskell            #-}
+{-# LANGUAGE TypeFamilies               #-}
 {-# LANGUAGE UndecidableInstances       #-}
 
 {-# OPTIONS_GHC -Wall            #-}
@@ -35,9 +37,8 @@ module Camfort.Analysis
   , PureAnalysis
   -- * Combinators
   , mapAnalysisT
-  , analysisModFiles
   , generalizePureAnalysis
-  , failAnalysis
+  , MonadAnalysis(..)
   , failAnalysis'
   , catchAnalysisT
   , loggingAnalysisError
@@ -85,7 +86,11 @@ module Camfort.Analysis
 import           Control.Monad.Except
 import           Control.Monad.Morph
 import           Control.Monad.Reader
-import           Control.Monad.State.Class
+import qualified Control.Monad.RWS              as Lazy
+import           Control.Monad.RWS.Strict
+import qualified Control.Monad.State            as Lazy
+import           Control.Monad.State.Strict
+import qualified Control.Monad.Writer           as Lazy
 import           Control.Monad.Writer.Strict
 
 import           Control.Lens
@@ -146,6 +151,44 @@ instance MonadReader r m => MonadReader r (AnalysisT e w m) where
     AnalysisT . ExceptT . ReaderT $ local f . k
 
 --------------------------------------------------------------------------------
+--  Liftable functions
+--------------------------------------------------------------------------------
+
+class (MonadLogger e w m) => MonadAnalysis e w m where
+  -- | Report a critical error in the analysis at a particular source location
+  -- and exit early.
+  failAnalysis :: Origin -> e -> m a
+
+  -- | Get the 'F.ModFiles' from the analysis environment.
+  analysisModFiles :: m F.ModFiles
+
+  default failAnalysis
+    :: (MonadTrans t, MonadAnalysis e w m', m ~ t m') => Origin -> e -> m a
+
+  default analysisModFiles
+    :: (MonadTrans t, MonadAnalysis e w m', m ~ t m') => m F.ModFiles
+
+  failAnalysis o = lift . failAnalysis o
+  analysisModFiles = lift analysisModFiles
+
+instance (Describe e, Describe w, Monad m) => MonadAnalysis e w (AnalysisT e w m) where
+  analysisModFiles = AnalysisT ask
+
+  failAnalysis origin e = do
+    let msg = LogMessage (Just origin) e
+    recordLogMessage (MsgError msg)
+    AnalysisT (throwError msg)
+
+instance MonadAnalysis e w m => MonadAnalysis e w (ReaderT r m)
+instance MonadAnalysis e w m => MonadAnalysis e w (ExceptT e' m)
+instance MonadAnalysis e w m => MonadAnalysis e w (StateT s m)
+instance (MonadAnalysis e w m, Monoid w') => MonadAnalysis e w (WriterT w' m)
+instance MonadAnalysis e w m => MonadAnalysis e w (Lazy.StateT s m)
+instance (MonadAnalysis e w m, Monoid w') => MonadAnalysis e w (Lazy.WriterT w' m)
+instance (MonadAnalysis e w m, Monoid w') => MonadAnalysis e w (RWST r w' s m)
+instance (MonadAnalysis e w m, Monoid w') => MonadAnalysis e w (Lazy.RWST r w' s m)
+
+--------------------------------------------------------------------------------
 --  Combinators
 --------------------------------------------------------------------------------
 
@@ -157,11 +200,6 @@ mapAnalysisT mapError mapWarn =
   (hoist (hoist (mapLoggerT mapError mapWarn)) . withExceptT (over lmMsg mapError)) .
   getAnalysisT
 
-
--- | Get the 'F.ModFiles' from the analysis environment.
-analysisModFiles :: (Monad m) => AnalysisT e w m F.ModFiles
-analysisModFiles = AnalysisT ask
-
 -- | Given a pure analysis action, it can be generalized to run in any 'Monad'.
 -- Since the original analysis was pure, it could not have logged anything as it
 -- ran. The new analysis cannot log anything as it runs either, even it is based
@@ -169,21 +207,11 @@ analysisModFiles = AnalysisT ask
 generalizePureAnalysis :: (Monad m) => PureAnalysis e w a -> AnalysisT e w m a
 generalizePureAnalysis = hoist generalize
 
--- | Report a critical error in the analysis at a particular source location
--- and exit early.
-failAnalysis
-  :: (Monad m, Describe e, Describe w)
-  => Origin -> e -> AnalysisT e w m a
-failAnalysis origin e = do
-  let msg = LogMessage (Just origin) e
-  recordLogMessage (MsgError msg)
-  AnalysisT (throwError msg)
-
 -- | Report a critical failure in the analysis at no particular source location
 -- and exit early.
 failAnalysis'
-  :: (Monad m, Describe w, Describe e, F.Spanned o)
-  => o -> e -> AnalysisT e w m a
+  :: (MonadAnalysis e w m, F.Spanned o)
+  => o -> e -> m a
 failAnalysis' originElem e = do
   origin <- atSpanned originElem
   failAnalysis origin e
