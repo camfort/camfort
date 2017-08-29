@@ -165,7 +165,7 @@ checkPU apu = do
 
     let translateFormulae =
             readerOfState
-          . doTranslate (lift . lift . failAnalysis' pu)
+          . doTranslate (failAnalysis' pu)
           . traverse translateFormula
 
     preconds <- translateFormulae (apu ^. apuPreconditions)
@@ -224,7 +224,7 @@ initialSetup pu = do
   -- need to treat as variables.
   mArgNames <- case pu of
     F.PUFunction _ _ (Just rettype) _ _ funargs retvalue _ _ -> do
-      rettype' <- runReaderT (doTranslate (lift . lift . failAnalysis' pu) (translateTypeSpec rettype)) emptyEnv
+      rettype' <- runReaderT (doTranslate (failAnalysis' pu) (translateTypeSpec rettype)) emptyEnv
 
       heVarsInScope %= case retvalue of
         Just rv -> newVar rv rettype'
@@ -242,7 +242,7 @@ initialSetup pu = do
   -- Verify that all argument names have types associated with them.
   forM_ argNames $ \argName -> do
     hasType <- isJust <$> use (heVarsInScope . at argName)
-    unless hasType $ lift $ failAnalysis' pu (ArgWithoutDecl argName)
+    unless hasType $ failAnalysis' pu (ArgWithoutDecl argName)
 
   return restBody
 
@@ -262,9 +262,9 @@ readInitialBlocks = dropWhileM readInitialBlock
             declVars <- forM (F.aStrip decls) $ \case
               -- TODO: Deal with declarations that include assignments
               F.DeclVariable _ _ e Nothing Nothing -> return e
-              _ -> lift $ failAnalysis' bl (UnsupportedBlock bl)
+              _ -> failAnalysis' bl (UnsupportedBlock bl)
 
-            declTy' <- readerOfState $ doTranslate (lift . lift . failAnalysis' bl) $ translateTypeSpec declTy
+            declTy' <- readerOfState $ doTranslate (failAnalysis' bl) $ translateTypeSpec declTy
 
             forM_ declVars $ \v -> heVarsInScope %= newVar v declTy'
 
@@ -273,7 +273,7 @@ readInitialBlocks = dropWhileM readInitialBlock
           F.StImplicit _ _ Nothing -> do
             -- TODO: Deal with implicits properly
             return True
-          F.StImplicit _ _ (Just _) -> lift $ failAnalysis' bl (UnsupportedBlock bl)
+          F.StImplicit _ _ (Just _) -> failAnalysis' bl (UnsupportedBlock bl)
           _ -> return False
 
       F.BlComment{} -> return True
@@ -330,6 +330,8 @@ newtype GenM a = GenM (RWST CheckHoareEnv [TransFormula Bool] CheckHoareState Ch
     , MonadReader CheckHoareEnv
     , MonadWriter [TransFormula Bool]
     , MonadIO
+    , MonadLogger HoareBackendError Void
+    , MonadAnalysis HoareBackendError Void
     )
 
 
@@ -450,13 +452,13 @@ setCursor x = hsCursor .= F.getSpan x
 failAtCursor :: HoareBackendError -> GenM x
 failAtCursor err = do
   cursor <- use hsCursor
-  GenM . lift $ failAnalysis' cursor err
+  failAnalysis' cursor err
 
 
 infoAtCursor :: Text -> GenM ()
 infoAtCursor msg = do
   cursor <- use hsCursor
-  GenM . lift $ logInfo' cursor msg
+  logInfo' cursor msg
 
 --------------------------------------------------------------------------------
 --  Translation
