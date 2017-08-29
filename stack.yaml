@@ -13,4 +13,4 @@ extra-deps:
 - sbv-7.2
 - vinyl-0.6.0
 - union-0.1.1.2
-resolver: lts-8.23
+resolver: lts-8.24
