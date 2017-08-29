@@ -109,7 +109,8 @@ data CamfortEnv =
   , ceLogLevel     :: LogLevel
   }
 
--- | Provides a default include directory if none is specified.
+-- | Gets the include directory from the environment. Provides a default include
+-- directory if none is specified.
 envIncludeDir :: CamfortEnv -> IO FileOrDir
 envIncludeDir env = maybe defaultIncludeDir return (ceIncludeDir env)
   where
