@@ -39,7 +39,7 @@ data ComparableKinds k1 k2 where
 data OpResult ok args result where
   -- TODO: non-primitive literals (initialization)
   ORLit
-    :: Prim p k (PrimS a)
+    :: Prim p k a
     -> a
     -> OpResult 'OKLit '[] (PrimS a)
 
@@ -47,36 +47,36 @@ data OpResult ok args result where
     :: NumericKind k1
     -> Prim p1 k1 a
     -> Prim p2 k2 b
-    -> OpResult 'OKNum '[a] b
+    -> OpResult 'OKNum '[PrimS a] (PrimS b)
 
   ORNum2
     :: NumericKind k1 -> NumericKind k2
     -> Prim p1 k1 a -> Prim p2 k2 b
     -> Prim (PrecMax p1 p2) (KindMax k1 k2) c
-    -> OpResult 'OKNum '[a, b] c
+    -> OpResult 'OKNum '[PrimS a, PrimS b] (PrimS c)
 
   ORLogical1
     :: Prim p1 'KLogical a
     -> Prim 'P8 'KLogical b
-    -> OpResult 'OKLogical '[a] b
+    -> OpResult 'OKLogical '[PrimS a] (PrimS b)
 
   ORLogical2
     :: Prim p1 'KLogical a
     -> Prim p2 'KLogical b
     -> Prim 'P8 'KLogical c
-    -> OpResult 'OKLogical '[a, b] c
+    -> OpResult 'OKLogical '[PrimS a, PrimS b] (PrimS c)
 
   OREq
     :: ComparableKinds k1 k2
     -> Prim p1 k1 a -> Prim p2 k2 b
     -> Prim 'P8 'KLogical c
-    -> OpResult 'OKEq '[a, b] c
+    -> OpResult 'OKEq '[PrimS a, PrimS b] (PrimS c)
 
   ORRel
     :: ComparableKinds k1 k2
     -> Prim p1 k1 a -> Prim p2 k2 b
     -> Prim 'P8 'KLogical c
-    -> OpResult 'OKRel '[a, b] c
+    -> OpResult 'OKRel '[PrimS a, PrimS b] (PrimS c)
 
   ORLookup
     :: D (Array i v)

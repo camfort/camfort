@@ -45,7 +45,7 @@ instance (Applicative f) => EvalOp f SymRepr FortranOp where
 instance Pretty2 FortranOp where
   prettys2Prec p (FortranOp op opr args) = prettysPrecOp p opr op args
 
-showsPrim :: Prim p k (PrimS a) -> a -> ShowS
+showsPrim :: Prim p k a -> a -> ShowS
 showsPrim = \case
   PInt8   -> shows
   PInt16  -> shows

@@ -47,12 +47,13 @@ import qualified Language.Fortran.LValue                as F
 import qualified Language.Fortran.Util.Position         as F
 
 import           Camfort.Analysis
-import           Camfort.Analysis.Logger                (Builder)
+import           Camfort.Analysis.Logger                (Text, Builder)
 import           Camfort.Specification.Hoare.Annotation
 import           Camfort.Specification.Hoare.Syntax
 import           Camfort.Specification.Hoare.Translate
 import           Language.Fortran.TypeModel
 import           Language.Fortran.TypeModel.Vars
+import           Language.Fortran.TypeModel.Match
 
 import           Language.Expression
 import           Language.Expression.DSL
@@ -89,7 +90,7 @@ data HoareBackendError
   -- ^ The variable was referenced in an assignment but not in scope
   | MissingWhileInvariant (F.Block HA)
   -- ^ The while block had no associated invariant
-  | ExpectedArray SomeType
+  | WrongAssignmentType Text SomeType
   -- ^ Expected array type but got the given type instead
 
 instance Describe HoareBackendError where
@@ -107,10 +108,8 @@ instance Describe HoareBackendError where
     MissingWhileInvariant _ ->
       "found a `do while` block with no invariant; " <>
       "invariant annotations must appear at the start of every `do while` loop"
-    ExpectedArray otherTy ->
-      "expected variable with an array type for an array assignment, " <>
-      "but got a non-array type; got " <>
-      describeBuilder (pretty otherTy)
+    WrongAssignmentType message gotType ->
+      "unexpected variable type; expected " <> describeBuilder message <> "; got " <> describeBuilder (pretty gotType)
 
 type BackendAnalysis = AnalysisT HoareBackendError Void IO
 
@@ -289,7 +288,7 @@ readInitialBlocks = dropWhileM readInitialBlock
 -- TODO: Maybe report a warning when two variables have the same source name.
 
 varOfType :: NamePair -> SomeType -> SomeVar
-varOfType names (Some d _) = Some d (FortranVar d names)
+varOfType names (Some d) = Some (FortranVar d names)
 
 -- | Create a variable from the given expression containing a variable value.
 newVar :: F.Expression (F.Analysis x) -> SomeType -> ScopeVars -> ScopeVars
@@ -424,18 +423,44 @@ blockToSequence bl = do
         Just x  -> return x
         Nothing -> chooseFrom rest
 
+type UpdatePair = PairOf FortranVar (VarUpdate FortranExpr)
 
-normalAssignment :: (ReportAnn ann) => NamePair -> F.Expression ann -> GenM (Assignment FExpr FortranVar)
+normalAssignment
+  :: (ReportAnn ann)
+  => NamePair
+  -> F.Expression ann
+  -> GenM (Some UpdatePair)
 normalAssignment nm rvalue = do
-  Some varD varV <- varFromScope nm
-  rvalue' <- doTranslate (atCursor failAnalysis') $ translateExpression' varD rvalue
-  let rvalue'' = Expr' $ mapOperators (review chooseOp) rvalue'
-  return (Assignment varV rvalue'')
+  Some varV@(FortranVar varD _) <- varFromScope nm
 
-arrayAssignment :: (ReportAnn ann) => NamePair -> F.Expression ann -> F.Expression ann -> GenM (Assignment FExpr FortranVar)
+  case varD of
+    DPrim _ -> do
+      rvalue' <- doTranslate (atCursor failAnalysis') $ translateExpression' varD rvalue
+      return (SomePair varV (UpdatePrim rvalue'))
+    _ -> atCursor failAnalysis' $ WrongAssignmentType "primitive value" (Some varD)
+
+arrayAssignment
+  :: (ReportAnn ann)
+  => NamePair
+  -> F.Expression ann
+  -> F.Expression ann
+  -> GenM (Some UpdatePair)
 arrayAssignment arrName ixAst rvalAst = do
-  Some varD varV <- varFromScope arrName
+  Some varV@(FortranVar varD _) <- varFromScope arrName
 
+  case varD of
+    DArray ixIndex@(Index ixPrim) valPrim -> do
+      case (matchPrim ixPrim, matchPrim valPrim) of
+        (MatchPrim _ _, MatchPrim _ _) -> do
+          let ixD = undefined -- DPrim ixPrim
+              valD = DPrim valPrim
+
+          ixExpr <- doTranslate (atCursor failAnalysis') $ translateExpression' ixD ixAst
+          rvalExpr  <- doTranslate (atCursor failAnalysis') $ translateExpression' valD rvalAst
+
+          return (SomePair varV (UpdateArray ixIndex ixExpr rvalExpr))
+
+    _ -> atCursor failAnalysis' $ WrongAssignmentType "array type" (Some varD)
   -- case varV of
   --   FortranVar (DArray (Index iPrim) vPrim) _ -> _
   --   _ -> atCursor failAnalysis' $ ExpectedArray (someType varD)
@@ -450,15 +475,18 @@ assignmentBlock bl = do
     F.BlStatement _ _ _ (F.StExpressionAssign _ _ lexp rvalue) -> do
       -- TODO: better error
       lvalue <- maybe (fail "not an lvalue") return (F.toLValue lexp)
-      case lvalue of
-        F.LvSimpleVar {} -> Just <$> normalAssignment (varNames lexp) rvalue
-        F.LvSubscript _ _ lvar@(F.LvSimpleVar {}) ixs ->
-          case ixs of
-            F.AList _ _ [F.IxSingle _ _ _ ixExpr] ->
-              Just <$> arrayAssignment (lvVarNames lvar) ixExpr rvalue
+      (SomePair fvar upd) <-
+        case lvalue of
+          F.LvSimpleVar {} -> normalAssignment (varNames lexp) rvalue
+          F.LvSubscript _ _ lvar@(F.LvSimpleVar {}) ixs ->
+            case ixs of
+              F.AList _ _ [F.IxSingle _ _ _ ixExpr] ->
+                arrayAssignment (lvVarNames lvar) ixExpr rvalue
 
-            _ -> return Nothing -- TODO: throw an error about special indices being unsupported
-        _ -> return Nothing -- TODO: throw an error about other assignment types being unsupported
+              _ -> fail "only simple indices are supported for now" -- TODO: better error message
+          _ -> fail "assignment type not supported for now" -- TODO: better error message
+
+      undefined
 
     _ -> return Nothing
 

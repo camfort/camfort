@@ -40,6 +40,7 @@ import           Data.Vinyl.Lens
 
 import qualified Language.Fortran.AST                     as F
 
+import           Language.Expression
 import           Language.Expression.Pretty
 import           Language.Verification
 
@@ -124,15 +125,22 @@ data VarUpdate t a where
 
   UpdateArray
     :: Index i
-    -> t (PrimS i) -- ^ Index to update at
+    -> t i         -- ^ Index to update at
     -> t (PrimS v) -- ^ New values at that index
-    -> VarUpdate t (Array i v)
+    -> VarUpdate t (Array i (PrimS v))
 
   UpdateData
     :: RElem '(fieldName, a) fields i
     => SSymbol fieldName -- ^ Field to update
     -> VarUpdate t a     -- ^ Update to apply to that field
     -> VarUpdate t (Record recordName fields)
+
+-- | Who'd have thought?
+instance Operator VarUpdate where
+  htraverseOp f = \case
+    UpdatePrim x -> UpdatePrim <$> f x
+    UpdateArray i x y -> UpdateArray i <$> f x <*> f y
+    UpdateData s x -> UpdateData s <$> htraverseOp f x
 
 applyVarUpdate :: VarUpdate SymRepr a -> SymRepr a -> SymRepr a
 applyVarUpdate = \case

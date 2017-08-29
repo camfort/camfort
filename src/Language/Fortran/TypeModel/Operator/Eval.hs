@@ -1,6 +1,6 @@
 {-# LANGUAGE DataKinds             #-}
 {-# LANGUAGE FlexibleContexts      #-}
-{-# LANGUAGE TemplateHaskell      #-}
+{-# LANGUAGE TemplateHaskell       #-}
 {-# LANGUAGE GADTs                 #-}
 {-# LANGUAGE KindSignatures        #-}
 {-# LANGUAGE LambdaCase            #-}
@@ -41,21 +41,21 @@ evalFortranOp :: Op (Length args) ok -> OpResult ok args result -> Rec SymRepr a
 evalFortranOp op opr = case opr of
   ORLit px x -> \_ -> primFromVal px (primLit px x)
 
-  ORNum1 _ p1 p2 ->
-    primUnop True p1 p2 (numUnop op)
+  ORNum1 _ _ p2 ->
+    primUnop True p2 (numUnop op)
   ORNum2 nk1 nk2 p1 p2 p3 ->
     primBinop True p1 p2 p3 (numBinop (nkBothInts nk1 nk2) op)
 
-  ORLogical1 p1 p2 -> primUnop True p1 p2 (logicalUnop op)
+  ORLogical1 _ p2 -> primUnop True p2 (logicalUnop op)
   ORLogical2 p1 p2 p3 -> primBinop True p1 p2 p3 (logicalBinop op)
 
   OREq cmp p1 p2 p3 -> primBinop False p1 p2 p3 (eqBinop cmp op)
   ORRel cmp p1 p2 p3 -> primBinop False p1 p2 p3 (relBinop cmp op)
 
-  ORLookup (DArray (Index indexPrim) elPrim) ->
+  ORLookup (DArray (Index _) (ArrValue elPrim)) ->
     runcurry $ \xs index ->
       let xsArr = toArr xs
-          indexVal = primToVal indexPrim index
+          indexVal = primToVal index
       in primFromVal elPrim (SBV.readSArr xsArr indexVal)
 
   ORDeref _ fname -> runcurry (\r -> derefRec (toRec r) fname)
@@ -64,28 +64,28 @@ evalFortranOp op opr = case opr of
 --  General
 --------------------------------------------------------------------------------
 
-primToVal :: Prim p k a -> SymRepr a -> SVal
-primToVal p = primS p $ const $ \case
+primToVal :: SymRepr (PrimS a) -> SVal
+primToVal = \case
   SRPrim (DPrim _) v -> v
 
-primFromVal :: Prim p k a -> SVal -> SymRepr a
-primFromVal p v = primS p $ \p' -> SRPrim (DPrim p') v
+primFromVal :: Prim p k a -> SVal -> SymRepr (PrimS a)
+primFromVal p v = SRPrim (DPrim p) v
 
 toArr :: SymRepr (Array i v) -> SArr
 toArr (SRArray _ x) = x
 
-fromArr :: Index i -> Prim p k a -> SArr -> SymRepr (Array i a)
-fromArr index elPrim = SRArray (DArray index elPrim)
+fromArr :: Index i -> ArrValue a -> SArr -> SymRepr (Array i a)
+fromArr index av = SRArray (DArray index av)
 
 toRec :: SymRepr (Record rname fields) -> Rec FieldRepr fields
 toRec (SRData _ x) = x
 
 primUnop
   :: Bool
-  -> Prim p1 k1 a -> Prim p2 k2 b
+  -> Prim p2 k2 b -- ^ The target type
   -> (SVal -> SVal)
-  -> Rec SymRepr '[a] -> SymRepr b
-primUnop shouldCoerce p1 p2 f = primFromVal p2 . runcurry (f . maybeCoerce . primToVal p1)
+  -> Rec SymRepr '[PrimS a] -> SymRepr (PrimS b)
+primUnop shouldCoerce p2 f = primFromVal p2 . runcurry (f . maybeCoerce . primToVal)
   where
     maybeCoerce
       | shouldCoerce = coerceSBVNum p2
@@ -97,10 +97,10 @@ primBinop
   -- ceiling of each.
   -> Prim p1 k1 a -> Prim p2 k2 b -> Prim p3 k3 c
   -> (SVal -> SVal -> SVal)
-  -> Rec SymRepr '[a, b] -> SymRepr c
+  -> Rec SymRepr '[PrimS a, PrimS b] -> SymRepr (PrimS c)
 primBinop takesResultVal p1 p2 p3 (.*.) =
   primFromVal p3 .
-  runcurry (\x y -> (coerceArg $ primToVal p1 x) .*. (coerceArg $ primToVal p2 y))
+  runcurry (\x y -> (coerceArg $ primToVal x) .*. (coerceArg $ primToVal y))
 
   where
     coerceToCeil = case primCeil p1 p2 of
@@ -153,7 +153,7 @@ data PrimSymSpec a =
   , _pssSymbolic :: String -> SBV.Symbolic SVal
   }
 
-primSymSpec :: Prim p k (PrimS a) -> PrimSymSpec a
+primSymSpec :: Prim p k a -> PrimSymSpec a
 primSymSpec = \case
   PInt8   -> bySymWord (0 :: Integer) fromIntegral
   PInt16  -> bySymWord (0 :: Integer) fromIntegral
@@ -180,15 +180,15 @@ primSymSpec = \case
 
 
 primSBVKind :: Prim p k a -> SBV.Kind
-primSBVKind p = primS p (_pssKind . primSymSpec)
+primSBVKind = _pssKind . primSymSpec
 
 
-primLit :: Prim p k (PrimS a) -> a -> SVal
+primLit :: Prim p k a -> a -> SVal
 primLit = _pssLiteral . primSymSpec
 
 
 primSymbolic :: Prim p k a -> String -> SBV.Symbolic SVal
-primSymbolic p = primS p (_pssSymbolic . primSymSpec)
+primSymbolic = _pssSymbolic . primSymSpec
 
 --------------------------------------------------------------------------------
 --  Numeric

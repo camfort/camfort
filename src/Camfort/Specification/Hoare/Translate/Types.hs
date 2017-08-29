@@ -85,11 +85,21 @@ type FExpr = Expr' '[FortranOp, FLiftLogical]
 type TransFormula = PropOver (FExpr FortranVar)
 
 data Some f where
-  Some :: D a -> f a -> Some f
+  Some :: f a -> Some f
+
+data PairOf f g a where
+  PairOf :: f a -> g a -> PairOf f g a
+
+pattern SomePair :: f a -> g a -> Some (PairOf f g)
+pattern SomePair x y = Some (PairOf x y)
 
 instance Pretty1 f => Pretty (Some f) where
   prettysPrec p = \case
-    Some _ x -> prettys1Prec p x
+    Some x -> prettys1Prec p x
+
+instance Pretty1 g => Pretty1 (PairOf f g) where
+  prettys1Prec p = \case
+    PairOf _ x -> prettys1Prec p x
 
 instance Pretty1 f => Show (Some f) where
   show = pretty
@@ -98,7 +108,13 @@ traverseSome
   :: Applicative m
   => (forall a. f a -> m (g a))
   -> Some f -> m (Some g)
-traverseSome f (Some d x) = Some d <$> f x
+traverseSome f (Some x) = Some <$> f x
+
+traversePairOf
+  :: Applicative m
+  => (f a -> g a -> m (f' b, g' b))
+  -> PairOf f g a -> m (PairOf f' g' b)
+traversePairOf f (PairOf x y) = uncurry PairOf <$> f x y
 
 mapSome :: (forall a. f a -> g a) -> Some f -> Some g
 mapSome f = runIdentity . traverseSome (Identity . f)
@@ -107,14 +123,11 @@ class Trivial a
 instance Trivial a
 
 type SomeVar = Some FortranVar
-type SomeExpr = Some FortranExpr
+type SomeExpr = Some (PairOf D FortranExpr)
 type SomeType = Some D
 
-someType :: D a -> SomeType
-someType d = Some d d
-
 someVarName :: SomeVar -> String
-someVarName (Some _ (FortranVar _ np)) = getUniqueName $ _npUnique np
+someVarName (Some (FortranVar _ np)) = getUniqueName $ _npUnique np
 
 --------------------------------------------------------------------------------
 --  Translate Monad

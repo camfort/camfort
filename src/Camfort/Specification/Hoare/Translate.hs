@@ -53,11 +53,11 @@ translateTypeSpec = \case
   -- TODO: Arrays (consider selectors)
   -- TODO: Derived data types (consider F.TypeCustom)
   ts@(F.TypeSpec _ _ bt Nothing) -> case bt of
-    F.TypeInteger         -> return $ someType (DPrim PInt64)
-    F.TypeReal            -> return $ someType (DPrim PFloat)
-    F.TypeDoublePrecision -> return $ someType (DPrim PDouble)
-    F.TypeCharacter       -> return $ someType (DPrim PChar)
-    F.TypeLogical         -> return $ someType (DPrim PBool8)
+    F.TypeInteger         -> return $ Some (DPrim PInt64)
+    F.TypeReal            -> return $ Some (DPrim PFloat)
+    F.TypeDoublePrecision -> return $ Some (DPrim PDouble)
+    F.TypeCharacter       -> return $ Some (DPrim PChar)
+    F.TypeLogical         -> return $ Some (DPrim PBool8)
     _                     -> errUnsupportedTypeSpec ts
   ts@_ -> errUnsupportedTypeSpec ts
 
@@ -89,7 +89,7 @@ translateBoolExpression
   :: F.Expression ann
   -> MonadTranslate ann (FExpr FortranVar Bool)
 translateBoolExpression e = do
-  Some d1 e' <- translateExpression e
+  SomePair d1 e' <- translateExpression e
 
   resUnsquashed :: Expr FLiftLogical FortranExpr Bool <- case matchPrimD d1 of
     Just (MatchPrimD (MatchPrim _ SKLogical) prim1) -> return $ EOp $
@@ -98,7 +98,7 @@ translateBoolExpression e = do
         PBool16 -> FLL16 (EVar e')
         PBool32 -> FLL32 (EVar e')
         PBool64 -> FLL64 (EVar e')
-    _ -> errUnexpectedType (LpExpression e) (someType (DPrim PBool8)) (someType d1)
+    _ -> errUnexpectedType (LpExpression e) (Some (DPrim PBool8)) (Some d1)
 
   return (squashExpression resUnsquashed)
 
@@ -133,7 +133,7 @@ translateValue = \case
   v@(F.ValVariable nm) -> do
     theVar <- view (teVarsInScope . at (SourceName nm))
     case theVar of
-      Just (Some d v') -> return (Some d (EVar v'))
+      Just (Some v'@(FortranVar d _)) -> return (SomePair d (EVar v'))
       _                -> errVarNotInScope nm
 
   v@(F.ValIntrinsic nm) -> errUnsupportedValue v
@@ -156,7 +156,7 @@ translateLiteral
   -> Prim p k (PrimS a) -> (s -> Maybe a) -> s
   -> MonadTranslate ann SomeExpr
 translateLiteral v pa readLit
-  = maybe (errBadLiteral v) (return . Some (DPrim pa) . flit pa)
+  = maybe (errBadLiteral v) (return . SomePair (DPrim pa) . flit pa)
   . readLit
   where
     flit px x = EOp (FortranOp OpLit (ORLit px x) RNil)
@@ -203,14 +203,14 @@ translateBop e1 e2 bop = do
     Just x  -> return x
     Nothing -> errUnsupportedItem (LpBinaryOp bop)
 
-  Some d1 e1' <- translateExpression e1
-  Some d2 e2' <- translateExpression e2
+  SomePair d1 e1' <- translateExpression e1
+  SomePair d2 e2' <- translateExpression e2
 
   MatchOpR opResult d3 <- case matchOpR bop' (d1 :& d2 :& RNil) of
     Just x -> return x
-    Nothing -> errInvalidBinopApplication (e1, someType d1) (e2, someType d2) (LpBinaryOp bop)
+    Nothing -> errInvalidBinopApplication (e1, Some d1) (e2, Some d2) (LpBinaryOp bop)
 
-  return $ Some d3 $ EOp $ FortranOp bop' opResult (e1' :& e2' :& RNil)
+  return $ SomePair d3 $ EOp $ FortranOp bop' opResult (e1' :& e2' :& RNil)
 
 
 translateUop :: F.Expression ann -> F.UnaryOp -> MonadTranslate ann SomeExpr
@@ -219,13 +219,13 @@ translateUop e uop = do
     Just x  -> return x
     Nothing -> errUnsupportedItem (LpUnaryOp uop)
 
-  Some d1 e' <- translateExpression e
+  SomePair d1 e' <- translateExpression e
 
   MatchOpR opResult d2 <- case matchOpR uop' (d1 :& RNil) of
     Just x  -> return x
-    Nothing -> errInvalidUnopApplication (e, someType d1) (LpUnaryOp uop)
+    Nothing -> errInvalidUnopApplication (e, Some d1) (LpUnaryOp uop)
 
-  return $ Some d2 $ EOp $ FortranOp uop' opResult (e' :& RNil)
+  return $ SomePair d2 $ EOp $ FortranOp uop' opResult (e' :& RNil)
 
 
 --------------------------------------------------------------------------------
@@ -238,7 +238,7 @@ translateAtType
   -> (a -> MonadTranslate ann SomeExpr)
   -> a -> MonadTranslate ann (FortranExpr b)
 translateAtType toLp db translate x =
-  do Some da someY <- translate x
+  do SomePair da someY <- translate x
      case dcast da db someY of
        Just y  -> return y
-       Nothing -> errUnexpectedType (toLp x) (someType da) (someType db)
+       Nothing -> errUnexpectedType (toLp x) (Some da) (Some db)

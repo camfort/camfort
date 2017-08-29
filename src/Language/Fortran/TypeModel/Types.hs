@@ -58,43 +58,30 @@ newtype PrimS a = PrimS a
 -- | Lists the allowed primitive Fortran types, with corresponding (phantom)
 -- constraints on precision, kind and semantic Haskell type.
 data Prim p k a where
-  PInt8          :: Prim 'P8   'KInt     (PrimS Int8)
-  PInt16         :: Prim 'P16  'KInt     (PrimS Int16)
-  PInt32         :: Prim 'P32  'KInt     (PrimS Int32)
-  PInt64         :: Prim 'P64  'KInt     (PrimS Int64)
+  PInt8          :: Prim 'P8   'KInt     Int8
+  PInt16         :: Prim 'P16  'KInt     Int16
+  PInt32         :: Prim 'P32  'KInt     Int32
+  PInt64         :: Prim 'P64  'KInt     Int64
 
-  PBool8         :: Prim 'P8   'KLogical (PrimS Bool8)
-  PBool16        :: Prim 'P16  'KLogical (PrimS Bool16)
-  PBool32        :: Prim 'P32  'KLogical (PrimS Bool32)
-  PBool64        :: Prim 'P64  'KLogical (PrimS Bool64)
+  PBool8         :: Prim 'P8   'KLogical Bool8
+  PBool16        :: Prim 'P16  'KLogical Bool16
+  PBool32        :: Prim 'P32  'KLogical Bool32
+  PBool64        :: Prim 'P64  'KLogical Bool64
 
-  PFloat         :: Prim 'P32  'KReal    (PrimS Float)
-  PDouble        :: Prim 'P64  'KReal    (PrimS Double)
+  PFloat         :: Prim 'P32  'KReal    Float
+  PDouble        :: Prim 'P64  'KReal    Double
 
-  PChar          :: Prim 'P8   'KChar    (PrimS Char8)
-
-  -- PProp          :: Prim 'P64  'KProp    Bool
-
-primS :: Prim p k a -> (forall a'. a ~ PrimS a' => Prim p k (PrimS a') -> r) -> r
-primS p f = case p of
-  PInt8   -> f p
-  PInt16  -> f p
-  PInt32  -> f p
-  PInt64  -> f p
-  PBool8  -> f p
-  PBool16 -> f p
-  PBool32 -> f p
-  PBool64 -> f p
-  PFloat  -> f p
-  PDouble -> f p
-  PChar   -> f p
+  PChar          :: Prim 'P8   'KChar    Char8
 
 --------------------------------------------------------------------------------
 --  Arrays
 --------------------------------------------------------------------------------
 
 data Index a where
-  Index :: Prim p 'KInt a -> Index a
+  Index :: Prim p 'KInt a -> Index (PrimS a)
+
+data ArrValue a where
+  ArrValue :: Prim p k a -> ArrValue (PrimS a)
 
 newtype Array i a = Array [a]
 
@@ -117,9 +104,15 @@ data Record name fields where
 -- | A Fortran type, with a phantom type variable indicating the Haskell type
 -- that it semantically corresponds to.
 data D a where
-  DPrim :: Prim p k (PrimS a) -> D (PrimS a)
-  DArray :: Index i -> Prim p k a -> D (Array i a)
+  DPrim :: Prim p k a -> D (PrimS a)
+  DArray :: Index i -> ArrValue a -> D (Array i a)
   DData :: SSymbol name -> Rec RField fs -> D (Record name fs)
+
+dIndex :: Index i -> D i
+dIndex (Index p) = DPrim p
+
+dArrValue :: ArrValue a -> D a
+dArrValue (ArrValue p) = DPrim p
 
 --------------------------------------------------------------------------------
 --  SBV Representations
@@ -189,6 +182,10 @@ instance Pretty1 (Prim p k) where
     PBool32 -> showString "logical32"
     PBool64 -> showString "logical64"
     PChar   -> showString "character"
+
+instance Pretty1 ArrValue where
+  prettys1Prec p = \case
+    ArrValue prim -> prettys1Prec p prim
 
 instance Pretty1 RField where
   prettys1Prec _ = \case

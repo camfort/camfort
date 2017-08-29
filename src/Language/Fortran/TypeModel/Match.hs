@@ -37,7 +37,7 @@ import           Language.Fortran.TypeModel.Util
 --------------------------------------------------------------------------------
 
 data MatchPrim p k a where
-  MatchPrim :: Sing p -> Sing k -> MatchPrim p k (PrimS a)
+  MatchPrim :: Sing p -> Sing k -> MatchPrim p k a
 
 matchPrim :: Prim p k a -> MatchPrim p k a
 matchPrim = \case
@@ -55,7 +55,7 @@ matchPrim = \case
 
 
 data MatchPrimD a where
-  MatchPrimD :: MatchPrim p k a -> Prim p k a -> MatchPrimD a
+  MatchPrimD :: MatchPrim p k a -> Prim p k a -> MatchPrimD (PrimS a)
 
 -- | Checks if the given type is primitive, and if so returns a proof of that
 -- fact.
@@ -66,7 +66,7 @@ matchPrimD = \case
 
 
 data MakePrim p k where
-  MakePrim :: Prim p k (PrimS a) -> MakePrim p k
+  MakePrim :: Prim p k a -> MakePrim p k
 
 -- | Tries to make a primitive type with the given precision and kind. Fails if
 -- there is no primitive with the given combination.
@@ -87,7 +87,7 @@ makePrim = curry $ \case
 
 
 data MatchNumType a where
-  MatchNumType :: Sing p -> Sing k -> NumericKind k -> Prim p k a -> MatchNumType a
+  MatchNumType :: Sing p -> Sing k -> NumericKind k -> Prim p k a -> MatchNumType (PrimS a)
 
 -- | Checks if the given type is numeric, and if so returns a proof of that
 -- fact.
@@ -102,8 +102,8 @@ data MatchNumR a b where
   MatchNumR
     :: NumericKind k1 -> NumericKind k2
     -> Prim p1 k1 a -> Prim p2 k2 b
-    -> Prim (PrecMax p1 p2) (KindMax k1 k2) (PrimS c)
-    -> MatchNumR a b
+    -> Prim (PrecMax p1 p2) (KindMax k1 k2) c
+    -> MatchNumR (PrimS a) (PrimS b)
 
 -- | Checks if it is possible to perform a binary numeric operation on arguments
 -- with the given respective types. If so, returns the type that would result
@@ -120,7 +120,7 @@ primCeil prim1 prim2 = case (matchPrim prim1, matchPrim prim2) of
 
 
 data MatchCompareR a b where
-  MatchCompareR :: ComparableKinds k1 k2 -> Prim p1 k1 a -> Prim p2 k2 b -> MatchCompareR a b
+  MatchCompareR :: ComparableKinds k1 k2 -> Prim p1 k1 a -> Prim p2 k2 b -> MatchCompareR (PrimS a) (PrimS b)
 
 -- | Checks if it is possible to perform a binary comparison (equality or
 -- relational) operation on arguments with the given respective types. If so,
@@ -209,8 +209,8 @@ matchOpR op argTypes =
         MatchCompareR cmp p1 p2 -> MatchOpR (ORRel cmp p1 p2 PBool8) (DPrim PBool8)
 
       OpLookup -> traverse matchPrimD (d1, d2) >>= \case
-        (DArray (Index pi1) pv, MatchPrimD (MatchPrim _ _) pi2) -> case eqPrim pi1 pi2 of
-          Just Refl -> Just $ MatchOpR (ORLookup d1) (primS pv DPrim)
+        (DArray (Index pi1) av, MatchPrimD (MatchPrim _ _) pi2) -> case eqPrim pi1 pi2 of
+          Just Refl -> Just $ MatchOpR (ORLookup d1) (dArrValue av)
           _         -> Nothing
         _ -> Nothing
 
@@ -264,7 +264,7 @@ eqD = curry $ \case
     case eqPrim p1 p2 of
       Just Refl -> Just Refl
       _         -> Nothing
-  (DArray (Index i1) p1, DArray (Index i2) p2) ->
+  (DArray (Index i1) (ArrValue p1), DArray (Index i2) (ArrValue p2)) ->
     case (eqPrim i1 i2, eqPrim p1 p2) of
       (Just Refl, Just Refl) -> Just Refl
       _                      -> Nothing
