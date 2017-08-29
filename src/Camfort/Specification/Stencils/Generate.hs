@@ -32,6 +32,7 @@ module Camfort.Specification.Stencils.Generate
   , indicesToSpec
   , neighbourToOffset
   , relativise
+  , consistentIVSuse
   ) where
 
 import Control.Monad (void, when, zipWithM)
