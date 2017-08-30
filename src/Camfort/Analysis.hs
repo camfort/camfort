@@ -42,6 +42,7 @@ module Camfort.Analysis
   , failAnalysis'
   , catchAnalysisT
   , loggingAnalysisError
+  , analysisLiftLogger
   -- * Analysis results
   , AnalysisResult(..)
   , _ARFailure
@@ -237,6 +238,12 @@ loggingAnalysisError =
                  . recordLogMessage
                  . MsgError)
   . fmap Just
+
+-- | Given a logging computation, lift it into an analysis monad.
+analysisLiftLogger
+  :: (Monad m, Describe w, Describe e)
+  => LoggerT e w m a -> AnalysisT e w m a
+analysisLiftLogger = AnalysisT . lift . lift
 
 --------------------------------------------------------------------------------
 --  Analysis Results
