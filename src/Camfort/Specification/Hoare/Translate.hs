@@ -62,21 +62,48 @@ fortranToFExpr (e :: FortranExpr a) =
 --  Translate
 --------------------------------------------------------------------------------
 
+data SomePrimD where
+  SomePrimD :: D (PrimS a) -> SomePrimD
+
+somePrimD :: SomePrimD -> Some D
+somePrimD (SomePrimD x) = Some x
+
+translateBaseType
+  :: F.BaseType
+  -> Maybe (F.Expression ann) -- ^ Kind
+  -> Maybe SomePrimD
+translateBaseType bt Nothing = case bt of
+  F.TypeInteger         -> Just $ SomePrimD (DPrim PInt64)
+  F.TypeReal            -> Just $ SomePrimD (DPrim PFloat)
+  F.TypeDoublePrecision -> Just $ SomePrimD (DPrim PDouble)
+  F.TypeCharacter       -> Just $ SomePrimD (DPrim PChar)
+  F.TypeLogical         -> Just $ SomePrimD (DPrim PBool8)
+  _                     -> Nothing
+translateBaseType _ _ = Nothing -- TODO: Support kind specifiers
+
 translateTypeSpec :: F.TypeSpec ann -> MonadTranslate SomeType
 translateTypeSpec = \case
-  -- TODO: Get precision right
-  -- TODO: Arrays (consider selectors)
   -- TODO: Derived data types (consider F.TypeCustom)
-  ts@(F.TypeSpec _ _ bt Nothing) -> case bt of
-    F.TypeInteger         -> return $ Some (DPrim PInt64)
-    F.TypeReal            -> return $ Some (DPrim PFloat)
-    F.TypeDoublePrecision -> return $ Some (DPrim PDouble)
-    F.TypeCharacter       -> return $ Some (DPrim PChar)
-    F.TypeLogical         -> return $ Some (DPrim PBool8)
-    _                     -> throwError $ ErrUnsupportedItem "type spec"
-  ts@_ -> throwError $ ErrUnsupportedItem "type spec"
+  (F.TypeSpec _ _ bt mselector) -> do
+    let selectorKind (F.Selector _ _ _ k) = k
+        mtranslateBase = translateBaseType bt =<< selectorKind <$> mselector
+        translateBase = maybe (throwError $ ErrUnsupportedItem "type spec")
+                        return mtranslateBase
 
-  -- where exprIntLit (F.ExpValue _ _ (F.ValInteger intStr))
+    case mselector of
+      Nothing -> somePrimD <$> translateBase
+
+      Just (F.Selector _ _ (Just lenExpr) Nothing)
+        | Just len <- exprIntLit lenExpr -> do
+            SomePrimD (DPrim basePrim) <- translateBase
+            let arrTy = DArray (Index PInt64) (ArrValue basePrim)
+            return (Some arrTy)
+
+      _ -> throwError $ ErrUnsupportedItem "type spec"
+
+  where
+    exprIntLit (F.ExpValue _ _ (F.ValInteger intStr)) = readLitInteger intStr
+    exprIntLit _ = Nothing
 
 
 translateFormula :: PrimFormula ann -> MonadTranslate (TransFormula Bool)
