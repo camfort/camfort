@@ -15,7 +15,8 @@
 -- TODO: Implement translation for more unsupported language parts
 
 module Camfort.Specification.Hoare.Translate
-  ( translateExpression
+  ( fortranToFExpr
+  , translateExpression
   , translateExpression'
   , translateBoolExpression
   , translateFormula
@@ -36,12 +37,22 @@ import qualified Language.Fortran.AST                        as F
 
 import           Language.Expression.DSL
 import           Language.Fortran.TypeModel
-import           Language.Fortran.TypeModel.Vars
 import           Language.Fortran.TypeModel.Match
 import           Language.Fortran.TypeModel.Singletons
+import           Language.Fortran.TypeModel.Vars
 
 import           Camfort.Specification.Hoare.Syntax
 import           Camfort.Specification.Hoare.Translate.Types as Types
+
+--------------------------------------------------------------------------------
+--  Util
+--------------------------------------------------------------------------------
+
+fortranToFExpr :: FortranExpr a -> FExpr FortranVar a
+fortranToFExpr (e :: FortranExpr a) =
+  let e' :: Expr FLiftLogical (Expr FortranOp FortranVar) a
+      e' = EVar e
+  in squashExpression e'
 
 --------------------------------------------------------------------------------
 --  Translate
@@ -134,7 +145,7 @@ translateValue = \case
     theVar <- view (teVarsInScope . at (SourceName nm))
     case theVar of
       Just (Some v'@(FortranVar d _)) -> return (SomePair d (EVar v'))
-      _                -> errVarNotInScope nm
+      _                               -> errVarNotInScope nm
 
   v@(F.ValIntrinsic nm) -> errUnsupportedValue v
 
@@ -153,7 +164,7 @@ translateValue = \case
 
 translateLiteral
   :: F.Value ann
-  -> Prim p k (PrimS a) -> (s -> Maybe a) -> s
+  -> Prim p k a -> (s -> Maybe a) -> s
   -> MonadTranslate ann SomeExpr
 translateLiteral v pa readLit
   = maybe (errBadLiteral v) (return . SomePair (DPrim pa) . flit pa)

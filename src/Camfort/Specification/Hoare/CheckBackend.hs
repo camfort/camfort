@@ -38,6 +38,7 @@ import           Data.Generics.Uniplate.Operations
 import           Data.Map                               (Map)
 import           Data.Maybe                             (isJust)
 import           Data.Void                              (Void)
+import Data.Vinyl.Curry
 
 import           Data.SBV                               (SBool, defaultSMTCfg)
 
@@ -53,7 +54,6 @@ import           Camfort.Specification.Hoare.Syntax
 import           Camfort.Specification.Hoare.Translate
 import           Language.Fortran.TypeModel
 import           Language.Fortran.TypeModel.Vars
-import           Language.Fortran.TypeModel.Match
 
 import           Language.Expression
 import           Language.Expression.DSL
@@ -92,6 +92,10 @@ data HoareBackendError
   -- ^ The while block had no associated invariant
   | WrongAssignmentType Text SomeType
   -- ^ Expected array type but got the given type instead
+  | NonLValueAssignment (F.Expression HA)
+  -- ^ Assigning to an expression that isn't an lvalue
+  | UnsupportedAssignment Text
+  -- ^ Tried to assign to something that's valid Fortran but unsupported
 
 instance Describe HoareBackendError where
   describeBuilder = \case
@@ -100,16 +104,25 @@ instance Describe HoareBackendError where
     TranslateError1 te -> "translation error: " <> describeBuilder (displayException te)
     UnsupportedBlock _ -> "encountered unsupported block"
     UnexpectedBlock _ -> "a block was found in an illegal location"
-    ArgWithoutDecl nm -> "argument " <> describeBuilder (show nm) <> " doesn't have an associated type declaration"
+    ArgWithoutDecl nm ->
+      "argument " <> describeBuilder (show nm) <>
+      " doesn't have an associated type declaration"
     AnnotationError _ ->
       "the program was insufficiently annotated; " <>
       "`seq` annotations must appear before each command which is not an assignment"
-    VarNotInScope nm -> "variable " <> describeBuilder (pretty nm) <> " is being assigned to but is not in scope"
+    VarNotInScope nm -> "variable " <> describeBuilder (pretty nm) <>
+      " is being assigned to but is not in scope"
     MissingWhileInvariant _ ->
       "found a `do while` block with no invariant; " <>
       "invariant annotations must appear at the start of every `do while` loop"
     WrongAssignmentType message gotType ->
-      "unexpected variable type; expected " <> describeBuilder message <> "; got " <> describeBuilder (pretty gotType)
+      "unexpected variable type; expected " <> describeBuilder message <>
+      "; got " <> describeBuilder (pretty gotType)
+    NonLValueAssignment lexpr ->
+      "assignment an expression which is not a valid lvalue, " <>
+      describeBuilder (displayLangPart (LpExpression lexpr))
+    UnsupportedAssignment message ->
+      "unsupported assignment; " <> describeBuilder message
 
 type BackendAnalysis = AnalysisT HoareBackendError Void IO
 
@@ -129,8 +142,6 @@ instance Describe HoareCheckResult where
 
 data CheckHoareState =
   CheckHoareState
-  { _hsCursor :: F.SrcSpan
-  }
 
 type ScopeVars = Map SourceName SomeVar
 
@@ -142,11 +153,8 @@ data CheckHoareEnv =
   -- names.
   }
 
-initialState :: F.SrcSpan -> CheckHoareState
-initialState sp =
-  CheckHoareState
-  { _hsCursor = sp
-  }
+initialState :: CheckHoareState
+initialState = CheckHoareState
 
 emptyEnv :: CheckHoareEnv
 emptyEnv = CheckHoareEnv True mempty
@@ -171,8 +179,7 @@ checkPU apu = do
 
     let translateFormulae =
             readerOfState
-          . doTranslate (failAnalysis' pu)
-          . traverse translateFormula
+          . traverse (tryTranslateFormula pu)
 
     preconds <- translateFormulae (apu ^. apuPreconditions)
     postconds <- translateFormulae (apu ^. apuPostconditions)
@@ -189,7 +196,7 @@ checkPU apu = do
 
   logInfo' pu $ " - Computing verification conditions"
 
-  (_, vcs) <- runGenM env (F.getSpan pu) (genBody bodyTriple)
+  (_, vcs) <- runGenM env (genBody bodyTriple)
 
   logInfo' pu $ " - Verifying conditions:"
 
@@ -230,7 +237,7 @@ initialSetup pu = do
   -- need to treat as variables.
   mArgNames <- case pu of
     F.PUFunction _ _ (Just rettype) _ _ funargs retvalue _ _ -> do
-      rettype' <- runReaderT (doTranslate (failAnalysis' pu) (translateTypeSpec rettype)) emptyEnv
+      rettype' <- runReaderT (doTranslate (failAnalysis' rettype) (translateTypeSpec rettype)) emptyEnv
 
       heVarsInScope %= case retvalue of
         Just rv -> newVar rv rettype'
@@ -270,7 +277,7 @@ readInitialBlocks = dropWhileM readInitialBlock
               F.DeclVariable _ _ e Nothing Nothing -> return e
               _ -> failAnalysis' bl (UnsupportedBlock bl)
 
-            declTy' <- readerOfState $ doTranslate (failAnalysis' bl) $ translateTypeSpec declTy
+            declTy' <- readerOfState $ doTranslate (failAnalysis' declTy) $ translateTypeSpec declTy
 
             forM_ declVars $ \v -> heVarsInScope %= newVar v declTy'
 
@@ -341,8 +348,8 @@ newtype GenM a = GenM (RWST CheckHoareEnv [TransFormula Bool] CheckHoareState Ch
     )
 
 
-runGenM :: CheckHoareEnv -> F.SrcSpan -> GenM a -> CheckHoare (a, [TransFormula Bool])
-runGenM env initialSpan (GenM action) = evalRWST action env (initialState initialSpan)
+runGenM :: CheckHoareEnv -> GenM a -> CheckHoare (a, [TransFormula Bool])
+runGenM env (GenM action) = evalRWST action env initialState
 
 
 type FortranTriplet a = Triplet FExpr FortranVar a
@@ -354,30 +361,28 @@ genBody = traverseOf _3 bodyToSequence >=> void . sequenceVCs genBlock
 
 genBlock :: FortranTriplet (F.Block HA) -> GenM ()
 genBlock (precond, postcond, bl) = do
-  setCursor bl
   case bl of
     F.BlIf _ _ _ _ conds bodies _ -> do
-      condsExprs <- traverse (traverse (doTranslate (atCursor failAnalysis') . translateBoolExpression)) conds
+      condsExprs <- traverse (traverse tryTranslateBoolExpr) conds
       multiIfVCs genBody expr (precond, postcond, (zip condsExprs bodies))
 
     F.BlDoWhile _ _ _ _ cond body _ -> do
       primInvariant <-
         case body of
          b : _ | Just (Specification SpecInvariant f) <- getAnnSpec (F.getAnnotation b) -> return f
-         _ -> atCursor failAnalysis' $ MissingWhileInvariant bl
+         _ -> failAnalysis' bl $ MissingWhileInvariant bl
 
-      invariant <- doTranslate (atCursor failAnalysis') $ translateFormula primInvariant
-      condExpr <- doTranslate (atCursor failAnalysis') $ translateBoolExpression cond
+      invariant <- tryTranslateFormula body primInvariant
+      condExpr <- tryTranslateBoolExpr cond
 
       whileVCs genBody expr invariant (precond, postcond, (condExpr, body))
 
     F.BlComment _ _ _ -> return ()
-    _ -> atCursor failAnalysis' $ UnsupportedBlock bl
+    _ -> failAnalysis' bl $ UnsupportedBlock bl
 
 
 bodyToSequence :: [F.Block HA] -> GenM (AnnSeq FExpr FortranVar (F.Block HA))
 bodyToSequence blocks = do
-  setCursor blocks
   foldlM combineBlockSequence emptyAnnSeq blocks
 
 
@@ -386,26 +391,26 @@ combineBlockSequence
   -> F.Block HA
   -> GenM (AnnSeq FExpr FortranVar (F.Block HA))
 combineBlockSequence prevSeq bl = do
-  setCursor bl
   blSeq <- blockToSequence bl
 
   case prevSeq `joinAnnSeq` blSeq of
     Just r  -> return r
-    Nothing -> atCursor failAnalysis' $ AnnotationError bl
+    Nothing -> failAnalysis' bl $ AnnotationError bl
 
 
 blockToSequence :: F.Block HA -> GenM (AnnSeq FExpr FortranVar (F.Block HA))
 blockToSequence bl = do
-  setCursor bl
-
   chooseFrom [assignment, sequenceSpec, other]
   where
-    assignment = fmap (JustAssign . (: [])) <$> assignmentBlock bl
+    assignment =
+      assignmentBlock bl >>= \case
+        Just a -> return $ Just $ JustAssign [a]
+        Nothing -> return $ Nothing
 
     sequenceSpec =
       case getAnnSpec (F.getAnnotation bl) of
         Just (Specification SpecSeq m) -> do
-          m' <- doTranslate (atCursor failAnalysis') $ translateFormula m
+          m' <- tryTranslateFormula bl m
           return $ Just $ propAnnSeq m'
         _ -> return Nothing
 
@@ -416,97 +421,90 @@ blockToSequence bl = do
     -- Tries each action in the list, using the first that works and otherwise
     -- reporting an error.
     chooseFrom :: [GenM (Maybe a)] -> GenM a
-    chooseFrom [] = atCursor failAnalysis' $ AnnotationError bl
+    chooseFrom [] = failAnalysis' bl $ AnnotationError bl
     chooseFrom (action : rest) = do
       m <- action
       case m of
         Just x  -> return x
         Nothing -> chooseFrom rest
 
-type UpdatePair = PairOf FortranVar (VarUpdate FortranExpr)
+--------------------------------------------------------------------------------
+-- Handling assignments
 
-normalAssignment
+primAssignment
   :: (ReportAnn ann)
   => NamePair
   -> F.Expression ann
-  -> GenM (Some UpdatePair)
-normalAssignment nm rvalue = do
-  Some varV@(FortranVar varD _) <- varFromScope nm
+  -> GenM (Assignment FExpr FortranVar)
+primAssignment nm rvalAst = do
+  Some varV@(FortranVar varD _) <- varFromScope rvalAst nm
 
   case varD of
     DPrim _ -> do
-      rvalue' <- doTranslate (atCursor failAnalysis') $ translateExpression' varD rvalue
-      return (SomePair varV (UpdatePrim rvalue'))
-    _ -> atCursor failAnalysis' $ WrongAssignmentType "primitive value" (Some varD)
+      rvalExpr <- tryTranslateExpr varD rvalAst
+      return (Assignment varV (fortranToFExpr rvalExpr))
+    _ -> failAnalysis' rvalAst $ WrongAssignmentType "primitive value" (Some varD)
 
 arrayAssignment
   :: (ReportAnn ann)
   => NamePair
   -> F.Expression ann
   -> F.Expression ann
-  -> GenM (Some UpdatePair)
+  -> GenM (Assignment FExpr FortranVar)
 arrayAssignment arrName ixAst rvalAst = do
-  Some varV@(FortranVar varD _) <- varFromScope arrName
+  Some varV@(FortranVar varD _) <- varFromScope rvalAst arrName
 
   case varD of
-    DArray ixIndex@(Index ixPrim) valPrim -> do
-      case (matchPrim ixPrim, matchPrim valPrim) of
-        (MatchPrim _ _, MatchPrim _ _) -> do
-          let ixD = undefined -- DPrim ixPrim
-              valD = DPrim valPrim
+    DArray ixIndex valAv -> do
+      let ixD = dIndex ixIndex
+          valD = dArrValue valAv
 
-          ixExpr <- doTranslate (atCursor failAnalysis') $ translateExpression' ixD ixAst
-          rvalExpr  <- doTranslate (atCursor failAnalysis') $ translateExpression' valD rvalAst
+      ixExpr   <- tryTranslateExpr ixD ixAst
+      rvalExpr <- tryTranslateExpr valD rvalAst
 
-          return (SomePair varV (UpdateArray ixIndex ixExpr rvalExpr))
+      -- Replace instances of the array variable with the same array, but with
+      -- the new value written at the given index.
+      let arrExpr = EVar varV
+          mkOp = rcurry $ FortranOp OpWriteArr (ORWriteArr varD)
+          arrExpr' = EOp (mkOp arrExpr ixExpr rvalExpr)
 
-    _ -> atCursor failAnalysis' $ WrongAssignmentType "array type" (Some varD)
-  -- case varV of
-  --   FortranVar (DArray (Index iPrim) vPrim) _ -> _
-  --   _ -> atCursor failAnalysis' $ ExpectedArray (someType varD)
+      return (Assignment varV (fortranToFExpr arrExpr'))
 
-  undefined
+    _ -> failAnalysis' rvalAst $ WrongAssignmentType "array type" (Some varD)
 
 
 assignmentBlock :: F.Block HA -> GenM (Maybe (Assignment FExpr FortranVar))
 assignmentBlock bl = do
-  setCursor bl
   case bl of
-    F.BlStatement _ _ _ (F.StExpressionAssign _ _ lexp rvalue) -> do
-      -- TODO: better error
-      lvalue <- maybe (fail "not an lvalue") return (F.toLValue lexp)
-      (SomePair fvar upd) <-
+    F.BlStatement _ _ _ stAst@(F.StExpressionAssign _ _ lexp rvalue) ->
+      Just <$> do
+        lvalue <- maybe (failAnalysis' lexp (NonLValueAssignment lexp))
+                  return (F.toLValue lexp)
+
         case lvalue of
-          F.LvSimpleVar {} -> normalAssignment (varNames lexp) rvalue
+          F.LvSimpleVar {} -> primAssignment (varNames lexp) rvalue
           F.LvSubscript _ _ lvar@(F.LvSimpleVar {}) ixs ->
             case ixs of
               F.AList _ _ [F.IxSingle _ _ _ ixExpr] ->
                 arrayAssignment (lvVarNames lvar) ixExpr rvalue
 
-              _ -> fail "only simple indices are supported for now" -- TODO: better error message
-          _ -> fail "assignment type not supported for now" -- TODO: better error message
-
-      undefined
+              _ -> failAnalysis' ixs $
+                   UnsupportedAssignment "only simple indices are supported for now"
+          _ -> failAnalysis' stAst $
+               UnsupportedAssignment "complex assignment"
 
     _ -> return Nothing
 
 
-varFromScope :: NamePair -> GenM SomeVar
-varFromScope np = do
+--------------------------------------------------------------------------------
+
+varFromScope :: (F.Spanned a) => a -> NamePair -> GenM SomeVar
+varFromScope loc np = do
   let src = np ^. npSource
   mscoped <- view (heVarsInScope . at src)
   case mscoped of
     Just v  -> return v
-    Nothing -> atCursor failAnalysis' $ VarNotInScope np
-
-
-setCursor :: (F.Spanned a) => a -> GenM ()
-setCursor x = hsCursor .= F.getSpan x
-
-atCursor :: (F.SrcSpan -> a -> GenM b) -> a -> GenM b
-atCursor f x = do
-  cursor <- use hsCursor
-  f cursor x
+    Nothing -> failAnalysis' loc $ VarNotInScope np
 
 --------------------------------------------------------------------------------
 --  Translation
@@ -532,6 +530,28 @@ toTranslateEnv env =
   defaultTranslateEnv
     & teImplictVars .~ env ^. heImplicitVars
     & teVarsInScope .~ env ^. heVarsInScope
+
+--------------------------------------------------------------------------------
+-- Shorthands for translating expressions and failing the analysis if the
+-- translation fails
+
+tryTranslateExpr
+  :: (ReportAnn ann,
+      MonadReader CheckHoareEnv m, MonadAnalysis HoareBackendError w m)
+  => D a -> F.Expression ann -> m (FortranExpr a)
+tryTranslateExpr d e = doTranslate (failAnalysis' e) (translateExpression' d e)
+
+tryTranslateBoolExpr
+  :: (ReportAnn ann,
+      MonadReader CheckHoareEnv m, MonadAnalysis HoareBackendError w m)
+  => F.Expression ann -> m (FExpr FortranVar Bool)
+tryTranslateBoolExpr e = doTranslate (failAnalysis' e) (translateBoolExpression e)
+
+tryTranslateFormula
+  :: (F.Spanned o, ReportAnn ann,
+      MonadReader CheckHoareEnv m, MonadAnalysis HoareBackendError w m)
+  => o -> PrimFormula ann -> m (TransFormula Bool)
+tryTranslateFormula loc e = doTranslate (failAnalysis' loc) (translateFormula e)
 
 --------------------------------------------------------------------------------
 --  Utility functions
