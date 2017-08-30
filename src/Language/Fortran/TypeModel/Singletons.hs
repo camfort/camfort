@@ -49,11 +49,13 @@ $(singletons
     | OKLogical
     | OKLookup
     | OKDeref
+    | OKWriteArr
+    | OKWriteData
 {-
     | OKProp
     -- ^ A dummy operator type for embedding Fortran expressions in propositions
 -}
-    deriving (Show, Eq, Ord)
+    -- deriving (Show, Eq, Ord)
 
   -- | Finds the maximum of two precision types.
   precMax :: Precision -> Precision -> Precision

@@ -92,11 +92,30 @@ prettysPrecOp p = \case
       showParen (p > 9) $ prettys1Prec 10 arr .
                           showString "[" . prettys1Prec 0 i .
                           showString "]"
+  ORWriteArr _ -> \case
+    OpWriteArr ->
+
+      -- e.g. @myArrayVar[9 <- "new value"]@
+      runcurry $ \arr i v ->
+      showParen (p > 9) $ prettys1Prec 10 arr .
+                          showString "[" . prettys1Prec 0 i .
+                          showString " <- " . prettys1Prec 0 v .
+                          showString "]"
   ORDeref _ fname -> \case
     OpDeref -> runcurry $ \r ->
       showParen (p > 9) $ prettys1Prec 10 r .
       showString "%" .
       showString (withKnownSymbol fname (symbolVal fname))
+  ORWriteData _ fname _ -> \case
+
+    -- e.g. @myDataVar{myField <- "new value"}@
+    OpWriteData -> runcurry $ \r v ->
+      showParen (p > 9) $ prettys1Prec 10 r .
+      showString "{" .
+      showString (withKnownSymbol fname (symbolVal fname)) .
+      showString " <- " .
+      prettys1Prec 0 v .
+      showString "}"
 
 -- TODO: HEq instance
 

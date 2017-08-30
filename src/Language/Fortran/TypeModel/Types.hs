@@ -146,18 +146,18 @@ data SymRepr a where
 
 getReprD :: SymRepr a -> Maybe (D a)
 getReprD = \case
-  SRPrim d _ -> Just d
+  SRPrim d _  -> Just d
   SRArray d _ -> Just d
-  SRData d _ -> Just d
-  SRProp _ -> Nothing
+  SRData d _  -> Just d
+  SRProp _    -> Nothing
 
 instance Applicative f => EvalOp f SymRepr LogicOp where
   evalOp f = \case
-    LogLit x -> pure $ SRProp (fromBool x)
-    LogNot x -> SRProp . bnot . getSrProp <$> f x
-    LogAnd x y -> appBinop (&&&) x y
-    LogOr x y -> appBinop (|||) x y
-    LogImpl x y -> appBinop (==>) x y
+    LogLit x     -> pure $ SRProp (fromBool x)
+    LogNot x     -> SRProp . bnot . getSrProp <$> f x
+    LogAnd x y   -> appBinop (&&&) x y
+    LogOr x y    -> appBinop (|||) x y
+    LogImpl x y  -> appBinop (==>) x y
     LogEquiv x y -> appBinop (<=>) x y
 
     where

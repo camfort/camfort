@@ -20,6 +20,8 @@ module Language.Fortran.TypeModel.Match where
 import           Control.Monad                            ((>=>))
 import           Data.Typeable
 
+import           Control.Lens
+
 import           Data.Singletons
 import           Data.Singletons.Prelude.List
 import           Data.Singletons.TypeLits
@@ -149,12 +151,12 @@ data MatchOpR ok args where
 -- arguments, and if so returns a proof of that fact, packaged with information
 -- about the result of applying the operator.
 matchOpR :: Op (Length args) ok -> Rec D args -> Maybe (MatchOpR ok args)
-matchOpR op argTypes =
+matchOpR operator argTypes =
   case argTypes of
-    RNil -> case op of
+    RNil -> case operator of
       OpLit -> Nothing
 
-    d1 :& RNil -> case op of
+    d1 :& RNil -> case operator of
       OpNeg -> argsNumeric <$$> \case
         MatchNumType _ _ nk p :& RNil -> MatchOpR (ORNum1 nk p p) d1
       OpPos -> argsNumeric <$$> \case
@@ -168,7 +170,7 @@ matchOpR op argTypes =
       -- dereference, so there's nothing we can return.
       OpDeref -> Nothing
 
-    d1 :& d2 :& RNil -> case op of
+    d1 :& d2 :& RNil -> case operator of
       OpAdd -> matchNumR d1 d2 <$$> \case
           MatchNumR nk1 nk2 p1 p2 p3 -> MatchOpR (ORNum2 nk1 nk2 p1 p2 p3) (DPrim p3)
       OpSub -> matchNumR d1 d2 <$$> \case
@@ -208,10 +210,21 @@ matchOpR op argTypes =
       OpGE -> matchCompareR d1 d2 <$$> \case
         MatchCompareR cmp p1 p2 -> MatchOpR (ORRel cmp p1 p2 PBool8) (DPrim PBool8)
 
-      OpLookup -> traverse matchPrimD (d1, d2) >>= \case
-        (DArray (Index pi1) av, MatchPrimD (MatchPrim _ _) pi2) -> case eqPrim pi1 pi2 of
+      OpLookup -> with (d1, d2) $ traverseOf _2 matchPrimD >=> \case
+        (DArray (Index pi1) av, MatchPrimD _ pi2) -> case eqPrim pi1 pi2 of
           Just Refl -> Just $ MatchOpR (ORLookup d1) (dArrValue av)
           _         -> Nothing
+        _ -> Nothing
+
+      -- See comment attached to 'OpDeref'
+      OpWriteData -> Nothing
+
+    d1 :& d2 :& d3 :& RNil -> case operator of
+      OpWriteArr -> with (d1, d2, d3) $ traverseOf _2 matchPrimD >=> traverseOf _3 matchPrimD >=> \case
+        (DArray (Index ix1) (ArrValue av1), MatchPrimD _ ix2, MatchPrimD _ av2) ->
+          case (eqPrim ix1 ix2, eqPrim av1 av2) of
+            (Just Refl, Just Refl) -> Just (MatchOpR (ORWriteArr d1) d1)
+            _                      -> Nothing
         _ -> Nothing
 
     _ -> Nothing

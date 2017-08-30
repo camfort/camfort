@@ -58,7 +58,10 @@ evalFortranOp op opr = case opr of
           indexVal = primToVal index
       in primFromVal elPrim (SBV.readSArr xsArr indexVal)
 
-  ORDeref _ fname -> runcurry (\r -> derefRec (toRec r) fname)
+  ORWriteArr _ -> runcurry writeArray
+
+  ORDeref _ s -> runcurry (derefData s Proxy)
+  ORWriteData _ s _ -> runcurry (writeDataAt s)
 
 --------------------------------------------------------------------------------
 --  General
@@ -76,9 +79,6 @@ toArr (SRArray _ x) = x
 
 fromArr :: Index i -> ArrValue a -> SArr -> SymRepr (Array i a)
 fromArr index av = SRArray (DArray index av)
-
-toRec :: SymRepr (Record rname fields) -> Rec FieldRepr fields
-toRec (SRData _ x) = x
 
 primUnop
   :: Bool
@@ -260,10 +260,42 @@ relBinop _ = \case
 --  Deref
 --------------------------------------------------------------------------------
 
-derefRec :: forall fname a fields i. RElem '(fname, a) fields i => Rec FieldRepr fields -> SSymbol fname -> SymRepr a
-derefRec r _ =
-  case rget (Proxy :: Proxy '(fname, a)) r of
+derefData
+  :: RElem '(fname, a) fields i
+  => SSymbol fname -> proxy a
+  -> SymRepr (Record rname fields)
+  -> SymRepr a
+derefData nameSymbol valProxy (SRData _ dataRec) =
+  case rget (pairProxy nameSymbol valProxy) dataRec of
     FR _ x -> x
+  where
+    pairProxy :: p1 a -> p2 b -> Proxy '(a, b)
+    pairProxy _ _ = Proxy
+
+--------------------------------------------------------------------------------
+--  Write array
+--------------------------------------------------------------------------------
+
+writeArray :: SymRepr (Array i v) -> SymRepr i -> SymRepr v -> SymRepr (Array i v)
+writeArray arrRep ixRep valRep =
+  case arrRep of
+    SRArray d@(DArray (Index _) (ArrValue _)) arr ->
+      case (ixRep, valRep) of
+        (SRPrim _ ixVal, SRPrim _ valVal) ->
+          SRArray d (SBV.writeSArr arr ixVal valVal)
+
+--------------------------------------------------------------------------------
+--  Write Data
+--------------------------------------------------------------------------------
+
+writeDataAt
+  :: RElem '(fname, a) fields i
+  => SSymbol fname
+  -> SymRepr (Record rname fields)
+  -> SymRepr a
+  -> SymRepr (Record rname fields)
+writeDataAt fieldSymbol (SRData d dataRec) valRep =
+  SRData d $ rput (FR fieldSymbol valRep) dataRec
 
 --------------------------------------------------------------------------------
 --  Lenses

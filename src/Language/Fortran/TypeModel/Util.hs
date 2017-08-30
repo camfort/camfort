@@ -2,6 +2,8 @@ module Language.Fortran.TypeModel.Util where
 
 import           Control.Applicative (Alternative (..))
 
+import           Data.Function       ((&))
+
 --------------------------------------------------------------------------------
 --  Combinators
 --------------------------------------------------------------------------------
@@ -23,3 +25,7 @@ alt2 f g x y = f x y <|> g x y
 
 (<$$>) :: (Functor f) => f a -> (a -> b) -> f b
 (<$$>) = flip (<$>)
+
+
+with :: a -> (a -> b) -> b
+with = (&)

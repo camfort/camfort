@@ -125,9 +125,10 @@ data VarUpdate t a where
 
   UpdateArray
     :: Index i
-    -> t i         -- ^ Index to update at
-    -> t (PrimS v) -- ^ New values at that index
-    -> VarUpdate t (Array i (PrimS v))
+    -> ArrValue a
+    -> t i -- ^ Index to update at
+    -> t a -- ^ New values at that index
+    -> VarUpdate t (Array i a)
 
   UpdateData
     :: RElem '(fieldName, a) fields i
@@ -139,7 +140,7 @@ data VarUpdate t a where
 instance Operator VarUpdate where
   htraverseOp f = \case
     UpdatePrim x -> UpdatePrim <$> f x
-    UpdateArray i x y -> UpdateArray i <$> f x <*> f y
+    UpdateArray i v x y -> UpdateArray i v <$> f x <*> f y
     UpdateData s x -> UpdateData s <$> htraverseOp f x
 
 applyVarUpdate :: VarUpdate SymRepr a -> SymRepr a -> SymRepr a
@@ -148,7 +149,7 @@ applyVarUpdate = \case
   UpdatePrim _ -> id
 
   -- For arrays, replace the old array with one updated at the particular index.
-  UpdateArray (Index _) (SRPrim _ ixVal) (SRPrim _ aVal) -> \case
+  UpdateArray (Index _) (ArrValue _) (SRPrim _ ixVal) (SRPrim _ aVal) -> \case
     SRArray arrD arr -> SRArray arrD (writeSArr arr ixVal aVal)
 
   UpdateData sFieldName valUpdate -> \case
@@ -164,8 +165,8 @@ applyVarUpdate = \case
 varForPrim :: String -> Prim p k a -> Symbolic SVal
 varForPrim = flip primSymbolic
 
-varForArray :: String -> Index i -> Prim p k a -> Symbolic SArr
-varForArray nm (Index ixPrim) valPrim =
+varForArray :: String -> Index i -> ArrValue a -> Symbolic SArr
+varForArray nm (Index ixPrim) (ArrValue valPrim) =
   let k1 = primSBVKind ixPrim
       k2 = primSBVKind valPrim
   in newSArr (k1, k2) (const nm)
