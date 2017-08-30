@@ -101,7 +101,7 @@ instance Describe HoareBackendError where
   describeBuilder = \case
     VerifierError e -> "verifier error: " <> describeBuilder (displayException e)
     TranslateErrorAnn te -> "translation error in logic annotation: " <> describeBuilder te
-    TranslateErrorSrc te -> "translation error in source code " <> describeBuilder te
+    TranslateErrorSrc te -> "translation error in source code: " <> describeBuilder te
     UnsupportedBlock _ -> "encountered unsupported block"
     UnexpectedBlock _ -> "a block was found in an illegal location"
     ArgWithoutDecl nm ->
@@ -236,7 +236,7 @@ initialSetup pu = do
   -- need to treat as variables.
   mArgNames <- case pu of
     F.PUFunction _ _ (Just rettype) _ _ funargs retvalue _ _ -> do
-      rettype' <- runReaderT (doTranslate (failAnalysis' rettype) translateTypeSpec rettype) emptyEnv
+      rettype' <- runReaderT (tryTranslateTypeInfo (typeInfo rettype)) emptyEnv
 
       heVarsInScope %= case retvalue of
         Just rv -> newVar rv rettype'
@@ -270,15 +270,26 @@ readInitialBlocks = dropWhileM readInitialBlock
     readInitialBlock bl = case bl of
       F.BlStatement _ _ _ st ->
         case st of
-          F.StDeclaration _ _ declTy _ decls -> do
-            declVars <- forM (F.aStrip decls) $ \case
+          F.StDeclaration _ _ astTypeSpec attrs decls -> do
+            -- This is the part of the type info that applies to every variable
+            -- in the declaration list.
+            let topTypeInfo = tiWithAttributes attrs $ typeInfo astTypeSpec
+
+            -- Each variable may have extra information that modifies its type info
+            declVarsTis <- forM (F.aStrip decls) $ \case
               -- TODO: Deal with declarations that include assignments
-              F.DeclVariable _ _ e Nothing Nothing -> return e
+              F.DeclVariable _ _ nameExp declLength Nothing ->
+                return (nameExp, tiWithDeclLength declLength topTypeInfo)
+              F.DeclArray _ _ nameExp declDims declLength Nothing ->
+                return (nameExp, tiWithDeclLength declLength .
+                                 tiWithDimensionDecls (Just declDims) $
+                                 topTypeInfo)
+
               _ -> failAnalysis' bl (UnsupportedBlock bl)
 
-            declTy' <- readerOfState $ doTranslate (failAnalysis' declTy) translateTypeSpec declTy
-
-            forM_ declVars $ \v -> heVarsInScope %= newVar v declTy'
+            forM_ declVarsTis $ \(varName, varTypeInfo) -> do
+              varType <- readerOfState $ tryTranslateTypeInfo varTypeInfo
+              heVarsInScope %= newVar varName varType
 
             return True
 
@@ -510,8 +521,8 @@ varFromScope loc np = do
 --------------------------------------------------------------------------------
 
 class ReportAnn a where fromTranslateError :: proxy a -> TranslateError -> HoareBackendError
-instance ReportAnn HA where fromTranslateError _ = TranslateErrorAnn
-instance ReportAnn () where fromTranslateError _ = TranslateErrorSrc
+instance ReportAnn HA where fromTranslateError _ = TranslateErrorSrc
+instance ReportAnn () where fromTranslateError _ = TranslateErrorAnn
 
 
 doTranslate
@@ -539,6 +550,12 @@ tryTranslateExpr
       MonadReader CheckHoareEnv m, MonadAnalysis HoareBackendError w m)
   => D a -> F.Expression ann -> m (FortranExpr a)
 tryTranslateExpr d e = doTranslate (failAnalysis' e) (translateExpression' d) e
+
+tryTranslateTypeInfo
+  :: (ReportAnn ann,
+      MonadReader CheckHoareEnv m, MonadAnalysis HoareBackendError w m)
+  => TypeInfo ann -> m SomeType
+tryTranslateTypeInfo ti = doTranslate (failAnalysis' ti) translateTypeInfo ti
 
 tryTranslateBoolExpr
   :: (ReportAnn ann,

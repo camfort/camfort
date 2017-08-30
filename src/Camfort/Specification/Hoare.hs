@@ -36,4 +36,4 @@ testOn fp = do
   (mfs, pfsSources) <- loadModAndProgramFiles simpleCompiler () fp fp []
   describePerFileAnalysis "invariant checking" (fmap HoareCheckResults . check) logOutputStd LogDebug mfs pfsSources
 
-testHoare = testOn "samples/invariants/invariants.f90"
+testHoare = testOn "samples/invariants/arrays.f90"

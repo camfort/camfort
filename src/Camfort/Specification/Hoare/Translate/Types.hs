@@ -162,12 +162,9 @@ data TranslateError
   | ErrBadLiteral
   -- ^ Found a literal value that we didn't know how to translate. May or may
   -- not be valid Fortran.
-  | ErrUnexpectedType SomeType SomeType
+  | ErrUnexpectedType Text SomeType SomeType
   -- ^ Tried to translate a FORTRAN language part into the wrong expression
   -- type, and it wasn't coercible to the correct type.
-  | ErrInvalidVarType SomeType
-  -- ^ Tried to make a variable representing a value of a type that can't be
-  -- stored in a variable.
   | ErrInvalidOpApplication (Some (Rec D))
   -- ^ Tried to apply an operator to arguments with the wrong types.
   | ErrVarNotInScope F.Name
@@ -180,19 +177,20 @@ instance Describe TranslateError where
       "unsupported " <> describeBuilder message
 
     ErrBadLiteral ->
-      "found a literal value that couldn't be translated; " <>
+      "encountered a literal value that couldn't be translated; " <>
       "it might be invalid Fortran or it might use unsupported language features"
 
-    ErrUnexpectedType ty1 ty2 ->
-      "Language item had unexpected type; expected type was " <>
-      describeBuilder (show ty1) <> "; actual type was " <> describeBuilder (show ty2)
-
-    ErrInvalidVarType ty ->
-      "Tried to make a variable containing unsupported variable type " <>
-      describeBuilder (show ty)
+    ErrUnexpectedType message ty1 ty2 ->
+      "unexpected type in " <> describeBuilder message <>
+      "; expected type was '" <> describeBuilder (show ty1) <>
+      "'; actual type was '" <> describeBuilder (show ty2) <> "'"
 
     ErrInvalidOpApplication (Some argTypes) ->
-      let descTypes = recordToList . rmap (Const . describeBuilder . pretty1) $ argTypes
+      let descTypes
+            = recordToList
+            . rmap (Const . surround "'" . describeBuilder . pretty1)
+            $ argTypes
+          surround s x = s <> x <> s
       in "tried to apply operator to arguments of the wrong type; arguments had types " <>
          mconcat (intersperse ", " descTypes)
 

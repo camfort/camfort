@@ -21,7 +21,14 @@ module Camfort.Specification.Hoare.Translate
   , translateExpression'
   , translateBoolExpression
   , translateFormula
-  , translateTypeSpec
+
+  , translateTypeInfo
+  , TypeInfo
+  , typeInfo
+  , tiWithDimensionDecls
+  , tiWithAttributes
+  , tiWithDeclLength
+
   , module Types
   ) where
 
@@ -29,6 +36,8 @@ import           Prelude                                     hiding (span)
 
 import           Data.Char                                   (toLower)
 import           Text.Read                                   (readMaybe)
+import           Data.Maybe (catMaybes)
+import           Control.Applicative ((<|>))
 
 import           Control.Lens                                hiding (op, (.>), rmap)
 import Control.Monad.Except (throwError)
@@ -36,6 +45,7 @@ import Control.Monad.Except (throwError)
 import           Data.Singletons.Prelude.List                (Length)
 import           Data.Vinyl
 
+import qualified Language.Fortran.Util.Position              as F
 import qualified Language.Fortran.AST                        as F
 
 import           Language.Expression.DSL
@@ -65,9 +75,6 @@ fortranToFExpr (e :: FortranExpr a) =
 data SomePrimD where
   SomePrimD :: D (PrimS a) -> SomePrimD
 
-somePrimD :: SomePrimD -> Some D
-somePrimD (SomePrimD x) = Some x
-
 translateBaseType
   :: F.BaseType
   -> Maybe (F.Expression ann) -- ^ Kind
@@ -81,29 +88,49 @@ translateBaseType bt Nothing = case bt of
   _                     -> Nothing
 translateBaseType _ _ = Nothing -- TODO: Support kind specifiers
 
-translateTypeSpec :: F.TypeSpec ann -> MonadTranslate SomeType
-translateTypeSpec = \case
-  -- TODO: Derived data types (consider F.TypeCustom)
-  (F.TypeSpec _ _ bt mselector) -> do
-    let selectorKind (F.Selector _ _ _ k) = k
-        mtranslateBase = translateBaseType bt =<< selectorKind <$> mselector
-        translateBase = maybe (throwError $ ErrUnsupportedItem "type spec")
-                        return mtranslateBase
 
-    case mselector of
-      Nothing -> somePrimD <$> translateBase
+translateTypeInfo
+  :: TypeInfo ann
+  -> MonadTranslate SomeType
+translateTypeInfo ti = do
+  let mtranslateBase = translateBaseType (tiBaseType ti) (tiSelectorKind ti)
 
-      Just (F.Selector _ _ (Just lenExpr) Nothing)
-        | Just len <- exprIntLit lenExpr -> do
-            SomePrimD (DPrim basePrim) <- translateBase
-            let arrTy = DArray (Index PInt64) (ArrValue basePrim)
-            return (Some arrTy)
+  SomePrimD basePrim <-
+    maybe (throwError $ ErrUnsupportedItem "type spec") return mtranslateBase
 
-      _ -> throwError $ ErrUnsupportedItem "type spec"
+  let
+    -- If an attribute corresponds to a dimension declaration which contains a
+    -- simple length dimension, get the expression out.
+    attrToLength (F.AttrDimension _ _ decls) = dimDeclsToLength decls
+    attrToLength _ = Nothing
 
-  where
-    exprIntLit (F.ExpValue _ _ (F.ValInteger intStr)) = readLitInteger intStr
-    exprIntLit _ = Nothing
+    attrsToLength (F.AList _ _ attrs) =
+      case catMaybes (attrToLength <$> attrs) of
+        [e] -> Just e
+        _ -> Nothing
+
+    -- If a list of dimension declarators corresponds to a simple length
+    -- dimension, get the expression out. We don't handle other cases yet.
+    dimDeclsToLength (F.AList _ _ [F.DimensionDeclarator _ _ (Just e) Nothing]) = Just e
+    dimDeclsToLength _ = Nothing
+
+    mLengthExp =
+      (tiSelectorLength ti) <|>
+      (tiDeclLength ti) <|>
+      (tiDimensionDecls ti >>= dimDeclsToLength) <|>
+      (tiAttributes ti >>= attrsToLength)
+
+  case mLengthExp of
+    Just lengthExp -> do
+      -- If a length expression could be found, this variable is an array
+
+      -- TODO: If the length expression is malformed, throw an error.
+      -- TODO: Use information about the length.
+      -- maybe (throwError $ ErrUnsupportedItem "type spec") void (exprIntLit lengthExp)
+      case basePrim of
+        DPrim bp -> return (Some (DArray (Index PInt64) (ArrValue bp)))
+    Nothing ->
+      return (Some basePrim)
 
 
 translateFormula :: PrimFormula ann -> MonadTranslate (TransFormula Bool)
@@ -121,12 +148,13 @@ translateExpression = \case
   e@(F.ExpBinary ann span bop e1 e2) -> translateOp2App e1 e2 bop
   e@(F.ExpUnary ann span uop operand) -> translateOp1App operand uop
 
-  e@(F.ExpSubscript ann span lhs indices')  -> throwError $ ErrUnsupportedItem "expression"
-  e@(F.ExpDataRef ann span e1 e2)           -> throwError $ ErrUnsupportedItem "expression"
-  e@(F.ExpFunctionCall ann span fexpr args) -> throwError $ ErrUnsupportedItem "expression"
-  e@(F.ExpImpliedDo ann span es spec)       -> throwError $ ErrUnsupportedItem "expression"
-  e@(F.ExpInitialisation ann span es)       -> throwError $ ErrUnsupportedItem "expression"
-  e@(F.ExpReturnSpec ann span rval)         -> throwError $ ErrUnsupportedItem "expression"
+  e@(F.ExpSubscript ann span lhs indices')  -> unsupported
+  e@(F.ExpDataRef ann span e1 e2)           -> unsupported
+  e@(F.ExpFunctionCall ann span fexpr args) -> unsupported
+  e@(F.ExpImpliedDo ann span es spec)       -> unsupported
+  e@(F.ExpInitialisation ann span es)       -> unsupported
+  e@(F.ExpReturnSpec ann span rval)         -> unsupported
+  where unsupported = throwError $ ErrUnsupportedItem "expression"
 
 
 translateBoolExpression
@@ -142,7 +170,7 @@ translateBoolExpression e = do
         PBool16 -> FLL16 (EVar e')
         PBool32 -> FLL32 (EVar e')
         PBool64 -> FLL64 (EVar e')
-    _ -> throwError $ ErrUnexpectedType (Some (DPrim PBool8)) (Some d1)
+    _ -> throwError $ ErrUnexpectedType "formula" (Some (DPrim PBool8)) (Some d1)
 
   return (squashExpression resUnsquashed)
 
@@ -150,7 +178,7 @@ translateBoolExpression e = do
 translateExpression'
   :: D a -> F.Expression ann
   -> MonadTranslate (FortranExpr a)
-translateExpression' d = translateAtType d translateExpression
+translateExpression' d = translateAtType "expression" d translateExpression
 
 
 translateLogical :: PrimLogic (TransFormula Bool) -> TransFormula Bool
@@ -167,7 +195,7 @@ translateValue :: F.Value ann -> MonadTranslate SomeExpr
 translateValue = \case
   v@(F.ValInteger s) -> translateLiteral v PInt64 (fmap fromIntegral . readLitInteger) s
 
-  v@(F.ValReal s) -> translateLiteral v PDouble readLitReal s
+  v@(F.ValReal s) -> translateLiteral v PFloat (fmap realToFrac . readLitReal) s
 
   v@(F.ValComplex realPart complexPart) -> throwError $ ErrUnsupportedItem "complex literal"
   v@(F.ValString s) -> throwError $ ErrUnsupportedItem "string literal"
@@ -297,15 +325,64 @@ readLitBool l = case map toLower l of
   _         -> Nothing
 
 --------------------------------------------------------------------------------
+--  Dealing with all the confusing ways of specifying Fortran types
+--------------------------------------------------------------------------------
+
+data TypeInfo ann =
+  TypeInfo
+  { tiSrcSpan :: F.SrcSpan
+  , tiBaseType :: F.BaseType
+  , tiSelectorLength :: Maybe (F.Expression ann)
+  , tiSelectorKind :: Maybe (F.Expression ann)
+  , tiDeclLength :: Maybe (F.Expression ann)
+  , tiDimensionDecls :: Maybe (F.AList F.DimensionDeclarator ann)
+  , tiAttributes :: Maybe (F.AList F.Attribute ann)
+  }
+  deriving (Show)
+
+instance F.Spanned (TypeInfo ann) where
+  getSpan = tiSrcSpan
+  setSpan sp ti = ti { tiSrcSpan = sp }
+
+typeInfo :: F.TypeSpec ann -> TypeInfo ann
+typeInfo ts@(F.TypeSpec _ _ bt mselector) =
+  let selectorLength (F.Selector _ _ l _) = l
+      selectorKind (F.Selector _ _ _ k) = k
+  in TypeInfo
+     { tiSrcSpan = F.getSpan ts
+     , tiBaseType = bt
+     , tiSelectorLength = mselector >>= selectorLength
+     , tiSelectorKind = mselector >>= selectorKind
+     , tiDeclLength = Nothing
+     , tiDimensionDecls = Nothing
+     , tiAttributes = Nothing
+     }
+
+tiWithDimensionDecls
+  :: Maybe (F.AList F.DimensionDeclarator ann)
+     -> TypeInfo ann -> TypeInfo ann
+tiWithDimensionDecls decls ti = ti { tiDimensionDecls = decls }
+
+tiWithAttributes
+  :: Maybe (F.AList F.Attribute ann)
+     -> TypeInfo ann -> TypeInfo ann
+tiWithAttributes attrs ti = ti { tiAttributes = attrs }
+
+tiWithDeclLength
+  :: Maybe (F.Expression ann) -> TypeInfo ann -> TypeInfo ann
+tiWithDeclLength len ti = ti { tiDeclLength = len }
+
+--------------------------------------------------------------------------------
 --  Dynamically typed expressions
 --------------------------------------------------------------------------------
 
 translateAtType
-  :: D b
+  :: Text
+  -> D b
   -> (a -> MonadTranslate SomeExpr)
   -> a -> MonadTranslate (FortranExpr b)
-translateAtType db translate x =
+translateAtType langPart db translate x =
   do SomePair da someY <- translate x
      case dcast da db someY of
        Just y  -> return y
-       Nothing -> throwError $ ErrUnexpectedType (Some da) (Some db)
+       Nothing -> throwError $ ErrUnexpectedType langPart (Some da) (Some db)
