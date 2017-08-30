@@ -1,3 +1,4 @@
+{-# LANGUAGE DeriveFunctor         #-}
 {-# OPTIONS_GHC -Wall #-}
 {-# OPTIONS_GHC -fno-warn-unused-matches #-}
 
@@ -7,11 +8,11 @@
 {-# LANGUAGE GADTs                 #-}
 {-# LANGUAGE LambdaCase            #-}
 {-# LANGUAGE MultiParamTypeClasses #-}
+{-# LANGUAGE OverloadedStrings     #-}
 {-# LANGUAGE RankNTypes            #-}
 {-# LANGUAGE ScopedTypeVariables   #-}
 {-# LANGUAGE TypeFamilies          #-}
 {-# LANGUAGE TypeOperators         #-}
-{-# LANGUAGE OverloadedStrings     #-}
 
 -- TODO: Implement translation for more unsupported language parts
 
@@ -34,26 +35,27 @@ module Camfort.Specification.Hoare.Translate
 
 import           Prelude                                     hiding (span)
 
+import           Control.Applicative                         ((<|>))
 import           Data.Char                                   (toLower)
+import           Data.Maybe                                  (catMaybes)
 import           Text.Read                                   (readMaybe)
-import           Data.Maybe (catMaybes)
-import           Control.Applicative ((<|>))
 
-import           Control.Lens                                hiding (op, (.>), rmap)
-import Control.Monad.Except (throwError)
+import           Control.Lens                                hiding (indices,
+                                                              op, rmap, (.>))
+import           Control.Monad.Except                        (throwError)
 
 import           Data.Singletons.Prelude.List                (Length)
 import           Data.Vinyl
 
-import qualified Language.Fortran.Util.Position              as F
 import qualified Language.Fortran.AST                        as F
+import qualified Language.Fortran.Util.Position              as F
 
+import           Camfort.Analysis.Logger
 import           Language.Expression.DSL
 import           Language.Fortran.TypeModel
 import           Language.Fortran.TypeModel.Match
 import           Language.Fortran.TypeModel.Singletons
 import           Language.Fortran.TypeModel.Vars
-import           Camfort.Analysis.Logger
 
 import           Camfort.Specification.Hoare.Syntax
 import           Camfort.Specification.Hoare.Translate.Types as Types
@@ -90,12 +92,10 @@ translateBaseType _ _ = Nothing -- TODO: Support kind specifiers
 
 
 translateTypeInfo
-  :: (MonadLogger e w m, Show ann)
+  :: (Monad m, Show ann)
   => TypeInfo ann
   -> TranslateT m SomeType
 translateTypeInfo ti = do
-  logDebug' ti $ "translating type info " <> describeShow ti
-
   let mtranslateBase = translateBaseType (tiBaseType ti) (tiSelectorKind ti)
 
   SomePrimD basePrim <-
@@ -112,9 +112,10 @@ translateTypeInfo ti = do
         [e] -> Just e
         _ -> Nothing
 
-    -- If a list of dimension declarators corresponds to a simple length
-    -- dimension, get the expression out. We don't handle other cases yet.
-    dimDeclsToLength (F.AList _ _ [F.DimensionDeclarator _ _ (Just e) Nothing]) = Just e
+    -- If a list of dimension declarators corresponds to a simple one
+    -- dimensional length, get the expression out. We don't handle other cases
+    -- yet.
+    dimDeclsToLength (F.AList _ _ [F.DimensionDeclarator _ _ e1 e2]) = e1 <|> e2
     dimDeclsToLength _ = Nothing
 
     mLengthExp =
@@ -147,17 +148,45 @@ translateFormula = \case
 
 translateExpression :: (Monad m) => F.Expression ann -> TranslateT m SomeExpr
 translateExpression = \case
-  e@(F.ExpValue ann span val) -> translateValue val
-  e@(F.ExpBinary ann span bop e1 e2) -> translateOp2App e1 e2 bop
-  e@(F.ExpUnary ann span uop operand) -> translateOp1App operand uop
+  (F.ExpValue ann span val) -> translateValue val
+  (F.ExpBinary ann span bop e1 e2) -> translateOp2App e1 e2 bop
+  (F.ExpUnary ann span uop operand) -> translateOp1App operand uop
 
-  e@(F.ExpSubscript ann span lhs indices')  -> unsupported
-  e@(F.ExpDataRef ann span e1 e2)           -> unsupported
-  e@(F.ExpFunctionCall ann span fexpr args) -> unsupported
-  e@(F.ExpImpliedDo ann span es spec)       -> unsupported
-  e@(F.ExpInitialisation ann span es)       -> unsupported
-  e@(F.ExpReturnSpec ann span rval)         -> unsupported
-  where unsupported = throwError $ ErrUnsupportedItem "expression"
+  (F.ExpSubscript ann span lhs (F.AList _ _ indices)) -> translateSubscript lhs indices
+
+  (F.ExpDataRef ann span e1 e2)           -> unsupported "data reference"
+  (F.ExpFunctionCall ann span fexpr args) -> unsupported "function call"
+  (F.ExpImpliedDo ann span es spec)       -> unsupported "implied do expression"
+  (F.ExpInitialisation ann span es)       -> unsupported "intitialization expression"
+  (F.ExpReturnSpec ann span rval)         -> unsupported "return spec expression"
+  where unsupported = throwError . ErrUnsupportedItem
+
+translateSubscript :: (Monad m) => F.Expression ann -> [F.Index ann] -> TranslateT m SomeExpr
+translateSubscript arrAst [F.IxSingle _ _ _ ixAst] = do
+  SomePair arrD arrExp <- translateExpression arrAst
+  SomePair ixD ixExp <- translateExpression ixAst
+
+  case matchOpR OpLookup (arrD :& ixD :& RNil) of
+    Just (MatchOpR opResult resultD) ->
+      return $ SomePair resultD $ EOp $ FortranOp OpLookup opResult (arrExp :& ixExp :& RNil)
+    Nothing ->
+      case arrD of
+        -- If the LHS is indeed an array, the index type must not have matched
+        DArray (Index requiredIx) _ ->
+          throwError $
+          ErrUnexpectedType "array indexing"
+          (Some (DPrim requiredIx)) (Some ixD)
+        -- If the LHS is not an array, tell the user we expected some specific
+        -- array type; in reality any array type would have done.
+        _ -> throwError $
+          ErrUnexpectedType "array indexing"
+          (Some (DArray (Index PInt64) (ArrValue PInt64)))
+          (Some arrD)
+
+translateSubscript lhs [F.IxRange {}] =
+  throwError $ ErrUnsupportedItem "range indices"
+translateSubscript _ _ =
+  throwError $ ErrUnsupportedItem "multiple indices"
 
 
 translateBoolExpression
@@ -349,7 +378,7 @@ data TypeInfo ann =
   , tiDimensionDecls :: Maybe (F.AList F.DimensionDeclarator ann)
   , tiAttributes :: Maybe (F.AList F.Attribute ann)
   }
-  deriving (Show)
+  deriving (Functor, Show)
 
 instance F.Spanned (TypeInfo ann) where
   getSpan = tiSrcSpan

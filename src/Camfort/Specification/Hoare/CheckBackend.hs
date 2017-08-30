@@ -520,7 +520,7 @@ varFromScope loc np = do
 --  Translation
 --------------------------------------------------------------------------------
 
-class ReportAnn a where fromTranslateError :: proxy a -> TranslateError -> HoareBackendError
+class Show a => ReportAnn a where fromTranslateError :: proxy a -> TranslateError -> HoareBackendError
 instance ReportAnn HA where fromTranslateError _ = TranslateErrorSrc
 instance ReportAnn () where fromTranslateError _ = TranslateErrorAnn
 
