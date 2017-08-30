@@ -11,6 +11,7 @@
 {-# LANGUAGE ScopedTypeVariables   #-}
 {-# LANGUAGE TypeFamilies          #-}
 {-# LANGUAGE TypeOperators         #-}
+{-# LANGUAGE OverloadedStrings     #-}
 
 -- TODO: Implement translation for more unsupported language parts
 
@@ -29,8 +30,10 @@ import           Prelude                                     hiding (span)
 import           Data.Char                                   (toLower)
 import           Text.Read                                   (readMaybe)
 
-import           Control.Lens                                hiding (op, (.>))
+import           Control.Lens                                hiding (op, (.>), rmap)
+import Control.Monad.Except (throwError)
 
+import           Data.Singletons.Prelude.List                (Length)
 import           Data.Vinyl
 
 import qualified Language.Fortran.AST                        as F
@@ -40,6 +43,7 @@ import           Language.Fortran.TypeModel
 import           Language.Fortran.TypeModel.Match
 import           Language.Fortran.TypeModel.Singletons
 import           Language.Fortran.TypeModel.Vars
+import           Camfort.Analysis.Logger
 
 import           Camfort.Specification.Hoare.Syntax
 import           Camfort.Specification.Hoare.Translate.Types as Types
@@ -58,7 +62,7 @@ fortranToFExpr (e :: FortranExpr a) =
 --  Translate
 --------------------------------------------------------------------------------
 
-translateTypeSpec :: F.TypeSpec ann -> MonadTranslate ann SomeType
+translateTypeSpec :: F.TypeSpec ann -> MonadTranslate SomeType
 translateTypeSpec = \case
   -- TODO: Get precision right
   -- TODO: Arrays (consider selectors)
@@ -69,11 +73,13 @@ translateTypeSpec = \case
     F.TypeDoublePrecision -> return $ Some (DPrim PDouble)
     F.TypeCharacter       -> return $ Some (DPrim PChar)
     F.TypeLogical         -> return $ Some (DPrim PBool8)
-    _                     -> errUnsupportedTypeSpec ts
-  ts@_ -> errUnsupportedTypeSpec ts
+    _                     -> throwError $ ErrUnsupportedItem "type spec"
+  ts@_ -> throwError $ ErrUnsupportedItem "type spec"
+
+  -- where exprIntLit (F.ExpValue _ _ (F.ValInteger intStr))
 
 
-translateFormula :: PrimFormula ann -> MonadTranslate ann (TransFormula Bool)
+translateFormula :: PrimFormula ann -> MonadTranslate (TransFormula Bool)
 translateFormula = \case
   PFExpr e -> do
     e' <- translateBoolExpression e
@@ -82,23 +88,23 @@ translateFormula = \case
   PFLogical x -> translateLogical <$> traverse translateFormula x
 
 
-translateExpression :: F.Expression ann -> MonadTranslate ann SomeExpr
+translateExpression :: F.Expression ann -> MonadTranslate SomeExpr
 translateExpression = \case
   e@(F.ExpValue ann span val) -> translateValue val
-  e@(F.ExpBinary ann span bop e1 e2) -> translateBop e1 e2 bop
-  e@(F.ExpUnary ann span uop operand) -> translateUop operand uop
+  e@(F.ExpBinary ann span bop e1 e2) -> translateOp2App e1 e2 bop
+  e@(F.ExpUnary ann span uop operand) -> translateOp1App operand uop
 
-  e@(F.ExpSubscript ann span lhs indices') -> errUnsupportedExpression e
-  e@(F.ExpDataRef ann span e1 e2) -> errUnsupportedExpression e
-  e@(F.ExpFunctionCall ann span fexpr args) -> errUnsupportedExpression e
-  e@(F.ExpImpliedDo ann span es spec) -> errUnsupportedExpression e
-  e@(F.ExpInitialisation ann span es) -> errUnsupportedExpression e
-  e@(F.ExpReturnSpec ann span rval) -> errUnsupportedExpression e
+  e@(F.ExpSubscript ann span lhs indices')  -> throwError $ ErrUnsupportedItem "expression"
+  e@(F.ExpDataRef ann span e1 e2)           -> throwError $ ErrUnsupportedItem "expression"
+  e@(F.ExpFunctionCall ann span fexpr args) -> throwError $ ErrUnsupportedItem "expression"
+  e@(F.ExpImpliedDo ann span es spec)       -> throwError $ ErrUnsupportedItem "expression"
+  e@(F.ExpInitialisation ann span es)       -> throwError $ ErrUnsupportedItem "expression"
+  e@(F.ExpReturnSpec ann span rval)         -> throwError $ ErrUnsupportedItem "expression"
 
 
 translateBoolExpression
   :: F.Expression ann
-  -> MonadTranslate ann (FExpr FortranVar Bool)
+  -> MonadTranslate (FExpr FortranVar Bool)
 translateBoolExpression e = do
   SomePair d1 e' <- translateExpression e
 
@@ -109,15 +115,15 @@ translateBoolExpression e = do
         PBool16 -> FLL16 (EVar e')
         PBool32 -> FLL32 (EVar e')
         PBool64 -> FLL64 (EVar e')
-    _ -> errUnexpectedType (LpExpression e) (Some (DPrim PBool8)) (Some d1)
+    _ -> throwError $ ErrUnexpectedType (Some (DPrim PBool8)) (Some d1)
 
   return (squashExpression resUnsquashed)
 
 
 translateExpression'
   :: D a -> F.Expression ann
-  -> MonadTranslate ann (FortranExpr a)
-translateExpression' d = translateAtType LpExpression d translateExpression
+  -> MonadTranslate (FortranExpr a)
+translateExpression' d = translateAtType d translateExpression
 
 
 translateLogical :: PrimLogic (TransFormula Bool) -> TransFormula Bool
@@ -130,126 +136,149 @@ translateLogical = \case
   PLLit x -> plit x
 
 
-translateValue :: F.Value ann -> MonadTranslate ann SomeExpr
+translateValue :: F.Value ann -> MonadTranslate SomeExpr
 translateValue = \case
-  v@(F.ValInteger s) -> translateLiteral v PInt64 readMaybe s
+  v@(F.ValInteger s) -> translateLiteral v PInt64 (fmap fromIntegral . readLitInteger) s
 
-  v@(F.ValReal s) -> translateLiteral v PFloat readMaybe s
+  v@(F.ValReal s) -> translateLiteral v PDouble readLitReal s
 
-  v@(F.ValComplex realPart complexPart) -> errUnsupportedValue v
-  v@(F.ValString s) -> errUnsupportedValue v
-  v@(F.ValHollerith s) -> errUnsupportedValue v
+  v@(F.ValComplex realPart complexPart) -> throwError $ ErrUnsupportedItem "complex literal"
+  v@(F.ValString s) -> throwError $ ErrUnsupportedItem "string literal"
+  v@(F.ValHollerith s) -> throwError $ ErrUnsupportedItem "hollerith literal"
 
   -- TODO: Auxiliary variables
   v@(F.ValVariable nm) -> do
     theVar <- view (teVarsInScope . at (SourceName nm))
     case theVar of
       Just (Some v'@(FortranVar d _)) -> return (SomePair d (EVar v'))
-      _                               -> errVarNotInScope nm
+      _                               -> throwError $ ErrVarNotInScope nm
 
-  v@(F.ValIntrinsic nm) -> errUnsupportedValue v
+  v@(F.ValIntrinsic nm) -> throwError $ ErrUnsupportedItem $ "intrinsic " <> describe nm
 
   v@(F.ValLogical s) ->
-    let intoBool l = case map toLower l of
-          ".true."  -> Just (Bool8 1)
-          ".false." -> Just (Bool8 0)
-          _         -> Nothing
+    let intoBool = fmap (\b -> if b then Bool8 1 else Bool8 0) . readLitBool
     in translateLiteral v PBool8 intoBool s
 
-  v@(F.ValOperator s) -> errUnsupportedValue v
-  v@F.ValAssignment -> errUnsupportedValue v
-  v@(F.ValType s) -> errUnsupportedValue v
-  v@F.ValStar -> errUnsupportedValue v
+  v@(F.ValOperator s) -> throwError $ ErrUnsupportedItem "user-defined operator"
+  v@F.ValAssignment -> throwError $ ErrUnsupportedItem "interface assignment"
+  v@(F.ValType s) -> throwError $ ErrUnsupportedItem "type value"
+  v@F.ValStar -> throwError $ ErrUnsupportedItem "star value"
 
 
 translateLiteral
   :: F.Value ann
   -> Prim p k a -> (s -> Maybe a) -> s
-  -> MonadTranslate ann SomeExpr
+  -> MonadTranslate SomeExpr
 translateLiteral v pa readLit
-  = maybe (errBadLiteral v) (return . SomePair (DPrim pa) . flit pa)
+  = maybe (throwError ErrBadLiteral) (return . SomePair (DPrim pa) . flit pa)
   . readLit
   where
     flit px x = EOp (FortranOp OpLit (ORLit px x) RNil)
 
 
-data SomeOp (f :: OpKind -> *) where
-  SomeOp :: f ok -> SomeOp f
-
-
-getUopOp :: F.UnaryOp -> Maybe (SomeOp (Op 1))
-getUopOp = \case
-  F.Minus -> Just (SomeOp OpNeg)
-  F.Plus -> Just (SomeOp OpPos)
-  F.Not -> Just (SomeOp OpNot)
+translateOp1 :: F.UnaryOp -> Maybe (Some (Op 1))
+translateOp1 = \case
+  F.Minus -> Just (Some OpNeg)
+  F.Plus -> Just (Some OpPos)
+  F.Not -> Just (Some OpNot)
   _ -> Nothing
 
 
-getBopOp :: F.BinaryOp -> Maybe (SomeOp (Op 2))
-getBopOp = \case
-  F.Addition -> Just (SomeOp OpAdd)
-  F.Subtraction -> Just (SomeOp OpSub)
-  F.Multiplication -> Just (SomeOp OpMul)
-  F.Division -> Just (SomeOp OpDiv)
+translateOp2 :: F.BinaryOp -> Maybe (Some (Op 2))
+translateOp2 = \case
+  F.Addition -> Just (Some OpAdd)
+  F.Subtraction -> Just (Some OpSub)
+  F.Multiplication -> Just (Some OpMul)
+  F.Division -> Just (Some OpDiv)
 
-  F.LT -> Just (SomeOp OpLT)
-  F.GT -> Just (SomeOp OpGT)
-  F.LTE -> Just (SomeOp OpLE)
-  F.GTE -> Just (SomeOp OpGE)
+  F.LT -> Just (Some OpLT)
+  F.GT -> Just (Some OpGT)
+  F.LTE -> Just (Some OpLE)
+  F.GTE -> Just (Some OpGE)
 
-  F.EQ -> Just (SomeOp OpEq)
-  F.NE -> Just (SomeOp OpNE)
+  F.EQ -> Just (Some OpEq)
+  F.NE -> Just (Some OpNE)
 
-  F.And -> Just (SomeOp OpAnd)
-  F.Or -> Just (SomeOp OpOr)
-  F.Equivalent -> Just (SomeOp OpEquiv)
-  F.NotEquivalent -> Just (SomeOp OpNotEquiv)
+  F.And -> Just (Some OpAnd)
+  F.Or -> Just (Some OpOr)
+  F.Equivalent -> Just (Some OpEquiv)
+  F.NotEquivalent -> Just (Some OpNotEquiv)
 
   _ -> Nothing
 
 
-translateBop :: F.Expression ann -> F.Expression ann -> F.BinaryOp -> MonadTranslate ann SomeExpr
-translateBop e1 e2 bop = do
-  SomeOp bop' <- case getBopOp bop of
+data SameLength as bs where
+  SameLength :: Length as ~ Length bs => SameLength as bs
+
+recSequenceSome :: Rec (Const (Some f)) xs -> Some (PairOf (SameLength xs) (Rec f))
+recSequenceSome RNil = SomePair SameLength RNil
+recSequenceSome (x :& xs) = case (x, recSequenceSome xs) of
+  (Const (Some y), SomePair SameLength ys) -> SomePair SameLength (y :& ys)
+  _ -> error "impossible"
+
+
+-- This is way too general for its own good but it was fun to write.
+translateOpApp
+  :: (Length xs ~ n)
+  => Op n ok
+  -> Rec (Const (F.Expression ann)) xs -> MonadTranslate SomeExpr
+translateOpApp operator argAsts = do
+  someArgs <- rtraverse (fmap Const . translateExpression . getConst) argAsts
+
+  case recSequenceSome someArgs of
+    SomePair SameLength argsTranslated -> do
+      let argsD = rmap (\(PairOf d _) -> d) argsTranslated
+          argsExpr = rmap (\(PairOf _ e) -> e) argsTranslated
+
+      MatchOpR opResult resultD <- case matchOpR operator argsD of
+        Just x -> return x
+        Nothing -> throwError $ ErrInvalidOpApplication (Some argsD)
+
+      return $ SomePair resultD $ EOp $ FortranOp operator opResult argsExpr
+    _ -> error "impossible"
+
+
+translateOp2App :: F.Expression ann -> F.Expression ann -> F.BinaryOp -> MonadTranslate SomeExpr
+translateOp2App e1 e2 bop = do
+  Some operator <- case translateOp2 bop of
     Just x  -> return x
-    Nothing -> errUnsupportedItem (LpBinaryOp bop)
+    Nothing -> throwError $ ErrUnsupportedItem "binary operator"
+  translateOpApp operator (Const e1 :& Const e2 :& RNil)
 
-  SomePair d1 e1' <- translateExpression e1
-  SomePair d2 e2' <- translateExpression e2
 
-  MatchOpR opResult d3 <- case matchOpR bop' (d1 :& d2 :& RNil) of
+translateOp1App :: F.Expression ann -> F.UnaryOp -> MonadTranslate SomeExpr
+translateOp1App e uop = do
+  Some operator <- case translateOp1 uop of
     Just x -> return x
-    Nothing -> errInvalidBinopApplication (e1, Some d1) (e2, Some d2) (LpBinaryOp bop)
+    Nothing -> throwError $ ErrUnsupportedItem "unary operator"
+  translateOpApp operator (Const e :& RNil)
 
-  return $ SomePair d3 $ EOp $ FortranOp bop' opResult (e1' :& e2' :& RNil)
+--------------------------------------------------------------------------------
+--  Readers for things that are strings in the AST
+--------------------------------------------------------------------------------
 
+readLitInteger :: String -> Maybe Integer
+readLitInteger = readMaybe
 
-translateUop :: F.Expression ann -> F.UnaryOp -> MonadTranslate ann SomeExpr
-translateUop e uop = do
-  SomeOp uop' <- case getUopOp uop of
-    Just x  -> return x
-    Nothing -> errUnsupportedItem (LpUnaryOp uop)
+readLitReal :: String -> Maybe Double
+readLitReal = readMaybe
 
-  SomePair d1 e' <- translateExpression e
-
-  MatchOpR opResult d2 <- case matchOpR uop' (d1 :& RNil) of
-    Just x  -> return x
-    Nothing -> errInvalidUnopApplication (e, Some d1) (LpUnaryOp uop)
-
-  return $ SomePair d2 $ EOp $ FortranOp uop' opResult (e' :& RNil)
-
+readLitBool :: String -> Maybe Bool
+readLitBool l = case map toLower l of
+  ".true."  -> Just True
+  ".false." -> Just False
+  _         -> Nothing
 
 --------------------------------------------------------------------------------
 --  Dynamically typed expressions
 --------------------------------------------------------------------------------
 
 translateAtType
-  :: (a -> LangPart ann)
-  -> D b
-  -> (a -> MonadTranslate ann SomeExpr)
-  -> a -> MonadTranslate ann (FortranExpr b)
-translateAtType toLp db translate x =
+  :: D b
+  -> (a -> MonadTranslate SomeExpr)
+  -> a -> MonadTranslate (FortranExpr b)
+translateAtType db translate x =
   do SomePair da someY <- translate x
      case dcast da db someY of
        Just y  -> return y
-       Nothing -> errUnexpectedType (toLp x) (Some da) (Some db)
+       Nothing -> throwError $ ErrUnexpectedType (Some da) (Some db)

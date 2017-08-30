@@ -73,10 +73,10 @@ data AnnotatedProgramUnit =
   }
 
 data HoareBackendError
-  = VerifierError (VerifierError FortranVar (Expr' '[FortranOp, FLiftLogical]))
-  | TranslateError0 (TranslateError ())
+  = VerifierError (VerifierError FortranVar FExpr)
+  | TranslateErrorAnn TranslateError
   -- ^ Unit errors come from translating annotation formulae
-  | TranslateError1 (TranslateError HA)
+  | TranslateErrorSrc TranslateError
   -- ^ HA errors come from translating actual source Fortran
   | UnsupportedBlock (F.Block HA)
   -- ^ Found a block that we don't know how to deal with
@@ -92,7 +92,7 @@ data HoareBackendError
   -- ^ The while block had no associated invariant
   | WrongAssignmentType Text SomeType
   -- ^ Expected array type but got the given type instead
-  | NonLValueAssignment (F.Expression HA)
+  | NonLValueAssignment
   -- ^ Assigning to an expression that isn't an lvalue
   | UnsupportedAssignment Text
   -- ^ Tried to assign to something that's valid Fortran but unsupported
@@ -100,8 +100,8 @@ data HoareBackendError
 instance Describe HoareBackendError where
   describeBuilder = \case
     VerifierError e -> "verifier error: " <> describeBuilder (displayException e)
-    TranslateError0 te -> "translation error: " <> describeBuilder (displayException te)
-    TranslateError1 te -> "translation error: " <> describeBuilder (displayException te)
+    TranslateErrorAnn te -> "translation error in logic annotation: " <> describeBuilder te
+    TranslateErrorSrc te -> "translation error in source code " <> describeBuilder te
     UnsupportedBlock _ -> "encountered unsupported block"
     UnexpectedBlock _ -> "a block was found in an illegal location"
     ArgWithoutDecl nm ->
@@ -118,9 +118,8 @@ instance Describe HoareBackendError where
     WrongAssignmentType message gotType ->
       "unexpected variable type; expected " <> describeBuilder message <>
       "; got " <> describeBuilder (pretty gotType)
-    NonLValueAssignment lexpr ->
-      "assignment an expression which is not a valid lvalue, " <>
-      describeBuilder (displayLangPart (LpExpression lexpr))
+    NonLValueAssignment ->
+      "assignment an expression which is not a valid lvalue"
     UnsupportedAssignment message ->
       "unsupported assignment; " <> describeBuilder message
 
@@ -237,7 +236,7 @@ initialSetup pu = do
   -- need to treat as variables.
   mArgNames <- case pu of
     F.PUFunction _ _ (Just rettype) _ _ funargs retvalue _ _ -> do
-      rettype' <- runReaderT (doTranslate (failAnalysis' rettype) (translateTypeSpec rettype)) emptyEnv
+      rettype' <- runReaderT (doTranslate (failAnalysis' rettype) translateTypeSpec rettype) emptyEnv
 
       heVarsInScope %= case retvalue of
         Just rv -> newVar rv rettype'
@@ -277,7 +276,7 @@ readInitialBlocks = dropWhileM readInitialBlock
               F.DeclVariable _ _ e Nothing Nothing -> return e
               _ -> failAnalysis' bl (UnsupportedBlock bl)
 
-            declTy' <- readerOfState $ doTranslate (failAnalysis' declTy) $ translateTypeSpec declTy
+            declTy' <- readerOfState $ doTranslate (failAnalysis' declTy) translateTypeSpec declTy
 
             forM_ declVars $ \v -> heVarsInScope %= newVar v declTy'
 
@@ -478,7 +477,7 @@ assignmentBlock bl = do
   case bl of
     F.BlStatement _ _ _ stAst@(F.StExpressionAssign _ _ lexp rvalue) ->
       Just <$> do
-        lvalue <- maybe (failAnalysis' lexp (NonLValueAssignment lexp))
+        lvalue <- maybe (failAnalysis' lexp NonLValueAssignment)
                   return (F.toLValue lexp)
 
         case lvalue of
@@ -510,19 +509,19 @@ varFromScope loc np = do
 --  Translation
 --------------------------------------------------------------------------------
 
-class ReportAnn a where fromTranslateError :: TranslateError a -> HoareBackendError
-instance ReportAnn HA where fromTranslateError = TranslateError1
-instance ReportAnn () where fromTranslateError = TranslateError0
+class ReportAnn a where fromTranslateError :: proxy a -> TranslateError -> HoareBackendError
+instance ReportAnn HA where fromTranslateError _ = TranslateErrorAnn
+instance ReportAnn () where fromTranslateError _ = TranslateErrorSrc
 
 
 doTranslate
   :: (MonadReader CheckHoareEnv m, ReportAnn ann)
-  => (HoareBackendError -> m a) -> MonadTranslate ann a -> m a
-doTranslate handle action = do
+  => (HoareBackendError -> m a) -> (f ann -> MonadTranslate a) -> f ann -> m a
+doTranslate handle trans ast = do
   env <- asks toTranslateEnv
-  case runMonadTranslate action env of
+  case runMonadTranslate (trans ast) env of
     Right x  -> return x
-    Left err -> handle (fromTranslateError err)
+    Left err -> handle (fromTranslateError ast err)
 
 
 toTranslateEnv :: CheckHoareEnv -> TranslateEnv
@@ -539,19 +538,19 @@ tryTranslateExpr
   :: (ReportAnn ann,
       MonadReader CheckHoareEnv m, MonadAnalysis HoareBackendError w m)
   => D a -> F.Expression ann -> m (FortranExpr a)
-tryTranslateExpr d e = doTranslate (failAnalysis' e) (translateExpression' d e)
+tryTranslateExpr d e = doTranslate (failAnalysis' e) (translateExpression' d) e
 
 tryTranslateBoolExpr
   :: (ReportAnn ann,
       MonadReader CheckHoareEnv m, MonadAnalysis HoareBackendError w m)
   => F.Expression ann -> m (FExpr FortranVar Bool)
-tryTranslateBoolExpr e = doTranslate (failAnalysis' e) (translateBoolExpression e)
+tryTranslateBoolExpr e = doTranslate (failAnalysis' e) translateBoolExpression e
 
 tryTranslateFormula
   :: (F.Spanned o, ReportAnn ann,
       MonadReader CheckHoareEnv m, MonadAnalysis HoareBackendError w m)
   => o -> PrimFormula ann -> m (TransFormula Bool)
-tryTranslateFormula loc e = doTranslate (failAnalysis' loc) (translateFormula e)
+tryTranslateFormula loc e = doTranslate (failAnalysis' loc) translateFormula e
 
 --------------------------------------------------------------------------------
 --  Utility functions
