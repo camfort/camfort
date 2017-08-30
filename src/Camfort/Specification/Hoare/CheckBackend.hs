@@ -73,7 +73,7 @@ data AnnotatedProgramUnit =
   }
 
 data HoareBackendError
-  = VerifierError (VerifierError FortranVar FExpr)
+  = VerifierError (VerifierError FortranVar)
   | TranslateErrorAnn TranslateError
   -- ^ Unit errors come from translating annotation formulae
   | TranslateErrorSrc TranslateError
@@ -520,7 +520,9 @@ varFromScope loc np = do
 --  Translation
 --------------------------------------------------------------------------------
 
-class Show a => ReportAnn a where fromTranslateError :: proxy a -> TranslateError -> HoareBackendError
+class Show a => ReportAnn a where
+  fromTranslateError :: proxy a -> TranslateError -> HoareBackendError
+
 instance ReportAnn HA where fromTranslateError _ = TranslateErrorSrc
 instance ReportAnn () where fromTranslateError _ = TranslateErrorAnn
 
