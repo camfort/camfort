@@ -527,10 +527,11 @@ instance ReportAnn () where fromTranslateError _ = TranslateErrorAnn
 
 doTranslate
   :: (MonadReader CheckHoareEnv m, ReportAnn ann)
-  => (HoareBackendError -> m a) -> (f ann -> MonadTranslate a) -> f ann -> m a
+  => (HoareBackendError -> m a) -> (f ann -> TranslateT m a) -> f ann -> m a
 doTranslate handle trans ast = do
   env <- asks toTranslateEnv
-  case runMonadTranslate (trans ast) env of
+  transResult <- runTranslateT (trans ast) env
+  case transResult of
     Right x  -> return x
     Left err -> handle (fromTranslateError ast err)
 
@@ -547,25 +548,29 @@ toTranslateEnv env =
 
 tryTranslateExpr
   :: (ReportAnn ann,
-      MonadReader CheckHoareEnv m, MonadAnalysis HoareBackendError w m)
+      MonadReader CheckHoareEnv m,
+      MonadAnalysis HoareBackendError w m)
   => D a -> F.Expression ann -> m (FortranExpr a)
 tryTranslateExpr d e = doTranslate (failAnalysis' e) (translateExpression' d) e
 
 tryTranslateTypeInfo
   :: (ReportAnn ann,
-      MonadReader CheckHoareEnv m, MonadAnalysis HoareBackendError w m)
+      MonadReader CheckHoareEnv m,
+      MonadAnalysis HoareBackendError w m)
   => TypeInfo ann -> m SomeType
 tryTranslateTypeInfo ti = doTranslate (failAnalysis' ti) translateTypeInfo ti
 
 tryTranslateBoolExpr
   :: (ReportAnn ann,
-      MonadReader CheckHoareEnv m, MonadAnalysis HoareBackendError w m)
+      MonadReader CheckHoareEnv m,
+      MonadAnalysis HoareBackendError w m)
   => F.Expression ann -> m (FExpr FortranVar Bool)
 tryTranslateBoolExpr e = doTranslate (failAnalysis' e) translateBoolExpression e
 
 tryTranslateFormula
   :: (F.Spanned o, ReportAnn ann,
-      MonadReader CheckHoareEnv m, MonadAnalysis HoareBackendError w m)
+      MonadReader CheckHoareEnv m,
+      MonadAnalysis HoareBackendError w m)
   => o -> PrimFormula ann -> m (TransFormula Bool)
 tryTranslateFormula loc e = doTranslate (failAnalysis' loc) translateFormula e
 

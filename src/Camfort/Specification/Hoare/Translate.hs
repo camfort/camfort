@@ -90,9 +90,12 @@ translateBaseType _ _ = Nothing -- TODO: Support kind specifiers
 
 
 translateTypeInfo
-  :: TypeInfo ann
-  -> MonadTranslate SomeType
+  :: (MonadLogger e w m, Show ann)
+  => TypeInfo ann
+  -> TranslateT m SomeType
 translateTypeInfo ti = do
+  logDebug' ti $ "translating type info " <> describeShow ti
+
   let mtranslateBase = translateBaseType (tiBaseType ti) (tiSelectorKind ti)
 
   SomePrimD basePrim <-
@@ -133,7 +136,7 @@ translateTypeInfo ti = do
       return (Some basePrim)
 
 
-translateFormula :: PrimFormula ann -> MonadTranslate (TransFormula Bool)
+translateFormula :: (Monad m) => PrimFormula ann -> TranslateT m (TransFormula Bool)
 translateFormula = \case
   PFExpr e -> do
     e' <- translateBoolExpression e
@@ -142,7 +145,7 @@ translateFormula = \case
   PFLogical x -> translateLogical <$> traverse translateFormula x
 
 
-translateExpression :: F.Expression ann -> MonadTranslate SomeExpr
+translateExpression :: (Monad m) => F.Expression ann -> TranslateT m SomeExpr
 translateExpression = \case
   e@(F.ExpValue ann span val) -> translateValue val
   e@(F.ExpBinary ann span bop e1 e2) -> translateOp2App e1 e2 bop
@@ -158,8 +161,8 @@ translateExpression = \case
 
 
 translateBoolExpression
-  :: F.Expression ann
-  -> MonadTranslate (FExpr FortranVar Bool)
+  :: (Monad m) => F.Expression ann
+  -> TranslateT m (FExpr FortranVar Bool)
 translateBoolExpression e = do
   SomePair d1 e' <- translateExpression e
 
@@ -176,8 +179,8 @@ translateBoolExpression e = do
 
 
 translateExpression'
-  :: D a -> F.Expression ann
-  -> MonadTranslate (FortranExpr a)
+  :: (Monad m) => D a -> F.Expression ann
+  -> TranslateT m (FortranExpr a)
 translateExpression' d = translateAtType "expression" d translateExpression
 
 
@@ -191,7 +194,7 @@ translateLogical = \case
   PLLit x -> plit x
 
 
-translateValue :: F.Value ann -> MonadTranslate SomeExpr
+translateValue :: (Monad m) => F.Value ann -> TranslateT m SomeExpr
 translateValue = \case
   v@(F.ValInteger s) -> translateLiteral v PInt64 (fmap fromIntegral . readLitInteger) s
 
@@ -221,9 +224,10 @@ translateValue = \case
 
 
 translateLiteral
-  :: F.Value ann
+  :: (Monad m)
+  => F.Value ann
   -> Prim p k a -> (s -> Maybe a) -> s
-  -> MonadTranslate SomeExpr
+  -> TranslateT m SomeExpr
 translateLiteral v pa readLit
   = maybe (throwError ErrBadLiteral) (return . SomePair (DPrim pa) . flit pa)
   . readLit
@@ -274,9 +278,10 @@ recSequenceSome (x :& xs) = case (x, recSequenceSome xs) of
 
 -- This is way too general for its own good but it was fun to write.
 translateOpApp
-  :: (Length xs ~ n)
+  :: (Monad m)
+  => (Length xs ~ n)
   => Op n ok
-  -> Rec (Const (F.Expression ann)) xs -> MonadTranslate SomeExpr
+  -> Rec (Const (F.Expression ann)) xs -> TranslateT m SomeExpr
 translateOpApp operator argAsts = do
   someArgs <- rtraverse (fmap Const . translateExpression . getConst) argAsts
 
@@ -293,7 +298,10 @@ translateOpApp operator argAsts = do
     _ -> error "impossible"
 
 
-translateOp2App :: F.Expression ann -> F.Expression ann -> F.BinaryOp -> MonadTranslate SomeExpr
+translateOp2App
+  :: (Monad m)
+  => F.Expression ann -> F.Expression ann -> F.BinaryOp
+  -> TranslateT m SomeExpr
 translateOp2App e1 e2 bop = do
   Some operator <- case translateOp2 bop of
     Just x  -> return x
@@ -301,7 +309,10 @@ translateOp2App e1 e2 bop = do
   translateOpApp operator (Const e1 :& Const e2 :& RNil)
 
 
-translateOp1App :: F.Expression ann -> F.UnaryOp -> MonadTranslate SomeExpr
+translateOp1App
+  :: (Monad m)
+  => F.Expression ann -> F.UnaryOp
+  -> TranslateT m SomeExpr
 translateOp1App e uop = do
   Some operator <- case translateOp1 uop of
     Just x -> return x
@@ -377,10 +388,11 @@ tiWithDeclLength len ti = ti { tiDeclLength = len }
 --------------------------------------------------------------------------------
 
 translateAtType
-  :: Text
+  :: (Monad m)
+  => Text
   -> D b
-  -> (a -> MonadTranslate SomeExpr)
-  -> a -> MonadTranslate (FortranExpr b)
+  -> (a -> TranslateT m SomeExpr)
+  -> a -> TranslateT m (FortranExpr b)
 translateAtType langPart db translate x =
   do SomePair da someY <- translate x
      case dcast da db someY of

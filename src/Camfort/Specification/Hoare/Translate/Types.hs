@@ -139,18 +139,23 @@ data TranslateEnv =
   , _teVarsInScope :: Map SourceName SomeVar
   }
 
-newtype MonadTranslate a =
-  MonadTranslate
-  { getMonadTranslate
-    :: ReaderT TranslateEnv (Either TranslateError) a
+newtype TranslateT m a =
+  TranslateT
+  { getTranslateT
+    :: ReaderT TranslateEnv (ExceptT TranslateError m) a
   }
   deriving ( Functor, Applicative, Monad
            , MonadError TranslateError
-           , MonadReader TranslateEnv)
+           , MonadReader TranslateEnv
+           , MonadLogger e w
+           )
 
-runMonadTranslate
-  :: MonadTranslate a -> TranslateEnv -> Either TranslateError a
-runMonadTranslate (MonadTranslate action) env = runReaderT action env
+runTranslateT
+  :: (Monad m)
+  => TranslateT m a
+  -> TranslateEnv
+  -> m (Either TranslateError a)
+runTranslateT (TranslateT action) env = runExceptT $ runReaderT action env
 
 --------------------------------------------------------------------------------
 --  Errors
