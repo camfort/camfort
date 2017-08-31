@@ -1,3 +1,4 @@
+{-# LANGUAGE UndecidableInstances #-}
 {-# LANGUAGE DataKinds             #-}
 {-# LANGUAGE FlexibleContexts      #-}
 {-# LANGUAGE FlexibleInstances     #-}
@@ -28,7 +29,7 @@ import           Language.Expression
 import           Language.Expression.Pretty
 
 import           Language.Fortran.TypeModel.Operator.Core
-import           Language.Fortran.TypeModel.Operator.Eval
+import           Language.Fortran.TypeModel.Eval
 import           Language.Fortran.TypeModel.Singletons
 import           Language.Fortran.TypeModel.Types
 
@@ -39,8 +40,8 @@ data FortranOp t a where
 instance Operator FortranOp where
   htraverseOp f (FortranOp op opr args) = FortranOp op opr <$> rtraverse f args
 
-instance (Applicative f) => EvalOp f SymRepr FortranOp where
-  evalOp f (FortranOp op opr args) = evalFortranOp op opr <$> rtraverse f args
+instance (MonadEvalFortran r m) => EvalOp m SymRepr FortranOp where
+  evalOp f (FortranOp op opr args) = rtraverse f args >>= evalFortranOp op opr
 
 instance Pretty2 FortranOp where
   prettys2Prec p (FortranOp op opr args) = prettysPrecOp p opr op args

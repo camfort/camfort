@@ -1,45 +1,59 @@
-{-# LANGUAGE DataKinds             #-}
-{-# LANGUAGE FlexibleContexts      #-}
-{-# LANGUAGE TemplateHaskell       #-}
-{-# LANGUAGE GADTs                 #-}
-{-# LANGUAGE KindSignatures        #-}
-{-# LANGUAGE LambdaCase            #-}
-{-# LANGUAGE MultiParamTypeClasses #-}
-{-# LANGUAGE PolyKinds             #-}
-{-# LANGUAGE RankNTypes            #-}
-{-# LANGUAGE ScopedTypeVariables   #-}
+{-# LANGUAGE ConstraintKinds        #-}
+{-# LANGUAGE DataKinds              #-}
+{-# LANGUAGE FlexibleContexts       #-}
+{-# LANGUAGE FlexibleInstances      #-}
+{-# LANGUAGE FunctionalDependencies #-}
+{-# LANGUAGE GADTs                  #-}
+{-# LANGUAGE KindSignatures         #-}
+{-# LANGUAGE LambdaCase             #-}
+{-# LANGUAGE MultiParamTypeClasses  #-}
+{-# LANGUAGE PolyKinds              #-}
+{-# LANGUAGE ScopedTypeVariables    #-}
+{-# LANGUAGE UndecidableInstances   #-}
 
 {-# OPTIONS_GHC -Wall      #-}
 
-module Language.Fortran.TypeModel.Operator.Eval where
+module Language.Fortran.TypeModel.Eval where
 
-import           Data.Word                                (Word8)
--- import           Data.Int                                (Int8, Int16, Int32, Int64)
+import           Control.Applicative                        (liftA2)
+import           Control.Monad.Reader.Class                 (MonadReader (..))
 
-import           Control.Lens.TH
-
-import           Data.SBV                                 (SDouble, SFloat,
-                                                           SReal, sRTZ)
-import qualified Data.SBV                                 as SBV
-import           Data.SBV.Dynamic                         (SArr, SVal)
-import qualified Data.SBV.Dynamic                         as SBV
-import           Data.SBV.Internals                       (SBV (..))
+import           Data.SBV                                   (SDouble, SFloat,
+                                                             SReal, sRTZ)
+import qualified Data.SBV                                   as SBV
+import           Data.SBV.Dynamic                           (SArr, SVal)
+import qualified Data.SBV.Dynamic                           as SBV
+import           Data.SBV.Internals                         (SBV (..))
 
 import           Data.Singletons
 import           Data.Singletons.Prelude.List
 import           Data.Singletons.TypeLits
 
-import           Data.Vinyl
+import           Data.Vinyl                                 hiding (Field)
 import           Data.Vinyl.Curry
 
+import           Language.Fortran.TypeModel.Eval.Primitives
+import           Language.Fortran.TypeModel.Match
 import           Language.Fortran.TypeModel.Operator.Core
 import           Language.Fortran.TypeModel.Singletons
 import           Language.Fortran.TypeModel.Types
-import           Language.Fortran.TypeModel.Match
 
-evalFortranOp :: Op (Length args) ok -> OpResult ok args result -> Rec SymRepr args -> SymRepr result
+--------------------------------------------------------------------------------
+--  Monad
+--------------------------------------------------------------------------------
+
+class (MonadReader r m, HasSymReprs r) => MonadEvalFortran r m | m -> r where
+instance (MonadReader r m, HasSymReprs r) => MonadEvalFortran r m where
+
+--------------------------------------------------------------------------------
+--  Evaluation
+--------------------------------------------------------------------------------
+
+evalFortranOp
+  :: (MonadEvalFortran r m)
+  => Op (Length args) ok -> OpResult ok args result -> Rec SymRepr args -> m (SymRepr result)
 evalFortranOp op opr = case opr of
-  ORLit px x -> \_ -> primFromVal px (primLit px x)
+  ORLit px x -> \_ -> primFromVal px <$> primLit px x
 
   ORNum1 _ _ p2 ->
     primUnop True p2 (numUnop op)
@@ -53,15 +67,15 @@ evalFortranOp op opr = case opr of
   ORRel cmp p1 p2 p3 -> primBinop False p1 p2 p3 (relBinop cmp op)
 
   ORLookup (DArray (Index _) (ArrValue elPrim)) ->
-    runcurry $ \xs index ->
+    return . runcurry (\xs index ->
       let xsArr = toArr xs
           indexVal = primToVal index
-      in primFromVal elPrim (SBV.readSArr xsArr indexVal)
+      in primFromVal elPrim (SBV.readSArr xsArr indexVal))
 
-  ORWriteArr _ -> runcurry writeArray
+  ORWriteArr _ -> return . runcurry writeArray
 
-  ORDeref _ s -> runcurry (derefData s Proxy)
-  ORWriteData _ s _ -> runcurry (writeDataAt s)
+  ORDeref _ s -> return . runcurry (derefData s Proxy)
+  ORWriteData _ s _ -> return . runcurry (writeDataAt s)
 
 --------------------------------------------------------------------------------
 --  General
@@ -81,31 +95,33 @@ fromArr :: Index i -> ArrValue a -> SArr -> SymRepr (Array i a)
 fromArr index av = SRArray (DArray index av)
 
 primUnop
-  :: Bool
+  :: (MonadEvalFortran r m)
+  => Bool
   -> Prim p2 k2 b -- ^ The target type
   -> (SVal -> SVal)
-  -> Rec SymRepr '[PrimS a] -> SymRepr (PrimS b)
-primUnop shouldCoerce p2 f = primFromVal p2 . runcurry (f . maybeCoerce . primToVal)
+  -> Rec SymRepr '[PrimS a] -> m (SymRepr (PrimS b))
+primUnop shouldCoerce p2 f = runcurry $ fmap (primFromVal p2 . f) . maybeCoerce . primToVal
   where
     maybeCoerce
       | shouldCoerce = coerceSBVNum p2
-      | otherwise = id
+      | otherwise = return
 
 primBinop
-  :: Bool
+  :: (MonadEvalFortran r m)
+  => Bool
   -- ^ True to coerce arguments to result value. False to coerce arguments to
   -- ceiling of each.
   -> Prim p1 k1 a -> Prim p2 k2 b -> Prim p3 k3 c
   -> (SVal -> SVal -> SVal)
-  -> Rec SymRepr '[PrimS a, PrimS b] -> SymRepr (PrimS c)
+  -> Rec SymRepr '[PrimS a, PrimS b] -> m (SymRepr (PrimS c))
 primBinop takesResultVal p1 p2 p3 (.*.) =
-  primFromVal p3 .
-  runcurry (\x y -> (coerceArg $ primToVal x) .*. (coerceArg $ primToVal y))
+  fmap (primFromVal p3) .
+  runcurry (\x y -> liftA2 (.*.) (coerceArg (primToVal x)) (coerceArg (primToVal y)))
 
   where
     coerceToCeil = case primCeil p1 p2 of
       Just (MakePrim pCeil) -> coerceSBVNum pCeil
-      _ -> id
+      _                     -> return
 
     coerceArg
       | takesResultVal = coerceSBVNum p3
@@ -136,59 +152,11 @@ coerceNumKinds _        k2@SBV.KFloat = SBV.svFromIntegral k2
 
 coerceNumKinds _ k2 = SBV.svFromIntegral k2
 
-coerceSBVNum :: Prim p k a -> SVal -> SVal
-coerceSBVNum p v =
-  let k2 = primSBVKind p
-      k1 = SBV.kindOf v
-  in coerceNumKinds k1 k2 v
-
---------------------------------------------------------------------------------
---  Literals
---------------------------------------------------------------------------------
-
-data PrimSymSpec a =
-  PrimSymSpec
-  { _pssKind :: SBV.Kind
-  , _pssLiteral :: a -> SVal
-  , _pssSymbolic :: String -> SBV.Symbolic SVal
-  }
-
-primSymSpec :: Prim p k a -> PrimSymSpec a
-primSymSpec = \case
-  PInt8   -> bySymWord (0 :: Integer) fromIntegral
-  PInt16  -> bySymWord (0 :: Integer) fromIntegral
-  PInt32  -> bySymWord (0 :: Integer) fromIntegral
-  PInt64  -> bySymWord (0 :: Integer) fromIntegral
-  PFloat  -> bySymWord (0 :: Float) id
-  PDouble -> bySymWord (0 :: Double) id
-  PBool8  -> bySymWord (False :: Bool) (toBool . getBool8)
-  PBool16 -> bySymWord (False :: Bool) (toBool . getBool16)
-  PBool32 -> bySymWord (False :: Bool) (toBool . getBool32)
-  PBool64 -> bySymWord (False :: Bool) (toBool . getBool64)
-  PChar   -> bySymWord (0 :: Word8) getChar8
-  where
-    bySymWord :: (SBV.SymWord b) => b -> (a -> b) -> PrimSymSpec a
-    bySymWord (repValue :: b) fromPrim =
-      PrimSymSpec
-      { _pssKind = SBV.kindOf repValue
-      , _pssLiteral = unSBV . SBV.literal . fromPrim
-      , _pssSymbolic = fmap (unSBV :: SBV b -> SVal) . SBV.symbolic
-      }
-
-    toBool :: (Ord a, Num a) => a -> Bool
-    toBool x = x > 0
-
-
-primSBVKind :: Prim p k a -> SBV.Kind
-primSBVKind = _pssKind . primSymSpec
-
-
-primLit :: Prim p k a -> a -> SVal
-primLit = _pssLiteral . primSymSpec
-
-
-primSymbolic :: Prim p k a -> String -> SBV.Symbolic SVal
-primSymbolic = _pssSymbolic . primSymSpec
+coerceSBVNum :: (MonadEvalFortran r m) => Prim p k a -> SVal -> m SVal
+coerceSBVNum p v = do
+  k2 <- primSBVKind p
+  let k1 = SBV.kindOf v
+  return $ coerceNumKinds k1 k2 v
 
 --------------------------------------------------------------------------------
 --  Numeric
@@ -267,7 +235,7 @@ derefData
   -> SymRepr a
 derefData nameSymbol valProxy (SRData _ dataRec) =
   case rget (pairProxy nameSymbol valProxy) dataRec of
-    FR _ x -> x
+    Field _ x -> x
   where
     pairProxy :: p1 a -> p2 b -> Proxy '(a, b)
     pairProxy _ _ = Proxy
@@ -295,13 +263,7 @@ writeDataAt
   -> SymRepr a
   -> SymRepr (Record rname fields)
 writeDataAt fieldSymbol (SRData d dataRec) valRep =
-  SRData d $ rput (FR fieldSymbol valRep) dataRec
-
---------------------------------------------------------------------------------
---  Lenses
---------------------------------------------------------------------------------
-
-makeLenses ''PrimSymSpec
+  SRData d $ rput (Field fieldSymbol valRep) dataRec
 
 --------------------------------------------------------------------------------
 --  Equality of operators

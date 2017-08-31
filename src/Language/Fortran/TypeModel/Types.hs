@@ -19,22 +19,22 @@ module Language.Fortran.TypeModel.Types where
 import           Data.Function                         (on)
 import           Data.Int                              (Int16, Int32, Int64,
                                                         Int8)
+import           Data.List                             (intersperse)
+import           Data.Monoid                           (Endo (..))
 import           Data.Typeable                         (Typeable)
 import           Data.Word                             (Word8)
-import Data.Monoid (Endo(..))
-import Data.List (intersperse)
 
 import           Data.Singletons.TypeLits
 
 import           Data.SBV                              (Boolean (..), SBool)
 import           Data.SBV.Dynamic                      hiding (KReal)
 
-import           Data.Vinyl
+import           Data.Vinyl                            hiding (Field)
 import           Data.Vinyl.Functor
 
 import           Language.Expression
 import           Language.Expression.Pretty
-import           Language.Expression.Ops.Standard
+import           Language.Expression.Prop              (LogicOp (..))
 
 import           Language.Fortran.TypeModel.Singletons
 
@@ -89,11 +89,14 @@ newtype Array i a = Array [a]
 --  Records
 --------------------------------------------------------------------------------
 
-data RField field where
-  RField :: SSymbol name -> D a -> RField '(name, a)
+data Field f field where
+  Field :: SSymbol name -> f a -> Field f '(name, a)
+
+overField :: (f a -> f b) -> Field f '(name, a) -> Field f '(name, b)
+overField f (Field n x) = Field n (f x)
 
 data Record name fields where
-  Record :: SSymbol name -> Rec ElField fields -> Record name fields
+  Record :: SSymbol name -> Rec (Field Identity) fields -> Record name fields
 
 --------------------------------------------------------------------------------
 --  Fortran Types
@@ -106,7 +109,7 @@ data Record name fields where
 data D a where
   DPrim :: Prim p k a -> D (PrimS a)
   DArray :: Index i -> ArrValue a -> D (Array i a)
-  DData :: SSymbol name -> Rec RField fs -> D (Record name fs)
+  DData :: SSymbol name -> Rec (Field D) fs -> D (Record name fs)
 
 dIndex :: Index i -> D i
 dIndex (Index p) = DPrim p
@@ -117,12 +120,6 @@ dArrValue (ArrValue p) = DPrim p
 --------------------------------------------------------------------------------
 --  SBV Representations
 --------------------------------------------------------------------------------
-
-data FieldRepr field where
-  FR :: SSymbol name -> SymRepr a -> FieldRepr '(name, a)
-
-overFieldRepr :: (SymRepr a -> SymRepr b) -> FieldRepr '(name, a) -> FieldRepr '(name, b)
-overFieldRepr f (FR n x) = FR n (f x)
 
 data SymRepr a where
   SRPrim
@@ -137,7 +134,7 @@ data SymRepr a where
 
   SRData
     :: D (Record name fs)
-    -> Rec FieldRepr fs
+    -> Rec (Field SymRepr) fs
     -> SymRepr (Record name fs)
 
   SRProp
@@ -187,10 +184,10 @@ instance Pretty1 ArrValue where
   prettys1Prec p = \case
     ArrValue prim -> prettys1Prec p prim
 
-instance Pretty1 RField where
+instance (Pretty1 f) => Pretty1 (Field f) where
   prettys1Prec _ = \case
-    RField fname fd ->
-      prettys1Prec 0 fd .
+    Field fname x ->
+      prettys1Prec 0 x .
       showString " " .
       withKnownSymbol fname (showString (symbolVal fname))
 
@@ -221,13 +218,6 @@ instance Pretty1 D where
 --   | DTBool
 --   | DTRec String [(String, DynType)]
 --   | DTArr DynType DynType
-
--- --------------------------------------------------------------------------------
--- --  Conversion to static types
--- --------------------------------------------------------------------------------
-
--- data Some (f :: k) where
---   Some :: f a -> Some f
 
 -- dynToD :: DynType -> Maybe (Some D)
 -- dynToD = \case

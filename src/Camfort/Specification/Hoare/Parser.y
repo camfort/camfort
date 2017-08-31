@@ -7,7 +7,7 @@ import           Control.Monad.Except
 import qualified Language.Fortran.AST as F
 
 import           Language.Verification
-import           Language.Expression.DSL hiding (Prop)
+import           Language.Expression.Prop
 
 import qualified Camfort.Specification.Parser as Parser
 import Camfort.Specification.Hoare.Syntax

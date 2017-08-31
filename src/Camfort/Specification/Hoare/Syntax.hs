@@ -12,23 +12,17 @@
 {-# LANGUAGE TemplateHaskell           #-}
 {-# LANGUAGE TypeFamilies              #-}
 
+{-# OPTIONS_GHC -Wall #-}
+
 module Camfort.Specification.Hoare.Syntax where
 
-import           Control.Monad                     (ap, join)
 import           Data.Data
-import           Data.Functor.Classes              (Eq1 (..))
-import           GHC.Generics
 
 import           Control.Lens
-import           Data.Generics.Uniplate.Operations
 
 import qualified Language.Fortran.AST              as F
-import qualified Language.Fortran.Util.Position    as F
 
-import           Language.Expression.Ops.Classes   (SymValue (..))
-import           Language.Expression.Ops.Standard
 import           Language.Expression.Pretty
-import           Language.Verification             hiding (Prop)
 
 data PrimLogic a
   = PLAnd a a

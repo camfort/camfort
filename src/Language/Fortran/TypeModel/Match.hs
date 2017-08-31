@@ -27,7 +27,7 @@ import           Data.Singletons.Prelude.List
 import           Data.Singletons.TypeLits
 import           GHC.TypeLits
 
-import           Data.Vinyl                               hiding ((:~:))
+import           Data.Vinyl                               hiding ((:~:), Field)
 
 import           Language.Fortran.TypeModel.Operator.Core
 import           Language.Fortran.TypeModel.Singletons
@@ -240,6 +240,7 @@ matchOpR operator argTypes =
 eqSymbol :: forall n1 n2. SSymbol n1 -> SSymbol n2 -> Maybe (n1 :~: n2)
 eqSymbol n1 n2 = withKnownSymbol n1 $ withKnownSymbol n2 $ sameSymbol (Proxy :: Proxy n1) (Proxy :: Proxy n2)
 
+
 eqPrim :: Prim p1 k1 a -> Prim p2 k2 b -> Maybe ('(p1, k1, a) :~: '(p2, k2, b))
 eqPrim = curry $ \case
   (PInt8, PInt8) -> Just Refl
@@ -255,21 +256,24 @@ eqPrim = curry $ \case
   (PChar, PChar) -> Just Refl
   _ -> Nothing
 
-eqRField :: RField a -> RField b -> Maybe (a :~: b)
-eqRField = curry $ \case
-  (RField n1 d1, RField n2 d2) ->
-    case (eqSymbol n1 n2, eqD d1 d2) of
+
+eqField :: (forall x y. f x -> g y -> Maybe (x :~: y)) -> Field f p1 -> Field g p2 -> Maybe (p1 :~: p2)
+eqField eqVals = curry $ \case
+  (Field n1 x1, Field n2 x2) ->
+    case (eqSymbol n1 n2, eqVals x1 x2) of
       (Just Refl, Just Refl) -> Just Refl
       _                      -> Nothing
 
-eqRec :: Rec RField fs -> Rec RField gs -> Maybe (fs :~: gs)
+
+eqRec :: Rec (Field D) fs -> Rec (Field D) gs -> Maybe (fs :~: gs)
 eqRec = curry $ \case
   (RNil, RNil) -> Just Refl
   (h1 :& t1, h2 :& t2) ->
-    case (eqRField h1 h2, eqRec t1 t2) of
+    case (eqField eqD h1 h2, eqRec t1 t2) of
       (Just Refl, Just Refl) -> Just Refl
       _                      -> Nothing
   _ -> Nothing
+
 
 eqD :: D a -> D b -> Maybe (a :~: b)
 eqD = curry $ \case
@@ -286,6 +290,7 @@ eqD = curry $ \case
       (Just Refl, Just Refl) -> Just Refl
       _                      -> Nothing
   _ -> Nothing
+
 
 dcast :: D a -> D b -> f a -> Maybe (f b)
 dcast d1 d2 = case eqD d1 d2 of

@@ -8,11 +8,11 @@
 {-# LANGUAGE MultiParamTypeClasses      #-}
 {-# LANGUAGE NamedFieldPuns             #-}
 {-# LANGUAGE OverloadedStrings          #-}
+{-# LANGUAGE RankNTypes                 #-}
 {-# LANGUAGE ScopedTypeVariables        #-}
 {-# LANGUAGE TemplateHaskell            #-}
 {-# LANGUAGE TypeSynonymInstances       #-}
 {-# OPTIONS_GHC -Wall #-}
-{-# OPTIONS_GHC -fno-warn-unused-top-binds #-}
 
 -- TODO: More precise error and logging origins
 
@@ -27,37 +27,41 @@ module Camfort.Specification.Hoare.CheckBackend
   , checkPU
   ) where
 
-import           Control.Exception                      (Exception (..))
+import           Control.Exception                          (Exception (..))
 import           Control.Lens
 import           Control.Monad.Except
 import           Control.Monad.Reader
 import           Control.Monad.RWS.Strict
 import           Control.Monad.State.Strict
-import           Data.Foldable                          (foldlM)
+import           Data.Foldable                              (foldlM)
 import           Data.Generics.Uniplate.Operations
-import           Data.Map                               (Map)
-import           Data.Maybe                             (isJust)
-import           Data.Void                              (Void)
-import Data.Vinyl.Curry
+import           Data.Map                                   (Map)
+import           Data.Maybe                                 (isJust)
+import           Data.Vinyl.Curry
+import           Data.Void                                  (Void)
 
-import           Data.SBV                               (SBool, defaultSMTCfg)
+import           Data.SBV                                   (SBool,
+                                                             defaultSMTCfg)
 
-import qualified Language.Fortran.Analysis              as F
-import qualified Language.Fortran.AST                   as F
-import qualified Language.Fortran.LValue                as F
-import qualified Language.Fortran.Util.Position         as F
+import qualified Language.Fortran.Analysis                  as F
+import qualified Language.Fortran.AST                       as F
+import qualified Language.Fortran.LValue                    as F
+import qualified Language.Fortran.Util.Position             as F
 
 import           Camfort.Analysis
-import           Camfort.Analysis.Logger                (Text, Builder)
+import           Camfort.Analysis.Logger                    (Builder, Text)
+import           Camfort.Helpers.TypeLevel
 import           Camfort.Specification.Hoare.Annotation
 import           Camfort.Specification.Hoare.Syntax
 import           Camfort.Specification.Hoare.Translate
 import           Language.Fortran.TypeModel
+import           Language.Fortran.TypeModel.Translate
+import           Language.Fortran.TypeModel.Eval.Primitives
 import           Language.Fortran.TypeModel.Vars
 
 import           Language.Expression
-import           Language.Expression.DSL
 import           Language.Expression.Pretty
+import           Language.Expression.Prop
 import           Language.Verification
 import           Language.Verification.Conditions
 
@@ -129,10 +133,10 @@ data HoareCheckResult = HoareCheckResult (F.ProgramUnit HA) Bool
   deriving (Show)
 
 describePuName :: F.ProgramUnitName -> Builder
-describePuName (F.Named n) = describeBuilder n
+describePuName (F.Named n)         = describeBuilder n
 describePuName F.NamelessBlockData = "<nameless block data>"
-describePuName F.NamelessComment = "<nameless comment>"
-describePuName F.NamelessMain = "<nameless main>"
+describePuName F.NamelessComment   = "<nameless comment>"
+describePuName F.NamelessMain      = "<nameless main>"
 
 instance Describe HoareCheckResult where
   describeBuilder (HoareCheckResult pu result) =
@@ -150,13 +154,17 @@ data CheckHoareEnv =
   , _heVarsInScope  :: ScopeVars
   -- ^ The variables in scope. Keyed by source name, and values have unique
   -- names.
+  , _heSymRepr      :: forall p k a. Prim p k a -> PrimSymRepr a
   }
+
+instance HasSymReprs CheckHoareEnv where
+  getSymRepr = _heSymRepr
 
 initialState :: CheckHoareState
 initialState = CheckHoareState
 
-emptyEnv :: CheckHoareEnv
-emptyEnv = CheckHoareEnv True mempty
+emptyEnv :: PrimSymSpec -> CheckHoareEnv
+emptyEnv spec = CheckHoareEnv True mempty (makeSymRepr spec)
 
 makeLenses ''AnnotatedProgramUnit
 makeLenses ''CheckHoareState
@@ -166,12 +174,12 @@ makeLenses ''CheckHoareEnv
 --  Main function
 --------------------------------------------------------------------------------
 
-checkPU :: AnnotatedProgramUnit -> BackendAnalysis HoareCheckResult
-checkPU apu = do
+checkPU :: AnnotatedProgramUnit -> PrimSymSpec -> BackendAnalysis HoareCheckResult
+checkPU apu symSpec = do
 
   let pu = apu ^. apuPU
 
-  (bodyTriple, env) <- flip runStateT emptyEnv $ do
+  (bodyTriple, env) <- flip runStateT (emptyEnv symSpec) $ do
     logInfo' pu $ " - Setting up"
 
     body <- initialSetup (apu ^. apuPU)
@@ -214,7 +222,7 @@ checkPU apu = do
         logInfo' pu $ "   " <> describeShow i <> ". " <> describe (pretty vc)
         logInfo' pu   "    - Unchecked"
 
-  HoareCheckResult pu <$> checkVcs (1 :: Int) vcs
+  HoareCheckResult pu <$> runReaderT (checkVcs (1 :: Int) vcs) env
 
 --------------------------------------------------------------------------------
 --  Check Monad
@@ -236,7 +244,8 @@ initialSetup pu = do
   -- need to treat as variables.
   mArgNames <- case pu of
     F.PUFunction _ _ (Just rettype) _ _ funargs retvalue _ _ -> do
-      rettype' <- runReaderT (tryTranslateTypeInfo (typeInfo rettype)) emptyEnv
+      env <- get
+      rettype' <- runReaderT (tryTranslateTypeInfo (typeInfo rettype)) env
 
       heVarsInScope %= case retvalue of
         Just rv -> newVar rv rettype'
@@ -273,17 +282,23 @@ readInitialBlocks = dropWhileM readInitialBlock
           F.StDeclaration _ _ astTypeSpec attrs decls -> do
             -- This is the part of the type info that applies to every variable
             -- in the declaration list.
-            let topTypeInfo = tiWithAttributes attrs $ typeInfo astTypeSpec
+            let topTypeInfo =
+                  typeInfo astTypeSpec &
+                  tiAttributes .~ attrs
 
             -- Each variable may have extra information that modifies its type info
             declVarsTis <- forM (F.aStrip decls) $ \case
               -- TODO: Deal with declarations that include assignments
               F.DeclVariable _ _ nameExp declLength Nothing ->
-                return (nameExp, tiWithDeclLength declLength topTypeInfo)
+                return (nameExp,
+                        topTypeInfo
+                        & tiDeclaratorLength .~ declLength)
+
               F.DeclArray _ _ nameExp declDims declLength Nothing ->
-                return (nameExp, tiWithDeclLength declLength .
-                                 tiWithDimensionDecls (Just declDims) $
-                                 topTypeInfo)
+                return (nameExp,
+                        topTypeInfo
+                        & tiDeclaratorLength .~ declLength
+                        & tiDimensionDeclarators .~ Just declDims)
 
               _ -> failAnalysis' bl (UnsupportedBlock bl)
 
@@ -325,7 +340,7 @@ newFunctionVar pu ty =
 
   in at srcName .~ Just (varOfType (NamePair uniqueName srcName) ty)
 
-verifyVc :: (HoareBackendError -> CheckHoare Bool) -> TransFormula Bool -> CheckHoare Bool
+verifyVc :: (HoareBackendError -> CheckHoare Bool) -> MetaFormula Bool -> ReaderT CheckHoareEnv CheckHoare Bool
 verifyVc handle prop = do
   let getSrProp :: SymRepr Bool -> SBool
       getSrProp (SRProp x) = x
@@ -335,34 +350,37 @@ verifyVc handle prop = do
         | debug = defaultSMTCfg { verbose = True, transcript = Just "transcript.smt2" }
         | otherwise = defaultSMTCfg
 
-  res <- liftIO . runVerifierWith cfg . query . checkPropWith getSrProp id $ prop
+  env <- ask
+  let queryEnv = SymReprEnv (env ^. heSymRepr)
+
+  res <- liftIO . runVerifierWith cfg . flip query queryEnv . flip runReaderT env . checkPropWith getSrProp id $ prop
   case res of
     Right b -> return b
-    Left e  -> handle (VerifierError e)
+    Left e  -> lift $ handle (VerifierError e)
 
 --------------------------------------------------------------------------------
 --  Generation Monad
 --------------------------------------------------------------------------------
 
-newtype GenM a = GenM (RWST CheckHoareEnv [TransFormula Bool] CheckHoareState CheckHoare a)
+newtype GenM a = GenM (RWST CheckHoareEnv [MetaFormula Bool] CheckHoareState CheckHoare a)
   deriving
     ( Functor
     , Applicative
     , Monad
     , MonadState CheckHoareState
     , MonadReader CheckHoareEnv
-    , MonadWriter [TransFormula Bool]
+    , MonadWriter [MetaFormula Bool]
     , MonadIO
     , MonadLogger HoareBackendError Void
     , MonadAnalysis HoareBackendError Void
     )
 
 
-runGenM :: CheckHoareEnv -> GenM a -> CheckHoare (a, [TransFormula Bool])
+runGenM :: CheckHoareEnv -> GenM a -> CheckHoare (a, [MetaFormula Bool])
 runGenM env (GenM action) = evalRWST action env initialState
 
 
-type FortranTriplet a = Triplet FExpr FortranVar a
+type FortranTriplet a = Triplet MetaExpr FortranVar a
 
 
 genBody :: FortranTriplet [F.Block HA] -> GenM ()
@@ -391,15 +409,15 @@ genBlock (precond, postcond, bl) = do
     _ -> failAnalysis' bl $ UnsupportedBlock bl
 
 
-bodyToSequence :: [F.Block HA] -> GenM (AnnSeq FExpr FortranVar (F.Block HA))
+bodyToSequence :: [F.Block HA] -> GenM (AnnSeq MetaExpr FortranVar (F.Block HA))
 bodyToSequence blocks = do
   foldlM combineBlockSequence emptyAnnSeq blocks
 
 
 combineBlockSequence
-  :: AnnSeq FExpr FortranVar (F.Block HA)
+  :: AnnSeq MetaExpr FortranVar (F.Block HA)
   -> F.Block HA
-  -> GenM (AnnSeq FExpr FortranVar (F.Block HA))
+  -> GenM (AnnSeq MetaExpr FortranVar (F.Block HA))
 combineBlockSequence prevSeq bl = do
   blSeq <- blockToSequence bl
 
@@ -408,7 +426,7 @@ combineBlockSequence prevSeq bl = do
     Nothing -> failAnalysis' bl $ AnnotationError bl
 
 
-blockToSequence :: F.Block HA -> GenM (AnnSeq FExpr FortranVar (F.Block HA))
+blockToSequence :: F.Block HA -> GenM (AnnSeq MetaExpr FortranVar (F.Block HA))
 blockToSequence bl = do
   chooseFrom [assignment, sequenceSpec, other]
   where
@@ -445,14 +463,14 @@ primAssignment
   :: (ReportAnn ann)
   => NamePair
   -> F.Expression ann
-  -> GenM (Assignment FExpr FortranVar)
+  -> GenM (Assignment MetaExpr FortranVar)
 primAssignment nm rvalAst = do
   Some varV@(FortranVar varD _) <- varFromScope rvalAst nm
 
   case varD of
     DPrim _ -> do
       rvalExpr <- tryTranslateExpr varD rvalAst
-      return (Assignment varV (fortranToFExpr rvalExpr))
+      return (Assignment varV (fortranToMetaExpr rvalExpr))
     _ -> failAnalysis' rvalAst $ WrongAssignmentType "primitive value" (Some varD)
 
 arrayAssignment
@@ -460,7 +478,7 @@ arrayAssignment
   => NamePair
   -> F.Expression ann
   -> F.Expression ann
-  -> GenM (Assignment FExpr FortranVar)
+  -> GenM (Assignment MetaExpr FortranVar)
 arrayAssignment arrName ixAst rvalAst = do
   Some varV@(FortranVar varD _) <- varFromScope rvalAst arrName
 
@@ -478,12 +496,12 @@ arrayAssignment arrName ixAst rvalAst = do
           mkOp = rcurry $ FortranOp OpWriteArr (ORWriteArr varD)
           arrExpr' = EOp (mkOp arrExpr ixExpr rvalExpr)
 
-      return (Assignment varV (fortranToFExpr arrExpr'))
+      return (Assignment varV (fortranToMetaExpr arrExpr'))
 
     _ -> failAnalysis' rvalAst $ WrongAssignmentType "array type" (Some varD)
 
 
-assignmentBlock :: F.Block HA -> GenM (Maybe (Assignment FExpr FortranVar))
+assignmentBlock :: F.Block HA -> GenM (Maybe (Assignment MetaExpr FortranVar))
 assignmentBlock bl = do
   case bl of
     F.BlStatement _ _ _ stAst@(F.StExpressionAssign _ _ lexp rvalue) ->
@@ -566,14 +584,14 @@ tryTranslateBoolExpr
   :: (ReportAnn ann,
       MonadReader CheckHoareEnv m,
       MonadAnalysis HoareBackendError w m)
-  => F.Expression ann -> m (FExpr FortranVar Bool)
+  => F.Expression ann -> m (MetaExpr FortranVar Bool)
 tryTranslateBoolExpr e = doTranslate (failAnalysis' e) translateBoolExpression e
 
 tryTranslateFormula
   :: (F.Spanned o, ReportAnn ann,
       MonadReader CheckHoareEnv m,
       MonadAnalysis HoareBackendError w m)
-  => o -> PrimFormula ann -> m (TransFormula Bool)
+  => o -> PrimFormula ann -> m (MetaFormula Bool)
 tryTranslateFormula loc e = doTranslate (failAnalysis' loc) translateFormula e
 
 --------------------------------------------------------------------------------
