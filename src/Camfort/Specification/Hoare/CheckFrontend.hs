@@ -26,7 +26,7 @@ import           Camfort.Analysis
 import           Camfort.Analysis.CommentAnnotator
 import           Camfort.Specification.Parser             (SpecParseError)
 
-import Language.Fortran.TypeModel.Eval.Primitives
+import           Language.Fortran.Model.EvalPrim
 
 import           Camfort.Specification.Hoare.Annotation
 import           Camfort.Specification.Hoare.CheckBackend

@@ -54,10 +54,10 @@ import           Camfort.Helpers.TypeLevel
 import           Camfort.Specification.Hoare.Annotation
 import           Camfort.Specification.Hoare.Syntax
 import           Camfort.Specification.Hoare.Translate
-import           Language.Fortran.TypeModel
-import           Language.Fortran.TypeModel.Translate
-import           Language.Fortran.TypeModel.Eval.Primitives
-import           Language.Fortran.TypeModel.Vars
+import           Language.Fortran.Model
+import           Language.Fortran.Model.Translate
+import           Language.Fortran.Model.EvalPrim
+import           Language.Fortran.Model.Vars
 
 import           Language.Expression
 import           Language.Expression.Pretty

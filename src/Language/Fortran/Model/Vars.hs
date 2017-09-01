@@ -14,7 +14,7 @@
 
 -- TODO: Variables for user-defined data types
 
-module Language.Fortran.TypeModel.Vars
+module Language.Fortran.Model.Vars
   ( -- * Names
     NamePair(..)
   , npSource
@@ -25,21 +25,21 @@ module Language.Fortran.TypeModel.Vars
   , FortranVar(..)
   ) where
 
-import           Data.Typeable                            ((:~:) (..))
+import           Data.Typeable                         ((:~:) (..))
 
-import           Control.Lens                             hiding (Index, op)
+import           Control.Lens                          hiding (Index, op)
 
 import           Data.SBV.Dynamic
 
-import qualified Language.Fortran.AST                     as F
+import qualified Language.Fortran.AST                  as F
 
 import           Language.Expression.Pretty
 import           Language.Verification
 
-import           Language.Fortran.TypeModel.Match
-import           Language.Fortran.TypeModel.Eval
-import           Language.Fortran.TypeModel.Eval.Primitives
-import           Language.Fortran.TypeModel.Types
+import           Language.Fortran.Model.EvalPrim
+import           Language.Fortran.Model.FortranOp.Eval
+import           Language.Fortran.Model.Types
+import           Language.Fortran.Model.Types.Match
 
 --------------------------------------------------------------------------------
 --  Names

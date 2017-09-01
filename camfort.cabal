@@ -45,6 +45,7 @@ library
                         Camfort.Analysis.ModFile
                         Camfort.Analysis.Simple
                         Camfort.Specification.Parser
+
                         Camfort.Specification.Stencils.Analysis
                         Camfort.Specification.Stencils.Annotation
                         Camfort.Specification.Stencils.CheckBackend
@@ -60,6 +61,7 @@ library
                         Camfort.Specification.Stencils.Parser.Types
                         Camfort.Specification.Stencils.Synthesis
                         Camfort.Specification.Stencils
+
                         Camfort.Specification.Units
                         Camfort.Specification.Units.Analysis
                         Camfort.Specification.Units.Analysis.Consistent
@@ -76,6 +78,7 @@ library
                         Camfort.Specification.Units.Parser
                         Camfort.Specification.Units.Parser.Types
                         Camfort.Specification.Units.Synthesis
+
                         Camfort.Specification.Hoare
                         Camfort.Specification.Hoare.Annotation
                         Camfort.Specification.Hoare.Types
@@ -86,9 +89,11 @@ library
                         Camfort.Specification.Hoare.Translate
                         Camfort.Specification.Hoare.CheckFrontend
                         Camfort.Specification.Hoare.CheckBackend
+
                         Camfort.Transformation.CommonBlockElim
                         Camfort.Transformation.DeadCode
                         Camfort.Transformation.EquivalenceElim
+
                         Camfort.Helpers
                         Camfort.Helpers.Syntax
                         Camfort.Helpers.Vec
@@ -97,17 +102,19 @@ library
                         Camfort.Input
                         Camfort.Output
                         Camfort.Reprint
-                        Language.Fortran.TypeModel
-                        Language.Fortran.TypeModel.Vars
-                        Language.Fortran.TypeModel.Match
-                        Language.Fortran.TypeModel.Operator
-                        Language.Fortran.TypeModel.Operator.Core
-                        Language.Fortran.TypeModel.Eval
-                        Language.Fortran.TypeModel.Eval.Primitives
-                        Language.Fortran.TypeModel.Singletons
-                        Language.Fortran.TypeModel.Types
-                        Language.Fortran.TypeModel.Translate
-                        Language.Fortran.TypeModel.Util
+
+                        Language.Fortran.Model
+                        Language.Fortran.Model.Vars
+                        Language.Fortran.Model.FortranOp
+                        Language.Fortran.Model.FortranOp.Match
+                        Language.Fortran.Model.FortranOp.Core
+                        Language.Fortran.Model.FortranOp.Eval
+                        Language.Fortran.Model.EvalPrim
+                        Language.Fortran.Model.Singletons
+                        Language.Fortran.Model.Types
+                        Language.Fortran.Model.Types.Match
+                        Language.Fortran.Model.Translate
+                        Language.Fortran.Model.Util
 
   build-depends:        base >= 4.6 && < 5,
                         ghc-prim >= 0.3.1.0 && < 0.6,

@@ -20,7 +20,7 @@ import           Camfort.Specification.Hoare.Annotation
 import           Camfort.Specification.Hoare.CheckBackend
 import           Camfort.Specification.Hoare.CheckFrontend
 import           Camfort.Specification.Hoare.Parser
-import           Language.Fortran.TypeModel.Eval.Primitives
+import           Language.Fortran.Model.EvalPrim
 
 getBlocks = FAB.analyseBBlocks . FAR.analyseRenames . FA.initAnalysis . fmap hoareAnn0
 

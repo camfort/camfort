@@ -11,7 +11,7 @@
 
 {-# OPTIONS_GHC -Wall      #-}
 
-module Language.Fortran.TypeModel.Eval.Primitives where
+module Language.Fortran.Model.EvalPrim where
 
 import           Data.Int                         (Int16, Int32, Int64, Int8)
 import           Data.Word                        (Word8)
@@ -23,7 +23,7 @@ import qualified Data.SBV                         as SBV
 import           Data.SBV.Dynamic                 (SVal)
 import           Data.SBV.Internals               (SBV (..))
 
-import           Language.Fortran.TypeModel.Types
+import           Language.Fortran.Model.Types
 
 --------------------------------------------------------------------------------
 -- * Types

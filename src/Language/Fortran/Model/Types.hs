@@ -14,7 +14,7 @@
 
 -- TODO: Complex Numbers
 
-module Language.Fortran.TypeModel.Types where
+module Language.Fortran.Model.Types where
 
 import           Data.Function                         (on)
 import           Data.Int                              (Int16, Int32, Int64,
@@ -36,7 +36,7 @@ import           Language.Expression
 import           Language.Expression.Pretty
 import           Language.Expression.Prop              (LogicOp (..))
 
-import           Language.Fortran.TypeModel.Singletons
+import           Language.Fortran.Model.Singletons
 
 --------------------------------------------------------------------------------
 --  Semantic Types

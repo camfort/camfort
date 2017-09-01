@@ -11,7 +11,7 @@
 
 {-# OPTIONS_GHC -Wall #-}
 
-module Language.Fortran.TypeModel.Operator
+module Language.Fortran.Model.FortranOp
   (
     FortranOp(..)
   , Op(..)
@@ -28,10 +28,10 @@ import           Data.Vinyl.Curry
 import           Language.Expression
 import           Language.Expression.Pretty
 
-import           Language.Fortran.TypeModel.Operator.Core
-import           Language.Fortran.TypeModel.Eval
-import           Language.Fortran.TypeModel.Singletons
-import           Language.Fortran.TypeModel.Types
+import           Language.Fortran.Model.FortranOp.Core
+import           Language.Fortran.Model.FortranOp.Eval
+import           Language.Fortran.Model.Singletons
+import           Language.Fortran.Model.Types
 
 
 data FortranOp t a where

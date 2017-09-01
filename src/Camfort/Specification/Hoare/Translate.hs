@@ -44,11 +44,11 @@ import           Language.Expression.Pretty
 import           Language.Expression.Prop
 
 import           Camfort.Helpers.TypeLevel
-import           Language.Fortran.TypeModel
-import           Language.Fortran.TypeModel.Match
-import           Language.Fortran.TypeModel.Singletons
-import           Language.Fortran.TypeModel.Translate
-import           Language.Fortran.TypeModel.Vars
+import           Language.Fortran.Model
+import           Language.Fortran.Model.Types.Match
+import           Language.Fortran.Model.Singletons
+import           Language.Fortran.Model.Translate
+import           Language.Fortran.Model.Vars
 
 import           Camfort.Specification.Hoare.Syntax
 

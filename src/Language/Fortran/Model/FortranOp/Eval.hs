@@ -13,30 +13,31 @@
 
 {-# OPTIONS_GHC -Wall      #-}
 
-module Language.Fortran.TypeModel.Eval where
+module Language.Fortran.Model.FortranOp.Eval where
 
-import           Control.Applicative                        (liftA2)
-import           Control.Monad.Reader.Class                 (MonadReader (..))
+import           Control.Applicative                    (liftA2)
+import           Control.Monad.Reader.Class             (MonadReader (..))
 
-import           Data.SBV                                   (SDouble, SFloat,
-                                                             SReal, sRTZ)
-import qualified Data.SBV                                   as SBV
-import           Data.SBV.Dynamic                           (SArr, SVal)
-import qualified Data.SBV.Dynamic                           as SBV
-import           Data.SBV.Internals                         (SBV (..))
+import           Data.SBV                               (SDouble, SFloat, SReal,
+                                                         sRTZ)
+import qualified Data.SBV                               as SBV
+import           Data.SBV.Dynamic                       (SArr, SVal)
+import qualified Data.SBV.Dynamic                       as SBV
+import           Data.SBV.Internals                     (SBV (..))
 
 import           Data.Singletons
 import           Data.Singletons.Prelude.List
 import           Data.Singletons.TypeLits
 
-import           Data.Vinyl                                 hiding (Field)
+import           Data.Vinyl                             hiding (Field)
 import           Data.Vinyl.Curry
 
-import           Language.Fortran.TypeModel.Eval.Primitives
-import           Language.Fortran.TypeModel.Match
-import           Language.Fortran.TypeModel.Operator.Core
-import           Language.Fortran.TypeModel.Singletons
-import           Language.Fortran.TypeModel.Types
+import           Language.Fortran.Model.EvalPrim
+import           Language.Fortran.Model.FortranOp.Core
+import           Language.Fortran.Model.FortranOp.Match
+import           Language.Fortran.Model.Singletons
+import           Language.Fortran.Model.Types
+import           Language.Fortran.Model.Types.Match
 
 --------------------------------------------------------------------------------
 --  Monad

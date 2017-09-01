@@ -1,4 +1,4 @@
-module Language.Fortran.TypeModel.Util where
+module Language.Fortran.Model.Util where
 
 import           Control.Applicative
 import           Control.Monad.Reader

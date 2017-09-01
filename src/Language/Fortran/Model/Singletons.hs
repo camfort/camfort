@@ -15,7 +15,7 @@
 {-# LANGUAGE TypeOperators             #-}
 {-# LANGUAGE UndecidableInstances      #-}
 
-module Language.Fortran.TypeModel.Singletons where
+module Language.Fortran.Model.Singletons where
 
 import           Data.Singletons.Prelude
 import           Data.Singletons.Prelude.Maybe

@@ -10,14 +10,14 @@
 {-# OPTIONS_GHC -Wall      #-}
 
 -- TODO: Function calls
-module Language.Fortran.TypeModel.Operator.Core where
+module Language.Fortran.Model.FortranOp.Core where
 
 import           Data.Singletons.TypeLits
 
 import           Data.Vinyl
 
-import           Language.Fortran.TypeModel.Singletons
-import           Language.Fortran.TypeModel.Types
+import           Language.Fortran.Model.Singletons
+import           Language.Fortran.Model.Types
 
 --------------------------------------------------------------------------------
 --  Closed Typeclasses on BasicTypes

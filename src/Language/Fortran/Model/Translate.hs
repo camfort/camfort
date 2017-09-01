@@ -1,4 +1,4 @@
-{-# LANGUAGE TupleSections #-}
+{-# LANGUAGE TupleSections              #-}
 {-# OPTIONS_GHC -Wall #-}
 {-# OPTIONS_GHC -fno-warn-unused-matches #-}
 
@@ -23,10 +23,10 @@
 
 Provides translation from a subset of the dynamically typed Fortran syntax
 ("Language.Fortran.AST") to the strongly typed expression language
-("Language.Fortran.TypeModel").
+("Language.Fortran.Model").
 
 -}
-module Language.Fortran.TypeModel.Translate
+module Language.Fortran.Model.Translate
   (
     -- * Types
     -- ** Fortran Expressions
@@ -83,39 +83,42 @@ module Language.Fortran.TypeModel.Translate
   , tiAttributes
   ) where
 
-import           Prelude                          hiding (span)
+import           Prelude                                hiding (span)
 
-import           Control.Applicative              ((<|>))
-import           Data.Char                        (toLower)
-import           Data.List                        (intersperse)
-import           Data.Maybe                       (catMaybes)
-import           Data.Typeable                    (Typeable)
-import           Text.Read                        (readMaybe)
+import           Control.Applicative                    ((<|>))
+import           Data.Char                              (toLower)
+import           Data.List                              (intersperse)
+import           Data.Maybe                             (catMaybes)
+import           Data.Typeable                          (Typeable)
+import           Text.Read                              (readMaybe)
 
-import           Control.Lens                     hiding (Const (..), indices,
-                                                   op, rmap, (.>))
+import           Control.Lens                           hiding (Const (..),
+                                                         indices, op, rmap,
+                                                         (.>))
 import           Control.Monad.Except
 import           Control.Monad.Reader
-import           Data.Map                         (Map)
+import           Data.Map                               (Map)
 
 import           Data.Singletons
-import           Data.Singletons.Prelude.List     (Length)
+import           Data.Singletons.Prelude.List           (Length)
 
 import           Data.Vinyl
-import           Data.Vinyl.Functor               (Const (..))
+import           Data.Vinyl.Functor                     (Const (..))
 
-import qualified Language.Fortran.AST             as F
-import qualified Language.Fortran.Util.Position   as F
+import qualified Language.Fortran.AST                   as F
+import qualified Language.Fortran.Util.Position         as F
 
 import           Language.Expression
 import           Language.Expression.Pretty
 
 import           Camfort.Analysis.Logger
 import           Camfort.Helpers.TypeLevel
-import           Language.Fortran.TypeModel
-import           Language.Fortran.TypeModel.Singletons
-import           Language.Fortran.TypeModel.Match
-import           Language.Fortran.TypeModel.Vars
+import           Language.Fortran.Model.FortranOp
+import           Language.Fortran.Model.FortranOp.Match
+import           Language.Fortran.Model.Singletons
+import           Language.Fortran.Model.Types
+import           Language.Fortran.Model.Types.Match
+import           Language.Fortran.Model.Vars
 
 --------------------------------------------------------------------------------
 --  General types
@@ -149,10 +152,10 @@ version of Fortran, needed when translating.
 -}
 data FortranSemantics =
   FortranSemantics
-  { _fsIntegerKinds   :: KindSelector
-  , _fsRealKinds      :: KindSelector
-  , _fsCharacterKinds :: KindSelector
-  , _fsLogicalKinds   :: KindSelector
+  { _fsIntegerKinds         :: KindSelector
+  , _fsRealKinds            :: KindSelector
+  , _fsCharacterKinds       :: KindSelector
+  , _fsLogicalKinds         :: KindSelector
   , _fsDoublePrecisionKinds :: Maybe KindSelector
   }
 
@@ -208,10 +211,10 @@ data TranslateEnv =
   { _teImplicitVars :: Bool
     -- ^ Are implicit variable types enabled? (TODO: this currently does
     -- nothing)
-  , _teVarsInScope :: Map SourceName SomeVar
+  , _teVarsInScope  :: Map SourceName SomeVar
     -- ^ A map of the variables in scope, including their types and unique
     -- names.
-  , _teSemantics :: FortranSemantics
+  , _teSemantics    :: FortranSemantics
     -- ^ The version of Fortran's semantics to use when translating code.
   }
 
@@ -411,14 +414,14 @@ translateBaseType bt mkind = do
     Nothing -> return 0
     Just (F.ExpValue _ _ (F.ValInteger s)) ->
       case readLitInteger s of
-        Just k -> return k
+        Just k  -> return k
         Nothing -> throwError ErrBadLiteral
     _ -> unsupported "kind which isn't an integer literal"
 
   let getKindPrec btName ksl = do
         mks <- preview (teSemantics . ksl)
         case mks >>= (`selectKind` kindInt) of
-          Just p -> return p
+          Just p  -> return p
           Nothing -> throwError $ ErrInvalidKind btName kindInt
 
   -- Get value-level representations of the type's basic type and precision
@@ -438,7 +441,7 @@ translateBaseType bt mkind = do
   case (toSing basicType, toSing prec) of
     (SomeSing sbt, SomeSing sprec) -> case makePrim sprec sbt of
       Just (MakePrim prim) -> return (SomePrimD (DPrim prim))
-      Nothing -> unsupported "type spec"
+      Nothing              -> unsupported "type spec"
 
 --------------------------------------------------------------------------------
 --  Translating Expressions
