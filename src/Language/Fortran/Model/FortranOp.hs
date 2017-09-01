@@ -16,7 +16,7 @@ module Language.Fortran.Model.FortranOp
     FortranOp(..)
   , Op(..)
   , OpKind(..)
-  , OpResult(..)
+  , OpSpec(..)
   ) where
 
 import           Data.Singletons.Prelude.List
@@ -35,7 +35,7 @@ import           Language.Fortran.Model.Types
 
 
 data FortranOp t a where
-  FortranOp :: Op (Length args) ok -> OpResult ok args result -> Rec t args -> FortranOp t result
+  FortranOp :: Op (Length args) ok -> OpSpec ok args result -> Rec t args -> FortranOp t result
 
 instance Operator FortranOp where
   htraverseOp f (FortranOp op opr args) = FortranOp op opr <$> rtraverse f args
@@ -60,40 +60,40 @@ showsPrim = \case
   PDouble -> shows
   PChar   -> shows
 
-prettysPrecOp :: Pretty1 t => Int -> OpResult ok args result -> Op (Length args) ok -> Rec t args -> ShowS
+prettysPrecOp :: Pretty1 t => Int -> OpSpec ok args result -> Op (Length args) ok -> Rec t args -> ShowS
 prettysPrecOp p = \case
-  ORLit px x -> \case
+  OSLit px x -> \case
     OpLit -> runcurry $ showsPrim px x
-  ORNum1 _ _ _ -> \case
+  OSNum1 _ _ _ -> \case
     OpNeg -> runcurry $ prettys1PrecUnop 8 "-" p
     OpPos -> runcurry $ prettys1PrecUnop 8 "+" p
-  ORNum2 _ _ _ _ _ -> \case
+  OSNum2 _ _ _ _ _ -> \case
     OpAdd -> runcurry $ prettys1PrecBinop 5 " + " p
     OpSub -> runcurry $ prettys1PrecBinop 5 " - " p
     OpMul -> runcurry $ prettys1PrecBinop 6 " * " p
     OpDiv -> runcurry $ prettys1PrecBinop 6 " / " p
-  ORLogical1 _ _ -> \case
+  OSLogical1 _ _ -> \case
     OpNot -> runcurry $ prettys1PrecUnop 8 "!" p
-  ORLogical2 _ _ _ -> \case
+  OSLogical2 _ _ _ -> \case
     OpAnd      -> runcurry $ prettys1PrecBinop 3 " && " p
     OpOr       -> runcurry $ prettys1PrecBinop 2 " || " p
     OpEquiv    -> runcurry $ prettys1PrecBinop 1 " <=> " p
     OpNotEquiv -> runcurry $ prettys1PrecBinop 1 " </=> " p
-  OREq _ _ _ _ -> \case
+  OSEq _ _ _ _ -> \case
     OpEq -> runcurry $ prettys1PrecBinop 4 " = " p
     OpNE -> runcurry $ prettys1PrecBinop 4 " /= " p
-  ORRel _ _ _ _ -> \case
+  OSRel _ _ _ _ -> \case
     OpLT -> runcurry $ prettys1PrecBinop 4 " < " p
     OpLE -> runcurry $ prettys1PrecBinop 4 " <= " p
     OpGT -> runcurry $ prettys1PrecBinop 4 " > " p
     OpGE -> runcurry $ prettys1PrecBinop 4 " >= " p
-  ORLookup _ -> \case
+  OSLookup _ -> \case
     OpLookup ->
       runcurry $ \arr i ->
       showParen (p > 9) $ prettys1Prec 10 arr .
                           showString "[" . prettys1Prec 0 i .
                           showString "]"
-  ORWriteArr _ -> \case
+  OSWriteArr _ -> \case
     OpWriteArr ->
 
       -- e.g. @myArrayVar[9 <- "new value"]@
@@ -102,12 +102,12 @@ prettysPrecOp p = \case
                           showString "[" . prettys1Prec 0 i .
                           showString " <- " . prettys1Prec 0 v .
                           showString "]"
-  ORDeref _ fname -> \case
+  OSDeref _ fname -> \case
     OpDeref -> runcurry $ \r ->
       showParen (p > 9) $ prettys1Prec 10 r .
       showString "%" .
       showString (withKnownSymbol fname (symbolVal fname))
-  ORWriteData _ fname _ -> \case
+  OSWriteData _ fname _ -> \case
 
     -- e.g. @myDataVar{myField <- "new value"}@
     OpWriteData -> runcurry $ \r v ->

@@ -52,31 +52,31 @@ instance (MonadReader r m, HasSymReprs r) => MonadEvalFortran r m where
 
 evalFortranOp
   :: (MonadEvalFortran r m)
-  => Op (Length args) ok -> OpResult ok args result -> Rec SymRepr args -> m (SymRepr result)
+  => Op (Length args) ok -> OpSpec ok args result -> Rec SymRepr args -> m (SymRepr result)
 evalFortranOp op opr = case opr of
-  ORLit px x -> \_ -> primFromVal px <$> primLit px x
+  OSLit px x -> \_ -> primFromVal px <$> primLit px x
 
-  ORNum1 _ _ p2 ->
+  OSNum1 _ _ p2 ->
     primUnop True p2 (numUnop op)
-  ORNum2 nk1 nk2 p1 p2 p3 ->
+  OSNum2 nk1 nk2 p1 p2 p3 ->
     primBinop True p1 p2 p3 (numBinop (nkBothInts nk1 nk2) op)
 
-  ORLogical1 _ p2 -> primUnop True p2 (logicalUnop op)
-  ORLogical2 p1 p2 p3 -> primBinop True p1 p2 p3 (logicalBinop op)
+  OSLogical1 _ p2 -> primUnop True p2 (logicalUnop op)
+  OSLogical2 p1 p2 p3 -> primBinop True p1 p2 p3 (logicalBinop op)
 
-  OREq cmp p1 p2 p3 -> primBinop False p1 p2 p3 (eqBinop cmp op)
-  ORRel cmp p1 p2 p3 -> primBinop False p1 p2 p3 (relBinop cmp op)
+  OSEq cmp p1 p2 p3 -> primBinop False p1 p2 p3 (eqBinop cmp op)
+  OSRel cmp p1 p2 p3 -> primBinop False p1 p2 p3 (relBinop cmp op)
 
-  ORLookup (DArray (Index _) (ArrValue elPrim)) ->
+  OSLookup (DArray (Index _) (ArrValue elPrim)) ->
     return . runcurry (\xs index ->
       let xsArr = toArr xs
           indexVal = primToVal index
       in primFromVal elPrim (SBV.readSArr xsArr indexVal))
 
-  ORWriteArr _ -> return . runcurry writeArray
+  OSWriteArr _ -> return . runcurry writeArray
 
-  ORDeref _ s -> return . runcurry (derefData s Proxy)
-  ORWriteData _ s _ -> return . runcurry (writeDataAt s)
+  OSDeref _ s -> return . runcurry (derefData s Proxy)
+  OSWriteData _ s _ -> return . runcurry (writeDataAt s)
 
 --------------------------------------------------------------------------------
 --  General
@@ -272,29 +272,29 @@ writeDataAt fieldSymbol (SRData d dataRec) valRep =
 
 -- eqOpRArgs
 --   :: (forall x y. (x -> y -> Bool) -> f x -> g y -> Bool)
---   -> OpResult ok1 args1 r1
---   -> OpResult ok2 args2 r2
+--   -> OpSpec ok1 args1 r1
+--   -> OpSpec ok2 args2 r2
 --   -> Rec f args1
 --   -> Rec g args2
 --   -> Bool
 -- eqOpRArgs le opr1 opr2 =
 --   case (opr1, opr2) of
---     (ORLit _ _, ORLit _ _) -> \_ _ -> True
---     (ORNum1 _ px _, ORNum1 _ py _) -> runcurry $ runcurry . le (eqPrimS px py)
---     (ORNum2 _ _ px1 px2 _, ORNum2 _ _ py1 py2 _) ->
+--     (OSLit _ _, OSLit _ _) -> \_ _ -> True
+--     (OSNum1 _ px _, OSNum1 _ py _) -> runcurry $ runcurry . le (eqPrimS px py)
+--     (OSNum2 _ _ px1 px2 _, OSNum2 _ _ py1 py2 _) ->
 --       runcurry $ \x1 x2 -> runcurry $ \y1 y2 ->
 --       le (eqPrimS px1 py1) x1 y1 && le (eqPrimS px2 py2) x2 y2
---     (ORLogical1 px _, ORLogical1 py _) -> runcurry $ runcurry . le (eqPrimS px py)
---     (ORLogical2 px1 px2 _, ORLogical2 py1 py2 _) ->
+--     (OSLogical1 px _, OSLogical1 py _) -> runcurry $ runcurry . le (eqPrimS px py)
+--     (OSLogical2 px1 px2 _, OSLogical2 py1 py2 _) ->
 --       runcurry $ \x1 x2 -> runcurry $ \y1 y2 ->
 --       le (eqPrimS px1 py1) x1 y1 && le (eqPrimS px2 py2) x2 y2
---     (OREq _ px1 px2 _, OREq _ py1 py2 _) ->
+--     (OSEq _ px1 px2 _, OSEq _ py1 py2 _) ->
 --       runcurry $ \x1 x2 -> runcurry $ \y1 y2 ->
 --       le (eqPrimS px1 py1) x1 y1 && le (eqPrimS px2 py2) x2 y2
---     (ORRel _ px1 px2 _, ORRel _ py1 py2 _) ->
+--     (OSRel _ px1 px2 _, OSRel _ py1 py2 _) ->
 --       runcurry $ \x1 x2 -> runcurry $ \y1 y2 ->
 --       le (eqPrimS px1 py1) x1 y1 && le (eqPrimS px2 py2) x2 y2
---     (ORLookup (DArray (Index pi1) _), ORLookup (DArray (Index pi2) _)) ->
+--     (OSLookup (DArray (Index pi1) _), OSLookup (DArray (Index pi2) _)) ->
 --       runcurry $ \arr1 i1 -> runcurry $ \arr2 i2 ->
 --       le _ arr1 arr2 && le (eqPrimS pi1 pi2) i1 i2
 --       -- le ()

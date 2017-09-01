@@ -90,26 +90,26 @@ matchCompareR =
 --  Matching on operator result types
 --------------------------------------------------------------------------------
 
-data MatchOpR ok args where
-  MatchOpR :: OpResult ok args result -> D result -> MatchOpR ok args
+data MatchOpSpec ok args where
+  MatchOpSpec :: OpSpec ok args result -> D result -> MatchOpSpec ok args
 
 -- | Checks if it is possible to apply the given operator to the given
 -- arguments, and if so returns a proof of that fact, packaged with information
 -- about the result of applying the operator.
-matchOpR :: Op (Length args) ok -> Rec D args -> Maybe (MatchOpR ok args)
-matchOpR operator argTypes =
+matchOpSpec :: Op (Length args) ok -> Rec D args -> Maybe (MatchOpSpec ok args)
+matchOpSpec operator argTypes =
   case argTypes of
     RNil -> case operator of
       OpLit -> Nothing
 
     d1 :& RNil -> case operator of
       OpNeg -> argsNumeric <$$> \case
-        MatchNumType _ _ nk p :& RNil -> MatchOpR (ORNum1 nk p p) d1
+        MatchNumType _ _ nk p :& RNil -> MatchOpSpec (OSNum1 nk p p) d1
       OpPos -> argsNumeric <$$> \case
-        MatchNumType _ _ nk p :& RNil -> MatchOpR (ORNum1 nk p p) d1
+        MatchNumType _ _ nk p :& RNil -> MatchOpSpec (OSNum1 nk p p) d1
 
       OpNot -> argsPrim >>= \case
-        MatchPrimD (MatchPrim _ SBTLogical) p :& RNil -> Just $ MatchOpR (ORLogical1 p PBool8) (DPrim PBool8)
+        MatchPrimD (MatchPrim _ SBTLogical) p :& RNil -> Just $ MatchOpSpec (OSLogical1 p PBool8) (DPrim PBool8)
         _ -> Nothing
 
       -- In the deref case, we don't have access to a particular field to
@@ -118,47 +118,47 @@ matchOpR operator argTypes =
 
     d1 :& d2 :& RNil -> case operator of
       OpAdd -> matchNumR d1 d2 <$$> \case
-          MatchNumR nk1 nk2 p1 p2 p3 -> MatchOpR (ORNum2 nk1 nk2 p1 p2 p3) (DPrim p3)
+          MatchNumR nk1 nk2 p1 p2 p3 -> MatchOpSpec (OSNum2 nk1 nk2 p1 p2 p3) (DPrim p3)
       OpSub -> matchNumR d1 d2 <$$> \case
-          MatchNumR nk1 nk2 p1 p2 p3 -> MatchOpR (ORNum2 nk1 nk2 p1 p2 p3) (DPrim p3)
+          MatchNumR nk1 nk2 p1 p2 p3 -> MatchOpSpec (OSNum2 nk1 nk2 p1 p2 p3) (DPrim p3)
       OpMul -> matchNumR d1 d2 <$$> \case
-          MatchNumR nk1 nk2 p1 p2 p3 -> MatchOpR (ORNum2 nk1 nk2 p1 p2 p3) (DPrim p3)
+          MatchNumR nk1 nk2 p1 p2 p3 -> MatchOpSpec (OSNum2 nk1 nk2 p1 p2 p3) (DPrim p3)
       OpDiv -> matchNumR d1 d2 <$$> \case
-          MatchNumR nk1 nk2 p1 p2 p3 -> MatchOpR (ORNum2 nk1 nk2 p1 p2 p3) (DPrim p3)
+          MatchNumR nk1 nk2 p1 p2 p3 -> MatchOpSpec (OSNum2 nk1 nk2 p1 p2 p3) (DPrim p3)
 
       OpAnd -> argsPrim >>= \case
         MatchPrimD (MatchPrim _ SBTLogical) p1 :& MatchPrimD (MatchPrim _ SBTLogical) p2 :& RNil ->
-          Just $ MatchOpR (ORLogical2 p1 p2 PBool8) (DPrim PBool8)
+          Just $ MatchOpSpec (OSLogical2 p1 p2 PBool8) (DPrim PBool8)
         _ -> Nothing
       OpOr -> argsPrim >>= \case
         MatchPrimD (MatchPrim _ SBTLogical) p1 :& MatchPrimD (MatchPrim _ SBTLogical) p2 :& RNil ->
-          Just $ MatchOpR (ORLogical2 p1 p2 PBool8) (DPrim PBool8)
+          Just $ MatchOpSpec (OSLogical2 p1 p2 PBool8) (DPrim PBool8)
         _ -> Nothing
       OpEquiv -> argsPrim >>= \case
         MatchPrimD (MatchPrim _ SBTLogical) p1 :& MatchPrimD (MatchPrim _ SBTLogical) p2 :& RNil ->
-          Just $ MatchOpR (ORLogical2 p1 p2 PBool8) (DPrim PBool8)
+          Just $ MatchOpSpec (OSLogical2 p1 p2 PBool8) (DPrim PBool8)
         _ -> Nothing
       OpNotEquiv -> argsPrim >>= \case
         MatchPrimD (MatchPrim _ SBTLogical) p1 :& MatchPrimD (MatchPrim _ SBTLogical) p2 :& RNil ->
-          Just $ MatchOpR (ORLogical2 p1 p2 PBool8) (DPrim PBool8)
+          Just $ MatchOpSpec (OSLogical2 p1 p2 PBool8) (DPrim PBool8)
         _ -> Nothing
 
       OpEq -> matchCompareR d1 d2 <$$> \case
-        MatchCompareR cmp p1 p2 -> MatchOpR (OREq cmp p1 p2 PBool8) (DPrim PBool8)
+        MatchCompareR cmp p1 p2 -> MatchOpSpec (OSEq cmp p1 p2 PBool8) (DPrim PBool8)
       OpNE -> matchCompareR d1 d2 <$$> \case
-        MatchCompareR cmp p1 p2 -> MatchOpR (OREq cmp p1 p2 PBool8) (DPrim PBool8)
+        MatchCompareR cmp p1 p2 -> MatchOpSpec (OSEq cmp p1 p2 PBool8) (DPrim PBool8)
       OpLT -> matchCompareR d1 d2 <$$> \case
-        MatchCompareR cmp p1 p2 -> MatchOpR (ORRel cmp p1 p2 PBool8) (DPrim PBool8)
+        MatchCompareR cmp p1 p2 -> MatchOpSpec (OSRel cmp p1 p2 PBool8) (DPrim PBool8)
       OpLE -> matchCompareR d1 d2 <$$> \case
-        MatchCompareR cmp p1 p2 -> MatchOpR (ORRel cmp p1 p2 PBool8) (DPrim PBool8)
+        MatchCompareR cmp p1 p2 -> MatchOpSpec (OSRel cmp p1 p2 PBool8) (DPrim PBool8)
       OpGT -> matchCompareR d1 d2 <$$> \case
-        MatchCompareR cmp p1 p2 -> MatchOpR (ORRel cmp p1 p2 PBool8) (DPrim PBool8)
+        MatchCompareR cmp p1 p2 -> MatchOpSpec (OSRel cmp p1 p2 PBool8) (DPrim PBool8)
       OpGE -> matchCompareR d1 d2 <$$> \case
-        MatchCompareR cmp p1 p2 -> MatchOpR (ORRel cmp p1 p2 PBool8) (DPrim PBool8)
+        MatchCompareR cmp p1 p2 -> MatchOpSpec (OSRel cmp p1 p2 PBool8) (DPrim PBool8)
 
       OpLookup -> with (d1, d2) $ traverseOf _2 matchPrimD >=> \case
         (DArray (Index pi1) av, MatchPrimD _ pi2) -> case eqPrim pi1 pi2 of
-          Just Refl -> Just $ MatchOpR (ORLookup d1) (dArrValue av)
+          Just Refl -> Just $ MatchOpSpec (OSLookup d1) (dArrValue av)
           _         -> Nothing
         _ -> Nothing
 
@@ -169,7 +169,7 @@ matchOpR operator argTypes =
       OpWriteArr -> with (d1, d2, d3) $ traverseOf _2 matchPrimD >=> traverseOf _3 matchPrimD >=> \case
         (DArray (Index ix1) (ArrValue av1), MatchPrimD _ ix2, MatchPrimD _ av2) ->
           case (eqPrim ix1 ix2, eqPrim av1 av2) of
-            (Just Refl, Just Refl) -> Just (MatchOpR (ORWriteArr d1) d1)
+            (Just Refl, Just Refl) -> Just (MatchOpSpec (OSWriteArr d1) d1)
             _                      -> Nothing
         _ -> Nothing
 

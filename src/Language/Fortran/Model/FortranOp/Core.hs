@@ -36,100 +36,101 @@ data ComparableBasicTypes k1 k2 where
 --  Operator Result Types
 --------------------------------------------------------------------------------
 
-data OpResult ok args result where
+data OpSpec ok args result where
   -- TODO: non-primitive literals (initialization)
-  ORLit
+  OSLit
     :: Prim p k a
     -> a
-    -> OpResult 'OKLit '[] (PrimS a)
+    -> OpSpec 'OKLit '[] (PrimS a)
 
-  ORNum1
+  OSNum1
     :: NumericBasicType k1
     -> Prim p1 k1 a
     -> Prim p2 k2 b
-    -> OpResult 'OKNum '[PrimS a] (PrimS b)
+    -> OpSpec 'OKNum '[PrimS a] (PrimS b)
 
-  ORNum2
+  OSNum2
     :: NumericBasicType k1 -> NumericBasicType k2
     -> Prim p1 k1 a -> Prim p2 k2 b
     -> Prim (PrecMax p1 p2) (BasicTypeMax k1 k2) c
-    -> OpResult 'OKNum '[PrimS a, PrimS b] (PrimS c)
+    -> OpSpec 'OKNum '[PrimS a, PrimS b] (PrimS c)
 
-  ORLogical1
+  OSLogical1
     :: Prim p1 'BTLogical a
     -> Prim 'P8 'BTLogical b
-    -> OpResult 'OKLogical '[PrimS a] (PrimS b)
+    -> OpSpec 'OKLogical '[PrimS a] (PrimS b)
 
-  ORLogical2
+  OSLogical2
     :: Prim p1 'BTLogical a
     -> Prim p2 'BTLogical b
     -> Prim 'P8 'BTLogical c
-    -> OpResult 'OKLogical '[PrimS a, PrimS b] (PrimS c)
+    -> OpSpec 'OKLogical '[PrimS a, PrimS b] (PrimS c)
 
-  OREq
+  OSEq
     :: ComparableBasicTypes k1 k2
     -> Prim p1 k1 a -> Prim p2 k2 b
     -> Prim 'P8 'BTLogical c
-    -> OpResult 'OKEq '[PrimS a, PrimS b] (PrimS c)
+    -> OpSpec 'OKEq '[PrimS a, PrimS b] (PrimS c)
 
-  ORRel
+  OSRel
     :: ComparableBasicTypes k1 k2
     -> Prim p1 k1 a -> Prim p2 k2 b
     -> Prim 'P8 'BTLogical c
-    -> OpResult 'OKRel '[PrimS a, PrimS b] (PrimS c)
+    -> OpSpec 'OKRel '[PrimS a, PrimS b] (PrimS c)
 
-  ORLookup
+  OSLookup
     :: D (Array i v)
-    -> OpResult 'OKLookup '[Array i v, i] v
+    -> OpSpec 'OKLookup '[Array i v, i] v
 
-  ORDeref
+  OSDeref
     :: RElem '(fname, a) fields i
     => D (Record rname fields)
     -> SSymbol fname
-    -> OpResult 'OKDeref '[Record rname fields] a
+    -> OpSpec 'OKDeref '[Record rname fields] a
 
-  ORWriteArr
+  OSWriteArr
     :: D (Array i v)
-    -> OpResult 'OKWriteArr '[Array i v, i, v] (Array i v)
+    -> OpSpec 'OKWriteArr '[Array i v, i, v] (Array i v)
 
-  ORWriteData
+  OSWriteData
     :: RElem '(fname, a) fields i
     => D (Record rname fields) -- ^ Record to write to
     -> SSymbol fname           -- ^ Field to write
     -> D a                     -- ^ New value
-    -> OpResult 'OKWriteData '[Record rname fields, a] (Record rname fields)
+    -> OpSpec 'OKWriteData '[Record rname fields, a] (Record rname fields)
 
 --------------------------------------------------------------------------------
 --  Specific Operators
 --------------------------------------------------------------------------------
 
 data Op n ok where
-  OpLit      :: Op 0 'OKLit
+  OpLit       :: Op 0 'OKLit
 
-  OpNeg      :: Op 1 'OKNum
-  OpPos      :: Op 1 'OKNum
-  OpAdd      :: Op 2 'OKNum
-  OpSub      :: Op 2 'OKNum
-  OpMul      :: Op 2 'OKNum
-  OpDiv      :: Op 2 'OKNum
+  OpNeg       :: Op 1 'OKNum
+  OpPos       :: Op 1 'OKNum
 
-  OpEq       :: Op 2 'OKEq
-  OpNE       :: Op 2 'OKEq
+  OpAdd       :: Op 2 'OKNum
+  OpSub       :: Op 2 'OKNum
+  OpMul       :: Op 2 'OKNum
+  OpDiv       :: Op 2 'OKNum
 
-  OpLT       :: Op 2 'OKRel
-  OpLE       :: Op 2 'OKRel
-  OpGT       :: Op 2 'OKRel
-  OpGE       :: Op 2 'OKRel
+  OpEq        :: Op 2 'OKEq
+  OpNE        :: Op 2 'OKEq
 
-  OpNot      :: Op 1 'OKLogical
-  OpAnd      :: Op 2 'OKLogical
-  OpOr       :: Op 2 'OKLogical
-  OpEquiv    :: Op 2 'OKLogical
-  OpNotEquiv :: Op 2 'OKLogical
+  OpLT        :: Op 2 'OKRel
+  OpLE        :: Op 2 'OKRel
+  OpGT        :: Op 2 'OKRel
+  OpGE        :: Op 2 'OKRel
 
-  OpLookup   :: Op 2 'OKLookup
+  OpNot       :: Op 1 'OKLogical
+  OpAnd       :: Op 2 'OKLogical
+  OpOr        :: Op 2 'OKLogical
+  OpEquiv     :: Op 2 'OKLogical
+  OpNotEquiv  :: Op 2 'OKLogical
 
-  OpDeref    :: Op 1 'OKDeref
+  OpLookup    :: Op 2 'OKLookup
 
-  OpWriteArr :: Op 3 'OKWriteArr
+  OpDeref     :: Op 1 'OKDeref
+
+  OpWriteArr  :: Op 3 'OKWriteArr
   OpWriteData :: Op 2 'OKWriteData

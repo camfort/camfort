@@ -493,7 +493,7 @@ arrayAssignment arrName ixAst rvalAst = do
       -- Replace instances of the array variable with the same array, but with
       -- the new value written at the given index.
       let arrExpr = EVar varV
-          mkOp = rcurry $ FortranOp OpWriteArr (ORWriteArr varD)
+          mkOp = rcurry $ FortranOp OpWriteArr (OSWriteArr varD)
           arrExpr' = EOp (mkOp arrExpr ixExpr rvalExpr)
 
       return (Assignment varV (fortranToMetaExpr arrExpr'))

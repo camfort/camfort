@@ -490,8 +490,8 @@ translateSubscript arrAst [F.IxSingle _ _ _ ixAst] = do
   SomePair arrD arrExp <- translateExpression arrAst
   SomePair ixD ixExp <- translateExpression ixAst
 
-  case matchOpR OpLookup (arrD :& ixD :& RNil) of
-    Just (MatchOpR opResult resultD) ->
+  case matchOpSpec OpLookup (arrD :& ixD :& RNil) of
+    Just (MatchOpSpec opResult resultD) ->
       return $ SomePair resultD $ EOp $ FortranOp OpLookup opResult (arrExp :& ixExp :& RNil)
     Nothing ->
       case arrD of
@@ -547,7 +547,7 @@ translateLiteral v pa readLit
   = maybe (throwError ErrBadLiteral) (return . SomePair (DPrim pa) . flit pa)
   . readLit
   where
-    flit px x = EOp (FortranOp OpLit (ORLit px x) RNil)
+    flit px x = EOp (FortranOp OpLit (OSLit px x) RNil)
 
 
 translateOp1 :: F.UnaryOp -> Maybe (Some (Op 1))
@@ -604,7 +604,7 @@ translateOpApp operator argAsts = do
       let argsD = rmap (\(PairOf d _) -> d) argsTranslated
           argsExpr = rmap (\(PairOf _ e) -> e) argsTranslated
 
-      MatchOpR opResult resultD <- case matchOpR operator argsD of
+      MatchOpSpec opResult resultD <- case matchOpSpec operator argsD of
         Just x  -> return x
         Nothing -> throwError $ ErrInvalidOpApplication (Some argsD)
 
