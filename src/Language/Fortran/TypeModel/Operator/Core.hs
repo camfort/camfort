@@ -20,17 +20,17 @@ import           Language.Fortran.TypeModel.Singletons
 import           Language.Fortran.TypeModel.Types
 
 --------------------------------------------------------------------------------
---  Closed Typeclasses on Kinds
+--  Closed Typeclasses on BasicTypes
 --------------------------------------------------------------------------------
 
-data NumericKind k where
-  NKInt :: NumericKind 'KInt
-  NKReal :: NumericKind 'KReal
+data NumericBasicType k where
+  NBTInt :: NumericBasicType 'BTInt
+  NBTReal :: NumericBasicType 'BTReal
 
-data ComparableKinds k1 k2 where
-  CKNum :: NumericKind k1 -> NumericKind k2 -> ComparableKinds k1 k2
-  CKBool :: ComparableKinds 'KLogical 'KLogical
-  CKChar :: ComparableKinds 'KChar 'KChar
+data ComparableBasicTypes k1 k2 where
+  CBTNum :: NumericBasicType k1 -> NumericBasicType k2 -> ComparableBasicTypes k1 k2
+  CBTBool :: ComparableBasicTypes 'BTLogical 'BTLogical
+  CBTChar :: ComparableBasicTypes 'BTChar 'BTChar
 
 --------------------------------------------------------------------------------
 --  Operator Result Types
@@ -44,38 +44,38 @@ data OpResult ok args result where
     -> OpResult 'OKLit '[] (PrimS a)
 
   ORNum1
-    :: NumericKind k1
+    :: NumericBasicType k1
     -> Prim p1 k1 a
     -> Prim p2 k2 b
     -> OpResult 'OKNum '[PrimS a] (PrimS b)
 
   ORNum2
-    :: NumericKind k1 -> NumericKind k2
+    :: NumericBasicType k1 -> NumericBasicType k2
     -> Prim p1 k1 a -> Prim p2 k2 b
-    -> Prim (PrecMax p1 p2) (KindMax k1 k2) c
+    -> Prim (PrecMax p1 p2) (BasicTypeMax k1 k2) c
     -> OpResult 'OKNum '[PrimS a, PrimS b] (PrimS c)
 
   ORLogical1
-    :: Prim p1 'KLogical a
-    -> Prim 'P8 'KLogical b
+    :: Prim p1 'BTLogical a
+    -> Prim 'P8 'BTLogical b
     -> OpResult 'OKLogical '[PrimS a] (PrimS b)
 
   ORLogical2
-    :: Prim p1 'KLogical a
-    -> Prim p2 'KLogical b
-    -> Prim 'P8 'KLogical c
+    :: Prim p1 'BTLogical a
+    -> Prim p2 'BTLogical b
+    -> Prim 'P8 'BTLogical c
     -> OpResult 'OKLogical '[PrimS a, PrimS b] (PrimS c)
 
   OREq
-    :: ComparableKinds k1 k2
+    :: ComparableBasicTypes k1 k2
     -> Prim p1 k1 a -> Prim p2 k2 b
-    -> Prim 'P8 'KLogical c
+    -> Prim 'P8 'BTLogical c
     -> OpResult 'OKEq '[PrimS a, PrimS b] (PrimS c)
 
   ORRel
-    :: ComparableKinds k1 k2
+    :: ComparableBasicTypes k1 k2
     -> Prim p1 k1 a -> Prim p2 k2 b
-    -> Prim 'P8 'KLogical c
+    -> Prim 'P8 'BTLogical c
     -> OpResult 'OKRel '[PrimS a, PrimS b] (PrimS c)
 
   ORLookup

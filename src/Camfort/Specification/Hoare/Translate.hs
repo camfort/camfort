@@ -112,7 +112,7 @@ translateBoolExpression e = do
   SomePair d1 e' <- translateExpression e
 
   resUnsquashed :: Expr FLiftLogical FortranExpr Bool <- case matchPrimD d1 of
-    Just (MatchPrimD (MatchPrim _ SKLogical) prim1) -> return $ EOp $
+    Just (MatchPrimD (MatchPrim _ SBTLogical) prim1) -> return $ EOp $
       case prim1 of
         PBool8  -> FLL8 (EVar e')
         PBool16 -> FLL16 (EVar e')

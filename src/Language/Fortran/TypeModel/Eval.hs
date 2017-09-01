@@ -164,9 +164,9 @@ coerceSBVNum p v = do
 
 -- TODO: Worry about what happens when LHS and RHS have different types
 
-nkBothInts :: NumericKind k1 -> NumericKind k2 -> Bool
-nkBothInts NKInt NKInt = True
-nkBothInts _ _         = False
+nkBothInts :: NumericBasicType k1 -> NumericBasicType k2 -> Bool
+nkBothInts NBTInt NBTInt = True
+nkBothInts _ _           = False
 
 numUnop :: Op 1 'OKNum -> SVal -> SVal
 numUnop = \case
@@ -206,7 +206,7 @@ logicalBinop = \case
 
 -- TODO: Worry about what happens when LHS and RHS have different types
 
-eqBinop :: ComparableKinds k1 k2 -> Op 2 'OKEq -> SVal -> SVal -> SVal
+eqBinop :: ComparableBasicTypes k1 k2 -> Op 2 'OKEq -> SVal -> SVal -> SVal
 eqBinop _ = \case
   OpEq -> SBV.svEqual
   OpNE -> SBV.svNotEqual
@@ -217,7 +217,7 @@ eqBinop _ = \case
 
 -- TODO: Worry about what happens when LHS and RHS have different types
 
-relBinop :: ComparableKinds k1 k2 -> Op 2 'OKRel -> SVal -> SVal -> SVal
+relBinop :: ComparableBasicTypes k1 k2 -> Op 2 'OKRel -> SVal -> SVal -> SVal
 relBinop _ = \case
   OpLT -> SBV.svLessThan
   OpLE -> SBV.svLessEq

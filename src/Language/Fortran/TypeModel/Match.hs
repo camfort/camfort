@@ -74,37 +74,37 @@ data MakePrim p k where
 -- there is no primitive with the given combination.
 makePrim :: Sing p -> Sing k -> Maybe (MakePrim p k)
 makePrim = curry $ \case
-  (SP8, SKInt)      -> Just $ MakePrim PInt8
-  (SP16, SKInt)     -> Just $ MakePrim PInt16
-  (SP32, SKInt)     -> Just $ MakePrim PInt32
-  (SP64, SKInt)     -> Just $ MakePrim PInt64
-  (SP32, SKReal)    -> Just $ MakePrim PFloat
-  (SP64, SKReal)    -> Just $ MakePrim PDouble
-  (SP8, SKLogical)  -> Just $ MakePrim PBool8
-  (SP16, SKLogical) -> Just $ MakePrim PBool16
-  (SP32, SKLogical) -> Just $ MakePrim PBool32
-  (SP64, SKLogical) -> Just $ MakePrim PBool64
-  (SP8, SKChar)     -> Just $ MakePrim PChar
+  (SP8, SBTInt)      -> Just $ MakePrim PInt8
+  (SP16, SBTInt)     -> Just $ MakePrim PInt16
+  (SP32, SBTInt)     -> Just $ MakePrim PInt32
+  (SP64, SBTInt)     -> Just $ MakePrim PInt64
+  (SP32, SBTReal)    -> Just $ MakePrim PFloat
+  (SP64, SBTReal)    -> Just $ MakePrim PDouble
+  (SP8, SBTLogical)  -> Just $ MakePrim PBool8
+  (SP16, SBTLogical) -> Just $ MakePrim PBool16
+  (SP32, SBTLogical) -> Just $ MakePrim PBool32
+  (SP64, SBTLogical) -> Just $ MakePrim PBool64
+  (SP8, SBTChar)     -> Just $ MakePrim PChar
   _ -> Nothing
 
 
 data MatchNumType a where
-  MatchNumType :: Sing p -> Sing k -> NumericKind k -> Prim p k a -> MatchNumType (PrimS a)
+  MatchNumType :: Sing p -> Sing k -> NumericBasicType k -> Prim p k a -> MatchNumType (PrimS a)
 
 -- | Checks if the given type is numeric, and if so returns a proof of that
 -- fact.
 matchNumType :: D a -> Maybe (MatchNumType a)
 matchNumType = matchPrimD >=> \case
-  MatchPrimD (MatchPrim sp SKInt) p -> Just (MatchNumType sp SKInt NKInt p)
-  MatchPrimD (MatchPrim sp SKReal) p -> Just (MatchNumType sp SKReal NKReal p)
+  MatchPrimD (MatchPrim sp SBTInt) p -> Just (MatchNumType sp SBTInt NBTInt p)
+  MatchPrimD (MatchPrim sp SBTReal) p -> Just (MatchNumType sp SBTReal NBTReal p)
   _ -> Nothing
 
 
 data MatchNumR a b where
   MatchNumR
-    :: NumericKind k1 -> NumericKind k2
+    :: NumericBasicType k1 -> NumericBasicType k2
     -> Prim p1 k1 a -> Prim p2 k2 b
-    -> Prim (PrecMax p1 p2) (KindMax k1 k2) c
+    -> Prim (PrecMax p1 p2) (BasicTypeMax k1 k2) c
     -> MatchNumR (PrimS a) (PrimS b)
 
 -- | Checks if it is possible to perform a binary numeric operation on arguments
@@ -113,16 +113,16 @@ data MatchNumR a b where
 matchNumR :: D a -> D b -> Maybe (MatchNumR a b)
 matchNumR = matchingWith2 matchNumType matchNumType $ \case
   (MatchNumType sp1 sk1 nk1 prim1, MatchNumType sp2 sk2 nk2 prim2) ->
-    makePrim (sPrecMax sp1 sp2) (sKindMax sk1 sk2) <$$> \case
+    makePrim (sPrecMax sp1 sp2) (sBasicTypeMax sk1 sk2) <$$> \case
       MakePrim prim3 -> MatchNumR nk1 nk2 prim1 prim2 prim3
 
-primCeil :: Prim p1 k1 a -> Prim p2 k2 b -> Maybe (MakePrim (PrecMax p1 p2) (KindMax k1 k2))
+primCeil :: Prim p1 k1 a -> Prim p2 k2 b -> Maybe (MakePrim (PrecMax p1 p2) (BasicTypeMax k1 k2))
 primCeil prim1 prim2 = case (matchPrim prim1, matchPrim prim2) of
-  (MatchPrim p1 k1, MatchPrim p2 k2) -> makePrim (sPrecMax p1 p2) (sKindMax k1 k2)
+  (MatchPrim p1 k1, MatchPrim p2 k2) -> makePrim (sPrecMax p1 p2) (sBasicTypeMax k1 k2)
 
 
 data MatchCompareR a b where
-  MatchCompareR :: ComparableKinds k1 k2 -> Prim p1 k1 a -> Prim p2 k2 b -> MatchCompareR (PrimS a) (PrimS b)
+  MatchCompareR :: ComparableBasicTypes k1 k2 -> Prim p1 k1 a -> Prim p2 k2 b -> MatchCompareR (PrimS a) (PrimS b)
 
 -- | Checks if it is possible to perform a binary comparison (equality or
 -- relational) operation on arguments with the given respective types. If so,
@@ -130,13 +130,13 @@ data MatchCompareR a b where
 matchCompareR :: D a -> D b -> Maybe (MatchCompareR a b)
 matchCompareR =
   (matchingWithBoth matchNumR $ Just . \case
-      MatchNumR nk1 nk2 p1 p2 _ -> MatchCompareR (CKNum nk1 nk2) p1 p2
-  ) `alt2`
+      MatchNumR nk1 nk2 p1 p2 _ -> MatchCompareR (CBTNum nk1 nk2) p1 p2
+  ) `altf2`
   (matchingWith2 matchPrimD matchPrimD $ \case
-      (MatchPrimD (MatchPrim _ SKLogical) p1, MatchPrimD (MatchPrim _ SKLogical) p2) ->
-        Just (MatchCompareR CKBool p1 p2)
-      (MatchPrimD (MatchPrim _ SKChar) p1, MatchPrimD (MatchPrim _ SKChar) p2) ->
-        Just (MatchCompareR CKChar p1 p2)
+      (MatchPrimD (MatchPrim _ SBTLogical) p1, MatchPrimD (MatchPrim _ SBTLogical) p2) ->
+        Just (MatchCompareR CBTBool p1 p2)
+      (MatchPrimD (MatchPrim _ SBTChar) p1, MatchPrimD (MatchPrim _ SBTChar) p2) ->
+        Just (MatchCompareR CBTChar p1 p2)
       _ -> Nothing
   )
 
@@ -163,7 +163,7 @@ matchOpR operator argTypes =
         MatchNumType _ _ nk p :& RNil -> MatchOpR (ORNum1 nk p p) d1
 
       OpNot -> argsPrim >>= \case
-        MatchPrimD (MatchPrim _ SKLogical) p :& RNil -> Just $ MatchOpR (ORLogical1 p PBool8) (DPrim PBool8)
+        MatchPrimD (MatchPrim _ SBTLogical) p :& RNil -> Just $ MatchOpR (ORLogical1 p PBool8) (DPrim PBool8)
         _ -> Nothing
 
       -- In the deref case, we don't have access to a particular field to
@@ -181,19 +181,19 @@ matchOpR operator argTypes =
           MatchNumR nk1 nk2 p1 p2 p3 -> MatchOpR (ORNum2 nk1 nk2 p1 p2 p3) (DPrim p3)
 
       OpAnd -> argsPrim >>= \case
-        MatchPrimD (MatchPrim _ SKLogical) p1 :& MatchPrimD (MatchPrim _ SKLogical) p2 :& RNil ->
+        MatchPrimD (MatchPrim _ SBTLogical) p1 :& MatchPrimD (MatchPrim _ SBTLogical) p2 :& RNil ->
           Just $ MatchOpR (ORLogical2 p1 p2 PBool8) (DPrim PBool8)
         _ -> Nothing
       OpOr -> argsPrim >>= \case
-        MatchPrimD (MatchPrim _ SKLogical) p1 :& MatchPrimD (MatchPrim _ SKLogical) p2 :& RNil ->
+        MatchPrimD (MatchPrim _ SBTLogical) p1 :& MatchPrimD (MatchPrim _ SBTLogical) p2 :& RNil ->
           Just $ MatchOpR (ORLogical2 p1 p2 PBool8) (DPrim PBool8)
         _ -> Nothing
       OpEquiv -> argsPrim >>= \case
-        MatchPrimD (MatchPrim _ SKLogical) p1 :& MatchPrimD (MatchPrim _ SKLogical) p2 :& RNil ->
+        MatchPrimD (MatchPrim _ SBTLogical) p1 :& MatchPrimD (MatchPrim _ SBTLogical) p2 :& RNil ->
           Just $ MatchOpR (ORLogical2 p1 p2 PBool8) (DPrim PBool8)
         _ -> Nothing
       OpNotEquiv -> argsPrim >>= \case
-        MatchPrimD (MatchPrim _ SKLogical) p1 :& MatchPrimD (MatchPrim _ SKLogical) p2 :& RNil ->
+        MatchPrimD (MatchPrim _ SBTLogical) p1 :& MatchPrimD (MatchPrim _ SBTLogical) p2 :& RNil ->
           Just $ MatchOpR (ORLogical2 p1 p2 PBool8) (DPrim PBool8)
         _ -> Nothing
 

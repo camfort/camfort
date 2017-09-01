@@ -1,3 +1,4 @@
+{-# LANGUAGE TupleSections #-}
 {-# OPTIONS_GHC -Wall #-}
 {-# OPTIONS_GHC -fno-warn-unused-matches #-}
 
@@ -20,8 +21,9 @@
 
 {-|
 
-Provides translation from a subset of the dynamically typed Fortran from
-"Language.Fortran.AST" to the strongly typed expression language.
+Provides translation from a subset of the dynamically typed Fortran syntax
+("Language.Fortran.AST") to the strongly typed expression language
+("Language.Fortran.TypeModel").
 
 -}
 module Language.Fortran.TypeModel.Translate
@@ -34,12 +36,14 @@ module Language.Fortran.TypeModel.Translate
   , SomeVar
   , SomeExpr
   , SomeType
+    -- ** Semantics
+  , KindSelector(..)
+  , FortranSemantics(..)
+  , defaultSemantics
 
     -- * Translation Monad
     -- ** Environment
   , TranslateEnv(..)
-  , teImplictVars
-  , teVarsInScope
   , defaultTranslateEnv
     -- ** Errors
   , TranslateError(..)
@@ -57,7 +61,19 @@ module Language.Fortran.TypeModel.Translate
   , typeInfo
     -- ** Translation
   , translateTypeInfo
-    -- ** Lenses
+
+    -- * Lenses
+    -- ** 'FortranSemantics'
+  , fsIntegerKinds
+  , fsRealKinds
+  , fsLogicalKinds
+  , fsCharacterKinds
+  , fsDoublePrecisionKinds
+    -- * 'TranslateEnv'
+  , teVarsInScope
+  , teImplicitVars
+  , teSemantics
+    -- ** 'TypeInfo'
   , tiSrcSpan
   , tiBaseType
   , tiSelectorLength
@@ -82,6 +98,7 @@ import           Control.Monad.Except
 import           Control.Monad.Reader
 import           Data.Map                         (Map)
 
+import           Data.Singletons
 import           Data.Singletons.Prelude.List     (Length)
 
 import           Data.Vinyl
@@ -96,6 +113,7 @@ import           Language.Expression.Pretty
 import           Camfort.Analysis.Logger
 import           Camfort.Helpers.TypeLevel
 import           Language.Fortran.TypeModel
+import           Language.Fortran.TypeModel.Singletons
 import           Language.Fortran.TypeModel.Match
 import           Language.Fortran.TypeModel.Vars
 
@@ -116,6 +134,70 @@ type SomeExpr = Some (PairOf D FortranExpr)
 type SomeType = Some D
 
 --------------------------------------------------------------------------------
+--  Semantics
+--------------------------------------------------------------------------------
+
+-- | A function mapping numeric kind annotations from Fortran programs to actual
+-- precision, for a particular basic type `bt`.
+newtype KindSelector = KindSelector { selectKind :: Integer -> Maybe Precision }
+
+{-|
+
+A (currently very incomplete) specification of the semantics of a particular
+version of Fortran, needed when translating.
+
+-}
+data FortranSemantics =
+  FortranSemantics
+  { _fsIntegerKinds   :: KindSelector
+  , _fsRealKinds      :: KindSelector
+  , _fsCharacterKinds :: KindSelector
+  , _fsLogicalKinds   :: KindSelector
+  , _fsDoublePrecisionKinds :: Maybe KindSelector
+  }
+
+makeLenses ''FortranSemantics
+
+{-|
+
+== /Kinds/
+
+The default semantics has sensible defaults for kind 0 (unspecified). Otherwise,
+the kind is the number of bytes used for the type's representation. Only
+power-of-two values up to 8 are valid. Characters only allow single byte
+precision. Reals only allow 4- or 8-byte precision.
+
+-}
+defaultSemantics :: FortranSemantics
+defaultSemantics =
+  FortranSemantics
+  { _fsIntegerKinds = KindSelector $ \case
+      0 -> Just P64
+      1 -> Just P8
+      2 -> Just P16
+      4 -> Just P32
+      8 -> Just P64
+      _ -> Nothing
+  , _fsRealKinds = KindSelector $ \case
+      0 -> Just P32
+      4 -> Just P32
+      8 -> Just P64
+      _ -> Nothing
+  , _fsCharacterKinds = KindSelector $ \case
+      0 -> Just P8
+      _ -> Nothing
+  , _fsLogicalKinds = KindSelector $ \case
+      0 -> Just P8
+      1 -> Just P8
+      2 -> Just P16
+      4 -> Just P32
+      8 -> Just P64
+      _ -> Nothing
+  , _fsDoublePrecisionKinds = Nothing
+  }
+
+
+--------------------------------------------------------------------------------
 --  Translate Monad
 --------------------------------------------------------------------------------
 
@@ -123,19 +205,22 @@ type SomeType = Some D
 -- about the environment. That information is capture in this record.
 data TranslateEnv =
   TranslateEnv
-  { _teImplictVars :: Bool
+  { _teImplicitVars :: Bool
     -- ^ Are implicit variable types enabled? (TODO: this currently does
     -- nothing)
   , _teVarsInScope :: Map SourceName SomeVar
     -- ^ A map of the variables in scope, including their types and unique
     -- names.
+  , _teSemantics :: FortranSemantics
+    -- ^ The version of Fortran's semantics to use when translating code.
   }
 
 defaultTranslateEnv :: TranslateEnv
 defaultTranslateEnv =
   TranslateEnv
-  { _teImplictVars = True
+  { _teImplicitVars = True
   , _teVarsInScope = mempty
+  , _teSemantics = defaultSemantics
   }
 
 makeLenses ''TranslateEnv
@@ -169,12 +254,16 @@ data TranslateError
   -- ^ Found a literal value that we didn't know how to translate. May or may
   -- not be valid Fortran.
   | ErrUnexpectedType Text SomeType SomeType
-  -- ^ Tried to translate a FORTRAN language part into the wrong expression
-  -- type, and it wasn't coercible to the correct type.
+  -- ^ @'ErrUnexpectedType' message expected actual@: tried to translate a
+  -- Fortran language part into the wrong expression type, and it wasn't
+  -- coercible to the correct type.
   | ErrInvalidOpApplication (Some (Rec D))
   -- ^ Tried to apply an operator to arguments with the wrong types.
   | ErrVarNotInScope F.Name
   -- ^ Reference to a variable that's not currently in scope
+  | ErrInvalidKind Text Integer
+  -- ^ @'ErrInvalidKind' baseTypeName givenKind@: tried to interpret a type with
+  -- the given kind which is not valid under the semantics.
   deriving (Typeable)
 
 instance Describe TranslateError where
@@ -186,10 +275,10 @@ instance Describe TranslateError where
       "encountered a literal value that couldn't be translated; " <>
       "it might be invalid Fortran or it might use unsupported language features"
 
-    ErrUnexpectedType message ty1 ty2 ->
+    ErrUnexpectedType message expected actual ->
       "unexpected type in " <> describeBuilder message <>
-      "; expected type was '" <> describeBuilder (show ty1) <>
-      "'; actual type was '" <> describeBuilder (show ty2) <> "'"
+      "; expected type was '" <> describeBuilder (show expected) <>
+      "'; actual type was '" <> describeBuilder (show actual) <> "'"
 
     ErrInvalidOpApplication (Some argTypes) ->
       let descTypes
@@ -201,7 +290,11 @@ instance Describe TranslateError where
          mconcat (intersperse ", " descTypes)
 
     ErrVarNotInScope nm ->
-      "Reference to variable '" <> describeBuilder nm <> "' which is not in scope"
+      "reference to variable '" <> describeBuilder nm <> "' which is not in scope"
+
+    ErrInvalidKind bt k ->
+      "type with base '" <> describeBuilder bt <> "' specified a kind '" <>
+      describeBuilder (show k) <> "' which is not valid under the current semantics"
 
 unsupported :: (MonadError TranslateError m) => Text -> m a
 unsupported = throwError . ErrUnsupportedItem
@@ -266,10 +359,7 @@ translateTypeInfo
   => TypeInfo ann
   -> TranslateT m SomeType
 translateTypeInfo ti = do
-  let mtranslateBase = translateBaseType (ti ^. tiBaseType) (ti ^. tiSelectorKind)
-
-  SomePrimD basePrim <-
-    maybe (unsupported "type spec") return mtranslateBase
+  SomePrimD basePrim <- translateBaseType (ti ^. tiBaseType) (ti ^. tiSelectorKind)
 
   let
     -- If an attribute corresponds to a dimension declaration which contains a
@@ -311,17 +401,44 @@ data SomePrimD where
   SomePrimD :: D (PrimS a) -> SomePrimD
 
 translateBaseType
-  :: F.BaseType
+  :: (Monad m)
+  => F.BaseType
   -> Maybe (F.Expression ann) -- ^ Kind
-  -> Maybe SomePrimD
-translateBaseType bt Nothing = case bt of
-  F.TypeInteger         -> Just $ SomePrimD (DPrim PInt64)
-  F.TypeReal            -> Just $ SomePrimD (DPrim PFloat)
-  F.TypeDoublePrecision -> Just $ SomePrimD (DPrim PDouble)
-  F.TypeCharacter       -> Just $ SomePrimD (DPrim PChar)
-  F.TypeLogical         -> Just $ SomePrimD (DPrim PBool8)
-  _                     -> Nothing
-translateBaseType _ _ = Nothing -- TODO: Support kind specifiers
+  -> TranslateT m SomePrimD
+translateBaseType bt mkind = do
+
+  kindInt <- case mkind of
+    Nothing -> return 0
+    Just (F.ExpValue _ _ (F.ValInteger s)) ->
+      case readLitInteger s of
+        Just k -> return k
+        Nothing -> throwError ErrBadLiteral
+    _ -> unsupported "kind which isn't an integer literal"
+
+  let getKindPrec btName ksl = do
+        mks <- preview (teSemantics . ksl)
+        case mks >>= (`selectKind` kindInt) of
+          Just p -> return p
+          Nothing -> throwError $ ErrInvalidKind btName kindInt
+
+  -- Get value-level representations of the type's basic type and precision
+  (basicType, prec) <- case bt of
+    F.TypeInteger   -> (BTInt     ,) <$> getKindPrec "integer"   fsIntegerKinds
+    F.TypeReal      -> (BTReal    ,) <$> getKindPrec "real"      fsRealKinds
+    F.TypeCharacter -> (BTChar    ,) <$> getKindPrec "character" fsCharacterKinds
+    F.TypeLogical   -> (BTLogical ,) <$> getKindPrec "logical"   fsLogicalKinds
+    -- Double precision is special because it's not always supported as its own
+    -- basic type, being subsumed by the `REAL` basic type.
+    F.TypeDoublePrecision ->
+      (BTReal,) <$> getKindPrec "double precision" (fsDoublePrecisionKinds . _Just)
+    _ -> unsupported "type spec"
+
+  -- Lift the value-level representations to the type level and get a primitive
+  -- type with those properties.
+  case (toSing basicType, toSing prec) of
+    (SomeSing sbt, SomeSing sprec) -> case makePrim sprec sbt of
+      Just (MakePrim prim) -> return (SomePrimD (DPrim prim))
+      Nothing -> unsupported "type spec"
 
 --------------------------------------------------------------------------------
 --  Translating Expressions

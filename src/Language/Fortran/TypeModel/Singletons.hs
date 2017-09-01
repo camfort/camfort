@@ -8,6 +8,7 @@
 {-# LANGUAGE KindSignatures            #-}
 {-# LANGUAGE RankNTypes                #-}
 {-# LANGUAGE ScopedTypeVariables       #-}
+{-# LANGUAGE StandaloneDeriving        #-}
 {-# LANGUAGE TemplateHaskell           #-}
 {-# LANGUAGE TypeFamilies              #-}
 {-# LANGUAGE TypeInType                #-}
@@ -22,24 +23,26 @@ import           Data.Singletons.TH
 
 $(singletons
   [d|
+
+  -- | The precision, in bits, of an intrinsic Fortran data type.
   data Precision
     = P8
     | P16
     | P32
     | P64
     | P128
-    deriving (Show, Eq, Ord)
+    deriving (Eq, Ord)
 
-  data Kind
-    = KInt
-    | KReal
-    | KLogical
-    | KChar
-{-
-    | KProp
-    -- ^ A dummy data kind for embedding Fortran expressions in propositions
--}
-    deriving (Show, Eq, Ord)
+  -- | The basic type of an intrinsic Fortran data type.
+  data BasicType
+    -- NB. The order of the constructors is very important for the derived 'Ord'
+    -- instance! Numeric basicTypes that can represent smaller sets of numbers must be
+    -- earlier in the list.
+    = BTInt
+    | BTReal
+    | BTLogical
+    | BTChar
+    deriving (Eq, Ord)
 
   data OpKind
     = OKLit
@@ -51,16 +54,21 @@ $(singletons
     | OKDeref
     | OKWriteArr
     | OKWriteData
-{-
-    | OKProp
-    -- ^ A dummy operator type for embedding Fortran expressions in propositions
--}
-    -- deriving (Show, Eq, Ord)
 
-  -- | Finds the maximum of two precision types.
   precMax :: Precision -> Precision -> Precision
   precMax = max
 
-  kindMax :: Kind -> Kind -> Kind
-  kindMax = max
+  basicTypeMax :: BasicType -> BasicType -> BasicType
+  basicTypeMax = max
    |])
+
+-- These are derived outside the TH splice because we don't need them at the
+-- type level so we don't want to waste compilation time on type-level versions
+-- of them.
+
+deriving instance Show Precision
+deriving instance Show BasicType
+
+deriving instance Eq OpKind
+deriving instance Ord OpKind
+deriving instance Show OpKind

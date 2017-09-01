@@ -20,10 +20,10 @@ end subroutine example
 
 != static_assert post("x <= y" -> "min == x")
 != static_assert post("y <= x" -> "min == y")
-integer function min(x, y)
+integer (kind=8) function min(x, y)
   implicit none
 
-  integer :: x, y
+  integer (kind=4) :: x, y
 
   if (x <= y) then
     min = x

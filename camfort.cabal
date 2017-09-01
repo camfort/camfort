@@ -84,7 +84,6 @@ library
                         Camfort.Specification.Hoare.Lexer
                         Camfort.Specification.Hoare.Syntax
                         Camfort.Specification.Hoare.Translate
-                        Camfort.Specification.Hoare.Translate.Types
                         Camfort.Specification.Hoare.CheckFrontend
                         Camfort.Specification.Hoare.CheckBackend
                         Camfort.Transformation.CommonBlockElim
@@ -107,6 +106,7 @@ library
                         Language.Fortran.TypeModel.Eval.Primitives
                         Language.Fortran.TypeModel.Singletons
                         Language.Fortran.TypeModel.Types
+                        Language.Fortran.TypeModel.Translate
                         Language.Fortran.TypeModel.Util
 
   build-depends:        base >= 4.6 && < 5,

@@ -559,7 +559,7 @@ doTranslate handle trans ast = do
 toTranslateEnv :: CheckHoareEnv -> TranslateEnv
 toTranslateEnv env =
   defaultTranslateEnv
-    & teImplictVars .~ env ^. heImplicitVars
+    & teImplicitVars .~ env ^. heImplicitVars
     & teVarsInScope .~ env ^. heVarsInScope
 
 --------------------------------------------------------------------------------
