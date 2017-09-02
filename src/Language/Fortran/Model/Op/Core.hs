@@ -1,4 +1,3 @@
-{-# LANGUAGE UndecidableInstances #-}
 {-# LANGUAGE DataKinds             #-}
 {-# LANGUAGE FlexibleContexts      #-}
 {-# LANGUAGE FlexibleInstances     #-}
@@ -8,12 +7,19 @@
 {-# LANGUAGE MultiParamTypeClasses #-}
 {-# LANGUAGE PolyKinds             #-}
 {-# LANGUAGE ScopedTypeVariables   #-}
+{-# LANGUAGE UndecidableInstances  #-}
 
 {-# OPTIONS_GHC -Wall #-}
 
-module Language.Fortran.Model.FortranOp
+{-|
+Actual Fortran language operators. For expressions over normal Fortran values
+that are actually representable in Fortran.
+
++, -, *, /, read array, etc...
+-}
+module Language.Fortran.Model.Op.Core
   (
-    FortranOp(..)
+    CoreOp(..)
   , Op(..)
   , OpKind(..)
   , OpSpec(..)
@@ -28,23 +34,34 @@ import           Data.Vinyl.Curry
 import           Language.Expression
 import           Language.Expression.Pretty
 
-import           Language.Fortran.Model.FortranOp.Core
-import           Language.Fortran.Model.FortranOp.Eval
+import           Language.Fortran.Model.Repr
+import           Language.Fortran.Model.Op.Core.Core
+import           Language.Fortran.Model.Op.Core.Eval
 import           Language.Fortran.Model.Singletons
 import           Language.Fortran.Model.Types
 
 
-data FortranOp t a where
-  FortranOp :: Op (Length args) ok -> OpSpec ok args result -> Rec t args -> FortranOp t result
+data CoreOp t a where
+  CoreOp
+    :: Op (Length args) ok
+    -> OpSpec ok args result
+    -> Rec t args
+    -> CoreOp t result
 
-instance Operator FortranOp where
-  htraverseOp f (FortranOp op opr args) = FortranOp op opr <$> rtraverse f args
+instance Operator CoreOp where
+  htraverseOp f (CoreOp op opr args) = CoreOp op opr <$> rtraverse f args
 
-instance (MonadEvalFortran r m) => EvalOp m SymRepr FortranOp where
-  evalOp f (FortranOp op opr args) = rtraverse f args >>= evalFortranOp op opr
+instance (MonadEvalFortran r m) => EvalOp m CoreRepr CoreOp where
+  evalOp (CoreOp op opr args) = evalCoreOp op opr args
 
-instance Pretty2 FortranOp where
-  prettys2Prec p (FortranOp op opr args) = prettysPrecOp p opr op args
+instance (MonadEvalFortran r m) => EvalOp m HighRepr CoreOp where
+  evalOp = fmap HRCore . evalOp .
+    hmapOp (\case
+               HRCore x -> x
+               HRHigh _ -> error "impossible")
+
+instance Pretty2 CoreOp where
+  prettys2Prec p (CoreOp op opr args) = prettysPrecOp p opr op args
 
 showsPrim :: Prim p k a -> a -> ShowS
 showsPrim = \case
@@ -60,7 +77,12 @@ showsPrim = \case
   PDouble -> shows
   PChar   -> shows
 
-prettysPrecOp :: Pretty1 t => Int -> OpSpec ok args result -> Op (Length args) ok -> Rec t args -> ShowS
+prettysPrecOp
+  :: Pretty1 t
+  => Int
+  -> OpSpec ok args result
+  -> Op (Length args) ok
+  -> Rec t args -> ShowS
 prettysPrecOp p = \case
   OSLit px x -> \case
     OpLit -> runcurry $ showsPrim px x
@@ -120,8 +142,8 @@ prettysPrecOp p = \case
 
 -- TODO: HEq instance
 
--- instance HEq FortranOp where
---   liftHEq he le (FortranOp op1 opr1 args1) (FortranOp op2 opr2 args2) =
+-- instance HEq CoreOp where
+--   liftHEq he le (CoreOp op1 opr1 args1) (CoreOp op2 opr2 args2) =
 --     eqOp op1 op2 &&
 --     eqOpR opr1 opr2 &&
 --     liftEqRec (he _) args1 args2

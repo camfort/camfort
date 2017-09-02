@@ -10,7 +10,7 @@
 {-# OPTIONS_GHC -Wall      #-}
 
 -- TODO: Function calls
-module Language.Fortran.Model.FortranOp.Core where
+module Language.Fortran.Model.Op.Core.Core where
 
 import           Data.Singletons.TypeLits
 

@@ -13,28 +13,29 @@
 
 {-# OPTIONS_GHC -Wall      #-}
 
-module Language.Fortran.Model.FortranOp.Eval where
+module Language.Fortran.Model.Op.Core.Eval where
 
-import           Control.Applicative                    (liftA2)
-import           Control.Monad.Reader.Class             (MonadReader (..))
+import           Control.Applicative                  (liftA2)
+import           Control.Monad.Reader.Class           (MonadReader (..))
 
-import           Data.SBV                               (SDouble, SFloat, SReal,
-                                                         sRTZ)
-import qualified Data.SBV                               as SBV
-import           Data.SBV.Dynamic                       (SArr, SVal)
-import qualified Data.SBV.Dynamic                       as SBV
-import           Data.SBV.Internals                     (SBV (..))
+import           Data.SBV                             (SDouble, SFloat, SReal,
+                                                       sRTZ)
+import qualified Data.SBV                             as SBV
+import           Data.SBV.Dynamic                     (SArr, SVal)
+import qualified Data.SBV.Dynamic                     as SBV
+import           Data.SBV.Internals                   (SBV (..))
 
 import           Data.Singletons
 import           Data.Singletons.Prelude.List
 import           Data.Singletons.TypeLits
 
-import           Data.Vinyl                             hiding (Field)
+import           Data.Vinyl                           hiding (Field)
 import           Data.Vinyl.Curry
 
-import           Language.Fortran.Model.EvalPrim
-import           Language.Fortran.Model.FortranOp.Core
-import           Language.Fortran.Model.FortranOp.Match
+import           Language.Fortran.Model.Repr
+import           Language.Fortran.Model.Repr.Prim
+import           Language.Fortran.Model.Op.Core.Core
+import           Language.Fortran.Model.Op.Core.Match
 import           Language.Fortran.Model.Singletons
 import           Language.Fortran.Model.Types
 import           Language.Fortran.Model.Types.Match
@@ -43,17 +44,17 @@ import           Language.Fortran.Model.Types.Match
 --  Monad
 --------------------------------------------------------------------------------
 
-class (MonadReader r m, HasSymReprs r) => MonadEvalFortran r m | m -> r where
-instance (MonadReader r m, HasSymReprs r) => MonadEvalFortran r m where
+class (MonadReader r m, HasPrimReprHandler r) => MonadEvalFortran r m | m -> r where
+instance (MonadReader r m, HasPrimReprHandler r) => MonadEvalFortran r m where
 
 --------------------------------------------------------------------------------
 --  Evaluation
 --------------------------------------------------------------------------------
 
-evalFortranOp
+evalCoreOp
   :: (MonadEvalFortran r m)
-  => Op (Length args) ok -> OpSpec ok args result -> Rec SymRepr args -> m (SymRepr result)
-evalFortranOp op opr = case opr of
+  => Op (Length args) ok -> OpSpec ok args result -> Rec CoreRepr args -> m (CoreRepr result)
+evalCoreOp op opr = case opr of
   OSLit px x -> \_ -> primFromVal px <$> primLit px x
 
   OSNum1 _ _ p2 ->
@@ -82,17 +83,17 @@ evalFortranOp op opr = case opr of
 --  General
 --------------------------------------------------------------------------------
 
-primToVal :: SymRepr (PrimS a) -> SVal
+primToVal :: CoreRepr (PrimS a) -> SVal
 primToVal = \case
   SRPrim (DPrim _) v -> v
 
-primFromVal :: Prim p k a -> SVal -> SymRepr (PrimS a)
+primFromVal :: Prim p k a -> SVal -> CoreRepr (PrimS a)
 primFromVal p v = SRPrim (DPrim p) v
 
-toArr :: SymRepr (Array i v) -> SArr
+toArr :: CoreRepr (Array i v) -> SArr
 toArr (SRArray _ x) = x
 
-fromArr :: Index i -> ArrValue a -> SArr -> SymRepr (Array i a)
+fromArr :: Index i -> ArrValue a -> SArr -> CoreRepr (Array i a)
 fromArr index av = SRArray (DArray index av)
 
 primUnop
@@ -100,7 +101,7 @@ primUnop
   => Bool
   -> Prim p2 k2 b -- ^ The target type
   -> (SVal -> SVal)
-  -> Rec SymRepr '[PrimS a] -> m (SymRepr (PrimS b))
+  -> Rec CoreRepr '[PrimS a] -> m (CoreRepr (PrimS b))
 primUnop shouldCoerce p2 f = runcurry $ fmap (primFromVal p2 . f) . maybeCoerce . primToVal
   where
     maybeCoerce
@@ -114,7 +115,7 @@ primBinop
   -- ceiling of each.
   -> Prim p1 k1 a -> Prim p2 k2 b -> Prim p3 k3 c
   -> (SVal -> SVal -> SVal)
-  -> Rec SymRepr '[PrimS a, PrimS b] -> m (SymRepr (PrimS c))
+  -> Rec CoreRepr '[PrimS a, PrimS b] -> m (CoreRepr (PrimS c))
 primBinop takesResultVal p1 p2 p3 (.*.) =
   fmap (primFromVal p3) .
   runcurry (\x y -> liftA2 (.*.) (coerceArg (primToVal x)) (coerceArg (primToVal y)))
@@ -186,6 +187,7 @@ numBinop isInt = \case
 --------------------------------------------------------------------------------
 
 -- TODO: Always return single bits, special-case when inputs are not single bits.
+-- TODO: Worry about what happens when LHS and RHS have different types
 
 logicalUnop :: Op 1 'OKLogical -> SVal -> SVal
 logicalUnop = \case
@@ -232,8 +234,8 @@ relBinop _ = \case
 derefData
   :: RElem '(fname, a) fields i
   => SSymbol fname -> proxy a
-  -> SymRepr (Record rname fields)
-  -> SymRepr a
+  -> CoreRepr (Record rname fields)
+  -> CoreRepr a
 derefData nameSymbol valProxy (SRData _ dataRec) =
   case rget (pairProxy nameSymbol valProxy) dataRec of
     Field _ x -> x
@@ -245,7 +247,7 @@ derefData nameSymbol valProxy (SRData _ dataRec) =
 --  Write array
 --------------------------------------------------------------------------------
 
-writeArray :: SymRepr (Array i v) -> SymRepr i -> SymRepr v -> SymRepr (Array i v)
+writeArray :: CoreRepr (Array i v) -> CoreRepr i -> CoreRepr v -> CoreRepr (Array i v)
 writeArray arrRep ixRep valRep =
   case arrRep of
     SRArray d@(DArray (Index _) (ArrValue _)) arr ->
@@ -260,9 +262,9 @@ writeArray arrRep ixRep valRep =
 writeDataAt
   :: RElem '(fname, a) fields i
   => SSymbol fname
-  -> SymRepr (Record rname fields)
-  -> SymRepr a
-  -> SymRepr (Record rname fields)
+  -> CoreRepr (Record rname fields)
+  -> CoreRepr a
+  -> CoreRepr (Record rname fields)
 writeDataAt fieldSymbol (SRData d dataRec) valRep =
   SRData d $ rput (Field fieldSymbol valRep) dataRec
 

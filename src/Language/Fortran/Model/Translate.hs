@@ -113,8 +113,8 @@ import           Language.Expression.Pretty
 
 import           Camfort.Analysis.Logger
 import           Camfort.Helpers.TypeLevel
-import           Language.Fortran.Model.FortranOp
-import           Language.Fortran.Model.FortranOp.Match
+import           Language.Fortran.Model.Op.Core
+import           Language.Fortran.Model.Op.Core.Match
 import           Language.Fortran.Model.Singletons
 import           Language.Fortran.Model.Types
 import           Language.Fortran.Model.Types.Match
@@ -125,7 +125,7 @@ import           Language.Fortran.Model.Vars
 --------------------------------------------------------------------------------
 
 -- | The type of strongly-typed Fortran expressions.
-type FortranExpr = Expr FortranOp FortranVar
+type FortranExpr = Expr CoreOp FortranVar
 
 -- | A Fortran variable with an existential type.
 type SomeVar = Some FortranVar
@@ -492,7 +492,7 @@ translateSubscript arrAst [F.IxSingle _ _ _ ixAst] = do
 
   case matchOpSpec OpLookup (arrD :& ixD :& RNil) of
     Just (MatchOpSpec opResult resultD) ->
-      return $ SomePair resultD $ EOp $ FortranOp OpLookup opResult (arrExp :& ixExp :& RNil)
+      return $ SomePair resultD $ EOp $ CoreOp OpLookup opResult (arrExp :& ixExp :& RNil)
     Nothing ->
       case arrD of
         -- If the LHS is indeed an array, the index type must not have matched
@@ -547,7 +547,7 @@ translateLiteral v pa readLit
   = maybe (throwError ErrBadLiteral) (return . SomePair (DPrim pa) . flit pa)
   . readLit
   where
-    flit px x = EOp (FortranOp OpLit (OSLit px x) RNil)
+    flit px x = EOp (CoreOp OpLit (OSLit px x) RNil)
 
 
 translateOp1 :: F.UnaryOp -> Maybe (Some (Op 1))
@@ -608,7 +608,7 @@ translateOpApp operator argAsts = do
         Just x  -> return x
         Nothing -> throwError $ ErrInvalidOpApplication (Some argsD)
 
-      return $ SomePair resultD $ EOp $ FortranOp operator opResult argsExpr
+      return $ SomePair resultD $ EOp $ CoreOp operator opResult argsExpr
 
 
 translateOp2App

@@ -2,8 +2,8 @@
 
 module Language.Fortran.Model
   ( module Types
-  , module FortranOp
+  , module Op
   ) where
 
 import Language.Fortran.Model.Types as Types
-import Language.Fortran.Model.FortranOp as FortranOp
+import Language.Fortran.Model.Op as Op

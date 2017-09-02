@@ -56,7 +56,7 @@ import           Camfort.Specification.Hoare.Syntax
 --  Lifting Logical Values
 --------------------------------------------------------------------------------
 
-type MetaExpr = Expr' [FLiftLogical, FortranOp]
+type MetaExpr = Expr' [FLiftLogical, CoreOp]
 type MetaFormula = Prop (MetaExpr FortranVar)
 
 -- | Propositions expect values of type 'Bool', so this is necessary to do the
@@ -139,6 +139,6 @@ translateLogical = \case
 
 fortranToMetaExpr :: FortranExpr a -> MetaExpr FortranVar a
 fortranToMetaExpr (e :: FortranExpr a) =
-  let e' :: Expr FLiftLogical (Expr FortranOp FortranVar) a
+  let e' :: Expr FLiftLogical (Expr CoreOp FortranVar) a
       e' = EVar e
   in squashExpression e'

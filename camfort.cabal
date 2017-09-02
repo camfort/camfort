@@ -104,16 +104,20 @@ library
                         Camfort.Reprint
 
                         Language.Fortran.Model
-                        Language.Fortran.Model.Vars
-                        Language.Fortran.Model.FortranOp
-                        Language.Fortran.Model.FortranOp.Match
-                        Language.Fortran.Model.FortranOp.Core
-                        Language.Fortran.Model.FortranOp.Eval
-                        Language.Fortran.Model.EvalPrim
                         Language.Fortran.Model.Singletons
                         Language.Fortran.Model.Types
                         Language.Fortran.Model.Types.Match
                         Language.Fortran.Model.Translate
+                        Language.Fortran.Model.Repr
+                        Language.Fortran.Model.Repr.Prim
+                        Language.Fortran.Model.Vars
+                        Language.Fortran.Model.Op
+                        Language.Fortran.Model.Op.Core
+                        Language.Fortran.Model.Op.Core.Match
+                        Language.Fortran.Model.Op.Core.Core
+                        Language.Fortran.Model.Op.Core.Eval
+                        Language.Fortran.Model.Op.Meta
+                        Language.Fortran.Model.Op.High
                         Language.Fortran.Model.Util
 
   build-depends:        base >= 4.6 && < 5,

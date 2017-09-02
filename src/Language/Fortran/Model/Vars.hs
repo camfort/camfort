@@ -25,19 +25,19 @@ module Language.Fortran.Model.Vars
   , FortranVar(..)
   ) where
 
-import           Data.Typeable                         ((:~:) (..))
+import           Data.Typeable                      ((:~:) (..))
 
-import           Control.Lens                          hiding (Index, op)
+import           Control.Lens                       hiding (Index, op)
+import           Control.Monad.Reader               (MonadReader (..))
 
 import           Data.SBV.Dynamic
 
-import qualified Language.Fortran.AST                  as F
+import qualified Language.Fortran.AST               as F
 
 import           Language.Expression.Pretty
 import           Language.Verification
 
 import           Language.Fortran.Model.EvalPrim
-import           Language.Fortran.Model.FortranOp.Eval
 import           Language.Fortran.Model.Types
 import           Language.Fortran.Model.Types.Match
 
@@ -87,8 +87,8 @@ instance VerifiableVar FortranVar where
 
   symForVar (FortranVar d np) env =
     case d of
-      DPrim prim -> SRPrim d <$> varForPrim uniqueName prim env
-      DArray i val -> SRArray d <$> varForArray uniqueName i val env
+      DPrim prim -> SRPrim d <$> primSymbolic prim uniqueName env
+      DArray i val -> SRArray d <$> arraySymbolic i val uniqueName env
       DData _ _ -> fail "User-defined data type variables are not supported yet"
     where
       uniqueName = np ^. npUnique . _Wrapped
@@ -112,11 +112,8 @@ instance Pretty1 FortranVar where
 --  Internals
 --------------------------------------------------------------------------------
 
-varForPrim :: (MonadEvalFortran r m) => String -> Prim p k a -> m (Symbolic SVal)
-varForPrim = flip primSymbolic
-
-varForArray :: (MonadEvalFortran r m) => String -> Index i -> ArrValue a -> m (Symbolic SArr)
-varForArray nm (Index ixPrim) (ArrValue valPrim) = do
+arraySymbolic :: (MonadReader r m, HasSymReprs r) => Index i -> ArrValue a -> String -> m (Symbolic SArr)
+arraySymbolic (Index ixPrim) (ArrValue valPrim) nm = do
   k1 <- primSBVKind ixPrim
   k2 <- primSBVKind valPrim
   return $ newSArr (k1, k2) (const nm)

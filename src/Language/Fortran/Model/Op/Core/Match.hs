@@ -15,9 +15,9 @@
 
 -- TODO: Complex Numbers
 
-module Language.Fortran.Model.FortranOp.Match where
+module Language.Fortran.Model.Op.Core.Match where
 
-import           Control.Monad                            ((>=>))
+import           Control.Monad                       ((>=>))
 import           Data.Typeable
 
 import           Control.Lens
@@ -25,9 +25,9 @@ import           Control.Lens
 import           Data.Singletons
 import           Data.Singletons.Prelude.List
 
-import           Data.Vinyl                               hiding ((:~:), Field)
+import           Data.Vinyl                          hiding ((:~:), Field)
 
-import           Language.Fortran.Model.FortranOp.Core
+import           Language.Fortran.Model.Op.Core.Core
 import           Language.Fortran.Model.Singletons
 import           Language.Fortran.Model.Types
 import           Language.Fortran.Model.Types.Match

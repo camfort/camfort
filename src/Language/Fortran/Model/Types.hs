@@ -16,7 +16,6 @@
 
 module Language.Fortran.Model.Types where
 
-import           Data.Function                         (on)
 import           Data.Int                              (Int16, Int32, Int64,
                                                         Int8)
 import           Data.List                             (intersperse)
@@ -26,15 +25,10 @@ import           Data.Word                             (Word8)
 
 import           Data.Singletons.TypeLits
 
-import           Data.SBV                              (Boolean (..), SBool)
-import           Data.SBV.Dynamic
-
 import           Data.Vinyl                            hiding (Field)
 import           Data.Vinyl.Functor
 
-import           Language.Expression
 import           Language.Expression.Pretty
-import           Language.Expression.Prop              (LogicOp (..))
 
 import           Language.Fortran.Model.Singletons
 
@@ -52,7 +46,7 @@ newtype Char8  = Char8 { getChar8 :: Word8 } deriving (Show, Num, Eq, Typeable)
 --  Primitive Types
 --------------------------------------------------------------------------------
 
-newtype PrimS a = PrimS a
+newtype PrimS a = PrimS { getPrimS :: a }
   deriving (Show, Eq, Typeable)
 
 -- | Lists the allowed primitive Fortran types, with corresponding (phantom)
@@ -116,51 +110,6 @@ dIndex (Index p) = DPrim p
 
 dArrValue :: ArrValue a -> D a
 dArrValue (ArrValue p) = DPrim p
-
---------------------------------------------------------------------------------
---  SBV Representations
---------------------------------------------------------------------------------
-
-data SymRepr a where
-  SRPrim
-    :: D (PrimS a)
-    -> SVal
-    -> SymRepr (PrimS a)
-
-  SRArray
-    :: D (Array i a)
-    -> SArr
-    -> SymRepr (Array i a)
-
-  SRData
-    :: D (Record name fs)
-    -> Rec (Field SymRepr) fs
-    -> SymRepr (Record name fs)
-
-  SRProp
-    :: SBool
-    -> SymRepr Bool
-
-getReprD :: SymRepr a -> Maybe (D a)
-getReprD = \case
-  SRPrim d _  -> Just d
-  SRArray d _ -> Just d
-  SRData d _  -> Just d
-  SRProp _    -> Nothing
-
-instance Applicative f => EvalOp f SymRepr LogicOp where
-  evalOp f = \case
-    LogLit x     -> pure $ SRProp (fromBool x)
-    LogNot x     -> SRProp . bnot . getSrProp <$> f x
-    LogAnd x y   -> appBinop (&&&) x y
-    LogOr x y    -> appBinop (|||) x y
-    LogImpl x y  -> appBinop (==>) x y
-    LogEquiv x y -> appBinop (<=>) x y
-
-    where
-      appBinop g x y = fmap SRProp $ (g `on` getSrProp) <$> f x <*> f y
-      getSrProp :: SymRepr Bool -> SBool
-      getSrProp (SRProp x) = x
 
 --------------------------------------------------------------------------------
 --  Pretty Printing
