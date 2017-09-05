@@ -88,8 +88,8 @@ instance VerifiableVar FortranVar where
 
   symForVar (FortranVar d np) env =
     case d of
-      DPrim prim -> SRPrim d <$> primSymbolic prim uniqueName env
-      DArray i val -> SRArray d <$> arraySymbolic i val uniqueName env
+      DPrim prim -> CRPrim d <$> primSymbolic prim uniqueName env
+      DArray i val -> CRArray d <$> arraySymbolic i val uniqueName env
       DData _ _ -> fail "User-defined data type variables are not supported yet"
     where
       uniqueName = np ^. npUnique . _Wrapped
@@ -99,11 +99,11 @@ instance VerifiableVar FortranVar where
   eqVarTypes (FortranVar d1 _) (FortranVar d2 _) = eqD d1 d2
 
   castVarSym (FortranVar d1 _) s = case s of
-    SRPrim d2 _  | Just Refl <- eqD d1 d2 -> Just s
-    SRArray d2 _ | Just Refl <- eqD d1 d2 -> Just s
-    SRData d2 _  | Just Refl <- eqD d1 d2 -> Just s
+    CRPrim d2 _  | Just Refl <- eqD d1 d2 -> Just s
+    CRArray d2 _ | Just Refl <- eqD d1 d2 -> Just s
+    CRData d2 _  | Just Refl <- eqD d1 d2 -> Just s
 
-    -- Variables can't have the 'Bool' type so 'SRProp' can't be casted.
+    -- Variables can't have the 'Bool' type so 'CRProp' can't be casted.
     _            -> Nothing
 
 instance Pretty1 FortranVar where

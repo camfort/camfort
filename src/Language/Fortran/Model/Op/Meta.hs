@@ -15,6 +15,7 @@ module Language.Fortran.Model.Op.Meta where
 import Language.Fortran.Model.Repr
 
 import Language.Expression
+import Language.Expression.Pretty
 
 
 data MetaOp t a where
@@ -25,3 +26,6 @@ instance Operator MetaOp where
 
 instance (Applicative f) => EvalOp f HighRepr MetaOp where
   evalOp = \case
+
+instance Pretty2 MetaOp where
+  prettys2Prec _ = \case

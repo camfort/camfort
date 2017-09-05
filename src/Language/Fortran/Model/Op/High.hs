@@ -48,6 +48,9 @@ instance (MonadReader r m, HasPrimReprHandlers r) => EvalOp m HighRepr HighOp wh
   evalOp = \case
     HopLift x -> evalOp x
 
+instance Pretty2 HighOp where
+  prettys2Prec p (HopLift x) = prettys2Prec p x
+
 --------------------------------------------------------------------------------
 --  Lifting Fortran values
 --------------------------------------------------------------------------------

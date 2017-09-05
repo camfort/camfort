@@ -42,17 +42,17 @@ import           Language.Fortran.Model.Types
 --------------------------------------------------------------------------------
 
 data CoreRepr a where
-  SRPrim
+  CRPrim
     :: D (PrimS a)
     -> SVal
     -> CoreRepr (PrimS a)
 
-  SRArray
+  CRArray
     :: D (Array i a)
     -> SArr
     -> CoreRepr (Array i a)
 
-  SRData
+  CRData
     :: D (Record name fs)
     -> Rec (Field CoreRepr) fs
     -> CoreRepr (Record name fs)
@@ -60,9 +60,9 @@ data CoreRepr a where
 
 coreReprD :: CoreRepr a -> D a
 coreReprD = \case
-  SRPrim d _  -> d
-  SRArray d _ -> d
-  SRData d _  -> d
+  CRPrim d _  -> d
+  CRArray d _ -> d
+  CRData d _  -> d
 
 --------------------------------------------------------------------------------
 --  High-level data representations
@@ -97,12 +97,12 @@ class (SymWord a) => LiftD b a | b -> a where
   liftDRepr :: PrimReprHandlers -> HighRepr b -> HighRepr a
 
 liftDInt :: PrimReprHandlers -> HighRepr (PrimS a) -> HighRepr Integer
-liftDInt _ (HRCore (SRPrim _ x)) = HRHigh (SBV (svFromIntegral KUnbounded x))
+liftDInt _ (HRCore (CRPrim _ x)) = HRHigh (SBV (svFromIntegral KUnbounded x))
 liftDInt _ _ = error "impossible"
 
 
 liftDReal :: PrimReprHandlers -> HighRepr (PrimS a) -> HighRepr AlgReal
-liftDReal env (HRCore (SRPrim (DPrim prim) x)) =
+liftDReal env (HRCore (CRPrim (DPrim prim) x)) =
   HRHigh $ case primSBVKind prim env of
               KFloat -> fromSFloat sRTZ (SBV x)
               KDouble -> fromSDouble sRTZ (SBV x)
@@ -112,7 +112,7 @@ liftDReal env (HRCore (SRPrim (DPrim prim) x)) =
 liftDReal _ _ = error "impossible"
 
 liftDBool :: PrimReprHandlers -> HighRepr (PrimS a) -> HighRepr Bool
-liftDBool _ (HRCore (SRPrim _ x)) = HRHigh (SBV (x `svGreaterThan` svFalse))
+liftDBool _ (HRCore (CRPrim _ x)) = HRHigh (SBV (x `svGreaterThan` svFalse))
 liftDBool _ _ = error "impossible"
 
 
@@ -151,6 +151,6 @@ instance LiftD (PrimS Bool64) Bool where
 
 instance LiftD (PrimS Char8) Word8 where
   liftD = getChar8 . getPrimS
-  liftDRepr _ (HRCore (SRPrim _ x)) = HRHigh (sFromIntegral (SBV x :: SBV Word8))
+  liftDRepr _ (HRCore (CRPrim _ x)) = HRHigh (sFromIntegral (SBV x :: SBV Word8))
   liftDRepr _ _ =
     error "liftDRepr: a 'PrimS Char8' has a non-primitive representation"

@@ -12,6 +12,7 @@
 {-# LANGUAGE ScopedTypeVariables        #-}
 {-# LANGUAGE TemplateHaskell            #-}
 {-# LANGUAGE TypeSynonymInstances       #-}
+{-# LANGUAGE EmptyCase                  #-}
 {-# OPTIONS_GHC -Wall #-}
 
 -- TODO: More precise error and logging origins
@@ -56,7 +57,8 @@ import           Camfort.Specification.Hoare.Syntax
 import           Camfort.Specification.Hoare.Translate
 import           Language.Fortran.Model
 import           Language.Fortran.Model.Translate
-import           Language.Fortran.Model.EvalPrim
+import           Language.Fortran.Model.Repr
+import           Language.Fortran.Model.Repr.Prim
 import           Language.Fortran.Model.Vars
 
 import           Language.Expression
@@ -154,16 +156,16 @@ data CheckHoareEnv =
   , _heVarsInScope  :: ScopeVars
   -- ^ The variables in scope. Keyed by source name, and values have unique
   -- names.
-  , _heSymRepr      :: forall p k a. Prim p k a -> PrimSymRepr a
+  , _heReprHandler      :: forall p k a. Prim p k a -> PrimReprHandler a
   }
 
-instance HasSymReprs CheckHoareEnv where
-  getSymRepr = _heSymRepr
+instance HasPrimReprHandlers CheckHoareEnv where
+  primReprHandler = _heReprHandler
 
 initialState :: CheckHoareState
 initialState = CheckHoareState
 
-emptyEnv :: PrimSymSpec -> CheckHoareEnv
+emptyEnv :: PrimReprSpec -> CheckHoareEnv
 emptyEnv spec = CheckHoareEnv True mempty (makeSymRepr spec)
 
 makeLenses ''AnnotatedProgramUnit
@@ -174,7 +176,7 @@ makeLenses ''CheckHoareEnv
 --  Main function
 --------------------------------------------------------------------------------
 
-checkPU :: AnnotatedProgramUnit -> PrimSymSpec -> BackendAnalysis HoareCheckResult
+checkPU :: AnnotatedProgramUnit -> PrimReprSpec -> BackendAnalysis HoareCheckResult
 checkPU apu symSpec = do
 
   let pu = apu ^. apuPU
@@ -342,18 +344,18 @@ newFunctionVar pu ty =
 
 verifyVc :: (HoareBackendError -> CheckHoare Bool) -> MetaFormula Bool -> ReaderT CheckHoareEnv CheckHoare Bool
 verifyVc handle prop = do
-  let getSrProp :: SymRepr Bool -> SBool
-      getSrProp (SRProp x) = x
+  let getSrProp :: HighRepr Bool -> SBool
+      getSrProp (HRHigh x) = x
+      getSrProp (HRCore x) = case x of -- absurd
 
   let debug = False
       cfg
         | debug = defaultSMTCfg { verbose = True, transcript = Just "transcript.smt2" }
         | otherwise = defaultSMTCfg
 
-  env <- ask
-  let queryEnv = SymReprEnv (env ^. heSymRepr)
+  env <- asks primReprHandlers
 
-  res <- liftIO . runVerifierWith cfg . flip query queryEnv . flip runReaderT env . checkPropWith getSrProp id $ prop
+  res <- liftIO . runVerifierWith cfg . flip query env . flip runReaderT env . checkPropWith getSrProp HRCore $ prop
   case res of
     Right b -> return b
     Left e  -> lift $ handle (VerifierError e)
@@ -493,7 +495,7 @@ arrayAssignment arrName ixAst rvalAst = do
       -- Replace instances of the array variable with the same array, but with
       -- the new value written at the given index.
       let arrExpr = EVar varV
-          mkOp = rcurry $ FortranOp OpWriteArr (OSWriteArr varD)
+          mkOp = rcurry $ CoreOp OpWriteArr (OSWriteArr varD)
           arrExpr' = EOp (mkOp arrExpr ixExpr rvalExpr)
 
       return (Assignment varV (fortranToMetaExpr arrExpr'))

@@ -20,20 +20,20 @@ import           Camfort.Specification.Hoare.Annotation
 import           Camfort.Specification.Hoare.CheckBackend
 import           Camfort.Specification.Hoare.CheckFrontend
 import           Camfort.Specification.Hoare.Parser
-import           Language.Fortran.Model.EvalPrim
+import           Language.Fortran.Model.Repr.Prim
 
 getBlocks = FAB.analyseBBlocks . FAR.analyseRenames . FA.initAnalysis . fmap hoareAnn0
 
-check :: PrimSymSpec -> F.ProgramFile Annotation -> HoareAnalysis [HoareCheckResult]
-check symSpec = invariantChecking symSpec . getBlocks
+check :: PrimReprSpec -> F.ProgramFile Annotation -> HoareAnalysis [HoareCheckResult]
+check primSpec = invariantChecking primSpec . getBlocks
 
 newtype HoareCheckResults = HoareCheckResults [HoareCheckResult]
 
 instance Describe HoareCheckResults where
   describeBuilder (HoareCheckResults rs) = mconcat . intersperse "\n" . map describeBuilder $ rs
 
-defaultSymSpec :: PrimSymSpec
-defaultSymSpec = pssIdealized
+defaultSymSpec :: PrimReprSpec
+defaultSymSpec = prsIdealized
 
 testOn :: FilePath -> IO ()
 testOn fp = do

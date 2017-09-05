@@ -85,16 +85,16 @@ evalCoreOp op opr = case opr of
 
 primToVal :: CoreRepr (PrimS a) -> SVal
 primToVal = \case
-  SRPrim (DPrim _) v -> v
+  CRPrim (DPrim _) v -> v
 
 primFromVal :: Prim p k a -> SVal -> CoreRepr (PrimS a)
-primFromVal p v = SRPrim (DPrim p) v
+primFromVal p v = CRPrim (DPrim p) v
 
 toArr :: CoreRepr (Array i v) -> SArr
-toArr (SRArray _ x) = x
+toArr (CRArray _ x) = x
 
 fromArr :: Index i -> ArrValue a -> SArr -> CoreRepr (Array i a)
-fromArr index av = SRArray (DArray index av)
+fromArr index av = CRArray (DArray index av)
 
 primUnop
   :: (MonadEvalFortran r m)
@@ -236,7 +236,7 @@ derefData
   => SSymbol fname -> proxy a
   -> CoreRepr (Record rname fields)
   -> CoreRepr a
-derefData nameSymbol valProxy (SRData _ dataRec) =
+derefData nameSymbol valProxy (CRData _ dataRec) =
   case rget (pairProxy nameSymbol valProxy) dataRec of
     Field _ x -> x
   where
@@ -250,10 +250,10 @@ derefData nameSymbol valProxy (SRData _ dataRec) =
 writeArray :: CoreRepr (Array i v) -> CoreRepr i -> CoreRepr v -> CoreRepr (Array i v)
 writeArray arrRep ixRep valRep =
   case arrRep of
-    SRArray d@(DArray (Index _) (ArrValue _)) arr ->
+    CRArray d@(DArray (Index _) (ArrValue _)) arr ->
       case (ixRep, valRep) of
-        (SRPrim _ ixVal, SRPrim _ valVal) ->
-          SRArray d (SBV.writeSArr arr ixVal valVal)
+        (CRPrim _ ixVal, CRPrim _ valVal) ->
+          CRArray d (SBV.writeSArr arr ixVal valVal)
 
 --------------------------------------------------------------------------------
 --  Write Data
@@ -265,8 +265,8 @@ writeDataAt
   -> CoreRepr (Record rname fields)
   -> CoreRepr a
   -> CoreRepr (Record rname fields)
-writeDataAt fieldSymbol (SRData d dataRec) valRep =
-  SRData d $ rput (Field fieldSymbol valRep) dataRec
+writeDataAt fieldSymbol (CRData d dataRec) valRep =
+  CRData d $ rput (Field fieldSymbol valRep) dataRec
 
 --------------------------------------------------------------------------------
 --  Equality of operators

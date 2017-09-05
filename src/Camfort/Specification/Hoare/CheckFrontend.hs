@@ -26,7 +26,7 @@ import           Camfort.Analysis
 import           Camfort.Analysis.CommentAnnotator
 import           Camfort.Specification.Parser             (SpecParseError)
 
-import           Language.Fortran.Model.EvalPrim
+import           Language.Fortran.Model.Repr.Prim
 
 import           Camfort.Specification.Hoare.Annotation
 import           Camfort.Specification.Hoare.CheckBackend
@@ -103,8 +103,8 @@ findAnnotatedPUs pf =
   in catMaybes <$> traverse collectUnit pusWithSpecs
 
 
-invariantChecking :: PrimSymSpec -> F.ProgramFile HA -> HoareAnalysis [HoareCheckResult]
-invariantChecking symSpec pf = do
+invariantChecking :: PrimReprSpec -> F.ProgramFile HA -> HoareAnalysis [HoareCheckResult]
+invariantChecking primSpec pf = do
     -- Attempt to parse comments to specifications
   pf' <- annotateComments hoareParser parseError pf
 
@@ -116,7 +116,7 @@ invariantChecking symSpec pf = do
               F.Named x -> x
               _         -> show nm
         logInfo' (apu ^. apuPU) $ "Verifying program unit: " <> prettyName
-        loggingAnalysisError . mapAnalysisT BackendError id $ checkPU apu symSpec
+        loggingAnalysisError . mapAnalysisT BackendError id $ checkPU apu primSpec
 
   catMaybes <$> traverse checkAndReport annotatedPUs
 
