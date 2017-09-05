@@ -348,10 +348,9 @@ verifyVc handle prop = do
       getSrProp (HRHigh x) = x
       getSrProp (HRCore x) = case x of -- absurd
 
-  let debug = False
-      cfg
-        | debug = defaultSMTCfg { verbose = True, transcript = Just "transcript.smt2" }
-        | otherwise = defaultSMTCfg
+  let debug = True
+      cfg | debug = defaultSMTCfg { verbose = True, transcript = Just "transcript.smt2" }
+          | otherwise = defaultSMTCfg
 
   env <- asks primReprHandlers
 

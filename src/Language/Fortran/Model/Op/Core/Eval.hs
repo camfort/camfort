@@ -13,7 +13,10 @@
 
 {-# OPTIONS_GHC -Wall      #-}
 
-module Language.Fortran.Model.Op.Core.Eval where
+module Language.Fortran.Model.Op.Core.Eval
+  ( MonadEvalFortran
+  , evalCoreOp
+  ) where
 
 import           Control.Applicative                  (liftA2)
 import           Control.Monad.Reader.Class           (MonadReader (..))
@@ -32,10 +35,10 @@ import           Data.Singletons.TypeLits
 import           Data.Vinyl                           hiding (Field)
 import           Data.Vinyl.Curry
 
-import           Language.Fortran.Model.Repr
-import           Language.Fortran.Model.Repr.Prim
 import           Language.Fortran.Model.Op.Core.Core
 import           Language.Fortran.Model.Op.Core.Match
+import           Language.Fortran.Model.Repr
+import           Language.Fortran.Model.Repr.Prim
 import           Language.Fortran.Model.Singletons
 import           Language.Fortran.Model.Types
 import           Language.Fortran.Model.Types.Match
@@ -92,9 +95,6 @@ primFromVal p v = CRPrim (DPrim p) v
 
 toArr :: CoreRepr (Array i v) -> SArr
 toArr (CRArray _ x) = x
-
-fromArr :: Index i -> ArrValue a -> SArr -> CoreRepr (Array i a)
-fromArr index av = CRArray (DArray index av)
 
 primUnop
   :: (MonadEvalFortran r m)
