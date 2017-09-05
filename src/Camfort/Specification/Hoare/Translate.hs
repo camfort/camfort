@@ -23,7 +23,6 @@ module Camfort.Specification.Hoare.Translate
   (
     MetaExpr
   , MetaFormula
-  , FLiftLogical
 
   , translateBoolExpression
   , translateFormula
@@ -34,17 +33,14 @@ import           Prelude                               hiding (span)
 
 import           Control.Monad.Except                  (MonadError (..))
 
-import           Data.SBV.Dynamic                      (svFalse, svGreaterThan)
-import           Data.SBV.Internals                    (SBV (SBV))
-
 import qualified Language.Fortran.AST                  as F
 
 import           Language.Expression
-import           Language.Expression.Pretty
 import           Language.Expression.Prop
 
 import           Camfort.Helpers.TypeLevel
 import           Language.Fortran.Model
+import           Language.Fortran.Model.Repr
 import           Language.Fortran.Model.Types.Match
 import           Language.Fortran.Model.Singletons
 import           Language.Fortran.Model.Translate
@@ -56,41 +52,8 @@ import           Camfort.Specification.Hoare.Syntax
 --  Lifting Logical Values
 --------------------------------------------------------------------------------
 
-type MetaExpr = Expr' [FLiftLogical, CoreOp]
+type MetaExpr = Expr' [HighOp, MetaOp, CoreOp]
 type MetaFormula = Prop (MetaExpr FortranVar)
-
--- | Propositions expect values of type 'Bool', so this is necessary to do the
--- conversion.
-data FLiftLogical t a where
-  FLL8  :: t (PrimS Bool8) -> FLiftLogical t Bool
-  FLL16 :: t (PrimS Bool16) -> FLiftLogical t Bool
-  FLL32 :: t (PrimS Bool32) -> FLiftLogical t Bool
-  FLL64 :: t (PrimS Bool64) -> FLiftLogical t Bool
-
-instance Operator FLiftLogical where
-  htraverseOp f = \case
-    FLL8 x -> FLL8 <$> f x
-    FLL16 x -> FLL16 <$> f x
-    FLL32 x -> FLL32 <$> f x
-    FLL64 x -> FLL64 <$> f x
-
-instance (Applicative f) => EvalOp f SymRepr FLiftLogical where
-  evalOp f = \case
-    FLL8  x -> primToBool <$> f x
-    FLL16 x -> primToBool <$> f x
-    FLL32 x -> primToBool <$> f x
-    FLL64 x -> primToBool <$> f x
-    where
-      primToBool :: SymRepr (PrimS a) -> SymRepr Bool
-      primToBool (SRPrim _ v) = SRProp (SBV (v `svGreaterThan` svFalse))
-
-instance Pretty2 FLiftLogical where
-  prettys2Prec p = \case
-    FLL8  x -> prettys1Prec p x
-    FLL16 x -> prettys1Prec p x
-    FLL32 x -> prettys1Prec p x
-    FLL64 x -> prettys1Prec p x
-
 
 --------------------------------------------------------------------------------
 --  Translate
@@ -111,16 +74,14 @@ translateBoolExpression
 translateBoolExpression e = do
   SomePair d1 e' <- translateExpression e
 
-  resUnsquashed :: Expr FLiftLogical FortranExpr Bool <- case matchPrimD d1 of
-    Just (MatchPrimD (MatchPrim _ SBTLogical) prim1) -> return $ EOp $
+  case matchPrimD d1 of
+    Just (MatchPrimD (MatchPrim _ SBTLogical) prim1) -> return $
       case prim1 of
-        PBool8  -> FLL8 (EVar e')
-        PBool16 -> FLL16 (EVar e')
-        PBool32 -> FLL32 (EVar e')
-        PBool64 -> FLL64 (EVar e')
+        PBool8  -> liftFortranExpr e'
+        PBool16 -> liftFortranExpr e'
+        PBool32 -> liftFortranExpr e'
+        PBool64 -> liftFortranExpr e'
     _ -> throwError $ ErrUnexpectedType "formula" (Some (DPrim PBool8)) (Some d1)
-
-  return (squashExpression resUnsquashed)
 
 
 translateLogical :: PrimLogic (MetaFormula Bool) -> MetaFormula Bool
@@ -137,8 +98,13 @@ translateLogical = \case
 --  Util
 --------------------------------------------------------------------------------
 
+liftFortranExpr :: (LiftD a b) => FortranExpr a -> MetaExpr FortranVar b
+liftFortranExpr e =
+  let e' = EOp (HopLift (LiftDOp (EVar e)))
+  in squashExpression e'
+
 fortranToMetaExpr :: FortranExpr a -> MetaExpr FortranVar a
 fortranToMetaExpr (e :: FortranExpr a) =
-  let e' :: Expr FLiftLogical (Expr CoreOp FortranVar) a
+  let e' :: Expr MetaOp (Expr CoreOp FortranVar) a
       e' = EVar e
   in squashExpression e'

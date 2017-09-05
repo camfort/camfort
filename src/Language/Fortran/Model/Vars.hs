@@ -37,7 +37,8 @@ import qualified Language.Fortran.AST               as F
 import           Language.Expression.Pretty
 import           Language.Verification
 
-import           Language.Fortran.Model.EvalPrim
+import           Language.Fortran.Model.Repr
+import           Language.Fortran.Model.Repr.Prim
 import           Language.Fortran.Model.Types
 import           Language.Fortran.Model.Types.Match
 
@@ -82,8 +83,8 @@ data FortranVar a where
 
 instance VerifiableVar FortranVar where
   type VarKey FortranVar = UniqueName
-  type VarSym FortranVar = SymRepr
-  type VarEnv FortranVar = SymReprEnv
+  type VarSym FortranVar = CoreRepr
+  type VarEnv FortranVar = PrimReprHandlers
 
   symForVar (FortranVar d np) env =
     case d of
@@ -112,7 +113,7 @@ instance Pretty1 FortranVar where
 --  Internals
 --------------------------------------------------------------------------------
 
-arraySymbolic :: (MonadReader r m, HasSymReprs r) => Index i -> ArrValue a -> String -> m (Symbolic SArr)
+arraySymbolic :: (MonadReader r m, HasPrimReprHandlers r) => Index i -> ArrValue a -> String -> m (Symbolic SArr)
 arraySymbolic (Index ixPrim) (ArrValue valPrim) nm = do
   k1 <- primSBVKind ixPrim
   k2 <- primSBVKind valPrim

@@ -31,11 +31,3 @@ module Language.Fortran.Model.Op.Meta.Core where
 -- import           Language.Fortran.Model.MetaOp.Repr
 
 
--- | Operations that can't actually occur in Fortran but which nevertheless are
--- used in converting it to a logical representation. E.g. immutable array update.
-data MetaOp t a where
-
-
--- | High-level calculations and assertions over high-level data. E.g. folds
--- over arrays and high-level mathematical functions such as factorial.
-data HighOp t a where

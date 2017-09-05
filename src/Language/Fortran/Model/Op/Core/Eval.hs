@@ -44,8 +44,8 @@ import           Language.Fortran.Model.Types.Match
 --  Monad
 --------------------------------------------------------------------------------
 
-class (MonadReader r m, HasPrimReprHandler r) => MonadEvalFortran r m | m -> r where
-instance (MonadReader r m, HasPrimReprHandler r) => MonadEvalFortran r m where
+class (MonadReader r m, HasPrimReprHandlers r) => MonadEvalFortran r m | m -> r where
+instance (MonadReader r m, HasPrimReprHandlers r) => MonadEvalFortran r m where
 
 --------------------------------------------------------------------------------
 --  Evaluation

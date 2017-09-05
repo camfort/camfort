@@ -200,26 +200,30 @@ makeSymRepr spec = \case
 --------------------------------------------------------------------------------
 -- * Monadic Accessors
 
-class HasPrimReprHandler r where
-  getSymRepr :: r -> Prim p k a -> PrimReprHandler a
+class HasPrimReprHandlers r where
+  primReprHandlers :: r -> PrimReprHandlers
+  primReprHandlers env = PrimReprHandlers (primReprHandler env)
+
+  primReprHandler :: r -> Prim p k a -> PrimReprHandler a
+  primReprHandler = unPrimReprHandlers . primReprHandlers
 
 newtype PrimReprHandlers =
-  PrimReprHandlers (forall p k a. Prim p k a -> PrimReprHandler a)
+  PrimReprHandlers { unPrimReprHandlers :: forall p k a. Prim p k a -> PrimReprHandler a }
 
-instance HasPrimReprHandler PrimReprHandlers where
-  getSymRepr (PrimReprHandlers k) = k
+instance HasPrimReprHandlers PrimReprHandlers where
+  primReprHandlers = id
 
-primSBVKind :: (MonadReader r m, HasPrimReprHandler r) => Prim p k a -> m SBV.Kind
-primSBVKind p = view (to (flip getSymRepr p) . prhKind)
+primSBVKind :: (MonadReader r m, HasPrimReprHandlers r) => Prim p k a -> m SBV.Kind
+primSBVKind p = view (to (flip primReprHandler p) . prhKind)
 
-primLit :: (MonadReader r m, HasPrimReprHandler r) => Prim p k a -> a -> m SVal
+primLit :: (MonadReader r m, HasPrimReprHandlers r) => Prim p k a -> a -> m SVal
 primLit p a = do
-  lit <- view (to (flip getSymRepr p) . prhLiteral)
+  lit <- view (to (flip primReprHandler p) . prhLiteral)
   return (lit a)
 
 primSymbolic
-  :: (MonadReader r m, HasPrimReprHandler r)
+  :: (MonadReader r m, HasPrimReprHandlers r)
   => Prim p k a -> String -> m (SBV.Symbolic SVal)
 primSymbolic p nm = do
-  symbolic <- view (to (flip getSymRepr p) . prhSymbolic)
+  symbolic <- view (to (flip primReprHandler p) . prhSymbolic)
   return (symbolic nm)
