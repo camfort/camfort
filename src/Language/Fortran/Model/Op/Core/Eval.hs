@@ -77,10 +77,7 @@ evalCoreOp op opr = case opr of
           indexVal = primToVal index
       in primFromVal elPrim (SBV.readSArr xsArr indexVal))
 
-  OSWriteArr _ -> return . runcurry writeArray
-
   OSDeref _ s -> return . runcurry (derefData s Proxy)
-  OSWriteData _ s _ -> return . runcurry (writeDataAt s)
 
 --------------------------------------------------------------------------------
 --  General
@@ -242,31 +239,6 @@ derefData nameSymbol valProxy (CRData _ dataRec) =
   where
     pairProxy :: p1 a -> p2 b -> Proxy '(a, b)
     pairProxy _ _ = Proxy
-
---------------------------------------------------------------------------------
---  Write array
---------------------------------------------------------------------------------
-
-writeArray :: CoreRepr (Array i v) -> CoreRepr i -> CoreRepr v -> CoreRepr (Array i v)
-writeArray arrRep ixRep valRep =
-  case arrRep of
-    CRArray d@(DArray (Index _) (ArrValue _)) arr ->
-      case (ixRep, valRep) of
-        (CRPrim _ ixVal, CRPrim _ valVal) ->
-          CRArray d (SBV.writeSArr arr ixVal valVal)
-
---------------------------------------------------------------------------------
---  Write Data
---------------------------------------------------------------------------------
-
-writeDataAt
-  :: RElem '(fname, a) fields i
-  => SSymbol fname
-  -> CoreRepr (Record rname fields)
-  -> CoreRepr a
-  -> CoreRepr (Record rname fields)
-writeDataAt fieldSymbol (CRData d dataRec) valRep =
-  CRData d $ rput (Field fieldSymbol valRep) dataRec
 
 --------------------------------------------------------------------------------
 --  Equality of operators

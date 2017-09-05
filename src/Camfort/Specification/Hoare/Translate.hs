@@ -1,8 +1,8 @@
-{-# LANGUAGE FlexibleInstances     #-}
 {-# LANGUAGE ConstraintKinds       #-}
 {-# LANGUAGE DataKinds             #-}
 {-# LANGUAGE DeriveFunctor         #-}
 {-# LANGUAGE FlexibleContexts      #-}
+{-# LANGUAGE FlexibleInstances     #-}
 {-# LANGUAGE GADTs                 #-}
 {-# LANGUAGE LambdaCase            #-}
 {-# LANGUAGE MultiParamTypeClasses #-}
@@ -26,14 +26,15 @@ module Camfort.Specification.Hoare.Translate
 
   , translateBoolExpression
   , translateFormula
-  , fortranToMetaExpr
+  , intoMetaExpr
   ) where
 
-import           Prelude                               hiding (span)
+import           Prelude                            hiding (span)
 
-import           Control.Monad.Except                  (MonadError (..))
+import           Control.Lens                       (review)
+import           Control.Monad.Except               (MonadError (..))
 
-import qualified Language.Fortran.AST                  as F
+import qualified Language.Fortran.AST               as F
 
 import           Language.Expression
 import           Language.Expression.Prop
@@ -41,9 +42,9 @@ import           Language.Expression.Prop
 import           Camfort.Helpers.TypeLevel
 import           Language.Fortran.Model
 import           Language.Fortran.Model.Repr
-import           Language.Fortran.Model.Types.Match
 import           Language.Fortran.Model.Singletons
 import           Language.Fortran.Model.Translate
+import           Language.Fortran.Model.Types.Match
 import           Language.Fortran.Model.Vars
 
 import           Camfort.Specification.Hoare.Syntax
@@ -52,7 +53,8 @@ import           Camfort.Specification.Hoare.Syntax
 --  Lifting Logical Values
 --------------------------------------------------------------------------------
 
-type MetaExpr = Expr' [HighOp, MetaOp, CoreOp]
+type AllOps = '[HighOp, MetaOp, CoreOp]
+type MetaExpr = Expr' AllOps
 type MetaFormula = Prop (MetaExpr FortranVar)
 
 --------------------------------------------------------------------------------
@@ -103,8 +105,6 @@ liftFortranExpr e =
   let e' = EOp (HopLift (LiftDOp (EVar e)))
   in squashExpression e'
 
-fortranToMetaExpr :: FortranExpr a -> MetaExpr FortranVar a
-fortranToMetaExpr (e :: FortranExpr a) =
-  let e' :: Expr MetaOp (Expr CoreOp FortranVar) a
-      e' = EVar e
-  in squashExpression e'
+
+intoMetaExpr :: (ChooseOp op AllOps, Operator op) => Expr op v a -> MetaExpr v a
+intoMetaExpr e = Expr' (mapOperators (review chooseOp) e)

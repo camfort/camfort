@@ -162,17 +162,6 @@ matchOpSpec operator argTypes =
           _         -> Nothing
         _ -> Nothing
 
-      -- See comment attached to 'OpDeref'
-      OpWriteData -> Nothing
-
-    d1 :& d2 :& d3 :& RNil -> case operator of
-      OpWriteArr -> with (d1, d2, d3) $ traverseOf _2 matchPrimD >=> traverseOf _3 matchPrimD >=> \case
-        (DArray (Index ix1) (ArrValue av1), MatchPrimD _ ix2, MatchPrimD _ av2) ->
-          case (eqPrim ix1 ix2, eqPrim av1 av2) of
-            (Just Refl, Just Refl) -> Just (MatchOpSpec (OSWriteArr d1) d1)
-            _                      -> Nothing
-        _ -> Nothing
-
     _ -> Nothing
 
   where

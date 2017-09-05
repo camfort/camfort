@@ -1,8 +1,14 @@
+{-# LANGUAGE UndecidableInstances #-}
+{-# LANGUAGE DataKinds             #-}
+{-# LANGUAGE EmptyCase             #-}
+{-# LANGUAGE FlexibleContexts      #-}
+{-# LANGUAGE FlexibleInstances     #-}
+{-# LANGUAGE GADTs                 #-}
+{-# LANGUAGE LambdaCase            #-}
 {-# LANGUAGE MultiParamTypeClasses #-}
-{-# LANGUAGE FlexibleInstances #-}
-{-# LANGUAGE PolyKinds #-}
-{-# LANGUAGE LambdaCase #-}
-{-# LANGUAGE EmptyCase #-}
+{-# LANGUAGE PolyKinds             #-}
+
+{-# OPTIONS_GHC -Wall #-}
 
 {-|
 For expressions over normal Fortran values that are not representable in Fortran.
@@ -12,20 +18,95 @@ For expressions over normal Fortran values that are not representable in Fortran
 -}
 module Language.Fortran.Model.Op.Meta where
 
-import Language.Fortran.Model.Repr
+import           Data.Vinyl.Lens
 
-import Language.Expression
-import Language.Expression.Pretty
+import           Data.Singletons.TypeLits
+
+import qualified Data.SBV.Dynamic                     as SBV
+
+import           Language.Expression
+import           Language.Expression.Pretty
+
+import           Language.Fortran.Model.Repr
+import           Language.Fortran.Model.Op.Core.Eval
+import           Language.Fortran.Model.Types
+
 
 
 data MetaOp t a where
+  MopWriteArr
+    :: D (Array i v)
+    -> t (Array i v)
+    -> t i
+    -> t v
+    -> MetaOp t (Array i v)
+
+  MopWriteData
+    :: RElem '(fname, a) fields i
+    => D (Record rname fields) -- ^ Record to write to
+    -> SSymbol fname           -- ^ Field to write
+    -> D a                     -- ^ New value
+    -> t (Record rname fields)
+    -> t a
+    -> MetaOp t (Record rname fields)
 
 
 instance Operator MetaOp where
-  htraverseOp _ = \case
+  htraverseOp f = \case
+    MopWriteArr d x y z -> MopWriteArr d <$> f x <*> f y <*> f z
+    MopWriteData a b c x y -> MopWriteData a b c <$> f x <*> f y
 
-instance (Applicative f) => EvalOp f HighRepr MetaOp where
+
+instance (Applicative f) => EvalOp f CoreRepr MetaOp where
   evalOp = \case
+    MopWriteArr _ arr ix val -> pure $ writeArray arr ix val
+    MopWriteData _ fname _ rec val -> pure $ writeDataAt fname rec val
+
+instance (MonadEvalFortran r m) => EvalOp m HighRepr MetaOp where
+  evalOp = fmap HRCore . evalOp .
+    hmapOp (\case
+               HRCore x -> x
+               HRHigh _ -> error "impossible")
+
 
 instance Pretty2 MetaOp where
-  prettys2Prec _ = \case
+  prettys2Prec p = \case
+    MopWriteArr _ arr i v ->
+      -- e.g. @myArrayVar[9 <- "new value"]@
+      showParen (p > 9) $ prettys1Prec 10 arr .
+                          showString "[" . prettys1Prec 0 i .
+                          showString " <- " . prettys1Prec 0 v .
+                          showString "]"
+    MopWriteData _ fname _ r v ->
+      showParen (p > 9) $ prettys1Prec 10 r .
+      showString "{" .
+      showString (withKnownSymbol fname (symbolVal fname)) .
+      showString " <- " .
+      prettys1Prec 0 v .
+      showString "}"
+
+
+--------------------------------------------------------------------------------
+--  Write array
+--------------------------------------------------------------------------------
+
+writeArray :: CoreRepr (Array i v) -> CoreRepr i -> CoreRepr v -> CoreRepr (Array i v)
+writeArray arrRep ixRep valRep =
+  case arrRep of
+    CRArray d@(DArray (Index _) (ArrValue _)) arr ->
+      case (ixRep, valRep) of
+        (CRPrim _ ixVal, CRPrim _ valVal) ->
+          CRArray d (SBV.writeSArr arr ixVal valVal)
+
+--------------------------------------------------------------------------------
+--  Write Data
+--------------------------------------------------------------------------------
+
+writeDataAt
+  :: RElem '(fname, a) fields i
+  => SSymbol fname
+  -> CoreRepr (Record rname fields)
+  -> CoreRepr a
+  -> CoreRepr (Record rname fields)
+writeDataAt fieldSymbol (CRData d dataRec) valRep =
+  CRData d $ rput (Field fieldSymbol valRep) dataRec

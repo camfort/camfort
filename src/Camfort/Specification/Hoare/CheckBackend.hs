@@ -38,7 +38,6 @@ import           Data.Foldable                              (foldlM)
 import           Data.Generics.Uniplate.Operations
 import           Data.Map                                   (Map)
 import           Data.Maybe                                 (isJust)
-import           Data.Vinyl.Curry
 import           Data.Void                                  (Void)
 
 import           Data.SBV                                   (SBool,
@@ -348,7 +347,7 @@ verifyVc handle prop = do
       getSrProp (HRHigh x) = x
       getSrProp (HRCore x) = case x of -- absurd
 
-  let debug = True
+  let debug = False
       cfg | debug = defaultSMTCfg { verbose = True, transcript = Just "transcript.smt2" }
           | otherwise = defaultSMTCfg
 
@@ -471,7 +470,7 @@ primAssignment nm rvalAst = do
   case varD of
     DPrim _ -> do
       rvalExpr <- tryTranslateExpr varD rvalAst
-      return (Assignment varV (fortranToMetaExpr rvalExpr))
+      return (Assignment varV (intoMetaExpr rvalExpr))
     _ -> failAnalysis' rvalAst $ WrongAssignmentType "primitive value" (Some varD)
 
 arrayAssignment
@@ -488,16 +487,15 @@ arrayAssignment arrName ixAst rvalAst = do
       let ixD = dIndex ixIndex
           valD = dArrValue valAv
 
-      ixExpr   <- tryTranslateExpr ixD ixAst
-      rvalExpr <- tryTranslateExpr valD rvalAst
+      ixExpr   <- intoMetaExpr <$> tryTranslateExpr ixD ixAst
+      rvalExpr <- intoMetaExpr <$> tryTranslateExpr valD rvalAst
 
       -- Replace instances of the array variable with the same array, but with
       -- the new value written at the given index.
-      let arrExpr = EVar varV
-          mkOp = rcurry $ CoreOp OpWriteArr (OSWriteArr varD)
-          arrExpr' = EOp (mkOp arrExpr ixExpr rvalExpr)
+      let arrExpr = Expr' $ EVar varV
+          arrExpr' = eop' $ MopWriteArr varD arrExpr ixExpr rvalExpr
 
-      return (Assignment varV (fortranToMetaExpr arrExpr'))
+      return (Assignment varV arrExpr')
 
     _ -> failAnalysis' rvalAst $ WrongAssignmentType "array type" (Some varD)
 

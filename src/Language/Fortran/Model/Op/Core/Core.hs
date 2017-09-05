@@ -88,17 +88,6 @@ data OpSpec ok args result where
     -> SSymbol fname
     -> OpSpec 'OKDeref '[Record rname fields] a
 
-  OSWriteArr
-    :: D (Array i v)
-    -> OpSpec 'OKWriteArr '[Array i v, i, v] (Array i v)
-
-  OSWriteData
-    :: RElem '(fname, a) fields i
-    => D (Record rname fields) -- ^ Record to write to
-    -> SSymbol fname           -- ^ Field to write
-    -> D a                     -- ^ New value
-    -> OpSpec 'OKWriteData '[Record rname fields, a] (Record rname fields)
-
 --------------------------------------------------------------------------------
 --  Specific Operators
 --------------------------------------------------------------------------------
@@ -131,6 +120,3 @@ data Op n ok where
   OpLookup    :: Op 2 'OKLookup
 
   OpDeref     :: Op 1 'OKDeref
-
-  OpWriteArr  :: Op 3 'OKWriteArr
-  OpWriteData :: Op 2 'OKWriteData
