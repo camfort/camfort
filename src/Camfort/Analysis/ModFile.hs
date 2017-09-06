@@ -153,13 +153,13 @@ getFortranFiles dir =
 -- | Normalize the 'ProgramFile' to include module map information from the
 -- 'ModFiles'. Also return the module map, which links source names to unique
 -- names within each program unit.
-withCombinedModuleMap :: (Data a) => ModFiles -> F.ProgramFile a -> (F.ProgramFile (FA.Analysis a), FAR.ModuleMap)
+withCombinedModuleMap :: (Data a) => ModFiles -> F.ProgramFile (FA.Analysis a) -> (F.ProgramFile (FA.Analysis a), FAR.ModuleMap)
 withCombinedModuleMap mfs pf =
   let
     -- Use the module map derived from all of the included Camfort Mod files.
     mmap = combinedModuleMap mfs
     tenv = combinedTypeEnv mfs
-    pfRenamed = FAR.analyseRenamesWithModuleMap mmap . FA.initAnalysis $ pf
+    pfRenamed = FAR.analyseRenamesWithModuleMap mmap $ pf
   in (pfRenamed, mmap `Map.union` extractModuleMap pfRenamed)
 
 -- | Normalize the 'ProgramFile' to include environment information from
@@ -168,7 +168,7 @@ withCombinedEnvironment
   :: (Data a)
   => ModFiles -> F.ProgramFile a -> (F.ProgramFile (FA.Analysis a), FAR.ModuleMap, FAT.TypeEnv)
 withCombinedEnvironment mfs pf =
-  let (pfRenamed, mmap) = withCombinedModuleMap mfs pf
+  let (pfRenamed, mmap) = withCombinedModuleMap mfs (FA.initAnalysis pf)
       tenv = combinedTypeEnv mfs
   in (fst . FAT.analyseTypesWithEnv tenv $ pfRenamed, mmap, tenv)
 
