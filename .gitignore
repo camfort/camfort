@@ -22,3 +22,5 @@
 
 # test files
 /equiv.expected.f90
+
+.DS_STORE

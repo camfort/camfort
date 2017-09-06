@@ -158,9 +158,6 @@ data CheckHoareEnv =
   , _heReprHandler      :: forall p k a. Prim p k a -> PrimReprHandler a
   }
 
-instance HasPrimReprHandlers CheckHoareEnv where
-  primReprHandler = _heReprHandler
-
 initialState :: CheckHoareState
 initialState = CheckHoareState
 
@@ -170,6 +167,9 @@ emptyEnv spec = CheckHoareEnv True mempty (makeSymRepr spec)
 makeLenses ''AnnotatedProgramUnit
 makeLenses ''CheckHoareState
 makeLenses ''CheckHoareEnv
+
+instance HasPrimReprHandlers CheckHoareEnv where
+  primReprHandler = view heReprHandler
 
 --------------------------------------------------------------------------------
 --  Main function
@@ -353,8 +353,10 @@ verifyVc handle prop = do
 
   env <- asks primReprHandlers
 
-  res <- liftIO . runVerifierWith cfg . flip query env . flip runReaderT env . checkPropWith getSrProp HRCore $ prop
-  case res of
+  let res = query (getSrProp <$> runReaderT (evalProp lift HRCore prop) env) env
+  res' <- liftIO . runVerifierWith cfg $ res
+
+  case res' of
     Right b -> return b
     Left e  -> lift $ handle (VerifierError e)
 
