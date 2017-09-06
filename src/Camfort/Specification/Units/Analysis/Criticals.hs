@@ -24,6 +24,7 @@ import           Data.Maybe (fromMaybe)
 
 import Camfort.Analysis
 import Camfort.Analysis.Annotations
+import Camfort.Analysis.ModFile (withCombinedModuleMap)
 import Camfort.Specification.Units.InferenceBackendSBV (criticalVariables)
 
 -- Provides the types and data accessors used in this module
@@ -96,9 +97,7 @@ inferCriticalVariables = do
   (eVars, _) <- runInference runCriticalVariables
   let
     -- Use the module map derived from all of the included Camfort Mod files.
-    mmap = combinedModuleMap mfs
-    pfRenamed = FAR.analyseRenamesWithModuleMap mmap . FA.initAnalysis . fmap UA.mkUnitAnnotation $ pf
-    mmap' = extractModuleMap pfRenamed `M.union` mmap -- post-parsing
+    (pfRenamed, mmap) = withCombinedModuleMap mfs . FA.initAnalysis . fmap UA.mkUnitAnnotation $ pf
     -- unique name -> src name across modules
 
     -- Map of all declarations
@@ -107,7 +106,7 @@ inferCriticalVariables = do
                 (FA.varName e, FA.srcName e) |
                 e@(F.ExpValue _ _ F.ValVariable{}) <- universeBi pfRenamed :: [F.Expression UA]
                 -- going to ignore intrinsics here
-              ] `M.union` (M.unions . map (M.fromList . map (\ (a, (b, _)) -> (b, a)) . M.toList) $ M.elems mmap')
+              ] `M.union` (M.unions . map (M.fromList . map (\ (a, (b, _)) -> (b, a)) . M.toList) $ M.elems mmap)
     fromWhereMap = genUniqNameToFilenameMap mfs
   pure Criticals { criticalsPf           = pf
                  , criticalsVariables    = eVars
