@@ -9,20 +9,27 @@ Stability   :  experimental
 -}
 
 module Camfort.Analysis.ModFile
-  ( MFCompiler
+  (
+    -- * Getting mod files
+    MFCompiler
   , genModFiles
   , getModFiles
   , readParseSrcDir
   , simpleCompiler
+    -- * Using mod files
+  , withCombinedModuleMap
   , withCombinedEnvironment
+  , lookupUniqueName
   ) where
 
+import           Control.Lens                       (at, preview, _Just)
 import           Control.Monad                      (forM)
 import           Control.Monad.IO.Class
 import qualified Data.ByteString                    as B
 import           Data.Char                          (toUpper)
 import           Data.Data                          (Data)
 import           Data.List                          ((\\))
+import qualified Data.Map                           as Map
 import           Data.Maybe                         (catMaybes)
 import           Data.Text.Encoding                 (decodeUtf8With, encodeUtf8)
 import           Data.Text.Encoding.Error           (replace)
@@ -41,26 +48,18 @@ import           Language.Fortran.Util.ModFile
 import           Camfort.Analysis.Annotations       (A, unitAnnotation)
 import           Camfort.Helpers
 
+--------------------------------------------------------------------------------
+--  Getting mod files
+--------------------------------------------------------------------------------
+
 -- | Compiler for ModFile information, parameterised over an underlying monad
 -- and the input to the compiler.
 type MFCompiler r m = r -> ModFiles -> F.ProgramFile A -> m ModFile
 
 -- | Compile the Modfile with only basic information.
 simpleCompiler :: (Monad m) => MFCompiler () m
-simpleCompiler () mfs = return . genModFile . withCombinedEnvironment mfs
-
--- | Normalize the 'ProgramFile' to include environment information from
--- the 'ModFiles'.
-withCombinedEnvironment
-  :: (Data a)
-  => ModFiles -> F.ProgramFile a -> F.ProgramFile (FA.Analysis a)
-withCombinedEnvironment mfs pf =
-  let
-    -- Use the module map derived from all of the included Camfort Mod files.
-    mmap = combinedModuleMap mfs
-    tenv = combinedTypeEnv mfs
-    pfRenamed = FAR.analyseRenamesWithModuleMap mmap . FA.initAnalysis $ pf
-  in fst . FAT.analyseTypesWithEnv tenv $ pfRenamed
+simpleCompiler () mfs = return . genModFile . fst' . withCombinedEnvironment mfs
+  where fst' (x, _, _) = x
 
 genCModFile :: MFCompiler r m -> r -> ModFiles -> F.ProgramFile A -> m ModFile
 genCModFile = id
@@ -146,3 +145,35 @@ getFortranFiles dir =
     isFortran x = takeExtension x `elem` (exts ++ extsUpper)
       where exts = [".f", ".f90", ".f77", ".cmn", ".inc"]
             extsUpper = map (map toUpper) exts
+
+--------------------------------------------------------------------------------
+--  Using mod files
+--------------------------------------------------------------------------------
+
+-- | Normalize the 'ProgramFile' to include module map information from the
+-- 'ModFiles'. Also return the module map, which links source names to unique
+-- names within each program unit.
+withCombinedModuleMap :: (Data a) => ModFiles -> F.ProgramFile a -> (F.ProgramFile (FA.Analysis a), FAR.ModuleMap)
+withCombinedModuleMap mfs pf =
+  let
+    -- Use the module map derived from all of the included Camfort Mod files.
+    mmap = combinedModuleMap mfs
+    tenv = combinedTypeEnv mfs
+    pfRenamed = FAR.analyseRenamesWithModuleMap mmap . FA.initAnalysis $ pf
+  in (pfRenamed, mmap `Map.union` extractModuleMap pfRenamed)
+
+-- | Normalize the 'ProgramFile' to include environment information from
+-- the 'ModFiles'. Also return the module map and type environment.
+withCombinedEnvironment
+  :: (Data a)
+  => ModFiles -> F.ProgramFile a -> (F.ProgramFile (FA.Analysis a), FAR.ModuleMap, FAT.TypeEnv)
+withCombinedEnvironment mfs pf =
+  let (pfRenamed, mmap) = withCombinedModuleMap mfs pf
+      tenv = combinedTypeEnv mfs
+  in (fst . FAT.analyseTypesWithEnv tenv $ pfRenamed, mmap, tenv)
+
+-- | From a module map, look up the unique name associated with a given source
+-- name in the given program unit. Also returns the name type, which tells you
+-- whether the name belongs to a subprogram, variable or intrinsic.
+lookupUniqueName :: F.ProgramUnitName -> F.Name -> FAR.ModuleMap -> Maybe (F.Name, FA.NameType)
+lookupUniqueName puName srcName = preview $ at puName . _Just . at srcName . _Just
