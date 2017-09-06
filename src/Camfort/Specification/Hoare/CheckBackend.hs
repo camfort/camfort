@@ -22,6 +22,7 @@ module Camfort.Specification.Hoare.CheckBackend
   , apuPreconditions
   , apuPostconditions
   , apuPU
+  , apuAuxDecls
   , BackendAnalysis
   , HoareCheckResult(..)
   , HoareBackendError(..)
@@ -74,6 +75,7 @@ data AnnotatedProgramUnit =
   AnnotatedProgramUnit
   { _apuPreconditions  :: [PrimFormula ()]
   , _apuPostconditions :: [PrimFormula ()]
+  , _apuAuxDecls       :: [AuxDecl ()]
   , _apuPU             :: F.ProgramUnit HA
   }
 
@@ -399,7 +401,7 @@ genBlock (precond, postcond, bl) = do
     F.BlDoWhile _ _ _ _ cond body _ -> do
       primInvariant <-
         case body of
-         b : _ | Just (Specification SpecInvariant f) <- getAnnSpec (F.getAnnotation b) -> return f
+         b : _ | Just (SodSpec (Specification SpecInvariant f)) <- getAnnSod (F.getAnnotation b) -> return f
          _ -> failAnalysis' bl $ MissingWhileInvariant bl
 
       invariant <- tryTranslateFormula body primInvariant
@@ -438,8 +440,8 @@ blockToSequence bl = do
         Nothing -> return $ Nothing
 
     sequenceSpec =
-      case getAnnSpec (F.getAnnotation bl) of
-        Just (Specification SpecSeq m) -> do
+      case getAnnSod (F.getAnnotation bl) of
+        Just (SodSpec (Specification SpecSeq m)) -> do
           m' <- tryTranslateFormula bl m
           return $ Just $ propAnnSeq m'
         _ -> return Nothing
@@ -608,8 +610,8 @@ dropWhileM f (x : xs) = do
     else return (x : xs)
 
 
-getAnnSpec :: HA -> Maybe (PrimSpec ())
-getAnnSpec = view (to F.prevAnnotation . hoareSpec)
+getAnnSod :: HA -> Maybe (SpecOrDecl ())
+getAnnSod = view (to F.prevAnnotation . hoareSod)
 
 
 varNames :: F.Expression (F.Analysis x) -> NamePair

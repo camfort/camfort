@@ -5,6 +5,7 @@ module Camfort.Specification.Hoare.Lexer where
 
 import Data.Monoid (Alt(..))
 import Data.Coerce
+import qualified Data.Char as Char
 
 import Control.Monad.State
 import Control.Monad.Except
@@ -24,15 +25,20 @@ lexer xs
   | Just (tok, rest) <- lexSymbol xs
   = addToTokens tok rest
 lexer ('"' : xs) = do
-  (tok, rest) <- lexExpr xs
+  (tok, rest) <- lexQuoted xs
   addToTokens tok rest
-lexer xs = throwError (LexError xs)
+lexer xs = do
+  mname <- lexName xs
+  case mname of
+    Just (tok, rest) -> addToTokens tok rest
+    Nothing -> throwError (LexError xs)
 
 
 lexSymbol :: String -> Maybe (Token, String)
 lexSymbol xs =
   let symbols =
         [ ("static_assert", TStaticAssert)
+        , ("decl_aux", TDeclAux)
         , ("invariant", TInvariant)
         , ("post", TPost)
         , ("pre", TPre)
@@ -46,6 +52,7 @@ lexSymbol xs =
         , ("f", TFalse)
         , ("(", TLParen)
         , (")", TRParen)
+        , ("::", TDColon)
         ]
 
       tryMatch (symbol, tok) = (tok,) <$> stripPrefix symbol xs
@@ -55,8 +62,8 @@ lexSymbol xs =
   in firstMatch (tryMatch <$> symbols)
 
 
-lexExpr :: String -> HoareSpecParser (Token, String)
-lexExpr input = do
+lexQuoted :: String -> HoareSpecParser (Token, String)
+lexQuoted input = do
   let
     go :: String -> StateT String HoareSpecParser String
     go ('"' : xs) = return xs
@@ -66,7 +73,24 @@ lexExpr input = do
       go xs
 
   (rest, expr) <- runStateT (go input) []
-  return (TExpr (reverse expr), rest)
+  return (TQuoted (reverse expr), rest)
+
+
+isNameStartChar :: Char -> Bool
+isNameStartChar c = Char.isLetter c || c == '_'
+
+isNameChar :: Char -> Bool
+isNameChar c =
+  Char.isLetter c ||
+  Char.isNumber c ||
+  c == '_'
+
+lexName :: String -> HoareSpecParser (Maybe (Token, String))
+lexName xs =
+  let (nm, rest) = span isNameChar xs
+  in case nm of
+    (n1 : _) | isNameStartChar n1 -> return (Just (TName nm, rest))
+    _ -> return Nothing
 
 
 stripPrefix :: (Eq a) => [a] -> [a] -> Maybe [a]

@@ -23,7 +23,7 @@ import           Camfort.Specification.Hoare.Syntax
 data HoareAnnotation a =
   HoareAnnotation
   { _hoarePrevAnnotation  :: a
-  , _hoareSpec :: Maybe (PrimSpec ())
+  , _hoareSod :: Maybe (SpecOrDecl ())
   , _hoarePUName :: Maybe F.ProgramUnitName
   }
   deriving (Show, Eq, Typeable, Data)
@@ -37,13 +37,13 @@ instance Linkable HA where
 
   linkPU ann pu = Ann.onPrev (hoarePUName .~ Just (F.puName pu)) ann
 
-instance ASTEmbeddable HA (PrimSpec ()) where
+instance ASTEmbeddable HA (SpecOrDecl ()) where
   annotateWithAST ann ast =
-    Ann.onPrev (hoareSpec .~ Just ast) ann
+    Ann.onPrev (hoareSod .~ Just ast) ann
 
 
 hoareAnn0 :: a -> HoareAnnotation a
-hoareAnn0 x = HoareAnnotation { _hoarePrevAnnotation = x, _hoareSpec = Nothing, _hoarePUName = Nothing }
+hoareAnn0 x = HoareAnnotation { _hoarePrevAnnotation = x, _hoareSod = Nothing, _hoarePUName = Nothing }
 
 -- ha0 :: HA
 -- ha0 = F.analysis0 (hoareAnn0 Ann.unitAnnotation)

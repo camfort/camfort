@@ -21,6 +21,7 @@ data HoareParseError
   = UnmatchedQuote
   | UnexpectedInput
   | MalformedExpression String
+  | MalformedTypeSpec String
   | ParseError [Token]
   | LexError String
   deriving (Eq, Ord, Typeable, Data)
@@ -29,6 +30,7 @@ instance Show HoareParseError where
   show UnmatchedQuote = "unmatched quote"
   show UnexpectedInput = "unexpected characters in input"
   show (MalformedExpression expr) = "couldn't parse expression: \"" ++ expr ++ "\""
+  show (MalformedTypeSpec ts) = "couldn't parse type spec: \"" ++ ts ++ "\""
   show (ParseError tokens) = "unable to parse input: " ++ prettyTokens tokens
   show (LexError xs) = "unable to lex input: " ++ xs
 
@@ -38,7 +40,7 @@ prettyTokens :: [Token] -> String
 prettyTokens = intercalate " " . map prettyToken
   where
     prettyToken = \case
-      TExpr expr -> "\"" ++ expr ++ "\""
+      TQuoted qv -> "\"" ++ qv ++ "\""
       TStaticAssert -> "static_assert"
       TPre -> "pre"
       TPost -> "post"
@@ -53,11 +55,16 @@ prettyTokens = intercalate " " . map prettyToken
       TNot -> "!"
       TTrue -> "T"
       TFalse -> "F"
+      TDeclAux -> "decl_aux"
+      TName nm -> nm
+      TDColon -> "::"
 
 type HoareSpecParser = Either HoareParseError
 
-data Token
-  = TExpr String
+data Token =
+  -- Quoted Fortran
+    TQuoted String
+  -- Static Assertions
   | TStaticAssert
   | TPre
   | TPost
@@ -72,6 +79,10 @@ data Token
   | TNot
   | TTrue
   | TFalse
+  -- Auxiliary variable declarations
+  | TDeclAux
+  | TName String
+  | TDColon
   deriving (Show, Eq, Ord, Typeable, Data)
 
 -- TODO: Make this report errors and deal with source position better
@@ -83,3 +94,14 @@ parseExpression expr =
   where
     paddedExpr = B.pack $ "      a = " ++ expr
     parseState = F.initParseState paddedExpr F.Fortran90 "<unknown>"
+
+
+-- TODO: Make this report errors and deal with source position better
+parseTypeSpec :: String -> HoareSpecParser (F.TypeSpec ())
+parseTypeSpec ts =
+  case F.runParse F.statementParser parseState of
+    F.ParseOk (F.StDeclaration _ _ s _ _) _ -> return s
+    _ -> throwError (MalformedTypeSpec ts)
+  where
+    paddedTS = B.pack $ ts ++ " :: dummy"
+    parseState = F.initParseState paddedTS F.Fortran90 "<unknown>"

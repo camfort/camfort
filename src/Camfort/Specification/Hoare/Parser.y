@@ -17,7 +17,7 @@ import Camfort.Specification.Hoare.Parser.Types
 }
 
 %monad { HoareSpecParser } { >>= } { return }
-%name parseHoare HOARE
+%name parseHoare START
 %tokentype { Token }
 %error { parseError }
 %token
@@ -35,7 +35,10 @@ import Camfort.Specification.Hoare.Parser.Types
   '!'           { TNot          }
   '('           { TLParen       }
   ')'           { TRParen       }
-  texpr         { TExpr $$      }
+  tquoted       { TQuoted $$    }
+  decl_aux      { TDeclAux      }
+  '::'          { TDColon       }
+  tname         { TName $$      }
 
 
 %left '|'
@@ -47,6 +50,17 @@ import Camfort.Specification.Hoare.Parser.Types
 
 
 %%
+
+START :: { SpecOrDecl () }
+: HOARE { SodSpec $1 }
+| DECL { SodDecl $1 }
+
+
+DECL :: { AuxDecl () }
+: decl_aux '(' TYPESPEC '::' tname ')' { AuxDecl $5 $3 }
+
+TYPESPEC :: { F.TypeSpec () }
+: tquoted {% parseTypeSpec $1 }
 
 
 HOARE :: { PrimSpec () }
@@ -76,18 +90,18 @@ FORMULA :: { PrimFormula () }
 | EXPR                  { PFExpr $1 }
 
 EXPR :: { F.Expression () }
-: texpr {% parseExpression $1 }
+: tquoted {% parseExpression $1 }
 
 {
 
 parseError :: [Token] -> HoareSpecParser a
 parseError = throwError . ParseError
 
-hoareParser :: Parser.SpecParser HoareParseError (PrimSpec ())
+hoareParser :: Parser.SpecParser HoareParseError (SpecOrDecl ())
 hoareParser = Parser.mkParser (\src -> do
                                   tokens <- lexer src
                                   parseHoare tokens)
-             ["static_assert", "invariant", "post", "pre", "seq"]
+             ["static_assert", "invariant", "post", "pre", "seq", "decl_aux"]
 
 }
 
