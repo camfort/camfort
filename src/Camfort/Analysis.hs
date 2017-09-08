@@ -177,7 +177,6 @@ instance (Describe e, Describe w, Monad m) => MonadAnalysis e w (AnalysisT e w m
 
   failAnalysis origin e = do
     let msg = LogMessage (Just origin) e
-    recordLogMessage (MsgError msg)
     AnalysisT (throwError msg)
 
 instance MonadAnalysis e w m => MonadAnalysis e w (ReaderT r m)
