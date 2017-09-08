@@ -153,7 +153,11 @@ getFortranFiles dir =
 -- | Normalize the 'ProgramFile' to include module map information from the
 -- 'ModFiles'. Also return the module map, which links source names to unique
 -- names within each program unit.
-withCombinedModuleMap :: (Data a) => ModFiles -> F.ProgramFile (FA.Analysis a) -> (F.ProgramFile (FA.Analysis a), FAR.ModuleMap)
+withCombinedModuleMap
+  :: (Data a)
+  => ModFiles
+  -> F.ProgramFile (FA.Analysis a)
+  -> (F.ProgramFile (FA.Analysis a), FAR.ModuleMap)
 withCombinedModuleMap mfs pf =
   let
     -- Use the module map derived from all of the included Camfort Mod files.
