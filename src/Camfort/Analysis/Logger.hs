@@ -1,3 +1,4 @@
+{-# LANGUAGE NamedFieldPuns #-}
 {-# LANGUAGE DefaultSignatures          #-}
 {-# LANGUAGE DeriveFunctor              #-}
 {-# LANGUAGE DeriveTraversable          #-}
@@ -208,6 +209,22 @@ data SomeMessage e w
 
 makePrisms ''SomeMessage
 
+someMessageOrigin :: Lens' (SomeMessage e w) (Maybe Origin)
+someMessageOrigin =
+  lens
+  (preview $
+    (_MsgError . lmOrigin `failing`
+     _MsgWarn  . lmOrigin `failing`
+     _MsgInfo  . lmOrigin `failing`
+     _MsgDebug . lmOrigin
+    ) . _Just)
+  (flip $ \o ->
+   set (_MsgError . lmOrigin) o .
+   set (_MsgWarn  . lmOrigin) o .
+   set (_MsgInfo  . lmOrigin) o .
+   set (_MsgDebug . lmOrigin) o)
+
+
 instance (Describe e, Describe w) => Describe (SomeMessage e w) where
   describeBuilder msg = case msg of
     MsgError m -> "ERROR: " <> describeBuilder m
@@ -330,6 +347,7 @@ data LoggerState =
   LoggerState
   { _lsLogLevel          :: !LogLevel
   , _lsDefaultSourceFile :: !FilePath
+  , _lsPreviousOrigin :: !(Maybe Origin)
   }
 
 data OpMonoid a = OpMonoid { getOpMonoid :: a }
@@ -342,14 +360,14 @@ instance Monoid a => Monoid (OpMonoid a) where
 
 data LoggerEnv m =
   LoggerEnv
-  { _leLogFunc :: !(LogLevel -> LogLevel -> Text -> m ())
+  { _leLogFunc :: !(Bool -> LogLevel -> LogLevel -> Text -> Text -> m ())
   }
 
 makeLenses ''LoggerState
 makeLenses ''LoggerEnv
 
 hoistEnv :: (m () -> n ()) -> LoggerEnv m -> LoggerEnv n
-hoistEnv f = leLogFunc %~ \logFunc l1 l2 msg -> f $ logFunc l1 l2 msg
+hoistEnv f = leLogFunc %~ \logFunc b l1 l2 m1 m2 -> f $ logFunc b l1 l2 m1 m2
 
 -- | The logging monad transformer, containing errors of type @e@ and warnings
 -- of type @w@.
@@ -391,7 +409,7 @@ instance (Monad m, Describe e, Describe w) =>
   getDefaultSourceFile = LoggerT (use lsDefaultSourceFile)
 
   recordLogMessage msg = do
-    LoggerT (tell (OpMonoid [msg]))
+    LoggerT $ tell (OpMonoid [msg])
     logSomeMessage msg
 
 
@@ -405,16 +423,34 @@ instance MFunctor (LoggerT e w) where
 
 
 -- | A function to output logs in a particular monad @m@.
-type LogOutput m = Text -> m ()
+data LogOutput m = LogOutput
+  { _loConciseOutput :: Bool
+  , _loPrintFunc :: Text -> m ()
+  }
 
 
 -- | Output logs to standard output (i.e. the console).
-logOutputStd :: MonadIO m => LogOutput m
-logOutputStd = liftIO . Text.putStrLn
+logOutputStd
+  :: MonadIO m
+  => Bool
+  -- ^ If 'True', print more concise output when message origin is repeated.
+  -> LogOutput m
+logOutputStd b = LogOutput
+  { _loConciseOutput = b
+  , _loPrintFunc = liftIO . Text.putStrLn
+  }
+
 
 -- | Output no logs.
-logOutputNone :: Monad m => LogOutput m
-logOutputNone = const (return ())
+logOutputNone
+  :: Monad m
+  => Bool
+  -- ^ If 'True', print more concise output when message origin is repeated.
+  -> LogOutput m
+logOutputNone b = LogOutput
+  { _loConciseOutput = b
+  , _loPrintFunc = const (return ())
+  }
 
 
 -- | Run the logging monad transformer. Returns the action's result value and a
@@ -436,9 +472,12 @@ runLoggerT sourceFile output logLevel (LoggerT action) = do
   let st = LoggerState
         { _lsLogLevel = logLevel
         , _lsDefaultSourceFile = sourceFile
+        , _lsPreviousOrigin = Nothing
         }
 
-      env = LoggerEnv { _leLogFunc = logFuncFrom output }
+      env = LoggerEnv
+        { _leLogFunc = logFuncFrom output
+        }
 
   (x, _, logs) <- runRWST action env st
 
@@ -464,11 +503,17 @@ mapLoggerT mapErr mapWarn (LoggerT x) = LoggerT (mapRWST mapInner x)
 logFuncFrom
   :: (Monad m)
   => LogOutput m
-  -> (LogLevel -> LogLevel -> Text -> m ())
-logFuncFrom output = lf
+  -> (Bool -> LogLevel -> LogLevel -> Text -> Text -> m ())
+logFuncFrom LogOutput{ _loConciseOutput, _loPrintFunc } = lf
   where
-    lf maxLevel level msg
-      | level <= maxLevel = output msg
+    lf repeatedOrigin maxLevel level originMsg actualMsg
+      | level <= maxLevel =
+        let outputMsg =
+              describeBuilder level <>
+              (if not _loConciseOutput || not repeatedOrigin
+               then " " <> describeBuilder originMsg else "") <> ": " <>
+              describeBuilder actualMsg
+        in _loPrintFunc (builderToStrict outputMsg)
       | otherwise = return ()
 
 
@@ -478,16 +523,29 @@ someLogLevel (MsgWarn _)  = LogWarn
 someLogLevel (MsgInfo _)  = LogInfo
 someLogLevel (MsgDebug _) = LogDebug
 
+someMsgText :: (Describe e, Describe w) => SomeMessage e w -> Text
+someMsgText (MsgError msg) = describe (msg ^. lmMsg)
+someMsgText (MsgWarn msg) = describe (msg ^. lmMsg)
+someMsgText (MsgInfo msg) = msg ^. lmMsg
+someMsgText (MsgDebug msg) = msg ^. lmMsg
+
 
 logSomeMessage
   :: (Monad m, Describe e, Describe w)
   => SomeMessage e w -> LoggerT e w m ()
 logSomeMessage msg = do
-  let msgText = describe msg
+  let msgText = someMsgText msg
       msgLevel = someLogLevel msg
+      msgOrigin = msg ^. someMessageOrigin
+      originText = maybe "" describe msgOrigin
+
+  prevOrigin <- LoggerT $ use lsPreviousOrigin
+  LoggerT $ lsPreviousOrigin .= msg ^. someMessageOrigin
+
+  let repeatedOrigin = msgOrigin == prevOrigin
 
   logFunc <- LoggerT $ view leLogFunc
   logLevel <- LoggerT $ use lsLogLevel
 
-  lift $ logFunc logLevel msgLevel msgText
+  lift $ logFunc repeatedOrigin logLevel msgLevel originText msgText
 
