@@ -22,7 +22,9 @@ import           Camfort.Specification.Hoare.CheckFrontend
 import           Camfort.Specification.Hoare.Parser
 import           Language.Fortran.Model.Repr.Prim
 
-getBlocks = FAB.analyseBBlocks . FAR.analyseRenames . FA.initAnalysis . fmap hoareAnn0
+getBlocks =
+  FAB.analyseBBlocks . FAR.analyseRenames .
+  FA.initAnalysis . fmap hoareAnn0
 
 check :: PrimReprSpec -> F.ProgramFile Annotation -> HoareAnalysis [HoareCheckResult]
 check primSpec = invariantChecking primSpec . getBlocks

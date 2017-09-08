@@ -24,7 +24,7 @@ end subroutine example
 integer (kind=8) function min(x, y)
   implicit none
 
-  integer (kind=4) :: x, y
+  integer (kind=8) :: x, y
 
   if (x <= y) then
     min = x
@@ -117,7 +117,7 @@ integer function div(x, y)
   n = y
   q = 0
 
-  != static_assert seq("x == xx" & "y == yy" & "n == y" & "q == 0" & "n <= x + y")
+  !!!= static_assert seq("x == xx" & "y == yy" & "n == y" & "q == 0" & "n <= x + y")
   do while (n <= x)
      != static_assert invariant("x == xx" & "y == yy" & "n <= x + y" & "y * q == n - y")
      q = q + 1

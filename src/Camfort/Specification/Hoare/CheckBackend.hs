@@ -36,7 +36,6 @@ import           Data.Generics.Uniplate.Operations      (childrenBi,
 import           Data.Map                               (Map)
 import qualified Data.Map                               as Map
 import           Data.Maybe                             (isJust)
-import qualified Data.Set                               as Set
 import           Data.Void                              (Void)
 
 import           Data.SBV                               (SBool, defaultSMTCfg)
@@ -76,6 +75,12 @@ data AnnotatedProgramUnit =
   , _apuPU             :: F.ProgramUnit HA
   }
 
+data AnnotationError
+  = MissingWhileInvariant
+  -- ^ The while block had no associated invariant
+  | MissingSequenceAnn
+  -- ^ A sequence annotation was required but not found
+
 data HoareBackendError
   = VerifierError (VerifierError FortranVar)
   | TranslateErrorAnn TranslateError
@@ -91,18 +96,27 @@ data HoareBackendError
   | ArgWithoutDecl NamePair
   -- ^ Found an argument that didn't come with a variable declaration
   | AuxVarConflict F.Name
-  | AnnotationError (F.Block HA)
-  -- ^ The program was insufficiently annotated (TODO: more detail)
+  -- ^ An auxiliary variable name conflicted with a program source name
   | AssignVarNotInScope NamePair
   -- ^ The variable was referenced in an assignment but not in scope
-  | MissingWhileInvariant (F.Block HA)
-  -- ^ The while block had no associated invariant
   | WrongAssignmentType Text SomeType
   -- ^ Expected array type but got the given type instead
   | NonLValueAssignment
   -- ^ Assigning to an expression that isn't an lvalue
   | UnsupportedAssignment Text
   -- ^ Tried to assign to something that's valid Fortran but unsupported
+  | AnnotationError AnnotationError
+  -- ^ There was a problem with the annotations
+
+instance Describe AnnotationError where
+  describeBuilder =
+    \case
+      MissingSequenceAnn ->
+        "the program was insufficiently annotated; " <>
+        "`seq` annotation required before this block"
+      MissingWhileInvariant ->
+        "found a `do while` block with no invariant; " <>
+        "invariant annotations must appear at the start of every `do while` loop"
 
 instance Describe HoareBackendError where
   describeBuilder =
@@ -124,15 +138,10 @@ instance Describe HoareBackendError where
       AuxVarConflict nm ->
         "auxiliary variable " <> describeBuilder nm <>
         " has the same name as a program variable; this is not allowed"
-      AnnotationError _ ->
-        "the program was insufficiently annotated; " <>
-        "`seq` annotations must appear before each command which is not an assignment"
+      AnnotationError e -> describeBuilder e
       AssignVarNotInScope nm ->
         "variable " <> describeBuilder (pretty nm) <>
         " is being assigned to but is not in scope"
-      MissingWhileInvariant _ ->
-        "found a `do while` block with no invariant; " <>
-        "invariant annotations must appear at the start of every `do while` loop"
       WrongAssignmentType message gotType ->
         "unexpected variable type; expected " <> describeBuilder message <>
         "; got " <>
@@ -350,23 +359,31 @@ initialSetup = do
 -- | Uses the auxiliary variable declaration annotations to add auxiliary
 -- variables into scope.
 addAuxVariables :: AnnotatedProgramUnit -> CheckHoareMut ()
-addAuxVariables apu = do
-    uniqueNamesUsed <- Map.keysSet <$> use heVarsInScope
-    sourceNamesUsed <- Map.keysSet <$> use heSourceToUnique
+addAuxVariables apu =
+  forM_ (apu ^. apuAuxDecls) $ \auxDecl -> do
+    let nm = auxDecl ^. adName
+    uniqNm <- uniqueAux nm
 
-    let translateAuxDecl auxDecl = do
-          let nm = auxDecl ^. adName
-              srcNm = SourceName nm
-              uniqNm = UniqueName nm
-          when ((srcNm `Set.member` sourceNamesUsed) ||
-                (uniqNm `Set.member` uniqueNamesUsed)) $
-            failAnalysis' (apu ^. apuPU) $ AuxVarConflict nm
+    let srcNm = SourceName nm
+    sourceToUnique <- use heSourceToUnique
 
-          ty <- readerOfState $ tryTranslateTypeInfo $ typeInfo (auxDecl ^. adTy)
-          return (uniqNm, varOfType (NamePair uniqNm srcNm) ty)
+    -- Make sure auxiliary variable source names don't conflict with other
+    -- variables (including other auxiliary variables).
+    when (srcNm `Map.member` sourceToUnique) $
+      failAnalysis' (apu ^. apuPU) $ AuxVarConflict nm
 
-    auxVars <- Map.fromList <$> traverse translateAuxDecl (apu ^. apuAuxDecls)
-    heVarsInScope %= Map.union auxVars
+    ty <- readerOfState . tryTranslateTypeInfo . typeInfo $ auxDecl ^. adTy
+    modify $ newVar (NamePair uniqNm srcNm) ty
+  where
+    -- This a bit of a hack: keep prepending underscores until we arrive at a
+    -- unique name that hasn't been used yet.
+    uniqueAux nm = do
+      varsInScope <- use heVarsInScope
+      return $ UniqueName
+             . head
+             . dropWhile ((`Map.member` varsInScope) . UniqueName)
+             . iterate (' ' :)
+             $ nm
 
 
 -- | As part of the initial setup, reads setup blocks like declarations and
@@ -480,7 +497,7 @@ genBlock (precond, postcond, bl) = do
       primInvariant <-
         case body of
          b : _ | Just (SodSpec (Specification SpecInvariant f)) <- getAnnSod (F.getAnnotation b) -> return f
-         _ -> failAnalysis' bl $ MissingWhileInvariant bl
+         _ -> failAnalysis' bl $ AnnotationError MissingWhileInvariant
 
       invariant <- tryTranslateFormula body primInvariant
       condExpr <- tryTranslateBoolExpr cond
@@ -505,7 +522,7 @@ combineBlockSequence prevSeq bl = do
 
   case prevSeq `joinAnnSeq` blSeq of
     Just r  -> return r
-    Nothing -> failAnalysis' bl $ AnnotationError bl
+    Nothing -> failAnalysis' bl $ AnnotationError MissingSequenceAnn
 
 
 blockToSequence :: F.Block HA -> GenM (AnnSeq MetaExpr FortranVar (F.Block HA))
@@ -531,7 +548,7 @@ blockToSequence bl = do
     -- Tries each action in the list, using the first that works and otherwise
     -- reporting an error.
     chooseFrom :: [GenM (Maybe a)] -> GenM a
-    chooseFrom [] = failAnalysis' bl $ AnnotationError bl
+    chooseFrom [] = failAnalysis' bl $ AnnotationError MissingSequenceAnn
     chooseFrom (action : rest) = do
       m <- action
       case m of
