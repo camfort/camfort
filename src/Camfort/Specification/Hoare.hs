@@ -43,7 +43,7 @@ testOn fp = do
   describePerFileAnalysis
     "invariant checking"
     (fmap HoareCheckResults . check defaultSymSpec)
-    logOutputStd
+    (logOutputStd True)
     LogDebug
     mfs
     pfsSources
