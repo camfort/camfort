@@ -70,9 +70,12 @@ data NamePair =
 
 makeLenses ''NamePair
 
+instance Pretty SourceName where
+  pretty = view _Wrapped
+
 -- | The pretty version of a 'NamePair' is its source name.
 instance Pretty NamePair where
-  pretty = view (npSource . _Wrapped)
+  pretty = pretty . view npSource
 
 --------------------------------------------------------------------------------
 --  Fortran Variables

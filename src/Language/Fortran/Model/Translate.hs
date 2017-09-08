@@ -83,30 +83,30 @@ module Language.Fortran.Model.Translate
   , tiAttributes
   ) where
 
-import           Prelude                                hiding (span)
+import           Prelude                              hiding (span)
 
-import           Control.Applicative                    ((<|>))
-import           Data.Char                              (toLower)
-import           Data.List                              (intersperse)
-import           Data.Maybe                             (catMaybes)
-import           Data.Typeable                          (Typeable)
-import           Text.Read                              (readMaybe)
+import           Control.Applicative                  ((<|>))
+import           Data.Char                            (toLower)
+import           Data.List                            (intersperse)
+import           Data.Maybe                           (catMaybes)
+import           Data.Typeable                        (Typeable)
+import           Text.Read                            (readMaybe)
 
-import           Control.Lens                           hiding (Const (..),
-                                                         indices, op, rmap,
-                                                         (.>))
+import           Control.Lens                         hiding (Const (..),
+                                                       indices, op, rmap, (.>))
 import           Control.Monad.Except
 import           Control.Monad.Reader
-import           Data.Map                               (Map)
+import           Data.Map                             (Map)
 
 import           Data.Singletons
-import           Data.Singletons.Prelude.List           (Length)
+import           Data.Singletons.Prelude.List         (Length)
 
 import           Data.Vinyl
-import           Data.Vinyl.Functor                     (Const (..))
+import           Data.Vinyl.Functor                   (Const (..))
 
-import qualified Language.Fortran.AST                   as F
-import qualified Language.Fortran.Util.Position         as F
+import qualified Language.Fortran.Analysis            as F
+import qualified Language.Fortran.AST                 as F
+import qualified Language.Fortran.Util.Position       as F
 
 import           Language.Expression
 import           Language.Expression.Pretty
@@ -211,9 +211,8 @@ data TranslateEnv =
   { _teImplicitVars :: Bool
     -- ^ Are implicit variable types enabled? (TODO: this currently does
     -- nothing)
-  , _teVarsInScope  :: Map SourceName SomeVar
-    -- ^ A map of the variables in scope, including their types and unique
-    -- names.
+  , _teVarsInScope  :: Map UniqueName SomeVar
+    -- ^ A map of the variables in scope, including their types
   , _teSemantics    :: FortranSemantics
     -- ^ The version of Fortran's semantics to use when translating code.
   }
@@ -449,25 +448,25 @@ translateBaseType bt mkind = do
 
 -- | Translate an expression with an unknown type. The return value
 -- existentially captures the type of the result.
-translateExpression :: (Monad m) => F.Expression ann -> TranslateT m SomeExpr
+translateExpression :: (Monad m) => F.Expression (F.Analysis ann) -> TranslateT m SomeExpr
 translateExpression = \case
-  (F.ExpValue ann span val) -> translateValue val
-  (F.ExpBinary ann span bop e1 e2) -> translateOp2App e1 e2 bop
-  (F.ExpUnary ann span uop operand) -> translateOp1App operand uop
+  e@(F.ExpValue ann span val) -> translateValue e
+  F.ExpBinary ann span bop e1 e2 -> translateOp2App e1 e2 bop
+  F.ExpUnary ann span uop operand -> translateOp1App operand uop
 
-  (F.ExpSubscript ann span lhs (F.AList _ _ indices)) -> translateSubscript lhs indices
+  F.ExpSubscript ann span lhs (F.AList _ _ indices) -> translateSubscript lhs indices
 
-  (F.ExpDataRef ann span e1 e2)           -> unsupported "data reference"
-  (F.ExpFunctionCall ann span fexpr args) -> unsupported "function call"
-  (F.ExpImpliedDo ann span es spec)       -> unsupported "implied do expression"
-  (F.ExpInitialisation ann span es)       -> unsupported "intitialization expression"
-  (F.ExpReturnSpec ann span rval)         -> unsupported "return spec expression"
+  F.ExpDataRef ann span e1 e2           -> unsupported "data reference"
+  F.ExpFunctionCall ann span fexpr args -> unsupported "function call"
+  F.ExpImpliedDo ann span es spec       -> unsupported "implied do expression"
+  F.ExpInitialisation ann span es       -> unsupported "intitialization expression"
+  F.ExpReturnSpec ann span rval         -> unsupported "return spec expression"
 
 
 -- | Translate an expression with a known type. Fails if the actual type does
 -- not match.
 translateExpression'
-  :: (Monad m) => D a -> F.Expression ann
+  :: (Monad m) => D a -> F.Expression (F.Analysis ann)
   -> TranslateT m (FortranExpr a)
 translateExpression' d = translateAtType "expression" d translateExpression
 
@@ -485,7 +484,7 @@ translateAtType langPart db translate x =
        Nothing -> throwError $ ErrUnexpectedType langPart (Some da) (Some db)
 
 
-translateSubscript :: (Monad m) => F.Expression ann -> [F.Index ann] -> TranslateT m SomeExpr
+translateSubscript :: (Monad m) => F.Expression (F.Analysis ann) -> [F.Index (F.Analysis ann)] -> TranslateT m SomeExpr
 translateSubscript arrAst [F.IxSingle _ _ _ ixAst] = do
   SomePair arrD arrExp <- translateExpression arrAst
   SomePair ixD ixExp <- translateExpression ixAst
@@ -512,30 +511,33 @@ translateSubscript lhs [F.IxRange {}] =
 translateSubscript _ _ =
   unsupported "multiple indices"
 
-translateValue :: (Monad m) => F.Value ann -> TranslateT m SomeExpr
-translateValue = \case
-  v@(F.ValInteger s) -> translateLiteral v PInt64 (fmap fromIntegral . readLitInteger) s
-  v@(F.ValReal    s) -> translateLiteral v PFloat (fmap realToFrac . readLitReal) s
+translateValue :: (Monad m) => F.Expression (F.Analysis ann) -> TranslateT m SomeExpr
+translateValue e = case e of
+  F.ExpValue _ _ v -> case v of
+    F.ValInteger s -> translateLiteral v PInt64 (fmap fromIntegral . readLitInteger) s
+    F.ValReal    s -> translateLiteral v PFloat (fmap realToFrac . readLitReal) s
 
-  -- TODO: Auxiliary variables
-  v@(F.ValVariable nm) -> do
-    theVar <- view (teVarsInScope . at (SourceName nm))
-    case theVar of
-      Just (Some v'@(FortranVar d _)) -> return (SomePair d (EVar v'))
-      _                               -> throwError $ ErrVarNotInScope nm
+    -- TODO: Auxiliary variables
+    F.ValVariable nm -> do
+      let uniq = UniqueName (F.varName e)
+      theVar <- view (teVarsInScope . at uniq)
+      case theVar of
+        Just (Some v'@(FortranVar d _)) -> return (SomePair d (EVar v'))
+        _                               -> throwError $ ErrVarNotInScope nm
 
-  v@(F.ValLogical s) ->
-    let intoBool = fmap (\b -> if b then Bool8 1 else Bool8 0) . readLitBool
-    in translateLiteral v PBool8 intoBool s
+    F.ValLogical s ->
+      let intoBool = fmap (\b -> if b then Bool8 1 else Bool8 0) . readLitBool
+      in translateLiteral v PBool8 intoBool s
 
-  v@(F.ValComplex r c)  -> unsupported "complex literal"
-  v@(F.ValString s)     -> unsupported "string literal"
-  v@(F.ValHollerith s)  -> unsupported "hollerith literal"
-  v@(F.ValIntrinsic nm) -> unsupported $ "intrinsic " <> describe nm
-  v@(F.ValOperator s)   -> unsupported "user-defined operator"
-  v@F.ValAssignment     -> unsupported "interface assignment"
-  v@(F.ValType s)       -> unsupported "type value"
-  v@F.ValStar           -> unsupported "star value"
+    F.ValComplex r c  -> unsupported "complex literal"
+    F.ValString s     -> unsupported "string literal"
+    F.ValHollerith s  -> unsupported "hollerith literal"
+    F.ValIntrinsic nm -> unsupported $ "intrinsic " <> describe nm
+    F.ValOperator s   -> unsupported "user-defined operator"
+    F.ValAssignment   -> unsupported "interface assignment"
+    F.ValType s       -> unsupported "type value"
+    F.ValStar         -> unsupported "star value"
+  _ -> fail "impossible: translateValue called on a non-value"
 
 
 translateLiteral
@@ -595,7 +597,7 @@ translateOpApp
   :: (Monad m)
   => (Length xs ~ n)
   => Op n ok
-  -> Rec (Const (F.Expression ann)) xs -> TranslateT m SomeExpr
+  -> Rec (Const (F.Expression (F.Analysis ann))) xs -> TranslateT m SomeExpr
 translateOpApp operator argAsts = do
   someArgs <- rtraverse (fmap Const . translateExpression . getConst) argAsts
 
@@ -613,7 +615,7 @@ translateOpApp operator argAsts = do
 
 translateOp2App
   :: (Monad m)
-  => F.Expression ann -> F.Expression ann -> F.BinaryOp
+  => F.Expression (F.Analysis ann) -> F.Expression (F.Analysis ann) -> F.BinaryOp
   -> TranslateT m SomeExpr
 translateOp2App e1 e2 bop = do
   Some operator <- case translateOp2 bop of
@@ -624,7 +626,7 @@ translateOp2App e1 e2 bop = do
 
 translateOp1App
   :: (Monad m)
-  => F.Expression ann -> F.UnaryOp
+  => F.Expression (F.Analysis ann) -> F.UnaryOp
   -> TranslateT m SomeExpr
 translateOp1App e uop = do
   Some operator <- case translateOp1 uop of

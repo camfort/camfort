@@ -37,7 +37,7 @@ data PrimLogic a
 data PrimFormula ann
   = PFExpr (F.Expression ann)
   | PFLogical (PrimLogic (PrimFormula ann))
-  deriving (Typeable, Data, Show, Eq)
+  deriving (Typeable, Data, Show, Eq, Functor)
 
 
 data SpecKind
@@ -60,14 +60,14 @@ data AuxDecl ann =
   { _adName :: F.Name
   , _adTy :: F.TypeSpec ann
   }
-  deriving (Typeable, Data, Show, Eq)
+  deriving (Typeable, Data, Show, Eq, Functor)
 
 type PrimSpec ann = Specification (PrimFormula ann)
 
 data SpecOrDecl ann =
     SodSpec (PrimSpec ann)
   | SodDecl (AuxDecl ann)
-  deriving (Typeable, Data, Show, Eq)
+  deriving (Typeable, Data, Show, Eq, Functor)
 
 instance Show a => Pretty (PrimFormula a) where pretty = show
 

@@ -20,30 +20,28 @@ import           Camfort.Analysis.CommentAnnotator
 
 import           Camfort.Specification.Hoare.Syntax
 
+type HA = F.Analysis (HoareAnnotation Ann.A)
+type InnerHA = F.Analysis Ann.A
+
 data HoareAnnotation a =
   HoareAnnotation
   { _hoarePrevAnnotation  :: a
-  , _hoareSod :: Maybe (SpecOrDecl ())
+  , _hoareSod :: Maybe (SpecOrDecl InnerHA)
   , _hoarePUName :: Maybe F.ProgramUnitName
   }
   deriving (Show, Eq, Typeable, Data)
 
 makeLenses ''HoareAnnotation
 
-type HA = F.Analysis (HoareAnnotation (Ann.A))
-
 instance Linkable HA where
   link ann _ = ann
 
   linkPU ann pu = Ann.onPrev (hoarePUName .~ Just (F.puName pu)) ann
 
-instance ASTEmbeddable HA (SpecOrDecl ()) where
+instance ASTEmbeddable HA (SpecOrDecl InnerHA) where
   annotateWithAST ann ast =
     Ann.onPrev (hoareSod .~ Just ast) ann
 
 
 hoareAnn0 :: a -> HoareAnnotation a
 hoareAnn0 x = HoareAnnotation { _hoarePrevAnnotation = x, _hoareSod = Nothing, _hoarePUName = Nothing }
-
--- ha0 :: HA
--- ha0 = F.analysis0 (hoareAnn0 Ann.unitAnnotation)

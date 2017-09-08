@@ -31,9 +31,10 @@ module Camfort.Specification.Hoare.Translate
 
 import           Prelude                            hiding (span)
 
-import           Control.Lens                       (review)
+import           Control.Lens
 import           Control.Monad.Except               (MonadError (..))
 
+import qualified Language.Fortran.Analysis          as F
 import qualified Language.Fortran.AST               as F
 
 import           Language.Expression
@@ -61,7 +62,7 @@ type MetaFormula = Prop (MetaExpr FortranVar)
 --  Translate
 --------------------------------------------------------------------------------
 
-translateFormula :: (Monad m) => PrimFormula ann -> TranslateT m (MetaFormula Bool)
+translateFormula :: (Monad m) => PrimFormula (F.Analysis ann) -> TranslateT m (MetaFormula Bool)
 translateFormula = \case
   PFExpr e -> do
     e' <- translateBoolExpression e
@@ -71,7 +72,8 @@ translateFormula = \case
 
 
 translateBoolExpression
-  :: (Monad m) => F.Expression ann
+  :: (Monad m)
+  => F.Expression (F.Analysis ann)
   -> TranslateT m (MetaExpr FortranVar Bool)
 translateBoolExpression e = do
   SomePair d1 e' <- translateExpression e

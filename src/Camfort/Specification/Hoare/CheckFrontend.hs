@@ -24,7 +24,9 @@ import qualified Language.Fortran.AST                     as F
 import qualified Language.Fortran.Util.Position           as F
 
 import           Camfort.Analysis
+import qualified Camfort.Analysis.Annotations as CA
 import           Camfort.Analysis.CommentAnnotator
+import           Camfort.Analysis.ModFile                 (withCombinedModuleMap)
 import           Camfort.Specification.Parser             (SpecParseError)
 
 import           Language.Fortran.Model.Repr.Prim
@@ -43,11 +45,11 @@ type HoareAnalysis = AnalysisT HoareFrontendError HoareFrontendWarning IO
 
 data HoareFrontendError
   = ParseError (SpecParseError HoareParseError)
-  | InvalidPUConditions F.ProgramUnitName [SpecOrDecl ()]
+  | InvalidPUConditions F.ProgramUnitName [SpecOrDecl InnerHA]
   | BackendError HoareBackendError
 
 data HoareFrontendWarning
-  = OrphanDecls F.ProgramUnitName [AuxDecl ()]
+  = OrphanDecls F.ProgramUnitName [AuxDecl InnerHA]
 
 instance Describe HoareFrontendError where
   describeBuilder = \case
@@ -78,24 +80,25 @@ findAnnotatedPUs pf =
       -- analysis we want to collect all of the annotations that are associated
       -- with the same program unit. For this we need to do some extra work
       -- because the comment annotator can't directly deal with this situation.
-      sodsByPU :: Map F.ProgramUnitName [SpecOrDecl ()]
+      sodsByPU :: Map F.ProgramUnitName [SpecOrDecl InnerHA]
       sodsByPU = Map.fromListWith (++)
         [(nm, [sod])
         | ann <- universeBi pf :: [HA]
-        , Just nm <- [F.prevAnnotation ann ^. hoarePUName]
+        , Just nm  <- [F.prevAnnotation ann ^. hoarePUName]
         , Just sod <- [F.prevAnnotation ann ^. hoareSod]]
 
       -- For a given program unit and list of associated specifications, either
       -- create an annotated program unit, or report an error if something is
       -- wrong.
-      collectUnit :: F.ProgramUnit HA -> [SpecOrDecl ()] -> HoareAnalysis (Maybe AnnotatedProgramUnit)
+      collectUnit
+        :: F.ProgramUnit HA -> [SpecOrDecl InnerHA]
+        -> HoareAnalysis (Maybe AnnotatedProgramUnit)
       collectUnit pu sods = do
         let pres  = sods ^.. traverse . _SodSpec . _SpecPre
             posts = sods ^.. traverse . _SodSpec . _SpecPost
             decls = sods ^.. traverse . _SodDecl
 
 
-            errors :: [SpecOrDecl ()]
             errors = filter (isn't (_SodSpec . _SpecPre ) .&&
                              isn't (_SodSpec . _SpecPost) .&&
                              isn't _SodDecl)
@@ -120,10 +123,16 @@ findAnnotatedPUs pf =
 
 invariantChecking :: PrimReprSpec -> F.ProgramFile HA -> HoareAnalysis [HoareCheckResult]
 invariantChecking primSpec pf = do
-    -- Attempt to parse comments to specifications
-  pf' <- annotateComments hoareParser parseError pf
+  let parserWithAnns = F.initAnalysis . fmap (const CA.unitAnnotation) <$> hoareParser
 
-  annotatedPUs <- findAnnotatedPUs pf'
+  pf' <- annotateComments parserWithAnns parseError pf
+  mfs <- analysisModFiles
+
+  -- TODO: This isn't the purpose of module maps! Run the renamer over annotated
+  -- comments instead.
+  let (pf'', _) = withCombinedModuleMap mfs pf'
+
+  annotatedPUs <- findAnnotatedPUs pf''
 
   let checkAndReport apu = do
         let nm = F.puName (apu ^. apuPU)

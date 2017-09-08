@@ -10,6 +10,7 @@ Stability   :  experimental
 
 {-# LANGUAGE FlexibleContexts #-}
 {-# LANGUAGE DeriveDataTypeable #-}
+{-# LANGUAGE DeriveFunctor #-}
 
 module Camfort.Specification.Parser
   (
@@ -65,6 +66,7 @@ data SpecParser e r = SpecParser
     -- | A list of keywords that indicate the type of specification (e.g., @"stencil"@ or @"access"@).
   , specKeywords :: [String]
   }
+  deriving (Functor)
 
 -- | Does the character indicate the start of an abritrary specification?
 --
