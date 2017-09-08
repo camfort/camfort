@@ -24,9 +24,8 @@ import qualified Language.Fortran.AST                     as F
 import qualified Language.Fortran.Util.Position           as F
 
 import           Camfort.Analysis
-import qualified Camfort.Analysis.Annotations as CA
+import qualified Camfort.Analysis.Annotations             as CA
 import           Camfort.Analysis.CommentAnnotator
-import           Camfort.Analysis.ModFile                 (withCombinedModuleMap)
 import           Camfort.Specification.Parser             (SpecParseError)
 
 import           Language.Fortran.Model.Repr.Prim
@@ -68,9 +67,9 @@ instance Describe HoareFrontendWarning where
 parseError :: F.SrcSpan -> SpecParseError HoareParseError -> HoareAnalysis ()
 parseError sp err = logError' sp (ParseError err)
 
--- | Finds all annotated program units in the given program file. Returns errors
--- for program units that are incorrectly annotated, along with a list of
--- program units which are correctly annotated at the top level.
+-- | Finds all annotated program units in the given program file. Throws errors
+-- for program units that are incorrectly annotated. Returns a list of program
+-- units which are correctly annotated at the top level.
 findAnnotatedPUs :: F.ProgramFile HA -> HoareAnalysis [AnnotatedProgramUnit]
 findAnnotatedPUs pf =
   let pusByName :: Map F.ProgramUnitName (F.ProgramUnit HA)
@@ -82,14 +81,14 @@ findAnnotatedPUs pf =
       -- because the comment annotator can't directly deal with this situation.
       sodsByPU :: Map F.ProgramUnitName [SpecOrDecl InnerHA]
       sodsByPU = Map.fromListWith (++)
-        [(nm, [sod])
+        [ (nm, [sod])
         | ann <- universeBi pf :: [HA]
-        , Just nm  <- [F.prevAnnotation ann ^. hoarePUName]
-        , Just sod <- [F.prevAnnotation ann ^. hoareSod]]
+        , nm  <- F.prevAnnotation ann ^.. hoarePUName . _Just
+        , sod <- F.prevAnnotation ann ^.. hoareSod    . _Just
+        ]
 
-      -- For a given program unit and list of associated specifications, either
-      -- create an annotated program unit, or report an error if something is
-      -- wrong.
+      -- For a given program unit and list of associated specifications, create
+      -- an annotated program unit, and report an error if something is wrong.
       collectUnit
         :: F.ProgramUnit HA -> [SpecOrDecl InnerHA]
         -> HoareAnalysis (Maybe AnnotatedProgramUnit)
@@ -97,7 +96,6 @@ findAnnotatedPUs pf =
         let pres  = sods ^.. traverse . _SodSpec . _SpecPre
             posts = sods ^.. traverse . _SodSpec . _SpecPost
             decls = sods ^.. traverse . _SodDecl
-
 
             errors = filter (isn't (_SodSpec . _SpecPre ) .&&
                              isn't (_SodSpec . _SpecPost) .&&
@@ -120,19 +118,12 @@ findAnnotatedPUs pf =
 
   in catMaybes <$> sequence apus
 
-
 invariantChecking :: PrimReprSpec -> F.ProgramFile HA -> HoareAnalysis [HoareCheckResult]
 invariantChecking primSpec pf = do
   let parserWithAnns = F.initAnalysis . fmap (const CA.unitAnnotation) <$> hoareParser
 
   pf' <- annotateComments parserWithAnns parseError pf
-  mfs <- analysisModFiles
-
-  -- TODO: This isn't the purpose of module maps! Run the renamer over annotated
-  -- comments instead.
-  let (pf'', _) = withCombinedModuleMap mfs pf'
-
-  annotatedPUs <- findAnnotatedPUs pf''
+  annotatedPUs <- findAnnotatedPUs pf'
 
   let checkAndReport apu = do
         let nm = F.puName (apu ^. apuPU)

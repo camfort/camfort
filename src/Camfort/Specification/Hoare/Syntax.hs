@@ -8,8 +8,10 @@
 {-# LANGUAGE MultiParamTypeClasses     #-}
 {-# LANGUAGE NamedFieldPuns            #-}
 {-# LANGUAGE PatternSynonyms           #-}
+{-# LANGUAGE RankNTypes                #-}
 {-# LANGUAGE StandaloneDeriving        #-}
 {-# LANGUAGE TemplateHaskell           #-}
+{-# LANGUAGE TupleSections             #-}
 {-# LANGUAGE TypeFamilies              #-}
 
 {-# OPTIONS_GHC -Wall #-}
@@ -20,7 +22,7 @@ import           Data.Data
 
 import           Control.Lens
 
-import qualified Language.Fortran.AST              as F
+import qualified Language.Fortran.AST       as F
 
 import           Language.Expression.Pretty
 
@@ -55,21 +57,26 @@ data Specification a =
   }
   deriving (Typeable, Data, Eq, Functor)
 
+
 data AuxDecl ann =
   AuxDecl
   { _adName :: F.Name
-  , _adTy :: F.TypeSpec ann
+  , _adTy   :: F.TypeSpec ann
   }
   deriving (Typeable, Data, Show, Eq, Functor)
 
+
 type PrimSpec ann = Specification (PrimFormula ann)
+
 
 data SpecOrDecl ann =
     SodSpec (PrimSpec ann)
   | SodDecl (AuxDecl ann)
   deriving (Typeable, Data, Show, Eq, Functor)
 
+
 instance Show a => Pretty (PrimFormula a) where pretty = show
+
 
 instance (Pretty a) => Show (Specification a) where
   show Specification { _specType, _specFormula } =
@@ -80,16 +87,36 @@ instance (Pretty a) => Show (Specification a) where
 
 makeLenses ''Specification
 makeLenses ''AuxDecl
+makePrisms ''Specification
 makePrisms ''SpecOrDecl
 
+
+-- | Given a prism @p@ projecting a pair, @'refining' x p@ projects values from
+-- the front left of the pair such that the right of the pair matches @x@.
+--
+-- @
+-- >>> [1, 2, 3] ^? refining [] _Cons
+-- Nothing
+-- @
+--
+-- @
+-- >>> [1] ^? refining [] _Cons
+-- Just 1
+-- @
+--
+refining :: (Eq r) => r -> APrism s t (a, r) (a, r) -> Prism s t a a
+refining y p = clonePrism p . below (only y) . iso fst (, ())
+
+
 _SpecPre :: Prism' (Specification a) a
-_SpecPre = prism' (Specification SpecPre) (\case (Specification SpecPre x) -> Just x; _ -> Nothing)
+_SpecPre = refining SpecPre (_Specification . swapped)
 
 _SpecPost :: Prism' (Specification a) a
-_SpecPost = prism' (Specification SpecPost) (\case (Specification SpecPost x) -> Just x; _ -> Nothing)
+_SpecPost = refining SpecPost (_Specification . swapped)
 
 _SpecSeq :: Prism' (Specification a) a
-_SpecSeq = prism' (Specification SpecSeq) (\case (Specification SpecSeq x) -> Just x; _ -> Nothing)
+_SpecSeq = refining SpecSeq (_Specification . swapped)
 
 _SpecInvariant :: Prism' (Specification a) a
-_SpecInvariant = prism' (Specification SpecInvariant) (\case (Specification SpecInvariant x) -> Just x; _ -> Nothing)
+_SpecInvariant = refining SpecInvariant (_Specification . swapped)
+

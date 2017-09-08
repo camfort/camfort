@@ -24,6 +24,7 @@ module Camfort.Specification.Hoare.CheckBackend
   , checkPU
   ) where
 
+import           Data.Data (Data)
 import           Control.Exception                      (Exception (..))
 import           Control.Lens
 import           Control.Monad.Except
@@ -186,11 +187,9 @@ checkPU apu symSpec = do
 
     body <- initialSetup
 
-    sourceToUnique <- use heSourceToUnique
-
     let translatePUFormulae =
             readerOfState
-          . traverse (tryTranslateFormula pu . setFormulaUniqueNames sourceToUnique)
+          . traverse (tryTranslateFormula pu)
 
     preconds <- translatePUFormulae (apu ^. apuPreconditions)
     postconds <- translatePUFormulae (apu ^. apuPostconditions)
@@ -265,7 +264,7 @@ newVar np@(NamePair uniq src) ty
 -- doesn't assign the right unique names. Once we have access to unique names
 -- from inside the program unit, this function assigns those names to variables
 -- in the PU specifications.
-setFormulaUniqueNames :: Map SourceName [UniqueName] -> PrimFormula InnerHA -> PrimFormula InnerHA
+setFormulaUniqueNames :: (Data ann) => Map SourceName [UniqueName] -> PrimFormula (F.Analysis ann) -> PrimFormula (F.Analysis ann)
 setFormulaUniqueNames nameMap = transformBi setExpUN
   where
     setExpUN :: F.Expression InnerHA -> F.Expression InnerHA
@@ -595,39 +594,54 @@ toTranslateEnv env =
   defaultTranslateEnv
     & teImplicitVars .~ env ^. heImplicitVars
     & teVarsInScope .~ env ^. heVarsInScope
-    -- & teLookupUniqueName .~ fmap (view npUnique) . (`lookupVarNames` env)
 
 --------------------------------------------------------------------------------
 -- Shorthands for translating expressions and failing the analysis if the
 -- translation fails
 
 tryTranslateExpr
-  :: (ReportAnn (F.Analysis ann),
-      MonadReader CheckHoareEnv m,
-      MonadAnalysis HoareBackendError w m)
+  :: ( ReportAnn (F.Analysis ann)
+     , MonadReader CheckHoareEnv m
+     , MonadAnalysis HoareBackendError w m
+     )
   => D a -> F.Expression (F.Analysis ann) -> m (FortranExpr a)
 tryTranslateExpr d e = doTranslate (failAnalysis' e) (translateExpression' d) e
 
 tryTranslateTypeInfo
-  :: (ReportAnn (F.Analysis ann),
-      MonadReader CheckHoareEnv m,
-      MonadAnalysis HoareBackendError w m)
+  :: ( ReportAnn (F.Analysis ann)
+     , MonadReader CheckHoareEnv m
+     , MonadAnalysis HoareBackendError w m
+     )
   => TypeInfo (F.Analysis ann) -> m SomeType
 tryTranslateTypeInfo ti = doTranslate (failAnalysis' ti) translateTypeInfo ti
 
 tryTranslateBoolExpr
-  :: (ReportAnn (F.Analysis ann),
-      MonadReader CheckHoareEnv m,
-      MonadAnalysis HoareBackendError w m)
+  :: ( ReportAnn (F.Analysis ann)
+     , MonadReader CheckHoareEnv m
+     , MonadAnalysis HoareBackendError w m
+     )
   => F.Expression (F.Analysis ann) -> m (MetaExpr FortranVar Bool)
 tryTranslateBoolExpr e = doTranslate (failAnalysis' e) translateBoolExpression e
 
 tryTranslateFormula
-  :: (F.Spanned o, ReportAnn (F.Analysis ann),
-      MonadReader CheckHoareEnv m,
-      MonadAnalysis HoareBackendError w m)
+  :: ( F.Spanned o
+     , ReportAnn (F.Analysis ann)
+     , Data ann
+     , MonadReader CheckHoareEnv m
+     , MonadAnalysis HoareBackendError w m
+     )
   => o -> PrimFormula (F.Analysis ann) -> m (MetaFormula Bool)
-tryTranslateFormula loc e = doTranslate (failAnalysis' loc) translateFormula e
+tryTranslateFormula loc formula = do
+  sourceToUnique <- view heSourceToUnique
+  -- TODO: Instead of setting unique names before translation, can we get the
+  -- renamer to work inside annotations? I've tried to make this work but ran
+  -- into some problems:
+  -- - We have to run the renamer before calling 'annotateComments' or it
+  --   doesn't find any comments (why?).
+  -- - When the renamer is run /after/ calling 'annotateComemnts' it doesn't do
+  --   any renaming inside annotations (why?)
+  let formulaUN = setFormulaUniqueNames sourceToUnique formula
+  doTranslate (failAnalysis' loc) translateFormula formulaUN
 
 --------------------------------------------------------------------------------
 --  Utility functions

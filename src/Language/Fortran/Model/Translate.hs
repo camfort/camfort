@@ -511,6 +511,13 @@ translateSubscript lhs [F.IxRange {}] =
 translateSubscript _ _ =
   unsupported "multiple indices"
 
+
+-- | Translate a source 'F.Value' to a strongly-typed expression. Accepts an
+-- 'F.Expression' which is expected to be an 'F.ExpValue' because it needs
+-- access to annotations to get unique names, and 'F.Value' doesn't have any
+-- annotations of its own.
+--
+-- Do not call on an expression that you don't know to be an 'F.ExpValue'!
 translateValue :: (Monad m) => F.Expression (F.Analysis ann) -> TranslateT m SomeExpr
 translateValue e = case e of
   F.ExpValue _ _ v -> case v of
@@ -583,13 +590,19 @@ translateOp2 = \case
   _ -> Nothing
 
 
-data SameLength as bs where
-  SameLength :: Length as ~ Length bs => SameLength as bs
+data HasLength n as where
+  HasLength :: Length as ~ n => HasLength n as
 
-recSequenceSome :: Rec (Const (Some f)) xs -> Some (PairOf (SameLength xs) (Rec f))
-recSequenceSome RNil = SomePair SameLength RNil
+-- | Given a record of 'Some' functorial types, return 'Some' record over the
+-- list of those types.
+--
+-- In the return value, @'Some' ('PairOf' ('HasLength' n) ('Rec' f))@ is a record over
+-- an unknown list of types, with the constraint that the unknown list has
+-- length @n@.
+recSequenceSome :: Rec (Const (Some f)) xs -> Some (PairOf (HasLength (Length xs)) (Rec f))
+recSequenceSome RNil = SomePair HasLength RNil
 recSequenceSome (x :& xs) = case (x, recSequenceSome xs) of
-  (Const (Some y), Some (PairOf SameLength ys)) -> SomePair SameLength (y :& ys)
+  (Const (Some y), Some (PairOf HasLength ys)) -> SomePair HasLength (y :& ys)
 
 
 -- This is way too general for its own good but it was fun to write.
@@ -599,10 +612,10 @@ translateOpApp
   => Op n ok
   -> Rec (Const (F.Expression (F.Analysis ann))) xs -> TranslateT m SomeExpr
 translateOpApp operator argAsts = do
-  someArgs <- rtraverse (fmap Const . translateExpression . getConst) argAsts
+  someArgs <- recSequenceSome <$> rtraverse (fmap Const . translateExpression . getConst) argAsts
 
-  case recSequenceSome someArgs of
-    Some (PairOf SameLength argsTranslated) -> do
+  case someArgs of
+    Some (PairOf HasLength argsTranslated) -> do
       let argsD = rmap (\(PairOf d _) -> d) argsTranslated
           argsExpr = rmap (\(PairOf _ e) -> e) argsTranslated
 
