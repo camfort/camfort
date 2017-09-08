@@ -1,4 +1,6 @@
 {-# LANGUAGE DataKinds                  #-}
+{-# LANGUAGE DeriveFunctor              #-}
+{-# LANGUAGE DeriveTraversable          #-}
 {-# LANGUAGE FlexibleInstances          #-}
 {-# LANGUAGE GADTs                      #-}
 {-# LANGUAGE GeneralizedNewtypeDeriving #-}
@@ -12,19 +14,25 @@
 
 module Camfort.Helpers.TypeLevel where
 
-import Data.Functor.Identity
+import           Data.Functor.Identity
 
-import Language.Expression.Pretty
+import           Language.Expression.Pretty
 
 --------------------------------------------------------------------------------
 --  Types
 --------------------------------------------------------------------------------
 
+-- | An existential type containing @f a@ for some type @a@.
 data Some f where
   Some :: f a -> Some f
 
-data PairOf f g a where
-  PairOf :: f a -> g a -> PairOf f g a
+-- | A pair of functorial values over the same ground type, where the first
+-- value is meant to add constraints rather than real semantic information. The
+-- 'Pretty1' instance ignores the first value.
+data PairOf f g a = PairOf (f a) (g a)
+  deriving (Eq, Ord, Show, Functor, Foldable, Traversable)
+
+type SomePair f g = Some (PairOf f g)
 
 --------------------------------------------------------------------------------
 --  Patterns
@@ -38,13 +46,13 @@ pattern SomePair x y = Some (PairOf x y)
 --------------------------------------------------------------------------------
 
 traverseSome
-  :: Applicative m
+  :: Functor m
   => (forall a. f a -> m (g a))
   -> Some f -> m (Some g)
 traverseSome f (Some x) = Some <$> f x
 
 traversePairOf
-  :: Applicative m
+  :: Functor m
   => (f a -> g a -> m (f' b, g' b))
   -> PairOf f g a -> m (PairOf f' g' b)
 traversePairOf f (PairOf x y) = uncurry PairOf <$> f x y

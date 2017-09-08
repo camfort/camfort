@@ -24,17 +24,19 @@ module Camfort.Specification.Hoare.CheckBackend
   , checkPU
   ) where
 
-import           Data.Data (Data)
 import           Control.Exception                      (Exception (..))
 import           Control.Lens
-import           Control.Monad.Except
 import           Control.Monad.Reader
-import           Control.Monad.RWS.Strict
 import           Control.Monad.State.Strict
+import           Control.Monad.Writer.Strict
+import           Data.Data                              (Data)
 import           Data.Foldable                          (foldlM)
-import           Data.Generics.Uniplate.Operations
+import           Data.Generics.Uniplate.Operations      (childrenBi,
+                                                         transformBi)
 import           Data.Map                               (Map)
+import qualified Data.Map                               as Map
 import           Data.Maybe                             (isJust)
+import qualified Data.Set                               as Set
 import           Data.Void                              (Void)
 
 import           Data.SBV                               (SBool, defaultSMTCfg)
@@ -88,6 +90,7 @@ data HoareBackendError
   -- ^ Found a block in an illegal place
   | ArgWithoutDecl NamePair
   -- ^ Found an argument that didn't come with a variable declaration
+  | AuxVarConflict F.Name
   | AnnotationError (F.Block HA)
   -- ^ The program was insufficiently annotated (TODO: more detail)
   | AssignVarNotInScope NamePair
@@ -102,33 +105,45 @@ data HoareBackendError
   -- ^ Tried to assign to something that's valid Fortran but unsupported
 
 instance Describe HoareBackendError where
-  describeBuilder = \case
-    VerifierError e -> "verifier error: " <> describeBuilder (displayException e)
-    TranslateErrorAnn te -> "translation error in logic annotation: " <> describeBuilder te
-    TranslateErrorSrc te -> "translation error in source code: " <> describeBuilder te
-    InvalidSourceName nm -> "a program source name had no associated unique name: " <> describeBuilder (pretty nm)
-    UnsupportedBlock _ -> "encountered unsupported block"
-    UnexpectedBlock _ -> "a block was found in an illegal location"
-    ArgWithoutDecl nm ->
-      "argument " <> describeBuilder (show nm) <>
-      " doesn't have an associated type declaration"
-    AnnotationError _ ->
-      "the program was insufficiently annotated; " <>
-      "`seq` annotations must appear before each command which is not an assignment"
-    AssignVarNotInScope nm -> "variable " <> describeBuilder (pretty nm) <>
-      " is being assigned to but is not in scope"
-    MissingWhileInvariant _ ->
-      "found a `do while` block with no invariant; " <>
-      "invariant annotations must appear at the start of every `do while` loop"
-    WrongAssignmentType message gotType ->
-      "unexpected variable type; expected " <> describeBuilder message <>
-      "; got " <> describeBuilder (pretty gotType)
-    NonLValueAssignment ->
-      "assignment an expression which is not a valid lvalue"
-    UnsupportedAssignment message ->
-      "unsupported assignment; " <> describeBuilder message
+  describeBuilder =
+    \case
+      VerifierError e ->
+        "verifier error: " <> describeBuilder (displayException e)
+      TranslateErrorAnn te ->
+        "translation error in logic annotation: " <> describeBuilder te
+      TranslateErrorSrc te ->
+        "translation error in source code: " <> describeBuilder te
+      InvalidSourceName nm ->
+        "a program source name had no associated unique name: " <>
+        describeBuilder (pretty nm)
+      UnsupportedBlock _ -> "encountered unsupported block"
+      UnexpectedBlock _ -> "a block was found in an illegal location"
+      ArgWithoutDecl nm ->
+        "argument " <> describeBuilder (show nm) <>
+        " doesn't have an associated type declaration"
+      AuxVarConflict nm ->
+        "auxiliary variable " <> describeBuilder nm <>
+        " has the same name as a program variable; this is not allowed"
+      AnnotationError _ ->
+        "the program was insufficiently annotated; " <>
+        "`seq` annotations must appear before each command which is not an assignment"
+      AssignVarNotInScope nm ->
+        "variable " <> describeBuilder (pretty nm) <>
+        " is being assigned to but is not in scope"
+      MissingWhileInvariant _ ->
+        "found a `do while` block with no invariant; " <>
+        "invariant annotations must appear at the start of every `do while` loop"
+      WrongAssignmentType message gotType ->
+        "unexpected variable type; expected " <> describeBuilder message <>
+        "; got " <>
+        describeBuilder (pretty gotType)
+      NonLValueAssignment ->
+        "assignment an expression which is not a valid lvalue"
+      UnsupportedAssignment message ->
+        "unsupported assignment; " <> describeBuilder message
 
-type BackendAnalysis = AnalysisT HoareBackendError Void IO
+type HoareBackendWarning = Void
+type BackendAnalysis = AnalysisT HoareBackendError HoareBackendWarning IO
 
 data HoareCheckResult = HoareCheckResult (F.ProgramUnit HA) Bool
   deriving (Show)
@@ -144,9 +159,6 @@ instance Describe HoareCheckResult where
     "Program unit '" <> describePuName (F.puSrcName pu) <> "': " <>
     (if result then "verified!" else "unverifiable!")
 
-data CheckHoareState =
-  CheckHoareState
-
 type ScopeVars = Map UniqueName SomeVar
 
 data CheckHoareEnv =
@@ -160,14 +172,10 @@ data CheckHoareEnv =
   , _hePU             :: F.ProgramUnit HA
   }
 
-initialState :: CheckHoareState
-initialState = CheckHoareState
-
 emptyEnv :: F.ProgramUnit HA -> PrimReprSpec -> CheckHoareEnv
 emptyEnv pu spec = CheckHoareEnv True mempty mempty (makeSymRepr spec) pu
 
 makeLenses ''AnnotatedProgramUnit
-makeLenses ''CheckHoareState
 makeLenses ''CheckHoareEnv
 
 instance HasPrimReprHandlers CheckHoareEnv where
@@ -177,15 +185,21 @@ instance HasPrimReprHandlers CheckHoareEnv where
 --  Main function
 --------------------------------------------------------------------------------
 
-checkPU :: AnnotatedProgramUnit -> PrimReprSpec -> BackendAnalysis HoareCheckResult
+checkPU :: AnnotatedProgramUnit
+        -> PrimReprSpec
+        -> BackendAnalysis HoareCheckResult
 checkPU apu symSpec = do
 
   let pu = apu ^. apuPU
 
+  -- The first part of the checking process has a mutable 'CheckHoareEnv' in
+  -- 'StateT' as it collects information to add to the environment.
   (bodyTriple, env) <- flip runStateT (emptyEnv pu symSpec) $ do
     logInfo' pu $ " - Setting up"
 
     body <- initialSetup
+
+    addAuxVariables apu
 
     let translatePUFormulae =
             readerOfState
@@ -204,43 +218,41 @@ checkPU apu symSpec = do
 
     return (precond, postcond, body)
 
-  logInfo' pu $ " - Computing verification conditions"
+  -- The second part has an immutable 'CheckHoareEnv' in 'ReaderT'.
+  flip runReaderT env $ do
+    logInfo' pu $ " - Computing verification conditions"
+    (_, vcs) <- runGenM (genBody bodyTriple)
 
-  (_, vcs) <- runGenM env (genBody bodyTriple)
+    logInfo' pu $ " - Verifying conditions:"
 
-  logInfo' pu $ " - Verifying conditions:"
+    let checkVcs _ [] = return True
+        checkVcs i (vc : rest) = do
+          logInfo' pu $ "   " <> describeShow i <> ". " <> describe (pretty vc)
+          result <- verifyVc (failAnalysis' pu) vc
+          if result
+            then checkVcs (1 + i) rest
+            else do
+            logInfo' pu "    - Failed!"
+            zipWithM_ printUnchecked [(1 + i)..] vcs
+            return False
 
-  let checkVcs _ [] = return True
-      checkVcs i (vc : rest) = do
-        logInfo' pu $ "   " <> describeShow i <> ". " <> describe (pretty vc)
-        result <- verifyVc (failAnalysis' pu) vc
-        if result
-          then checkVcs (1 + i) rest
-          else do
-          logInfo' pu "    - Failed!"
-          zipWithM_ printUnchecked [(1 + i)..] vcs
-          return False
+        printUnchecked i vc = do
+          logInfo' pu $ "   " <> describeShow i <> ". " <> describe (pretty vc)
+          logInfo' pu   "    - Unchecked"
 
-      printUnchecked i vc = do
-        logInfo' pu $ "   " <> describeShow i <> ". " <> describe (pretty vc)
-        logInfo' pu   "    - Unchecked"
-
-  HoareCheckResult pu <$> runReaderT (checkVcs (1 :: Int) vcs) env
+    HoareCheckResult pu <$> checkVcs (1 :: Int) vcs
 
 --------------------------------------------------------------------------------
---  Check Monad
+--  Variables and names
 --------------------------------------------------------------------------------
-
-type CheckHoare = BackendAnalysis
-
--- TODO: Maybe report a warning when two variables have the same source name.
-
 
 varOfType :: NamePair -> SomeType -> SomeVar
 varOfType names (Some d) = Some (FortranVar d names)
 
+
 expNamePair :: F.Expression (F.Analysis a) -> NamePair
 expNamePair = NamePair <$> UniqueName . F.varName <*> SourceName . F.srcName
+
 
 functionNamePair :: F.ProgramUnit (F.Analysis a) -> NamePair
 functionNamePair =
@@ -249,6 +261,10 @@ functionNamePair =
   where
     fromPuName (F.Named n) = n
     fromPuName _           = error "impossible: function has no name"
+
+
+-- TODO: Consider reporting a warning when two variables have the same source
+-- name.
 
 -- | Create a variable in scope with the given name and type.
 newVar :: NamePair -> SomeType -> CheckHoareEnv -> CheckHoareEnv
@@ -264,7 +280,11 @@ newVar np@(NamePair uniq src) ty
 -- doesn't assign the right unique names. Once we have access to unique names
 -- from inside the program unit, this function assigns those names to variables
 -- in the PU specifications.
-setFormulaUniqueNames :: (Data ann) => Map SourceName [UniqueName] -> PrimFormula (F.Analysis ann) -> PrimFormula (F.Analysis ann)
+setFormulaUniqueNames
+  :: (Data ann)
+  => Map SourceName [UniqueName]
+  -> PrimFormula (F.Analysis ann)
+  -> PrimFormula (F.Analysis ann)
 setFormulaUniqueNames nameMap = transformBi setExpUN
   where
     setExpUN :: F.Expression InnerHA -> F.Expression InnerHA
@@ -281,10 +301,16 @@ setFormulaUniqueNames nameMap = transformBi setExpUN
 
     setAnnUniq uniq a = a { F.uniqueName = Just uniq }
 
+--------------------------------------------------------------------------------
+--  Check Monad
+--------------------------------------------------------------------------------
+
+type CheckHoareMut = StateT CheckHoareEnv BackendAnalysis
+type CheckHoare = ReaderT CheckHoareEnv BackendAnalysis
 
 -- | Sets up the environment for checking the program unit, including reading
 -- past variable declarations. Returns the blocks after the variable declarations.
-initialSetup :: StateT CheckHoareEnv CheckHoare [F.Block HA]
+initialSetup :: CheckHoareMut [F.Block HA]
 initialSetup = do
   pu <- use hePU
   let body = childrenBi pu :: [F.Block HA]
@@ -321,15 +347,37 @@ initialSetup = do
   return restBody
 
 
+-- | Uses the auxiliary variable declaration annotations to add auxiliary
+-- variables into scope.
+addAuxVariables :: AnnotatedProgramUnit -> CheckHoareMut ()
+addAuxVariables apu = do
+    uniqueNamesUsed <- Map.keysSet <$> use heVarsInScope
+    sourceNamesUsed <- Map.keysSet <$> use heSourceToUnique
+
+    let translateAuxDecl auxDecl = do
+          let nm = auxDecl ^. adName
+              srcNm = SourceName nm
+              uniqNm = UniqueName nm
+          when ((srcNm `Set.member` sourceNamesUsed) ||
+                (uniqNm `Set.member` uniqueNamesUsed)) $
+            failAnalysis' (apu ^. apuPU) $ AuxVarConflict nm
+
+          ty <- readerOfState $ tryTranslateTypeInfo $ typeInfo (auxDecl ^. adTy)
+          return (uniqNm, varOfType (NamePair uniqNm srcNm) ty)
+
+    auxVars <- Map.fromList <$> traverse translateAuxDecl (apu ^. apuAuxDecls)
+    heVarsInScope %= Map.union auxVars
+
+
 -- | As part of the initial setup, reads setup blocks like declarations and
 -- implicit statements. Updates the environment accordingly. Returns the rest of
 -- the blocks, after the setup blocks.
-readInitialBlocks :: [F.Block HA] -> StateT CheckHoareEnv CheckHoare [F.Block HA]
+readInitialBlocks :: [F.Block HA] -> CheckHoareMut [F.Block HA]
 readInitialBlocks = dropWhileM readInitialBlock
   where
     -- This function should return 'True' if the block may be part of the setup,
     -- and 'False' otherwise.
-    readInitialBlock :: F.Block HA -> StateT CheckHoareEnv CheckHoare Bool
+    readInitialBlock :: F.Block HA -> CheckHoareMut Bool
     readInitialBlock bl = case bl of
       F.BlStatement _ _ _ st ->
         case st of
@@ -372,7 +420,8 @@ readInitialBlocks = dropWhileM readInitialBlock
       F.BlComment{} -> return True
       _ -> return False
 
-verifyVc :: (HoareBackendError -> CheckHoare Bool) -> MetaFormula Bool -> ReaderT CheckHoareEnv CheckHoare Bool
+
+verifyVc :: (HoareBackendError -> CheckHoare Bool) -> MetaFormula Bool -> CheckHoare Bool
 verifyVc handle prop = do
   let getSrProp :: HighRepr Bool -> SBool
       getSrProp (HRHigh x) = x
@@ -389,28 +438,28 @@ verifyVc handle prop = do
 
   case res' of
     Right b -> return b
-    Left e  -> lift $ handle (VerifierError e)
+    Left e  -> handle (VerifierError e)
 
 --------------------------------------------------------------------------------
 --  Generation Monad
 --------------------------------------------------------------------------------
 
-newtype GenM a = GenM (RWST CheckHoareEnv [MetaFormula Bool] CheckHoareState CheckHoare a)
+-- | The verification condition generation monad. A writer of meta-formulae with
+-- an immutable 'CheckHoareEnv'.
+newtype GenM a = GenM (WriterT [MetaFormula Bool] CheckHoare a)
   deriving
     ( Functor
     , Applicative
     , Monad
-    , MonadState CheckHoareState
     , MonadReader CheckHoareEnv
     , MonadWriter [MetaFormula Bool]
-    , MonadIO
-    , MonadLogger HoareBackendError Void
-    , MonadAnalysis HoareBackendError Void
+    , MonadLogger HoareBackendError HoareBackendWarning
+    , MonadAnalysis HoareBackendError HoareBackendWarning
     )
 
 
-runGenM :: CheckHoareEnv -> GenM a -> CheckHoare (a, [MetaFormula Bool])
-runGenM env (GenM action) = evalRWST action env initialState
+runGenM :: GenM a -> CheckHoare (a, [MetaFormula Bool])
+runGenM (GenM action) = runWriterT action
 
 
 type FortranTriplet a = Triplet MetaExpr FortranVar a
@@ -559,7 +608,12 @@ assignmentBlock bl = do
 
 --------------------------------------------------------------------------------
 
-varFromScope :: (F.Spanned a) => a -> NamePair -> GenM SomeVar
+varFromScope
+  :: ( F.Spanned a
+     , MonadReader CheckHoareEnv m
+     , MonadAnalysis HoareBackendError HoareBackendWarning m
+     )
+  => a -> NamePair -> m SomeVar
 varFromScope loc np = do
   let uniq = np ^. npUnique
   mscoped <- view (heVarsInScope . at uniq)

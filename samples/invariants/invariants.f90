@@ -18,6 +18,7 @@ subroutine example(x, y, q, r)
   end do
 end subroutine example
 
+
 != static_assert post("x <= y" -> "min == x")
 != static_assert post("y <= x" -> "min == y")
 integer (kind=8) function min(x, y)
@@ -32,6 +33,7 @@ integer (kind=8) function min(x, y)
   end if
 
 end function min
+
 
 != static_assert post("x <= y" -> "minf == x")
 != static_assert post("y <= x" -> "minf == y")
@@ -48,33 +50,34 @@ real function minf(x, y)
 
 end function minf
 
-!= static_assert post("multiply == x * y")
+
+!= decl_aux("integer" :: xx)
+!= decl_aux("integer" :: yy)
+!= static_assert pre("x == xx" & "y == yy")
+!= static_assert post("multiply == xx * yy")
 integer function multiply(x, y)
   implicit none
 
   integer :: x, y
-  integer :: r, n, d, l
+  integer :: r, n
 
-  if (x >= 0) then
-     d = y
-     l = x
-  else
-     ! unary negation isn't supported yet
-     d = 0 - y
-     l = 0 - x
+  if (x < 0) then
+     x = -x
+     y = -y
   end if
 
   r = 0
   n = 0
-  != static_assert seq("l * d == x * y" & "n == 0" & "r == 0" & "n <= l")
-  do while (n < l)
-     != static_assert invariant("l * d == x * y" & "r == n * d" & "n <= l")
-     r = r + d
+  != static_assert seq("x * y == xx * yy" & "n == 0" & "r == 0" & "n <= x")
+  do while (n < x)
+     != static_assert invariant("x * y == xx * yy" & "r == n * y" & "n <= x")
+     r = r + y
      n = n + 1
   end do
 
   multiply = r
 end function multiply
+
 
 != static_assert pre("x >= 0")
 != static_assert post("2 * halve > x - 2")
@@ -98,10 +101,14 @@ integer function halve(x)
   halve = q
 end function halve
 
+
 ! Performs (positive) integer division, rounded down.
+!= decl_aux("integer" :: xx)
+!= decl_aux("integer" :: yy)
+!= static_assert pre("x == xx" & "y == yy")
 != static_assert pre("x >= 0")
-!= static_assert post("y * div > x - y")
-!= static_assert post("y * div <= x")
+!= static_assert post("yy * div > xx - yy")
+!= static_assert post("yy * div <= xx")
 integer function div(x, y)
 
   integer :: x, y
@@ -110,9 +117,9 @@ integer function div(x, y)
   n = y
   q = 0
 
-  != static_assert seq("n == y" & "q == 0" & "n <= x + y")
+  != static_assert seq("x == xx" & "y == yy" & "n == y" & "q == 0" & "n <= x + y")
   do while (n <= x)
-     != static_assert invariant("n <= x + y" & "y * q == n - y")
+     != static_assert invariant("x == xx" & "y == yy" & "n <= x + y" & "y * q == n - y")
      q = q + 1
      n = n + y
   end do
@@ -121,29 +128,28 @@ integer function div(x, y)
 
 end function div
 
-!= static_assert post("multiplyf == x * y")
+
+!= decl_aux("integer" :: xx)
+!= decl_aux("real" :: yy)
+!= static_assert pre("x == xx" & "y == yy")
+!= static_assert post("multiplyf == xx * yy")
 real function multiplyf(x, y)
   implicit none
 
-  integer :: x
-  real :: y
-  integer :: l, n
-  real :: d, r
+  integer :: x, n
+  real :: y, r
 
-  if (x >= 0) then
-     d = y
-     l = x
-  else
-     d = - y
-     l = - x
+  if (x < 0) then
+     x = -x
+     y = -y
   end if
 
   r = 0.0
   n = 0
-  != static_assert seq("l * d == x * y" & "n == 0" & "r == 0" & "n <= l")
-  do while (n < l)
-     != static_assert invariant("l * d == x * y" & "r == n * d" & "n <= l")
-     r = r + d
+  != static_assert seq("x * y == xx * yy" & "n == 0" & "r == 0" & "n <= x")
+  do while (n < x)
+     != static_assert invariant("x * y == xx * yy" & "r == n * y" & "n <= x")
+     r = r + y
      n = n + 1
   end do
 

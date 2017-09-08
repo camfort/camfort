@@ -47,5 +47,5 @@ testOn fp = do
     pfsSources
 
 testHoare = do
-  testOn "camfort/samples/invariants/arrays.f90"
+  -- testOn "camfort/samples/invariants/arrays.f90"
   testOn "camfort/samples/invariants/invariants.f90"
