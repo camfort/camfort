@@ -29,13 +29,14 @@ import           Control.Lens
 import           Control.Monad.Reader
 import           Control.Monad.State.Strict
 import           Control.Monad.Writer.Strict
+import           Control.Monad.Trans.Maybe
 import           Data.Data                              (Data)
 import           Data.Foldable                          (foldlM)
 import           Data.Generics.Uniplate.Operations      (childrenBi,
                                                          transformBi)
 import           Data.Map                               (Map)
 import qualified Data.Map                               as Map
-import           Data.Maybe                             (isJust)
+import           Data.Maybe                             (isJust, maybeToList)
 import           Data.Void                              (Void)
 
 import           Data.SBV                               (SBool, defaultSMTCfg)
@@ -203,10 +204,15 @@ checkPU apu symSpec = do
 
   -- The first part of the checking process has a mutable 'CheckHoareEnv' in
   -- 'StateT' as it collects information to add to the environment.
-  (bodyTriple, env) <- flip runStateT (emptyEnv pu symSpec) $ do
+  ((bodyTriple, initialAssignments), env) <- flip runStateT (emptyEnv pu symSpec) $ do
     logInfo' pu $ " - Setting up"
 
-    body <- initialSetup
+    (body, initialAssignments) <- initialSetup
+
+    unless (null initialAssignments) $
+      logDebug' pu $
+      "Found " <> describeShow (length initialAssignments) <>
+      " initial assignments: " <> describeShow (map pretty initialAssignments)
 
     addAuxVariables apu
 
@@ -225,12 +231,16 @@ checkPU apu symSpec = do
     logInfo' pu $ " - Found preconditions: "  <> describe (pretty precond)
     logInfo' pu $ " - Found postconditions: " <> describe (pretty postcond)
 
-    return (precond, postcond, body)
+    -- Modify the postcondition by substituting in variable values from the
+    -- initial assignments
+    let postcond' = chainSub postcond initialAssignments
+
+    return ((precond, postcond', body), initialAssignments)
 
   -- The second part has an immutable 'CheckHoareEnv' in 'ReaderT'.
   flip runReaderT env $ do
     logInfo' pu $ " - Computing verification conditions"
-    (_, vcs) <- runGenM (genBody bodyTriple)
+    (_, vcs) <- runGenM (genBody' initialAssignments bodyTriple)
 
     logInfo' pu $ " - Verifying conditions:"
 
@@ -317,9 +327,12 @@ setFormulaUniqueNames nameMap = transformBi setExpUN
 type CheckHoareMut = StateT CheckHoareEnv BackendAnalysis
 type CheckHoare = ReaderT CheckHoareEnv BackendAnalysis
 
+type FortranAssignment = Assignment MetaExpr FortranVar
+
 -- | Sets up the environment for checking the program unit, including reading
--- past variable declarations. Returns the blocks after the variable declarations.
-initialSetup :: CheckHoareMut [F.Block HA]
+-- past variable declarations. Returns the assignments made in variable
+-- declarations, and blocks after the variable declarations.
+initialSetup :: CheckHoareMut ([F.Block HA], [FortranAssignment])
 initialSetup = do
   pu <- use hePU
   let body = childrenBi pu :: [F.Block HA]
@@ -346,14 +359,14 @@ initialSetup = do
 
   let argNames = map expNamePair rawArgNames
 
-  restBody <- readInitialBlocks body
+  (restBody, initialAssignments) <- readInitialBlocks body
 
   -- Verify that all argument names have types associated with them.
   forM_ argNames $ \argName -> do
     hasType <- isJust <$> use (heVarsInScope . at (argName ^. npUnique))
     unless hasType $ failAnalysis' pu (ArgWithoutDecl argName)
 
-  return restBody
+  return (restBody, initialAssignments)
 
 
 -- | Uses the auxiliary variable declaration annotations to add auxiliary
@@ -389,12 +402,12 @@ addAuxVariables apu =
 -- | As part of the initial setup, reads setup blocks like declarations and
 -- implicit statements. Updates the environment accordingly. Returns the rest of
 -- the blocks, after the setup blocks.
-readInitialBlocks :: [F.Block HA] -> CheckHoareMut [F.Block HA]
-readInitialBlocks = dropWhileM readInitialBlock
+readInitialBlocks :: [F.Block HA] -> CheckHoareMut ([F.Block HA], [FortranAssignment])
+readInitialBlocks = runWriterT . dropWhileM readInitialBlock
   where
-    -- This function should return 'True' if the block may be part of the setup,
-    -- and 'False' otherwise.
-    readInitialBlock :: F.Block HA -> CheckHoareMut Bool
+    -- This function returns 'True' if the block may be part of the setup, and
+    -- 'False' otherwise.
+    readInitialBlock :: F.Block HA -> WriterT [FortranAssignment] CheckHoareMut Bool
     readInitialBlock bl = case bl of
       F.BlStatement _ _ _ st ->
         case st of
@@ -407,24 +420,32 @@ readInitialBlocks = dropWhileM readInitialBlock
 
             -- Each variable may have extra information that modifies its type info
             declVarsTis <- forM (F.aStrip decls) $ \case
-              -- TODO: Deal with declarations that include assignments
-              F.DeclVariable _ _ nameExp declLength Nothing ->
+              F.DeclVariable _ _ nameExp declLength mInitialValue -> do
                 return (nameExp,
                         topTypeInfo
-                        & tiDeclaratorLength .~ declLength)
+                        & tiDeclaratorLength .~ declLength,
+                        mInitialValue)
 
-              F.DeclArray _ _ nameExp declDims declLength Nothing ->
+              F.DeclArray _ _ nameExp declDims declLength mInitialValue ->
                 return (nameExp,
                         topTypeInfo
                         & tiDeclaratorLength .~ declLength
-                        & tiDimensionDeclarators .~ Just declDims)
+                        & tiDimensionDeclarators .~ Just declDims,
+                        mInitialValue)
 
-              _ -> failAnalysis' bl (UnsupportedBlock bl)
-
-            forM_ declVarsTis $ \(varNameExp, varTypeInfo) -> do
-              varType <- readerOfState $ tryTranslateTypeInfo varTypeInfo
+            forM_ declVarsTis $ \(varNameExp, varTypeInfo, mInitialValue) -> do
               let varNames = expNamePair varNameExp
+
+              varType <- readerOfState $ tryTranslateTypeInfo varTypeInfo
+
+              -- Put the new variable in scope
               modify $ newVar varNames varType
+
+              -- Record the assignment if there is one. NB this must be done
+              -- after putting the variable in scope, because making an
+              -- assignment checks that it is in scope.
+              tell =<< traverse (readerOfState . simpleAssignment varNames)
+                          (maybeToList mInitialValue)
 
             return True
 
@@ -434,7 +455,8 @@ readInitialBlocks = dropWhileM readInitialBlock
           F.StImplicit _ _ (Just _) -> failAnalysis' bl (UnsupportedBlock bl)
           _ -> return False
 
-      F.BlComment{} -> return True
+      -- Skip comments that don't have sequence annotations
+      F.BlComment{} | Nothing <- getBlockSeqAnnotation bl -> return True
       _ -> return False
 
 
@@ -482,8 +504,18 @@ runGenM (GenM action) = runWriterT action
 type FortranTriplet a = Triplet MetaExpr FortranVar a
 
 
+genBody' :: [FortranAssignment] -> FortranTriplet [F.Block HA] -> GenM ()
+genBody' as (precond, postcond, body) = do
+  let seqL = JustAssign as
+  seqR <- bodyToSequence body
+
+  case seqL `joinAnnSeq` seqR of
+    Just x -> void $ sequenceVCs genBlock (precond, postcond, x)
+    Nothing -> failAnalysis' body $ AnnotationError MissingSequenceAnn
+
+
 genBody :: FortranTriplet [F.Block HA] -> GenM ()
-genBody = traverseOf _3 bodyToSequence >=> void . sequenceVCs genBlock
+genBody = genBody' []
 
 
 genBlock :: FortranTriplet (F.Block HA) -> GenM ()
@@ -496,7 +528,9 @@ genBlock (precond, postcond, bl) = do
     F.BlDoWhile _ _ _ _ cond body _ -> do
       primInvariant <-
         case body of
-         b : _ | Just (SodSpec (Specification SpecInvariant f)) <- getAnnSod (F.getAnnotation b) -> return f
+         b : _ | Just (SodSpec (Specification SpecInvariant f))
+                 <- getAnnSod (F.getAnnotation b)
+                 -> return f
          _ -> failAnalysis' bl $ AnnotationError MissingWhileInvariant
 
       invariant <- tryTranslateFormula body primInvariant
@@ -529,17 +563,12 @@ blockToSequence :: F.Block HA -> GenM (AnnSeq MetaExpr FortranVar (F.Block HA))
 blockToSequence bl = do
   chooseFrom [assignment, sequenceSpec, other]
   where
-    assignment =
-      assignmentBlock bl >>= \case
-        Just a -> return $ Just $ JustAssign [a]
-        Nothing -> return $ Nothing
+    assignment = fmap (JustAssign . (: [])) <$> tryBlockToAssignment bl
 
     sequenceSpec =
-      case getAnnSod (F.getAnnotation bl) of
-        Just (SodSpec (Specification SpecSeq m)) -> do
-          m' <- tryTranslateFormula bl m
-          return $ Just $ propAnnSeq m'
-        _ -> return Nothing
+      traverse
+      (fmap propAnnSeq . tryTranslateFormula bl)
+      (getBlockSeqAnnotation bl)
 
     other = return $ case bl of
       F.BlComment{} -> Just emptyAnnSeq
@@ -548,36 +577,77 @@ blockToSequence bl = do
     -- Tries each action in the list, using the first that works and otherwise
     -- reporting an error.
     chooseFrom :: [GenM (Maybe a)] -> GenM a
-    chooseFrom [] = failAnalysis' bl $ AnnotationError MissingSequenceAnn
-    chooseFrom (action : rest) = do
-      m <- action
-      case m of
-        Just x  -> return x
-        Nothing -> chooseFrom rest
+    chooseFrom =
+      (>>= fromMaybeM (failAnalysis' bl $ AnnotationError MissingSequenceAnn)) .
+      runMaybeT . msum . map MaybeT
+
+
+getBlockSeqAnnotation :: F.Block HA -> Maybe (PrimFormula InnerHA)
+getBlockSeqAnnotation = preview (to F.getAnnotation . to getAnnSod . _Just . _SodSpec . _SpecSeq)
 
 --------------------------------------------------------------------------------
 -- Handling assignments
 
-primAssignment
-  :: (ReportAnn (F.Analysis ann))
+
+tryBlockToAssignment
+  :: ( MonadReader CheckHoareEnv m
+     , MonadAnalysis HoareBackendError HoareBackendWarning m
+     )
+  => F.Block HA -> m (Maybe FortranAssignment)
+tryBlockToAssignment bl = do
+  case bl of
+    F.BlStatement _ _ _ stAst@(F.StExpressionAssign _ _ lexp rvalue) ->
+      Just <$> do
+        lvalue <- fromMaybeM (failAnalysis' lexp NonLValueAssignment)
+                  (F.toLValue lexp)
+
+        case lvalue of
+          F.LvSimpleVar {} -> simpleAssignment (expNamePair lexp) rvalue
+
+          F.LvSubscript _ _ lvar@(F.LvSimpleVar {}) ixs ->
+            case ixs of
+              F.AList _ _ [F.IxSingle _ _ _ ixExpr] ->
+                arrayAssignment (lvVarNames lvar) ixExpr rvalue
+
+              _ -> failAnalysis' ixs $
+                   UnsupportedAssignment "only simple indices are supported for now"
+          _ -> failAnalysis' stAst $
+               UnsupportedAssignment "complex assignment"
+
+    _ -> return Nothing
+
+
+-- | Create an assignment where the whole value is written to. TODO: this
+-- currently only supports primitive values.
+simpleAssignment
+  :: ( ReportAnn (F.Analysis ann)
+     , MonadReader CheckHoareEnv m
+     , MonadAnalysis HoareBackendError HoareBackendWarning m
+     )
   => NamePair
   -> F.Expression (F.Analysis ann)
-  -> GenM (Assignment MetaExpr FortranVar)
-primAssignment nm rvalAst = do
+  -> m FortranAssignment
+simpleAssignment nm rvalAst = do
   Some varV@(FortranVar varD _) <- varFromScope rvalAst nm
 
   case varD of
     DPrim _ -> do
       rvalExpr <- tryTranslateExpr varD rvalAst
       return (Assignment varV (intoMetaExpr rvalExpr))
-    _ -> failAnalysis' rvalAst $ WrongAssignmentType "primitive value" (Some varD)
+    _ -> failAnalysis' rvalAst $
+         WrongAssignmentType
+         "primitive value (others unsupported for now)"
+         (Some varD)
 
 arrayAssignment
-  :: (ReportAnn (F.Analysis ann))
+  :: ( ReportAnn (F.Analysis ann)
+     , MonadReader CheckHoareEnv m
+     , MonadAnalysis HoareBackendError HoareBackendWarning m
+     )
   => NamePair
   -> F.Expression (F.Analysis ann)
   -> F.Expression (F.Analysis ann)
-  -> GenM (Assignment MetaExpr FortranVar)
+  -> m FortranAssignment
 arrayAssignment arrName ixAst rvalAst = do
   Some varV@(FortranVar varD _) <- varFromScope rvalAst arrName
 
@@ -597,31 +667,6 @@ arrayAssignment arrName ixAst rvalAst = do
       return (Assignment varV arrExpr')
 
     _ -> failAnalysis' rvalAst $ WrongAssignmentType "array type" (Some varD)
-
-
-assignmentBlock :: F.Block HA -> GenM (Maybe (Assignment MetaExpr FortranVar))
-assignmentBlock bl = do
-  case bl of
-    F.BlStatement _ _ _ stAst@(F.StExpressionAssign _ _ lexp rvalue) ->
-      Just <$> do
-        lvalue <- maybe (failAnalysis' lexp NonLValueAssignment)
-                  return (F.toLValue lexp)
-
-        case lvalue of
-          F.LvSimpleVar {} -> primAssignment (expNamePair lexp) rvalue
-
-          F.LvSubscript _ _ lvar@(F.LvSimpleVar {}) ixs ->
-            case ixs of
-              F.AList _ _ [F.IxSingle _ _ _ ixExpr] ->
-                arrayAssignment (lvVarNames lvar) ixExpr rvalue
-
-              _ -> failAnalysis' ixs $
-                   UnsupportedAssignment "only simple indices are supported for now"
-          _ -> failAnalysis' stAst $
-               UnsupportedAssignment "complex assignment"
-
-    _ -> return Nothing
-
 
 --------------------------------------------------------------------------------
 
@@ -725,6 +770,10 @@ dropWhileM f (x : xs) = do
   if continue
     then dropWhileM f xs
     else return (x : xs)
+
+
+fromMaybeM :: (Monad m) => m a -> Maybe a -> m a
+fromMaybeM e = maybe e return
 
 
 getAnnSod :: HA -> Maybe (SpecOrDecl InnerHA)

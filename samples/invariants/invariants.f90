@@ -112,12 +112,14 @@ end function halve
 integer function div(x, y)
 
   integer :: x, y
-  integer :: n, q
+  integer :: n = y, q = 0
 
-  n = y
-  q = 0
+  ! integer :: n, q
 
-  !!!= static_assert seq("x == xx" & "y == yy" & "n == y" & "q == 0" & "n <= x + y")
+  ! n = y
+  ! q = 0
+
+  != static_assert seq("x == xx" & "y == yy" & "n == y" & "q == 0" & "n <= x + y")
   do while (n <= x)
      != static_assert invariant("x == xx" & "y == yy" & "n <= x + y" & "y * q == n - y")
      q = q + 1
@@ -127,6 +129,9 @@ integer function div(x, y)
   div = q
 
 end function div
+
+! INFO:    2. (((x = xx ∧ y = yy) ∧ n <= x + y) ∧ y * q = n - y) ∧ n <= x -> ((x = xx ∧ y = yy) ∧ n + y <= x + y) ∧ y * (q + 1) = (n + y) - y
+! INFO:    2. x >= 0 ∧ (x = xx ∧ y = yy) -> ((x = xx ∧ y = yy) ∧ n <= x + y) ∧ y * q = n - y
 
 
 != decl_aux("integer" :: xx)
