@@ -113,14 +113,18 @@ eqField eqVals = curry $ \case
       _                      -> Nothing
 
 
-eqRec :: Rec (Field D) fs -> Rec (Field D) gs -> Maybe (fs :~: gs)
-eqRec = curry $ \case
+eqRec :: (forall a b. t a -> t b -> Maybe (a :~: b)) -> Rec (Field t) fs -> Rec (Field t) gs -> Maybe (fs :~: gs)
+eqRec eqInside = curry $ \case
   (RNil, RNil) -> Just Refl
   (h1 :& t1, h2 :& t2) ->
-    case (eqField eqD h1 h2, eqRec t1 t2) of
+    case (eqField eqInside h1 h2, eqRec eqInside t1 t2) of
       (Just Refl, Just Refl) -> Just Refl
       _                      -> Nothing
   _ -> Nothing
+
+
+eqArrValue :: ArrValue a -> ArrValue b -> Maybe (a :~: b)
+eqArrValue a1 a2 = eqD (dArrValue a1) (dArrValue a2)
 
 
 eqD :: D a -> D b -> Maybe (a :~: b)
@@ -129,12 +133,12 @@ eqD = curry $ \case
     case eqPrim p1 p2 of
       Just Refl -> Just Refl
       _         -> Nothing
-  (DArray (Index i1) (ArrValue p1), DArray (Index i2) (ArrValue p2)) ->
-    case (eqPrim i1 i2, eqPrim p1 p2) of
+  (DArray (Index i1) av1, DArray (Index i2) av2) ->
+    case (eqPrim i1 i2, eqArrValue av1 av2) of
       (Just Refl, Just Refl) -> Just Refl
-      _                      -> Nothing
+      _ -> Nothing
   (DData n1 r1, DData n2 r2) ->
-    case (eqSymbol n1 n2, eqRec r1 r2) of
+    case (eqSymbol n1 n2, eqRec eqD r1 r2) of
       (Just Refl, Just Refl) -> Just Refl
       _                      -> Nothing
   _ -> Nothing

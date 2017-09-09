@@ -28,9 +28,10 @@ module Language.Fortran.Model.Vars
 import           Data.Typeable                      ((:~:) (..))
 
 import           Control.Lens                       hiding (Index, op)
-import           Control.Monad.Reader               (MonadReader (..))
 
 import           Data.SBV.Dynamic
+
+import           Data.Vinyl (rtraverse)
 
 import qualified Language.Fortran.AST               as F
 
@@ -116,11 +117,19 @@ instance Pretty1 FortranVar where
 --  Internals
 --------------------------------------------------------------------------------
 
-arraySymbolic :: (MonadReader r m, HasPrimReprHandlers r) => Index i -> ArrValue a -> String -> m (Symbolic SArr)
-arraySymbolic (Index ixPrim) (ArrValue valPrim) nm = do
+arraySymbolic :: (HasPrimReprHandlers r) => Index i -> ArrValue a -> String -> r -> Symbolic (ArrRepr i a)
+arraySymbolic ixIndex@(Index ixPrim) valAV nm env =
+  case valAV of
+    ArrPrim valPrim -> ARPrim <$> arraySymbolicPrim ixPrim valPrim nm env
+    ArrData _ valData -> do
+      valReprs <- rtraverse (traverseField' (\av -> arraySymbolic ixIndex av nm env)) valData
+      return $ ARData valReprs
+
+arraySymbolicPrim :: (HasPrimReprHandlers r) => Prim p1 k1 i -> Prim p2 k2 a -> String -> r -> Symbolic SArr
+arraySymbolicPrim ixPrim valPrim nm = do
   k1 <- primSBVKind ixPrim
   k2 <- primSBVKind valPrim
-  return $ newSArr (k1, k2) (const nm)
+  return $ newSArr (k1, k2) (\i -> nm ++ "_" ++ show i)
 
 -- pairProxy :: p1 a -> p2 b -> Proxy '(a, b)
 -- pairProxy _ _ = Proxy

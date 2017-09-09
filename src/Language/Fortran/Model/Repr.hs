@@ -41,6 +41,11 @@ import           Language.Fortran.Model.Types
 --  Core Fortran Representations
 --------------------------------------------------------------------------------
 
+data ArrRepr i a where
+  ARPrim :: SArr -> ArrRepr i (PrimS a)
+  ARData :: Rec (Field (ArrRepr i)) fs -> ArrRepr i (Record name fs)
+
+
 data CoreRepr a where
   CRPrim
     :: D (PrimS a)
@@ -49,7 +54,7 @@ data CoreRepr a where
 
   CRArray
     :: D (Array i a)
-    -> SArr
+    -> ArrRepr i a
     -> CoreRepr (Array i a)
 
   CRData

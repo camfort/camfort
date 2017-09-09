@@ -71,11 +71,15 @@ data Prim p k a where
 --  Arrays
 --------------------------------------------------------------------------------
 
+-- | Specifies which types can be used as array indices.
 data Index a where
   Index :: Prim p 'BTInt a -> Index (PrimS a)
 
+-- | Specifies which types can be stored in arrays.
 data ArrValue a where
-  ArrValue :: Prim p k a -> ArrValue (PrimS a)
+  ArrPrim :: Prim p k a -> ArrValue (PrimS a)
+  ArrData :: SSymbol name -> Rec (Field ArrValue) fs -> ArrValue (Record name fs)
+
 
 newtype Array i a = Array [a]
 
@@ -86,8 +90,18 @@ newtype Array i a = Array [a]
 data Field f field where
   Field :: SSymbol name -> f a -> Field f '(name, a)
 
-overField :: (f a -> f b) -> Field f '(name, a) -> Field f '(name, b)
+-- | Given a field with known contents, we can change the functor and value
+-- type.
+overField :: (f a -> g b) -> Field f '(name, a) -> Field g '(name, b)
 overField f (Field n x) = Field n (f x)
+
+-- | Given a field with unknown contents, we can change the functor but not the
+-- value type.
+overField' :: (forall a. f a -> g a) -> Field f nv -> Field g nv
+overField' f (Field n x) = Field n (f x)
+
+traverseField' :: (Functor t) => (forall a. f a -> t (g a)) -> Field f nv -> t (Field g nv)
+traverseField' f (Field n x) = Field n <$> f x
 
 data Record name fields where
   Record :: SSymbol name -> Rec (Field Identity) fields -> Record name fields
@@ -109,7 +123,9 @@ dIndex :: Index i -> D i
 dIndex (Index p) = DPrim p
 
 dArrValue :: ArrValue a -> D a
-dArrValue (ArrValue p) = DPrim p
+dArrValue (ArrPrim p) = DPrim p
+dArrValue (ArrData nameSym fieldArrValues) =
+  DData nameSym (rmap (overField' dArrValue) fieldArrValues)
 
 --------------------------------------------------------------------------------
 --  Pretty Printing
@@ -130,8 +146,7 @@ instance Pretty1 (Prim p k) where
     PChar   -> showString "character"
 
 instance Pretty1 ArrValue where
-  prettys1Prec p = \case
-    ArrValue prim -> prettys1Prec p prim
+  prettys1Prec p = prettys1Prec p . dArrValue
 
 instance (Pretty1 f) => Pretty1 (Field f) where
   prettys1Prec _ = \case

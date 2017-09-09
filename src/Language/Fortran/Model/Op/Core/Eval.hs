@@ -8,10 +8,11 @@
 {-# LANGUAGE LambdaCase             #-}
 {-# LANGUAGE MultiParamTypeClasses  #-}
 {-# LANGUAGE PolyKinds              #-}
+{-# LANGUAGE RankNTypes             #-}
 {-# LANGUAGE ScopedTypeVariables    #-}
 {-# LANGUAGE UndecidableInstances   #-}
 
-{-# OPTIONS_GHC -Wall      #-}
+{-# OPTIONS_GHC -Wall #-}
 
 module Language.Fortran.Model.Op.Core.Eval
   ( MonadEvalFortran
@@ -20,7 +21,7 @@ module Language.Fortran.Model.Op.Core.Eval
 
 import           Control.Applicative                  (liftA2)
 
-import           Data.SBV.Dynamic                     (SArr, SVal)
+import           Data.SBV.Dynamic                     (SVal)
 import qualified Data.SBV.Dynamic                     as SBV
 
 import           Data.Singletons
@@ -60,11 +61,7 @@ evalCoreOp op opr = case opr of
   OSEq cmp p1 p2 p3 -> primBinop False p1 p2 p3 (eqBinop cmp op)
   OSRel cmp p1 p2 p3 -> primBinop False p1 p2 p3 (relBinop cmp op)
 
-  OSLookup (DArray (Index _) (ArrValue elPrim)) ->
-    return . runcurry (\xs index ->
-      let xsArr = toArr xs
-          indexVal = primToVal index
-      in primFromVal elPrim (SBV.readSArr xsArr indexVal))
+  OSLookup _ -> return . runcurry lookupArr
 
   OSDeref _ s -> return . runcurry (derefData s Proxy)
 
@@ -78,9 +75,6 @@ primToVal = \case
 
 primFromVal :: Prim p k a -> SVal -> CoreRepr (PrimS a)
 primFromVal p v = CRPrim (DPrim p) v
-
-toArr :: CoreRepr (Array i v) -> SArr
-toArr (CRArray _ x) = x
 
 primUnop
   :: (MonadEvalFortran r m)
@@ -181,6 +175,33 @@ relBinop _ = \case
   OpLE -> SBV.svLessEq
   OpGT -> SBV.svGreaterThan
   OpGE -> SBV.svGreaterEq
+
+--------------------------------------------------------------------------------
+--  Lookup
+--------------------------------------------------------------------------------
+
+zipFieldsWith :: (forall a. f a -> g a -> h a) -> Field f nv -> Field g nv -> Field h nv
+zipFieldsWith f (Field _ x) (Field n y) = Field n (f x y)
+
+lookupArrRepr
+  :: CoreRepr i
+  -> D (Array i v)
+  -> ArrRepr i v
+  -> CoreRepr v
+lookupArrRepr ixRepr (DArray ixIndex@(Index _) valAV) arrRepr =
+  case ixRepr of
+    CRPrim _ ixVal -> case (valAV, arrRepr) of
+      (ArrPrim _, ARPrim arr) ->
+        CRPrim (dArrValue valAV) (SBV.readSArr arr ixVal)
+      (ArrData _ dfields, ARData afields) ->
+        let avD = (dArrValue valAV)
+        in CRData avD (rzipWith (zipFieldsWith (lookupArrRepr ixRepr . DArray ixIndex)) dfields afields)
+
+lookupArr
+  :: CoreRepr (Array i v)
+  -> CoreRepr i
+  -> CoreRepr v
+lookupArr (CRArray arrD arrRepr) ixRepr = lookupArrRepr ixRepr arrD arrRepr
 
 --------------------------------------------------------------------------------
 --  Deref
