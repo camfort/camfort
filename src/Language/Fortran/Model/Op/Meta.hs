@@ -1,4 +1,3 @@
-{-# LANGUAGE UndecidableInstances #-}
 {-# LANGUAGE DataKinds             #-}
 {-# LANGUAGE EmptyCase             #-}
 {-# LANGUAGE FlexibleContexts      #-}
@@ -7,14 +6,17 @@
 {-# LANGUAGE LambdaCase            #-}
 {-# LANGUAGE MultiParamTypeClasses #-}
 {-# LANGUAGE PolyKinds             #-}
+{-# LANGUAGE UndecidableInstances  #-}
 
 {-# OPTIONS_GHC -Wall #-}
 
 {-|
-For expressions over normal Fortran values that are not representable in Fortran.
+For expressions over normal Fortran values that are not representable in
+Fortran.
 
-- Immutable array update
-- Immutable data update
+- Immutable array update ('MopWriteArr')
+- Immutable data update ('MopWriteData')
+- Explicit coercions ('MopCoercePrim')
 -}
 module Language.Fortran.Model.Op.Meta where
 
@@ -22,15 +24,14 @@ import           Data.Vinyl.Lens
 
 import           Data.Singletons.TypeLits
 
-import qualified Data.SBV.Dynamic                     as SBV
+import qualified Data.SBV.Dynamic                    as SBV
 
 import           Language.Expression
 import           Language.Expression.Pretty
 
-import           Language.Fortran.Model.Repr
 import           Language.Fortran.Model.Op.Core.Eval
+import           Language.Fortran.Model.Repr
 import           Language.Fortran.Model.Types
-
 
 
 data MetaOp t a where
@@ -50,17 +51,26 @@ data MetaOp t a where
     -> t a
     -> MetaOp t (Record rname fields)
 
+  MopCoercePrim
+    :: Prim p k a
+    -> Prim p k b
+    -> t (PrimS a)
+    -> MetaOp t (PrimS b)
+
 
 instance Operator MetaOp where
   htraverseOp f = \case
     MopWriteArr d x y z -> MopWriteArr d <$> f x <*> f y <*> f z
     MopWriteData a b c x y -> MopWriteData a b c <$> f x <*> f y
+    MopCoercePrim p1 p2 x -> MopCoercePrim p1 p2 <$> f x
 
 
 instance (Applicative f) => EvalOp f CoreRepr MetaOp where
   evalOp = \case
     MopWriteArr _ arr ix val -> pure $ writeArray arr ix val
     MopWriteData _ fname _ rec val -> pure $ writeDataAt fname rec val
+    MopCoercePrim p1 p2 x -> pure $ coercePrim p1 p2 x
+
 
 instance (MonadEvalFortran r m) => EvalOp m HighRepr MetaOp where
   evalOp = fmap HRCore . evalOp .
@@ -84,6 +94,9 @@ instance Pretty2 MetaOp where
       showString " <- " .
       prettys1Prec 0 v .
       showString "}"
+
+    -- TODO: Consider adding visual evidence of coercion
+    MopCoercePrim _ _ x -> prettys1Prec p x
 
 
 --------------------------------------------------------------------------------
@@ -110,3 +123,14 @@ writeDataAt
   -> CoreRepr (Record rname fields)
 writeDataAt fieldSymbol (CRData d dataRec) valRep =
   CRData d $ rput (Field fieldSymbol valRep) dataRec
+
+--------------------------------------------------------------------------------
+--  Coerce primitives
+--------------------------------------------------------------------------------
+
+coercePrim
+  :: Prim p k a
+  -> Prim p k b
+  -> CoreRepr (PrimS a)
+  -> CoreRepr (PrimS b)
+coercePrim _ _ _ = error "primitive coercion not implemented yet"
