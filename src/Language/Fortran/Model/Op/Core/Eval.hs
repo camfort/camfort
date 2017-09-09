@@ -19,14 +19,9 @@ module Language.Fortran.Model.Op.Core.Eval
   ) where
 
 import           Control.Applicative                  (liftA2)
-import           Control.Monad.Reader.Class           (MonadReader (..))
 
-import           Data.SBV                             (SDouble, SFloat, SReal,
-                                                       sRTZ)
-import qualified Data.SBV                             as SBV
 import           Data.SBV.Dynamic                     (SArr, SVal)
 import qualified Data.SBV.Dynamic                     as SBV
-import           Data.SBV.Internals                   (SBV (..))
 
 import           Data.Singletons
 import           Data.Singletons.Prelude.List
@@ -37,18 +32,12 @@ import           Data.Vinyl.Curry
 
 import           Language.Fortran.Model.Op.Core.Core
 import           Language.Fortran.Model.Op.Core.Match
+import           Language.Fortran.Model.Op.Eval
 import           Language.Fortran.Model.Repr
 import           Language.Fortran.Model.Repr.Prim
 import           Language.Fortran.Model.Singletons
 import           Language.Fortran.Model.Types
 import           Language.Fortran.Model.Types.Match
-
---------------------------------------------------------------------------------
---  Monad
---------------------------------------------------------------------------------
-
-class (MonadReader r m, HasPrimReprHandlers r) => MonadEvalFortran r m | m -> r where
-instance (MonadReader r m, HasPrimReprHandlers r) => MonadEvalFortran r m where
 
 --------------------------------------------------------------------------------
 --  Evaluation
@@ -102,7 +91,7 @@ primUnop
 primUnop shouldCoerce p2 f = runcurry $ fmap (primFromVal p2 . f) . maybeCoerce . primToVal
   where
     maybeCoerce
-      | shouldCoerce = coerceSBVNum p2
+      | shouldCoerce = coercePrimSVal p2
       | otherwise = return
 
 primBinop
@@ -119,43 +108,12 @@ primBinop takesResultVal p1 p2 p3 (.*.) =
 
   where
     coerceToCeil = case primCeil p1 p2 of
-      Just (MakePrim pCeil) -> coerceSBVNum pCeil
+      Just (MakePrim pCeil) -> coercePrimSVal pCeil
       _                     -> return
 
     coerceArg
-      | takesResultVal = coerceSBVNum p3
+      | takesResultVal = coercePrimSVal p3
       | otherwise = coerceToCeil
-
---------------------------------------------------------------------------------
---  SBV Kinds
---------------------------------------------------------------------------------
-
-coerceBy :: (SBV a -> SBV b) -> SVal -> SVal
-coerceBy f x = unSBV (f (SBV x))
-
-coerceNumKinds :: SBV.Kind -> SBV.Kind -> (SVal -> SVal)
-coerceNumKinds SBV.KReal   SBV.KReal = id
-coerceNumKinds SBV.KFloat  SBV.KReal = coerceBy (SBV.fromSFloat sRTZ :: SFloat -> SReal)
-coerceNumKinds SBV.KDouble SBV.KReal = coerceBy (SBV.fromSDouble sRTZ :: SDouble -> SReal)
-coerceNumKinds _        k2@SBV.KReal = SBV.svFromIntegral k2
-
-coerceNumKinds SBV.KReal   SBV.KDouble = coerceBy (SBV.toSDouble sRTZ :: SReal -> SDouble)
-coerceNumKinds SBV.KDouble SBV.KDouble = id
-coerceNumKinds SBV.KFloat  SBV.KDouble = coerceBy (SBV.toSDouble sRTZ :: SFloat -> SDouble)
-coerceNumKinds _        k2@SBV.KDouble = SBV.svFromIntegral k2
-
-coerceNumKinds SBV.KReal   SBV.KFloat = coerceBy (SBV.toSFloat sRTZ :: SReal -> SFloat)
-coerceNumKinds SBV.KDouble SBV.KFloat = coerceBy (SBV.toSFloat sRTZ :: SDouble -> SFloat)
-coerceNumKinds SBV.KFloat  SBV.KFloat = id
-coerceNumKinds _        k2@SBV.KFloat = SBV.svFromIntegral k2
-
-coerceNumKinds _ k2 = SBV.svFromIntegral k2
-
-coerceSBVNum :: (MonadEvalFortran r m) => Prim p k a -> SVal -> m SVal
-coerceSBVNum p v = do
-  k2 <- primSBVKind p
-  let k1 = SBV.kindOf v
-  return $ coerceNumKinds k1 k2 v
 
 --------------------------------------------------------------------------------
 --  Numeric

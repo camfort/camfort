@@ -109,4 +109,4 @@ liftFortranExpr e =
 
 
 intoMetaExpr :: (ChooseOp op AllOps, Operator op) => Expr op v a -> MetaExpr v a
-intoMetaExpr e = Expr' (mapOperators (review chooseOp) e)
+intoMetaExpr = Expr' . mapOperators (review chooseOp)

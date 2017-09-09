@@ -54,6 +54,7 @@ module Language.Fortran.Model.Translate
     -- * Translating Expressions
   , translateExpression
   , translateExpression'
+  , translateCoerceExpression
 
     -- * Translating Types
     -- ** 'TypeInfo'
@@ -114,6 +115,7 @@ import           Language.Expression.Pretty
 import           Camfort.Analysis.Logger
 import           Camfort.Helpers.TypeLevel
 import           Language.Fortran.Model.Op.Core
+import           Language.Fortran.Model.Op.Meta
 import           Language.Fortran.Model.Op.Core.Match
 import           Language.Fortran.Model.Singletons
 import           Language.Fortran.Model.Types
@@ -468,23 +470,34 @@ translateExpression = \case
 translateExpression'
   :: (Monad m) => D a -> F.Expression (F.Analysis ann)
   -> TranslateT m (FortranExpr a)
-translateExpression' d = translateAtType "expression" d translateExpression
+translateExpression' targetD ast = do
+  SomePair sourceD expr <- translateExpression ast
+
+  case dcast sourceD targetD expr of
+    Just y -> return y
+    Nothing -> throwError $ ErrUnexpectedType "expression" (Some sourceD) (Some targetD)
 
 
-translateAtType
+-- | Translate an expression and try to coerce it to a particular type. Fails if
+-- the actual type cannot be coerced to the given type.
+translateCoerceExpression
+  :: (Monad m) => D a -> F.Expression (F.Analysis ann)
+  -> TranslateT m (Expr MetaOp FortranExpr a)
+translateCoerceExpression targetD ast = do
+  SomePair sourceD expr <- translateExpression ast
+
+  -- First check if it's already the right type
+  case dcast sourceD targetD expr of
+    Just y -> return (EVar y)
+    Nothing -> case (matchPrimD sourceD, matchPrimD targetD) of
+      (Just (MatchPrimD _ sourcePrim), Just (MatchPrimD _ targetPrim)) ->
+        return (EOp (MopCoercePrim targetPrim (EVar expr)))
+      _ -> throwError $ ErrUnexpectedType "expression" (Some sourceD) (Some targetD)
+
+
+translateSubscript
   :: (Monad m)
-  => Text
-  -> D b
-  -> (a -> TranslateT m SomeExpr)
-  -> a -> TranslateT m (FortranExpr b)
-translateAtType langPart db translate x =
-  do SomePair da someY <- translate x
-     case dcast da db someY of
-       Just y  -> return y
-       Nothing -> throwError $ ErrUnexpectedType langPart (Some da) (Some db)
-
-
-translateSubscript :: (Monad m) => F.Expression (F.Analysis ann) -> [F.Index (F.Analysis ann)] -> TranslateT m SomeExpr
+  => F.Expression (F.Analysis ann) -> [F.Index (F.Analysis ann)] -> TranslateT m SomeExpr
 translateSubscript arrAst [F.IxSingle _ _ _ ixAst] = do
   SomePair arrD arrExp <- translateExpression arrAst
   SomePair ixD ixExp <- translateExpression ixAst

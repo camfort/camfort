@@ -30,6 +30,7 @@ import           Language.Expression
 import           Language.Expression.Pretty
 
 import           Language.Fortran.Model.Op.Core.Eval
+import           Language.Fortran.Model.Op.Eval
 import           Language.Fortran.Model.Repr
 import           Language.Fortran.Model.Types
 
@@ -52,8 +53,7 @@ data MetaOp t a where
     -> MetaOp t (Record rname fields)
 
   MopCoercePrim
-    :: Prim p k a
-    -> Prim p k b
+    :: Prim p k b
     -> t (PrimS a)
     -> MetaOp t (PrimS b)
 
@@ -62,14 +62,14 @@ instance Operator MetaOp where
   htraverseOp f = \case
     MopWriteArr d x y z -> MopWriteArr d <$> f x <*> f y <*> f z
     MopWriteData a b c x y -> MopWriteData a b c <$> f x <*> f y
-    MopCoercePrim p1 p2 x -> MopCoercePrim p1 p2 <$> f x
+    MopCoercePrim p x -> MopCoercePrim p <$> f x
 
 
-instance (Applicative f) => EvalOp f CoreRepr MetaOp where
+instance (MonadEvalFortran r m) => EvalOp m CoreRepr MetaOp where
   evalOp = \case
     MopWriteArr _ arr ix val -> pure $ writeArray arr ix val
     MopWriteData _ fname _ rec val -> pure $ writeDataAt fname rec val
-    MopCoercePrim p1 p2 x -> pure $ coercePrim p1 p2 x
+    MopCoercePrim p x -> coercePrim p x
 
 
 instance (MonadEvalFortran r m) => EvalOp m HighRepr MetaOp where
@@ -96,7 +96,7 @@ instance Pretty2 MetaOp where
       showString "}"
 
     -- TODO: Consider adding visual evidence of coercion
-    MopCoercePrim _ _ x -> prettys1Prec p x
+    MopCoercePrim _ x -> prettys1Prec p x
 
 
 --------------------------------------------------------------------------------
@@ -129,8 +129,8 @@ writeDataAt fieldSymbol (CRData d dataRec) valRep =
 --------------------------------------------------------------------------------
 
 coercePrim
-  :: Prim p k a
-  -> Prim p k b
+  :: (MonadEvalFortran r m)
+  => Prim p k b
   -> CoreRepr (PrimS a)
-  -> CoreRepr (PrimS b)
-coercePrim _ _ _ = error "primitive coercion not implemented yet"
+  -> m (CoreRepr (PrimS b))
+coercePrim prim2 (CRPrim _ v) = CRPrim (DPrim prim2) <$> coercePrimSVal prim2 v

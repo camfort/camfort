@@ -10,8 +10,6 @@
 {-# LANGUAGE TemplateHaskell            #-}
 {-# OPTIONS_GHC -Wall #-}
 
--- TODO: More precise error and logging origins
-
 module Camfort.Specification.Hoare.CheckBackend
   ( AnnotatedProgramUnit(..)
   , apuPreconditions
@@ -632,8 +630,8 @@ simpleAssignment nm rvalAst = do
 
   case varD of
     DPrim _ -> do
-      rvalExpr <- tryTranslateExpr varD rvalAst
-      return (Assignment varV (intoMetaExpr rvalExpr))
+      rvalExpr <- tryTranslateCoerceExpr varD rvalAst
+      return (Assignment varV rvalExpr)
     _ -> failAnalysis' rvalAst $
          WrongAssignmentType
          "primitive value (others unsupported for now)"
@@ -722,6 +720,16 @@ tryTranslateExpr
      )
   => D a -> F.Expression (F.Analysis ann) -> m (FortranExpr a)
 tryTranslateExpr d e = doTranslate (failAnalysis' e) (translateExpression' d) e
+
+tryTranslateCoerceExpr
+  :: ( ReportAnn (F.Analysis ann)
+     , MonadReader CheckHoareEnv m
+     , MonadAnalysis HoareBackendError w m
+     )
+  => D a -> F.Expression (F.Analysis ann) -> m (MetaExpr FortranVar a)
+tryTranslateCoerceExpr d e =
+  doTranslate (failAnalysis' e)
+  (fmap squashExpression . translateCoerceExpression d) e
 
 tryTranslateTypeInfo
   :: ( ReportAnn (F.Analysis ann)

@@ -112,6 +112,7 @@ library
                         Language.Fortran.Model.Repr.Prim
                         Language.Fortran.Model.Vars
                         Language.Fortran.Model.Op
+                        Language.Fortran.Model.Op.Eval
                         Language.Fortran.Model.Op.Core
                         Language.Fortran.Model.Op.Core.Match
                         Language.Fortran.Model.Op.Core.Core
