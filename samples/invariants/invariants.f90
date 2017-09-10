@@ -114,11 +114,6 @@ integer function div(x, y)
   integer :: x, y
   integer :: n = y, q = 0
 
-  ! integer :: n, q
-
-  ! n = y
-  ! q = 0
-
   != static_assert seq("x == xx" & "y == yy" & "n == y" & "q == 0" & "n <= x + y")
   do while (n <= x)
      != static_assert invariant("x == xx" & "y == yy" & "n <= x + y" & "y * q == n - y")
