@@ -289,9 +289,9 @@ describeReport analysisName level report = Builder.toLazyText . execWriter $ do
   -- Output file name
   tell "Finished running "
   tellDescribe analysisName
-  tell " on input: "
+  tell " on input '"
   tellDescribe (report ^. arSourceFile)
-  tell "\n"
+  tell "' ...\n"
 
   -- Output logs if requested
   case level of
@@ -299,7 +299,7 @@ describeReport analysisName level report = Builder.toLazyText . execWriter $ do
       tell $ "Logs:\n"
       forM_ (report ^. arMessages) (describeMessage lvl)
       tell "\n"
-      tell "Result:\n"
+      tell "Result... "
     Nothing -> return ()
 
   let loggedWarnings = arMessages . traverse . _MsgWarn
@@ -316,8 +316,8 @@ describeReport analysisName level report = Builder.toLazyText . execWriter $ do
       tell $ describeBuilder e
     ARSuccess r -> do
       tell $ case (hadErrors, hadWarnings) of
-        (True, _) -> "Finished, but with errors:"
-        (False, True) -> "Finished, but with warnings:"
+        (True, _) -> "OK, but with errors:"
+        (False, True) -> "OK, but with warnings:"
         (False, False) -> "OK:"
       tell "\n"
       tell $ describeBuilder r
