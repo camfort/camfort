@@ -103,6 +103,17 @@ overField' f (Field n x) = Field n (f x)
 traverseField' :: (Functor t) => (forall a. f a -> t (g a)) -> Field f nv -> t (Field g nv)
 traverseField' f (Field n x) = Field n <$> f x
 
+zipFieldsWith :: (forall a. f a -> g a -> h a) -> Field f nv -> Field g nv -> Field h nv
+zipFieldsWith f (Field _ x) (Field n y) = Field n (f x y)
+
+zip3FieldsWith
+  :: (forall a. f a -> g a -> h a -> i a)
+  -> Field f nv
+  -> Field g nv
+  -> Field h nv
+  -> Field i nv
+zip3FieldsWith f (Field _ x) (Field _ y) (Field n z) = Field n (f x y z)
+
 data Record name fields where
   Record :: SSymbol name -> Rec (Field Identity) fields -> Record name fields
 

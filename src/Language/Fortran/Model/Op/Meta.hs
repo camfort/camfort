@@ -6,6 +6,7 @@
 {-# LANGUAGE LambdaCase            #-}
 {-# LANGUAGE MultiParamTypeClasses #-}
 {-# LANGUAGE PolyKinds             #-}
+{-# LANGUAGE RankNTypes            #-}
 {-# LANGUAGE UndecidableInstances  #-}
 
 {-# OPTIONS_GHC -Wall #-}
@@ -18,9 +19,12 @@ Fortran.
 - Immutable data update ('MopWriteData')
 - Explicit coercions ('MopCoercePrim')
 -}
-module Language.Fortran.Model.Op.Meta where
 
-import           Data.Vinyl.Lens
+module Language.Fortran.Model.Op.Meta (MetaOp(..)) where
+
+import           Data.Vinyl                          (Rec, rmap, (<<*>>))
+import           Data.Vinyl.Functor                  (Lift (..))
+import           Data.Vinyl.Lens                     (RElem (rput))
 
 import           Data.Singletons.TypeLits
 
@@ -103,13 +107,29 @@ instance Pretty2 MetaOp where
 --  Write array
 --------------------------------------------------------------------------------
 
+rzip3With
+  :: (forall x. f x -> g x -> h x -> i x)
+  -> Rec f xs
+  -> Rec g xs
+  -> Rec h xs
+  -> Rec i xs
+rzip3With f x y z = rmap (Lift . (Lift .) . f) x <<*>> y <<*>> z
+
+writeArray' :: CoreRepr i -> D (Array i v) -> ArrRepr i v -> CoreRepr v -> ArrRepr i v
+writeArray' ixRep (DArray ixIndex@(Index _) valAV) arrRep valRep =
+  case ixRep of
+    CRPrim _ ixVal -> case (valAV, arrRep, valRep) of
+      (ArrPrim _, ARPrim arr, CRPrim _ valVal) -> ARPrim (SBV.writeSArr arr ixVal valVal)
+      (ArrData _ fieldsAV, ARData fieldsAR, CRData _ fieldsRep) ->
+        ARData (rzip3With (zip3FieldsWith (writeArray' ixRep . DArray ixIndex))
+                fieldsAV
+                fieldsAR
+                fieldsRep)
+
+
 writeArray :: CoreRepr (Array i v) -> CoreRepr i -> CoreRepr v -> CoreRepr (Array i v)
-writeArray arrRep ixRep valRep =
-  case arrRep of
-    CRArray d@(DArray (Index _) (ArrValue _)) arr ->
-      case (ixRep, valRep) of
-        (CRPrim _ ixVal, CRPrim _ valVal) ->
-          CRArray d (SBV.writeSArr arr ixVal valVal)
+writeArray (CRArray arrD arrRep) ixRep valRep =
+  CRArray arrD (writeArray' ixRep arrD arrRep valRep)
 
 --------------------------------------------------------------------------------
 --  Write Data

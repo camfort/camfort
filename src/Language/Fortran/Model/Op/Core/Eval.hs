@@ -180,9 +180,6 @@ relBinop _ = \case
 --  Lookup
 --------------------------------------------------------------------------------
 
-zipFieldsWith :: (forall a. f a -> g a -> h a) -> Field f nv -> Field g nv -> Field h nv
-zipFieldsWith f (Field _ x) (Field n y) = Field n (f x y)
-
 lookupArrRepr
   :: CoreRepr i
   -> D (Array i v)
@@ -195,7 +192,11 @@ lookupArrRepr ixRepr (DArray ixIndex@(Index _) valAV) arrRepr =
         CRPrim (dArrValue valAV) (SBV.readSArr arr ixVal)
       (ArrData _ dfields, ARData afields) ->
         let avD = (dArrValue valAV)
-        in CRData avD (rzipWith (zipFieldsWith (lookupArrRepr ixRepr . DArray ixIndex)) dfields afields)
+        in CRData avD (
+          rzipWith
+          (zipFieldsWith (lookupArrRepr ixRepr . DArray ixIndex))
+          dfields
+          afields)
 
 lookupArr
   :: CoreRepr (Array i v)

@@ -363,6 +363,7 @@ translateTypeInfo
   => TypeInfo ann
   -> TranslateT m SomeType
 translateTypeInfo ti = do
+  -- TODO: Derived data types
   SomePrimD basePrim <- translateBaseType (ti ^. tiBaseType) (ti ^. tiSelectorKind)
 
   let
@@ -396,7 +397,7 @@ translateTypeInfo ti = do
       -- TODO: Use information about the length.
       -- maybe (unsupported "type spec") void (exprIntLit lengthExp)
       case basePrim of
-        DPrim bp -> return (Some (DArray (Index PInt64) (ArrValue bp)))
+        DPrim bp -> return (Some (DArray (Index PInt64) (ArrPrim bp)))
     Nothing ->
       return (Some basePrim)
 
@@ -516,7 +517,7 @@ translateSubscript arrAst [F.IxSingle _ _ _ ixAst] = do
         -- array type; in reality any array type would have done.
         _ -> throwError $
           ErrUnexpectedType "array indexing"
-          (Some (DArray (Index PInt64) (ArrValue PInt64)))
+          (Some (DArray (Index PInt64) (ArrPrim PInt64)))
           (Some arrD)
 
 translateSubscript lhs [F.IxRange {}] =
