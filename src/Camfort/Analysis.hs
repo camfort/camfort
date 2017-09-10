@@ -268,17 +268,11 @@ data AnalysisReport e w r =
 
 makeLenses ''AnalysisReport
 
-instance (Describe e, Describe r) => Describe (AnalysisResult e r) where
-  describeBuilder (ARFailure origin e) =
-    "CRITICAL ERROR:\n" <> describeBuilder origin <> ": " <> describeBuilder e
-
-  describeBuilder (ARSuccess r) =
-    "OK:\n" <> describeBuilder r
-
-
 -- | Produce a human-readable version of an 'AnalysisReport', at the given
 -- verbosity level. Giving 'Nothing' for the log level hides all logs.
-describeReport :: (Describe e, Describe w, Describe r) => Text -> Maybe LogLevel -> AnalysisReport e w r -> Lazy.Text
+describeReport
+  :: (Describe e, Describe w, Describe r)
+  => Text -> Maybe LogLevel -> AnalysisReport e w r -> Lazy.Text
 describeReport analysisName level report = Builder.toLazyText . execWriter $ do
   let describeMessage lvl msg = do
         let tell' x = do
@@ -293,7 +287,7 @@ describeReport analysisName level report = Builder.toLazyText . execWriter $ do
           _              -> return ()
 
   -- Output file name
-  tell "Running "
+  tell "Finished running "
   tellDescribe analysisName
   tell " on input: "
   tellDescribe (report ^. arSourceFile)
@@ -308,8 +302,25 @@ describeReport analysisName level report = Builder.toLazyText . execWriter $ do
       tell "Result:\n"
     Nothing -> return ()
 
-  -- Output results
-  tellDescribe (report ^. arResult)
+  let loggedWarnings = arMessages . traverse . _MsgWarn
+      loggedErrors = arMessages . traverse . _MsgError
+
+      hadErrors = notNullOf loggedErrors report
+      hadWarnings = notNullOf loggedWarnings report
+
+  case report ^. arResult of
+    ARFailure origin e -> do
+      tell $ "CRITICAL ERROR:\n"
+      tell $ describeBuilder origin
+      tell ": "
+      tell $ describeBuilder e
+    ARSuccess r -> do
+      tell $ case (hadErrors, hadWarnings) of
+        (True, _) -> "Finished, but with errors:"
+        (False, True) -> "Finished, but with warnings:"
+        (False, False) -> "OK:"
+      tell "\n"
+      tell $ describeBuilder r
 
 
 putDescribeReport
