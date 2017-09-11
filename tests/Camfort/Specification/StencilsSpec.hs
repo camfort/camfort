@@ -458,7 +458,7 @@ inferReportWithMod modNames fileName expectedReport = do
   modFiles <- mapM mkTestModFile modPaths
   [(pf, _)] <- readParseSrcDir modFiles file []
 
-  let report = runIdentity $ runAnalysisT (F.pfGetFilename pf) logOutputNone LogError modFiles (infer False '=' pf)
+  let report = runIdentity $ runAnalysisT (F.pfGetFilename pf) (logOutputNone True) LogError modFiles (infer False '=' pf)
       logs = report ^.. arMessages . traverse . L._MsgInfo . L.lmMsg
 
   map L.describe logs `shouldBe` expectedReport
@@ -515,7 +515,7 @@ test2DSpecVariation a b (input, expectation) =
 indicesToSpec' ivs lhs ixs =
   let inferer = indicesToSpec "a" lhs ixs
       analysis = runStencilInferer inferer ivs Gr.empty
-      report = runIdentity $ runAnalysisT "example" logOutputNone LogError emptyModFiles analysis
+      report = runIdentity $ runAnalysisT "example" (logOutputNone True) LogError emptyModFiles analysis
   in report ^?! arResult . _ARSuccess . _1
 
 variations =

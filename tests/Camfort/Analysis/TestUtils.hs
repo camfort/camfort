@@ -71,7 +71,7 @@ testSingleFileAnalysis input program testReport = do
     report <- liftIO $
       runAnalysisT
       (F.pfGetFilename pf)
-      logOutputNone
+      (logOutputNone True)
       LogError
       mfs
       (program pf)
@@ -101,7 +101,7 @@ testMultiFileAnalysisWithSrc input program testReport = do
   report <- liftIO $
     runAnalysisT
     fname
-    logOutputNone
+    (logOutputNone True)
     LogError
     mfs
     (program pfs)
