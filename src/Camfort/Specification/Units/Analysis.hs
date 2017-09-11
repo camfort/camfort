@@ -129,7 +129,7 @@ runInference solver = do
   pf <- asks unitProgramFile
   mfs <- lift analysisModFiles
 
-  let pf' = withCombinedEnvironment mfs . fmap UA.mkUnitAnnotation $ pf
+  let (pf', _, _) = withCombinedEnvironment mfs . fmap UA.mkUnitAnnotation $ pf
 
   runUnitSolver pf' $ do
     initializeModFiles
@@ -912,7 +912,7 @@ intrinsicUnits =
 -- | Compile a program to a 'ModFile' containing units information.
 compileUnits :: UnitOpts -> ModFiles -> F.ProgramFile Annotation -> IO ModFile
 compileUnits uo mfs pf = do
-  let pf'      = withCombinedEnvironment mfs . fmap UA.mkUnitAnnotation $ pf
+  let (pf', _, _) = withCombinedEnvironment mfs . fmap UA.mkUnitAnnotation $ pf
 
   let analysis = runReaderT (runInference runCompileUnits) $
         UnitEnv
