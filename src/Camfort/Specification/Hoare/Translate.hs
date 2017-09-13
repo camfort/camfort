@@ -38,6 +38,7 @@ import qualified Language.Fortran.Analysis          as F
 import qualified Language.Fortran.AST               as F
 
 import           Language.Expression
+import           Language.Expression.Choice
 import           Language.Expression.Prop
 
 import           Camfort.Helpers.TypeLevel
@@ -55,7 +56,7 @@ import           Camfort.Specification.Hoare.Syntax
 --------------------------------------------------------------------------------
 
 type AllOps = '[HighOp, MetaOp, CoreOp]
-type MetaExpr = Expr' AllOps
+type MetaExpr = HFree' AllOps
 type MetaFormula = Prop (MetaExpr FortranVar)
 
 --------------------------------------------------------------------------------
@@ -104,9 +105,9 @@ translateLogical = \case
 
 liftFortranExpr :: (LiftD a b) => FortranExpr a -> MetaExpr FortranVar b
 liftFortranExpr e =
-  let e' = EOp (HopLift (LiftDOp (EVar e)))
+  let e' = HWrap (HopLift (LiftDOp (HPure e)))
   in squashExpression e'
 
 
-intoMetaExpr :: (ChooseOp op AllOps, Operator op) => Expr op v a -> MetaExpr v a
-intoMetaExpr = Expr' . mapOperators (review chooseOp)
+intoMetaExpr :: (ChooseOp op AllOps, HTraversable op) => HFree op v a -> MetaExpr v a
+intoMetaExpr = HFree' . hduomapFirst' (review chooseOp)

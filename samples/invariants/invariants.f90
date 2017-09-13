@@ -125,9 +125,6 @@ integer function div(x, y)
 
 end function div
 
-! INFO:    2. (((x = xx ∧ y = yy) ∧ n <= x + y) ∧ y * q = n - y) ∧ n <= x -> ((x = xx ∧ y = yy) ∧ n + y <= x + y) ∧ y * (q + 1) = (n + y) - y
-! INFO:    2. x >= 0 ∧ (x = xx ∧ y = yy) -> ((x = xx ∧ y = yy) ∧ n <= x + y) ∧ y * q = n - y
-
 
 != decl_aux("integer" :: xx)
 != decl_aux("real" :: yy)

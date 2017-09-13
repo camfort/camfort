@@ -57,6 +57,7 @@ import           Language.Fortran.Model.Translate
 import           Language.Fortran.Model.Vars
 
 import           Language.Expression
+import           Language.Expression.Choice
 import           Language.Expression.Pretty
 import           Language.Expression.Prop
 import           Language.Verification
@@ -470,7 +471,7 @@ verifyVc handle prop = do
 
   env <- asks primReprHandlers
 
-  let res = query (getSrProp <$> runReaderT (evalProp lift HRCore prop) env) env
+  let res = query (getSrProp <$> runReaderT (evalProp' lift (pure . HRCore) prop) env) env
   res' <- liftIO . runVerifierWith cfg $ res
 
   case res' of
@@ -659,8 +660,8 @@ arrayAssignment arrName ixAst rvalAst = do
 
       -- Replace instances of the array variable with the same array, but with
       -- the new value written at the given index.
-      let arrExpr = Expr' $ EVar varV
-          arrExpr' = eop' $ MopWriteArr varD arrExpr ixExpr rvalExpr
+      let arrExpr = HFree' $ HPure varV
+          arrExpr' = hwrap' $ MopWriteArr varD arrExpr ixExpr rvalExpr
 
       return (Assignment varV arrExpr')
 

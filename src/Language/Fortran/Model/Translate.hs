@@ -127,7 +127,7 @@ import           Language.Fortran.Model.Vars
 --------------------------------------------------------------------------------
 
 -- | The type of strongly-typed Fortran expressions.
-type FortranExpr = Expr CoreOp FortranVar
+type FortranExpr = HFree CoreOp FortranVar
 
 -- | A Fortran variable with an existential type.
 type SomeVar = Some FortranVar
@@ -483,16 +483,16 @@ translateExpression' targetD ast = do
 -- the actual type cannot be coerced to the given type.
 translateCoerceExpression
   :: (Monad m) => D a -> F.Expression (F.Analysis ann)
-  -> TranslateT m (Expr MetaOp FortranExpr a)
+  -> TranslateT m (HFree MetaOp FortranExpr a)
 translateCoerceExpression targetD ast = do
   SomePair sourceD expr <- translateExpression ast
 
   -- First check if it's already the right type
   case dcast sourceD targetD expr of
-    Just y -> return (EVar y)
+    Just y -> return (HPure y)
     Nothing -> case (matchPrimD sourceD, matchPrimD targetD) of
       (Just (MatchPrimD _ sourcePrim), Just (MatchPrimD _ targetPrim)) ->
-        return (EOp (MopCoercePrim targetPrim (EVar expr)))
+        return (HWrap (MopCoercePrim targetPrim (HPure expr)))
       _ -> throwError $ ErrUnexpectedType "expression" (Some sourceD) (Some targetD)
 
 
@@ -505,7 +505,7 @@ translateSubscript arrAst [F.IxSingle _ _ _ ixAst] = do
 
   case matchOpSpec OpLookup (arrD :& ixD :& RNil) of
     Just (MatchOpSpec opResult resultD) ->
-      return $ SomePair resultD $ EOp $ CoreOp OpLookup opResult (arrExp :& ixExp :& RNil)
+      return $ SomePair resultD $ HWrap $ CoreOp OpLookup opResult (arrExp :& ixExp :& RNil)
     Nothing ->
       case arrD of
         -- If the LHS is indeed an array, the index type must not have matched
@@ -543,7 +543,7 @@ translateValue e = case e of
       let uniq = UniqueName (F.varName e)
       theVar <- view (teVarsInScope . at uniq)
       case theVar of
-        Just (Some v'@(FortranVar d _)) -> return (SomePair d (EVar v'))
+        Just (Some v'@(FortranVar d _)) -> return (SomePair d (HPure v'))
         _                               -> throwError $ ErrVarNotInScope nm
 
     F.ValLogical s ->
@@ -570,7 +570,7 @@ translateLiteral v pa readLit
   = maybe (throwError ErrBadLiteral) (return . SomePair (DPrim pa) . flit pa)
   . readLit
   where
-    flit px x = EOp (CoreOp OpLit (OSLit px x) RNil)
+    flit px x = HWrap (CoreOp OpLit (OSLit px x) RNil)
 
 
 translateOp1 :: F.UnaryOp -> Maybe (Some (Op 1))
@@ -637,7 +637,7 @@ translateOpApp operator argAsts = do
         Just x  -> return x
         Nothing -> throwError $ ErrInvalidOpApplication (Some argsD)
 
-      return $ SomePair resultD $ EOp $ CoreOp operator opResult argsExpr
+      return $ SomePair resultD $ HWrap $ CoreOp operator opResult argsExpr
 
 
 translateOp2App

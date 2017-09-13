@@ -22,6 +22,8 @@ Fortran.
 
 module Language.Fortran.Model.Op.Meta (MetaOp(..)) where
 
+import           Data.Functor.Compose
+
 import           Data.Vinyl                          (Rec, rmap, (<<*>>))
 import           Data.Vinyl.Functor                  (Lift (..))
 import           Data.Vinyl.Lens                     (RElem (rput))
@@ -62,25 +64,25 @@ data MetaOp t a where
     -> MetaOp t (PrimS b)
 
 
-instance Operator MetaOp where
-  htraverseOp f = \case
+instance HFunctor MetaOp where
+instance HTraversable MetaOp where
+  htraverse f = \case
     MopWriteArr d x y z -> MopWriteArr d <$> f x <*> f y <*> f z
     MopWriteData a b c x y -> MopWriteData a b c <$> f x <*> f y
     MopCoercePrim p x -> MopCoercePrim p <$> f x
 
 
-instance (MonadEvalFortran r m) => EvalOp m CoreRepr MetaOp where
-  evalOp = \case
+instance (MonadEvalFortran r m) => HFoldableAt (Compose m CoreRepr) MetaOp where
+  hfoldMap = implHfoldMapCompose $ \case
     MopWriteArr _ arr ix val -> pure $ writeArray arr ix val
     MopWriteData _ fname _ rec val -> pure $ writeDataAt fname rec val
     MopCoercePrim p x -> coercePrim p x
 
 
-instance (MonadEvalFortran r m) => EvalOp m HighRepr MetaOp where
-  evalOp = fmap HRCore . evalOp .
-    hmapOp (\case
-               HRCore x -> x
-               HRHigh _ -> error "impossible")
+instance (MonadEvalFortran r m) => HFoldableAt (Compose m HighRepr) MetaOp where
+  hfoldMap = implHfoldMapCompose $ fmap HRCore . hfoldA .
+    hmap (\case HRCore x -> x
+                HRHigh _ -> error "impossible")
 
 
 instance Pretty2 MetaOp where

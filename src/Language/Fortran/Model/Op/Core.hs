@@ -25,6 +25,8 @@ module Language.Fortran.Model.Op.Core
   , OpSpec(..)
   ) where
 
+import           Data.Functor.Compose
+
 import           Data.Singletons.Prelude.List
 import           Data.Singletons.TypeLits
 
@@ -48,15 +50,16 @@ data CoreOp t a where
     -> Rec t args
     -> CoreOp t result
 
-instance Operator CoreOp where
-  htraverseOp f (CoreOp op opr args) = CoreOp op opr <$> rtraverse f args
+instance HFunctor CoreOp where
+instance HTraversable CoreOp where
+  htraverse f (CoreOp op opr args) = CoreOp op opr <$> rtraverse f args
 
-instance (MonadEvalFortran r m) => EvalOp m CoreRepr CoreOp where
-  evalOp (CoreOp op opr args) = evalCoreOp op opr args
+instance (MonadEvalFortran r m) => HFoldableAt (Compose m CoreRepr) CoreOp where
+  hfoldMap = implHfoldMapCompose $ \(CoreOp op opr args) -> evalCoreOp op opr args
 
-instance (MonadEvalFortran r m) => EvalOp m HighRepr CoreOp where
-  evalOp = fmap HRCore . evalOp .
-    hmapOp (\case
+instance (MonadEvalFortran r m) => HFoldableAt (Compose m HighRepr) CoreOp where
+  hfoldMap = implHfoldMapCompose $ fmap HRCore . hfoldA .
+    hmap (\case
                HRCore x -> x
                HRHigh _ -> error "impossible")
 

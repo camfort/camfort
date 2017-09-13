@@ -25,6 +25,8 @@ module Language.Fortran.Model.Repr where
 import           Data.Int                        (Int16, Int32, Int64, Int8)
 import           Data.Word                       (Word8)
 
+import           Data.Functor.Compose
+
 import           Data.SBV
 import           Data.SBV.Dynamic
 import           Data.SBV.Internals              (SBV (..))
@@ -77,10 +79,10 @@ data HighRepr a where
   HRCore :: CoreRepr a -> HighRepr a
   HRHigh :: SBV a -> HighRepr a
 
-instance Applicative f => EvalOp f HighRepr LogicOp where
-  evalOp = \case
-    LogLit x     -> pure $ HRHigh (fromBool x)
-    LogNot x     -> pure $ HRHigh . bnot . getHrBool $ x
+instance HFoldableAt HighRepr LogicOp where
+  hfoldMap = implHfoldMap $ \case
+    LogLit x     -> HRHigh (fromBool x)
+    LogNot x     -> HRHigh . bnot . getHrBool $ x
     LogAnd x y   -> appBinop (&&&) x y
     LogOr x y    -> appBinop (|||) x y
     LogImpl x y  -> appBinop (==>) x y
@@ -88,10 +90,13 @@ instance Applicative f => EvalOp f HighRepr LogicOp where
 
     where
       appBinop (g :: SBool -> SBool -> SBool) x y =
-        pure $ HRHigh $ g (getHrBool x) (getHrBool y)
+        HRHigh $ g (getHrBool x) (getHrBool y)
       getHrBool :: HighRepr Bool -> SBool
       getHrBool (HRHigh x) = x
       getHrBool (HRCore x) = case x of -- I.e. absurd
+
+instance (Monad m) => HFoldableAt (Compose m HighRepr) LogicOp where
+  hfoldMap = implHfoldMapCompose (pure . hfold)
 
 --------------------------------------------------------------------------------
 --  Lifting Fortran types to high-level representations

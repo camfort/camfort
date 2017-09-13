@@ -25,6 +25,7 @@ module Language.Fortran.Model.Op.High where
 
 
 import           Control.Monad.Reader.Class       (MonadReader, asks)
+import           Data.Functor.Compose
 
 import           Language.Expression
 import           Language.Expression.Pretty
@@ -40,13 +41,14 @@ data HighOp t a where
   HopLift :: LiftDOp t a -> HighOp t a
 
 
-instance Operator HighOp where
-  htraverseOp f = \case
-    HopLift x -> HopLift <$> htraverseOp f x
+instance HFunctor HighOp
+instance HTraversable HighOp where
+  htraverse f = \case
+    HopLift x -> HopLift <$> htraverse f x
 
-instance (MonadReader r m, HasPrimReprHandlers r) => EvalOp m HighRepr HighOp where
-  evalOp = \case
-    HopLift x -> evalOp x
+instance (MonadReader r m, HasPrimReprHandlers r) => HFoldableAt (Compose m HighRepr) HighOp where
+  hfoldMap f = \case
+    HopLift x -> hfoldMap f x
 
 instance Pretty2 HighOp where
   prettys2Prec p (HopLift x) = prettys2Prec p x
@@ -58,13 +60,14 @@ instance Pretty2 HighOp where
 data LiftDOp t a where
   LiftDOp :: LiftD b a => t b -> LiftDOp t a
 
-instance Operator LiftDOp where
-  htraverseOp f = \case
+instance HFunctor LiftDOp where
+instance HTraversable LiftDOp where
+  htraverse f = \case
     LiftDOp x -> LiftDOp <$> f x
 
 instance (MonadReader r m, HasPrimReprHandlers r
-         ) => EvalOp m HighRepr LiftDOp where
-  evalOp = \case
+         ) => HFoldableAt (Compose m HighRepr) LiftDOp where
+  hfoldMap = implHfoldMapCompose $ \case
     LiftDOp x -> do
       env <- asks primReprHandlers
       pure $ liftDRepr env x

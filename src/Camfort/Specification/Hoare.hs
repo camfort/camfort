@@ -3,13 +3,13 @@
 module Camfort.Specification.Hoare where
 
 import           Control.Monad.Except
-import           Data.List                                  (intersperse)
+import           Data.List                                 (intersperse)
 
-import qualified Language.Fortran.Analysis                  as FA
-import qualified Language.Fortran.Analysis.BBlocks          as FAB
-import qualified Language.Fortran.Analysis.Renaming         as FAR
-import qualified Language.Fortran.AST                       as F
-import qualified Language.Fortran.Util.Position             as F
+import qualified Language.Fortran.Analysis                 as FA
+import qualified Language.Fortran.Analysis.BBlocks         as FAB
+import qualified Language.Fortran.Analysis.Renaming        as FAR
+import qualified Language.Fortran.AST                      as F
+import qualified Language.Fortran.Util.Position            as F
 
 import           Camfort.Analysis
 import           Camfort.Analysis.Annotations
@@ -49,5 +49,5 @@ testOn fp = do
     pfsSources
 
 testHoare = do
-  -- testOn "camfort/samples/invariants/arrays.f90"
+  testOn "camfort/samples/invariants/arrays.f90"
   testOn "camfort/samples/invariants/invariants.f90"
