@@ -16,6 +16,7 @@ module Camfort.Specification.Units.Analysis.Infer
   , InferenceResult(..)
   , getInferred
   , inferUnits
+  , inferAndCompileUnits
   ) where
 
 import           Data.Data (Data)
@@ -25,6 +26,7 @@ import           Data.List (sort)
 import qualified Data.Map.Strict as M
 import           Data.Maybe (mapMaybe, maybeToList)
 import           GHC.Generics (Generic)
+import qualified Data.ByteString as B
 
 import qualified Language.Fortran.AST           as F
 import qualified Language.Fortran.Analysis      as FA
@@ -40,6 +42,8 @@ import Camfort.Specification.Units.Environment
 import Camfort.Specification.Units.InferenceBackendSBV (inferVariables)
 import Camfort.Specification.Units.InferenceBackend (chooseImplicitNames)
 import Camfort.Specification.Units.Monad
+
+import Camfort.Helpers (FileOrDir, Filename)
 
 data ExpInfo = ExpInfo
   { eiSrcSpan :: FU.SrcSpan
@@ -103,6 +107,16 @@ inferUnits = do
   pure $ case consistency of
            Consistent{}     -> Inferred (InferenceReport pfUA eVars)
            Inconsistent err -> InfInconsistent err
+
+-- | Compile units info into a fortran-src modfile.
+inferAndCompileUnits :: UnitAnalysis (InferenceResult, [(Filename, B.ByteString)])
+inferAndCompileUnits = do
+  (eVars, state) <- runInference (chooseImplicitNames <$> runInferVariables)
+  consistency <- checkUnits
+  let pfUA = usProgramFile state -- the program file after units analysis is done
+  pure $ case consistency of
+           Consistent{}     -> (Inferred (InferenceReport pfUA eVars), [])
+           Inconsistent err -> (InfInconsistent err, [])
 
 -- | Return a list of variable names mapped to their corresponding
 -- unit that was inferred.

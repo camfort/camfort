@@ -89,6 +89,29 @@ runMultiFileAnalysis program logOutput logLevel modFiles
 --  Complex Runners
 --------------------------------------------------------------------------------
 
+-- doCreateBinary
+--   :: (MonadIO m, Describe r, Describe w, Describe e)
+--   => Text -> AnalysisRunner e w m ProgramFile r ()
+-- doCreateBinary analysisName = runPerFileAnalysis `runThen` writeCompiledFiles
+--   where
+--     writeCompiledFiles :: (r, [(Filename, B.ByteString)]) -> IO r
+--     writeCompiledFiles (report, bins) = do
+--       outputFiles inSrc outSrc bins
+--       pure report
+
+-- FIXME
+compilePerFile :: (Describe e, Describe e', Describe w, Describe r) =>
+                  Text
+               -> FileOrDir
+               -> FilePath
+               -> AnalysisRunner e w IO [ProgramFile] (r, [Either e' ProgramFile]) ()
+compilePerFile analysisName inSrc outSrc = runPerFileAnalysis `runThen` writeCompiledFiles
+  where
+    writeCompiledFiles :: (r, [(Filename, B.ByteString)]) -> IO r
+    writeCompiledFiles (report, bins) = do
+      outputFiles inSrc outSrc bins
+      pure report
+
 -- | Given an analysis program for a single file, run it over every input file
 -- and collect the reports, then print those reports to standard output.
 describePerFileAnalysis

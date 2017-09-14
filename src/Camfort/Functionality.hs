@@ -40,6 +40,7 @@ module Camfort.Functionality
   , unitsCriticals
   , unitsCheck
   , unitsInfer
+  , unitsCompile
   , unitsSynth
   -- ** Refactorings
   , common
@@ -77,7 +78,7 @@ import qualified Camfort.Specification.Units                     as LU
 import           Camfort.Specification.Units.Analysis            (compileUnits)
 import           Camfort.Specification.Units.Analysis.Consistent (checkUnits)
 import           Camfort.Specification.Units.Analysis.Criticals  (inferCriticalVariables)
-import           Camfort.Specification.Units.Analysis.Infer      (inferUnits)
+import           Camfort.Specification.Units.Analysis.Infer      (inferUnits, inferAndCompileUnits)
 import           Camfort.Specification.Units.Monad               (runUnitAnalysis,
                                                                   unitOpts0)
 import           Camfort.Specification.Units.MonadTypes          (LiteralsOpt,
@@ -161,7 +162,7 @@ runFunctionality description program runner mfCompiler mfInput env = do
 ast :: CamfortEnv -> IO ()
 ast env = do
     incDir' <- maybe getCurrentDirectory pure (ceIncludeDir env)
-    modFiles <- genModFiles simpleCompiler () incDir' (ceExcludeFiles env)
+    modFiles <- getModFiles incDir'
     xs <- readParseSrcDir modFiles (ceInputSources env) (ceExcludeFiles env)
     print . fmap fst $ xs
 
@@ -231,6 +232,18 @@ singlePfUnits unitAnalysis opts pf =
         }
   in runUnitAnalysis ue unitAnalysis
 
+
+-- slight hack to make doRefactorAndCreate happy
+singlePfUnits'
+  :: UnitAnalysis a -> UnitOpts
+  -> AnalysisProgram () () IO [ProgramFile] a
+singlePfUnits' unitAnalysis opts (pf:_) =
+  let ue = UnitEnv
+        { unitOpts = opts
+        , unitProgramFile = pf
+        }
+  in runUnitAnalysis ue unitAnalysis
+
 multiPfUnits
   :: (Describe a)
   => UnitAnalysis (Either e (a, b))
@@ -264,6 +277,14 @@ unitsInfer =
   (singlePfUnits inferUnits)
   (describePerFileAnalysis "unit inference")
 
+unitsCompile :: FileOrDir -> LiteralsOpt -> CamfortEnv -> IO ()
+unitsCompile outSrc opts env =
+  runUnitsFunctionality
+  "Compiling units for"
+  (singlePfUnits inferAndCompileUnits)
+  (compilePerFile "unit compilation" (ceInputSources env) outSrc)
+  opts
+  env
 
 unitsSynth :: AnnotationType -> FileOrDir -> LiteralsOpt -> CamfortEnv -> IO ()
 unitsSynth annType outSrc opts env =
