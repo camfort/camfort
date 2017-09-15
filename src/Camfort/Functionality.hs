@@ -67,6 +67,7 @@ import           Camfort.Analysis.Annotations                    (Annotation)
 import           Camfort.Analysis.Logger
 import           Camfort.Analysis.ModFile                        (MFCompiler,
                                                                   getModFiles,
+                                                                  genModFiles,
                                                                   readParseSrcDir,
                                                                   simpleCompiler)
 import           Camfort.Analysis.Simple
