@@ -206,11 +206,14 @@ instance Show StencilResult where
 instance Show StencilCheckError where
   show (SynToAstError err srcSpan) = prettyWithSpan srcSpan (show err)
   show (NotWellSpecified (spanActual, stencilActual) (spanInferred, stencilInferred)) =
-    let sp = replicate 8 ' '
-    in concat [prettyWithSpan spanActual "Not well specified.\n", sp,
-               "Specification is:\n", sp, sp, pprintSpecDecls stencilActual, "\n",
-               sp, "but at ", show spanInferred, " the code behaves as\n", sp, sp,
-               pprintSpecDecls stencilInferred]
+    concat $ [prettyWithSpan spanActual "Not well specified.\n", sp,
+             "Specification is:\n", sp, sp, pprintSpecDecls stencilActual, "\n",
+              sp, "but at ", show spanInferred] ++ msg
+    where
+      sp = replicate 8 ' '
+      msg = case stencilInferred of
+              [] -> [" there is no specifiable array computation"]
+              _ ->  [" the code behaves as\n", sp, sp, pprintSpecDecls stencilInferred]
   show (ParseError srcSpan err) = prettyWithSpan srcSpan (show err)
   show (RegionExists srcSpan name) =
     prettyWithSpan srcSpan ("Region '" ++ name ++ "' already defined")
