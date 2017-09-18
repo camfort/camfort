@@ -22,11 +22,11 @@ module Camfort.Analysis.ModFile
   , lookupUniqueName
   ) where
 
-import           Control.Lens                       (at, preview, _Just)
+import           Control.Lens                       (ix, preview)
 import           Control.Monad                      (forM)
 import           Control.Monad.IO.Class
 import qualified Data.ByteString                    as B
-import           Data.Char                          (toUpper)
+import           Data.Char                          (toLower)
 import           Data.Data                          (Data)
 import           Data.List                          ((\\))
 import qualified Data.Map                           as Map
@@ -142,9 +142,8 @@ getFortranFiles dir =
   where
     -- | True if the file has a valid fortran extension.
     isFortran :: Filename -> Bool
-    isFortran x = takeExtension x `elem` (exts ++ extsUpper)
+    isFortran x = map toLower (takeExtension x) `elem` exts
       where exts = [".f", ".f90", ".f77", ".cmn", ".inc"]
-            extsUpper = map (map toUpper) exts
 
 --------------------------------------------------------------------------------
 --  Using mod files
@@ -180,4 +179,4 @@ withCombinedEnvironment mfs pf =
 -- name in the given program unit. Also returns the name type, which tells you
 -- whether the name belongs to a subprogram, variable or intrinsic.
 lookupUniqueName :: F.ProgramUnitName -> F.Name -> FAR.ModuleMap -> Maybe (F.Name, FA.NameType)
-lookupUniqueName puName srcName = preview $ at puName . _Just . at srcName . _Just
+lookupUniqueName puName srcName = preview $ ix puName . ix srcName

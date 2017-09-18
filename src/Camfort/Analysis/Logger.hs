@@ -1,4 +1,3 @@
-{-# LANGUAGE NamedFieldPuns #-}
 {-# LANGUAGE DefaultSignatures          #-}
 {-# LANGUAGE DeriveFunctor              #-}
 {-# LANGUAGE DeriveTraversable          #-}
@@ -7,6 +6,7 @@
 {-# LANGUAGE FunctionalDependencies     #-}
 {-# LANGUAGE GeneralizedNewtypeDeriving #-}
 {-# LANGUAGE MultiParamTypeClasses      #-}
+{-# LANGUAGE NamedFieldPuns             #-}
 {-# LANGUAGE OverloadedStrings          #-}
 {-# LANGUAGE RankNTypes                 #-}
 {-# LANGUAGE TemplateHaskell            #-}
@@ -347,7 +347,7 @@ data LoggerState =
   LoggerState
   { _lsLogLevel          :: !LogLevel
   , _lsDefaultSourceFile :: !FilePath
-  , _lsPreviousOrigin :: !(Maybe Origin)
+  , _lsPreviousOrigin    :: !(Maybe Origin)
   }
 
 data OpMonoid a = OpMonoid { getOpMonoid :: a }
@@ -425,7 +425,7 @@ instance MFunctor (LoggerT e w) where
 -- | A function to output logs in a particular monad @m@.
 data LogOutput m = LogOutput
   { _loConciseOutput :: Bool
-  , _loPrintFunc :: Text -> m ()
+  , _loPrintFunc     :: Text -> m ()
   }
 
 
@@ -525,8 +525,8 @@ someLogLevel (MsgDebug _) = LogDebug
 
 someMsgText :: (Describe e, Describe w) => SomeMessage e w -> Text
 someMsgText (MsgError msg) = describe (msg ^. lmMsg)
-someMsgText (MsgWarn msg) = describe (msg ^. lmMsg)
-someMsgText (MsgInfo msg) = msg ^. lmMsg
+someMsgText (MsgWarn msg)  = describe (msg ^. lmMsg)
+someMsgText (MsgInfo msg)  = msg ^. lmMsg
 someMsgText (MsgDebug msg) = msg ^. lmMsg
 
 

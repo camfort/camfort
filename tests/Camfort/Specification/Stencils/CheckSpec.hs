@@ -136,7 +136,7 @@ checkText text = do
   return (runChecking pf' ^?! arResult . _ARSuccess)
 
   where
-    runChecking = runIdentity . runAnalysisT "example" logOutputNone LogInfo emptyModFiles . stencilChecking
+    runChecking = runIdentity . runAnalysisT "example" (logOutputNone True) LogInfo emptyModFiles . stencilChecking
     getBlocks = FAB.analyseBBlocks . FAR.analyseRenames . FA.initAnalysis . fmap SA.mkStencilAnnotation
 
 runCheck :: String -> IO CheckResult

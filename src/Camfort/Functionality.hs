@@ -151,7 +151,7 @@ runFunctionality description program runner mfCompiler mfInput env = do
   incDir <- maybe getCurrentDirectory pure (ceIncludeDir env)
   modFiles <- genModFiles mfCompiler mfInput incDir (ceExcludeFiles env)
   pfsTexts <- readParseSrcDir modFiles (ceInputSources env) (ceExcludeFiles env)
-  runner program logOutputStd (ceLogLevel env) modFiles pfsTexts
+  runner program (logOutputStd True) (ceLogLevel env) modFiles pfsTexts
 
 
 
