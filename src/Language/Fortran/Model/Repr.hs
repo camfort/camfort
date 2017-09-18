@@ -40,8 +40,7 @@ import           Language.Fortran.Model.Repr.Prim
 import           Language.Fortran.Model.Types
 
 --------------------------------------------------------------------------------
---  Core Fortran Representations
---------------------------------------------------------------------------------
+-- * Core Fortran Representations
 
 data ArrRepr i a where
   ARPrim :: SArr -> ArrRepr i (PrimS a)
@@ -72,8 +71,7 @@ coreReprD = \case
   CRData d _  -> d
 
 --------------------------------------------------------------------------------
---  High-level data representations
---------------------------------------------------------------------------------
+-- * High-level data representations
 
 data HighRepr a where
   HRCore :: CoreRepr a -> HighRepr a
