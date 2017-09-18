@@ -22,3 +22,6 @@
 
 # test files
 /equiv.expected.f90
+
+# Mac OS
+.DS_Store
