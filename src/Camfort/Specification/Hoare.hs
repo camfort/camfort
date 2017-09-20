@@ -122,7 +122,7 @@ end function multiply
 @
 
 -}
-module Camfort.Specification.Hoare (check, HoareCheckResults(..)) where
+module Camfort.Specification.Hoare (check, HoareCheckResults(..), PrimReprOption(..)) where
 
 import           Control.Monad.Except
 import           Data.List                                 (intersperse)
@@ -145,7 +145,7 @@ import           Camfort.Specification.Hoare.Parser
 import           Language.Fortran.Model.Repr.Prim
 
 --------------------------------------------------------------------------------
---  Check Results
+--  Types
 --------------------------------------------------------------------------------
 
 newtype HoareCheckResults = HoareCheckResults [HoareCheckResult]
@@ -153,6 +153,9 @@ newtype HoareCheckResults = HoareCheckResults [HoareCheckResult]
 instance Describe HoareCheckResults where
   describeBuilder (HoareCheckResults rs) =
     mconcat . intersperse "\n" . map describeBuilder $ rs
+
+-- TODO: Give more control here
+data PrimReprOption = PROIdealized | PROPrecise
 
 --------------------------------------------------------------------------------
 --  Checking
@@ -162,14 +165,14 @@ instance Describe HoareCheckResults where
 The main entry point for the invariant checking analysis. Runs invariant
 checking on every annotated program unit in the given program file.
 
-The 'PrimReprSpec' argument controls how Fortran data types are treated
+The 'PrimReprOption' argument controls how Fortran data types are treated
 symbolically. See the documentation in "Language.Fortran.Model.Repr.Prim" for a
 detailed explanation.
 -}
-check :: PrimReprSpec
+check :: PrimReprOption
       -> F.ProgramFile Annotation
       -> HoareAnalysis HoareCheckResults
-check primSpec = fmap HoareCheckResults . invariantChecking primSpec . getBlocks
+check pro = fmap HoareCheckResults . invariantChecking (fromPrimReprOption pro) . getBlocks
 
 --------------------------------------------------------------------------------
 --  Internal
@@ -183,6 +186,10 @@ getBlocks =
 defaultSymSpec :: PrimReprSpec
 defaultSymSpec = prsIdealized
 
+fromPrimReprOption :: PrimReprOption -> PrimReprSpec
+fromPrimReprOption PROIdealized = prsIdealized
+fromPrimReprOption PROPrecise = prsPrecise
+
 --------------------------------------------------------------------------------
 --  Testsing
 --------------------------------------------------------------------------------
@@ -192,7 +199,7 @@ testOn fp = do
   (mfs, pfsSources) <- loadModAndProgramFiles simpleCompiler () fp fp []
   describePerFileAnalysis
     "invariant checking"
-    (check defaultSymSpec)
+    (check PROIdealized)
     (logOutputStd True)
     LogDebug
     mfs

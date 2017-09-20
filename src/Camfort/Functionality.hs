@@ -41,6 +41,8 @@ module Camfort.Functionality
   , unitsCheck
   , unitsInfer
   , unitsSynth
+  -- ** Invariants Analysis
+  , invariantsCheck
   -- ** Refactorings
   , common
   , dead
@@ -84,6 +86,7 @@ import           Camfort.Specification.Units.MonadTypes          (LiteralsOpt,
                                                                   UnitAnalysis,
                                                                   UnitEnv (..),
                                                                   UnitOpts (..))
+import qualified Camfort.Specification.Hoare as Hoare
 import           Camfort.Transformation.CommonBlockElim
 import           Camfort.Transformation.DeadCode
 import           Camfort.Transformation.EquivalenceElim
@@ -318,8 +321,19 @@ stencilsSynth annType =
      (doRefactor "stencil synthesis")
      compileStencils ()
 
+{- Invariants Feature-}
+
+invariantsCheck :: Hoare.PrimReprOption -> CamfortEnv -> IO ()
+invariantsCheck pro =
+  runFunctionality
+  "Checking invariants in"
+  (Hoare.check pro)
+  (describePerFileAnalysis "invariant checking")
+  simpleCompiler ()
+
 
 -- | Initialize Camfort for the given project.
 camfortInitialize :: FilePath -> IO ()
 camfortInitialize projectDir =
   createDirectoryIfMissing False (projectDir </> ".camfort")
+
