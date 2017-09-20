@@ -1,7 +1,7 @@
 {-# LANGUAGE TupleSections #-}
 {-# OPTIONS_GHC -Wall #-}
 
-module Camfort.Specification.Hoare.Lexer where
+module Camfort.Specification.Hoare.Lexer (lexer) where
 
 import Data.Monoid (Alt(..))
 import Data.Coerce
@@ -12,11 +12,8 @@ import Control.Monad.Except
 
 import Camfort.Specification.Hoare.Parser.Types
 
-addToTokens :: Token -> String -> HoareSpecParser [Token]
-addToTokens tok rest = do
- tokens <- lexer rest
- return $ tok : tokens
 
+-- | Lex an invariant annotation.
 lexer :: String -> HoareSpecParser [Token]
 lexer [] = return []
 lexer (' ' : xs) = lexer xs
@@ -33,6 +30,11 @@ lexer xs = do
     Just (tok, rest) -> addToTokens tok rest
     Nothing -> throwError (LexError xs)
 
+
+addToTokens :: Token -> String -> HoareSpecParser [Token]
+addToTokens tok rest = do
+ tokens <- lexer rest
+ return $ tok : tokens
 
 lexSymbol :: String -> Maybe (Token, String)
 lexSymbol xs =

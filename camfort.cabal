@@ -81,7 +81,6 @@ library
 
                         Camfort.Specification.Hoare
                         Camfort.Specification.Hoare.Annotation
-                        Camfort.Specification.Hoare.Types
                         Camfort.Specification.Hoare.Parser
                         Camfort.Specification.Hoare.Parser.Types
                         Camfort.Specification.Hoare.Lexer
@@ -149,7 +148,7 @@ library
                         singletons >= 2.2 && < 3,
                         template-haskell >= 2.11 && < 3,
                         vinyl >= 0.6 && < 1.0,
-                        language-verification >= 0.2
+                        verifiable-expressions >= 0.3
 
   default-language: Haskell2010
 

@@ -16,30 +16,36 @@ Programs must be annotation in order to check them. Annotations are of the form
 
 The possible keywords are
 
-  [@pre@] for program unit preconditions.
+  [@pre@] program unit preconditions.
 
-  [@post@] for program unit postconditions.
+  [@post@] program unit postconditions.
 
-  [@seq@] for invariants between program statements.
+  [@seq@] invariants between program statements.
 
-  [@invariant@] for loop invariant annotations.
+  [@invariant@] loop invariant annotations.
 
 == Logical Expressions
 
 A logical expression is an expression formed from quoted Fortran expressions
 combined with an arbitrary combination of the logical operators
 
-  [@&@] (conjunction)
+  [ @&@ ] conjunction
 
-  [@|@] (disjunction)
+  [ @|@ ] disjunction
 
-  [@->@] (implication)
+  [ @->@ ] implication
 
-  [@<->@] (bi-implication/equivalence)
+  [ @\<-\>@ ] bi-implication, equivalence
 
-  [@!@] (negation)
+  [ @!@ ] negation
 
-For example, @"x >= 3" & ("y = 7" | "y = z")@ is a valid logical expression.
+For example,
+
+@
+"x >= 3" & ("y = 7" | "y = z")
+@
+
+is a valid logical expression.
 
 == Variables
 
@@ -50,13 +56,13 @@ otherwise specified). In addition, you may declare auxiliary variables using the
 syntax
 
 @
-!= decl_aux("<type spec>" :: <name>)
+!= decl_aux("\<type spec\>" :: \<name\>)
 @
 
-  [@\<type spec\>@] refers to an arbitrary Fortran type specification, such as
+  [@\<type spec\>@] an arbitrary Fortran type specification, such as
     @integer@ or @real(kind=8,dimensions=(3,4))@
 
-  [@\<name\>@] is any string (case-insensitive) that is a valid Fortran
+  [@\<name\>@] any string (case-insensitive) that is a valid Fortran
     identifier, such as @my_var123@.
 
 Using any undeclared variables will result in an error.
@@ -116,7 +122,7 @@ end function multiply
 @
 
 -}
-module Camfort.Specification.Hoare where
+module Camfort.Specification.Hoare (check, HoareCheckResults(..)) where
 
 import           Control.Monad.Except
 import           Data.List                                 (intersperse)
@@ -138,27 +144,55 @@ import           Camfort.Specification.Hoare.CheckFrontend
 import           Camfort.Specification.Hoare.Parser
 import           Language.Fortran.Model.Repr.Prim
 
-getBlocks =
-  FAB.analyseBBlocks . FAR.analyseRenames .
-  FA.initAnalysis . fmap hoareAnn0
-
-check :: PrimReprSpec -> F.ProgramFile Annotation -> HoareAnalysis [HoareCheckResult]
-check primSpec = invariantChecking primSpec . getBlocks
+--------------------------------------------------------------------------------
+--  Check Results
+--------------------------------------------------------------------------------
 
 newtype HoareCheckResults = HoareCheckResults [HoareCheckResult]
 
 instance Describe HoareCheckResults where
-  describeBuilder (HoareCheckResults rs) = mconcat . intersperse "\n" . map describeBuilder $ rs
+  describeBuilder (HoareCheckResults rs) =
+    mconcat . intersperse "\n" . map describeBuilder $ rs
+
+--------------------------------------------------------------------------------
+--  Checking
+--------------------------------------------------------------------------------
+
+{-|
+The main entry point for the invariant checking analysis. Runs invariant
+checking on every annotated program unit in the given program file.
+
+The 'PrimReprSpec' argument controls how Fortran data types are treated
+symbolically. See the documentation in "Language.Fortran.Model.Repr.Prim" for a
+detailed explanation.
+-}
+check :: PrimReprSpec
+      -> F.ProgramFile Annotation
+      -> HoareAnalysis HoareCheckResults
+check primSpec = fmap HoareCheckResults . invariantChecking primSpec . getBlocks
+
+--------------------------------------------------------------------------------
+--  Internal
+--------------------------------------------------------------------------------
+
+getBlocks :: F.ProgramFile A -> F.ProgramFile (FA.Analysis (HoareAnnotation A))
+getBlocks =
+  FAB.analyseBBlocks . FAR.analyseRenames .
+  FA.initAnalysis . fmap hoareAnn0
 
 defaultSymSpec :: PrimReprSpec
 defaultSymSpec = prsIdealized
+
+--------------------------------------------------------------------------------
+--  Testsing
+--------------------------------------------------------------------------------
 
 testOn :: FilePath -> IO ()
 testOn fp = do
   (mfs, pfsSources) <- loadModAndProgramFiles simpleCompiler () fp fp []
   describePerFileAnalysis
     "invariant checking"
-    (fmap HoareCheckResults . check defaultSymSpec)
+    (check defaultSymSpec)
     (logOutputStd True)
     LogDebug
     mfs

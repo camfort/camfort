@@ -1,31 +1,33 @@
 {-# LANGUAGE ConstraintKinds       #-}
 {-# LANGUAGE DataKinds             #-}
-{-# LANGUAGE DeriveFunctor         #-}
 {-# LANGUAGE FlexibleContexts      #-}
-{-# LANGUAGE FlexibleInstances     #-}
-{-# LANGUAGE GADTs                 #-}
 {-# LANGUAGE LambdaCase            #-}
 {-# LANGUAGE MultiParamTypeClasses #-}
 {-# LANGUAGE OverloadedStrings     #-}
 {-# LANGUAGE RankNTypes            #-}
-{-# LANGUAGE ScopedTypeVariables   #-}
 {-# LANGUAGE TypeFamilies          #-}
-{-# LANGUAGE TypeOperators         #-}
 
 {-# OPTIONS_GHC -Wall #-}
 
 {-|
 
-Translation of meta-expressions.
+Translation from annotation syntax defined in
+"Camfort.Specification.Hoare.Syntax" to strongly-typed meta-expressions defined
+in "Language.Fortran.Model.Op.Meta".
 
 -}
 module Camfort.Specification.Hoare.Translate
   (
+    -- * Meta Expression Types
     MetaExpr
   , MetaFormula
+  , AllOps
 
+    -- * Translation
   , translateBoolExpression
   , translateFormula
+
+    -- * Combinators
   , intoMetaExpr
   ) where
 
@@ -62,15 +64,17 @@ type MetaFormula = Prop (MetaExpr FortranVar)
 --  Translate
 --------------------------------------------------------------------------------
 
+-- | Translate an untyped logical formula into a strongly typed 'MetaFormula'.
 translateFormula :: (Monad m) => PrimFormula (F.Analysis ann) -> TranslateT m (MetaFormula Bool)
 translateFormula = \case
   PFExpr e -> do
     e' <- translateBoolExpression e
     return $ expr $ e'
 
-  PFLogical x -> translateLogical <$> traverse translateFormula x
+  PFLogical x -> foldPrimLogic <$> traverse translateFormula x
 
 
+-- | Translate a boolean-valued untyped Fortran expression into a strongly typed 'MetaExpr'.
 translateBoolExpression
   :: (Monad m)
   => F.Expression (F.Analysis ann)
@@ -88,8 +92,8 @@ translateBoolExpression e = do
     _ -> throwError $ ErrUnexpectedType "formula" (Some (DPrim PBool8)) (Some d1)
 
 
-translateLogical :: PrimLogic (MetaFormula Bool) -> MetaFormula Bool
-translateLogical = \case
+foldPrimLogic :: PrimLogic (MetaFormula Bool) -> MetaFormula Bool
+foldPrimLogic = \case
   PLAnd x y -> x *&& y
   PLOr x y -> x *|| y
   PLImpl x y -> x *-> y
@@ -102,11 +106,11 @@ translateLogical = \case
 --  Util
 --------------------------------------------------------------------------------
 
+-- | Convert an expression over 'HighOp', 'MetaOp' or 'CoreOp' into a 'MetaExpr'.
+intoMetaExpr :: (ChooseOp op AllOps, HTraversable op) => HFree op v a -> MetaExpr v a
+intoMetaExpr = HFree' . hduomapFirst' (review chooseOp)
+
 liftFortranExpr :: (LiftD a b) => FortranExpr a -> MetaExpr FortranVar b
 liftFortranExpr e =
   let e' = HWrap (HopLift (LiftDOp (HPure e)))
   in squashExpression e'
-
-
-intoMetaExpr :: (ChooseOp op AllOps, HTraversable op) => HFree op v a -> MetaExpr v a
-intoMetaExpr = HFree' . hduomapFirst' (review chooseOp)

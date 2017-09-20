@@ -7,7 +7,22 @@
 
 {-# OPTIONS_GHC -Wall #-}
 
-module Camfort.Specification.Hoare.CheckFrontend where
+{-|
+
+This module is responsible for finding annotated program units, and running the
+functionality in "Camfort.Specification.Hoare.CheckBackend" on each of them.
+
+-}
+module Camfort.Specification.Hoare.CheckFrontend
+  (
+    -- * Invariant Checking
+    invariantChecking
+
+    -- * Analysis Types
+  , HoareAnalysis
+  , HoareFrontendError(..)
+  , HoareFrontendWarning(..)
+  ) where
 
 import           Control.Applicative                      (liftA2)
 import           Control.Exception
@@ -37,6 +52,36 @@ import           Camfort.Specification.Hoare.Parser.Types (HoareParseError)
 import           Camfort.Specification.Hoare.Syntax
 
 --------------------------------------------------------------------------------
+--  Invariant Checking
+--------------------------------------------------------------------------------
+
+{-|
+Runs invariant checking on every annotated program unit in the given program
+file. Expects the program file to have basic block and unique analysis
+information.
+
+The 'PrimReprSpec' argument controls how Fortran data types are treated
+symbolically. See the documentation in "Language.Fortran.Mode.Repr.Prim" for a
+detailed explanation.
+-}
+invariantChecking :: PrimReprSpec -> F.ProgramFile HA -> HoareAnalysis [HoareCheckResult]
+invariantChecking primSpec pf = do
+  let parserWithAnns = F.initAnalysis . fmap (const CA.unitAnnotation) <$> hoareParser
+
+  pf' <- annotateComments parserWithAnns parseError pf
+  annotatedPUs <- findAnnotatedPUs pf'
+
+  let checkAndReport apu = do
+        let nm = F.puName (apu ^. apuPU)
+            prettyName = describe $ case F.puSrcName (apu ^. apuPU) of
+              F.Named x -> x
+              _         -> show nm
+        logInfo' (apu ^. apuPU) $ "Verifying program unit: " <> prettyName
+        loggingAnalysisError . mapAnalysisT BackendError absurd $ checkPU apu primSpec
+
+  catMaybes <$> traverse checkAndReport annotatedPUs
+
+--------------------------------------------------------------------------------
 --  Results and errors
 --------------------------------------------------------------------------------
 
@@ -48,7 +93,7 @@ data HoareFrontendError
   | BackendError HoareBackendError
 
 data HoareFrontendWarning
-  = OrphanDecls F.ProgramUnitName [AuxDecl InnerHA]
+  = OrphanDecls F.ProgramUnitName
 
 instance Describe HoareFrontendError where
   describeBuilder = \case
@@ -60,9 +105,13 @@ instance Describe HoareFrontendError where
 
 instance Describe HoareFrontendWarning where
   describeBuilder = \case
-    OrphanDecls nm decls ->
+    OrphanDecls nm ->
       "auxiliary variable declared for a program unit with no annotations with name " <>
-      describeBuilder (show nm) <> ": " <> describeBuilder (show decls)
+      describeBuilder (show nm) <> "; skipping invariant checking for this program unit"
+
+--------------------------------------------------------------------------------
+--  Internal
+--------------------------------------------------------------------------------
 
 parseError :: F.SrcSpan -> SpecParseError HoareParseError -> HoareAnalysis ()
 parseError sp err = logError' sp (ParseError err)
@@ -109,7 +158,7 @@ findAnnotatedPUs pf =
 
         if null pres && null posts
           then do
-            unless (null decls) $ logWarn' pu (OrphanDecls (F.puName pu) decls)
+            unless (null decls) $ logWarn' pu (OrphanDecls (F.puName pu))
             return Nothing
           else return $ Just result
 
@@ -117,20 +166,3 @@ findAnnotatedPUs pf =
       apus = map snd . Map.toList $ Map.intersectionWith collectUnit pusByName sodsByPU
 
   in catMaybes <$> sequence apus
-
-invariantChecking :: PrimReprSpec -> F.ProgramFile HA -> HoareAnalysis [HoareCheckResult]
-invariantChecking primSpec pf = do
-  let parserWithAnns = F.initAnalysis . fmap (const CA.unitAnnotation) <$> hoareParser
-
-  pf' <- annotateComments parserWithAnns parseError pf
-  annotatedPUs <- findAnnotatedPUs pf'
-
-  let checkAndReport apu = do
-        let nm = F.puName (apu ^. apuPU)
-            prettyName = describe $ case F.puSrcName (apu ^. apuPU) of
-              F.Named x -> x
-              _         -> show nm
-        logInfo' (apu ^. apuPU) $ "Verifying program unit: " <> prettyName
-        loggingAnalysisError . mapAnalysisT BackendError absurd $ checkPU apu primSpec
-
-  catMaybes <$> traverse checkAndReport annotatedPUs

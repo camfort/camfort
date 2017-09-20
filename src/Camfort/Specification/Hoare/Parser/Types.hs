@@ -62,9 +62,11 @@ prettyTokens = intercalate " " . map prettyToken
 type HoareSpecParser = Either HoareParseError
 
 data Token =
-  -- Quoted Fortran
+
+  -- Quoted Fortran --
     TQuoted String
-  -- Static Assertions
+
+  -- Static Assertions --
   | TStaticAssert
   | TPre
   | TPost
@@ -79,7 +81,8 @@ data Token =
   | TNot
   | TTrue
   | TFalse
-  -- Auxiliary variable declarations
+
+  -- Auxiliary variable declarations --
   | TDeclAux
   | TName String
   | TDColon
