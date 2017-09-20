@@ -77,8 +77,8 @@ getModFiles :: FilePath -> IO FM.ModFiles
 getModFiles dir = do
   -- Figure out the camfort mod files and parse them.
   modFileNames <- filter isModFile <$> listDirectoryRecursively dir
-  mods <- forM modFileNames $ \ modFileName -> do
-    modData <- B.readFile (dir </> modFileName)
+  mods <- forM modFileNames $ \modFileName -> do
+    modData <- B.readFile modFileName
     let eResult = FM.decodeModFile modData
     case eResult of
       Left msg -> do
