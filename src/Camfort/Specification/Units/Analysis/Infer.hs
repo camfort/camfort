@@ -107,23 +107,6 @@ inferUnits = do
            Consistent{}     -> Inferred (InferenceReport pfUA eVars)
            Inconsistent err -> InfInconsistent err
 
-
-{- TODO: delete if not needed
--- | Compile units info into a fortran-src modfile.
-inferAndCompileUnits :: UnitAnalysis (InferenceResult, [(Filename, B.ByteString)])
-inferAndCompileUnits = do
-  (eVars, state) <- runInference (chooseImplicitNames <$> runInferVariables)
-  consistency <- checkUnits
-  pure $ case consistency of
-           Consistent {} ->
-             (Inferred (InferenceReport pfUA eVars), [])
-             where
-                -- the program file after units analysis is done
-               pfUA = usProgramFile state
-
-           Inconsistent err -> (InfInconsistent err, [])
--}
-
 -- | Return a list of variable names mapped to their corresponding
 -- unit that was inferred.
 runInferVariables :: UnitSolver [(VV, UnitInfo)]
