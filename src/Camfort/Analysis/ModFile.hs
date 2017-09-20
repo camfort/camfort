@@ -43,7 +43,7 @@ import qualified Language.Fortran.Analysis.Renaming as FAR
 import qualified Language.Fortran.Analysis.Types    as FAT
 import qualified Language.Fortran.AST               as F
 import qualified Language.Fortran.Parser.Any        as FP
-import           Language.Fortran.Util.ModFile
+import qualified Language.Fortran.Util.ModFile      as FM
 
 import           Camfort.Analysis.Annotations       (A, unitAnnotation)
 import           Camfort.Helpers
@@ -54,31 +54,32 @@ import           Camfort.Helpers
 
 -- | Compiler for ModFile information, parameterised over an underlying monad
 -- and the input to the compiler.
-type MFCompiler r m = r -> ModFiles -> F.ProgramFile A -> m ModFile
+type MFCompiler r m = r -> FM.ModFiles -> F.ProgramFile A -> m FM.ModFile
 
 -- | Compile the Modfile with only basic information.
 simpleCompiler :: (Monad m) => MFCompiler () m
-simpleCompiler () mfs = return . genModFile . fst' . withCombinedEnvironment mfs
+simpleCompiler () mfs = return . FM.genModFile . fst' . withCombinedEnvironment mfs
   where fst' (x, _, _) = x
 
-genCModFile :: MFCompiler r m -> r -> ModFiles -> F.ProgramFile A -> m ModFile
+genCModFile :: MFCompiler r m -> r -> FM.ModFiles -> F.ProgramFile A -> m FM.ModFile
 genCModFile = id
 
+-- | Generate a mode file based on the given mod file compiler
 genModFiles
   :: (MonadIO m)
-  => MFCompiler r m -> r -> FilePath -> [Filename] -> m ModFiles
+  => MFCompiler r m -> r -> FilePath -> [Filename] -> m FM.ModFiles
 genModFiles mfc env fp excludes = do
-  fortranFiles <- liftIO $ fmap fst <$> readParseSrcDir emptyModFiles fp excludes
-  traverse (genCModFile mfc env emptyModFiles) fortranFiles
+  fortranFiles <- liftIO $ fmap fst <$> readParseSrcDir FM.emptyModFiles fp excludes
+  traverse (genCModFile mfc env FM.emptyModFiles) fortranFiles
 
 -- | Retrieve the ModFiles under a given path.
-getModFiles :: FilePath -> IO ModFiles
+getModFiles :: FilePath -> IO FM.ModFiles
 getModFiles dir = do
   -- Figure out the camfort mod files and parse them.
   modFileNames <- filter isModFile <$> listDirectoryRecursively dir
   mods <- forM modFileNames $ \ modFileName -> do
     modData <- B.readFile (dir </> modFileName)
-    let eResult = decodeModFile modData
+    let eResult = FM.decodeModFile modData
     case eResult of
       Left msg -> do
         putStrLn $ modFileName ++ ": Error: " ++ show msg
@@ -89,7 +90,7 @@ getModFiles dir = do
   pure . catMaybes $ mods
   where
     isModFile :: String -> Bool
-    isModFile = (== modFileSuffix) . takeExtension
+    isModFile = (== FM.modFileSuffix) . takeExtension
 
 listDirectoryRecursively :: FilePath -> IO [FilePath]
 listDirectoryRecursively dir = listDirectoryRec dir ""
@@ -104,7 +105,7 @@ listDirectoryRecursively dir = listDirectoryRec dir ""
         concat <$> mapM (listDirectoryRec fullPath) conts
       else pure [fullPath]
 
-readParseSrcDir :: ModFiles
+readParseSrcDir :: FM.ModFiles
                 -> FileOrDir
                 -> [Filename]
                 -> IO [(F.ProgramFile A, SourceText)]
@@ -124,7 +125,7 @@ readParseSrcDir mods inp excludes = do
     mapMaybeM :: Monad m => (a -> m (Maybe b)) -> [a] -> m [b]
     mapMaybeM f = fmap catMaybes . mapM f
 
-readParseSrcFile :: ModFiles -> Filename -> IO (Maybe (F.ProgramFile A, SourceText))
+readParseSrcFile :: FM.ModFiles -> Filename -> IO (Maybe (F.ProgramFile A, SourceText))
 readParseSrcFile mods f = do
   inp <- flexReadFile f
   let result = FP.fortranParserWithModFiles mods inp f
@@ -155,25 +156,25 @@ getFortranFiles dir =
 -- names within each program unit.
 withCombinedModuleMap
   :: (Data a)
-  => ModFiles
+  => FM.ModFiles
   -> F.ProgramFile (FA.Analysis a)
   -> (F.ProgramFile (FA.Analysis a), FAR.ModuleMap)
 withCombinedModuleMap mfs pf =
   let
     -- Use the module map derived from all of the included Camfort Mod files.
-    mmap = combinedModuleMap mfs
-    tenv = combinedTypeEnv mfs
+    mmap = FM.combinedModuleMap mfs
+    tenv = FM.combinedTypeEnv mfs
     pfRenamed = FAR.analyseRenamesWithModuleMap mmap $ pf
-  in (pfRenamed, mmap `Map.union` extractModuleMap pfRenamed)
+  in (pfRenamed, mmap `Map.union` FM.extractModuleMap pfRenamed)
 
 -- | Normalize the 'ProgramFile' to include environment information from
 -- the 'ModFiles'. Also return the module map and type environment.
 withCombinedEnvironment
   :: (Data a)
-  => ModFiles -> F.ProgramFile a -> (F.ProgramFile (FA.Analysis a), FAR.ModuleMap, FAT.TypeEnv)
+  => FM.ModFiles -> F.ProgramFile a -> (F.ProgramFile (FA.Analysis a), FAR.ModuleMap, FAT.TypeEnv)
 withCombinedEnvironment mfs pf =
   let (pfRenamed, mmap) = withCombinedModuleMap mfs (FA.initAnalysis pf)
-      tenv = combinedTypeEnv mfs
+      tenv = FM.combinedTypeEnv mfs
   in (fst . FAT.analyseTypesWithEnv tenv $ pfRenamed, mmap, tenv)
 
 -- | From a module map, look up the unique name associated with a given source
