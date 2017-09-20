@@ -254,8 +254,8 @@ spec =
           let logs = report ^.. arMessages . traverse . L._MsgInfo . L.lmMsg
           map (L.describe) logs
             `shouldBe` [unlines'
-            [ "(32:7)-(32:26)    stencil readOnce, backward(depth=1, dim=1) :: a"
-            , "(26:8)-(26:29)    stencil readOnce, pointed(dim=1)*pointed(dim=2) :: a"
+            [ "(31:7)-(31:26)    stencil readOnce, backward(depth=1, dim=1) :: a"
+            , "(25:8)-(25:29)    access readOnce, pointed(dim=1)*pointed(dim=2) :: a"
             , "(24:8)-(24:53)    stencil readOnce, pointed(dim=1)*centered(depth=1, dim=2) \
                                      \+ centered(depth=1, dim=1)*pointed(dim=2) :: a"]
             ]
@@ -265,7 +265,7 @@ spec =
           let res = report ^?! arResult . _ARSuccess
           show res
             `shouldBe`
-            "(23:1)-(23:78)    Correct.\n(31:1)-(31:56)    Correct."
+            "(23:1)-(23:78)    Correct.\n(30:1)-(30:56)    Correct."
 
     let example4In = testInputSources (fixturesDir </> "example4.f")
 

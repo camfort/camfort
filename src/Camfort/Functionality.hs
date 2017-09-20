@@ -68,6 +68,7 @@ import           Camfort.Analysis
 import           Camfort.Analysis.Annotations                    (Annotation)
 import           Camfort.Analysis.Logger
 import           Camfort.Analysis.ModFile                        (MFCompiler,
+                                                                  getModFiles,
                                                                   genModFiles,
                                                                   readParseSrcDir,
                                                                   simpleCompiler)
@@ -152,7 +153,7 @@ runFunctionality
 runFunctionality description program runner mfCompiler mfInput env = do
   putStrLn $ description ++ " '" ++ ceInputSources env ++ "'"
   incDir <- maybe getCurrentDirectory pure (ceIncludeDir env)
-  modFiles <- genModFiles mfCompiler mfInput incDir (ceExcludeFiles env)
+  modFiles <- getModFiles incDir
   pfsTexts <- readParseSrcDir modFiles (ceInputSources env) (ceExcludeFiles env)
   runner program (logOutputStd True) (ceLogLevel env) modFiles pfsTexts
 

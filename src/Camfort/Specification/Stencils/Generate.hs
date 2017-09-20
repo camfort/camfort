@@ -25,6 +25,14 @@ module Camfort.Specification.Stencils.Generate
   , isArraySubscript
   , neighbourIndex
   , runStencilInferer
+   -- Various helpers that get used by other tools, e.g., array-analysis
+  , isVariableExpr
+  , convIxToNeighbour
+  , indicesToRelativisedOffsets
+  , indicesToSpec
+  , neighbourToOffset
+  , relativise
+  , consistentIVSuse
   ) where
 
 import           Control.Monad (void, when, zipWithM)
@@ -378,6 +386,10 @@ relativeIxsToSpec ixs =
     specification -}
 setType :: [Neighbour] -> Specification -> Specification
 setType [] (Specification spec _) = Specification spec False
+setType xs (Specification spec _) | all isConstant xs = Specification spec False
+  where
+    isConstant (Constant _) = True
+    isConstant _            = False
 setType _  (Specification spec _)  = Specification spec True
 
 -- Given a list of the neighbourhood representation for the LHS, of size n

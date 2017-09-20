@@ -29,6 +29,81 @@ import System.Directory (getCurrentDirectory)
 
 import Options.Applicative
 
+main :: IO ()
+main = do
+  currentDir <- getCurrentDirectory
+  cmd <- execParser (info (commandParser currentDir) idm)
+  runCommand cmd
+  where
+    env ro lo = CamfortEnv
+      { ceInputSources = inputSource ro
+      , ceIncludeDir = includeDir ro
+      , ceExcludeFiles = getExcludes ro
+      , ceLogLevel = logLevel lo
+      }
+
+    getExcludes = fromMaybe [] . exclude
+
+    getOutputFile _ (WriteFile f) = f
+    getOutputFile inp WriteInplace = inp
+
+    runRO ro lo f = f (env ro lo)
+    runSIO sio f =
+      let ro      = sioReadOptions sio
+          lo      = sioLogOptions sio
+          useEval = sioUseEval sio
+          inFile  = inputSource ro
+      in runRO ro lo (f useEval)
+    runSSO sso f =
+      let ao     = ssoAnnotationOptions sso
+          wo     = ssoWriteOptions sso
+          ro     = ssoReadOptions sso
+          lo     = ssoLogOptions sso
+          inFile = inputSource ro
+      in runRO ro lo (f (annotationType ao) (getOutputFile inFile wo))
+    runUO uo f =
+      let ro = uoReadOptions uo
+          lo = uoLogOptions uo
+      in runRO ro lo (f (literals uo))
+    runUWO uwo f =
+      let uo     = uwoUnitsOptions uwo
+          ro     = uoReadOptions uo
+          wo     = uwoWriteOptions uwo
+          inFile = inputSource ro
+      in runUO uo (f (getOutputFile inFile wo))
+    runUSO uso f =
+      let uwo = usoUnitsWriteOptions uso
+          ao  = usoAnnotationOptions uso
+      in runUWO uwo (f (annotationType ao))
+    runIO io f =
+      let ro = ioReadOptions io
+          lo = ioLogOptions io
+          pro = ioPrimReprOption io
+      in runRO ro lo (f pro)
+    runRFO rfo f =
+      let ro     = rfoReadOptions rfo
+          lo     = rfoLogOptions rfo
+          wo     = rfoWriteOptions rfo
+          inFile = inputSource ro
+      in runRO ro lo (f (getOutputFile inFile wo))
+
+    runCommand :: Command -> IO ()
+    runCommand (CmdAST ro lo)             = runRO ro lo ast
+    runCommand (CmdCount ro lo)           = runRO ro lo countVarDecls
+    runCommand (CmdStencilsCheck ro lo)   = runRO ro lo stencilsCheck
+    runCommand (CmdStencilsInfer so)      = runSIO so stencilsInfer
+    runCommand (CmdStencilsSynth sso)     = runSSO sso stencilsSynth
+    runCommand (CmdUnitsSuggest uo)       = runUO uo unitsCriticals
+    runCommand (CmdUnitsCheck uo)         = runUO uo unitsCheck
+    runCommand (CmdUnitsInfer uo)         = runUO uo unitsInfer
+    runCommand (CmdUnitsSynth uso)        = runUSO uso unitsSynth
+    runCommand (CmdInvariantsCheck io)    = runIO io invariantsCheck
+    runCommand (CmdRefactCommon rfo)      = runRFO rfo common
+    runCommand (CmdRefactDead rfo)        = runRFO rfo dead
+    runCommand (CmdRefactEquivalence rfo) = runRFO rfo equivalences
+    runCommand (CmdInit dir)              = camfortInitialize dir
+    runCommand CmdTopVersion              = displayVersion
+
 
 -- | Commands supported by CamFort.
 data Command = CmdCount ReadOptions LogOptions
@@ -373,81 +448,6 @@ commandParser currDir =
               <|> analysesParser
               <|> refactoringsParser
               <|> topLevelCommands)
-
-main :: IO ()
-main = do
-  currentDir <- getCurrentDirectory
-  cmd <- execParser (info (commandParser currentDir) idm)
-  runCommand cmd
-  where
-    env ro lo = CamfortEnv
-      { ceInputSources = inputSource ro
-      , ceIncludeDir = includeDir ro
-      , ceExcludeFiles = getExcludes ro
-      , ceLogLevel = logLevel lo
-      }
-
-    getExcludes = fromMaybe [] . exclude
-
-    getOutputFile _ (WriteFile f) = f
-    getOutputFile inp WriteInplace = inp
-
-    runRO ro lo f = f (env ro lo)
-    runSIO sio f =
-      let ro      = sioReadOptions sio
-          lo      = sioLogOptions sio
-          useEval = sioUseEval sio
-          inFile  = inputSource ro
-      in runRO ro lo (f useEval)
-    runSSO sso f =
-      let ao     = ssoAnnotationOptions sso
-          wo     = ssoWriteOptions sso
-          ro     = ssoReadOptions sso
-          lo     = ssoLogOptions sso
-          inFile = inputSource ro
-      in runRO ro lo (f (annotationType ao) (getOutputFile inFile wo))
-    runUO uo f =
-      let ro = uoReadOptions uo
-          lo = uoLogOptions uo
-      in runRO ro lo (f (literals uo))
-    runUWO uwo f =
-      let uo     = uwoUnitsOptions uwo
-          ro     = uoReadOptions uo
-          wo     = uwoWriteOptions uwo
-          inFile = inputSource ro
-      in runUO uo (f (getOutputFile inFile wo))
-    runUSO uso f =
-      let uwo = usoUnitsWriteOptions uso
-          ao  = usoAnnotationOptions uso
-      in runUWO uwo (f (annotationType ao))
-    runIO io f =
-      let ro = ioReadOptions io
-          lo = ioLogOptions io
-          pro = ioPrimReprOption io
-      in runRO ro lo (f pro)
-    runRFO rfo f =
-      let ro     = rfoReadOptions rfo
-          lo     = rfoLogOptions rfo
-          wo     = rfoWriteOptions rfo
-          inFile = inputSource ro
-      in runRO ro lo (f (getOutputFile inFile wo))
-
-    runCommand :: Command -> IO ()
-    runCommand (CmdAST ro lo)             = runRO ro lo ast
-    runCommand (CmdCount ro lo)           = runRO ro lo countVarDecls
-    runCommand (CmdStencilsCheck ro lo)   = runRO ro lo stencilsCheck
-    runCommand (CmdStencilsInfer so)      = runSIO so stencilsInfer
-    runCommand (CmdStencilsSynth sso)     = runSSO sso stencilsSynth
-    runCommand (CmdUnitsSuggest uo)       = runUO uo unitsCriticals
-    runCommand (CmdUnitsCheck uo)         = runUO uo unitsCheck
-    runCommand (CmdUnitsInfer uo)         = runUO uo unitsInfer
-    runCommand (CmdUnitsSynth uso)        = runUSO uso unitsSynth
-    runCommand (CmdInvariantsCheck io)    = runIO io invariantsCheck
-    runCommand (CmdRefactCommon rfo)      = runRFO rfo common
-    runCommand (CmdRefactDead rfo)        = runRFO rfo dead
-    runCommand (CmdRefactEquivalence rfo) = runRFO rfo equivalences
-    runCommand (CmdInit dir)              = camfortInitialize dir
-    runCommand CmdTopVersion              = displayVersion
 
 
 -- | Current CamFort version.

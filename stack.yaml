@@ -1,0 +1,14 @@
+flags: {}
+extra-package-dbs: []
+packages:
+- location: '.'
+- location: ../fortran-src
+  extra-dep: true
+- location: ../verifiable-expressions
+  extra-dep: true
+extra-deps:
+- partial-order-0.1.2.1
+- sbv-7.3
+- vinyl-0.6.0
+- union-0.1.1.2
+resolver: lts-8.23
