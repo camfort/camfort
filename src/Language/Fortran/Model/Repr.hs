@@ -17,7 +17,14 @@
 
 {-|
 
-Symbolic representations of Fortran values.
+Symbolic representations of Fortran values, for symbolic reasoning.
+
+There is a distinction between core representations ('CoreRepr') and high-level
+representations ('HighRepr'). 'CoreRepr' represents any @a@ such that @'D' a@
+exists; i.e. anything with a corresponding Fortran type. 'HighRepr' is a
+superset of 'CoreRepr'. It represents Fortran types, and also higher-level types
+that facilitate reasoning. There is more information about this distinction in
+"Language.Fortran.Model.Op".
 
 -}
 module Language.Fortran.Model.Repr where
@@ -42,11 +49,11 @@ import           Language.Fortran.Model.Types
 --------------------------------------------------------------------------------
 -- * Core Fortran Representations
 
-data ArrRepr i a where
-  ARPrim :: SArr -> ArrRepr i (PrimS a)
-  ARData :: Rec (Field (ArrRepr i)) fs -> ArrRepr i (Record name fs)
+{-|
 
+Symbolic representations of Fortran values, using "Data.SBV.Dynamic".
 
+-}
 data CoreRepr a where
   CRPrim
     :: D (PrimS a)
@@ -63,16 +70,34 @@ data CoreRepr a where
     -> Rec (Field CoreRepr) fs
     -> CoreRepr (Record name fs)
 
+{-|
 
-coreReprD :: CoreRepr a -> D a
-coreReprD = \case
-  CRPrim d _  -> d
-  CRArray d _ -> d
-  CRData d _  -> d
+Symbolic respresentations of Fortran arrays. SBV arrays can only contain basic
+values, so in order to represent arrays of derived data types, we use multiple
+flat arrays, one for each basic field. Nested derived data types are recursively
+expanded.
+
+Arrays of arrays are not yet supported.
+
+-}
+data ArrRepr i a where
+  -- | A primitive type is represented by a flat 'SArr'.
+  ARPrim :: SArr -> ArrRepr i (PrimS a)
+
+  -- | A derived data type is represented by a record of 'ArrRepr's over the
+  -- record's fields.
+  ARData :: Rec (Field (ArrRepr i)) fs -> ArrRepr i (Record name fs)
+
 
 --------------------------------------------------------------------------------
 -- * High-level data representations
 
+{-|
+
+Symbolic representations of Fortran values plus types in the higher-level
+meta-language (see "Language.Fortran.Op" for more information).
+
+-}
 data HighRepr a where
   HRCore :: CoreRepr a -> HighRepr a
   HRHigh :: SBV a -> HighRepr a
@@ -97,11 +122,15 @@ instance (Monad m) => HFoldableAt (Compose m HighRepr) LogicOp where
   hfoldMap = implHfoldMapCompose (pure . hfold)
 
 --------------------------------------------------------------------------------
---  Lifting Fortran types to high-level representations
---------------------------------------------------------------------------------
+-- *  Lifting Fortran types to high-level representations
 
+-- | Provides conversions between symbolic representations of core Fortran
+-- values and their corresponding high-level types.
 class (SymWord a) => LiftD b a | b -> a where
+  -- | Go from a core value to the corresponding high-level value.
   liftD :: b -> a
+  -- | Go from a symbolic core value to the corresponding symbolic high-level
+  -- value.
   liftDRepr :: PrimReprHandlers -> HighRepr b -> HighRepr a
 
 liftDInt :: PrimReprHandlers -> HighRepr (PrimS a) -> HighRepr Integer
@@ -162,3 +191,13 @@ instance LiftD (PrimS Char8) Word8 where
   liftDRepr _ (HRCore (CRPrim _ x)) = HRHigh (sFromIntegral (SBV x :: SBV Word8))
   liftDRepr _ _ =
     error "liftDRepr: a 'PrimS Char8' has a non-primitive representation"
+
+--------------------------------------------------------------------------------
+-- * Combinators
+
+-- | Any type that has a core representation has a corresponding Fortran type.
+coreReprD :: CoreRepr a -> D a
+coreReprD = \case
+  CRPrim d _  -> d
+  CRArray d _ -> d
+  CRData d _  -> d

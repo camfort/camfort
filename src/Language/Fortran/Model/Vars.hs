@@ -14,15 +14,21 @@
 
 -- TODO: Variables for user-defined data types
 
+{-|
+
+Defines a strongly-typed representation of Fortran variables.
+
+-}
 module Language.Fortran.Model.Vars
-  ( -- * Names
-    NamePair(..)
+  (
+    -- * Variables
+    FortranVar(..)
+    -- * Names
+  , NamePair(..)
   , npSource
   , npUnique
   , SourceName(..)
   , UniqueName(..)
-    -- * Variables
-  , FortranVar(..)
   ) where
 
 import           Data.Typeable                      ((:~:) (..))
@@ -31,7 +37,7 @@ import           Control.Lens                       hiding (Index, op)
 
 import           Data.SBV.Dynamic
 
-import           Data.Vinyl (rtraverse)
+import           Data.Vinyl                         (rtraverse)
 
 import qualified Language.Fortran.AST               as F
 
@@ -47,11 +53,13 @@ import           Language.Fortran.Model.Types.Match
 --  Names
 --------------------------------------------------------------------------------
 
+-- | Newtype wrapper for source-level variable names.
 newtype SourceName = SourceName { getSourceName :: F.Name }
   deriving (Eq, Ord)
 
 instance Show SourceName where show = show . getSourceName
 
+-- | Newtype wrapper for unique variable names.
 newtype UniqueName = UniqueName { getUniqueName :: F.Name }
   deriving (Eq, Ord)
 
@@ -82,6 +90,8 @@ instance Pretty NamePair where
 --  Fortran Variables
 --------------------------------------------------------------------------------
 
+-- | A variable representing a value of type @a@. Contains a @'D' a@ as proof
+-- that the type has a corresponding Fortran type, and the variable name.
 data FortranVar a where
   FortranVar :: D a -> NamePair -> FortranVar a
 

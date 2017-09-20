@@ -49,11 +49,21 @@ data MetaOp t a where
     -> t v
     -> MetaOp t (Array i v)
 
+  {-|
+
+  In @'MopWriteData' recD fSymb valD recVal valVal@:
+
+  * @recD@ is the type of the record we're writing to.
+  * @fSymb@ is the name of the field we're writing to.
+  * @valD@ is the type of the value we're writing to.
+  * @recVal@ is the original value of the record.
+  * @valVal@ is the new value of the field to write to.
+  -}
   MopWriteData
     :: RElem '(fname, a) fields i
-    => D (Record rname fields) -- ^ Record to write to
-    -> SSymbol fname           -- ^ Field to write
-    -> D a                     -- ^ New value
+    => D (Record rname fields)
+    -> SSymbol fname
+    -> D a
     -> t (Record rname fields)
     -> t a
     -> MetaOp t (Record rname fields)

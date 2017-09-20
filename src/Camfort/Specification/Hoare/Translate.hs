@@ -43,7 +43,6 @@ import           Language.Expression.Prop
 
 import           Camfort.Helpers.TypeLevel
 import           Language.Fortran.Model
-import           Language.Fortran.Model.Repr
 import           Language.Fortran.Model.Singletons
 import           Language.Fortran.Model.Translate
 import           Language.Fortran.Model.Types.Match

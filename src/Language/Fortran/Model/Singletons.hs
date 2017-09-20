@@ -15,6 +15,38 @@
 {-# LANGUAGE TypeOperators             #-}
 {-# LANGUAGE UndecidableInstances      #-}
 
+{-|
+
+Data kinds and corresponding singletons (via the @singletons@ library) for kinds
+used in various places in "Language.Fortran.Model".
+
+As documentation in Template Haskell is not yet supported, documentation for
+each data type is given here.
+
+== 'Precision'
+
+The precision, in bits, of an intrinsic Fortran data type.
+
+== 'BasicType'
+
+The basic type of an intrinsic Fortran data type.
+
+== 'OpKind'
+
+TODO
+
+== 'precMax'
+
+Finds the maximum of two precisions. Use 'PrecMax' at the type level and 'sPrecMax' for singletons.
+
+== 'basicTypeMax'
+
+Finds the \'largest\' (with respect to the size of the set it semantically
+represents) of numeric basic types. Also works with non-numeric basic types, but
+the result in that case is unspecified. Use 'BasicTypeMax' at the type level and
+'sBasicTypeMax' for singletons.
+
+-}
 module Language.Fortran.Model.Singletons where
 
 import           Data.Singletons.Prelude
@@ -24,7 +56,6 @@ import           Data.Singletons.TH
 $(singletons
   [d|
 
-  -- | The precision, in bits, of an intrinsic Fortran data type.
   data Precision
     = P8
     | P16
@@ -33,7 +64,6 @@ $(singletons
     | P128
     deriving (Eq, Ord)
 
-  -- | The basic type of an intrinsic Fortran data type.
   data BasicType
     -- NB. The order of the constructors is very important for the derived 'Ord'
     -- instance! Numeric basicTypes that can represent smaller sets of numbers must be

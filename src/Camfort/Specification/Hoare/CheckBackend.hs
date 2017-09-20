@@ -51,7 +51,6 @@ import           Camfort.Specification.Hoare.Annotation
 import           Camfort.Specification.Hoare.Syntax
 import           Camfort.Specification.Hoare.Translate
 import           Language.Fortran.Model
-import           Language.Fortran.Model.Repr
 import           Language.Fortran.Model.Repr.Prim
 import           Language.Fortran.Model.Translate
 import           Language.Fortran.Model.Vars
