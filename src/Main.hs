@@ -38,7 +38,7 @@ data Command = CmdCount ReadOptions LogOptions
              | CmdUnitsSuggest UnitsOptions
              | CmdUnitsCheck UnitsOptions
              | CmdUnitsInfer UnitsOptions
-             | CmdUnitsCompile UnitsWriteOptions
+             | CmdUnitsCompile UnitsOptions
              | CmdUnitsSynth UnitsSynthOptions
              | CmdRefactCommon RefactOptions
              | CmdRefactDead RefactOptions
@@ -244,7 +244,7 @@ cmdUnitsSuggest, cmdUnitsCheck, cmdUnitsInfer, cmdUnitsCompile, cmdUnitsSynth ::
 cmdUnitsSuggest = fmap CmdUnitsSuggest unitsOptions
 cmdUnitsCheck   = fmap CmdUnitsCheck   unitsOptions
 cmdUnitsInfer   = fmap CmdUnitsInfer   unitsOptions
-cmdUnitsCompile = fmap CmdUnitsCompile unitsWriteOptions
+cmdUnitsCompile = fmap CmdUnitsCompile unitsOptions
 cmdUnitsSynth   = fmap CmdUnitsSynth   unitsSynthOptions
 
 
@@ -408,7 +408,7 @@ main = do
     runCommand (CmdUnitsSuggest uo)       = runUO uo unitsCriticals
     runCommand (CmdUnitsCheck uo)         = runUO uo unitsCheck
     runCommand (CmdUnitsInfer uo)         = runUO uo unitsInfer
-    runCommand (CmdUnitsCompile uwo)      = runUWO uwo unitsCompile
+    runCommand (CmdUnitsCompile uo)       = runUO uo unitsCompile
     runCommand (CmdUnitsSynth uso)        = runUSO uso unitsSynth
     runCommand (CmdRefactCommon rfo)      = runRFO rfo common
     runCommand (CmdRefactDead rfo)        = runRFO rfo dead

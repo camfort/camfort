@@ -53,21 +53,25 @@ module Camfort.Functionality
 import           Control.Arrow                                   (first, second)
 import           Data.List                                       (intersperse)
 import           Data.Void                                       (Void)
+import qualified Data.ByteString as B
 import           System.Directory                                (createDirectoryIfMissing,
                                                                   getCurrentDirectory)
 import           System.FilePath                                 (takeDirectory,
-                                                                  (</>))
+                                                                  (</>), replaceExtension)
 
 import           Control.Lens
 import           Control.Monad.Reader.Class
+import           Control.Monad (forM_)
 
 import qualified Language.Fortran.AST                            as F
+import qualified Language.Fortran.Util.ModFile                   as FM
 
 import           Camfort.Analysis
 import           Camfort.Analysis.Annotations                    (Annotation)
 import           Camfort.Analysis.Logger
 import           Camfort.Analysis.ModFile                        (MFCompiler,
                                                                   getModFiles,
+                                                                  genModFiles,
                                                                   readParseSrcDir,
                                                                   simpleCompiler)
 import           Camfort.Analysis.Simple
@@ -78,7 +82,7 @@ import qualified Camfort.Specification.Units                     as LU
 import           Camfort.Specification.Units.Analysis            (compileUnits)
 import           Camfort.Specification.Units.Analysis.Consistent (checkUnits)
 import           Camfort.Specification.Units.Analysis.Criticals  (inferCriticalVariables)
-import           Camfort.Specification.Units.Analysis.Infer      (inferUnits, inferAndCompileUnits)
+import           Camfort.Specification.Units.Analysis.Infer      (inferUnits)
 import           Camfort.Specification.Units.Monad               (runUnitAnalysis,
                                                                   unitOpts0)
 import           Camfort.Specification.Units.MonadTypes          (LiteralsOpt,
@@ -150,6 +154,9 @@ runFunctionality
 runFunctionality description program runner mfCompiler mfInput env = do
   putStrLn $ description ++ " '" ++ ceInputSources env ++ "'"
   incDir <- maybe getCurrentDirectory pure (ceIncludeDir env)
+  -- Previously...
+--modFiles <- genModFiles mfCompiler mfInput incDir (ceExcludeFiles env)
+  -- ...instead for now, just get the mod files
   modFiles <- getModFiles incDir
   pfsTexts <- readParseSrcDir modFiles (ceInputSources env) (ceExcludeFiles env)
   runner program (logOutputStd True) (ceLogLevel env) modFiles pfsTexts
@@ -277,6 +284,7 @@ unitsInfer =
   (singlePfUnits inferUnits)
   (describePerFileAnalysis "unit inference")
 
+{-  TODO: remove if not needed
 unitsCompile :: FileOrDir -> LiteralsOpt -> CamfortEnv -> IO ()
 unitsCompile outSrc opts env =
   runUnitsFunctionality
@@ -285,6 +293,19 @@ unitsCompile outSrc opts env =
   (compilePerFile "unit compilation" (ceInputSources env) outSrc)
   opts
   env
+-}
+
+unitsCompile :: LiteralsOpt -> CamfortEnv -> IO ()
+unitsCompile opts env = do
+  let uo = optsToUnitOpts opts
+  let description = "Compiling units for"
+  putStrLn $ description ++ " '" ++ ceInputSources env ++ "'"
+  -- Run the gen mod file routine directly on the input source
+  modFiles <- genModFiles compileUnits uo (ceInputSources env) (ceExcludeFiles env)
+  -- Write the mod files out
+  forM_ modFiles $ \modFile -> do
+     let mfname = replaceExtension (FM.moduleFilename modFile) FM.modFileSuffix
+     B.writeFile mfname (FM.encodeModFile modFile)
 
 unitsSynth :: AnnotationType -> FileOrDir -> LiteralsOpt -> CamfortEnv -> IO ()
 unitsSynth annType outSrc opts env =
