@@ -174,7 +174,6 @@ test-suite spec
                         Camfort.Specification.Units.Analysis.InferSpec
                         Camfort.Specification.Units.InferenceBackendSpec
                         Camfort.Specification.Units.ParserSpec
-                        Camfort.Specification.UnitsSpec
                         Camfort.Specification.Hoare.ParserSpec
                         Camfort.Transformation.CommonSpec
                         Camfort.Transformation.EquivalenceElimSpec
