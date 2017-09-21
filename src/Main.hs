@@ -21,6 +21,7 @@ import Camfort.Analysis.Logger (LogLevel(..))
 import Camfort.Input (defaultValue)
 import Camfort.Functionality
 import Camfort.Specification.Units.Monad (LiteralsOpt(LitMixed))
+import Camfort.Specification.Hoare (PrimReprOption(..))
 
 import Data.Maybe (fromMaybe)
 import Data.Monoid ((<>))
@@ -74,6 +75,11 @@ main = do
       let uwo = usoUnitsWriteOptions uso
           ao  = usoAnnotationOptions uso
       in runUWO uwo (f (annotationType ao))
+    runIO io f =
+      let ro = ioReadOptions io
+          lo = ioLogOptions io
+          pro = ioPrimReprOption io
+      in runRO ro lo (f pro)
     runRFO rfo f =
       let ro     = rfoReadOptions rfo
           lo     = rfoLogOptions rfo
@@ -91,6 +97,7 @@ main = do
     runCommand (CmdUnitsCheck uo)         = runUO uo unitsCheck
     runCommand (CmdUnitsInfer uo)         = runUO uo unitsInfer
     runCommand (CmdUnitsSynth uso)        = runUSO uso unitsSynth
+    runCommand (CmdInvariantsCheck io)    = runIO io invariantsCheck
     runCommand (CmdRefactCommon rfo)      = runRFO rfo common
     runCommand (CmdRefactDead rfo)        = runRFO rfo dead
     runCommand (CmdRefactEquivalence rfo) = runRFO rfo equivalences
@@ -108,6 +115,7 @@ data Command = CmdCount ReadOptions LogOptions
              | CmdUnitsCheck UnitsOptions
              | CmdUnitsInfer UnitsOptions
              | CmdUnitsSynth UnitsSynthOptions
+             | CmdInvariantsCheck InvariantsOptions
              | CmdRefactCommon RefactOptions
              | CmdRefactDead RefactOptions
              | CmdRefactEquivalence RefactOptions
@@ -172,6 +180,13 @@ data StencilsSynthOptions = StencilsSynthOptions
   , ssoLogOptions         :: LogOptions
   , ssoWriteOptions       :: WriteOptions
   , ssoAnnotationOptions  :: AnnotationOptions
+  }
+
+
+data InvariantsOptions = InvariantsOptions
+  { ioReadOptions :: ReadOptions
+  , ioLogOptions :: LogOptions
+  , ioPrimReprOption :: PrimReprOption
   }
 
 
@@ -274,6 +289,21 @@ unitsOptions = fmap UnitsOptions
     parseLiterals = fmap read str
 
 
+invariantsOptions :: Parser InvariantsOptions
+invariantsOptions = fmap InvariantsOptions
+      readOptions
+  <*> logOptions
+  <*> reprOption
+  where
+    reprOption =
+      flag PROIdealized PROPrecise
+      $  long "precise-reprs"
+      <> short 'p'
+      <> help "use precise data representations, in invariant verification, at\
+              \the cost of speed and provability; see documentation in\
+              \Language.Model.Fortran.Repr.Prim"
+
+
 unitsWriteOptions :: Parser UnitsWriteOptions
 unitsWriteOptions = fmap UnitsWriteOptions
   unitsOptions <*> writeOptions
@@ -314,6 +344,10 @@ cmdUnitsSuggest = fmap CmdUnitsSuggest unitsOptions
 cmdUnitsCheck   = fmap CmdUnitsCheck   unitsOptions
 cmdUnitsInfer   = fmap CmdUnitsInfer   unitsOptions
 cmdUnitsSynth   = fmap CmdUnitsSynth   unitsSynthOptions
+
+
+cmdInvariantsCheck :: Parser Command
+cmdInvariantsCheck = fmap CmdInvariantsCheck invariantsOptions
 
 
 cmdRefactCommon, cmdRefactDead, cmdRefactEquivalence :: Parser Command
@@ -373,7 +407,11 @@ analysesParser = commandsParser "Analysis Commands" analysesCommands
           cmdUnitsInfer,    "unit-of-measure inference")
       , ("units-synth",
           ["unit-synth", "synth-units", "synth-unit"],
-          cmdUnitsSynth,    "unit-of-measure synthesise specs") ]
+          cmdUnitsSynth,    "unit-of-measure synthesise specs")
+      , ("invariants-check",
+          ["invariants-check","check-invariants", "check-hoare", "hoare-check"],
+          cmdInvariantsCheck, "hoare logic invariant checking")
+      ]
 
 
 refactoringsParser :: Parser Command

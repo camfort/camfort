@@ -9,6 +9,8 @@ Stability   :  experimental
 -}
 
 {-# LANGUAGE FlexibleContexts #-}
+{-# LANGUAGE DeriveDataTypeable #-}
+{-# LANGUAGE DeriveFunctor #-}
 
 module Camfort.Specification.Parser
   (
@@ -23,20 +25,28 @@ module Camfort.Specification.Parser
   ) where
 
 import           Control.Monad.Except (throwError)
-import           Data.List (isPrefixOf)
-import qualified Data.Text as T
+import           Control.Exception (Exception(..))
+import           Data.Data
+import           Data.List            (isPrefixOf)
+import qualified Data.Text            as T
 
 data SpecParseError e
   = ParseError e
   | InvalidSpecificationCharacter Char
   | MissingSpecificationCharacter
-  deriving (Eq)
+  deriving (Eq, Typeable, Data)
 
 instance (Show e) => Show (SpecParseError e) where
   show (InvalidSpecificationCharacter c) =
     "Invalid character at start of specification: " ++ show c
   show MissingSpecificationCharacter = "missing start of specification"
   show (ParseError e) = show e
+
+instance Exception e => Exception (SpecParseError e) where
+  displayException (InvalidSpecificationCharacter c) =
+    "Invalid character at start of specification: " ++ show c
+  displayException MissingSpecificationCharacter = "missing start of specification"
+  displayException (ParseError e) = displayException e
 
 -- | Embed an error as a specification parse error.
 parseError :: e -> SpecParseError e
@@ -56,6 +66,7 @@ data SpecParser e r = SpecParser
     -- | A list of keywords that indicate the type of specification (e.g., @"stencil"@ or @"access"@).
   , specKeywords :: [String]
   }
+  deriving (Functor)
 
 -- | Does the character indicate the start of an abritrary specification?
 --
