@@ -40,6 +40,7 @@ module Camfort.Functionality
   , unitsCriticals
   , unitsCheck
   , unitsInfer
+  , unitsCompile
   , unitsSynth
   -- ** Invariants Analysis
   , invariantsCheck
@@ -54,15 +55,18 @@ module Camfort.Functionality
 import           Control.Arrow                                   (first, second)
 import           Data.List                                       (intersperse)
 import           Data.Void                                       (Void)
+import qualified Data.ByteString as B
 import           System.Directory                                (createDirectoryIfMissing,
                                                                   getCurrentDirectory)
 import           System.FilePath                                 (takeDirectory,
-                                                                  (</>))
+                                                                  (</>), replaceExtension)
 
 import           Control.Lens
 import           Control.Monad.Reader.Class
+import           Control.Monad (forM_)
 
 import qualified Language.Fortran.AST                            as F
+import qualified Language.Fortran.Util.ModFile                   as FM
 
 import           Camfort.Analysis
 import           Camfort.Analysis.Annotations                    (Annotation)
@@ -153,6 +157,9 @@ runFunctionality
 runFunctionality description program runner mfCompiler mfInput env = do
   putStrLn $ description ++ " '" ++ ceInputSources env ++ "'"
   incDir <- maybe getCurrentDirectory pure (ceIncludeDir env)
+  -- Previously...
+--modFiles <- genModFiles mfCompiler mfInput incDir (ceExcludeFiles env)
+  -- ...instead for now, just get the mod files
   modFiles <- getModFiles incDir
   pfsTexts <- readParseSrcDir modFiles (ceInputSources env) (ceExcludeFiles env)
   runner program (logOutputStd True) (ceLogLevel env) modFiles pfsTexts
@@ -165,7 +172,7 @@ runFunctionality description program runner mfCompiler mfInput env = do
 ast :: CamfortEnv -> IO ()
 ast env = do
     incDir' <- maybe getCurrentDirectory pure (ceIncludeDir env)
-    modFiles <- genModFiles simpleCompiler () incDir' (ceExcludeFiles env)
+    modFiles <- getModFiles incDir'
     xs <- readParseSrcDir modFiles (ceInputSources env) (ceExcludeFiles env)
     print . fmap fst $ xs
 
@@ -235,6 +242,18 @@ singlePfUnits unitAnalysis opts pf =
         }
   in runUnitAnalysis ue unitAnalysis
 
+
+-- slight hack to make doRefactorAndCreate happy
+singlePfUnits'
+  :: UnitAnalysis a -> UnitOpts
+  -> AnalysisProgram () () IO [ProgramFile] a
+singlePfUnits' unitAnalysis opts (pf:_) =
+  let ue = UnitEnv
+        { unitOpts = opts
+        , unitProgramFile = pf
+        }
+  in runUnitAnalysis ue unitAnalysis
+
 multiPfUnits
   :: (Describe a)
   => UnitAnalysis (Either e (a, b))
@@ -268,6 +287,28 @@ unitsInfer =
   (singlePfUnits inferUnits)
   (describePerFileAnalysis "unit inference")
 
+{-  TODO: remove if not needed
+unitsCompile :: FileOrDir -> LiteralsOpt -> CamfortEnv -> IO ()
+unitsCompile outSrc opts env =
+  runUnitsFunctionality
+  "Compiling units for"
+  (singlePfUnits inferAndCompileUnits)
+  (compilePerFile "unit compilation" (ceInputSources env) outSrc)
+  opts
+  env
+-}
+
+unitsCompile :: LiteralsOpt -> CamfortEnv -> IO ()
+unitsCompile opts env = do
+  let uo = optsToUnitOpts opts
+  let description = "Compiling units for"
+  putStrLn $ description ++ " '" ++ ceInputSources env ++ "'"
+  -- Run the gen mod file routine directly on the input source
+  modFiles <- genModFiles compileUnits uo (ceInputSources env) (ceExcludeFiles env)
+  -- Write the mod files out
+  forM_ modFiles $ \modFile -> do
+     let mfname = replaceExtension (FM.moduleFilename modFile) FM.modFileSuffix
+     B.writeFile mfname (FM.encodeModFile modFile)
 
 unitsSynth :: AnnotationType -> FileOrDir -> LiteralsOpt -> CamfortEnv -> IO ()
 unitsSynth annType outSrc opts env =

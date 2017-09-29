@@ -25,6 +25,7 @@ import           Data.List (sort)
 import qualified Data.Map.Strict as M
 import           Data.Maybe (mapMaybe, maybeToList)
 import           GHC.Generics (Generic)
+import qualified Data.ByteString as B
 
 import qualified Language.Fortran.AST           as F
 import qualified Language.Fortran.Analysis      as FA
@@ -40,6 +41,8 @@ import Camfort.Specification.Units.Environment
 import Camfort.Specification.Units.InferenceBackendSBV (inferVariables)
 import Camfort.Specification.Units.InferenceBackend (chooseImplicitNames)
 import Camfort.Specification.Units.Monad
+
+import Camfort.Helpers (FileOrDir, Filename)
 
 data ExpInfo = ExpInfo
   { eiSrcSpan :: FU.SrcSpan

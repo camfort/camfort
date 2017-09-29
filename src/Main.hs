@@ -97,6 +97,7 @@ main = do
     runCommand (CmdUnitsCheck uo)         = runUO uo unitsCheck
     runCommand (CmdUnitsInfer uo)         = runUO uo unitsInfer
     runCommand (CmdUnitsSynth uso)        = runUSO uso unitsSynth
+    runCommand (CmdUnitsCompile uo)       = runUO uo unitsCompile
     runCommand (CmdInvariantsCheck io)    = runIO io invariantsCheck
     runCommand (CmdRefactCommon rfo)      = runRFO rfo common
     runCommand (CmdRefactDead rfo)        = runRFO rfo dead
@@ -114,6 +115,7 @@ data Command = CmdCount ReadOptions LogOptions
              | CmdUnitsSuggest UnitsOptions
              | CmdUnitsCheck UnitsOptions
              | CmdUnitsInfer UnitsOptions
+             | CmdUnitsCompile UnitsOptions
              | CmdUnitsSynth UnitsSynthOptions
              | CmdInvariantsCheck InvariantsOptions
              | CmdRefactCommon RefactOptions
@@ -338,11 +340,11 @@ cmdStencilsInfer = fmap CmdStencilsInfer stencilsInferOptions
 cmdStencilsSynth = fmap CmdStencilsSynth stencilsSynthOptions
 
 
-cmdUnitsSuggest, cmdUnitsCheck, cmdUnitsInfer
-  , cmdUnitsSynth :: Parser Command
+cmdUnitsSuggest, cmdUnitsCheck, cmdUnitsInfer, cmdUnitsCompile, cmdUnitsSynth :: Parser Command
 cmdUnitsSuggest = fmap CmdUnitsSuggest unitsOptions
 cmdUnitsCheck   = fmap CmdUnitsCheck   unitsOptions
 cmdUnitsInfer   = fmap CmdUnitsInfer   unitsOptions
+cmdUnitsCompile = fmap CmdUnitsCompile unitsOptions
 cmdUnitsSynth   = fmap CmdUnitsSynth   unitsSynthOptions
 
 
@@ -405,6 +407,9 @@ analysesParser = commandsParser "Analysis Commands" analysesCommands
       , ("units-infer",
           ["unit-infer", "infer-units", "infer-unit"],
           cmdUnitsInfer,    "unit-of-measure inference")
+      , ("units-compile",
+          ["unit-compile", "compile-units", "compile-unit"],
+          cmdUnitsCompile,    "unit-of-measure compilation")
       , ("units-synth",
           ["unit-synth", "synth-units", "synth-unit"],
           cmdUnitsSynth,    "unit-of-measure synthesise specs")
