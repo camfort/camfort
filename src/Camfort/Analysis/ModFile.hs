@@ -118,7 +118,7 @@ readParseSrcDir mods inp excludes = do
       -- Compute alternate list of excludes with the
       -- the directory appended
       let excludes' = excludes ++ map (\x -> inp </> x) excludes
-      pure $ map (\y -> inp </> y) files \\ excludes'
+      pure $ files \\ excludes'
     else pure [inp]
   mapMaybeM (readParseSrcFile mods) files
   where
