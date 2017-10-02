@@ -56,7 +56,7 @@ import           Control.Arrow                                   (first, second)
 import           Data.List                                       (intersperse)
 import           Data.Void                                       (Void)
 import qualified Data.ByteString as B
-import           System.Directory                                (createDirectoryIfMissing,
+import           System.Directory                                (doesDirectoryExist, createDirectoryIfMissing,
                                                                   getCurrentDirectory)
 import           System.FilePath                                 (takeDirectory,
                                                                   (</>), replaceExtension)
@@ -156,10 +156,14 @@ runFunctionality
   -> IO r
 runFunctionality description program runner mfCompiler mfInput env = do
   putStrLn $ description ++ " '" ++ ceInputSources env ++ "'"
-  incDir <- maybe getCurrentDirectory pure (ceIncludeDir env)
+  incDir' <- maybe getCurrentDirectory pure (ceIncludeDir env)
+  isDir <- doesDirectoryExist incDir'
+  let incDir | isDir     = incDir'
+             | otherwise = takeDirectory incDir'
   -- Previously...
 --modFiles <- genModFiles mfCompiler mfInput incDir (ceExcludeFiles env)
   -- ...instead for now, just get the mod files
+
   modFiles <- getModFiles incDir
   pfsTexts <- readParseSrcDir modFiles (ceInputSources env) (ceExcludeFiles env)
   runner program (logOutputStd True) (ceLogLevel env) modFiles pfsTexts
