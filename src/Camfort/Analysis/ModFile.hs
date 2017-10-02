@@ -76,7 +76,7 @@ genModFiles mfc env fp excludes = do
 getModFiles :: FilePath -> IO FM.ModFiles
 getModFiles dir = do
   -- Figure out the camfort mod files and parse them.
-  modFileNames <- filter isModFile <$> listDirectoryRecursively dir
+  modFileNames <- (filter isModFile . map (dir </>)) <$> listDirectory dir
   mods <- forM modFileNames $ \modFileName -> do
     modData <- B.readFile modFileName
     let eResult = FM.decodeModFile modData
