@@ -34,7 +34,7 @@ spec =
 
           env = CamfortEnv
             { ceInputSources = commonFile
-            , ceIncludeDir = Just commonFile
+            , ceIncludeDir = Just (takeDirectory commonFile)
             , ceExcludeFiles = []
             , ceLogLevel = LogDebug
             }
