@@ -101,11 +101,14 @@ getInferred (InferenceReport _ vars) = vars
 inferUnits :: UnitAnalysis InferenceResult
 inferUnits = do
   (eVars, state) <- runInference (chooseImplicitNames <$> runInferVariables)
-  consistency <- checkUnits
   let pfUA = usProgramFile state -- the program file after units analysis is done
-  pure $ case consistency of
-           Consistent{}     -> Inferred (InferenceReport pfUA eVars)
-           Inconsistent err -> InfInconsistent err
+  case eVars of
+    [] -> do
+      consistency <- checkUnits
+      pure $ case consistency of
+        Consistent{}     -> Inferred (InferenceReport pfUA eVars)
+        Inconsistent err -> InfInconsistent err
+    _ -> pure . Inferred $ InferenceReport pfUA eVars
 
 -- | Return a list of variable names mapped to their corresponding
 -- unit that was inferred.
