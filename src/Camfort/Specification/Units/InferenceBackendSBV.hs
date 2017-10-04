@@ -177,8 +177,15 @@ genBasisMap shiftedCons = baseRhsMap
 
 genUnitAssignments :: Constraints -> [(UnitInfo, UnitInfo)]
 genUnitAssignments cons = case engine cons of
-  Left (core, labeledCons) -> trace (unlines $ map show labeledCons ++ ["Unsatisfiable: " ++ show core]) $ []
+  Left (core, labeledCons) -> []
   Right (sub, _) -> subToList sub
+
+basicOptimisations :: Constraints -> Constraints
+basicOptimisations cons = cons'
+  where
+    cons' = filter (not . identicalSides) cons
+    identicalSides (ConEq lhs rhs) = lhs == rhs
+    identicalSides _               = False
 
 type EngineResult = Either ([String], [(String, AugConstraint)]) (Sub, [UnitInfo])
 
@@ -186,7 +193,7 @@ type EngineResult = Either ([String], [(String, AugConstraint)]) (Sub, [UnitInfo
 engine :: Constraints -> EngineResult
 engine cons = unsafePerformIO $ do
   let shiftedCons :: ShiftedConstraints
-      shiftedCons = map (shiftTerms isUnitRHS) $ flattenConstraints cons
+      shiftedCons = map (shiftTerms isUnitRHS) . flattenConstraints $ basicOptimisations cons
 
   let nameUIMap = gatherNameUnitInfoMap shiftedCons
 
