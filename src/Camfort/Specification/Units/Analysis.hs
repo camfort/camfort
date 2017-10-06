@@ -531,10 +531,12 @@ getUnitInfoMul _ e
   | otherwise                     = UA.getUnitInfo e
 
 
--- | Decorate the AST with unit info.
+-- | Propagate* functions: decorate the AST with constraints, given
+-- that variables have all been annotated.
 propagateUnits :: UnitSolver ()
 -- precondition: all variables have already been annotated
 propagateUnits = modifyProgramFileM $ transformBiM propagatePU        <=<
+                                      transformBiM propagateDoSpec    <=<
                                       transformBiM propagateStatement <=<
                                       transformBiM propagateExp
 
@@ -568,6 +570,13 @@ propagateFunctionCall (F.ExpFunctionCall a s f (Just (F.AList a' s' args))) = do
   let cons = intrinsicHelper info f args'
   pure . UA.setConstraint (ConConj cons) . UA.setUnitInfo info $ F.ExpFunctionCall a s f (Just (F.AList a' s' args'))
 propagateFunctionCall _ = error "received non-function-call in propagateFunctionCall"
+
+propagateDoSpec :: F.DoSpecification UA -> UnitSolver (F.DoSpecification UA)
+propagateDoSpec ast@(F.DoSpecification _ _ (F.StExpressionAssign _ _ e1 _) e2 m_e3) = do
+  let ast' = case m_e3 of
+        Nothing -> ast
+        Just e3 -> UA.maybeSetUnitConstraintF2 ConEq (UA.getUnitInfo e1) (UA.getUnitInfo e3) ast
+  pure $ UA.maybeSetUnitConstraintF2 ConEq (UA.getUnitInfo e1) (UA.getUnitInfo e2) ast'
 
 propagateStatement :: F.Statement UA -> UnitSolver (F.Statement UA)
 propagateStatement stmt = case stmt of
