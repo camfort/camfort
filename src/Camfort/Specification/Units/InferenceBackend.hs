@@ -97,6 +97,7 @@ genUnitAssignments cons
     -- constraintsToMatrix interpretation, we need to ensure that any
     -- moved ParamPosAbs units are negated, because they are
     -- effectively being shifted across the equal-sign:
+    isUnitRHS (UnitPow (UnitParamPosAbs (_, 0)) _) = False
     isUnitRHS (UnitPow (UnitParamPosAbs _) _) = True
     isUnitRHS _                               = False
 
