@@ -30,6 +30,7 @@ import           Camfort.Specification.Units.Analysis (UnitAnalysis, runInferenc
 import qualified Camfort.Specification.Units.Annotation as UA
 import           Camfort.Specification.Units.Environment
 import           Camfort.Specification.Units.InferenceBackendSBV (inconsistentConstraints)
+import qualified Camfort.Specification.Units.InferenceBackend as MatrixBackend
 import           Camfort.Specification.Units.Monad
 import           Camfort.Specification.Units.MonadTypes
 import qualified Camfort.Specification.Units.BackendTypes as B
@@ -72,12 +73,19 @@ instance Show ConsistencyError where
           isReflexive (ConEq u1 u2) = u1 == u2
           isReflexive _ = error "isReflexive without ConEq"
 
-      reportError con = (errSpan, pprintConstr . orient . unrename $ con)
+      reportError con = (errSpan, pprintConstr . orient . unrename . shift $ con)
         where
           errSpan = findCon con
           orient (ConEq u (UnitVar v)) = ConEq (UnitVar v) u
           orient (ConEq u (UnitParamVarUse v)) = ConEq (UnitParamVarUse v) u
           orient c = c
+
+          -- When reporting inconsistent constraints, shift all the
+          -- UnitNames (e.g. m, kg) and Polymorphic Units (e.g. 'a,
+          -- 'b) to the right-hand-side, and other things to the left.
+          shift (ConEq u v) = uncurry ConEq . fold2 $ MatrixBackend.shiftTerms (flattenUnits u, flattenUnits v)
+          shift (ConConj cs) = ConConj (map shift cs)
+          fold2 (us, vs) = (foldUnits us, foldUnits vs)
 
       findCon :: Constraint -> Maybe FU.SrcSpan
       findCon con = lookupWith (eq con) constraints
