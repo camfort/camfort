@@ -661,13 +661,21 @@ callHelper nexp args = do
 -- FIXME: use this function to create a list of constraints on intrinsic call-sites...
 intrinsicHelper :: Foldable t => UnitInfo -> F.Expression (FA.Analysis a) -> t b -> [Constraint]
 intrinsicHelper (UnitParamPosUse (_, _, callId)) f@(F.ExpValue _ _ (F.ValIntrinsic _)) args
-  | Just (retU, argUs) <- M.lookup sname intrinsicUnits = zipWith eachArg [0..numArgs] (retU:argUs)
+  | Just (retU, argUs) <- intrinsicLookup sname = zipWith eachArg [0..numArgs] (retU:argUs)
   where
     numArgs     = length args
     sname       = srcName f
     vname       = varName f
     eachArg i u = ConEq (UnitParamPosUse ((vname, sname), i, callId)) (instantiate callId u)
 intrinsicHelper _ _ _ = []
+
+-- | Get info about intrinsics by source name 'sname', taking into
+-- account the special case of those with arbitrary number of
+-- arguments.
+intrinsicLookup :: F.Name -> Maybe (UnitInfo, [UnitInfo])
+intrinsicLookup sname = do
+  (retU, argUs) <- M.lookup sname intrinsicUnits
+  return (retU, if sname `S.member` specialCaseArbitraryArgs then cycle argUs else argUs)
 
 -- | Generate a unique identifier for a literal encountered in the code.
 genUnitLiteral :: UnitSolver UnitInfo
@@ -836,7 +844,14 @@ puSrcName pu
 
 --------------------------------------------------
 
--- | name => (return-unit, parameter-units)
+-- | Intrinics that take arbitrary number of arguments. Entry in table
+-- 'intrinsicUnits' will contain a single item in the argument list,
+-- corresponding to the template used for all arguments.
+specialCaseArbitraryArgs :: S.Set F.Name
+specialCaseArbitraryArgs = S.fromList [ "max", "max0", "amax1", "dmax1", "amax0", "max1"
+                                      , "min", "min0", "amin1", "dmin1", "amin0", "min1" ]
+
+-- | Intrinsics table: name => (return-unit, parameter-units). See also 'specialCaseArbitraryArgs'.
 intrinsicUnits :: M.Map F.Name (UnitInfo, [UnitInfo])
 intrinsicUnits =
   M.fromList
