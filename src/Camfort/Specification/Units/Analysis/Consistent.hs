@@ -73,7 +73,7 @@ instance Show ConsistencyError where
           isReflexive (ConEq u1 u2) = u1 == u2
           isReflexive _ = error "isReflexive without ConEq"
 
-      reportError con = (errSpan, pprintConstr . orient . unrename . shift $ con)
+      reportError con = (errSpan, pprintConstr . orient . unrename . shift . simplify $ con)
         where
           errSpan = findCon con
           orient (ConEq u (UnitVar v)) = ConEq (UnitVar v) u
@@ -86,6 +86,8 @@ instance Show ConsistencyError where
           shift (ConEq u v) = uncurry ConEq . fold2 $ MatrixBackend.shiftTerms (flattenUnits u, flattenUnits v)
           shift (ConConj cs) = ConConj (map shift cs)
           fold2 (us, vs) = (foldUnits us, foldUnits vs)
+
+          simplify = B.dimToConstraint . B.constraintToDim
 
       findCon :: Constraint -> Maybe FU.SrcSpan
       findCon con = lookupWith (eq con) constraints
