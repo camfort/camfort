@@ -625,7 +625,7 @@ propagatePU pu = do
   -- the explicit unit annotation as well.
   givenCons <- forM (indexedParams pu) $ \ (i, param) ->
     case M.lookup param varMap of
-      Just UnitParamPosAbs{} -> pure . ConEq (UnitParamVarAbs (nn, param)) $ UnitParamPosAbs (nn, i)
+      Just UnitParamPosAbs{}    -> pure . ConEq (UnitParamVarAbs (nn, param)) $ UnitParamPosAbs (nn, i)
       Just u                    -> pure . ConEq u $ UnitParamPosAbs (nn, i)
       _                         -> pure . ConEq (UnitParamVarAbs (nn, param)) $ UnitParamPosAbs (nn, i)
 
@@ -648,7 +648,10 @@ propagatePU pu = do
 callHelper :: F.Expression UA -> [F.Argument UA] -> UnitSolver (UnitInfo, [F.Argument UA])
 callHelper nexp args = do
   let name = (varName nexp, srcName nexp)
-  callId <- freshId -- every call-site gets its own unique identifier
+  let ctyp = FA.idCType =<< FA.idType (F.getAnnotation nexp)
+  callId <- case ctyp of
+    Just FA.CTExternal -> pure 0  -- if external with no further info then no polymorphism
+    _                  -> freshId -- every call-site gets its own unique identifier
   let eachArg i arg@(F.Argument _ _ _ e)
         -- add site-specific parametric constraints to each argument
         | Just u <- UA.getUnitInfo e = UA.setConstraint (ConEq u (UnitParamPosUse (name, i, callId))) arg

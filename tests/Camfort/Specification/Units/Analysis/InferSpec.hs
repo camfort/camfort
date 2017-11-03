@@ -17,7 +17,7 @@ import Camfort.Specification.Units.Monad
 
 spec :: Test.Spec
 spec =
-  xdescribe "fixtures integration tests" $ do
+  describe "fixtures integration tests" $ do
     it "infers correctly based on simple addition" $
        "example-simple-1.f90" `unitsInferReportIs` exampleInferSimple1Report
     describe "Polymorphic functions" $
