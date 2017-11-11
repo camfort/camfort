@@ -61,6 +61,7 @@ import           Numeric.LinearAlgebra.Devel
   )
 
 import Camfort.Specification.Units.Environment
+import qualified Camfort.Specification.Units.InferenceBackendFlint as Flint
 
 -- | Returns list of formerly-undetermined variables and their units.
 inferVariables :: Constraints -> [(VV, UnitInfo)]
@@ -200,7 +201,10 @@ flattenConstraints = map (\ (ConEq u1 u2) -> (flattenUnits u1, flattenUnits u2))
 
 -- | Returns given matrix transformed into Reduced Row Echelon Form
 rref :: H.Matrix Double -> H.Matrix Double
-rref a = snd $ rrefMatrices' a 0 0 []
+rref a = a' -- snd $ rrefMatrices' a 0 0 []
+  where
+    -- (a', den, r) = Flint.rref a
+    a' = Flint.hnf a
 
 -- worker function
 -- invariant: the matrix a is in rref except within the submatrix (j-k,j) to (n,n)

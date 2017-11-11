@@ -38,6 +38,7 @@ executable camfort
 library
   hs-source-dirs:       src
   build-tools:          alex, happy
+  extra-libraries:      flint
   exposed-modules:      Camfort.Analysis
                         Camfort.Analysis.Logger
                         Camfort.Analysis.Annotations
@@ -69,6 +70,7 @@ library
                         Camfort.Specification.Units.Analysis.Infer
                         Camfort.Specification.Units.Annotation
                         Camfort.Specification.Units.InferenceBackend
+                        Camfort.Specification.Units.InferenceBackendFlint
                         Camfort.Specification.Units.InferenceBackendSBV
                         Camfort.Specification.Units.BackendTypes
                         Camfort.Specification.Units.Environment
