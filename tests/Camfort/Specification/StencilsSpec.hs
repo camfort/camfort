@@ -20,7 +20,7 @@ import Control.Lens
 
 import qualified Data.Text as Text
 
-import Language.Fortran.Util.ModFile (ModFile)
+import Language.Fortran.Util.ModFile (emptyModFiles, ModFile)
 
 import Camfort.Analysis.TestUtils
 import Camfort.Analysis hiding (describe)
@@ -465,7 +465,7 @@ inferReportWithMod modNames fileName expectedReport = do
 
 -- | Helper for producing a basic ModFile from a (terminal) module file.
 mkTestModFile :: String -> IO ModFile
-mkTestModFile file = head <$> genModFiles compileStencils () file []
+mkTestModFile file = head <$> genModFiles emptyModFiles compileStencils () file []
 
 crossModuleAUserReport :: [L.Text]
 crossModuleAUserReport =

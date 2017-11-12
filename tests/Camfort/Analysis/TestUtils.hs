@@ -17,11 +17,12 @@ module Camfort.Analysis.TestUtils
 import           Control.Monad                 (forM_)
 import           Control.Monad.IO.Class
 import           System.Directory              (getCurrentDirectory)
+import           System.FilePath
 
 import           Control.Lens
 
 import qualified Language.Fortran.AST          as F
-import           Language.Fortran.Util.ModFile (ModFiles)
+import           Language.Fortran.Util.ModFile (ModFiles, emptyModFiles)
 
 import           Camfort.Analysis
 import           Camfort.Analysis.ModFile
@@ -43,7 +44,7 @@ testInputSources inputSources =
   TestInput
   { _tiInputSources = inputSources
   , _tiExcludeFiles = []
-  , _tiIncludeDir = Just inputSources
+  , _tiIncludeDir = Just $ takeDirectory inputSources
   }
 
 
@@ -53,7 +54,8 @@ loadInput input = do
     Just x  -> return x
     Nothing -> getCurrentDirectory
 
-  modFiles <- genModFiles simpleCompiler () incDir (input ^. tiExcludeFiles)
+  modFiles <- getModFiles incDir
+  modFiles <- genModFiles modFiles simpleCompiler () incDir (input ^. tiExcludeFiles)
   pfsTexts <- readParseSrcDir modFiles (input ^. tiInputSources) (input ^. tiExcludeFiles)
   return (modFiles, pfsTexts)
 
