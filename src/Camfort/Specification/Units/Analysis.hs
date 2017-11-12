@@ -29,12 +29,14 @@ import           Data.Data (Data)
 import qualified Data.IntMap.Strict as IM
 import           Data.Generics.Uniplate.Operations
 import           Data.List (nub, intercalate)
+import qualified Data.Array as A
 import qualified Data.Map.Strict as M
 import           Data.Maybe (isJust, fromMaybe)
 import qualified Data.Set as S
 import qualified Numeric.LinearAlgebra as H -- for debugging
 import           Data.Text (Text)
 import           Control.Lens ((^?), _1)
+import qualified Debug.Trace as D
 
 import qualified Language.Fortran.AST      as F
 import qualified Language.Fortran.Analysis as FA
@@ -51,6 +53,7 @@ import           Camfort.Analysis.ModFile (withCombinedEnvironment)
 import qualified Camfort.Specification.Units.Annotation   as UA
 import           Camfort.Specification.Units.Environment
 import           Camfort.Specification.Units.InferenceBackend
+import qualified Camfort.Specification.Units.InferenceBackendFlint as Flint
 import           Camfort.Specification.Units.ModFile
   (genUnitsModFile, initializeModFiles, runCompileUnits)
 import           Camfort.Specification.Units.Monad
@@ -812,9 +815,19 @@ debugLogging = do
     logDebugNoOrigin $ describeShow lhsM
     logDebugNoOrigin "--------------------------------------------------\nRHS M:"
     logDebugNoOrigin $ describeShow rhsM
-    logDebugNoOrigin "--------------------------------------------------\nSolved (RREF) M:"
+    logDebugNoOrigin "--------------------------------------------------\nAUG M:"
     let augM = if H.rows rhsM == 0 || H.cols rhsM == 0 then lhsM else H.fromBlocks [[lhsM, rhsM]]
-    logDebugNoOrigin . describeShow . rref $ augM
+    logDebugNoOrigin $ describeShow augM
+    logDebugNoOrigin "--------------------------------------------------\nSolved (normHNF) M:"
+    let hnfM = Flint.hnf augM
+    logDebugNoOrigin $ describeShow hnfM
+    logDebugNoOrigin "--------------------------------------------------\nSolved (normHNF) M:"
+    let (solvedM, newColIndices) = Flint.normHNF augM
+    logDebugNoOrigin . describeShow $ solvedM
+    logDebugNoOrigin $ "newColIndices = " <> describeShow newColIndices
+    logDebugNoOrigin "--------------------------------------------------\nLHS Cols with newColIndices:"
+    let lhsCols = A.elems lhsColA ++ map (lhsColA A.!) newColIndices
+    logDebugNoOrigin $ describe . unlines . map show $ zip [0..] lhsCols
     -- logDebugNoOrigin "--------------------------------------------------\nSolved (SVD) M:"
     -- logDebugNoOrigin $ show (H.linearSolveSVD lhsM rhsM)
     -- logDebugNoOrigin "--------------------------------------------------\nSingular Values:"
