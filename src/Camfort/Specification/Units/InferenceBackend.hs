@@ -95,7 +95,7 @@ genUnitAssignments cons
     unitPows                      = map (concatMap flattenUnits . zipWith UnitPow cols) (H.toLists solvedM)
 
     -- Variables to the left, unit names to the right side of the equation.
-    unitAssignments               = map (fmap (foldUnits . map negatePosAbs) . partition (not . isUnitRHS)) unitPows
+    unitAssignments               = map (fmap (foldUnits . map negatePosAbs) . checkSanity . partition (not . isUnitRHS)) unitPows
     isUnitRHS (UnitPow (UnitName _) _)        = True
     isUnitRHS (UnitPow (UnitParamEAPAbs _) _) = True
     -- Because this version of isUnitRHS different from
@@ -105,6 +105,13 @@ genUnitAssignments cons
     isUnitRHS (UnitPow (UnitParamPosAbs (_, 0)) _) = False
     isUnitRHS (UnitPow (UnitParamPosAbs _) _) = True
     isUnitRHS _                               = False
+
+checkSanity :: ([UnitInfo], [UnitInfo]) -> ([UnitInfo], [UnitInfo])
+checkSanity (u1@[UnitPow (UnitVar _) _], u2)
+  | or [ True | UnitParamPosAbs (_, i) <- universeBi u2 ] = (u1++u2,[])
+checkSanity (u1@[UnitPow (UnitParamVarAbs (f, _)) _], u2)
+  | or [ True | UnitParamPosAbs (f', i) <- universeBi u2, f' /= f ] = (u1++u2,[])
+checkSanity c = c
 
 --------------------------------------------------
 
