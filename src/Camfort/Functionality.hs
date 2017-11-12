@@ -301,14 +301,23 @@ unitsCompile outSrc opts env =
   opts
   env
 -}
+  -- Previously...
+--modFiles <- genModFiles mfCompiler mfInput incDir (ceExcludeFiles env)
+  -- ...instead for now, just get the mod files
 
 unitsCompile :: LiteralsOpt -> CamfortEnv -> IO ()
 unitsCompile opts env = do
   let uo = optsToUnitOpts opts
   let description = "Compiling units for"
   putStrLn $ description ++ " '" ++ ceInputSources env ++ "'"
+  incDir' <- maybe getCurrentDirectory pure (ceIncludeDir env)
+  isDir <- doesDirectoryExist incDir'
+  let incDir | isDir     = incDir'
+             | otherwise = takeDirectory incDir'
+  modFiles <- getModFiles incDir
+
   -- Run the gen mod file routine directly on the input source
-  modFiles <- genModFiles compileUnits uo (ceInputSources env) (ceExcludeFiles env)
+  modFiles <- genModFiles modFiles compileUnits uo (ceInputSources env) (ceExcludeFiles env)
   -- Write the mod files out
   forM_ modFiles $ \modFile -> do
      let mfname = replaceExtension (FM.moduleFilename modFile) FM.modFileSuffix

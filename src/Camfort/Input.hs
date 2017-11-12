@@ -37,13 +37,12 @@ import           Data.List                     (intercalate)
 import           Control.Lens
 
 import qualified Language.Fortran.AST          as F
-import           Language.Fortran.Util.ModFile (ModFiles)
+import           Language.Fortran.Util.ModFile (ModFiles, emptyModFiles)
 
 import           Camfort.Analysis
 import           Camfort.Analysis.Annotations
 import           Camfort.Analysis.Logger
-import           Camfort.Analysis.ModFile      (MFCompiler, genModFiles,
-                                                readParseSrcDir)
+import           Camfort.Analysis.ModFile      (MFCompiler, genModFiles, readParseSrcDir)
 import           Camfort.Helpers
 import           Camfort.Output
 
@@ -261,7 +260,7 @@ loadModAndProgramFiles
   -> m (ModFiles, [(ProgramFile, SourceText)])
 loadModAndProgramFiles mfc env inSrc incDir excludes = do
   liftIO $ printExcludes inSrc excludes
-  modFiles <- genModFiles mfc env incDir excludes
+  modFiles <- genModFiles emptyModFiles mfc env incDir excludes
   ps <- liftIO $ readParseSrcDir modFiles inSrc excludes
   pure (modFiles, ps)
 

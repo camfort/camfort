@@ -67,10 +67,10 @@ genCModFile = id
 -- | Generate a mode file based on the given mod file compiler
 genModFiles
   :: (MonadIO m)
-  => MFCompiler r m -> r -> FilePath -> [Filename] -> m FM.ModFiles
-genModFiles mfc env fp excludes = do
-  fortranFiles <- liftIO $ fmap fst <$> readParseSrcDir FM.emptyModFiles fp excludes
-  traverse (genCModFile mfc env FM.emptyModFiles) fortranFiles
+  => FM.ModFiles -> MFCompiler r m -> r -> FilePath -> [Filename] -> m FM.ModFiles
+genModFiles mfs mfc env fp excludes = do
+  fortranFiles <- liftIO $ fmap fst <$> readParseSrcDir mfs fp excludes
+  traverse (genCModFile mfc env mfs) fortranFiles
 
 -- | Retrieve the ModFiles under a given path.
 getModFiles :: FilePath -> IO FM.ModFiles
