@@ -38,8 +38,9 @@ import Camfort.Specification.Units.Analysis
 import Camfort.Specification.Units.Analysis.Consistent
   (ConsistencyError, ConsistencyReport(..), checkUnits)
 import Camfort.Specification.Units.Environment
-import Camfort.Specification.Units.InferenceBackendSBV (inferVariables)
-import Camfort.Specification.Units.InferenceBackend (chooseImplicitNames)
+--import Camfort.Specification.Units.InferenceBackendSBV (inferVariables)
+import Camfort.Specification.Units.InferenceBackend (inferVariables,
+                                                    chooseImplicitNames)
 import Camfort.Specification.Units.Monad
 
 import Camfort.Helpers (FileOrDir, Filename)

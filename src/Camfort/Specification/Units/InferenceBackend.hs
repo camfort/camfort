@@ -83,8 +83,12 @@ genUnitAssignments cons
   | otherwise       = []
   where
     (unsolvedM, inconsists, colA) = constraintsToMatrix cons
-    solvedM                       = rref unsolvedM
-    cols                          = A.elems colA
+
+    (solvedM, newColIndices)      = Flint.normHNF unsolvedM
+    cols                          = A.elems colA ++ map (colA A.!) newColIndices
+
+    -- solvedM                       = rref unsolvedM
+    -- cols                          = A.elems colA
 
     -- Convert the rows of the solved matrix into flattened unit
     -- expressions in the form of "unit ** k".
@@ -201,10 +205,9 @@ flattenConstraints = map (\ (ConEq u1 u2) -> (flattenUnits u1, flattenUnits u2))
 
 -- | Returns given matrix transformed into Reduced Row Echelon Form
 rref :: H.Matrix Double -> H.Matrix Double
-rref a = a' -- snd $ rrefMatrices' a 0 0 []
+rref a = snd $ rrefMatrices' a 0 0 []
   where
     -- (a', den, r) = Flint.rref a
-    a' = Flint.hnf a
 
 -- worker function
 -- invariant: the matrix a is in rref except within the submatrix (j-k,j) to (n,n)
