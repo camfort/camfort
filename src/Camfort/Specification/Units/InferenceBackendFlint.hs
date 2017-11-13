@@ -24,6 +24,14 @@
 
 module Camfort.Specification.Units.InferenceBackendFlint where
 
+import           Numeric.LinearAlgebra.Devel
+  ( newMatrix, readMatrix
+  , writeMatrix, runSTMatrix
+  , freezeMatrix, STMatrix
+  )
+
+import           Control.Monad.ST
+
 import System.IO.Unsafe (unsafePerformIO)
 import Numeric.LinearAlgebra
   ( atIndex, (<>), (><)
@@ -330,11 +338,13 @@ normhnf (numRows, numCols, inputM) = do
         pokeM outputM i j' $ x `div` lcoef
 
     -- identify columns that need additional constraints generated
-    let consCols = map (\ ((_, j), _) -> j) consCands
+    let consCols = map (\ ((_, j), _:rest) -> (j, maximum (map abs rest))) consCands
 
-    -- generate operations that poke 1.0 and -1.0 into columns of the
-    -- given row (supplied later)
-    let ops = [ \ flintM i -> pokeM flintM i j 1 >> pokeM flintM i (numCols + k) (-1) | (j, k) <- zip consCols [0..] ]
+    -- generate operations that poke 1.0 and -d into columns of the
+    -- given row (matrix parameter supplied later); d is the value of
+    -- the co-efficient that isn't divisible by the
+    -- leading-coefficient
+    let ops = [ \ flintM i -> pokeM flintM i j 1 >> pokeM flintM i (numCols + k) (-d) | ((j, d), k) <- zip consCols [0..] ]
     let numOps = fromIntegral (length ops)
     let numRows' = numOps + rank
     let numCols' = numOps + numCols
@@ -352,5 +362,115 @@ normhnf (numRows, numCols, inputM) = do
       withBlankMatrix numRows' numCols' $ \ outputM'' -> do
         fmpz_mat_hnf outputM'' outputM'
         rank' <- fmpz_mat_rank outputM''
+        elemrowscale outputM'' rank' numCols'
         h <- flintToHMatrix rank' numCols' outputM''
-        return (h, consCols)
+        return (myRref h, map fst consCols)
+
+elemrowscale outputM rank numCols = do
+    -- column indices of leading co-efficients > 1
+    lcoefs <- filter ((> 1) . head . snd) <$> forM [0 .. rank-1] (\ i -> do
+      cs <- zip [0..] `fmap` sequence [ peekM outputM i j | j <- [0 .. numCols-1] ]
+      let (_, (j, lcoef):rest) = span ((== 0) . snd) cs
+      return ((i, j), lcoef:map snd rest))
+
+    let multCands = filter (\ (_, lcoef:rest) -> all ((== 0) . (`rem` lcoef)) rest) lcoefs
+
+    -- apply elementary row scaling
+    forM_ multCands $ \ ((i, j), lcoef:_) ->
+      forM_ [j..numCols - 1] $ \ j' -> do
+        x <- peekM outputM i j'
+        pokeM outputM i j' $ x `div` lcoef
+
+m1 = (8><6)
+ [ 1.0, 0.0, 0.0, -1.0,  0.0,  0.0
+ , 0.0, 1.0, 0.0,  0.0, -1.0,  0.0
+ , 0.0, 0.0, 1.0,  0.0,  0.0, -1.0
+ , 1.0, 0.0, 0.0, -1.0,  0.0,  0.0
+ , 0.0, 1.0, 0.0,  0.0, -1.0,  0.0
+ , 0.0, 0.0, 1.0,  0.0,  0.0, -1.0
+ , 0.0, 0.0, 0.0,  1.0, -4.0,  0.0
+ , 0.0, 0.0, 0.0,  0.0,  4.0, -3.0 ] :: H.Matrix Double
+
+
+--------------------------------------------------
+
+--------------------------------------------------
+-- Matrix solving functions based on HMatrix
+
+-- | Returns given matrix transformed into Reduced Row Echelon Form
+myRref :: H.Matrix Double -> H.Matrix Double
+myRref a = snd $ rrefMatrices' a 0 0 []
+  where
+    -- (a', den, r) = Flint.rref a
+
+-- worker function
+-- invariant: the matrix a is in rref except within the submatrix (j-k,j) to (n,n)
+rrefMatrices' a j k mats
+  -- Base cases:
+  | j - k == n            = (mats, a)
+  | j     == m            = (mats, a)
+
+  -- When we haven't yet found the first non-zero number in the row, but we really need one:
+  | a @@> (j - k, j) == 0 = case findIndex (/= 0) below of
+    -- this column is all 0s below current row, must move onto the next column
+    Nothing -> rrefMatrices' a (j + 1) (k + 1) mats
+    -- we've found a row that has a non-zero element that can be swapped into this row
+    Just i' -> rrefMatrices' (swapMat <> a) j k (swapMat:mats)
+      where i       = j - k + i'
+            swapMat = elemRowSwap n i (j - k)
+
+  -- We have found a non-zero cell at (j - k, j), so transform it into
+  -- a 1 if needed using elemRowMult, and then clear out any lingering
+  -- non-zero values that might appear in the same column, using
+  -- elemRowAdd:
+  | otherwise             = rrefMatrices' a2 (j + 1) k mats2
+  where
+    n     = rows a
+    m     = cols a
+    below = getColumnBelow a (j - k, j)
+
+    erm   = elemRowMult n (j - k) (recip (a @@> (j - k, j)))
+
+    -- scale the row if the cell is not already equal to 1
+    (a1, mats1) | a @@> (j - k, j) /= 1 = (erm <> a, erm:mats)
+                | otherwise             = (a, mats)
+
+    -- Locate any non-zero values in the same column as (j - k, j) and
+    -- cancel them out. Optimisation: instead of constructing a
+    -- separate elemRowAdd matrix for each cancellation that are then
+    -- multiplied together, simply build a single matrix that cancels
+    -- all of them out at the same time, using the ST Monad.
+    findAdds _ m ms
+      | isWritten = (new <> m, new:ms)
+      | otherwise = (m, ms)
+      where
+        (isWritten, new) = runST $ do
+          new <- newMatrix 0 n n :: ST s (STMatrix s Double)
+          sequence [ writeMatrix new i' i' 1 | i' <- [0 .. (n - 1)] ]
+          let f w i | i >= n            = return w
+                    | i == j - k        = f w (i + 1)
+                    | a @@> (i, j) == 0 = f w (i + 1)
+                    | otherwise         = writeMatrix new i (j - k) (- (a @@> (i, j)))
+                                          >> f True (i + 1)
+          isWritten <- f False 0
+          (isWritten,) `fmap` freezeMatrix new
+
+    (a2, mats2) = findAdds 0 a1 mats1
+
+-- Get a list of values that occur below (i, j) in the matrix a.
+getColumnBelow a (i, j) = concat . H.toLists $ subMatrix (i, j) (n - i, 1) a
+  where n = rows a
+
+-- 'Elementary row operation' matrices
+elemRowMult :: Int -> Int -> Double -> H.Matrix Double
+elemRowMult n i k = diag (H.fromList (replicate i 1.0 ++ [k] ++ replicate (n - i - 1) 1.0))
+
+elemRowSwap :: Int -> Int -> Int -> H.Matrix Double
+elemRowSwap n i j
+  | i == j          = ident n
+  | i > j           = elemRowSwap n j i
+  | otherwise       = extractRows ([0..i-1] ++ [j] ++ [i+1..j-1] ++ [i] ++ [j+1..n-1]) $ ident n
+
+
+extractRows = flip (?) -- hmatrix 0.17 changed interface
+m @@> i = m `atIndex` i
