@@ -24,14 +24,6 @@
 
 module Camfort.Specification.Units.InferenceBackendFlint where
 
-import           Numeric.LinearAlgebra.Devel
-  ( newMatrix, readMatrix
-  , writeMatrix, runSTMatrix
-  , freezeMatrix, STMatrix
-  )
-
-import           Control.Monad.ST
-
 import System.IO.Unsafe (unsafePerformIO)
 import Numeric.LinearAlgebra
   ( atIndex, (<>), (><)
@@ -44,7 +36,7 @@ import qualified Numeric.LinearAlgebra as H
 
 import Control.Monad
 
-import Data.List (findIndex, partition)
+import Data.List (findIndex, partition, foldl')
 
 import Foreign
 import Foreign.Ptr
@@ -308,8 +300,8 @@ copyMatrix m1 m2 r1 c1 r2 c2 =
 -- way.
 --
 -- The resulting matrix can have non-zeroes above the
--- leading-coefficients in the same column, so I invoke the old RREF
--- functionality to clear that out. This can be optimised later.
+-- leading-coefficients in the same column, so I apply some elementary
+-- row operations to fix that and bring things into RREF.
 --
 -- Running time is computation of Hermite Normal Form twice, plus
 -- construction of a slightly larger matrix (possibly), plus scanning
@@ -341,14 +333,23 @@ normhnf (numRows, numCols, inputM) = do
         x <- peekM outputM i j'
         pokeM outputM i j' $ x `div` lcoef
 
-    -- identify columns that need additional constraints generated
-    let consCols = map (\ ((_, j), _:rest) -> (j, maximum (map abs rest))) consCands
+    -- identify columns that need additional constraints generated and
+    -- their associated value d, which is the value of the non-leading
+    -- co-efficient divided by the GCD of the row.
+    let genColCons ((_, j), lcoef:rest) = (j, maxNLcoef `div` foldl' gcd lcoef restABS)
+          where
+            restABS   = map abs rest
+            maxNLcoef = maximum restABS
+
+    let consCols = map genColCons consCands
 
     -- generate operations that poke 1.0 and -d into columns of the
     -- given row (matrix parameter supplied later); d is the value of
-    -- the co-efficient that isn't divisible by the
-    -- leading-coefficient
-    let ops = [ \ flintM i -> pokeM flintM i j 1 >> pokeM flintM i (numCols + k) (-d) | ((j, d), k) <- zip consCols [0..] ]
+    -- the non-leading co-efficient that isn't divisible by the
+    -- leading-coefficient, divided by the GCD of the row.
+    let ops = [ \ flintM i -> do pokeM flintM i j 1
+                                 pokeM flintM i (numCols + k) (-d)
+              | ((j, d), k) <- zip consCols [0..] ]
     let numOps = fromIntegral (length ops)
     let numRows' = numOps + rank
     let numCols' = numOps + numCols
@@ -366,53 +367,66 @@ normhnf (numRows, numCols, inputM) = do
       withBlankMatrix numRows' numCols' $ \ outputM'' -> do
         fmpz_mat_hnf outputM'' outputM'
         rank' <- fmpz_mat_rank outputM''
-        elemrowscale outputM'' rank' numCols'
+        -- scale the rows so that it is a RREF, returning the indices
+        -- where leading-coefficients had to be scaled to 1.
+        indices <- elemrowscale outputM'' rank' numCols'
+        -- HNF allows non-zeroes above the leading-coefficients that
+        -- were greater than 1, so also fix that to bring into RREF.
+        elemrowadds outputM'' rank' numCols' indices
+        -- convert back to HMatrix form
         h <- flintToHMatrix rank' numCols' outputM''
         return (h, map fst consCols)
 
+-- find leading-coefficients that are greater than 1 and scale those
+-- rows accordingly to reach RREF
+--
+-- precondition: matrix outputM is in HNF
 elemrowscale outputM rank numCols = do
-    -- column indices of leading co-efficients > 1
-    lcoefs <- filter ((> 1) . head . snd) <$> forM [0 .. rank-1] (\ i -> do
-      cs <- zip [0..] `fmap` sequence [ peekM outputM i j | j <- [0 .. numCols-1] ]
-      let (_, (j, lcoef):rest) = span ((== 0) . snd) cs
-      return ((i, j), lcoef:map snd rest))
+  -- column indices of leading co-efficients > 1
+  lcoefs <- filter ((> 1) . head . snd) <$> forM [0 .. rank-1] (\ i -> do
+    cs <- zip [0..] `fmap` sequence [ peekM outputM i j | j <- [0 .. numCols-1] ]
+    let (_, (j, lcoef):rest) = span ((== 0) . snd) cs
+    return ((i, j), lcoef:map snd rest))
 
-    let multCands = filter (\ (_, lcoef:rest) -> all ((== 0) . (`rem` lcoef)) rest) lcoefs
+  let multCands = filter (\ (_, lcoef:rest) -> all ((== 0) . (`rem` lcoef)) rest) lcoefs
 
-    -- apply elementary row scaling
-    js <- forM multCands $ \ ((i, j), lcoef:_) -> do
-      forM_ [j..numCols - 1] $ \ j' -> do
-        x <- peekM outputM i j'
-        pokeM outputM i j' $ x `div` lcoef
-      return j
+  -- apply elementary row scaling
+  forM multCands $ \ ((i, j), lcoef:_) -> do
+    forM_ [j..numCols - 1] $ \ j' -> do
+      x <- peekM outputM i j'
+      pokeM outputM i j' $ x `div` lcoef
+    return (i, j)
 
-    -- fixup non-zeroes above the leading-coefficients
-    elemrowadds outputM rank numCols js
-
--- precondition: js is a list of column indices where we have just
--- scaled the leading-coefficient to 1 and now we must look to see if
--- there are any non-zeroes in the column above the
+-- use indices to guide elementary row additions to reach RREF
+--
+-- precondition: matrix outputM is in HNF save for work done by
+-- elemrowscale, and indices is a list of coordinates where we have
+-- just scaled the leading-coefficient to 1 and now we must look to
+-- see if there are any non-zeroes in the column above the
 -- leading-coefficient, because that is allowed by HNF.
-elemrowadds outputM rank numCols js = do
+elemrowadds outputM rank numCols indices = do
   -- look for non-zero members of the columns above the
   -- leading-coefficient and wipe them out.
-  forM_ js $ \ j -> do
-    forM_ [0..j-1] $ \ i -> do
+  forM_ indices $ \ (lcI, lcJ) -> do
+    let j = lcJ
+    forM_ [0..lcI-1] $ \ i -> do
       -- (i, j) ranges over the elements of the column above leading
-      -- co-efficient (j, j).
+      -- co-efficient (lcI, lcJ).
       x <- peekM outputM i j
       if x == 0 then
-        pure () -- nothing to do
+        pure () -- nothing to do at row i
       else do
-        -- (i, j) is non-zero and must be cancelled x times
+        -- (i, j) is non-zero and row i must be cancelled x times
         let sf = x -- scaling factor = non-zero magnitude
-        forM_ [j..numCols-1] $ \ j' -> do
-          -- (i, j') ranges over the row where we discovered a non-zero
-          -- (j, j') ranges over the row with the leading co-efficient
+        forM_ [lcJ..numCols-1] $ \ j' -> do
+          -- (i,   j') ranges over the row where we discovered a non-zero
+          -- (lcI, j') ranges over the row with the leading co-efficient
           x1 <- peekM outputM i j'
-          x2 <- peekM outputM j j'
+          x2 <- peekM outputM lcI j'
           -- add lower row scaled by sf to upper row
           pokeM outputM i j' (x1 - x2 * sf)
+
+--------------------------------------------------
 
 m1 = (8><6)
  [ 1.0, 0.0, 0.0, -1.0,  0.0,  0.0
@@ -433,87 +447,3 @@ m2 = (8><6)
  , 0.0, 0.0, 1.0,  0.0,  0.0, -1.0
  , 0.0, 0.0, 0.0,  1.0, -6.0,  0.0
  , 0.0, 0.0, 0.0,  0.0,  6.0, -4.0 ] :: H.Matrix Double
-
-
---------------------------------------------------
-
---------------------------------------------------
--- Matrix solving functions based on HMatrix
-
--- | Returns given matrix transformed into Reduced Row Echelon Form
-myRref :: H.Matrix Double -> H.Matrix Double
-myRref a = snd $ rrefMatrices' a 0 0 []
-  where
-    -- (a', den, r) = Flint.rref a
-
--- worker function
--- invariant: the matrix a is in rref except within the submatrix (j-k,j) to (n,n)
-rrefMatrices' a j k mats
-  -- Base cases:
-  | j - k == n            = (mats, a)
-  | j     == m            = (mats, a)
-
-  -- When we haven't yet found the first non-zero number in the row, but we really need one:
-  | a @@> (j - k, j) == 0 = case findIndex (/= 0) below of
-    -- this column is all 0s below current row, must move onto the next column
-    Nothing -> rrefMatrices' a (j + 1) (k + 1) mats
-    -- we've found a row that has a non-zero element that can be swapped into this row
-    Just i' -> rrefMatrices' (swapMat <> a) j k (swapMat:mats)
-      where i       = j - k + i'
-            swapMat = elemRowSwap n i (j - k)
-
-  -- We have found a non-zero cell at (j - k, j), so transform it into
-  -- a 1 if needed using elemRowMult, and then clear out any lingering
-  -- non-zero values that might appear in the same column, using
-  -- elemRowAdd:
-  | otherwise             = rrefMatrices' a2 (j + 1) k mats2
-  where
-    n     = rows a
-    m     = cols a
-    below = getColumnBelow a (j - k, j)
-
-    erm   = elemRowMult n (j - k) (recip (a @@> (j - k, j)))
-
-    -- scale the row if the cell is not already equal to 1
-    (a1, mats1) | a @@> (j - k, j) /= 1 = (erm <> a, erm:mats)
-                | otherwise             = (a, mats)
-
-    -- Locate any non-zero values in the same column as (j - k, j) and
-    -- cancel them out. Optimisation: instead of constructing a
-    -- separate elemRowAdd matrix for each cancellation that are then
-    -- multiplied together, simply build a single matrix that cancels
-    -- all of them out at the same time, using the ST Monad.
-    findAdds _ m ms
-      | isWritten = (new <> m, new:ms)
-      | otherwise = (m, ms)
-      where
-        (isWritten, new) = runST $ do
-          new <- newMatrix 0 n n :: ST s (STMatrix s Double)
-          sequence [ writeMatrix new i' i' 1 | i' <- [0 .. (n - 1)] ]
-          let f w i | i >= n            = return w
-                    | i == j - k        = f w (i + 1)
-                    | a @@> (i, j) == 0 = f w (i + 1)
-                    | otherwise         = writeMatrix new i (j - k) (- (a @@> (i, j)))
-                                          >> f True (i + 1)
-          isWritten <- f False 0
-          (isWritten,) `fmap` freezeMatrix new
-
-    (a2, mats2) = findAdds 0 a1 mats1
-
--- Get a list of values that occur below (i, j) in the matrix a.
-getColumnBelow a (i, j) = concat . H.toLists $ subMatrix (i, j) (n - i, 1) a
-  where n = rows a
-
--- 'Elementary row operation' matrices
-elemRowMult :: Int -> Int -> Double -> H.Matrix Double
-elemRowMult n i k = diag (H.fromList (replicate i 1.0 ++ [k] ++ replicate (n - i - 1) 1.0))
-
-elemRowSwap :: Int -> Int -> Int -> H.Matrix Double
-elemRowSwap n i j
-  | i == j          = ident n
-  | i > j           = elemRowSwap n j i
-  | otherwise       = extractRows ([0..i-1] ++ [j] ++ [i+1..j-1] ++ [i] ++ [j+1..n-1]) $ ident n
-
-
-extractRows = flip (?) -- hmatrix 0.17 changed interface
-m @@> i = m `atIndex` i
