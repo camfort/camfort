@@ -39,6 +39,9 @@ spec =
     describe "Intrinsic functions" $
       it "sqrtPoly" $
         "sqrtPoly.f90" `unitsInferReportIs` sqrtPolyReport
+    describe "GCD of powers" $
+      it "gcd1" $
+        "gcd1.f90" `unitsInferReportIs` gcd1Report
 
 fixturesDir :: String
 fixturesDir = "tests" </> "fixtures" </> "Specification" </> "Units"
@@ -143,3 +146,9 @@ sqrtPolyReport = inferReport "sqrtPoly.f90"
   \  11:14 unit j**2 :: c\n\
   \  16:3 unit ('a)**2 :: square\n\
   \  17:13 unit 'a :: n\n"
+
+gcd1Report :: String
+gcd1Report = inferReport "gcd1.f90"
+  "  3:3 unit ('a)**12 :: g\n\
+  \  4:13 unit ('a)**2 :: x\n\
+  \  4:16 unit ('a)**3 :: y\n"
