@@ -159,8 +159,8 @@ hnf m = unsafePerformIO $ do
       r <- fmpz_mat_rank outputM
 
       -- DEBUG:
-      fmpz_mat_print_pretty outputM
-      traceM $ "rank = " ++ show r
+      -- fmpz_mat_print_pretty outputM
+      -- traceM $ "rank = " ++ show r
       --
 
       lists <- forM [0..fromIntegral r-1] $ \ i -> do

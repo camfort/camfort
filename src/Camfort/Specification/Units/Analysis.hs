@@ -818,7 +818,7 @@ debugLogging = do
     logDebugNoOrigin "--------------------------------------------------\nAUG M:"
     let augM = if H.rows rhsM == 0 || H.cols rhsM == 0 then lhsM else H.fromBlocks [[lhsM, rhsM]]
     logDebugNoOrigin $ describeShow augM
-    logDebugNoOrigin "--------------------------------------------------\nSolved (normHNF) M:"
+    logDebugNoOrigin "--------------------------------------------------\nSolved (hnf) M:"
     let hnfM = Flint.hnf augM
     logDebugNoOrigin $ describeShow hnfM
     logDebugNoOrigin "--------------------------------------------------\nSolved (normHNF) M:"

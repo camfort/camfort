@@ -78,21 +78,25 @@ inferVariables cons = unitVarAssignments
 genUnitAssignments :: [Constraint] -> [([UnitInfo], UnitInfo)]
 genUnitAssignments [] = []
 genUnitAssignments cons
-  | null cols       = []
-  | null inconsists = unitAssignments
-  | otherwise       = []
+  | null colList                                      = []
+  | null inconsists && rank solvedM == rank cosolvedM = unitAssignments
+  | otherwise                                         = []
   where
-    (unsolvedM, inconsists, colA) = constraintsToMatrix cons
+    (lhsM, rhsM, inconsists, lhsColA, rhsColA) = constraintsToMatrices cons
+    unsolvedM | rows rhsM == 0 || cols rhsM == 0 = lhsM
+              | rows lhsM == 0 || cols lhsM == 0 = rhsM
+              | otherwise                        = fromBlocks [[lhsM, rhsM]]
 
     (solvedM, newColIndices)      = Flint.normHNF unsolvedM
-    cols                          = A.elems colA ++ map (colA A.!) newColIndices
+    -- solvedM can have additional columns and rows from normHNF;
+    -- cosolvedM corresponds to the original lhsM.
+    cosolvedM                     = subMatrix (0, 0) (rows solvedM, cols lhsM) solvedM
 
-    -- solvedM                       = rref unsolvedM
-    -- cols                          = A.elems colA
+    colList                       = A.elems lhsColA ++ A.elems rhsColA ++ map (lhsColA A.!) newColIndices
 
     -- Convert the rows of the solved matrix into flattened unit
     -- expressions in the form of "unit ** k".
-    unitPows                      = map (concatMap flattenUnits . zipWith UnitPow cols) (H.toLists solvedM)
+    unitPows                      = map (concatMap flattenUnits . zipWith UnitPow colList) (H.toLists solvedM)
 
     -- Variables to the left, unit names to the right side of the equation.
     unitAssignments               = map (fmap (foldUnits . map negatePosAbs) . checkSanity . partition (not . isUnitRHS)) unitPows
