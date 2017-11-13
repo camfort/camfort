@@ -128,7 +128,7 @@ constraintsToMatrix cons
   | otherwise = (augM, inconsists, A.listArray (0, length colElems - 1) colElems)
   where
     -- convert each constraint into the form (lhs, rhs)
-    consPairs       = flattenConstraints cons
+    consPairs       = filter (uncurry (/=)) $ flattenConstraints cons
     -- ensure terms are on the correct side of the equal sign
     shiftedCons     = map shiftTerms consPairs
     lhs             = map fst shiftedCons
