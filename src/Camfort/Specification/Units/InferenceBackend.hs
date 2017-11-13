@@ -128,7 +128,7 @@ epsilon = 0.001 -- arbitrary
 -- reverse mapping of column numbers to units.
 constraintsToMatrix :: Constraints -> (H.Matrix Double, [Int], A.Array Int UnitInfo)
 constraintsToMatrix cons
-  | all null lhs = (H.ident 0, [], A.listArray (0, 0) [])
+  | all null lhs = (H.ident 0, [], A.listArray (0, -1) [])
   | otherwise = (augM, inconsists, A.listArray (0, length colElems - 1) colElems)
   where
     -- convert each constraint into the form (lhs, rhs)
@@ -145,7 +145,7 @@ constraintsToMatrix cons
 
 constraintsToMatrices :: Constraints -> (H.Matrix Double, H.Matrix Double, [Int], A.Array Int UnitInfo, A.Array Int UnitInfo)
 constraintsToMatrices cons
-  | all null lhs = (H.ident 0, H.ident 0, [], A.listArray (0, 0) [], A.listArray (0, 0) [])
+  | all null lhs = (H.ident 0, H.ident 0, [], A.listArray (0, -1) [], A.listArray (0, -1) [])
   | otherwise = (lhsM, rhsM, inconsists, lhsCols, rhsCols)
   where
     -- convert each constraint into the form (lhs, rhs)
