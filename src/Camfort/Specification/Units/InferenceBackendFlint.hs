@@ -307,6 +307,10 @@ copyMatrix m1 m2 r1 c1 r2 c2 =
 -- As a result we also return a list of columns that were cloned this
 -- way.
 --
+-- The resulting matrix can have non-zeroes above the
+-- leading-coefficients in the same column, so I invoke the old RREF
+-- functionality to clear that out. This can be optimised later.
+--
 -- Running time is computation of Hermite Normal Form twice, plus
 -- construction of a slightly larger matrix (possibly), plus scanning
 -- through the matrix for leading-coefficients, and then again to
@@ -364,7 +368,7 @@ normhnf (numRows, numCols, inputM) = do
         rank' <- fmpz_mat_rank outputM''
         elemrowscale outputM'' rank' numCols'
         h <- flintToHMatrix rank' numCols' outputM''
-        return (myRref h, map fst consCols)
+        return (h, map fst consCols)
 
 elemrowscale outputM rank numCols = do
     -- column indices of leading co-efficients > 1
@@ -376,10 +380,39 @@ elemrowscale outputM rank numCols = do
     let multCands = filter (\ (_, lcoef:rest) -> all ((== 0) . (`rem` lcoef)) rest) lcoefs
 
     -- apply elementary row scaling
-    forM_ multCands $ \ ((i, j), lcoef:_) ->
+    js <- forM multCands $ \ ((i, j), lcoef:_) -> do
       forM_ [j..numCols - 1] $ \ j' -> do
         x <- peekM outputM i j'
         pokeM outputM i j' $ x `div` lcoef
+      return j
+
+    -- fixup non-zeroes above the leading-coefficients
+    elemrowadds outputM rank numCols js
+
+-- precondition: js is a list of column indices where we have just
+-- scaled the leading-coefficient to 1 and now we must look to see if
+-- there are any non-zeroes in the column above the
+-- leading-coefficient, because that is allowed by HNF.
+elemrowadds outputM rank numCols js = do
+  -- look for non-zero members of the columns above the
+  -- leading-coefficient and wipe them out.
+  forM_ js $ \ j -> do
+    forM_ [0..j-1] $ \ i -> do
+      -- (i, j) ranges over the elements of the column above leading
+      -- co-efficient (j, j).
+      x <- peekM outputM i j
+      if x == 0 then
+        pure () -- nothing to do
+      else do
+        -- (i, j) is non-zero and must be cancelled x times
+        let sf = x -- scaling factor = non-zero magnitude
+        forM_ [j..numCols-1] $ \ j' -> do
+          -- (i, j') ranges over the row where we discovered a non-zero
+          -- (j, j') ranges over the row with the leading co-efficient
+          x1 <- peekM outputM i j'
+          x2 <- peekM outputM j j'
+          -- add lower row scaled by sf to upper row
+          pokeM outputM i j' (x1 - x2 * sf)
 
 m1 = (8><6)
  [ 1.0, 0.0, 0.0, -1.0,  0.0,  0.0
@@ -390,6 +423,16 @@ m1 = (8><6)
  , 0.0, 0.0, 1.0,  0.0,  0.0, -1.0
  , 0.0, 0.0, 0.0,  1.0, -4.0,  0.0
  , 0.0, 0.0, 0.0,  0.0,  4.0, -3.0 ] :: H.Matrix Double
+
+m2 = (8><6)
+ [ 1.0, 0.0, 0.0, -1.0,  0.0,  0.0
+ , 0.0, 1.0, 0.0,  0.0, -1.0,  0.0
+ , 0.0, 0.0, 1.0,  0.0,  0.0, -1.0
+ , 1.0, 0.0, 0.0, -1.0,  0.0,  0.0
+ , 0.0, 1.0, 0.0,  0.0, -1.0,  0.0
+ , 0.0, 0.0, 1.0,  0.0,  0.0, -1.0
+ , 0.0, 0.0, 0.0,  1.0, -6.0,  0.0
+ , 0.0, 0.0, 0.0,  0.0,  6.0, -4.0 ] :: H.Matrix Double
 
 
 --------------------------------------------------
