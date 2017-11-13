@@ -251,9 +251,6 @@ peekM flintM i j = do
   e <- fmpz_mat_entry flintM i j
   fmpz_get_si e
 
-normHNF :: H.Matrix Double -> (H.Matrix Double, [Int])
-normHNF m = fmap (map fromIntegral) . unsafePerformIO $ withMatrix m normhnf
-
 copyMatrix m1 m2 r1 c1 r2 c2 =
   forM_ [r1 .. r2-1] $ \ i ->
     forM_ [c1 .. c2-1] $ \ j ->
@@ -265,6 +262,50 @@ copyMatrix m1 m2 r1 c1 r2 c2 =
 --   withWindow m2 r1 c1 r2 c2 $ \ w2 ->
 --     withWindow m1 r1 c1 r2 c2 $ \ w1 -> do
 --       fmpz_mat_set w1 w2
+
+--------------------------------------------------
+-- 'normalising' Hermite Normal Form, for lack of a better name
+--
+-- The problem with HNF is that it will happily return a matrix where
+-- the leading-coefficient diagonal contains integers > 1.
+--
+-- In some cases the leading-coefficient does not divide some of the
+-- remaining numbers in the row.
+--
+-- This corresponds to the case where one of the solutions would be
+-- fractional if we were dealing with rational matrices.
+--
+-- But we don't want fractional solutions. We need to bump the matrix
+-- so that this situation does not arise.
+--
+-- This tends to happen due to implicit polymorphism.
+--
+-- We do this by adding another column that copies the column with the
+-- problematic leading-coefficient.
+--
+-- We then set up a new row expressing the constraint that the old
+-- column is equal to the new column, 1:1.
+--
+-- This prevents a 'fractional' solution.
+--
+-- Along the way we look for leading-coefficients > 1 that do divide
+-- their entire row. Then we simply apply elementary row scaling to
+-- the row so that the leading-coefficients is 1.
+--
+-- The result is a matrix where the leading-coefficients of all the
+-- rows that matter are 1. It's not quite a 'reduced' form though
+-- because it can be bigger than the original matrix.
+--
+-- As a result we also return a list of columns that were cloned this
+-- way.
+--
+-- Running time is computation of Hermite Normal Form twice, plus
+-- construction of a slightly larger matrix (possibly), plus scanning
+-- through the matrix for leading-coefficients, and then again to
+-- divide them out sometimes.
+
+normHNF :: H.Matrix Double -> (H.Matrix Double, [Int])
+normHNF m = fmap (map fromIntegral) . unsafePerformIO $ withMatrix m normhnf
 
 normhnf (numRows, numCols, inputM) = do
   withBlankMatrix numRows numCols $ \ outputM -> do
@@ -311,6 +352,5 @@ normhnf (numRows, numCols, inputM) = do
       withBlankMatrix numRows' numCols' $ \ outputM'' -> do
         fmpz_mat_hnf outputM'' outputM'
         rank' <- fmpz_mat_rank outputM''
-
         h <- flintToHMatrix rank' numCols' outputM''
         return (h, consCols)
