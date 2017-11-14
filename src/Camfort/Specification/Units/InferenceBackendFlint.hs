@@ -346,10 +346,10 @@ normhnf (numRows, numCols, inputM) = do
     -- identify columns that need additional constraints generated and
     -- their associated value d, which is the value of the non-leading
     -- co-efficient divided by the GCD of the row.
-    let genColCons ((_, j), lcoef:rest) = (j, maxNLcoef `div` foldl' gcd lcoef restABS)
+    let genColCons ((_, j), lcoef:rest) = (j, minNLcoef `div` gcd lcoef minNLcoef)
           where
             restABS   = map abs rest
-            maxNLcoef = maximum restABS
+            minNLcoef = minimum (filter (/= 0) restABS)
 
     let consCols = map genColCons consCands
 
