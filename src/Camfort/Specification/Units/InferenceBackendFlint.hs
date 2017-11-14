@@ -309,7 +309,17 @@ copyMatrix m1 m2 r1 c1 r2 c2 =
 -- divide them out sometimes.
 
 normHNF :: H.Matrix Double -> (H.Matrix Double, [Int])
-normHNF m = fmap (map fromIntegral) . unsafePerformIO $ withMatrix m normhnf
+normHNF m = (m', indices)
+  where
+    numCols = cols m
+    indexLookup j | j < numCols = j
+                  | otherwise = indices !! (j `mod` numCols)
+    indices = map indexLookup $ concatMap snd rs1
+    (rs1, (m',[]):rs2) = break (null . snd) results
+    results = tail $ iterate (normHNF' . fst) (m, [])
+
+normHNF' :: H.Matrix Double -> (H.Matrix Double, [Int])
+normHNF' m = fmap (map fromIntegral) . unsafePerformIO $ withMatrix m normhnf
 
 normhnf (numRows, numCols, inputM) = do
   withBlankMatrix numRows numCols $ \ outputM -> do
