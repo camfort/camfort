@@ -79,7 +79,7 @@ genUnitAssignments :: [Constraint] -> [([UnitInfo], UnitInfo)]
 genUnitAssignments [] = []
 genUnitAssignments cons
   | null colList                                      = []
-  | null inconsists && rank solvedM == rank cosolvedM = unitAssignments
+  | null inconsists                                   = unitAssignments
   | otherwise                                         = []
   where
     (lhsM, rhsM, inconsists, lhsColA, rhsColA) = constraintsToMatrices cons
@@ -92,8 +92,8 @@ genUnitAssignments cons
     -- cosolvedM corresponds to the original lhsM.
     cosolvedM                     = subMatrix (0, 0) (rows solvedM, cols lhsM) solvedM
 
-    colList                       = A.elems lhsColA ++ A.elems rhsColA ++ map (lhsColA A.!) newColIndices
-
+    colList                       = A.elems lhsColA ++ A.elems rhsColA ++ map (genC . (lhsColA A.!)) newColIndices
+    genC u                        = UnitParamImpAbs (show u)
     -- Convert the rows of the solved matrix into flattened unit
     -- expressions in the form of "unit ** k".
     unitPows                      = map (concatMap flattenUnits . zipWith UnitPow colList) (H.toLists solvedM)
@@ -106,6 +106,7 @@ genUnitAssignments cons
     -- constraintsToMatrix interpretation, we need to ensure that any
     -- moved ParamPosAbs units are negated, because they are
     -- effectively being shifted across the equal-sign:
+    isUnitRHS (UnitPow (UnitParamImpAbs _) _) = True
     isUnitRHS (UnitPow (UnitParamPosAbs (_, 0)) _) = False
     isUnitRHS (UnitPow (UnitParamPosAbs _) _) = True
     isUnitRHS _                               = False
@@ -183,6 +184,7 @@ flattenedToMatrix cons = (m, A.array (0, numCols - 1) (map swap uniqUnits))
 negateCons = map (\ (UnitPow u k) -> UnitPow u (-k))
 
 negatePosAbs (UnitPow (UnitParamPosAbs x) k) = UnitPow (UnitParamPosAbs x) (-k)
+negatePosAbs (UnitPow (UnitParamImpAbs v) k) = UnitPow (UnitParamImpAbs v) (-k)
 negatePosAbs u                               = u
 
 colSort (UnitLiteral i) (UnitLiteral j)         = compare i j
@@ -317,7 +319,8 @@ chooseImplicitNames vars = replaceImplicitNames (genImplicitNamesMap vars) vars
 genImplicitNamesMap :: Data a => a -> M.Map UnitInfo UnitInfo
 genImplicitNamesMap x = M.fromList [ (absU, UnitParamEAPAbs (newN, newN)) | (absU, newN) <- zip absUnits newNames ]
   where
-    absUnits = nub [ u | u@(UnitParamPosAbs _)             <- universeBi x ]
+    absUnits = nub [ u | u@(UnitParamPosAbs _)             <- universeBi x ] ++
+               nub [ u | u@(UnitParamImpAbs _)             <- universeBi x ]
     eapNames = nub $ [ n | u@(UnitParamEAPAbs (_, n))      <- universeBi x ] ++
                      [ n | u@(UnitParamEAPUse ((_, n), _)) <- universeBi x ]
     newNames = filter (`notElem` eapNames) . map ('\'':) $ nameGen
@@ -327,6 +330,7 @@ replaceImplicitNames :: Data a => M.Map UnitInfo UnitInfo -> a -> a
 replaceImplicitNames implicitMap = transformBi replace
   where
     replace u@(UnitParamPosAbs _) = fromMaybe u $ M.lookup u implicitMap
+    replace u@(UnitParamImpAbs _) = fromMaybe u $ M.lookup u implicitMap
     replace u                     = u
 
 -- | Identifies the variables that need to be annotated in order for

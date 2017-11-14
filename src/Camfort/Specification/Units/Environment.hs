@@ -71,6 +71,7 @@ data UnitInfo
   | UnitParamLitUse (UniqueId, Int)       -- a particular instantiation of a polymorphic literal
   | UnitParamEAPAbs VV                    -- an abstract Explicitly Annotated Polymorphic unit variable
   | UnitParamEAPUse (VV, Int)             -- a particular instantiation of an Explicitly Annotated Polymorphic unit variable
+  | UnitParamImpAbs String                -- implicitly inferred polymorphic units, uniquely identified
   | UnitLiteral Int                       -- literal with undetermined but uniquely identified units
   | UnitlessLit                           -- a unitless literal
   | UnitlessVar                           -- a unitless variable
@@ -130,6 +131,7 @@ instance Show UnitInfo where
     UnitParamLitUse (i, j)              -> printf "#<ParamLitUse litId=%d callId=%d]>" i j
     UnitParamEAPAbs (v, _)              -> v
     UnitParamEAPUse ((v, _), i)         -> printf "#<ParamEAPUse %s callId=%d]>" v i
+    UnitParamImpAbs id                  -> printf "#<ParamImpAbs %s>" id
     UnitLiteral i                       -> printf "#<Literal id=%d>" i
     UnitlessLit                         -> "1"
     UnitlessVar                         -> "1"
@@ -212,6 +214,7 @@ isUnresolvedUnit (UnitParamPosAbs _) = True
 isUnresolvedUnit (UnitParamLitUse _) = True
 isUnresolvedUnit (UnitParamLitAbs _) = True
 isUnresolvedUnit (UnitParamEAPAbs _) = True
+isUnresolvedUnit (UnitParamImpAbs _) = True
 isUnresolvedUnit (UnitParamEAPUse _) = True
 isUnresolvedUnit (UnitPow u _)       = isUnresolvedUnit u
 isUnresolvedUnit (UnitMul u1 u2)     = isUnresolvedUnit u1 || isUnresolvedUnit u2
@@ -294,6 +297,7 @@ unitParamEq (UnitParamVarAbs (f, i))      (UnitParamVarUse (f', i', _)) = (f, i)
 unitParamEq (UnitParamVarUse (f', i', _)) (UnitParamVarAbs (f, i))      = (f, i) == (f', i')
 unitParamEq (UnitParamPosAbs (f, i))      (UnitParamPosUse (f', i', _)) = (f, i) == (f', i')
 unitParamEq (UnitParamPosUse (f', i', _)) (UnitParamPosAbs (f, i))      = (f, i) == (f', i')
+unitParamEq (UnitParamImpAbs v)           (UnitParamImpAbs v')          = v == v'
 unitParamEq (UnitParamEAPAbs v)           (UnitParamEAPUse (v', _))     = v == v'
 unitParamEq (UnitParamEAPUse (v', _))     (UnitParamEAPAbs v)           = v == v'
 unitParamEq (UnitMul u1 u2)               (UnitMul u1' u2')             = unitParamEq u1 u1' && unitParamEq u2 u2' ||
