@@ -35,6 +35,7 @@ module Camfort.Specification.Units.Environment
   , foldUnits
   , flattenUnits
   , simplifyUnits
+  , colSort, SortFn
     -- * Modules (instances)
   , module Data.Data
   ) where
@@ -82,6 +83,16 @@ data UnitInfo
   | UnitPow UnitInfo Double               -- a unit raised to a constant power
   | UnitRecord [(String, UnitInfo)]       -- 'record'-type of units
   deriving (Eq, Ord, Data, Typeable, Generic)
+
+type SortFn = UnitInfo -> UnitInfo -> Ordering
+colSort :: UnitInfo -> UnitInfo -> Ordering
+colSort (UnitLiteral i) (UnitLiteral j)         = compare i j
+colSort (UnitLiteral _) _                       = LT
+colSort _ (UnitLiteral _)                       = GT
+colSort (UnitParamPosAbs x) (UnitParamPosAbs y) = compare x y
+colSort (UnitParamPosAbs _) _                   = GT
+colSort _ (UnitParamPosAbs _)                   = LT
+colSort x y                                     = compare x y
 
 simplifyUnits :: UnitInfo -> UnitInfo
 simplifyUnits = rewrite rw

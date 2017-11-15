@@ -34,6 +34,7 @@ module Camfort.Specification.Units.InferenceBackend
   , constraintsToMatrices
   , rref
   , genUnitAssignments
+  , genUnitAssignments'
   ) where
 
 import           Control.Monad
@@ -43,11 +44,12 @@ import           Data.Generics.Uniplate.Operations
   (transformBi, universeBi)
 import           Data.List
   ((\\), findIndex, inits, nub, partition, sortBy, group, tails)
+import           Data.Ord
 import qualified Data.Map.Strict as M
 import           Data.Maybe (fromMaybe, mapMaybe)
 import           Data.Tuple (swap)
 import           Numeric.LinearAlgebra
-  ( atIndex, (<>)
+  ( atIndex, (<>), (><)
   , rank, (?)
   , rows, cols
   , subMatrix, diag
@@ -76,13 +78,16 @@ inferVariables cons = unitVarAssignments
 
 -- | Raw units-assignment pairs.
 genUnitAssignments :: [Constraint] -> [([UnitInfo], UnitInfo)]
-genUnitAssignments [] = []
-genUnitAssignments cons
+genUnitAssignments = genUnitAssignments' colSort
+
+genUnitAssignments' :: SortFn -> [Constraint] -> [([UnitInfo], UnitInfo)]
+genUnitAssignments' _ [] = []
+genUnitAssignments' sortfn cons
   | null colList                                      = []
   | null inconsists                                   = unitAssignments
   | otherwise                                         = []
   where
-    (lhsM, rhsM, inconsists, lhsColA, rhsColA) = constraintsToMatrices cons
+    (lhsM, rhsM, inconsists, lhsColA, rhsColA) = constraintsToMatrices' sortfn cons
     unsolvedM | rows rhsM == 0 || cols rhsM == 0 = lhsM
               | rows lhsM == 0 || cols lhsM == 0 = rhsM
               | otherwise                        = fromBlocks [[lhsM, rhsM]]
@@ -113,7 +118,8 @@ genUnitAssignments cons
 
 checkSanity :: ([UnitInfo], [UnitInfo]) -> ([UnitInfo], [UnitInfo])
 checkSanity (u1@[UnitPow (UnitVar _) _], u2)
-  | or [ True | UnitParamPosAbs (_, i) <- universeBi u2 ] = (u1++u2,[])
+  | or $ [ True | UnitParamPosAbs (_, i) <- universeBi u2 ]
+      ++ [ True | UnitParamImpAbs _      <- universeBi u2 ] = (u1++u2,[])
 checkSanity (u1@[UnitPow (UnitParamVarAbs (f, _)) _], u2)
   | or [ True | UnitParamPosAbs (f', i) <- universeBi u2, f' /= f ] = (u1++u2,[])
 checkSanity c = c
@@ -138,14 +144,17 @@ constraintsToMatrix cons
     shiftedCons     = map shiftTerms consPairs
     lhs             = map fst shiftedCons
     rhs             = map snd shiftedCons
-    (lhsM, lhsCols) = flattenedToMatrix lhs
-    (rhsM, rhsCols) = flattenedToMatrix rhs
+    (lhsM, lhsCols) = flattenedToMatrix colSort lhs
+    (rhsM, rhsCols) = flattenedToMatrix colSort rhs
     colElems        = A.elems lhsCols ++ A.elems rhsCols
     augM            = if rows rhsM == 0 || cols rhsM == 0 then lhsM else if rows lhsM == 0 || cols lhsM == 0 then rhsM else fromBlocks [[lhsM, rhsM]]
     inconsists      = findInconsistentRows lhsM augM
 
 constraintsToMatrices :: Constraints -> (H.Matrix Double, H.Matrix Double, [Int], A.Array Int UnitInfo, A.Array Int UnitInfo)
-constraintsToMatrices cons
+constraintsToMatrices cons = constraintsToMatrices' colSort cons
+
+constraintsToMatrices' :: SortFn -> Constraints -> (H.Matrix Double, H.Matrix Double, [Int], A.Array Int UnitInfo, A.Array Int UnitInfo)
+constraintsToMatrices' sortfn cons
   | all null lhs = (H.ident 0, H.ident 0, [], A.listArray (0, -1) [], A.listArray (0, -1) [])
   | otherwise = (lhsM, rhsM, inconsists, lhsCols, rhsCols)
   where
@@ -155,14 +164,14 @@ constraintsToMatrices cons
     shiftedCons     = map shiftTerms consPairs
     lhs             = map fst shiftedCons
     rhs             = map snd shiftedCons
-    (lhsM, lhsCols) = flattenedToMatrix lhs
-    (rhsM, rhsCols) = flattenedToMatrix rhs
+    (lhsM, lhsCols) = flattenedToMatrix sortfn lhs
+    (rhsM, rhsCols) = flattenedToMatrix sortfn rhs
     augM            = if rows rhsM == 0 || cols rhsM == 0 then lhsM else if rows lhsM == 0 || cols lhsM == 0 then rhsM else fromBlocks [[lhsM, rhsM]]
     inconsists      = findInconsistentRows lhsM augM
 
 -- [[UnitInfo]] is a list of flattened constraints
-flattenedToMatrix :: [[UnitInfo]] -> (H.Matrix Double, A.Array Int UnitInfo)
-flattenedToMatrix cons = (m, A.array (0, numCols - 1) (map swap uniqUnits))
+flattenedToMatrix :: SortFn -> [[UnitInfo]] -> (H.Matrix Double, A.Array Int UnitInfo)
+flattenedToMatrix sortfn cons = (m, A.array (0, numCols - 1) (map swap uniqUnits))
   where
     m = runSTMatrix $ do
           m <- newMatrix 0 numRows numCols
@@ -175,7 +184,7 @@ flattenedToMatrix cons = (m, A.array (0, numCols - 1) (map swap uniqUnits))
                 _        -> return ()
           return m
     -- identify and enumerate every unit uniquely
-    uniqUnits = flip zip [0..] . map head . group . sortBy colSort $ [ u | UnitPow u _ <- concat cons ]
+    uniqUnits = flip zip [0..] . map head . group . sortBy sortfn $ [ u | UnitPow u _ <- concat cons ]
     -- map units to their unique column number
     colMap    = M.fromList uniqUnits
     numRows   = length cons
@@ -186,14 +195,6 @@ negateCons = map (\ (UnitPow u k) -> UnitPow u (-k))
 negatePosAbs (UnitPow (UnitParamPosAbs x) k) = UnitPow (UnitParamPosAbs x) (-k)
 negatePosAbs (UnitPow (UnitParamImpAbs v) k) = UnitPow (UnitParamImpAbs v) (-k)
 negatePosAbs u                               = u
-
-colSort (UnitLiteral i) (UnitLiteral j)         = compare i j
-colSort (UnitLiteral _) _                       = LT
-colSort _ (UnitLiteral _)                       = GT
-colSort (UnitParamPosAbs x) (UnitParamPosAbs y) = compare x y
-colSort (UnitParamPosAbs _) _                   = GT
-colSort _ (UnitParamPosAbs _)                   = LT
-colSort x y                                     = compare x y
 
 --------------------------------------------------
 

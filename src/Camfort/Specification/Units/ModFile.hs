@@ -33,8 +33,8 @@ import           Language.Fortran.Util.ModFile
 
 import Camfort.Analysis (analysisModFiles)
 import Camfort.Specification.Units.Annotation (UA)
-import Camfort.Specification.Units.Environment (UnitInfo(..))
-import Camfort.Specification.Units.InferenceBackend (flattenUnits, genUnitAssignments)
+import Camfort.Specification.Units.Environment (Constraint(..), foldUnits, UnitInfo(..), colSort)
+import Camfort.Specification.Units.InferenceBackend (flattenConstraints, flattenUnits, genUnitAssignments, genUnitAssignments')
 import Camfort.Specification.Units.Monad
 
 -- | The data-structure stored in 'fortran-src mod files'
@@ -80,33 +80,42 @@ runCompileUnits :: UnitSolver CompiledUnits
 runCompileUnits = do
   cons <- usConstraints `fmap` get
 
-  -- Sketching some ideas about solving the unit equation for each
-  -- parameter of each function.
-  let unitAssigns = map (fmap flattenUnits) $ genUnitAssignments cons
-  let mulCons x = map (\ (UnitPow u k) -> UnitPow u (x * k))
-  let negateCons = mulCons (-1)
+  let unitAssigns = flattenConstraints cons
   let epsilon = 0.001 -- arbitrary
   let approxEq a b = abs (b - a) < epsilon
-  let uninvert ([UnitPow u k], rhs) | not (k `approxEq` 1) = ([UnitPow u 1], mulCons (1 / k) rhs)
-      uninvert (lhs, rhs)                                  = (lhs, rhs)
-  let shiftTerms name pos (lhs, rhs) = (lhsOk ++ negateCons rhsShift, rhsOk ++ negateCons lhsShift)
-        where
-          (lhsOk, lhsShift) = partition isLHS lhs
-          (rhsOk, rhsShift) = partition (not . isLHS) rhs
-          isLHS (UnitParamPosAbs (n, i)) | n == name && i == pos = True
-          isLHS (UnitPow u _) = isLHS u
-          isLHS _ = False
-
-  let nameParams = M.fromList [ (NPKParam name pos, rhs) | assign <- unitAssigns
-                                                         , UnitParamPosAbs (name, pos) <- universeBi assign
-                                                         , let (_, rhs) = uninvert $ shiftTerms name pos assign ]
-
 
   let variables = M.fromList [ (NPKVariable var, units) | ([UnitPow (UnitVar var) k], units) <- unitAssigns
                                                         , k `approxEq` 1 ]
 
-  tmap <- gets usTemplateMap
-  pure CompiledUnits { cuTemplateMap = tmap, cuNameParamMap = nameParams `M.union` variables }
+  tmap <- M.map optimiseTemplate `fmap` gets usTemplateMap
+  let npm = variables
+
+  -- D.traceM $ "npm = " ++ unlines (map show (M.toList npm))
+  -- D.traceM $ "tmap = \n" ++ unlines [ f ++ "\n" ++ unlines (map show cons) | (f, cons) <- M.toList tmap ]
+  pure CompiledUnits { cuTemplateMap = tmap, cuNameParamMap = variables }
+
+optimiseTemplate cons = map (\ (l, r) -> ConEq (foldUnits l) r) optimised
+  where
+    unitAssigns  = genUnitAssignments' (flip colSort) cons
+    unitPows     = map (fmap flattenUnits) unitAssigns
+    optimised    = filter cull $ map (fmap foldUnits . shiftTerms) unitPows
+
+    cull ([UnitPow (UnitParamPosAbs _) _], _) = True
+    cull _ = False
+
+    isUnitRHS (UnitPow (UnitName _) _)        = True
+    isUnitRHS (UnitPow (UnitParamEAPAbs _) _) = True
+    isUnitRHS (UnitPow (UnitParamImpAbs _) _) = True
+    isUnitRHS (UnitPow (UnitParamPosAbs _) _) = False
+    isUnitRHS _                               = False
+
+    negateCons = map (\ (UnitPow u k) -> UnitPow u (-k))
+
+    shiftTerms :: ([UnitInfo], [UnitInfo]) -> ([UnitInfo], [UnitInfo])
+    shiftTerms (lhs, rhs) = (lhsOk ++ negateCons rhsShift, rhsOk ++ negateCons lhsShift)
+      where
+        (lhsOk, lhsShift) = partition (not . isUnitRHS) lhs
+        (rhsOk, rhsShift) = partition isUnitRHS rhs
 
 -- | Generate a new ModFile containing Units information.
 genUnitsModFile :: F.ProgramFile UA -> CompiledUnits -> ModFile
