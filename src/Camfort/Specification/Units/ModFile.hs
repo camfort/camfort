@@ -96,12 +96,11 @@ runCompileUnits = do
 
 optimiseTemplate cons = map (\ (l, r) -> ConEq (foldUnits l) r) optimised
   where
-    unitAssigns  = genUnitAssignments' (flip colSort) cons
+    unitAssigns  = genUnitAssignments' (compileColSort) cons
     unitPows     = map (fmap flattenUnits) unitAssigns
     optimised    = filter cull $ map (fmap foldUnits . shiftTerms) unitPows
 
-    cull ([UnitPow (UnitParamPosAbs _) _], _) = True
-    cull _ = False
+    cull (lhs, _) = or [ True | (UnitPow (UnitParamPosAbs _) _) <- universeBi lhs ]
 
     isUnitRHS (UnitPow (UnitName _) _)        = True
     isUnitRHS (UnitPow (UnitParamEAPAbs _) _) = True
@@ -116,6 +115,8 @@ optimiseTemplate cons = map (\ (l, r) -> ConEq (foldUnits l) r) optimised
       where
         (lhsOk, lhsShift) = partition (not . isUnitRHS) lhs
         (rhsOk, rhsShift) = partition isUnitRHS rhs
+
+    compileColSort = flip colSort
 
 -- | Generate a new ModFile containing Units information.
 genUnitsModFile :: F.ProgramFile UA -> CompiledUnits -> ModFile
