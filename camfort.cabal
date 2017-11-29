@@ -94,6 +94,7 @@ library
                         Camfort.Transformation.CommonBlockElim
                         Camfort.Transformation.DeadCode
                         Camfort.Transformation.EquivalenceElim
+                        Camfort.Transformation.ArrayIndexSwap
 
                         Camfort.Helpers
                         Camfort.Helpers.Syntax
@@ -179,6 +180,7 @@ test-suite spec
                         Camfort.Specification.Hoare.ParserSpec
                         Camfort.Transformation.CommonSpec
                         Camfort.Transformation.EquivalenceElimSpec
+                        Camfort.Transformation.ArrayIndexSwapSpec
 
   build-depends:        base >= 4.6 && < 5,
                         containers >= 0.5.0.0 && < 0.6,

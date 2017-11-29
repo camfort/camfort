@@ -48,6 +48,7 @@ module Camfort.Functionality
   , common
   , dead
   , equivalences
+  , arrayIndexSwap
   -- ** Project Management
   , camfortInitialize
   ) where
@@ -95,6 +96,7 @@ import qualified Camfort.Specification.Hoare as Hoare
 import           Camfort.Transformation.CommonBlockElim
 import           Camfort.Transformation.DeadCode
 import           Camfort.Transformation.EquivalenceElim
+import           Camfort.Transformation.ArrayIndexSwap
 
 import           Camfort.Helpers                                 (FileOrDir,
                                                                   Filename)
@@ -215,6 +217,16 @@ equivalences =
   "Refactoring equivalences blocks in"
   (fmap generalizePureAnalysis . perFileRefactoring $ refactorEquivalences)
   (doRefactor "equivalence block refactoring")
+  simpleCompiler ()
+
+
+arrayIndexSwap :: Int -> Int -> F.Name -> FileOrDir -> CamfortEnv -> IO ()
+arrayIndexSwap i j name =
+  runWithOutput
+  ("For top-level array " ++ name ++  " swapping array indices " ++
+    show i ++ " for " ++ show j)
+  (fmap generalizePureAnalysis . perFileRefactoring $ swapIndices i j name)
+  (doRefactor "array index swapping")
   simpleCompiler ()
 
 {- Units feature -}
