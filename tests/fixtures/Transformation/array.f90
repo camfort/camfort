@@ -40,7 +40,7 @@ program arrays
       integer :: i, j
       do i = 1, n
          do j = 1, m
-            addAndZero(i, j) = c(i, j) + c(i, j)
+            addAndZero(i, j) = c(i, j) + d(i, j)
             c(i, j) = 0
          end do
       end do
