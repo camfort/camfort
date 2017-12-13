@@ -86,6 +86,12 @@ main = do
           wo     = rfoWriteOptions rfo
           inFile = inputSource ro
       in runRO ro lo (f (getOutputFile inFile wo))
+    runIndexSwap rfo f =
+      let ro     = arfoReadOptions rfo
+          lo     = arfoLogOptions rfo
+          wo     = arfoWriteOptions rfo
+          inFile = inputSource ro
+      in runRO ro lo (f (getOutputFile inFile wo))
 
     runCommand :: Command -> IO ()
     runCommand (CmdAST ro lo)             = runRO ro lo ast
@@ -102,6 +108,13 @@ main = do
     runCommand (CmdRefactCommon rfo)      = runRFO rfo common
     runCommand (CmdRefactDead rfo)        = runRFO rfo dead
     runCommand (CmdRefactEquivalence rfo) = runRFO rfo equivalences
+    runCommand (CmdRefactArrayIndexSwap rfo) =
+      arrayIndexSwap
+        (srcIndex rfo)
+        (trgIndex rfo)
+        (arrayName rfo)
+        (getOutputFile (inputSource (arfoReadOptions rfo)) (arfoWriteOptions rfo))
+        (env (arfoReadOptions rfo) (arfoLogOptions rfo))
     runCommand (CmdInit dir)              = camfortInitialize dir
     runCommand CmdTopVersion              = displayVersion
 
@@ -121,6 +134,7 @@ data Command = CmdCount ReadOptions LogOptions
              | CmdRefactCommon RefactOptions
              | CmdRefactDead RefactOptions
              | CmdRefactEquivalence RefactOptions
+             | CmdRefactArrayIndexSwap IndexSwapOptions
              | CmdInit FilePath
              | CmdTopVersion
 
@@ -197,6 +211,16 @@ data RefactOptions = RefactOptions
   { rfoReadOptions  :: ReadOptions
   , rfoLogOptions   :: LogOptions
   , rfoWriteOptions :: WriteOptions
+  }
+
+-- | Options used by refactoring of array indices.
+data IndexSwapOptions = IndexSwapOptions
+  { arfoReadOptions  :: ReadOptions
+  , arfoLogOptions   :: LogOptions
+  , arfoWriteOptions :: WriteOptions
+  , arrayName       :: String
+  , srcIndex        :: Int
+  , trgIndex        :: Int
   }
 
 
@@ -328,6 +352,13 @@ refactOptions :: Parser RefactOptions
 refactOptions = fmap RefactOptions
   readOptions <*> logOptions <*> writeOptions
 
+arrayIndexSwapOptions :: Parser IndexSwapOptions
+arrayIndexSwapOptions = fmap IndexSwapOptions
+  readOptions <*> logOptions <*> writeOptions
+    <*> (strArgument (metavar "array-name"))
+    <*> (argument (fmap read str) (metavar "source-index"))
+    <*> (argument (fmap read str) (metavar "target-index"))
+
 
 cmdCount, cmdAST :: Parser Command
 cmdCount = fmap CmdCount readOptions <*> logOptions
@@ -356,6 +387,7 @@ cmdRefactCommon, cmdRefactDead, cmdRefactEquivalence :: Parser Command
 cmdRefactCommon      = fmap CmdRefactCommon refactOptions
 cmdRefactDead        = fmap CmdRefactDead refactOptions
 cmdRefactEquivalence = fmap CmdRefactEquivalence refactOptions
+cmdRefactArrayIndexSwap = fmap CmdRefactArrayIndexSwap arrayIndexSwapOptions
 
 -- | Helper for building a command alias.
 --
@@ -425,7 +457,8 @@ refactoringsParser = commandsParser "Refactoring Commands" refactoringsCommands
     refactoringsCommands =
       [ ("common",      [], cmdRefactCommon,      "common block elimination")
       , ("equivalence", [], cmdRefactEquivalence, "equivalence elimination")
-      , ("dead",        [], cmdRefactDead,        "dead-code elimination") ]
+      , ("dead",        [], cmdRefactDead,        "dead-code elimination")
+      , ("indexSwap",   [], cmdRefactArrayIndexSwap, "swap array indices") ]
 
 
 topLevelCommands :: Parser Command
