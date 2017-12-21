@@ -325,6 +325,12 @@ normhnf (numRows, numCols, inputM) = do
   withBlankMatrix numRows numCols $ \ outputM -> do
     fmpz_mat_hnf outputM inputM
     rank <- fmpz_mat_rank outputM
+    -- scale the rows so that it is a RREF, returning the indices
+    -- where leading-coefficients had to be scaled to 1.
+    indices <- elemrowscale outputM rank numCols
+    -- HNF allows non-zeroes above the leading-coefficients that
+    -- were greater than 1, so also fix that to bring into RREF.
+    elemrowadds outputM rank numCols indices
 
     -- column indices of leading co-efficients > 1
     lcoefs <- filter ((> 1) . head . snd) <$> forM [0 .. rank-1] (\ i -> do
