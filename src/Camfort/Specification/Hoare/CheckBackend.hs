@@ -523,7 +523,7 @@ genBlock (precond, postcond, bl) = do
       condsExprs <- traverse (traverse tryTranslateBoolExpr) conds
       multiIfVCs genBody expr (precond, postcond, (zip condsExprs bodies))
 
-    F.BlDoWhile _ _ _ _ cond body _ -> do
+    F.BlDoWhile _ _ _ _ _ cond body _ -> do
       primInvariant <-
         case body of
          b : _ | Just (SodSpec (Specification SpecInvariant f))

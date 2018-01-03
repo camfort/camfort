@@ -235,7 +235,7 @@ updateUseDecls fps tcs = map perPF fps
     tcrs = mkTLCommonRenamers tcs
 
     inames :: F.Statement A -> Maybe String
-    inames (F.StInclude _ _ (F.ExpValue _ _ (F.ValString fname))) = Just fname
+    inames (F.StInclude _ _ (F.ExpValue _ _ (F.ValString fname)) _) = Just fname
     inames _ = Nothing
 
     importIncludeCommons :: PM.FortranVersion -> F.ProgramUnit A -> F.ProgramUnit A
