@@ -76,9 +76,22 @@ inferVariables cons = unitVarAssignments
       [ (var, units) | ([UnitPow (UnitVar var)                 k], units) <- unitAssignments, k `approxEq` 1 ] ++
       [ (var, units) | ([UnitPow (UnitParamVarAbs (_, var)) k], units)    <- unitAssignments, k `approxEq` 1 ]
 
+-- detect inconsistency if concrete units are assigned an implicit
+-- abstract unit variable with coefficients not equal
+detectInconsistency :: [([UnitInfo], UnitInfo)] -> [([UnitInfo], UnitInfo)]
+detectInconsistency unitAssignments = [ fmap foldUnits a | a@([UnitPow (UnitParamImpAbs _) k1], rhs) <- ua'
+                                                         , UnitPow _ k2 <- rhs
+                                                         , k1 /= k2 ]
+  where
+    ua' = map (shiftTerms . fmap flattenUnits) unitAssignments
+
 -- | Raw units-assignment pairs.
 genUnitAssignments :: [Constraint] -> [([UnitInfo], UnitInfo)]
-genUnitAssignments = genUnitAssignments' colSort
+genUnitAssignments cons
+  | null (detectInconsistency ua) = ua
+  | otherwise                     = []
+  where
+    ua = genUnitAssignments' colSort cons
 
 genUnitAssignments' :: SortFn -> [Constraint] -> [([UnitInfo], UnitInfo)]
 genUnitAssignments' _ [] = []
