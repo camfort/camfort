@@ -109,12 +109,19 @@ genUnitAssignments' sortfn cons
     -- solvedM can have additional columns and rows from normHNF;
     -- cosolvedM corresponds to the original lhsM.
     cosolvedM                     = subMatrix (0, 0) (rows solvedM, cols lhsM) solvedM
+    cosolvedMrhs                  = subMatrix (0, cols lhsM) (rows solvedM, cols solvedM - cols lhsM) solvedM
 
-    colList                       = A.elems lhsColA ++ A.elems rhsColA ++ map (genC . (lhsColA A.!)) newColIndices
-    genC u                        = UnitParamImpAbs (show u)
+    -- generate a colList with both the original columns and new ones generated
+    -- if a new column generated was derived from the right-hand side then negate it
+    numLhsCols                    = 1 + snd (A.bounds lhsColA)
+    colList                       = map (1,) (A.elems lhsColA ++ A.elems rhsColA) ++ map genC newColIndices
+    genC n | n >= numLhsCols      = (-k, UnitParamImpAbs (show u))
+           | otherwise            = (k, UnitParamImpAbs (show u))
+      where (k, u) = colList !! n
     -- Convert the rows of the solved matrix into flattened unit
     -- expressions in the form of "unit ** k".
-    unitPows                      = map (concatMap flattenUnits . zipWith UnitPow colList) (H.toLists solvedM)
+    unitPow (k, u) x              = UnitPow u (k * x)
+    unitPows                      = map (concatMap flattenUnits . zipWith unitPow colList) (H.toLists solvedM)
 
     -- Variables to the left, unit names to the right side of the equation.
     unitAssignments               = map (fmap (foldUnits . map negatePosAbs) . checkSanity . partition (not . isUnitRHS)) unitPows
