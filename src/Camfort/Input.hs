@@ -119,7 +119,9 @@ compilePerFile analysisName inSrc outSrc =
 describePerFileAnalysis
   :: (MonadIO m, Describe r, Describe w, Describe e)
   => Text -> AnalysisRunner e w m ProgramFile r ()
-describePerFileAnalysis analysisName = runPerFileAnalysis `runThen` mapM_ (putDescribeReport analysisName Nothing)
+describePerFileAnalysis analysisName program logOutput logLevel modFiles pfsTexts =
+  runPerFileAnalysis program logOutput logLevel modFiles pfsTexts >>=
+  mapM_ (putDescribeReport analysisName (Just logLevel))
 
 
 -- | Accepts an analysis program for multiple input files which produces a
@@ -139,7 +141,7 @@ doRefactor analysisName inSrc outSrc program logOutput logLevel modFiles pfsText
     -- Get the refactoring result form the report
     resultFiles = report ^? arResult . _ARSuccess . _2
 
-  putDescribeReport analysisName Nothing report'
+  putDescribeReport analysisName (Just logLevel) report'
 
   -- If the refactoring succeeded, change the files
   case resultFiles of
@@ -162,7 +164,7 @@ doRefactorAndCreate analysisName inSrc outSrc program logOutput logLevel modFile
     -- Get the refactoring result form the report
     resultFiles = report ^? arResult . _ARSuccess
 
-  putDescribeReport analysisName Nothing report'
+  putDescribeReport analysisName (Just logLevel) report'
 
   case resultFiles of
     -- If the refactoring succeeded, change the files
