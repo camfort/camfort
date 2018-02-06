@@ -25,6 +25,8 @@ module Camfort.Specification.Stencils.InferenceFrontend
     -- * Functions
     stencilInference
   , stencilSynthesis
+    -- * report
+  , StencilsReport(..)
   ) where
 
 import Control.Monad.RWS.Strict
@@ -85,6 +87,17 @@ data InferEnv = IE
 
 -- The inferer returns information as a LogLine
 type LogLine = (FU.SrcSpan, Either [([Variable], Specification)] (String,Variable))
+
+data StencilsReport = StencilsReport [(String, LogLine)] -- ^ (filename, logged stencil)
+
+instance Show StencilsReport where
+  show (StencilsReport flogs) = unlines . filter (not . white) $ output
+    where
+      output = [ Synth.formatSpecNoComment ll | (_, ll) <- flogs ]
+      white  = all (\x -> (x == ' ') || (x == '\t'))
+
+instance Describe StencilsReport
+
 -- The core of the inferer works within this monad
 
 type Inferer = RWST InferEnv [LogLine] InferState StencilsAnalysis

@@ -295,12 +295,12 @@ describeReport analysisName level report = Builder.toLazyText . execWriter $ do
 
   -- Output logs if requested
   case level of
-    Just lvl -> do
+    Just lvl | not (null (report ^. arMessages)) -> do
       tell $ "Logs:\n"
       forM_ (report ^. arMessages) (describeMessage lvl)
       tell "\n"
       tell "Result... "
-    Nothing -> return ()
+    _ -> return ()
 
   let loggedWarnings = arMessages . traverse . _MsgWarn
       loggedErrors = arMessages . traverse . _MsgError

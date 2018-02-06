@@ -1,3 +1,4 @@
+{-# LANGUAGE TupleSections #-}
 {-
    Copyright 2016, Dominic Orchard, Andrew Rice, Mistral Contrastin, Matthew Danish
 
@@ -44,21 +45,13 @@ getBlocks = FAB.analyseBBlocks . FAR.analyseRenames . FA.initAnalysis . fmap SA.
 --------------------------------------------------
 --         Stencil specification inference      --
 --------------------------------------------------
-
 -- Top-level of specification inference
 infer :: Bool
       -> Char
       -> F.ProgramFile Annotation
-      -> StencilsAnalysis ()
-infer useEval marker pf = do
-  logs <- stencilInference useEval marker (getBlocks pf)
-  let filename = F.pfGetFilename pf
-      output = intercalate "\n"
-             . filter (not . white)
-             . map formatSpecNoComment $ logs
-      white  = all (\x -> (x == ' ') || (x == '\t'))
-
-  logInfo' pf $ describe output
+      -> StencilsAnalysis StencilsReport
+infer useEval marker pf =
+  (StencilsReport . map (F.pfGetFilename pf,)) <$> stencilInference useEval marker (getBlocks pf)
 
 --------------------------------------------------
 --         Stencil specification synthesis      --
