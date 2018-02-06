@@ -35,6 +35,7 @@ import Camfort.Specification.Stencils.Generate
   (Neighbour(..), indicesToSpec, convIxToNeighbour, runStencilInferer)
 import Camfort.Specification.Stencils.Synthesis
 import Camfort.Specification.Stencils.Model
+import Camfort.Specification.Stencils.InferenceFrontend
 import Camfort.Specification.Stencils.InferenceBackend
 import Camfort.Specification.Stencils.Syntax
 import qualified Language.Fortran.AST as F
@@ -251,14 +252,13 @@ spec =
     describe "integration test on inference for example2.f" $ do
       it "stencil infer" $
         testSingleFileAnalysis example2In (generalizePureAnalysis . infer False '=') $ \report -> do
-          let logs = report ^.. arMessages . traverse . L._MsgInfo . L.lmMsg
-          map (L.describe) logs
-            `shouldBe` [unlines'
+          show (report ^?! arResult . _ARSuccess)
+            `shouldBe` unlines
             [ "(31:7)-(31:26)    stencil readOnce, backward(depth=1, dim=1) :: a"
-            , "(25:8)-(25:29)    access readOnce, pointed(dim=1)*pointed(dim=2) :: a"
-            , "(24:8)-(24:53)    stencil readOnce, pointed(dim=1)*centered(depth=1, dim=2) \
+            , "(25:14)-(25:29)    access readOnce, pointed(dim=1)*pointed(dim=2) :: a"
+            , "(24:14)-(24:53)    stencil readOnce, pointed(dim=1)*centered(depth=1, dim=2) \
                                      \+ centered(depth=1, dim=1)*pointed(dim=2) :: a"]
-            ]
+
 
       it "stencil check" $
         testSingleFileAnalysis example2In (generalizePureAnalysis . check) $ \report -> do
@@ -272,10 +272,9 @@ spec =
     describe "integration test on inference for example4.f" $
       it "stencil infer" $
         testSingleFileAnalysis example4In (generalizePureAnalysis . infer False '=') $ \report -> do
-          let logs = report ^.. arMessages . traverse . L._MsgInfo . L.lmMsg
-          logs
-            `shouldBe`
-             [ "(6:8)-(6:33)    stencil readOnce, pointed(dim=1) :: x"
+          show (report ^?! arResult . _ARSuccess)
+            `shouldBe` unlines
+             [ "(6:10)-(6:33)    stencil readOnce, pointed(dim=1) :: x"
              ]
 
     describe "integration test on inference for example5" $
@@ -310,7 +309,7 @@ spec =
          , "        Specification is:"
          , "                stencil readOnce, backward(depth=1, dim=1) :: a"
          , ""
-         , "        but at (9:8)-(9:32) the code behaves as"
+         , "        but at (9:13)-(9:32) the code behaves as"
          , "                stencil readOnce, forward(depth=1, dim=1) :: a"
          , ""
          , "Please resolve these errors, and then run synthesis again."
@@ -339,7 +338,7 @@ spec =
         , "        Specification is:"
         , "                access readOnce, forward(depth=1, dim=1) :: a"
         , ""
-        , "        but at (9:8)-(9:32) the code behaves as"
+        , "        but at (9:13)-(9:32) the code behaves as"
         , "                stencil readOnce, forward(depth=1, dim=1) :: a"
         ]
 
@@ -349,7 +348,7 @@ spec =
         , "        Specification is:"
         , "                stencil readOnce, forward(depth=1, dim=1) :: a"
         , ""
-        , "        but at (9:8)-(9:29) the code behaves as"
+        , "        but at (9:13)-(9:29) the code behaves as"
         , "                access readOnce, forward(depth=1, dim=1) :: a"
         ]
 
@@ -401,8 +400,8 @@ spec =
         assertStencilInference useEval fileName expected = do
           let input = testInputSources (fixturesDir </> fileName)
           testSingleFileAnalysis input (generalizePureAnalysis . infer useEval '=') $ \report -> do
-            let logs = report ^.. arMessages . traverse . L._MsgInfo . L.lmMsg
-            logs `shouldBe` expected
+            let res = report ^?! arResult . _ARSuccess
+            show res `shouldBe` unlines (map Text.unpack expected)
 
         assertStencilSynthDir expected dir fileName testComment =
           let input        = testInputSources (dir </> fileName)
@@ -459,9 +458,8 @@ inferReportWithMod modNames fileName expectedReport = do
   [(pf, _)] <- readParseSrcDir modFiles file []
 
   let report = runIdentity $ runAnalysisT (F.pfGetFilename pf) (logOutputNone True) LogError modFiles (infer False '=' pf)
-      logs = report ^.. arMessages . traverse . L._MsgInfo . L.lmMsg
 
-  map L.describe logs `shouldBe` expectedReport
+  show (report ^?! arResult . _ARSuccess) `shouldBe` unlines (map Text.unpack expectedReport)
 
 -- | Helper for producing a basic ModFile from a (terminal) module file.
 mkTestModFile :: String -> IO ModFile
