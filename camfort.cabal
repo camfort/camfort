@@ -37,7 +37,7 @@ executable camfort
 
 library
   hs-source-dirs:       src
-  build-tools:          alex, happy
+  build-tools:          alex >= 3.1, happy >= 1.19
   extra-libraries:      flint
   exposed-modules:      Camfort.Analysis
                         Camfort.Analysis.Logger
