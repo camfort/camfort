@@ -18,7 +18,7 @@ import Camfort.Specification.Units.Monad
 
 spec :: Test.Spec
 spec = do
-  xdescribe "critical-units analysis" $ do
+  describe "critical-units analysis" $ do
     it "reports critical variables" $
        "example-criticals-1.f90" `unitsCriticalsReportIs` exampleCriticals1CriticalsReport
     it "reports when no additional variables need to be annotated" $
