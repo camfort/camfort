@@ -20,9 +20,10 @@ import           Control.Monad.State (get)
 import           Control.Monad.Reader (asks)
 import           Data.Data
 import           Data.Generics.Uniplate.Operations
-import           Data.List (find, group, sort)
+import           Data.List (partition, find, group, sort)
 import qualified Data.Map.Strict as M
 import           Data.Maybe (maybeToList, maybe)
+import           Data.Function (on)
 
 import           Camfort.Analysis (Describe(..))
 import           Camfort.Analysis.Annotations
@@ -76,16 +77,32 @@ instance Show ConsistencyError where
       reportError con = (errSpan, pprintConstr . orient . unrename . shift . simplify $ con)
         where
           errSpan = findCon con
+          orient (ConEq u v) | 0 `elem` [unitPower u, unitPower v] = balanceConEq ((< 0) . unitPower) (ConEq u v)
           orient (ConEq u (UnitVar v)) = ConEq (UnitVar v) u
           orient (ConEq u (UnitParamVarUse v)) = ConEq (UnitParamVarUse v) u
+          orient (ConEq u v)
+            | all ((< 0) . unitPower) $ lhs ++ rhs = orient $ ConEq (foldUnits (negateCons lhs)) (foldUnits (negateCons rhs))
+            where
+              lhs = flattenUnits u
+              rhs = flattenUnits v
           orient c = c
+
+          partitionUnits f u = (foldUnits a, foldUnits b)
+            where (a, b) = partition f (flattenUnits u)
+          unitPower (UnitPow u k) = unitPower u * k
+          unitPower UnitlessLit = 0
+          unitPower UnitlessVar = 0
+          unitPower _ = 1
 
           -- When reporting inconsistent constraints, shift all the
           -- UnitNames (e.g. m, kg) and Polymorphic Units (e.g. 'a,
           -- 'b) to the right-hand-side, and other things to the left.
-          shift (ConEq u v) = uncurry ConEq . fold2 $ MatrixBackend.shiftTerms (flattenUnits u, flattenUnits v)
-          shift (ConConj cs) = ConConj (map shift cs)
-          fold2 (us, vs) = (foldUnits us, foldUnits vs)
+          shift = shiftConEq isUnitRHS
+
+          -- Units that should appear on the right-hand-side of the matrix during solving
+          isUnitRHS (UnitPow (UnitName _) _)        = True
+          isUnitRHS (UnitPow (UnitParamEAPAbs _) _) = True
+          isUnitRHS _                               = False
 
           simplify = B.dimToConstraint . B.constraintToDim
 
@@ -168,3 +185,22 @@ unrename = transformBi $ \ x -> case x of
 -- | Show only the start position of the 'SrcSpan'.
 showSpanStart :: FU.SrcSpan -> String
 showSpanStart (FU.SrcSpan l _) = show l
+
+-- | Shift terms to the right if predicate f is satisfied and to the left otherwise.
+shiftConEq :: (UnitInfo -> Bool) -> Constraint -> Constraint
+shiftConEq f (ConEq l r) = ConEq (foldUnits (lhsOk ++ negateCons rhsShift)) (foldUnits (rhsOk ++ negateCons lhsShift))
+  where
+    (lhsOk, lhsShift) = partition (not . f) (flattenUnits l)
+    (rhsOk, rhsShift) = partition f (flattenUnits r)
+shiftConEq f (ConConj cs) = ConConj $ map (shiftConEq f) cs
+
+-- | Balance equations by shifting terms that satisfy predicate f
+balanceConEq f (ConEq l r) = ConEq (foldUnits (lhsOk ++ negateCons rhsShift)) (foldUnits (rhsOk ++ negateCons lhsShift))
+  where
+    (lhsShift, lhsOk) = partition f (flattenUnits l)
+    (rhsShift, rhsOk) = partition f (flattenUnits r)
+balanceConEq f (ConConj cs) = ConConj $ map (balanceConEq f) cs
+
+negateCons = map (\ x -> case x of
+                     UnitPow u k -> UnitPow u (-k)
+                     u -> UnitPow u (-1))
