@@ -20,7 +20,7 @@ import Camfort.Specification.Units.Monad
 
 spec :: Test.Spec
 spec =
-  xdescribe "consistency analysis" $ do
+  describe "consistency analysis" $ do
     it "reports (simple) inconsistent units" $
        "example-inconsist-1.f90" `unitsCheckReportIs` exampleInconsist1CheckReport
     it "Polymorphic non-zero literal is not OK" $
@@ -78,43 +78,42 @@ exampleInconsist1CheckReport =
   \ - at 7:7: Units 's' and 'm' should be equal\n"
 
 inconsist3LitMixedReport :: String
-inconsist3LitMixedReport =
-  "\ntests/fixtures/Specification/Units/inconsist3.f90: Inconsistent:\n\
-  \ - at 5:7: 'j' should have unit 'literal'\n\
-  \ - at 5:7: 'literal' should have unit 'literal'\n\
-  \ - at 7:7: 'k' should have the same units as 'j * j'\n"
+inconsist3LitMixedReport = inconsist3LitPolyReport
 
 inconsist3LitPolyReport :: String
 inconsist3LitPolyReport =
   "\ntests/fixtures/Specification/Units/inconsist3.f90: Inconsistent:\n\
-  \ - at 7:7: 'k' should have the same units as 'j * j'\n"
+   \ - at 6:3: 'j**2' should have the same units as 'k'\n\
+   \ - at 7:7: 'k' should have unit 'a'\n\
+   \ - at 8:3: 'j' should have unit '1'\n"
 
 inconsist3LitUnitlessReport :: String
 inconsist3LitUnitlessReport =
   "\ntests/fixtures/Specification/Units/inconsist3.f90: Inconsistent:\n\
-  \ - at 5:7: 'j' should have unit '1'\n"
+  \ - at 5:3: 'j' should have unit '1'\n\
+  \ - at 6:3: 'j**2' should have the same units as 'k'\n\
+  \ - at 7:7: 'k' should have unit 'a'\n"
 
 inconsistLitInPolyFunReport :: String
 inconsistLitInPolyFunReport =
   "\ntests/fixtures/Specification/Units/inconsistLitInPolyFun.f90: Inconsistent:\n\
-  \ - at 10:3: 'a' should have the same units as 'result of sqr'\n\
-  \ - at 10:11: 'literal' should have unit 'm'\n\
   \ - at 10:11: 'parameter 1 to sqr' should have unit 'm'\n\
-  \ - at 11:11: 'literal' should have unit 's'\n"
+  \ - at 11:11: 'parameter 1 to sqr' should have unit 's'\n\
+  \ - at 15:13: 'literal number' should have the same units as 'z'\n\
+  \ - at 16:11: '(parameter 1 to sqr)**2' should have the same units as 'z'\n"
 
 inconsistRecMultReport :: String
 inconsistRecMultReport =
   "\ntests/fixtures/Specification/Units/inconsistRecMult.f90: Inconsistent:\n\
-  \ - at 4:3: 'z' should have the same units as 'result of recur'\n\
-  \ - at 4:13: 'x' should have unit 'literal'\n\
-  \ - at 4:15: 'literal' should have unit 'm'\n\
-  \ - at 9:9: 'x' should have the same units as 'parameter 1 to recur'\n\
-  \ - at 10:8: 'parameter 2 to recur' should have unit 'm'\n"
+  \'parameter 2 to recur' should have the same units as 'parameter 2 to recur'\n\
+  \'result of recur * parameter 2 to recur' should have the same units as 'result of recur'\n\
+  \ - at 4:15: 'parameter 2 to recur' should have unit 'm'\n\
+  \ - at 10:8: 'parameter 2 to recur' should have the same units as 'result of recur'\n"
 
 crossModuleInconsistBasicReport :: String
 crossModuleInconsistBasicReport =
   "\ntests/fixtures/Specification/Units/cross-module-a/crossmoduleuser.f90: Inconsistent:\n\
-  \ - at 7:3: 'literal' should have unit 'm'\n\
-  \ - at 7:3: 'parameter 1 to add' should have unit 'm'\n\
-  \ - at 8:3: 'literal' should have unit 's'\n\
-  \ - at 9:3: 'z' should have the same units as 'result of add'\n"
+  \'add' should have the same units as 'parameter 1 to add'\n\
+  \'add' should have the same units as 'parameter 2 to add'\n\
+  \ - at 9:11: 'parameter 1 to add' should have unit 'm'\n\
+  \ - at 9:14: 'parameter 2 to add' should have unit 's'\n"
