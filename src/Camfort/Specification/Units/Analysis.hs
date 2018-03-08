@@ -603,12 +603,15 @@ literalAssignmentSpecialCase :: (F.Annotated f)
                              => F.Expression UA -> F.Expression UA
                              -> f UA -> UnitSolver (f UA)
 literalAssignmentSpecialCase e1 e2 ast
-  | u2@(Just (UnitLiteral _)) <- UA.getUnitInfo e2 =
-    pure $ UA.maybeSetUnitConstraintF2 ConEq (UA.getUnitInfo e1) u2 ast
-  | isLiteralNonZero e2                         = do
-    u2 <- genUnitLiteral
-    pure $ UA.maybeSetUnitConstraintF2 ConEq (UA.getUnitInfo e1) (Just u2) ast
-  | otherwise                                   =
+  | isLiteral e2
+  , Just u1 <- UA.getUnitInfo e1
+  , Just u2 <- UA.getUnitInfo e2 = do
+    u2' <- case (u1, u2) of
+      (UnitName _, UnitlessLit) -> genUnitLiteral
+      (UnitName _, UnitParamLitAbs _) -> genUnitLiteral
+      _ -> pure u2
+    pure $ UA.maybeSetUnitConstraintF2 ConEq (UA.getUnitInfo e1) (Just u2') ast
+  | otherwise = do
     -- otherwise express the constraint between LHS and RHS of assignment.
     pure $ UA.maybeSetUnitConstraintF2 ConEq (UA.getUnitInfo e1) (UA.getUnitInfo e2) ast
 
