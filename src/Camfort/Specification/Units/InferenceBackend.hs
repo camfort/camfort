@@ -324,6 +324,7 @@ findInconsistentRows coA augA = [0..(rows augA - 1)] \\ consistent
     -- Rouché–Capelli theorem is that if the rank of the coefficient
     -- matrix is not equal to the rank of the augmented matrix then
     -- the system of linear equations is inconsistent.
+    tryRows _ _ []      = True
     tryRows coA augA ns = (rank coA' == rank augA')
       where
         coA'  = extractRows ns coA
