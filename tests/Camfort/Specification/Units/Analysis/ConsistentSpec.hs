@@ -38,6 +38,12 @@ spec =
       it "basic inconsistent" $
         unitsCheckReportWithMod ["cross-module-a/crossmoduleprovider.f90"] "cross-module-a/crossmoduleuser.f90"
           crossModuleInconsistBasicReport
+    describe "literals" $ do
+      it "nonzero literal with explicitly annotated polymorphic units-variable" $
+        "literal-nonzero-inconsist1.f90" `unitsCheckReportIs` literalNonZeroInconsist1Report
+      it "nonzero literal is unitless in poly-context" $
+        "literal-nonzero-inconsist2.f90" `unitsCheckReportIs` literalNonZeroInconsist2Report
+
 
 fixturesDir :: String
 fixturesDir = "tests" </> "fixtures" </> "Specification" </> "Units"
@@ -116,3 +122,14 @@ crossModuleInconsistBasicReport =
   \'add' should have the same units as 'parameter 2 to add'\n\
   \ - at 9:11: 'parameter 1 to add' should have unit 'm'\n\
   \ - at 9:14: 'parameter 2 to add' should have unit 's'\n"
+
+literalNonZeroInconsist1Report :: String
+literalNonZeroInconsist1Report =
+  "\ntests/fixtures/Specification/Units/literal-nonzero-inconsist1.f90: Inconsistent:\n\
+  \ - at 11:5: 'f_'a' should have unit '1'\n"
+
+literalNonZeroInconsist2Report :: String
+literalNonZeroInconsist2Report =
+  "\ntests/fixtures/Specification/Units/literal-nonzero-inconsist2.f90: Inconsistent:\n\
+  \ - at 5:9: 'parameter 1 to f' should have unit 'm'\n\
+  \ - at 10:5: 'parameter 1 to f' should have unit '1'\n"
