@@ -98,8 +98,7 @@ inconsistLitInPolyFunReport :: String
 inconsistLitInPolyFunReport =
   "\ntests/fixtures/Specification/Units/inconsistLitInPolyFun.f90: Inconsistent:\n\
   \ - at 10:11: 'parameter 1 to sqr' should have unit 'm'\n\
-  \ - at 11:11: 'parameter 1 to sqr' should have unit 's'\n\
-  \ - at 15:13: 'literal number' should have the same units as 'z'\n\
+  \ - at 15:13: 'z' should have unit '1'\n\
   \ - at 16:11: '(parameter 1 to sqr)**2' should have the same units as 'z'\n"
 
 inconsistRecMultReport :: String
