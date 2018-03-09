@@ -42,6 +42,12 @@ spec =
     describe "GCD of powers" $
       it "gcd1" $
         "gcd1.f90" `unitsInferReportIs` gcd1Report
+    describe "literals" $ do
+      it "literal-zero" $
+        "literal-zero.f90" `unitsInferReportIs` literalZeroReport
+      it "literal-nonzero" $
+        "literal-nonzero.f90" `unitsInferReportIs` literalNonZeroReport
+
 
 fixturesDir :: String
 fixturesDir = "tests" </> "fixtures" </> "Specification" </> "Units"
@@ -152,3 +158,17 @@ gcd1Report = inferReport "gcd1.f90"
   "  3:3 unit ('a)**12 :: g\n\
   \  4:13 unit ('a)**2 :: x\n\
   \  4:16 unit ('a)**3 :: y\n"
+
+literalZeroReport :: String
+literalZeroReport = inferReport "literal-zero.f90"
+  "  3:11 unit m :: a\n\
+  \  3:14 unit m :: b\n\
+  \  9:3 unit 'a :: f\n\
+  \  11:13 unit 'a :: x\n"
+
+literalNonZeroReport :: String
+literalNonZeroReport = inferReport "literal-nonzero.f90"
+  "  2:11 unit m s :: a\n\
+  \  2:14 unit m s :: b\n\
+  \  8:3 unit m s :: f\n\
+  \  10:13 unit m s :: x\n"
