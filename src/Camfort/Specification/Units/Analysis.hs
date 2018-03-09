@@ -343,6 +343,8 @@ isLiteralNonZero (F.ExpValue _ _ (F.ValInteger i)) = readInteger i /= Just 0
 isLiteralNonZero (F.ExpValue _ _ (F.ValReal i))    = readReal i    /= Just 0
 isLiteralNonZero _                                 = False
 
+isLiteralZero = not . isLiteralNonZero
+
 --------------------------------------------------
 
 -- | Convert all parametric templates into actual uses, via substitution.
@@ -605,15 +607,10 @@ literalAssignmentSpecialCase :: (F.Annotated f)
 literalAssignmentSpecialCase e1 e2 ast
   | isLiteral e2
   , Just u1 <- UA.getUnitInfo e1
-  , Just u2 <- UA.getUnitInfo e2 = do
-    u2' <- case (u1, u2) of
-      (UnitName _, UnitlessLit) -> genUnitLiteral
-      (UnitName _, UnitParamLitAbs _) -> genUnitLiteral
-      _ -> pure u2
-    pure $ UA.maybeSetUnitConstraintF2 ConEq (UA.getUnitInfo e1) (Just u2') ast
-  | otherwise = do
-    -- otherwise express the constraint between LHS and RHS of assignment.
-    pure $ UA.maybeSetUnitConstraintF2 ConEq (UA.getUnitInfo e1) (UA.getUnitInfo e2) ast
+  , Just u2 <- UA.getUnitInfo e2
+  , (isMonomorphic u1 && isUnitless u2) || isLiteralZero e2 = pure ast
+  -- otherwise express the constraint between LHS and RHS of assignment.
+  | otherwise = pure $ UA.maybeSetUnitConstraintF2 ConEq (UA.getUnitInfo e1) (UA.getUnitInfo e2) ast
 
 propagatePU :: F.ProgramUnit UA -> UnitSolver (F.ProgramUnit UA)
 propagatePU pu = do

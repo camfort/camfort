@@ -24,6 +24,7 @@ module Camfort.Specification.Units.Environment
     Constraint(..)
   , Constraints
   , UnitInfo(..)
+  , isMonomorphic, isUnitless
   , VV, PP
     -- * Helpers
   , conParamEq
@@ -83,6 +84,24 @@ data UnitInfo
   | UnitPow UnitInfo Double               -- a unit raised to a constant power
   | UnitRecord [(String, UnitInfo)]       -- 'record'-type of units
   deriving (Eq, Ord, Data, Typeable, Generic)
+
+-- | True iff u is monomorphic (has no parametric polymorphic pieces)
+isMonomorphic u = case u of
+  UnitName _      -> True
+  UnitAlias _     -> True
+  UnitVar _       -> True
+  UnitLiteral _   -> True
+  UnitlessVar     -> True
+  UnitlessLit     -> True
+  UnitRecord recs -> all (isMonomorphic . snd) recs
+  UnitMul u1 u2   -> isMonomorphic u1 && isMonomorphic u2
+  UnitPow u _     -> isMonomorphic u
+  _               -> False
+
+-- | True iff argument matches one of the unitless constructors
+isUnitless UnitlessVar = True
+isUnitless UnitlessLit = True
+isUnitless _           = False
 
 type SortFn = UnitInfo -> UnitInfo -> Ordering
 colSort :: UnitInfo -> UnitInfo -> Ordering
@@ -147,7 +166,7 @@ instance Show UnitInfo where
     UnitlessLit                         -> "1"
     UnitlessVar                         -> "1"
     UnitName name                       -> name
-    UnitAlias name                      -> name
+    UnitAlias name                      -> name -- FIXME: forbid polymorphism in aliases
     UnitVar (vName, _)                  -> printf "#<Var %s>" vName
     UnitRecord recs                     -> "record (" ++ intercalate ", " (map (\ (n, u) -> n ++ " :: " ++ show u) recs) ++ ")"
     UnitMul u1 (UnitPow u2 k)
