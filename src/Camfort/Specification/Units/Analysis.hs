@@ -608,7 +608,7 @@ literalAssignmentSpecialCase e1 e2 ast
   | isLiteral e2
   , Just u1 <- UA.getUnitInfo e1
   , Just u2 <- UA.getUnitInfo e2
-  , (isMonomorphic u1 && isUnitless u2) || isLiteralZero e2 = pure ast
+  , isMonomorphic u1 || isLiteralZero e2 = pure ast
   -- otherwise express the constraint between LHS and RHS of assignment.
   | otherwise = pure $ UA.maybeSetUnitConstraintF2 ConEq (UA.getUnitInfo e1) (UA.getUnitInfo e2) ast
 
