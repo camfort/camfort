@@ -43,6 +43,12 @@ spec =
         "literal-nonzero-inconsist1.f90" `unitsCheckReportIs` literalNonZeroInconsist1Report
       it "nonzero literal is unitless in poly-context" $
         "literal-nonzero-inconsist2.f90" `unitsCheckReportIs` literalNonZeroInconsist2Report
+      it "monomorphism restriction is important (do-loop)" $
+        "literal-nonzero-inconsist3.f90" `unitsCheckReportIs` literalNonZeroInconsist3Report
+      -- it "monomorphism restriction is important (do-loop with zero-start)" $
+      --   "literal-nonzero-inconsist4.f90" `unitsCheckReportIs` literalNonZeroInconsist4Report
+      it "monomorphism restriction is important (goto)" $
+        "literal-nonzero-inconsist5.f90" `unitsCheckReportIs` literalNonZeroInconsist5Report
 
 
 fixturesDir :: String
@@ -133,3 +139,25 @@ literalNonZeroInconsist2Report =
   "\ntests/fixtures/Specification/Units/literal-nonzero-inconsist2.f90: Inconsistent:\n\
   \ - at 5:9: 'parameter 1 to f' should have unit 'm'\n\
   \ - at 10:5: 'parameter 1 to f' should have unit '1'\n"
+
+literalNonZeroInconsist3Report :: String
+literalNonZeroInconsist3Report =
+  "\ntests/fixtures/Specification/Units/literal-nonzero-inconsist3.f90: Inconsistent:\n\
+  \ - at 7:11: 'parameter 1 to sqr' should have unit 's'\n\
+  \ - at 12:3: 'i' should have the same units as 'parameter 1 to sqr'\n\
+  \ - at 15:8: 'i' should have unit '1'\n"
+
+literalNonZeroInconsist4Report :: String -- fixme
+literalNonZeroInconsist4Report =
+  "\ntests/fixtures/Specification/Units/literal-nonzero-inconsist5.f90: Inconsistent:\n\
+  \- at 7:11: 'parameter 1 to sqr' should have unit 's'\n\
+  \- at 15:9: 'i' should have the same units as 'parameter 1 to sqr'\n\
+  \- at 17:12: 'i' should have unit '1'\n"
+
+literalNonZeroInconsist5Report :: String
+literalNonZeroInconsist5Report =
+  "\ntests/fixtures/Specification/Units/literal-nonzero-inconsist5.f90: Inconsistent:\n\
+  \ - at 7:11: 'parameter 1 to sqr' should have unit 's'\n\
+  \ - at 13:23: 'j' should have unit '1'\n\
+  \ - at 15:9: 'i' should have the same units as 'parameter 1 to sqr'\n\
+  \ - at 17:12: 'j' should have the same units as 'i'\n"
