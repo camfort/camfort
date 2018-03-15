@@ -521,21 +521,6 @@ mainBlocks = concatMap getBlocks . universeBi
 
 --------------------------------------------------
 
--- | Extract the unit info from a given annotated piece of AST, within
--- the context of a multiplication expression, and given a particular
--- mode for handling literals.
---
--- The point is that the unit-assignment of a literal constant can
--- vary depending upon whether it is being multiplied by a variable
--- with units, and possibly by global options that assume one way or
--- the other.
-getUnitInfoMul :: LiteralsOpt -> F.Expression UA -> Maybe UnitInfo
-getUnitInfoMul LitPoly e          = UA.getUnitInfo e
-getUnitInfoMul _ e
-  | isJust (constantExpression e) = Just UnitlessLit
-  | otherwise                     = UA.getUnitInfo e
-
-
 -- | Propagate* functions: decorate the AST with constraints, given
 -- that variables have all been annotated.
 propagateUnits :: UnitSolver ()
@@ -546,10 +531,10 @@ propagateUnits = modifyProgramFileM $ transformBiM propagatePU        <=<
                                       transformBiM propagateExp
 
 propagateExp :: F.Expression UA -> UnitSolver (F.Expression UA)
-propagateExp e = asks (uoLiterals . unitOpts) >>= \ lm -> case e of
+propagateExp e = case e of
   F.ExpValue{}                           -> pure e -- all values should already be annotated
-  F.ExpBinary _ _ F.Multiplication e1 e2 -> setF2 UnitMul (getUnitInfoMul lm e1) (getUnitInfoMul lm e2)
-  F.ExpBinary _ _ F.Division e1 e2       -> setF2 UnitMul (getUnitInfoMul lm e1) (flip UnitPow (-1) <$> getUnitInfoMul lm e2)
+  F.ExpBinary _ _ F.Multiplication e1 e2 -> setF2 UnitMul (UA.getUnitInfo e1) (UA.getUnitInfo e2)
+  F.ExpBinary _ _ F.Division e1 e2       -> setF2 UnitMul (UA.getUnitInfo e1) (flip UnitPow (-1) <$> UA.getUnitInfo e2)
   F.ExpBinary _ _ F.Exponentiation e1 e2 -> setF2 UnitPow (UA.getUnitInfo e1) (constantExpression e2)
   F.ExpBinary _ _ o e1 e2 | isOp AddOp o -> setF2C ConEq  (UA.getUnitInfo e1) (UA.getUnitInfo e2)
                           | isOp RelOp o -> setF2C ConEq  (UA.getUnitInfo e1) (UA.getUnitInfo e2)
