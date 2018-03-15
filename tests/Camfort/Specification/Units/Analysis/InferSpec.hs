@@ -47,6 +47,10 @@ spec =
         "literal-zero.f90" `unitsInferReportIs` literalZeroReport
       it "literal-nonzero" $
         "literal-nonzero.f90" `unitsInferReportIs` literalNonZeroReport
+      it "do-loop1" $
+        "do-loop1.f90" `unitsInferReportIs` doLoop1Report
+      it "do-loop2" $
+        "do-loop2.f90" `unitsInferReportIs` doLoop2Report
 
 
 fixturesDir :: String
@@ -172,3 +176,31 @@ literalNonZeroReport = inferReport "literal-nonzero.f90"
   \  2:14 unit m s :: b\n\
   \  8:3 unit m s :: f\n\
   \  10:13 unit m s :: x\n"
+
+doLoop1Report :: String
+doLoop1Report = inferReport "do-loop1.f90"
+  "  3:11 unit m :: x\n\
+  \  3:14 unit m :: y\n\
+  \  4:14 unit m :: i\n\
+  \  10:3 unit 1 :: f\n\
+  \  11:13 unit 1 :: x\n\
+  \  11:16 unit 1 :: y\n\
+  \  12:16 unit 1 :: i\n"
+
+doLoop2Report :: String
+doLoop2Report = inferReport "do-loop2.f90"
+  "  3:11 unit m :: x\n\
+  \  3:14 unit m :: y\n\
+  \  4:14 unit m :: i\n\
+  \  10:3 unit 1 :: f\n\
+  \  11:13 unit 1 :: x\n\
+  \  11:16 unit 1 :: y\n\
+  \  12:16 unit 1 :: i\n\
+  \  19:3 unit 1 :: g\n\
+  \  20:13 unit 1 :: x\n\
+  \  20:16 unit 1 :: y\n\
+  \  21:16 unit 1 :: i\n\
+  \  28:3 unit 'a :: h\n\
+  \  29:13 unit 'a :: x\n\
+  \  29:16 unit 'a :: y\n\
+  \  30:16 unit 'a :: i\n"
