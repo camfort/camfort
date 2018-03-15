@@ -563,14 +563,18 @@ propagateFunctionCall _ = error "received non-function-call in propagateFunction
 
 propagateDoSpec :: F.DoSpecification UA -> UnitSolver (F.DoSpecification UA)
 propagateDoSpec ast@(F.DoSpecification _ _ (F.StExpressionAssign _ _ e1 _) e2 m_e3) = do
-  -- express constraints between the iteration variable and the two expressions
-  let m_con1 = do e3 <- m_e3
-                  u1 <- UA.getUnitInfo e1
-                  u3 <- UA.getUnitInfo e3
-                  pure . (:[]) $ ConEq u1 u3
-  let m_con2 = (:[]) <$> liftM2 ConEq (UA.getUnitInfo e1) (UA.getUnitInfo e2)
-  let m_cons = ConConj <$> mappend m_con1 m_con2
-  pure $ maybe ast (flip UA.setConstraint ast) m_cons
+  -- express constraints between the iteration variable, the bounding
+  -- expressions and the step expression, or treat the step expression
+  -- as a literal 1 if not specified.
+  pure . maybe ast (flip UA.setConstraint ast) $ ConConj <$> mconcat [
+        -- units(e1) ~ units(e2)
+        (:[]) <$> liftM2 ConEq (UA.getUnitInfo e1) (UA.getUnitInfo e2)
+
+        -- units(e1) ~ units(e3) or if e3 not specified then units(e1) ~ 1 in a polymorphic context
+        , do u1 <- UA.getUnitInfo e1
+             u3 <- (UA.getUnitInfo =<< m_e3) `mplus` if isMonomorphic u1 then mzero else pure UnitlessVar
+             pure [ConEq u1 u3]
+        ]
 
 propagateStatement :: F.Statement UA -> UnitSolver (F.Statement UA)
 propagateStatement stmt = case stmt of
