@@ -157,6 +157,8 @@ insertParametricUnits = getProgramFile >>= (mapM_ paramPU . universeBi)
 -- | Return the list of parameters paired with its positional index.
 indexedParams :: F.ProgramUnit UA -> [(Int, VV)]
 indexedParams pu
+  | F.PUFunction _ _ _ _ _ Nothing (Just r) _ _       <- pu = [(0, toVV r)]
+  | F.PUFunction _ _ _ _ _ Nothing _ _ _              <- pu = [(0, (fname, sfname))]
   | F.PUFunction _ _ _ _ _ (Just paList) (Just r) _ _ <- pu = zip [0..] $ map toVV (r : F.aStrip paList)
   | F.PUFunction _ _ _ _ _ (Just paList) _ _ _        <- pu = zip [0..] $ (fname, sfname) : map toVV (F.aStrip paList)
   | F.PUSubroutine _ _ _ _ (Just paList) _ _          <- pu = zip [1..] $ map toVV (F.aStrip paList)
