@@ -39,6 +39,9 @@ spec =
     describe "Intrinsic functions" $
       it "sqrtPoly" $
         "sqrtPoly.f90" `unitsInferReportIs` sqrtPolyReport
+    describe "Intrinsic function transfer (explicit cast)" $
+      it "transfer" $
+        "transfer.f90" `unitsInferReportIs` transferReport
     describe "GCD of powers" $
       it "gcd1" $
         "gcd1.f90" `unitsInferReportIs` gcd1Report
@@ -156,6 +159,11 @@ sqrtPolyReport = inferReport "sqrtPoly.f90"
   \  11:14 unit j**2 :: c\n\
   \  16:3 unit ('a)**2 :: square\n\
   \  17:13 unit 'a :: n\n"
+
+transferReport :: String
+transferReport = inferReport "transfer.f90"
+  "  4:11 unit m :: x\n\
+  \  6:11 unit s :: y\n"
 
 gcd1Report :: String
 gcd1Report = inferReport "gcd1.f90"

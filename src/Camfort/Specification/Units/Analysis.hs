@@ -866,7 +866,8 @@ specialCaseArbitraryArgs = S.fromList [ "max", "max0", "amax1", "dmax1", "amax0"
 intrinsicUnits :: M.Map F.Name (UnitInfo, [UnitInfo])
 intrinsicUnits =
   M.fromList
-    [ ("abs", (UnitParamEAPAbs ("'a", "'a"), [UnitParamEAPAbs ("'a", "'a")]))
+    [ ("transfer", (UnitParamEAPAbs ("'b", "'b"), [UnitParamEAPAbs ("'a", "'a"), UnitParamEAPAbs ("'b", "'b")]))
+    , ("abs", (UnitParamEAPAbs ("'a", "'a"), [UnitParamEAPAbs ("'a", "'a")]))
     , ("iabs", (UnitParamEAPAbs ("'a", "'a"), [UnitParamEAPAbs ("'a", "'a")]))
     , ("dabs", (UnitParamEAPAbs ("'a", "'a"), [UnitParamEAPAbs ("'a", "'a")]))
     , ("cabs", (UnitParamEAPAbs ("'a", "'a"), [UnitParamEAPAbs ("'a", "'a")]))
