@@ -32,6 +32,7 @@ module Camfort.Functionality
   -- * Commands
   , ast
   , countVarDecls
+  , implicitNone
   -- ** Stencil Analysis
   , stencilsCheck
   , stencilsInfer
@@ -215,6 +216,14 @@ equivalences =
   "Refactoring equivalences blocks in"
   (fmap generalizePureAnalysis . perFileRefactoring $ refactorEquivalences)
   (doRefactor "equivalence block refactoring")
+  simpleCompiler ()
+
+implicitNone :: CamfortEnv -> IO ()
+implicitNone =
+  runFunctionality
+  "Checking 'implicit none' completeness"
+  (generalizePureAnalysis . checkImplicitNone)
+  (describePerFileAnalysis "check 'implicit none'")
   simpleCompiler ()
 
 {- Units feature -}

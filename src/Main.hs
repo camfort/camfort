@@ -102,6 +102,7 @@ main = do
     runCommand (CmdRefactCommon rfo)      = runRFO rfo common
     runCommand (CmdRefactDead rfo)        = runRFO rfo dead
     runCommand (CmdRefactEquivalence rfo) = runRFO rfo equivalences
+    runCommand (CmdImplicitNone ro lo)    = runRO ro lo implicitNone
     runCommand (CmdInit dir)              = camfortInitialize dir
     runCommand CmdTopVersion              = displayVersion
 
@@ -121,6 +122,7 @@ data Command = CmdCount ReadOptions LogOptions
              | CmdRefactCommon RefactOptions
              | CmdRefactDead RefactOptions
              | CmdRefactEquivalence RefactOptions
+             | CmdImplicitNone ReadOptions LogOptions
              | CmdInit FilePath
              | CmdTopVersion
 
@@ -330,8 +332,8 @@ refactOptions = fmap RefactOptions
 
 
 cmdCount, cmdAST :: Parser Command
-cmdCount = fmap CmdCount readOptions <*> logOptions
-cmdAST   = fmap CmdAST   readOptions <*> logOptions
+cmdCount        = fmap CmdCount readOptions <*> logOptions
+cmdAST          = fmap CmdAST   readOptions <*> logOptions
 
 
 cmdStencilsCheck, cmdStencilsInfer, cmdStencilsSynth :: Parser Command
@@ -348,8 +350,9 @@ cmdUnitsCompile = fmap CmdUnitsCompile unitsOptions
 cmdUnitsSynth   = fmap CmdUnitsSynth   unitsSynthOptions
 
 
-cmdInvariantsCheck :: Parser Command
+cmdImplicitNone, cmdInvariantsCheck :: Parser Command
 cmdInvariantsCheck = fmap CmdInvariantsCheck invariantsOptions
+cmdImplicitNone    = fmap CmdImplicitNone readOptions <*> logOptions
 
 
 cmdRefactCommon, cmdRefactDead, cmdRefactEquivalence :: Parser Command
@@ -386,6 +389,9 @@ analysesParser = commandsParser "Analysis Commands" analysesCommands
       [ ("count",
           [],
           cmdCount,         "count variable declarations")
+      , ("implicit-none",
+          [],
+          cmdImplicitNone,  "check 'implicit none' completeness")
       , ("ast",
           [],
           cmdAST,           "print the raw AST -- for development purposes")
