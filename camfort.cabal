@@ -161,6 +161,7 @@ test-suite spec
   other-modules:        Camfort.Analysis.TestUtils
                         Camfort.Analysis.CommentAnnotatorSpec
                         Camfort.Analysis.ModFileSpec
+                        Camfort.Analysis.ImplicitNoneSpec
                         Camfort.FunctionalitySpec
                         Camfort.ReprintSpec
                         Camfort.Specification.ParserSpec
