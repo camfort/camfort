@@ -20,7 +20,7 @@
 {- Simple syntactic analysis on Fortran programs -}
 
 module Camfort.Analysis.Simple
- (countVariableDeclarations, checkImplicitNone) where
+ (countVariableDeclarations, checkImplicitNone, ImplicitNoneReport(..)) where
 import Prelude hiding (unlines)
 import Data.Data
 import Data.Text (Text, unlines)
@@ -40,7 +40,8 @@ import Camfort.Analysis (describe, describeBuilder, PureAnalysis, Describe)
 countVariableDeclarations :: forall a. Data a => F.ProgramFile a -> PureAnalysis () () Int
 countVariableDeclarations pf = return $ length (universeBi pf :: [F.Declarator a])
 
-data ImplicitNoneReport = ImplicitNoneReport [(F.ProgramUnitName, F.SrcSpan)]
+data ImplicitNoneReport
+  = ImplicitNoneReport [(F.ProgramUnitName, F.SrcSpan)] -- ^ list of program units identified as needing implicit none
 
 -- Follows host scoping unit rule: 'external' program units
 -- (ie. appear at top level) must have implicit-none statements, which
@@ -66,7 +67,7 @@ checkImplicitNone pf = do
       F.PUFunction _ _ _ _ _ _ _ bs _  -> checkBlocks bs
       _                                -> True
 
-    checkBlocks bs = all (not . isImplicitSome) bs && all isUseStmt useStmts && not (null rest)
+    checkBlocks bs = all (not . isImplicitSome) bs && all isUseStmt useStmts && not (null rest) && all (not . isUseStmt) rest
       where
         (useStmts, rest) = break isImplicitNone bs
 
