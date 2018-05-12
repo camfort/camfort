@@ -25,7 +25,7 @@ import qualified Data.Map.Strict as M
 import           Data.Maybe (maybeToList, maybe)
 import           Data.Function (on)
 
-import           Camfort.Analysis (Describe(..))
+import           Camfort.Analysis (ExitCodeOfReport(..), Describe(..))
 import           Camfort.Analysis.Annotations
 import           Camfort.Specification.Units.Analysis (UnitAnalysis, runInference)
 import qualified Camfort.Specification.Units.Annotation as UA
@@ -50,6 +50,10 @@ instance Show ConsistencyReport where
   show (Consistent pf nVars) = concat ["\n", fname, ": Consistent ", show nVars, " variables checked."]
     where fname = F.pfGetFilename pf
   show (Inconsistent e) = show e
+
+instance ExitCodeOfReport ConsistencyReport where
+  exitCodeOf (Consistent {}) = 0
+  exitCodeOf (Inconsistent _) = 1
 
 instance Describe ConsistencyReport
 

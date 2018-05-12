@@ -40,8 +40,14 @@ import Camfort.Analysis ( ExitCodeOfReport(..), atSpanned, Origin, failAnalysis'
 
 {-| Counts the number of declarations (of variables) in a whole program -}
 
-countVariableDeclarations :: forall a. Data a => F.ProgramFile a -> PureAnalysis () () Int
-countVariableDeclarations pf = return $ length (universeBi pf :: [F.Declarator a])
+newtype VarCountReport = VarCountReport Int
+instance ExitCodeOfReport VarCountReport where
+  exitCodeOf _ = 0
+instance Describe VarCountReport where
+  describeBuilder (VarCountReport c) = Builder.fromText $ describe c
+
+countVariableDeclarations :: forall a. Data a => F.ProgramFile a -> PureAnalysis () () VarCountReport
+countVariableDeclarations pf = return . VarCountReport $ length (universeBi pf :: [F.Declarator a])
 
 type PULoc = (F.ProgramUnitName, Origin)
 data ImplicitNoneReport
@@ -94,3 +100,7 @@ instance Describe ImplicitNoneReport where
     | null results = "no cases detected"
     | null (tail results) = "1 case detected"
     | otherwise = Builder.fromText $ describe (length results) <> " cases detected"
+
+instance ExitCodeOfReport ImplicitNoneReport where
+  exitCodeOf (ImplicitNoneReport []) = 0
+  exitCodeOf (ImplicitNoneReport _)  = 1

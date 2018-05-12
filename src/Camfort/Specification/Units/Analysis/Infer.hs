@@ -31,7 +31,7 @@ import qualified Language.Fortran.AST           as F
 import qualified Language.Fortran.Analysis      as FA
 import qualified Language.Fortran.Util.Position as FU
 
-import Camfort.Analysis (Describe(..))
+import Camfort.Analysis (ExitCodeOfReport(..), Describe(..))
 import Camfort.Analysis.Annotations (Annotation)
 import Camfort.Specification.Units.Analysis
   (UnitAnalysis, puName, puSrcName, runInference)
@@ -58,6 +58,10 @@ data InferenceReport
 data InferenceResult
   = Inferred InferenceReport
   | InfInconsistent ConsistencyError
+
+instance ExitCodeOfReport InferenceResult where
+  exitCodeOf (Inferred _) = 0
+  exitCodeOf (InfInconsistent _) = 1
 
 instance Show InferenceReport where
   show (InferenceReport pf vars) =

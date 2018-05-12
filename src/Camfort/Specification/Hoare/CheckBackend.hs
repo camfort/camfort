@@ -156,6 +156,9 @@ type BackendAnalysis = AnalysisT HoareBackendError HoareBackendWarning IO
 data HoareCheckResult = HoareCheckResult (F.ProgramUnit HA) Bool
   deriving (Show)
 
+instance ExitCodeOfReport HoareCheckResult where
+  exitCodeOf (HoareCheckResult _ r) = if r then 0 else 1
+
 describePuName :: F.ProgramUnitName -> Builder
 describePuName (F.Named n)         = describeBuilder n
 describePuName F.NamelessBlockData = "<nameless block data>"

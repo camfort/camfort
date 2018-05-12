@@ -89,6 +89,8 @@ data InferEnv = IE
 type LogLine = (FU.SrcSpan, Either [([Variable], Specification)] (String,Variable))
 
 data StencilsReport = StencilsReport [(String, LogLine)] -- ^ (filename, logged stencil)
+instance ExitCodeOfReport StencilsReport where
+  exitCodeOf _ = 0
 
 instance Show StencilsReport where
   show (StencilsReport flogs) = unlines . filter (not . white) $ output

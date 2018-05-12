@@ -26,14 +26,17 @@ import Camfort.Specification.Hoare (PrimReprOption(..))
 import Data.Maybe (fromMaybe)
 import Data.Monoid ((<>))
 import System.Directory (getCurrentDirectory)
-
+import System.Exit
 import Options.Applicative
 
 main :: IO ()
 main = do
   currentDir <- getCurrentDirectory
   cmd <- execParser (info (commandParser currentDir) idm)
-  runCommand cmd
+  code <- runCommand cmd
+  if code == 0
+    then exitWith ExitSuccess
+    else exitWith $ ExitFailure code
   where
     env ro lo = CamfortEnv
       { ceInputSources = inputSource ro
@@ -87,8 +90,8 @@ main = do
           inFile = inputSource ro
       in runRO ro lo (f (getOutputFile inFile wo))
 
-    runCommand :: Command -> IO ()
-    runCommand (CmdAST ro lo)             = runRO ro lo ast
+    runCommand :: Command -> IO Int
+    runCommand (CmdAST ro lo)             = runRO ro lo ast >> return 0
     runCommand (CmdCount ro lo)           = runRO ro lo countVarDecls
     runCommand (CmdStencilsCheck ro lo)   = runRO ro lo stencilsCheck
     runCommand (CmdStencilsInfer so)      = runSIO so stencilsInfer
@@ -103,8 +106,8 @@ main = do
     runCommand (CmdRefactDead rfo)        = runRFO rfo dead
     runCommand (CmdRefactEquivalence rfo) = runRFO rfo equivalences
     runCommand (CmdImplicitNone ro lo)    = runRO ro lo implicitNone
-    runCommand (CmdInit dir)              = camfortInitialize dir
-    runCommand CmdTopVersion              = displayVersion
+    runCommand (CmdInit dir)              = camfortInitialize dir >> return 0
+    runCommand CmdTopVersion              = displayVersion >> return 0
 
 
 -- | Commands supported by CamFort.

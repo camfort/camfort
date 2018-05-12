@@ -182,7 +182,7 @@ ast env = do
     print . fmap fst $ xs
 
 
-countVarDecls :: CamfortEnv -> IO ()
+countVarDecls :: CamfortEnv -> IO Int
 countVarDecls =
   runFunctionality
   "Counting variable declarations in"
@@ -190,8 +190,7 @@ countVarDecls =
   (describePerFileAnalysis "count variable declarations")
   simpleCompiler ()
 
-
-dead :: FileOrDir -> CamfortEnv -> IO ()
+dead :: FileOrDir -> CamfortEnv -> IO Int
 dead =
   runWithOutput
   "Eliminating dead code in"
@@ -200,7 +199,7 @@ dead =
   simpleCompiler ()
 
 
-common :: FileOrDir -> CamfortEnv -> IO ()
+common :: FileOrDir -> CamfortEnv -> IO Int
 common outSrc =
   runWithOutput
   "Refactoring common blocks in"
@@ -210,7 +209,7 @@ common outSrc =
   outSrc
 
 
-equivalences :: FileOrDir -> CamfortEnv -> IO ()
+equivalences :: FileOrDir -> CamfortEnv -> IO Int
 equivalences =
   runWithOutput
   "Refactoring equivalences blocks in"
@@ -218,7 +217,7 @@ equivalences =
   (doRefactor "equivalence block refactoring")
   simpleCompiler ()
 
-implicitNone :: CamfortEnv -> IO ()
+implicitNone :: CamfortEnv -> IO Int
 implicitNone =
   runFunctionality
   "Checking 'implicit none' completeness"
@@ -285,7 +284,7 @@ multiPfUnits unitAnalysis opts pfs = do
 
   return (rs', ps)
 
-unitsCheck :: LiteralsOpt -> CamfortEnv -> IO ()
+unitsCheck :: LiteralsOpt -> CamfortEnv -> IO Int
 unitsCheck =
   runUnitsFunctionality
   "Checking units for"
@@ -293,7 +292,7 @@ unitsCheck =
   (describePerFileAnalysis "unit checking")
 
 
-unitsInfer :: LiteralsOpt -> CamfortEnv -> IO ()
+unitsInfer :: LiteralsOpt -> CamfortEnv -> IO Int
 unitsInfer =
   runUnitsFunctionality
   "Inferring units for"
@@ -314,7 +313,7 @@ unitsCompile outSrc opts env =
 --modFiles <- genModFiles mfCompiler mfInput incDir (ceExcludeFiles env)
   -- ...instead for now, just get the mod files
 
-unitsCompile :: LiteralsOpt -> CamfortEnv -> IO ()
+unitsCompile :: LiteralsOpt -> CamfortEnv -> IO Int
 unitsCompile opts env = do
   let uo = optsToUnitOpts opts
   let description = "Compiling units for"
@@ -331,8 +330,9 @@ unitsCompile opts env = do
   forM_ modFiles $ \modFile -> do
      let mfname = replaceExtension (FM.moduleFilename modFile) FM.modFileSuffix
      B.writeFile mfname (FM.encodeModFile modFile)
+  return 0
 
-unitsSynth :: AnnotationType -> FileOrDir -> LiteralsOpt -> CamfortEnv -> IO ()
+unitsSynth :: AnnotationType -> FileOrDir -> LiteralsOpt -> CamfortEnv -> IO Int
 unitsSynth annType outSrc opts env =
   runUnitsFunctionality
   "Synthesising units for"
@@ -342,7 +342,7 @@ unitsSynth annType outSrc opts env =
   env
 
 
-unitsCriticals :: LiteralsOpt -> CamfortEnv -> IO ()
+unitsCriticals :: LiteralsOpt -> CamfortEnv -> IO Int
 unitsCriticals =
   runUnitsFunctionality
   "Suggesting variables to annotate with unit specifications in"
@@ -353,7 +353,7 @@ unitsCriticals =
 {- Stencils feature -}
 
 
-stencilsCheck :: CamfortEnv -> IO ()
+stencilsCheck :: CamfortEnv -> IO Int
 stencilsCheck =
   runFunctionality
   "Checking stencil specs for"
@@ -362,7 +362,7 @@ stencilsCheck =
   compileStencils ()
 
 
-stencilsInfer :: Bool -> CamfortEnv -> IO ()
+stencilsInfer :: Bool -> CamfortEnv -> IO Int
 stencilsInfer useEval =
   runFunctionality
   "Inferring stencil specs for"
@@ -371,7 +371,7 @@ stencilsInfer useEval =
   compileStencils ()
 
 
-stencilsSynth :: AnnotationType -> FileOrDir -> CamfortEnv -> IO ()
+stencilsSynth :: AnnotationType -> FileOrDir -> CamfortEnv -> IO Int
 stencilsSynth annType =
   let
     program :: AnalysisProgram () () IO [ProgramFile] ((), [Either () ProgramFile])
@@ -387,7 +387,7 @@ stencilsSynth annType =
 
 {- Invariants Feature-}
 
-invariantsCheck :: Hoare.PrimReprOption -> CamfortEnv -> IO ()
+invariantsCheck :: Hoare.PrimReprOption -> CamfortEnv -> IO Int
 invariantsCheck pro =
   runFunctionality
   "Checking invariants in"

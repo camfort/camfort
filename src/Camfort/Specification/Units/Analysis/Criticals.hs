@@ -57,6 +57,9 @@ data Criticals = Criticals
   , criticalsFromWhere    :: M.Map F.Name FilePath
   }
 
+instance ExitCodeOfReport Criticals where
+  exitCodeOf _ = 0
+
 instance Show Criticals where
   show crits =
     case vars of

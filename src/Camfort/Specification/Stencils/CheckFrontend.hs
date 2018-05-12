@@ -61,6 +61,8 @@ import qualified Language.Fortran.Util.Position     as FU
 
 -- TODO: Replace instances of this with logging of errors and warnings
 newtype CheckResult = CheckResult [StencilResult]
+instance ExitCodeOfReport CheckResult where
+  exitCodeOf (CheckResult rs) = exitCodeOfSet rs
 
 -- | Retrieve a list of 'StencilResult' from a 'CheckResult'.
 --
@@ -107,6 +109,11 @@ data StencilResult
   -- | A warning which shouldn't interrupt other procedures.
   | SCWarn StencilCheckWarning
   deriving (Eq)
+
+instance ExitCodeOfReport StencilResult where
+  exitCodeOf (SCOkay {}) = 0
+  exitCodeOf (SCFail _) = 1
+  exitCodeOf (SCWarn _) = 0
 
 class GetSpan a where
   getSpan :: a -> FU.SrcSpan

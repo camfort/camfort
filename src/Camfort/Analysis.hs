@@ -82,6 +82,9 @@ module Camfort.Analysis
   , Describe(..)
   , describeShow
   , (<>)
+
+  -- ** Exit Code of reports
+  , ExitCodeOfReport(..)
   ) where
 
 import           Control.Monad.Except
@@ -99,6 +102,8 @@ import           Control.Lens
 import qualified Data.Text.Lazy                 as Lazy
 import qualified Data.Text.Lazy.Builder         as Builder
 import qualified Data.Text.Lazy.IO              as Lazy
+import           Data.List (maximumBy)
+import           Data.Ord (comparing)
 
 import qualified Language.Fortran.Util.ModFile  as F
 import qualified Language.Fortran.Util.Position as F
@@ -368,3 +373,29 @@ runAnalysisT fileName output logLevel mfs analysis = do
     , _arMessages = messages
     , _arResult = result
     }
+
+
+
+--------------------------------------------------------------------------------
+--  Exit codes
+--------------------------------------------------------------------------------
+
+class ExitCodeOfReport a where
+  -- | Interpret an exit code from report (default 0)
+  exitCodeOf :: a -> Int
+  exitCodeOf _ = 0
+  -- | Interpret an exit code from a set of reports (default: maximises absolute value)
+  exitCodeOfSet :: [a] -> Int
+  exitCodeOfSet [] = 0
+  exitCodeOfSet s = maximumBy (comparing abs) . map exitCodeOf $ s
+
+instance ExitCodeOfReport r => ExitCodeOfReport (AnalysisReport e w r) where
+  exitCodeOf report = case report ^. arResult of
+    ARFailure _ _ -> 1
+    ARSuccess r -> exitCodeOf r
+
+instance ExitCodeOfReport () where
+  exitCodeOf () = 0
+
+instance ExitCodeOfReport Text where
+  exitCodeOf _ = 0

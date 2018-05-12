@@ -8,11 +8,16 @@ import qualified Camfort.Helpers.Vec as V
 import Camfort.Specification.Stencils.DenotationalSemantics
 import Camfort.Specification.Stencils.Model
 import Camfort.Specification.Stencils.Syntax
+import Camfort.Analysis (ExitCodeOfReport(..))
 
 data ConsistencyResult =
     Consistent
   | Inconsistent String
   deriving (Eq, Show)
+
+instance ExitCodeOfReport ConsistencyResult where
+  exitCodeOf Consistent = 0
+  exitCodeOf (Inconsistent _) = 1
 
 -- | This function checks multiplicity consistency and then delegates the
 -- spatial consistency to |consistent'| function.

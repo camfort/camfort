@@ -117,21 +117,21 @@ compilePerFile analysisName inSrc outSrc =
 -- | Given an analysis program for a single file, run it over every input file
 -- and collect the reports, then print those reports to standard output.
 describePerFileAnalysis
-  :: (MonadIO m, Describe r, Describe w, Describe e)
-  => Text -> AnalysisRunner e w m ProgramFile r ()
-describePerFileAnalysis analysisName program logOutput logLevel modFiles pfsTexts =
-  runPerFileAnalysis program logOutput logLevel modFiles pfsTexts >>=
-  mapM_ (putDescribeReport analysisName (Just logLevel))
-
+  :: (MonadIO m, Describe r, ExitCodeOfReport r, Describe w, Describe e)
+  => Text -> AnalysisRunner e w m ProgramFile r Int
+describePerFileAnalysis analysisName program logOutput logLevel modFiles pfsTexts = do
+  reports <- runPerFileAnalysis program logOutput logLevel modFiles pfsTexts
+  mapM_ (putDescribeReport analysisName (Just logLevel)) reports
+  return $ exitCodeOfSet reports
 
 -- | Accepts an analysis program for multiple input files which produces a
 -- result value along with refactored files. Performs the refactoring, and
 -- prints the result value with the report.
 doRefactor
-  :: (Describe e, Describe e', Describe w, Describe r)
+  :: (Describe e, Describe e', Describe w, Describe r, ExitCodeOfReport r)
   => Text
   -> FileOrDir -> FilePath
-  -> AnalysisRunner e w IO [ProgramFile] (r, [Either e' ProgramFile]) ()
+  -> AnalysisRunner e w IO [ProgramFile] (r, [Either e' ProgramFile]) Int
 doRefactor analysisName inSrc outSrc program logOutput logLevel modFiles pfsTexts = do
   report <- runMultiFileAnalysis program logOutput logLevel modFiles pfsTexts
 
@@ -145,8 +145,9 @@ doRefactor analysisName inSrc outSrc program logOutput logLevel modFiles pfsText
 
   -- If the refactoring succeeded, change the files
   case resultFiles of
-    Just fs -> finishRefactor inSrc outSrc (map snd pfsTexts) fs
-    Nothing -> return ()
+    Just fs -> finishRefactor inSrc outSrc (map snd pfsTexts) fs >>
+               return (exitCodeOf report')
+    Nothing -> return (exitCodeOf report')
 
 -- | Accepts an analysis program for multiple input files which produces
 -- refactored files and creates new files. Performs the refactoring.
@@ -154,7 +155,7 @@ doRefactorAndCreate
   :: (Describe e, Describe w)
   => Text
   -> FileOrDir -> FilePath
-  -> AnalysisRunner e w IO [ProgramFile] ([ProgramFile], [ProgramFile]) ()
+  -> AnalysisRunner e w IO [ProgramFile] ([ProgramFile], [ProgramFile]) Int
 doRefactorAndCreate analysisName inSrc outSrc program logOutput logLevel modFiles pfsTexts = do
   report <- runMultiFileAnalysis program logOutput logLevel modFiles pfsTexts
 
@@ -168,8 +169,9 @@ doRefactorAndCreate analysisName inSrc outSrc program logOutput logLevel modFile
 
   case resultFiles of
     -- If the refactoring succeeded, change the files
-    Just fs -> finishRefactorAndCreate inSrc outSrc (map snd pfsTexts) fs
-    Nothing -> return ()
+    Just fs -> finishRefactorAndCreate inSrc outSrc (map snd pfsTexts) fs >>
+               return (exitCodeOf report')
+    Nothing -> return (exitCodeOf report')
 
 -- | Accepts an analysis program to refactor a single file and returns an
 -- analysis program to refactor each input file with that refactoring.

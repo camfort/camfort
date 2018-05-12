@@ -150,6 +150,9 @@ import           Language.Fortran.Model.Repr.Prim
 
 newtype HoareCheckResults = HoareCheckResults [HoareCheckResult]
 
+instance ExitCodeOfReport HoareCheckResults where
+  exitCodeOf (HoareCheckResults rs) = exitCodeOfSet rs
+
 instance Describe HoareCheckResults where
   describeBuilder (HoareCheckResults rs) =
     mconcat . intersperse "\n" . map describeBuilder $ rs
@@ -204,6 +207,7 @@ testOn fp = do
     LogDebug
     mfs
     pfsSources
+  return ()
 
 testHoare = do
   testOn "camfort/samples/invariants/arrays.f90"
