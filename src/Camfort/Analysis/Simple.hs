@@ -57,21 +57,26 @@ instance Monoid ImplicitNoneReport where
   mempty = ImplicitNoneReport []
   ImplicitNoneReport r1 `mappend` ImplicitNoneReport r2 = ImplicitNoneReport $ r1 ++ r2
 
--- Follows host scoping unit rule: 'external' program units
--- (ie. appear at top level) must have implicit-none statements, which
--- are then inherited by internal subprograms. Also, subprograms of
--- interface blocks must have implicit-none statements. FIXME: when we
--- have Fortran 2008 support then submodules must also be checked.
-checkImplicitNone :: forall a. Data a => F.ProgramFile a -> PureAnalysis String () ImplicitNoneReport
-checkImplicitNone pf = do
-  checkedPUs <- sequence [ puHelper pu | pu <- childrenBi pf :: [F.ProgramUnit a] ]
-  checkedInterfaces <- sequence [ puHelper pu | int@(F.BlInterface {}) <- universeBi pf :: [F.Block a]
-                                              , pu <- childrenBi int :: [F.ProgramUnit a] ]
-  forM_ (checkedPUs ++ checkedInterfaces) $ \ r -> case r of
+-- If allPU is False then function obeys host scoping unit rule:
+-- 'external' program units (ie. appear at top level) must have
+-- implicit-none statements, which are then inherited by internal
+-- subprograms. Also, subprograms of interface blocks must have
+-- implicit-none statements. If allPU is True then simply checks all
+-- program units. FIXME: when we have Fortran 2008 support then
+-- submodules must also be checked.
+checkImplicitNone :: forall a. Data a => Bool -> F.ProgramFile a -> PureAnalysis String () ImplicitNoneReport
+checkImplicitNone allPU pf = do
+  checkedPUs <- if allPU
+                then sequence [ puHelper pu | pu <- universeBi pf :: [F.ProgramUnit a] ]
+                     -- host scoping unit rule + interface exception:
+                else sequence ( [ puHelper pu | pu <- childrenBi pf :: [F.ProgramUnit a] ] ++
+                                [ puHelper pu | int@(F.BlInterface {}) <- universeBi pf :: [F.Block a]
+                                              , pu <- childrenBi int :: [F.ProgramUnit a] ] )
+  forM_ checkedPUs $ \ r -> case r of
      ImplicitNoneReport [(F.Named name, orig)] -> logError orig name
      _ -> return ()
 
-  return $ mconcat checkedPUs <> mconcat checkedInterfaces
+  return $ mconcat checkedPUs
 
   where
     isUseStmt (F.BlStatement _ _ _ (F.StUse {})) = True; isUseStmt _ = False

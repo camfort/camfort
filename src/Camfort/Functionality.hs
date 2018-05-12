@@ -217,11 +217,11 @@ equivalences =
   (doRefactor "equivalence block refactoring")
   simpleCompiler ()
 
-implicitNone :: CamfortEnv -> IO Int
-implicitNone =
+implicitNone :: Bool -> CamfortEnv -> IO Int
+implicitNone allPU =
   runFunctionality
   "Checking 'implicit none' completeness"
-  (generalizePureAnalysis . checkImplicitNone)
+  (generalizePureAnalysis . (checkImplicitNone allPU))
   (describePerFileAnalysis "check 'implicit none'")
   simpleCompiler ()
 

@@ -105,7 +105,8 @@ main = do
     runCommand (CmdRefactCommon rfo)      = runRFO rfo common
     runCommand (CmdRefactDead rfo)        = runRFO rfo dead
     runCommand (CmdRefactEquivalence rfo) = runRFO rfo equivalences
-    runCommand (CmdImplicitNone ro lo)    = runRO ro lo implicitNone
+    runCommand (CmdImplicitNone ro lo)    = runRO ro lo (implicitNone False)
+    runCommand (CmdImplicitNoneAll ro lo) = runRO ro lo (implicitNone True)
     runCommand (CmdInit dir)              = camfortInitialize dir >> return 0
     runCommand CmdTopVersion              = displayVersion >> return 0
 
@@ -126,6 +127,7 @@ data Command = CmdCount ReadOptions LogOptions
              | CmdRefactDead RefactOptions
              | CmdRefactEquivalence RefactOptions
              | CmdImplicitNone ReadOptions LogOptions
+             | CmdImplicitNoneAll ReadOptions LogOptions
              | CmdInit FilePath
              | CmdTopVersion
 
@@ -353,9 +355,10 @@ cmdUnitsCompile = fmap CmdUnitsCompile unitsOptions
 cmdUnitsSynth   = fmap CmdUnitsSynth   unitsSynthOptions
 
 
-cmdImplicitNone, cmdInvariantsCheck :: Parser Command
+cmdImplicitNone, cmdImplicitNoneAll, cmdInvariantsCheck :: Parser Command
 cmdInvariantsCheck = fmap CmdInvariantsCheck invariantsOptions
 cmdImplicitNone    = fmap CmdImplicitNone readOptions <*> logOptions
+cmdImplicitNoneAll = fmap CmdImplicitNoneAll readOptions <*> logOptions
 
 
 cmdRefactCommon, cmdRefactDead, cmdRefactEquivalence :: Parser Command
@@ -395,6 +398,9 @@ analysesParser = commandsParser "Analysis Commands" analysesCommands
       , ("implicit-none",
           [],
           cmdImplicitNone,  "check 'implicit none' completeness")
+      , ("implicit-none-all",
+          [],
+          cmdImplicitNoneAll,  "check 'implicit none' completeness (all program units)")
       , ("ast",
           [],
           cmdAST,           "print the raw AST -- for development purposes")

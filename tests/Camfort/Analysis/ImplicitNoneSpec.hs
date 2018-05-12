@@ -21,18 +21,33 @@ import Test.Hspec hiding (Spec)
 import qualified Test.Hspec as Test
 
 spec :: Test.Spec
-spec =
+spec = do
+  let f n = testInputSources $ fixturesDir </> n
+  let g a = (generalizePureAnalysis . checkImplicitNone a)
   describe "implicitNone" $ do
     it "basic" $ do
-      testSingleFileAnalysis (testInputSources $ fixturesDir </> "implicitnone1.f90") (generalizePureAnalysis . checkImplicitNone) $ \ report ->
+      testSingleFileAnalysis (f "implicitnone1.f90") (g False) $ \ report ->
         let ImplicitNoneReport ls = (report ^?! arResult . _ARSuccess) in
         map fst ls `shouldBe` [Named "s"]
     it "misplaced statements" $ do
-      testSingleFileAnalysis (testInputSources $ fixturesDir </> "implicitnone2.f90") (generalizePureAnalysis . checkImplicitNone) $ \ report ->
+      testSingleFileAnalysis (f "implicitnone2.f90") (g False) $ \ report ->
         let ImplicitNoneReport ls = (report ^?! arResult . _ARSuccess) in
         map fst ls `shouldBe` [Named "implicitnone1", Named "implicitnone2"]
     it "interfaces are separate scope" $ do
-      testSingleFileAnalysis (testInputSources $ fixturesDir </> "implicitnone3.f90") (generalizePureAnalysis . checkImplicitNone) $ \ report ->
+      testSingleFileAnalysis (f "implicitnone3.f90") (g False) $ \ report ->
+        let ImplicitNoneReport ls = (report ^?! arResult . _ARSuccess) in
+        map fst ls `shouldBe` [Named "s"]
+  describe "implicitNoneAll" $ do
+    it "basic" $ do
+      testSingleFileAnalysis (f "implicitnone1.f90") (g True) $ \ report ->
+        let ImplicitNoneReport ls = (report ^?! arResult . _ARSuccess) in
+        map fst ls `shouldBe` [Named "f", Named "s"]
+    it "misplaced statements" $ do
+      testSingleFileAnalysis (f "implicitnone2.f90") (g True) $ \ report ->
+        let ImplicitNoneReport ls = (report ^?! arResult . _ARSuccess) in
+        map fst ls `shouldBe` [Named "implicitnone1", Named "f", Named "implicitnone2", Named "f"]
+    it "interfaces are separate scope" $ do
+      testSingleFileAnalysis (f "implicitnone3.f90") (g True) $ \ report ->
         let ImplicitNoneReport ls = (report ^?! arResult . _ARSuccess) in
         map fst ls `shouldBe` [Named "s"]
 
