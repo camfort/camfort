@@ -4,6 +4,7 @@ program implicitnone
   implicit none
   real :: x
   real :: y
+  ! test
   y = f(x)
 contains
   real function f(x)

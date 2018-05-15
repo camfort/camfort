@@ -80,8 +80,11 @@ checkImplicitNone allPU pf = do
 
   where
     isUseStmt (F.BlStatement _ _ _ (F.StUse {})) = True
-    isUseStmt (F.BlComment {}) = True
     isUseStmt _ = False
+    isComment (F.BlComment {}) = True
+    isComment _ = False
+    isUseOrComment b = isUseStmt b || isComment b
+
     isImplicitNone (F.BlStatement _ _ _ (F.StImplicit _ _ Nothing)) = True; isImplicitNone _ = False
     isImplicitSome (F.BlStatement _ _ _ (F.StImplicit _ _ (Just _))) = True; isImplicitSome _ = False
 
@@ -93,7 +96,7 @@ checkImplicitNone allPU pf = do
       F.PUFunction _ _ _ _ _ _ _ bs _  -> checkBlocks bs
       _                                -> True
 
-    checkBlocks bs = all (not . isImplicitSome) bs && all isUseStmt useStmts && not (null rest) && all (not . isUseStmt) rest
+    checkBlocks bs = all (not . isImplicitSome) bs && all isUseOrComment useStmts && not (null rest) && all (not . isUseStmt) rest
       where
         (useStmts, rest) = break isImplicitNone bs
 
