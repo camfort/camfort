@@ -1,5 +1,6 @@
 program implicitnone
   use foo
+  ! test
   implicit none
   real :: x
   real :: y

@@ -79,7 +79,9 @@ checkImplicitNone allPU pf = do
   return $ mconcat checkedPUs
 
   where
-    isUseStmt (F.BlStatement _ _ _ (F.StUse {})) = True; isUseStmt _ = False
+    isUseStmt (F.BlStatement _ _ _ (F.StUse {})) = True
+    isUseStmt (F.BlComment {}) = True
+    isUseStmt _ = False
     isImplicitNone (F.BlStatement _ _ _ (F.StImplicit _ _ Nothing)) = True; isImplicitNone _ = False
     isImplicitSome (F.BlStatement _ _ _ (F.StImplicit _ _ (Just _))) = True; isImplicitSome _ = False
 
