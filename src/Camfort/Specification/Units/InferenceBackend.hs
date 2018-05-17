@@ -37,6 +37,7 @@ module Camfort.Specification.Units.InferenceBackend
   , genUnitAssignments'
   ) where
 
+import           Prelude hiding ((<>))
 import           Control.Monad
 import           Control.Monad.ST
 import qualified Data.Array as A

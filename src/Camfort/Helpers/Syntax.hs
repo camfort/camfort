@@ -45,6 +45,7 @@ module Camfort.Helpers.Syntax
 
 -- Standard imports
 import Data.Char
+import qualified Data.Semigroup as SG
 
 -- Data-type generics imports
 import Data.Generics.Uniplate.Data
@@ -102,10 +103,13 @@ extractVariable (F.ExpValue _ _ (F.ValVariable v)) = Just v
 extractVariable (F.ExpSubscript _ _ e _)           = extractVariable e
 extractVariable _                                  = Nothing
 
+instance SG.Semigroup Int where
+  (<>) = (+)
+
 {-| Set a default monoid instances for Int -}
 instance Monoid Int where
     mempty = 0
-    mappend = (+)
+    mappend = (SG.<>)
 
 -- SrcSpan helpers
 

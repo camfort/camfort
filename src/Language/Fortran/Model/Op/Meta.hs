@@ -26,7 +26,7 @@ import           Data.Functor.Compose
 
 import           Data.Vinyl                          (Rec, rmap, (<<*>>))
 import           Data.Vinyl.Functor                  (Lift (..))
-import           Data.Vinyl.Lens                     (RElem (rput))
+import           Data.Vinyl.Lens                     (RElem, RecElem (rput))
 
 import           Data.Singletons.TypeLits
 

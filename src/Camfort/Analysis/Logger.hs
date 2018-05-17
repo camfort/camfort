@@ -75,7 +75,7 @@ module Camfort.Analysis.Logger
   , runLoggerT
   ) where
 
-import           Data.Monoid                    ((<>))
+import qualified Data.Semigroup                 as SG
 import           Data.Void                      (Void)
 
 import           Control.Lens
@@ -354,9 +354,12 @@ data OpMonoid a = OpMonoid { getOpMonoid :: a }
 
 makeWrapped ''OpMonoid
 
-instance Monoid a => Monoid (OpMonoid a) where
+instance SG.Semigroup a => SG.Semigroup (OpMonoid a) where
+  OpMonoid x <> OpMonoid y = OpMonoid (y SG.<> x)
+
+instance (SG.Semigroup a, Monoid a) => Monoid (OpMonoid a) where
   mempty = OpMonoid mempty
-  OpMonoid x `mappend` OpMonoid y = OpMonoid (y `mappend` x)
+  mappend = (SG.<>)
 
 data LoggerEnv m =
   LoggerEnv

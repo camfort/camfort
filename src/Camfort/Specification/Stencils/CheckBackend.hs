@@ -35,6 +35,7 @@ import           Control.Arrow (second)
 import           Data.Function (on)
 import           Data.Int (Int64)
 import           Data.List (sort)
+import qualified Data.List.NonEmpty as NE
 import qualified Data.Set as S
 
 import qualified Camfort.Helpers.Vec as V
@@ -128,7 +129,7 @@ checkOffsetsAgainstSpec offsetMaps specMaps =
         (spec', Once (V.VL vs)) -> spec' `C.consistent` (Once . toUNF) vs == C.Consistent
         (spec', Mult (V.VL vs)) -> spec' `C.consistent` (Mult . toUNF) vs == C.Consistent
     toUNF :: [ V.Vec n Int64 ] -> UnionNF n Offsets
-    toUNF = joins1 . map (return . fmap intToSubscript)
+    toUNF = joins1 . NE.fromList . map (return . fmap intToSubscript)
 
     -- This function generates the special offsets subspace, subscript,
     -- that either had one element or is the whole set.

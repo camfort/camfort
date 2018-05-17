@@ -25,6 +25,7 @@ import Prelude hiding (unlines)
 import Control.Monad
 import Data.Data
 import Data.Text (Text, unlines)
+import qualified Data.Semigroup as SG
 import Data.Monoid ((<>))
 import Data.Generics.Uniplate.Operations
 import Data.Text.Lazy.Builder (Builder)
@@ -53,9 +54,12 @@ type PULoc = (F.ProgramUnitName, Origin)
 data ImplicitNoneReport
   = ImplicitNoneReport [PULoc] -- ^ list of program units identified as needing implicit none
 
+instance SG.Semigroup ImplicitNoneReport where
+  ImplicitNoneReport r1 <> ImplicitNoneReport r2 = ImplicitNoneReport $ r1 ++ r2
+
 instance Monoid ImplicitNoneReport where
   mempty = ImplicitNoneReport []
-  ImplicitNoneReport r1 `mappend` ImplicitNoneReport r2 = ImplicitNoneReport $ r1 ++ r2
+  mappend = (SG.<>)
 
 -- If allPU is False then function obeys host scoping unit rule:
 -- 'external' program units (ie. appear at top level) must have

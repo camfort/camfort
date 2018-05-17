@@ -77,7 +77,7 @@ regionsToIntervals nOfDims (Spatial (Sum prods))
     convert :: RegionProd -> Either String (UnionNF n (Interval Standard))
     convert (Product rs)
       | null rs = Left "Empty region product"
-      | otherwise = Right $ meets1 . map convert' $ rs
+      | otherwise = Right $ meets1 . NE.fromList . map convert' $ rs
 
     convert' r = return $ proto nOfDims $
       case r of
