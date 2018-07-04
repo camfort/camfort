@@ -35,12 +35,13 @@ import qualified Language.Fortran.Analysis as FA
 import qualified Language.Fortran.Util.ModFile as MF
 import qualified Language.Fortran.Analysis.Renaming as FAR
 import qualified Language.Fortran.Analysis.BBlocks as FAB
+import qualified Language.Fortran.Analysis.DataFlow as FAD
 
 import Data.List
 
 
 -- | Helper for retrieving analysed blocks.
-getBlocks = FAB.analyseBBlocks . FAR.analyseRenames . FA.initAnalysis . fmap SA.mkStencilAnnotation
+getBlocks = FAD.analyseConstExps . FAB.analyseBBlocks . FAR.analyseRenames . FA.initAnalysis . fmap SA.mkStencilAnnotation
 
 --------------------------------------------------
 --         Stencil specification inference      --

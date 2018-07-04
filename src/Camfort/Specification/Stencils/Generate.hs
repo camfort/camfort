@@ -17,11 +17,9 @@ module Camfort.Specification.Stencils.Generate
   (
     EvalLog
   , Neighbour(..)
-  , convIxToNeighbour
   , extractRelevantIVS
   , genOffsets
   , genSpecifications
-  , indicesToSpec
   , isArraySubscript
   , neighbourIndex
   , runStencilInferer
@@ -310,15 +308,37 @@ expToNeighbour ivs e@(F.ExpValue _ _ v@(F.ValVariable _))
 
 expToNeighbour _ (F.ExpValue _ _ val) = Constant (void val)
 
+-- use constant-expression analysis if available
+expToNeighbour ivs (F.ExpBinary _ _ F.Addition
+                    e1@(F.ExpValue _ _ (F.ValVariable _))
+                    e2)
+    | FA.varName e1 `elem` ivs
+    , Just (FAD.ConstInt offs) <- FA.constExp (F.getAnnotation e2) = Neighbour (FA.varName e1) (fromIntegral offs)
+
 expToNeighbour ivs (F.ExpBinary _ _ F.Addition
                  e@(F.ExpValue _ _ (F.ValVariable _))
                    (F.ExpValue _ _ (F.ValInteger offs)))
     | FA.varName e `elem` ivs = Neighbour (FA.varName e) (read offs)
 
+-- use constant-expression analysis if available
+expToNeighbour ivs (F.ExpBinary _ _ F.Addition
+                    e1@(F.ExpValue _ _ (F.ValVariable _))
+                    e2)
+    | FA.varName e1 `elem` ivs
+    , Just (FAD.ConstInt offs) <- FA.constExp (F.getAnnotation e2) = Neighbour (FA.varName e1) (fromIntegral offs)
+
 expToNeighbour ivs (F.ExpBinary _ _ F.Addition
                   (F.ExpValue _ _ (F.ValInteger offs))
                 e@(F.ExpValue _ _ (F.ValVariable _)))
     | FA.varName e `elem` ivs = Neighbour (FA.varName e) (read offs)
+
+-- use constant-expression analysis if available
+expToNeighbour ivs (F.ExpBinary _ _ F.Subtraction
+                    e1@(F.ExpValue _ _ (F.ValVariable _))
+                    e2)
+   | FA.varName e1 `elem` ivs
+   , Just (FAD.ConstInt offs) <- FA.constExp (F.getAnnotation e2)
+   , offs' <- if offs < 0 then abs offs else (- offs) = Neighbour (FA.varName e1) (fromIntegral offs')
 
 expToNeighbour ivs (F.ExpBinary _ _ F.Subtraction
                  e@(F.ExpValue _ _ (F.ValVariable _))
