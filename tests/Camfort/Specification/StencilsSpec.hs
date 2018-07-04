@@ -284,6 +284,13 @@ spec =
         assertStencilSynthNoWarn "example5.f90"
           "inserts correct comment types for modern fortran"
 
+    describe "integration test on inference for example5a (with constant-prop.)" $
+      describe "stencil synth" $ do
+        assertStencilSynthNoWarn "example5a.f"
+          "inserts correct comment types for old fortran"
+        assertStencilSynthNoWarn "example5a.f90"
+          "inserts correct comment types for modern fortran"
+
     describe "synth on files already containing stencils" $ do
       assertStencilSynthNoWarn "example6.f"
         "complements existing stencils (when second missing)"
