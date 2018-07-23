@@ -105,6 +105,8 @@ main = do
     runCommand (CmdRefactCommon rfo)      = runRFO rfo common
     runCommand (CmdRefactDead rfo)        = runRFO rfo dead
     runCommand (CmdRefactEquivalence rfo) = runRFO rfo equivalences
+    runCommand (CmdDerivedDataType rfo)   = runRFO rfo derivedDataType
+    runCommand (CmdDDTCompile ro lo)      = runRO ro lo ddtCompile
     runCommand (CmdImplicitNone ro lo)    = runRO ro lo (implicitNone False)
     runCommand (CmdImplicitNoneAll ro lo) = runRO ro lo (implicitNone True)
     runCommand (CmdInit dir)              = camfortInitialize dir >> return 0
@@ -126,6 +128,8 @@ data Command = CmdCount ReadOptions LogOptions
              | CmdRefactCommon RefactOptions
              | CmdRefactDead RefactOptions
              | CmdRefactEquivalence RefactOptions
+             | CmdDerivedDataType RefactOptions
+             | CmdDDTCompile ReadOptions LogOptions
              | CmdImplicitNone ReadOptions LogOptions
              | CmdImplicitNoneAll ReadOptions LogOptions
              | CmdInit FilePath
@@ -361,10 +365,12 @@ cmdImplicitNone    = fmap CmdImplicitNone readOptions <*> logOptions
 cmdImplicitNoneAll = fmap CmdImplicitNoneAll readOptions <*> logOptions
 
 
-cmdRefactCommon, cmdRefactDead, cmdRefactEquivalence :: Parser Command
+cmdRefactCommon, cmdRefactDead, cmdRefactEquivalence, cmdDerivedDataType, cmdCompileDDT :: Parser Command
 cmdRefactCommon      = fmap CmdRefactCommon refactOptions
 cmdRefactDead        = fmap CmdRefactDead refactOptions
 cmdRefactEquivalence = fmap CmdRefactEquivalence refactOptions
+cmdDerivedDataType   = fmap CmdDerivedDataType refactOptions
+cmdCompileDDT        = fmap CmdDDTCompile readOptions <*> logOptions
 
 -- | Helper for building a command alias.
 --
@@ -438,9 +444,11 @@ refactoringsParser :: Parser Command
 refactoringsParser = commandsParser "Refactoring Commands" refactoringsCommands
   where
     refactoringsCommands =
-      [ ("common",      [], cmdRefactCommon,      "common block elimination")
-      , ("equivalence", [], cmdRefactEquivalence, "equivalence elimination")
-      , ("dead",        [], cmdRefactDead,        "dead-code elimination") ]
+      [ ("common",            [],      cmdRefactCommon,      "common block elimination")
+      , ("equivalence",       [],      cmdRefactEquivalence, "equivalence elimination")
+      , ("dead",              [],      cmdRefactDead,        "dead-code elimination")
+      , ("derived-datatypes", ["ddt"], cmdDerivedDataType,   "derived datatypes")
+      , ("ddt-compile",       [],      cmdCompileDDT,        "compile derived datatypes info")]
 
 
 topLevelCommands :: Parser Command

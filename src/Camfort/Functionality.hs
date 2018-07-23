@@ -49,6 +49,8 @@ module Camfort.Functionality
   , common
   , dead
   , equivalences
+  , derivedDataType
+  , ddtCompile
   -- ** Project Management
   , camfortInitialize
   ) where
@@ -78,6 +80,7 @@ import           Camfort.Analysis.ModFile                        (MFCompiler,
                                                                   readParseSrcDir,
                                                                   simpleCompiler)
 import           Camfort.Analysis.Simple
+import           Camfort.Analysis.DerivedDataType
 import           Camfort.Input
 import qualified Camfort.Specification.Stencils                  as Stencils
 import           Camfort.Specification.Stencils.Analysis         (compileStencils)
@@ -224,6 +227,32 @@ implicitNone allPU =
   (generalizePureAnalysis . (checkImplicitNone allPU))
   (describePerFileAnalysis "check 'implicit none'")
   simpleCompiler ()
+
+derivedDataType :: FileOrDir -> CamfortEnv -> IO Int
+derivedDataType outSrc =
+  runFunctionality
+  "Analysing derived datatypes"
+  (generalizePureAnalysis . inferDerivedDataTypes)
+  (describePerFileAnalysis "infer derived data types")
+  simpleCompiler ()
+
+ddtCompile :: CamfortEnv -> IO Int
+ddtCompile env = do
+  let description = "Compiling derived datatypes for"
+  putStrLn $ description ++ " '" ++ ceInputSources env ++ "'"
+  incDir' <- maybe getCurrentDirectory pure (ceIncludeDir env)
+  isDir <- doesDirectoryExist incDir'
+  let incDir | isDir     = incDir'
+             | otherwise = takeDirectory incDir'
+  modFiles <- getModFiles incDir
+
+  -- Run the gen mod file routine directly on the input source
+  modFiles <- genModFiles modFiles compileDerivedDataTypes () (ceInputSources env) (ceExcludeFiles env)
+  -- Write the mod files out
+  forM_ modFiles $ \ modFile -> do
+     let mfname = replaceExtension (FM.moduleFilename modFile) FM.modFileSuffix
+     B.writeFile mfname (FM.encodeModFile modFile)
+  return 0
 
 {- Units feature -}
 
