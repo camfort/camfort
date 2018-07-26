@@ -28,7 +28,7 @@ import Data.Binary (Binary, decodeOrFail, encode)
 import qualified Data.ByteString.Lazy.Char8 as LB
 import Data.Data
 import Data.Generics.Uniplate.Operations
-import Data.Maybe (isJust)
+import Data.Maybe (maybeToList, isJust)
 import Data.Text (Text, unlines, intercalate, pack)
 import Data.Text.Lazy.Builder (Builder)
 import qualified Data.Text.Lazy.Builder as Builder
@@ -56,31 +56,47 @@ import Camfort.Helpers (Filename)
 -- | map of information about constants used to index arrays
 type AMap = M.Map F.Name (M.Map Int (S.Set (Maybe Integer)))
 
-data DerivedDataTypeReport = DerivedDataTypeReport AMap
+-- | map of info about vars
+type VMap = M.Map F.Name (S.Set VInfo)
+
+data VInfo = VInfo { vSrcName :: F.Name, vFileName :: String, vSrcSpan :: FU.SrcSpan }
+  deriving (Generic, Eq, Ord)
+
+instance Binary VInfo
+
+data DerivedDataTypeReport = DerivedDataTypeReport AMap VMap
   deriving (Generic)
 
 instance Binary DerivedDataTypeReport
 
 instance SG.Semigroup DerivedDataTypeReport where
-  DerivedDataTypeReport m1 <> DerivedDataTypeReport m2 = DerivedDataTypeReport $ M.unionWith (M.unionWith S.union) m1 m2
+  DerivedDataTypeReport m1 v1 <> DerivedDataTypeReport m2 v2 =
+    DerivedDataTypeReport (M.unionWith (M.unionWith S.union) m1 m2) (M.unionWith S.union v1 v2)
 
 instance Monoid DerivedDataTypeReport where
-  mempty = DerivedDataTypeReport M.empty
+  mempty = DerivedDataTypeReport M.empty M.empty
   mappend = (SG.<>)
 
 instance ExitCodeOfReport DerivedDataTypeReport where
-  exitCodeOf (DerivedDataTypeReport m) | M.null m  = 0
-                                       | otherwise = 1
+  exitCodeOf (DerivedDataTypeReport m _) | M.null m  = 0
+                                         | otherwise = 1
 
 instance Describe DerivedDataTypeReport where
-  describeBuilder (DerivedDataTypeReport amap)
+  describeBuilder (DerivedDataTypeReport amap vmap)
     | M.null amap = "no cases detected"
-    | otherwise = Builder.fromText $ unlines
-      [ pack name <> " (" <> intercalate ", " pstrs <> ")" | (name, pmap) <- M.toList $ filterCondensedCategoryOne amap
-                                                          , let pstrs = map perName $ M.toList pmap ]
+    | otherwise = Builder.fromText . unlines . concat $
+      [ ("\n"<>pack fileName<>":\n"): [ describe srcSpan <> " derive-datatype " <> pack srcName <> " (" <> intercalate ", " pstrs <> ")"
+                                      | (VInfo srcName _ srcSpan, pstrs) <- srcsPstrs ]
+      | (fileName, srcsPstrs) <- M.toList byFile]
+
     where
       perParam Nothing = "*"; perParam (Just k) = describe k
       perName (n, consts) = "{" <> intercalate ";" (map perParam (S.toList consts)) <> "}"
+      namePstrs = [ (name, pstrs) | (name, pmap) <- M.toList $ filterCondensedCategoryOne amap
+                                  , let pstrs = map perName $ M.toList pmap ]
+      srcsPstrs = [ (vFileName vinfo, [(vinfo, pstrs)]) | (name, pstrs) <- namePstrs
+                                                        , vinfo <- join (maybeToList (S.toList <$> M.lookup name vmap)) ]
+      byFile = M.fromListWith (++) srcsPstrs
 
 -- | Used to represent an array and any global (non-induction)
 -- variables used to index it
@@ -95,15 +111,25 @@ data BulkDataArrayInfo = Array
 
 -- | Produce a report on potential derived data types
 inferDerivedDataTypes :: forall a. Data a => F.ProgramFile a -> PureAnalysis String () DerivedDataTypeReport
-inferDerivedDataTypes pf = do
+inferDerivedDataTypes pf@(F.ProgramFile (F.MetaInfo { F.miFilename = srcFile }) _) = do
   mfs <- analysisModFiles
-  let analysisOutput = analysis mfs pf
+  let (analysisOutput, pf') = analysis mfs pf
   let amap = condenseCategoryOne analysisOutput
-  return $ DerivedDataTypeReport amap <> combinedDerivedDataTypeReport mfs
+  let vars = S.fromList $ M.keys amap
+  let vls1 = [ (v, S.singleton $ VInfo (FA.srcName e) srcFile ss)
+             | F.DeclArray _ ss e _ _ _ <- universeBi pf' :: [F.Declarator (FA.Analysis a)]
+             , let v = FA.varName e
+             , v `S.member` vars ]
+  let vls2 = [ (v, S.singleton $ VInfo (FA.srcName e) srcFile ss)
+             | F.DeclVariable _ ss e _ _ <- universeBi pf' :: [F.Declarator (FA.Analysis a)]
+             , let v = FA.varName e
+             , v `S.member` vars ]
+  let vmap = M.fromListWith S.union $ vls1 ++ vls2
+  return $ DerivedDataTypeReport amap vmap <> combinedDerivedDataTypeReport mfs
 
 -- analyse bulk data info
-analysis :: Data a => ModFiles -> F.ProgramFile a -> [(String, BulkDataArrayInfo)]
-analysis mfs pf = accessInfo
+analysis :: Data a => ModFiles -> F.ProgramFile a -> ([(String, BulkDataArrayInfo)], F.ProgramFile (FA.Analysis a))
+analysis mfs pf = (accessInfo, pf'')
   where
      filename       = F.pfGetFilename pf
      (pf', _, tenv) = withCombinedEnvironment mfs pf

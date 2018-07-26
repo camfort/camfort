@@ -2,6 +2,7 @@ program example
   integer, parameter :: x = 1
   integer, parameter :: y = 2
   integer, parameter :: z = 3
+
   real, dimension(3,3) :: d, e
   real :: sum
   integer :: i
