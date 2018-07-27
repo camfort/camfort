@@ -19,7 +19,8 @@
 {-# LANGUAGE DeriveGeneric #-}
 
 module Camfort.Analysis.DerivedDataType
-       ( inferDerivedDataTypes, DerivedDataTypeReport(..), compileDerivedDataTypes
+       ( infer, refactor, check, synth, compile
+       , DerivedDataTypeReport(..)
        ) where
 import Prelude hiding (unlines)
 import Control.Monad
@@ -29,6 +30,7 @@ import qualified Data.ByteString.Lazy.Char8 as LB
 import Data.Data
 import Data.Generics.Uniplate.Operations
 import Data.Maybe (maybeToList, isJust)
+import Data.List (foldl')
 import Data.Text (Text, unlines, intercalate, pack)
 import Data.Text.Lazy.Builder (Builder)
 import qualified Data.Text.Lazy.Builder as Builder
@@ -98,6 +100,54 @@ instance Describe DerivedDataTypeReport where
                                                         , vinfo <- join (maybeToList (S.toList <$> M.lookup name vmap)) ]
       byFile = M.fromListWith (++) srcsPstrs
 
+--------------------------------------------------
+
+-- | Generate report about derived datatypes in given program file
+infer :: F.ProgramFile A -> PureAnalysis String () DerivedDataTypeReport
+infer pf = do
+  mfs <- analysisModFiles
+  return . fst $ genProgramFileReport mfs pf
+
+-- | Check annotations relating to derived datatypes in given program file
+check :: F.ProgramFile A -> PureAnalysis String () DerivedDataTypeReport
+check pf = do
+  mfs <- analysisModFiles
+  -- FIXME: gather annotations and check consistency
+  return mempty
+
+-- | Generate and insert comments about derived datatypes
+synth :: [F.ProgramFile A] -> PureAnalysis String () (DerivedDataTypeReport, [Either String (F.ProgramFile A)])
+synth pfs = do
+  mfs <- analysisModFiles
+  forEachProgramFile pfs $ \ pf -> do
+    let (report, pf') = genProgramFileReport mfs pf
+    -- FIXME: generate datatype names, labels & insert comments
+    return $ (report, Right pf)
+
+-- | Refactor derived datatypes based on marked comments
+refactor :: [F.ProgramFile A] -> PureAnalysis String () (DerivedDataTypeReport, [Either String (F.ProgramFile A)])
+refactor pfs = do
+  mfs <- analysisModFiles
+  forEachProgramFile pfs $ \ pf -> do
+    let (report, pf') = genProgramFileReport mfs pf
+    -- FIXME: gather marked comments and apply
+    return $ (report, Right pf)
+
+-- | Compile a program to a 'ModFile' containing derived datatype information.
+compile :: () -> ModFiles -> F.ProgramFile A -> IO ModFile
+compile _ mfs pf = do
+  let (report, pf') = genProgramFileReport mfs pf
+  return $ genDDTModFile pf' report
+
+--------------------------------------------------
+-- Analysis helpers
+
+-- forEachProgramFile :: [F.ProgramFile A] -> (F.ProgramFile A -> PureAnalysis String () (DerivedDataTypeReport, Either String (F.ProgramFile A))) -> PureAnalysis String () (DerivedDataTypeReport, [Either String (F.ProgramFile A)])
+forEachProgramFile :: (Monad m, Monoid r) => [a] -> (a -> m (r, b)) -> m (r, [b])
+forEachProgramFile pfs f = do
+  results <- mapM f pfs
+  return (foldl' (<>) mempty (map fst results), map snd results)
+
 -- | Used to represent an array and any global (non-induction)
 -- variables used to index it
 data BulkDataArrayInfo = Array
@@ -109,23 +159,22 @@ data BulkDataArrayInfo = Array
   }
   deriving (Show, Eq)
 
--- | Produce a report on potential derived data types
-inferDerivedDataTypes :: forall a. Data a => F.ProgramFile a -> PureAnalysis String () DerivedDataTypeReport
-inferDerivedDataTypes pf@(F.ProgramFile (F.MetaInfo { F.miFilename = srcFile }) _) = do
-  mfs <- analysisModFiles
-  let (analysisOutput, pf') = analysis mfs pf
-  let amap = condenseCategoryOne analysisOutput
-  let vars = S.fromList $ M.keys amap
-  let vls1 = [ (v, S.singleton $ VInfo (FA.srcName e) srcFile ss)
-             | F.DeclArray _ ss e _ _ _ <- universeBi pf' :: [F.Declarator (FA.Analysis a)]
-             , let v = FA.varName e
-             , v `S.member` vars ]
-  let vls2 = [ (v, S.singleton $ VInfo (FA.srcName e) srcFile ss)
-             | F.DeclVariable _ ss e _ _ <- universeBi pf' :: [F.Declarator (FA.Analysis a)]
-             , let v = FA.varName e
-             , v `S.member` vars ]
-  let vmap = M.fromListWith S.union $ vls1 ++ vls2
-  return $ DerivedDataTypeReport amap vmap <> combinedDerivedDataTypeReport mfs
+genProgramFileReport :: ModFiles -> F.ProgramFile A -> (DerivedDataTypeReport, F.ProgramFile (FA.Analysis A))
+genProgramFileReport mfs (pf@(F.ProgramFile F.MetaInfo{ F.miFilename = srcFile } _)) = (report, pf')
+  where
+    (analysisOutput, pf') = analysis mfs pf
+    amap = condenseCategoryOne analysisOutput
+    vars = S.fromList $ M.keys amap
+    vls1 = [ (v, S.singleton $ VInfo (FA.srcName e) srcFile ss)
+           | F.DeclArray _ ss e _ _ _ <- universeBi pf' :: [F.Declarator (FA.Analysis A)]
+           , let v = FA.varName e
+           , v `S.member` vars ]
+    vls2 = [ (v, S.singleton $ VInfo (FA.srcName e) srcFile ss)
+           | F.DeclVariable _ ss e _ _ <- universeBi pf' :: [F.Declarator (FA.Analysis A)]
+           , let v = FA.varName e
+           , v `S.member` vars ]
+    vmap = M.fromListWith S.union $ vls1 ++ vls2
+    report = DerivedDataTypeReport amap vmap <> combinedDerivedDataTypeReport mfs
 
 -- analyse bulk data info
 analysis :: Data a => ModFiles -> F.ProgramFile a -> ([(String, BulkDataArrayInfo)], F.ProgramFile (FA.Analysis a))
@@ -155,20 +204,7 @@ filterCondensedCategoryOne :: AMap -> AMap
 filterCondensedCategoryOne = M.filter (not . M.null . M.filter (all isJust . S.toList))
 
 --------------------------------------------------
-
-ddtCompiledDataLabel :: String
-ddtCompiledDataLabel = "derived-datatypes-compiled-data"
-
--- | Compile a program to a 'ModFile' containing derived datatype information.
-compileDerivedDataTypes :: () -> ModFiles -> F.ProgramFile A -> IO ModFile
-compileDerivedDataTypes _ mfs pf = do
-  let (pf', _, _) = withCombinedEnvironment mfs pf
-  let analysis = generalizePureAnalysis . inferDerivedDataTypes $ pf
-  out <- runAnalysisT (F.pfGetFilename pf) (logOutputNone True) LogError mfs analysis
-
-  case out ^? arResult . _ARSuccess of
-    Just report -> return $ genDDTModFile pf' report
-    Nothing -> fail "compileDerivedDataTypes: analysis failed"
+-- Compilation helpers
 
 -- | Generate a new ModFile containing derived datatype information.
 genDDTModFile :: F.ProgramFile (FA.Analysis A) -> DerivedDataTypeReport -> ModFile
@@ -185,3 +221,6 @@ mfDerivedDataTypeReport mf = case lookupModFileData ddtCompiledDataLabel mf of
 
 combinedDerivedDataTypeReport :: ModFiles -> DerivedDataTypeReport
 combinedDerivedDataTypeReport = foldMap mfDerivedDataTypeReport
+
+ddtCompiledDataLabel :: String
+ddtCompiledDataLabel = "derived-datatypes-compiled-data"

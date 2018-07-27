@@ -49,7 +49,10 @@ module Camfort.Functionality
   , common
   , dead
   , equivalences
-  , derivedDataType
+  , ddtRefactor
+  , ddtInfer
+  , ddtCheck
+  , ddtSynth
   , ddtCompile
   -- ** Project Management
   , camfortInitialize
@@ -80,7 +83,7 @@ import           Camfort.Analysis.ModFile                        (MFCompiler,
                                                                   readParseSrcDir,
                                                                   simpleCompiler)
 import           Camfort.Analysis.Simple
-import           Camfort.Analysis.DerivedDataType
+import qualified Camfort.Analysis.DerivedDataType                as DDT
 import           Camfort.Input
 import qualified Camfort.Specification.Stencils                  as Stencils
 import           Camfort.Specification.Stencils.Analysis         (compileStencils)
@@ -228,12 +231,36 @@ implicitNone allPU =
   (describePerFileAnalysis "check 'implicit none'")
   simpleCompiler ()
 
-derivedDataType :: FileOrDir -> CamfortEnv -> IO Int
-derivedDataType outSrc =
+ddtRefactor :: FileOrDir -> CamfortEnv -> IO Int
+ddtRefactor =
+  runWithOutput
+  "Refactoring derived datatypes"
+  (generalizePureAnalysis . DDT.refactor)
+  (doRefactor "infer derived data types")
+  simpleCompiler ()
+
+ddtSynth :: FileOrDir -> CamfortEnv -> IO Int
+ddtSynth =
+  runWithOutput
+  "Synthesising derived datatypes"
+  (generalizePureAnalysis . DDT.synth)
+  (doRefactor "synth derived data types")
+  simpleCompiler ()
+
+ddtCheck :: CamfortEnv -> IO Int
+ddtCheck =
   runFunctionality
-  "Analysing derived datatypes"
-  (generalizePureAnalysis . inferDerivedDataTypes)
-  (describePerFileAnalysis "infer derived data types")
+  "Checking derived datatype annotations"
+  (generalizePureAnalysis . DDT.check)
+  (describePerFileAnalysis "check derived datatypes")
+  simpleCompiler ()
+
+ddtInfer :: CamfortEnv -> IO Int
+ddtInfer =
+  runFunctionality
+  "Inferring derived datatypes"
+  (generalizePureAnalysis . DDT.infer)
+  (describePerFileAnalysis "infer derived datatypes")
   simpleCompiler ()
 
 ddtCompile :: CamfortEnv -> IO Int
@@ -247,7 +274,7 @@ ddtCompile env = do
   modFiles <- getModFiles incDir
 
   -- Run the gen mod file routine directly on the input source
-  modFiles <- genModFiles modFiles compileDerivedDataTypes () (ceInputSources env) (ceExcludeFiles env)
+  modFiles <- genModFiles modFiles DDT.compile () (ceInputSources env) (ceExcludeFiles env)
   -- Write the mod files out
   forM_ modFiles $ \ modFile -> do
      let mfname = replaceExtension (FM.moduleFilename modFile) FM.modFileSuffix
@@ -429,4 +456,3 @@ invariantsCheck pro =
 camfortInitialize :: FilePath -> IO ()
 camfortInitialize projectDir =
   createDirectoryIfMissing False (projectDir </> ".camfort")
-

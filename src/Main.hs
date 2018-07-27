@@ -105,8 +105,11 @@ main = do
     runCommand (CmdRefactCommon rfo)      = runRFO rfo common
     runCommand (CmdRefactDead rfo)        = runRFO rfo dead
     runCommand (CmdRefactEquivalence rfo) = runRFO rfo equivalences
-    runCommand (CmdDerivedDataType rfo)   = runRFO rfo derivedDataType
-    runCommand (CmdDDTCompile ro lo)      = runRO ro lo ddtCompile
+    runCommand (CmdInferDDT ro lo)        = runRO ro lo ddtInfer
+    runCommand (CmdSynthDDT ro lo wo)     = runRO ro lo (ddtSynth (getOutputFile (inputSource ro) wo))
+    runCommand (CmdCheckDDT ro lo)        = runRO ro lo ddtCheck
+    runCommand (CmdRefactDDT rfo)         = runRFO rfo ddtRefactor
+    runCommand (CmdCompileDDT ro lo)      = runRO ro lo ddtCompile
     runCommand (CmdImplicitNone ro lo)    = runRO ro lo (implicitNone False)
     runCommand (CmdImplicitNoneAll ro lo) = runRO ro lo (implicitNone True)
     runCommand (CmdInit dir)              = camfortInitialize dir >> return 0
@@ -128,8 +131,11 @@ data Command = CmdCount ReadOptions LogOptions
              | CmdRefactCommon RefactOptions
              | CmdRefactDead RefactOptions
              | CmdRefactEquivalence RefactOptions
-             | CmdDerivedDataType RefactOptions
-             | CmdDDTCompile ReadOptions LogOptions
+             | CmdInferDDT ReadOptions LogOptions
+             | CmdSynthDDT ReadOptions LogOptions WriteOptions
+             | CmdCheckDDT ReadOptions LogOptions
+             | CmdRefactDDT RefactOptions
+             | CmdCompileDDT ReadOptions LogOptions
              | CmdImplicitNone ReadOptions LogOptions
              | CmdImplicitNoneAll ReadOptions LogOptions
              | CmdInit FilePath
@@ -365,12 +371,17 @@ cmdImplicitNone    = fmap CmdImplicitNone readOptions <*> logOptions
 cmdImplicitNoneAll = fmap CmdImplicitNoneAll readOptions <*> logOptions
 
 
-cmdRefactCommon, cmdRefactDead, cmdRefactEquivalence, cmdDerivedDataType, cmdCompileDDT :: Parser Command
+cmdRefactCommon, cmdRefactDead, cmdRefactEquivalence :: Parser Command
 cmdRefactCommon      = fmap CmdRefactCommon refactOptions
 cmdRefactDead        = fmap CmdRefactDead refactOptions
 cmdRefactEquivalence = fmap CmdRefactEquivalence refactOptions
-cmdDerivedDataType   = fmap CmdDerivedDataType refactOptions
-cmdCompileDDT        = fmap CmdDDTCompile readOptions <*> logOptions
+
+cmdInferDDT, cmdSynthDDT, cmdCheckDDT, cmdRefactDDT, cmdCompileDDT :: Parser Command
+cmdInferDDT = fmap CmdInferDDT readOptions <*> logOptions
+cmdSynthDDT = fmap CmdSynthDDT readOptions <*> logOptions <*> writeOptions
+cmdCheckDDT = fmap CmdCheckDDT readOptions <*> logOptions
+cmdRefactDDT = fmap CmdRefactDDT refactOptions
+cmdCompileDDT = fmap CmdCompileDDT readOptions <*> logOptions
 
 -- | Helper for building a command alias.
 --
@@ -446,10 +457,17 @@ refactoringsParser = commandsParser "Refactoring Commands" refactoringsCommands
     refactoringsCommands =
       [ ("common",            [],      cmdRefactCommon,      "common block elimination")
       , ("equivalence",       [],      cmdRefactEquivalence, "equivalence elimination")
-      , ("dead",              [],      cmdRefactDead,        "dead-code elimination")
-      , ("derived-datatypes", ["ddt"], cmdDerivedDataType,   "derived datatypes")
-      , ("ddt-compile",       [],      cmdCompileDDT,        "compile derived datatypes info")]
+      , ("dead",              [],      cmdRefactDead,        "dead-code elimination") ]
 
+derivedDatatypeParser :: Parser Command
+derivedDatatypeParser = commandsParser "Derived Datatype Commands" derivedDatatypeCommands
+  where
+    derivedDatatypeCommands =
+      [ ("ddt-infer",    ["infer-ddt"],    cmdInferDDT,   "infer derived datatypes")
+      , ("ddt-synth",    ["synth-ddt"],    cmdSynthDDT,   "synthesise comments for derived datatypes")
+      , ("ddt-check",    ["check-ddt"],    cmdCheckDDT,   "check comments for derived datatypes")
+      , ("ddt-refactor", ["refactor-ddt"], cmdRefactDDT,  "refactor marked derived datatypes from comments")
+      , ("ddt-compile",  ["compile-ddt"],  cmdCompileDDT, "compile derived datatypes info")]
 
 topLevelCommands :: Parser Command
 topLevelCommands = versionOption
@@ -475,6 +493,7 @@ commandParser currDir =
   helper <*> (    projectParser currDir
               <|> analysesParser
               <|> refactoringsParser
+              <|> derivedDatatypeParser
               <|> topLevelCommands)
 
 
