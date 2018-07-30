@@ -239,11 +239,11 @@ ddtRefactor =
   (doRefactor "infer derived data types")
   simpleCompiler ()
 
-ddtSynth :: FileOrDir -> CamfortEnv -> IO Int
-ddtSynth =
+ddtSynth :: AnnotationType -> FileOrDir -> CamfortEnv -> IO Int
+ddtSynth annType =
   runWithOutput
   "Synthesising derived datatypes"
-  (generalizePureAnalysis . DDT.synth)
+  (generalizePureAnalysis . DDT.synth (markerChar annType))
   (doRefactor "synth derived data types")
   simpleCompiler ()
 

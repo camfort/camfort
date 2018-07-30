@@ -29,8 +29,9 @@ import Data.Binary (Binary, decodeOrFail, encode)
 import qualified Data.ByteString.Lazy.Char8 as LB
 import Data.Data
 import Data.Generics.Uniplate.Operations
-import Data.Maybe (maybeToList, isJust)
+import Data.Maybe (fromJust, maybeToList, isJust)
 import Data.List (foldl')
+import qualified Data.List as List
 import Data.Text (Text, unlines, intercalate, pack)
 import Data.Text.Lazy.Builder (Builder)
 import qualified Data.Text.Lazy.Builder as Builder
@@ -50,7 +51,7 @@ import Language.Fortran.Util.ModFile
 
 import Camfort.Analysis
 import Camfort.Analysis.ModFile
-import Camfort.Analysis.Annotations  (A)
+import Camfort.Analysis.Annotations (buildCommentText, A, Annotation(..))
 import Camfort.Helpers (Filename)
 
 --------------------------------------------------
@@ -116,13 +117,14 @@ check pf = do
   return mempty
 
 -- | Generate and insert comments about derived datatypes
-synth :: [F.ProgramFile A] -> PureAnalysis String () (DerivedDataTypeReport, [Either String (F.ProgramFile A)])
-synth pfs = do
+synth :: Char -> [F.ProgramFile A] -> PureAnalysis String () (DerivedDataTypeReport, [Either String (F.ProgramFile A)])
+synth marker pfs = do
   mfs <- analysisModFiles
   forEachProgramFile pfs $ \ pf -> do
-    let (report, pf') = genProgramFileReport mfs pf
+    let (report, pf'@(F.ProgramFile mi _)) = genProgramFileReport mfs pf
+    let pf'' = descendBi (synthBlocks (mi, marker) report) pf'
     -- FIXME: generate datatype names, labels & insert comments
-    return $ (report, Right pf)
+    return $ (report, Right (fmap FA.prevAnnotation pf''))
 
 -- | Refactor derived datatypes based on marked comments
 refactor :: [F.ProgramFile A] -> PureAnalysis String () (DerivedDataTypeReport, [Either String (F.ProgramFile A)])
@@ -202,6 +204,38 @@ condenseCategoryOne c1 = amap
 -- filter only the interesting ones
 filterCondensedCategoryOne :: AMap -> AMap
 filterCondensedCategoryOne = M.filter (not . M.null . M.filter (all isJust . S.toList))
+
+--------------------------------------------------
+-- Synthesis helpers
+
+synthBlocks :: (F.MetaInfo, Char) -> DerivedDataTypeReport -> [F.Block (FA.Analysis A)] -> [F.Block (FA.Analysis A)]
+synthBlocks marker report = concatMap (synthBlock marker report)
+
+synthBlock :: (F.MetaInfo, Char) -> DerivedDataTypeReport -> F.Block (FA.Analysis A) -> [F.Block (FA.Analysis A)]
+synthBlock (mi, marker) (DerivedDataTypeReport amap _) b = case b of
+  F.BlStatement a ss _ F.StDeclaration{}
+    | vars <- ofInterest b -> genComment vars ++ [b]
+    where
+      ofInterest b = filter (flip M.member amap . fst) $
+        [ (FA.varName e, FA.srcName e) | F.DeclVariable _ _ e _ _ <- universeBi b :: [F.Declarator (FA.Analysis A)] ] ++
+        [ (FA.varName e, FA.srcName e) | F.DeclArray _ _ e _ _ _ <- universeBi b :: [F.Declarator (FA.Analysis A)] ]
+
+      genComment = map $ \ var ->
+        F.BlComment newA newSS . F.Comment $ genCommentText var
+
+      newA = a { FA.prevAnnotation = (FA.prevAnnotation a) { refactored = Just lp } }
+      FU.SrcSpan lp _ = ss
+      newSS = FU.SrcSpan (lp {FU.posColumn = 0}) (lp {FU.posColumn = 0})
+
+      space = FU.posColumn lp - 1
+      genCommentText (v, s)
+        | Just pmap <- M.lookup v amap
+        , ty <- v ++ "_type"
+        , (dim, set):_ <- M.toList $ M.filter (all isJust . S.toList) pmap
+        , nums <- map fromJust $ S.toList set
+        , labs <- List.intercalate ", " [ str ++ "=>" ++ "label" ++ str | num <- nums, let str = show num ] =
+            buildCommentText mi space $ marker:" ddt " ++ ty ++ "(" ++ labs ++ ") :: " ++ s ++ "(dim=" ++ show dim ++ ")"
+  _ -> [b]
 
 --------------------------------------------------
 -- Compilation helpers

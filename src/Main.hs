@@ -64,6 +64,13 @@ main = do
           lo     = ssoLogOptions sso
           inFile = inputSource ro
       in runRO ro lo (f (annotationType ao) (getOutputFile inFile wo))
+    runDSO dso f =
+      let ao     = dsoAnnotationOptions dso
+          wo     = dsoWriteOptions dso
+          ro     = dsoReadOptions dso
+          lo     = dsoLogOptions dso
+          inFile = inputSource ro
+      in runRO ro lo (f (annotationType ao) (getOutputFile inFile wo))
     runUO uo f =
       let ro = uoReadOptions uo
           lo = uoLogOptions uo
@@ -106,7 +113,7 @@ main = do
     runCommand (CmdRefactDead rfo)        = runRFO rfo dead
     runCommand (CmdRefactEquivalence rfo) = runRFO rfo equivalences
     runCommand (CmdInferDDT ro lo)        = runRO ro lo ddtInfer
-    runCommand (CmdSynthDDT ro lo wo)     = runRO ro lo (ddtSynth (getOutputFile (inputSource ro) wo))
+    runCommand (CmdSynthDDT dso)          = runDSO dso ddtSynth
     runCommand (CmdCheckDDT ro lo)        = runRO ro lo ddtCheck
     runCommand (CmdRefactDDT rfo)         = runRFO rfo ddtRefactor
     runCommand (CmdCompileDDT ro lo)      = runRO ro lo ddtCompile
@@ -132,7 +139,7 @@ data Command = CmdCount ReadOptions LogOptions
              | CmdRefactDead RefactOptions
              | CmdRefactEquivalence RefactOptions
              | CmdInferDDT ReadOptions LogOptions
-             | CmdSynthDDT ReadOptions LogOptions WriteOptions
+             | CmdSynthDDT DDTSynthOptions
              | CmdCheckDDT ReadOptions LogOptions
              | CmdRefactDDT RefactOptions
              | CmdCompileDDT ReadOptions LogOptions
@@ -201,6 +208,12 @@ data StencilsSynthOptions = StencilsSynthOptions
   , ssoAnnotationOptions  :: AnnotationOptions
   }
 
+data DDTSynthOptions = DDTSynthOptions
+  { dsoReadOptions        :: ReadOptions
+  , dsoLogOptions         :: LogOptions
+  , dsoWriteOptions       :: WriteOptions
+  , dsoAnnotationOptions  :: AnnotationOptions
+  }
 
 data InvariantsOptions = InvariantsOptions
   { ioReadOptions :: ReadOptions
@@ -345,6 +358,9 @@ refactOptions :: Parser RefactOptions
 refactOptions = fmap RefactOptions
   readOptions <*> logOptions <*> writeOptions
 
+ddtSynthOptions :: Parser DDTSynthOptions
+ddtSynthOptions = fmap DDTSynthOptions
+  readOptions <*> logOptions <*> writeOptions <*> annotationOptions
 
 cmdCount, cmdAST :: Parser Command
 cmdCount        = fmap CmdCount readOptions <*> logOptions
@@ -378,7 +394,7 @@ cmdRefactEquivalence = fmap CmdRefactEquivalence refactOptions
 
 cmdInferDDT, cmdSynthDDT, cmdCheckDDT, cmdRefactDDT, cmdCompileDDT :: Parser Command
 cmdInferDDT = fmap CmdInferDDT readOptions <*> logOptions
-cmdSynthDDT = fmap CmdSynthDDT readOptions <*> logOptions <*> writeOptions
+cmdSynthDDT = fmap CmdSynthDDT ddtSynthOptions
 cmdCheckDDT = fmap CmdCheckDDT readOptions <*> logOptions
 cmdRefactDDT = fmap CmdRefactDDT refactOptions
 cmdCompileDDT = fmap CmdCompileDDT readOptions <*> logOptions
