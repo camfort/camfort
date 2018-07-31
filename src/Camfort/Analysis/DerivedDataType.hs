@@ -30,7 +30,7 @@ import qualified Data.ByteString.Lazy.Char8 as LB
 import Data.Data
 import Data.Generics.Uniplate.Operations
 import Data.Maybe (fromJust, maybeToList, isJust)
-import Data.List (foldl')
+import Data.List (sort, foldl')
 import qualified Data.List as List
 import Data.Text (Text, unlines, intercalate, pack)
 import Data.Text.Lazy.Builder (Builder)
@@ -63,7 +63,10 @@ type AMap = M.Map F.Name (M.Map Int (S.Set (Maybe Integer)))
 type VMap = M.Map F.Name (S.Set VInfo)
 
 data VInfo = VInfo { vSrcName :: F.Name, vFileName :: String, vSrcSpan :: FU.SrcSpan }
-  deriving (Generic, Eq, Ord)
+  deriving (Generic, Eq)
+
+instance Ord VInfo where
+  VInfo s1 f1 ss1 `compare` VInfo s2 f2 ss2 = (f1, ss1, s1) `compare` (f2, ss2, s2)
 
 instance Binary VInfo
 
@@ -89,7 +92,7 @@ instance Describe DerivedDataTypeReport where
     | M.null amap = "no cases detected"
     | otherwise = Builder.fromText . unlines . concat $
       [ ("\n"<>pack fileName<>":\n"): [ describe srcSpan <> pack (genCommentText amap (v, srcName))
-                                      | (v, VInfo srcName _ srcSpan, pstrs) <- srcsPstrs ]
+                                      | (VInfo srcName _ srcSpan, v, pstrs) <- sort srcsPstrs ]
       | (fileName, srcsPstrs) <- M.toList byFile]
 
     where
@@ -97,7 +100,7 @@ instance Describe DerivedDataTypeReport where
       perName (n, consts) = "{" <> intercalate ";" (map perParam (S.toList consts)) <> "}"
       namePstrs = [ (name, pstrs) | (name, pmap) <- M.toList $ filterCondensedCategoryOne amap
                                   , let pstrs = map perName $ M.toList pmap ]
-      srcsPstrs = [ (vFileName vinfo, [(name, vinfo, pstrs)])
+      srcsPstrs = [ (vFileName vinfo, [(vinfo, name, pstrs)])
                   | (name, pstrs) <- namePstrs
                   , vinfo <- join (maybeToList (S.toList <$> M.lookup name vmap)) ]
       byFile = M.fromListWith (++) srcsPstrs
