@@ -88,8 +88,8 @@ instance Describe DerivedDataTypeReport where
   describeBuilder (DerivedDataTypeReport amap vmap)
     | M.null amap = "no cases detected"
     | otherwise = Builder.fromText . unlines . concat $
-      [ ("\n"<>pack fileName<>":\n"): [ describe srcSpan <> " derive-datatype " <> pack srcName <> " (" <> intercalate ", " pstrs <> ")"
-                                      | (VInfo srcName _ srcSpan, pstrs) <- srcsPstrs ]
+      [ ("\n"<>pack fileName<>":\n"): [ describe srcSpan <> pack (genCommentText amap (v, srcName))
+                                      | (v, VInfo srcName _ srcSpan, pstrs) <- srcsPstrs ]
       | (fileName, srcsPstrs) <- M.toList byFile]
 
     where
@@ -97,8 +97,9 @@ instance Describe DerivedDataTypeReport where
       perName (n, consts) = "{" <> intercalate ";" (map perParam (S.toList consts)) <> "}"
       namePstrs = [ (name, pstrs) | (name, pmap) <- M.toList $ filterCondensedCategoryOne amap
                                   , let pstrs = map perName $ M.toList pmap ]
-      srcsPstrs = [ (vFileName vinfo, [(vinfo, pstrs)]) | (name, pstrs) <- namePstrs
-                                                        , vinfo <- join (maybeToList (S.toList <$> M.lookup name vmap)) ]
+      srcsPstrs = [ (vFileName vinfo, [(name, vinfo, pstrs)])
+                  | (name, pstrs) <- namePstrs
+                  , vinfo <- join (maybeToList (S.toList <$> M.lookup name vmap)) ]
       byFile = M.fromListWith (++) srcsPstrs
 
 --------------------------------------------------
@@ -221,21 +222,22 @@ synthBlock (mi, marker) (DerivedDataTypeReport amap _) b = case b of
         [ (FA.varName e, FA.srcName e) | F.DeclArray _ _ e _ _ _ <- universeBi b :: [F.Declarator (FA.Analysis A)] ]
 
       genComment = map $ \ var ->
-        F.BlComment newA newSS . F.Comment $ genCommentText var
+        F.BlComment newA newSS . F.Comment . buildCommentText mi space $ marker:genCommentText amap var
 
       newA = a { FA.prevAnnotation = (FA.prevAnnotation a) { refactored = Just lp } }
-      FU.SrcSpan lp _ = ss
       newSS = FU.SrcSpan (lp {FU.posColumn = 0}) (lp {FU.posColumn = 0})
-
+      FU.SrcSpan lp _ = ss
       space = FU.posColumn lp - 1
-      genCommentText (v, s)
-        | Just pmap <- M.lookup v amap
-        , ty <- v ++ "_type"
-        , (dim, set):_ <- M.toList $ M.filter (all isJust . S.toList) pmap
-        , nums <- map fromJust $ S.toList set
-        , labs <- List.intercalate ", " [ str ++ "=>" ++ "label" ++ str | num <- nums, let str = show num ] =
-            buildCommentText mi space $ marker:" ddt " ++ ty ++ "(" ++ labs ++ ") :: " ++ s ++ "(dim=" ++ show dim ++ ")"
   _ -> [b]
+
+-- Generate the text that goes into the specification.
+genCommentText amap (v, s)
+  | Just pmap <- M.lookup v amap
+  , ty <- v ++ "_type"
+  , (dim, set):_ <- M.toList $ M.filter (all isJust . S.toList) pmap
+  , nums <- map fromJust $ S.toList set
+  , labs <- List.intercalate ", " [ str ++ "=>" ++ "label" ++ str | num <- nums, let str = show num ] =
+      " ddt " ++ ty ++ "(" ++ labs ++ ") :: " ++ s ++ "(dim=" ++ show dim ++ ")"
 
 --------------------------------------------------
 -- Compilation helpers
