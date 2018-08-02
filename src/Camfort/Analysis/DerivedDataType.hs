@@ -25,6 +25,7 @@ module Camfort.Analysis.DerivedDataType
 import Prelude hiding (unlines)
 import Control.Monad
 import GHC.Generics (Generic)
+import Control.Arrow ((&&&))
 import Data.Binary (Binary, decodeOrFail, encode)
 import qualified Data.ByteString.Lazy.Char8 as LB
 import Data.Data
@@ -205,9 +206,18 @@ condenseCategoryOne c1 = amap
     amap = M.fromListWith (M.unionWith S.union) [ (arrayName bdai, doIndices (indexInfo bdai)) | bdai <- map snd c1 ]
     doIndices is = M.fromList $ map (fmap S.singleton) is
 
--- filter only the interesting ones
+-- filter only the interesting ones: at least one of the parameters
+-- was populated only by a range of constants where each constant is
+-- no more than 3 away from the adjacent ones.
 filterCondensedCategoryOne :: AMap -> AMap
-filterCondensedCategoryOne = M.filter (not . M.null . M.filter (all isJust . S.toList))
+filterCondensedCategoryOne = M.filter (not . M.null . M.filter valid) -- accept if at least one valid parameter
+  where
+    diffs = uncurry (zipWith subtract) . (id &&& drop 1) . sort -- compute differences between consecutive numbers
+    -- valid set if...
+    valid = and . sequence [ not . null                       -- (1) non-empty list
+                           , all isJust                       -- (2) of constants only, no wildcards
+                           , all (< 3) . diffs . map fromJust -- (3) no more than 3 away from adjacent constants
+                           ] . S.toList
 
 --------------------------------------------------
 -- Synthesis helpers
