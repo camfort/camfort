@@ -14,9 +14,14 @@
    limitations under the License.
 -}
 
+{-# LANGUAGE MultiParamTypeClasses #-}
+{-# LANGUAGE FlexibleInstances #-}
+{-# LANGUAGE TypeSynonymInstances #-}
 {-# LANGUAGE ScopedTypeVariables #-}
 {-# LANGUAGE OverloadedStrings #-}
 {-# LANGUAGE DeriveGeneric #-}
+{-# LANGUAGE DeriveDataTypeable #-}
+{-# LANGUAGE TupleSections #-}
 
 module Camfort.Analysis.DerivedDataType
        ( infer, refactor, check, synth, compile
@@ -24,19 +29,22 @@ module Camfort.Analysis.DerivedDataType
        ) where
 import Prelude hiding (unlines)
 import Control.Monad
+import Control.Monad.Writer.Strict
 import GHC.Generics (Generic)
-import Control.Arrow ((&&&))
+import Control.Arrow (first, second, (&&&))
 import Data.Binary (Binary, decodeOrFail, encode)
 import qualified Data.ByteString.Lazy.Char8 as LB
 import Data.Data
 import Data.Generics.Uniplate.Operations
 import Data.Maybe (fromJust, maybeToList, isJust)
+import qualified Data.Strict.Either as SE
 import Data.List (sort, foldl')
 import qualified Data.List as List
 import Data.Text (Text, unlines, intercalate, pack)
 import Data.Text.Lazy.Builder (Builder)
 import qualified Data.Text.Lazy.Builder as Builder
 import qualified Data.Map.Strict as M
+import qualified Data.IntMap.Strict as IM
 import qualified Data.Set as S
 import Data.Monoid ((<>))
 import Control.Lens
@@ -52,10 +60,13 @@ import Language.Fortran.Util.ModFile
 
 import Camfort.Analysis
 import Camfort.Analysis.ModFile
-import Camfort.Analysis.Annotations (buildCommentText, A, Annotation(..))
+import Camfort.Analysis.Annotations (onPrev, buildCommentText, A, Annotation(..))
+import Camfort.Analysis.CommentAnnotator (annotateComments, ASTEmbeddable(..), Linkable(..))
+import Camfort.Analysis.DerivedDataType.Parser (ddtParser, DDTStatement(..))
 import Camfort.Helpers (Filename)
 
 --------------------------------------------------
+-- ddt-infer reporting infra
 
 -- | map of information about constants used to index arrays
 type AMap = M.Map F.Name (M.Map Int (S.Set (Maybe Integer)))
@@ -107,6 +118,96 @@ instance Describe DerivedDataTypeReport where
       byFile = M.fromListWith (++) srcsPstrs
 
 --------------------------------------------------
+-- ddt-check reporting infrastructure
+
+-- 'essence' of a specification
+-- type name, map of int => label, (source name, span)
+data Essence = Essence String (IM.IntMap String) (F.Name, FU.SrcSpan)
+  deriving (Show)
+
+instance Eq Essence where
+  Essence ty1 l1 _ == Essence ty2 l2 _ = (ty1, l1) == (ty2, l2)
+
+instance Ord Essence where
+  Essence ty1 l1 _ `compare` Essence ty2 l2 _ = (ty1, l1) `compare` (ty2, l2)
+
+type SrcNameSpan = (F.Name, FU.SrcSpan)
+
+-- given type name, (source name, span), dupped labels
+data LabelDupError = LabelDupError String SrcNameSpan [Int]
+  deriving (Show, Eq, Ord)
+
+type ConflictErrors = M.Map F.Name (S.Set Essence) -- variable => essence set
+
+type BadLabelErrors = M.Map F.Name (S.Set (String, SrcNameSpan))  -- variable => (label, (source name, span)) set
+
+data DerivedDataTypeCheckReport
+  = DerivedDataTypeCheckReport (S.Set LabelDupError) ConflictErrors BadLabelErrors
+    deriving (Eq)
+
+instance SG.Semigroup DerivedDataTypeCheckReport where
+  DerivedDataTypeCheckReport a1 b1 c1 <> DerivedDataTypeCheckReport a2 b2 c2 =
+    DerivedDataTypeCheckReport (S.union a1 a2) (M.unionWith S.union b1 b2) (M.unionWith S.union c1 c2)
+
+instance Monoid DerivedDataTypeCheckReport where
+  mempty = DerivedDataTypeCheckReport S.empty M.empty M.empty
+  mappend = (SG.<>)
+
+instance ExitCodeOfReport DerivedDataTypeCheckReport where
+  exitCodeOf r | r == mempty = 0
+               | otherwise   = 1
+
+instance Describe DerivedDataTypeCheckReport where
+  describeBuilder (DerivedDataTypeCheckReport lde ce ble) = Builder.fromText . unlines . concat $
+    [ if S.null lde then [] else ["Duplicated indices:"]
+    , [ describe ss <> " " <> pack ty <> " has duplicated indice(s) [" <> intercalate ", " (map describe ints) <>
+        "] for variable: " <> pack srcName | LabelDupError ty (srcName, ss) ints <- S.toList lde ]
+    , if M.null ce then [] else ["Conflicts:"]
+    , [ describe ss0 <> " " <> pack ty0 <> "(" <> describeLabels l0 <> ") :: " <> pack src0 <>
+        "\nconflicts with\n" <> unlines [ describe ss <> " " <> pack ty <> "(" <> describeLabels labs <> ") :: " <> pack src
+                                        | Essence ty labs (src, ss) <- essences ]
+      | (_, essenceSet) <- M.toList ce
+      , not (S.null essenceSet)
+      , let Essence ty0 l0 (src0, ss0):essences = S.toList essenceSet ]
+    , if M.null ble then [] else ["Bad Labels:"]
+    , [ describe ss <> " label '" <> pack lab <> "', associated with variable " <> pack src
+      | (_, badSet) <- M.toList ble
+      , (lab, (src, ss)) <- S.toList badSet ]
+    ]
+
+    where
+      describeLabels labs = intercalate ", " [describe i <> "=>" <> pack l | (i,l) <- IM.toList labs]
+
+--------------------------------------------------
+-- Linking DDT specifications with associated AST-blocks.
+
+type DA = FA.Analysis DDTAnnotation
+data DDTAnnotation = DDTAnnotation {
+    prevAnnotation :: A,
+    ddtSpec       :: Maybe DDTStatement,
+    ddtBlock      :: Maybe (F.Block DA), -- ^ linked variable declaration
+    ddtPU         :: Maybe (F.ProgramUnit DA) -- ^ linked program unit
+  } deriving (Data, Typeable, Show)
+ddtAnnotation0 a = DDTAnnotation a Nothing Nothing Nothing
+
+-- Instances for embedding parsed specifications into the AST
+instance ASTEmbeddable DA DDTStatement where
+  annotateWithAST ann ast =
+    onPrev (\ann' -> ann' { ddtSpec = Just ast }) ann
+
+-- Link annotation comments to declaration statements
+instance Linkable DA where
+  link ann (b@(F.BlStatement _ _ _ F.StDeclaration {})) =
+      onPrev (\ann' -> ann' { ddtBlock = Just b }) ann
+  link ann _ = ann
+  linkPU ann pu@F.PUFunction{} =
+      onPrev (\ann' -> ann' { ddtPU = Just pu }) ann
+  linkPU ann pu@F.PUSubroutine{} =
+      onPrev (\ann' -> ann' { ddtPU = Just pu }) ann
+  linkPU ann _ = ann
+
+--------------------------------------------------
+-- interfaces
 
 -- | Generate report about derived datatypes in given program file
 infer :: F.ProgramFile A -> PureAnalysis String () DerivedDataTypeReport
@@ -115,11 +216,31 @@ infer pf = do
   return . fst $ genProgramFileReport mfs pf
 
 -- | Check annotations relating to derived datatypes in given program file
-check :: F.ProgramFile A -> PureAnalysis String () DerivedDataTypeReport
+check :: F.ProgramFile A -> PureAnalysis String () DerivedDataTypeCheckReport
 check pf = do
   mfs <- analysisModFiles
-  -- FIXME: gather annotations and check consistency
-  return mempty
+  let (report, pf') = genProgramFileReport mfs (fmap ddtAnnotation0 pf)
+  let (linkedPF, _) =
+        runWriter $ annotateComments ddtParser
+        (\srcSpan err -> tell $ "Error " ++ show srcSpan ++ ": " ++ show err) pf'
+  let specs = [ (spec, b) | DDTAnnotation { ddtSpec = Just spec, ddtBlock = Just b } <- universeBi linkedPF ]
+
+  -- boil down the parsed specs
+  let e_essences = [ essence | (spec@DDTSt { ddtStVarDims = vardims } , b) <- specs
+                             , (var, dim) <- vardims
+                             , (declVarName, declSrcName, ss) <- declaredVars b
+                             , declSrcName == var
+                             , let essence = (declVarName, distil spec (declSrcName, ss)) ]
+  let (errors, essences) = List.partition (SE.isLeft . snd) e_essences
+  let lde = S.fromList $ map (SE.fromLeft . snd) errors
+  let essences' = M.fromListWith S.union $ map (second (S.singleton . SE.fromRight)) essences
+  -- conflicting specs
+  let conflicts = M.filter ((>1) . S.size) essences'
+  -- dupped labels
+  let f (Essence _ labMap ss) = map (,ss) . M.keys . M.filter (>1) . M.fromListWith (+) $ map (,1) (IM.elems labMap)
+  let badLabels = M.filter (not . null) $ M.map (S.fromList . concatMap f . S.toList) essences'
+  -- FIXME: gather annotations and check consistency from modfiles
+  return $ DerivedDataTypeCheckReport lde conflicts badLabels
 
 -- | Generate and insert comments about derived datatypes
 synth :: Char -> [F.ProgramFile A] -> PureAnalysis String () (DerivedDataTypeReport, [Either String (F.ProgramFile A)])
@@ -166,7 +287,7 @@ data BulkDataArrayInfo = Array
   }
   deriving (Show, Eq)
 
-genProgramFileReport :: ModFiles -> F.ProgramFile A -> (DerivedDataTypeReport, F.ProgramFile (FA.Analysis A))
+genProgramFileReport :: Data a => ModFiles -> F.ProgramFile a -> (DerivedDataTypeReport, F.ProgramFile (FA.Analysis a))
 genProgramFileReport mfs (pf@(F.ProgramFile F.MetaInfo{ F.miFilename = srcFile } _)) = (report, pf')
   where
     (analysisOutput, pf') = analysis mfs pf
@@ -251,6 +372,24 @@ genCommentText amap (v, s)
   , nums <- map fromJust $ S.toList set
   , labs <- List.intercalate ", " [ str ++ "=>" ++ "label" ++ str | num <- nums, let str = show num ] =
       " ddt " ++ ty ++ "(" ++ labs ++ ") :: " ++ s ++ "(dim=" ++ show dim ++ ")"
+
+--------------------------------------------------
+-- Check helpers
+
+declaredVars :: F.Block DA -> [(F.Name, F.Name, FU.SrcSpan)]
+declaredVars x =
+  [ (FA.varName e, FA.srcName e, FU.getSpan e) | F.DeclVariable _ _ e _ _  <- universeBi x :: [F.Declarator DA]] ++
+  [ (FA.varName e, FA.srcName e, FU.getSpan e) | F.DeclArray _ _ e _ _ _   <- universeBi x :: [F.Declarator DA]]
+
+distil :: DDTStatement -> SrcNameSpan -> SE.Either LabelDupError Essence
+distil (DDTSt { ddtStTypeName = tyname, ddtStLabels = labels }) ss
+  -- if no duplicated nums
+  | length (List.nub nums) == length nums = SE.Right $ Essence tyname (IM.fromList [ (n, lname) | (n, lname) <- labels' ]) ss
+  -- if there's a problem
+  | otherwise                             = SE.Left $ LabelDupError tyname ss (nums List.\\ List.nub nums)
+  where
+    labels' = map (first read) labels
+    nums = map fst labels'
 
 --------------------------------------------------
 -- Compilation helpers

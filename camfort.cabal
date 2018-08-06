@@ -47,6 +47,7 @@ library
                         Camfort.Analysis.ModFile
                         Camfort.Analysis.Simple
                         Camfort.Analysis.DerivedDataType
+                        Camfort.Analysis.DerivedDataType.Parser
                         Camfort.Specification.Parser
 
                         Camfort.Specification.Stencils.Analysis
@@ -152,7 +153,8 @@ library
                         singletons >= 2.2 && < 3,
                         template-haskell >= 2.11 && < 3,
                         vinyl >= 0.6 && < 1.0,
-                        verifiable-expressions >= 0.4
+                        verifiable-expressions >= 0.4,
+                        strict >= 0.3.2 && < 1
 
   default-language: Haskell2010
 
