@@ -28,6 +28,7 @@ module Camfort.Analysis.DerivedDataType
        , DerivedDataTypeReport(..)
        ) where
 import Prelude hiding (unlines)
+import Control.Applicative
 import Control.Monad
 import Control.Monad.Writer.Strict
 import GHC.Generics (Generic)
@@ -86,15 +87,18 @@ instance Ord VInfo where
 
 instance Binary VInfo
 
-data DerivedDataTypeReport = DerivedDataTypeReport AMap VMap SMap (S.Set IndexDupError) ConflictErrors BadLabelErrors
+data DerivedDataTypeReport = DerivedDataTypeReport AMap VMap SMap (S.Set IndexDupError)
+                                                   ConflictErrors BadLabelErrors BadDimErrors
   deriving (Generic)
 
 instance Binary DerivedDataTypeReport
 
 instance SG.Semigroup DerivedDataTypeReport where
-  DerivedDataTypeReport m1 v1 s1 ide1 ce1 ble1 <> DerivedDataTypeReport m2 v2 s2 ide2 ce2 ble2 =
+  DerivedDataTypeReport m1 v1 s1 ide1 ce1 ble1 bde1 <> DerivedDataTypeReport m2 v2 s2 ide2 ce2 ble2 bde2 =
     DerivedDataTypeReport (M.unionWith (IM.unionWith S.union) m1 m2) (M.unionWith S.union v1 v2) newSMap
-                          (S.union ide1 ide2) (M.unionsWith S.union [ce1, ce2, newCE]) (M.unionWith S.union ble1 ble2)
+                          (S.union ide1 ide2) (M.unionsWith S.union [ce1, ce2, newCE])
+                          (M.unionWith S.union ble1 ble2)
+                          (M.unionWith S.union bde1 bde2)
     where
       newCE   = M.map SE.fromLeft $ M.filter SE.isLeft e_smap
       newSMap = M.map (S.singleton . SE.fromRight) $ M.filter SE.isRight e_smap
@@ -116,17 +120,19 @@ combineEssences e1@(Essence ty1 labMap1 vinfoSet1) e2@(Essence ty2 labMap2 vinfo
   = SE.Left $ S.fromList [e1, e2]
 
 instance Monoid DerivedDataTypeReport where
-  mempty = DerivedDataTypeReport M.empty M.empty M.empty S.empty M.empty M.empty
+  mempty = DerivedDataTypeReport M.empty M.empty M.empty S.empty M.empty M.empty M.empty
   mappend = (SG.<>)
 
+successful (DerivedDataTypeReport _ _ _ ide ce ble bde) = S.null ide && M.null ce && M.null ble && M.null bde
+
 instance ExitCodeOfReport DerivedDataTypeReport where
-  exitCodeOf (DerivedDataTypeReport m _ _ ide ce ble)
-    | S.null ide && M.null ce && M.null ble = 0
-    | otherwise = 1
+  exitCodeOf r
+    | successful r = 0
+    | otherwise    = 1
 
 instance Describe DerivedDataTypeReport where
-  describeBuilder (DerivedDataTypeReport amap vmap smap ide ce ble)
-    | not (S.null ide && M.null ce && M.null ble) = Builder.fromText errorReport
+  describeBuilder r@(DerivedDataTypeReport amap vmap smap ide ce ble bde)
+    | not (successful r) = Builder.fromText errorReport
     | M.null smap = "no cases detected"
     | otherwise = Builder.fromText specReport
     where
@@ -142,27 +148,38 @@ instance Describe DerivedDataTypeReport where
                   , Essence ty labs vinfoSet <- S.toList essenceSet
                   , vinfo <- S.toList vinfoSet ]
 
-      errorReport = unlines . concat $
-        [ if S.null ide then [] else ["Duplicated indices:"]
-        , [ describe ss <> " " <> pack ty <> " has duplicated indice(s) [" <> intercalate ", " (map describe ints) <>
-            "] for variable: " <> pack srcName | IndexDupError ty (VInfo srcName _ ss) ints <- S.toList ide ]
-        , if M.null ce then [] else ["Conflicts:"]
-        , [ describe ss0 <> " " <> pack ty0 <> "(" <> describeLabels l0 <> ") :: " <> pack src0 <> "(dim=" <> describe dim <>
-            ")\nconflicts with\n" <> unlines [ describe ss <> " " <> pack ty <> "(" <> describeLabels labs <> ")"
-                                             | Essence ty labs vinfoSet <- essences
-                                             , VInfo src _ ss <- S.toList vinfoSet ]
-          | ((_, dim), essenceSet) <- M.toList ce
-          , not (S.null essenceSet)
-          , let Essence ty0 l0 vinfoSet0:essences = S.toList essenceSet
-          , VInfo src0 _ ss0 <- take 1 (S.toList vinfoSet0) ]
-        , if M.null ble then [] else ["Bad Labels:"]
-        , [ describe ss <> " label '" <> pack lab <> "', associated with variable " <>
-            pack src <> "(dim=" <> describe dim <> ")"
-          | ((_, dim), badSet) <- M.toList ble
-          , (lab, VInfo src _ ss) <- S.toList badSet ]
-        ]
+      ideLines = [ (vinfo, [pack ty <> " has duplicated indice(s) [" <>
+                            intercalate ", " (map describe ints) <> "] for variable: " <> pack (vSrcName vinfo)])
+                 | IndexDupError ty vinfo ints <- S.toList ide ]
+      ceLines  = [ (vinfo, [pack ty0 <> "(" <> describeLabels l0 <> ") :: " <> pack (vSrcName vinfo) <> "(dim=" <>
+                            describe dim <> ")\nconflicts with\n" <>
+                            unlines [ pack fn <> ": " <> describe ss <> " " <> pack ty <> "(" <> describeLabels labs <> ")"
+                                    | Essence ty labs vinfoSet <- essences
+                                    , VInfo src fn ss <- S.toList vinfoSet ]])
+                 | ((_, dim), essenceSet) <- M.toList ce
+                 , not (S.null essenceSet)
+                 , let Essence ty0 l0 vinfoSet0:essences = S.toList essenceSet
+                 , vinfo <- take 1 (S.toList vinfoSet0) ]
+      bleLines = [ (vinfo, ["duplicated label '" <> pack lab <> "', associated with variable " <>
+                            pack (vSrcName vinfo) <> "(dim=" <> describe dim <> ")"])
+                 | ((_, dim), badSet) <- M.toList ble
+                 , (lab, vinfo) <- S.toList badSet ]
+      bdeLines = [ (vinfo, [pack (vSrcName vinfo) <> ": bad dim " <> describe dim <>
+                            if maxDim == 0 then " less than 1"
+                            else " not in range 1.." <> describe maxDim])
+                 | ((_, dim), badSet) <- M.toList bde
+                 , (vinfo, maxDim) <- S.toList badSet ]
 
+      errorReport = linesByFile $ ideLines ++ ceLines ++ bleLines ++ bdeLines
       describeLabels labs = intercalate ", " [describe i <> "=>" <> pack l | (i,l) <- IM.toList labs]
+
+linesByFile :: [(VInfo, [Text])] -> Text
+linesByFile vinfoTexts = unlines $ concat [ ("\n"<>pack fileName<>":\n") : [ describe ss <> " " <> text
+                                                                           | (ss, text) <- sort sstexts ]
+                                          | (fileName, sstexts) <- M.toList mapByFile ]
+  where
+    mapByFile = M.fromListWith (++) [ (vFileName vinfo, map (vSrcSpan vinfo,) texts) | (vinfo, texts) <- vinfoTexts ]
+
 
 --------------------------------------------------
 -- ddt-check reporting infrastructure
@@ -189,6 +206,8 @@ instance Binary IndexDupError
 type ConflictErrors = M.Map (F.Name, Int) (S.Set Essence) -- variable => essence set
 
 type BadLabelErrors = M.Map (F.Name, Int) (S.Set (String, VInfo))  -- variable => (label, var info) set
+
+type BadDimErrors = M.Map (F.Name, Int) (S.Set (VInfo, Int))
 
 --------------------------------------------------
 -- Linking DDT specifications with associated AST-blocks.
@@ -282,7 +301,7 @@ data BulkDataArrayInfo = Array
 genProgramFileReport :: ModFiles -> F.ProgramFile A -> (DerivedDataTypeReport, F.ProgramFile DA)
 genProgramFileReport mfs (pf@(F.ProgramFile F.MetaInfo{ F.miFilename = srcFile } _)) = (report, pf')
   where
-    (analysisOutput, pf') = analysis mfs pf
+    (analysisOutput, pf', tenv) = analysis mfs pf
     amap = filterCondensedCategoryOne $ condenseCategoryOne analysisOutput
     vars = S.fromList $ M.keys amap
     vls1 = [ (v, S.singleton $ VInfo (FA.srcName e) srcFile ss)
@@ -304,6 +323,7 @@ genProgramFileReport mfs (pf@(F.ProgramFile F.MetaInfo{ F.miFilename = srcFile }
                            , let essence = ((declVarName, dim), distil spec vinfo) ]
     (errors, essences) = List.partition (SE.isLeft . snd) e_essences
     indexErrors = S.fromList $ map (SE.fromLeft . snd) errors
+    essences' :: M.Map (F.Name, Int) (S.Set Essence)
     essences' = M.fromListWith S.union $ map (second (S.singleton . SE.fromRight)) essences
     -- conflicting specs
     conflicts = M.filter ((>1) . S.size) essences'
@@ -313,6 +333,21 @@ genProgramFileReport mfs (pf@(F.ProgramFile F.MetaInfo{ F.miFilename = srcFile }
         vinfos = S.toList vinfoSet
         labs = M.keys . M.filter (>1) . M.fromListWith (+) $ map (,1) (IM.elems labMap)
     badLabels = M.filter (not . null) $ M.map (S.fromList . concatMap f . S.toList) essences'
+
+    -- badly specified 'dim' attributes
+    badDims = [ ((declVarName, dim), S.singleton (vinfo, maxDim))
+              | (spec@DDTSt { ddtStVarDims = vardims } , b) <- specs
+              , (srcName, dim) <- vardims
+              , (declVarName, vinfo) <- declaredVars srcFile b
+              , vSrcName vinfo == srcName
+              , Just maxDim <- [ do guard (dim < 1)
+                                    return 0  -- stand-in for 'dim violates the lower bound' case
+                                 <|>
+                                 do FA.IDType { FA.idCType = Just (FA.CTArray dims) } <- M.lookup declVarName tenv
+                                    let maxDim = length dims
+                                    guard $ not (null dims || dim <= maxDim)
+                                    -- there is a known upper-bound and dim violates it
+                                    return maxDim ] ]
 
     -- distil specs from the inferred amap
     smapFromAMap = M.fromList [ ((v, dim), essenceSet) | (v, aminfoMap) <- M.toList amap
@@ -326,11 +361,12 @@ genProgramFileReport mfs (pf@(F.ProgramFile F.MetaInfo{ F.miFilename = srcFile }
     ide  = indexErrors
     ce   = conflicts
     ble  = badLabels
-    report = DerivedDataTypeReport amap vmap smap ide ce ble <> combinedDerivedDataTypeReport mfs
+    bde  = M.fromList badDims
+    report = DerivedDataTypeReport amap vmap smap ide ce ble bde <> combinedDerivedDataTypeReport mfs
 
 -- analyse bulk data info
-analysis :: ModFiles -> F.ProgramFile A -> ([(String, BulkDataArrayInfo)], F.ProgramFile DA)
-analysis mfs pf = (accessInfo, linkedPF)
+analysis :: ModFiles -> F.ProgramFile A -> ([(String, BulkDataArrayInfo)], F.ProgramFile DA, FAT.TypeEnv)
+analysis mfs pf = (accessInfo, linkedPF, tenv)
   where
      filename       = F.pfGetFilename pf
      (pf', _, tenv) = withCombinedEnvironment mfs (fmap ddtAnnotation0 pf)
@@ -375,7 +411,7 @@ synthBlocks :: (F.MetaInfo, Char) -> DerivedDataTypeReport -> [F.Block DA] -> [F
 synthBlocks marker report = concatMap (synthBlock marker report)
 
 synthBlock :: (F.MetaInfo, Char) -> DerivedDataTypeReport -> F.Block DA -> [F.Block DA]
-synthBlock (mi, marker) (DerivedDataTypeReport amap _ _ _ _ _) b = case b of
+synthBlock (mi, marker) (DerivedDataTypeReport amap _ _ _ _ _ _) b = case b of
   F.BlStatement a ss _ F.StDeclaration{}
     | vars <- ofInterest b -> genComment vars ++ [b]
     where
