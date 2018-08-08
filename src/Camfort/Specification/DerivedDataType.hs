@@ -25,7 +25,7 @@
 
 module Camfort.Specification.DerivedDataType
        ( infer, refactor, check, synth, compile
-       , DerivedDataTypeReport(..)
+       , DerivedDataTypeReport(..), successful
        ) where
 import Prelude hiding (unlines)
 import Control.Applicative

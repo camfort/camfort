@@ -169,6 +169,7 @@ test-suite spec
                         Camfort.FunctionalitySpec
                         Camfort.ReprintSpec
                         Camfort.Specification.ParserSpec
+                        Camfort.Specification.DerivedDataTypeSpec
                         Camfort.Specification.Stencils.CheckSpec
                         Camfort.Specification.Stencils.ConsistencySpec
                         Camfort.Specification.Stencils.DenotationalSemanticsSpec
