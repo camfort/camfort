@@ -123,7 +123,7 @@ collectAndRmCommons tenv fname pname = transformBiM commons
     typeCommonExprs (F.ExpValue _ sp (F.ValVariable v)) =
       case M.lookup v tenv of
         Just (FA.IDType (Just t) (Just FA.CTVariable)) -> (v, t)
-        Just (FA.IDType (Just t) (Just FA.CTArray))    -> (v, t)
+        Just (FA.IDType (Just t) (Just FA.CTArray{}))    -> (v, t)
         _ -> error $ "Variable '" ++ show v
                   ++ "' is of an unknown or higher-order type at: " ++ show sp
                   ++ show (M.lookup v tenv)
