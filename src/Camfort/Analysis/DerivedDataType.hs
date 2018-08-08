@@ -87,8 +87,14 @@ instance Ord VInfo where
 
 instance Binary VInfo
 
-data DerivedDataTypeReport = DerivedDataTypeReport AMap VMap SMap (S.Set IndexDupError)
-                                                   ConflictErrors BadLabelErrors BadDimErrors
+data DerivedDataTypeReport
+  = DerivedDataTypeReport { ddtrAMap :: AMap
+                          , ddtrVMap :: VMap
+                          , ddtrSMap :: SMap
+                          , ddtrIDE  :: (S.Set IndexDupError)
+                          , ddtrCE   :: ConflictErrors
+                          , ddtrBLE  :: BadLabelErrors
+                          , ddtrBDE  :: BadDimErrors }
   deriving (Generic)
 
 instance Binary DerivedDataTypeReport
@@ -123,7 +129,7 @@ instance Monoid DerivedDataTypeReport where
   mempty = DerivedDataTypeReport M.empty M.empty M.empty S.empty M.empty M.empty M.empty
   mappend = (SG.<>)
 
-successful (DerivedDataTypeReport _ _ _ ide ce ble bde) = S.null ide && M.null ce && M.null ble && M.null bde
+successful r = and [S.null (ddtrIDE r), M.null (ddtrCE r), M.null (ddtrBLE r), M.null (ddtrBDE r)]
 
 instance ExitCodeOfReport DerivedDataTypeReport where
   exitCodeOf r
@@ -411,7 +417,7 @@ synthBlocks :: (F.MetaInfo, Char) -> DerivedDataTypeReport -> [F.Block DA] -> [F
 synthBlocks marker report = concatMap (synthBlock marker report)
 
 synthBlock :: (F.MetaInfo, Char) -> DerivedDataTypeReport -> F.Block DA -> [F.Block DA]
-synthBlock (mi, marker) (DerivedDataTypeReport amap _ _ _ _ _ _) b = case b of
+synthBlock (mi, marker) DerivedDataTypeReport { ddtrAMap = amap } b = case b of
   F.BlStatement a ss _ F.StDeclaration{}
     | vars <- ofInterest b -> genComment vars ++ [b]
     where
