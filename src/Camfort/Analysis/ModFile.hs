@@ -173,8 +173,9 @@ withCombinedEnvironment
   => FM.ModFiles -> F.ProgramFile a -> (F.ProgramFile (FA.Analysis a), FAR.ModuleMap, FAT.TypeEnv)
 withCombinedEnvironment mfs pf =
   let (pfRenamed, mmap) = withCombinedModuleMap mfs (FA.initAnalysis pf)
-      tenv = FM.combinedTypeEnv mfs
-  in (fst . FAT.analyseTypesWithEnv tenv $ pfRenamed, mmap, tenv)
+      moduleTEnv        = FM.combinedTypeEnv mfs
+      (pf', tenv)       = FAT.analyseTypesWithEnv moduleTEnv $ pfRenamed
+  in (pf', mmap, tenv)
 
 -- | From a module map, look up the unique name associated with a given source
 -- name in the given program unit. Also returns the name type, which tells you
