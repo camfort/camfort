@@ -23,7 +23,7 @@
 {-# LANGUAGE DeriveDataTypeable #-}
 {-# LANGUAGE TupleSections #-}
 
-module Camfort.Analysis.DerivedDataType
+module Camfort.Specification.DerivedDataType
        ( infer, refactor, check, synth, compile
        , DerivedDataTypeReport(..)
        ) where
@@ -63,7 +63,7 @@ import Camfort.Analysis
 import Camfort.Analysis.ModFile
 import Camfort.Analysis.Annotations (onPrev, buildCommentText, A, Annotation(..))
 import Camfort.Analysis.CommentAnnotator (annotateComments, ASTEmbeddable(..), Linkable(..))
-import Camfort.Analysis.DerivedDataType.Parser (ddtParser, DDTStatement(..))
+import Camfort.Specification.DerivedDataType.Parser (ddtParser, DDTStatement(..))
 import Camfort.Helpers (Filename)
 
 --------------------------------------------------

@@ -1,7 +1,7 @@
 { -- -*- Mode: Haskell -*-
 {-# LANGUAGE DeriveDataTypeable #-}
 
-module Camfort.Analysis.DerivedDataType.Parser
+module Camfort.Specification.DerivedDataType.Parser
   ( ddtParser
   , DDTParseError
   , DDTStatement(..)

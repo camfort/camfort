@@ -83,8 +83,8 @@ import           Camfort.Analysis.ModFile                        (MFCompiler,
                                                                   readParseSrcDir,
                                                                   simpleCompiler)
 import           Camfort.Analysis.Simple
-import qualified Camfort.Analysis.DerivedDataType                as DDT
 import           Camfort.Input
+import qualified Camfort.Specification.DerivedDataType           as DDT
 import qualified Camfort.Specification.Stencils                  as Stencils
 import           Camfort.Specification.Stencils.Analysis         (compileStencils)
 import qualified Camfort.Specification.Units                     as LU
