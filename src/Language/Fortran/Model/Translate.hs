@@ -428,10 +428,10 @@ translateBaseType bt mkind = do
 
   -- Get value-level representations of the type's basic type and precision
   (basicType, prec) <- case bt of
-    F.TypeInteger   -> (BTInt     ,) <$> getKindPrec "integer"   fsIntegerKinds
-    F.TypeReal      -> (BTReal    ,) <$> getKindPrec "real"      fsRealKinds
-    F.TypeCharacter -> (BTChar    ,) <$> getKindPrec "character" fsCharacterKinds
-    F.TypeLogical   -> (BTLogical ,) <$> getKindPrec "logical"   fsLogicalKinds
+    F.TypeInteger     -> (BTInt     ,) <$> getKindPrec "integer"   fsIntegerKinds
+    F.TypeReal        -> (BTReal    ,) <$> getKindPrec "real"      fsRealKinds
+    F.TypeCharacter{} -> (BTChar    ,) <$> getKindPrec "character" fsCharacterKinds
+    F.TypeLogical     -> (BTLogical ,) <$> getKindPrec "logical"   fsLogicalKinds
     -- Double precision is special because it's not always supported as its own
     -- basic type, being subsumed by the `REAL` basic type.
     F.TypeDoublePrecision ->
