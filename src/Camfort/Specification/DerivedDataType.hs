@@ -37,7 +37,7 @@ import Data.Binary (Binary, decodeOrFail, encode)
 import qualified Data.ByteString.Lazy.Char8 as LB
 import Data.Data
 import Data.Generics.Uniplate.Operations
-import Data.Maybe (fromJust, maybeToList, isJust)
+import Data.Maybe (fromMaybe, fromJust, maybeToList, isJust)
 import qualified Data.Strict.Either as SE
 import Data.List (sort, foldl')
 import qualified Data.List as List
@@ -118,13 +118,27 @@ instance SG.Semigroup DerivedDataTypeReport where
 
 -- | Combine compatible essences (SE.Right) or else indicate conflict (SE.Left)
 combineEssences :: Essence -> Essence -> SE.Either (S.Set Essence) Essence
-combineEssences e1@(Essence ty1 labMap1 vinfoSet1) e2@(Essence ty2 labMap2 vinfoSet2)
-  | ty1 == ty2
-  , mlabMap <- IM.unionWith (\ l1 l2 -> if l1 == l2 then l1 else Nothing) (IM.map Just labMap1) (IM.map Just labMap2)
-  , all isJust (IM.elems mlabMap)
-  = SE.Right $ Essence ty1 (IM.map fromJust mlabMap) (S.union vinfoSet1 vinfoSet2)
-  | otherwise
-  = SE.Left $ S.fromList [e1, e2]
+combineEssences e1 e2
+  | Essence ty1 labMap1 vinfoSet1 s1 <- e1
+  , Essence ty2 labMap2 vinfoSet2 s2 <- e2 =
+    fromMaybe (SE.Left $ S.fromList [e1, e2]) $ do
+      -- in case of conflict, starred essence info overwrites unstarred essence info
+      ty <- case () of _ | ty1 == ty2   -> pure ty1
+                         | s1 && not s2 -> pure ty1
+                         | not s1 && s2 -> pure ty2
+                         | otherwise    -> mzero
+      let labelStarCombine l1 l2 | l1 == l2     = l1
+                                 | s1 && not s2 = l1
+                                 | not s1 && s2 = l2
+                                 | otherwise    = mzero
+      labMap <- sequenceIntMap $ IM.unionWith labelStarCombine (IM.map pure labMap1) (IM.map pure labMap2)
+      pure . SE.Right $ Essence ty labMap (S.union vinfoSet1 vinfoSet2) (s1 || s2)
+
+sequenceIntMap :: Monad m => IM.IntMap (m a) -> m (IM.IntMap a)
+sequenceIntMap = fmap IM.fromList . sequence . map mstrength . IM.toList
+
+mstrength :: Functor f => (a, f b) -> f (a, b)
+mstrength (x, my) = fmap (x,) my
 
 instance Monoid DerivedDataTypeReport where
   mempty = DerivedDataTypeReport M.empty M.empty M.empty S.empty M.empty M.empty M.empty
@@ -145,14 +159,15 @@ instance Describe DerivedDataTypeReport where
     where
       specReport = unlines . concat $
         [ ("\n"<>pack fileName<>":\n"):
-          [ describe ss <> " ddt " <> pack ty <> "(" <> describeLabels labs <> ") :: " <>
-            pack src <> "(dim=" <> describe dim <> ")" | (VInfo src _ ss, ty, labs, dim) <- sort fileStuff ]
+          [ describe ss <> " ddt" <> starStr <> pack ty <> "(" <> describeLabels labs <> ") :: " <>
+            pack src <> "(dim=" <> describe dim <> ")" | (VInfo src _ ss, ty, labs, dim, star) <- sort fileStuff
+                                                       , let starStr = pack (if star then "* " else " ") ]
         | (fileName, fileStuff) <- M.toList byFile ]
         where
           byFile = M.fromListWith (++) stuff
-          stuff = [ (vFileName vinfo, [(vinfo, ty, labs, dim)])
+          stuff = [ (vFileName vinfo, [(vinfo, ty, labs, dim, star)])
                   | ((v, dim), essenceSet) <- M.toList smap
-                  , Essence ty labs vinfoSet <- S.toList essenceSet
+                  , Essence ty labs vinfoSet star <- S.toList essenceSet
                   , vinfo <- S.toList vinfoSet ]
 
       ideLines = [ (vinfo, [pack ty <> " has duplicated indice(s) [" <>
@@ -161,11 +176,11 @@ instance Describe DerivedDataTypeReport where
       ceLines  = [ (vinfo, [pack ty0 <> "(" <> describeLabels l0 <> ") :: " <> pack (vSrcName vinfo) <> "(dim=" <>
                             describe dim <> ")\nconflicts with\n" <>
                             unlines [ pack fn <> ": " <> describe ss <> " " <> pack ty <> "(" <> describeLabels labs <> ")"
-                                    | Essence ty labs vinfoSet <- essences
+                                    | Essence ty labs vinfoSet _ <- essences
                                     , VInfo src fn ss <- S.toList vinfoSet ]])
                  | ((_, dim), essenceSet) <- M.toList ce
                  , not (S.null essenceSet)
-                 , let Essence ty0 l0 vinfoSet0:essences = S.toList essenceSet
+                 , let Essence ty0 l0 vinfoSet0 _:essences = S.toList essenceSet
                  , vinfo <- take 1 (S.toList vinfoSet0) ]
       bleLines = [ (vinfo, ["duplicated label '" <> pack lab <> "', associated with variable " <>
                             pack (vSrcName vinfo) <> "(dim=" <> describe dim <> ")"])
@@ -193,16 +208,19 @@ linesByFile vinfoTexts = unlines $ concat [ ("\n"<>pack fileName<>":\n") : [ des
 
 -- 'essence' of a specification
 -- type name, map of int => label, variable info set
-data Essence = Essence String (IM.IntMap String) (S.Set VInfo)
+data Essence = Essence { essTypeName :: String
+                       , essLabelMap :: IM.IntMap String
+                       , essVInfoSet :: S.Set VInfo
+                       , essStarred  :: Bool }
   deriving (Show, Generic)
 
 instance Binary Essence
 
 instance Eq Essence where
-  Essence ty1 l1 _ == Essence ty2 l2 _ = (ty1, l1) == (ty2, l2)
+  Essence ty1 l1 _ _ == Essence ty2 l2 _ _ = (ty1, l1) == (ty2, l2)
 
 instance Ord Essence where
-  Essence ty1 l1 _ `compare` Essence ty2 l2 _ = (ty1, l1) `compare` (ty2, l2)
+  Essence ty1 l1 _ _ `compare` Essence ty2 l2 _ _ = (ty1, l1) `compare` (ty2, l2)
 
 -- given type name, (source name, span), dupped labels
 data IndexDupError = IndexDupError String VInfo [Int]
@@ -320,7 +338,7 @@ genProgramFileReport mfs (pf@(F.ProgramFile F.MetaInfo{ F.miFilename = srcFile }
 
     specs = [ (spec, b) | DDTAnnotation { ddtSpec = Just spec, ddtBlock = Just b } <- universeBi pf' ]
     -- boil down the parsed specs
-    e_essences = [ essence | (spec@DDTSt { ddtStVarDims = vardims } , b) <- specs
+    e_essences = [ essence | (spec@DDTSt { ddtStVarDims = vardims }, b) <- specs
                            , (var, dim) <- vardims
                            , (declVarName, vinfo) <- declaredVars srcFile b
                            , vSrcName vinfo == var
@@ -332,7 +350,7 @@ genProgramFileReport mfs (pf@(F.ProgramFile F.MetaInfo{ F.miFilename = srcFile }
     -- conflicting specs
     conflicts = M.filter ((>1) . S.size) essences'
     -- dupped labels
-    f (Essence _ labMap vinfoSet) = [ (lab, vinfo) | lab <- labs, vinfo <- vinfos ]
+    f (Essence _ labMap vinfoSet _) = [ (lab, vinfo) | lab <- labs, vinfo <- vinfos ]
       where
         vinfos = S.toList vinfoSet
         labs = M.keys . M.filter (>1) . M.fromListWith (+) $ map (,1) (IM.elems labMap)
@@ -459,9 +477,10 @@ genCommentText DerivedDataTypeReport { ddtrAMap = amap, ddtrSMap = smap } (varNa
             " ddt " ++ ty ++ "(" ++ labs ++ ") :: " ++ srcName ++ "(dim=" ++ show dim ++ ")"
       -- generate comment from pre-existing info
       Just essenceSet
-        | Essence ty labMap _:_ <- S.toList essenceSet
-        , labs <- List.intercalate ", " [ show i ++ "=>" ++ lab | (i, lab) <- IM.toList labMap ] ->
-            " ddt " ++ ty ++ "(" ++ labs ++ ") :: " ++ srcName ++ "(dim=" ++ show dim ++ ")"
+        | Essence ty labMap _ star:_ <- S.toList essenceSet
+        , labs <- List.intercalate ", " [ show i ++ "=>" ++ lab | (i, lab) <- IM.toList labMap ]
+        , starStr <- if star then "* " else " " ->
+            " ddt" ++ starStr ++ ty ++ "(" ++ labs ++ ") :: " ++ srcName ++ "(dim=" ++ show dim ++ ")"
 
 --------------------------------------------------
 -- Check helpers
@@ -474,19 +493,23 @@ declaredVars srcFile x =
   | F.DeclArray _ _ e _ _ _   <- universeBi x :: [F.Declarator DA]]
 
 distil :: DDTStatement -> VInfo -> SE.Either IndexDupError Essence
-distil (DDTSt { ddtStTypeName = tyname, ddtStLabels = labels }) vinfo
-  -- if no duplicated nums
-  | length (List.nub nums) == length nums = SE.Right $ Essence tyname (IM.fromList [ (n, lname) | (n, lname) <- labels' ]) (S.singleton vinfo)
+distil (DDTSt { ddtStStarred = star, ddtStTypeName = tyname, ddtStLabels = labels }) vinfo
+  -- if no duplicated indices
+  | noDups nums = SE.Right $ Essence { essTypeName = tyname
+                                     , essLabelMap = IM.fromList [ (n, lname) | (n, lname) <- labels' ]
+                                     , essVInfoSet = S.singleton vinfo
+                                     , essStarred  = star }
   -- if there's a problem
-  | otherwise                             = SE.Left $ IndexDupError tyname vinfo (nums List.\\ List.nub nums)
+  | otherwise   = SE.Left $ IndexDupError tyname vinfo (nums List.\\ List.nub nums)
   where
     labels' = map (first read) labels
     nums = map fst labels'
+    noDups nums = length (List.nub nums) == length nums
 
 distilArrayInfo :: F.Name -> S.Set VInfo -> S.Set Int -> Essence
 distilArrayInfo v vinfoSet = perDim
   where
-    perDim dimSet = Essence tyname labMap vinfoSet
+    perDim dimSet = Essence tyname labMap vinfoSet False
       where
         tyname = v ++ "_type"
         labMap = IM.fromList [ (n, lname) | n <- S.toList dimSet, let lname = "label" ++ show n ]

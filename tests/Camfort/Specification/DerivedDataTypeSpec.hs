@@ -42,6 +42,9 @@ spec = do
       it "consistent where labels overlap" $ do
         r <- ddtInferReport ["consistSpec1b.f90"] "consistSpec1a.f90"
         successful r `shouldBe` True
+      it "starred spec overrides unstarred spec" $ do
+        r <- ddtInferReport ["consistSpec2b.f90"] "consistSpec2a.f90"
+        successful r `shouldBe` True
   describe "error-finding" $ do
     describe "bad dimensions" $ do
       it "dim violates min bound" $ do
@@ -67,3 +70,6 @@ spec = do
       it "disagreeing on label names" $ do
         r <- ddtInferReport ["inconsistSpec3b.f90"] "inconsistSpec3a.f90"
         map (fmap S.size) (M.toList (ddtrCE r)) `shouldBe` [(("inconsist3_d_common", 2), 2)]
+      it "when starred specs disagree" $ do
+        r <- ddtInferReport ["inconsistSpec4b.f90"] "inconsistSpec4a.f90"
+        map (fmap S.size) (M.toList (ddtrCE r)) `shouldBe` [(("inconsist4_d_common", 2), 2)]

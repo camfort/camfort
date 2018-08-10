@@ -29,14 +29,16 @@ import Camfort.Specification.Parser (mkParser, SpecParser)
  '=>'     { TArrow }
  '('      { TLeftPar }
  ')'      { TRightPar }
+ '*'      { TStar }
 
-%left '*'
-%left '/'
-%left '**'
 %%
 
 DDT :: { DDTStatement }
-: ddt id '(' LABELS ')' '::' VARDIMS { DDTSt $2 $4 $7 }
+: ddt OPTSTAR id '(' LABELS ')' '::' VARDIMS { DDTSt $2 $3 $5 $8 }
+
+OPTSTAR :: { Bool }
+: '*' { True }
+|     { False }
 
 VARDIMS :: { [(String, Int)] }
 : VARDIM ',' VARDIMS   { $1 : $3 }
@@ -55,9 +57,10 @@ LABEL :: { (String, String) }
 {
 
 data DDTStatement
-  = DDTSt { ddtStTypeName :: String
-          , ddtStLabels :: [(String, String)]
-          , ddtStVarDims :: [(String, Int)] }
+  = DDTSt { ddtStStarred  :: Bool
+          , ddtStTypeName :: String
+          , ddtStLabels   :: [(String, String)]
+          , ddtStVarDims  :: [(String, Int)] }
   deriving (Data, Eq, Show)
 
 data DDTParseError
@@ -85,6 +88,7 @@ data Token =
  | TDoubleColon
  | TArrow
  | TEqual
+ | TStar
  | TLeftPar
  | TRightPar
  | TId String
@@ -107,6 +111,7 @@ lexer (':':':':xs) = addToTokens TDoubleColon xs
 lexer ('=':'>':xs) = addToTokens TArrow xs
 lexer (',':xs) = addToTokens TComma xs
 lexer ('=':xs) = addToTokens TEqual xs
+lexer ('*':xs) = addToTokens TStar xs
 lexer ('(':xs) = addToTokens TLeftPar xs
 lexer (')':xs) = addToTokens TRightPar xs
 lexer (x:xs)
