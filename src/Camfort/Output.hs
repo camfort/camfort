@@ -166,12 +166,16 @@ refactorBlocks :: FPM.FortranVersion
 -- Output comments
 refactorBlocks _ inp (F.BlComment ann span (F.Comment comment)) = do
     cursor <- get
+    let FU.SrcSpan lb ub     = span
+        lb' | deleteNode ann = lb { FU.posColumn = 0 }
+            | otherwise      = lb
+        (p0, _)              = takeBounds (cursor, lb') inp
+        nl | null comment ||
+             deleteNode ann  = B.empty
+           | otherwise       =  B.pack "\n"
     if pRefactored ann
-     then    let (FU.SrcSpan lb ub) = span
-                 (p0, _)  = takeBounds (cursor, lb) inp
-                 nl       = if null comment then B.empty else B.pack "\n"
-             in put ub >> return (B.concat [p0, B.pack comment, nl], True)
-     else return (B.empty, False)
+      then put ub >> return (B.concat [p0, B.pack comment, nl], True)
+      else return (B.empty, False)
 
 -- Refactor use statements
 refactorBlocks v inp b@(F.BlStatement _ _ _ u@F.StUse{}) = do
@@ -235,11 +239,8 @@ refactorSyntax v inp e = do
         put ub
         return (B.concat [pre, out], True)
 
-countLines xs =
-  case B.uncons xs of
-    Nothing -> 0
-    Just ('\n', xs) -> 1 + countLines xs
-    Just (_, xs)    -> countLines xs
+countLines :: B.ByteString -> Int
+countLines = B.count '\n'
 
 {- 'removeNewLines xs n' removes at most 'n' new lines characters from
 the input string xs, returning the new string and the number of new
