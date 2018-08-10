@@ -65,6 +65,7 @@ import Camfort.Analysis.Annotations (onPrev, buildCommentText, A, Annotation(..)
 import Camfort.Analysis.CommentAnnotator (annotateComments, ASTEmbeddable(..), Linkable(..))
 import Camfort.Specification.DerivedDataType.Parser (ddtParser, DDTStatement(..))
 import Camfort.Helpers (Filename)
+import Camfort.Helpers.Syntax (deleteLine)
 
 --------------------------------------------------
 -- ddt-infer reporting infra
@@ -237,11 +238,7 @@ instance Linkable DA where
   link ann (b@(F.BlStatement _ _ _ F.StDeclaration {})) =
       onPrev (\ann' -> ann' { ddtBlock = Just b }) ann
   link ann _ = ann
-  linkPU ann pu@F.PUFunction{} =
-      onPrev (\ann' -> ann' { ddtPU = Just pu }) ann
-  linkPU ann pu@F.PUSubroutine{} =
-      onPrev (\ann' -> ann' { ddtPU = Just pu }) ann
-  linkPU ann _ = ann
+  linkPU ann _ = ann -- annotation on PU not needed/supported
 
 --------------------------------------------------
 -- interfaces
@@ -418,7 +415,7 @@ synthBlocks :: (F.MetaInfo, Char) -> DerivedDataTypeReport -> [F.Block DA] -> [F
 synthBlocks marker report = concatMap (synthBlock marker report)
 
 synthBlock :: (F.MetaInfo, Char) -> DerivedDataTypeReport -> F.Block DA -> [F.Block DA]
-synthBlock (mi, marker) DerivedDataTypeReport { ddtrAMap = amap } b = case b of
+synthBlock (mi, marker) r@DerivedDataTypeReport { ddtrAMap = amap } b = case b of
   F.BlStatement a ss _ F.StDeclaration{}
     | vars <- ofInterest b -> genComment vars ++ [b]
     where
@@ -427,7 +424,7 @@ synthBlock (mi, marker) DerivedDataTypeReport { ddtrAMap = amap } b = case b of
         [ (FA.varName e, FA.srcName e) | F.DeclArray _ _ e _ _ _ <- universeBi b :: [F.Declarator DA] ]
 
       genComment = map $ \ var ->
-        F.BlComment newA newSS . F.Comment . buildCommentText mi space $ marker:genCommentText amap var
+        F.BlComment newA newSS . F.Comment . buildCommentText mi space $ marker:genCommentText r var
 
       -- drill down two levels of annotation to set the refactored flag
       newA  = a { FA.prevAnnotation = (FA.prevAnnotation a) {
@@ -436,16 +433,35 @@ synthBlock (mi, marker) DerivedDataTypeReport { ddtrAMap = amap } b = case b of
       newSS = FU.SrcSpan (lp {FU.posColumn = 0}) (lp {FU.posColumn = 0})
       FU.SrcSpan lp _ = ss
       space = FU.posColumn lp - 1
+  -- strip existing comment annotations
+  F.BlComment a@FA.Analysis { FA.prevAnnotation = DDTAnnotation { ddtSpec = Just _ } } ss c ->
+    [F.BlComment a' ss' $ F.Comment ""]
+    where
+      FU.SrcSpan lp _ = ss
+      ss' = deleteLine ss
+      a'  = a { FA.prevAnnotation = (FA.prevAnnotation a) {
+                  prevAnnotation = (prevAnnotation (FA.prevAnnotation a)) {
+                      refactored = Just lp
+                    , deleteNode = True } } }
+
   _ -> [b]
 
 -- Generate the text that goes into the specification.
-genCommentText amap (v, s)
-  | Just pmap <- M.lookup v amap
-  , ty <- v ++ "_type"
-  , (dim, set):_ <- IM.toList $ IM.filter (all isJust . S.toList) pmap
-  , nums <- map fromJust $ S.toList set
-  , labs <- List.intercalate ", " [ str ++ "=>" ++ "label" ++ str | num <- nums, let str = show num ] =
-      " ddt " ++ ty ++ "(" ++ labs ++ ") :: " ++ s ++ "(dim=" ++ show dim ++ ")"
+genCommentText :: DerivedDataTypeReport -> (F.Name, F.Name) -> String
+genCommentText DerivedDataTypeReport { ddtrAMap = amap, ddtrSMap = smap } (varName, srcName)
+  | Just pmap <- M.lookup varName amap
+  , (dim, set):_ <- IM.toList $ IM.filter (all isJust . S.toList) pmap = case M.lookup (varName, dim) smap of
+      -- generate new comment from scratch
+      Nothing
+        | nums <- map fromJust $ S.toList set
+        , ty   <- varName ++ "_type"
+        , labs <- List.intercalate ", " [ str ++ "=>" ++ "label" ++ str | num <- nums, let str = show num ] ->
+            " ddt " ++ ty ++ "(" ++ labs ++ ") :: " ++ srcName ++ "(dim=" ++ show dim ++ ")"
+      -- generate comment from pre-existing info
+      Just essenceSet
+        | Essence ty labMap _:_ <- S.toList essenceSet
+        , labs <- List.intercalate ", " [ show i ++ "=>" ++ lab | (i, lab) <- IM.toList labMap ] ->
+            " ddt " ++ ty ++ "(" ++ labs ++ ") :: " ++ srcName ++ "(dim=" ++ show dim ++ ")"
 
 --------------------------------------------------
 -- Check helpers
