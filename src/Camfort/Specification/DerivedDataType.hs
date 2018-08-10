@@ -265,9 +265,10 @@ synth marker pfs = do
   mfs <- analysisModFiles
   forEachProgramFile pfs $ \ pf -> do
     let (report, pf'@(F.ProgramFile mi _)) = genProgramFileReport mfs pf
-    let pf'' = descendBi (synthBlocks (mi, marker) report) pf'
-    -- FIXME: generate datatype names, labels & insert comments
-    return $ (report, Right (fmap (prevAnnotation . FA.prevAnnotation) pf''))
+    let synthedPF = descendBi (synthBlocks (mi, marker) report) pf'
+    let strippedPF | successful report = Right (fmap (prevAnnotation . FA.prevAnnotation) synthedPF)
+                   | otherwise         = Left "error"
+    return $ (report, strippedPF)
 
 -- | Refactor derived datatypes based on marked comments
 refactor :: [F.ProgramFile A] -> PureAnalysis String () (DerivedDataTypeReport, [Either String (F.ProgramFile A)])
