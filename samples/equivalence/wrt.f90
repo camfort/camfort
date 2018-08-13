@@ -1,9 +1,11 @@
 program wrt 
   implicit none
-  integer :: x = 97
+  integer :: x
   character :: y
   character :: z(20)
   equivalence (x, y, z(2))
+
+  x = 97
 
   z(1) = "c"
 
@@ -14,6 +16,7 @@ program wrt
 
   x = 97 +    98 * (2**8)
 
+  z(3) = "d"
   write (*,'(i8,A,A,A,A)') x, y, z(1), z(2), z(3)
 
 
