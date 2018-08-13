@@ -13,7 +13,6 @@ program example1
 
   common x1, x2
 
-
   d = 1.0
   x1 = 0.0
   x2 = 0.4
@@ -27,6 +26,7 @@ program example1
   call intersect (s1, s2, x)
       
   !write (*,'(F8.3, A, F8.3, A, F8.3)'), v1, ' ', v2, ' ', x
+  print *, v1, ' ', v2, ' ', x
 
   contains
 
@@ -36,8 +36,6 @@ program example1
       real :: y1
       real :: y2
       real :: t_i, x
-
-
 
       common y1, y2
 
