@@ -37,6 +37,7 @@ import Data.Generics.Uniplate.Operations
 import qualified Language.Fortran.AST as F
 import qualified Language.Fortran.Analysis as FA
 import qualified Language.Fortran.Analysis.Types as FAT
+import qualified Language.Fortran.Analysis.Renaming as FAR
 import qualified Language.Fortran.Util.Position as FU
 import qualified Language.Fortran.ParserMonad as PM
 import qualified Language.Fortran.PrettyPrint as PP
@@ -89,7 +90,7 @@ analyseAndRmCommons = mapM analysePerPF
 
 analysePerPF :: F.ProgramFile A -> CommonState (F.ProgramFile A)
 analysePerPF pf = do
-   let pf' = FA.initAnalysis pf
+   let pf' = FAR.analyseRenames . FA.initAnalysis $ pf
    let (pf'', tenv) = FAT.analyseTypes pf'
    pf''' <- transformBiM (analysePerPU tenv (F.pfGetFilename pf)) pf''
    return (fmap FA.prevAnnotation pf''')
@@ -122,14 +123,16 @@ collectAndRmCommons tenv fname pname = transformBiM commons
       modify (\(r, infos) -> (r ++ r', info : infos))
 
     typeCommonExprs :: F.Expression A1 -> (F.Name, TypeInfo)
-    typeCommonExprs (F.ExpValue _ sp (F.ValVariable v)) =
-      case M.lookup v tenv of
-        Just (FA.IDType (Just t) (Just ct@FA.CTVariable)) -> (v, (t, ct))
-        Just (FA.IDType (Just t) (Just ct@FA.CTArray{}))  -> (v, (t, ct))
-        _ -> error $ "Variable '" ++ show v
+    typeCommonExprs e@(F.ExpValue _ sp (F.ValVariable _)) =
+      case M.lookup var tenv of
+        Just (FA.IDType (Just t) (Just ct@FA.CTVariable)) -> (src, (t, ct))
+        Just (FA.IDType (Just t) (Just ct@FA.CTArray{}))  -> (src, (t, ct))
+        _ -> error $ "Variable '" ++ src
                   ++ "' is of an unknown or higher-order type at: " ++ show sp ++ " "
-                  ++ show (M.lookup v tenv)
-
+                  ++ show (M.lookup var tenv)
+      where
+        var = FA.varName e
+        src = FA.srcName e
     typeCommonExprs e = error $ "Not expecting a non-variable expression \
                                 \in expression at: " ++ show (FU.getSpan e)
 
