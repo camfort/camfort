@@ -180,7 +180,7 @@ freshenCommonNames (fname, (pname, (cname, fields))) =
         let mkRenamerAndCommon (r, tc) (v, t) =
                            let v' = caml (commonName cname) ++ "_" ++ v
                            in (M.insert v (Just v', Nothing) r, (v', t) : tc)
-            (r, fields') = foldl mkRenamerAndCommon (M.empty, []) fields
+            (r, fields') = foldl' mkRenamerAndCommon (M.empty, []) fields
         in ((fname, (pname, (cname, fields'))), Just r)
 
 -- From a list of typed and located common blocks group by the common
@@ -245,7 +245,7 @@ updateUseDecls fps tcs = map perPF fps
 
     importIncludeCommons :: PM.FortranVersion -> F.ProgramUnit A -> F.ProgramUnit A
     importIncludeCommons v p =
-        foldl (flip (matchPUnit v)) p (reduceCollect inames p)
+        foldl' (flip (matchPUnit v)) p (reduceCollect inames p)
 
     -- Data-type generic reduce traversal
     reduceCollect :: (Data s, Data t, Uniplate t, Biplate t s) => (s -> Maybe a) -> t -> [a]
@@ -297,7 +297,7 @@ updateUseDecls fps tcs = map perPF fps
       where
         (F.AList al sl declsA) = decls
         decls' = F.AList al' sl declsA'
-        (assgns, declsA') = foldl matchVar ([],[]) declsA
+        (assgns, declsA') = foldl' matchVar ([],[]) declsA
         -- Update annotation if declarations are being added
         ((a', s'), al')
           | null declsA'                     = ((a {refactored = Just p1, deleteNode = True}, deleteLine s),
@@ -363,7 +363,7 @@ renamerToUse :: RenamerCoercer -> [(F.Name, F.Name)]
 renamerToUse Nothing = []
 renamerToUse (Just m) = let entryToPair _ (Nothing, _) = []
                             entryToPair v (Just v', _) = [(v, v')]
-                        in M.foldlWithKey (\xs v e -> entryToPair v e ++ xs) [] m
+                        in M.foldlWithKey' (\xs v e -> entryToPair v e ++ xs) [] m
 
 -- make the use statements for a particular program unit's common blocks
 mkUseStatementBlocks :: FU.SrcSpan -> [(TCommon A, RenamerCoercer)] -> [F.Block A]
