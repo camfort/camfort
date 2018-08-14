@@ -17,6 +17,7 @@
 {-# LANGUAGE FlexibleInstances #-}
 {-# LANGUAGE PolyKinds #-}
 {-# LANGUAGE TypeSynonymInstances #-}
+{-# LANGUAGE MonoLocalBinds #-}
 
 module Camfort.Transformation.CommonBlockElim
   ( commonElimToModules
@@ -49,7 +50,8 @@ import Camfort.Analysis.Annotations
 -- Tuple of:
 --     * a (possible) common block name
 --     * map from names to their types
-type TCommon p = (Maybe F.Name, [(F.Name, F.BaseType)])
+type TypeInfo = (F.BaseType, FA.ConstructType)
+type TCommon p = (Maybe F.Name, [(F.Name, TypeInfo)])
 
 -- Typed and "located" common block representation
 -- Right associated pairs tuple of:
@@ -119,13 +121,13 @@ collectAndRmCommons tenv fname pname = transformBiM commons
       let info = (fname, (punitName pname, (commonNameFromAST cname, tcommon)))
       modify (\(r, infos) -> (r ++ r', info : infos))
 
-    typeCommonExprs :: F.Expression A1 -> (F.Name, F.BaseType)
+    typeCommonExprs :: F.Expression A1 -> (F.Name, TypeInfo)
     typeCommonExprs (F.ExpValue _ sp (F.ValVariable v)) =
       case M.lookup v tenv of
-        Just (FA.IDType (Just t) (Just FA.CTVariable)) -> (v, t)
-        Just (FA.IDType (Just t) (Just FA.CTArray{}))    -> (v, t)
+        Just (FA.IDType (Just t) (Just ct@FA.CTVariable)) -> (v, (t, ct))
+        Just (FA.IDType (Just t) (Just ct@FA.CTArray{}))  -> (v, (t, ct))
         _ -> error $ "Variable '" ++ show v
-                  ++ "' is of an unknown or higher-order type at: " ++ show sp
+                  ++ "' is of an unknown or higher-order type at: " ++ show sp ++ " "
                   ++ show (M.lookup v tenv)
 
     typeCommonExprs e = error $ "Not expecting a non-variable expression \
@@ -212,7 +214,7 @@ mkTLCommonRenamers commons =
 -- a Nothing for a variable represent a variable-level (renamer) identity
 -- a Nothing for a type represents a type-level (coercer) identity
 type RenamerCoercer =
-    Maybe (M.Map F.Name (Maybe F.Name, Maybe (F.BaseType, F.BaseType)))
+    Maybe (M.Map F.Name (Maybe F.Name, Maybe (TypeInfo, TypeInfo)))
 
 class Renaming r where
     hasRenaming :: F.Name -> r -> Bool
@@ -386,9 +388,8 @@ mkRenamerCoercerTLC (_, (_, common1)) (_, (_, common2)) =
 
 mkRenamerCoercer :: TCommon A :? source -> TCommon A :? target -> RenamerCoercer
 mkRenamerCoercer (name1, vtys1) (name2, vtys2)
-  | name1 == name2 =
-     if vtys1 == vtys2 then Nothing
-                         else Just $ generate vtys1 vtys2 M.empty
+  | name1 == name2 = if vtys1 == vtys2 then Nothing
+                     else Just $ generate vtys1 vtys2 M.empty
   | otherwise      =
         error "Can't generate renamer between different common blocks\n"
       where
@@ -418,16 +419,16 @@ coherentCommons (_, (_, (n1, vtys1))) (_, (_, (n2, vtys2))) =
     else error $ "Trying to compare differently named common blocks: "
                ++ show n1 ++ " and " ++ show n2 ++ "\n"
 
-coherentCommons' ::  [(F.Name, F.BaseType)] -> [(F.Name, F.BaseType)] -> (String, Bool)
+coherentCommons' ::  [(F.Name, TypeInfo)] -> [(F.Name, TypeInfo)] -> (String, Bool)
 coherentCommons' []               []                = ("", True)
 coherentCommons' ((var1, ty1):xs) ((var2, ty2):ys)
       | af ty1 == af ty2 = let (r', c) = coherentCommons' xs ys
                                            in (r', c && True)
       | otherwise = let r = var1 ++ ":"
-                          ++ PP.pprintAndRender PM.Fortran90 ty1 Nothing
+                          ++ PP.pprintAndRender PM.Fortran90 (fst ty1) Nothing
                           ++ "(" ++ show (af ty1) ++ ")"
                           ++ " differs from " ++ var2
-                          ++ ":" ++ PP.pprintAndRender PM.Fortran90 ty2 Nothing
+                          ++ ":" ++ PP.pprintAndRender PM.Fortran90 (fst ty2) Nothing
                           ++ "(" ++ show (af ty2) ++ ")" ++ "\n"
                         (r', _) = coherentCommons' xs ys
                     in (r ++ r', False)
@@ -451,7 +452,7 @@ mkModuleFile meta dir (_, (_, (name, varTys))) =
     r = "Creating module " ++ modname ++ " at " ++ path ++ "\n"
     mod = mkModule modname varTys modname
 
-mkModule :: String -> [(F.Name, F.BaseType)] -> String -> F.ProgramUnit A
+mkModule :: String -> [(F.Name, TypeInfo)] -> String -> F.ProgramUnit A
 mkModule name vtys fname =
     F.PUModule a sp (caml fname) decls Nothing
   where
@@ -459,9 +460,15 @@ mkModule name vtys fname =
     loc = FU.Position 0 0 0
     sp = FU.SrcSpan loc loc
     toDeclBlock (v, t) = F.BlStatement a sp Nothing (toStmt (v, t))
-    toStmt (v, t) = F.StDeclaration a sp (toTypeSpec t) Nothing (toDeclarator v)
+    toStmt (v, (bt, ct)) = F.StDeclaration a sp (toTypeSpec bt) Nothing (toDeclarator (v, ct))
     toTypeSpec t = F.TypeSpec a sp t Nothing
-    toDeclarator v = F.AList a sp
+    toDeclarator (v, FA.CTVariable) = F.AList a sp
        [F.DeclVariable a sp
           (F.ExpValue a sp (F.ValVariable (caml name ++ "_" ++ v))) Nothing Nothing]
+    toDeclarator (v, FA.CTArray dims) = F.AList a sp
+       [F.DeclArray a sp
+          (F.ExpValue a sp (F.ValVariable (caml name ++ "_" ++ v))) dimDecls Nothing Nothing]
+       where
+         dimDecls = F.AList a sp . flip map dims $ \ (lb, ub) -> F.DimensionDeclarator a sp (fmap exp lb) (fmap exp ub)
+         exp = F.ExpValue a sp . F.ValInteger . show
     decls = map toDeclBlock vtys

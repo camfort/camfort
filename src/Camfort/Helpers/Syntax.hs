@@ -51,6 +51,7 @@ import qualified Data.Semigroup as SG
 import Data.Generics.Uniplate.Data
 
 import qualified Language.Fortran.AST as F
+import qualified Language.Fortran.Analysis as FA
 import qualified Language.Fortran.Util.Position as FU
 
 -- * Comparison and ordering
@@ -91,6 +92,9 @@ instance Eq a => Eq (AnnotationFree (F.Expression a)) where
                  where pos0 = FU.Position 0 0 0
 
 instance Eq (AnnotationFree F.BaseType) where
+    (AnnotationFree x) == (AnnotationFree y) = x == y
+
+instance Eq (AnnotationFree FA.ConstructType) where
     (AnnotationFree x) == (AnnotationFree y) = x == y
 
 -- * Accessor functions for extracting various pieces of information
