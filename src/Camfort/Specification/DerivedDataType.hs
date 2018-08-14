@@ -155,7 +155,7 @@ type ConflictErrors = M.Map (F.Name, Int) (S.Set Essence)
 type BadLabelErrors = M.Map (F.Name, Int) (S.Set (String, VInfo))
 
 -- | Variable(dim)s where the specification has a bad (e.g. duplicated) index
-type BadDimErrors = M.Map (F.Name, Int) (S.Set (VInfo, Int))
+type BadDimErrors = M.Map (F.Name, Int) (S.Set (Int, VInfo))
 
 -- | Collection of information comprising a 'derived datatype' report
 -- for CamFort output purposes.
@@ -263,7 +263,7 @@ instance Describe DerivedDataTypeReport where
                             if maxDim == 0 then " less than 1"
                             else " not in range 1.." <> describe maxDim])
                  | ((_, dim), badSet) <- M.toList ddtrBDE
-                 , (vinfo, maxDim) <- S.toList badSet ]
+                 , (maxDim, vinfo) <- S.toList badSet ]
 
       errorReport = linesByFile $ ideLines ++ ceLines ++ bleLines ++ bdeLines
       describeLabels labs = intercalate ", " [describe i <> "=>" <> pack l | (i,l) <- IM.toList labs]
@@ -374,7 +374,7 @@ genProgramFileReport mfs (pf@(F.ProgramFile F.MetaInfo{ F.miFilename = srcFile }
     badLabels = M.filter (not . null) $ M.map (setConcatMap findDupLabels) essences
 
     -- Badly specified 'dim' attributes (e.g. out of bounds):
-    badDims = [ ((declVarName, dim), S.singleton (vinfo, maxDim))
+    badDims = [ ((declVarName, dim), S.singleton (maxDim, vinfo))
               | (spec@DDTSt{..} , b) <- specs
               , (srcName, dim)       <- ddtStVarDims
               , (declVarName, vinfo) <- declaredVars srcFile b

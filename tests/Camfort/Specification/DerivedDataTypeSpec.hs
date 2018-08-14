@@ -49,10 +49,10 @@ spec = do
     describe "bad dimensions" $ do
       it "dim violates min bound" $ do
         r <- ddtInferReport [] "badDim1.f90"
-        map (fmap (snd . head . S.toList)) (M.toList (ddtrBDE r)) `shouldBe` [(("example_d_common", 0), 0)]
+        map (fmap (fst . head . S.toList)) (M.toList (ddtrBDE r)) `shouldBe` [(("example_d_common", 0), 0)]
       it "dim violates max bound" $ do
         r <- ddtInferReport [] "badDim2.f90"
-        map (fmap (snd . head . S.toList)) (M.toList (ddtrBDE r)) `shouldBe` [(("example_d_common", 3), 2)]
+        map (fmap (fst . head . S.toList)) (M.toList (ddtrBDE r)) `shouldBe` [(("example_d_common", 3), 2)]
     describe "bad labelling" $ do
       it "dupped index" $ do
         r <- ddtInferReport [] "dupIndex1.f90"
