@@ -1,22 +1,18 @@
 program foo
   implicit none
 
+  integer :: a = 10
   integer :: i
-  integer :: x
-  integer :: y
-
+  integer :: j
   real(kind=8) :: z
 
-  common x, y
-  
-  x = 3
-  y = 10
+  common i, j
 
-  CALL bar(i)
+  i = 3
+  j = 10
 
-  print '(i2)', x 
+  CALL bar(a)
 
-  contains
-
+  print '(i2)', i
 
 end program foo
