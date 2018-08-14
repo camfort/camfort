@@ -1,5 +1,6 @@
 { -- -*- Mode: Haskell -*-
 {-# LANGUAGE DeriveDataTypeable #-}
+{-# LANGUAGE DeriveGeneric #-}
 
 module Camfort.Specification.DerivedDataType.Parser
   ( ddtParser
@@ -7,10 +8,12 @@ module Camfort.Specification.DerivedDataType.Parser
   , DDTStatement(..)
   ) where
 
+import Camfort.Specification.Parser (mkParser, SpecParser)
 import Control.Monad.Except (throwError)
+import Data.Binary (Binary)
 import Data.Char (isLetter, isNumber, isAlphaNum, toLower)
 import Data.Data (Data)
-import Camfort.Specification.Parser (mkParser, SpecParser)
+import GHC.Generics (Generic)
 
 }
 
@@ -61,7 +64,8 @@ data DDTStatement
           , ddtStTypeName :: String
           , ddtStLabels   :: [(String, String)]
           , ddtStVarDims  :: [(String, Int)] }
-  deriving (Data, Eq, Show)
+  deriving (Data, Eq, Show, Generic)
+instance Binary DDTStatement
 
 data DDTParseError
   -- | Not a valid identifier character.
