@@ -40,13 +40,15 @@ import           Control.Applicative
 import           Control.Arrow (first, second, (&&&))
 import           Control.Lens
 import           Control.Monad
+import           Control.Monad.RWS
 import           Control.Monad.Writer.Strict
 import           Data.Binary (Binary, decodeOrFail, encode)
 import qualified Data.ByteString.Lazy.Char8 as LB
 import           Data.Data
+import           Data.Function (on)
 import           Data.Generics.Uniplate.Operations
 import qualified Data.IntMap.Strict as IM
-import           Data.List (sort, foldl')
+import           Data.List (sort, foldl', groupBy)
 import qualified Data.List as List
 import qualified Data.Map.Strict as M
 import           Data.Maybe (fromMaybe, fromJust, maybeToList, isJust)
@@ -90,6 +92,10 @@ type DA = FA.Analysis DDTAnnotation
 -- | Modify top-level annotation.
 onOrigAnnotation :: (A -> A) -> DA -> DA
 onOrigAnnotation f = onPrev $ \ a -> a { prevAnnotation = f (prevAnnotation a) }
+
+-- | Strip annotations used by this file.
+stripAnnotations :: Functor f => f DA -> f A
+stripAnnotations = fmap (prevAnnotation . FA.prevAnnotation)
 
 -- Instances for embedding parsed specifications into the AST
 instance ASTEmbeddable DA DDTStatement where
@@ -298,7 +304,7 @@ synth marker pfs = do
   forEachProgramFile pfs $ \ pf -> do
     let (report, pf'@(F.ProgramFile mi _)) = genProgramFileReport mfs pf
     let synthedPF = descendBi (synthBlocks (mi, marker) report) pf'
-    let strippedPF | successful report = Right (fmap (prevAnnotation . FA.prevAnnotation) synthedPF)
+    let strippedPF | successful report = Right (stripAnnotations synthedPF)
                    | otherwise         = Left "error"
     return $ (report, strippedPF)
 
@@ -309,7 +315,11 @@ refactor pfs = do
   forEachProgramFile pfs $ \ pf -> do
     let (report, pf') = genProgramFileReport mfs pf
     -- FIXME: gather marked comments and apply
-    return $ (report, Right pf)
+    let smap = M.filter (not . S.null) . M.map (S.filter essStarred) $ ddtrSMap report
+    let report' = report { ddtrSMap = smap }
+    if M.null smap
+      then return (report', Left "nothing to do")
+      else return (report', Right . stripAnnotations $ refactorPF report' pf')
 
 -- | Compile a program to a 'ModFile' containing derived datatype information.
 compile :: () -> ModFiles -> F.ProgramFile A -> IO ModFile
@@ -422,8 +432,8 @@ analysis mfs pf = (amap', linkedPF, tenv)
 
      -- Attempt to gather any constant-expression information from indices.
      perArray :: [F.Index DA] -> [(Int, Maybe Int)]
-     perArray is = [ (n, do F.IxSingle _ _ _ e <- Just ix
-                            FAD.ConstInt i     <- FA.constExp (F.getAnnotation e)
+     perArray is = [ (n, do F.IxSingle _ _ Nothing e <- Just ix
+                            FAD.ConstInt i           <- FA.constExp (F.getAnnotation e)
                             return (fromIntegral i))
                    | (n, ix) <- zip [1..] is ]
 
@@ -449,6 +459,54 @@ analysis mfs pf = (amap', linkedPF, tenv)
                                 , all isJust                       -- (2) of constants only, no wildcards
                                 , all (< 3) . diffs . map fromJust -- (3) no more than 3 away from adjacent constants
                                 ] . S.toList
+--------------------------------------------------
+-- Refactoring helpers
+
+type RefactorM = RWS DerivedDataTypeReport [Essence] Bool
+
+refactorPF :: DerivedDataTypeReport -> F.ProgramFile DA -> F.ProgramFile DA
+refactorPF r pf = pf'
+  where
+    -- FIXME essences need to be inserted as new derived types
+    (pf', _, essences) = runRWS (transformBiM refactorBlock pf) r False
+
+refactorBlock :: F.Block DA -> RefactorM (F.Block DA)
+refactorBlock b = case b of
+  F.BlStatement _ _ _ F.StExpressionAssign{} -> do
+    put False
+    b'   <- transformBiM refactorExp b
+    flag <- get
+    let FU.SrcSpan lb _ = FU.getSpan b'
+    if flag
+      then return $ F.modifyAnnotation (onOrigAnnotation $ \ a -> a { refactored = Just lb }) b'
+      else return b
+  -- FIXME revise declarations with new type
+  -- F.BlStatement _ _ _ F.StDeclaration{} ->
+  -- FIXME remove relevant spec comments
+  -- F.BlComment _ _ _ ->
+  _ -> return b
+
+refactorExp :: F.Expression DA -> RefactorM (F.Expression DA)
+refactorExp e = do
+  smap <- asks ddtrSMap
+  case e of
+    F.ExpSubscript a s e1 ixAList
+      | ixs   <- F.aStrip ixAList
+      , list  <- zipWith ixLookup [1..] ixs
+      , any SE.isRight list
+      , list' <- groupBy ((==) `on` SE.isLeft) list
+      , e'    <- foldl' rewrite e1 list'             -> put True >> return e'
+        where
+          ixLookup dim ix@(F.IxSingle ixA ixS Nothing e)
+            | Just (FAD.ConstInt i) <- FA.constExp (F.getAnnotation e)
+            , Just (Essence{..}:_)  <- fmap S.toList $ M.lookup (FA.varName e1, dim) smap
+            , Just label            <- IM.lookup (fromIntegral i) essLabelMap = SE.Right (ixA, ixS, label)
+          ixLookup _ ix = SE.Left ix
+
+          rewrite e l@(SE.Left _:_)                = F.ExpSubscript a s e (F.AList a s $ map SE.fromLeft l)
+          rewrite e (SE.Right (ixA, ixS, label):l) = rewrite (F.ExpDataRef a s e (F.ExpValue a s (F.ValVariable label))) l
+          rewrite e []                             = e
+    _ -> return e
 
 --------------------------------------------------
 -- Synthesis helpers
