@@ -220,11 +220,14 @@ refactorSyntax v inp e = do
     case refactored a of
       Nothing -> return (B.empty, False)
       Just (FU.Position _ rCol _) -> do
-        let (FU.SrcSpan lb ub) = FU.getSpan e
-        let (pre, _) = takeBounds (cursor, lb) inp
-        let indent = if newNode a then Just (rCol - 1) else Nothing
-        let output = if deleteNode a then B.empty
-                                     else B.pack $ PP.pprintAndRender v e indent
+        let FU.SrcSpan lb ub     = FU.getSpan e
+            lb' | deleteNode a   = lb { FU.posColumn = 0 }
+                | otherwise      = lb
+            (pre, _)             = takeBounds (cursor, lb') inp
+        let indent | newNode a = Just (rCol - 1)
+                   | otherwise = Nothing
+        let output | deleteNode a = B.empty
+                   | otherwise = B.pack $ PP.pprintAndRender v e indent
         out <- if newNode a then do
                   -- If a new node is begin created then
                   numAdded <- lift get
