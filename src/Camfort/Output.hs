@@ -239,7 +239,8 @@ refactorSyntax v inp e = do
                   lift $ put (numAdded - numRemoved)
                   return out
                 else return output
-        put ub
+        put $ if FU.posColumn ub == 1
+              then ub else ub { FU.posLine = FU.posLine ub + 1, FU.posColumn = 1 }
         return (B.concat [pre, out], True)
 
 countLines :: B.ByteString -> Int
