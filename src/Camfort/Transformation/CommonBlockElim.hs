@@ -302,20 +302,21 @@ updateUseDecls fps tcs = map perPF fps
 
         matchVar :: ([F.Statement A], [F.Declarator A]) -> F.Declarator A
                  -> ([F.Statement A], [F.Declarator A])
-        matchVar (assgns, decls)
-                     dec@(F.DeclVariable _ s
-                    lvar@(F.ExpValue _ _ (F.ValVariable v)) _ init) =
-           if hasRenaming v rcs
-           then case init of
-                   -- Renaming exists and no default, then remove
-                   Nothing -> (assgns, decls)
-                   -- Renaming exists but has default, so create an
-                   -- assignment for this
-                   Just initExpr ->
-                     ((F.StExpressionAssign a' s lvar initExpr) : assgns, decls)
-            else -- no renaming, preserve declaration
-                 (assgns, dec : decls)
-        matchVar (assgns, decls) _ = (assgns, decls)
+        -- match on variable or array declaration
+        matchVar (assgns, decls) dec = case dec of
+          F.DeclVariable _ _ lvar@(F.ExpValue _ _ (F.ValVariable v)) _ init -> doMatchVar lvar v init
+          F.DeclArray _ _ lvar@(F.ExpValue _ _ (F.ValVariable v)) _ _ init  -> doMatchVar lvar v init
+          _                                                                 -> (assgns, decls)
+          where
+            doMatchVar lvar v init
+              | hasRenaming v rcs = case init of
+                  -- Renaming exists and no default, then remove
+                  Nothing -> (assgns, decls)
+                    -- Renaming exists but has default, so create an
+                    -- assignment for this
+                  Just initExpr -> ((F.StExpressionAssign a' (FU.getSpan dec) lvar initExpr) : assgns, decls)
+              | otherwise = (assgns, dec : decls)  -- no renaming, preserve declaration
+
     removeDecl _ d = return d
 
 
