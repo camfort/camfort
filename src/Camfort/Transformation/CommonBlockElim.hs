@@ -288,17 +288,18 @@ updateUseDecls fps tcs = map perPF fps
                -> F.Statement A -> State [F.Statement A] (F.Statement A)
     removeDecl rcs (F.StDeclaration a s@(FU.SrcSpan p1 _) typ attr decls) = do
         modify (++ assgns)
-        return $ F.StDeclaration a' (deleteLine s) typ attr decls'
+        return $ F.StDeclaration a' s' typ attr decls'
       where
         (F.AList al sl declsA) = decls
         decls' = F.AList al' sl declsA'
         (assgns, declsA') = foldl matchVar ([],[]) declsA
         -- Update annotation if declarations are being added
-        (a', al') = if length declsA == length declsA'
-                     then (a, al)
-                     else (a {refactored = Just p1, deleteNode = True}
-                         , al {refactored = Just pl1})
-                       where (FU.SrcSpan pl1 _ ) = sl
+        ((a', s'), al')
+          | null declsA'                     = ((a {refactored = Just p1, deleteNode = True}, deleteLine s),
+                                                al {refactored = Just pl1})
+          | length declsA' /= length declsA  = ((a {refactored = Just p1}, s), al {refactored = Just pl1})
+          | otherwise                        = ((a, s), al)
+          where FU.SrcSpan pl1 _ = sl
 
         matchVar :: ([F.Statement A], [F.Declarator A]) -> F.Declarator A
                  -> ([F.Statement A], [F.Declarator A])
