@@ -107,16 +107,15 @@ instance Linkable DA where
 -- | Map of information about constants used to index arrays. Nothing
 -- implies a non-constant is used to index the array at the given
 -- dimension.
-type AMap = M.Map F.Name                          -- ^ variable name (unique form)
-                  (IM.IntMap (S.Set (Maybe Int))) -- ^ Map of dim => maybe constants
+--
+-- Variable name (unique name) => (dim => maybe constants)
+type AMap = M.Map F.Name (IM.IntMap (S.Set (Maybe Int)))
 
--- | Map of info about vars.
-type VMap = M.Map F.Name         -- ^ variable name (unique form)
-                  (S.Set VInfo)
+-- | Map of info about vars (unique name).
+type VMap = M.Map F.Name (S.Set VInfo)
 
--- | Map of specs about (var, dim)s.
-type SMap = M.Map (F.Name, Int)   -- ^ (variable, dim)
-                  (S.Set Essence) -- ^ set of essences of the specs
+-- | Map of specification essences connected to var-unique-name(dim)s.
+type SMap = M.Map (F.Name, Int) (S.Set Essence)
 
 -- | Info about a variable: source name, source filename, source span.
 data VInfo = VInfo { vSrcName :: F.Name, vFileName :: String, vSrcSpan :: FU.SrcSpan }
@@ -149,17 +148,14 @@ data IndexDupError = IndexDupError String VInfo [Int]
   deriving (Show, Eq, Ord, Generic)
 instance Binary IndexDupError
 
--- | Variables(dim) with conflicting spec definitions
-type ConflictErrors = M.Map (F.Name, Int)   -- ^ (variable, dim)
-                            (S.Set Essence) -- ^ set of conflicting essences
+-- | Variable(dim)s and any conflicting spec essences.
+type ConflictErrors = M.Map (F.Name, Int) (S.Set Essence)
 
--- | Variables(dim) where the specification has a bad (e.g. duplicated) label name
-type BadLabelErrors = M.Map (F.Name, Int)            -- ^ (variable, dim)
-                            (S.Set (String, VInfo))  -- ^ set of bad (label, location) info
+-- | Variable(dim)s where the specification has a bad (e.g. duplicated) label name
+type BadLabelErrors = M.Map (F.Name, Int) (S.Set (String, VInfo))
 
--- | Variables(dim) where the specification has a bad (e.g. duplicated) index
-type BadDimErrors = M.Map (F.Name, Int)        -- ^ (variable, dim)
-                          (S.Set (VInfo, Int)) -- ^ set of bad (index, location) info
+-- | Variable(dim)s where the specification has a bad (e.g. duplicated) index
+type BadDimErrors = M.Map (F.Name, Int) (S.Set (VInfo, Int))
 
 -- | Collection of information comprising a 'derived datatype' report
 -- for CamFort output purposes.
@@ -188,8 +184,10 @@ instance SG.Semigroup DerivedDataTypeReport where
                           (M.unionWith S.union bde1 bde2)
                           (ch1 && ch2)
     where
-      newCE   = M.map SE.fromLeft $ M.filter SE.isLeft e_smap -- ^ new conflicts found, if any
-      newSMap = M.map (S.singleton . SE.fromRight) $ M.filter SE.isRight e_smap -- ^ combined SMaps
+      -- new conflicts found, if any
+      newCE   = M.map SE.fromLeft $ M.filter SE.isLeft e_smap
+      -- combined SMaps
+      newSMap = M.map (S.singleton . SE.fromRight) $ M.filter SE.isRight e_smap
 
       -- | Combine the SMaps while looking for new conflicts.
       e_smap = M.fromListWith combine [ (v, SE.Right e) | (v, eSet) <- M.toList s1 ++ M.toList s2, e <- S.toList eSet ]
@@ -205,17 +203,18 @@ combineEssences e1 e2
   , Essence ty2 labMap2 vinfoSet2 s2 <- e2 =
     fromMaybe (SE.Left $ S.fromList [e1, e2]) $ do
       -- In case of conflict, starred essence info overwrites unstarred essence info.
-      -- | Compatible type name.
+      --
+      -- Compatible type name:
       ty <- case () of _ | ty1 == ty2   -> pure ty1
                          | s1 && not s2 -> pure ty1
                          | not s1 && s2 -> pure ty2
                          | otherwise    -> mzero
-      -- | Compatible label names.
+      -- Compatible label names:
       let labelStarCombine l1 l2 | l1 == l2     = l1
                                  | s1 && not s2 = l1
                                  | not s1 && s2 = l2
                                  | otherwise    = mzero
-      -- | Combined label map.
+      -- Combined label map:
       labMap <- sequenceIntMap $ IM.unionWith labelStarCombine (IM.map pure labMap1) (IM.map pure labMap2)
       pure . SE.Right $ Essence ty labMap (S.union vinfoSet1 vinfoSet2) (s1 || s2)
 
