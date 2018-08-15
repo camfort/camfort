@@ -463,7 +463,8 @@ mkModule name vtys fname =
     loc = FU.Position 0 0 0
     sp = FU.SrcSpan loc loc
     toDeclBlock (v, t) = F.BlStatement a sp Nothing (toStmt (v, t))
-    toStmt (v, (bt, ct)) = F.StDeclaration a sp (toTypeSpec bt) Nothing (toDeclarator (v, ct))
+    toStmt (v, (bt, ct)) = F.StDeclaration a sp (toTypeSpec bt) attrs (toDeclarator (v, ct))
+    attrs = Just $ F.AList a sp [F.AttrSave a sp]
     toTypeSpec t = F.TypeSpec a sp t Nothing
     toDeclarator (v, FA.CTVariable) = F.AList a sp
        [F.DeclVariable a sp
