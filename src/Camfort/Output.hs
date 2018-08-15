@@ -198,8 +198,6 @@ refactorBlocks v inp (F.BlStatement _ _ _ s@F.StEquivalence{}) =
     refactorStatements v inp s
 refactorBlocks v inp (F.BlStatement _ _ _ s@F.StCommon{}) =
     refactorStatements v inp s
-refactorBlocks v inp (F.BlStatement _ _ _ s@F.StDeclaration{}) =
-    refactorStatements v inp s
 -- Arbitrary statements can be refactored *as blocks* (in order to
 -- get good indenting)
 refactorBlocks v inp b@F.BlStatement {} = refactorSyntax v inp b
