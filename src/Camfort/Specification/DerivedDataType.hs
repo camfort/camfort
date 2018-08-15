@@ -34,13 +34,13 @@ import           Camfort.Analysis.Annotations (onPrev, buildCommentText, A, Anno
 import           Camfort.Analysis.CommentAnnotator (annotateComments, ASTEmbeddable(..), Linkable(..))
 import           Camfort.Analysis.ModFile
 import           Camfort.Helpers (Filename)
-import           Camfort.Helpers.Syntax (deleteLine)
+import           Camfort.Helpers.Syntax (afterAligned, toCol0, deleteLine)
 import           Camfort.Specification.DerivedDataType.Parser (ddtParser, DDTStatement(..))
 import           Control.Applicative
-import           Control.Arrow (first, second, (&&&))
+import           Control.Arrow ((***), (|||), first, second, (&&&))
 import           Control.Lens
 import           Control.Monad
-import           Control.Monad.RWS
+import           Control.Monad.RWS.Strict
 import           Control.Monad.Writer.Strict
 import           Data.Binary (Binary, decodeOrFail, encode)
 import qualified Data.ByteString.Lazy.Char8 as LB
@@ -51,7 +51,7 @@ import qualified Data.IntMap.Strict as IM
 import           Data.List (sort, foldl', groupBy)
 import qualified Data.List as List
 import qualified Data.Map.Strict as M
-import           Data.Maybe (fromMaybe, fromJust, maybeToList, isJust)
+import           Data.Maybe (mapMaybe, fromMaybe, fromJust, maybeToList, isJust)
 import           Data.Monoid ((<>))
 import qualified Data.Semigroup as SG
 import qualified Data.Set as S
@@ -296,6 +296,7 @@ check :: F.ProgramFile A -> PureAnalysis String () DerivedDataTypeReport
 check pf = do
   mfs <- analysisModFiles
   return (fst $ genProgramFileReport mfs pf) { ddtrCheck = True }
+  -- FIXME: check that a user-supplied spec doesn't conflict with something disqualifying in the code
 
 -- | Generate and insert comments about derived datatypes
 synth :: Char -> [F.ProgramFile A] -> PureAnalysis String () (DerivedDataTypeReport, [Either String (F.ProgramFile A)])
@@ -314,9 +315,10 @@ refactor pfs = do
   mfs <- analysisModFiles
   forEachProgramFile pfs $ \ pf -> do
     let (report, pf') = genProgramFileReport mfs pf
-    -- FIXME: gather marked comments and apply
     let smap = M.filter (not . S.null) . M.map (S.filter essStarred) $ ddtrSMap report
-    let report' = report { ddtrSMap = smap }
+    let amap = M.filter (not . IM.null) . M.mapWithKey cullDims $ ddtrAMap report
+          where cullDims var = IM.filterWithKey (\ dim _ -> M.member (var, dim) smap)
+    let report' = report { ddtrSMap = smap, ddtrAMap = amap }
     if M.null smap
       then return (report', Left "nothing to do")
       else return (report', Right . stripAnnotations $ refactorPF report' pf')
@@ -422,6 +424,7 @@ genProgramFileReport mfs (pf@(F.ProgramFile F.MetaInfo{ F.miFilename = srcFile }
 -- only by constants.
 analysis :: ModFiles -> F.ProgramFile A -> (AMap, F.ProgramFile DA, FAT.TypeEnv)
 analysis mfs pf = (amap', linkedPF, tenv)
+  -- FIXME: check for violations of the 'only one array deref in a path' rule
   where
      (pf', _, tenv) = withCombinedEnvironment mfs (fmap ddtAnnotation0 pf)
      pf''           = FAD.analyseConstExps $ FAB.analyseBBlocks pf'
@@ -467,15 +470,97 @@ type RefactorM = RWS DerivedDataTypeReport [Essence] Bool
 refactorPF :: DerivedDataTypeReport -> F.ProgramFile DA -> F.ProgramFile DA
 refactorPF r pf = pf'
   where
-    -- FIXME essences need to be inserted as new derived types
+    -- FIXME: possibly use the 'essences' writer slot to instead
+    -- gather derived-type declarations and put them somewhere
+    -- central.
     (pf', _, essences) = runRWS (descendBiM refactorBlocks pf) r False
 
 refactorBlocks :: [F.Block DA] -> RefactorM [F.Block DA]
 refactorBlocks = fmap concat . mapM refactorBlock
 
 refactorBlock :: F.Block DA -> RefactorM [F.Block DA]
-refactorBlock b = case b of
-  F.BlStatement _ _ _ F.StExpressionAssign{} -> do
+refactorBlock b = ask >>= \ DerivedDataTypeReport{..} -> case b of
+  -- Rewrite a type declaration of the variable to be converted into the new form.
+  -- FIXME: handle references to other converted variables that are found in initialisation expressions
+  F.BlStatement a ss lab (F.StDeclaration stA stSS ty attrs (F.AList alA alSS decls)) -> do
+    let declNames = map ((FA.varName . declExp) &&& id) decls
+    -- Partition declared variables into 'refactor' and 'remain' sets.
+    let (declsRef, declsRem) = List.partition ((`M.member` ddtrAMap) . fst) declNames
+    let a' | null declsRef = a
+           | otherwise     = flip onOrigAnnotation a $ \ orig -> orig { refactored = Just (afterAligned ss) }
+
+    -- Process a variable (and its corresponding declaration).
+    let eachVar (var, decl)
+          | Just dimMap   <- M.lookup var ddtrAMap
+          , dimDeclALists <- universeBi b :: [F.AList F.DimensionDeclarator DA]
+          , not (null dimDeclALists)
+          , F.AList alDDA alDDSS dimList <- last dimDeclALists
+          , dims          <- IM.keys dimMap
+          , minDim        <- minimum dims
+          , maxDim        <- maximum dims
+          , dimDeclAList' <- F.AList alDDA alDDSS (take (minDim - 1) dimList)
+          , dimEssences   <- sort $ mapMaybe (\ dim -> (dim,) <$> M.lookup (var, dim) ddtrSMap) dims
+          , (_, esset1):_ <- dimEssences
+          , ess1:_        <- S.toList esset1 =
+          let
+            F.TypeSpec tyA tySS _ msel = ty
+            ty' = F.TypeSpec tyA tySS (F.TypeCustom $ essTypeName ess1) msel
+            a'' = flip onOrigAnnotation a' $ \ orig -> orig { newNode = True }
+            ss' = FU.SrcSpan (toCol0 lp) lp where lp = afterAligned ss
+            -- FIXME: character length, what to do
+            decl' ddAList
+              | dds <- F.aStrip ddAList
+              , null dds  = F.DeclVariable (F.getAnnotation decl) (FU.getSpan decl) (declExp decl) Nothing Nothing
+              | otherwise = F.DeclArray (F.getAnnotation decl) (FU.getSpan decl) (declExp decl) ddAList Nothing Nothing
+
+            -- The list of attributes minus any dimension attributes.
+            attrs' = descendBi (List.filter (not . isAttrDimension)) attrs
+            attrs'' | Just (F.AList _ _ []) <- attrs' = Nothing
+                    | otherwise                       = attrs'
+
+            -- Each dimension index number along with its associated type-name.
+            dimTypes = flip map dimEssences . second $ \ esset -> case S.toList esset of
+              Essence{..}:_ -> F.TypeSpec tyA tySS (F.TypeCustom $ essTypeName) Nothing
+              _ -> error "dimTypes: something broken badly: no essences in set"
+
+            -- Process each dimension and return the AST-blocks that define the derived type.
+            eachDim :: [F.DimensionDeclarator DA] -> Int -> [(Int, F.TypeSpec DA)] -> [F.Block DA]
+            eachDim dimList maxDim ((dim, F.TypeSpec _ _ (F.TypeCustom tyName) _):(_, nextTy):rest)
+              | Just (Essence{..}:_) <- fmap S.toList $ M.lookup (var, dim) ddtrSMap = let
+                  mInit | null rest = declInitialiser decl
+                        | otherwise = Nothing
+                  dimDeclAList = F.AList a ss $ drop dim dimList
+                  eachLabel (n, lab)
+                    | maxDim == dim &&
+                      dim < length dimList = F.DeclArray a ss (FA.genVar a ss lab) dimDeclAList Nothing mInit
+                    | otherwise            = F.DeclVariable a ss (FA.genVar a ss lab) Nothing mInit
+                  labelDecls = map eachLabel . sort $ IM.toList essLabelMap
+                  in [ F.BlStatement a'' ss' Nothing (F.StType stA stSS Nothing tyName)
+                     , F.BlStatement a'' ss' Nothing (F.StDeclaration stA stSS nextTy attrs'' (F.AList alA alSS labelDecls))
+                     , F.BlStatement a'' ss' Nothing (F.StEndType stA stSS Nothing) ]
+            eachDim _ _ _ = []
+
+            in (concat . reverse $ map (eachDim dimList maxDim) (List.tails $ dimTypes ++ [(0, ty)])) ++
+               -- The declaration of the variable under the new derived type:
+               [F.BlStatement a'' ss' lab (F.StDeclaration stA stSS ty' attrs'' (F.AList alA alSS [decl' dimDeclAList']))]
+
+    return $ -- Reinsert any other variables, with the refactored ones removed from the list.
+             [F.BlStatement a' ss lab (F.StDeclaration stA stSS ty attrs (F.AList alA alSS (map snd declsRem)))] ++
+             -- Followed by the new set of declarations and derived types.
+             concatMap eachVar declsRef
+
+  -- Eliminate comments that were processed.
+  F.BlComment a ss _
+    | Just spec <- ddtSpec (FA.prevAnnotation a)
+    , ddtStStarred spec -> do
+        let FU.SrcSpan lp _ = ss
+            ss' = deleteLine ss
+            a'  = flip onOrigAnnotation a $ \ orig -> orig { refactored = Just lp, deleteNode = True }
+        return $ if spec `List.elem` ddtrSpecs
+                 then [F.BlComment a' ss' $ F.Comment ""]
+                 else [b]
+  -- Rewrite references to the converted variable
+  F.BlStatement _ _ _ _ -> do
     put False
     b'   <- transformBiM refactorExp b
     flag <- get
@@ -483,20 +568,13 @@ refactorBlock b = case b of
     if flag
       then return [F.modifyAnnotation (onOrigAnnotation $ \ a -> a { refactored = Just lb }) b']
       else return [b]
-  -- FIXME revise declarations with new type
-  -- F.BlStatement _ _ _ F.StDeclaration{} ->
-  F.BlComment a ss _
-    | Just spec <- ddtSpec (FA.prevAnnotation a)
-    , ddtStStarred spec -> do
-        specs <- asks ddtrSpecs
-        let FU.SrcSpan lp _ = ss
-            ss' = deleteLine ss
-            a'  = flip onOrigAnnotation a $ \ orig -> orig { refactored = Just lp, deleteNode = True }
-        return $ if spec `List.elem` specs
-                 then [F.BlComment a' ss' $ F.Comment ""]
-                 else [b]
-  _ -> return [b]
+  -- FIXME: handle BlDo, etc
+  _ -> (:[]) <$> descendBiM refactorBlocks b
 
+isAttrDimension :: F.Attribute DA -> Bool
+isAttrDimension F.AttrDimension{} = True; isAttrDimension _ = False
+
+-- | Convert references such as @x(1,2,3)@ into @x % label1 % label2(3)@.
 refactorExp :: F.Expression DA -> RefactorM (F.Expression DA)
 refactorExp e = do
   smap <- asks ddtrSMap
@@ -517,6 +595,7 @@ refactorExp e = do
           rewrite e l@(SE.Left _:_)                = F.ExpSubscript a s e (F.AList a s $ map SE.fromLeft l)
           rewrite e (SE.Right (ixA, ixS, label):l) = rewrite (F.ExpDataRef a s e (F.ExpValue a s (F.ValVariable label))) l
           rewrite e []                             = e
+    -- FIXME: either convert array slices, or regard that as a disqualifying effect
     _ -> return e
 
 --------------------------------------------------
@@ -552,7 +631,7 @@ synthBlock (mi, marker) r@DerivedDataTypeReport { ddtrAMap = amap } b = case b o
       ss' = deleteLine ss
       a'  = flip onOrigAnnotation a $ \ orig -> orig { refactored = Just lp, deleteNode = True }
   -- otherwise leave the Block untouched
-  _ -> [b]
+  _ -> [descendBi (synthBlocks (mi, marker) r) b]
 
 -- Generate the text that goes into the specification.
 genCommentText :: DerivedDataTypeReport -> (F.Name, F.Name) -> String
@@ -577,14 +656,28 @@ genCommentText DerivedDataTypeReport{..} (varName, srcName)
 --------------------------------------------------
 -- Check helpers
 
--- | From the given block, returns a list of declared variables
+-- | From the given piece of AST, returns a list of declared variables
 -- (unique form) paired with location.
-declaredVars :: String -> F.Block DA -> [(F.Name, VInfo)]
-declaredVars srcFile x =
-  [ (FA.varName e, VInfo (FA.srcName e) srcFile (FU.getSpan e))
-  | F.DeclVariable _ _ e _ _  <- universeBi x :: [F.Declarator DA]] ++
-  [ (FA.varName e, VInfo (FA.srcName e) srcFile (FU.getSpan e))
-  | F.DeclArray _ _ e _ _ _   <- universeBi x :: [F.Declarator DA]]
+declaredVars :: Data (f DA) => String -> f DA -> [(F.Name, VInfo)]
+declaredVars srcFile x = [ (FA.varName e, VInfo (FA.srcName e) srcFile (FU.getSpan e)) | e <- declaredExps x ]
+
+
+-- | From the given piece of AST, returns a list of expressions
+-- associated with the declarators.
+declaredExps :: Data (f DA) => f DA -> [F.Expression DA]
+declaredExps x = [ e | d <- universeBi x :: [F.Declarator DA]
+                     , e@(F.ExpValue _ _ (F.ValVariable _)) <- [declExp d] ]
+
+
+-- | Pattern matches the expression from the declarator
+declExp :: F.Declarator a -> F.Expression a
+declExp (F.DeclVariable _ _ e _ _) = e
+declExp (F.DeclArray _ _ e _ _ _)  = e
+
+-- | Pattern matches the initialiser from the declarator
+declInitialiser :: F.Declarator a -> Maybe (F.Expression a)
+declInitialiser (F.DeclVariable _ _ _ _ me) = me
+declInitialiser (F.DeclArray _ _ _ _ _ me)  = me
 
 -- | Given a parsed specification and variable information, attempts
 -- to 'distil' the essence of the specification. If there is a problem
