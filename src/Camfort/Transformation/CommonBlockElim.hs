@@ -290,10 +290,10 @@ updateUseDecls fps tcs = map perPF fps
     -- declaration time (which then need to be turned into separate assignment
     -- statements)
     removeDecl :: [RenamerCoercer]
-               -> F.Statement A -> State [F.Statement A] (F.Statement A)
-    removeDecl rcs (F.StDeclaration a s@(FU.SrcSpan p1 _) typ attr decls) = do
+               -> F.Block A -> State [F.Statement A] (F.Block A)
+    removeDecl rcs (F.BlStatement a s@(FU.SrcSpan p1 _) mlab (F.StDeclaration stA stS typ attr decls)) = do
         modify (++ assgns)
-        return $ F.StDeclaration a' s' typ attr decls'
+        return . F.BlStatement a' s' mlab $ F.StDeclaration stA stS typ attr decls'
       where
         (F.AList al sl declsA) = decls
         decls' = F.AList al' sl declsA'
