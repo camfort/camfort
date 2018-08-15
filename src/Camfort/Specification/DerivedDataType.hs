@@ -543,9 +543,9 @@ refactorBlock b = ask >>= \ DerivedDataTypeReport{..} -> case b of
             in (concat . reverse $ map (eachDim dimList maxDim) (List.tails $ dimTypes ++ [(0, ty)])) ++
                -- The declaration of the variable under the new derived type:
                [F.BlStatement a'' ss' lab (F.StDeclaration stA stSS ty' attrs'' (F.AList alA alSS [decl' dimDeclAList']))]
-
+    let aRem = onOrigAnnotation (\ orig -> orig { deleteNode = null declsRem }) a'
     return $ -- Reinsert any other variables, with the refactored ones removed from the list.
-             [F.BlStatement a' ss lab (F.StDeclaration stA stSS ty attrs (F.AList alA alSS (map snd declsRem)))] ++
+             [F.BlStatement aRem ss lab (F.StDeclaration stA stSS ty attrs (F.AList alA alSS (map snd declsRem)))] ++
              -- Followed by the new set of declarations and derived types.
              concatMap eachVar declsRef
 
