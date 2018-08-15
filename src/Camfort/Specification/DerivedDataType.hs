@@ -468,9 +468,12 @@ refactorPF :: DerivedDataTypeReport -> F.ProgramFile DA -> F.ProgramFile DA
 refactorPF r pf = pf'
   where
     -- FIXME essences need to be inserted as new derived types
-    (pf', _, essences) = runRWS (transformBiM refactorBlock pf) r False
+    (pf', _, essences) = runRWS (descendBiM refactorBlocks pf) r False
 
-refactorBlock :: F.Block DA -> RefactorM (F.Block DA)
+refactorBlocks :: [F.Block DA] -> RefactorM [F.Block DA]
+refactorBlocks = fmap concat . mapM refactorBlock
+
+refactorBlock :: F.Block DA -> RefactorM [F.Block DA]
 refactorBlock b = case b of
   F.BlStatement _ _ _ F.StExpressionAssign{} -> do
     put False
@@ -478,13 +481,21 @@ refactorBlock b = case b of
     flag <- get
     let FU.SrcSpan lb _ = FU.getSpan b'
     if flag
-      then return $ F.modifyAnnotation (onOrigAnnotation $ \ a -> a { refactored = Just lb }) b'
-      else return b
+      then return [F.modifyAnnotation (onOrigAnnotation $ \ a -> a { refactored = Just lb }) b']
+      else return [b]
   -- FIXME revise declarations with new type
   -- F.BlStatement _ _ _ F.StDeclaration{} ->
-  -- FIXME remove relevant spec comments
-  -- F.BlComment _ _ _ ->
-  _ -> return b
+  F.BlComment a ss _
+    | Just spec <- ddtSpec (FA.prevAnnotation a)
+    , ddtStStarred spec -> do
+        specs <- asks ddtrSpecs
+        let FU.SrcSpan lp _ = ss
+            ss' = deleteLine ss
+            a'  = flip onOrigAnnotation a $ \ orig -> orig { refactored = Just lp, deleteNode = True }
+        return $ if spec `List.elem` specs
+                 then [F.BlComment a' ss' $ F.Comment ""]
+                 else [b]
+  _ -> return [b]
 
 refactorExp :: F.Expression DA -> RefactorM (F.Expression DA)
 refactorExp e = do
