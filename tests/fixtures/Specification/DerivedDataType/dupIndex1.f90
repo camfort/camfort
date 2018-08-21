@@ -4,7 +4,7 @@ program example
   integer, parameter :: y = 2
   integer, parameter :: z = 3
 
-  != ddt example_d_common_type(2=>label2, 2=>label1, 3=>label3, 4=>label4) :: d(dim=2)
+  != ddt example_d_common_type(2=>label2, 2=>label1, 3=>label3) :: d(dim=2)
   real, dimension(3,3) :: d, e
   real :: sum
   integer :: i

@@ -57,6 +57,9 @@ spec = do
       it "dupped index" $ do
         r <- ddtInferReport [] "dupIndex1.f90"
         S.size (ddtrIDE r) `shouldBe` 1
+      it "out-of-bounds index" $ do
+        r <- ddtInferReport [] "oobIndex1.f90"
+        S.size (ddtrIDE r) `shouldBe` 1
       it "dupped label" $ do
         r <- ddtInferReport [] "badLabel1.f90"
         map (fmap (fst . head . S.toList)) (M.toList (ddtrBLE r)) `shouldBe` [(("example_d_common", 2), "label1")]

@@ -515,8 +515,10 @@ refactorBlock b = ask >>= \ DerivedDataTypeReport{..} -> case b of
     -- Process a variable (and its corresponding declaration).
     let eachVar (var, decl)
           | Just dimMap   <- M.lookup var ddtrAMap
+            -- find the DimDecls for the array we are working on
           , dimDeclALists <- universeBi b :: [F.AList F.DimensionDeclarator DA]
           , not (null dimDeclALists)
+            -- if DimDecls are specified twice, take the last one:
           , F.AList alDDA alDDSS dimList <- last dimDeclALists
           , dims          <- IM.keys dimMap
           , minDim        <- minimum dims

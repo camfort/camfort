@@ -4,7 +4,7 @@ program consistSpec1
   integer, parameter :: z = 4
 
   != ddt consist1(2=>label2, 3=>label3, 4=>label4) :: d(dim=2)
-  real, dimension(3,3) :: d, e
+  real, dimension(3,4) :: d, e
   real :: sum
   integer :: i
   common /consist1/ d
