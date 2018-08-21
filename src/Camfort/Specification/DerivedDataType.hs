@@ -150,9 +150,10 @@ instance Ord Essence where
   Essence ty1 l1 _ _ `compare` Essence ty2 l2 _ _ = (ty1, l1) `compare` (ty2, l2)
 
 -- given type name, (source name, span), dupped labels
-data IndexDupError = IndexDupError String VInfo [Int]
+data IndexError = IndexDupError String VInfo [Int]
+                | IndexOOBError String VInfo [Int]
   deriving (Show, Eq, Ord, Generic)
-instance Binary IndexDupError
+instance Binary IndexError
 
 -- | Variable(dim)s and any conflicting spec essences.
 type ConflictErrors = M.Map (F.Name, Int) (S.Set Essence)
@@ -170,7 +171,7 @@ data DerivedDataTypeReport
                           , ddtrVMap  :: VMap
                           , ddtrSMap  :: SMap
                           , ddtrSpecs :: [DDTStatement]
-                          , ddtrIDE   :: (S.Set IndexDupError)
+                          , ddtrIDE   :: (S.Set IndexError)
                           , ddtrCE    :: ConflictErrors
                           , ddtrBLE   :: BadLabelErrors
                           , ddtrBDE   :: BadDimErrors
@@ -252,6 +253,9 @@ instance Describe DerivedDataTypeReport where
       ideLines = [ (vinfo, [pack ty <> " has duplicated indice(s) [" <>
                             intercalate ", " (map describe ints) <> "] for variable: " <> pack (vSrcName vinfo)])
                  | IndexDupError ty vinfo ints <- S.toList ddtrIDE ]
+      oobLines = [ (vinfo, [pack ty <> " has out-of-bounds indice(s) [" <>
+                            intercalate ", " (map describe ints) <> "] for variable: " <> pack (vSrcName vinfo)])
+                 | IndexOOBError ty vinfo ints <- S.toList ddtrIDE ]
       ceLines  = [ (vinfo, [pack ty0 <> "(" <> describeLabels l0 <> ") :: " <> pack (vSrcName vinfo) <> "(dim=" <>
                             describe dim <> ")\nconflicts with\n" <>
                             unlines [ pack fn <> ": " <> describe ss <> " " <> pack ty <> "(" <> describeLabels labs <> ")"
@@ -271,7 +275,7 @@ instance Describe DerivedDataTypeReport where
                  | ((_, dim), badSet) <- M.toList ddtrBDE
                  , (maxDim, vinfo) <- S.toList badSet ]
 
-      errorReport = linesByFile $ ideLines ++ ceLines ++ bleLines ++ bdeLines
+      errorReport = linesByFile $ ideLines ++ oobLines ++ ceLines ++ bleLines ++ bdeLines
       describeLabels labs = intercalate ", " [describe i <> "=>" <> pack l | (i,l) <- IM.toList labs]
 
 -- | Return combined text where entries are grouped and sorted by filename, source span
@@ -369,7 +373,7 @@ genProgramFileReport mfs (pf@(F.ProgramFile F.MetaInfo{ F.miFilename = srcFile }
     (l_errors, r_essences) = List.partition (SE.isLeft . snd) e_essences
 
     -- Dupped indices:
-    indexErrors = S.fromList $ map (SE.fromLeft . snd) l_errors
+    dupIndices = S.fromList $ map (SE.fromLeft . snd) l_errors
 
     essences :: M.Map (F.Name, Int) (S.Set Essence)
     essences = M.fromListWith S.union $ map (second (S.singleton . SE.fromRight)) r_essences
@@ -400,6 +404,25 @@ genProgramFileReport mfs (pf@(F.ProgramFile F.MetaInfo{ F.miFilename = srcFile }
                                     -- There is a known upper-bound and dim violates it.
                                     return maxDim ] ]
 
+    -- Index out-of-bounds of statically-known array dimensions:
+    oobIndices = [ IndexOOBError tyname vinfo indices
+                 | (spec@DDTSt{..} , b) <- specs
+                 , (srcName, dim)       <- ddtStVarDims
+                 , (declVarName, vinfo) <- declaredVars srcFile b
+                 , let indices = [], let tyname = ""
+                 , vSrcName vinfo == srcName
+                 , Just indices <- [ do FA.IDType { FA.idCType = Just (FA.CTArray dims) } <- M.lookup declVarName tenv
+                                        let maxDim = length dims
+                                        guard $ dim >= 1 && dim <= maxDim
+                                        let (mminBound, mmaxBound) = dims !! (dim - 1)
+                                        let minBound = 1 `fromMaybe` mminBound
+                                        maxBound <- mmaxBound
+                                        let indices = [ read i | (i, _) <- ddtStLabels ]
+                                        let oob = filter (uncurry (||) . ((< minBound) &&& (> maxBound))) indices
+                                        guard . not . null $ oob
+                                        -- oob is the list of indices out-of-bounds
+                                        return oob ] ]
+
     -- Distil specs from the inferred AMap:
     smapFromAMap = M.fromList [ ((v, dim), essenceSet) | (v, aminfoMap) <- M.toList amap
                                                        , (dim, aminfo)  <- IM.toList aminfoMap
@@ -410,7 +433,7 @@ genProgramFileReport mfs (pf@(F.ProgramFile F.MetaInfo{ F.miFilename = srcFile }
     -- Specs in the file override inferred specs:
     smap = M.unionWith (curry fst) essences smapFromAMap
 
-    ide  = indexErrors
+    ide  = dupIndices `S.union` S.fromList oobIndices
     ce   = conflicts
     ble  = badLabels
     bde  = M.fromList badDims
@@ -682,7 +705,7 @@ declInitialiser (F.DeclArray _ _ _ _ _ me)  = me
 -- | Given a parsed specification and variable information, attempts
 -- to 'distil' the essence of the specification. If there is a problem
 -- with the spec then it returns SE.Left, otherwise SE.Right.
-distil :: DDTStatement -> VInfo -> SE.Either IndexDupError Essence
+distil :: DDTStatement -> VInfo -> SE.Either IndexError Essence
 distil (DDTSt { ddtStStarred = star, ddtStTypeName = tyname, ddtStLabels = labels }) vinfo
   -- if no duplicated indices
   | noDups nums = SE.Right $ Essence { essTypeName = tyname
