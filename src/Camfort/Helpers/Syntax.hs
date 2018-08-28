@@ -89,7 +89,7 @@ instance Eq a => Eq (AnnotationFree (F.Expression a)) where
               x'' = transformBi setSpanConst x'
               setSpanConst :: FU.SrcSpan -> FU.SrcSpan
               setSpanConst (FU.SrcSpan _ _) = FU.SrcSpan pos0 pos0
-                 where pos0 = FU.Position 0 0 0
+                 where pos0 = FU.Position 0 0 0 ""
 
 instance Eq (AnnotationFree F.BaseType) where
     (AnnotationFree x) == (AnnotationFree y) = x == y
@@ -118,18 +118,18 @@ instance Monoid Int where
 -- SrcSpan helpers
 
 dropLine :: FU.SrcSpan -> FU.SrcSpan
-dropLine (FU.SrcSpan s1 (FU.Position o _ l)) =
-    FU.SrcSpan s1 (FU.Position o 1 (l+1))
+dropLine (FU.SrcSpan s1 (FU.Position o _ l f)) =
+    FU.SrcSpan s1 (FU.Position o 1 (l+1) f)
 
 deleteLine :: FU.SrcSpan -> FU.SrcSpan
-deleteLine (FU.SrcSpan (FU.Position ol cl ll) (FU.Position ou _ lu)) =
-    FU.SrcSpan (FU.Position ol (cl-1) ll) (FU.Position ou 1 (lu+1))
+deleteLine (FU.SrcSpan (FU.Position ol cl ll fl) (FU.Position ou _ lu fu)) =
+    FU.SrcSpan (FU.Position ol (cl-1) ll fl) (FU.Position ou 1 (lu+1) fu)
 
 linesCovered :: FU.Position -> FU.Position -> Int
-linesCovered (FU.Position _ _ l1) (FU.Position _ _ l2) = l2 - l1 + 1
+linesCovered (FU.Position _ _ l1 _) (FU.Position _ _ l2 _) = l2 - l1 + 1
 
-toCol0 (FU.Position o _ l) = FU.Position o 1 l
+toCol0 (FU.Position o _ l f) = FU.Position o 1 l f
 
 afterAligned :: FU.SrcSpan -> FU.Position
-afterAligned (FU.SrcSpan (FU.Position o cA _) (FU.Position _ _ lB)) =
-    FU.Position o cA (lB+1)
+afterAligned (FU.SrcSpan (FU.Position o cA _ f) (FU.Position _ _ lB _)) =
+    FU.Position o cA (lB+1) f

@@ -18,7 +18,7 @@ import Language.Fortran.Util.Position
 import Camfort.Analysis.CommentAnnotator
 import Camfort.Specification.Parser (mkParser, parseError, SpecParser)
 
-p = SrcSpan (Position 0 1 1) (Position 0 1 1)
+p = SrcSpan (Position 0 1 1 "") (Position 0 1 1 "")
 
 annotateWith :: (String -> String) -> ProgramFile A -> ProgramFile A
 annotateWith s = runIdentity . annotateComments trivialParser ignore

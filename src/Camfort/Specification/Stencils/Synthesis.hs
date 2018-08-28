@@ -74,7 +74,7 @@ formatSpecNoComment (span, Left specs) =
 
 ------------------------
 a = (head $ FA.initAnalysis [unitAnnotation]) { FA.insLabel = Just 0 }
-s = SrcSpan (Position 0 0 0) (Position 0 0 0)
+s = SrcSpan (Position 0 0 0 "") (Position 0 0 0 "")
 
 -- Make indexing expression for variable 'v' from an offset.
 -- essentially inverse to `ixToOffset` in StencilSpecification

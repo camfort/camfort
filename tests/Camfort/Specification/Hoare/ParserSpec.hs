@@ -114,7 +114,7 @@ matches :: (Eq a, Data a) => a -> a -> Bool
 matches a b =
   stripSpans a == stripSpans b
 
-defSpan = F.SrcSpan (F.Position 0 0 0) (F.Position 0 0 0)
+defSpan = F.SrcSpan (F.Position 0 0 0 "") (F.Position 0 0 0 "")
 
 parse :: String -> Either (Parser.SpecParseError HoareParseError) (SpecOrDecl ())
 parse = runParser hoareParser

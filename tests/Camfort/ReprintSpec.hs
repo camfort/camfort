@@ -58,15 +58,15 @@ spec =
 -}
 
     it "takeBounds test 1" $
-      (fst $ takeBounds (FU.Position 0 2 2, FU.Position 0 5 2) btext)
+      (fst $ takeBounds (FU.Position 0 2 2 "", FU.Position 0 5 2 "") btext)
         `shouldBe` (B.pack "A B")
 
     it "takeBounds test 2" $
-      (fst $ takeBounds (FU.Position 0 2 2, FU.Position 0 1 3) btext)
+      (fst $ takeBounds (FU.Position 0 2 2 "", FU.Position 0 1 3 "") btext)
         `shouldBe` (B.pack "A B C D\n")
 
     it "takeBound test 3" $
-      (fst $ takeBounds (FU.Position 1 1 1, FU.Position 1 5 3) btext2)
+      (fst $ takeBounds (FU.Position 1 1 1 "", FU.Position 1 5 3 "") btext2)
         `shouldBe` (B.pack $ unlines $ take 3 text2)
 
     -- TODO: Fix this
@@ -88,16 +88,16 @@ data PlusOne a = PlusOne { _unwrapPO :: a } deriving Show
 
 instance Arbitrary (PlusOne FU.Position) where
     arbitrary = do
-      FU.Position offset col line <- arbitrary
+      FU.Position offset col line f <- arbitrary
       let col' = if line == 1 then col+1 else col
-      return $ PlusOne $ FU.Position offset col' (line + 1)
+      return $ PlusOne $ FU.Position offset col' (line + 1) f
 
 instance Arbitrary FU.Position where
     arbitrary = do
       offset <- arbitrary `suchThat` (>0)
       line   <- arbitrary `suchThat` (\x -> x >= 1 && x <= (length text))
       col    <- choose (1, orOne $ length (text !! (line - 1)))
-      return $ FU.Position offset col line
+      return $ FU.Position offset col line "<generated>"
 
 orOne x | x == 0    = 1
         | otherwise = x

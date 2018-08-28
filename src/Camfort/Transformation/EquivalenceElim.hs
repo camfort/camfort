@@ -97,9 +97,9 @@ addCopysPerBlock tenv x@(F.BlStatement _ _ _
         let pos = afterAligned sp
         let copies = map (mkCopy tenv pos dstE) eqs'
 
-        let (FU.Position ao c l) = s1
+        let (FU.Position ao c l f) = s1
             reportSpan i =
-              let pos = FU.Position (ao + i) c (l + i)
+              let pos = FU.Position (ao + i) c (l + i) f
               in (FU.SrcSpan pos pos)
 
         forM_ [n..(n + length copies - 1)] $ \i -> do
