@@ -12,3 +12,4 @@ extra-deps:
 - syz-0.2.0.0
 - vinyl-0.8.1.1
 resolver: lts-11.9
+allow-newer: true
