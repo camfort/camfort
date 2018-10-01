@@ -373,7 +373,7 @@ mkUseStatementBlocks s = map mkUseStmnt
     (FU.SrcSpan pos pos') = s
     s' = FU.SrcSpan (toCol0 pos) pos'
     mkUseStmnt x@((name, _), _) = F.BlStatement a s' Nothing $
-       F.StUse a s' useName F.Permissive useListA
+       F.StUse a s' useName Nothing F.Permissive useListA
      where useName = F.ExpValue a s' (F.ValVariable (caml (commonName name)))
            useListA = case useList of [] -> Nothing
                                       us -> Just (F.AList a s' (reverse us))
