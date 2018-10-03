@@ -23,6 +23,8 @@ import Camfort.Functionality
 import Camfort.Specification.Units.Monad (LiteralsOpt(LitMixed))
 import Camfort.Specification.Hoare (PrimReprOption(..))
 
+import Language.Fortran.ParserMonad (FortranVersion(..), selectFortranVersion)
+
 import Data.Maybe (fromMaybe)
 import Data.Monoid ((<>))
 import System.Directory (getCurrentDirectory)
@@ -39,10 +41,11 @@ main = do
     else exitWith $ ExitFailure code
   where
     env ro lo = CamfortEnv
-      { ceInputSources = inputSource ro
-      , ceIncludeDir = includeDir ro
-      , ceExcludeFiles = getExcludes ro
-      , ceLogLevel = logLevel lo
+      { ceInputSources   = inputSource ro
+      , ceIncludeDir     = includeDir ro
+      , ceExcludeFiles   = getExcludes ro
+      , ceLogLevel       = logLevel lo
+      , ceFortranVersion = fortranVersion ro
       }
 
     getExcludes = fromMaybe [] . exclude
@@ -154,6 +157,7 @@ data ReadOptions = ReadOptions
   { inputSource :: String
   , includeDir  :: Maybe String
   , exclude     :: Maybe [String]
+  , fortranVersion :: Maybe FortranVersion
   }
 
 
@@ -251,19 +255,30 @@ multiFileOption m = option (list str)
                          (xs', _:cs) -> xs' : splitBy c cs
 
 
-excludeOption :: Parser (Maybe [String])
-excludeOption = optional $ multiFileOption $
+excludeOption :: Parser [String]
+excludeOption = multiFileOption $
      long "exclude"
   <> short 'e'
   <> help "files to exclude (comma separated list, no spaces)"
 
+fortranVersionOption :: Parser FortranVersion
+fortranVersionOption = option parseFortranVersion $
+     long "fortranVersion"
+  <> short 'F'
+  <> metavar "VERSION"
+  <> help "version of Fortran to parse"
+  where
+    parseFortranVersion = eitherReader $ \ s -> case selectFortranVersion s of
+      Just v  -> Right v
+      Nothing -> Left "unable to parse the supplied Fortran version string"
 
 -- | Parse options for 'ReadOptions'.
 readOptions :: Parser ReadOptions
 readOptions = fmap ReadOptions
   (fileArgument $ help "input file")
   <*> optional includeDirOption
-  <*> excludeOption
+  <*> optional excludeOption
+  <*> optional fortranVersionOption
   where
     dirOption m = strOption (metavar "DIR" <> action "directory" <> m)
     includeDirOption = dirOption

@@ -462,7 +462,7 @@ inferReportWithMod modNames fileName expectedReport = do
       modPaths = fmap (fixturesDir </>) modNames
 
   modFiles <- mapM mkTestModFile modPaths
-  [(pf, _)] <- readParseSrcDir modFiles file []
+  [(pf, _)] <- readParseSrcDir Nothing modFiles file []
 
   let report = runIdentity $ runAnalysisT (F.pfGetFilename pf) (logOutputNone True) LogError modFiles (infer False '=' pf)
 
@@ -470,7 +470,7 @@ inferReportWithMod modNames fileName expectedReport = do
 
 -- | Helper for producing a basic ModFile from a (terminal) module file.
 mkTestModFile :: String -> IO ModFile
-mkTestModFile file = head <$> genModFiles emptyModFiles compileStencils () file []
+mkTestModFile file = head <$> genModFiles Nothing emptyModFiles compileStencils () file []
 
 crossModuleAUserReport :: [L.Text]
 crossModuleAUserReport =

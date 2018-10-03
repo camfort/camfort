@@ -26,14 +26,14 @@ ddtInferReport modNames fileName = do
   let file = fixturesDir </> fileName
       modPaths = fmap (fixturesDir </>) modNames
   modFiles <- mapM mkTestModFile modPaths
-  [(pf,_)] <- readParseSrcDir modFiles file []
+  [(pf,_)] <- readParseSrcDir Nothing modFiles file []
 
   let r = runIdentity $ runAnalysisT file (logOutputNone True) LogError modFiles (infer pf)
   return $ r ^?! arResult . _ARSuccess
 
 -- | Helper for producing a basic ModFile from a (terminal) module file.
 mkTestModFile :: String -> IO ModFile
-mkTestModFile file = head <$> genModFiles emptyModFiles compile () file []
+mkTestModFile file = head <$> genModFiles Nothing emptyModFiles compile () file []
 
 spec :: Test.Spec
 spec = do

@@ -199,7 +199,7 @@ fromPrimReprOption PROPrecise = prsPrecise
 
 testOn :: FilePath -> IO ()
 testOn fp = do
-  (mfs, pfsSources) <- loadModAndProgramFiles simpleCompiler () fp fp []
+  (mfs, pfsSources) <- loadModAndProgramFiles Nothing simpleCompiler () fp fp []
   describePerFileAnalysis
     "invariant checking"
     (check PROIdealized)

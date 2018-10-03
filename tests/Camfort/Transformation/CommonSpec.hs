@@ -37,6 +37,7 @@ spec =
             , ceIncludeDir = Just (takeDirectory commonFile)
             , ceExcludeFiles = []
             , ceLogLevel = LogDebug
+            , ceFortranVersion = Nothing
             }
 
       runIO $ common outFile env

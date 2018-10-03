@@ -64,7 +64,7 @@ unitsInferReportIs :: String -> String -> Expectation
 unitsInferReportIs fileName expectedReport = do
   let file = fixturesDir </> fileName
       modFiles = emptyModFiles
-  [(pf,_)] <- readParseSrcDir modFiles file []
+  [(pf,_)] <- readParseSrcDir Nothing modFiles file []
 
   let uEnv = UnitEnv { unitOpts = uOpts, unitProgramFile = pf }
 

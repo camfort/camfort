@@ -44,6 +44,7 @@ import qualified Language.Fortran.Analysis.Types    as FAT
 import qualified Language.Fortran.AST               as F
 import qualified Language.Fortran.Parser.Any        as FP
 import qualified Language.Fortran.Util.ModFile      as FM
+import           Language.Fortran.ParserMonad       (FortranVersion(..))
 
 import           Camfort.Analysis.Annotations       (A, unitAnnotation)
 import           Camfort.Helpers
@@ -67,9 +68,9 @@ genCModFile = id
 -- | Generate a mode file based on the given mod file compiler
 genModFiles
   :: (MonadIO m)
-  => FM.ModFiles -> MFCompiler r m -> r -> FilePath -> [Filename] -> m FM.ModFiles
-genModFiles mfs mfc env fp excludes = do
-  fortranFiles <- liftIO $ fmap fst <$> readParseSrcDir mfs fp excludes
+  => Maybe FortranVersion -> FM.ModFiles -> MFCompiler r m -> r -> FilePath -> [Filename] -> m FM.ModFiles
+genModFiles mv mfs mfc env fp excludes = do
+  fortranFiles <- liftIO $ fmap fst <$> readParseSrcDir mv mfs fp excludes
   traverse (genCModFile mfc env mfs) fortranFiles
 
 -- | Retrieve the ModFiles under a given path.
@@ -105,11 +106,12 @@ listDirectoryRecursively dir = listDirectoryRec dir ""
         concat <$> mapM (listDirectoryRec fullPath) conts
       else pure [fullPath]
 
-readParseSrcDir :: FM.ModFiles
+readParseSrcDir :: Maybe FortranVersion
+                -> FM.ModFiles
                 -> FileOrDir
                 -> [Filename]
                 -> IO [(F.ProgramFile A, SourceText)]
-readParseSrcDir mods inp excludes = do
+readParseSrcDir mv mods inp excludes = do
   isdir <- isDirectory inp
   files <-
     if isdir
@@ -120,15 +122,17 @@ readParseSrcDir mods inp excludes = do
       let excludes' = excludes ++ map (\x -> inp </> x) excludes
       pure $ files \\ excludes'
     else pure [inp]
-  mapMaybeM (readParseSrcFile mods) files
+  mapMaybeM (readParseSrcFile mv mods) files
   where
     mapMaybeM :: Monad m => (a -> m (Maybe b)) -> [a] -> m [b]
     mapMaybeM f = fmap catMaybes . mapM f
 
-readParseSrcFile :: FM.ModFiles -> Filename -> IO (Maybe (F.ProgramFile A, SourceText))
-readParseSrcFile mods f = do
+readParseSrcFile :: Maybe FortranVersion -> FM.ModFiles -> Filename -> IO (Maybe (F.ProgramFile A, SourceText))
+readParseSrcFile mv mods f = do
   inp <- flexReadFile f
-  let result = FP.fortranParserWithModFiles mods inp f
+  let result = case mv of
+        Nothing -> FP.fortranParserWithModFiles mods inp f
+        Just v  -> FP.fortranParserWithModFilesAndVersion v mods inp f
   case result of
     Right ast -> pure $ Just (fmap (const unitAnnotation) ast, inp)
     Left  err -> print err >> pure Nothing

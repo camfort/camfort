@@ -73,6 +73,7 @@ import           Control.Monad (forM_)
 
 import qualified Language.Fortran.AST                            as F
 import qualified Language.Fortran.Util.ModFile                   as FM
+import           Language.Fortran.ParserMonad                    (FortranVersion(..))
 
 import           Camfort.Analysis
 import           Camfort.Analysis.Annotations                    (Annotation)
@@ -118,10 +119,11 @@ markerChar ATDefault = '='
 
 data CamfortEnv =
   CamfortEnv
-  { ceInputSources :: FileOrDir
-  , ceIncludeDir   :: Maybe FileOrDir
-  , ceExcludeFiles :: [Filename]
-  , ceLogLevel     :: LogLevel
+  { ceInputSources   :: FileOrDir
+  , ceIncludeDir     :: Maybe FileOrDir
+  , ceExcludeFiles   :: [Filename]
+  , ceLogLevel       :: LogLevel
+  , ceFortranVersion :: Maybe FortranVersion
   }
 
 --------------------------------------------------------------------------------
@@ -172,7 +174,7 @@ runFunctionality description program runner mfCompiler mfInput env = do
   -- ...instead for now, just get the mod files
 
   modFiles <- getModFiles incDir
-  pfsTexts <- readParseSrcDir modFiles (ceInputSources env) (ceExcludeFiles env)
+  pfsTexts <- readParseSrcDir (ceFortranVersion env) modFiles (ceInputSources env) (ceExcludeFiles env)
   runner program (logOutputStd True) (ceLogLevel env) modFiles pfsTexts
 
 
@@ -184,7 +186,7 @@ ast :: CamfortEnv -> IO ()
 ast env = do
     incDir' <- maybe getCurrentDirectory pure (ceIncludeDir env)
     modFiles <- getModFiles incDir'
-    xs <- readParseSrcDir modFiles (ceInputSources env) (ceExcludeFiles env)
+    xs <- readParseSrcDir (ceFortranVersion env) modFiles (ceInputSources env) (ceExcludeFiles env)
     print . fmap fst $ xs
 
 
@@ -274,7 +276,7 @@ ddtCompile env = do
   modFiles <- getModFiles incDir
 
   -- Run the gen mod file routine directly on the input source
-  modFiles <- genModFiles modFiles DDT.compile () (ceInputSources env) (ceExcludeFiles env)
+  modFiles <- genModFiles (ceFortranVersion env) modFiles DDT.compile () (ceInputSources env) (ceExcludeFiles env)
   -- Write the mod files out
   forM_ modFiles $ \ modFile -> do
      let mfname = replaceExtension (FM.moduleFilename modFile) FM.modFileSuffix
@@ -381,7 +383,7 @@ unitsCompile opts env = do
   modFiles <- getModFiles incDir
 
   -- Run the gen mod file routine directly on the input source
-  modFiles <- genModFiles modFiles compileUnits uo (ceInputSources env) (ceExcludeFiles env)
+  modFiles <- genModFiles (ceFortranVersion env) modFiles compileUnits uo (ceInputSources env) (ceExcludeFiles env)
   -- Write the mod files out
   forM_ modFiles $ \modFile -> do
      let mfname = replaceExtension (FM.moduleFilename modFile) FM.modFileSuffix

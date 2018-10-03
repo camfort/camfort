@@ -38,6 +38,7 @@ import           Control.Lens
 
 import qualified Language.Fortran.AST          as F
 import           Language.Fortran.Util.ModFile (ModFiles, emptyModFiles)
+import           Language.Fortran.ParserMonad  (FortranVersion(..))
 
 import           Camfort.Analysis
 import           Camfort.Analysis.Annotations
@@ -257,14 +258,14 @@ reassociateSourceText ps ps' = zip ps' ps
 
 loadModAndProgramFiles
   :: (MonadIO m)
-  => MFCompiler r m -> r
+  => Maybe FortranVersion
+  -> MFCompiler r m -> r
   -> FileOrDir -- ^ Input source file or directory
   -> FileOrDir -- ^ Include path
   -> [Filename] -- ^ Excluded files
   -> m (ModFiles, [(ProgramFile, SourceText)])
-loadModAndProgramFiles mfc env inSrc incDir excludes = do
+loadModAndProgramFiles mv mfc env inSrc incDir excludes = do
   liftIO $ printExcludes inSrc excludes
-  modFiles <- genModFiles emptyModFiles mfc env incDir excludes
-  ps <- liftIO $ readParseSrcDir modFiles inSrc excludes
+  modFiles <- genModFiles mv emptyModFiles mfc env incDir excludes
+  ps <- liftIO $ readParseSrcDir mv modFiles inSrc excludes
   pure (modFiles, ps)
-
