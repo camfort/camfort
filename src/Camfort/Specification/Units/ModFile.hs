@@ -24,7 +24,7 @@ import qualified Data.ByteString.Lazy.Char8 as LB
 import           Data.Data (Data)
 import           Data.Generics.Uniplate.Operations (universeBi)
 import           Data.List (partition)
-import qualified Data.Map.Strict            as M
+import qualified Data.Map                   as M
 import           Data.Typeable (Typeable)
 import           GHC.Generics (Generic)
 
@@ -63,7 +63,7 @@ unitsCompiledDataLabel = "units-compiled-data"
 mfCompiledUnits :: ModFile -> CompiledUnits
 mfCompiledUnits mf = case lookupModFileData unitsCompiledDataLabel mf of
   Nothing -> emptyCompiledUnits
-  Just bs -> case decodeOrFail (LB.fromStrict bs) of
+  Just bs -> case decodeOrFail bs of
     Left _ -> emptyCompiledUnits
     Right (_, _, cu) -> cu
 
@@ -122,4 +122,4 @@ optimiseTemplate cons = map (\ (l, r) -> ConEq (foldUnits l) r) optimised
 genUnitsModFile :: F.ProgramFile UA -> CompiledUnits -> ModFile
 genUnitsModFile pf cu = alterModFileData f unitsCompiledDataLabel $ genModFile pf
   where
-    f _ = Just . LB.toStrict $ encode cu
+    f _ = Just $ encode cu

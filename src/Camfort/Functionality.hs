@@ -61,7 +61,8 @@ module Camfort.Functionality
 import           Control.Arrow                                   (first, second)
 import           Data.List                                       (intersperse)
 import           Data.Void                                       (Void)
-import qualified Data.ByteString as B
+import qualified Data.ByteString                                 as B
+import qualified Data.ByteString.Lazy                            as LB
 import           System.Directory                                (doesDirectoryExist, createDirectoryIfMissing,
                                                                   getCurrentDirectory)
 import           System.FilePath                                 (takeDirectory,
@@ -280,7 +281,7 @@ ddtCompile env = do
   -- Write the mod files out
   forM_ modFiles $ \ modFile -> do
      let mfname = replaceExtension (FM.moduleFilename modFile) FM.modFileSuffix
-     B.writeFile mfname (FM.encodeModFile modFile)
+     LB.writeFile mfname (FM.encodeModFile modFile)
   return 0
 
 {- Units feature -}
@@ -387,7 +388,7 @@ unitsCompile opts env = do
   -- Write the mod files out
   forM_ modFiles $ \modFile -> do
      let mfname = replaceExtension (FM.moduleFilename modFile) FM.modFileSuffix
-     B.writeFile mfname (FM.encodeModFile modFile)
+     LB.writeFile mfname (FM.encodeModFile modFile)
   return 0
 
 unitsSynth :: AnnotationType -> FileOrDir -> LiteralsOpt -> CamfortEnv -> IO Int

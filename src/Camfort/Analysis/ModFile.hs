@@ -26,6 +26,7 @@ import           Control.Lens                       (ix, preview)
 import           Control.Monad                      (forM)
 import           Control.Monad.IO.Class
 import qualified Data.ByteString                    as B
+import qualified Data.ByteString.Lazy               as LB
 import           Data.Char                          (toLower)
 import           Data.Data                          (Data)
 import           Data.List                          ((\\))
@@ -79,7 +80,7 @@ getModFiles dir = do
   -- Figure out the camfort mod files and parse them.
   modFileNames <- (filter isModFile . map (dir </>)) <$> listDirectory dir
   mods <- forM modFileNames $ \modFileName -> do
-    modData <- B.readFile modFileName
+    modData <- LB.readFile modFileName
     let eResult = FM.decodeModFile modData
     case eResult of
       Left msg -> do

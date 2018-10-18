@@ -753,13 +753,13 @@ mstrength (x, my) = fmap (x,) my
 genDDTModFile :: Data a => F.ProgramFile (FA.Analysis a) -> DerivedDataTypeReport -> ModFile
 genDDTModFile pf ddtr = alterModFileData f ddtCompiledDataLabel $ genModFile pf
   where
-    f _ = Just . LB.toStrict $ encode ddtr
+    f _ = Just $ encode ddtr
 
 -- | Decode a DerivedDataTypeReport from a ModFile.
 mfDerivedDataTypeReport :: ModFile -> DerivedDataTypeReport
 mfDerivedDataTypeReport mf = case lookupModFileData ddtCompiledDataLabel mf of
   Nothing -> mempty
-  Just bs -> case decodeOrFail (LB.fromStrict bs) of
+  Just bs -> case decodeOrFail bs of
     Left _ -> mempty
     Right (_, _, ddtr) -> ddtr
 
