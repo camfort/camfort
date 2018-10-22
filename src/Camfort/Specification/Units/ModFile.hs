@@ -132,9 +132,11 @@ dumpModFileCompiledUnits mf = do
   cu <- case decodeOrFail bs of
     Left _ -> Nothing
     Right (_, _, cu) -> Just cu
-  pure . unlines $ [ "Template Map:"
-                   , concat [ unlines (i 2 fname:map (i 4 . show) temp) | (fname, temp) <- M.toList (cuTemplateMap cu) ]
-                   , "NameParam Map:"
+  pure . unlines $ [ "Template Map (size=" ++ show (M.size (cuTemplateMap cu)) ++ "):"
+                   , concat [ unlines (i 2 fname':map (i 4 . show) temp)
+                            | (fname, temp) <- M.toList (cuTemplateMap cu)
+                            , let fname' = "Template for " ++ show fname ]
+                   , "NameParam Map  (size=" ++ show (M.size (cuNameParamMap cu)) ++ "):"
                    , unlines [ i 2 (show uis ++ " :: " ++ show npk) | (npk, uis) <- M.toList (cuNameParamMap cu) ] ]
  where
    i n s = replicate n ' ' ++ s
