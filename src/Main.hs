@@ -107,7 +107,9 @@ main = do
     runCommand (CmdStencilsInfer so)      = runSIO so stencilsInfer
     runCommand (CmdStencilsSynth sso)     = runSSO sso stencilsSynth
     runCommand (CmdUnitsSuggest uo)       = runUO uo unitsCriticals
-    runCommand (CmdUnitsCheck uo)         = runUO uo unitsCheck
+    runCommand (CmdUnitsCheck uo)
+      | uoDumpMode uo                     = runUO uo unitsDump
+      | otherwise                         = runUO uo unitsCheck
     runCommand (CmdUnitsInfer uo)         = runUO uo unitsInfer
     runCommand (CmdUnitsSynth uso)        = runUSO uso unitsSynth
     runCommand (CmdUnitsCompile uo)       = runUO uo unitsCompile
@@ -179,6 +181,7 @@ data UnitsOptions = UnitsOptions
   { uoReadOptions :: ReadOptions
   , uoLogOptions  :: LogOptions
   , literals      :: LiteralsOpt
+  , uoDumpMode    :: Bool
   }
 
 
@@ -325,6 +328,7 @@ unitsOptions = fmap UnitsOptions
       readOptions
   <*> logOptions
   <*> literalsOption
+  <*> dumpModFileOption
   where
     literalsOption = option parseLiterals $
                      long "units-literals"
@@ -333,6 +337,7 @@ unitsOptions = fmap UnitsOptions
                      <> completeWith ["Unitless", "Poly", "Mixed"]
                      <> value LitMixed
                      <> help "units-of-measure literals mode. ID = Unitless, Poly, or Mixed"
+    dumpModFileOption = switch (long "dump-mod-file" <> help "show contents of fsmod file")
     parseLiterals = fmap read str
 
 

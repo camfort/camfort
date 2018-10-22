@@ -16,6 +16,7 @@ module Camfort.Specification.Units.ModFile
     genUnitsModFile
   , initializeModFiles
   , runCompileUnits
+  , dumpModFileCompiledUnits
   ) where
 
 import           Control.Monad.State (get, gets, lift)
@@ -123,3 +124,17 @@ genUnitsModFile :: F.ProgramFile UA -> CompiledUnits -> ModFile
 genUnitsModFile pf cu = alterModFileData f unitsCompiledDataLabel $ genModFile pf
   where
     f _ = Just $ encode cu
+
+-- | Return information about compiled units for debugging purposes
+dumpModFileCompiledUnits :: ModFile -> Maybe String
+dumpModFileCompiledUnits mf = do
+  bs <- lookupModFileData unitsCompiledDataLabel mf
+  cu <- case decodeOrFail bs of
+    Left _ -> Nothing
+    Right (_, _, cu) -> Just cu
+  pure . unlines $ [ "Template Map:"
+                   , concat [ unlines (i 2 fname:map (i 4 . show) temp) | (fname, temp) <- M.toList (cuTemplateMap cu) ]
+                   , "NameParam Map:"
+                   , unlines [ i 2 (show uis ++ " :: " ++ show npk) | (npk, uis) <- M.toList (cuNameParamMap cu) ] ]
+ where
+   i n s = replicate n ' ' ++ s

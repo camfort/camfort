@@ -40,6 +40,7 @@ module Camfort.Functionality
   -- ** Unit Analysis
   , unitsCriticals
   , unitsCheck
+  , unitsDump
   , unitsInfer
   , unitsCompile
   , unitsSynth
@@ -60,6 +61,7 @@ module Camfort.Functionality
 
 import           Control.Arrow                                   (first, second)
 import           Data.List                                       (intersperse)
+import           Data.Maybe                                      (fromMaybe)
 import           Data.Void                                       (Void)
 import qualified Data.ByteString                                 as B
 import qualified Data.ByteString.Lazy                            as LB
@@ -96,6 +98,7 @@ import           Camfort.Specification.Units.Analysis.Criticals  (inferCriticalV
 import           Camfort.Specification.Units.Analysis.Infer      (inferUnits)
 import           Camfort.Specification.Units.Monad               (runUnitAnalysis,
                                                                   unitOpts0)
+import           Camfort.Specification.Units.ModFile             (dumpModFileCompiledUnits)
 import           Camfort.Specification.Units.MonadTypes          (LiteralsOpt,
                                                                   UnitAnalysis,
                                                                   UnitEnv (..),
@@ -342,6 +345,20 @@ multiPfUnits unitAnalysis opts pfs = do
       rs' = mconcat . intersperse "\n" . map describe $ rs
 
   return (rs', ps)
+
+unitsDump :: LiteralsOpt -> CamfortEnv -> IO Int
+unitsDump _ env = do
+  let modFileName = ceInputSources env
+  modData <- LB.readFile modFileName
+  let eResult = FM.decodeModFile modData
+  case eResult of
+    Left msg -> do
+      putStrLn $ modFileName ++ ": Error: " ++ show msg
+      pure 1
+    Right modFile -> do
+      putStrLn $ modFileName ++ ": successfully parsed precompiled file."
+      putStrLn . fromMaybe "unable to find units info" $ dumpModFileCompiledUnits modFile
+      pure 0
 
 unitsCheck :: LiteralsOpt -> CamfortEnv -> IO Int
 unitsCheck =
