@@ -25,11 +25,14 @@ import qualified Data.ByteString.Lazy.Char8 as LB
 import           Data.Data (Data)
 import           Data.Generics.Uniplate.Operations (universeBi)
 import           Data.List (partition)
+import           Data.Maybe (catMaybes)
 import qualified Data.Map                   as M
+import qualified Data.Set                   as S
 import           Data.Typeable (Typeable)
 import           GHC.Generics (Generic)
 
 import qualified Language.Fortran.AST as F
+import qualified Language.Fortran.Analysis as FA
 import           Language.Fortran.Util.ModFile
 
 import Camfort.Analysis (analysisModFiles)
@@ -80,6 +83,7 @@ initializeModFiles = do
 runCompileUnits :: UnitSolver CompiledUnits
 runCompileUnits = do
   cons <- usConstraints `fmap` get
+  pf <- usProgramFile  `fmap` get
 
   let unitAssigns = flattenConstraints cons
   let epsilon = 0.001 -- arbitrary
@@ -88,12 +92,22 @@ runCompileUnits = do
   let variables = M.fromList [ (NPKVariable var, units) | ([UnitPow (UnitVar var) k], units) <- unitAssigns
                                                         , k `approxEq` 1 ]
 
-  tmap <- M.map optimiseTemplate `fmap` gets usTemplateMap
-  let npm = variables
+  let getName pu | F.Named n <- FA.puName pu = Just n | otherwise = Nothing
+  let puNameSet = S.fromList $ catMaybes [ getName pu | pu <- universeBi pf :: [F.ProgramUnit UA] ]
+  let filterPUs = M.filterWithKey (const . (`S.member` puNameSet))
+  let varNameSet = S.fromList $
+        [ FA.varName v | F.DeclVariable _ _ v _ _ <- universeBi pf :: [F.Declarator UA] ] ++
+        [ FA.varName v | F.DeclArray _ _ v _ _ _  <- universeBi pf :: [F.Declarator UA] ]
+  let filterVarNames = M.filterWithKey (\ npk _ -> case npk of
+                                           NPKVariable (v, _) -> v `S.member` varNameSet
+                                           _                  -> False
+                                       )
+  tmap <- (filterPUs . M.map optimiseTemplate) `fmap` gets usTemplateMap
+  let npm = filterVarNames variables
 
   -- D.traceM $ "npm = " ++ unlines (map show (M.toList npm))
   -- D.traceM $ "tmap = \n" ++ unlines [ f ++ "\n" ++ unlines (map show cons) | (f, cons) <- M.toList tmap ]
-  pure CompiledUnits { cuTemplateMap = tmap, cuNameParamMap = variables }
+  pure CompiledUnits { cuTemplateMap = tmap, cuNameParamMap = npm }
 
 optimiseTemplate cons = map (\ (l, r) -> ConEq (foldUnits l) r) optimised
   where
