@@ -92,12 +92,16 @@ runCompileUnits = do
   let variables = M.fromList [ (NPKVariable var, units) | ([UnitPow (UnitVar var) k], units) <- unitAssigns
                                                         , k `approxEq` 1 ]
 
+  -- Create sets of relevant program-unit and variable names.
   let getName pu | F.Named n <- FA.puName pu = Just n | otherwise = Nothing
   let puNameSet = S.fromList $ catMaybes [ getName pu | pu <- universeBi pf :: [F.ProgramUnit UA] ]
-  let filterPUs = M.filterWithKey (const . (`S.member` puNameSet))
   let varNameSet = S.fromList $
         [ FA.varName v | F.DeclVariable _ _ v _ _ <- universeBi pf :: [F.Declarator UA] ] ++
         [ FA.varName v | F.DeclArray _ _ v _ _ _  <- universeBi pf :: [F.Declarator UA] ]
+
+  -- Filter functions that cut out any information not having to do
+  -- with the current modules being compiled.
+  let filterPUs = M.filterWithKey (const . (`S.member` puNameSet))
   let filterVarNames = M.filterWithKey (\ npk _ -> case npk of
                                            NPKVariable (v, _) -> v `S.member` varNameSet
                                            _                  -> False
@@ -109,6 +113,7 @@ runCompileUnits = do
   -- D.traceM $ "tmap = \n" ++ unlines [ f ++ "\n" ++ unlines (map show cons) | (f, cons) <- M.toList tmap ]
   pure CompiledUnits { cuTemplateMap = tmap, cuNameParamMap = npm }
 
+-- | Cut out unnecessary constraints in the template using the solver.
 optimiseTemplate cons = map (\ (l, r) -> ConEq (foldUnits l) r) optimised
   where
     unitAssigns  = genUnitAssignments' (compileColSort) cons
