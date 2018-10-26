@@ -24,19 +24,16 @@ module Camfort.Analysis.Simple
 import Prelude hiding (unlines)
 import Control.Monad
 import Data.Data
-import Data.Text (Text, unlines)
 import qualified Data.Semigroup as SG
 import Data.Monoid ((<>))
 import Data.Generics.Uniplate.Operations
-import Data.Text.Lazy.Builder (Builder)
 import qualified Data.Text.Lazy.Builder as Builder
 
 
 import qualified Language.Fortran.AST as F
-import qualified Language.Fortran.Util.Position as F
 
-import Camfort.Analysis ( ExitCodeOfReport(..), atSpanned, Origin, failAnalysis'
-                        , logError', logError, describe, describeBuilder
+import Camfort.Analysis ( ExitCodeOfReport(..), atSpanned, Origin
+                        , logError, describe, describeBuilder
                         , PureAnalysis, Describe )
 
 {-| Counts the number of declarations (of variables) in a whole program -}
