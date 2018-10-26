@@ -369,9 +369,14 @@ applyTemplates cons = do
   logDebug' pf $ ("instances: " <> describeShow instances)
   logDebug' pf $ ("dummies: " <> describeShow dummies)
 
+  -- Get constraints for any imported variables
+  let filterForVars (NPKVariable _) _ = True; filterForVars _ _ = False
+  nmap <- M.filterWithKey filterForVars <$> getNameParamMap
+  let importedVariables = [ ConEq (UnitVar vv) (foldUnits units) | (NPKVariable vv, units) <- M.toList nmap ]
+
   -- Work through the instances, expanding their templates, and
   -- substituting the callId into the abstract parameters.
-  concreteCons <- liftM2 (++) (foldM (substInstance False []) [] instances)
+  concreteCons <- liftM2 (++) (foldM (substInstance False []) importedVariables instances)
                               (foldM (substInstance True []) [] dummies)
   dumpConsM "applyTemplates: concreteCons" concreteCons
 
@@ -424,11 +429,6 @@ substInstance isDummy callStack output (name, callId) = do
   dumpConsM ("instantiating " ++ show (name, callId) ++ ": (output ++ template) is") (output ++ template)
   dumpConsM ("instantiating " ++ show (name, callId) ++ ": (template') is") template'
 
-  -- Get constraints for any imported variables
-  let filterForVars (NPKVariable _) _ = True; filterForVars _ _ = False
-  nmap <- M.filterWithKey filterForVars <$> getNameParamMap
-  let importedVariables = [ ConEq (UnitVar vv) (foldUnits units) | (NPKVariable vv, units) <- M.toList nmap ]
-
   -- Convert abstract parametric units into concrete ones.
 
   let output' = -- Do not instantiate explicitly annotated polymorphic
@@ -438,10 +438,7 @@ substInstance isDummy callStack output (name, callId) = do
 
                 -- Only instantiate explicitly annotated polymorphic
                 -- variables from nested function/subroutine calls.
-                instantiate callId template' ++
-
-                -- any imported variables
-                importedVariables
+                instantiate callId template'
 
   dumpConsM ("final output for " ++ show (name, callId)) output'
 
