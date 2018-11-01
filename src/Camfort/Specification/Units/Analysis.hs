@@ -40,7 +40,9 @@ import qualified Debug.Trace as D
 
 import qualified Language.Fortran.AST      as F
 import qualified Language.Fortran.Analysis as FA
-import           Language.Fortran.Analysis (varName, srcName)
+import qualified Language.Fortran.Analysis.DataFlow as FAD
+import qualified Language.Fortran.Analysis.BBlocks as FAB
+import           Language.Fortran.Analysis (constExp, varName, srcName)
 import           Language.Fortran.Parser.Utils (readReal, readInteger)
 import           Language.Fortran.Util.ModFile
 import           Language.Fortran.Util.Position (getSpan)
@@ -133,8 +135,9 @@ runInference solver = do
   mfs <- lift analysisModFiles
 
   let (pf', _, _) = withCombinedEnvironment mfs . fmap UA.mkUnitAnnotation $ pf
-
-  runUnitSolver pf' $ do
+  let pvm = combinedParamVarMap mfs
+  let pf'' = FAD.analyseConstExps . FAD.analyseParameterVars pvm . FAB.analyseBBlocks $ pf'
+  runUnitSolver pf'' $ do
     initializeModFiles
     initInference
     solver
@@ -319,7 +322,13 @@ annotateLiteralsPU pu = do
       F.ExpValue _ _ (F.ValReal i) | readReal i == Just 0       -> withLiterals genParamLit e
                                    | isPolyCtxt                 -> expUnitless e
                                    | otherwise                  -> withLiterals genUnitLiteral e
-      _                                                         -> pure e
+      _ | Just con <- constExp (F.getAnnotation e)              -> if isLiteralZero e then
+                                                                     withLiterals genParamLit e
+                                                                   else if isPolyCtxt then
+                                                                     expUnitless e
+                                                                   else
+                                                                     withLiterals genUnitLiteral e
+        | otherwise                                             -> pure e
 
     -- Set all literals to unitless.
     expUnitless e
@@ -337,13 +346,19 @@ annotateLiteralsPU pu = do
 isLiteral :: F.Expression UA -> Bool
 isLiteral (F.ExpValue _ _ (F.ValReal _))    = True
 isLiteral (F.ExpValue _ _ (F.ValInteger _)) = True
-isLiteral _                                 = False
+-- allow propagated constants to be interpreted as literals
+isLiteral e                                 = isJust (constExp (F.getAnnotation e))
 
--- | Is expression a literal and is it zero?
+-- | Is expression a literal and is it non-zero?
 isLiteralNonZero :: F.Expression UA -> Bool
 isLiteralNonZero (F.ExpValue _ _ (F.ValInteger i)) = readInteger i /= Just 0
 isLiteralNonZero (F.ExpValue _ _ (F.ValReal i))    = readReal i    /= Just 0
-isLiteralNonZero _                                 = False
+-- allow propagated constants to be interpreted as literals
+isLiteralNonZero e = case constExp (F.getAnnotation e) of
+  Just (FA.ConstInt i)          -> i /= 0
+  Just (FA.ConstUninterpInt s)  -> readInteger s /= Just 0
+  Just (FA.ConstUninterpReal s) -> readReal s /= Just 0
+  _                             -> False
 
 isLiteralZero = not . isLiteralNonZero
 
