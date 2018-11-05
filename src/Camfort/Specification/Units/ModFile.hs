@@ -10,6 +10,7 @@ Stability   :  experimental
 
 {-# LANGUAGE DeriveDataTypeable #-}
 {-# LANGUAGE DeriveGeneric      #-}
+{-# LANGUAGE TupleSections #-}
 
 module Camfort.Specification.Units.ModFile
   (
@@ -25,7 +26,7 @@ import qualified Data.ByteString.Lazy.Char8 as LB
 import           Data.Data (Data)
 import           Data.Generics.Uniplate.Operations (universeBi)
 import           Data.List (partition)
-import           Data.Maybe (catMaybes)
+import           Data.Maybe (mapMaybe, catMaybes)
 import qualified Data.Map                   as M
 import qualified Data.Set                   as S
 import           Data.Typeable (Typeable)
@@ -37,7 +38,7 @@ import           Language.Fortran.Util.ModFile
 
 import Camfort.Analysis (analysisModFiles)
 import Camfort.Specification.Units.Annotation (UA)
-import Camfort.Specification.Units.Environment (Constraint(..), foldUnits, UnitInfo(..), colSort)
+import Camfort.Specification.Units.Environment (Constraint(..), foldUnits, UnitInfo(..), colSort, Constraints)
 import Camfort.Specification.Units.InferenceBackend (flattenConstraints, flattenUnits, genUnitAssignments, genUnitAssignments')
 import Camfort.Specification.Units.Monad
 
@@ -95,25 +96,31 @@ runCompileUnits = do
   -- Create sets of relevant program-unit and variable names.
   let getName pu | F.Named n <- FA.puName pu = Just n | otherwise = Nothing
   let puNameSet = S.fromList $ catMaybes [ getName pu | pu <- universeBi pf :: [F.ProgramUnit UA] ]
-  let varNameSet = S.fromList $
-        [ FA.varName v | F.DeclVariable _ _ v _ _ <- universeBi pf :: [F.Declarator UA] ] ++
-        [ FA.varName v | F.DeclArray _ _ v _ _ _  <- universeBi pf :: [F.Declarator UA] ]
+
+  let puVarNameSet pu = S.fromList $
+        [ (FA.varName v, FA.srcName v) | F.DeclVariable _ _ v _ _ <- universeBi pu :: [F.Declarator UA] ] ++
+        [ (FA.varName v, FA.srcName v) | F.DeclArray _ _ v _ _ _  <- universeBi pu :: [F.Declarator UA] ]
+
+  let puVarNameMap :: M.Map F.ProgramUnitName (S.Set VV)
+      puVarNameMap = M.fromListWith S.union [ (F.getName pu, puVarNameSet pu) | pu <- universeBi pf :: [F.ProgramUnit UA] ]
 
   -- Filter functions that cut out any information not having to do
   -- with the current modules being compiled.
   let filterPUs = M.filterWithKey (const . (`S.member` puNameSet))
-  let filterVarNames = M.filterWithKey (\ npk _ -> case npk of
-                                           NPKVariable (v, _) -> v `S.member` varNameSet
-                                           _                  -> False
-                                       )
+  -- FIXME: investigate whether we should include vars that are linked
+  -- transitively to current pf vars should also be included.
   tmap <- (filterPUs . M.map optimiseTemplate) `fmap` gets usTemplateMap
-  let npm = filterVarNames variables
+
+  let findNPK vv = ( (NPKVariable vv), ) <$> M.lookup (NPKVariable vv) variables
+
+  let npm = flip M.map puVarNameMap (M.fromList . mapMaybe findNPK . S.toList)
 
   -- D.traceM $ "npm = " ++ unlines (map show (M.toList npm))
   -- D.traceM $ "tmap = \n" ++ unlines [ f ++ "\n" ++ unlines (map show cons) | (f, cons) <- M.toList tmap ]
   pure CompiledUnits { cuTemplateMap = tmap, cuNameParamMap = npm }
 
 -- | Cut out unnecessary constraints in the template using the solver.
+optimiseTemplate :: Constraints -> Constraints
 optimiseTemplate cons = map (\ (l, r) -> ConEq (foldUnits l) r) optimised
   where
     unitAssigns  = genUnitAssignments' (compileColSort) cons

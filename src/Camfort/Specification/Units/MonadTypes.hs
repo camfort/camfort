@@ -72,7 +72,7 @@ data NameParamKey
 instance Binary NameParamKey
 
 -- | mapped to a list of units (to be multiplied together)
-type NameParamMap = M.Map NameParamKey [UnitInfo]
+type NameParamMap = M.Map F.ProgramUnitName (M.Map NameParamKey [UnitInfo])
 
 -- | Variable => unit
 type VarUnitMap   = M.Map VV UnitInfo

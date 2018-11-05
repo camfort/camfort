@@ -31,7 +31,7 @@ import           Data.Generics.Uniplate.Operations
 import           Data.List (nub, intercalate)
 import qualified Data.Array as A
 import qualified Data.Map.Strict as M
-import           Data.Maybe (isJust, fromMaybe)
+import           Data.Maybe (isJust, fromMaybe, mapMaybe)
 import qualified Data.Set as S
 import qualified Numeric.LinearAlgebra as H -- for debugging
 import           Data.Text (Text)
@@ -364,6 +364,14 @@ isLiteralZero = not . isLiteralNonZero
 
 --------------------------------------------------
 
+-- | Filter out redundant constraints.
+cullRedundant :: Constraints -> Constraints
+cullRedundant = nub . mapMaybe ( \ con -> case con of
+  ConEq u1 u2 | u1 /= u2                              -> Just con
+  ConConj cs | cs' <- cullRedundant cs, not (null cs) -> Just (ConConj cs')
+  _                                                   -> Nothing
+  )
+
 -- | Convert all parametric templates into actual uses, via substitution.
 applyTemplates :: Constraints -> UnitSolver Constraints
 -- postcondition: returned constraints lack all Parametric constructors
@@ -384,14 +392,34 @@ applyTemplates cons = do
   logDebug' pf $ ("instances: " <> describeShow instances)
   logDebug' pf $ ("dummies: " <> describeShow dummies)
 
-  -- Get constraints for any imported variables
-  let filterForVars (NPKVariable _) _ = True; filterForVars _ _ = False
-  nmap <- M.filterWithKey filterForVars <$> getNameParamMap
-  let importedVariables = [ ConEq (UnitVar vv) (foldUnits units) | (NPKVariable vv, units) <- M.toList nmap ]
+  nmap <- getNameParamMap
+  -- Translate a Use AST node into a pair mapping unique name to 'local' source name in this program file.
+  let useToPair (F.UseID _ _ e) = (varName e, srcName e)
+      useToPair (F.UseRename _ _ e1 e2) = (varName e1, srcName e1) -- (unique name, 'local' source name)
+  -- A map of modules -> (maps of variables -> their unit info).
+  let modnmaps = [ M.fromList (mapMaybe f (M.toList npkmap))
+                 -- find all StUse statements and identify variables that need to be imported from nmap
+                 | F.StUse _ _ e _ only alist <- universeBi pf :: [ F.Statement UA ]
+                 , let mod = srcName e
+                 , let uses = map useToPair (fromMaybe [] (F.aStrip <$> alist))
+                 , Just npkmap <- [M.lookup (F.Named mod) nmap]
+                 , let f (npk, ui) = case npk of
+                         (NPKVariable (var, src))
+                           -- import all variables from module -- apply any renames from uses
+                           | only == F.Permissive -> Just (NPKVariable (var, src `fromMaybe` lookup var uses), ui)
+                           -- only import variable mentioned in uses
+                           | Just src' <- lookup var uses -> Just (NPKVariable (var, src'), ui)
+                         _ -> Nothing
+                 ]
+  let modnmap = M.unions modnmaps
+
+  -- Prepare constraints for all variables imported via StUse.
+  let importedVariables = [ ConEq (UnitVar vv) (foldUnits units) | (NPKVariable vv, units) <- M.toList modnmap ]
 
   -- Work through the instances, expanding their templates, and
   -- substituting the callId into the abstract parameters.
-  concreteCons <- liftM2 (++) (foldM (substInstance False []) importedVariables instances)
+  concreteCons <- cullRedundant <$>
+                  liftM2 (++) (foldM (substInstance False []) importedVariables instances)
                               (foldM (substInstance True []) [] dummies)
   dumpConsM "applyTemplates: concreteCons" concreteCons
 
@@ -404,7 +432,7 @@ applyTemplates cons = do
       transAlias u                                    = u
 
   dumpConsM "aliases" aliases
-  pure . transformBi transAlias $ cons ++ concreteCons ++ aliases
+  pure . transformBi transAlias . cullRedundant $ cons ++ concreteCons ++ aliases
 
 -- | Look up the Parametric templates for a given function or
 -- subroutine, and do the substitutions. Process any additional
