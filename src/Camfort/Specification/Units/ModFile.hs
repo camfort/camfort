@@ -101,8 +101,10 @@ runCompileUnits = do
         [ (FA.varName v, FA.srcName v) | F.DeclVariable _ _ v _ _ <- universeBi pu :: [F.Declarator UA] ] ++
         [ (FA.varName v, FA.srcName v) | F.DeclArray _ _ v _ _ _  <- universeBi pu :: [F.Declarator UA] ]
 
+  -- Map of modules -> associated declared variables
   let puVarNameMap :: M.Map F.ProgramUnitName (S.Set VV)
-      puVarNameMap = M.fromListWith S.union [ (F.getName pu, puVarNameSet pu) | pu <- universeBi pf :: [F.ProgramUnit UA] ]
+      puVarNameMap = M.fromListWith S.union [ (F.getName pu, puVarNameSet pu)
+                                            | pu@F.PUModule {} <- universeBi pf :: [F.ProgramUnit UA] ]
 
   -- Filter functions that cut out any information not having to do
   -- with the current modules being compiled.
@@ -113,10 +115,9 @@ runCompileUnits = do
 
   let findNPK vv = ( (NPKVariable vv), ) <$> M.lookup (NPKVariable vv) variables
 
-  let npm = flip M.map puVarNameMap (M.fromList . mapMaybe findNPK . S.toList)
+  -- 'Name Param Map': module names -> (variables -> unit info)
+  let npm = M.filter (not . M.null) $ flip M.map puVarNameMap (M.fromList . mapMaybe findNPK . S.toList)
 
-  -- D.traceM $ "npm = " ++ unlines (map show (M.toList npm))
-  -- D.traceM $ "tmap = \n" ++ unlines [ f ++ "\n" ++ unlines (map show cons) | (f, cons) <- M.toList tmap ]
   pure CompiledUnits { cuTemplateMap = tmap, cuNameParamMap = npm }
 
 -- | Cut out unnecessary constraints in the template using the solver.
@@ -163,6 +164,10 @@ dumpModFileCompiledUnits mf = do
                             | (fname, temp) <- M.toList (cuTemplateMap cu)
                             , let fname' = "Template for " ++ show fname ]
                    , "NameParam Map  (size=" ++ show (M.size (cuNameParamMap cu)) ++ "):"
-                   , unlines [ i 2 (show uis ++ " :: " ++ show npk) | (npk, uis) <- M.toList (cuNameParamMap cu) ] ]
+                   , concat [ unlines (i 2 mod':[ i 4 (show ui ++ " :: " ++ show v)
+                                                | (NPKVariable (v,_), ui) <- M.toList npkmap ])
+                            | (mod, npkmap) <- M.toList (cuNameParamMap cu)
+                            , let mod' = "Module " ++ show mod ]
+                   ]
  where
    i n s = replicate n ' ' ++ s
