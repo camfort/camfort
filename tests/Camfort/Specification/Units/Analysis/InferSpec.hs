@@ -7,10 +7,11 @@ import Control.Lens
 import           Test.Hspec hiding (Spec)
 import qualified Test.Hspec as Test
 
-import Language.Fortran.Util.ModFile (emptyModFiles)
+import Language.Fortran.Util.ModFile (ModFile, emptyModFiles)
 
 import Camfort.Analysis hiding (describe)
-import Camfort.Analysis.ModFile (readParseSrcDir)
+import Camfort.Analysis.ModFile (genModFiles, readParseSrcDir)
+import Camfort.Specification.Units.Analysis (compileUnits)
 import Camfort.Specification.Units.Analysis.Infer (inferUnits)
 import Camfort.Specification.Units.Monad
   (LiteralsOpt(..), unitOpts0, uoLiterals, runUnitAnalysis, UnitEnv(..))
@@ -50,10 +51,17 @@ spec =
         "literal-zero.f90" `unitsInferReportIs` literalZeroReport
       it "literal-nonzero" $
         "literal-nonzero.f90" `unitsInferReportIs` literalNonZeroReport
+      it "literal-nonzero" $
+        "literal-nonzero2.f90" `unitsInferReportIs` literalNonZero2Report
       it "do-loop1" $
         "do-loop1.f90" `unitsInferReportIs` doLoop1Report
       it "do-loop2" $
         "do-loop2.f90" `unitsInferReportIs` doLoop2Report
+    describe "cross module analysis" $ do
+      it "with literals" $
+        unitsInferReportWithMod ["cross-module-b/cross-module-b1.f90"] "cross-module-b/cross-module-b2.f90"
+          crossModuleBReport
+
 
 
 fixturesDir :: String
@@ -62,8 +70,14 @@ fixturesDir = "tests" </> "fixtures" </> "Specification" </> "Units"
 -- | Assert that the report of performing units inference on a file is as expected.
 unitsInferReportIs :: String -> String -> Expectation
 unitsInferReportIs fileName expectedReport = do
+  unitsInferReportWithMod [] fileName expectedReport
+
+-- | Assert that the report of performing units inference on a file is as expected (with mod files).
+unitsInferReportWithMod :: [String] -> String -> String -> Expectation
+unitsInferReportWithMod modNames fileName expectedReport = do
   let file = fixturesDir </> fileName
-      modFiles = emptyModFiles
+      modPaths = fmap (fixturesDir </>) modNames
+  modFiles <- mapM mkTestModFile modPaths
   [(pf,_)] <- readParseSrcDir Nothing modFiles file []
 
   let uEnv = UnitEnv { unitOpts = uOpts, unitProgramFile = pf }
@@ -73,6 +87,10 @@ unitsInferReportIs fileName expectedReport = do
 
   show res `shouldBe` expectedReport
   where uOpts = unitOpts0 { uoLiterals = LitMixed }
+
+-- | Helper for producing a basic ModFile from a (terminal) module file.
+mkTestModFile :: String -> IO ModFile
+mkTestModFile file = head <$> genModFiles Nothing emptyModFiles compileUnits unitOpts0 file []
 
 exampleInferSimple1Report :: String
 exampleInferSimple1Report =
@@ -185,6 +203,16 @@ literalNonZeroReport = inferReport "literal-nonzero.f90"
   \  8:3 unit m s :: f\n\
   \  10:13 unit m s :: x\n"
 
+literalNonZero2Report :: String
+literalNonZero2Report = inferReport "literal-nonzero2.f90"
+  "  3:11 unit m :: a\n\
+  \  3:14 unit m :: b\n\
+  \  3:17 unit m :: c\n\
+  \  3:20 unit m :: d\n\
+  \  4:22 unit m :: n\n\
+  \  10:3 unit m :: f\n\
+  \  11:13 unit m :: x\n"
+
 doLoop1Report :: String
 doLoop1Report = inferReport "do-loop1.f90"
   "  3:11 unit m :: x\n\
@@ -212,3 +240,10 @@ doLoop2Report = inferReport "do-loop2.f90"
   \  29:13 unit 'a :: x\n\
   \  29:16 unit 'a :: y\n\
   \  30:16 unit 'a :: i\n"
+
+crossModuleBReport :: String
+crossModuleBReport =
+  "\ntests/fixtures/Specification/Units/cross-module-b/cross-module-b2.f90:\n\
+  \  6:24 unit c :: foo\n\
+  \  9:13 unit c :: tc\n\
+  \  9:17 unit k :: t\n"

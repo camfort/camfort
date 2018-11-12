@@ -327,15 +327,17 @@ annotateLiteralsPU pu = do
             _ | Just c1 <- constExp (F.getAnnotation e1)
               , Just c2 <- constExp (F.getAnnotation e2)        -> pure e
             -- a constant multiplier is unitless
-            _ | Just c1 <- constExp (F.getAnnotation e1)        ->
+            _ | Just c1 <- constExp (F.getAnnotation e1)
+              , Just UnitLiteral{} <- UA.getUnitInfo e1         ->
                 pure $ F.ExpBinary a s F.Multiplication (UA.setUnitInfo UnitlessLit e1) e2
-            _                                                   -> pure e
-      F.ExpBinary a s op e1 e2
-        | op `elem` [F.Multiplication, F.Division]
-        , Just c2 <- constExp (F.getAnnotation e2)              ->
             -- a constant multiplier is unitless
-            pure $ F.ExpBinary a s F.Multiplication e1 (UA.setUnitInfo UnitlessLit e2)
-      _ | Just _ <- constExp (F.getAnnotation e)                -> if isLiteralZero e then
+              | Just c2 <- constExp (F.getAnnotation e2)
+              , Just UnitLiteral{} <- UA.getUnitInfo e2         ->
+                pure $ F.ExpBinary a s F.Multiplication e1 (UA.setUnitInfo UnitlessLit e2)
+            _                                                   -> pure e
+
+      _ | Just _ <- constExp (F.getAnnotation e)
+        , Nothing <- UA.getUnitInfo e                           -> if isLiteralZero e then
                                                                      withLiterals genParamLit e
                                                                    else
                                                                      withLiterals genUnitLiteral e
