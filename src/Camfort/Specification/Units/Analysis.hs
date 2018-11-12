@@ -317,15 +317,26 @@ annotateLiteralsPU pu = do
     -- Follow the LitMixed rules.
     expMixed e = case e of
       F.ExpValue _ _ (F.ValInteger i) | readInteger i == Just 0 -> withLiterals genParamLit e
-                                      | isPolyCtxt              -> expUnitless e
                                       | otherwise               -> withLiterals genUnitLiteral e
       F.ExpValue _ _ (F.ValReal i) | readReal i == Just 0       -> withLiterals genParamLit e
-                                   | isPolyCtxt                 -> expUnitless e
                                    | otherwise                  -> withLiterals genUnitLiteral e
-      _ | Just con <- constExp (F.getAnnotation e)              -> if isLiteralZero e then
+
+      F.ExpBinary a s op e1 e2
+        | op `elem` [F.Multiplication, F.Division] -> case () of
+            -- leave it alone if they're both constants
+            _ | Just c1 <- constExp (F.getAnnotation e1)
+              , Just c2 <- constExp (F.getAnnotation e2)        -> pure e
+            -- a constant multiplier is unitless
+            _ | Just c1 <- constExp (F.getAnnotation e1)        ->
+                pure $ F.ExpBinary a s F.Multiplication (UA.setUnitInfo UnitlessLit e1) e2
+            _                                                   -> pure e
+      F.ExpBinary a s op e1 e2
+        | op `elem` [F.Multiplication, F.Division]
+        , Just c2 <- constExp (F.getAnnotation e2)              ->
+            -- a constant multiplier is unitless
+            pure $ F.ExpBinary a s F.Multiplication e1 (UA.setUnitInfo UnitlessLit e2)
+      _ | Just _ <- constExp (F.getAnnotation e)                -> if isLiteralZero e then
                                                                      withLiterals genParamLit e
-                                                                   else if isPolyCtxt then
-                                                                     expUnitless e
                                                                    else
                                                                      withLiterals genUnitLiteral e
         | otherwise                                             -> pure e
@@ -583,6 +594,7 @@ propagateExp e = case e of
   F.ExpFunctionCall {}                   -> propagateFunctionCall e
   F.ExpSubscript _ _ e1 _                -> pure $ UA.maybeSetUnitInfo (UA.getUnitInfo e1) e
   F.ExpUnary _ _ _ e1                    -> pure $ UA.maybeSetUnitInfo (UA.getUnitInfo e1) e
+  F.ExpInitialisation{}                  -> pure e
   _                                      -> do
     logDebug' e $ "progagateExp: unhandled " <> describeShow e
     pure e

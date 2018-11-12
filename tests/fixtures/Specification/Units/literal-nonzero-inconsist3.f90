@@ -31,6 +31,7 @@ end program literalnonzero
 !
 ! with it enabled (normal):
 ! tests/fixtures/Specification/Units/literal-nonzero-inconsist3.f90: Inconsistent:
-!  - at 7:11: 'parameter 1 to sqr' should have unit 's'
-!  - at 12:3: 'i' should have the same units as 'parameter 1 to sqr'
-!  - at 15:8: 'i' should have unit '1'
+! - at 6:3: 'result of sqr' should have unit 'm'
+! - at 6:11: 'parameter 1 to sqr' should have unit 'm'
+! - at 7:3: 'result of sqr' should have unit 's'
+! - at 7:11: 'parameter 1 to sqr' should have unit 's'

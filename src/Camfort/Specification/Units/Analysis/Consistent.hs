@@ -30,7 +30,7 @@ import           Camfort.Analysis.Annotations
 import           Camfort.Specification.Units.Analysis (UnitAnalysis, runInference)
 import qualified Camfort.Specification.Units.Annotation as UA
 import           Camfort.Specification.Units.Environment
-import           Camfort.Specification.Units.InferenceBackendSBV (inconsistentConstraints)
+import           Camfort.Specification.Units.InferenceBackend (inconsistentConstraints)
 import qualified Camfort.Specification.Units.InferenceBackend as MatrixBackend
 import           Camfort.Specification.Units.Monad
 import           Camfort.Specification.Units.MonadTypes

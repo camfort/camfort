@@ -36,8 +36,8 @@ module Camfort.Specification.Units.InferenceBackend
   , genUnitAssignments
   , genUnitAssignments'
   ) where
-
 import           Prelude hiding ((<>))
+import           Control.Arrow (first)
 import           Control.Monad
 import           Control.Monad.ST
 import qualified Data.Array as A
@@ -77,24 +77,57 @@ inferVariables cons = unitVarAssignments
       [ (var, units) | ([UnitPow (UnitVar var)                 k], units) <- unitAssignments, k `approxEq` 1 ] ++
       [ (var, units) | ([UnitPow (UnitParamVarAbs (_, var)) k], units)    <- unitAssignments, k `approxEq` 1 ]
 
--- detect inconsistency if concrete units are assigned an implicit
--- abstract unit variable with coefficients not equal
-detectInconsistency :: [([UnitInfo], UnitInfo)] -> [([UnitInfo], UnitInfo)]
-detectInconsistency unitAssignments = [ fmap foldUnits a | a@([UnitPow (UnitParamImpAbs _) k1], rhs) <- ua'
-                                                         , UnitPow _ k2 <- rhs
-                                                         , k1 /= k2 ]
+-- Detect inconsistency if concrete units are assigned an implicit
+-- abstract unit variable with coefficients not equal, or there are
+-- monomorphic literals being given parametric polymorphic units.
+detectInconsistency :: [([UnitInfo], UnitInfo)] -> Constraints
+detectInconsistency unitAssignments = unitAssignmentsToConstraints badImplicits ++ mustBeUnitless unitAssignments
   where
     ua' = map (shiftTerms . fmap flattenUnits) unitAssignments
+    badImplicits = [ fmap foldUnits a | a@([UnitPow (UnitParamImpAbs _) k1], rhs) <- ua'
+                                      , UnitPow _ k2 <- rhs
+                                      , k1 /= k2 ]
+
+-- Must be unitless: any assignments of parametric abstract units to
+-- monomorphic literals.
+mustBeUnitless :: [([UnitInfo], UnitInfo)] -> Constraints
+mustBeUnitless unitAssignments = mbu
+  where
+    -- msg = "\n\n\n" ++ show unitAssignments ++ "\n\n\nmust be unitless: " ++ show mbu
+    mbu = [ ConEq UnitlessLit (UnitPow (UnitLiteral l) k)
+          | a@(UnitPow (UnitLiteral l) k:_, rhs) <- ua''
+          , any isParametric (universeBi rhs :: [UnitInfo]) ]
+    ua' = map (shiftTerms . fmap flattenUnits) unitAssignments
+    ua'' = map (shiftTermsBy isLiteral . fmap flattenUnits) unitAssignments
+
+    isLiteral UnitLiteral{} = True
+    isLiteral (UnitPow UnitLiteral{} _) = True
+    isLiteral _ = False
+
+    isParametric UnitParamVarAbs{} = True
+    isParametric UnitParamPosAbs{} = True
+    isParametric UnitParamEAPAbs{} = True
+    isParametric UnitParamLitAbs{} = True
+    isParametric UnitParamImpAbs{} = True
+    isParametric (UnitPow u _)     = isParametric u
+    isParametric _                 = False
+
+
+-- convert the assignment format back into constraints
+unitAssignmentsToConstraints :: [([UnitInfo], UnitInfo)] -> Constraints
+unitAssignmentsToConstraints = map (uncurry ConEq . first foldUnits)
 
 -- | Raw units-assignment pairs.
-genUnitAssignments :: [Constraint] -> [([UnitInfo], UnitInfo)]
+genUnitAssignments :: Constraints -> [([UnitInfo], UnitInfo)]
 genUnitAssignments cons
-  | null (detectInconsistency ua) = ua
-  | otherwise                     = []
+  -- if the results include any mappings that must be forced to be unitless...
+  | mbu <- mustBeUnitless ua, not (null mbu) = genUnitAssignments (mbu ++ unitAssignmentsToConstraints ua)
+  | null (detectInconsistency ua)            = ua
+  | otherwise                                = []
   where
     ua = genUnitAssignments' colSort cons
 
-genUnitAssignments' :: SortFn -> [Constraint] -> [([UnitInfo], UnitInfo)]
+genUnitAssignments' :: SortFn -> Constraints -> [([UnitInfo], UnitInfo)]
 genUnitAssignments' _ [] = []
 genUnitAssignments' sortfn cons
   | null colList                                      = []
@@ -230,6 +263,14 @@ shiftTerms (lhs, rhs) = (lhsOk ++ negateCons rhsShift, rhsOk ++ negateCons lhsSh
   where
     (lhsOk, lhsShift) = partition (not . isUnitRHS) lhs
     (rhsOk, rhsShift) = partition isUnitRHS rhs
+
+-- | Shift terms based on function f (<- True, False ->).
+shiftTermsBy :: (UnitInfo -> Bool) -> ([UnitInfo], [UnitInfo]) -> ([UnitInfo], [UnitInfo])
+shiftTermsBy f (lhs, rhs) = (lhsOk ++ negateCons rhsShift, rhsOk ++ negateCons lhsShift)
+  where
+    (lhsOk, lhsShift) = partition f lhs
+    (rhsOk, rhsShift) = partition (not . f) rhs
+
 
 -- | Translate all constraints into a LHS, RHS side of units.
 flattenConstraints :: Constraints -> [([UnitInfo], [UnitInfo])]
@@ -373,7 +414,9 @@ criticalVariables cons = filter (not . isUnitRHS) $ map (colA A.!) criticalIndic
 inconsistentConstraints :: Constraints -> Maybe Constraints
 inconsistentConstraints [] = Nothing
 inconsistentConstraints cons
-  | null inconsists = Nothing
-  | otherwise       = Just [ con | (con, i) <- zip cons [0..], i `elem` inconsists ]
+  | not (null direct) = Just direct
+  | null inconsists   = Nothing
+  | otherwise         = Just [ con | (con, i) <- zip cons [0..], i `elem` inconsists ]
   where
     (_, _, inconsists, _, _) = constraintsToMatrices cons
+    direct = detectInconsistency $ genUnitAssignments' colSort cons
