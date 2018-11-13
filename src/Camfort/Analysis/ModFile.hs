@@ -87,9 +87,11 @@ getModFiles dir = do
         putStrLn $ modFileName ++ ": Error: " ++ show msg
         pure Nothing
       Right modFile -> do
-        putStrLn $ modFileName ++ ": successfully parsed precompiled file."
         pure . pure $ modFile
-  pure . catMaybes $ mods
+  let mods' = catMaybes mods
+  putStrLn $ "Successfully parsed " ++ show (length mods) ++ " precompiled file(s)."
+  pure mods'
+
   where
     isModFile :: String -> Bool
     isModFile = (== FM.modFileSuffix) . takeExtension
