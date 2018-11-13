@@ -329,11 +329,11 @@ annotateLiteralsPU pu = do
             -- a constant multiplier is unitless
             _ | Just c1 <- constExp (F.getAnnotation e1)
               , Just UnitLiteral{} <- UA.getUnitInfo e1         ->
-                pure $ F.ExpBinary a s F.Multiplication (UA.setUnitInfo UnitlessLit e1) e2
+                pure $ F.ExpBinary a s op (UA.setUnitInfo UnitlessLit e1) e2
             -- a constant multiplier is unitless
               | Just c2 <- constExp (F.getAnnotation e2)
               , Just UnitLiteral{} <- UA.getUnitInfo e2         ->
-                pure $ F.ExpBinary a s F.Multiplication e1 (UA.setUnitInfo UnitlessLit e2)
+                pure $ F.ExpBinary a s op e1 (UA.setUnitInfo UnitlessLit e2)
             _                                                   -> pure e
 
       _ | Just _ <- constExp (F.getAnnotation e)
