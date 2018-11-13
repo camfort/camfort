@@ -580,7 +580,8 @@ mainBlocks = concatMap getBlocks . universeBi
 -- that variables have all been annotated.
 propagateUnits :: UnitSolver ()
 -- precondition: all variables have already been annotated
-propagateUnits = modifyProgramFileM $ transformBiM propagatePU        <=<
+propagateUnits = modifyProgramFileM $ transformBiM propagateInterface <=<
+                                      transformBiM propagatePU        <=<
                                       transformBiM propagateDoSpec    <=<
                                       transformBiM propagateStatement <=<
                                       transformBiM propagateExp
@@ -660,6 +661,17 @@ literalAssignmentSpecialCase e1 e2 ast
   , isMonomorphic u1 || isLiteralZero e2 = pure ast
   -- otherwise express the constraint between LHS and RHS of assignment.
   | otherwise = pure $ UA.maybeSetUnitConstraintF2 ConEq (UA.getUnitInfo e1) (UA.getUnitInfo e2) ast
+
+-- Generic Interface template mapping will be same as first module procedure.
+propagateInterface :: F.Block UA -> UnitSolver (F.Block UA)
+propagateInterface b@(F.BlInterface _ _ (Just e) _ bs _) = do
+  let iname = varName e
+  case [ varName e1 | F.StModuleProcedure _ _ (F.AList _ _ (e1:_)) <- universeBi bs :: [F.Statement UA] ] of
+    mpname:_ -> modifyTemplateMap $ \ m -> fromMaybe m ((\ t -> M.insert iname t m) <$> M.lookup mpname m)
+    _        -> pure ()
+  pure b
+
+propagateInterface b = pure b
 
 propagatePU :: F.ProgramUnit UA -> UnitSolver (F.ProgramUnit UA)
 propagatePU pu = do
