@@ -35,6 +35,7 @@ module Camfort.Specification.Units.InferenceBackend
   , rref
   , genUnitAssignments
   , genUnitAssignments'
+  , provenance
   ) where
 import           Prelude hiding ((<>))
 import           Control.Arrow (first)
@@ -44,9 +45,11 @@ import qualified Data.Array as A
 import           Data.Generics.Uniplate.Operations
   (transformBi, universeBi)
 import           Data.List
-  ((\\), findIndex, inits, nub, partition, sortBy, group, tails)
+  ((\\), findIndex, inits, nub, partition, sortBy, group, tails, foldl')
 import           Data.Ord
 import qualified Data.Map.Strict as M
+import qualified Data.IntMap as IM
+import qualified Data.IntSet as IS
 import           Data.Maybe (fromMaybe, mapMaybe)
 import           Data.Tuple (swap)
 import           Numeric.LinearAlgebra
@@ -285,8 +288,17 @@ rref a = snd $ rrefMatrices' a 0 0 []
   where
     -- (a', den, r) = Flint.rref a
 
+-- Provenance of matrices.
+data RRefOp
+  = ElemRowSwap Int Int         -- ^ swapped row with row
+  | ElemRowMult Int Double      -- ^ scaled row by constant
+  | ElemRowAdds [(Int, Int)]    -- ^ set of added row onto row ops
+  deriving (Show, Eq, Ord)
+
 -- worker function
 -- invariant: the matrix a is in rref except within the submatrix (j-k,j) to (n,n)
+rrefMatrices' :: H.Matrix Double -> Int -> Int -> [(H.Matrix Double, RRefOp)] ->
+                 ([(H.Matrix Double, RRefOp)], H.Matrix Double)
 rrefMatrices' a j k mats
   -- Base cases:
   | j - k == n            = (mats, a)
@@ -297,7 +309,7 @@ rrefMatrices' a j k mats
     -- this column is all 0s below current row, must move onto the next column
     Nothing -> rrefMatrices' a (j + 1) (k + 1) mats
     -- we've found a row that has a non-zero element that can be swapped into this row
-    Just i' -> rrefMatrices' (swapMat <> a) j k (swapMat:mats)
+    Just i' -> rrefMatrices' (swapMat <> a) j k ((swapMat, ElemRowSwap i (j - k)):mats)
       where i       = j - k + i'
             swapMat = elemRowSwap n i (j - k)
 
@@ -310,11 +322,11 @@ rrefMatrices' a j k mats
     n     = rows a
     m     = cols a
     below = getColumnBelow a (j - k, j)
-
-    erm   = elemRowMult n (j - k) (recip (a @@> (j - k, j)))
+    scale = recip (a @@> (j - k, j))
+    erm   = elemRowMult n (j - k) scale
 
     -- scale the row if the cell is not already equal to 1
-    (a1, mats1) | a @@> (j - k, j) /= 1 = (erm <> a, erm:mats)
+    (a1, mats1) | a @@> (j - k, j) /= 1 = (erm <> a, (erm, ElemRowMult (j - k) scale):mats)
                 | otherwise             = (a, mats)
 
     -- Locate any non-zero values in the same column as (j - k, j) and
@@ -323,19 +335,19 @@ rrefMatrices' a j k mats
     -- multiplied together, simply build a single matrix that cancels
     -- all of them out at the same time, using the ST Monad.
     findAdds _ m ms
-      | isWritten = (new <> m, new:ms)
+      | isWritten = (new <> m, (new, ElemRowAdds ops):ms)
       | otherwise = (m, ms)
       where
-        (isWritten, new) = runST $ do
+        (isWritten, ops, new) = runST $ do
           new <- newMatrix 0 n n :: ST s (STMatrix s Double)
           sequence [ writeMatrix new i' i' 1 | i' <- [0 .. (n - 1)] ]
-          let f w i | i >= n            = return w
-                    | i == j - k        = f w (i + 1)
-                    | a @@> (i, j) == 0 = f w (i + 1)
-                    | otherwise         = writeMatrix new i (j - k) (- (a @@> (i, j)))
-                                          >> f True (i + 1)
-          isWritten <- f False 0
-          (isWritten,) `fmap` freezeMatrix new
+          let f w o i | i >= n            = return (w, o)
+                      | i == j - k        = f w o (i + 1)
+                      | a @@> (i, j) == 0 = f w o (i + 1)
+                      | otherwise         = writeMatrix new i (j - k) (- (a @@> (i, j)))
+                                          >> f True ((i, j - k):o) (i + 1)
+          (isWritten, ops) <- f False [] 0
+          (isWritten, ops,) `fmap` freezeMatrix new
 
     (a2, mats2) = findAdds 0 a1 mats1
 
@@ -355,6 +367,27 @@ elemRowSwap n i j
 
 
 --------------------------------------------------
+
+type GraphCol = IM.IntMap IS.IntSet   -- graph from origin to dest.
+type Provenance = IM.IntMap IS.IntSet -- graph from dest. to origin
+
+opToGraphCol :: RRefOp -> GraphCol
+opToGraphCol ElemRowMult{} = IM.empty
+opToGraphCol (ElemRowSwap i j) = IM.fromList [ (i, IS.singleton j), (j, IS.singleton i) ]
+opToGraphCol (ElemRowAdds l)   = IM.fromList $ concat [ [(i, IS.fromList [i,j]), (j, IS.singleton j)]  | (i, j) <- l ]
+
+graphColCombine :: GraphCol -> GraphCol -> GraphCol
+graphColCombine g1 g2 = IM.unionWith (curry snd) g1 $ IM.map (IS.fromList . trans . IS.toList) g2
+  where
+    trans = concatMap (\ i -> [i] `fromMaybe` (IS.toList <$> IM.lookup i g1))
+
+invertGraphCol g = IM.fromListWith IS.union [ (i, IS.singleton j) | (j, jset) <- IM.toList g, i <- IS.toList jset ]
+
+provenance :: H.Matrix Double -> (H.Matrix Double, Provenance)
+provenance m = (m', p)
+  where
+    (matOps, m') = rrefMatrices' m 0 0 []
+    p = invertGraphCol . foldl' graphColCombine IM.empty . map opToGraphCol $ map snd matOps
 
 -- Worker functions:
 

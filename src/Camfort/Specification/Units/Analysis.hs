@@ -904,7 +904,10 @@ debugLogging = do
     logDebugNoOrigin "--------------------------------------------------"
     let unitAssignments = BackendSBV.genUnitAssignments cons
     logDebugNoOrigin . describe . unlines $ map (\ (u1s, u2) -> "  ***UnitAssignmentSBV: " ++ show u1s ++ " === " ++ show (flattenUnits u2)) unitAssignments
-    logDebugNoOrigin "--------------------------------------------------"
+    logDebugNoOrigin "--------------------------------------------------\nProvenance:"
+    let (augM', p) = provenance augM
+    logDebugNoOrigin . describeShow $ augM'
+    logDebugNoOrigin . describeShow $ p
 
 --------------------------------------------------
 
