@@ -36,7 +36,6 @@ import qualified Data.Set as S
 import qualified Numeric.LinearAlgebra as H -- for debugging
 import           Data.Text (Text)
 import           Control.Lens ((^?), _1)
-import qualified Debug.Trace as D
 
 import qualified Language.Fortran.AST      as F
 import qualified Language.Fortran.Analysis as FA
@@ -667,8 +666,13 @@ propagateInterface :: F.Block UA -> UnitSolver (F.Block UA)
 propagateInterface b@(F.BlInterface _ _ (Just e) _ _ bs) = do
   let iname = varName e
   case [ varName e1 | F.StModuleProcedure _ _ (F.AList _ _ (e1:_)) <- universeBi bs :: [F.Statement UA] ] of
-    mpname:_ -> modifyTemplateMap $ \ m -> fromMaybe m ((\ t -> M.insert iname t m) <$> M.lookup mpname m)
-    _        -> pure ()
+    mpname:_ -> do
+      -- translate any instance of mpname into iname within the template
+      let trans = transformBi (\ x -> if x == mpname then iname else x)
+      -- copy (translated) template from first module procedure to interface
+      modifyTemplateMap $ \ m -> fromMaybe m ((\ t -> M.insert iname (trans t) m) <$> M.lookup mpname m)
+    _        ->
+      pure ()
   pure b
 
 propagateInterface b = pure b
