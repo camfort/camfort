@@ -664,7 +664,7 @@ literalAssignmentSpecialCase e1 e2 ast
 
 -- Generic Interface template mapping will be same as first module procedure.
 propagateInterface :: F.Block UA -> UnitSolver (F.Block UA)
-propagateInterface b@(F.BlInterface _ _ (Just e) _ bs _) = do
+propagateInterface b@(F.BlInterface _ _ (Just e) _ _ bs) = do
   let iname = varName e
   case [ varName e1 | F.StModuleProcedure _ _ (F.AList _ _ (e1:_)) <- universeBi bs :: [F.Statement UA] ] of
     mpname:_ -> modifyTemplateMap $ \ m -> fromMaybe m ((\ t -> M.insert iname t m) <$> M.lookup mpname m)

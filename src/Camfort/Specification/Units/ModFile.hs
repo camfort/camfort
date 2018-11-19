@@ -95,7 +95,8 @@ runCompileUnits = do
 
   -- Create sets of relevant program-unit and variable names.
   let getName pu | F.Named n <- FA.puName pu = Just n | otherwise = Nothing
-  let puNameSet = S.fromList $ catMaybes [ getName pu | pu <- universeBi pf :: [F.ProgramUnit UA] ]
+  let puNameSet = S.fromList $ catMaybes [ getName pu | pu <- universeBi pf :: [F.ProgramUnit UA] ] ++
+                               [ FA.varName e | F.BlInterface _ _ (Just e) _ _ _ <- universeBi pf :: [F.Block UA] ]
 
   let puVarNameSet pu = S.fromList $
         [ (FA.varName v, FA.srcName v) | F.DeclVariable _ _ v _ _ <- universeBi pu :: [F.Declarator UA] ] ++
