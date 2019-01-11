@@ -288,8 +288,11 @@ insertGivenUnits = do
 annotateAllVariables :: UnitSolver ()
 annotateAllVariables = modifyProgramFileM $ \ pf -> do
   varUnitMap <- getVarUnitMap
+  importedVariables <- getImportedVariables
+  let varUnitMap' = M.union varUnitMap importedVariables
+
   let annotateExp e@(F.ExpValue _ _ (F.ValVariable _))
-        | Just info <- M.lookup (varName e, srcName e) varUnitMap = UA.setUnitInfo info e
+        | Just info <- M.lookup (varName e, srcName e) varUnitMap' = UA.setUnitInfo info e
       -- may need to annotate intrinsics separately
       annotateExp e = e
   pure $ transformBi annotateExp pf
@@ -404,34 +407,15 @@ applyTemplates cons = do
   logDebug' pf $ ("instances: " <> describeShow instances)
   logDebug' pf $ ("dummies: " <> describeShow dummies)
 
-  nmap <- getNameParamMap
-  -- Translate a Use AST node into a pair mapping unique name to 'local' source name in this program file.
-  let useToPair (F.UseID _ _ e) = (varName e, srcName e)
-      useToPair (F.UseRename _ _ e1 e2) = (varName e1, srcName e1) -- (unique name, 'local' source name)
-  -- A map of modules -> (maps of variables -> their unit info).
-  let modnmaps = [ M.fromList (mapMaybe f (M.toList npkmap))
-                 -- find all StUse statements and identify variables that need to be imported from nmap
-                 | F.StUse _ _ e _ only alist <- universeBi pf :: [ F.Statement UA ]
-                 , let mod = srcName e
-                 , let uses = map useToPair (fromMaybe [] (F.aStrip <$> alist))
-                 , Just npkmap <- [M.lookup (F.Named mod) nmap]
-                 , let f (npk, ui) = case npk of
-                         (NPKVariable (var, src))
-                           -- import all variables from module -- apply any renames from uses
-                           | only == F.Permissive -> Just (NPKVariable (var, src `fromMaybe` lookup var uses), ui)
-                           -- only import variable mentioned in uses
-                           | Just src' <- lookup var uses -> Just (NPKVariable (var, src'), ui)
-                         _ -> Nothing
-                 ]
-  let modnmap = M.unions modnmaps
+  importedVariables <- getImportedVariables
 
   -- Prepare constraints for all variables imported via StUse.
-  let importedVariables = [ ConEq (UnitVar vv) (foldUnits units) | (NPKVariable vv, units) <- M.toList modnmap ]
+  let importedCons = [ ConEq (UnitVar vv) units | (vv, units) <- M.toList importedVariables ]
 
   -- Work through the instances, expanding their templates, and
   -- substituting the callId into the abstract parameters.
   concreteCons <- cullRedundant <$>
-                  liftM2 (++) (foldM (substInstance False []) importedVariables instances)
+                  liftM2 (++) (foldM (substInstance False []) importedCons instances)
                               (foldM (substInstance True []) [] dummies)
   dumpConsM "applyTemplates: concreteCons" concreteCons
 
@@ -837,6 +821,31 @@ binOpKind F.And              = LogicOp
 binOpKind F.Equivalent       = RelOp
 binOpKind F.NotEquivalent    = RelOp
 binOpKind (F.BinCustom _)    = RelOp
+
+-- | Get information about imported variables coming from mod files.
+getImportedVariables :: UnitSolver (M.Map VV UnitInfo)
+getImportedVariables = do
+  pf <- getProgramFile
+  nmap <- getNameParamMap
+  -- Translate a Use AST node into a pair mapping unique name to 'local' source name in this program file.
+  let useToPair (F.UseID _ _ e) = (varName e, srcName e)
+      useToPair (F.UseRename _ _ e1 e2) = (varName e1, srcName e1) -- (unique name, 'local' source name)
+  -- A map of modules -> (maps of variables -> their unit info).
+  let modnmaps = [ M.fromList (mapMaybe f (M.toList npkmap))
+                 -- find all StUse statements and identify variables that need to be imported from nmap
+                 | F.StUse _ _ e _ only alist <- universeBi pf :: [ F.Statement UA ]
+                 , let mod = srcName e
+                 , let uses = map useToPair (fromMaybe [] (F.aStrip <$> alist))
+                 , Just npkmap <- [M.lookup (F.Named mod) nmap]
+                 , let f (npk, ui) = case npk of
+                         (NPKVariable (var, src))
+                           -- import all variables from module -- apply any renames from uses
+                           | only == F.Permissive -> Just (NPKVariable (var, src `fromMaybe` lookup var uses), ui)
+                           -- only import variable mentioned in uses
+                           | Just src' <- lookup var uses -> Just (NPKVariable (var, src'), ui)
+                         _ -> Nothing
+                 ]
+  pure $ M.fromList [ (vv, foldUnits units) | (NPKVariable vv, units) <- M.toList (M.unions modnmaps) ]
 
 --------------------------------------------------
 
