@@ -110,7 +110,7 @@ main = do
     runCommand (CmdUnitsCheck uo)
       | uoDumpMode uo                     = runUO uo unitsDump
       | otherwise                         = runUO uo unitsCheck
-    runCommand (CmdUnitsInfer uo)         = runUO uo unitsInfer
+    runCommand (CmdUnitsInfer uo)         = runUO uo $ unitsInfer (uoShowAST uo)
     runCommand (CmdUnitsSynth uso)        = runUSO uso unitsSynth
     runCommand (CmdUnitsCompile uo)       = runUO uo unitsCompile
     runCommand (CmdInvariantsCheck io)    = runIO io invariantsCheck
@@ -182,6 +182,7 @@ data UnitsOptions = UnitsOptions
   , uoLogOptions  :: LogOptions
   , literals      :: LiteralsOpt
   , uoDumpMode    :: Bool
+  , uoShowAST     :: Bool
   }
 
 
@@ -329,6 +330,7 @@ unitsOptions = fmap UnitsOptions
   <*> logOptions
   <*> literalsOption
   <*> dumpModFileOption
+  <*> showASTOption
   where
     literalsOption = option parseLiterals $
                      long "units-literals"
@@ -338,6 +340,7 @@ unitsOptions = fmap UnitsOptions
                      <> value LitMixed
                      <> help "units-of-measure literals mode. ID = Unitless, Poly, or Mixed"
     dumpModFileOption = switch (long "dump-mod-file" <> help "show contents of fsmod file")
+    showASTOption = switch (long "show-ast" <> help "show units at each AST node")
     parseLiterals = fmap read str
 
 

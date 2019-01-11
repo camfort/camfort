@@ -49,6 +49,8 @@ import           Data.Ratio
 import           GHC.Generics (Generic)
 import           Text.Printf
 import           Control.Arrow (first, second)
+import           Text.PrettyPrint.GenericPretty (pp, pretty, Out, doc, docPrec)
+import           Text.PrettyPrint (text)
 
 import qualified Language.Fortran.AST as F
 import qualified Camfort.Specification.Units.Parser.Types as P
@@ -196,6 +198,10 @@ instance Show UnitInfo where
                     | otherwise         = "(" ++ s ++ ")"
         where s = show x
       isUnitMulOk c = isSpace c || isAlphaNum c || c `elem` "*."
+
+instance Out UnitInfo where
+  doc = text . show
+  docPrec _ = text . show
 
 -- Converts doubles to a rational that can be expressed
 -- as a rational with denominator at most 10

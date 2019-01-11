@@ -70,13 +70,19 @@ import           System.Directory                                (doesDirectoryE
 import           System.FilePath                                 (takeDirectory,
                                                                   (</>), replaceExtension)
 
+import           Text.PrettyPrint.GenericPretty                  (pp, pretty, Out)
+
 import           Control.Lens
 import           Control.Monad.Reader.Class
-import           Control.Monad (forM_)
+import           Control.Monad
+import           Control.Monad.IO.Class
 
 import qualified Language.Fortran.AST                            as F
+import qualified Language.Fortran.Analysis.Renaming              as FA
+import qualified Language.Fortran.Analysis                       as FA
 import qualified Language.Fortran.Util.ModFile                   as FM
 import           Language.Fortran.ParserMonad                    (FortranVersion(..))
+import           Language.Fortran.PrettyPrint
 
 import           Camfort.Analysis
 import           Camfort.Analysis.Annotations                    (Annotation)
@@ -93,9 +99,10 @@ import qualified Camfort.Specification.Stencils                  as Stencils
 import           Camfort.Specification.Stencils.Analysis         (compileStencils)
 import qualified Camfort.Specification.Units                     as LU
 import           Camfort.Specification.Units.Analysis            (compileUnits)
+import           Camfort.Specification.Units.Annotation          (unitInfo)
 import           Camfort.Specification.Units.Analysis.Consistent (checkUnits)
 import           Camfort.Specification.Units.Analysis.Criticals  (inferCriticalVariables)
-import           Camfort.Specification.Units.Analysis.Infer      (inferUnits)
+import           Camfort.Specification.Units.Analysis.Infer      (InferenceResult(..), InferenceReport(..), inferUnits)
 import           Camfort.Specification.Units.Monad               (runUnitAnalysis,
                                                                   unitOpts0)
 import           Camfort.Specification.Units.ModFile             (dumpModFileCompiledUnits)
@@ -368,12 +375,29 @@ unitsCheck =
   (describePerFileAnalysis "unit checking")
 
 
-unitsInfer :: LiteralsOpt -> CamfortEnv -> IO Int
-unitsInfer =
+unitsInfer :: Bool -> LiteralsOpt -> CamfortEnv -> IO Int
+unitsInfer showAST =
   runUnitsFunctionality
   "Inferring units for"
   (singlePfUnits inferUnits)
-  (describePerFileAnalysis "unit inference")
+  (if showAST
+      then describePerFileAnalysisShowASTUnitInfo
+      else describePerFileAnalysis "unit inference")
+
+-- | Given an analysis program for a single file, run it over every input file
+-- and collect the reports, then print those reports to standard output.
+describePerFileAnalysisShowASTUnitInfo
+  :: (MonadIO m, Describe w, Describe e)
+  => AnalysisRunner e w m ProgramFile InferenceResult Int
+describePerFileAnalysisShowASTUnitInfo program logOutput logLevel modFiles pfsTexts = do
+  reports <- runPerFileAnalysis program logOutput logLevel modFiles pfsTexts
+  flip mapM_ reports $ \ r -> do
+    case r of
+      AnalysisReport _ _ (ARSuccess (Inferred (InferenceReport pfUA eVars))) ->
+        liftIO . pp . fmap (unitInfo . FA.prevAnnotation) . FA.rename $ pfUA
+      _ -> pure ()
+    putDescribeReport "unit inference" (Just logLevel) r
+  return $ exitCodeOfSet reports
 
 {-  TODO: remove if not needed
 unitsCompile :: FileOrDir -> LiteralsOpt -> CamfortEnv -> IO ()

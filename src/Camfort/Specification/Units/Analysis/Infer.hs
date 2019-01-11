@@ -12,7 +12,7 @@ Stability   :  experimental
 {-# LANGUAGE DeriveGeneric      #-}
 
 module Camfort.Specification.Units.Analysis.Infer
-  ( InferenceReport
+  ( InferenceReport(..)
   , InferenceResult(..)
   , getInferred
   , inferUnits
