@@ -289,7 +289,7 @@ annotateAllVariables :: UnitSolver ()
 annotateAllVariables = modifyProgramFileM $ \ pf -> do
   varUnitMap <- getVarUnitMap
   importedVariables <- getImportedVariables
-  let varUnitMap' = M.union varUnitMap importedVariables
+  let varUnitMap' = M.unionWith (curry snd) varUnitMap importedVariables
 
   let annotateExp e@(F.ExpValue _ _ (F.ValVariable _))
         | Just info <- M.lookup (varName e, srcName e) varUnitMap' = UA.setUnitInfo info e
