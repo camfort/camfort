@@ -338,11 +338,12 @@ annotateLiteralsPU pu = do
                 pure $ F.ExpBinary a s op e1 (UA.setUnitInfo UnitlessLit e2)
             _                                                   -> pure e
 
-      _ | Just _ <- constExp (F.getAnnotation e)
-        , Nothing <- UA.getUnitInfo e                           -> if isLiteralZero e then
-                                                                     withLiterals genParamLit e
-                                                                   else
-                                                                     withLiterals genUnitLiteral e
+      _ | Just _ <- constExp (F.getAnnotation e)                -> case UA.getUnitInfo e of
+            -- Treat constant expressions as if they were fresh
+            -- literals, unless assigned units already.
+            Just UnitLiteral{} -> genLit e
+            Just UnitVar{}     -> genLit e
+            _                  -> pure e
         | otherwise                                             -> pure e
 
     -- Set all literals to unitless.
@@ -356,6 +357,10 @@ annotateLiteralsPU pu = do
       | otherwise   = pure e
 
     isPolyCtxt = case pu of F.PUFunction {} -> True; F.PUSubroutine {} -> True; _ -> False
+
+    genLit e
+      | isLiteralZero e = withLiterals genParamLit e
+      | otherwise       = withLiterals genUnitLiteral e
 
 -- | Is it a literal, literally?
 isLiteral :: F.Expression UA -> Bool
