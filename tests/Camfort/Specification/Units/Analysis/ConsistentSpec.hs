@@ -104,6 +104,7 @@ inconsist3LitPolyReport =
 inconsist3LitUnitlessReport :: String
 inconsist3LitUnitlessReport =
   "\ntests/fixtures/Specification/Units/inconsist3.f90: Inconsistent:\n\
+  \ - at 5:3: 'j' should have unit '1'\n\
   \ - at 6:3: 'j**2' should have the same units as 'k'\n"
 
 inconsistLitInPolyFunReport :: String

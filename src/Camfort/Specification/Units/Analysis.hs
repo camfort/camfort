@@ -643,10 +643,11 @@ literalAssignmentSpecialCase :: (F.Annotated f)
                              => F.Expression UA -> F.Expression UA
                              -> f UA -> UnitSolver (f UA)
 literalAssignmentSpecialCase e1 e2 ast
+  | isLiteralZero e2 = pure ast
   | isLiteral e2
-  , Just u1 <- UA.getUnitInfo e1
-  , Just u2 <- UA.getUnitInfo e2
-  , isMonomorphic u1 || isLiteralZero e2 = pure ast
+  , Just u1            <- UA.getUnitInfo e1
+  , Just UnitLiteral{} <- UA.getUnitInfo e2
+  , isMonomorphic u1 = pure ast
   -- otherwise express the constraint between LHS and RHS of assignment.
   | otherwise = pure $ UA.maybeSetUnitConstraintF2 ConEq (UA.getUnitInfo e1) (UA.getUnitInfo e2) ast
 
