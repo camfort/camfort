@@ -380,7 +380,7 @@ isLiteralNonZero e = case constExp (F.getAnnotation e) of
   Just (FA.ConstUninterpReal s) -> readReal s /= Just 0
   _                             -> False
 
-isLiteralZero = not . isLiteralNonZero
+isLiteralZero x = isLiteral x && not (isLiteralNonZero x)
 
 --------------------------------------------------
 
