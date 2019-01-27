@@ -16,23 +16,28 @@
 
 {-# LANGUAGE ScopedTypeVariables #-}
 {-# LANGUAGE OverloadedStrings #-}
+{-# LANGUAGE RecordWildCards #-}
 
 {- Simple syntactic analysis on Fortran programs -}
 
 module Camfort.Analysis.Simple
- (countVariableDeclarations, checkImplicitNone, ImplicitNoneReport(..)) where
+ (countVariableDeclarations, checkImplicitNone, ImplicitNoneReport(..),checkAllocateStatements)
+where
 import Prelude hiding (unlines)
 import Control.Monad
 import Data.Data
+import Data.Function (on)
 import qualified Data.Semigroup as SG
 import Data.Monoid ((<>))
 import Data.Generics.Uniplate.Operations
 import qualified Data.Text.Lazy.Builder as Builder
-
+import Data.Text (Text, unlines, intercalate, pack)
+import Data.List (nubBy)
 
 import qualified Language.Fortran.AST as F
+import qualified Language.Fortran.Analysis as F
 
-import Camfort.Analysis ( ExitCodeOfReport(..), atSpanned, Origin
+import Camfort.Analysis ( ExitCodeOfReport(..), atSpanned, atSpannedInFile, Origin
                         , logError, describe, describeBuilder
                         , PureAnalysis, Describe )
 
@@ -115,3 +120,58 @@ instance Describe ImplicitNoneReport where
 instance ExitCodeOfReport ImplicitNoneReport where
   exitCodeOf (ImplicitNoneReport []) = 0
   exitCodeOf (ImplicitNoneReport _)  = 1
+
+--------------------------------------------------
+
+data CheckAllocReport
+  = CheckAllocReport { unbalancedAllocs :: [(F.Name, PULoc)]
+                     , outOfOrder       :: [(F.Name, PULoc)]}
+
+instance SG.Semigroup CheckAllocReport where
+  CheckAllocReport a1 b1 <> CheckAllocReport a2 b2 = CheckAllocReport (a1 ++ a2) (b1 ++ b2)
+
+instance Monoid CheckAllocReport where
+  mempty = CheckAllocReport [] []
+  mappend = (SG.<>)
+
+checkAllocateStatements :: forall a. Data a => F.ProgramFile a -> PureAnalysis String () CheckAllocReport
+checkAllocateStatements pf = do
+  let F.ProgramFile F.MetaInfo { F.miFilename = file } _ = pf
+
+  let checkPU :: F.ProgramUnit a -> CheckAllocReport
+      checkPU pu = CheckAllocReport {..}
+        where
+          allocs =
+            [ (v, (F.getName pu, atSpannedInFile file e))
+            | F.StAllocate _ _ _ (F.AList _ _ es) _ <- universeBi (F.programUnitBody pu) :: [F.Statement a]
+            , e <- es
+            , v <- take 1 [ v | F.ExpValue _ _ (F.ValVariable v) <- universeBi e :: [F.Expression a] ]
+            ]
+          deallocs =
+            [ (v, (F.getName pu, atSpannedInFile file e))
+            | F.StDeallocate _ _ (F.AList _ _ es) _ <- universeBi (F.programUnitBody pu) :: [F.Statement a]
+            , e <- es
+            , v <- take 1 [ v | F.ExpValue _ _ (F.ValVariable v) <- universeBi e :: [F.Expression a] ]
+            ]
+          isDealloced v = not . null $ filter ((==v) . fst) deallocs
+          unbalancedAllocs = filter (not . isDealloced . fst) allocs
+          outOfOrder = concat $ zipWith (\ v1 v2 -> if fst v1 == fst v2 then [] else [v1, v2]) (nubBy ((==) `on` fst) allocs) (nubBy ((==) `on` fst) $ reverse deallocs)
+
+  let reports = map checkPU (universeBi pf)
+
+  return $ mconcat reports
+
+
+instance Describe CheckAllocReport where
+  describeBuilder (CheckAllocReport {..})
+    | null (unbalancedAllocs ++ outOfOrder) = "no cases detected"
+    | otherwise = Builder.fromText . unlines $
+      [ describe orig <> " unbalanced allocation or deallocation for " <> pack name
+      | (name, (_, orig)) <- unbalancedAllocs ] ++
+      [ describe orig <> " out-of-order (de)allocation " <> pack name
+      | (name, (_, orig)) <- outOfOrder ]
+
+instance ExitCodeOfReport CheckAllocReport where
+  exitCodeOf (CheckAllocReport {..})
+    | null (unbalancedAllocs ++ outOfOrder) = 0
+    | otherwise = 1

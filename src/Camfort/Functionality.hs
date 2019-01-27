@@ -33,6 +33,7 @@ module Camfort.Functionality
   , ast
   , countVarDecls
   , implicitNone
+  , allocCheck
   -- ** Stencil Analysis
   , stencilsCheck
   , stencilsInfer
@@ -242,6 +243,14 @@ implicitNone allPU =
   "Checking 'implicit none' completeness"
   (generalizePureAnalysis . (checkImplicitNone allPU))
   (describePerFileAnalysis "check 'implicit none'")
+  simpleCompiler ()
+
+allocCheck :: CamfortEnv -> IO Int
+allocCheck =
+  runFunctionality
+  "Checking allocate / deallocate usage"
+  (generalizePureAnalysis . checkAllocateStatements)
+  (describePerFileAnalysis "check allocate / deallocate")
   simpleCompiler ()
 
 ddtRefactor :: FileOrDir -> CamfortEnv -> IO Int

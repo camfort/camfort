@@ -124,6 +124,7 @@ main = do
     runCommand (CmdCompileDDT ro lo)      = runRO ro lo ddtCompile
     runCommand (CmdImplicitNone ro lo)    = runRO ro lo (implicitNone False)
     runCommand (CmdImplicitNoneAll ro lo) = runRO ro lo (implicitNone True)
+    runCommand (CmdAllocCheck ro lo)      = runRO ro lo allocCheck
     runCommand (CmdInit dir)              = camfortInitialize dir >> return 0
     runCommand CmdTopVersion              = displayVersion >> return 0
 
@@ -150,6 +151,7 @@ data Command = CmdCount ReadOptions LogOptions
              | CmdCompileDDT ReadOptions LogOptions
              | CmdImplicitNone ReadOptions LogOptions
              | CmdImplicitNoneAll ReadOptions LogOptions
+             | CmdAllocCheck ReadOptions LogOptions
              | CmdInit FilePath
              | CmdTopVersion
 
@@ -404,11 +406,11 @@ cmdUnitsCompile = fmap CmdUnitsCompile unitsOptions
 cmdUnitsSynth   = fmap CmdUnitsSynth   unitsSynthOptions
 
 
-cmdImplicitNone, cmdImplicitNoneAll, cmdInvariantsCheck :: Parser Command
+cmdImplicitNone, cmdImplicitNoneAll, cmdInvariantsCheck, cmdAllocCheck :: Parser Command
 cmdInvariantsCheck = fmap CmdInvariantsCheck invariantsOptions
 cmdImplicitNone    = fmap CmdImplicitNone readOptions <*> logOptions
 cmdImplicitNoneAll = fmap CmdImplicitNoneAll readOptions <*> logOptions
-
+cmdAllocCheck      = fmap CmdAllocCheck readOptions <*> logOptions
 
 cmdRefactCommon, cmdRefactDead, cmdRefactEquivalence :: Parser Command
 cmdRefactCommon      = fmap CmdRefactCommon refactOptions
@@ -487,6 +489,9 @@ analysesParser = commandsParser "Analysis Commands" analysesCommands
       , ("invariants-check",
           ["invariants-check","check-invariants", "check-hoare", "hoare-check"],
           cmdInvariantsCheck, "hoare logic invariant checking")
+      , ("alloc-check",
+          [],
+          cmdAllocCheck,  "check allocate/deallocate statement usage")
       ]
 
 
