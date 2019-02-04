@@ -625,6 +625,11 @@ propagateDoSpec ast@(F.DoSpecification _ _ (F.StExpressionAssign _ _ e1 _) e2 m_
         , do u1 <- UA.getUnitInfo e1
              u3 <- (UA.getUnitInfo =<< m_e3) `mplus` if isMonomorphic u1 then mzero else pure UnitlessVar
              pure [ConEq u1 u3]
+
+        -- units(e2) ~ units(e3) or if e3 not specified then units(e2) ~ 1 in a polymorphic context
+        , do u2 <- UA.getUnitInfo e1
+             u3 <- (UA.getUnitInfo =<< m_e3) `mplus` if isMonomorphic u2 then mzero else pure UnitlessVar
+             pure [ConEq u2 u3]
         ]
 
 propagateStatement :: F.Statement UA -> UnitSolver (F.Statement UA)
