@@ -185,7 +185,9 @@ insertUndeterminedUnits = do
 
 -- Specifically handle variables
 insertUndeterminedUnitVar :: DeclMap -> F.Expression UA -> UnitSolver (F.Expression UA)
-insertUndeterminedUnitVar dmap v@(F.ExpValue _ _ (F.ValVariable _)) = do
+insertUndeterminedUnitVar dmap v@(F.ExpValue _ _ (F.ValVariable _))
+  | Just (FA.IDType { FA.idVType = Just bty }) <- FA.idType (F.getAnnotation v)
+  , bty `elem` acceptableTypes = do
   let vname = varName v
   let sname = srcName v
   let unit  = toUnitVar dmap (vname, sname)
@@ -201,6 +203,10 @@ toUnitVar dmap (vname, sname) = unit
       Just (DCFunction (F.Named fvname, F.Named fsname))   -> UnitParamVarAbs ((fvname, fsname), (vname, sname))
       Just (DCSubroutine (F.Named fvname, F.Named fsname)) -> UnitParamVarAbs ((fvname, fsname), (vname, sname))
       _                                                    -> UnitVar (vname, sname)
+
+-- Insert undetermined units annotations on the following types of variables.
+acceptableTypes :: [F.BaseType]
+acceptableTypes = [F.TypeReal, F.TypeDoublePrecision, F.TypeComplex, F.TypeDoubleComplex, F.TypeInteger]
 
 --------------------------------------------------
 
