@@ -42,6 +42,8 @@ import           Prelude hiding ((<>))
 import           Control.Arrow (first, second)
 import           Control.Monad
 import           Control.Monad.ST
+import           Control.Parallel
+import           Control.Parallel.Strategies
 import qualified Data.Array as A
 import           Data.Generics.Uniplate.Operations
   (transformBi, universeBi)
@@ -86,19 +88,19 @@ inferVariables cons = unitVarAssignments
 -- abstract unit variable with coefficients not equal, or there are
 -- monomorphic literals being given parametric polymorphic units.
 detectInconsistency :: [([UnitInfo], UnitInfo)] -> Constraints
-detectInconsistency unitAssignments = unitAssignmentsToConstraints badImplicits ++ mustBeUnitless unitAssignments
+detectInconsistency unitAssignments = inconsist
   where
     ua' = map (shiftTerms . fmap flattenUnits) unitAssignments
     badImplicits = [ fmap foldUnits a | a@([UnitPow (UnitParamImpAbs _) k1], rhs) <- ua'
                                       , UnitPow _ k2 <- rhs
                                       , k1 /= k2 ]
+    inconsist = unitAssignmentsToConstraints badImplicits ++ mustBeUnitless unitAssignments
 
 -- Must be unitless: any assignments of parametric abstract units to
 -- monomorphic literals.
 mustBeUnitless :: [([UnitInfo], UnitInfo)] -> Constraints
 mustBeUnitless unitAssignments = mbu
   where
-    -- msg = "\n\n\n" ++ show unitAssignments ++ "\n\n\nmust be unitless: " ++ show mbu
     mbu = [ ConEq UnitlessLit (UnitPow (UnitLiteral l) k)
           | a@(UnitPow (UnitLiteral l) k:_, rhs) <- ua''
           , any isParametric (universeBi rhs :: [UnitInfo]) ]
@@ -135,14 +137,24 @@ genUnitAssignments cons
 -- | Break up the problem of solving normHNF on each group of related
 -- columns, then bring it all back together.
 splitNormHNF :: H.Matrix Double -> (H.Matrix Double, [Int])
-splitNormHNF unsolvedM = ( (joinMat (map (first fst) solvedMs)), concatMap (snd . fst) solvedMs)
+splitNormHNF unsolvedM = (combinedMat, allNewColIndices)
   where
-    solvedMs = fst . foldl' eachResult ([], cols unsolvedM) $ map (first Flint.normHNF) (splitMat unsolvedM)
+    combinedMat      = joinMat (map (first fst) solvedMs)
+    allNewColIndices = concatMap (snd . fst) solvedMs
+
+    inParallel = (`using` parTuple2 (parList rseq) rseq)
+    (solvedMs, _) = inParallel . foldl' eachResult ([], cols unsolvedM) $ map (first Flint.normHNF) (splitMat unsolvedM)
+
+    -- for each result re-number the generated columns & add mappings for each.
     eachResult (ms, startI) ((m, newColIndices), origCols) = (((m, newColIndices'), origCols'):ms, endI)
       where
-        endI = startI + length newColIndices
+        -- produce (length newColIndices) number of mappings
+        endI           = startI + length newColIndices
+        -- re-number the newColIndices according to the lookup list
         newColIndices' = map (origCols !!) newColIndices
-        origCols' = origCols ++ [startI .. endI-1]
+        -- add columns in the (combined) matrix for the newly
+        -- generated columns from running normHNF on m.
+        origCols'      = origCols ++ [startI .. endI-1]
 
 genUnitAssignments' :: SortFn -> Constraints -> [([UnitInfo], UnitInfo)]
 genUnitAssignments' _ [] = []
@@ -155,8 +167,7 @@ genUnitAssignments' sortfn cons
     unsolvedM | rows rhsM == 0 || cols rhsM == 0 = lhsM
               | rows lhsM == 0 || cols lhsM == 0 = rhsM
               | otherwise                        = fromBlocks [[lhsM, rhsM]]
-
-    (solvedM, newColIndices)      = Flint.normHNF unsolvedM
+    (solvedM, newColIndices)      = splitNormHNF unsolvedM
     -- solvedM can have additional columns and rows from normHNF;
     -- cosolvedM corresponds to the original lhsM.
     cosolvedM                     = subMatrix (0, 0) (rows solvedM, cols lhsM) solvedM
@@ -214,9 +225,8 @@ splitMat m = map (eachComponent . sort) $ scc (relatedColumnsGraph m)
 -- their original order. Rows may not be in the same order as the
 -- original, but the constraints should be equivalent.
 joinMat :: [(H.Matrix Double, [Int])] -> H.Matrix Double
-joinMat ms = trace ("joinMat totalSize = " ++ show totalSize) sortedM
+joinMat ms = sortedM
   where
-    totalSize = sum [ cols m | (m, _) <- ms ]
     disorderedM = H.diagBlock (map fst ms)
     colsWithIdx = zip (concatMap snd ms) . H.toColumns $ disorderedM
     sortedM     = H.fromColumns . map snd . sortBy (comparing fst) $ colsWithIdx

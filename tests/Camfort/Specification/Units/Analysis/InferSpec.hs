@@ -107,10 +107,10 @@ squarePoly1Report = inferReport "squarePoly1.f90"
   \  5:11 unit s**2 :: y\n\
   \  7:11 unit m :: a\n\
   \  9:11 unit s :: b\n\
-  \  13:3 unit ('a)**2 :: square\n\
-  \  14:13 unit 'a :: n\n\
-  \  17:3 unit ('b)**2 :: squarep\n\
-  \  18:13 unit 'b :: m\n"
+  \  13:3 unit ('b)**2 :: square\n\
+  \  14:13 unit 'b :: n\n\
+  \  17:3 unit ('a)**2 :: squarep\n\
+  \  18:13 unit 'a :: m\n"
 
 recursive1Report :: String
 recursive1Report = inferReport "recursive1.f90"
