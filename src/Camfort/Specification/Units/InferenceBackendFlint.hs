@@ -309,7 +309,9 @@ copyMatrix m1 m2 r1 c1 r2 c2 =
 -- divide them out sometimes.
 
 normHNF :: H.Matrix Double -> (H.Matrix Double, [Int])
-normHNF m = (m', indices)
+normHNF m
+  | (rows m, cols m) == (1, 1) = (H.ident (if H.atIndex m (0, 0) /= 0 then 1 else 0), [])
+  | otherwise = (m', indices)
   where
     numCols = cols m
     indexLookup j | j < numCols = j

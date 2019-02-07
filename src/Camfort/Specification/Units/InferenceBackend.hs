@@ -36,16 +36,17 @@ module Camfort.Specification.Units.InferenceBackend
   , genUnitAssignments
   , genUnitAssignments'
   , provenance
+  , splitNormHNF
   ) where
 import           Prelude hiding ((<>))
-import           Control.Arrow (first)
+import           Control.Arrow (first, second)
 import           Control.Monad
 import           Control.Monad.ST
 import qualified Data.Array as A
 import           Data.Generics.Uniplate.Operations
   (transformBi, universeBi)
 import           Data.List
-  ((\\), findIndex, inits, nub, partition, sortBy, group, tails, foldl')
+  ((\\), findIndex, inits, nub, partition, sort, sortBy, group, tails, foldl')
 import           Data.Ord
 import qualified Data.Map.Strict as M
 import qualified Data.IntMap as IM
@@ -54,7 +55,7 @@ import           Data.Maybe (fromMaybe, mapMaybe)
 import           Data.Tuple (swap)
 import           Numeric.LinearAlgebra
   ( atIndex, (<>), (><)
-  , rank, (?)
+  , rank, (?), (¿)
   , rows, cols
   , subMatrix, diag
   , fromBlocks, ident
@@ -65,6 +66,7 @@ import           Numeric.LinearAlgebra.Devel
   , writeMatrix, runSTMatrix
   , freezeMatrix, STMatrix
   )
+import Data.Graph.Inductive hiding ((><))
 
 import Camfort.Specification.Units.Environment
 import qualified Camfort.Specification.Units.InferenceBackendFlint as Flint
@@ -130,6 +132,18 @@ genUnitAssignments cons
   where
     ua = genUnitAssignments' colSort cons
 
+-- | Break up the problem of solving normHNF on each group of related
+-- columns, then bring it all back together.
+splitNormHNF :: H.Matrix Double -> (H.Matrix Double, [Int])
+splitNormHNF unsolvedM = ( (joinMat (map (first fst) solvedMs)), concatMap (snd . fst) solvedMs)
+  where
+    solvedMs = fst . foldl' eachResult ([], cols unsolvedM) $ map (first Flint.normHNF) (splitMat unsolvedM)
+    eachResult (ms, startI) ((m, newColIndices), origCols) = (((m, newColIndices'), origCols'):ms, endI)
+      where
+        endI = startI + length newColIndices
+        newColIndices' = map (origCols !!) newColIndices
+        origCols' = origCols ++ [startI .. endI-1]
+
 genUnitAssignments' :: SortFn -> Constraints -> [([UnitInfo], UnitInfo)]
 genUnitAssignments' _ [] = []
 genUnitAssignments' sortfn cons
@@ -187,6 +201,36 @@ approxEq a b = abs (b - a) < epsilon
 epsilon = 0.001 -- arbitrary
 
 --------------------------------------------------
+
+-- | Break out the 'unrelated' columns in a single matrix into
+-- separate matrices, along with a list of their original column
+-- positions.
+splitMat :: H.Matrix Double -> [(H.Matrix Double, [Int])]
+splitMat m = map (eachComponent . sort) $ scc (relatedColumnsGraph m)
+  where
+    eachComponent cs = (H.fromLists . filter (any (/= 0)) . H.toLists $ m ¿ cs, cs)
+
+-- | Bring together the split matrices and put the columns back in
+-- their original order. Rows may not be in the same order as the
+-- original, but the constraints should be equivalent.
+joinMat :: [(H.Matrix Double, [Int])] -> H.Matrix Double
+joinMat ms = trace ("joinMat totalSize = " ++ show totalSize) sortedM
+  where
+    totalSize = sum [ cols m | (m, _) <- ms ]
+    disorderedM = H.diagBlock (map fst ms)
+    colsWithIdx = zip (concatMap snd ms) . H.toColumns $ disorderedM
+    sortedM     = H.fromColumns . map snd . sortBy (comparing fst) $ colsWithIdx
+
+-- | Turn a matrix into a graph where each node represents a column
+-- and each edge represents two columns that have non-zero
+-- co-efficients in some row. Basically, 'related columns'. Also
+-- includes self-refs for each node..
+relatedColumnsGraph :: H.Matrix Double -> Gr () ()
+relatedColumnsGraph m = mkGraph (map (,()) ns) (map (\ (a,b) -> (a,b,())) es)
+  where
+    nonZeroCols = [ [ j | j <- [0..cols m - 1], not (m `atIndex` (i, j) `approxEq` 0) ] | i <- [0..rows m - 1] ]
+    ns          = nub $ concat nonZeroCols
+    es          = [ (i, j) | cs <- nonZeroCols, [i, j] <- sequence [cs, cs] ]
 
 -- Convert a set of constraints into a matrix of co-efficients, and a
 -- reverse mapping of column numbers to units.
