@@ -16,6 +16,7 @@
 {-# LANGUAGE TemplateHaskell            #-}
 {-# LANGUAGE TypeFamilies               #-}
 {-# LANGUAGE TypeOperators              #-}
+{-# LANGUAGE PolyKinds                  #-}
 
 -- TODO: Implement translation for more unsupported language parts
 
@@ -97,6 +98,7 @@ import           Control.Lens                         hiding (Const (..),
                                                        indices, op, rmap, (.>))
 import           Control.Monad.Except
 import           Control.Monad.Reader
+import           Control.Monad.Fail hiding            (fail)
 import           Data.Map                             (Map)
 
 import           Data.Singletons
@@ -238,10 +240,11 @@ newtype TranslateT m a =
            , MonadError TranslateError
            , MonadReader TranslateEnv
            , MonadLogger e w
+           , MonadFail
            )
 
 runTranslateT
-  :: (Monad m)
+  :: (Monad m, MonadFail m)
   => TranslateT m a
   -> TranslateEnv
   -> m (Either TranslateError a)
@@ -359,7 +362,7 @@ typeInfo ts@(F.TypeSpec _ _ bt mselector) =
 
 -- | Convert a 'TypeInfo' to its corresponding strong type.
 translateTypeInfo
-  :: (Monad m, Show ann)
+  :: (Monad m, MonadFail m, Show ann)
   => TypeInfo ann
   -> TranslateT m SomeType
 translateTypeInfo ti = do
@@ -406,7 +409,7 @@ data SomePrimD where
   SomePrimD :: D (PrimS a) -> SomePrimD
 
 translateBaseType
-  :: (Monad m)
+  :: (Monad m, MonadFail m)
   => F.BaseType
   -> Maybe (F.Expression ann) -- ^ Kind
   -> TranslateT m SomePrimD
@@ -451,7 +454,7 @@ translateBaseType bt mkind = do
 
 -- | Translate an expression with an unknown type. The return value
 -- existentially captures the type of the result.
-translateExpression :: (Monad m) => F.Expression (F.Analysis ann) -> TranslateT m SomeExpr
+translateExpression :: (Monad m, MonadFail m) => F.Expression (F.Analysis ann) -> TranslateT m SomeExpr
 translateExpression = \case
   e@(F.ExpValue ann span val) -> translateValue e
   F.ExpBinary ann span bop e1 e2 -> translateOp2App e1 e2 bop
@@ -469,7 +472,7 @@ translateExpression = \case
 -- | Translate an expression with a known type. Fails if the actual type does
 -- not match.
 translateExpression'
-  :: (Monad m) => D a -> F.Expression (F.Analysis ann)
+  :: (Monad m, MonadFail m) => D a -> F.Expression (F.Analysis ann)
   -> TranslateT m (FortranExpr a)
 translateExpression' targetD ast = do
   SomePair sourceD expr <- translateExpression ast
@@ -482,7 +485,7 @@ translateExpression' targetD ast = do
 -- | Translate an expression and try to coerce it to a particular type. Fails if
 -- the actual type cannot be coerced to the given type.
 translateCoerceExpression
-  :: (Monad m) => D a -> F.Expression (F.Analysis ann)
+  :: (Monad m, MonadFail m) => D a -> F.Expression (F.Analysis ann)
   -> TranslateT m (HFree MetaOp FortranExpr a)
 translateCoerceExpression targetD ast = do
   SomePair sourceD expr <- translateExpression ast
@@ -497,7 +500,7 @@ translateCoerceExpression targetD ast = do
 
 
 translateSubscript
-  :: (Monad m)
+  :: (Monad m, MonadFail m)
   => F.Expression (F.Analysis ann) -> [F.Index (F.Analysis ann)] -> TranslateT m SomeExpr
 translateSubscript arrAst [F.IxSingle _ _ _ ixAst] = do
   SomePair arrD arrExp <- translateExpression arrAst
@@ -532,7 +535,7 @@ translateSubscript _ _ =
 -- annotations of its own.
 --
 -- Do not call on an expression that you don't know to be an 'F.ExpValue'!
-translateValue :: (Monad m) => F.Expression (F.Analysis ann) -> TranslateT m SomeExpr
+translateValue :: (Monad m, MonadFail m) => F.Expression (F.Analysis ann) -> TranslateT m SomeExpr
 translateValue e = case e of
   F.ExpValue _ _ v -> case v of
     F.ValInteger s -> translateLiteral v PInt64 (fmap fromIntegral . readLitInteger) s
@@ -562,7 +565,7 @@ translateValue e = case e of
 
 
 translateLiteral
-  :: (Monad m)
+  :: (Monad m, MonadFail m)
   => F.Value ann
   -> Prim p k a -> (s -> Maybe a) -> s
   -> TranslateT m SomeExpr
@@ -621,7 +624,7 @@ recSequenceSome (x :& xs) = case (x, recSequenceSome xs) of
 
 -- This is way too general for its own good but it was fun to write.
 translateOpApp
-  :: (Monad m)
+  :: (Monad m, MonadFail m)
   => (Length xs ~ n)
   => Op n ok
   -> Rec (Const (F.Expression (F.Analysis ann))) xs -> TranslateT m SomeExpr
@@ -641,7 +644,7 @@ translateOpApp operator argAsts = do
 
 
 translateOp2App
-  :: (Monad m)
+  :: (Monad m, MonadFail m)
   => F.Expression (F.Analysis ann) -> F.Expression (F.Analysis ann) -> F.BinaryOp
   -> TranslateT m SomeExpr
 translateOp2App e1 e2 bop = do
@@ -652,7 +655,7 @@ translateOp2App e1 e2 bop = do
 
 
 translateOp1App
-  :: (Monad m)
+  :: (Monad m, MonadFail m)
   => F.Expression (F.Analysis ann) -> F.UnaryOp
   -> TranslateT m SomeExpr
 translateOp1App e uop = do

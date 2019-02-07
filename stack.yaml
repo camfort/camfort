@@ -6,10 +6,13 @@ packages:
   extra-dep: true
 - location:
     git: https://github.com/camfort/verifiable-expressions.git
-    commit: 1b76530f07aa85613b89b01b6ae638d33b93c899
+    commit: 929513e98f519c33405c29b9d86882811cf5a3bc
+  extra-dep: true
+- location:
+    git: https://github.com/camfort/haskell-partial-order.git
+    commit: 91cc6beee2e7f94e9356f02ab1c08a7877b19e37
   extra-dep: true
 extra-deps:
 - syz-0.2.0.0
 - vinyl-0.8.1.1
-resolver: lts-11.9
-allow-newer: true
+resolver: lts-13.6

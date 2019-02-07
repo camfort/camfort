@@ -25,6 +25,7 @@ module Camfort.Specification.Hoare.CheckBackend
 import           Control.Exception                      (Exception (..))
 import           Control.Lens
 import           Control.Monad.Reader
+import           Control.Monad.Fail
 import           Control.Monad.State.Strict
 import           Control.Monad.Writer.Strict
 import           Control.Monad.Trans.Maybe
@@ -495,6 +496,7 @@ newtype GenM a = GenM (WriterT [MetaFormula Bool] CheckHoare a)
     , MonadWriter [MetaFormula Bool]
     , MonadLogger HoareBackendError HoareBackendWarning
     , MonadAnalysis HoareBackendError HoareBackendWarning
+    , MonadFail
     )
 
 
@@ -593,6 +595,7 @@ getBlockSeqAnnotation = preview (to F.getAnnotation . to getAnnSod . _Just . _So
 tryBlockToAssignment
   :: ( MonadReader CheckHoareEnv m
      , MonadAnalysis HoareBackendError HoareBackendWarning m
+     , MonadFail m
      )
   => F.Block HA -> m (Maybe FortranAssignment)
 tryBlockToAssignment bl = do
@@ -624,6 +627,7 @@ simpleAssignment
   :: ( ReportAnn (F.Analysis ann)
      , MonadReader CheckHoareEnv m
      , MonadAnalysis HoareBackendError HoareBackendWarning m
+     , MonadFail m
      )
   => NamePair
   -> F.Expression (F.Analysis ann)
@@ -644,6 +648,7 @@ arrayAssignment
   :: ( ReportAnn (F.Analysis ann)
      , MonadReader CheckHoareEnv m
      , MonadAnalysis HoareBackendError HoareBackendWarning m
+     , MonadFail m
      )
   => NamePair
   -> F.Expression (F.Analysis ann)
@@ -675,6 +680,7 @@ varFromScope
   :: ( F.Spanned a
      , MonadReader CheckHoareEnv m
      , MonadAnalysis HoareBackendError HoareBackendWarning m
+     , MonadFail m
      )
   => a -> NamePair -> m SomeVar
 varFromScope loc np = do
@@ -696,7 +702,7 @@ instance ReportAnn InnerHA where fromTranslateError _ = TranslateErrorAnn
 
 
 doTranslate
-  :: (MonadReader CheckHoareEnv m, ReportAnn ann)
+  :: (MonadReader CheckHoareEnv m, ReportAnn ann, MonadFail m)
   => (HoareBackendError -> m a) -> (f ann -> TranslateT m a) -> f ann -> m a
 doTranslate handle trans ast = do
   env <- asks toTranslateEnv
@@ -720,6 +726,7 @@ tryTranslateExpr
   :: ( ReportAnn (F.Analysis ann)
      , MonadReader CheckHoareEnv m
      , MonadAnalysis HoareBackendError w m
+     , MonadFail m
      )
   => D a -> F.Expression (F.Analysis ann) -> m (FortranExpr a)
 tryTranslateExpr d e = doTranslate (failAnalysis' e) (translateExpression' d) e
@@ -728,6 +735,7 @@ tryTranslateCoerceExpr
   :: ( ReportAnn (F.Analysis ann)
      , MonadReader CheckHoareEnv m
      , MonadAnalysis HoareBackendError w m
+     , MonadFail m
      )
   => D a -> F.Expression (F.Analysis ann) -> m (MetaExpr FortranVar a)
 tryTranslateCoerceExpr d e =
@@ -738,6 +746,7 @@ tryTranslateTypeInfo
   :: ( ReportAnn (F.Analysis ann)
      , MonadReader CheckHoareEnv m
      , MonadAnalysis HoareBackendError w m
+     , MonadFail m
      )
   => TypeInfo (F.Analysis ann) -> m SomeType
 tryTranslateTypeInfo ti = doTranslate (failAnalysis' ti) translateTypeInfo ti
@@ -746,6 +755,7 @@ tryTranslateBoolExpr
   :: ( ReportAnn (F.Analysis ann)
      , MonadReader CheckHoareEnv m
      , MonadAnalysis HoareBackendError w m
+     , MonadFail m
      )
   => F.Expression (F.Analysis ann) -> m (MetaExpr FortranVar Bool)
 tryTranslateBoolExpr e = doTranslate (failAnalysis' e) translateBoolExpression e
@@ -756,6 +766,7 @@ tryTranslateFormula
      , Data ann
      , MonadReader CheckHoareEnv m
      , MonadAnalysis HoareBackendError w m
+     , MonadFail m
      )
   => o -> PrimFormula (F.Analysis ann) -> m (MetaFormula Bool)
 tryTranslateFormula loc formula = do
@@ -774,7 +785,7 @@ tryTranslateFormula loc formula = do
 --  Utility functions
 --------------------------------------------------------------------------------
 
-dropWhileM :: (Monad m) => (a -> m Bool) -> [a] -> m [a]
+dropWhileM :: (Monad m, MonadFail m) => (a -> m Bool) -> [a] -> m [a]
 dropWhileM _ [] = return []
 dropWhileM f (x : xs) = do
   continue <- f x
@@ -783,7 +794,7 @@ dropWhileM f (x : xs) = do
     else return (x : xs)
 
 
-fromMaybeM :: (Monad m) => m a -> Maybe a -> m a
+fromMaybeM :: (Monad m, MonadFail m) => m a -> Maybe a -> m a
 fromMaybeM e = maybe e return
 
 

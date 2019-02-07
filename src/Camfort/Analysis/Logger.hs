@@ -89,6 +89,7 @@ import qualified Control.Monad.State            as Lazy
 import           Control.Monad.State.Strict
 import qualified Control.Monad.Writer           as Lazy
 import           Control.Monad.Writer.Strict
+import           Control.Monad.Fail
 
 import           Data.Text                      (Text)
 import qualified Data.Text.IO                   as Text
@@ -382,6 +383,7 @@ newtype LoggerT e w m a =
     , Monad
     , MonadIO
     , MonadError e'
+    , MonadFail
     )
 
 instance MonadTrans (LoggerT e w) where

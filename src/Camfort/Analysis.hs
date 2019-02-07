@@ -96,6 +96,7 @@ import qualified Control.Monad.State            as Lazy
 import           Control.Monad.State.Strict
 import qualified Control.Monad.Writer           as Lazy
 import           Control.Monad.Writer.Strict
+import           Control.Monad.Fail
 
 import           Control.Lens
 
@@ -131,6 +132,7 @@ newtype AnalysisT e w m a =
     , MonadState s
     , MonadWriter w'
     , MonadLogger e w
+    , MonadFail
     )
 
 -- | A pure analysis computation which cannot do any 'IO'.

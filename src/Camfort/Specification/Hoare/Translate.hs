@@ -35,6 +35,7 @@ import           Prelude                            hiding (span)
 
 import           Control.Lens
 import           Control.Monad.Except               (MonadError (..))
+import           Control.Monad.Fail
 
 import qualified Language.Fortran.Analysis          as F
 import qualified Language.Fortran.AST               as F
@@ -65,7 +66,7 @@ type MetaFormula = Prop (MetaExpr FortranVar)
 --------------------------------------------------------------------------------
 
 -- | Translate an untyped logical formula into a strongly typed 'MetaFormula'.
-translateFormula :: (Monad m) => PrimFormula (F.Analysis ann) -> TranslateT m (MetaFormula Bool)
+translateFormula :: (Monad m, MonadFail m) => PrimFormula (F.Analysis ann) -> TranslateT m (MetaFormula Bool)
 translateFormula = \case
   PFExpr e -> do
     e' <- translateBoolExpression e
@@ -76,7 +77,7 @@ translateFormula = \case
 
 -- | Translate a boolean-valued untyped Fortran expression into a strongly typed 'MetaExpr'.
 translateBoolExpression
-  :: (Monad m)
+  :: (Monad m, MonadFail m)
   => F.Expression (F.Analysis ann)
   -> TranslateT m (MetaExpr FortranVar Bool)
 translateBoolExpression e = do
