@@ -214,29 +214,44 @@ epsilon = 0.001 -- arbitrary
 
 --------------------------------------------------
 
-type RowNum = Int
-type ColNum = Int
-type SplitMatWithSides = [([RowNum], (H.Matrix Double, H.Matrix Double), [ColNum])]
-splitMatWithRHS :: H.Matrix Double -> H.Matrix Double -> SplitMatWithSides
+type RowNum = Int               -- ^ 'row number' of matrix
+type ColNum = Int               -- ^ 'column number' of matrix
+-- | Represents a subproblem of AX=B where the row numbers and column
+-- numbers help you re-map back to the original problem.
+type Subproblem = ([RowNum], (H.Matrix Double, H.Matrix Double), [ColNum])
+
+-- | Divide up the AX=B problem into smaller problems based on the
+-- 'related columns' and their corresponding rows in the
+-- right-hand-side of the equation. Where lhsM = A and rhsM = B.  The
+-- resulting list of subproblems contains the new, smaller As and Bs
+-- as well as a list of original row numbers and column numbers to
+-- aide re-mapping back to the original lhsM and rhsM.
+splitMatWithRHS :: H.Matrix Double -> H.Matrix Double -> [Subproblem]
 splitMatWithRHS lhsM rhsM | cols lhsM > 0 = map (eachComponent . sort) $ scc (relatedColumnsGraph lhsM)
                           | otherwise     = []
   where
+    -- Gets called on every strongly-connected component / related set of columns.
     eachComponent cs = (rs, mats, cs)
       where
+        -- Selected columns
         lhsSelCols :: H.Matrix Double
         lhsSelCols = lhsM ¿ cs
 
         csLen = cols lhsSelCols
 
+        -- Find the row numbers of the 'all zero' rows in lhsM.
         lhsAllZeroRows :: [RowNum]
         lhsAllZeroRows = map fst . filter (all (approxEq 0) . snd) . zip [0..] $ H.toLists lhsM
 
+        -- Find the row numbers that correspond to the non-zero co-efficients in the selected columns.
         lhsNonZeroColRows :: [(RowNum, [Double])]
         lhsNonZeroColRows = filter (any (notApproxEq 0) . snd) . zip [0..] . H.toLists $ lhsSelCols
 
+        -- List of all the row numbers and row values combined from the two above variables.
         lhsNumberedRows :: [(RowNum, [Double])]
         lhsNumberedRows = sortBy (comparing fst) $ lhsNonZeroColRows ++ zip lhsAllZeroRows (repeat (replicate csLen 0))
 
+        -- For each of the above LHS rows find a corresponding RHS row.
         rhsSelRows :: [[Double]]
         rhsSelRows | rows rhsM > 0 = H.toLists (rhsM ? map fst lhsNumberedRows)
                    | otherwise     = []
@@ -245,18 +260,24 @@ splitMatWithRHS lhsM rhsM | cols lhsM > 0 = map (eachComponent . sort) $ scc (re
 
         notAllZero (_, (lhs, rhs)) = any (notApproxEq 0) (lhs ++ rhs)
 
+        -- Zip the selected LHS, RHS rows together, filter out any that are all zeroes.
         numberedRows :: ([RowNum], [([Double], [Double])])
         numberedRows = unzip . filter notAllZero $ zipWith reassoc lhsNumberedRows rhsSelRows
 
-        rs :: [RowNum]
-        mats :: (H.Matrix Double, H.Matrix Double)
+        rs :: [RowNum]          -- list of row numbers in the subproblem
+        mats :: (H.Matrix Double, H.Matrix Double) -- LHS/RHS subproblem matrices
         (rs, mats) = second ((H.fromLists *** H.fromLists) . unzip) numberedRows
 
+-- | Split the lhsM/rhsM problem into subproblems and then look for
+-- inconsistent rows in each subproblem, concatenating all of the
+-- inconsistent row numbers found (in terms of the rows of the
+-- original lhsM).
 splitFindInconsistent :: H.Matrix Double -> H.Matrix Double -> [RowNum]
 splitFindInconsistent lhsM rhsM = concatMap eachComponent $ splitMatWithRHS lhsM rhsM
   where
     eachComponent (rs, (lhsM, rhsM), _) = map (rs !!) $ findInconsistentRows lhsM augM
       where
+        -- Augmented matrix is defined as the combined LHS/RHS matrices.
         augM
           | rows rhsM == 0 || cols rhsM == 0 = lhsM
           | rows lhsM == 0 || cols lhsM == 0 = rhsM
@@ -265,7 +286,7 @@ splitFindInconsistent lhsM rhsM = concatMap eachComponent $ splitMatWithRHS lhsM
 -- | Break out the 'unrelated' columns in a single matrix into
 -- separate matrices, along with a list of their original column
 -- positions.
-splitMat :: H.Matrix Double -> [(H.Matrix Double, [Int])]
+splitMat :: H.Matrix Double -> [(H.Matrix Double, [ColNum])]
 splitMat m = map (eachComponent . sort) $ scc (relatedColumnsGraph m)
   where
     eachComponent cs = (H.fromLists . filter (any (/= 0)) . H.toLists $ m ¿ cs, cs)
