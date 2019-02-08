@@ -87,7 +87,6 @@ mkTestModFile file = head <$> genModFiles Nothing emptyModFiles compileUnits uni
 exampleInconsist1CheckReport :: String
 exampleInconsist1CheckReport =
   "\ntests/fixtures/Specification/Units/example-inconsist-1.f90: Inconsistent:\n\
-  \ - at 7:3: 'z' should have unit 's'\n\
   \ - at 7:7: Units 's' and 'm' should be equal\n"
 
 inconsist3LitMixedReport :: String
@@ -103,7 +102,6 @@ inconsist3LitPolyReport =
 inconsist3LitUnitlessReport :: String
 inconsist3LitUnitlessReport =
   "\ntests/fixtures/Specification/Units/inconsist3.f90: Inconsistent:\n\
-  \ - at 5:3: 'j' should have unit '1'\n\
   \ - at 6:3: 'j**2' should have the same units as 'k'\n"
 
 inconsistLitInPolyFunReport :: String
@@ -115,13 +113,11 @@ inconsistLitInPolyFunReport =
 inconsistRecMultReport :: String
 inconsistRecMultReport =
   "\ntests/fixtures/Specification/Units/inconsistRecMult.f90: Inconsistent:\n\
-  \ - at 4:3: 'z' should have the same units as 'result of recur'\n\
   \ - at 4:15: 'parameter 2 to recur' should have unit 'm'\n"
 
 crossModuleInconsistBasicReport :: String
 crossModuleInconsistBasicReport =
   "\ntests/fixtures/Specification/Units/cross-module-a/crossmoduleuser.f90: Inconsistent:\n\
-  \ - at 9:3: 'z' should have the same units as 'result of add'\n\
   \ - at 9:11: 'parameter 1 to add' should have unit 'm'\n"
 
 literalNonZeroInconsist1Report :: String

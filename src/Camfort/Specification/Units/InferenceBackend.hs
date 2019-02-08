@@ -515,15 +515,23 @@ provenance m = (m', p)
 -- Worker functions:
 
 findInconsistentRows :: H.Matrix Double -> H.Matrix Double -> [Int]
-findInconsistentRows coA augA = [0..(rows augA - 1)] \\ consistent
+findInconsistentRows coA augA | rows augA < 2 = []
+                              | otherwise     = inconsistent
   where
-    consistent = head (filter (tryRows coA augA) (tails ( [0..(rows augA - 1)])) ++ [[]])
+    inconsistent = [0..(rows augA - 1)] \\ consistent
+
+    consistent
+      -- if the space is relatively small, try it all
+      | rows augA < 16 = head (filter tryRows (powerset $ reverse [0..(rows augA - 1)]))
+      | otherwise = head (filter tryRows (tails ( [0..(rows augA - 1)])) ++ [[]])
+
+    powerset = filterM (const [True, False])
 
     -- Rouché–Capelli theorem is that if the rank of the coefficient
     -- matrix is not equal to the rank of the augmented matrix then
     -- the system of linear equations is inconsistent.
-    tryRows _ _ []      = True
-    tryRows coA augA ns = (rank coA' == rank augA')
+    tryRows [] = True
+    tryRows ns = (rank coA' == rank augA')
       where
         coA'  = coA ? ns
         augA' = augA ? ns
