@@ -429,7 +429,7 @@ rrefMatrices' a j k mats
   | j     == m            = (mats, a)
 
   -- When we haven't yet found the first non-zero number in the row, but we really need one:
-  | a @@> (j - k, j) == 0 = case findIndex (/= 0) below of
+  | a `atIndex` (j - k, j) == 0 = case findIndex (/= 0) below of
     -- this column is all 0s below current row, must move onto the next column
     Nothing -> rrefMatrices' a (j + 1) (k + 1) mats
     -- we've found a row that has a non-zero element that can be swapped into this row
@@ -446,12 +446,12 @@ rrefMatrices' a j k mats
     n     = rows a
     m     = cols a
     below = getColumnBelow a (j - k, j)
-    scale = recip (a @@> (j - k, j))
+    scale = recip (a `atIndex` (j - k, j))
     erm   = elemRowMult n (j - k) scale
 
     -- scale the row if the cell is not already equal to 1
-    (a1, mats1) | a @@> (j - k, j) /= 1 = (erm <> a, (erm, ElemRowMult (j - k) scale):mats)
-                | otherwise             = (a, mats)
+    (a1, mats1) | a `atIndex` (j - k, j) /= 1 = (erm <> a, (erm, ElemRowMult (j - k) scale):mats)
+                | otherwise                   = (a, mats)
 
     -- Locate any non-zero values in the same column as (j - k, j) and
     -- cancel them out. Optimisation: instead of constructing a
@@ -465,11 +465,11 @@ rrefMatrices' a j k mats
         (isWritten, ops, new) = runST $ do
           new <- newMatrix 0 n n :: ST s (STMatrix s Double)
           sequence [ writeMatrix new i' i' 1 | i' <- [0 .. (n - 1)] ]
-          let f w o i | i >= n            = return (w, o)
-                      | i == j - k        = f w o (i + 1)
-                      | a @@> (i, j) == 0 = f w o (i + 1)
-                      | otherwise         = writeMatrix new i (j - k) (- (a @@> (i, j)))
-                                          >> f True ((i, j - k):o) (i + 1)
+          let f w o i | i >= n                  = return (w, o)
+                      | i == j - k              = f w o (i + 1)
+                      | a `atIndex` (i, j) == 0 = f w o (i + 1)
+                      | otherwise               = writeMatrix new i (j - k) (- (a `atIndex` (i, j)))
+                                                  >> f True ((i, j - k):o) (i + 1)
           (isWritten, ops) <- f False [] 0
           (isWritten, ops,) `fmap` freezeMatrix new
 
@@ -487,8 +487,7 @@ elemRowSwap :: Int -> Int -> Int -> H.Matrix Double
 elemRowSwap n i j
   | i == j          = ident n
   | i > j           = elemRowSwap n j i
-  | otherwise       = extractRows ([0..i-1] ++ [j] ++ [i+1..j-1] ++ [i] ++ [j+1..n-1]) $ ident n
-
+  | otherwise       = ident n ? ([0..i-1] ++ [j] ++ [i+1..j-1] ++ [i] ++ [j+1..n-1])
 
 --------------------------------------------------
 
@@ -526,11 +525,8 @@ findInconsistentRows coA augA = [0..(rows augA - 1)] \\ consistent
     tryRows _ _ []      = True
     tryRows coA augA ns = (rank coA' == rank augA')
       where
-        coA'  = extractRows ns coA
-        augA' = extractRows ns augA
-
-extractRows = flip (?) -- hmatrix 0.17 changed interface
-m @@> i = m `atIndex` i
+        coA'  = coA ? ns
+        augA' = augA ? ns
 
 -- | Create unique names for all of the inferred implicit polymorphic
 -- unit variables.
