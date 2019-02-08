@@ -272,8 +272,8 @@ splitMatWithRHS lhsM rhsM | cols lhsM > 0 = map (eachComponent . sort) $ scc (re
 -- inconsistent rows in each subproblem, concatenating all of the
 -- inconsistent row numbers found (in terms of the rows of the
 -- original lhsM).
-splitFindInconsistent :: H.Matrix Double -> H.Matrix Double -> [RowNum]
-splitFindInconsistent lhsM rhsM = concatMap eachComponent $ splitMatWithRHS lhsM rhsM
+splitFindInconsistentRows :: H.Matrix Double -> H.Matrix Double -> [RowNum]
+splitFindInconsistentRows lhsM rhsM = concatMap eachComponent $ splitMatWithRHS lhsM rhsM
   where
     eachComponent (rs, (lhsM, rhsM), _) = map (rs !!) $ findInconsistentRows lhsM augM
       where
@@ -329,7 +329,7 @@ constraintsToMatrix cons
     (rhsM, rhsCols) = flattenedToMatrix colSort rhs
     colElems        = A.elems lhsCols ++ A.elems rhsCols
     augM            = if rows rhsM == 0 || cols rhsM == 0 then lhsM else if rows lhsM == 0 || cols lhsM == 0 then rhsM else fromBlocks [[lhsM, rhsM]]
-    inconsists      = splitFindInconsistent lhsM rhsM
+    inconsists      = splitFindInconsistentRows lhsM rhsM
 
 constraintsToMatrices :: Constraints -> (H.Matrix Double, H.Matrix Double, [Int], A.Array Int UnitInfo, A.Array Int UnitInfo)
 constraintsToMatrices cons = constraintsToMatrices' colSort cons
@@ -348,7 +348,7 @@ constraintsToMatrices' sortfn cons
     (lhsM, lhsCols) = flattenedToMatrix sortfn lhs
     (rhsM, rhsCols) = flattenedToMatrix sortfn rhs
     augM            = if rows rhsM == 0 || cols rhsM == 0 then lhsM else if rows lhsM == 0 || cols lhsM == 0 then rhsM else fromBlocks [[lhsM, rhsM]]
-    inconsists      = splitFindInconsistent lhsM rhsM
+    inconsists      = splitFindInconsistentRows lhsM rhsM
 
 -- [[UnitInfo]] is a list of flattened constraints
 flattenedToMatrix :: SortFn -> [[UnitInfo]] -> (H.Matrix Double, A.Array Int UnitInfo)
