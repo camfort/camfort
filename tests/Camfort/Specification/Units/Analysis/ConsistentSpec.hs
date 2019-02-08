@@ -93,7 +93,6 @@ exampleInconsist1CheckReport =
 inconsist3LitMixedReport :: String
 inconsist3LitMixedReport =
   "\ntests/fixtures/Specification/Units/inconsist3.f90: Inconsistent:\n\
-  \ - at 5:7: 'literal number' should have the same units as 'literal number'\n\
   \ - at 6:3: 'j**2' should have the same units as 'k'\n"
 
 inconsist3LitPolyReport :: String
@@ -117,7 +116,6 @@ inconsistRecMultReport :: String
 inconsistRecMultReport =
   "\ntests/fixtures/Specification/Units/inconsistRecMult.f90: Inconsistent:\n\
   \ - at 4:3: 'z' should have the same units as 'result of recur'\n\
-  \ - at 4:13: 'x' should have the same units as 'parameter 1 to recur'\n\
   \ - at 4:15: 'parameter 2 to recur' should have unit 'm'\n"
 
 crossModuleInconsistBasicReport :: String
