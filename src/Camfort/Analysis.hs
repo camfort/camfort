@@ -91,11 +91,11 @@ import           Control.Monad.Except
 import           Control.Monad.Morph
 import           Control.Monad.Reader
 import qualified Control.Monad.RWS              as Lazy
-import           Control.Monad.RWS.Strict
+import           Control.Monad.RWS.CPS
 import qualified Control.Monad.State            as Lazy
 import           Control.Monad.State.Strict
 import qualified Control.Monad.Writer           as Lazy
-import           Control.Monad.Writer.Strict
+import           Control.Monad.Writer.CPS
 import           Control.Monad.Fail
 
 import           Control.Lens

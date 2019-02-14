@@ -27,7 +27,7 @@ import           Control.Lens
 import           Control.Monad.Reader
 import           Control.Monad.Fail
 import           Control.Monad.State.Strict
-import           Control.Monad.Writer.Strict
+import           Control.Monad.Writer.CPS
 import           Control.Monad.Trans.Maybe
 import           Data.Data                              (Data)
 import           Data.Foldable                          (foldlM)

@@ -25,7 +25,7 @@ module Camfort.Transformation.CommonBlockElim
 
 import Control.Monad
 import Control.Monad.State.Lazy
-import Control.Monad.Writer.Strict (execWriter, tell)
+import Control.Monad.Writer.CPS (execWriter, tell)
 
 import Data.Data
 import Data.Void

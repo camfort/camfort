@@ -32,7 +32,7 @@ module Camfort.Specification.Stencils.CheckFrontend
 import Control.Monad.IO.Class (MonadIO(..))
 import Control.Monad.Reader (MonadReader, ReaderT, asks, runReaderT)
 import Control.Monad.State.Strict
-import Control.Monad.Writer.Strict hiding (Product)
+import Control.Monad.Writer.CPS hiding (Product)
 import Data.Function (on)
 import Data.Generics.Uniplate.Operations
 import Data.List (intercalate, sort, union)

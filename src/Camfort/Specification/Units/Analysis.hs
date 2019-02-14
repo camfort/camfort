@@ -23,7 +23,7 @@ module Camfort.Specification.Units.Analysis
 
 import           Control.Monad
 import           Control.Monad.State.Strict
-import           Control.Monad.Writer.Strict
+import           Control.Monad.Writer.CPS
 import           Control.Monad.Reader
 import           Data.Data (Data)
 import qualified Data.IntMap.Strict as IM

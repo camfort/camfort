@@ -29,8 +29,8 @@ module Camfort.Specification.Stencils.InferenceFrontend
   , StencilsReport(..)
   ) where
 
-import Control.Monad.RWS.Strict
-import Control.Monad.Writer.Strict
+import Control.Monad.RWS.CPS
+import Control.Monad.Writer.CPS
 
 import           Camfort.Analysis
 import           Camfort.Analysis.Annotations
