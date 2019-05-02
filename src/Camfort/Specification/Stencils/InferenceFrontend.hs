@@ -209,7 +209,7 @@ stencilSynthesis' useEval doSynth marker pf@(F.ProgramFile mi pus) = do
             flTo = FAD.genFlowsToGraph bm dm gr rd
 
             -- induction variable map
-            beMap = FAD.genBackEdgeMap (FAD.dominators gr) gr
+            beMap = FAD.genBackEdgeMap (FAD.dominators gr) $ FA.bbgrGr gr
 
             -- identify every loop by its back-edge
             ivMap = FAD.genInductionVarMapByASTBlock beMap gr

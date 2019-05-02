@@ -252,7 +252,7 @@ stencilChecking pf = do
         -- create graph of definition "flows"
         flowsGraph =  FAD.genFlowsToGraph bm dm gr rd
         -- identify every loop by its back-edge
-        beMap      = FAD.genBackEdgeMap (FAD.dominators gr) gr
+        beMap      = FAD.genBackEdgeMap (FAD.dominators gr) $ FA.bbgrGr gr
         ivmap      = FAD.genInductionVarMapByASTBlock beMap gr
         -- results :: Checker (F.ProgramFile (F.ProgramFile (FA.Analysis A)))
         results    = descendBiM perProgramUnitCheck pf'
