@@ -181,7 +181,7 @@ refactorBlocks _ inp (F.BlComment ann span (F.Comment comment)) = do
 refactorBlocks v inp b@(F.BlStatement _ _ _ u@F.StUse{}) = do
     cursor <- get
     case refactored $ F.getAnnotation u of
-           Just (FU.Position _ rCol _ _) -> do
+           Just (FU.Position _ rCol _ _ _) -> do
                let (FU.SrcSpan lb _) = FU.getSpan u
                let (p0, _) = takeBounds (cursor, lb) inp
                let out  = B.pack $ PP.pprintAndRender v b (Just (rCol -1))
@@ -217,7 +217,7 @@ refactorSyntax v inp e = do
     let a = F.getAnnotation e
     case refactored a of
       Nothing -> return (B.empty, False)
-      Just (FU.Position _ rCol _ _) -> do
+      Just (FU.Position _ rCol _ _ _) -> do
         let FU.SrcSpan lb ub     = FU.getSpan e
             lb' | deleteNode a   = lb { FU.posColumn = 0 }
                 | otherwise      = lb

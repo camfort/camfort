@@ -184,7 +184,7 @@ unusedRegion :: FU.SrcSpan -> Variable -> StencilResult
 unusedRegion srcSpan var = SCWarn $ UnusedRegion srcSpan var
 
 specOkay :: FU.SrcSpan -> Specification -> Variable -> FU.SrcSpan -> StencilResult
-specOkay spanSpec@(FU.SrcSpan (FU.Position o1 _ _ _) (FU.Position o2 _ _ _)) spec var spanBody@(FU.SrcSpan (FU.Position o1' _ _ _) (FU.Position o2' _ _ _)) =
+specOkay spanSpec@(FU.SrcSpan (FU.Position o1 _ _ _ _) (FU.Position o2 _ _ _ _)) spec var spanBody@(FU.SrcSpan (FU.Position o1' _ _ _ _) (FU.Position o2' _ _ _ _)) =
   SCOkay { scSpan      = spanSpec
          , scSpec      = spec
          , scBodySpan  = spanBody
@@ -288,7 +288,7 @@ informRegionsUsed regions = modify
 
 -- | Start tracking a region.
 addRegionToTracked :: FU.SrcSpan -> Variable -> Checker ()
-addRegionToTracked srcSpan@(FU.SrcSpan (FU.Position o1 _ _ _) (FU.Position o2 _ _ _)) r =
+addRegionToTracked srcSpan@(FU.SrcSpan (FU.Position o1 _ _ _ _) (FU.Position o2 _ _ _ _)) r =
   modify (\s -> s { regions = (srcSpan, r) : regions s })
 
 -- | True if the region name is already tracked.

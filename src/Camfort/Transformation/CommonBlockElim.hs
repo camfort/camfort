@@ -460,7 +460,7 @@ mkModule name vtys fname =
     F.PUModule a sp (caml fname) decls Nothing
   where
     a = unitAnnotation { refactored = Just loc, newNode = True }
-    loc = FU.Position 0 0 0 ""
+    loc = FU.Position 0 0 0 "" Nothing
     sp = FU.SrcSpan loc loc
     toDeclBlock (v, t) = F.BlStatement a sp Nothing (toStmt (v, t))
     toStmt (v, (bt, ct)) = F.StDeclaration a sp (toTypeSpec bt) attrs (toDeclarator (v, ct))

@@ -92,7 +92,7 @@ spec =
                 , ((15, 3), addCopyMsg)
                 ]
 
-              spanMatches (pl, pc) (FU.SrcSpan (FU.Position _ pc1 pl1 _) (FU.Position _ pc2 pl2 _)) =
+              spanMatches (pl, pc) (FU.SrcSpan (FU.Position _ pc1 pl1 _ _) (FU.Position _ pc2 pl2 _ _)) =
                 pl == pl1 && pl == pl2 &&
                 pc == pc1 && pc == pc2
 

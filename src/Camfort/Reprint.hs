@@ -133,8 +133,8 @@ enterRight refactoring z =
 -- incoming SourceText based on the distanceF between the FU.Position pairs
 takeBounds :: (FU.Position, FU.Position) -> SourceText -> (SourceText, SourceText)
 takeBounds (l, u) = subtext (ll, lc) (ll, lc) (ul, uc)
-  where (FU.Position _ lc ll _) = l
-        (FU.Position _ uc ul _) = u
+  where (FU.Position _ lc ll _ _) = l
+        (FU.Position _ uc ul _ _) = u
 
 {-|
   Split a text.
