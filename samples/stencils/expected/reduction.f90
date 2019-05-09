@@ -15,8 +15,7 @@ program reduction
                z = a(i)
                != access readOnce, pointed(dim=1) :: a
                r = max(r, z)
-           end if
-       end if
+        end if
      end if
   end do
 

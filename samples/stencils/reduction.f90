@@ -13,8 +13,7 @@ program reduction
                a(i) = (b(i) + beta_mod + eps_E*b(i)) / 2
                z = a(i)
                r = max(r, z)
-           end if
-       end if
+        end if
      end if
   end do
 
