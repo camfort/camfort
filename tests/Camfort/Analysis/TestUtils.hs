@@ -54,7 +54,7 @@ loadInput input = do
     Just x  -> return x
     Nothing -> getCurrentDirectory
 
-  modFiles <- genModFiles Nothing emptyModFiles simpleCompiler () incDir (input ^. tiExcludeFiles)
+  modFiles <- getModFiles incDir
   pfsTexts <- readParseSrcDir Nothing modFiles (input ^. tiInputSources) (input ^. tiExcludeFiles)
   return (modFiles, pfsTexts)
 
