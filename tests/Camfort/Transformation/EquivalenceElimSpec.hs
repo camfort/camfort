@@ -77,7 +77,7 @@ spec =
 
       let infile = samplesBase </> "equiv.f90"
 
-          input = testInputSources infile & tiIncludeDir .~ Just infile
+          input = testInputSources infile
 
       it "log is as expected" $
         testSingleFileAnalysis input (generalizePureAnalysis . refactorEquivalences) $ \report -> do
