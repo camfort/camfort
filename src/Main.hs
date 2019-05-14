@@ -125,6 +125,7 @@ main = do
     runCommand (CmdImplicitNone ro lo)    = runRO ro lo (implicitNone False)
     runCommand (CmdImplicitNoneAll ro lo) = runRO ro lo (implicitNone True)
     runCommand (CmdAllocCheck ro lo)      = runRO ro lo allocCheck
+    runCommand (CmdFPCheck ro lo)         = runRO ro lo fpCheck
     runCommand (CmdInit dir)              = camfortInitialize dir >> return 0
     runCommand CmdTopVersion              = displayVersion >> return 0
 
@@ -152,6 +153,7 @@ data Command = CmdCount ReadOptions LogOptions
              | CmdImplicitNone ReadOptions LogOptions
              | CmdImplicitNoneAll ReadOptions LogOptions
              | CmdAllocCheck ReadOptions LogOptions
+             | CmdFPCheck ReadOptions LogOptions
              | CmdInit FilePath
              | CmdTopVersion
 
@@ -406,11 +408,12 @@ cmdUnitsCompile = fmap CmdUnitsCompile unitsOptions
 cmdUnitsSynth   = fmap CmdUnitsSynth   unitsSynthOptions
 
 
-cmdImplicitNone, cmdImplicitNoneAll, cmdInvariantsCheck, cmdAllocCheck :: Parser Command
+cmdImplicitNone, cmdImplicitNoneAll, cmdInvariantsCheck, cmdAllocCheck, cmdFPCheck :: Parser Command
 cmdInvariantsCheck = fmap CmdInvariantsCheck invariantsOptions
 cmdImplicitNone    = fmap CmdImplicitNone readOptions <*> logOptions
 cmdImplicitNoneAll = fmap CmdImplicitNoneAll readOptions <*> logOptions
 cmdAllocCheck      = fmap CmdAllocCheck readOptions <*> logOptions
+cmdFPCheck         = fmap CmdFPCheck readOptions <*> logOptions
 
 cmdRefactCommon, cmdRefactDead, cmdRefactEquivalence :: Parser Command
 cmdRefactCommon      = fmap CmdRefactCommon refactOptions
@@ -492,6 +495,9 @@ analysesParser = commandsParser "Analysis Commands" analysesCommands
       , ("alloc-check",
           [],
           cmdAllocCheck,  "check allocate/deallocate statement usage")
+      , ("fp-check",
+          [],
+          cmdFPCheck, "check floating point usage")
       ]
 
 

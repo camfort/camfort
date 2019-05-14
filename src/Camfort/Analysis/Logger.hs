@@ -160,7 +160,7 @@ data Origin =
   { _oFile :: FilePath
   , _oSpan :: F.SrcSpan
   }
-  deriving (Show, Eq)
+  deriving (Show, Eq, Ord)
 
 makeLenses ''Origin
 

@@ -34,6 +34,7 @@ module Camfort.Functionality
   , countVarDecls
   , implicitNone
   , allocCheck
+  , fpCheck
   -- ** Stencil Analysis
   , stencilsCheck
   , stencilsInfer
@@ -251,6 +252,14 @@ allocCheck =
   "Checking allocate / deallocate usage"
   (generalizePureAnalysis . checkAllocateStatements)
   (describePerFileAnalysis "check allocate / deallocate")
+  simpleCompiler ()
+
+fpCheck :: CamfortEnv -> IO Int
+fpCheck =
+  runFunctionality
+  "Checking usage of floating point"
+  (generalizePureAnalysis . checkFloatingPointUse)
+  (describePerFileAnalysis "check floating point")
   simpleCompiler ()
 
 ddtRefactor :: FileOrDir -> CamfortEnv -> IO Int

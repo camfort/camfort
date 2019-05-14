@@ -21,8 +21,13 @@
 {- Simple syntactic analysis on Fortran programs -}
 
 module Camfort.Analysis.Simple
- (countVariableDeclarations, checkImplicitNone, ImplicitNoneReport(..),checkAllocateStatements)
+ ( countVariableDeclarations
+ , checkImplicitNone
+ , ImplicitNoneReport(..)
+ , checkAllocateStatements
+ , checkFloatingPointUse )
 where
+
 import Prelude hiding (unlines)
 import Control.Monad
 import Data.Data
@@ -32,14 +37,20 @@ import Data.Monoid ((<>))
 import Data.Generics.Uniplate.Operations
 import qualified Data.Text.Lazy.Builder as Builder
 import Data.Text (Text, unlines, intercalate, pack)
-import Data.List (nubBy)
+import Data.List (sort, nub, nubBy)
 
 import qualified Language.Fortran.AST as F
+import qualified Language.Fortran.Util.Position as F
 import qualified Language.Fortran.Analysis as F
+import qualified Language.Fortran.Analysis.Types as FAT
+import qualified Language.Fortran.Analysis.DataFlow as FAD
+import qualified Language.Fortran.Analysis.BBlocks as FAB
+import Language.Fortran.Util.ModFile
 
-import Camfort.Analysis ( ExitCodeOfReport(..), atSpanned, atSpannedInFile, Origin
+import Camfort.Analysis (analysisModFiles,  ExitCodeOfReport(..), atSpanned, atSpannedInFile, Origin
                         , logError, describe, describeBuilder
                         , PureAnalysis, Describe )
+import Camfort.Analysis.ModFile (withCombinedEnvironment)
 
 {-| Counts the number of declarations (of variables) in a whole program -}
 
@@ -174,4 +185,53 @@ instance Describe CheckAllocReport where
 instance ExitCodeOfReport CheckAllocReport where
   exitCodeOf (CheckAllocReport {..})
     | null (unbalancedAllocs ++ outOfOrder) = 0
+    | otherwise = 1
+
+--------------------------------------------------
+
+data CheckFPReport
+  = CheckFPReport { badEquality :: [PULoc] }
+
+instance SG.Semigroup CheckFPReport where
+  CheckFPReport a1 <> CheckFPReport a2 = CheckFPReport (a1 ++ a2)
+
+instance Monoid CheckFPReport where
+  mempty = CheckFPReport []
+  mappend = (SG.<>)
+
+checkFloatingPointUse :: forall a. Data a => F.ProgramFile a -> PureAnalysis String () CheckFPReport
+checkFloatingPointUse pf = do
+  let F.ProgramFile F.MetaInfo { F.miFilename = file } _ = pf
+  mfs <- analysisModFiles
+  let (pf', _, _) = withCombinedEnvironment mfs pf
+  let pvm         = combinedParamVarMap mfs
+  let pf''        = FAD.analyseConstExps . FAD.analyseParameterVars pvm . FAB.analyseBBlocks $ pf'
+
+  let checkPU :: F.ProgramUnit (F.Analysis a) -> CheckFPReport
+      checkPU pu = CheckFPReport {..}
+        where
+          candidates :: [F.Expression (F.Analysis a)]
+          candidates = [ e | e@(F.ExpBinary _ _ op x y) <- universeBi (F.programUnitBody pu)
+                           , op `elem` [F.EQ, F.NE]
+                           , Just (F.IDType (Just bt) _) <- [F.idType (F.getAnnotation x), F.idType (F.getAnnotation y)]
+                           , bt `elem` floatingPointTypes ]
+          badEquality = nub [ (F.getName pu, atSpannedInFile file e) | e <- candidates ]
+
+  let reports = map checkPU (universeBi pf'')
+
+  return $ mconcat reports
+
+floatingPointTypes :: [F.BaseType]
+floatingPointTypes = [F.TypeReal, F.TypeDoubleComplex, F.TypeComplex, F.TypeDoublePrecision]
+
+instance Describe CheckFPReport where
+  describeBuilder (CheckFPReport {..})
+    | null (badEquality) = "no cases detected"
+    | otherwise = Builder.fromText . unlines $
+      [ describe orig <> " equality operation used on floating-point numbers."
+      | (_, orig) <- badEquality ]
+
+instance ExitCodeOfReport CheckFPReport where
+  exitCodeOf (CheckFPReport {..})
+    | null (badEquality) = 0
     | otherwise = 1
