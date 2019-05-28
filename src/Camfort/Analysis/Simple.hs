@@ -257,8 +257,6 @@ checkModuleUse pf = do
   let F.ProgramFile F.MetaInfo { F.miFilename = file } _ = pf
   mfs <- analysisModFiles
   let (pf', _, _) = withCombinedEnvironment mfs pf
-  let pvm         = combinedParamVarMap mfs
-  let pf''        = FAD.analyseConstExps . FAD.analyseParameterVars pvm . FAB.analyseBBlocks $ pf'
 
   let checkPU :: F.ProgramUnit (F.Analysis a) -> CheckUseReport
       checkPU pu = CheckUseReport {..}
