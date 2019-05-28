@@ -35,6 +35,7 @@ module Camfort.Functionality
   , implicitNone
   , allocCheck
   , fpCheck
+  , useCheck
   -- ** Stencil Analysis
   , stencilsCheck
   , stencilsInfer
@@ -260,6 +261,14 @@ fpCheck =
   "Checking usage of floating point"
   (generalizePureAnalysis . checkFloatingPointUse)
   (describePerFileAnalysis "check floating point")
+  simpleCompiler ()
+
+useCheck :: CamfortEnv -> IO Int
+useCheck =
+  runFunctionality
+  "Checking usage of USE statements"
+  (generalizePureAnalysis . checkModuleUse)
+  (describePerFileAnalysis "check module USE")
   simpleCompiler ()
 
 ddtRefactor :: FileOrDir -> CamfortEnv -> IO Int

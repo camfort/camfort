@@ -25,7 +25,8 @@ module Camfort.Analysis.Simple
  , checkImplicitNone
  , ImplicitNoneReport(..)
  , checkAllocateStatements
- , checkFloatingPointUse )
+ , checkFloatingPointUse
+ , checkModuleUse )
 where
 
 import Prelude hiding (unlines)
@@ -37,7 +38,7 @@ import Data.Monoid ((<>))
 import Data.Generics.Uniplate.Operations
 import qualified Data.Text.Lazy.Builder as Builder
 import Data.Text (Text, unlines, intercalate, pack)
-import Data.List (sort, nub, nubBy)
+import Data.List (sort, nub, nubBy, tails)
 
 import qualified Language.Fortran.AST as F
 import qualified Language.Fortran.Util.Position as F
@@ -234,4 +235,67 @@ instance Describe CheckFPReport where
 instance ExitCodeOfReport CheckFPReport where
   exitCodeOf (CheckFPReport {..})
     | null (badEquality) = 0
+    | otherwise = 1
+
+--------------------------------------------------
+
+data CheckUseReport
+  = CheckUseReport { missingOnly :: [PULoc]
+                   , duppedOnly  :: [(String, PULoc)]
+                   , unusedNames :: [(String, PULoc)]
+                   }
+
+instance SG.Semigroup CheckUseReport where
+  CheckUseReport a1 b1 c1 <> CheckUseReport a2 b2 c2 = CheckUseReport (a1 ++ a2) (b1 ++ b2) (c1 ++ c2)
+
+instance Monoid CheckUseReport where
+  mempty = CheckUseReport [] [] []
+  mappend = (SG.<>)
+
+checkModuleUse :: forall a. Data a => F.ProgramFile a -> PureAnalysis String () CheckUseReport
+checkModuleUse pf = do
+  let F.ProgramFile F.MetaInfo { F.miFilename = file } _ = pf
+  mfs <- analysisModFiles
+  let (pf', _, _) = withCombinedEnvironment mfs pf
+  let pvm         = combinedParamVarMap mfs
+  let pf''        = FAD.analyseConstExps . FAD.analyseParameterVars pvm . FAB.analyseBBlocks $ pf'
+
+  let checkPU :: F.ProgramUnit (F.Analysis a) -> CheckUseReport
+      checkPU pu = CheckUseReport {..}
+        where
+          statements :: [F.Statement (F.Analysis a)]
+          statements  = universeBi (F.programUnitBody pu)
+          expressions :: [F.Expression (F.Analysis a)]
+          expressions = universeBi pu
+          missingOnly = nub [ (F.getName pu, atSpannedInFile file s)
+                            | s <- [ s | s@(F.StUse _ _ _ _ F.Permissive _) <- statements ] ]
+          duppedOnly  = [ (n, (F.getName pu, atSpannedInFile file $ F.getSpan (ss, ss')))
+                        | F.StUse _ ss (F.ExpValue _ _ (F.ValVariable n)) _ _ _:rest <- tails statements
+                        , F.StUse _ ss' (F.ExpValue _ _ (F.ValVariable n')) _ _ _ <- rest
+                        , n == n' ]
+          extractUseName (F.UseID _ ss (F.ExpValue _ _ (F.ValVariable n)))       = (n, ss)
+          extractUseName (F.UseRename _ ss (F.ExpValue _ _ (F.ValVariable n)) _) = (n, ss)
+          unusedNames = [ (n, (F.getName pu, atSpannedInFile file ss))
+                        | F.StUse _ _ _ _ _ (Just (F.AList _ _ uses)) <- statements
+                        , (n, ss) <- map extractUseName uses
+                        , length [ () | F.ExpValue _ _ (F.ValVariable n') <- expressions, n == n' ] < 2 ]
+
+  let reports = map checkPU (universeBi pf'')
+
+  return $ mconcat reports
+
+instance Describe CheckUseReport where
+  describeBuilder (CheckUseReport {..})
+    | null missingOnly && null duppedOnly && null unusedNames = "no cases detected"
+    | otherwise = Builder.fromText . unlines $
+      [ describe orig <> " USE statement missing ONLY attribute."
+      | (_, orig) <- missingOnly ] ++
+      [ describe orig <> " multiple USE statements for same module '" <> describe name <> "'"
+      | (name, (_, orig)) <- duppedOnly ] ++
+      [ describe orig <> " local name '" <> describe name <> "' imported but unused in program unit."
+      | (name, (_, orig)) <- unusedNames ]
+
+instance ExitCodeOfReport CheckUseReport where
+  exitCodeOf (CheckUseReport {..})
+    | null missingOnly && null duppedOnly && null unusedNames = 0
     | otherwise = 1
