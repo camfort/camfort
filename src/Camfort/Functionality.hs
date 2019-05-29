@@ -36,6 +36,7 @@ module Camfort.Functionality
   , allocCheck
   , fpCheck
   , useCheck
+  , arrayCheck
   -- ** Stencil Analysis
   , stencilsCheck
   , stencilsInfer
@@ -269,6 +270,14 @@ useCheck =
   "Checking usage of USE statements"
   (generalizePureAnalysis . checkModuleUse)
   (describePerFileAnalysis "check module USE")
+  simpleCompiler ()
+
+arrayCheck :: CamfortEnv -> IO Int
+arrayCheck =
+  runFunctionality
+  "Checking usage of USE statements"
+  (generalizePureAnalysis . checkArrayUse)
+  (describePerFileAnalysis "check array usage")
   simpleCompiler ()
 
 ddtRefactor :: FileOrDir -> CamfortEnv -> IO Int

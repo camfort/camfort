@@ -127,6 +127,7 @@ main = do
     runCommand (CmdAllocCheck ro lo)      = runRO ro lo allocCheck
     runCommand (CmdFPCheck ro lo)         = runRO ro lo fpCheck
     runCommand (CmdUseCheck ro lo)        = runRO ro lo useCheck
+    runCommand (CmdArrayCheck ro lo)      = runRO ro lo arrayCheck
     runCommand (CmdInit dir)              = camfortInitialize dir >> return 0
     runCommand CmdTopVersion              = displayVersion >> return 0
 
@@ -156,6 +157,7 @@ data Command = CmdCount ReadOptions LogOptions
              | CmdAllocCheck ReadOptions LogOptions
              | CmdFPCheck ReadOptions LogOptions
              | CmdUseCheck ReadOptions LogOptions
+             | CmdArrayCheck ReadOptions LogOptions
              | CmdInit FilePath
              | CmdTopVersion
 
@@ -417,6 +419,7 @@ cmdImplicitNoneAll = fmap CmdImplicitNoneAll readOptions <*> logOptions
 cmdAllocCheck      = fmap CmdAllocCheck readOptions <*> logOptions
 cmdFPCheck         = fmap CmdFPCheck readOptions <*> logOptions
 cmdUseCheck        = fmap CmdUseCheck readOptions <*> logOptions
+cmdArrayCheck      = fmap CmdArrayCheck readOptions <*> logOptions
 
 cmdRefactCommon, cmdRefactDead, cmdRefactEquivalence :: Parser Command
 cmdRefactCommon      = fmap CmdRefactCommon refactOptions
@@ -504,6 +507,9 @@ analysesParser = commandsParser "Analysis Commands" analysesCommands
       , ("use-check",
           [],
           cmdUseCheck, "check usage of module USE")
+      , ("array-check",
+          [],
+          cmdArrayCheck, "check usage of arrays")
       ]
 
 

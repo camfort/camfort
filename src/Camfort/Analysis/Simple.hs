@@ -26,13 +26,16 @@ module Camfort.Analysis.Simple
  , ImplicitNoneReport(..)
  , checkAllocateStatements
  , checkFloatingPointUse
- , checkModuleUse )
+ , checkModuleUse
+ , checkArrayUse )
 where
 
 import Prelude hiding (unlines)
 import Control.Monad
 import Data.Data
 import Data.Function (on)
+import Data.Maybe (mapMaybe)
+import qualified Data.Set as S
 import qualified Data.Semigroup as SG
 import Data.Monoid ((<>))
 import Data.Generics.Uniplate.Operations
@@ -48,7 +51,7 @@ import qualified Language.Fortran.Analysis.DataFlow as FAD
 import qualified Language.Fortran.Analysis.BBlocks as FAB
 import Language.Fortran.Util.ModFile
 
-import Camfort.Analysis (analysisModFiles,  ExitCodeOfReport(..), atSpanned, atSpannedInFile, Origin
+import Camfort.Analysis (describeShow, analysisModFiles,  ExitCodeOfReport(..), atSpanned, atSpannedInFile, Origin
                         , logError, describe, describeBuilder
                         , PureAnalysis, Describe )
 import Camfort.Analysis.ModFile (withCombinedEnvironment)
@@ -278,7 +281,7 @@ checkModuleUse pf = do
                         , (n, ss) <- map extractUseName uses
                         , length [ () | F.ExpValue _ _ (F.ValVariable n') <- expressions, n == n' ] < 2 ]
 
-  let reports = map checkPU (universeBi pf'')
+  let reports = map checkPU (universeBi pf')
 
   return $ mconcat reports
 
@@ -296,4 +299,68 @@ instance Describe CheckUseReport where
 instance ExitCodeOfReport CheckUseReport where
   exitCodeOf (CheckUseReport {..})
     | null missingOnly && null duppedOnly && null unusedNames = 0
+    | otherwise = 1
+
+--------------------------------------------------
+
+data CheckArrayReport
+  = CheckArrayReport { nestedIdx  :: [([String], PULoc)] }
+
+instance SG.Semigroup CheckArrayReport where
+  CheckArrayReport a1 <> CheckArrayReport a2 = CheckArrayReport (a1 ++ a2)
+
+instance Monoid CheckArrayReport where
+  mempty = CheckArrayReport []
+  mappend = (SG.<>)
+
+checkArrayUse :: forall a. Data a => F.ProgramFile a -> PureAnalysis String () CheckArrayReport
+checkArrayUse pf = do
+  let F.ProgramFile F.MetaInfo { F.miFilename = file } _ = pf
+  mfs <- analysisModFiles
+  let (pf', _, _) = withCombinedEnvironment mfs pf
+
+  let checkPU :: F.ProgramUnit (F.Analysis a) -> CheckArrayReport
+      checkPU pu = CheckArrayReport {..}
+        where
+          blocks :: [F.Block (F.Analysis a)]
+          blocks = childrenBi (F.programUnitBody pu)
+
+          -- find subscripts where the order of indices doesn't match
+          -- the order of introduction of induction variables by
+          -- nested do-loops.
+          nestedIdx = [ (ivars, (F.getName pu, atSpannedInFile file ss)) | (ivars, ss) <- getNestedIdx [] blocks ]
+
+          getNestedIdx :: [F.Name] -> [F.Block (F.Analysis a)] -> [([String], F.SrcSpan)]
+          getNestedIdx _ [] = []
+          getNestedIdx vs (b@(F.BlDo _ _ _ _ _ _ body _):bs)
+            | v:_ <- F.blockVarDefs b = getNestedIdx (v:vs) body ++ getNestedIdx vs bs
+            | otherwise               = getNestedIdx vs bs
+          getNestedIdx vs (b:bs) = bad ++ getNestedIdx vs bs
+            where
+              vset = S.fromList vs
+              vmap = zip vs [0..]
+              subs = [ (ivars, ss)
+                     | F.ExpSubscript _ ss _ (F.AList _ _ is) <- universeBi b :: [F.Expression (F.Analysis a)]
+                     , let ivars = [ (F.varName e, F.srcName e)
+                                   | i <- is
+                                   , e@(F.ExpValue _ _ F.ValVariable{}) <- universeBi i :: [F.Expression (F.Analysis a)]
+                                   , F.varName e `S.member` vset ] ]
+              -- 'bad' subscripts are where the ordering doesn't match the nesting.
+              bad = [ (map snd ivars, ss)
+                    | (ivars, ss) <- subs, let nums = mapMaybe (flip lookup vmap . fst) ivars, nums /= sort nums ]
+
+  let reports = map checkPU (universeBi pf')
+
+  return $ mconcat reports
+
+instance Describe CheckArrayReport where
+  describeBuilder (CheckArrayReport {..})
+    | null nestedIdx = "no cases detected"
+    | otherwise = Builder.fromText . unlines $
+      [ describe orig <> " possibly less efficient order of subscript indices: " <> intercalate ", " (map describe ivars)
+      | (ivars, (_, orig)) <- nestedIdx ]
+
+instance ExitCodeOfReport CheckArrayReport where
+  exitCodeOf (CheckArrayReport {..})
+    | null nestedIdx = 0
     | otherwise = 1
