@@ -17,6 +17,7 @@
 {-# LANGUAGE ScopedTypeVariables #-}
 {-# LANGUAGE OverloadedStrings #-}
 {-# LANGUAGE RecordWildCards #-}
+{-# LANGUAGE TupleSections #-}
 
 {- Simple syntactic analysis on Fortran programs -}
 
@@ -32,23 +33,29 @@ where
 
 import Prelude hiding (unlines)
 import Control.Monad
+import Control.Arrow (first)
 import Data.Data
 import Data.Function (on)
-import Data.Maybe (mapMaybe)
+import Data.Maybe (catMaybes, fromMaybe, maybeToList, listToMaybe, mapMaybe)
 import qualified Data.Set as S
+import qualified Data.IntSet as IS
+import qualified Data.Map.Strict as M
+import qualified Data.IntMap.Strict as IM
 import qualified Data.Semigroup as SG
 import Data.Monoid ((<>))
 import Data.Generics.Uniplate.Operations
 import qualified Data.Text.Lazy.Builder as Builder
 import Data.Text (Text, unlines, intercalate, pack)
-import Data.List (sort, nub, nubBy, tails)
+import Data.List ((\\), sort, nub, nubBy, tails)
+
+import Data.Graph.Inductive
 
 import qualified Language.Fortran.AST as F
 import qualified Language.Fortran.Util.Position as F
 import qualified Language.Fortran.Analysis as F
-import qualified Language.Fortran.Analysis.Types as FAT
-import qualified Language.Fortran.Analysis.DataFlow as FAD
-import qualified Language.Fortran.Analysis.BBlocks as FAB
+import qualified Language.Fortran.Analysis.Types as F
+import qualified Language.Fortran.Analysis.DataFlow as F
+import qualified Language.Fortran.Analysis.BBlocks as F
 import Language.Fortran.Util.ModFile
 
 import Camfort.Analysis (describeShow, analysisModFiles,  ExitCodeOfReport(..), atSpanned, atSpannedInFile, Origin
@@ -209,7 +216,7 @@ checkFloatingPointUse pf = do
   mfs <- analysisModFiles
   let (pf', _, _) = withCombinedEnvironment mfs pf
   let pvm         = combinedParamVarMap mfs
-  let pf''        = FAD.analyseConstExps . FAD.analyseParameterVars pvm . FAB.analyseBBlocks $ pf'
+  let pf''        = F.analyseConstExps . F.analyseParameterVars pvm . F.analyseBBlocks $ pf'
 
   let checkPU :: F.ProgramUnit (F.Analysis a) -> CheckFPReport
       checkPU pu = CheckFPReport {..}
@@ -304,13 +311,13 @@ instance ExitCodeOfReport CheckUseReport where
 --------------------------------------------------
 
 data CheckArrayReport
-  = CheckArrayReport { nestedIdx  :: [([String], PULoc)] }
+  = CheckArrayReport { nestedIdx, missingIdx :: [([String], PULoc)] }
 
 instance SG.Semigroup CheckArrayReport where
-  CheckArrayReport a1 <> CheckArrayReport a2 = CheckArrayReport (a1 ++ a2)
+  CheckArrayReport a1 b1 <> CheckArrayReport a2 b2 = CheckArrayReport (a1 ++ a2) (b1 ++ b2)
 
 instance Monoid CheckArrayReport where
-  mempty = CheckArrayReport []
+  mempty = CheckArrayReport [] []
   mappend = (SG.<>)
 
 checkArrayUse :: forall a. Data a => F.ProgramFile a -> PureAnalysis String () CheckArrayReport
@@ -318,12 +325,28 @@ checkArrayUse pf = do
   let F.ProgramFile F.MetaInfo { F.miFilename = file } _ = pf
   mfs <- analysisModFiles
   let (pf', _, _) = withCombinedEnvironment mfs pf
+  let pvm         = combinedParamVarMap mfs
+  let pf''        = F.analyseConstExps . F.analyseParameterVars pvm . F.analyseBBlocks $ pf'
+  let bm          = F.genBlockMap pf''
+  let dm          = F.genDefMap bm
+  let cm          = F.genCallMap pf''
 
   let checkPU :: F.ProgramUnit (F.Analysis a) -> CheckArrayReport
-      checkPU pu = CheckArrayReport {..}
+      checkPU pu | F.Analysis { F.bBlocks = Just _ } <- F.getAnnotation pu = CheckArrayReport {..}
         where
+          F.Analysis { F.bBlocks = Just gr } = F.getAnnotation pu
+          bedges = F.genBackEdgeMap (F.dominators gr) $ F.bbgrGr gr
+          ivmap  = F.genInductionVarMapByASTBlock bedges gr
+          divmap = F.genDerivedInductionMap bedges gr
+          -- lnmap (loop-node map) maps loop-header nodes to body node sets
+          lnmap  = F.genLoopNodeMap bedges $ F.bbgrGr gr
+          -- loop-header map, inversion of loop-node map (lnmap)
+          -- maps body nodes to loop-header nodes
+          lhmap  = IM.fromListWith IS.union [ (v, IS.singleton k) | (k, vs) <- IM.toList lnmap, v <- IS.toList vs ]
+          flFrom = tc . grev . F.genFlowsToGraph bm dm gr $ F.reachingDefinitions dm gr
+
           blocks :: [F.Block (F.Analysis a)]
-          blocks = childrenBi (F.programUnitBody pu)
+          blocks = F.programUnitBody pu
 
           -- find subscripts where the order of indices doesn't match
           -- the order of introduction of induction variables by
@@ -349,16 +372,92 @@ checkArrayUse pf = do
               bad = [ (map snd ivars, ss)
                     | (ivars, ss) <- subs, let nums = mapMaybe (flip lookup vmap . fst) ivars, nums /= sort nums ]
 
-  let reports = map checkPU (universeBi pf')
+          -- Seek any possible missing uses of an induction variable
+          -- within subscript expressions, looking through nested
+          -- blocks, while excluding cases where If/Case control-flow
+          -- depends-on an induction variable instead of having it be
+          -- directly used by a subscript expression.
+          getMissingUse :: forall a. Data a => [String] -> F.Block (F.Analysis a) -> [([String], F.SrcSpan)]
+          getMissingUse excls (F.BlDo _ _ _ _ _ _ bs _) = concatMap (getMissingUse excls) bs
+          getMissingUse excls (F.BlDoWhile _ _ _ _ _ _ bs _) = concatMap (getMissingUse excls) bs
+          getMissingUse excls (F.BlForall _ _ _ _ _ bs _) = concatMap (getMissingUse excls) bs
+          getMissingUse excls b@(F.BlIf F.Analysis{F.insLabel = Just i} _ _ _ mes bss _)
+            -- check If statement conditions
+            | any (flip eligible i) es = bads ++ rest
+            | otherwise                = rest
+            where
+              es = catMaybes mes
+              excl' = concatMap excludes (universeBi es :: [F.Expression (F.Analysis a)])
+              rest = concatMap (getMissingUse (excls ++ excl')) $ concat bss
+              bads = getMissingUse' excls b
+          getMissingUse excls b@(F.BlCase F.Analysis{F.insLabel = Just i} _ _ _ e _ bss _)
+            -- check Case statement scrutinee
+            | eligible e i = bads ++ rest
+            | otherwise    = rest
+            where
+              rest = concatMap (getMissingUse (excls ++ excludes e)) $ concat bss
+              bads = getMissingUse' excls b
+          getMissingUse excls b@(F.BlStatement F.Analysis{F.insLabel = Just i} _ _ st)
+            | eligible st i = getMissingUse' excls b
+            | otherwise = []
+          getMissingUse _ F.BlInterface{} = []
+          getMissingUse _ F.BlComment{} = []
+
+          getMissingUse' :: forall a. Data a => [F.Name] -> F.Block (F.Analysis a) -> [([F.Name], F.SrcSpan)]
+          getMissingUse' excls b
+            | Just i            <- F.insLabel (F.getAnnotation b)
+            -- obtain the live induction variables at this program point
+            , Just ivarSet      <- IM.lookup i ivmap
+            -- find the definitions that flowed into this program point
+            , flFroms           <- suc flFrom i
+            -- get their AST Blocks
+            , Just flFromBlocks <- sequence $ map (flip IM.lookup bm) flFroms
+            -- find out what variables they define
+            , flFromBlockDefSet <- S.fromList $ concatMap F.blockVarDefs flFromBlocks
+            -- subtract the excludes and the defined variables from
+            -- the live induction variables in order to find out the
+            -- 'missing' or unaccounted-for induction vars.
+            , missingIVars      <- ivarSet `S.difference` S.fromList excls `S.difference` flFromBlockDefSet
+            , missingIVars'     <- S.map (\ v -> v `fromMaybe` findSrcName v b) missingIVars
+            , not (S.null missingIVars) = [(S.toList missingIVars', F.getSpan b)]
+          getMissingUse' _ _ = []
+
+          -- eligible bits of AST are those that contain subscripting
+          -- expressions with a length equivalent to the number of
+          -- currently live induction variables.
+          eligible :: forall a b. (Data a, Data (b (F.Analysis a))) => b (F.Analysis a) -> Int -> Bool
+          eligible x i
+            | Just ivars <- IM.lookup i ivmap =
+                not $ null [ () | F.ExpSubscript _ _ _ (F.AList _ _ idxs) <- universeBi x :: [F.Expression (F.Analysis a)]
+                                , length idxs == S.size ivars ]
+            | otherwise = False
+
+          -- check the derived induction maps to find out if a given
+          -- expression depends on any induction variable and
+          -- therefore can be used to exclude that induction variable
+          -- from the 'missing' list.
+          excludes e
+            | Just ei <- F.insLabel (F.getAnnotation e)
+            , Just (F.IELinear n _ _) <- IM.lookup ei divmap = [n]
+          excludes _ = []
+
+      checkPU _ = mempty
+  let reports = map checkPU (universeBi pf'')
 
   return $ mconcat reports
 
+findSrcName :: forall a. Data a => F.Name -> F.Block (F.Analysis a) -> Maybe F.Name
+findSrcName v b = listToMaybe [ F.srcName e | e@(F.ExpValue _ _ F.ValVariable{}) <- universeBi b :: [F.Expression (F.Analysis a)]
+                                            , F.varName e == v ]
+
 instance Describe CheckArrayReport where
   describeBuilder (CheckArrayReport {..})
-    | null nestedIdx = "no cases detected"
+    | null nestedIdx && null missingIdx = "no cases detected"
     | otherwise = Builder.fromText . unlines $
       [ describe orig <> " possibly less efficient order of subscript indices: " <> intercalate ", " (map describe ivars)
-      | (ivars, (_, orig)) <- nestedIdx ]
+      | (ivars, (_, orig)) <- nestedIdx ] ++
+      [ describe orig <> " possibly missing use of variable(s) in array subscript: " <> intercalate ", " (map describe ivars)
+      | (ivars, (_, orig)) <- missingIdx ]
 
 instance ExitCodeOfReport CheckArrayReport where
   exitCodeOf (CheckArrayReport {..})

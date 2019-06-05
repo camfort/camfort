@@ -275,7 +275,7 @@ useCheck =
 arrayCheck :: CamfortEnv -> IO Int
 arrayCheck =
   runFunctionality
-  "Checking usage of USE statements"
+  "Checking array usage"
   (generalizePureAnalysis . checkArrayUse)
   (describePerFileAnalysis "check array usage")
   simpleCompiler ()
