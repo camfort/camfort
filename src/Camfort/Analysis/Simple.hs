@@ -343,7 +343,8 @@ checkArrayUse pf = do
           -- loop-header map, inversion of loop-node map (lnmap)
           -- maps body nodes to loop-header nodes
           lhmap  = IM.fromListWith IS.union [ (v, IS.singleton k) | (k, vs) <- IM.toList lnmap, v <- IS.toList vs ]
-          flFrom = tc . grev . F.genFlowsToGraph bm dm gr $ F.reachingDefinitions dm gr
+          rdmap  = F.reachingDefinitions dm gr
+          flFrom = tc . grev $ F.genFlowsToGraph bm dm gr rdmap
 
           blocks :: [F.Block (F.Analysis a)]
           blocks = F.programUnitBody pu
@@ -372,10 +373,13 @@ checkArrayUse pf = do
               bad = [ (map snd ivars, ss)
                     | (ivars, ss) <- subs, let nums = mapMaybe (flip lookup vmap . fst) ivars, nums /= sort nums ]
 
+          missingIdx = [ (missing, (F.getName pu, atSpannedInFile file ss)) | b <- blocks
+                                                                            , (missing, ss) <- getMissingUse [] b ]
+
           -- Seek any possible missing uses of an induction variable
           -- within subscript expressions, looking through nested
-          -- blocks, while excluding cases where If/Case control-flow
-          -- depends-on an induction variable instead of having it be
+          -- blocks. We can exclude variables for which If/Case
+          -- control-flow depends on it instead of needing it to be
           -- directly used by a subscript expression.
           getMissingUse :: forall a. Data a => [String] -> F.Block (F.Analysis a) -> [([String], F.SrcSpan)]
           getMissingUse excls (F.BlDo _ _ _ _ _ _ bs _) = concatMap (getMissingUse excls) bs
@@ -383,23 +387,24 @@ checkArrayUse pf = do
           getMissingUse excls (F.BlForall _ _ _ _ _ bs _) = concatMap (getMissingUse excls) bs
           getMissingUse excls b@(F.BlIf F.Analysis{F.insLabel = Just i} _ _ _ mes bss _)
             -- check If statement conditions
-            | any (flip eligible i) es = bads ++ rest
-            | otherwise                = rest
+            | any (eligible i (length excls)) es = bads ++ rest
+            | otherwise                          = rest
             where
               es = catMaybes mes
-              excl' = concatMap excludes (universeBi es :: [F.Expression (F.Analysis a)])
+              -- find any induction variables that are referenced by If-Elseif expressions
+              excl' = concatMap getExcludes (universeBi es :: [F.Expression (F.Analysis a)])
               rest = concatMap (getMissingUse (excls ++ excl')) $ concat bss
               bads = getMissingUse' excls b
           getMissingUse excls b@(F.BlCase F.Analysis{F.insLabel = Just i} _ _ _ e _ bss _)
             -- check Case statement scrutinee
-            | eligible e i = bads ++ rest
-            | otherwise    = rest
+            | eligible i (length excls) e = bads ++ rest
+            | otherwise                   = rest
             where
-              rest = concatMap (getMissingUse (excls ++ excludes e)) $ concat bss
+              rest = concatMap (getMissingUse (excls ++ getExcludes e)) $ concat bss
               bads = getMissingUse' excls b
           getMissingUse excls b@(F.BlStatement F.Analysis{F.insLabel = Just i} _ _ st)
-            | eligible st i = getMissingUse' excls b
-            | otherwise = []
+            | eligible i (length excls) st = getMissingUse' excls b
+            | otherwise                    = []
           getMissingUse _ F.BlInterface{} = []
           getMissingUse _ F.BlComment{} = []
 
@@ -418,28 +423,37 @@ checkArrayUse pf = do
             -- the live induction variables in order to find out the
             -- 'missing' or unaccounted-for induction vars.
             , missingIVars      <- ivarSet `S.difference` S.fromList excls `S.difference` flFromBlockDefSet
-            , missingIVars'     <- S.map (\ v -> v `fromMaybe` findSrcName v b) missingIVars
+            -- Try to look up source-names for the missing ivars in
+            -- each of the flow-from blocks.
+            , missingIVars'     <- S.map (\ v -> "unk" `fromMaybe` findSrcNameInDefMap v) missingIVars
             , not (S.null missingIVars) = [(S.toList missingIVars', F.getSpan b)]
           getMissingUse' _ _ = []
 
           -- eligible bits of AST are those that contain subscripting
           -- expressions with a length equivalent to the number of
           -- currently live induction variables.
-          eligible :: forall a b. (Data a, Data (b (F.Analysis a))) => b (F.Analysis a) -> Int -> Bool
-          eligible x i
+          eligible :: forall a b. (Data a, Data (b (F.Analysis a))) => Int -> Int -> b (F.Analysis a) -> Bool
+          eligible i numExcls x
             | Just ivars <- IM.lookup i ivmap =
                 not $ null [ () | F.ExpSubscript _ _ _ (F.AList _ _ idxs) <- universeBi x :: [F.Expression (F.Analysis a)]
-                                , length idxs == S.size ivars ]
+                                , length idxs == S.size ivars - numExcls ]
             | otherwise = False
 
           -- check the derived induction maps to find out if a given
           -- expression depends on any induction variable and
           -- therefore can be used to exclude that induction variable
           -- from the 'missing' list.
-          excludes e
+          getExcludes e
             | Just ei <- F.insLabel (F.getAnnotation e)
             , Just (F.IELinear n _ _) <- IM.lookup ei divmap = [n]
-          excludes _ = []
+          getExcludes _ = []
+
+          -- look through the DefMap and BlockMap for instances of
+          -- variable v in order to retrieve its 'source name'.
+          findSrcNameInDefMap v = do
+            defSet <- M.lookup v dm
+            bs     <- mapM (flip IM.lookup bm) $ IS.toList defSet
+            msum (map (findSrcName v) bs)
 
       checkPU _ = mempty
   let reports = map checkPU (universeBi pf'')
@@ -447,8 +461,9 @@ checkArrayUse pf = do
   return $ mconcat reports
 
 findSrcName :: forall a. Data a => F.Name -> F.Block (F.Analysis a) -> Maybe F.Name
-findSrcName v b = listToMaybe [ F.srcName e | e@(F.ExpValue _ _ F.ValVariable{}) <- universeBi b :: [F.Expression (F.Analysis a)]
-                                            , F.varName e == v ]
+findSrcName v b = listToMaybe
+  [ F.srcName e | e@(F.ExpValue _ _ F.ValVariable{}) <- universeBi b :: [F.Expression (F.Analysis a)]
+                , F.varName e == v ]
 
 instance Describe CheckArrayReport where
   describeBuilder (CheckArrayReport {..})
