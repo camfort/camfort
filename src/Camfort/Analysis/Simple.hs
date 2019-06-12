@@ -320,6 +320,9 @@ instance Monoid CheckArrayReport where
   mempty = CheckArrayReport [] []
   mappend = (SG.<>)
 
+-- Look at array subscripting, especially with regard to order of
+-- indices and perhaps whether there is a missing data dependency on
+-- an index variable (e.g. due to copy/paste error).
 checkArrayUse :: forall a. Data a => F.ProgramFile a -> PureAnalysis String () CheckArrayReport
 checkArrayUse pf = do
   let F.ProgramFile F.MetaInfo { F.miFilename = file } _ = pf
@@ -338,22 +341,17 @@ checkArrayUse pf = do
           bedges = F.genBackEdgeMap (F.dominators gr) $ F.bbgrGr gr
           ivmap  = F.genInductionVarMapByASTBlock bedges gr
           divmap = F.genDerivedInductionMap bedges gr
-          -- lnmap (loop-node map) maps loop-header nodes to body node sets
-          lnmap  = F.genLoopNodeMap bedges $ F.bbgrGr gr
-          -- loop-header map, inversion of loop-node map (lnmap)
-          -- maps body nodes to loop-header nodes
-          lhmap  = IM.fromListWith IS.union [ (v, IS.singleton k) | (k, vs) <- IM.toList lnmap, v <- IS.toList vs ]
           rdmap  = F.reachingDefinitions dm gr
           flFrom = tc . grev $ F.genFlowsToGraph bm dm gr rdmap
 
           blocks :: [F.Block (F.Analysis a)]
           blocks = F.programUnitBody pu
 
+          nestedIdx = [ (ivars, (F.getName pu, atSpannedInFile file ss)) | (ivars, ss) <- getNestedIdx [] blocks ]
+
           -- find subscripts where the order of indices doesn't match
           -- the order of introduction of induction variables by
           -- nested do-loops.
-          nestedIdx = [ (ivars, (F.getName pu, atSpannedInFile file ss)) | (ivars, ss) <- getNestedIdx [] blocks ]
-
           getNestedIdx :: [F.Name] -> [F.Block (F.Analysis a)] -> [([String], F.SrcSpan)]
           getNestedIdx _ [] = []
           getNestedIdx vs (b@(F.BlDo _ _ _ _ _ _ body _):bs)
@@ -382,9 +380,9 @@ checkArrayUse pf = do
           -- control-flow depends on it instead of needing it to be
           -- directly used by a subscript expression.
           getMissingUse :: forall a. Data a => [String] -> F.Block (F.Analysis a) -> [([String], F.SrcSpan)]
-          getMissingUse excls (F.BlDo _ _ _ _ _ _ bs _) = concatMap (getMissingUse excls) bs
+          getMissingUse excls (F.BlDo _ _ _ _ _ _ bs _)      = concatMap (getMissingUse excls) bs
           getMissingUse excls (F.BlDoWhile _ _ _ _ _ _ bs _) = concatMap (getMissingUse excls) bs
-          getMissingUse excls (F.BlForall _ _ _ _ _ bs _) = concatMap (getMissingUse excls) bs
+          getMissingUse excls (F.BlForall _ _ _ _ _ bs _)    = concatMap (getMissingUse excls) bs
           getMissingUse excls b@(F.BlIf F.Analysis{F.insLabel = Just i} _ _ _ mes bss _)
             -- check If statement conditions
             | any (eligible i (length excls)) es = bads ++ rest
@@ -394,19 +392,19 @@ checkArrayUse pf = do
               -- find any induction variables that are referenced by If-Elseif expressions
               excl' = concatMap getExcludes (universeBi es :: [F.Expression (F.Analysis a)])
               rest = concatMap (getMissingUse (excls ++ excl')) $ concat bss
-              bads = getMissingUse' excls b
+              bads = map (fmap (const (F.getSpan e))) $ getMissingUse' excls b
           getMissingUse excls b@(F.BlCase F.Analysis{F.insLabel = Just i} _ _ _ e _ bss _)
             -- check Case statement scrutinee
             | eligible i (length excls) e = bads ++ rest
             | otherwise                   = rest
             where
               rest = concatMap (getMissingUse (excls ++ getExcludes e)) $ concat bss
-              bads = getMissingUse' excls b
+              bads = map (fmap (const (F.getSpan e))) $ getMissingUse' excls b
           getMissingUse excls b@(F.BlStatement F.Analysis{F.insLabel = Just i} _ _ st)
             | eligible i (length excls) st = getMissingUse' excls b
             | otherwise                    = []
-          getMissingUse _ F.BlInterface{} = []
-          getMissingUse _ F.BlComment{} = []
+          getMissingUse _ F.BlInterface{}  = []
+          getMissingUse _ F.BlComment{}    = []
 
           getMissingUse' :: forall a. Data a => [F.Name] -> F.Block (F.Analysis a) -> [([F.Name], F.SrcSpan)]
           getMissingUse' excls b
@@ -460,6 +458,7 @@ checkArrayUse pf = do
 
   return $ mconcat reports
 
+-- Look through a piece of AST for the source name of a given var name.
 findSrcName :: forall a. Data a => F.Name -> F.Block (F.Analysis a) -> Maybe F.Name
 findSrcName v b = listToMaybe
   [ F.srcName e | e@(F.ExpValue _ _ F.ValVariable{}) <- universeBi b :: [F.Expression (F.Analysis a)]
