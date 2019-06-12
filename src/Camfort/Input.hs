@@ -57,7 +57,7 @@ type AnalysisProgram e w m a b = a -> AnalysisT e w m b
 -- | An 'AnalysisRunner' is a function to run an 'AnalysisProgram' in a
 -- particular way. Produces a final result of type @r@.
 type AnalysisRunner e w m a b r =
-  AnalysisProgram e w m a b -> LogOutput m -> LogLevel -> ModFiles -> [(ProgramFile, SourceText)] -> m r
+  AnalysisProgram e w m a b -> LogOutput m -> LogLevel -> Bool -> ModFiles -> [(ProgramFile, SourceText)] -> m r
 
 --------------------------------------------------------------------------------
 --  Simple runners
@@ -68,7 +68,7 @@ type AnalysisRunner e w m a b r =
 runPerFileAnalysis
   :: (Monad m, Describe e, Describe w)
   => AnalysisRunner e w m ProgramFile b [AnalysisReport e w b]
-runPerFileAnalysis program logOutput logLevel modFiles =
+runPerFileAnalysis program logOutput logLevel snippets modFiles =
   traverse (\pf ->
     runAnalysisT
       (F.pfGetFilename pf)
@@ -82,7 +82,7 @@ runPerFileAnalysis program logOutput logLevel modFiles =
 runMultiFileAnalysis
   :: (Monad m, Describe e, Describe w)
   => AnalysisRunner e w m [ProgramFile] b (AnalysisReport e w b)
-runMultiFileAnalysis program logOutput logLevel modFiles
+runMultiFileAnalysis program logOutput logLevel snippets modFiles
   = runAnalysisT "<unknown>" logOutput logLevel modFiles . program . map fst
 
 --------------------------------------------------------------------------------
@@ -120,9 +120,9 @@ compilePerFile analysisName inSrc outSrc =
 describePerFileAnalysis
   :: (MonadIO m, Describe r, ExitCodeOfReport r, Describe w, Describe e)
   => Text -> AnalysisRunner e w m ProgramFile r Int
-describePerFileAnalysis analysisName program logOutput logLevel modFiles pfsTexts = do
-  reports <- runPerFileAnalysis program logOutput logLevel modFiles pfsTexts
-  mapM_ (putDescribeReport analysisName (Just logLevel)) reports
+describePerFileAnalysis analysisName program logOutput logLevel snippets modFiles pfsTexts = do
+  reports <- runPerFileAnalysis program logOutput logLevel snippets modFiles pfsTexts
+  mapM_ (putDescribeReport analysisName (Just logLevel) snippets) reports
   return $ exitCodeOfSet reports
 
 -- | Accepts an analysis program for multiple input files which produces a
@@ -133,8 +133,8 @@ doRefactor
   => Text
   -> FileOrDir -> FilePath
   -> AnalysisRunner e w IO [ProgramFile] (r, [Either e' ProgramFile]) Int
-doRefactor analysisName inSrc outSrc program logOutput logLevel modFiles pfsTexts = do
-  report <- runMultiFileAnalysis program logOutput logLevel modFiles pfsTexts
+doRefactor analysisName inSrc outSrc program logOutput logLevel snippets modFiles pfsTexts = do
+  report <- runMultiFileAnalysis program logOutput logLevel snippets modFiles pfsTexts
 
   let
     -- Get the user-facing output from the report
@@ -142,7 +142,7 @@ doRefactor analysisName inSrc outSrc program logOutput logLevel modFiles pfsText
     -- Get the refactoring result form the report
     resultFiles = report ^? arResult . _ARSuccess . _2
 
-  putDescribeReport analysisName (Just logLevel) report'
+  putDescribeReport analysisName (Just logLevel) snippets report'
 
   -- If the refactoring succeeded, change the files
   case resultFiles of
@@ -157,8 +157,8 @@ doRefactorAndCreate
   => Text
   -> FileOrDir -> FilePath
   -> AnalysisRunner e w IO [ProgramFile] ([ProgramFile], [ProgramFile]) Int
-doRefactorAndCreate analysisName inSrc outSrc program logOutput logLevel modFiles pfsTexts = do
-  report <- runMultiFileAnalysis program logOutput logLevel modFiles pfsTexts
+doRefactorAndCreate analysisName inSrc outSrc program logOutput logLevel snippets modFiles pfsTexts = do
+  report <- runMultiFileAnalysis program logOutput logLevel snippets modFiles pfsTexts
 
   let
     -- Get the user-facing output from the report
@@ -166,7 +166,7 @@ doRefactorAndCreate analysisName inSrc outSrc program logOutput logLevel modFile
     -- Get the refactoring result form the report
     resultFiles = report ^? arResult . _ARSuccess
 
-  putDescribeReport analysisName (Just logLevel) report'
+  putDescribeReport analysisName (Just logLevel) snippets report'
 
   case resultFiles of
     -- If the refactoring succeeded, change the files
@@ -226,8 +226,8 @@ runThen
   :: (Monad m)
   => AnalysisRunner e w m a b r -> (r -> m r')
   -> AnalysisRunner e w m a b r'
-runThen runner withResult program output level modFiles programFiles =
-  runner program output level modFiles programFiles >>= withResult
+runThen runner withResult program output level snippets modFiles programFiles =
+  runner program output level snippets modFiles programFiles >>= withResult
 
 --------------------------------------------------------------------------------
 --  Misc

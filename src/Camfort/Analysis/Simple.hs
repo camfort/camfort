@@ -392,7 +392,7 @@ checkArrayUse pf = do
               -- find any induction variables that are referenced by If-Elseif expressions
               excl' = concatMap getExcludes (universeBi es :: [F.Expression (F.Analysis a)])
               rest = concatMap (getMissingUse (excls ++ excl')) $ concat bss
-              bads = map (fmap (const (F.getSpan e))) $ getMissingUse' excls b
+              bads = getMissingUse' excls b
           getMissingUse excls b@(F.BlCase F.Analysis{F.insLabel = Just i} _ _ _ e _ bss _)
             -- check Case statement scrutinee
             | eligible i (length excls) e = bads ++ rest

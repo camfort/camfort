@@ -332,9 +332,26 @@ describeReport analysisName level report = Builder.toLazyText . execWriter $ do
 
 putDescribeReport
   :: (Describe e, Describe w, Describe r, MonadIO m)
-  => Text -> Maybe LogLevel -> AnalysisReport e w r -> m ()
-putDescribeReport analysisName level = liftIO . Lazy.putStrLn . describeReport analysisName level
+  => Text -> Maybe LogLevel -> Bool -> AnalysisReport e w r -> m ()
+putDescribeReport analysisName level snippets report = do
+  let output = describeReport analysisName level report
+  output' <- if not snippets then return output else insertSnippets output
+  liftIO . Lazy.putStrLn $ output'
 
+-- Insert snippets of code where source spans are referenced.
+insertSnippets :: MonadIO m => Lazy.Text -> m Lazy.Text
+insertSnippets output = do
+  let findLines n cnt str
+        | n > 0, ls <- Lazy.lines str, ls'@(_:_) <- drop (n-1) ls = Just (take cnt ls')
+        | otherwise                                               = Nothing
+  let doLine l
+        | Just (ParsedOrigin fn (l1, _) (l2, _)) <- parseOrigin (Lazy.unpack l) = do
+            f <- liftIO $ Lazy.readFile fn
+            case findLines l1 (l2 - l1 + 1) f of
+              Just fLines -> return $ [l, Lazy.empty] ++ fLines ++ [Lazy.empty]
+              Nothing     -> return [l]
+        | otherwise = return [l]
+  Lazy.unlines <$> concat <$> mapM doLine (Lazy.lines output)
 
 --------------------------------------------------------------------------------
 --  Running Analyses

@@ -45,6 +45,7 @@ main = do
       , ceIncludeDir     = includeDir ro
       , ceExcludeFiles   = getExcludes ro
       , ceLogLevel       = logLevel lo
+      , ceSourceSnippets = snippets lo
       , ceFortranVersion = fortranVersion ro
       }
 
@@ -173,6 +174,7 @@ data ReadOptions = ReadOptions
 
 data LogOptions = LogOptions
   { logLevel :: LogLevel
+  , snippets :: Bool
   }
 
 
@@ -300,11 +302,12 @@ readOptions = fmap ReadOptions
 
 
 logOptions :: Parser LogOptions
-logOptions = LogOptions <$> logLevelOption
+logOptions = LogOptions <$> logLevelOption <*> snippetsOption
   where
     logLevelOption =
       let toLogLevel debug = if debug then LogDebug else LogInfo
       in toLogLevel <$> switch (long "debug" <> help "enable debug output")
+    snippetsOption = switch (long "snippets" <> help "show code snippets")
 
 
 -- | User must specify either an ouput file, or say that the file

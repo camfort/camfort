@@ -138,6 +138,7 @@ data CamfortEnv =
   , ceIncludeDir     :: Maybe FileOrDir
   , ceExcludeFiles   :: [Filename]
   , ceLogLevel       :: LogLevel
+  , ceSourceSnippets :: Bool
   , ceFortranVersion :: Maybe FortranVersion
   }
 
@@ -190,7 +191,7 @@ runFunctionality description program runner mfCompiler mfInput env = do
 
   modFiles <- getModFiles incDir
   pfsTexts <- readParseSrcDir (ceFortranVersion env) modFiles (ceInputSources env) (ceExcludeFiles env)
-  runner program (logOutputStd True) (ceLogLevel env) modFiles pfsTexts
+  runner program (logOutputStd True) (ceLogLevel env) (ceSourceSnippets env) modFiles pfsTexts
 
 
 
@@ -425,14 +426,14 @@ unitsInfer showAST =
 describePerFileAnalysisShowASTUnitInfo
   :: (MonadIO m, Describe w, Describe e)
   => AnalysisRunner e w m ProgramFile InferenceResult Int
-describePerFileAnalysisShowASTUnitInfo program logOutput logLevel modFiles pfsTexts = do
-  reports <- runPerFileAnalysis program logOutput logLevel modFiles pfsTexts
+describePerFileAnalysisShowASTUnitInfo program logOutput logLevel snippets modFiles pfsTexts = do
+  reports <- runPerFileAnalysis program logOutput logLevel snippets modFiles pfsTexts
   flip mapM_ reports $ \ r -> do
     case r of
       AnalysisReport _ _ (ARSuccess (Inferred (InferenceReport pfUA eVars))) ->
         liftIO . pp . fmap (unitInfo . FA.prevAnnotation) . FA.rename $ pfUA
       _ -> pure ()
-    putDescribeReport "unit inference" (Just logLevel) r
+    putDescribeReport "unit inference" (Just logLevel) snippets r
   return $ exitCodeOfSet reports
 
 {-  TODO: remove if not needed

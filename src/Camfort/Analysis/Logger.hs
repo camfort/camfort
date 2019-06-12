@@ -51,6 +51,8 @@ module Camfort.Analysis.Logger
   , (<>)
   -- * Messages
   , Origin(..)
+  , ParsedOrigin(..)
+  , parseOrigin
   , oFile
   , oSpan
   , LogLevel(..)
@@ -100,6 +102,7 @@ import qualified Data.Text.Lazy                 as Lazy
 import           Data.Text.Lazy.Builder         (Builder)
 import qualified Data.Text.Lazy.Builder         as Builder
 
+import           Text.Read                      (readMaybe)
 import qualified Language.Fortran.Util.Position as F
 
 --------------------------------------------------------------------------------
@@ -168,6 +171,30 @@ instance Describe Origin where
   describeBuilder origin =
     "at [" <> Builder.fromString (origin ^. oFile) <>
     ", " <> describeBuilder (origin ^. oSpan) <> "]"
+
+data ParsedOrigin = ParsedOrigin FilePath (Int, Int) (Int, Int)
+  deriving (Show, Eq, Ord)
+
+-- | Extract information about filename and source span from a string.
+parseOrigin :: String -> Maybe ParsedOrigin
+parseOrigin str
+  | not (null filename)
+  , Just (pos1, rest) <- parsePos comma
+  , Just (pos2, _)    <- parsePos rest = Just (ParsedOrigin filename pos1 pos2)
+  | otherwise                          = Nothing
+  where
+    lbrack            = dropWhile (/= '[') str
+    (filename, comma) = break (==',') (drop 1 lbrack)
+
+parsePos :: String -> Maybe ((Int, Int), String)
+parsePos str
+  | Just l <- readMaybe line
+  , Just c <- readMaybe col  = Just ((l, c), rest)
+  | otherwise                = Nothing
+  where
+    lparen        = dropWhile (/= '(') str
+    (line, colon) = break (== ':') (drop 1 lparen)
+    (col, rest)   = span (/= ')') (drop 1 colon)
 
 -- | A logging level. At each logging level, only produce output at that level or lower.
 data LogLevel

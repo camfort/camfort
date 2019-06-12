@@ -205,6 +205,7 @@ testOn fp = do
     (check PROIdealized)
     (logOutputStd True)
     LogDebug
+    False
     mfs
     pfsSources
   return ()
