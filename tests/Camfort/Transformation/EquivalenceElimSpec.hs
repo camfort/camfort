@@ -59,6 +59,7 @@ readActual argumentFilename = do
         , ceIncludeDir = Nothing
         , ceExcludeFiles = []
         , ceLogLevel = LogInfo
+        , ceSourceSnippets = False
         , ceFortranVersion = Nothing
         }
 
