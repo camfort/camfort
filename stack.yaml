@@ -4,9 +4,11 @@ extra-package-dbs: []
 
 packages:
 - '.'
-- '../fortran-src'
 
 extra-deps:
+- url: https://github.com/camfort/fortran-src/archive/version-0.3.0.tar.gz
+  size: 178875
+  sha256: bb82971f597dce3dbdfa85426724cb4fa307e77ff8ea84b8f284ba9efb286e16
 - hackage: syz-0.2.0.0@sha256:7307acb8f6ae7720e7e235c974281ecee912703c1394ebcac19caf83d70bb492,2345
   pantry-tree:
     size: 256
