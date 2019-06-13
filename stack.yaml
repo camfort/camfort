@@ -1,18 +1,39 @@
+resolver: lts-13.6
 flags: {}
 extra-package-dbs: []
+
 packages:
 - '.'
-- location: ../fortran-src
-  extra-dep: true
-- location:
-    git: https://github.com/camfort/verifiable-expressions.git
-    commit: 929513e98f519c33405c29b9d86882811cf5a3bc
-  extra-dep: true
-- location:
-    git: https://github.com/camfort/haskell-partial-order.git
-    commit: 91cc6beee2e7f94e9356f02ab1c08a7877b19e37
-  extra-dep: true
+- '../fortran-src'
+
 extra-deps:
-- syz-0.2.0.0
-- vinyl-0.8.1.1
-resolver: lts-13.6
+- hackage: syz-0.2.0.0@sha256:7307acb8f6ae7720e7e235c974281ecee912703c1394ebcac19caf83d70bb492,2345
+  pantry-tree:
+    size: 256
+    sha256: a5438cf5c8f701d8e2aa6543ca3d591224b83dcc379063da5ed68727da0bb1ad
+- hackage: vinyl-0.8.1.1@sha256:7983e5533f34cacf501f19d499942514484297817f1c72412e28e4013c496655,3378
+  pantry-tree:
+    size: 1314
+    sha256: 686b82616e989a0bb4f76c182befb1dcdd542d2a4201ebf8720fb2602defc7eb
+- size: 28502
+  url: https://github.com/camfort/verifiable-expressions/archive/929513e98f519c33405c29b9d86882811cf5a3bc.tar.gz
+  cabal-file:
+    size: 1789
+    sha256: 69ca68586ace9a94442e66910263deada7d950d2dd9ea9bf78cd59c45357efdd
+  name: verifiable-expressions
+  version: 0.5.0
+  sha256: 229d2369724ecf07bb4347c899abec9b17bdabf42740e609495c0a9dfb8ccbe2
+  pantry-tree:
+    size: 1590
+    sha256: 3b8439720a201f3f836561727bf1f1786f8988ec564e2718c69101c960163495
+- size: 6670
+  url: https://github.com/camfort/haskell-partial-order/archive/91cc6beee2e7f94e9356f02ab1c08a7877b19e37.tar.gz
+  cabal-file:
+    size: 1927
+    sha256: 8d8484e97b759b410f8a1baec492fc0b193d09b99da60c53085fd51b62fa4bd3
+  name: partial-order
+  version: 0.1.2.1
+  sha256: 1c14541fdc1d0d9fd2bc42ed9b29a409088e4a3a8afd074333d4ce384f6dee0c
+  pantry-tree:
+    size: 475
+    sha256: e0df46cd148b11f4628357623683081faadc14d877dc0e0227af6f335824f71e
