@@ -1,6 +1,16 @@
-## 0.906 (???)
+## 0.906 (June 13, 2019)
 
-## 0.905 (18 May, 2018)
+* Update to new fortran-src version 0.3.0.
+* Add array-check, alloc-check, use-check, fp-check and implicit-none features.
+  * A collection of sanity checks on Fortran code looking for common issues, possible problems or potential inefficiencies.
+* Introduce a divide-and-conquer methodology for solving units-inference problems, reducing the size of the matrices and taking advantage of SMP where available.
+* Treat constant-expressions and parameter variables as literals, for units-inference purposes, making it easier to retrofit units annotations onto existing programs.
+* Add 'units-infer --show-ast' feature, which decorates the displayed AST (internal data structure) with units information on each expression.
+* Made assorted efficiency improvements to the units solver and other features, especially for large projects with many files.
+* Add 'units-check --dump-mod-file' feature that lets you view an 'fsmod' file's contents with regard to units info.
+* Allow override of Fortran version used by parser using -F option.
+
+## 0.905 (May 18, 2018)
 
 * Greatly improved units-of-measure support
 * Separate verification of modules
