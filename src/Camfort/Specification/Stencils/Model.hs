@@ -61,7 +61,7 @@ import           Data.SBV
 import           Data.Data
 import           Data.List (sortBy, nub)
 import           Data.Maybe (fromJust)
-import qualified Data.PartialOrd as PO
+import qualified Camfort.Specification.Stencils.PartialOrd as PO
 
 import qualified Camfort.Helpers.Vec as V
 import System.IO.Unsafe
