@@ -7,8 +7,8 @@ packages:
 
 extra-deps:
 - url: https://github.com/camfort/fortran-src/archive/version-0.3.0.tar.gz
-  size: 178875
-  sha256: bb82971f597dce3dbdfa85426724cb4fa307e77ff8ea84b8f284ba9efb286e16
+  size: 178856
+  sha256: 1645707d9d6f2255eba578fae039a55d39792764028589fbb0e3b3e6fc404f50
 - hackage: syz-0.2.0.0@sha256:7307acb8f6ae7720e7e235c974281ecee912703c1394ebcac19caf83d70bb492,2345
   pantry-tree:
     size: 256
