@@ -129,9 +129,12 @@ main = do
     runCommand (CmdFPCheck ro lo)         = runRO ro lo fpCheck
     runCommand (CmdUseCheck ro lo)        = runRO ro lo useCheck
     runCommand (CmdArrayCheck ro lo)      = runRO ro lo arrayCheck
+    runCommand (CmdBasicChecks ro lo)     = maximum <$> mapM (runRO ro lo) basicChecks
     runCommand (CmdInit dir)              = camfortInitialize dir >> return 0
     runCommand CmdTopVersion              = displayVersion >> return 0
 
+basicChecks :: [CamfortEnv -> IO Int]
+basicChecks = [allocCheck, arrayCheck, fpCheck, implicitNone False, useCheck]
 
 -- | Commands supported by CamFort.
 data Command = CmdCount ReadOptions LogOptions
@@ -159,6 +162,7 @@ data Command = CmdCount ReadOptions LogOptions
              | CmdFPCheck ReadOptions LogOptions
              | CmdUseCheck ReadOptions LogOptions
              | CmdArrayCheck ReadOptions LogOptions
+             | CmdBasicChecks ReadOptions LogOptions
              | CmdInit FilePath
              | CmdTopVersion
 
@@ -423,6 +427,7 @@ cmdAllocCheck      = fmap CmdAllocCheck readOptions <*> logOptions
 cmdFPCheck         = fmap CmdFPCheck readOptions <*> logOptions
 cmdUseCheck        = fmap CmdUseCheck readOptions <*> logOptions
 cmdArrayCheck      = fmap CmdArrayCheck readOptions <*> logOptions
+cmdBasicChecks     = fmap CmdBasicChecks readOptions <*> logOptions
 
 cmdRefactCommon, cmdRefactDead, cmdRefactEquivalence :: Parser Command
 cmdRefactCommon      = fmap CmdRefactCommon refactOptions
@@ -513,6 +518,9 @@ analysesParser = commandsParser "Analysis Commands" analysesCommands
       , ("array-check",
           [],
           cmdArrayCheck, "check usage of arrays")
+      , ("basic-checks",
+          [],
+          cmdBasicChecks, "run a series of basic checks: alloc, array, fp, implicit-none, use")
       ]
 
 
