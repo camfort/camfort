@@ -341,6 +341,7 @@ putDescribeReport analysisName level snippets report = do
 -- Insert snippets of code where source spans are referenced.
 insertSnippets :: MonadIO m => Lazy.Text -> m Lazy.Text
 insertSnippets output = do
+  let maxLines = 5
   let findLines n cnt str
         | n > 0, ls <- Lazy.lines str, ls'@(_:_) <- drop (n-1) ls = Just (take cnt ls')
         | otherwise                                               = Nothing
@@ -348,7 +349,10 @@ insertSnippets output = do
         | Just (ParsedOrigin fn (l1, _) (l2, _)) <- parseOrigin (Lazy.unpack l) = do
             f <- liftIO $ Lazy.readFile fn
             case findLines l1 (l2 - l1 + 1) f of
-              Just fLines -> return $ [l, Lazy.empty] ++ fLines ++ [Lazy.empty]
+              Just fLines -> do
+                let fLines' | null (drop maxLines fLines) = fLines
+                            | otherwise = take maxLines fLines ++ ["[...]"]
+                return $ [l, Lazy.empty] ++ fLines' ++ [Lazy.empty]
               Nothing     -> return [l]
         | otherwise = return [l]
   Lazy.unlines <$> concat <$> mapM doLine (Lazy.lines output)
