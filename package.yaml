@@ -188,6 +188,6 @@ executable:
   dependencies:
     - base >= 4.6 && < 5
     - directory >= 1.2 && < 2
-    - optparse-applicative >= 0.14 && < 0.15
+    - optparse-applicative >= 0.14 && < 0.16
     - fortran-src >= 0.3 && < 0.4
     - camfort
