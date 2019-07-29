@@ -28,8 +28,8 @@ RUN apt-get update && \
     apt-get install -y libflint-2.5.2 \
                        liblapack3 \
                        libgf2x1 \
-                       libmpfr4 \
-                       libntl27 \
+                       libmpfr6 \
+                       libntl35 \
                        libblas3 \
                        libtinfo5 && \
     rm -rf /var/lib/apt/lists/* && \
