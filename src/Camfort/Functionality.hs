@@ -328,7 +328,7 @@ ddtCompile env = do
   -- Write the mod files out
   forM_ modFiles $ \ modFile -> do
      let mfname = replaceExtension (FM.moduleFilename modFile) FM.modFileSuffix
-     LB.writeFile mfname (FM.encodeModFile modFile)
+     LB.writeFile mfname (FM.encodeModFile [modFile])
   return 0
 
 {- Units feature -}
@@ -399,9 +399,10 @@ unitsDump _ env = do
     Left msg -> do
       putStrLn $ modFileName ++ ": Error: " ++ show msg
       pure 1
-    Right modFile -> do
-      putStrLn $ modFileName ++ ": successfully parsed precompiled file."
-      putStrLn . fromMaybe "unable to find units info" $ dumpModFileCompiledUnits modFile
+    Right modFiles -> do
+      forM_ modFiles $ \ modFile -> do
+        putStrLn $ modFileName ++ ": successfully parsed summary file."
+        putStrLn . fromMaybe "unable to find units info" $ dumpModFileCompiledUnits modFile
       pure 0
 
 unitsCheck :: LiteralsOpt -> CamfortEnv -> IO Int
@@ -466,7 +467,7 @@ unitsCompile opts env = do
   -- Write the mod files out
   forM_ modFiles $ \modFile -> do
      let mfname = replaceExtension (FM.moduleFilename modFile) FM.modFileSuffix
-     LB.writeFile mfname (FM.encodeModFile modFile)
+     LB.writeFile mfname (FM.encodeModFile [modFile])
   return 0
 
 unitsSynth :: AnnotationType -> FileOrDir -> LiteralsOpt -> CamfortEnv -> IO Int

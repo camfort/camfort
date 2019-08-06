@@ -79,18 +79,17 @@ getModFiles :: FilePath -> IO FM.ModFiles
 getModFiles dir = do
   -- Figure out the camfort mod files and parse them.
   modFileNames <- (filter isModFile . map (dir </>)) <$> listDirectory dir
-  mods <- forM modFileNames $ \modFileName -> do
+  mods <- fmap concat . forM modFileNames $ \modFileName -> do
     modData <- LB.readFile modFileName
     let eResult = FM.decodeModFile modData
     case eResult of
       Left msg -> do
         putStrLn $ modFileName ++ ": Error: " ++ show msg
-        pure Nothing
-      Right modFile -> do
-        pure . pure $ modFile
-  let mods' = catMaybes mods
-  putStrLn $ "Successfully parsed " ++ show (length mods) ++ " precompiled file(s)."
-  pure mods'
+        pure []
+      Right modFiles -> do
+        pure modFiles
+  putStrLn $ "Successfully parsed " ++ show (length mods) ++ " summary file(s)."
+  pure mods
 
   where
     isModFile :: String -> Bool
