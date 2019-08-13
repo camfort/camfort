@@ -342,7 +342,7 @@ checkArrayUse pf = do
           ivmap  = F.genInductionVarMapByASTBlock bedges gr
           divmap = F.genDerivedInductionMap bedges gr
           rdmap  = F.reachingDefinitions dm gr
-          flFrom = tc . grev $ F.genFlowsToGraph bm dm gr rdmap
+          flFrom = grev $ F.genFlowsToGraph bm dm gr rdmap
 
           blocks :: [F.Block (F.Analysis a)]
           blocks = F.programUnitBody pu
@@ -412,7 +412,7 @@ checkArrayUse pf = do
             -- obtain the live induction variables at this program point
             , Just ivarSet      <- IM.lookup i ivmap
             -- find the definitions that flowed into this program point
-            , flFroms           <- suc flFrom i
+            , flFroms           <- drop 1 $ bfs i flFrom
             -- get their AST Blocks
             , Just flFromBlocks <- sequence $ map (flip IM.lookup bm) flFroms
             -- find out what variables they define
