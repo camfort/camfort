@@ -340,9 +340,9 @@ checkArrayUse pf = do
           F.Analysis { F.bBlocks = Just gr } = F.getAnnotation pu
           bedges = F.genBackEdgeMap (F.dominators gr) $ F.bbgrGr gr
           ivmap  = F.genInductionVarMapByASTBlock bedges gr
-          divmap = F.genDerivedInductionMap bedges gr
           rdmap  = F.reachingDefinitions dm gr
-          flFrom = grev $ F.genFlowsToGraph bm dm gr rdmap
+          flTo   = F.genFlowsToGraph bm dm gr rdmap
+          flFrom = grev flTo
 
           blocks :: [F.Block (F.Analysis a)]
           blocks = F.programUnitBody pu
@@ -390,7 +390,7 @@ checkArrayUse pf = do
             where
               es = catMaybes mes
               -- find any induction variables that are referenced by If-Elseif expressions
-              excl' = concatMap getExcludes (universeBi es :: [F.Expression (F.Analysis a)])
+              excl' = concatMap (getExcludes b) (universeBi es :: [F.Expression (F.Analysis a)])
               rest = concatMap (getMissingUse (excls ++ excl')) $ concat bss
               bads = getMissingUse' excls b
           getMissingUse excls b@(F.BlCase F.Analysis{F.insLabel = Just i} _ _ _ e _ bss _)
@@ -398,7 +398,7 @@ checkArrayUse pf = do
             | eligible i (length excls) e = bads ++ rest
             | otherwise                   = rest
             where
-              rest = concatMap (getMissingUse (excls ++ getExcludes e)) $ concat bss
+              rest = concatMap (getMissingUse (excls ++ getExcludes b e)) $ concat bss
               bads = map (fmap (const (F.getSpan e))) $ getMissingUse' excls b
           getMissingUse excls b@(F.BlStatement F.Analysis{F.insLabel = Just i} _ _ st)
             | eligible i (length excls) st = getMissingUse' excls b
@@ -441,10 +441,18 @@ checkArrayUse pf = do
           -- expression depends on any induction variable and
           -- therefore can be used to exclude that induction variable
           -- from the 'missing' list.
-          getExcludes e
-            | Just ei <- F.insLabel (F.getAnnotation e)
-            , Just (F.IELinear n _ _) <- IM.lookup ei divmap = [n]
-          getExcludes _ = []
+          getExcludes b e
+            | Just i            <- F.insLabel (F.getAnnotation b)
+            -- obtain the live induction variables at this program point
+            , Just ivarSet      <- IM.lookup i ivmap
+            -- find the definitions that flowed into this program point
+            , flFroms           <- drop 1 $ bfs i flFrom
+            -- get their AST Blocks
+            , Just flFromBlocks <- sequence $ map (flip IM.lookup bm) flFroms
+            -- find out what variables they define
+            , flFromBlockDefSet <- S.fromList $ concatMap F.blockVarDefs flFromBlocks
+            = S.toList (ivarSet `S.intersection` flFromBlockDefSet)
+            | otherwise = []
 
           -- look through the DefMap and BlockMap for instances of
           -- variable v in order to retrieve its 'source name'.
