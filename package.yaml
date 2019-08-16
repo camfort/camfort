@@ -125,9 +125,6 @@ library:
     - matrix >= 0.2.2 && < 0.4
     - hmatrix >= 0.15 && < 0.20
     - mtl >= 2.1 && < 2.3
-    - writer-cps-morph >= 0.1.0.2
-    - writer-cps-transformers >= 0.1.1.2
-    - writer-cps-mtl >= 0.1.1.5
     - text >= 0.11.2.3 && < 1.3
     - array >= 0.4 && < 0.6
     - directory >= 1.2 && < 1.4

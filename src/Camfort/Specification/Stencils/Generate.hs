@@ -35,7 +35,7 @@ module Camfort.Specification.Stencils.Generate
 
 import           Control.Monad (void, when, zipWithM)
 import           Control.Monad.State.Strict (State, get, put, runState)
-import           Control.Monad.Writer.CPS (WriterT, runWriterT, tell)
+import           Control.Monad.Writer.Lazy (WriterT, runWriterT, tell)
 import           Control.Monad.Reader (ReaderT, runReaderT, asks)
 import           Data.Data (Data)
 import           Data.Foldable (foldrM)

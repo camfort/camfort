@@ -40,8 +40,8 @@ import           Control.Applicative
 import           Control.Arrow ((***), (|||), first, second, (&&&))
 import           Control.Lens
 import           Control.Monad
-import           Control.Monad.RWS.CPS
-import           Control.Monad.Writer.CPS
+import           Control.Monad.RWS.Strict
+import           Control.Monad.Writer.Strict
 import           Data.Binary (Binary, decodeOrFail, encode)
 import qualified Data.ByteString.Lazy.Char8 as LB
 import           Data.Data

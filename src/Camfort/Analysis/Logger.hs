@@ -85,15 +85,10 @@ import           Control.Lens
 import           Control.Monad.Except
 import           Control.Monad.Morph
 import           Control.Monad.Reader
-import qualified Control.Monad.RWS              as Lazy
-import           Control.Monad.RWS.CPS
-import           Control.Monad.Trans.RWS.CPS.Morph ()
-import           Control.Monad.Trans.RWS.CPS.Internal (RWST(..))
+import           Control.Monad.RWS
 import qualified Control.Monad.State            as Lazy
 import           Control.Monad.State.Strict
-import qualified Control.Monad.Writer           as Lazy
-import           Control.Monad.Writer.CPS
-import           Control.Monad.Trans.Writer.CPS.Morph ()
+import           Control.Monad.Writer
 import           Control.Monad.Fail
 
 import           Data.Text                      (Text)
@@ -366,9 +361,9 @@ instance MonadLogger e w m => MonadLogger e w (ExceptT e' m)
 instance MonadLogger e w m => MonadLogger e w (StateT s m)
 instance (MonadLogger e w m, Monoid w') => MonadLogger e w (WriterT w' m)
 instance MonadLogger e w m => MonadLogger e w (Lazy.StateT s m)
-instance (MonadLogger e w m, Monoid w') => MonadLogger e w (Lazy.WriterT w' m)
+-- instance (MonadLogger e w m, Monoid w') => MonadLogger e w (Lazy.WriterT w' m)
 instance (MonadLogger e w m, Monoid w') => MonadLogger e w (RWST r w' s m)
-instance (MonadLogger e w m, Monoid w') => MonadLogger e w (Lazy.RWST r w' s m)
+-- instance (MonadLogger e w m, Monoid w') => MonadLogger e w (Lazy.RWST r w' s m)
 
 --------------------------------------------------------------------------------
 --  'LoggerT' monad
@@ -426,15 +421,16 @@ instance (MonadState s m) => MonadState s (LoggerT e w m) where
 
 instance (MonadReader r m) => MonadReader r (LoggerT e w m) where
   ask = lift ask
-  local f (LoggerT m) | k <- runRWST m = LoggerT $ rwsT $ \e -> local f . k e
+  local f (LoggerT (RWST k)) = LoggerT $ RWST $ \e -> local f . k e
 
 instance (MonadWriter w' m) => MonadWriter w' (LoggerT e w m) where
   tell = lift . tell
-  listen (LoggerT m) | k <- runRWST m = LoggerT $ rwsT $ \e s -> do
+
+  listen (LoggerT (RWST k)) = LoggerT $ RWST $ \e s -> do
     ((x, w, s'), w') <- listen (k e s)
     return ((x, w'), w, s')
 
-  pass (LoggerT m) | k <- runRWST m = LoggerT $ rwsT $ \e s ->
+  pass (LoggerT (RWST k)) = LoggerT $ RWST $ \e s ->
     pass $ (\((x, f), w, s') -> ((x, w, s'), f)) <$> k e s
 
 instance (Monad m, Describe e, Describe w) =>
@@ -451,9 +447,10 @@ instance (Monad m, Describe e, Describe w) =>
 -- the resulting 'LoggerT' cannot output as it goes. It still collects logs to
 -- be inspected when it finishes.
 instance MFunctor (LoggerT e w) where
-  hoist f (LoggerT (RWST k)) = LoggerT ( RWST ( \e s w ->
+  hoist f (LoggerT (RWST k)) = LoggerT $ RWST $ \e s ->
     let e' = hoistEnv (const (return ())) e
-    in f (k e' s w) ) )
+    in f (k e' s)
+
 
 -- | A function to output logs in a particular monad @m@.
 data LogOutput m = LogOutput
@@ -520,7 +517,7 @@ runLoggerT sourceFile output logLevel (LoggerT action) = do
 -- | Change the error and warning types in a logger computation. To change the
 -- underlying monad use 'hoist'.
 mapLoggerT
-  :: (Monad m)
+  :: (Functor m)
   => (e -> e') -> (w -> w')
   -> LoggerT e w m a -> LoggerT e' w' m a
 mapLoggerT mapErr mapWarn (LoggerT x) = LoggerT (mapRWST mapInner x)

@@ -91,11 +91,11 @@ import           Control.Monad.Except
 import           Control.Monad.Morph
 import           Control.Monad.Reader
 import qualified Control.Monad.RWS              as Lazy
-import           Control.Monad.RWS.CPS
+import           Control.Monad.RWS
 import qualified Control.Monad.State            as Lazy
 import           Control.Monad.State.Strict
 import qualified Control.Monad.Writer           as Lazy
-import           Control.Monad.Writer.CPS
+import           Control.Monad.Writer
 import           Control.Monad.Fail
 
 import           Control.Lens
@@ -191,9 +191,9 @@ instance MonadAnalysis e w m => MonadAnalysis e w (ExceptT e' m)
 instance MonadAnalysis e w m => MonadAnalysis e w (StateT s m)
 instance (MonadAnalysis e w m, Monoid w') => MonadAnalysis e w (WriterT w' m)
 instance MonadAnalysis e w m => MonadAnalysis e w (Lazy.StateT s m)
-instance (MonadAnalysis e w m, Monoid w') => MonadAnalysis e w (Lazy.WriterT w' m)
+-- instance (MonadAnalysis e w m, Monoid w') => MonadAnalysis e w (Lazy.WriterT w' m)
 instance (MonadAnalysis e w m, Monoid w') => MonadAnalysis e w (RWST r w' s m)
-instance (MonadAnalysis e w m, Monoid w') => MonadAnalysis e w (Lazy.RWST r w' s m)
+-- instance (MonadAnalysis e w m, Monoid w') => MonadAnalysis e w (Lazy.RWST r w' s m)
 
 --------------------------------------------------------------------------------
 --  Combinators
