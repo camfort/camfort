@@ -39,6 +39,7 @@ import           Camfort.Specification.DerivedDataType.Parser (ddtParser, DDTSta
 import           Control.Applicative
 import           Control.Arrow ((***), (|||), first, second, (&&&))
 import           Control.Lens
+import           Control.DeepSeq
 import           Control.Monad
 import           Control.Monad.RWS.Strict
 import           Control.Monad.Writer.Strict
@@ -126,6 +127,7 @@ type SMap = M.Map (F.Name, Int) (S.Set Essence)
 -- | Info about a variable: source name, source filename, source span.
 data VInfo = VInfo { vSrcName :: F.Name, vFileName :: String, vSrcSpan :: FU.SrcSpan }
   deriving (Generic, Show, Eq)
+instance NFData VInfo
 instance Binary VInfo
 
 -- special ord instance compares by filename, source span and then name.
@@ -139,6 +141,7 @@ data Essence = Essence { essTypeName :: String            -- ^ specified type na
                        , essStarred  :: Bool              -- ^ is this essence 'starred'?
                        }
   deriving (Show, Generic)
+instance NFData Essence
 instance Binary Essence
 
 -- special eq instance: only compare type-name and labels
@@ -153,6 +156,7 @@ instance Ord Essence where
 data IndexError = IndexDupError String VInfo [Int]
                 | IndexOOBError String VInfo [Int]
   deriving (Show, Eq, Ord, Generic)
+instance NFData IndexError
 instance Binary IndexError
 
 -- | Variable(dim)s and any conflicting spec essences.
@@ -177,6 +181,7 @@ data DerivedDataTypeReport
                           , ddtrBDE   :: BadDimErrors
                           , ddtrCheck :: Bool }
   deriving Generic
+instance NFData DerivedDataTypeReport
 instance Binary DerivedDataTypeReport
 
 -- | These reports can be combined, e.g. from multiple files, and the

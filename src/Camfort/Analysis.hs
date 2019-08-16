@@ -1,3 +1,4 @@
+{-# LANGUAGE DeriveGeneric              #-}
 {-# LANGUAGE DefaultSignatures          #-}
 {-# LANGUAGE DeriveFunctor              #-}
 {-# LANGUAGE FlexibleContexts           #-}
@@ -97,6 +98,8 @@ import           Control.Monad.State.Strict
 import qualified Control.Monad.Writer           as Lazy
 import           Control.Monad.Writer
 import           Control.Monad.Fail
+import           Control.DeepSeq
+import           GHC.Generics                   (Generic)
 
 import           Control.Lens
 
@@ -258,9 +261,11 @@ analysisLiftLogger = AnalysisT . lift . lift
 data AnalysisResult e r
   = ARFailure Origin e
   | ARSuccess r
-  deriving (Show, Eq, Functor)
+  deriving (Show, Eq, Functor, Generic)
 
 makePrisms ''AnalysisResult
+
+instance (NFData e, NFData r) => NFData (AnalysisResult e r)
 
 -- | When an analysis is run, it produces a report consisting of the logs it
 -- collect as it ran. In addition, it either fails at a certain location or
@@ -271,9 +276,11 @@ data AnalysisReport e w r =
   , _arMessages   :: ![SomeMessage e w]
   , _arResult     :: !(AnalysisResult e r)
   }
-  deriving (Show, Eq, Functor)
+  deriving (Show, Eq, Functor, Generic)
 
 makeLenses ''AnalysisReport
+
+instance (NFData e, NFData w, NFData r) => NFData (AnalysisReport e w r)
 
 -- | Produce a human-readable version of an 'AnalysisReport', at the given
 -- verbosity level. Giving 'Nothing' for the log level hides all logs.

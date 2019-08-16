@@ -146,6 +146,8 @@ library:
     - vinyl >= 0.6 && < 1.0
     - verifiable-expressions >= 0.4
     - strict >= 0.3.2 && < 1
+    - deepseq
+    - pipes
     - parallel
 
 tests:

@@ -90,6 +90,10 @@ data InferEnv = IE
 type LogLine = (FU.SrcSpan, Either [([Variable], Specification)] (String,Variable))
 
 data StencilsReport = StencilsReport [(String, LogLine)] -- ^ (filename, logged stencil)
+
+instance NFData StencilsReport where
+  rnf _ = ()
+
 instance ExitCodeOfReport StencilsReport where
   exitCodeOf _ = 0
 

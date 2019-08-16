@@ -15,10 +15,13 @@ module Camfort.Input
   , ProgramFile
   , AnalysisProgram
   , AnalysisRunner
+  , AnalysisRunnerP
+  , AnalysisRunnerConsumer
     -- * Builders for analysers and refactorings
   , runPerFileAnalysis
   , runMultiFileAnalysis
   , describePerFileAnalysis
+  , describePerFileAnalysisP
   , doRefactor
   , doRefactorAndCreate
   , perFileRefactoring
@@ -30,11 +33,14 @@ module Camfort.Input
   ) where
 
 import           Control.Monad.IO.Class
+import           Control.Monad.Trans.Cont      (evalCont, cont)
+import           Data.Functor.Compose          (Compose(..), getCompose)
 import qualified Data.ByteString.Char8         as B
 import           Data.Either                   (partitionEithers)
 import           Data.List                     (intercalate)
 
 import           Control.Lens
+import           Control.DeepSeq
 
 import qualified Language.Fortran.AST          as F
 import           Language.Fortran.Util.ModFile (ModFiles, emptyModFiles)
@@ -46,6 +52,9 @@ import           Camfort.Analysis.Logger
 import           Camfort.Analysis.ModFile      (MFCompiler, genModFiles, readParseSrcDir)
 import           Camfort.Helpers
 import           Camfort.Output
+
+import           Pipes
+import qualified Pipes.Prelude                 as P
 
 -- | An analysis program which accepts inputs of type @a@ and produces results
 -- of type @b@.
@@ -59,23 +68,46 @@ type AnalysisProgram e w m a b = a -> AnalysisT e w m b
 type AnalysisRunner e w m a b r =
   AnalysisProgram e w m a b -> LogOutput m -> LogLevel -> Bool -> ModFiles -> [(ProgramFile, SourceText)] -> m r
 
+type AnalysisRunnerP e w m a b r =
+  AnalysisProgram e w m a b -> LogOutput m -> LogLevel -> Bool -> ModFiles -> Pipe (ProgramFile, SourceText) r m ()
+
+type AnalysisRunnerConsumer e w m a b r =
+  AnalysisProgram e w m a b -> LogOutput m -> LogLevel -> Bool -> ModFiles -> Consumer (ProgramFile, SourceText) m ()
+
 --------------------------------------------------------------------------------
 --  Simple runners
 --------------------------------------------------------------------------------
 
+traverse' :: (NFData b, Traversable t, Applicative f) => (a -> f b) -> t a -> f (t b)
+traverse' f = fmap evalCont . getCompose . traverse (Compose . fmap (\a -> cont $ \k -> k $!! a) . f)
+
 -- | Given an analysis program for a single file, run it over every input file
 -- and collect the reports. Doesn't produce any output.
 runPerFileAnalysis
-  :: (Monad m, Describe e, Describe w)
+  :: (Monad m, Describe e, Describe w, NFData e, NFData w, NFData b)
   => AnalysisRunner e w m ProgramFile b [AnalysisReport e w b]
 runPerFileAnalysis program logOutput logLevel snippets modFiles =
-  traverse (\pf ->
+  traverse' (\pf ->
     runAnalysisT
       (F.pfGetFilename pf)
       logOutput
       logLevel
       modFiles
       (program pf)) . map fst
+
+-- | Given an analysis program for a single file, run it over every input file
+-- and collect the reports. Doesn't produce any output.
+runPerFileAnalysisP
+  :: (Monad m, Describe e, Describe w, NFData e, NFData w, NFData b)
+  => AnalysisRunnerP e w m ProgramFile b (AnalysisReport e w b)
+runPerFileAnalysisP program logOutput logLevel snippets modFiles =
+  P.mapM $ \ (pf, _) ->
+             runAnalysisT
+             (F.pfGetFilename pf)
+             logOutput
+             logLevel
+             modFiles
+             (program pf)
 
 -- | Run an analysis program over every input file and get the report. Doesn't
 -- produce any output.
@@ -118,12 +150,21 @@ compilePerFile analysisName inSrc outSrc =
 -- | Given an analysis program for a single file, run it over every input file
 -- and collect the reports, then print those reports to standard output.
 describePerFileAnalysis
-  :: (MonadIO m, Describe r, ExitCodeOfReport r, Describe w, Describe e)
+  :: (MonadIO m, Describe r, ExitCodeOfReport r, Describe w, Describe e, NFData e, NFData w, NFData r)
   => Text -> AnalysisRunner e w m ProgramFile r Int
 describePerFileAnalysis analysisName program logOutput logLevel snippets modFiles pfsTexts = do
   reports <- runPerFileAnalysis program logOutput logLevel snippets modFiles pfsTexts
   mapM_ (putDescribeReport analysisName (Just logLevel) snippets) reports
   return $ exitCodeOfSet reports
+
+-- | Given an analysis program for a single file, run it over every input file
+-- and collect the reports, then print those reports to standard output.
+describePerFileAnalysisP
+  :: (MonadIO m, Describe r, ExitCodeOfReport r, Describe w, Describe e, NFData e, NFData w, NFData r)
+  => Text -> AnalysisRunnerP e w m ProgramFile r (AnalysisReport e w r)
+describePerFileAnalysisP analysisName program logOutput logLevel snippets modFiles = do
+  runPerFileAnalysisP program logOutput logLevel snippets modFiles >->
+    (P.mapM $ \ r -> liftIO (putDescribeReport analysisName (Just logLevel) snippets r) >> pure r)
 
 -- | Accepts an analysis program for multiple input files which produces a
 -- result value along with refactored files. Performs the refactoring, and

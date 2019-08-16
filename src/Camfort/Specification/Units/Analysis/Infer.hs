@@ -18,6 +18,7 @@ module Camfort.Specification.Units.Analysis.Infer
   , inferUnits
   ) where
 
+import           Control.DeepSeq
 import           Data.Data (Data)
 import           Data.Generics.Uniplate.Operations
   (universeBi)
@@ -55,9 +56,15 @@ data ExpInfo = ExpInfo
 data InferenceReport
   = InferenceReport (F.ProgramFile UA) [(VV, UnitInfo)]
 
+instance NFData InferenceReport where
+  rnf _ = ()
+
 data InferenceResult
   = Inferred InferenceReport
   | InfInconsistent ConsistencyError
+
+instance NFData InferenceResult where
+  rnf _ = ()
 
 instance ExitCodeOfReport InferenceResult where
   exitCodeOf (Inferred _) = 0

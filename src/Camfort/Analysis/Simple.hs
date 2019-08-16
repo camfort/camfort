@@ -18,6 +18,7 @@
 {-# LANGUAGE OverloadedStrings #-}
 {-# LANGUAGE RecordWildCards #-}
 {-# LANGUAGE TupleSections #-}
+{-# LANGUAGE DeriveGeneric #-}
 
 {- Simple syntactic analysis on Fortran programs -}
 
@@ -34,6 +35,7 @@ where
 import Prelude hiding (unlines)
 import Control.Monad
 import Control.Arrow (first)
+import Control.DeepSeq
 import Data.Data
 import Data.Function (on)
 import Data.Maybe (catMaybes, fromMaybe, maybeToList, listToMaybe, mapMaybe)
@@ -47,6 +49,7 @@ import Data.Generics.Uniplate.Operations
 import qualified Data.Text.Lazy.Builder as Builder
 import Data.Text (Text, unlines, intercalate, pack)
 import Data.List ((\\), sort, nub, nubBy, tails)
+import GHC.Generics
 
 import Data.Graph.Inductive
 
@@ -65,7 +68,8 @@ import Camfort.Analysis.ModFile (withCombinedEnvironment)
 
 {-| Counts the number of declarations (of variables) in a whole program -}
 
-newtype VarCountReport = VarCountReport Int
+newtype VarCountReport = VarCountReport Int deriving Generic
+instance NFData VarCountReport
 instance ExitCodeOfReport VarCountReport where
   exitCodeOf _ = 0
 instance Describe VarCountReport where
@@ -77,7 +81,8 @@ countVariableDeclarations pf = return . VarCountReport $ length (universeBi pf :
 type PULoc = (F.ProgramUnitName, Origin)
 data ImplicitNoneReport
   = ImplicitNoneReport [PULoc] -- ^ list of program units identified as needing implicit none
-
+  deriving Generic
+instance NFData ImplicitNoneReport
 instance SG.Semigroup ImplicitNoneReport where
   ImplicitNoneReport r1 <> ImplicitNoneReport r2 = ImplicitNoneReport $ r1 ++ r2
 
@@ -148,7 +153,8 @@ instance ExitCodeOfReport ImplicitNoneReport where
 data CheckAllocReport
   = CheckAllocReport { unbalancedAllocs :: [(F.Name, PULoc)]
                      , outOfOrder       :: [(F.Name, PULoc)]}
-
+  deriving Generic
+instance NFData CheckAllocReport
 instance SG.Semigroup CheckAllocReport where
   CheckAllocReport a1 b1 <> CheckAllocReport a2 b2 = CheckAllocReport (a1 ++ a2) (b1 ++ b2)
 
@@ -202,7 +208,8 @@ instance ExitCodeOfReport CheckAllocReport where
 
 data CheckFPReport
   = CheckFPReport { badEquality :: [PULoc] }
-
+  deriving Generic
+instance NFData CheckFPReport
 instance SG.Semigroup CheckFPReport where
   CheckFPReport a1 <> CheckFPReport a2 = CheckFPReport (a1 ++ a2)
 
@@ -254,7 +261,8 @@ data CheckUseReport
                    , duppedOnly  :: [(String, PULoc)]
                    , unusedNames :: [(String, PULoc)]
                    }
-
+  deriving Generic
+instance NFData CheckUseReport
 instance SG.Semigroup CheckUseReport where
   CheckUseReport a1 b1 c1 <> CheckUseReport a2 b2 c2 = CheckUseReport (a1 ++ a2) (b1 ++ b2) (c1 ++ c2)
 
@@ -312,7 +320,8 @@ instance ExitCodeOfReport CheckUseReport where
 
 data CheckArrayReport
   = CheckArrayReport { nestedIdx, missingIdx :: [([String], PULoc)] }
-
+  deriving Generic
+instance NFData CheckArrayReport
 instance SG.Semigroup CheckArrayReport where
   CheckArrayReport a1 b1 <> CheckArrayReport a2 b2 = CheckArrayReport (a1 ++ a2) (b1 ++ b2)
 
@@ -464,7 +473,7 @@ checkArrayUse pf = do
       checkPU _ = mempty
   let reports = map checkPU (universeBi pf'')
 
-  return $ mconcat reports
+  return $!! mconcat reports
 
 -- Look through a piece of AST for the source name of a given var name.
 findSrcName :: forall a. Data a => F.Name -> F.Block (F.Analysis a) -> Maybe F.Name

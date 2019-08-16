@@ -51,6 +51,8 @@ import           Camfort.Specification.Hoare.Parser
 import           Camfort.Specification.Hoare.Parser.Types (HoareParseError)
 import           Camfort.Specification.Hoare.Syntax
 
+import           Control.DeepSeq
+
 --------------------------------------------------------------------------------
 --  Invariant Checking
 --------------------------------------------------------------------------------
@@ -92,8 +94,14 @@ data HoareFrontendError
   | InvalidPUConditions F.ProgramUnitName [SpecOrDecl InnerHA]
   | BackendError HoareBackendError
 
+instance NFData HoareFrontendError where
+  rnf _ = ()
+
 data HoareFrontendWarning
   = OrphanDecls F.ProgramUnitName
+
+instance NFData HoareFrontendWarning where
+  rnf _ = ()
 
 instance Describe HoareFrontendError where
   describeBuilder = \case

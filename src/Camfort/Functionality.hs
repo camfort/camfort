@@ -63,6 +63,7 @@ module Camfort.Functionality
   , camfortInitialize
   ) where
 
+import           Control.DeepSeq
 import           Control.Arrow                                   (first, second)
 import           Data.List                                       (intersperse)
 import           Data.Maybe                                      (fromMaybe)
@@ -95,6 +96,7 @@ import           Camfort.Analysis.ModFile                        (MFCompiler,
                                                                   getModFiles,
                                                                   genModFiles,
                                                                   readParseSrcDir,
+                                                                  readParseSrcDirP,
                                                                   simpleCompiler)
 import           Camfort.Analysis.Simple
 import           Camfort.Input
@@ -121,6 +123,8 @@ import           Camfort.Transformation.EquivalenceElim
 
 import           Camfort.Helpers                                 (FileOrDir,
                                                                   Filename)
+import           Pipes
+import qualified Pipes.Prelude                                   as P
 
 data AnnotationType = ATDefault | Doxygen | Ford
 
@@ -193,7 +197,36 @@ runFunctionality description program runner mfCompiler mfInput env = do
   pfsTexts <- readParseSrcDir (ceFortranVersion env) modFiles (ceInputSources env) (ceExcludeFiles env)
   runner program (logOutputStd True) (ceLogLevel env) (ceSourceSnippets env) modFiles pfsTexts
 
+runFunctionalityP
+  :: (Describe e, Describe w, ExitCodeOfReport b)
+  => String
+  -- ^ Functionality desription
+  -> AnalysisProgram e w IO a b
+  -- ^ Analysis program
+  -> AnalysisRunnerP e w IO a b (AnalysisReport e w b)
+  -- ^ Analysis runner
+  -> MFCompiler i IO
+  -- ^ Mod file compiler
+  -> i
+  -- ^ Mod file input
+  -> CamfortEnv
+  -> IO Int
+runFunctionalityP description program runner mfCompiler mfInput env = do
+  putStrLn $ description ++ " '" ++ ceInputSources env ++ "'"
+  incDir' <- maybe getCurrentDirectory pure (ceIncludeDir env)
+  isDir <- doesDirectoryExist incDir'
+  let incDir | isDir     = incDir'
+             | otherwise = takeDirectory incDir'
+  -- Previously...
+--modFiles <- genModFiles mfCompiler mfInput incDir (ceExcludeFiles env)
+  -- ...instead for now, just get the mod files
 
+  modFiles <- getModFiles incDir
+
+  reports <- P.toListM $
+    readParseSrcDirP (ceFortranVersion env) modFiles (ceInputSources env) (ceExcludeFiles env) >->
+    runner program (logOutputStd True) (ceLogLevel env) (ceSourceSnippets env) modFiles
+  return . exitCodeOfSet $ reports
 
 --------------------------------------------------------------------------------
 -- * Wrappers on all of the features
@@ -275,10 +308,10 @@ useCheck =
 
 arrayCheck :: CamfortEnv -> IO Int
 arrayCheck =
-  runFunctionality
+  runFunctionalityP
   "Checking array usage"
   (generalizePureAnalysis . checkArrayUse)
-  (describePerFileAnalysis "check array usage")
+  (describePerFileAnalysisP "check array usage")
   simpleCompiler ()
 
 ddtRefactor :: FileOrDir -> CamfortEnv -> IO Int
@@ -425,7 +458,7 @@ unitsInfer showAST =
 -- | Given an analysis program for a single file, run it over every input file
 -- and collect the reports, then print those reports to standard output.
 describePerFileAnalysisShowASTUnitInfo
-  :: (MonadIO m, Describe w, Describe e)
+  :: (MonadIO m, Describe w, Describe e, NFData w, NFData e)
   => AnalysisRunner e w m ProgramFile InferenceResult Int
 describePerFileAnalysisShowASTUnitInfo program logOutput logLevel snippets modFiles pfsTexts = do
   reports <- runPerFileAnalysis program logOutput logLevel snippets modFiles pfsTexts

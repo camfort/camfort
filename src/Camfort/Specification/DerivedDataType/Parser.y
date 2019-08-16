@@ -9,6 +9,7 @@ module Camfort.Specification.DerivedDataType.Parser
   ) where
 
 import Camfort.Specification.Parser (mkParser, SpecParser)
+import Control.DeepSeq
 import Control.Monad.Except (throwError)
 import Data.Binary (Binary)
 import Data.Char (isLetter, isNumber, isAlphaNum, toLower)
@@ -65,6 +66,7 @@ data DDTStatement
           , ddtStLabels   :: [(String, String)]
           , ddtStVarDims  :: [(String, Int)] }
   deriving (Data, Eq, Show, Generic)
+instance NFData DDTStatement
 instance Binary DDTStatement
 
 data DDTParseError

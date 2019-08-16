@@ -1,6 +1,7 @@
 {-# LANGUAGE DefaultSignatures          #-}
 {-# LANGUAGE DeriveFunctor              #-}
 {-# LANGUAGE DeriveTraversable          #-}
+{-# LANGUAGE DeriveGeneric              #-}
 {-# LANGUAGE FlexibleContexts           #-}
 {-# LANGUAGE FlexibleInstances          #-}
 {-# LANGUAGE FunctionalDependencies     #-}
@@ -80,6 +81,7 @@ module Camfort.Analysis.Logger
 import qualified Data.Semigroup                 as SG
 import           Data.Void                      (Void)
 
+import           Control.DeepSeq
 import           Control.Lens
 
 import           Control.Monad.Except
@@ -96,6 +98,8 @@ import qualified Data.Text.IO                   as Text
 import qualified Data.Text.Lazy                 as Lazy
 import           Data.Text.Lazy.Builder         (Builder)
 import qualified Data.Text.Lazy.Builder         as Builder
+
+import           GHC.Generics
 
 import           Text.Read                      (readMaybe)
 import qualified Language.Fortran.Util.Position as F
@@ -158,9 +162,11 @@ data Origin =
   { _oFile :: FilePath
   , _oSpan :: F.SrcSpan
   }
-  deriving (Show, Eq, Ord)
+  deriving (Show, Eq, Ord, Generic)
 
 makeLenses ''Origin
+
+instance NFData Origin
 
 instance Describe Origin where
   describeBuilder origin =
@@ -216,9 +222,11 @@ data LogMessage a =
   { _lmOrigin :: Maybe Origin
   , _lmMsg    :: a
   }
-  deriving (Show, Eq, Functor, Foldable, Traversable)
+  deriving (Show, Eq, Functor, Foldable, Traversable, Generic)
 
 makeLenses ''LogMessage
+
+instance NFData a => NFData (LogMessage a)
 
 instance Describe a => Describe (LogMessage a) where
   describeBuilder msg =
@@ -231,9 +239,11 @@ data SomeMessage e w
   | MsgWarn (LogMessage w)
   | MsgInfo (LogMessage Text)
   | MsgDebug (LogMessage Text)
-  deriving (Show, Eq)
+  deriving (Show, Eq, Generic)
 
 makePrisms ''SomeMessage
+
+instance (NFData e, NFData w) => NFData (SomeMessage e w)
 
 someMessageOrigin :: Lens' (SomeMessage e w) (Maybe Origin)
 someMessageOrigin =

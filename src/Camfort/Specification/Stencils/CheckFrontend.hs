@@ -29,6 +29,7 @@ module Camfort.Specification.Stencils.CheckFrontend
   , existingStencils
   ) where
 
+import Control.DeepSeq
 import Control.Monad.IO.Class (MonadIO(..))
 import Control.Monad.Reader (MonadReader, ReaderT, asks, runReaderT)
 import Control.Monad.State.Strict
@@ -61,6 +62,8 @@ import qualified Language.Fortran.Util.Position     as FU
 
 -- TODO: Replace instances of this with logging of errors and warnings
 newtype CheckResult = CheckResult [StencilResult]
+instance NFData CheckResult where
+  rnf _ = ()
 instance ExitCodeOfReport CheckResult where
   exitCodeOf (CheckResult rs) = exitCodeOfSet rs
 

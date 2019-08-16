@@ -16,6 +16,7 @@ module Camfort.Specification.Units.Analysis.Criticals
   ( inferCriticalVariables
   ) where
 
+import           Control.DeepSeq
 import           Control.Monad.State (get)
 import           Control.Monad.Reader (asks, lift)
 import           Data.Generics.Uniplate.Operations
@@ -56,6 +57,9 @@ data Criticals = Criticals
     -- | Location of criticals.
   , criticalsFromWhere    :: M.Map F.Name FilePath
   }
+
+instance NFData Criticals where
+  rnf _ = ()
 
 instance ExitCodeOfReport Criticals where
   exitCodeOf _ = 0

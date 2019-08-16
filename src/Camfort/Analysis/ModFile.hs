@@ -1,3 +1,4 @@
+{-# LANGUAGE RankNTypes #-}
 {- |
 Module      :  Camfort.Analysis.ModFile
 Description :  CamFort-specific ModFiles helpers.
@@ -15,6 +16,7 @@ module Camfort.Analysis.ModFile
   , genModFiles
   , getModFiles
   , readParseSrcDir
+  , readParseSrcDirP
   , simpleCompiler
     -- * Using mod files
   , withCombinedModuleMap
@@ -49,6 +51,9 @@ import           Language.Fortran.ParserMonad       (FortranVersion(..))
 
 import           Camfort.Analysis.Annotations       (A, unitAnnotation)
 import           Camfort.Helpers
+
+import           Pipes
+import qualified Pipes.Prelude                      as P
 
 --------------------------------------------------------------------------------
 --  Getting mod files
@@ -128,6 +133,29 @@ readParseSrcDir mv mods inp excludes = do
   where
     mapMaybeM :: Monad m => (a -> m (Maybe b)) -> [a] -> m [b]
     mapMaybeM f = fmap catMaybes . mapM f
+
+readParseSrcDirP :: Maybe FortranVersion
+                -> FM.ModFiles
+                -> FileOrDir
+                -> [Filename]
+                -> Producer' (F.ProgramFile A, SourceText) IO ()
+readParseSrcDirP mv mods inp excludes = do
+  isdir <- liftIO $ isDirectory inp
+  files <-
+    if isdir
+    then do
+      files <- liftIO $ getFortranFiles inp
+      -- Compute alternate list of excludes with the
+      -- the directory appended
+      let excludes' = excludes ++ map (\x -> inp </> x) excludes
+      pure $ files \\ excludes'
+    else pure [inp]
+  for (each files) $ \ file -> do
+    mProgSrc <- liftIO $ readParseSrcFile mv mods file
+    case mProgSrc of
+      Just progSrc -> yield progSrc
+      Nothing -> pure ()
+  pure ()
 
 readParseSrcFile :: Maybe FortranVersion -> FM.ModFiles -> Filename -> IO (Maybe (F.ProgramFile A, SourceText))
 readParseSrcFile mv mods f = do

@@ -16,6 +16,7 @@ module Camfort.Specification.Units.Analysis.Consistent
   , checkUnits
   ) where
 
+import           Control.DeepSeq
 import           Control.Monad.State (get)
 import           Control.Monad.Reader (asks)
 import           Data.Data
@@ -45,7 +46,8 @@ data ConsistencyReport
   = forall a. Consistent (F.ProgramFile a) Int
     -- | An inconsistency was found in units of the program.
   | Inconsistent ConsistencyError
-
+instance NFData ConsistencyReport where
+  rnf _ = ()
 instance Show ConsistencyReport where
   show (Consistent pf nVars) = concat ["\n", fname, ": Consistent ", show nVars, " variables checked."]
     where fname = F.pfGetFilename pf

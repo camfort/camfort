@@ -125,6 +125,7 @@ end function multiply
 module Camfort.Specification.Hoare (check, HoareCheckResults(..), PrimReprOption(..)) where
 
 import           Control.Monad.Except
+import           Control.DeepSeq
 import           Data.List                                 (intersperse)
 
 import qualified Language.Fortran.Analysis                 as FA
@@ -144,11 +145,15 @@ import           Camfort.Specification.Hoare.CheckFrontend
 import           Camfort.Specification.Hoare.Parser
 import           Language.Fortran.Model.Repr.Prim
 
+
 --------------------------------------------------------------------------------
 --  Types
 --------------------------------------------------------------------------------
 
 newtype HoareCheckResults = HoareCheckResults [HoareCheckResult]
+
+instance NFData HoareCheckResults where
+  rnf _ = ()
 
 instance ExitCodeOfReport HoareCheckResults where
   exitCodeOf (HoareCheckResults rs) = exitCodeOfSet rs
