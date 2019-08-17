@@ -1,4 +1,4 @@
-resolver: lts-13.30
+resolver: lts-14.1
 flags: {}
 extra-package-dbs: []
 
@@ -15,17 +15,17 @@ extra-deps:
   pantry-tree:
     size: 1314
     sha256: 686b82616e989a0bb4f76c182befb1dcdd542d2a4201ebf8720fb2602defc7eb
-- size: 28502
-  url: https://github.com/camfort/verifiable-expressions/archive/929513e98f519c33405c29b9d86882811cf5a3bc.tar.gz
+- name: verifiable-expressions
+  url: https://github.com/camfort/verifiable-expressions/archive/v0.6.0.tar.gz
+  size: 28515
+  version: 0.6.0
   cabal-file:
-    size: 1789
-    sha256: 69ca68586ace9a94442e66910263deada7d950d2dd9ea9bf78cd59c45357efdd
-  name: verifiable-expressions
-  version: 0.5.0
-  sha256: 229d2369724ecf07bb4347c899abec9b17bdabf42740e609495c0a9dfb8ccbe2
+    size: 1784
+    sha256: 5018b983d82b1f63c4e5700e4517b4698ba51e0d62a92b603093456c8f7c02eb
+  sha256: a71cc8fdd092f90b3fb649d6cd4471fe98acfdcb86c809021cf4d00c0b6f67fa
   pantry-tree:
     size: 1590
-    sha256: 3b8439720a201f3f836561727bf1f1786f8988ec564e2718c69101c960163495
+    sha256: 79a5ef44bf99db148f8c6712afcb3ca01d6a2097aa85000aefcd247c1d21fe9c
 - size: 6670
   url: https://github.com/camfort/haskell-partial-order/archive/91cc6beee2e7f94e9356f02ab1c08a7877b19e37.tar.gz
   cabal-file:

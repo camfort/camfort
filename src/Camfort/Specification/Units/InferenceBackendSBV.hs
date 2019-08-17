@@ -361,10 +361,10 @@ extractSIntValues = (M.fromList <$>) . mapM convert . M.toList
   where convert (name, sInt) = ((name,) . VISet . (:[])) <$> getValue sInt
 
 disallowValues :: NameSIntegerMap -> NameValueInfoMap -> Query ()
-disallowValues nameSIntMap nvMap = constrain . bOr . catMaybes $ map mkNotEq (M.toList nvMap)
+disallowValues nameSIntMap nvMap = constrain . sOr . catMaybes $ map mkNotEq (M.toList nvMap)
   where
     mkNotEq (name, VISet vs@(_:_))
-      | Just sInt <- M.lookup name nameSIntMap = Just . bAnd $ map ((sInt ./=) . literal) vs
+      | Just sInt <- M.lookup name nameSIntMap = Just . sAnd $ map ((sInt ./=) . literal) vs
     mkNotEq _                                = Nothing
 
 disallowCurrentValues :: NameSIntegerMap -> Query ()

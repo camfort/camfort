@@ -105,11 +105,11 @@ data HighRepr a where
 instance HFoldableAt HighRepr LogicOp where
   hfoldMap = implHfoldMap $ \case
     LogLit x     -> HRHigh (fromBool x)
-    LogNot x     -> HRHigh . bnot . getHrBool $ x
-    LogAnd x y   -> appBinop (&&&) x y
-    LogOr x y    -> appBinop (|||) x y
-    LogImpl x y  -> appBinop (==>) x y
-    LogEquiv x y -> appBinop (<=>) x y
+    LogNot x     -> HRHigh . sNot . getHrBool $ x
+    LogAnd x y   -> appBinop (.&&) x y
+    LogOr x y    -> appBinop (.||) x y
+    LogImpl x y  -> appBinop (.=>) x y
+    LogEquiv x y -> appBinop (.<=>) x y
 
     where
       appBinop (g :: SBool -> SBool -> SBool) x y =
@@ -126,7 +126,7 @@ instance (Monad m) => HFoldableAt (Compose m HighRepr) LogicOp where
 
 -- | Provides conversions between symbolic representations of core Fortran
 -- values and their corresponding high-level types.
-class (SymWord a) => LiftD b a | b -> a where
+class (SymVal a) => LiftD b a | b -> a where
   -- | Go from a core value to the corresponding high-level value.
   liftD :: b -> a
   -- | Go from a symbolic core value to the corresponding symbolic high-level

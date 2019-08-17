@@ -97,26 +97,20 @@ instance Container Offsets where
   member _ _ = True
 
   compile (Offsets s) i = i `sElem` map fromIntegral (S.toList s)
-  compile SetOfIntegers _ = true
+  compile SetOfIntegers _ = sTrue
 
-instance JoinSemiLattice Offsets where
+instance Lattice Offsets where
   (Offsets s) \/ (Offsets s') = Offsets $ s `S.union` s'
   _ \/ _ = SetOfIntegers
-
-instance MeetSemiLattice Offsets where
   (Offsets s) /\ (Offsets s') = Offsets $ s `S.intersection` s'
   off@Offsets{} /\ _ = off
   _ /\ o = o
-
-instance Lattice Offsets
 
 instance BoundedJoinSemiLattice Offsets where
   bottom = Offsets S.empty
 
 instance BoundedMeetSemiLattice Offsets where
   top = SetOfIntegers
-
-instance BoundedLattice Offsets
 
 --------------------------------------------------------------------------------
 -- Interval as defined in the paper
@@ -191,23 +185,19 @@ instance Container (Interval Standard) where
 
   compile (IntervHoled i1 i2 b) i
     | b = inRange i range
-    | otherwise = inRange i range &&& i ./= 0
+    | otherwise = inRange i range .&& i ./= 0
     where
       range = (fromIntegral i1, fromIntegral i2)
-  compile IntervInfinite _ = true
+  compile IntervInfinite _ = sTrue
 
-instance JoinSemiLattice (Interval Standard) where
+instance Lattice (Interval Standard) where
   (IntervHoled lb ub noHole) \/ (IntervHoled lb' ub' noHole') =
     IntervHoled (min lb lb') (max ub ub') (noHole || noHole')
   _ \/ _ = top
-
-instance MeetSemiLattice (Interval Standard) where
   (IntervHoled lb ub noHole) /\ (IntervHoled lb' ub' noHole') =
     IntervHoled (max lb lb') (min ub ub') (noHole && noHole')
   int@IntervHoled{} /\ _ = int
   _ /\ int = int
-
-instance Lattice (Interval Standard)
 
 instance BoundedJoinSemiLattice (Interval Standard) where
   bottom = IntervHoled 0 0 False
@@ -215,7 +205,7 @@ instance BoundedJoinSemiLattice (Interval Standard) where
 instance BoundedMeetSemiLattice (Interval Standard) where
   top = IntervInfinite
 
-instance BoundedLattice (Interval Standard)
+-- instance BoundedLattice (Interval Standard)
 
 --------------------------------------------------------------------------------
 -- Union of cartesian products normal form
@@ -233,18 +223,14 @@ instance Container a => Container (UnionNF n a) where
     where
       member' is space = and $ V.zipWith member is space
 
-  compile spaces is = foldr1 (|||) $ NE.map (`compile'` is) spaces
+  compile spaces is = foldr1 (.||) $ NE.map (`compile'` is) spaces
     where
       compile' space is =
-        foldr' (\(set, i) -> (&&&) $ compile set i) true $ V.zip space is
+        foldr' (\(set, i) -> (.&&) $ compile set i) sTrue $ V.zip space is
 
-instance JoinSemiLattice (UnionNF n a) where
+instance BoundedMeetSemiLattice a => Lattice (UnionNF n a) where
   oi \/ oi' = oi <> oi'
-
-instance BoundedLattice a => MeetSemiLattice (UnionNF n a) where
   (/\) = CM.liftM2 (V.zipWith (/\))
-
-instance BoundedLattice a => Lattice (UnionNF n a)
 
 unfCompare :: forall a b n . ( Container a,          Container b
                              , MemberTyp a ~ Int64,  MemberTyp b ~ Int64
@@ -257,7 +243,7 @@ unfCompare oi oi' = unsafePerformIO $ do
       -- Tell the user if there was a hard proof error (e.g., if
       -- z3 is not installed/accessible).
       -- TODO: give more information
-      ThmResult (ProofError _ msgs) -> fail $ unlines msgs
+      ThmResult (ProofError _ msgs _) -> fail $ unlines msgs
       _ ->
         if modelExists thmRes
         then do

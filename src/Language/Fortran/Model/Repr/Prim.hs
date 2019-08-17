@@ -166,27 +166,27 @@ makeSymRepr spec = \case
   PChar   -> bySymWord (0 :: Word8) getChar8
   where
     intRepr
-      :: (Integral a, SBV.SymWord a)
+      :: (Integral a, SBV.SymVal a)
       => Lens' PrimReprSpec (IntRepr a) -> PrimReprHandler a
     intRepr l = case spec ^. l of
       MachineInt   -> bySymWord 0 id
       ArbitraryInt -> bySymWord (0 :: Integer) fromIntegral
 
     realRepr
-      :: (RealFloat a, SBV.SymWord a)
+      :: (RealFloat a, SBV.SymVal a)
       => Lens' PrimReprSpec (RealRepr a) -> PrimReprHandler a
     realRepr l = case spec ^. l of
       MachineFloat  -> bySymWord 0 id
       ArbitraryReal -> bySymWord (0 :: SBV.AlgReal) realToFrac
 
     boolRepr
-      :: (Integral b, SBV.SymWord b)
+      :: (Integral b, SBV.SymVal b)
       => (a -> b) -> Lens' PrimReprSpec (BoolRepr a) -> PrimReprHandler a
     boolRepr unwrap l = case spec ^. l of
       IntBool -> bySymWord 0 unwrap
       BitBool -> bySymWord (False :: Bool) (toBool . unwrap)
 
-    bySymWord :: (SBV.SymWord b) => b -> (a -> b) -> PrimReprHandler a
+    bySymWord :: (SBV.SymVal b) => b -> (a -> b) -> PrimReprHandler a
     bySymWord (repValue :: b) fromPrim =
       PrimReprHandler
       { _prhKind = SBV.kindOf repValue
