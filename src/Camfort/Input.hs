@@ -77,23 +77,6 @@ type AnalysisRunnerConsumer e w m a b r =
 --  Simple runners
 --------------------------------------------------------------------------------
 
-traverse' :: (NFData b, Traversable t, Applicative f) => (a -> f b) -> t a -> f (t b)
-traverse' f = fmap evalCont . getCompose . traverse (Compose . fmap (\a -> cont $ \k -> k $!! a) . f)
-
--- | Given an analysis program for a single file, run it over every input file
--- and collect the reports. Doesn't produce any output.
-runPerFileAnalysis
-  :: (Monad m, Describe e, Describe w, NFData e, NFData w, NFData b)
-  => AnalysisRunner e w m ProgramFile b [AnalysisReport e w b]
-runPerFileAnalysis program logOutput logLevel snippets modFiles =
-  traverse' (\pf ->
-    runAnalysisT
-      (F.pfGetFilename pf)
-      logOutput
-      logLevel
-      modFiles
-      (program pf)) . map fst
-
 -- | Given an analysis program for a single file, run it over every input file
 -- and collect the reports. Doesn't produce any output.
 runPerFileAnalysisP
