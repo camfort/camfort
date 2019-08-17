@@ -53,7 +53,6 @@ import           Camfort.Analysis.Annotations       (A, unitAnnotation)
 import           Camfort.Helpers
 
 import           Pipes
-import qualified Pipes.Prelude                      as P
 
 --------------------------------------------------------------------------------
 --  Getting mod files
