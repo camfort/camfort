@@ -241,10 +241,10 @@ ast env = do
 
 countVarDecls :: CamfortEnv -> IO Int
 countVarDecls =
-  runFunctionality
+  runFunctionalityP
   "Counting variable declarations in"
   (generalizePureAnalysis . countVariableDeclarations)
-  (describePerFileAnalysis "count variable declarations")
+  (describePerFileAnalysisP "count variable declarations")
   simpleCompiler ()
 
 dead :: FileOrDir -> CamfortEnv -> IO Int
@@ -276,34 +276,34 @@ equivalences =
 
 implicitNone :: Bool -> CamfortEnv -> IO Int
 implicitNone allPU =
-  runFunctionality
+  runFunctionalityP
   "Checking 'implicit none' completeness"
   (generalizePureAnalysis . (checkImplicitNone allPU))
-  (describePerFileAnalysis "check 'implicit none'")
+  (describePerFileAnalysisP "check 'implicit none'")
   simpleCompiler ()
 
 allocCheck :: CamfortEnv -> IO Int
 allocCheck =
-  runFunctionality
+  runFunctionalityP
   "Checking allocate / deallocate usage"
   (generalizePureAnalysis . checkAllocateStatements)
-  (describePerFileAnalysis "check allocate / deallocate")
+  (describePerFileAnalysisP "check allocate / deallocate")
   simpleCompiler ()
 
 fpCheck :: CamfortEnv -> IO Int
 fpCheck =
-  runFunctionality
+  runFunctionalityP
   "Checking usage of floating point"
   (generalizePureAnalysis . checkFloatingPointUse)
-  (describePerFileAnalysis "check floating point")
+  (describePerFileAnalysisP "check floating point")
   simpleCompiler ()
 
 useCheck :: CamfortEnv -> IO Int
 useCheck =
-  runFunctionality
+  runFunctionalityP
   "Checking usage of USE statements"
   (generalizePureAnalysis . checkModuleUse)
-  (describePerFileAnalysis "check module USE")
+  (describePerFileAnalysisP "check module USE")
   simpleCompiler ()
 
 arrayCheck :: CamfortEnv -> IO Int
@@ -332,18 +332,18 @@ ddtSynth annType =
 
 ddtCheck :: CamfortEnv -> IO Int
 ddtCheck =
-  runFunctionality
+  runFunctionalityP
   "Checking derived datatype annotations"
   (generalizePureAnalysis . DDT.check)
-  (describePerFileAnalysis "check derived datatypes")
+  (describePerFileAnalysisP "check derived datatypes")
   simpleCompiler ()
 
 ddtInfer :: CamfortEnv -> IO Int
 ddtInfer =
-  runFunctionality
+  runFunctionalityP
   "Inferring derived datatypes"
   (generalizePureAnalysis . DDT.infer)
-  (describePerFileAnalysis "infer derived datatypes")
+  (describePerFileAnalysisP "infer derived datatypes")
   simpleCompiler ()
 
 ddtCompile :: CamfortEnv -> IO Int
@@ -366,17 +366,17 @@ ddtCompile env = do
 
 {- Units feature -}
 
-runUnitsFunctionality
-  :: (Describe e, Describe w)
+runUnitsFunctionalityP
+  :: (Describe e, Describe w, ExitCodeOfReport b)
   => String
   -> (UnitOpts -> AnalysisProgram e w IO a b)
-  -> AnalysisRunner e w IO a b r
+  -> AnalysisRunnerP e w IO a b (AnalysisReport e w b)
   -> LiteralsOpt
   -> CamfortEnv
-  -> IO r
-runUnitsFunctionality description unitsProgram runner opts =
+  -> IO Int
+runUnitsFunctionalityP description unitsProgram runner opts =
   let uo = optsToUnitOpts opts
-  in runFunctionality description (unitsProgram uo) runner compileUnits uo
+  in runFunctionalityP description (unitsProgram uo) runner compileUnits uo
 
 optsToUnitOpts :: LiteralsOpt -> UnitOpts
 optsToUnitOpts m = o1
@@ -440,35 +440,35 @@ unitsDump _ env = do
 
 unitsCheck :: LiteralsOpt -> CamfortEnv -> IO Int
 unitsCheck =
-  runUnitsFunctionality
+  runUnitsFunctionalityP
   "Checking units for"
   (singlePfUnits checkUnits)
-  (describePerFileAnalysis "unit checking")
+  (describePerFileAnalysisP "unit checking")
 
 
 unitsInfer :: Bool -> LiteralsOpt -> CamfortEnv -> IO Int
 unitsInfer showAST =
-  runUnitsFunctionality
+  runUnitsFunctionalityP
   "Inferring units for"
   (singlePfUnits inferUnits)
   (if showAST
-      then describePerFileAnalysisShowASTUnitInfo
-      else describePerFileAnalysis "unit inference")
+      then describePerFileAnalysisShowASTUnitInfoP
+      else describePerFileAnalysisP "unit inference")
 
 -- | Given an analysis program for a single file, run it over every input file
 -- and collect the reports, then print those reports to standard output.
-describePerFileAnalysisShowASTUnitInfo
+describePerFileAnalysisShowASTUnitInfoP
   :: (MonadIO m, Describe w, Describe e, NFData w, NFData e)
-  => AnalysisRunner e w m ProgramFile InferenceResult Int
-describePerFileAnalysisShowASTUnitInfo program logOutput logLevel snippets modFiles pfsTexts = do
-  reports <- runPerFileAnalysis program logOutput logLevel snippets modFiles pfsTexts
-  flip mapM_ reports $ \ r -> do
-    case r of
-      AnalysisReport _ _ (ARSuccess (Inferred (InferenceReport pfUA eVars))) ->
-        liftIO . pp . fmap (unitInfo . FA.prevAnnotation) . FA.rename $ pfUA
-      _ -> pure ()
-    putDescribeReport "unit inference" (Just logLevel) snippets r
-  return $ exitCodeOfSet reports
+  => AnalysisRunnerP e w m ProgramFile InferenceResult (AnalysisReport e w InferenceResult)
+describePerFileAnalysisShowASTUnitInfoP program logOutput logLevel snippets modFiles =
+  runPerFileAnalysisP program logOutput logLevel snippets modFiles >->
+    (P.mapM $ \ r -> do
+        case r of
+          AnalysisReport _ _ (ARSuccess (Inferred (InferenceReport pfUA eVars))) ->
+            liftIO . pp . fmap (unitInfo . FA.prevAnnotation) . FA.rename $ pfUA
+          _ -> pure ()
+        putDescribeReport "unit inference" (Just logLevel) snippets r
+        pure r)
 
 {-  TODO: remove if not needed
 unitsCompile :: FileOrDir -> LiteralsOpt -> CamfortEnv -> IO ()
@@ -505,20 +505,20 @@ unitsCompile opts env = do
 
 unitsSynth :: AnnotationType -> FileOrDir -> LiteralsOpt -> CamfortEnv -> IO Int
 unitsSynth annType outSrc opts env =
-  runUnitsFunctionality
-  "Synthesising units for"
-  (multiPfUnits $ LU.synthesiseUnits (markerChar annType))
-  (doRefactor "unit synthesis" (ceInputSources env) outSrc)
-  opts
-  env
-
+  runFunctionality "Synthesising units for"
+                   (multiPfUnits (LU.synthesiseUnits (markerChar annType)) uo)
+                   (doRefactor "unit synthesis" (ceInputSources env) outSrc)
+                   compileUnits
+                   uo
+                   env
+  where uo = optsToUnitOpts opts
 
 unitsCriticals :: LiteralsOpt -> CamfortEnv -> IO Int
 unitsCriticals =
-  runUnitsFunctionality
+  runUnitsFunctionalityP
   "Suggesting variables to annotate with unit specifications in"
   (singlePfUnits inferCriticalVariables)
-  (describePerFileAnalysis "unit critical variable analysis")
+  (describePerFileAnalysisP "unit critical variable analysis")
 
 
 {- Stencils feature -}
@@ -526,19 +526,19 @@ unitsCriticals =
 
 stencilsCheck :: CamfortEnv -> IO Int
 stencilsCheck =
-  runFunctionality
+  runFunctionalityP
   "Checking stencil specs for"
   (generalizePureAnalysis . Stencils.check)
-  (describePerFileAnalysis "stencil checking")
+  (describePerFileAnalysisP "stencil checking")
   compileStencils ()
 
 
 stencilsInfer :: Bool -> CamfortEnv -> IO Int
 stencilsInfer useEval =
-  runFunctionality
+  runFunctionalityP
   "Inferring stencil specs for"
   (generalizePureAnalysis . Stencils.infer useEval '=')
-  (describePerFileAnalysis "stencil inference")
+  (describePerFileAnalysisP "stencil inference")
   compileStencils ()
 
 
@@ -560,10 +560,10 @@ stencilsSynth annType =
 
 invariantsCheck :: Hoare.PrimReprOption -> CamfortEnv -> IO Int
 invariantsCheck pro =
-  runFunctionality
+  runFunctionalityP
   "Checking invariants in"
   (Hoare.check pro)
-  (describePerFileAnalysis "invariant checking")
+  (describePerFileAnalysisP "invariant checking")
   simpleCompiler ()
 
 

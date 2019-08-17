@@ -202,19 +202,19 @@ fromPrimReprOption PROPrecise = prsPrecise
 --  Testsing
 --------------------------------------------------------------------------------
 
-testOn :: FilePath -> IO ()
-testOn fp = do
-  (mfs, pfsSources) <- loadModAndProgramFiles Nothing simpleCompiler () fp fp []
-  describePerFileAnalysis
-    "invariant checking"
-    (check PROIdealized)
-    (logOutputStd True)
-    LogDebug
-    False
-    mfs
-    pfsSources
-  return ()
+-- testOn :: FilePath -> IO ()
+-- testOn fp = do
+--   (mfs, pfsSources) <- loadModAndProgramFiles Nothing simpleCompiler () fp fp []
+--   describePerFileAnalysis
+--     "invariant checking"
+--     (check PROIdealized)
+--     (logOutputStd True)
+--     LogDebug
+--     False
+--     mfs
+--     pfsSources
+--   return ()
 
-testHoare = do
-  testOn "camfort/samples/invariants/arrays.f90"
-  testOn "camfort/samples/invariants/invariants.f90"
+-- testHoare = do
+--   testOn "camfort/samples/invariants/arrays.f90"
+--   testOn "camfort/samples/invariants/invariants.f90"

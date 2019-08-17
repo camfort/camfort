@@ -18,9 +18,8 @@ module Camfort.Input
   , AnalysisRunnerP
   , AnalysisRunnerConsumer
     -- * Builders for analysers and refactorings
-  , runPerFileAnalysis
+  , runPerFileAnalysisP
   , runMultiFileAnalysis
-  , describePerFileAnalysis
   , describePerFileAnalysisP
   , doRefactor
   , doRefactorAndCreate
@@ -146,16 +145,6 @@ compilePerFile analysisName inSrc outSrc =
       outputFiles inSrc outSrc bins
       pure report
 -}
-
--- | Given an analysis program for a single file, run it over every input file
--- and collect the reports, then print those reports to standard output.
-describePerFileAnalysis
-  :: (MonadIO m, Describe r, ExitCodeOfReport r, Describe w, Describe e, NFData e, NFData w, NFData r)
-  => Text -> AnalysisRunner e w m ProgramFile r Int
-describePerFileAnalysis analysisName program logOutput logLevel snippets modFiles pfsTexts = do
-  reports <- runPerFileAnalysis program logOutput logLevel snippets modFiles pfsTexts
-  mapM_ (putDescribeReport analysisName (Just logLevel) snippets) reports
-  return $ exitCodeOfSet reports
 
 -- | Given an analysis program for a single file, run it over every input file
 -- and collect the reports, then print those reports to standard output.
