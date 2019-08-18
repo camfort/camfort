@@ -161,9 +161,9 @@ checkUnits = do
     pfUA :: F.ProgramFile UA
     pfUA = usProgramFile state -- the program file after units analysis is done
 
-  pure $ case eCons of
-           Nothing     -> Consistent pf nVars
-           (Just cons) -> Inconsistent $ Inconsistency pfUA cons
+  pure $!! case eCons of
+             Nothing     -> Consistent pf nVars
+             (Just cons) -> Inconsistent $ Inconsistency pfUA cons
   where
     isParametricUnit u = case u of UnitParamPosAbs {} -> True; UnitParamPosUse {} -> True
                                    UnitParamVarAbs {} -> True; UnitParamVarUse {} -> True

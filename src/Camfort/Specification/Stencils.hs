@@ -19,6 +19,7 @@ module Camfort.Specification.Stencils
  (infer, check, synth) where
 
 import Control.Arrow ((***), first, second)
+import Control.DeepSeq
 import Data.Maybe (catMaybes)
 
 import           Camfort.Analysis
@@ -52,7 +53,7 @@ infer :: Bool
       -> F.ProgramFile Annotation
       -> StencilsAnalysis StencilsReport
 infer useEval marker pf =
-  (StencilsReport . map (F.pfGetFilename pf,)) <$> stencilInference useEval marker (getBlocks pf)
+  (force . StencilsReport . map (F.pfGetFilename pf,)) <$> stencilInference useEval marker (getBlocks pf)
 
 --------------------------------------------------
 --         Stencil specification synthesis      --
@@ -65,7 +66,7 @@ synth :: Char
 synth marker pfs = do
   syntheses <- unzip <$> traverse buildOutput pfs
   logInfo' pfs $ describe . normaliseMsg . fst $ syntheses
-  pure (catMaybes $ snd syntheses)
+  pure . catMaybes $ snd syntheses
   where
     buildOutput :: F.ProgramFile A -> StencilsAnalysis ((String, String), Maybe (F.ProgramFile Annotation))
     buildOutput pf = do
@@ -102,7 +103,7 @@ synth marker pfs = do
 --------------------------------------------------
 
 check :: F.ProgramFile Annotation -> StencilsAnalysis CheckResult
-check = stencilChecking . getBlocks
+check = fmap force . stencilChecking . getBlocks
 
 -- Local variables:
 -- mode: haskell

@@ -115,9 +115,9 @@ inferCriticalVariables = do
                 -- going to ignore intrinsics here
               ] `M.union` (M.unions . map (M.fromList . map (\ (a, (b, _)) -> (b, a)) . M.toList) $ M.elems mmap)
     fromWhereMap = genUniqNameToFilenameMap mfs
-  pure Criticals { criticalsPf           = pf
-                 , criticalsVariables    = eVars
-                 , criticalsDeclarations = dmap
-                 , criticalsUniqMap      = uniqnameMap
-                 , criticalsFromWhere    = fromWhereMap
-                 }
+  pure $!! Criticals { criticalsPf           = pf
+                     , criticalsVariables    = eVars
+                     , criticalsDeclarations = dmap
+                     , criticalsUniqMap      = uniqnameMap
+                     , criticalsFromWhere    = fromWhereMap
+                     }

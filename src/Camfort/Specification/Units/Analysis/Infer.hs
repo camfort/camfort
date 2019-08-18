@@ -117,10 +117,10 @@ inferUnits = do
   case eVars of
     [] -> do
       consistency <- checkUnits
-      pure $ case consistency of
+      pure $!! case consistency of
         Consistent{}     -> Inferred (InferenceReport pfUA eVars)
         Inconsistent err -> InfInconsistent err
-    _ -> pure . Inferred $ InferenceReport pfUA eVars
+    _ -> pure . Inferred $!! InferenceReport pfUA eVars
 
 -- | Return a list of variable names mapped to their corresponding
 -- unit that was inferred.

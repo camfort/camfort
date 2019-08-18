@@ -109,7 +109,7 @@ checkImplicitNone allPU pf = do
      ImplicitNoneReport [(F.Named name, orig)] -> logError orig name
      _ -> return ()
 
-  return $ mconcat checkedPUs
+  return $!! mconcat checkedPUs
 
   where
     isUseStmt (F.BlStatement _ _ _ (F.StUse {})) = True
@@ -187,7 +187,7 @@ checkAllocateStatements pf = do
 
   let reports = map checkPU (universeBi pf)
 
-  return $ mconcat reports
+  return $!! mconcat reports
 
 
 instance Describe CheckAllocReport where
@@ -237,7 +237,7 @@ checkFloatingPointUse pf = do
 
   let reports = map checkPU (universeBi pf'')
 
-  return $ mconcat reports
+  return $!! mconcat reports
 
 floatingPointTypes :: [F.BaseType]
 floatingPointTypes = [F.TypeReal, F.TypeDoubleComplex, F.TypeComplex, F.TypeDoublePrecision]
@@ -294,11 +294,11 @@ checkModuleUse pf = do
           unusedNames = [ (n, (F.getName pu, atSpannedInFile file ss))
                         | F.StUse _ _ _ _ _ (Just (F.AList _ _ uses)) <- statements
                         , (n, ss) <- map extractUseName uses
-                        , length [ () | F.ExpValue _ _ (F.ValVariable n') <- expressions, n == n' ] < 2 ]
+                        , null (drop 1 [ () | F.ExpValue _ _ (F.ValVariable n') <- expressions, n == n' ]) ]
 
   let reports = map checkPU (universeBi pf')
 
-  return $ mconcat reports
+  return $!! mconcat reports
 
 instance Describe CheckUseReport where
   describeBuilder (CheckUseReport {..})
