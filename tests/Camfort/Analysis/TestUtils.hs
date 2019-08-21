@@ -14,20 +14,17 @@ module Camfort.Analysis.TestUtils
   , testMultiFileAnalysisWithSrc
   ) where
 
-import           Control.Monad                 (forM_)
-import           Control.Monad.IO.Class
-import           System.Directory              (getCurrentDirectory)
-import           System.FilePath
-
-import           Control.Lens
-
-import qualified Language.Fortran.AST          as F
-import           Language.Fortran.Util.ModFile (ModFiles, emptyModFiles)
-
 import           Camfort.Analysis
 import           Camfort.Analysis.ModFile
 import           Camfort.Helpers
 import           Camfort.Input
+import           Control.Lens
+import           Control.Monad (forM_)
+import           Control.Monad.IO.Class
+import qualified Language.Fortran.AST as F
+import           Language.Fortran.Util.ModFile (ModFiles)
+import           System.Directory (getCurrentDirectory)
+import           System.FilePath
 
 
 data TestInput =
