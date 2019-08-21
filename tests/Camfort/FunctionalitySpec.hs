@@ -1,45 +1,37 @@
+{-# OPTIONS -Wno-unused-top-binds #-}
 -- TODO: Fix this
 module Camfort.FunctionalitySpec (spec) where
 
-import System.Directory (copyFile, doesDirectoryExist)
-import System.FilePath  ((</>))
-import System.IO.Silently (capture_)
-import System.IO.Temp   (withSystemTempDirectory)
-
-import           Test.Hspec hiding (Spec)
+import           Camfort.Specification.Units.Monad (LiteralsOpt(LitMixed))
+import           System.Directory (copyFile)
+import           System.FilePath ((</>))
+import           System.IO.Silently (capture_)
+import           System.IO.Temp (withSystemTempDirectory)
 import qualified Test.Hspec as Test
-
-import Camfort.Functionality
-  ( AnnotationType(ATDefault)
-  , camfortInitialize
-  , stencilsInfer
-  , unitsCheck, unitsInfer, unitsSynth )
-import Camfort.Specification.Units.Monad (LiteralsOpt(LitMixed))
+import           Test.Hspec hiding (Spec)
 
 spec :: Test.Spec
 spec = do
-  describe "camfortInitialize" $ return ()
-    -- xit "creates a .camfort directory" $
-    --   return ()
-      -- withSystemTempDirectory "camfort-test-tmp"
-      --   (\d -> camfortInitialize d >> doesDirectoryExist (d </> ".camfort"))
-      -- `shouldReturn` True
-  xdescribe "units-check" $ return ()
+  xdescribe "camfortInitialize" $ return ()
+  -- xit "creates a .camfort directory" $
+  --   withSystemTempDirectory "camfort-test-tmp"
+  --     (\d -> camfortInitialize d >> doesDirectoryExist (d </> ".camfort"))
+  --   `shouldReturn` True
+  -- xdescribe "units-check" $ return ()
   --   it "correctly detects basic cross-module inconsistent"
   --     return ()
   --     -- unitsCheckTestCrossModuleInconsistBasic
-  xdescribe "units-infer" $ return ()
+  -- xdescribe "units-infer" $ return ()
   --   it "shows consistency error with inconsistent program"
   --     return ()
   --     -- unitsInferTestCrossModuleInconsistBasic
-  xdescribe "units-synth" $ return ()
+  -- xdescribe "units-synth" $ return ()
   --   it "correct synth output with basic, consistent file"
-  --     return ()
-  --     -- unitsSynthTestBasic
-  xdescribe "stencils-infer" $ return ()
+  --     unitsSynthTestBasic
+  -- xdescribe "stencils-infer" $ return ()
   --   it "correctly infers with basic cross-module"
   --     return ()
-      -- stencilsInferTestCrossModuleBasic
+  --     stencilsInferTestCrossModuleBasic
 
 analysisWithTmpFilesTest
   :: FilePath -> [FilePath] -> FilePath
