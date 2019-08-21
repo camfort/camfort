@@ -16,30 +16,24 @@ module Camfort.Specification.Units.Analysis.Criticals
   ( inferCriticalVariables
   ) where
 
-import           Control.DeepSeq
-import           Control.Monad.State (get)
-import           Control.Monad.Reader (asks, lift)
-import           Data.Generics.Uniplate.Operations
-import qualified Data.Map.Strict       as M
-import           Data.Maybe (fromMaybe)
-
-import Camfort.Analysis
-import Camfort.Analysis.Annotations
-import Camfort.Analysis.ModFile (withCombinedModuleMap)
-import Camfort.Specification.Units.InferenceBackendSBV (criticalVariables)
-
--- Provides the types and data accessors used in this module
+import           Camfort.Analysis
+import           Camfort.Analysis.Annotations
+import           Camfort.Analysis.ModFile (withCombinedModuleMap)
 import           Camfort.Specification.Units.Analysis (UnitAnalysis, runInference)
 import qualified Camfort.Specification.Units.Annotation as UA
 import           Camfort.Specification.Units.Environment
+import           Camfort.Specification.Units.InferenceBackendSBV (criticalVariables)
 import           Camfort.Specification.Units.Monad
-import           Camfort.Specification.Units.MonadTypes
-
-import qualified Language.Fortran.AST               as F
-import qualified Language.Fortran.Analysis          as FA
-import qualified Language.Fortran.Analysis.Renaming as FAR
+import           Control.DeepSeq
+import           Control.Monad.Reader (asks, lift)
+import           Control.Monad.State (get)
+import           Data.Generics.Uniplate.Operations
+import qualified Data.Map.Strict as M
+import           Data.Maybe (fromMaybe)
+import qualified Language.Fortran.AST as F
+import qualified Language.Fortran.Analysis as FA
 import           Language.Fortran.Util.ModFile
-import qualified Language.Fortran.Util.Position     as FU
+import qualified Language.Fortran.Util.Position as FU
 
 -- | An inference of variables that must be provided with
 -- unit annotations before units for all variables can be
