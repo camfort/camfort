@@ -16,28 +16,21 @@ module Camfort.Specification.Units.Analysis.Consistent
   , checkUnits
   ) where
 
+import           Camfort.Analysis (ExitCodeOfReport(..), Describe(..))
+import           Camfort.Specification.Units.Analysis (UnitAnalysis, runInference)
+import qualified Camfort.Specification.Units.Annotation as UA
+import qualified Camfort.Specification.Units.BackendTypes as B
+import           Camfort.Specification.Units.Environment
+import           Camfort.Specification.Units.InferenceBackend (inconsistentConstraints)
+import           Camfort.Specification.Units.Monad
 import           Control.DeepSeq
-import           Control.Monad.State (get)
 import           Control.Monad.Reader (asks)
-import           Data.Data
+import           Control.Monad.State (get)
 import           Data.Generics.Uniplate.Operations
 import           Data.List (partition, find, group, sort)
 import qualified Data.Map.Strict as M
 import           Data.Maybe (maybeToList, maybe)
-import           Data.Function (on)
-
-import           Camfort.Analysis (ExitCodeOfReport(..), Describe(..))
-import           Camfort.Analysis.Annotations
-import           Camfort.Specification.Units.Analysis (UnitAnalysis, runInference)
-import qualified Camfort.Specification.Units.Annotation as UA
-import           Camfort.Specification.Units.Environment
-import           Camfort.Specification.Units.InferenceBackend (inconsistentConstraints)
-import qualified Camfort.Specification.Units.InferenceBackend as MatrixBackend
-import           Camfort.Specification.Units.Monad
-import           Camfort.Specification.Units.MonadTypes
-import qualified Camfort.Specification.Units.BackendTypes as B
-
-import qualified Language.Fortran.AST           as F
+import qualified Language.Fortran.AST as F
 import qualified Language.Fortran.Util.Position as FU
 
 -- | A report that summarises unit consistency.
@@ -93,8 +86,8 @@ instance Show ConsistencyError where
               rhs = flattenUnits v
           orient c = c
 
-          partitionUnits f u = (foldUnits a, foldUnits b)
-            where (a, b) = partition f (flattenUnits u)
+          -- partitionUnits f u = (foldUnits a, foldUnits b)
+          --   where (a, b) = partition f (flattenUnits u)
           unitPower (UnitPow u k) = unitPower u * k
           unitPower UnitlessLit = 0
           unitPower UnitlessVar = 0
@@ -201,12 +194,14 @@ shiftConEq f (ConEq l r) = ConEq (foldUnits (lhsOk ++ negateCons rhsShift)) (fol
 shiftConEq f (ConConj cs) = ConConj $ map (shiftConEq f) cs
 
 -- | Balance equations by shifting terms that satisfy predicate f
+balanceConEq :: (UnitInfo -> Bool) -> Constraint -> Constraint
 balanceConEq f (ConEq l r) = ConEq (foldUnits (lhsOk ++ negateCons rhsShift)) (foldUnits (rhsOk ++ negateCons lhsShift))
   where
     (lhsShift, lhsOk) = partition f (flattenUnits l)
     (rhsShift, rhsOk) = partition f (flattenUnits r)
 balanceConEq f (ConConj cs) = ConConj $ map (balanceConEq f) cs
 
+negateCons :: [UnitInfo] -> [UnitInfo]
 negateCons = map (\ x -> case x of
                      UnitPow u k -> UnitPow u (-k)
                      u -> UnitPow u (-1))
