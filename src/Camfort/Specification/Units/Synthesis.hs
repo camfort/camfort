@@ -20,21 +20,19 @@ module Camfort.Specification.Units.Synthesis
   (runSynthesis)
 where
 
-import Data.Maybe
-import qualified Data.Set as S
-import Data.Generics.Uniplate.Operations
-import Control.Monad.State.Strict hiding (gets)
-
-import qualified Language.Fortran.AST as F
-import qualified Language.Fortran.Analysis as FA
-import qualified Language.Fortran.Util.Position as FU
-
-import           Camfort.Analysis.Annotations hiding (Unitless)
+import           Camfort.Analysis.Annotations
 import           Camfort.Specification.Units.Analysis (puName, puSrcName)
 import           Camfort.Specification.Units.Annotation (UA)
 import qualified Camfort.Specification.Units.Annotation as UA
 import           Camfort.Specification.Units.Environment
 import           Camfort.Specification.Units.Monad
+import           Control.Monad.State.Strict hiding (gets)
+import           Data.Generics.Uniplate.Operations
+import           Data.Maybe
+import qualified Data.Set as S
+import qualified Language.Fortran.AST as F
+import qualified Language.Fortran.Analysis as FA
+import qualified Language.Fortran.Util.Position as FU
 
 -- | Insert unit declarations into the ProgramFile as comments.
 runSynthesis :: Char -> [(VV, UnitInfo)] -> UnitSolver [(VV, UnitInfo)]
@@ -57,7 +55,7 @@ synthBlock marker vars bs b@(F.BlStatement a (FU.SrcSpan lp _) _ (F.StDeclaratio
   pf    <- usProgramFile `fmap` get
   gvSet <- usGivenVarSet `fmap` get
   newBs <- fmap catMaybes . forM (universeBi decls) $ \ e -> case e of
-    e@(F.ExpValue _ _ (F.ValVariable _))
+    (F.ExpValue _ _ (F.ValVariable _))
       | vname `S.notMember` gvSet                     -- not a member of the already-given variables
       , Just u <- lookup (vname, sname) vars -> do    -- and a unit has been inferred
         -- Create new annotation which labels this as a refactored node.
@@ -117,4 +115,5 @@ synthProgramUnit marker vars pus pu@(F.PUFunction a (FU.SrcSpan lp _) _ _ _ _ mr
 synthProgramUnit marker vars pus pu = fmap (:pus) $ descendBiM (synthProgramUnits marker vars) pu
 
 -- Pretty print a unit declaration.
+showUnitDecl :: ([Char], UnitInfo) -> [Char]
 showUnitDecl (sname, u) = "unit(" ++ show u ++ ") :: " ++ sname
