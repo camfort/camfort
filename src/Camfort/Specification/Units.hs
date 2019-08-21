@@ -22,11 +22,6 @@
 
 module Camfort.Specification.Units (synthesiseUnits) where
 
-import Control.Monad.Reader (asks)
-
-import qualified Language.Fortran.AST      as F
-import qualified Language.Fortran.Analysis as FA
-
 import           Camfort.Analysis.Annotations
 import           Camfort.Specification.Units.Analysis
   (UnitAnalysis, runInference)
@@ -37,15 +32,15 @@ import           Camfort.Specification.Units.Analysis.Infer
 import qualified Camfort.Specification.Units.Annotation as UA
 import           Camfort.Specification.Units.InferenceBackend (chooseImplicitNames)
 import           Camfort.Specification.Units.Monad
-import           Camfort.Specification.Units.MonadTypes (UnitEnv(..))
 import           Camfort.Specification.Units.Synthesis (runSynthesis)
+import qualified Language.Fortran.AST as F
+import qualified Language.Fortran.Analysis as FA
 
 {-| Synthesis unspecified units for a program (after checking) -}
 synthesiseUnits
   :: Char -> UnitAnalysis (Either ConsistencyError (InferenceReport, F.ProgramFile Annotation))
 synthesiseUnits marker = do
   infRes <- inferUnits
-  pfOriginal <- asks unitProgramFile
   case infRes of
     InfInconsistent err       -> pure $ Left err
     Inferred report -> do
