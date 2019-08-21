@@ -21,47 +21,45 @@ module Camfort.Specification.Units.Analysis
   , puSrcName
   ) where
 
-import           Control.Monad
-import           Control.Monad.State.Strict
-import           Control.Monad.Writer.Lazy
-import           Control.Monad.Reader
-import           Data.Data (Data)
-import qualified Data.IntMap.Strict as IM
-import           Data.Generics.Uniplate.Operations
-import           Data.List (nub, intercalate)
-import qualified Data.Array as A
-import qualified Data.Map.Strict as M
-import           Data.Maybe (isJust, fromMaybe, mapMaybe)
-import qualified Data.Set as S
-import qualified Numeric.LinearAlgebra as H -- for debugging
-import           Data.Text (Text)
-import           Control.Lens ((^?), _1)
-
-import qualified Language.Fortran.AST      as F
-import qualified Language.Fortran.Analysis as FA
-import qualified Language.Fortran.Analysis.DataFlow as FAD
-import qualified Language.Fortran.Analysis.BBlocks as FAB
-import           Language.Fortran.Analysis (constExp, varName, srcName)
-import           Language.Fortran.Parser.Utils (readReal, readInteger)
-import           Language.Fortran.Util.ModFile
-import           Language.Fortran.Util.Position (getSpan)
-
 import           Camfort.Analysis
-import           Camfort.Analysis.Logger (LogLevel(..))
 import           Camfort.Analysis.Annotations (Annotation)
 import           Camfort.Analysis.CommentAnnotator (annotateComments)
+import           Camfort.Analysis.Logger (LogLevel(..))
 import           Camfort.Analysis.ModFile (withCombinedEnvironment)
-import qualified Camfort.Specification.Units.Annotation   as UA
+import qualified Camfort.Specification.Units.Annotation as UA
 import           Camfort.Specification.Units.Environment
 import           Camfort.Specification.Units.InferenceBackend
 import qualified Camfort.Specification.Units.InferenceBackendFlint as Flint
+import qualified Camfort.Specification.Units.InferenceBackendSBV as BackendSBV
 import           Camfort.Specification.Units.ModFile
   (genUnitsModFile, initializeModFiles, runCompileUnits)
 import           Camfort.Specification.Units.Monad
 import           Camfort.Specification.Units.MonadTypes
 import           Camfort.Specification.Units.Parser (unitParser)
 import qualified Camfort.Specification.Units.Parser.Types as P
-import qualified Camfort.Specification.Units.InferenceBackendSBV as BackendSBV
+import           Control.Lens ((^?), _1)
+import           Control.Monad
+import           Control.Monad.Reader
+import           Control.Monad.State.Strict
+import           Control.Monad.Writer.Lazy
+import qualified Data.Array as A
+import           Data.Data (Data)
+import           Data.Generics.Uniplate.Operations
+import qualified Data.IntMap.Strict as IM
+import           Data.List (nub, intercalate)
+import qualified Data.Map.Strict as M
+import           Data.Maybe (isJust, fromMaybe, mapMaybe)
+import qualified Data.Set as S
+import           Data.Text (Text)
+import qualified Language.Fortran.AST as F
+import           Language.Fortran.Analysis (constExp, varName, srcName)
+import qualified Language.Fortran.Analysis as FA
+import qualified Language.Fortran.Analysis.BBlocks as FAB
+import qualified Language.Fortran.Analysis.DataFlow as FAD
+import           Language.Fortran.Parser.Utils (readReal, readInteger)
+import           Language.Fortran.Util.ModFile
+import qualified Numeric.LinearAlgebra as H -- for debugging
+import           Prelude hiding (mod)
 
 -- | Prepare to run an inference function.
 initInference :: UnitSolver ()
@@ -129,7 +127,6 @@ initInference = do
 -- | Run a 'UnitSolver' analysis within a 'UnitsAnalysis'.
 runInference :: UnitSolver a -> UnitAnalysis (a, UnitState)
 runInference solver = do
-  uOpts <- asks unitOpts
   pf <- asks unitProgramFile
   mfs <- lift analysisModFiles
 
@@ -332,14 +329,14 @@ annotateLiteralsPU pu = do
       F.ExpBinary a s op e1 e2
         | op `elem` [F.Multiplication, F.Division] -> case () of
             -- leave it alone if they're both constants
-            _ | Just c1 <- constExp (F.getAnnotation e1)
-              , Just c2 <- constExp (F.getAnnotation e2)        -> pure e
+            _ | Just _ <- constExp (F.getAnnotation e1)
+              , Just _ <- constExp (F.getAnnotation e2)        -> pure e
             -- a constant multiplier is unitless
-            _ | Just c1 <- constExp (F.getAnnotation e1)
+            _ | Just _ <- constExp (F.getAnnotation e1)
               , Just UnitLiteral{} <- UA.getUnitInfo e1         ->
                 pure $ F.ExpBinary a s op (UA.setUnitInfo UnitlessLit e1) e2
             -- a constant multiplier is unitless
-              | Just c2 <- constExp (F.getAnnotation e2)
+              | Just _ <- constExp (F.getAnnotation e2)
               , Just UnitLiteral{} <- UA.getUnitInfo e2         ->
                 pure $ F.ExpBinary a s op e1 (UA.setUnitInfo UnitlessLit e2)
             _                                                   -> pure e
@@ -362,7 +359,7 @@ annotateLiteralsPU pu = do
       | isLiteral e = flip UA.setUnitInfo e <$> m
       | otherwise   = pure e
 
-    isPolyCtxt = case pu of F.PUFunction {} -> True; F.PUSubroutine {} -> True; _ -> False
+    -- isPolyCtxt = case pu of F.PUFunction {} -> True; F.PUSubroutine {} -> True; _ -> False
 
     genLit e
       | isLiteralZero e = withLiterals genParamLit e
@@ -386,6 +383,7 @@ isLiteralNonZero e = case constExp (F.getAnnotation e) of
   Just (FA.ConstUninterpReal s) -> readReal s /= Just 0
   _                             -> False
 
+isLiteralZero :: F.Expression UA -> Bool
 isLiteralZero x = isLiteral x && not (isLiteralNonZero x)
 
 --------------------------------------------------
@@ -631,6 +629,7 @@ propagateDoSpec ast@(F.DoSpecification _ _ (F.StExpressionAssign _ _ e1 _) e2 m_
              u3 <- (UA.getUnitInfo =<< m_e3) `mplus` if isMonomorphic u2 then mzero else pure UnitlessVar
              pure [ConEq u2 u3]
         ]
+propagateDoSpec _ = error "propagateDoSpec: called on invalid DoSpec"
 
 propagateStatement :: F.Statement UA -> UnitSolver (F.Statement UA)
 propagateStatement stmt = case stmt of
@@ -835,6 +834,7 @@ binOpKind F.EQ               = RelOp
 binOpKind F.NE               = RelOp
 binOpKind F.Or               = LogicOp
 binOpKind F.And              = LogicOp
+binOpKind F.XOr              = LogicOp
 binOpKind F.Equivalent       = RelOp
 binOpKind F.NotEquivalent    = RelOp
 binOpKind (F.BinCustom _)    = RelOp
@@ -846,7 +846,7 @@ getImportedVariables = do
   nmap <- getNameParamMap
   -- Translate a Use AST node into a pair mapping unique name to 'local' source name in this program file.
   let useToPair (F.UseID _ _ e) = (varName e, srcName e)
-      useToPair (F.UseRename _ _ e1 e2) = (varName e1, srcName e1) -- (unique name, 'local' source name)
+      useToPair (F.UseRename _ _ e1 _) = (varName e1, srcName e1) -- (unique name, 'local' source name)
   -- A map of modules -> (maps of variables -> their unit info).
   let modnmaps = [ M.fromList (mapMaybe f (M.toList npkmap))
                  -- find all StUse statements and identify variables that need to be imported from nmap
@@ -918,7 +918,7 @@ debugLogging = do
     logDebugNoOrigin $ "newColIndices = " <> describeShow newColIndices
     logDebugNoOrigin "--------------------------------------------------\nLHS Cols with newColIndices:"
     let lhsCols = A.elems lhsColA ++ map (lhsColA A.!) newColIndices
-    logDebugNoOrigin $ describe . unlines . map show $ zip [0..] lhsCols
+    logDebugNoOrigin $ describe . unlines . map show $ zip [(0::Int)..] lhsCols
     -- logDebugNoOrigin "--------------------------------------------------\nSolved (SVD) M:"
     -- logDebugNoOrigin $ show (H.linearSolveSVD lhsM rhsM)
     -- logDebugNoOrigin "--------------------------------------------------\nSingular Values:"
@@ -932,8 +932,8 @@ debugLogging = do
     let unitAssignments = genUnitAssignments cons
     logDebugNoOrigin . describe . unlines $ map (\ (u1s, u2) -> "  ***UnitAssignment: " ++ show u1s ++ " === " ++ show (flattenUnits u2) ++ "\n") unitAssignments
     logDebugNoOrigin "--------------------------------------------------"
-    let unitAssignments = BackendSBV.genUnitAssignments cons
-    logDebugNoOrigin . describe . unlines $ map (\ (u1s, u2) -> "  ***UnitAssignmentSBV: " ++ show u1s ++ " === " ++ show (flattenUnits u2)) unitAssignments
+    let unitAssignmentsSBV = BackendSBV.genUnitAssignments cons
+    logDebugNoOrigin . describe . unlines $ map (\ (u1s, u2) -> "  ***UnitAssignmentSBV: " ++ show u1s ++ " === " ++ show (flattenUnits u2)) unitAssignmentsSBV
     logDebugNoOrigin "--------------------------------------------------\nProvenance:"
     let (augM', p) = provenance augM
     logDebugNoOrigin . describeShow $ augM'
