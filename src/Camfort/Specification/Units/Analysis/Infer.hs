@@ -18,33 +18,24 @@ module Camfort.Specification.Units.Analysis.Infer
   , inferUnits
   ) where
 
+import           Camfort.Analysis (ExitCodeOfReport(..), Describe(..))
+import           Camfort.Specification.Units.Analysis
+  (UnitAnalysis, puName, puSrcName, runInference)
+import           Camfort.Specification.Units.Analysis.Consistent
+  (ConsistencyError, ConsistencyReport(..), checkUnits)
+import           Camfort.Specification.Units.Environment
+import           Camfort.Specification.Units.InferenceBackend (inferVariables, chooseImplicitNames)
+import           Camfort.Specification.Units.Monad
 import           Control.DeepSeq
 import           Data.Data (Data)
-import           Data.Generics.Uniplate.Operations
-  (universeBi)
+import           Data.Generics.Uniplate.Operations (universeBi)
 import           Data.List (sort)
 import qualified Data.Map.Strict as M
 import           Data.Maybe (mapMaybe, maybeToList)
 import           GHC.Generics (Generic)
-import qualified Data.ByteString as B
-
-import qualified Language.Fortran.AST           as F
-import qualified Language.Fortran.Analysis      as FA
+import qualified Language.Fortran.AST as F
+import qualified Language.Fortran.Analysis as FA
 import qualified Language.Fortran.Util.Position as FU
-
-import Camfort.Analysis (ExitCodeOfReport(..), Describe(..))
-import Camfort.Analysis.Annotations (Annotation)
-import Camfort.Specification.Units.Analysis
-  (UnitAnalysis, puName, puSrcName, runInference)
-import Camfort.Specification.Units.Analysis.Consistent
-  (ConsistencyError, ConsistencyReport(..), checkUnits)
-import Camfort.Specification.Units.Environment
--- import Camfort.Specification.Units.InferenceBackendSBV (inferVariables)
-import Camfort.Specification.Units.InferenceBackend (inferVariables,
-                                                     chooseImplicitNames)
-import Camfort.Specification.Units.Monad
-
-import Camfort.Helpers (FileOrDir, Filename)
 
 data ExpInfo = ExpInfo
   { eiSrcSpan :: FU.SrcSpan
