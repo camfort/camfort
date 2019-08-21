@@ -50,10 +50,11 @@ module Camfort.Specification.Stencils.Model ( Interval(..)
                                             , Peelable(..)
                                             ) where
 
+import           Prelude hiding (pred)
+
 import qualified Control.Monad as CM
 
 import           Algebra.Lattice
-import           Data.Semigroup
 import qualified Data.List.NonEmpty as NE
 import qualified Data.Set as S
 import           Data.Foldable
@@ -122,19 +123,19 @@ data Bound = Arbitrary | Standard
 -- 1. The first num. param. is less than the second;
 -- 2. For holed intervals, first num. param. <= 0 <= second num. param.;
 data Interval a where
-  IntervArbitrary :: Int -> Int -> Interval Arbitrary
-  IntervInfiniteArbitrary :: Interval Arbitrary
-  IntervHoled     :: Int64 -> Int64 -> Bool -> Interval Standard
-  IntervInfinite  :: Interval Standard
+  IntervArbitrary :: Int -> Int -> Interval 'Arbitrary
+  IntervInfiniteArbitrary :: Interval 'Arbitrary
+  IntervHoled     :: Int64 -> Int64 -> Bool -> Interval 'Standard
+  IntervInfinite  :: Interval 'Standard
 
 deriving instance Eq (Interval a)
 
-instance Show (Interval Standard) where
+instance Show (Interval 'Standard) where
   show IntervInfinite = "IntervInfinite"
   show (IntervHoled lb up p) =
     "Interv [" ++ show lb ++ "," ++ show up ++ "]^" ++ show p
 
-approxInterv :: Interval Arbitrary -> Approximation (Interval Standard)
+approxInterv :: Interval 'Arbitrary -> Approximation (Interval 'Standard)
 approxInterv (IntervArbitrary a b)
   | a > b = error
     "Interval condition violated: lower bound is bigger than the upper bound."
@@ -150,22 +151,22 @@ approxInterv (IntervArbitrary a b)
 approxInterv IntervInfiniteArbitrary = Exact IntervInfinite
 
 approxVec :: forall n .
-             V.Vec n (Interval Arbitrary)
-          -> Approximation (V.Vec n (Interval Standard))
+             V.Vec n (Interval 'Arbitrary)
+          -> Approximation (V.Vec n (Interval 'Standard))
 approxVec v =
   case findApproxIntervs stdVec of
     ([],_) -> Exact . fmap fromExact $ stdVec
     _      -> Bound Nothing (Just $ upperBound <$> stdVec)
   where
-    stdVec :: V.Vec n (Approximation (Interval Standard))
+    stdVec :: V.Vec n (Approximation (Interval 'Standard))
     stdVec = fmap approxInterv v
 
-    findApproxIntervs :: forall n . V.Vec n (Approximation (Interval Standard))
+    findApproxIntervs :: forall n' . V.Vec n' (Approximation (Interval 'Standard))
                       -> ([ Int ], [ Int ])
-    findApproxIntervs v = findApproxIntervs' 0 v ([],[])
+    findApproxIntervs v' = findApproxIntervs' 0 v' ([],[])
 
-    findApproxIntervs' :: forall n . Int
-                       -> V.Vec n (Approximation (Interval Standard))
+    findApproxIntervs' :: forall n' . Int
+                       -> V.Vec n' (Approximation (Interval 'Standard))
                        -> ([ Int ], [ Int ])
                        -> ([ Int ], [ Int ])
     findApproxIntervs' _ V.Nil acc = acc
@@ -175,9 +176,9 @@ approxVec v =
           Bound{} -> (i:bixs, eixs)
           Exact{} -> (bixs, i:eixs)
 
-instance Container (Interval Standard) where
-  type MemberTyp (Interval Standard) = Int64
-  type CompTyp (Interval Standard) = SInt64
+instance Container (Interval 'Standard) where
+  type MemberTyp (Interval 'Standard) = Int64
+  type CompTyp (Interval 'Standard) = SInt64
 
   member 0 (IntervHoled _ _ b) = b
   member i (IntervHoled a b _) = i >= a && i <= b
@@ -190,7 +191,7 @@ instance Container (Interval Standard) where
       range = (fromIntegral i1, fromIntegral i2)
   compile IntervInfinite _ = sTrue
 
-instance Lattice (Interval Standard) where
+instance Lattice (Interval 'Standard) where
   (IntervHoled lb ub noHole) \/ (IntervHoled lb' ub' noHole') =
     IntervHoled (min lb lb') (max ub ub') (noHole || noHole')
   _ \/ _ = top
@@ -199,13 +200,13 @@ instance Lattice (Interval Standard) where
   int@IntervHoled{} /\ _ = int
   _ /\ int = int
 
-instance BoundedJoinSemiLattice (Interval Standard) where
+instance BoundedJoinSemiLattice (Interval 'Standard) where
   bottom = IntervHoled 0 0 False
 
-instance BoundedMeetSemiLattice (Interval Standard) where
+instance BoundedMeetSemiLattice (Interval 'Standard) where
   top = IntervInfinite
 
--- instance BoundedLattice (Interval Standard)
+-- instance BoundedLattice (Interval 'Standard)
 
 --------------------------------------------------------------------------------
 -- Union of cartesian products normal form
@@ -221,12 +222,12 @@ instance Container a => Container (UnionNF n a) where
   type CompTyp (UnionNF n a) = V.Vec n (CompTyp a)
   member is = any (member' is)
     where
-      member' is space = and $ V.zipWith member is space
+      member' is' space = and $ V.zipWith member is' space
 
   compile spaces is = foldr1 (.||) $ NE.map (`compile'` is) spaces
     where
-      compile' space is =
-        foldr' (\(set, i) -> (.&&) $ compile set i) sTrue $ V.zip space is
+      compile' space is' =
+        foldr' (\(set, i) -> (.&&) $ compile set i) sTrue $ V.zip space is'
 
 instance BoundedMeetSemiLattice a => Lattice (UnionNF n a) where
   oi \/ oi' = oi <> oi'
@@ -295,7 +296,7 @@ instance PO.PartialOrd Offsets where
   SetOfIntegers <= Offsets{} = False
   _ <= SetOfIntegers = True
 
-instance PO.PartialOrd (Interval Standard) where
+instance PO.PartialOrd (Interval 'Standard) where
   (IntervHoled lb ub p) <= (IntervHoled lb' ub' p') =
     (p' || not p) && lb >= lb' && ub <= ub'
   IntervInfinite <= IntervHoled{} = False
@@ -304,7 +305,7 @@ instance PO.PartialOrd (Interval Standard) where
 instance PO.PartialOrd a => PO.PartialOrd (V.Vec n a) where
   v <= v' = and $ V.zipWith (PO.<=) v v'
 
-optimise :: UnionNF n (Interval Standard) -> UnionNF n (Interval Standard)
+optimise :: UnionNF n (Interval 'Standard) -> UnionNF n (Interval 'Standard)
 optimise = NE.fromList . maximas . fixedPointUnion . NE.toList
   where
     fixedPointUnion unf =
@@ -318,7 +319,7 @@ sensibleGroupBy :: Eq a =>
                 -> [ [ a ] ]
 sensibleGroupBy ord p l = nub . map (\el -> sortBy ord . filter (p el) $ l) $ l
 
-maximas :: [ V.Vec n (Interval Standard) ] -> [ V.Vec n (Interval Standard) ]
+maximas :: [ V.Vec n (Interval 'Standard) ] -> [ V.Vec n (Interval 'Standard) ]
 maximas = nub
         . fmap (head . PO.maxima)
         . sensibleGroupBy ord (PO.<=)
@@ -330,7 +331,7 @@ maximas = nub
 -- The union is again a product of intervals that agrees with the original
 -- dimensions in all dimensions except the original differing one. At that
 -- point it is the union of intervals, which is itself still an interval.
-unionLemma :: [ V.Vec n (Interval Standard) ] -> [ V.Vec n (Interval Standard) ]
+unionLemma :: [ V.Vec n (Interval 'Standard) ] -> [ V.Vec n (Interval 'Standard) ]
 unionLemma = map (foldr1 (V.zipWith (\/)))
            . sensibleGroupBy (\a b -> if a == b then EQ else LT) agreeButOne
   where
