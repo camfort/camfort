@@ -50,10 +50,8 @@ import qualified Data.Set as S
 import qualified Language.Fortran.AST               as F
 import qualified Language.Fortran.Analysis          as FA
 import qualified Language.Fortran.Analysis.DataFlow as FAD
-import           Language.Fortran.Util.ModFile (ModFiles)
 import qualified Language.Fortran.Util.Position     as FU
 
-import           Camfort.Analysis
 import           Camfort.Helpers (collect)
 import qualified Camfort.Helpers.Vec as V
 import           Camfort.Specification.Stencils.Annotation ()
