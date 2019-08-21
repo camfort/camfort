@@ -19,27 +19,17 @@
 
 module Camfort.Transformation.EquivalenceElimSpec (spec) where
 
-import           Control.Arrow                          (second)
-import           Control.Monad                          (forM_)
-import           System.Directory
-import           System.FilePath
-import           System.IO.Silently                     (capture_)
-
-import           Control.Lens
-
-import           Test.Hspec
-
-import qualified Language.Fortran.Util.Position         as FU
-
-import           Camfort.Analysis                       hiding (describe)
-import           Camfort.Analysis.Logger                hiding (describe)
-import           Camfort.Analysis.ModFile               (MFCompiler,
-                                                         genModFiles,
-                                                         simpleCompiler)
+import           Camfort.Analysis hiding (describe)
+import           Camfort.Analysis.Logger hiding (describe)
 import           Camfort.Analysis.TestUtils
 import           Camfort.Functionality
-import           Camfort.Input
 import           Camfort.Transformation.EquivalenceElim
+import           Control.Lens
+import           Control.Monad (forM_)
+import qualified Language.Fortran.Util.Position as FU
+import           System.Directory
+import           System.FilePath
+import           Test.Hspec
 
 samplesBase :: FilePath
 samplesBase = "tests" </> "fixtures" </> "Transformation"
@@ -63,7 +53,7 @@ readActual argumentFilename = do
         , ceFortranVersion = Nothing
         }
 
-  equivalences outFile env
+  _ <- equivalences outFile env
   actual <- readFile outFile
   removeFile outFile
   return actual
