@@ -561,6 +561,7 @@ translateValue e = case e of
     F.ValAssignment   -> unsupported "interface assignment"
     F.ValType s       -> unsupported "type value"
     F.ValStar         -> unsupported "star value"
+    F.ValColon        -> unsupported "colon value"
   _ -> fail "impossible: translateValue called on a non-value"
 
 
