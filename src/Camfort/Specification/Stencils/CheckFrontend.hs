@@ -29,15 +29,16 @@ module Camfort.Specification.Stencils.CheckFrontend
   , existingStencils
   ) where
 
-import Control.DeepSeq
-import Control.Monad.IO.Class (MonadIO(..))
-import Control.Monad.Reader (MonadReader, ReaderT, asks, runReaderT)
-import Control.Monad.State.Strict
-import Control.Monad.Writer.Lazy hiding (Product)
-import Data.Function (on)
-import Data.Generics.Uniplate.Operations
-import Data.List (intercalate, sort, union)
-import Data.Maybe
+import           Prelude hiding (span)
+
+import           Control.DeepSeq
+import           Control.Monad.Reader (ReaderT, asks, runReaderT)
+import           Control.Monad.State.Strict hiding (state)
+import           Control.Monad.Writer.Lazy hiding (Product)
+import           Data.Function (on)
+import           Data.Generics.Uniplate.Operations
+import           Data.List (intercalate, sort, union)
+import           Data.Maybe
 
 import           Camfort.Analysis
 import           Camfort.Analysis.Annotations
@@ -53,12 +54,11 @@ import qualified Camfort.Specification.Stencils.Parser as Parser
 import           Camfort.Specification.Stencils.Parser.Types (reqRegions)
 import           Camfort.Specification.Stencils.Syntax
 
-import qualified Language.Fortran.AST               as F
-import qualified Language.Fortran.Analysis          as FA
-import qualified Language.Fortran.Analysis.BBlocks  as FAB
+import qualified Language.Fortran.AST as F
+import qualified Language.Fortran.Analysis as FA
+import qualified Language.Fortran.Analysis.BBlocks as FAB
 import qualified Language.Fortran.Analysis.DataFlow as FAD
-import qualified Language.Fortran.Util.ModFile      as MF
-import qualified Language.Fortran.Util.Position     as FU
+import qualified Language.Fortran.Util.Position as FU
 
 -- TODO: Replace instances of this with logging of errors and warnings
 newtype CheckResult = CheckResult [StencilResult]
@@ -187,7 +187,7 @@ unusedRegion :: FU.SrcSpan -> Variable -> StencilResult
 unusedRegion srcSpan var = SCWarn $ UnusedRegion srcSpan var
 
 specOkay :: FU.SrcSpan -> Specification -> Variable -> FU.SrcSpan -> StencilResult
-specOkay spanSpec@(FU.SrcSpan (FU.Position o1 _ _ _ _) (FU.Position o2 _ _ _ _)) spec var spanBody@(FU.SrcSpan (FU.Position o1' _ _ _ _) (FU.Position o2' _ _ _ _)) =
+specOkay spanSpec spec var spanBody =
   SCOkay { scSpan      = spanSpec
          , scSpec      = spec
          , scBodySpan  = spanBody
@@ -286,12 +286,12 @@ addResult r = modify (\s -> s { checkResult = r : checkResult s })
 
 -- | Remove the given regions variables from the tracked unused regions.
 informRegionsUsed :: [Variable] -> Checker ()
-informRegionsUsed regions = modify
-  (\s -> s { usedRegions = usedRegions s `union` regions })
+informRegionsUsed rs = modify
+  (\s -> s { usedRegions = usedRegions s `union` rs })
 
 -- | Start tracking a region.
 addRegionToTracked :: FU.SrcSpan -> Variable -> Checker ()
-addRegionToTracked srcSpan@(FU.SrcSpan (FU.Position o1 _ _ _ _) (FU.Position o2 _ _ _ _)) r =
+addRegionToTracked srcSpan r =
   modify (\s -> s { regions = (srcSpan, r) : regions s })
 
 -- | True if the region name is already tracked.
@@ -410,7 +410,7 @@ checkStencil block specDecls spanInferred maybeSubs span = do
   -- Work out whether this is a stencil (non empty LHS indices) or not
   let (subs, isStencil) = case maybeSubs of
                              Nothing -> ([], False)
-                             Just subs -> (subs, True)
+                             Just subs' -> (subs', True)
 
   -- Get the induction variables relative to the current block
   ivmap <- fmap ivMap get
