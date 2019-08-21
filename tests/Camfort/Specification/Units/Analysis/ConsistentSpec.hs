@@ -1,22 +1,17 @@
 -- TODO: Fix this
 module Camfort.Specification.Units.Analysis.ConsistentSpec (spec) where
 
-import System.FilePath ((</>))
-
-import Control.Lens
-
-import Test.Hspec hiding (Spec)
+import           Camfort.Analysis hiding (describe)
+import           Camfort.Analysis.ModFile (genModFiles)
+import           Camfort.Input (readParseSrcDir)
+import           Camfort.Specification.Units.Analysis (compileUnits)
+import           Camfort.Specification.Units.Analysis.Consistent (checkUnits)
+import           Camfort.Specification.Units.Monad (LiteralsOpt(..), unitOpts0, uoLiterals, runUnitAnalysis, UnitEnv(..))
+import           Control.Lens
+import           Language.Fortran.Util.ModFile (ModFile, emptyModFiles)
+import           System.FilePath ((</>))
 import qualified Test.Hspec as Test
-
-import Language.Fortran.Util.ModFile (ModFile, emptyModFiles)
-
-import Camfort.Analysis hiding (describe)
-import Camfort.Analysis.ModFile (genModFiles)
-import Camfort.Input (readParseSrcDir)
-import Camfort.Specification.Units.Analysis (compileUnits)
-import Camfort.Specification.Units.Analysis.Consistent (checkUnits)
-import Camfort.Specification.Units.Monad
-  (LiteralsOpt(..), unitOpts0, uoLiterals, runUnitAnalysis, UnitEnv(..))
+import           Test.Hspec hiding (Spec)
 
 spec :: Test.Spec
 spec =
@@ -139,12 +134,12 @@ literalNonZeroInconsist3Report =
   \ - at 7:3: 'result of sqr' should have unit 's'\n\
   \ - at 7:11: 'parameter 1 to sqr' should have unit 's'\n"
 
-literalNonZeroInconsist4Report :: String -- fixme
-literalNonZeroInconsist4Report =
-  "\ntests/fixtures/Specification/Units/literal-nonzero-inconsist5.f90: Inconsistent:\n\
-  \- at 7:11: 'parameter 1 to sqr' should have unit 's'\n\
-  \- at 15:9: 'i' should have the same units as 'parameter 1 to sqr'\n\
-  \- at 17:12: 'i' should have unit '1'\n"
+-- literalNonZeroInconsist4Report :: String -- fixme
+-- literalNonZeroInconsist4Report =
+--   "\ntests/fixtures/Specification/Units/literal-nonzero-inconsist5.f90: Inconsistent:\n\
+--   \- at 7:11: 'parameter 1 to sqr' should have unit 's'\n\
+--   \- at 15:9: 'i' should have the same units as 'parameter 1 to sqr'\n\
+--   \- at 17:12: 'i' should have unit '1'\n"
 
 literalNonZeroInconsist5Report :: String
 literalNonZeroInconsist5Report =
