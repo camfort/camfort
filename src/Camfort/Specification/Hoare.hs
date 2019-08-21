@@ -124,25 +124,17 @@ end function multiply
 -}
 module Camfort.Specification.Hoare (check, HoareCheckResults(..), PrimReprOption(..)) where
 
-import           Control.Monad.Except
-import           Control.DeepSeq
-import           Data.List                                 (intersperse)
-
-import qualified Language.Fortran.Analysis                 as FA
-import qualified Language.Fortran.Analysis.BBlocks         as FAB
-import qualified Language.Fortran.Analysis.Renaming        as FAR
-import qualified Language.Fortran.AST                      as F
-import qualified Language.Fortran.Util.Position            as F
-
 import           Camfort.Analysis
 import           Camfort.Analysis.Annotations
-import           Camfort.Analysis.ModFile
-import           Camfort.Helpers
-import           Camfort.Input
 import           Camfort.Specification.Hoare.Annotation
 import           Camfort.Specification.Hoare.CheckBackend
 import           Camfort.Specification.Hoare.CheckFrontend
-import           Camfort.Specification.Hoare.Parser
+import           Control.DeepSeq
+import           Data.List                                 (intersperse)
+import qualified Language.Fortran.AST                      as F
+import qualified Language.Fortran.Analysis                 as FA
+import qualified Language.Fortran.Analysis.BBlocks         as FAB
+import qualified Language.Fortran.Analysis.Renaming        as FAR
 import           Language.Fortran.Model.Repr.Prim
 
 
@@ -191,8 +183,8 @@ getBlocks =
   FAB.analyseBBlocks . FAR.analyseRenames .
   FA.initAnalysis . fmap hoareAnn0
 
-defaultSymSpec :: PrimReprSpec
-defaultSymSpec = prsIdealized
+-- defaultSymSpec :: PrimReprSpec
+-- defaultSymSpec = prsIdealized
 
 fromPrimReprOption :: PrimReprOption -> PrimReprSpec
 fromPrimReprOption PROIdealized = prsIdealized
