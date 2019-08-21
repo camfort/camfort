@@ -60,8 +60,8 @@ data Nat = Z | S Nat
 
 -- Indexed natural number type
 data Natural (n :: Nat) where
-     Zero :: Natural Z
-     Succ :: Natural n -> Natural (S n)
+     Zero :: Natural 'Z
+     Succ :: Natural n -> Natural ('S n)
 
 deriving instance Show (Natural n)
 
@@ -71,15 +71,15 @@ deriving instance Show NatBox
 class IsNatural (n :: Nat) where
    fromNat :: Proxy n -> Int
 
-instance IsNatural Z where
+instance IsNatural 'Z where
    fromNat Proxy = 0
-instance IsNatural n => IsNatural (S n) where
+instance IsNatural n => IsNatural ('S n) where
    fromNat Proxy = 1 + fromNat (Proxy :: Proxy n)
 
 -- Indexed vector type
 data Vec (n :: Nat) a where
-     Nil :: Vec Z a
-     Cons :: a -> Vec n a -> Vec (S n) a
+     Nil :: Vec 'Z a
+     Cons :: a -> Vec n a -> Vec ('S n) a
 
 length :: Vec n a -> Int
 length Nil = 0
@@ -102,10 +102,10 @@ instance Ord a => Ord (Vec n a) where
 instance Show a => Show (Vec n a) where
   show xs = "<" ++ showV xs ++ ">"
     where
-      showV :: forall n a . Show a => Vec n a -> String
+      showV :: forall n' a' . Show a' => Vec n' a' -> String
       showV Nil          = ""
-      showV (Cons x Nil) = show x
-      showV (Cons x xs)  = show x ++ "," ++ showV xs
+      showV (Cons x Nil)  = show x
+      showV (Cons x xs')  = show x ++ "," ++ showV xs'
 
 instance Foldable (Vec n) where
   foldr _ acc Nil = acc
@@ -130,6 +130,7 @@ findIndex = go 0
 (!!) :: Vec n a -> Int -> a
 Cons x _  !! 0 = x
 Cons _ v' !! n = v' !! (n - 1)
+_ !! _         = error "Vec: (!!)"
 
 replace :: Int -> a -> Vec n a -> Vec n a
 replace 0 a (Cons _ xs) = Cons a xs
@@ -161,7 +162,7 @@ proveEqSize (Cons _ xs) (Cons _ ys) = do
   return ReflEq
 proveEqSize _ _ = Nothing
 
-proveNonEmpty :: Vec n a -> Maybe (ExistsEqT S n)
+proveNonEmpty :: Vec n a -> Maybe (ExistsEqT 'S n)
 proveNonEmpty v =
   case v of
     Nil -> Nothing
@@ -173,15 +174,15 @@ data VecList a where VL :: [Vec n a] -> VecList a
 -- pre-condition: the input is a 'rectangular' list of lists (i.e. all internal
 -- lists have the same size)
 fromLists :: forall a . [[a]] -> VecList a
-fromLists [] = VL ([] :: [Vec Z a])
+fromLists [] = VL ([] :: [Vec 'Z a])
 fromLists (xs:xss) = consList (fromList xs) (fromLists xss)
   where
     consList :: VecBox a -> VecList a -> VecList a
     consList (VecBox vec) (VL [])     = VL [vec]
-    consList (VecBox vec) (VL xs) = -- Force the pre-condition equality
-      case preCondition vec xs of
-          ReflEq -> VL (vec : xs)
+    consList (VecBox vec) (VL xs') = -- Force the pre-condition equality
+      case preCondition vec xs' of
+          ReflEq -> VL (vec : xs')
           where -- At the moment the pre-condition is 'assumed', and therefore
             -- force used unsafeCoerce: TODO, rewrite
-            preCondition :: forall n n1 a . Vec n a -> [Vec n1 a] -> EqT n n1
+            preCondition :: forall n n1 a' . Vec n a' -> [Vec n1 a'] -> EqT n n1
             preCondition _ _ = unsafeCoerce ReflEq
