@@ -2,22 +2,13 @@
 
 module Camfort.Analysis.ImplicitNoneSpec (spec) where
 
-import Data.Binary (encodeFile)
-import Data.List (sort)
-import System.Directory (createDirectory)
-import System.FilePath ((</>), (<.>))
-import System.IO.Temp (withSystemTempDirectory)
-import Control.Lens
-
-import Language.Fortran.Util.ModFile
-import Language.Fortran.AST (ProgramUnitName(..))
-
-import Camfort.Analysis.ModFile (getModFiles)
-import Camfort.Analysis.Simple
-import Camfort.Analysis.TestUtils
-import Camfort.Analysis hiding (describe)
-
-import Test.Hspec hiding (Spec)
+import           Camfort.Analysis hiding (describe)
+import           Camfort.Analysis.Simple
+import           Camfort.Analysis.TestUtils
+import           Control.Lens
+import           Language.Fortran.AST (ProgramUnitName(..))
+import           System.FilePath ((</>))
+import           Test.Hspec hiding (Spec)
 import qualified Test.Hspec as Test
 
 spec :: Test.Spec
