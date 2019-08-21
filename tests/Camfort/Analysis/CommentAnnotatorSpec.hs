@@ -5,19 +5,17 @@
 
 module Camfort.Analysis.CommentAnnotatorSpec (spec) where
 
-import Test.Hspec
-
-import Data.Data
+import Camfort.Analysis.CommentAnnotator
+import Camfort.Specification.Parser (mkParser, parseError, SpecParser)
 import Control.Monad.Identity (runIdentity)
 import Control.Monad.Writer.Strict
-
+import Data.Data
 import Language.Fortran.AST
 import Language.Fortran.ParserMonad
 import Language.Fortran.Util.Position
+import Test.Hspec
 
-import Camfort.Analysis.CommentAnnotator
-import Camfort.Specification.Parser (mkParser, parseError, SpecParser)
-
+p :: SrcSpan
 p = SrcSpan (Position 0 1 1 "" Nothing) (Position 0 1 1 "" Nothing)
 
 annotateWith :: (String -> String) -> ProgramFile A -> ProgramFile A
@@ -25,6 +23,7 @@ annotateWith s = runIdentity . annotateComments trivialParser ignore
   where trivialParser = mkParser (Right . s) []
         ignore        = const . const . pure $ ()
 
+spec :: SpecWith ()
 spec =
   describe "Comment annotator" $ do
     it "annotates with no comment blocks" $
@@ -56,35 +55,48 @@ instance ASTEmbeddable A String where
 
 instance Linkable A where
   link a block = a { annLink = Just block }
+  linkPU = undefined
 
 -- Some helper functions
+varGen :: Name -> Expression A
 varGen x = ExpValue ea p (ValVariable x)
+intGen :: Integer -> Expression A
 intGen i = ExpValue ea p (ValInteger (show i))
-wrapBlocks bs = ProgramFile (MetaInfo { miVersion = Fortran90, miFilename = "<unknown>" }) [ pu ]
+wrapBlocks :: [Block A] -> ProgramFile A
+wrapBlocks bs' = ProgramFile (MetaInfo { miVersion = Fortran90, miFilename = "<unknown>" }) [ pu ]
   where
-    pu = PUModule ea p "my_module" bs Nothing
+    pu = PUModule ea p "my_module" bs' Nothing
 
 -- Test cases
 
 mkComment :: String -> Comment a
 mkComment = Comment . ("= "++)
 
+ea :: A
 ea = A Nothing Nothing
 
+pf :: ProgramFile A
 pf = wrapBlocks bs
+bs :: [Block A]
 bs = [ BlStatement ea p Nothing (StPause ea p Nothing) ]
 
+pf2 :: ProgramFile A
 pf2 = wrapBlocks bs2
+bs2 :: [Block A]
 bs2 =
   [ BlComment ea p (mkComment "something")
   , BlStatement ea p Nothing (StPause ea p Nothing) ]
 
+pf2e :: ProgramFile A
 pf2e = wrapBlocks bs2e
+bs2e :: [Block A]
 bs2e =
   [ BlComment (A (Just (bs2e !! 1)) (Just "hello")) p (mkComment "something")
   , BlStatement ea p Nothing (StPause ea p Nothing) ]
 
+pf3 :: ProgramFile A
 pf3 = wrapBlocks bs3
+bs3 :: [Block A]
 bs3 =
   [ BlComment ea p (mkComment "mistral")
   , BlComment ea p (mkComment "orhan")
@@ -92,7 +104,9 @@ bs3 =
   , BlComment ea p (mkComment "contrastin")
   , BlStatement ea p Nothing (StPause ea p Nothing) ]
 
+pf3e :: ProgramFile A
 pf3e = wrapBlocks bs3e
+bs3e :: [Block A]
 bs3e =
   [ BlComment (A (Just (last bs3e)) (Just "!!!mistral")) p (mkComment "mistral")
   , BlComment (A (Just (last bs3e)) (Just "!!!orhan")) p (mkComment "orhan")
@@ -100,7 +114,9 @@ bs3e =
   , BlComment (A (Just (last bs3e)) (Just "!!!contrastin")) p (mkComment "contrastin")
   , BlStatement ea p Nothing (StPause ea p Nothing) ]
 
+pf4 :: ProgramFile A
 pf4 = wrapBlocks bs4
+bs4 :: [Block A]
 bs4 =
   [ BlComment ea p (mkComment "mistral")
   , BlComment ea p (mkComment "contrastin")
@@ -109,7 +125,9 @@ bs4 =
   , BlComment ea p (mkComment "orchard")
   , BlStatement ea p Nothing (StExpressionAssign ea p (varGen "x") (intGen 42)) ]
 
+pf4e :: ProgramFile A
 pf4e = wrapBlocks bs4e
+bs4e :: [Block A]
 bs4e =
   [ BlComment (A (Just (bs4e !! 2)) (Just "!!!mistral")) p (mkComment "mistral")
   , BlComment (A (Just (bs4e !! 2)) (Just "!!!contrastin")) p (mkComment "contrastin")
@@ -118,13 +136,17 @@ bs4e =
   , BlComment (A (Just (last bs4e)) (Just "!!!orchard")) p (mkComment "orchard")
   , BlStatement ea p Nothing (StExpressionAssign ea p (varGen "x") (intGen 42)) ]
 
+pf5 :: ProgramFile A
 pf5 = wrapBlocks bs5
+bs5 :: [Block A]
 bs5 =
   [ BlComment ea p (mkComment "comment 1")
   , BlComment ea p (mkComment "comment 2")
   , BlStatement ea p Nothing (StPause ea p Nothing) ]
 
+pf5e :: ProgramFile A
 pf5e = wrapBlocks bs5e
+bs5e :: [Block A]
 bs5e =
   [ BlComment (A (Just (last bs5e)) Nothing) p (mkComment "comment 1")
   , BlComment (A (Just (last bs5e)) Nothing) p (mkComment "comment 2")
