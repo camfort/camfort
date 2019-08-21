@@ -63,68 +63,44 @@ module Camfort.Functionality
   , camfortInitialize
   ) where
 
-import           Control.DeepSeq
-import           Control.Arrow                                   (first, second)
-import           Data.List                                       (intersperse)
-import           Data.Maybe                                      (fromMaybe)
-import           Data.Void                                       (Void)
-import qualified Data.ByteString                                 as B
-import qualified Data.ByteString.Lazy                            as LB
-import           System.Directory                                (doesDirectoryExist, createDirectoryIfMissing,
-                                                                  getCurrentDirectory)
-import           System.FilePath                                 (takeDirectory,
-                                                                  (</>), replaceExtension)
-
-import           Text.PrettyPrint.GenericPretty                  (pp, pretty, Out)
-
-import           Control.Lens
-import           Control.Monad.Reader.Class
-import           Control.Monad
-import           Control.Monad.IO.Class
-
-import qualified Language.Fortran.AST                            as F
-import qualified Language.Fortran.Analysis.Renaming              as FA
-import qualified Language.Fortran.Analysis                       as FA
-import qualified Language.Fortran.Util.ModFile                   as FM
-import           Language.Fortran.ParserMonad                    (FortranVersion(..))
-import           Language.Fortran.PrettyPrint
-
 import           Camfort.Analysis
-import           Camfort.Analysis.Annotations                    (Annotation)
 import           Camfort.Analysis.Logger
-import           Camfort.Analysis.ModFile                        (MFCompiler,
-                                                                  getModFiles,
-                                                                  genModFiles,
-                                                                  readParseSrcDir,
-                                                                  readParseSrcDirP,
-                                                                  simpleCompiler)
+import           Camfort.Analysis.ModFile ( MFCompiler, getModFiles, genModFiles, readParseSrcDir
+                                          , readParseSrcDirP, simpleCompiler)
 import           Camfort.Analysis.Simple
+import           Camfort.Helpers (FileOrDir, Filename)
 import           Camfort.Input
-import qualified Camfort.Specification.DerivedDataType           as DDT
-import qualified Camfort.Specification.Stencils                  as Stencils
-import           Camfort.Specification.Stencils.Analysis         (compileStencils)
-import qualified Camfort.Specification.Units                     as LU
-import           Camfort.Specification.Units.Analysis            (compileUnits)
-import           Camfort.Specification.Units.Annotation          (unitInfo)
-import           Camfort.Specification.Units.Analysis.Consistent (checkUnits)
-import           Camfort.Specification.Units.Analysis.Criticals  (inferCriticalVariables)
-import           Camfort.Specification.Units.Analysis.Infer      (InferenceResult(..), InferenceReport(..), inferUnits)
-import           Camfort.Specification.Units.Monad               (runUnitAnalysis,
-                                                                  unitOpts0)
-import           Camfort.Specification.Units.ModFile             (dumpModFileCompiledUnits)
-import           Camfort.Specification.Units.MonadTypes          (LiteralsOpt,
-                                                                  UnitAnalysis,
-                                                                  UnitEnv (..),
-                                                                  UnitOpts (..))
+import qualified Camfort.Specification.DerivedDataType as DDT
 import qualified Camfort.Specification.Hoare as Hoare
+import qualified Camfort.Specification.Stencils as Stencils
+import           Camfort.Specification.Stencils.Analysis (compileStencils)
+import qualified Camfort.Specification.Units as LU
+import           Camfort.Specification.Units.Analysis (compileUnits)
+import           Camfort.Specification.Units.Analysis.Consistent (checkUnits)
+import           Camfort.Specification.Units.Analysis.Criticals (inferCriticalVariables)
+import           Camfort.Specification.Units.Analysis.Infer (InferenceResult(..), InferenceReport(..), inferUnits)
+import           Camfort.Specification.Units.Annotation (unitInfo)
+import           Camfort.Specification.Units.ModFile (dumpModFileCompiledUnits)
+import           Camfort.Specification.Units.Monad (runUnitAnalysis, unitOpts0)
+import           Camfort.Specification.Units.MonadTypes (LiteralsOpt, UnitAnalysis, UnitEnv (..), UnitOpts (..))
 import           Camfort.Transformation.CommonBlockElim
 import           Camfort.Transformation.DeadCode
 import           Camfort.Transformation.EquivalenceElim
-
-import           Camfort.Helpers                                 (FileOrDir,
-                                                                  Filename)
+import           Control.DeepSeq
+import           Control.Monad
+import           Control.Monad.IO.Class
+import qualified Data.ByteString.Lazy as LB
+import           Data.List (intersperse)
+import           Data.Maybe (fromMaybe)
+import qualified Language.Fortran.Analysis as FA
+import qualified Language.Fortran.Analysis.Renaming as FA
+import           Language.Fortran.ParserMonad (FortranVersion(..))
+import qualified Language.Fortran.Util.ModFile as FM
 import           Pipes
-import qualified Pipes.Prelude                                   as P
+import qualified Pipes.Prelude as P
+import           System.Directory (doesDirectoryExist, createDirectoryIfMissing, getCurrentDirectory)
+import           System.FilePath (takeDirectory, (</>), replaceExtension)
+import           Text.PrettyPrint.GenericPretty (pp)
 
 data AnnotationType = ATDefault | Doxygen | Ford
 
@@ -183,7 +159,7 @@ runFunctionality
   -- ^ Mod file input
   -> CamfortEnv
   -> IO r
-runFunctionality description program runner mfCompiler mfInput env = do
+runFunctionality description program runner _ _ env = do
   putStrLn $ description ++ " '" ++ ceInputSources env ++ "'"
   incDir' <- maybe getCurrentDirectory pure (ceIncludeDir env)
   isDir <- doesDirectoryExist incDir'
@@ -211,7 +187,7 @@ runFunctionalityP
   -- ^ Mod file input
   -> CamfortEnv
   -> IO Int
-runFunctionalityP description program runner mfCompiler mfInput env = do
+runFunctionalityP description program runner _ _ env = do
   putStrLn $ description ++ " '" ++ ceInputSources env ++ "'"
   incDir' <- maybe getCurrentDirectory pure (ceIncludeDir env)
   isDir <- doesDirectoryExist incDir'
@@ -354,10 +330,10 @@ ddtCompile env = do
   isDir <- doesDirectoryExist incDir'
   let incDir | isDir     = incDir'
              | otherwise = takeDirectory incDir'
-  modFiles <- getModFiles incDir
+  modFileNames <- getModFiles incDir
 
   -- Run the gen mod file routine directly on the input source
-  modFiles <- genModFiles (ceFortranVersion env) modFiles DDT.compile () (ceInputSources env) (ceExcludeFiles env)
+  modFiles <- genModFiles (ceFortranVersion env) modFileNames DDT.compile () (ceInputSources env) (ceExcludeFiles env)
   -- Write the mod files out
   forM_ modFiles $ \ modFile -> do
      let mfname = replaceExtension (FM.moduleFilename modFile) FM.modFileSuffix
@@ -395,15 +371,16 @@ singlePfUnits unitAnalysis opts pf =
 
 
 -- slight hack to make doRefactorAndCreate happy
-singlePfUnits'
-  :: UnitAnalysis a -> UnitOpts
-  -> AnalysisProgram () () IO [ProgramFile] a
-singlePfUnits' unitAnalysis opts (pf:_) =
-  let ue = UnitEnv
-        { unitOpts = opts
-        , unitProgramFile = pf
-        }
-  in runUnitAnalysis ue unitAnalysis
+-- singlePfUnits'
+--   :: UnitAnalysis a -> UnitOpts
+--   -> AnalysisProgram () () IO [ProgramFile] a
+-- singlePfUnits' unitAnalysis opts (pf:_) =
+--   let ue = UnitEnv
+--         { unitOpts = opts
+--         , unitProgramFile = pf
+--         }
+--   in runUnitAnalysis ue unitAnalysis
+-- singlePfUnits' _ _ [] = error "singlePfUnits': no program file provided"
 
 multiPfUnits
   :: (Describe a)
@@ -464,7 +441,7 @@ describePerFileAnalysisShowASTUnitInfoP program logOutput logLevel snippets modF
   runPerFileAnalysisP program logOutput logLevel snippets modFiles >->
     (P.mapM $ \ r -> do
         case r of
-          AnalysisReport _ _ (ARSuccess (Inferred (InferenceReport pfUA eVars))) ->
+          AnalysisReport _ _ (ARSuccess (Inferred (InferenceReport pfUA _))) ->
             liftIO . pp . fmap (unitInfo . FA.prevAnnotation) . FA.rename $ pfUA
           _ -> pure ()
         putDescribeReport "unit inference" (Just logLevel) snippets r
@@ -493,10 +470,10 @@ unitsCompile opts env = do
   isDir <- doesDirectoryExist incDir'
   let incDir | isDir     = incDir'
              | otherwise = takeDirectory incDir'
-  modFiles <- getModFiles incDir
+  modFileNames <- getModFiles incDir
 
   -- Run the gen mod file routine directly on the input source
-  modFiles <- genModFiles (ceFortranVersion env) modFiles compileUnits uo (ceInputSources env) (ceExcludeFiles env)
+  modFiles <- genModFiles (ceFortranVersion env) modFileNames compileUnits uo (ceInputSources env) (ceExcludeFiles env)
   -- Write the mod files out
   forM_ modFiles $ \modFile -> do
      let mfname = replaceExtension (FM.moduleFilename modFile) FM.modFileSuffix
