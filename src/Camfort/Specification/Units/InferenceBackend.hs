@@ -38,25 +38,27 @@ module Camfort.Specification.Units.InferenceBackend
   , provenance
   , splitNormHNF
   ) where
-import           Prelude hiding ((<>))
+
+import           Camfort.Specification.Units.Environment
+import qualified Camfort.Specification.Units.InferenceBackendFlint as Flint
 import           Control.Arrow (first, second, (***))
 import           Control.Monad
 import           Control.Monad.ST
-import           Control.Parallel
 import           Control.Parallel.Strategies
 import qualified Data.Array as A
 import           Data.Generics.Uniplate.Operations
   (transformBi, universeBi)
-import           Data.List
-  ((\\), findIndex, inits, nub, partition, sort, sortBy, group, tails, foldl')
-import           Data.Ord
-import qualified Data.Map.Strict as M
+import           Data.Graph.Inductive hiding ((><))
 import qualified Data.IntMap as IM
 import qualified Data.IntSet as IS
+import           Data.List
+  ((\\), findIndex, inits, nub, partition, sort, sortBy, group, tails, foldl')
+import qualified Data.Map.Strict as M
 import           Data.Maybe (fromMaybe, mapMaybe)
+import           Data.Ord
 import           Data.Tuple (swap)
 import           Numeric.LinearAlgebra
-  ( atIndex, (<>), (><)
+  ( atIndex, (<>)
   , rank, (?), (¿)
   , rows, cols
   , subMatrix, diag
@@ -68,10 +70,8 @@ import           Numeric.LinearAlgebra.Devel
   , writeMatrix, runSTMatrix
   , freezeMatrix, STMatrix
   )
-import Data.Graph.Inductive hiding ((><))
+import           Prelude hiding ((<>))
 
-import Camfort.Specification.Units.Environment
-import qualified Camfort.Specification.Units.InferenceBackendFlint as Flint
 
 -- | Returns list of formerly-undetermined variables and their units.
 inferVariables :: Constraints -> [(VV, UnitInfo)]
@@ -102,9 +102,9 @@ mustBeUnitless :: [([UnitInfo], UnitInfo)] -> Constraints
 mustBeUnitless unitAssignments = mbu
   where
     mbu = [ ConEq UnitlessLit (UnitPow (UnitLiteral l) k)
-          | a@(UnitPow (UnitLiteral l) k:_, rhs) <- ua''
+          | (UnitPow (UnitLiteral l) k:_, rhs) <- ua''
           , any isParametric (universeBi rhs :: [UnitInfo]) ]
-    ua' = map (shiftTerms . fmap flattenUnits) unitAssignments
+    -- ua' = map (shiftTerms . fmap flattenUnits) unitAssignments
     ua'' = map (shiftTermsBy isLiteral . fmap flattenUnits) unitAssignments
 
     isLiteral UnitLiteral{} = True
@@ -170,8 +170,8 @@ genUnitAssignments' sortfn cons
     (solvedM, newColIndices)      = splitNormHNF unsolvedM
     -- solvedM can have additional columns and rows from normHNF;
     -- cosolvedM corresponds to the original lhsM.
-    cosolvedM                     = subMatrix (0, 0) (rows solvedM, cols lhsM) solvedM
-    cosolvedMrhs                  = subMatrix (0, cols lhsM) (rows solvedM, cols solvedM - cols lhsM) solvedM
+    -- cosolvedM                     = subMatrix (0, 0) (rows solvedM, cols lhsM) solvedM
+    -- cosolvedMrhs                  = subMatrix (0, cols lhsM) (rows solvedM, cols solvedM - cols lhsM) solvedM
 
     -- generate a colList with both the original columns and new ones generated
     -- if a new column generated was derived from the right-hand side then negate it
@@ -186,30 +186,34 @@ genUnitAssignments' sortfn cons
     unitPows                      = map (concatMap flattenUnits . zipWith unitPow colList) (H.toLists solvedM)
 
     -- Variables to the left, unit names to the right side of the equation.
-    unitAssignments               = map (fmap (foldUnits . map negatePosAbs) . checkSanity . partition (not . isUnitRHS)) unitPows
-    isUnitRHS (UnitPow (UnitName _) _)        = True
-    isUnitRHS (UnitPow (UnitParamEAPAbs _) _) = True
+    unitAssignments               = map (fmap (foldUnits . map negatePosAbs) . checkSanity . partition (not . isUnitRHS')) unitPows
+    isUnitRHS' (UnitPow (UnitName _) _)        = True
+    isUnitRHS' (UnitPow (UnitParamEAPAbs _) _) = True
     -- Because this version of isUnitRHS different from
     -- constraintsToMatrix interpretation, we need to ensure that any
     -- moved ParamPosAbs units are negated, because they are
     -- effectively being shifted across the equal-sign:
-    isUnitRHS (UnitPow (UnitParamImpAbs _) _) = True
-    isUnitRHS (UnitPow (UnitParamPosAbs (_, 0)) _) = False
-    isUnitRHS (UnitPow (UnitParamPosAbs _) _) = True
-    isUnitRHS _                               = False
+    isUnitRHS' (UnitPow (UnitParamImpAbs _) _) = True
+    isUnitRHS' (UnitPow (UnitParamPosAbs (_, 0)) _) = False
+    isUnitRHS' (UnitPow (UnitParamPosAbs _) _) = True
+    isUnitRHS' _                               = False
 
 checkSanity :: ([UnitInfo], [UnitInfo]) -> ([UnitInfo], [UnitInfo])
 checkSanity (u1@[UnitPow (UnitVar _) _], u2)
-  | or $ [ True | UnitParamPosAbs (_, i) <- universeBi u2 ]
+  | or $ [ True | UnitParamPosAbs (_, _) <- universeBi u2 ]
       ++ [ True | UnitParamImpAbs _      <- universeBi u2 ] = (u1++u2,[])
 checkSanity (u1@[UnitPow (UnitParamVarAbs (f, _)) _], u2)
-  | or [ True | UnitParamPosAbs (f', i) <- universeBi u2, f' /= f ] = (u1++u2,[])
+  | or [ True | UnitParamPosAbs (f', _) <- universeBi u2, f' /= f ] = (u1++u2,[])
 checkSanity c = c
 
 --------------------------------------------------
 
+-- FIXME: you know better...
+approxEq :: Double -> Double -> Bool
 approxEq a b = abs (b - a) < epsilon
+notApproxEq :: Double -> Double -> Bool
 notApproxEq a b = not (approxEq a b)
+epsilon :: Double
 epsilon = 0.001 -- arbitrary
 
 --------------------------------------------------
@@ -273,7 +277,7 @@ splitMatWithRHS lhsM rhsM | cols lhsM > 0 = map (eachComponent . sort) $ scc (re
 -- inconsistent row numbers found (in terms of the rows of the
 -- original lhsM).
 splitFindInconsistentRows :: H.Matrix Double -> H.Matrix Double -> [RowNum]
-splitFindInconsistentRows lhsM rhsM = concatMap eachComponent $ splitMatWithRHS lhsM rhsM
+splitFindInconsistentRows lhsMat rhsMat = concatMap eachComponent $ splitMatWithRHS lhsMat rhsMat
   where
     eachComponent (rs, (lhsM, rhsM), _) = map (rs !!) $ findInconsistentRows lhsM augM
       where
@@ -347,7 +351,6 @@ constraintsToMatrices' sortfn cons
     rhs             = map snd shiftedCons
     (lhsM, lhsCols) = flattenedToMatrix sortfn lhs
     (rhsM, rhsCols) = flattenedToMatrix sortfn rhs
-    augM            = if rows rhsM == 0 || cols rhsM == 0 then lhsM else if rows lhsM == 0 || cols lhsM == 0 then rhsM else fromBlocks [[lhsM, rhsM]]
     inconsists      = splitFindInconsistentRows lhsM rhsM
 
 -- [[UnitInfo]] is a list of flattened constraints
@@ -355,15 +358,15 @@ flattenedToMatrix :: SortFn -> [[UnitInfo]] -> (H.Matrix Double, A.Array Int Uni
 flattenedToMatrix sortfn cons = (m, A.array (0, numCols - 1) (map swap uniqUnits))
   where
     m = runSTMatrix $ do
-          m <- newMatrix 0 numRows numCols
+          newM <- newMatrix 0 numRows numCols
           -- loop through all constraints
           forM_ (zip cons [0..]) $ \ (unitPows, row) -> do
             -- write co-efficients for the lhs of the constraint
             forM_ unitPows $ \ (UnitPow u k) -> do
               case M.lookup u colMap of
-                Just col -> readMatrix m row col >>= (writeMatrix m row col . (+k))
+                Just col -> readMatrix newM row col >>= (writeMatrix newM row col . (+k))
                 _        -> return ()
-          return m
+          return newM
     -- identify and enumerate every unit uniquely
     uniqUnits = flip zip [0..] . map head . group . sortBy sortfn $ [ u | UnitPow u _ <- concat cons ]
     -- map units to their unique column number
@@ -371,8 +374,10 @@ flattenedToMatrix sortfn cons = (m, A.array (0, numCols - 1) (map swap uniqUnits
     numRows   = length cons
     numCols   = M.size colMap
 
+negateCons :: [UnitInfo] -> [UnitInfo]
 negateCons = map (\ (UnitPow u k) -> UnitPow u (-k))
 
+negatePosAbs :: UnitInfo -> UnitInfo
 negatePosAbs (UnitPow (UnitParamPosAbs x) k) = UnitPow (UnitParamPosAbs x) (-k)
 negatePosAbs (UnitPow (UnitParamImpAbs v) k) = UnitPow (UnitParamImpAbs v) (-k)
 negatePosAbs u                               = u
@@ -380,6 +385,7 @@ negatePosAbs u                               = u
 --------------------------------------------------
 
 -- Units that should appear on the right-hand-side of the matrix during solving
+isUnitRHS :: UnitInfo -> Bool
 isUnitRHS (UnitPow (UnitName _) _)        = True
 isUnitRHS (UnitPow (UnitParamEAPAbs _) _) = True
 isUnitRHS _                               = False
@@ -458,24 +464,25 @@ rrefMatrices' a j k mats
     -- separate elemRowAdd matrix for each cancellation that are then
     -- multiplied together, simply build a single matrix that cancels
     -- all of them out at the same time, using the ST Monad.
-    findAdds _ m ms
-      | isWritten = (new <> m, (new, ElemRowAdds ops):ms)
-      | otherwise = (m, ms)
+    findAdds _ curM ms
+      | isWritten = (newMat <> curM, (newMat, ElemRowAdds matOps):ms)
+      | otherwise = (curM, ms)
       where
-        (isWritten, ops, new) = runST $ do
-          new <- newMatrix 0 n n :: ST s (STMatrix s Double)
-          sequence [ writeMatrix new i' i' 1 | i' <- [0 .. (n - 1)] ]
+        (isWritten, matOps, newMat) = runST $ do
+          newM <- newMatrix 0 n n :: ST s (STMatrix s Double)
+          sequence_ [ writeMatrix newM i' i' 1 | i' <- [0 .. (n - 1)] ]
           let f w o i | i >= n                  = return (w, o)
                       | i == j - k              = f w o (i + 1)
                       | a `atIndex` (i, j) == 0 = f w o (i + 1)
-                      | otherwise               = writeMatrix new i (j - k) (- (a `atIndex` (i, j)))
+                      | otherwise               = writeMatrix newM i (j - k) (- (a `atIndex` (i, j)))
                                                   >> f True ((i, j - k):o) (i + 1)
-          (isWritten, ops) <- f False [] 0
-          (isWritten, ops,) `fmap` freezeMatrix new
+          (isW, ops) <- f False [] 0
+          (isW, ops,) `fmap` freezeMatrix newM
 
-    (a2, mats2) = findAdds 0 a1 mats1
+    (a2, mats2) = findAdds (0::Int) a1 mats1
 
 -- Get a list of values that occur below (i, j) in the matrix a.
+getColumnBelow :: H.Matrix Double -> (Int, Int) -> [Double]
 getColumnBelow a (i, j) = concat . H.toLists $ subMatrix (i, j) (n - i, 1) a
   where n = rows a
 
@@ -504,6 +511,7 @@ graphColCombine g1 g2 = IM.unionWith (curry snd) g1 $ IM.map (IS.fromList . tran
   where
     trans = concatMap (\ i -> [i] `fromMaybe` (IS.toList <$> IM.lookup i g1))
 
+invertGraphCol :: GraphCol -> GraphCol
 invertGraphCol g = IM.fromListWith IS.union [ (i, IS.singleton j) | (j, jset) <- IM.toList g, i <- IS.toList jset ]
 
 provenance :: H.Matrix Double -> (H.Matrix Double, Provenance)
@@ -546,8 +554,8 @@ genImplicitNamesMap x = M.fromList [ (absU, UnitParamEAPAbs (newN, newN)) | (abs
   where
     absUnits = nub [ u | u@(UnitParamPosAbs _)             <- universeBi x ] ++
                nub [ u | u@(UnitParamImpAbs _)             <- universeBi x ]
-    eapNames = nub $ [ n | u@(UnitParamEAPAbs (_, n))      <- universeBi x ] ++
-                     [ n | u@(UnitParamEAPUse ((_, n), _)) <- universeBi x ]
+    eapNames = nub $ [ n | (UnitParamEAPAbs (_, n))      <- universeBi x ] ++
+                     [ n | (UnitParamEAPUse ((_, n), _)) <- universeBi x ]
     newNames = filter (`notElem` eapNames) . map ('\'':) $ nameGen
     nameGen  = concatMap sequence . tail . inits $ repeat ['a'..'z']
 
@@ -562,13 +570,13 @@ replaceImplicitNames implicitMap = transformBi replace
 -- inference or checking to work.
 criticalVariables :: Constraints -> [UnitInfo]
 criticalVariables [] = []
-criticalVariables cons = filter (not . isUnitRHS) $ map (colA A.!) criticalIndices
+criticalVariables cons = filter (not . isUnitRHS') $ map (colA A.!) criticalIndices
   where
     (unsolvedM, _, colA)          = constraintsToMatrix cons
     solvedM                       = rref unsolvedM
     uncriticalIndices             = mapMaybe (findIndex (/= 0)) $ H.toLists solvedM
     criticalIndices               = A.indices colA \\ uncriticalIndices
-    isUnitRHS (UnitName _)        = True; isUnitRHS _ = False
+    isUnitRHS' (UnitName _)       = True; isUnitRHS' _ = False
 
 -- | Returns just the list of constraints that were identified as
 -- being possible candidates for inconsistency, if there is a problem.
