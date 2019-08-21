@@ -57,13 +57,14 @@ type FileOrDir = String
 -- Filename and directory related helpers
 
 -- gets the directory part of a filename
-getDir :: String -> String
+getDir :: Filename -> Directory
 getDir file = let ixs = elemIndices '/' file
               in if null ixs then file
                  else take (last $ ixs) file
 
 
 {-| Creates a directory (from a filename string) if it doesn't exist -}
+checkDir :: Directory -> IO ()
 checkDir f = case (elemIndices '/' f) of
                [] -> return ()
                ix -> let d = take (last ix) f
@@ -92,7 +93,7 @@ instance Foldable (Reverse Str.Str) where
 instance Traversable (Reverse Str.Str) where
     traverse _ (Reverse Str.Zero) = pure $ Reverse Str.Zero
     traverse f (Reverse (Str.One x)) = (Reverse . Str.One) <$> f x
-    traverse f (Reverse (Str.Two x y)) = (\y x -> Reverse $ Str.Two x y)
+    traverse f (Reverse (Str.Two x y)) = (\y' x' -> Reverse $ Str.Two x' y')
                              <$> (fmap unwrapReverse . traverse f . Reverse $ y)
                              <*> (fmap unwrapReverse . traverse f . Reverse $ x)
 
