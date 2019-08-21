@@ -6,7 +6,7 @@ import           Data.Data                                (Data)
 import           Data.Either                              (isLeft)
 import           Data.Foldable                            (traverse_)
 
-import           Data.Generics.Uniplate.Operations        (Biplate, transformBi)
+import           Data.Generics.Uniplate.Operations        (transformBi)
 
 import           Camfort.Specification.Hoare.Lexer
 import           Camfort.Specification.Hoare.Parser
@@ -59,7 +59,7 @@ spec = describe "Hoare - Parser" $ do
         add = bin F.Addition
         sub = bin F.Subtraction
 
-        xA3 = x `add` num 3
+        xA3 = x `add` num (3 :: Int)
         ySz = y `sub` z
         yAz = y `add` z
 
@@ -68,9 +68,9 @@ spec = describe "Hoare - Parser" $ do
         (.>) = bin F.GT
         (.>=) = bin F.GTE
 
-        x *&& y = PFLogical (PLAnd x y)
-        x *|| y = PFLogical (PLOr x y)
-        x *-> y = PFLogical (PLImpl x y)
+        x' *&& y' = PFLogical (PLAnd x' y')
+        x' *|| y' = PFLogical (PLOr x' y')
+        x' *-> y' = PFLogical (PLImpl x' y')
 
         tests =
           [ "! static_assert pre(\"x == y\")"
@@ -90,14 +90,14 @@ spec = describe "Hoare - Parser" $ do
             .->
             SodSpec (Specification SpecPost
                      (((PFExpr $ xA3 .< ySz) *&& (PFExpr $ xA3 .> yAz)) *||
-                      (PFExpr $ x .>= (num 7))
+                      (PFExpr $ x .>= (num (7::Int)))
                      ))
 
           , "! static_assert seq(\"x + 3 < y - z\" -> \"x + 3 > y + z\" -> \"x >= 7\")"
             .->
             SodSpec (Specification SpecSeq
                      ((PFExpr $ xA3 .< ySz) *->
-                      (((PFExpr $ xA3 .> yAz)) *-> (PFExpr $ x .>= (num 7)))
+                      (((PFExpr $ xA3 .> yAz)) *-> (PFExpr $ x .>= (num (7::Int))))
                      ))
 
           ]
@@ -114,6 +114,7 @@ matches :: (Eq a, Data a) => a -> a -> Bool
 matches a b =
   stripSpans a == stripSpans b
 
+defSpan :: F.SrcSpan
 defSpan = F.SrcSpan (F.Position 0 0 0 "" Nothing) (F.Position 0 0 0 "" Nothing)
 
 parse :: String -> Either (Parser.SpecParseError HoareParseError) (SpecOrDecl ())
