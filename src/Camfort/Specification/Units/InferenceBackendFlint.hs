@@ -231,7 +231,7 @@ withBlankMatrix numRows numCols f = do
 withWindow :: Ptr FMPZMat -> CLong -> CLong -> CLong -> CLong -> (Ptr FMPZMat -> IO b) -> IO b
 withWindow underM r1 c1 r2 c2 f = do
   alloca $ \ window -> do
-    fmpz_mat_window_init window underM r1 c2 r2 c2
+    fmpz_mat_window_init window underM r1 c1 r2 c2
     x <- f window
     fmpz_mat_window_clear window
     return x
