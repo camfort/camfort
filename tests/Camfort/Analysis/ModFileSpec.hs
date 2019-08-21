@@ -2,18 +2,14 @@
 
 module Camfort.Analysis.ModFileSpec (spec) where
 
-import Data.Binary (encodeFile)
-import Data.List (sort)
-import System.Directory (createDirectory)
-import System.FilePath ((</>), (<.>))
-import System.IO.Temp (withSystemTempDirectory)
-
-import Language.Fortran.Util.ModFile
-
-import Camfort.Analysis.ModFile (getModFiles)
-
-import Test.Hspec hiding (Spec)
+import           Camfort.Analysis.ModFile (getModFiles)
+import           Data.Binary (encodeFile)
+import           Data.List (sort)
+import           Language.Fortran.Util.ModFile
+import           System.FilePath ((</>), (<.>))
+import           System.IO.Temp (withSystemTempDirectory)
 import qualified Test.Hspec as Test
+import           Test.Hspec hiding (Spec)
 
 spec :: Test.Spec
 spec =
