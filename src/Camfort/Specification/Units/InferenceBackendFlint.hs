@@ -24,24 +24,14 @@
 
 module Camfort.Specification.Units.InferenceBackendFlint where
 
-import System.IO.Unsafe (unsafePerformIO)
-import Numeric.LinearAlgebra
-  ( atIndex, (<>), (><)
-  , rank, (?)
-  , rows, cols
-  , subMatrix, diag
-  , fromBlocks, ident
-  )
+import           Control.Monad
+import           Data.List (partition)
+-- import           Debug.Trace (trace, traceM, traceShowM)
+import           Foreign
+import           Foreign.C.Types
+import           Numeric.LinearAlgebra (atIndex, rows, cols)
 import qualified Numeric.LinearAlgebra as H
-
-import Control.Monad
-
-import Data.List (findIndex, partition, foldl')
-
-import Foreign
-import Foreign.Ptr
-import Foreign.C.Types
-import Debug.Trace (trace, traceM, traceShowM)
+import           System.IO.Unsafe (unsafePerformIO)
 
 foreign import ccall unsafe "flint/fmpz_mat.h fmpz_mat_init" fmpz_mat_init :: Ptr FMPZMat -> CLong -> CLong -> IO ()
 foreign import ccall unsafe "flint/fmpz_mat.h fmpz_mat_set" fmpz_mat_set :: Ptr FMPZMat -> Ptr FMPZMat -> IO ()
@@ -88,30 +78,30 @@ instance Storable FMPZMat where
   peek _ = undefined
   poke _ = undefined
 
-testFlint = do
-  traceM "***********************8 testFlint 8***********************"
-  alloca $ \ a -> do
-    alloca $ \ b -> do
-      alloca $ \ den -> do
-        let n = 10
-        fmpz_mat_init a n n
-        fmpz_mat_init b n n
-        forM_ [0..n-1] $ \ i -> do
-          forM_ [0..n-1] $ \ j -> do
-            e <- fmpz_mat_entry a i j
-            fmpz_set_si e (2 * i + j)
+-- testFlint :: IO ()
+-- testFlint = do
+--   traceM "***********************8 testFlint 8***********************"
+--   alloca $ \ a -> do
+--     alloca $ \ b -> do
+--       alloca $ \ den -> do
+--         let n = 10
+--         fmpz_mat_init a n n
+--         fmpz_mat_init b n n
+--         forM_ [0..n-1] $ \ i -> do
+--           forM_ [0..n-1] $ \ j -> do
+--             e <- fmpz_mat_entry a i j
+--             fmpz_set_si e (2 * i + j)
 
-        -- fmpz_mat_mul b a a
-        r <- fmpz_mat_rref b den a
-        fmpz_mat_print_pretty a
-        fmpz_mat_print_pretty b
-        d <- peek den
-        traceM $ "r = " ++ show r ++ " den = " ++ show d
-        fmpz_mat_hnf b a
-        fmpz_mat_print_pretty b
-        fmpz_mat_clear a
-        fmpz_mat_clear b
-
+--         -- fmpz_mat_mul b a a
+--         r <- fmpz_mat_rref b den a
+--         fmpz_mat_print_pretty a
+--         fmpz_mat_print_pretty b
+--         d <- peek den
+--         traceM $ "r = " ++ show r ++ " den = " ++ show d
+--         fmpz_mat_hnf b a
+--         fmpz_mat_print_pretty b
+--         fmpz_mat_clear a
+--         fmpz_mat_clear b
 
 rref :: H.Matrix Double -> (H.Matrix Double, Int, Int)
 rref m = unsafePerformIO $ do
@@ -170,7 +160,6 @@ hnf m = unsafePerformIO $ do
       let m' = H.fromLists lists
       fmpz_mat_clear inputM
       fmpz_mat_clear outputM
-      let Just (m'', _) = inv m'
       return m'
 
 inv :: H.Matrix Double -> Maybe (H.Matrix Double, Int)
@@ -191,7 +180,7 @@ inv m = unsafePerformIO $ do
 
         -- DEBUG:
         fmpz_mat_print_pretty outputM
-        traceM $ "r = " ++ show r ++ " den = " ++ show d
+        -- traceM $ "r = " ++ show r ++ " den = " ++ show d
         --
 
         lists <- forM [0..numRows-1] $ \ i -> do
@@ -236,6 +225,7 @@ withWindow underM r1 c1 r2 c2 f = do
     fmpz_mat_window_clear window
     return x
 
+flintToHMatrix :: CLong -> CLong -> Ptr FMPZMat -> IO (H.Matrix Double)
 flintToHMatrix numRows numCols flintM = do
   lists <- forM [0..numRows-1] $ \ i -> do
     forM [0..numCols-1] $ \ j -> do
@@ -243,21 +233,23 @@ flintToHMatrix numRows numCols flintM = do
       fromIntegral `fmap` fmpz_get_si e
   return $ H.fromLists lists
 
+pokeM :: Ptr FMPZMat -> CLong -> CLong -> CLong -> IO ()
 pokeM flintM i j v = do
   e <- fmpz_mat_entry flintM i j
   fmpz_set_si e v
 
+peekM :: Ptr FMPZMat -> CLong -> CLong -> IO CLong
 peekM flintM i j = do
   e <- fmpz_mat_entry flintM i j
   fmpz_get_si e
 
+copyMatrix :: Ptr FMPZMat -> Ptr FMPZMat -> CLong -> CLong -> CLong -> CLong -> IO ()
 copyMatrix m1 m2 r1 c1 r2 c2 =
   forM_ [r1 .. r2-1] $ \ i ->
     forM_ [c1 .. c2-1] $ \ j ->
       peekM m2 i j >>= pokeM m1 i j
 
 
--- 'windows' don't seem to work?
 -- copyMatrix' m1 m2 r1 c1 r2 c2 =
 --   withWindow m2 r1 c1 r2 c2 $ \ w2 ->
 --     withWindow m1 r1 c1 r2 c2 $ \ w1 -> do
@@ -317,12 +309,13 @@ normHNF m
     indexLookup j | j < numCols = j
                   | otherwise = indices !! (j `mod` numCols)
     indices = map indexLookup $ concatMap snd rs1
-    (rs1, (m',[]):rs2) = break (null . snd) results
+    (rs1, (m',[]):_) = break (null . snd) results
     results = tail $ iterate (normHNF' . fst) (m, [])
 
 normHNF' :: H.Matrix Double -> (H.Matrix Double, [Int])
 normHNF' m = fmap (map fromIntegral) . unsafePerformIO $ withMatrix m normhnf
 
+normhnf :: (CLong, CLong, Ptr FMPZMat) -> IO (H.Matrix Double, [CLong])
 normhnf (numRows, numCols, inputM) = do
   withBlankMatrix numRows numCols $ \ outputM -> do
     fmpz_mat_hnf outputM inputM
@@ -358,6 +351,7 @@ normhnf (numRows, numCols, inputM) = do
           where
             restABS   = map abs rest
             minNLcoef = minimum (filter (/= 0) restABS)
+        genColCons _ = error "normhnf: genColCons: impossible: missing leading co-efficient"
 
     let consCols = map genColCons consCands
 
@@ -379,7 +373,7 @@ normhnf (numRows, numCols, inputM) = do
       -- apply the operations on the extra space to write the
       -- additional rows and columns providing the additional
       -- constraints
-      forM (zip [rank..] ops) $ \ (i, op) -> op outputM' i
+      forM_ (zip [rank..] ops) $ \ (i, op) -> op outputM' i
 
       -- re-run HNF
       withBlankMatrix numRows' numCols' $ \ outputM'' -> do
@@ -387,10 +381,10 @@ normhnf (numRows, numCols, inputM) = do
         rank' <- fmpz_mat_rank outputM''
         -- scale the rows so that it is a RREF, returning the indices
         -- where leading-coefficients had to be scaled to 1.
-        indices <- elemrowscale outputM'' rank' numCols'
+        indices' <- elemrowscale outputM'' rank' numCols'
         -- HNF allows non-zeroes above the leading-coefficients that
         -- were greater than 1, so also fix that to bring into RREF.
-        elemrowadds outputM'' rank' numCols' indices
+        elemrowadds outputM'' rank' numCols' indices'
         -- convert back to HMatrix form
         h <- flintToHMatrix rank' numCols' outputM''
         return (h, map fst consCols)
@@ -399,6 +393,7 @@ normhnf (numRows, numCols, inputM) = do
 -- rows accordingly to reach RREF
 --
 -- precondition: matrix outputM is in HNF
+elemrowscale :: Ptr FMPZMat -> CLong -> CLong -> IO [(CLong, CLong)]
 elemrowscale outputM rank numCols = do
   -- column indices of leading co-efficients > 1
   lcoefs <- filter ((> 1) . head . snd) <$> forM [0 .. rank-1] (\ i -> do
@@ -422,7 +417,8 @@ elemrowscale outputM rank numCols = do
 -- just scaled the leading-coefficient to 1 and now we must look to
 -- see if there are any non-zeroes in the column above the
 -- leading-coefficient, because that is allowed by HNF.
-elemrowadds outputM rank numCols indices = do
+elemrowadds :: Ptr FMPZMat -> CLong -> CLong -> [(CLong, CLong)] -> IO ()
+elemrowadds outputM _ numCols indices = do
   -- look for non-zero members of the columns above the
   -- leading-coefficient and wipe them out.
   forM_ indices $ \ (lcI, lcJ) -> do
@@ -446,22 +442,24 @@ elemrowadds outputM rank numCols indices = do
 
 --------------------------------------------------
 
-m1 = (8><6)
- [ 1.0, 0.0, 0.0, -1.0,  0.0,  0.0
- , 0.0, 1.0, 0.0,  0.0, -1.0,  0.0
- , 0.0, 0.0, 1.0,  0.0,  0.0, -1.0
- , 1.0, 0.0, 0.0, -1.0,  0.0,  0.0
- , 0.0, 1.0, 0.0,  0.0, -1.0,  0.0
- , 0.0, 0.0, 1.0,  0.0,  0.0, -1.0
- , 0.0, 0.0, 0.0,  1.0, -4.0,  0.0
- , 0.0, 0.0, 0.0,  0.0,  4.0, -3.0 ] :: H.Matrix Double
+-- m1 :: H.Matrix Double
+-- m1 = (8><6)
+--  [ 1.0, 0.0, 0.0, -1.0,  0.0,  0.0
+--  , 0.0, 1.0, 0.0,  0.0, -1.0,  0.0
+--  , 0.0, 0.0, 1.0,  0.0,  0.0, -1.0
+--  , 1.0, 0.0, 0.0, -1.0,  0.0,  0.0
+--  , 0.0, 1.0, 0.0,  0.0, -1.0,  0.0
+--  , 0.0, 0.0, 1.0,  0.0,  0.0, -1.0
+--  , 0.0, 0.0, 0.0,  1.0, -4.0,  0.0
+--  , 0.0, 0.0, 0.0,  0.0,  4.0, -3.0 ]
 
-m2 = (8><6)
- [ 1.0, 0.0, 0.0, -1.0,  0.0,  0.0
- , 0.0, 1.0, 0.0,  0.0, -1.0,  0.0
- , 0.0, 0.0, 1.0,  0.0,  0.0, -1.0
- , 1.0, 0.0, 0.0, -1.0,  0.0,  0.0
- , 0.0, 1.0, 0.0,  0.0, -1.0,  0.0
- , 0.0, 0.0, 1.0,  0.0,  0.0, -1.0
- , 0.0, 0.0, 0.0,  1.0, -6.0,  0.0
- , 0.0, 0.0, 0.0,  0.0,  6.0, -4.0 ] :: H.Matrix Double
+-- m2 :: H.Matrix Double
+-- m2 = (8><6)
+--  [ 1.0, 0.0, 0.0, -1.0,  0.0,  0.0
+--  , 0.0, 1.0, 0.0,  0.0, -1.0,  0.0
+--  , 0.0, 0.0, 1.0,  0.0,  0.0, -1.0
+--  , 1.0, 0.0, 0.0, -1.0,  0.0,  0.0
+--  , 0.0, 1.0, 0.0,  0.0, -1.0,  0.0
+--  , 0.0, 0.0, 1.0,  0.0,  0.0, -1.0
+--  , 0.0, 0.0, 0.0,  1.0, -6.0,  0.0
+--  , 0.0, 0.0, 0.0,  0.0,  6.0, -4.0 ]
