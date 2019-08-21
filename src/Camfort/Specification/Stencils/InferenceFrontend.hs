@@ -29,47 +29,35 @@ module Camfort.Specification.Stencils.InferenceFrontend
   , StencilsReport(..)
   ) where
 
-import           Control.Monad.RWS.Lazy
-import           Control.Monad.Writer.Lazy
-import           Control.DeepSeq
-
 import           Camfort.Analysis
 import           Camfort.Analysis.Annotations
 import           Camfort.Analysis.CommentAnnotator
-import           Camfort.Helpers (collect, descendReverseM, descendBiReverseM)
-import qualified Camfort.Helpers.Vec as V
-import           Camfort.Input
+import           Camfort.Helpers (descendReverseM, descendBiReverseM)
 import           Camfort.Specification.Stencils.Analysis (StencilsAnalysis)
 import           Camfort.Specification.Stencils.Annotation (SA)
 import qualified Camfort.Specification.Stencils.Annotation as SA
-import           Camfort.Specification.Stencils.CheckBackend (synToAst)
 import           Camfort.Specification.Stencils.CheckFrontend
   (CheckResult, existingStencils, stencilChecking)
 import           Camfort.Specification.Stencils.Generate
-import           Camfort.Specification.Stencils.InferenceBackend
-import           Camfort.Specification.Stencils.Model
 import qualified Camfort.Specification.Stencils.Parser as Parser
-import           Camfort.Specification.Stencils.Parser.Types (SpecInner)
 import           Camfort.Specification.Stencils.Syntax
 import qualified Camfort.Specification.Stencils.Synthesis as Synth
-
-import qualified Language.Fortran.AST               as F
-import qualified Language.Fortran.Analysis          as FA
-import qualified Language.Fortran.Analysis.BBlocks  as FAB
-import qualified Language.Fortran.Analysis.DataFlow as FAD
-import qualified Language.Fortran.Util.Position     as FU
-
-import Data.Data
-import Data.Foldable
-import Data.Generics.Uniplate.Operations
-import Data.Graph.Inductive.Graph hiding (isEmpty)
+import           Control.DeepSeq
+import           Control.Monad.RWS.Lazy hiding (state)
+import           Control.Monad.Writer.Lazy
+import           Data.Foldable
+import           Data.Generics.Uniplate.Operations
 import qualified Data.Map as M
-import qualified Data.Set as S
-import Data.Maybe
-import Data.Monoid ((<>))
+import           Data.Maybe
+import qualified Language.Fortran.AST as F
+import qualified Language.Fortran.Analysis as FA
+import qualified Language.Fortran.Analysis.BBlocks as FAB
+import qualified Language.Fortran.Analysis.DataFlow as FAD
+import qualified Language.Fortran.Util.Position as FU
+import           Prelude hiding (span, log)
 
 data InferState = IS {
-     ivMap        :: FAD.InductionVarMapByASTBlock
+     _ivMap       :: FAD.InductionVarMapByASTBlock
    , visitedNodes :: [Int]}
 
 data InferEnv = IE
@@ -158,11 +146,11 @@ ifSynth t e = getDoSynth >>= (\doSynth -> if doSynth then t else e)
 -- | Attempt to convert a 'Parser.Specification' into a 'Specification'.
 --
 -- Only performs conversions for spatial specifications.
-specToSynSpec :: SpecInner -> Maybe Specification
-specToSynSpec spec = let ?renv = [] in
-                       case synToAst spec of
-                         Left err -> Nothing
-                         Right x  -> Just x
+-- specToSynSpec :: SpecInner -> Maybe Specification
+-- specToSynSpec spec = let ?renv = [] in
+--                        case synToAst spec of
+--                          Left _   -> Nothing
+--                          Right x  -> Just x
 
 -- | Main stencil inference code
 stencilInference :: Bool
@@ -217,9 +205,9 @@ stencilSynthesis' useEval doSynth marker pf@(F.ProgramFile mi pus) = do
             beMap = FAD.genBackEdgeMap (FAD.dominators gr) $ FA.bbgrGr gr
 
             -- identify every loop by its back-edge
-            ivMap = FAD.genInductionVarMapByASTBlock beMap gr
+            ivmap = FAD.genInductionVarMapByASTBlock beMap gr
 
-        (pu', log) <- lift $ runInferer checkRes useEval doSynth marker mi ivMap flTo pum
+        (pu', log) <- lift $ runInferer checkRes useEval doSynth marker mi ivmap flTo pum
         tell log
         pure pu'
     perPU pu = pure pu
@@ -267,6 +255,7 @@ perBlockInfer = perBlockInfer' False
 -- the following code is inside a do-loop since we only target
 -- array computations inside loops.
 
+perBlockInfer' :: Bool -> F.Block SA -> Inferer (F.Block SA)
 perBlockInfer' _ b@F.BlComment{} = pure b
 
 perBlockInfer' inDo b@(F.BlStatement ann span@(FU.SrcSpan lp _) _ stmnt) = do
@@ -313,8 +302,8 @@ perBlockInfer' inDo b@(F.BlStatement ann span@(FU.SrcSpan lp _) _ stmnt) = do
         Just subs ->
           -- Left-hand side is a subscript-by relative index or by a range
           case neighbourIndex ivmap subs of
-            Just lhs -> genSpecsAndReport span lhs b
-            Nothing  -> do
+            Just lhs' -> genSpecsAndReport span lhs' b
+            Nothing   -> do
               whenEval $
                 tell [(span , Right ("EVALMODE: LHS is an array\
                                      \ subscript we can't handle \
@@ -323,7 +312,7 @@ perBlockInfer' inDo b@(F.BlStatement ann span@(FU.SrcSpan lp _) _ stmnt) = do
         -- Not an assign we are interested in
         _ -> pure []
 
-perBlockInfer' _ b@(F.BlDo ann span lab cname lab' mDoSpec body tlab) = do
+perBlockInfer' _ (F.BlDo ann span lab cname lab' mDoSpec body tlab) = do
   -- descend into the body of the do-statement (in reverse order)
   body' <- mapM (descendBiReverseM (perBlockInfer' True)) (reverse body)
   return $ F.BlDo ann span lab cname lab' mDoSpec (reverse body') tlab
