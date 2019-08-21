@@ -41,21 +41,20 @@ module Camfort.Specification.Units.Environment
   , module Data.Data
   ) where
 
+import qualified Camfort.Specification.Units.Parser.Types as P
+import           Control.Arrow (first, second)
 import           Data.Binary
 import           Data.Char
 import           Data.Data
+import           Data.Generics.Uniplate.Operations (rewrite)
 import           Data.List
+import qualified Data.Map.Strict as M
 import           Data.Ratio
 import           GHC.Generics (Generic)
-import           Text.Printf
-import           Control.Arrow (first, second)
-import           Text.PrettyPrint.GenericPretty (pp, pretty, Out, doc, docPrec)
-import           Text.PrettyPrint (text)
-
 import qualified Language.Fortran.AST as F
-import qualified Camfort.Specification.Units.Parser.Types as P
-import Data.Generics.Uniplate.Operations (rewrite)
-import qualified Data.Map.Strict as M
+import           Text.PrettyPrint (text)
+import           Text.PrettyPrint.GenericPretty (Out, doc, docPrec)
+import           Text.Printf
 
 -- | A (unique name, source name) variable
 type VV = (F.Name, F.Name)
@@ -88,7 +87,8 @@ data UnitInfo
   deriving (Eq, Ord, Data, Typeable, Generic)
 
 -- | True iff u is monomorphic (has no parametric polymorphic pieces)
-isMonomorphic u = case u of
+isMonomorphic :: UnitInfo -> Bool
+isMonomorphic unitinfo = case unitinfo of
   UnitName _      -> True
   UnitAlias _     -> True
   UnitVar _       -> True
@@ -101,6 +101,7 @@ isMonomorphic u = case u of
   _               -> False
 
 -- | True iff argument matches one of the unitless constructors
+isUnitless :: UnitInfo -> Bool
 isUnitless UnitlessVar = True
 isUnitless UnitlessLit = True
 isUnitless _           = False
@@ -143,18 +144,22 @@ flattenUnits = map (uncurry UnitPow) . M.toList
     flatten (UnitPow u p)   = map (second (p*)) $ flatten u
     flatten u               = [(u, 1)]
 
+foldUnits :: Foldable t => t UnitInfo -> UnitInfo
 foldUnits units
   | null units = UnitlessVar
   | otherwise  = foldl1 UnitMul units
 
+-- FIXME: we know better...
+approxEq :: Double -> Double -> Bool
 approxEq a b = abs (b - a) < epsilon
+epsilon :: Double
 epsilon = 0.001 -- arbitrary
 
 
 instance Binary UnitInfo
 
 instance Show UnitInfo where
-  show u = case u of
+  show unitinfo = case unitinfo of
     UnitParamPosAbs ((f, _), i)         -> printf "#<ParamPosAbs %s[%d]>" f i
     UnitParamPosUse ((f, _), i, j)      -> printf "#<ParamPosUse %s[%d] callId=%d>" f i j
     UnitParamVarAbs ((f, _), (v, _))    -> printf "#<ParamVarAbs %s.%s>" f v
@@ -163,7 +168,7 @@ instance Show UnitInfo where
     UnitParamLitUse (i, j)              -> printf "#<ParamLitUse litId=%d callId=%d]>" i j
     UnitParamEAPAbs (v, _)              -> v
     UnitParamEAPUse ((v, _), i)         -> printf "#<ParamEAPUse %s callId=%d]>" v i
-    UnitParamImpAbs id                  -> printf "#<ParamImpAbs %s>" id
+    UnitParamImpAbs iden                -> printf "#<ParamImpAbs %s>" iden
     UnitLiteral i                       -> printf "#<Literal id=%d>" i
     UnitlessLit                         -> "1"
     UnitlessVar                         -> "1"
@@ -208,7 +213,7 @@ instance Out UnitInfo where
 -- otherwise Noting
 doubleToRationalSubset :: Double -> Maybe Rational
 doubleToRationalSubset x | x < 0 =
-    doubleToRationalSubset (abs x) >>= (\x -> return (-x))
+    negate <$> doubleToRationalSubset (abs x)
 doubleToRationalSubset x =
     doubleToRational' 0 1 (ceiling x) 1
   where
@@ -241,6 +246,7 @@ instance Show Constraint where
   show (ConEq u1 u2) = show u1 ++ " === " ++ show u2
   show (ConConj cs) = intercalate " && " (map show cs)
 
+isUnresolvedUnit :: UnitInfo -> Bool
 isUnresolvedUnit (UnitVar _)         = True
 isUnresolvedUnit (UnitLiteral _)     = True
 isUnresolvedUnit (UnitParamVarUse _) = True
@@ -256,6 +262,7 @@ isUnresolvedUnit (UnitPow u _)       = isUnresolvedUnit u
 isUnresolvedUnit (UnitMul u1 u2)     = isUnresolvedUnit u1 || isUnresolvedUnit u2
 isUnresolvedUnit _                   = False
 
+isResolvedUnit :: UnitInfo -> Bool
 isResolvedUnit = not . isUnresolvedUnit
 
 isConcreteUnit :: UnitInfo -> Bool
@@ -306,11 +313,11 @@ pprintUnitInfo (UnitPow u k) | k `approxEq` 0       = "1"
       | all isAlphaNum s = s
       | otherwise        = "(" ++ s ++ ")"
       where s = pprintUnitInfo x
-    maybeParenS x
-      | all isUnitMulOk s = s
-      | otherwise         = "(" ++ s ++ ")"
-      where s = pprintUnitInfo x
-    isUnitMulOk c = isSpace c || isAlphaNum c || c `elem` "*."
+    -- maybeParenS x
+    --   | all isUnitMulOk s = s
+    --   | otherwise         = "(" ++ s ++ ")"
+    --   where s = pprintUnitInfo x
+    -- isUnitMulOk c = isSpace c || isAlphaNum c || c `elem` "*."
 
 pprintUnitInfo ui                                   = show ui
 
