@@ -32,8 +32,6 @@ module Camfort.Input
   ) where
 
 import           Control.Monad.IO.Class
-import           Control.Monad.Trans.Cont      (evalCont, cont)
-import           Data.Functor.Compose          (Compose(..), getCompose)
 import qualified Data.ByteString.Char8         as B
 import           Data.Either                   (partitionEithers)
 import           Data.List                     (intercalate)
@@ -80,23 +78,23 @@ type AnalysisRunnerConsumer e w m a b r =
 -- | Given an analysis program for a single file, run it over every input file
 -- and collect the reports. Doesn't produce any output.
 runPerFileAnalysisP
-  :: (Monad m, Describe e, Describe w, NFData e, NFData w, NFData b)
+  :: (MonadIO m, Describe e, Describe w, NFData e, NFData w, NFData b)
   => AnalysisRunnerP e w m ProgramFile b (AnalysisReport e w b)
-runPerFileAnalysisP program logOutput logLevel snippets modFiles =
-  P.mapM $ \ (pf, _) ->
-             runAnalysisT
-             (F.pfGetFilename pf)
-             logOutput
-             logLevel
-             modFiles
-             (program pf)
+runPerFileAnalysisP program logOutput logLevel _ modFiles =
+  P.mapM $ \ (pf, _) -> do
+    -- liftIO . putStrLn $ "Running analysis on " ++ (F.pfGetFilename pf)
+    runAnalysisT (F.pfGetFilename pf)
+                 logOutput
+                 logLevel
+                 modFiles
+                 (program pf)
 
 -- | Run an analysis program over every input file and get the report. Doesn't
 -- produce any output.
 runMultiFileAnalysis
   :: (Monad m, Describe e, Describe w)
   => AnalysisRunner e w m [ProgramFile] b (AnalysisReport e w b)
-runMultiFileAnalysis program logOutput logLevel snippets modFiles
+runMultiFileAnalysis program logOutput logLevel _ modFiles
   = runAnalysisT "<unknown>" logOutput logLevel modFiles . program . map fst
 
 --------------------------------------------------------------------------------
