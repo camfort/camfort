@@ -1,3 +1,4 @@
+{-# LANGUAGE MonoLocalBinds         #-}
 {-# LANGUAGE FlexibleInstances      #-}
 {-# LANGUAGE FunctionalDependencies #-}
 {-# LANGUAGE MultiParamTypeClasses  #-}
