@@ -13,26 +13,35 @@
    limitations under the License.
 -}
 
-{-# LANGUAGE DoAndIfThenElse #-}
+{-# LANGUAGE DoAndIfThenElse, ScopedTypeVariables #-}
 
 module Main (main) where
 
 import Camfort.Analysis.Logger (LogLevel(..))
-import Camfort.Input (defaultValue)
 import Camfort.Functionality
-import Camfort.Specification.Units.Monad (LiteralsOpt(LitMixed))
 import Camfort.Specification.Hoare (PrimReprOption(..))
-
-import Language.Fortran.ParserMonad (FortranVersion(..), selectFortranVersion)
-
+import Camfort.Specification.Units.Monad (LiteralsOpt(LitMixed))
+import Control.Exception
 import Data.Maybe (fromMaybe)
 import Data.Monoid ((<>))
+import GHC.Stack
+import Language.Fortran.ParserMonad (FortranVersion(..), selectFortranVersion)
+import Options.Applicative
 import System.Directory (getCurrentDirectory)
 import System.Exit
-import Options.Applicative
 
 main :: IO ()
-main = do
+main = catch realMain stacktrace
+  where
+    stacktrace (e::AsyncException) = do
+      putStrLn "Call stack:"
+      stack <- currentCallStack
+      mapM_ putStrLn stack
+      putStrLn "Exception:"
+      print e
+
+realMain :: IO ()
+realMain = do
   currentDir <- getCurrentDirectory
   cmd <- execParser (info (commandParser currentDir) idm)
   code <- runCommand cmd
@@ -59,7 +68,6 @@ main = do
       let ro      = sioReadOptions sio
           lo      = sioLogOptions sio
           useEval = sioUseEval sio
-          inFile  = inputSource ro
       in runRO ro lo (f useEval)
     runSSO sso f =
       let ao     = ssoAnnotationOptions sso
@@ -420,6 +428,7 @@ cmdUnitsSynth   = fmap CmdUnitsSynth   unitsSynthOptions
 
 
 cmdImplicitNone, cmdImplicitNoneAll, cmdInvariantsCheck, cmdAllocCheck, cmdFPCheck :: Parser Command
+cmdArrayCheck, cmdUseCheck, cmdBasicChecks :: Parser Command
 cmdInvariantsCheck = fmap CmdInvariantsCheck invariantsOptions
 cmdImplicitNone    = fmap CmdImplicitNone readOptions <*> logOptions
 cmdImplicitNoneAll = fmap CmdImplicitNoneAll readOptions <*> logOptions
@@ -571,10 +580,12 @@ commandParser currDir =
 
 
 -- | Current CamFort version.
+version :: String
 version = "1.0"
 
 
 -- | Full CamFort version string.
+versionMessage :: String
 versionMessage = "CamFort " ++ version ++ " - Cambridge Fortran Infrastructure."
 
 
