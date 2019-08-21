@@ -23,29 +23,28 @@ module Camfort.Transformation.CommonBlockElim
   ( commonElimToModules
   ) where
 
-import Control.Monad
-import Control.Monad.State.Lazy
-import Control.Monad.Writer.Lazy (execWriter, tell)
-
-import Data.Data
-import Data.Void
-import Data.Function (on)
-import Data.List
+import           Camfort.Analysis
+import           Camfort.Analysis.Annotations
+import           Camfort.Helpers
+import           Camfort.Helpers.Syntax
+import           Control.Monad hiding (ap)
+import           Control.Monad.State.Lazy hiding (ap)
+import           Control.Monad.Writer.Lazy (execWriter, tell)
+import           Data.Data
+import           Data.Function (on)
+import           Data.Generics.Uniplate.Operations
+import           Data.List hiding (init)
 import qualified Data.Map as M
-import Data.Generics.Uniplate.Operations
-
+import           Data.Maybe (fromMaybe)
+import           Data.Void
 import qualified Language.Fortran.AST as F
 import qualified Language.Fortran.Analysis as FA
-import qualified Language.Fortran.Analysis.Types as FAT
 import qualified Language.Fortran.Analysis.Renaming as FAR
-import qualified Language.Fortran.Util.Position as FU
+import qualified Language.Fortran.Analysis.Types as FAT
 import qualified Language.Fortran.ParserMonad as PM
 import qualified Language.Fortran.PrettyPrint as PP
-
-import Camfort.Analysis
-import Camfort.Helpers
-import Camfort.Helpers.Syntax
-import Camfort.Analysis.Annotations
+import qualified Language.Fortran.Util.Position as FU
+import           Prelude hiding (mod, init)
 
 -- Typed common-block representation
 -- Tuple of:
@@ -167,9 +166,10 @@ cmpVarName (_, (_, (_, vtys1))) (_, (_, (_, vtys2))) =
 -- particular Common) (need to do gorouping, but sortBy is used
 -- already so... (IS THIS STABLE- does this matter?))
 
-commonName Nothing  = "Common"
-commonName (Just x) = x
+commonName :: Maybe String -> String
+commonName = fromMaybe "Common"
 
+commonNameFromAST :: Maybe (F.Expression a) -> Maybe F.Name
 commonNameFromAST (Just (F.ExpValue _ _ (F.ValVariable v))) = Just v
 commonNameFromAST _ = Nothing
 
@@ -180,8 +180,8 @@ freshenCommonNames (fname, (pname, (cname, fields))) =
         let mkRenamerAndCommon (r, tc) (v, t) =
                            let v' = caml (commonName cname) ++ "_" ++ v
                            in (M.insert v (Just v', Nothing) r, (v', t) : tc)
-            (r, fields') = foldl' mkRenamerAndCommon (M.empty, []) fields
-        in ((fname, (pname, (cname, fields'))), Just r)
+            (rmap, fields') = foldl' mkRenamerAndCommon (M.empty, []) fields
+        in ((fname, (pname, (cname, fields'))), Just rmap)
 
 -- From a list of typed and located common blocks group by the common
 -- block name, and then group/sort within such that the "mode" block
@@ -250,7 +250,7 @@ updateUseDecls fps tcs = map perPF fps
     -- Data-type generic reduce traversal
     reduceCollect :: (Data s, Data t, Uniplate t, Biplate t s) => (s -> Maybe a) -> t -> [a]
     reduceCollect k x = execWriter (transformBiM (\y -> do case k y of
-                                                            Just x -> tell [x]
+                                                            Just x' -> tell [x']
                                                             Nothing -> return ()
                                                            return y) x)
 
@@ -265,9 +265,9 @@ updateUseDecls fps tcs = map perPF fps
         removeDecls v (map snd tcrs') p'
       where
         pname = case F.getName p of
-                  F.Named pname -> pname
+                  F.Named n -> n
                    -- If no subname is available, use the filename
-                  _             -> fname
+                  _         -> fname
         tcrs' = lookups pname (lookups fname tcrs)
         pos = getUnitStartPosition p
         uses = mkUseStatementBlocks pos tcrs'
@@ -309,19 +309,19 @@ updateUseDecls fps tcs = map perPF fps
         matchVar :: ([F.Statement A], [F.Declarator A]) -> F.Declarator A
                  -> ([F.Statement A], [F.Declarator A])
         -- match on variable or array declaration
-        matchVar (assgns, decls) dec = case dec of
+        matchVar (assgnsNew, declsNew) dec = case dec of
           F.DeclVariable _ _ lvar@(F.ExpValue _ _ (F.ValVariable v)) _ init -> doMatchVar lvar v init
           F.DeclArray _ _ lvar@(F.ExpValue _ _ (F.ValVariable v)) _ _ init  -> doMatchVar lvar v init
-          _                                                                 -> (assgns, decls)
+          _                                                                 -> (assgnsNew, declsNew)
           where
             doMatchVar lvar v init
               | hasRenaming v rcs = case init of
                   -- Renaming exists and no default, then remove
-                  Nothing -> (assgns, decls)
+                  Nothing -> (assgnsNew, declsNew)
                     -- Renaming exists but has default, so create an
                     -- assignment for this
-                  Just initExpr -> ((F.StExpressionAssign a' (FU.getSpan dec) lvar initExpr) : assgns, decls)
-              | otherwise = (assgns, dec : decls)  -- no renaming, preserve declaration
+                  Just initExpr -> ((F.StExpressionAssign a' (FU.getSpan dec) lvar initExpr) : assgnsNew, declsNew)
+              | otherwise = (assgnsNew, dec : declsNew)  -- no renaming, preserve declaration
 
     removeDecl _ d = return d
 
@@ -358,6 +358,7 @@ getUnitStartPosition (F.PUFunction _ _ _ _ _ _ _ bs _) = FU.getSpan (head bs)
 getUnitStartPosition (F.PUBlockData _ s _ []) = s
 getUnitStartPosition (F.PUBlockData _ _ _ bs) = FU.getSpan (head bs)
 getUnitStartPosition (F.PUComment _ s _) = s
+getUnitStartPosition (F.PUModule _ s _ _ _) = s
 
 renamerToUse :: RenamerCoercer -> [(F.Name, F.Name)]
 renamerToUse Nothing = []
@@ -397,8 +398,8 @@ mkRenamerCoercer (name1, vtys1) (name2, vtys2)
         error "Can't generate renamer between different common blocks\n"
       where
         generate [] [] theta = theta
-        generate ((var1, ty1):vtys1) ((var2, ty2):vtys2) theta =
-            generate vtys1 vtys2 (M.insert var1 (varR, typR) theta)
+        generate ((var1, ty1):vtys1') ((var2, ty2):vtys2') theta =
+            generate vtys1' vtys2' (M.insert var1 (varR, typR) theta)
           where
              varR = if var1 == var2 then Nothing else Just var2
              typR = if ty1  ==  ty2 then Nothing else Just (ty1, ty2)
@@ -473,6 +474,7 @@ mkModule name vtys fname =
        [F.DeclArray a sp
           (F.ExpValue a sp (F.ValVariable (caml name ++ "_" ++ v))) dimDecls Nothing Nothing]
        where
-         dimDecls = F.AList a sp . flip map dims $ \ (lb, ub) -> F.DimensionDeclarator a sp (fmap exp lb) (fmap exp ub)
-         exp = F.ExpValue a sp . F.ValInteger . show
+         dimDecls = F.AList a sp . flip map dims $ \ (lb, ub) -> F.DimensionDeclarator a sp (fmap expr lb) (fmap expr ub)
+         expr = F.ExpValue a sp . F.ValInteger . show
+    toDeclarator (_, ct) = error $ "mkModule: toDeclarator: bad construct type: " ++ show ct
     decls = map toDeclBlock vtys
