@@ -35,7 +35,7 @@ consistent (Specification mult _) observedIxs =
       (Mult _, Once _) -> Inconsistent
         "Specification lacks readOnce, but the indices are unique."
   where
-    specModel :: Multiplicity (Approximation (UnionNF n (Interval Standard)))
+    specModel :: Multiplicity (Approximation (UnionNF n (Interval 'Standard)))
     specModel =
       case sequence $ (sequence . fmap (regionsToIntervals nOfDims)) <$> mult of
         Right model -> model
@@ -46,7 +46,7 @@ consistent (Specification mult _) observedIxs =
 
 -- | This is the actual consistency check using set comparison supplied in
 -- the model.
-consistent' :: Approximation (UnionNF n (Interval Standard))
+consistent' :: Approximation (UnionNF n (Interval 'Standard))
             -> UnionNF n Offsets
             -> ConsistencyResult
 consistent' (Exact unf) ixs =
