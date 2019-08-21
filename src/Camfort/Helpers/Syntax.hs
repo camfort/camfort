@@ -62,10 +62,13 @@ import qualified Language.Fortran.Util.Position as FU
 data AnnotationFree t = AnnotationFree { annotationBound :: t } deriving Show
 
 {-| short-hand constructor for 'AnnotationFree' -}
+af :: t -> AnnotationFree t
 af = AnnotationFree
 
 -- variable renaming helpers
+caml :: [Char] -> [Char]
 caml (x:xs) = toUpper x : xs
+caml []     = []
 
 -- Here begins varioous 'Eq' instances for instantiations of 'AnnotationFree'
 
@@ -118,8 +121,8 @@ instance Monoid Int where
 -- SrcSpan helpers
 
 dropLine :: FU.SrcSpan -> FU.SrcSpan
-dropLine (FU.SrcSpan s1 (FU.Position o _ l f Nothing)) =
-    FU.SrcSpan s1 (FU.Position o 1 (l+1) f Nothing)
+dropLine (FU.SrcSpan s1 (FU.Position o _ l f po)) =
+    FU.SrcSpan s1 (FU.Position o 1 (l+1) f po)
 
 deleteLine :: FU.SrcSpan -> FU.SrcSpan
 deleteLine (FU.SrcSpan (FU.Position ol cl ll fl pl) (FU.Position ou _ lu fu pu)) =
@@ -128,6 +131,7 @@ deleteLine (FU.SrcSpan (FU.Position ol cl ll fl pl) (FU.Position ou _ lu fu pu))
 linesCovered :: FU.Position -> FU.Position -> Int
 linesCovered (FU.Position _ _ l1 _ _) (FU.Position _ _ l2 _ _) = l2 - l1 + 1
 
+toCol0 :: FU.Position -> FU.Position
 toCol0 (FU.Position o _ l f p) = FU.Position o 1 l f p
 
 afterAligned :: FU.SrcSpan -> FU.Position
