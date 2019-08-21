@@ -13,8 +13,6 @@ module Camfort.Specification.Stencils.Analysis
   , compileStencils
   ) where
 
-import qualified Language.Fortran.Util.ModFile as MF
-
 import           Camfort.Analysis
 import           Camfort.Analysis.ModFile      (MFCompiler, simpleCompiler)
 
