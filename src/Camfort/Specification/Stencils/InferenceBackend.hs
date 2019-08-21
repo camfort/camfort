@@ -42,7 +42,7 @@ import Camfort.Specification.Stencils.Syntax
 
 type Span a = (a, a)
 
-spansToApproxSpatial :: [ Span (V.Vec (V.S n) Int) ]
+spansToApproxSpatial :: [ Span (V.Vec ('V.S n) Int) ]
                        -> Either String (Approximation Spatial)
 spansToApproxSpatial spans = sequence . fmap intervalsToRegions $ approxUnion
   where
@@ -50,8 +50,8 @@ spansToApproxSpatial spans = sequence . fmap intervalsToRegions $ approxUnion
       toApprox . map (fmap absRepToInf . transposeVecInterval) $ spans
     approxUnion = fmap (optimise . joins1 . NE.fromList . map return) approxVecs
 
-    toApprox :: [ V.Vec n (Interval Arbitrary) ]
-             -> Approximation [ V.Vec n (Interval Standard) ]
+    toApprox :: [ V.Vec n (Interval 'Arbitrary) ]
+             -> Approximation [ V.Vec n (Interval 'Standard) ]
     toApprox vs
       | parts <- (elongatedPartitions . map approxVec) vs =
           case parts of
@@ -64,14 +64,14 @@ spansToApproxSpatial spans = sequence . fmap intervalsToRegions $ approxUnion
       partition $ \case { Exact{} -> True; Bound{} -> False }
 
     -- TODO: DELETE AS SOON AS POSSIBLE
-    absRepToInf :: Interval Arbitrary -> Interval Arbitrary
+    absRepToInf :: Interval 'Arbitrary -> Interval 'Arbitrary
     absRepToInf interv@(IntervArbitrary a b)
       | fromIntegral a == absoluteRep = IntervInfiniteArbitrary
       | fromIntegral b == absoluteRep = IntervInfiniteArbitrary
       | otherwise = interv
     absRepToInf interv = interv
 
-    transposeVecInterval :: Span (V.Vec n Int) -> V.Vec n (Interval Arbitrary)
+    transposeVecInterval :: Span (V.Vec n Int) -> V.Vec n (Interval 'Arbitrary)
     transposeVecInterval (us, vs) = V.zipWith IntervArbitrary us vs
 
 mkTrivialSpan :: V.Vec n Int -> Span (V.Vec n Int)
@@ -167,8 +167,6 @@ containedWithin (V.Nil, V.Nil) (V.Nil, V.Nil)
   = True
 containedWithin (V.Cons l1 ls1, V.Cons u1 us1) (V.Cons l2 ls2, V.Cons u2 us2)
   = (l2 <= l1 && u1 <= u2) && containedWithin (ls1, us1) (ls2, us2)
-containedWithin _ _
-  = False
 
 -- Local variables:
 -- mode: haskell
