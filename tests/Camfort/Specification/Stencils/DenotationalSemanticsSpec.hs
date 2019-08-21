@@ -1,14 +1,11 @@
 module Camfort.Specification.Stencils.DenotationalSemanticsSpec (spec) where
 
+import           Algebra.Lattice
 import qualified Camfort.Helpers.Vec as V
-
-import Camfort.Specification.Stencils.Model
-import Camfort.Specification.Stencils.Syntax
-import Camfort.Specification.Stencils.DenotationalSemantics
-
-import Algebra.Lattice
-
-import Test.Hspec
+import           Camfort.Specification.Stencils.DenotationalSemantics
+import           Camfort.Specification.Stencils.Model
+import           Camfort.Specification.Stencils.Syntax
+import           Test.Hspec
 
 spec :: Spec
 spec =
@@ -33,7 +30,7 @@ spec =
             \/
             return (V.Cons (IntervHoled 0 2 False)
                            (V.Cons (IntervHoled 0 2 False) V.Nil))
-      let spec = Right $ Spatial $
+      let sspec = Right $ Spatial $
             Sum [ Product [ Centered 0 1 True, Forward 1 2 False ]
                 , Product [ Forward 2 1 False, Forward 2 2 False ] ]
-      intervalsToRegions reg `shouldBe` spec
+      intervalsToRegions reg `shouldBe` sspec
