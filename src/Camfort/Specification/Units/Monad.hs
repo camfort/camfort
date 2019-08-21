@@ -56,24 +56,13 @@ module Camfort.Specification.Units.Monad
   , runUnitAnalysis
   ) where
 
-import Control.Monad.State.Strict
-import Control.Monad.Reader
-import Data.Binary (Binary)
-import Data.Typeable (Typeable)
-import Data.Char (toLower)
-import Data.Data (Data)
-import Data.List (find, isPrefixOf)
-import GHC.Generics (Generic)
+import           Camfort.Analysis
+import           Camfort.Specification.Units.Annotation (UA)
+import           Camfort.Specification.Units.Environment (Constraints, VV)
+import           Camfort.Specification.Units.MonadTypes
+import           Control.Monad.Reader
+import           Control.Monad.State.Strict
 import qualified Language.Fortran.AST as F
-import Language.Fortran.Util.ModFile (ModFiles)
-
-import Camfort.Analysis
-import Camfort.Input
-import Camfort.Analysis.Annotations (Annotation)
-import Camfort.Specification.Units.Annotation (UA)
-import Camfort.Specification.Units.Environment (UnitInfo, Constraints, VV, PP)
-
-import Camfort.Specification.Units.MonadTypes
 
 unitOpts0 :: UnitOpts
 unitOpts0 = UnitOpts LitMixed
