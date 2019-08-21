@@ -2,22 +2,19 @@ module Camfort.Transformation.CommonSpec (spec) where
 
 import           System.Directory
 import           System.FilePath
-
 import           Test.Hspec
-
 import           Camfort.Analysis.Logger (LogLevel (..))
 import           Camfort.Functionality
 
 samplesBase :: FilePath
 samplesBase = "tests" </> "fixtures" </> "Transformation"
 
-data Example = Example FilePath FilePath
-
 readSample :: FilePath -> IO String
 readSample filename = do
   let path = samplesBase </> filename
   readFile path
 
+removeSample :: [Char] -> IO ()
 removeSample filename = do
   let path = samplesBase </> filename
   removeFile path
@@ -41,7 +38,7 @@ spec =
             , ceFortranVersion = Nothing
             }
 
-      runIO $ common outFile env
+      _ <- runIO $ common outFile env
 
       actual    <- runIO $ readSample "common.f90.out"
       actualMod <- runIO $ readSample "cmn.f90"
