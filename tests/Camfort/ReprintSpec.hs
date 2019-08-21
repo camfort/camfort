@@ -1,18 +1,13 @@
+{-# OPTIONS -Wno-orphans #-}
 {-# LANGUAGE FlexibleInstances #-}
 
 module Camfort.ReprintSpec (spec) where
 
-import Camfort.Functionality
-import Camfort.Reprint
-import Camfort.Specification.Units.Monad (LiteralsOpt(LitMixed))
+import           Camfort.Reprint
 import qualified Data.ByteString.Char8 as B
 import qualified Language.Fortran.Util.Position as FU
-
-import System.FilePath
-
-import Test.Hspec
-import Test.QuickCheck
-
+import           Test.Hspec
+import           Test.QuickCheck
 
 spec :: Spec
 spec =
@@ -99,6 +94,7 @@ instance Arbitrary FU.Position where
       col    <- choose (1, orOne $ length (text !! (line - 1)))
       return $ FU.Position offset col line "<generated>" Nothing
 
+orOne :: (Eq p, Num p) => p -> p
 orOne x | x == 0    = 1
         | otherwise = x
 
@@ -108,13 +104,17 @@ instance Arbitrary B.ByteString where
       numLines <- choose (0, 3)
       return . B.pack . concat $ take numLines text
 
+btext :: B.ByteString
 btext = B.pack . unlines $ text
+text :: [[Char]]
 text = ["A B C D"
        ,""
        ,"  E F"
        ," G H I J K L"]
 
+btext2 :: B.ByteString
 btext2 = B.pack . unlines $ text2
+text2 :: [[Char]]
 text2 = ["A B C D"
        ,"E F"
        ,"G H"
