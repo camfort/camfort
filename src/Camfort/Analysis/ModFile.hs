@@ -195,7 +195,6 @@ withCombinedModuleMap mfs pf =
   let
     -- Use the module map derived from all of the included Camfort Mod files.
     mmap = FM.combinedModuleMap mfs
-    tenv = FM.combinedTypeEnv mfs
     pfRenamed = FAR.analyseRenamesWithModuleMap mmap $ pf
   in (pfRenamed, mmap `Map.union` FM.extractModuleMap pfRenamed)
 
