@@ -108,7 +108,7 @@ dimMultiply d1 d2 = removeZeroes $ M.unionWith (+) d1 d2
 
 -- | Raise the dimension to the given power
 dimRaisePow :: Integer -> Dim -> Dim
-dimRaisePow 0 d = identDim
+dimRaisePow 0 _ = identDim
 dimRaisePow k d = M.map (* k) d
 
 -- | Compare two Dims, not minding the difference between
@@ -125,11 +125,11 @@ dimParamEq' [] _              = False
 dimParamEq' ((u1, p1):d1') d2 = case partition (unitParamEq u1 . fst) d2 of
   ((u2, p2):d2', d2'') -> dimParamEq' (rem1 ++ d1') (rem2 ++ d2' ++ d2'')
     where
-      (rem1, rem2) | p1 == p2 = ([], [])
-                   | p1 < p2  = ([], [(u2, p2 - p1)])
-                   | p1 > p2  = ([(u1, p1 - p2)], [])
-
-  _                    -> False
+      (rem1, rem2) | p1 == p2  = ([], [])
+                   | p1 < p2   = ([], [(u2, p2 - p1)])
+                   | p1 > p2   = ([(u1, p1 - p2)], [])
+                   | otherwise = error "dimParamEq'"
+  _ -> False
 
 -- | Similar to dimParamEq but assume that dimRaisePow can be
 -- arbitrarily applied to each of the parameters, because they now
@@ -212,23 +212,23 @@ dimSimplify excludes dim
   | (u, x):_ <- valids
   , sub1     <- M.singleton u (dimFromList ((u, 1):[(v, -div y x) | (v, y) <- M.toList dim, v /= u]))
   , sub2     <- dimSimplify excludes (applySub sub1 dim) = composeSubs sub2 sub1
-
+  | otherwise = error "dimSimplify"
   where
     valids   = sortBy (comparing (abs . snd)) . filter ((`S.notMember` excludes) . fst) $ M.toList dim
     validSet = S.fromList (map fst valids)
     invals   = filter ((`S.notMember` validSet) . fst) $ M.toList dim
 
-testVar x = UnitVar (x, x)
+-- testVar x = UnitVar (x, x)
 
-u0 = testVar "u0"
-u1 = testVar "u1"
-u2 = testVar "u2"
-u3 = testVar "u3"
-u4 = testVar "u4"
+-- u0 = testVar "u0"
+-- u1 = testVar "u1"
+-- u2 = testVar "u2"
+-- u3 = testVar "u3"
+-- u4 = testVar "u4"
 
-dim1 = dimFromList [(u1, 6), (u2, 15), (u3, -7), (u4, 12)]
-dim2 = dimFromList [(u1, 2), (u2, 15), (u3, -9)]
+-- dim1 = dimFromList [(u1, 6), (u2, 15), (u3, -7), (u4, 12)]
+-- dim2 = dimFromList [(u1, 2), (u2, 15), (u3, -9)]
 
-test1 = applySub (dimSimplify (S.fromList [u3,u4]) dim1) dim1 == dimFromList [(u2, 3), (u3, 2)]
+-- test1 = applySub (dimSimplify (S.fromList [u3,u4]) dim1) dim1 == dimFromList [(u2, 3), (u3, 2)]
 
-test2 =  (dimSimplify (S.fromList [u0]) (dimFromList [(u0, 1), (u1, -2)]))
+-- test2 =  (dimSimplify (S.fromList [u0]) (dimFromList [(u0, 1), (u1, -2)]))
