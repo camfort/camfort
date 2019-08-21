@@ -29,9 +29,8 @@ module Camfort.Specification.Stencils.PartialOrd
 
 import Data.Bool
 import Data.Maybe
-import Prelude (Int, Integer, Float, Double, ($), Integral)
+import Prelude (Int, Integer, Float, Double, ($))
 import qualified Data.Ord as Ord
-import qualified Data.Eq as Eq
 import qualified Data.List as List
 import qualified Data.Set as Set
 import qualified Data.Foldable as Foldable
