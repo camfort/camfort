@@ -20,27 +20,25 @@ module Camfort.Specification.Units.ModFile
   , dumpModFileCompiledUnits
   ) where
 
+import           Camfort.Analysis (analysisModFiles)
+import           Camfort.Specification.Units.Annotation (UA)
+import           Camfort.Specification.Units.Environment (Constraint(..), foldUnits, UnitInfo(..), colSort, Constraints)
+import           Camfort.Specification.Units.InferenceBackend (flattenConstraints, flattenUnits, genUnitAssignments')
+import           Camfort.Specification.Units.Monad
 import           Control.Monad.State (get, gets, lift)
 import           Data.Binary (Binary, decodeOrFail, encode)
-import qualified Data.ByteString.Lazy.Char8 as LB
 import           Data.Data (Data)
 import           Data.Generics.Uniplate.Operations (universeBi)
 import           Data.List (partition)
+import qualified Data.Map as M
 import           Data.Maybe (mapMaybe, catMaybes)
-import qualified Data.Map                   as M
-import qualified Data.Set                   as S
+import qualified Data.Set as S
 import           Data.Typeable (Typeable)
 import           GHC.Generics (Generic)
-
 import qualified Language.Fortran.AST as F
 import qualified Language.Fortran.Analysis as FA
 import           Language.Fortran.Util.ModFile
-
-import Camfort.Analysis (analysisModFiles)
-import Camfort.Specification.Units.Annotation (UA)
-import Camfort.Specification.Units.Environment (Constraint(..), foldUnits, UnitInfo(..), colSort, Constraints)
-import Camfort.Specification.Units.InferenceBackend (flattenConstraints, flattenUnits, genUnitAssignments, genUnitAssignments')
-import Camfort.Specification.Units.Monad
+import           Prelude hiding (mod)
 
 -- | The data-structure stored in 'fortran-src mod files'
 data CompiledUnits = CompiledUnits
