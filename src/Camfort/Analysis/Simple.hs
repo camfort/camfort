@@ -34,11 +34,10 @@ where
 
 import Prelude hiding (unlines)
 import Control.Monad
-import Control.Arrow (first)
 import Control.DeepSeq
 import Data.Data
 import Data.Function (on)
-import Data.Maybe (catMaybes, fromMaybe, maybeToList, listToMaybe, mapMaybe)
+import Data.Maybe (catMaybes, fromMaybe, listToMaybe, mapMaybe)
 import qualified Data.Set as S
 import qualified Data.IntSet as IS
 import qualified Data.Map.Strict as M
@@ -47,8 +46,8 @@ import qualified Data.Semigroup as SG
 import Data.Monoid ((<>))
 import Data.Generics.Uniplate.Operations
 import qualified Data.Text.Lazy.Builder as Builder
-import Data.Text (Text, unlines, intercalate, pack)
-import Data.List ((\\), sort, nub, nubBy, tails)
+import Data.Text (unlines, intercalate, pack)
+import Data.List (sort, nub, nubBy, tails)
 import GHC.Generics
 
 import Data.Graph.Inductive
@@ -56,12 +55,11 @@ import Data.Graph.Inductive
 import qualified Language.Fortran.AST as F
 import qualified Language.Fortran.Util.Position as F
 import qualified Language.Fortran.Analysis as F
-import qualified Language.Fortran.Analysis.Types as F
 import qualified Language.Fortran.Analysis.DataFlow as F
 import qualified Language.Fortran.Analysis.BBlocks as F
 import Language.Fortran.Util.ModFile
 
-import Camfort.Analysis (describeShow, analysisModFiles,  ExitCodeOfReport(..), atSpanned, atSpannedInFile, Origin
+import Camfort.Analysis (analysisModFiles,  ExitCodeOfReport(..), atSpanned, atSpannedInFile, Origin
                         , logError, describe, describeBuilder
                         , PureAnalysis, Describe )
 import Camfort.Analysis.ModFile (withCombinedEnvironment)
@@ -291,6 +289,7 @@ checkModuleUse pf = do
                         , n == n' ]
           extractUseName (F.UseID _ ss (F.ExpValue _ _ (F.ValVariable n)))       = (n, ss)
           extractUseName (F.UseRename _ ss (F.ExpValue _ _ (F.ValVariable n)) _) = (n, ss)
+          extractUseName u = error $ "checkModuleUse: extractUseName: invalid AST: " ++ show (fmap (const ()) u)
           unusedNames = [ (n, (F.getName pu, atSpannedInFile file ss))
                         | F.StUse _ _ _ _ _ (Just (F.AList _ _ uses)) <- statements
                         , (n, ss) <- map extractUseName uses
@@ -341,7 +340,6 @@ checkArrayUse pf = do
   let pf''        = F.analyseConstExps . F.analyseParameterVars pvm . F.analyseBBlocks $ pf'
   let bm          = F.genBlockMap pf''
   let dm          = F.genDefMap bm
-  let cm          = F.genCallMap pf''
 
   let checkPU :: F.ProgramUnit (F.Analysis a) -> CheckArrayReport
       checkPU pu | F.Analysis { F.bBlocks = Just _ } <- F.getAnnotation pu = CheckArrayReport {..}
@@ -369,7 +367,7 @@ checkArrayUse pf = do
           getNestedIdx vs (b:bs) = bad ++ getNestedIdx vs bs
             where
               vset = S.fromList vs
-              vmap = zip vs [0..]
+              vmap = zip vs ([0..] :: [Int])
               subs = [ (ivars, ss)
                      | F.ExpSubscript _ ss _ (F.AList _ _ is) <- universeBi b :: [F.Expression (F.Analysis a)]
                      , let ivars = [ (F.varName e, F.srcName e)
@@ -388,7 +386,7 @@ checkArrayUse pf = do
           -- blocks. We can exclude variables for which If/Case
           -- control-flow depends on it instead of needing it to be
           -- directly used by a subscript expression.
-          getMissingUse :: forall a. Data a => [String] -> F.Block (F.Analysis a) -> [([String], F.SrcSpan)]
+          getMissingUse :: forall a'. Data a' => [String] -> F.Block (F.Analysis a') -> [([String], F.SrcSpan)]
           getMissingUse excls (F.BlDo _ _ _ _ _ _ bs _)      = concatMap (getMissingUse excls) bs
           getMissingUse excls (F.BlDoWhile _ _ _ _ _ _ bs _) = concatMap (getMissingUse excls) bs
           getMissingUse excls (F.BlForall _ _ _ _ _ bs _)    = concatMap (getMissingUse excls) bs
@@ -399,7 +397,7 @@ checkArrayUse pf = do
             where
               es = catMaybes mes
               -- find any induction variables that are referenced by If-Elseif expressions
-              excl' = concatMap (getExcludes b) (universeBi es :: [F.Expression (F.Analysis a)])
+              excl' = getExcludes b
               rest = concatMap (getMissingUse (excls ++ excl')) $ concat bss
               bads = getMissingUse' excls b
           getMissingUse excls b@(F.BlCase F.Analysis{F.insLabel = Just i} _ _ _ e _ bss _)
@@ -407,15 +405,16 @@ checkArrayUse pf = do
             | eligible i (length excls) e = bads ++ rest
             | otherwise                   = rest
             where
-              rest = concatMap (getMissingUse (excls ++ getExcludes b e)) $ concat bss
+              rest = concatMap (getMissingUse (excls ++ getExcludes b)) $ concat bss
               bads = map (fmap (const (F.getSpan e))) $ getMissingUse' excls b
           getMissingUse excls b@(F.BlStatement F.Analysis{F.insLabel = Just i} _ _ st)
             | eligible i (length excls) st = getMissingUse' excls b
             | otherwise                    = []
           getMissingUse _ F.BlInterface{}  = []
           getMissingUse _ F.BlComment{}    = []
+          getMissingUse _ b = error $ "checkArrayUse: getMissingUse: missing insLabel: " ++ show (fmap F.insLabel b)
 
-          getMissingUse' :: forall a. Data a => [F.Name] -> F.Block (F.Analysis a) -> [([F.Name], F.SrcSpan)]
+          getMissingUse' :: forall a'. Data a' => [F.Name] -> F.Block (F.Analysis a') -> [([F.Name], F.SrcSpan)]
           getMissingUse' excls b
             | Just i            <- F.insLabel (F.getAnnotation b)
             -- obtain the live induction variables at this program point
@@ -439,10 +438,10 @@ checkArrayUse pf = do
           -- eligible bits of AST are those that contain subscripting
           -- expressions with a length equivalent to the number of
           -- currently live induction variables.
-          eligible :: forall a b. (Data a, Data (b (F.Analysis a))) => Int -> Int -> b (F.Analysis a) -> Bool
+          eligible :: forall a' b'. (Data a', Data (b' (F.Analysis a'))) => Int -> Int -> b' (F.Analysis a') -> Bool
           eligible i numExcls x
             | Just ivars <- IM.lookup i ivmap =
-                not $ null [ () | F.ExpSubscript _ _ _ (F.AList _ _ idxs) <- universeBi x :: [F.Expression (F.Analysis a)]
+                not $ null [ () | F.ExpSubscript _ _ _ (F.AList _ _ idxs) <- universeBi x :: [F.Expression (F.Analysis a')]
                                 , length idxs == S.size ivars - numExcls ]
             | otherwise = False
 
@@ -450,7 +449,7 @@ checkArrayUse pf = do
           -- expression depends on any induction variable and
           -- therefore can be used to exclude that induction variable
           -- from the 'missing' list.
-          getExcludes b e
+          getExcludes b
             | Just i            <- F.insLabel (F.getAnnotation b)
             -- obtain the live induction variables at this program point
             , Just ivarSet      <- IM.lookup i ivmap
