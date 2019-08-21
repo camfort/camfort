@@ -21,22 +21,20 @@ module Camfort.Transformation.EquivalenceElim
   ( refactorEquivalences
   ) where
 
-import Data.List
-import Data.Void (Void)
+import           Camfort.Analysis
+import           Camfort.Analysis.Annotations
+import           Camfort.Helpers.Syntax
+import           Camfort.Transformation.DeadCode
+import           Control.Monad.State.Lazy hiding (ap)
+import           Data.Generics.Uniplate.Operations
+import           Data.List
 import qualified Data.Map as M
-import Data.Generics.Uniplate.Operations
-import Control.Monad.State.Lazy
-
+import           Data.Void (Void)
 import qualified Language.Fortran.AST as F
+import qualified Language.Fortran.Analysis as FA
+import qualified Language.Fortran.Analysis.Renaming as FAR
 import qualified Language.Fortran.Analysis.Types as FAT (analyseTypes, TypeEnv)
 import qualified Language.Fortran.Util.Position as FU
-import qualified Language.Fortran.Analysis.Renaming as FAR
-import qualified Language.Fortran.Analysis as FA
-
-import Camfort.Analysis
-import Camfort.Helpers.Syntax
-import Camfort.Analysis.Annotations
-import Camfort.Transformation.DeadCode
 
 type EquivalenceRefactoring = PureAnalysis Void Void
 
@@ -60,12 +58,12 @@ refactorEquivalences pf = do
     refactoring
       :: FAT.TypeEnv -> F.ProgramFile A1
       -> EquivalenceRefactoring (F.ProgramFile A1)
-    refactoring tenv pf = do
-      (pf', _) <- runStateT equiv ([], 0)
-      return pf'
+    refactoring tenv pf' = do
+      (pf'', _) <- runStateT equiv ([], 0)
+      return pf''
       where
-         equiv = do pf' <- transformBiM perBlockRmEquiv pf
-                    descendBiM (addCopysPerBlockGroup tenv) pf'
+         equiv = do pf'' <- transformBiM perBlockRmEquiv pf'
+                    descendBiM (addCopysPerBlockGroup tenv) pf''
 
 addCopysPerBlockGroup
   :: FAT.TypeEnv -> [F.Block A1]
@@ -77,7 +75,7 @@ addCopysPerBlockGroup tenv blocks = do
 addCopysPerBlock
   :: FAT.TypeEnv -> F.Block A1
   -> StateT RmEqState EquivalenceRefactoring [F.Block A1]
-addCopysPerBlock tenv x@(F.BlStatement _ _ _
+addCopysPerBlock tenv b@(F.BlStatement _ _ _
                  (F.StExpressionAssign a sp@(FU.SrcSpan s1 _) dstE _))
   | not (pRefactored $ FA.prevAnnotation a) = do
     -- Find all variables/cells that are equivalent to the target
@@ -85,13 +83,13 @@ addCopysPerBlock tenv x@(F.BlStatement _ _ _
     eqs <- equivalentsToExpr dstE
     -- If there is only one, then it must refer to itself, so do nothing
     if length eqs <= 1
-      then return [x]
+      then return [b]
     -- If there are more than one, copy statements must be generated
       else do
         (equivs, n) <- get
 
         -- Remove the destination from the equivalents
-        let eqs' = deleteBy (\x y -> af x == af y) dstE eqs
+        let eqs' = deleteBy (\ x y -> af x == af y) dstE eqs
 
         -- Make copy statements
         let pos = afterAligned sp
@@ -99,8 +97,8 @@ addCopysPerBlock tenv x@(F.BlStatement _ _ _
 
         let (FU.Position ao c l f p) = s1
             reportSpan i =
-              let pos = FU.Position (ao + i) c (l + i) f p
-              in (FU.SrcSpan pos pos)
+              let pos' = FU.Position (ao + i) c (l + i) f p
+              in (FU.SrcSpan pos' pos')
 
         forM_ [n..(n + length copies - 1)] $ \i -> do
           origin <- atSpanned (reportSpan i)
@@ -109,13 +107,14 @@ addCopysPerBlock tenv x@(F.BlStatement _ _ _
         -- Update refactoring state
         put (equivs, n + length eqs')
         -- Sequence original assignment with new assignments
-        return $ x : copies
+        return $ b : copies
 
 addCopysPerBlock tenv x = do
    x' <- descendBiM (addCopysPerBlockGroup tenv) x
    return [x']
 
 -- see if two expressions have the same type
+equalTypes :: FAT.TypeEnv -> F.Expression A1 -> F.Expression A1 -> Maybe FA.IDType
 equalTypes tenv e e' = do
     v1 <- extractVariable e
     v2 <- extractVariable e'
@@ -159,7 +158,7 @@ perBlockRmEquiv = transformBiM perStatementRmEquiv
 perStatementRmEquiv
   :: F.Statement A1
   -> StateT RmEqState EquivalenceRefactoring (F.Statement A1)
-perStatementRmEquiv x@(F.StEquivalence a sp@(FU.SrcSpan spL _) equivs) = do
+perStatementRmEquiv (F.StEquivalence a sp@(FU.SrcSpan spL _) equivs) = do
     (ess, n) <- get
 
     let spL' = FU.SrcSpan spL spL
@@ -175,9 +174,9 @@ perStatementRmEquiv f = return f
 equivalentsToExpr
   :: F.Expression A1
   -> StateT RmEqState EquivalenceRefactoring [F.Expression A1]
-equivalentsToExpr x = do
+equivalentsToExpr y = do
     (equivs, _) <- get
-    return (inGroup x equivs)
+    return (inGroup y equivs)
   where
     inGroup _ [] = []
     inGroup x (xs:xss) =
