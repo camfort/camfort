@@ -29,6 +29,8 @@ module Camfort.Output
   , refactoring
   ) where
 
+import Prelude hiding (span)
+
 import qualified Language.Fortran.AST as F
 import qualified Language.Fortran.PrettyPrint as PP
 import qualified Language.Fortran.Util.Position as FU
@@ -91,6 +93,7 @@ class OutputFiles t where
 
 {-| changeDir is used to change the directory of a filename string.
     If the filename string has no directory then this is an identity  -}
+changeDir :: Eq a => [a] -> [a] -> [a] -> [a]
 changeDir newDir oldDir oldFilename =
     newDir ++ listDiffL oldDir oldFilename
   where
@@ -250,20 +253,22 @@ lines that were removed. Note that the number of new lines removed
 might actually be less than 'n'- but in principle this should not
 happen with the usaage in 'refactorDecl' -}
 
+removeNewLines :: B.ByteString -> Int -> (B.ByteString, Int)
 removeNewLines xs 0 = (xs, 0)
 -- Deal with CR LF in the same way as just LF
-removeNewLines xs n =
-    case unpackFst (B.splitAt 4 xs) of
+removeNewLines topXS n =
+    case unpackFst (B.splitAt 4 topXS) of
       ("\r\n\r\n", xs) -> (xs', n' + 1)
           where (xs', n') = removeNewLines (B.pack "\r\n" `B.append` xs) (n - 1)
       _ ->
-        case unpackFst (B.splitAt 2 xs) of
+        case unpackFst (B.splitAt 2 topXS) of
           ("\n\n", xs)     -> (xs', n' + 1)
               where (xs', n') = removeNewLines (B.pack "\n" `B.append` xs) (n - 1)
           _ ->
-           case B.uncons xs of
-               Nothing -> (xs, 0)
+           case B.uncons topXS of
+               Nothing -> (topXS, 0)
                Just (x, xs) -> (B.cons x xs', n)
                    where (xs', _) = removeNewLines xs n
 
+unpackFst :: (B.ByteString, b) -> (String, b)
 unpackFst (x, y) = (B.unpack x, y)
