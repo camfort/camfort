@@ -69,7 +69,8 @@ type Variable = String
 -- but can be made smaller for debugging purposes,
 -- e.g., 100, but it needs to be high enough to clash with reasonable
 -- relative indices.
-absoluteRep = maxBound :: Int
+absoluteRep :: Int
+absoluteRep = maxBound
 
 {- *** 1 . Specification syntax -}
 
@@ -127,6 +128,7 @@ setLinearity :: Linearity -> Specification -> Specification
 setLinearity l (Specification mult isStencil)
   | l == Linear    = Specification (Once $ peel mult) isStencil
   | l == NonLinear = Specification (Mult $ peel mult) isStencil
+  | otherwise      = error "setLinearity: impossible"
 
 data Linearity = Linear | NonLinear deriving (Eq, Data, Typeable)
 
@@ -305,6 +307,7 @@ instance Show Region where
      | otherwise = showRegion "centered" dep dim reflx
 
 -- Helper for showing regions
+showRegion :: (Show dep, Show dim) => String -> dep -> dim -> Bool -> [Char]
 showRegion typ depS dimS reflx = typ ++ "(depth=" ++ show depS
                                ++ ", dim=" ++ show dimS
                                ++ (if reflx then "" else ", nonpointed")
