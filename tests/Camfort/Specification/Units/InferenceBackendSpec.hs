@@ -1,16 +1,15 @@
 module Camfort.Specification.Units.InferenceBackendSpec (spec) where
 
-import GHC.Real ((%))
-
-import           Test.Hspec hiding (Spec)
+import           Camfort.Specification.Units.BackendTypes (constraintToDim, dimParamEq, dimFromList, prop_composition)
+import           Camfort.Specification.Units.Environment
+import           Camfort.Specification.Units.InferenceBackend ( flattenConstraints, shiftTerms )
+import           Camfort.Specification.Units.InferenceBackendSBV ( criticalVariables
+                                                                 , inconsistentConstraints, inferVariables )
+import           Data.Maybe (fromJust)
+import           GHC.Real ((%))
 import qualified Test.Hspec as Test
-
-import Camfort.Specification.Units.Environment
-import Camfort.Specification.Units.InferenceBackendSBV ( criticalVariables, inconsistentConstraints, inferVariables )
-import Camfort.Specification.Units.InferenceBackend ( flattenConstraints, shiftTerms )
-import Camfort.Specification.Units.BackendTypes (constraintToDim, dimParamEq, Dim, dimFromList, prop_composition)
-import Data.Maybe (fromJust)
-import Test.QuickCheck
+import           Test.Hspec hiding (Spec)
+import           Test.QuickCheck
 
 spec :: Test.Spec
 spec = do
@@ -56,20 +55,24 @@ instance Arbitrary UnitInfo where
     name <- arbitrary
     return $ UnitVar (name, name)
 
+testCons1 :: [Constraint]
 testCons1 = [ ConEq (UnitName "kg") (UnitName "m")
             , ConEq (UnitVar ("x", "x")) (UnitName "m")
             , ConEq (UnitVar ("y", "y")) (UnitName "kg")]
 
+testCons1_flattened :: [([UnitInfo], [UnitInfo])]
 testCons1_flattened = [([UnitPow (UnitName "kg") 1.0],[UnitPow (UnitName "m") 1.0])
                       ,([UnitPow (UnitVar ("x", "x")) 1.0],[UnitPow (UnitName "m") 1.0])
                       ,([UnitPow (UnitVar ("y", "y")) 1.0],[UnitPow (UnitName "kg") 1.0])]
 
+testCons1_shifted :: [([UnitInfo], [UnitInfo])]
 testCons1_shifted = [([],[UnitPow (UnitName "m") 1.0,UnitPow (UnitName "kg") (-1.0)])
                     ,([UnitPow (UnitVar ("x", "x")) 1.0],[UnitPow (UnitName "m") 1.0])
                     ,([UnitPow (UnitVar ("y", "y")) 1.0],[UnitPow (UnitName "kg") 1.0])]
 
 --------------------------------------------------
 
+testCons2 :: [Constraint]
 testCons2 = [ConEq (UnitMul (UnitName "m") (UnitPow (UnitName "s") (-1.0))) (UnitMul (UnitName "m") (UnitPow (UnitName "s") (-1.0)))
             ,ConEq (UnitName "m") (UnitMul (UnitMul (UnitName "m") (UnitPow (UnitName "s") (-1.0))) (UnitName "s"))
             ,ConEq (UnitAlias "accel") (UnitMul (UnitName "m") (UnitPow (UnitParamPosUse (("simple1_sqr6", "sqr"),0,0)) (-1.0)))
@@ -85,6 +88,7 @@ testCons2 = [ConEq (UnitMul (UnitName "m") (UnitPow (UnitName "s") (-1.0))) (Uni
             ,ConEq (UnitParamPosUse (("simple1_mul7","mul"),0,1)) (UnitMul (UnitParamPosUse (("simple1_mul7","mul"),1,1)) (UnitParamPosUse (("simple1_mul7","mul"),2,1)))
             ,ConEq (UnitAlias "accel") (UnitMul (UnitName "m") (UnitPow (UnitName "s") (-2.0)))]
 
+testCons2_shifted :: [([UnitInfo], [UnitInfo])]
 testCons2_shifted = [([],[UnitPow (UnitName "m") 1.0,UnitPow (UnitName "s") (-1.0),UnitPow (UnitName "m") (-1.0),UnitPow (UnitName "s") 1.0])
                     ,([],[UnitPow (UnitName "m") 1.0,UnitPow (UnitName "m") (-1.0)])
                     ,([UnitPow (UnitAlias "accel") 1.0,UnitPow (UnitParamPosUse (("simple1_sqr6","sqr"),0,0)) 1.0],[UnitPow (UnitName "m") 1.0])
@@ -100,20 +104,24 @@ testCons2_shifted = [([],[UnitPow (UnitName "m") 1.0,UnitPow (UnitName "s") (-1.
                     ,([UnitPow (UnitParamPosUse (("simple1_mul7","mul"),0,1)) 1.0,UnitPow (UnitParamPosUse (("simple1_mul7","mul"),1,1)) (-1.0),UnitPow (UnitParamPosUse (("simple1_mul7","mul"),2,1)) (-1.0)],[])
                     ,([UnitPow (UnitAlias "accel") 1.0],[UnitPow (UnitName "m") 1.0,UnitPow (UnitName "s") (-2.0)])]
 
+testCons3 :: [Constraint]
 testCons3 = [ ConEq (UnitVar ("a", "a")) (UnitVar ("e", "e"))
             , ConEq (UnitVar ("a", "a")) (UnitMul (UnitVar ("b", "b")) (UnitMul (UnitVar ("c", "c")) (UnitVar ("d", "d"))))
             , ConEq (UnitVar ("d", "d")) (UnitName "m") ]
 
+testCons3_shifted :: [([UnitInfo], [UnitInfo])]
 testCons3_shifted = [([UnitPow (UnitVar ("a", "a")) 1.0,UnitPow (UnitVar ("e", "e")) (-1.0)],[])
                     ,([UnitPow (UnitVar ("a", "a")) 1.0,UnitPow (UnitVar ("b", "b")) (-1.0),UnitPow (UnitVar ("c", "c")) (-1.0),UnitPow (UnitVar ("d", "d")) (-1.0)],[])
                     ,([UnitPow (UnitVar ("d", "d")) 1.0],[UnitPow (UnitName "m") 1.0])]
 
+testCons4 :: [Constraint]
 testCons4 = [ConEq (UnitVar ("simple2_a11", "simple2_a11")) (UnitParamPosUse (("simple2_sqr3","sqr"),0,0))
             ,ConEq (UnitVar ("simple2_a22", "simple2_a22")) (UnitParamPosUse (("simple2_sqr3","sqr"),1,0))
             -- ,ConEq (UnitVar ("simple2_a11", "simple2_a11")) (UnitVar ("simple2_a11", "simple2_a11"))
             -- ,ConEq (UnitVar ("simple2_a22", "simple2_a22")) (UnitVar ("simple2_a22", "simple2_a22"))
             ,ConEq (UnitParamPosUse (("simple2_sqr3","sqr"),0,0)) (UnitMul (UnitParamPosUse (("simple2_sqr3","sqr"),1,0)) (UnitParamPosUse (("simple2_sqr3","sqr"),1,0)))]
 
+testCons5 :: [Constraint]
 testCons5 = [ConEq (UnitVar ("simple2_a11", "simple2_a11")) (UnitParamPosUse (("simple2_sqr3","sqr"),0,0))
             ,ConEq (UnitAlias "accel") (UnitParamPosUse (("simple2_sqr3","sqr"),1,0))
             ,ConEq (UnitVar ("simple2_a11", "simple2_a11")) (UnitVar ("simple2_a11", "simple2_a11"))
@@ -121,6 +129,7 @@ testCons5 = [ConEq (UnitVar ("simple2_a11", "simple2_a11")) (UnitParamPosUse (("
             ,ConEq (UnitParamPosUse (("simple2_sqr3","sqr"),0,0)) (UnitMul (UnitParamPosUse (("simple2_sqr3","sqr"),1,0)) (UnitParamPosUse (("simple2_sqr3","sqr"),1,0)))
             ,ConEq (UnitAlias "accel") (UnitMul (UnitName "m") (UnitPow (UnitName "s") (-2.0)))]
 
+testCons5_infer :: [(([Char], [Char]), UnitInfo)]
 testCons5_infer = [(("simple2_a11", "simple2_a11"),UnitMul (UnitPow (UnitName "m") 2.0) (UnitPow (UnitName "s") (-4.0)))
                   ,(("simple2_a22", "simple2_a22"),UnitMul (UnitPow (UnitName "m") 1.0) (UnitPow (UnitName "s") (-2.0)))]
 
