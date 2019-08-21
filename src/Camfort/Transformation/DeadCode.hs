@@ -34,7 +34,6 @@ import Camfort.Helpers.Syntax
 import qualified Data.IntMap as IM
 import qualified Data.Set as S
 import Data.Generics.Uniplate.Operations
-import Data.Maybe
 import Control.Monad (guard)
 import Control.Monad.Trans.Writer (WriterT, runWriterT, tell)
 import Data.Monoid (Any(..), (<>))
@@ -62,7 +61,7 @@ deadCode flag pf = do
     -- live variables
     lva   = FAD.liveVariableAnalysis gr
 
-  deadCode' flag lva pf'
+  _ <- deadCode' flag lva pf'
   pure $ fmap FA.prevAnnotation pf'
 
 deadCode' :: Bool -> FAD.InOutMap (S.Set F.Name)
