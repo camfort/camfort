@@ -1,20 +1,14 @@
 module Camfort.Specification.Units.Analysis.CriticalsSpec (spec) where
 
-import System.Directory (getCurrentDirectory)
-import System.FilePath ((</>))
-
-import Control.Lens
-
-import Test.Hspec hiding (Spec)
+import           Camfort.Analysis hiding (describe)
+import           Camfort.Analysis.ModFile (readParseSrcDir)
+import           Camfort.Specification.Units.Analysis.Criticals (inferCriticalVariables)
+import           Camfort.Specification.Units.Monad (LiteralsOpt(..), unitOpts0, uoLiterals, UnitEnv(..), runUnitAnalysis)
+import           Control.Lens
+import           Language.Fortran.Util.ModFile (emptyModFiles)
+import           System.FilePath ((</>))
 import qualified Test.Hspec as Test
-
-import Language.Fortran.Util.ModFile (emptyModFiles)
-
-import Camfort.Analysis hiding (describe)
-import Camfort.Analysis.ModFile (readParseSrcDir)
-import Camfort.Specification.Units.Analysis.Criticals (inferCriticalVariables)
-import Camfort.Specification.Units.Monad
-  (LiteralsOpt(..), unitOpts0, uoLiterals, UnitEnv(..), runUnitAnalysis)
+import           Test.Hspec hiding (Spec)
 
 spec :: Test.Spec
 spec = do
