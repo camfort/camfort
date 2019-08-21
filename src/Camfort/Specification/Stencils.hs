@@ -18,30 +18,22 @@
 module Camfort.Specification.Stencils
  (infer, check, synth) where
 
-import Control.Arrow ((***), first, second)
-import Control.DeepSeq
-import Data.Maybe (catMaybes)
-
 import           Camfort.Analysis
 import           Camfort.Analysis.Annotations
-import           Camfort.Helpers
 import           Camfort.Specification.Stencils.Analysis (StencilsAnalysis)
 import qualified Camfort.Specification.Stencils.Annotation as SA
-import           Camfort.Specification.Stencils.CheckFrontend hiding (LogLine)
+import           Camfort.Specification.Stencils.CheckFrontend
 import           Camfort.Specification.Stencils.InferenceFrontend
-import           Camfort.Specification.Stencils.Synthesis
-
+import           Control.DeepSeq
+import           Data.Maybe (catMaybes)
 import qualified Language.Fortran.AST as F
 import qualified Language.Fortran.Analysis as FA
-import qualified Language.Fortran.Util.ModFile as MF
-import qualified Language.Fortran.Analysis.Renaming as FAR
 import qualified Language.Fortran.Analysis.BBlocks as FAB
 import qualified Language.Fortran.Analysis.DataFlow as FAD
-
-import Data.List
-
+import qualified Language.Fortran.Analysis.Renaming as FAR
 
 -- | Helper for retrieving analysed blocks.
+getBlocks :: F.ProgramFile A -> F.ProgramFile SA.SA
 getBlocks = FAD.analyseConstExps . FAB.analyseBBlocks . FAR.analyseRenames . FA.initAnalysis . fmap SA.mkStencilAnnotation
 
 --------------------------------------------------
