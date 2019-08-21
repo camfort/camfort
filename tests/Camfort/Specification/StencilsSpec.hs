@@ -1,3 +1,4 @@
+{-# OPTIONS -Wno-orphans #-}
 {-# LANGUAGE DataKinds #-}
 {-# LANGUAGE FlexibleInstances #-}
 {-# LANGUAGE FlexibleContexts #-}
@@ -11,49 +12,38 @@
 
 module Camfort.Specification.StencilsSpec (spec) where
 
-
-import           Control.Monad.Writer.Strict hiding (Sum, Product)
+import           Camfort.Analysis hiding (describe)
+import qualified Camfort.Analysis.Logger as L
+import           Camfort.Analysis.ModFile (genModFiles)
+import           Camfort.Analysis.TestUtils
+import           Camfort.Helpers.Vec hiding (zipWith)
+import           Camfort.Input
+import           Camfort.Output
+import           Camfort.Reprint
+import           Camfort.Specification.Stencils
+import           Camfort.Specification.Stencils.Analysis (compileStencils)
+import           Camfort.Specification.Stencils.Generate ( Neighbour(..), indicesToSpec
+                                                         , convIxToNeighbour, runStencilInferer)
+import           Camfort.Specification.Stencils.InferenceBackend
+import           Camfort.Specification.Stencils.Model
+import           Camfort.Specification.Stencils.Syntax
+import           Camfort.Specification.Stencils.Synthesis
+import           Control.Lens
+import qualified Data.ByteString.Char8 as B
+import           Data.Data (Data)
 import qualified Data.Graph.Inductive.Graph as Gr
 import           Data.List
-
-import Control.Lens
-
 import qualified Data.Text as Text
-
-import Language.Fortran.Util.ModFile (emptyModFiles, ModFile)
-
-import Camfort.Analysis.TestUtils
-import Camfort.Analysis hiding (describe)
-import qualified Camfort.Analysis.Logger as L
-import Camfort.Analysis.ModFile (genModFiles)
-import Camfort.Helpers.Vec hiding (zipWith)
-import Camfort.Input
-import Camfort.Specification.Stencils
-import Camfort.Specification.Stencils.Analysis
-  (StencilsAnalysis, compileStencils)
-import Camfort.Specification.Stencils.Generate
-  (Neighbour(..), indicesToSpec, convIxToNeighbour, runStencilInferer)
-import Camfort.Specification.Stencils.Synthesis
-import Camfort.Specification.Stencils.Model
-import Camfort.Specification.Stencils.InferenceFrontend
-import Camfort.Specification.Stencils.InferenceBackend
-import Camfort.Specification.Stencils.Syntax
 import qualified Language.Fortran.AST as F
-import Language.Fortran.Parser.Any (deduceVersion)
-import Language.Fortran.ParserMonad
-import Language.Fortran.Util.ModFile (emptyModFiles)
-import Camfort.Reprint
-import Camfort.Output
+import qualified Language.Fortran.Analysis as F
+import           Language.Fortran.Parser.Any (deduceVersion)
+import           Language.Fortran.Util.ModFile (emptyModFiles, ModFile)
+import           System.Directory (listDirectory)
+import           System.FilePath
+import           Test.Hspec
+import           Test.QuickCheck
 
-import qualified Data.Set as S
-import Data.Functor.Identity
-import qualified Data.ByteString.Char8 as B
-
-import System.Directory (listDirectory)
-import System.FilePath
-
-import Test.Hspec
-import Test.QuickCheck
+type Indices a = [[F.Index (F.Analysis a)]]
 
 spec :: Spec
 spec =
@@ -91,7 +81,7 @@ spec =
                 , Cons 1 (Cons 0 (Cons 2 Nil))
                 , Cons 2 (Cons 2 (Cons 3 Nil))
                 , Cons 1 (Cons 3 (Cons 3 Nil))
-                ] :: [Vec (S (S (S Z))) Int])
+                ] :: [Vec ('S ('S ('S 'Z))) Int])
 
     it "composeRegions (1,0)-(1,0) span and (2,0)-(2,0) span" $
       shouldBe (coalesce
@@ -396,9 +386,10 @@ spec =
         sampleFiles
 
   where -- Helpers go here for loading files and running analyses
+        assertStencilCheck :: String -> String -> String -> Spec
         assertStencilCheck fileName testComment expected = do
           let input = testInputSources (fixturesDir </> fileName)
-          it "testComment" $
+          it testComment $
             testSingleFileAnalysis input (generalizePureAnalysis . check) $ \report -> do
               let res = report ^?! arResult . _ARSuccess
               show res `shouldBe` expected
@@ -431,14 +422,12 @@ spec =
         assertStencilSynthSample = assertStencilSynthDir
           (\d f -> d </> "expected" </> f) samplesDir
 
-        assertStencilSynthResponse fileName testComment expectedResponse =
+        assertStencilSynthResponse fileName testComment expectedResponse = do
           let input = testInputSources (fixturesDir </> fileName)
-              modFiles = emptyModFiles
-          in do
-            it testComment $
-              testMultiFileAnalysis input (generalizePureAnalysis . synth '=') $ \report -> do
-                let logs = report ^.. arMessages . traverse . L._MsgInfo . L.lmMsg
-                logs `shouldBe` expectedResponse
+          it testComment $
+            testMultiFileAnalysis input (generalizePureAnalysis . synth '=') $ \report -> do
+              let logs = report ^.. arMessages . traverse . L._MsgInfo . L.lmMsg
+              logs `shouldBe` expectedResponse
 
         assertStencilSynthResponseOut fileName testComment expectedResponse =
           describe testComment $ do
@@ -446,7 +435,6 @@ spec =
             assertStencilSynthResponse fileName "correct output" expectedResponse
 
         assertStencilSynthNoWarn fileName testComment = assertStencilSynthResponseOut fileName testComment [""]
-        fixturesDir = "tests" </> "fixtures" </> "Specification" </> "Stencils"
         samplesDir  = "samples" </> "stencils"
         getExpectedSrcFileName file =
           let oldExtension = takeExtension file
@@ -478,36 +466,41 @@ crossModuleAUserReport =
   ]
 
 -- Indices for the 2D five point stencil (deliberately in an odd order)
+fivepoint :: [Vec ('S ('S 'Z)) Int]
 fivepoint = [ Cons (-1) (Cons 0 Nil), Cons 0 (Cons (-1) Nil)
             , Cons 1 (Cons 0 Nil) , Cons 0 (Cons 1 Nil), Cons 0 (Cons 0 Nil)
             ]
 -- Indices for the 3D seven point stencil
+sevenpoint :: [Vec ('S ('S ('S 'Z))) Int]
 sevenpoint = [ Cons (-1) (Cons 0 (Cons 0 Nil)), Cons 0 (Cons (-1) (Cons 0 Nil))
              , Cons 0 (Cons 0 (Cons 1 Nil)), Cons 0 (Cons 1 (Cons 0 Nil))
              , Cons 1 (Cons 0 (Cons 0 Nil)), Cons 0 (Cons 0 (Cons (-1) Nil))
              , Cons 0 (Cons 0 (Cons 0 Nil))
              ]
+centeredFwd :: [Vec ('S ('S 'Z)) Int]
 centeredFwd = [ Cons 1 (Cons 0 Nil), Cons 0 (Cons 1 Nil), Cons 0 (Cons (-1) Nil)
               , Cons 1 (Cons 1 Nil), Cons 0 (Cons 0 Nil), Cons 1 (Cons (-1) Nil)
-              ] :: [ Vec (S (S Z)) Int ]
+              ] :: [ Vec ('S ('S 'Z)) Int ]
 
 -- Examples of unusal patterns
+fivepointErr :: [Vec ('S ('S 'Z)) Int]
 fivepointErr = [ Cons (-1) (Cons 0 Nil)
                , Cons 0 (Cons (-1) Nil)
                , Cons 1 (Cons 0 Nil)
                , Cons 0 (Cons 1 Nil)
                , Cons 0 (Cons 0 Nil)
-               , Cons 1 (Cons 1 Nil) ] :: [ Vec (S (S Z)) Int ]
+               , Cons 1 (Cons 1 Nil) ] :: [ Vec ('S ('S 'Z)) Int ]
 
 {- Construct arbtirary vectors and test up to certain sizes -}
-instance {-# OVERLAPPING #-} Arbitrary a => Arbitrary (Vec Z a) where
+instance {-# OVERLAPPING #-} Arbitrary a => Arbitrary (Vec 'Z a) where
     arbitrary = return Nil
 
-instance (Arbitrary (Vec n a), Arbitrary a) => Arbitrary (Vec (S n) a) where
+instance (Arbitrary (Vec n a), Arbitrary a) => Arbitrary (Vec ('S n) a) where
     arbitrary = do x  <- arbitrary
                    xs <- arbitrary
                    return $ Cons x xs
 
+test2DSpecVariation :: Neighbour -> Neighbour -> ([[Int]], Multiplicity (Approximation Spatial)) -> SpecWith ()
 test2DSpecVariation a b (input, expectation) =
     it ("format=" ++ show input) $ do
       -- Test inference
@@ -516,13 +509,16 @@ test2DSpecVariation a b (input, expectation) =
   where
     expectedSpec = Specification expectation True
     fromFormatToIx [ri,rj] = [ offsetToIx "i" ri, offsetToIx "j" rj ]
+    fromFormatToIx _       = error "test2DSpecVariation: fromFormatToIx"
 
+indicesToSpec' :: Data ann => [Variable] -> [Neighbour] -> Indices ann -> Maybe Specification
 indicesToSpec' ivs lhs ixs =
   let inferer = indicesToSpec "a" lhs ixs
       analysis = runStencilInferer inferer ivs Gr.empty
       report = runIdentity $ runAnalysisT "example" (logOutputNone True) LogError emptyModFiles analysis
   in report ^?! arResult . _ARSuccess . _1
 
+variations :: [([[Int]], Multiplicity (Approximation Spatial))]
 variations =
   [ ( [ [0,0] ]
     , Once $ Exact $ Spatial (Sum [Product [ Centered 0 1 True, Centered 0 2 True]])
@@ -559,6 +555,7 @@ variations =
     )
   ]
 
+variationsRel :: [(Neighbour, Neighbour, [[Int]], Multiplicity (Approximation Spatial))]
 variationsRel =
   [   -- Stencil which has non-relative indices in one dimension
     (Neighbour "i" 0, Constant (F.ValInteger "0"), [ [0, absoluteRep], [1, absoluteRep] ]
@@ -590,6 +587,7 @@ variationsRel =
     )
   ]
 
+test3DSpecVariation :: ([[Int]], Multiplicity (Approximation Spatial)) -> SpecWith ()
 test3DSpecVariation (input, expectation) =
     it ("format=" ++ show input) $
       -- Test inference
@@ -600,10 +598,11 @@ test3DSpecVariation (input, expectation) =
 
   where
     expectedSpec = Specification expectation True
-    fromFormatToIx [ri,rj,rk] =
-      [offsetToIx "i" ri, offsetToIx "j" rj, offsetToIx "k" rk]
+    fromFormatToIx [ri,rj,rk] = [offsetToIx "i" ri, offsetToIx "j" rj, offsetToIx "k" rk]
+    fromFormatToIx _          = error "test3DSpecVariation: fromFormatToIx"
 
 
+variations3D :: [([[Int]], Multiplicity (Approximation Spatial))]
 variations3D =
   [ ( [ [-1,0,-1], [0,0,-1], [-1,0,0], [0,0,0] ]
     ,  Once $ Exact $ Spatial (Sum [Product [Backward 1 1 True, Centered 0 2 True, Backward 1 3 True]])
@@ -620,6 +619,7 @@ prop_extract_synth_inverse :: F.Name -> Int -> Bool
 prop_extract_synth_inverse v o =
      convIxToNeighbour [v] (offsetToIx v o) == Neighbour v o
 
+unlines' :: [L.Text] -> L.Text
 unlines' = Text.init . Text.unlines
 
 -- Local variables:
