@@ -1,22 +1,16 @@
 module Camfort.Specification.DerivedDataTypeSpec (spec) where
 
-import System.FilePath ((</>))
-
-import Control.Lens
-
-import Test.Hspec hiding (Spec)
-import qualified Test.Hspec as Test
-
-import qualified Language.Fortran.AST as F
-import Language.Fortran.Util.ModFile (ModFile, emptyModFiles)
-
-import Camfort.Analysis hiding (describe)
-import Camfort.Analysis.ModFile (genModFiles)
-import Camfort.Input (readParseSrcDir)
-import Camfort.Specification.DerivedDataType
-
+import           Camfort.Analysis hiding (describe)
+import           Camfort.Analysis.ModFile (genModFiles)
+import           Camfort.Input (readParseSrcDir)
+import           Camfort.Specification.DerivedDataType
+import           Control.Lens
 import qualified Data.Map.Strict as M
 import qualified Data.Set as S
+import           Language.Fortran.Util.ModFile (ModFile, emptyModFiles)
+import           System.FilePath ((</>))
+import qualified Test.Hspec as Test
+import           Test.Hspec hiding (Spec)
 
 fixturesDir :: String
 fixturesDir = "tests" </> "fixtures" </> "Specification" </> "DerivedDataType"
