@@ -23,30 +23,27 @@ module Camfort.Specification.Stencils.Synthesis
   , offsetToIx
   ) where
 
-import Data.List
-
-import Camfort.Specification.Stencils.Syntax
-
-import Camfort.Analysis.Annotations
-
+import           Camfort.Analysis.Annotations
+import           Camfort.Specification.Stencils.Syntax
+import           Data.List hiding (span)
 import qualified Language.Fortran.AST as F
 import qualified Language.Fortran.Analysis as FA
+import           Language.Fortran.Util.Position
 import qualified Language.Fortran.Util.Position as FU
-
-import Language.Fortran.Util.Position
+import           Prelude hiding (span)
 
 -- Format inferred specifications
 formatSpec :: F.MetaInfo -> Int -> Char
  -> (FU.SrcSpan, Either [([Variable], Specification)] (String,Variable))
  -> String
-formatSpec mi indent marker (span, Right (evalInfo, name)) =
+formatSpec mi indent marker (_, Right (evalInfo, name)) =
   buildCommentText mi indent $
        marker : " "
     ++ evalInfo
     ++ (if name /= "" then " :: " ++ name else "") ++ "\n"
 
 formatSpec _ _ _ (_, Left []) = ""
-formatSpec mi indent marker (span, Left specs) =
+formatSpec mi indent marker (_, Left specs) =
   intercalate "\n" $ map commentText specs
     where
       commentText s = buildCommentText mi indent (marker : " " ++ doSpec s)
@@ -73,9 +70,6 @@ formatSpecNoComment (span, Left specs) =
 
 
 ------------------------
-a = (head $ FA.initAnalysis [unitAnnotation]) { FA.insLabel = Just 0 }
-s = SrcSpan (Position 0 0 0 "" Nothing) (Position 0 0 0 "" Nothing)
-
 -- Make indexing expression for variable 'v' from an offset.
 -- essentially inverse to `ixToOffset` in StencilSpecification
 offsetToIx :: F.Name -> Int -> F.Index (FA.Analysis A)
@@ -89,3 +83,7 @@ offsetToIx v o
   | otherwise = F.IxSingle a s Nothing (F.ExpBinary a s F.Subtraction
                                  (F.ExpValue a s (F.ValVariable v))
                                  (F.ExpValue a s (F.ValInteger $ show (abs o))))
+  where
+    a = (head $ FA.initAnalysis [unitAnnotation]) { FA.insLabel = Just 0 }
+    s = SrcSpan (Position 0 0 0 "" Nothing) (Position 0 0 0 "" Nothing)
+
