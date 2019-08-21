@@ -3,26 +3,22 @@
 
 module Camfort.Specification.Units.MonadTypes where
 
+import           Camfort.Analysis
+import           Camfort.Analysis.Annotations (Annotation)
+import           Camfort.Specification.Units.Annotation (UA)
+import           Camfort.Specification.Units.Environment (Constraints, PP, UnitInfo, VV)
 import           Control.Monad.Reader
 import           Control.Monad.State.Strict
-import           Data.Binary                             (Binary)
-import           Data.Char                               (toLower)
-import           Data.Data                               (Data)
-import qualified Data.IntMap.Strict                      as IM
-import           Data.List                               (find, isPrefixOf)
-import qualified Data.Map.Strict                         as M
-import qualified Data.Set                                as S
-import           Data.Typeable                           (Typeable)
-import           GHC.Generics                            (Generic)
-import qualified Language.Fortran.AST                    as F
-import           Language.Fortran.Util.ModFile           (ModFiles)
-
-import           Camfort.Analysis
-import           Camfort.Analysis.Annotations            (Annotation)
-import           Camfort.Input
-import           Camfort.Specification.Units.Annotation  (UA)
-import           Camfort.Specification.Units.Environment (Constraints, PP,
-                                                          UnitInfo, VV)
+import           Data.Binary (Binary)
+import           Data.Char (toLower)
+import           Data.Data (Data)
+import qualified Data.IntMap.Strict as IM
+import           Data.List (find, isPrefixOf)
+import qualified Data.Map.Strict as M
+import qualified Data.Set as S
+import           Data.Typeable (Typeable)
+import           GHC.Generics (Generic)
+import qualified Language.Fortran.AST as F
 
 --------------------------------------------------------------------------------
 --  Environment
