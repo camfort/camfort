@@ -33,43 +33,38 @@ import           Camfort.Analysis
 import           Camfort.Analysis.Annotations (onPrev, buildCommentText, A, Annotation(..))
 import           Camfort.Analysis.CommentAnnotator (annotateComments, ASTEmbeddable(..), Linkable(..))
 import           Camfort.Analysis.ModFile
-import           Camfort.Helpers (Filename)
 import           Camfort.Helpers.Syntax (afterAligned, toCol0, deleteLine)
 import           Camfort.Specification.DerivedDataType.Parser (ddtParser, DDTStatement(..))
 import           Control.Applicative
-import           Control.Arrow ((***), (|||), first, second, (&&&))
-import           Control.Lens
+import           Control.Arrow (first, second, (&&&))
 import           Control.DeepSeq
 import           Control.Monad
 import           Control.Monad.RWS.Strict
 import           Control.Monad.Writer.Strict
 import           Data.Binary (Binary, decodeOrFail, encode)
-import qualified Data.ByteString.Lazy.Char8 as LB
 import           Data.Data
 import           Data.Function (on)
-import           Data.Generics.Uniplate.Operations
+import           Data.Generics.Uniplate.Operations hiding (rewrite)
 import qualified Data.IntMap.Strict as IM
 import           Data.List (sort, foldl', groupBy)
 import qualified Data.List as List
 import qualified Data.Map.Strict as M
-import           Data.Maybe (mapMaybe, fromMaybe, fromJust, maybeToList, isJust)
+import           Data.Maybe (mapMaybe, fromMaybe, fromJust, isJust)
 import           Data.Monoid ((<>))
 import qualified Data.Semigroup as SG
 import qualified Data.Set as S
 import qualified Data.Strict.Either as SE
 import           Data.Text (Text, unlines, intercalate, pack)
-import           Data.Text.Lazy.Builder (Builder)
 import qualified Data.Text.Lazy.Builder as Builder
 import           GHC.Generics (Generic)
 import qualified Language.Fortran.AST as F
 import qualified Language.Fortran.Analysis as FA
 import qualified Language.Fortran.Analysis.BBlocks as FAB
 import qualified Language.Fortran.Analysis.DataFlow as FAD
-import qualified Language.Fortran.Analysis.Renaming as FAR
 import qualified Language.Fortran.Analysis.Types as FAT
 import           Language.Fortran.Util.ModFile
 import qualified Language.Fortran.Util.Position as FU
-import           Prelude hiding (unlines)
+import           Prelude hiding (unlines, minBound, maxBound)
 
 ddtShort :: String
 ddtShort = "ddt"
@@ -251,7 +246,7 @@ instance Describe DerivedDataTypeReport where
       num = length ddtrSpecs
       specReport = linesByFile specLines
       specLines = [ (vinfo, [pack $ genCommentText r (var, vSrcName)])
-                  | ((var, dim), essenceSet) <- M.toList ddtrSMap
+                  | ((var, _), essenceSet)   <- M.toList ddtrSMap
                   , Essence{..}              <- S.toList essenceSet
                   , vinfo@VInfo{..}          <- S.toList essVInfoSet ]
 
@@ -265,7 +260,7 @@ instance Describe DerivedDataTypeReport where
                             describe dim <> ")\nconflicts with\n" <>
                             unlines [ pack fn <> ": " <> describe ss <> " " <> pack ty <> "(" <> describeLabels labs <> ")"
                                     | Essence ty labs vinfoSet _ <- essences
-                                    , VInfo src fn ss <- S.toList vinfoSet ]])
+                                    , VInfo _ fn ss <- S.toList vinfoSet ]])
                  | ((_, dim), essenceSet) <- M.toList ddtrCE
                  , not (S.null essenceSet)
                  , let Essence ty0 l0 vinfoSet0 _:essences = S.toList essenceSet
@@ -389,14 +384,14 @@ genProgramFileReport mfs (pf@(F.ProgramFile F.MetaInfo{ F.miFilename = srcFile }
       where
         vinfos = S.toList essVInfoSet
         -- Labels that appear more than once in the label map:
-        labs = M.keys . M.filter (>1) . M.fromListWith (+) . map (,1) $ IM.elems essLabelMap
+        labs = M.keys . M.filter (>1) . M.fromListWith (+) . map (,1::Int) $ IM.elems essLabelMap
 
     -- Dupped labels:
     badLabels = M.filter (not . null) $ M.map (setConcatMap findDupLabels) essences
 
     -- Badly specified 'dim' attributes (e.g. out of bounds):
     badDims = [ ((declVarName, dim), S.singleton (maxDim, vinfo))
-              | (spec@DDTSt{..} , b) <- specs
+              | (DDTSt{..}, b)       <- specs
               , (srcName, dim)       <- ddtStVarDims
               , (declVarName, vinfo) <- declaredVars srcFile b
               , vSrcName vinfo == srcName
@@ -411,10 +406,10 @@ genProgramFileReport mfs (pf@(F.ProgramFile F.MetaInfo{ F.miFilename = srcFile }
 
     -- Index out-of-bounds of statically-known array dimensions:
     oobIndices = [ IndexOOBError tyname vinfo indices
-                 | (spec@DDTSt{..} , b) <- specs
+                 | (DDTSt{..}, b)       <- specs
                  , (srcName, dim)       <- ddtStVarDims
                  , (declVarName, vinfo) <- declaredVars srcFile b
-                 , let indices = [], let tyname = ""
+                 , let tyname = ""
                  , vSrcName vinfo == srcName
                  , Just indices <- [ do FA.IDType { FA.idCType = Just (FA.CTArray dims) } <- M.lookup declVarName tenv
                                         let maxDim = length dims
@@ -501,7 +496,7 @@ refactorPF r pf = pf'
     -- FIXME: possibly use the 'essences' writer slot to instead
     -- gather derived-type declarations and put them somewhere
     -- central.
-    (pf', _, essences) = runRWS (descendBiM refactorBlocks pf) r False
+    (pf', _, _) = runRWS (descendBiM refactorBlocks pf) r False
 
 refactorBlocks :: [F.Block DA] -> RefactorM [F.Block DA]
 refactorBlocks = fmap concat . mapM refactorBlock
@@ -555,24 +550,25 @@ refactorBlock b = ask >>= \ DerivedDataTypeReport{..} -> case b of
 
             -- Process each dimension and return the AST-blocks that define the derived type.
             eachDim :: [F.DimensionDeclarator DA] -> Int -> [(Int, F.TypeSpec DA)] -> [F.Block DA]
-            eachDim dimList maxDim ((dim, F.TypeSpec _ _ (F.TypeCustom tyName) _):(_, nextTy):rest)
+            eachDim dimList' maxDim' ((dim, F.TypeSpec _ _ (F.TypeCustom tyName) _):(_, nextTy):rest)
               | Just (Essence{..}:_) <- fmap S.toList $ M.lookup (var, dim) ddtrSMap = let
                   mInit | null rest = declInitialiser decl
                         | otherwise = Nothing
-                  dimDeclAList = F.AList a ss $ drop dim dimList
-                  eachLabel (n, lab)
-                    | maxDim == dim &&
-                      dim < length dimList = F.DeclArray a ss (FA.genVar a ss lab) dimDeclAList Nothing mInit
-                    | otherwise            = F.DeclVariable a ss (FA.genVar a ss lab) Nothing mInit
+                  dimDeclAList = F.AList a ss $ drop dim dimList'
+                  eachLabel (_, lab')
+                    | maxDim' == dim &&
+                      dim < length dimList' = F.DeclArray a ss (FA.genVar a ss lab') dimDeclAList Nothing mInit
+                    | otherwise             = F.DeclVariable a ss (FA.genVar a ss lab') Nothing mInit
                   labelDecls = map eachLabel . sort $ IM.toList essLabelMap
                   in [ F.BlStatement a'' ss' Nothing (F.StType stA stSS Nothing tyName)
                      , F.BlStatement a'' ss' Nothing (F.StDeclaration stA stSS nextTy attrs'' (F.AList alA alSS labelDecls))
                      , F.BlStatement a'' ss' Nothing (F.StEndType stA stSS Nothing) ]
             eachDim _ _ _ = []
-
             in (concat . reverse $ map (eachDim dimList maxDim) (List.tails $ dimTypes ++ [(0, ty)])) ++
                -- The declaration of the variable under the new derived type:
                [F.BlStatement a'' ss' lab (F.StDeclaration stA stSS ty' attrs'' (F.AList alA alSS [decl' dimDeclAList']))]
+          | otherwise = []
+
     let aRem = onOrigAnnotation (\ orig -> orig { deleteNode = null declsRem }) a'
     return $ -- Reinsert any other variables, with the refactored ones removed from the list.
              [F.BlStatement aRem ss lab (F.StDeclaration stA stSS ty attrs (F.AList alA alSS (map snd declsRem)))] ++
@@ -616,15 +612,15 @@ refactorExp e = do
       , list' <- groupBy ((==) `on` SE.isLeft) list
       , e'    <- foldl' rewrite e1 list'             -> put True >> return e'
         where
-          ixLookup dim ix@(F.IxSingle ixA ixS Nothing e)
-            | Just (FAD.ConstInt i) <- FA.constExp (F.getAnnotation e)
+          ixLookup dim (F.IxSingle ixA ixS Nothing eIdx)
+            | Just (FAD.ConstInt i) <- FA.constExp (F.getAnnotation eIdx)
             , Just (Essence{..}:_)  <- fmap S.toList $ M.lookup (FA.varName e1, dim) smap
             , Just label            <- IM.lookup (fromIntegral i) essLabelMap = SE.Right (ixA, ixS, label)
           ixLookup _ ix = SE.Left ix
 
-          rewrite e l@(SE.Left _:_)                = F.ExpSubscript a s e (F.AList a s $ map SE.fromLeft l)
-          rewrite e (SE.Right (ixA, ixS, label):l) = rewrite (F.ExpDataRef a s e (F.ExpValue a s (F.ValVariable label))) l
-          rewrite e []                             = e
+          rewrite e' l@(SE.Left _:_)              = F.ExpSubscript a s e' (F.AList a s $ map SE.fromLeft l)
+          rewrite e' (SE.Right (_, _, label):l)   = rewrite (F.ExpDataRef a s e' (F.ExpValue a s (F.ValVariable label))) l
+          rewrite e' []                           = e'
     -- FIXME: either convert array slices, or regard that as a disqualifying effect
     _ -> return e
 
@@ -641,9 +637,9 @@ synthBlock (mi, marker) r@DerivedDataTypeReport { ddtrAMap = amap } b = case b o
   -- check if this declaration has variables of interest
   F.BlStatement a ss _ F.StDeclaration{} | vars <- ofInterest b -> genComment vars ++ [b]
     where
-      ofInterest b = filter (flip M.member amap . fst) $
-        [ (FA.varName e, FA.srcName e) | F.DeclVariable _ _ e _ _ <- universeBi b :: [F.Declarator DA] ] ++
-        [ (FA.varName e, FA.srcName e) | F.DeclArray _ _ e _ _ _ <- universeBi b :: [F.Declarator DA] ]
+      ofInterest b' = filter (flip M.member amap . fst) $
+        [ (FA.varName e, FA.srcName e) | F.DeclVariable _ _ e _ _ <- universeBi b' :: [F.Declarator DA] ] ++
+        [ (FA.varName e, FA.srcName e) | F.DeclArray _ _ e _ _ _ <- universeBi b' :: [F.Declarator DA] ]
 
       genComment = map $ \ var ->
         F.BlComment newA newSS . F.Comment . buildCommentText mi space $ marker:genCommentText r var
@@ -655,7 +651,7 @@ synthBlock (mi, marker) r@DerivedDataTypeReport { ddtrAMap = amap } b = case b o
       FU.SrcSpan lp _ = ss
       space = FU.posColumn lp - 1
   -- strip existing comment annotations
-  F.BlComment a ss c | isJust . ddtSpec . FA.prevAnnotation $ a -> [F.BlComment a' ss' $ F.Comment ""]
+  F.BlComment a ss _ | isJust . ddtSpec . FA.prevAnnotation $ a -> [F.BlComment a' ss' $ F.Comment ""]
     where
       FU.SrcSpan lp _ = ss
       ss' = deleteLine ss
@@ -682,6 +678,7 @@ genCommentText DerivedDataTypeReport{..} (varName, srcName)
         , starStr       <- if essStarred then "* " else " " ->
             " " ++ ddtShort ++ starStr ++ essTypeName ++ "(" ++ labs ++ ") :: " ++ srcName ++ "(dim=" ++ show dim ++ ")"
       _ -> error $ "genCommentText: unable to generate text for " ++ srcName
+  | otherwise = error $ "genCommentText: empty pmap entry and/or unable to lookup varName = " ++ varName
 
 --------------------------------------------------
 -- Check helpers
@@ -722,9 +719,9 @@ distil (DDTSt { ddtStStarred = star, ddtStTypeName = tyname, ddtStLabels = label
   -- if there's a problem
   | otherwise   = SE.Left $ IndexDupError tyname vinfo (nums List.\\ List.nub nums)
   where
-    labels'     = map (first read) labels
-    nums        = map fst labels'
-    noDups nums = length (List.nub nums) == length nums
+    labels'   = map (first read) labels
+    nums      = map fst labels'
+    noDups ns = length (List.nub ns) == length ns
 
 -- | Create an essence from array access information derived in a
 -- file, assuming some default names and labels.
