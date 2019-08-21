@@ -136,7 +136,7 @@ arraySymbolic ixIndex@(Index ixPrim) valAV nm env =
       return $ ARData valReprs
 
 arraySymbolicPrim :: (HasPrimReprHandlers r) => Prim p1 k1 i -> Prim p2 k2 a -> String -> r -> Symbolic SArr
-arraySymbolicPrim ixPrim valPrim nm = error "arraySymbolicPrim: bit-rotted in new SBV 8.0 version" -- do
+arraySymbolicPrim _ _ _ = error "arraySymbolicPrim: bit-rotted in new SBV 8.0 version" -- do
   -- k1 <- primSBVKind ixPrim
   -- k2 <- primSBVKind valPrim
   -- return $ newSArr (k1, k2) (\i -> nm ++ "_" ++ show i)
