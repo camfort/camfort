@@ -65,8 +65,8 @@ module Camfort.Functionality
 
 import           Camfort.Analysis
 import           Camfort.Analysis.Logger
-import           Camfort.Analysis.ModFile ( MFCompiler, getModFiles, genModFiles, readParseSrcDir
-                                          , readParseSrcDirP, simpleCompiler)
+import           Camfort.Analysis.ModFile ( MFCompiler, getModFiles, genModFiles, genModFilesP
+                                          , readParseSrcDir, readParseSrcDirP, simpleCompiler)
 import           Camfort.Analysis.Simple
 import           Camfort.Helpers (FileOrDir, Filename)
 import           Camfort.Input
@@ -473,11 +473,12 @@ unitsCompile opts env = do
   modFileNames <- getModFiles incDir
 
   -- Run the gen mod file routine directly on the input source
-  modFiles <- genModFiles (ceFortranVersion env) modFileNames compileUnits uo (ceInputSources env) (ceExcludeFiles env)
+  let producer = genModFilesP (ceFortranVersion env) modFileNames compileUnits uo (ceInputSources env) (ceExcludeFiles env)
   -- Write the mod files out
-  forM_ modFiles $ \modFile -> do
+  runEffect . for producer $ \ modFile -> do
      let mfname = replaceExtension (FM.moduleFilename modFile) FM.modFileSuffix
-     LB.writeFile mfname (FM.encodeModFile [modFile])
+     liftIO . putStrLn $ "Writing " ++ mfname
+     liftIO $ LB.writeFile mfname (FM.encodeModFile [modFile])
   return 0
 
 unitsSynth :: AnnotationType -> FileOrDir -> LiteralsOpt -> CamfortEnv -> IO Int

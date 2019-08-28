@@ -14,6 +14,7 @@ module Camfort.Analysis.ModFile
     -- * Getting mod files
     MFCompiler
   , genModFiles
+  , genModFilesP
   , getModFiles
   , readParseSrcDir
   , readParseSrcDirP
@@ -53,6 +54,7 @@ import           Camfort.Analysis.Annotations       (A, unitAnnotation)
 import           Camfort.Helpers
 
 import           Pipes
+import qualified Pipes.Prelude                      as P
 
 --------------------------------------------------------------------------------
 --  Getting mod files
@@ -70,13 +72,20 @@ simpleCompiler () mfs = return . FM.genModFile . fst' . withCombinedEnvironment 
 genCModFile :: MFCompiler r m -> r -> FM.ModFiles -> F.ProgramFile A -> m FM.ModFile
 genCModFile = id
 
--- | Generate a mode file based on the given mod file compiler
+-- | Generate mod files based on the given mod file compiler
 genModFiles
   :: (MonadIO m)
   => Maybe FortranVersion -> FM.ModFiles -> MFCompiler r m -> r -> FilePath -> [Filename] -> m FM.ModFiles
 genModFiles mv mfs mfc env fp excludes = do
   fortranFiles <- liftIO $ fmap fst <$> readParseSrcDir mv mfs fp excludes
   traverse (genCModFile mfc env mfs) fortranFiles
+
+-- | Generate mod files based on the given mod file compiler (Pipes version)
+genModFilesP
+  :: (MonadIO m)
+  => Maybe FortranVersion -> FM.ModFiles -> MFCompiler r m -> r -> FilePath -> [Filename] -> Producer' FM.ModFile m ()
+genModFilesP mv mfs mfc env fp excludes =
+   readParseSrcDirP mv mfs fp excludes >-> P.mapM (genCModFile mfc env mfs . fst)
 
 -- | Retrieve the ModFiles under a given path.
 getModFiles :: FilePath -> IO FM.ModFiles
@@ -133,11 +142,12 @@ readParseSrcDir mv mods inp excludes = do
     mapMaybeM :: Monad m => (a -> m (Maybe b)) -> [a] -> m [b]
     mapMaybeM f = fmap catMaybes . mapM f
 
-readParseSrcDirP :: Maybe FortranVersion
+readParseSrcDirP :: MonadIO m
+                => Maybe FortranVersion
                 -> FM.ModFiles
                 -> FileOrDir
                 -> [Filename]
-                -> Producer' (F.ProgramFile A, SourceText) IO ()
+                -> Producer' (F.ProgramFile A, SourceText) m ()
 readParseSrcDirP mv mods inp excludes = do
   isdir <- liftIO $ isDirectory inp
   files <-
