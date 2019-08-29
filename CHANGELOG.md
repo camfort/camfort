@@ -1,3 +1,14 @@
+## 1.0 (August 29, 2019)
+
+* Update to new fortran-src version 0.4.0.
+* New command: basic-checks, which runs a series of other checks in Simple.hs.
+* Add max-lines threshold for snippets output, currently 5.
+* Rename units-compile to units-summarise/summarize.
+* Bring over same command-line flexibility to units-compile as 'fortran-src -c', can specify multiple files-or-directories.
+* Use ModGraph functionality to allow units-summarise to build dependency graphs and summarise in build-order.
+* Search includedir recursively for mod-files, like fortran-src.
+* Numerous changes to increase strictness and reduce memory usage: use Pipes, avoid constructing needlessly large graphs.
+
 ## 0.906 (June 13, 2019)
 
 * Update to new fortran-src version 0.3.0.
