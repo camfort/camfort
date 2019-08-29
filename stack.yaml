@@ -6,7 +6,10 @@ packages:
 - '.'
 
 extra-deps:
-- '../fortran-src'
+- hackage: fortran-src-0.4.0@sha256:c1ffc55546e01b6a7443d9ed4d29c1adcebd686964f5b98e62cf6ee1f6ac6ab7,4955
+  pantry-tree:
+    size: 4573
+    sha256: b7230dd284a5e6d28e5f9183aa113a2bcda9ed5709254a949d690b3ab8b022f9
 - hackage: syz-0.2.0.0@sha256:7307acb8f6ae7720e7e235c974281ecee912703c1394ebcac19caf83d70bb492,2345
   pantry-tree:
     size: 256
