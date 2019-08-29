@@ -506,9 +506,9 @@ analysesParser = commandsParser "Analysis Commands" analysesCommands
       , ("units-infer",
           ["unit-infer", "infer-units", "infer-unit"],
           cmdUnitsInfer,    "unit-of-measure inference")
-      , ("units-compile",
-          ["unit-compile", "compile-units", "compile-unit"],
-          cmdUnitsCompile,    "unit-of-measure compilation")
+      , ("units-summarise",
+          ["unit-compile", "units-summarize", "units-compile", "compile-units", "compile-unit"],
+          cmdUnitsCompile,    "unit-of-measure summarisation")
       , ("units-synth",
           ["unit-synth", "synth-units", "synth-unit"],
           cmdUnitsSynth,    "unit-of-measure synthesise specs")

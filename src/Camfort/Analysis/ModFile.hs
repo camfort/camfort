@@ -1,4 +1,4 @@
-{-# LANGUAGE RankNTypes #-}
+{-# LANGUAGE RankNTypes, ScopedTypeVariables #-}
 {- |
 Module      :  Camfort.Analysis.ModFile
 Description :  CamFort-specific ModFiles helpers.
@@ -15,9 +15,11 @@ module Camfort.Analysis.ModFile
     MFCompiler
   , genModFiles
   , genModFilesP
+--  , genModFilesIO
   , getModFiles
   , readParseSrcDir
   , readParseSrcDirP
+  , readParseSrcFile
   , simpleCompiler
     -- * Using mod files
   , withCombinedModuleMap
@@ -54,7 +56,9 @@ import           Camfort.Analysis.Annotations       (A, unitAnnotation)
 import           Camfort.Helpers
 
 import           Pipes
+-- import           Pipes.Core
 import qualified Pipes.Prelude                      as P
+import           Prelude                            hiding (mod)
 
 --------------------------------------------------------------------------------
 --  Getting mod files
@@ -76,16 +80,65 @@ genCModFile = id
 genModFiles
   :: (MonadIO m)
   => Maybe FortranVersion -> FM.ModFiles -> MFCompiler r m -> r -> FilePath -> [Filename] -> m FM.ModFiles
-genModFiles mv mfs mfc env fp excludes = do
+genModFiles mv mfs mfc opts fp excludes = do
   fortranFiles <- liftIO $ fmap fst <$> readParseSrcDir mv mfs fp excludes
-  traverse (genCModFile mfc env mfs) fortranFiles
+  traverse (genCModFile mfc opts mfs) fortranFiles
 
 -- | Generate mod files based on the given mod file compiler (Pipes version)
 genModFilesP
-  :: (MonadIO m)
-  => Maybe FortranVersion -> FM.ModFiles -> MFCompiler r m -> r -> FilePath -> [Filename] -> Producer' FM.ModFile m ()
-genModFilesP mv mfs mfc env fp excludes =
-   readParseSrcDirP mv mfs fp excludes >-> P.mapM (genCModFile mfc env mfs . fst)
+  :: forall m r. (MonadIO m)
+  => Maybe FortranVersion -> FM.ModFiles -> MFCompiler r m -> r -> [FilePath] -> Producer' FM.ModFile m ()
+genModFilesP mv mfs mfc opts files = parse >-> compile
+  where
+    compile = P.mapM (genCModFile mfc opts mfs)
+    parse = for (each files) $ \ file -> do
+      mProgSrc <- liftIO $ readParseSrcFile mv mfs file
+      case mProgSrc of
+        Just (pf, _) -> yield pf
+        Nothing -> pure ()
+
+
+-- | Generate mod files based on the given mod file compiler (Pipes version)
+-- (testing 'bi-directional' pipes)
+-- genModFilesP'
+--   :: forall x' x m r. (MonadIO m)
+--   => Maybe FortranVersion -> FM.ModFiles -> MFCompiler r m -> r -> [FilePath] -> [FilePath] -> Proxy x' x () FM.ModFile m ()
+-- genModFilesP' mv mfs mfc opts files incDirs = parse //> compile
+--   where
+--     compile :: F.ProgramFile A -> Proxy x' x () FM.ModFile m FM.ModFile
+--     compile pf = do
+--       mod <- liftIO undefined -- (genCModFile mfc opts mfs pf)
+--       yield mod
+--       -- request mod
+--       pure mod
+
+--     parse :: Proxy x' x (FM.ModFile) (F.ProgramFile A) m ()
+--     parse = loop files
+--       where loop [] = pure ()
+--             loop (f:fs) = do
+--               mProgSrc <- liftIO $ readParseSrcFile mv mfs f
+--               case mProgSrc of
+--                 Just (pf, _) -> do
+--                   _ <- respond pf
+--                   loop fs
+--                 Nothing -> loop fs
+
+-- | Generate mod files based on the given mod file compiler (PipesIO version)
+-- Accumulates mods as it goes.
+-- (testing)
+-- genModFilesIO
+--   :: Maybe FortranVersion -> FM.ModFiles -> MFCompiler r IO -> r -> [FilePath] -> IO FM.ModFiles
+-- genModFilesIO mv mfs mfc opts files = fst <$> P.foldM' f (pure mfs) pure (each files)
+--   where
+--     f :: FM.ModFiles -> Filename -> IO [FM.ModFile]
+--     f mods file = do
+--       mProgSrc <- readParseSrcFile mv mods file
+--       case mProgSrc of
+--         Just (pf, _) -> do
+--           mod <- genCModFile mfc opts mods pf
+--           -- yield mod
+--           pure $ mod:mods
+--         Nothing -> pure mods
 
 -- | Retrieve the ModFiles under a given path.
 getModFiles :: FilePath -> IO FM.ModFiles

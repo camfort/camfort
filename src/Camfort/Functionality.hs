@@ -65,7 +65,7 @@ module Camfort.Functionality
 
 import           Camfort.Analysis
 import           Camfort.Analysis.Logger
-import           Camfort.Analysis.ModFile ( MFCompiler, getModFiles, genModFiles, genModFilesP
+import           Camfort.Analysis.ModFile (readParseSrcFile,  MFCompiler, getModFiles, genModFiles
                                           , readParseSrcDir, readParseSrcDirP, simpleCompiler)
 import           Camfort.Analysis.Simple
 import           Camfort.Helpers (FileOrDir, Filename)
@@ -90,16 +90,21 @@ import           Control.DeepSeq
 import           Control.Monad
 import           Control.Monad.IO.Class
 import qualified Data.ByteString.Lazy as LB
+import           Data.Char (toLower)
 import           Data.List (intersperse)
 import           Data.Maybe (fromMaybe)
 import qualified Language.Fortran.Analysis as FA
+import qualified Language.Fortran.Analysis.ModGraph as FM
 import qualified Language.Fortran.Analysis.Renaming as FA
 import           Language.Fortran.ParserMonad (FortranVersion(..))
 import qualified Language.Fortran.Util.ModFile as FM
 import           Pipes
 import qualified Pipes.Prelude as P
+import           Prelude hiding (mod)
+import           System.Directory
 import           System.Directory (doesDirectoryExist, createDirectoryIfMissing, getCurrentDirectory)
-import           System.FilePath (takeDirectory, (</>), replaceExtension)
+import           System.FilePath (takeDirectory, (</>), takeExtension, replaceExtension)
+import           System.IO
 import           Text.PrettyPrint.GenericPretty (pp)
 
 data AnnotationType = ATDefault | Doxygen | Ford
@@ -447,19 +452,49 @@ describePerFileAnalysisShowASTUnitInfoP program logOutput logLevel snippets modF
         putDescribeReport "unit inference" (Just logLevel) snippets r
         pure r)
 
-{-  TODO: remove if not needed
-unitsCompile :: FileOrDir -> LiteralsOpt -> CamfortEnv -> IO ()
-unitsCompile outSrc opts env =
-  runUnitsFunctionality
-  "Compiling units for"
-  (singlePfUnits inferAndCompileUnits)
-  (compilePerFile "unit compilation" (ceInputSources env) outSrc)
-  opts
-  env
--}
-  -- Previously...
---modFiles <- genModFiles mfCompiler mfInput incDir (ceExcludeFiles env)
-  -- ...instead for now, just get the mod files
+-- | Expand all paths that are directories into a list of Fortran
+-- files from a recursive directory listing.
+expandDirs :: [FilePath] -> IO [FilePath]
+expandDirs = fmap concat . mapM doEach
+  where
+    doEach path = do
+      isDir <- doesDirectoryExist path
+      if isDir
+        then listFortranFiles path
+        else pure [path]
+
+-- | Get a list of Fortran files under the given directory.
+listFortranFiles :: FilePath -> IO [FilePath]
+listFortranFiles dir = filter isFortran <$> listDirectoryRecursively dir
+  where
+    -- | True if the file has a valid fortran extension.
+    isFortran :: FilePath -> Bool
+    isFortran x = map toLower (takeExtension x) `elem` exts
+      where exts = [".f", ".f90", ".f77", ".f03"]
+
+listDirectoryRecursively :: FilePath -> IO [FilePath]
+listDirectoryRecursively dir = listDirectoryRec dir ""
+  where
+    listDirectoryRec :: FilePath -> FilePath -> IO [FilePath]
+    listDirectoryRec d f = do
+      let fullPath = d </> f
+      isDir <- doesDirectoryExist fullPath
+      if isDir
+      then do
+        conts <- listDirectory fullPath
+        concat <$> mapM (listDirectoryRec fullPath) conts
+      else pure [fullPath]
+
+decodeOneModFile :: FilePath -> IO FM.ModFiles
+decodeOneModFile path = do
+  contents <- LB.readFile path
+  case FM.decodeModFile contents of
+    Left msg -> do
+      hPutStrLn stderr $ path ++ ": Error: " ++ msg
+      return []
+    Right modFiles -> do
+      hPutStrLn stderr $ path ++ ": successfully parsed summary file."
+      return modFiles
 
 unitsCompile :: LiteralsOpt -> CamfortEnv -> IO Int
 unitsCompile opts env = do
@@ -470,15 +505,50 @@ unitsCompile opts env = do
   isDir <- doesDirectoryExist incDir'
   let incDir | isDir     = incDir'
              | otherwise = takeDirectory incDir'
-  modFileNames <- getModFiles incDir
+  -- modFileNames <- getModFiles incDir
 
-  -- Run the gen mod file routine directly on the input source
-  let producer = genModFilesP (ceFortranVersion env) modFileNames compileUnits uo (ceInputSources env) (ceExcludeFiles env)
-  -- Write the mod files out
-  runEffect . for producer $ \ modFile -> do
-     let mfname = replaceExtension (FM.moduleFilename modFile) FM.modFileSuffix
-     liftIO . putStrLn $ "Writing " ++ mfname
-     liftIO $ LB.writeFile mfname (FM.encodeModFile [modFile])
+  paths' <- expandDirs $ [ceInputSources env]
+  -- Build the graph of module dependencies
+  mg0 <- FM.genModGraph (ceFortranVersion env) [incDir] paths'
+
+  let compileFileToMod mods pf = do
+        mod <- compileUnits uo mods pf
+        let mfname = replaceExtension (FM.moduleFilename mod) FM.modFileSuffix
+        LB.writeFile mfname (FM.encodeModFile [mod])
+        pure mod
+
+  -- Loop through the dependency graph until it is empty
+  let loop mg mods
+        | nxt <- FM.takeNextMods mg
+        , not (null nxt) = do
+            let fnPaths = [ fn | (_, Just (FM.MOFile fn)) <- nxt ]
+            newMods <- fmap concat . forM fnPaths $ \ fnPath -> do
+              tsStatus <- FM.checkTimestamps fnPath
+              case tsStatus of
+                FM.NoSuchFile -> do
+                  putStr $ "Does not exist: " ++ fnPath
+                  pure [FM.emptyModFile]
+                FM.ModFileExists modPath -> do
+                  putStrLn $ "Loading mod file " ++ modPath ++ "."
+                  decodeOneModFile modPath
+                FM.CompileFile -> do
+                  putStr $ "Summarising " ++ fnPath ++ "..."
+                  m_pf <- readParseSrcFile (ceFortranVersion env) mods fnPath
+                  case m_pf of
+                    Just (pf, _) -> do
+                      mod <- compileFileToMod mods pf
+                      putStrLn "done"
+                      pure [mod]
+                    Nothing -> do
+                      putStrLn "failed"
+                      pure []
+
+            let ns  = map fst nxt
+            let mg' = FM.delModNodes ns mg
+            loop mg' $ newMods ++ mods
+      loop _ mods = pure mods
+
+  _allMods <- loop mg0 []
   return 0
 
 unitsSynth :: AnnotationType -> FileOrDir -> LiteralsOpt -> CamfortEnv -> IO Int
