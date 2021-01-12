@@ -107,6 +107,10 @@ import           Data.Singletons.Prelude.List         (Length)
 import           Data.Vinyl
 import           Data.Vinyl.Functor                   (Const (..))
 
+-- TODO: unable to figure out typeclass constraints on Some (Rec D), so using
+-- old Vinyl functions
+import qualified Data.Vinyl.Recursive                 as VinylRec
+
 import qualified Language.Fortran.Analysis            as F
 import qualified Language.Fortran.AST                 as F
 import qualified Language.Fortran.Util.Position       as F
@@ -287,11 +291,11 @@ instance Describe TranslateError where
       "; expected type was '" <> describeBuilder (show expected) <>
       "'; actual type was '" <> describeBuilder (show actual) <> "'"
 
-    ErrInvalidOpApplication (Some argTypes) ->
-      let descTypes
-            = recordToList
-            . rmap (Const . surround "'" . describeBuilder . pretty1)
-            $ argTypes
+    ErrInvalidOpApplication (Some (argTypes :: Rec D a)) ->
+      let descTypes :: [Builder]
+          descTypes = VinylRec.recordToList descTypesRec
+          descTypesRec :: Rec (Const Builder) a
+          descTypesRec = VinylRec.rmap (Const . surround "'" . describeBuilder . pretty1) argTypes
           surround s x = s <> x <> s
       in "tried to apply operator to arguments of the wrong type; arguments had types " <>
          mconcat (intersperse ", " descTypes)
@@ -633,9 +637,9 @@ translateOpApp operator argAsts = do
   someArgs <- recSequenceSome <$> rtraverse (fmap Const . translateExpression . getConst) argAsts
 
   case someArgs of
-    Some (PairOf HasLength argsTranslated) -> do
-      let argsD = rmap (\(PairOf d _) -> d) argsTranslated
-          argsExpr = rmap (\(PairOf _ e) -> e) argsTranslated
+    SomePair HasLength argsTranslated -> do
+      let argsD = VinylRec.rmap (\(PairOf d _) -> d) argsTranslated
+          argsExpr = VinylRec.rmap (\(PairOf _ e) -> e) argsTranslated
 
       MatchOpSpec opResult resultD <- case matchOpSpec operator argsD of
         Just x  -> return x

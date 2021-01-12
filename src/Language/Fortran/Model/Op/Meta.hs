@@ -24,9 +24,9 @@ module Language.Fortran.Model.Op.Meta (MetaOp(..)) where
 
 import           Data.Functor.Compose
 
-import           Data.Vinyl                          (Rec, rmap, (<<*>>))
+import           Data.Vinyl                          (Rec, RMap, RApply, rmap, (<<*>>))
 import           Data.Vinyl.Functor                  (Lift (..))
-import           Data.Vinyl.Lens                     (RElem, RecElem (rput))
+import           Data.Vinyl.Lens                     (RElem, rput)
 
 import           Data.Singletons.TypeLits
 
@@ -120,7 +120,8 @@ instance Pretty2 MetaOp where
 --------------------------------------------------------------------------------
 
 rzip3With
-  :: (forall x. f x -> g x -> h x -> i x)
+  :: (RMap xs, RApply xs)
+  => (forall x. f x -> g x -> h x -> i x)
   -> Rec f xs
   -> Rec g xs
   -> Rec h xs

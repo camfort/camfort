@@ -17,6 +17,7 @@ module Camfort.Helpers.TypeLevel where
 import           Data.Functor.Identity
 
 import           Language.Expression.Pretty
+import Data.Vinyl.Core (RMap(..), Rec(..))
 
 --------------------------------------------------------------------------------
 --  Types
@@ -31,6 +32,9 @@ data Some f where
 -- 'Pretty1' instance ignores the first value.
 data PairOf f g a = PairOf (f a) (g a)
   deriving (Eq, Ord, Show, Functor, Foldable, Traversable)
+
+--instance RMap a => RMap (Some f) where
+--    rmap (Some x) (Some y) = rm1ap x y
 
 type SomePair f g = Some (PairOf f g)
 

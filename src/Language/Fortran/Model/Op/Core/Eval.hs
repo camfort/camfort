@@ -11,6 +11,7 @@
 {-# LANGUAGE RankNTypes             #-}
 {-# LANGUAGE ScopedTypeVariables    #-}
 {-# LANGUAGE UndecidableInstances   #-}
+{-# LANGUAGE TypeApplications       #-}
 
 {-# OPTIONS_GHC -Wall #-}
 
@@ -47,7 +48,7 @@ import           Language.Fortran.Model.Types.Match
 evalCoreOp
   :: (MonadEvalFortran r m)
   => Op (Length args) ok -> OpSpec ok args result -> Rec CoreRepr args -> m (CoreRepr result)
-evalCoreOp op opr = case opr of
+evalCoreOp op = \case
   OSLit px x -> \_ -> primFromVal px <$> primLit px x
 
   OSNum1 _ _ p2 ->
@@ -63,7 +64,7 @@ evalCoreOp op opr = case opr of
 
   OSLookup _ -> return . runcurry lookupArr
 
-  OSDeref _ s -> return . runcurry (derefData s Proxy)
+  OSDeref _ s -> return . runcurry (derefData s)
 
 --------------------------------------------------------------------------------
 --  General
@@ -209,16 +210,13 @@ lookupArr (CRArray arrD arrRepr) ixRepr = lookupArrRepr ixRepr arrD arrRepr
 --------------------------------------------------------------------------------
 
 derefData
-  :: RElem '(fname, a) fields i
-  => SSymbol fname -> proxy a
+  :: forall a fname fields i rname. RElem '(fname, a) fields i
+  => SSymbol fname
   -> CoreRepr (Record rname fields)
   -> CoreRepr a
-derefData nameSymbol valProxy (CRData _ dataRec) =
-  case rget (pairProxy nameSymbol valProxy) dataRec of
+derefData _ (CRData _ dataRec) =
+      case rget @'(fname, a) @fields dataRec of
     Field _ x -> x
-  where
-    pairProxy :: p1 a -> p2 b -> Proxy '(a, b)
-    pairProxy _ _ = Proxy
 
 --------------------------------------------------------------------------------
 --  Equality of operators
