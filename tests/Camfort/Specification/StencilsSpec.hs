@@ -36,7 +36,7 @@ import           Data.List
 import qualified Data.Text as Text
 import qualified Language.Fortran.AST as F
 import qualified Language.Fortran.Analysis as F
-import           Language.Fortran.Parser.Any (deduceVersion)
+import           Language.Fortran.Version (deduceFortranVersion)
 import           Language.Fortran.Util.ModFile (emptyModFiles, ModFile)
 import           System.Directory (listDirectory)
 import           System.FilePath
@@ -403,7 +403,7 @@ spec =
 
         assertStencilSynthDir expected dir fileName testComment =
           let input        = testInputSources (dir </> fileName)
-              version      = deduceVersion (dir </> fileName)
+              version      = deduceFortranVersion (dir </> fileName)
               expectedFile = expected dir fileName
           in do
             synthExpectedSrc <- runIO $ readFile expectedFile
