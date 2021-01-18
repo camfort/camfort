@@ -123,13 +123,11 @@ spec =
 
 checkText :: BS.ByteString -> IO CheckResult
 checkText text = do
-  pf <- either (fail "received test input with invalid syntax") return $
-        fortranParser text "example"
-
-  let pf' = getBlocks . fmap (const unitAnnotation) $ pf
-
-  return (runChecking pf' ^?! arResult . _ARSuccess)
-
+  case fortranParser text "example" of
+    Left x -> fail "received test input with invalid syntax"
+    Right pf ->
+      let pf' = getBlocks . fmap (const unitAnnotation) $ pf
+       in return (runChecking pf' ^?! arResult . _ARSuccess)
   where
     runChecking = runIdentity . runAnalysisT "example" (logOutputNone True) LogInfo emptyModFiles . stencilChecking
     getBlocks = FAB.analyseBBlocks . FAR.analyseRenames . FA.initAnalysis . fmap SA.mkStencilAnnotation

@@ -43,7 +43,7 @@ import           Data.Word                             (Word8)
 import           Data.Singletons.TypeLits
 
 import           Data.Vinyl                            hiding (Field)
-import           Data.Vinyl.Functor
+import           Data.Vinyl.Functor                    hiding (Field)
 
 import           Language.Expression.Pretty
 
@@ -86,7 +86,7 @@ case. It eliminates situations where you'd otherwise write @error "impossible:
 data D a where
   DPrim :: Prim p k a -> D (PrimS a)
   DArray :: Index i -> ArrValue a -> D (Array i a)
-  DData :: SSymbol name -> Rec (Field D) fs -> D (Record name fs)
+  DData :: (RMap fs, RecordToList fs, RApply fs) => SSymbol name -> Rec (Field D) fs -> D (Record name fs)
 
 --------------------------------------------------------------------------------
 -- * Semantic Types
@@ -149,7 +149,7 @@ data Index a where
 -- are not supported.
 data ArrValue a where
   ArrPrim :: Prim p k a -> ArrValue (PrimS a)
-  ArrData :: SSymbol name -> Rec (Field ArrValue) fs -> ArrValue (Record name fs)
+  ArrData :: (RMap fs, RecordToList fs, RApply fs) => SSymbol name -> Rec (Field ArrValue) fs -> ArrValue (Record name fs)
 
 
 -- | An array with a phantom index type. Mostly used at the type-level to
@@ -166,7 +166,7 @@ data Field f field where
 -- | A type of records with the given @name@ and @fields@. Mostly used at the
 -- type level to constrain instances of @'D' (Record name fields)@ etc.
 data Record name fields where
-  Record :: SSymbol name -> Rec (Field Identity) fields -> Record name fields
+  Record :: RMap fields => SSymbol name -> Rec (Field Identity) fields -> Record name fields
 
 --------------------------------------------------------------------------------
 -- * Combinators

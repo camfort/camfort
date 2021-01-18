@@ -14,6 +14,7 @@
 {-# LANGUAGE TypeInType                #-}
 {-# LANGUAGE TypeOperators             #-}
 {-# LANGUAGE UndecidableInstances      #-}
+{-# LANGUAGE TypeApplications          #-}
 
 {-|
 
