@@ -36,6 +36,9 @@ import           Data.Typeable                      ((:~:) (..))
 import           Control.Lens                       hiding (Index, op)
 
 import           Data.SBV.Dynamic
+import           Data.SBV                           (MonadSymbolic(..))
+
+import           Control.Monad.Trans.Class          (lift)
 
 import           Data.Vinyl                         (rtraverse)
 
@@ -136,10 +139,8 @@ arraySymbolic ixIndex@(Index ixPrim) valAV nm env =
       return $ ARData valReprs
 
 arraySymbolicPrim :: (HasPrimReprHandlers r) => Prim p1 k1 i -> Prim p2 k2 a -> String -> r -> Symbolic SArr
-arraySymbolicPrim _ _ _ = error "arraySymbolicPrim: bit-rotted in new SBV 8.0 version" -- do
-  -- k1 <- primSBVKind ixPrim
-  -- k2 <- primSBVKind valPrim
-  -- return $ newSArr (k1, k2) (\i -> nm ++ "_" ++ show i)
-
--- pairProxy :: p1 a -> p2 b -> Proxy '(a, b)
--- pairProxy _ _ = Proxy
+arraySymbolicPrim ixPrim valPrim nm env = do
+  k1 <- lift . return $ primSBVKind ixPrim env
+  k2 <- lift . return $ primSBVKind valPrim env
+  state <- symbolicEnv
+  lift $ newSArr state (k1, k2) (\i -> nm ++ "_" ++ show i) Nothing
