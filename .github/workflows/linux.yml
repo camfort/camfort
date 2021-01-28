@@ -1,0 +1,36 @@
+name: CI (Linux/Ubuntu)
+
+on:
+  push:
+    branches:
+    - master
+  pull_request:
+    types:
+    - opened
+    - synchronize
+
+jobs:
+  build:
+    # ubuntu-20.04 required for a recent version of z3 (probably need >4.5)
+    runs-on: ubuntu-20.04
+    steps:
+    - uses: actions/checkout@v2
+
+    # note that we require static libs (in Ubuntu, *-dev)
+    - name: Install required libraries
+      run: sudo apt install libflint-dev liblapack-dev z3
+
+    # relative paths are relative to the project directory
+    - name: Cache Stack build artifacts (user + project)
+      uses: actions/cache@v2
+      with:
+        path: |
+          ~/.stack
+          .stack-work
+        key: ${{ runner.os }}
+
+    - name: Install project dependencies
+      run: stack --no-terminal test --only-dependencies
+
+    - name: Build and run tests
+      run: stack --no-terminal haddock --test --no-haddock-deps
