@@ -10,7 +10,7 @@ extra-deps:
 - git: https://github.com/camfort/fortran-src
   commit: b5eb20b9350c59aa1dd562e0e80f1d6d010fca87
 - git: https://github.com/camfort/verifiable-expressions
-  commit: 195f9a07107cc5f9179e3ef1e32c9b79dbb39589
+  commit: 5ce579be7879e2a193243fe7799a4055cc120bc1
 - sbv-8.9@sha256:efb0f16c671869805e57d11e269793d5e5ae512e8e626582cf76b8e46a63e9c6,28985
 - syz-0.2.0.0@sha256:7307acb8f6ae7720e7e235c974281ecee912703c1394ebcac19caf83d70bb492,2345
 - vinyl-0.13.0@sha256:0f247cd3f8682b30881a07de18e6fec52d540646fbcb328420049cc8d63cd407,3724
