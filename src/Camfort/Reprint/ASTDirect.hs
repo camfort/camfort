@@ -16,7 +16,7 @@
 
 {-# LANGUAGE RankNTypes #-}
 
-module Camfort.Reprint
+module Camfort.Reprint.ASTDirect
   ( reprint
   , subtext
   , takeBounds

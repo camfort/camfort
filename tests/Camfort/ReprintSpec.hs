@@ -3,7 +3,7 @@
 
 module Camfort.ReprintSpec (spec) where
 
-import           Camfort.Reprint
+import           Camfort.Reprint.ASTDirect
 import qualified Data.ByteString.Char8 as B
 import qualified Language.Fortran.Util.Position as FU
 import           Test.Hspec

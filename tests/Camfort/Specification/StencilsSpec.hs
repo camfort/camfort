@@ -19,7 +19,7 @@ import           Camfort.Analysis.TestUtils
 import           Camfort.Helpers.Vec hiding (zipWith)
 import           Camfort.Input
 import           Camfort.Output
-import           Camfort.Reprint
+import           Camfort.Reprint.ASTDirect
 import           Camfort.Specification.Stencils
 import           Camfort.Specification.Stencils.Analysis (compileStencils)
 import           Camfort.Specification.Stencils.Generate ( Neighbour(..), indicesToSpec

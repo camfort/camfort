@@ -95,7 +95,7 @@ library:
     - Camfort.Functionality
     - Camfort.Input
     - Camfort.Output
-    - Camfort.Reprint
+    - Camfort.Reprint.ASTDirect
 
     - Language.Fortran.Model
     - Language.Fortran.Model.Singletons

@@ -37,7 +37,7 @@ import qualified Language.Fortran.Util.Position as FU
 import qualified Language.Fortran.ParserMonad as FPM
 
 import Camfort.Analysis.Annotations
-import Camfort.Reprint
+import Camfort.Reprint.ASTDirect
 import Camfort.Helpers
 import Camfort.Helpers.Syntax
 
