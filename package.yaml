@@ -149,6 +149,7 @@ library:
     - deepseq
     - pipes
     - parallel
+    - reprinter
 
 tests:
   spec:
