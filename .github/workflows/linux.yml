@@ -27,7 +27,10 @@ jobs:
         path: |
           ~/.stack
           .stack-work
-        key: ${{ runner.os }}
+        # best effort for cache: tie it to Stack resolver and package config
+        key: ${{ runner.os }}-stack-${{ hashFiles('stack.yaml.lock', 'package.yaml') }}
+        restore-keys:
+          ${{ runner.os }}-stack
 
     - name: Install project dependencies
       run: stack --no-terminal test --only-dependencies
