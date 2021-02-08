@@ -30,15 +30,12 @@ module Camfort.Analysis.ModFile
 import           Control.Lens                       (ix, preview)
 import           Control.Monad                      (forM)
 import           Control.Monad.IO.Class
-import qualified Data.ByteString                    as B
 import qualified Data.ByteString.Lazy               as LB
 import           Data.Char                          (toLower)
 import           Data.Data                          (Data)
 import           Data.List                          ((\\))
 import qualified Data.Map                           as Map
 import           Data.Maybe                         (catMaybes)
-import           Data.Text.Encoding                 (decodeUtf8With, encodeUtf8)
-import           Data.Text.Encoding.Error           (replace)
 import           System.Directory                   (doesDirectoryExist,
                                                      listDirectory)
 import           System.FilePath                    (takeExtension, (</>))
@@ -50,6 +47,7 @@ import qualified Language.Fortran.Analysis.Types    as FAT
 import qualified Language.Fortran.AST               as F
 import qualified Language.Fortran.Parser.Any        as FP
 import qualified Language.Fortran.Util.ModFile      as FM
+import           Language.Fortran.Util.Files        (flexReadFile)
 import           Language.Fortran.ParserMonad       (FortranVersion(..))
 
 import           Camfort.Analysis.Annotations       (A, unitAnnotation)
@@ -221,6 +219,7 @@ readParseSrcDirP mv mods inp excludes = do
 
 readParseSrcFile :: Maybe FortranVersion -> FM.ModFiles -> Filename -> IO (Maybe (F.ProgramFile A, SourceText))
 readParseSrcFile mv mods f = do
+  -- get file as ByteString, replacing non UTF-8 with space
   inp <- flexReadFile f
   let result = case mv of
         Nothing -> FP.fortranParserWithModFiles mods inp f
@@ -228,10 +227,6 @@ readParseSrcFile mv mods f = do
   case result of
     Right ast -> pure $ Just (fmap (const unitAnnotation) ast, inp)
     Left  err -> print err >> pure Nothing
-  where
-    -- | Read file using ByteString library and deal with any weird characters.
-    flexReadFile :: String -> IO B.ByteString
-    flexReadFile = fmap (encodeUtf8 . decodeUtf8With (replace ' ')) . B.readFile
 
 getFortranFiles :: FileOrDir -> IO [String]
 getFortranFiles dir =
