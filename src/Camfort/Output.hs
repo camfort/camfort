@@ -34,14 +34,12 @@ import Prelude hiding (span)
 import qualified Language.Fortran.AST as F
 import qualified Language.Fortran.PrettyPrint as PP
 import qualified Language.Fortran.Util.Position as FU
-import Language.Fortran.Version (FortranVersion)
+import qualified Language.Fortran.ParserMonad as FPM
 
 import Camfort.Analysis.Annotations
---import Camfort.Reprint.ASTDirect
+import Camfort.Reprint
 import Camfort.Helpers
 import Camfort.Helpers.Syntax
-
-import Text.Reprinter as RP
 
 import System.Directory
 
@@ -126,19 +124,22 @@ instance OutputFiles (F.ProgramFile Annotation, SourceText) where
 {- Specifies how to do specific refactorings
   (uses generic query extension - remember extQ is non-symmetric) -}
 
-refactoring :: Typeable node
-            => FortranVersion
-            -> SourceText -> node -> Identity (Maybe (RefactorType, a, Span))
-refactoring v inp = (catchAll inp `extQ` refactoringsForProgramUnits v inp) `extQ` refactoringsForBlocks v inp
+refactoring :: Typeable a
+            => FPM.FortranVersion
+            -> a -> SourceText -> StateT FU.Position Identity (SourceText, Bool)
+refactoring v z inp = ((catchAll inp `extQ` refactoringsForProgramUnits v inp) `extQ` refactoringsForBlocks v inp) $ z
+  where
+    catchAll :: SourceText -> a -> StateT FU.Position Identity (SourceText, Bool)
+    catchAll _ _ = return (B.empty, False)
 
-refactoringsForProgramUnits :: FortranVersion
+refactoringsForProgramUnits :: FPM.FortranVersion
                             -> SourceText
                             -> F.ProgramUnit Annotation
-                            -> Identity (Maybe (RefactorType, a, Span))
+                            -> StateT FU.Position Identity (SourceText, Bool)
 refactoringsForProgramUnits v inp z =
    mapStateT (\n -> Identity $ n `evalState` 0) (refactorProgramUnits v inp z)
 
-refactorProgramUnits :: FortranVersion
+refactorProgramUnits :: FPM.FortranVersion
                      -> SourceText
                      -> F.ProgramUnit Annotation
                      -> StateT FU.Position (State Int) (SourceText, Bool)
@@ -147,21 +148,21 @@ refactorProgramUnits _ inp (F.PUComment ann span (F.Comment comment)) = do
     cursor <- get
     if pRefactored ann
      then    let (FU.SrcSpan lb ub) = span
-                 (p0, _)  = splitBySpan (cursor, lb) inp
+                 (p0, _)  = takeBounds (cursor, lb) inp
                  nl       = if null comment then B.empty else B.pack "\n"
              in (put ub >> return (B.concat [p0, B.pack comment, nl], True))
      else return (B.empty, False)
 
 refactorProgramUnits _ _ _ = return (B.empty, False)
 
-refactoringsForBlocks :: FortranVersion
+refactoringsForBlocks :: FPM.FortranVersion
                       -> SourceText
                       -> F.Block Annotation
                       -> StateT FU.Position Identity (SourceText, Bool)
 refactoringsForBlocks v inp z =
    mapStateT (\n -> Identity $ n `evalState` 0) (refactorBlocks v inp z)
 
-refactorBlocks :: FortranVersion
+refactorBlocks :: FPM.FortranVersion
                -> SourceText
                -> F.Block Annotation
                -> StateT FU.Position (State Int) (SourceText, Bool)
@@ -171,7 +172,7 @@ refactorBlocks _ inp (F.BlComment ann span (F.Comment comment)) = do
     let FU.SrcSpan lb ub     = span
         lb' | deleteNode ann = lb { FU.posColumn = 0 }
             | otherwise      = lb
-        (p0, _)              = splitBySpan (cursor, lb') inp
+        (p0, _)              = takeBounds (cursor, lb') inp
         nl | null comment ||
              deleteNode ann  = B.empty
            | otherwise       =  B.pack "\n"
@@ -185,7 +186,7 @@ refactorBlocks v inp b@(F.BlStatement _ _ _ u@F.StUse{}) = do
     case refactored $ F.getAnnotation u of
            Just (FU.Position _ rCol _ _ _) -> do
                let (FU.SrcSpan lb _) = FU.getSpan u
-               let (p0, _) = splitBySpan (cursor, lb) inp
+               let (p0, _) = takeBounds (cursor, lb) inp
                let out  = B.pack $ PP.pprintAndRender v b (Just (rCol -1))
                added <- lift get
                when (newNode $ F.getAnnotation u)
@@ -206,13 +207,13 @@ refactorBlocks v inp b@F.BlStatement {} = refactorSyntax v inp b
 refactorBlocks _ _ _ = return (B.empty, False)
 
 -- Wrapper to fix the type of refactorSyntax to deal with statements
-refactorStatements :: FortranVersion -> SourceText
+refactorStatements :: FPM.FortranVersion -> SourceText
                    -> F.Statement A -> StateT FU.Position (State Int) (SourceText, Bool)
 refactorStatements = refactorSyntax
 
 refactorSyntax ::
    (Typeable s, F.Annotated s, FU.Spanned (s A), PP.IndentablePretty (s A))
-   => FortranVersion -> SourceText
+   => FPM.FortranVersion -> SourceText
    -> s A -> StateT FU.Position (State Int) (SourceText, Bool)
 refactorSyntax v inp e = do
     cursor <- get
@@ -223,7 +224,7 @@ refactorSyntax v inp e = do
         let FU.SrcSpan lb ub     = FU.getSpan e
             lb' | deleteNode a   = lb { FU.posColumn = 0 }
                 | otherwise      = lb
-            (pre, _)             = splitBySpan (cursor, lb') inp
+            (pre, _)             = takeBounds (cursor, lb') inp
         let indent | newNode a = Just (rCol - 1)
                    | otherwise = Nothing
         let output | deleteNode a = B.empty
@@ -271,23 +272,3 @@ removeNewLines topXS n =
 
 unpackFst :: (B.ByteString, b) -> (String, b)
 unpackFst (x, y) = (B.unpack x, y)
-
-instance (F.Annotated ast, FU.Spanned (ast A)) => Refactorable (ast A) where
-    getSpan = rewrapSpan
-    isRefactored ast =
-        let anno = F.getAnnotation ast
-            isRefactored = refactored anno
-         in Nothing -- TODO
-
--- | Generic getSpan helper function.
-rewrapSpan :: FU.Spanned a => a -> RP.Span
-rewrapSpan a =
-        let FU.SrcSpan p1 p2 = FU.getSpan a
-         in (rewrapPos p1, rewrapPos p2)
-
--- | Convert fortran-src position type to the minimal one used by the reprinter.
-rewrapPos :: FU.Position -> RP.Position
-rewrapPos pos =
-    let Right line = mkLine (FU.posLine   pos)
-        Right col  = mkCol  (FU.posColumn pos)
-     in (line, col)

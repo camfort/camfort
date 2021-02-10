@@ -95,6 +95,7 @@ library:
     - Camfort.Functionality
     - Camfort.Input
     - Camfort.Output
+    - Camfort.OutputNew
     - Camfort.Reprint
 
     - Language.Fortran.Model

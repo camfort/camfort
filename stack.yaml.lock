@@ -37,12 +37,12 @@ packages:
     version: 0.2.0.0
     git: https://github.com/camfort/reprinter
     pantry-tree:
-      size: 568
-      sha256: 7f0ed0612158ed755190bff0cf381a666de6c488fdaa41a83b7e055dd8a59a60
-    commit: b0d0978045b14ce75b91abad4a4eaad530475fa2
+      size: 649
+      sha256: 5482c87488faa0f99bbdcc9ac848b477f6a6446626eb487bf751228e9533507e
+    commit: beea21b48e9aca6fc0bf83b2d723c433a47a1a6b
   original:
     git: https://github.com/camfort/reprinter
-    commit: b0d0978045b14ce75b91abad4a4eaad530475fa2
+    commit: beea21b48e9aca6fc0bf83b2d723c433a47a1a6b
 snapshots:
 - completed:
     size: 533053
