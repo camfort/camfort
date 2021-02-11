@@ -15,3 +15,5 @@ extra-deps:
 - syz-0.2.0.0@sha256:7307acb8f6ae7720e7e235c974281ecee912703c1394ebcac19caf83d70bb492,2345
 - vinyl-0.13.0@sha256:0f247cd3f8682b30881a07de18e6fec52d540646fbcb328420049cc8d63cd407,3724
 - union-0.1.2@rev:5
+- git: https://github.com/camfort/reprinter
+  commit: beea21b48e9aca6fc0bf83b2d723c433a47a1a6b

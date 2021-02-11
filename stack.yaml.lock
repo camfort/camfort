@@ -32,6 +32,17 @@ packages:
       sha256: 2e4bd60c24f6cd5b81a24323fb47853939fcddc181d0d4bf9f550897d0e32da7
   original:
     hackage: union-0.1.2@rev:5
+- completed:
+    name: reprinter
+    version: 0.2.0.0
+    git: https://github.com/camfort/reprinter
+    pantry-tree:
+      size: 649
+      sha256: 5482c87488faa0f99bbdcc9ac848b477f6a6446626eb487bf751228e9533507e
+    commit: beea21b48e9aca6fc0bf83b2d723c433a47a1a6b
+  original:
+    git: https://github.com/camfort/reprinter
+    commit: beea21b48e9aca6fc0bf83b2d723c433a47a1a6b
 snapshots:
 - completed:
     size: 533053
