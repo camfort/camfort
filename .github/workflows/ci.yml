@@ -41,7 +41,7 @@ jobs:
 
   build-test-ubuntu-cabal:
     runs-on: ubuntu-20.04
-    name: Ubuntu / GHC ${{ matrix.ghc }}, Cabal ${{ matrix.cabal }}
+    name: Ubuntu 20.04 / GHC ${{ matrix.ghc }}, Cabal ${{ matrix.cabal }}
     strategy:
       matrix:
         cabal: ["3.2"] # latest as of 2021-02-23

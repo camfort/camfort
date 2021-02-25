@@ -19,7 +19,8 @@
 /camfort
 /dist
 /.stack-work
-/camfort.cabal
+/dist-newstyle
+/cabal.project.freeze
 
 # test files
 /equiv.expected.f90
