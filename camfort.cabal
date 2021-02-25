@@ -4,7 +4,7 @@ cabal-version: 1.12
 --
 -- see: https://github.com/sol/hpack
 --
--- hash: 0e5d7a4f9d71705d69e04171b6350acb9da06686ed28b0c4d79ad8bda0cd2485
+-- hash: 9cbad199e3bd50ec23636b7c15fc333a35e1dae1ae43ea0d3a845d200ecd37e8
 
 name:           camfort
 version:        1.0
@@ -195,7 +195,7 @@ library
     , fgl >=5.6 && <5.8
     , filepath >=1.4 && <1.5
     , fortran-src >=0.4 && <0.5
-    , ghc-prim >=0.3.1.0 && <0.6
+    , ghc-prim >=0.3.1.0 && <0.7
     , hmatrix >=0.20 && <0.21
     , lattices >=2.0.0 && <2.1
     , lens >=4.15.1 && <5
