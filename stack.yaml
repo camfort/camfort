@@ -6,11 +6,12 @@ packages:
 flags: {}
 extra-package-dbs: []
 
+# reminder: you can use a Git repo (e.g. on public GitHub) directly via:
+#   - git: https://github.com/camfort/fortran-src
+#     commit: <commit hash>
 extra-deps:
-- git: https://github.com/camfort/fortran-src
-  commit: 900a8fa5e27752b7d9d3cae52011d4bffae3ad01
-- git: https://github.com/camfort/verifiable-expressions
-  commit: 5ce579be7879e2a193243fe7799a4055cc120bc1
+- fortran-src-0.4.2@sha256:4da54322a4a2ff60437923397412805547de534daec57cf1c85ef35fddda0a8b,5422
+- verifiable-expressions-0.6.1@sha256:10a66373a558a39db1cf8c290bab107604ff25e78539052ae49c1e7a5ff7e273,1820
 - sbv-8.9@sha256:efb0f16c671869805e57d11e269793d5e5ae512e8e626582cf76b8e46a63e9c6,28985
 - syz-0.2.0.0@sha256:7307acb8f6ae7720e7e235c974281ecee912703c1394ebcac19caf83d70bb492,2345
 - vinyl-0.13.0@sha256:0f247cd3f8682b30881a07de18e6fec52d540646fbcb328420049cc8d63cd407,3724
