@@ -139,7 +139,7 @@ library:
     - binary >= 0.8.3.0 && < 0.11
     - lattices >= 2.0.0 && < 2.1
     - sbv >= 8.0 && < 9
-    - lens >= 4.15.1 && < 6 # !! TODO confirm this is OK
+    - lens >= 4.15.1 && < 6
     - mmorph >= 1.0.9 && < 2
     - singletons >= 2.2 && < 3
     - template-haskell >= 2.11 && < 3
@@ -154,7 +154,8 @@ tests:
   spec:
     main: Spec.hs
     source-dirs: tests
-    build-tools: hspec-discover
+    build-tools:
+      - hspec-discover
     dependencies:
       - camfort
       - base >= 4.6 && < 5
@@ -178,7 +179,7 @@ tests:
       - temporary >= 1.2.0.4 && < 1.4
       - lens >= 4.15.1 && < 5
       - verifiable-expressions >= 0.6.0 && < 0.8.0
-      - time >= 1.11 && < 1.12
+      - time >= 1.8 && < 1.12
 
 executable:
   main: src/Main.hs
