@@ -1,3 +1,10 @@
+## 1.0.1 (March 08, 2021)
+
+* Update fortran-src, verifiable-expressions versions
+* Require minimum Vinyl 0.9 (`RMap` etc. type classes)
+* Support at least GHC 8.6, 8.8, 8.10 (on Linux)
+* Fix an issue caused by SBV version update
+
 ## 1.0 (August 29, 2019)
 
 * Update to new fortran-src version 0.4.0.
