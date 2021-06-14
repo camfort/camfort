@@ -19,6 +19,7 @@
 {-# LANGUAGE RecordWildCards #-}
 {-# LANGUAGE TupleSections #-}
 {-# LANGUAGE DeriveGeneric #-}
+{-# LANGUAGE LambdaCase #-}
 
 {- Simple syntactic analysis on Fortran programs -}
 
@@ -53,6 +54,7 @@ import GHC.Generics
 import Data.Graph.Inductive
 
 import qualified Language.Fortran.AST as F
+import qualified Language.Fortran.Analysis.SemanticTypes as FAS
 import qualified Language.Fortran.Util.Position as F
 import qualified Language.Fortran.Analysis as F
 import qualified Language.Fortran.Analysis.DataFlow as F
@@ -229,16 +231,19 @@ checkFloatingPointUse pf = do
           candidates :: [F.Expression (F.Analysis a)]
           candidates = [ e | e@(F.ExpBinary _ _ op x y) <- universeBi (F.programUnitBody pu)
                            , op `elem` [F.EQ, F.NE]
-                           , Just (F.IDType (Just bt) _) <- [F.idType (F.getAnnotation x), F.idType (F.getAnnotation y)]
-                           , bt `elem` floatingPointTypes ]
+                           , Just (F.IDType (Just st) _) <- [F.idType (F.getAnnotation x), F.idType (F.getAnnotation y)]
+                           , isFloatingPointType st ]
           badEquality = nub [ (F.getName pu, atSpannedInFile file e) | e <- candidates ]
 
   let reports = map checkPU (universeBi pf'')
 
   return $!! mconcat reports
 
-floatingPointTypes :: [F.BaseType]
-floatingPointTypes = [F.TypeReal, F.TypeDoubleComplex, F.TypeComplex, F.TypeDoublePrecision]
+isFloatingPointType :: FAS.SemType -> Bool
+isFloatingPointType = \case
+  FAS.TReal    _ -> True
+  FAS.TComplex _ -> True
+  _              -> False
 
 instance Describe CheckFPReport where
   describeBuilder (CheckFPReport {..})
