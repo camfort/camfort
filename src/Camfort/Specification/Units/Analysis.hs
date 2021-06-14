@@ -9,6 +9,7 @@ Stability   :  experimental
 -}
 
 {-# LANGUAGE OverloadedStrings #-}
+{-# LANGUAGE LambdaCase        #-}
 
 module Camfort.Specification.Units.Analysis
   ( UnitAnalysis
@@ -54,6 +55,7 @@ import           Data.Text (Text)
 import qualified Language.Fortran.AST as F
 import           Language.Fortran.Analysis (constExp, varName, srcName)
 import qualified Language.Fortran.Analysis as FA
+import qualified Language.Fortran.Analysis.SemanticTypes as FAS
 import qualified Language.Fortran.Analysis.BBlocks as FAB
 import qualified Language.Fortran.Analysis.DataFlow as FAD
 import           Language.Fortran.Parser.Utils (readReal, readInteger)
@@ -183,8 +185,8 @@ insertUndeterminedUnits = do
 -- Specifically handle variables
 insertUndeterminedUnitVar :: DeclMap -> F.Expression UA -> UnitSolver (F.Expression UA)
 insertUndeterminedUnitVar dmap v@(F.ExpValue _ _ (F.ValVariable _))
-  | Just (FA.IDType { FA.idVType = Just bty }) <- FA.idType (F.getAnnotation v)
-  , bty `elem` acceptableTypes = do
+  | Just (FA.IDType { FA.idVType = Just sty }) <- FA.idType (F.getAnnotation v)
+  , isAcceptableType sty = do
   let vname = varName v
   let sname = srcName v
   let unit  = toUnitVar dmap (vname, sname)
@@ -202,8 +204,12 @@ toUnitVar dmap (vname, sname) = unit
       _                                                    -> UnitVar (vname, sname)
 
 -- Insert undetermined units annotations on the following types of variables.
-acceptableTypes :: [F.BaseType]
-acceptableTypes = [F.TypeReal, F.TypeDoublePrecision, F.TypeComplex, F.TypeDoubleComplex, F.TypeInteger]
+isAcceptableType :: FAS.SemType -> Bool
+isAcceptableType = \case
+  FAS.TReal    _ -> True
+  FAS.TComplex _ -> True
+  FAS.TInteger _ -> True
+  _              -> False
 
 --------------------------------------------------
 

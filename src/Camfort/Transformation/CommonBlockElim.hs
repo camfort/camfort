@@ -18,6 +18,7 @@
 {-# LANGUAGE PolyKinds #-}
 {-# LANGUAGE TypeSynonymInstances #-}
 {-# LANGUAGE MonoLocalBinds #-}
+{-# LANGUAGE LambdaCase#-}
 
 module Camfort.Transformation.CommonBlockElim
   ( commonElimToModules
@@ -39,6 +40,7 @@ import           Data.Maybe (fromMaybe)
 import           Data.Void
 import qualified Language.Fortran.AST as F
 import qualified Language.Fortran.Analysis as FA
+import qualified Language.Fortran.Analysis.SemanticTypes as FAS
 import qualified Language.Fortran.Analysis.Renaming as FAR
 import qualified Language.Fortran.Analysis.Types as FAT
 import qualified Language.Fortran.ParserMonad as PM
@@ -50,7 +52,7 @@ import           Prelude hiding (mod, init)
 -- Tuple of:
 --     * a (possible) common block name
 --     * map from names to their types
-type TypeInfo = (F.BaseType, FA.ConstructType)
+type TypeInfo = (FAS.SemType, FA.ConstructType)
 type TCommon p = (Maybe F.Name, [(F.Name, TypeInfo)])
 
 -- Typed and "located" common block representation
@@ -454,19 +456,19 @@ mkModuleFile meta dir (_, (_, (name, varTys))) =
     modname = commonName name
     path = dir ++ modname ++ ".f90"
     r = "Creating module " ++ modname ++ " at " ++ path ++ "\n"
-    mod = mkModule modname varTys modname
+    mod = mkModule (F.miVersion meta) modname varTys modname
 
-mkModule :: String -> [(F.Name, TypeInfo)] -> String -> F.ProgramUnit A
-mkModule name vtys fname =
+mkModule :: PM.FortranVersion -> String -> [(F.Name, TypeInfo)] -> String -> F.ProgramUnit A
+mkModule v name vtys fname =
     F.PUModule a sp (caml fname) decls Nothing
   where
     a = unitAnnotation { refactored = Just loc, newNode = True }
     loc = FU.Position 0 0 0 "" Nothing
     sp = FU.SrcSpan loc loc
     toDeclBlock (v, t) = F.BlStatement a sp Nothing (toStmt (v, t))
-    toStmt (v, (bt, ct)) = F.StDeclaration a sp (toTypeSpec bt) attrs (toDeclarator (v, ct))
+    toStmt (v, (st, ct)) = F.StDeclaration a sp (typespec st) attrs (toDeclarator (v, ct))
     attrs = Just $ F.AList a sp [F.AttrSave a sp]
-    toTypeSpec t = F.TypeSpec a sp t Nothing
+    typespec = FAS.recoverSemTypeTypeSpec a sp v
     toDeclarator (v, FA.CTVariable) = F.AList a sp
        [F.DeclVariable a sp
           (F.ExpValue a sp (F.ValVariable (caml name ++ "_" ++ v))) Nothing Nothing]
