@@ -205,7 +205,7 @@ library
     , pipes ==4.3.*
     , pretty >=1.1 && <2
     , sbv >=8.0 && <9
-    , singletons >=2.2 && <3
+    , singletons >=2.2 && <3.1
     , strict >=0.3.2 && <1
     , syb >=0.4 && <0.8
     , syz ==0.2.*
@@ -276,7 +276,7 @@ test-suite spec
     , hmatrix ==0.20.*
     , hspec >=2.2 && <3
     , lattices >=2.0.0 && <2.1
-    , lens >=4.15.1 && <5
+    , lens >=4.15.1 && <5.1
     , mtl >=2.1 && <2.3
     , sbv >=8.0 && <9
     , silently ==1.2.*

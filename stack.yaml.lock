@@ -12,19 +12,26 @@ packages:
   original:
     hackage: fortran-src-0.4.2@sha256:4da54322a4a2ff60437923397412805547de534daec57cf1c85ef35fddda0a8b,5422
 - completed:
-    hackage: verifiable-expressions-0.6.1@sha256:10a66373a558a39db1cf8c290bab107604ff25e78539052ae49c1e7a5ff7e273,1820
+    hackage: verifiable-expressions-0.6.2@sha256:cefdc5d3d9a4cff4ce0bfaa27ccdf83ff46bcd17340ac0c5cf6fcbe88ce05a61,1739
     pantry-tree:
       size: 1316
-      sha256: cfa49b30d6fc6770bb42b37aa481df7a3aec22def27ad058c327e9e52d75c014
+      sha256: 4dd7c83273f550737d955f605010d63fb88026b5c84fe3ab404906125b779b9f
   original:
-    hackage: verifiable-expressions-0.6.1@sha256:10a66373a558a39db1cf8c290bab107604ff25e78539052ae49c1e7a5ff7e273,1820
+    hackage: verifiable-expressions-0.6.2@sha256:cefdc5d3d9a4cff4ce0bfaa27ccdf83ff46bcd17340ac0c5cf6fcbe88ce05a61,1739
 - completed:
-    hackage: sbv-8.9@sha256:efb0f16c671869805e57d11e269793d5e5ae512e8e626582cf76b8e46a63e9c6,28985
+    hackage: sbv-8.15@sha256:bc0ea4e3564626030ac2cb21905b97cd9bd25fddcd6d6010834e8cc2ebf79067,29016
     pantry-tree:
-      size: 62515
-      sha256: 9bb3bb8dbb26363388e013c795e60e81f9b243ecac6e28b3e9d7079c083ebdf4
+      size: 63924
+      sha256: 9b71ca2696ef73cac9246696d64f5b3d46c5b0443eca48e7a888fb738d00db3a
   original:
-    hackage: sbv-8.9@sha256:efb0f16c671869805e57d11e269793d5e5ae512e8e626582cf76b8e46a63e9c6,28985
+    hackage: sbv-8.15@sha256:bc0ea4e3564626030ac2cb21905b97cd9bd25fddcd6d6010834e8cc2ebf79067,29016
+- completed:
+    hackage: libBF-0.6.2@sha256:7bffc0e4dbc9bd9e851ba5c29255b62fd2c288dbc9a401cd3761b740f013775e,1770
+    pantry-tree:
+      size: 760
+      sha256: ca11e64003b53b2586cf0015038587e1dc85f96aed22cce7480ff76568402370
+  original:
+    hackage: libBF-0.6.2@sha256:7bffc0e4dbc9bd9e851ba5c29255b62fd2c288dbc9a401cd3761b740f013775e,1770
 - completed:
     hackage: syz-0.2.0.0@sha256:7307acb8f6ae7720e7e235c974281ecee912703c1394ebcac19caf83d70bb492,2345
     pantry-tree:
@@ -33,12 +40,12 @@ packages:
   original:
     hackage: syz-0.2.0.0@sha256:7307acb8f6ae7720e7e235c974281ecee912703c1394ebcac19caf83d70bb492,2345
 - completed:
-    hackage: vinyl-0.13.0@sha256:0f247cd3f8682b30881a07de18e6fec52d540646fbcb328420049cc8d63cd407,3724
+    hackage: vinyl-0.13.3@sha256:4031f1cb791185fccd2237bf412fa831363812b95987b433159520d1a511fcac,4046
     pantry-tree:
-      size: 1857
-      sha256: 860fb95820b595161cdbdec5f376100ebae2d14e5ef0dbe311546202f7525d01
+      size: 1811
+      sha256: cff722cef25fce568f3e6bb9320e0a43f3b14b52b47418407d3b88ad9dde6810
   original:
-    hackage: vinyl-0.13.0@sha256:0f247cd3f8682b30881a07de18e6fec52d540646fbcb328420049cc8d63cd407,3724
+    hackage: vinyl-0.13.3@sha256:4031f1cb791185fccd2237bf412fa831363812b95987b433159520d1a511fcac,4046
 - completed:
     hackage: union-0.1.2@sha256:9f0f143ba2cf168c795339e1187001e96427bdcf9fe9af14b34a4f1ca5b531d8,2130
     pantry-tree:
