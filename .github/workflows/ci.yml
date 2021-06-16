@@ -43,12 +43,14 @@ jobs:
     runs-on: ubuntu-20.04
     name: Ubuntu 20.04 / GHC ${{ matrix.ghc }}, Cabal ${{ matrix.cabal }}
     strategy:
+        fail-fast: false    # don't stop if one job (= GHC version) fails
       matrix:
-        cabal: ["3.2"] # latest as of 2021-02-23
+        cabal: ["3.2"]      # latest as of 2021-02-23
         ghc:
         - "8.6"
         - "8.8"
         - "8.10"
+        - "9.0"
     steps:
     # note that we require static libs (in Ubuntu, *-dev)
     - name: Install required libraries
