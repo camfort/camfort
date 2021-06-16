@@ -45,7 +45,7 @@ jobs:
     strategy:
       fail-fast: false    # don't stop if one job (= GHC version) fails
       matrix:
-        cabal: ["3.2"]      # latest as of 2021-02-23
+        cabal: ["3.4"]      # latest as of 2021-06-16
         ghc:
         - "8.6"
         - "8.8"
