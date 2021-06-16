@@ -3,8 +3,6 @@ cabal-version: 1.12
 -- This file has been generated from package.yaml by hpack version 0.34.4.
 --
 -- see: https://github.com/sol/hpack
---
--- hash: 51011f0d2b0ef961fea2fc55f41db20d673aba9d31e40c2af4d83abfdacd5f95
 
 name:           camfort
 version:        1.0.1
@@ -19,9 +17,9 @@ maintainer:     Matthew Danish
 copyright:      2012-2019 University of Cambridge
 license:        Apache-2.0
 license-file:   LICENSE
+build-type:     Simple
 tested-with:
     GHC >= 8.6
-build-type:     Simple
 extra-source-files:
     tests/fixtures/Specification/Stencils/example10.expected.f
     tests/fixtures/Specification/Stencils/example10.f

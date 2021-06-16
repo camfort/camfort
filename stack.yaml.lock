@@ -40,12 +40,12 @@ packages:
   original:
     hackage: vinyl-0.13.0@sha256:0f247cd3f8682b30881a07de18e6fec52d540646fbcb328420049cc8d63cd407,3724
 - completed:
-    hackage: union-0.1.2@sha256:a3adc5df3985e3e4edbe2f9d88819a62138c3fd1cf78749ec13d12b506e9bce3,2137
+    hackage: union-0.1.2@sha256:9f0f143ba2cf168c795339e1187001e96427bdcf9fe9af14b34a4f1ca5b531d8,2130
     pantry-tree:
       size: 330
-      sha256: 2e4bd60c24f6cd5b81a24323fb47853939fcddc181d0d4bf9f550897d0e32da7
+      sha256: f1bc092a50de9cb9555747e1d3d3b4e30f494904aa168cbcc9b38103af90eee2
   original:
-    hackage: union-0.1.2@rev:5
+    hackage: union-0.1.2@rev:6
 snapshots:
 - completed:
     size: 533053
