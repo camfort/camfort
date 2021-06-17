@@ -26,8 +26,8 @@ import           Data.SBV.Dynamic                     (SVal)
 import qualified Data.SBV.Dynamic                     as SBV
 
 import           Data.Singletons
-import           Data.Singletons.Prelude.List
-import           Data.Singletons.TypeLits
+import           Data.List.Singletons
+import           GHC.TypeLits.Singletons
 
 import           Data.Vinyl                           hiding (Field)
 import           Data.Vinyl.Curry

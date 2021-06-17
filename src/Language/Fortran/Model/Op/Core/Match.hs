@@ -23,7 +23,7 @@ import           Data.Typeable
 import           Control.Lens
 
 import           Data.Singletons
-import           Data.Singletons.Prelude.List
+import           Data.List.Singletons
 
 import           Data.Vinyl                          hiding ((:~:), Field)
 

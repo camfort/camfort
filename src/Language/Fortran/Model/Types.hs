@@ -40,7 +40,7 @@ import           Data.Monoid                           (Endo (..))
 import           Data.Typeable                         (Typeable)
 import           Data.Word                             (Word8)
 
-import           Data.Singletons.TypeLits
+import           GHC.TypeLits.Singletons
 
 import           Data.Vinyl                            hiding (Field)
 import           Data.Vinyl.Functor                    hiding (Field)
