@@ -12,7 +12,7 @@
 -- TODO: Function calls
 module Language.Fortran.Model.Op.Core.Core where
 
-import           Data.Singletons.TypeLits
+import           GHC.TypeLits.Singletons
 
 import           Data.Vinyl
 

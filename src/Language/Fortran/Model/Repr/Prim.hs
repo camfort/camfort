@@ -205,7 +205,7 @@ class HasPrimReprHandlers r where
   primReprHandlers env = PrimReprHandlers (primReprHandler env)
 
   primReprHandler :: r -> Prim p k a -> PrimReprHandler a
-  primReprHandler = unPrimReprHandlers . primReprHandlers
+  primReprHandler env p = unPrimReprHandlers (primReprHandlers env) p
 
 newtype PrimReprHandlers =
   PrimReprHandlers { unPrimReprHandlers :: forall p k a. Prim p k a -> PrimReprHandler a }

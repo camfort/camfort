@@ -206,7 +206,9 @@ library
     , pipes ==4.3.*
     , pretty >=1.1 && <2
     , sbv >=8.0 && <9
-    , singletons >=2.2 && <2.8
+    , singletons ==3.0.*
+    , singletons-base ==3.0.*
+    , singletons-th ==3.0.*
     , strict >=0.3.2 && <1
     , syb >=0.4 && <0.8
     , syz ==0.2.*

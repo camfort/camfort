@@ -28,7 +28,7 @@ import           Data.Vinyl                          (Rec, RMap, RApply, rmap, (
 import           Data.Vinyl.Functor                  (Lift (..))
 import           Data.Vinyl.Lens                     (RElem, rput)
 
-import           Data.Singletons.TypeLits
+import           GHC.TypeLits.Singletons
 
 import qualified Data.SBV.Dynamic                    as SBV
 

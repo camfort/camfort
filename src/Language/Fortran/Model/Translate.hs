@@ -102,7 +102,7 @@ import           Control.Monad.Reader
 import           Data.Map                             (Map)
 
 import           Data.Singletons
-import           Data.Singletons.Prelude.List         (Length)
+import           Data.List.Singletons                 (Length)
 
 import           Data.Vinyl
 import           Data.Vinyl.Functor                   (Const (..))

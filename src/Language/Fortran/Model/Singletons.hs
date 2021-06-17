@@ -56,8 +56,8 @@ the result in that case is unspecified. Use 'BasicTypeMax' at the type level and
 -}
 module Language.Fortran.Model.Singletons where
 
-import Data.Singletons.Prelude
-import Data.Singletons.TH
+import Prelude.Singletons
+import Data.Singletons.Base.TH
 
 $(singletons
   [d|
