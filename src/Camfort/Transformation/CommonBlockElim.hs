@@ -18,7 +18,7 @@
 {-# LANGUAGE PolyKinds #-}
 {-# LANGUAGE TypeSynonymInstances #-}
 {-# LANGUAGE MonoLocalBinds #-}
-{-# LANGUAGE LambdaCase#-}
+{-# LANGUAGE LambdaCase #-}
 
 module Camfort.Transformation.CommonBlockElim
   ( commonElimToModules
