@@ -1,4 +1,4 @@
-## 1.1.0 (Unreleased)
+## 1.1.0 (July 06, 2021)
 
 * Update fortran-src
 
