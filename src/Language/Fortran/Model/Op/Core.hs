@@ -27,8 +27,8 @@ module Language.Fortran.Model.Op.Core
 
 import           Data.Functor.Compose
 
-import           Data.Singletons.Prelude.List
-import           Data.Singletons.TypeLits
+import           Data.List.Singletons
+import           GHC.TypeLits.Singletons
 
 import           Data.Vinyl
 import           Data.Vinyl.Curry

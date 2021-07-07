@@ -47,11 +47,10 @@ jobs:
       matrix:
         cabal: ["3.4"]      # latest as of 2021-06-16
         ghc:
-        - "8.6"
-        - "8.8"
-        - "8.10"
-        #- "9.0" # 2021-06-16: singletons 3.0 requires GHC 9.0 but changes too
-                 # effectively support older versions
+        #- "8.6"
+        #- "8.8"
+        #- "8.10"
+        - "9.0"
     steps:
     # note that we require static libs (in Ubuntu, *-dev)
     - name: Install required libraries

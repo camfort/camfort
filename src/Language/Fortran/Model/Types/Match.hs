@@ -20,7 +20,7 @@ module Language.Fortran.Model.Types.Match where
 import           Data.Typeable
 
 import           Data.Singletons
-import           Data.Singletons.TypeLits
+import           GHC.TypeLits.Singletons
 import           GHC.TypeLits
 
 import           Data.Vinyl                        hiding ((:~:), Field)
