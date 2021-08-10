@@ -30,7 +30,7 @@ labeledDoAway = return . transformBi go
     go :: F.Block A -> F.Block A
     go = \case
       F.BlDo   a            ss@(FU.SrcSpan s1 s2) mLabel mName (Just tl) mDoSpec body mEndLabel ->
-        trace "found a matching BlDo" $ F.BlDo (aMark s1 a) ss                    mLabel mName Nothing      mDoSpec body mEndLabel
+        trace "found a matching BlDo" $ F.BlDo (aMark s1 a) ss                    mLabel mName Nothing      mDoSpec body Nothing
       x -> x
     --aMark :: FU.Position -> FA.Analysis A -> FA.Analysis A
     --aMark s = onPrev $ \ap -> ap { refactored = Just s }

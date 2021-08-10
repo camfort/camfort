@@ -206,7 +206,14 @@ refactorBlocks v inp (F.BlStatement _ _ _ s@F.StCommon{}) =
 -- Arbitrary statements can be refactored *as blocks* (in order to
 -- get good indenting)
 refactorBlocks v inp b@F.BlStatement {} = refactorSyntax v inp b
-refactorBlocks _ _ _ = trace "ignored a potential request to refactor a block" $ return (B.empty, False)
+
+-- remaining blocks
+refactorBlocks v inp b = refactorSyntax v inp b
+
+--    let u = F.getAnnotation bl
+--    case refactored u of
+--      Just (FU.Position _ rCol _ _ _) -> do
+--      Nothing -> return (B.empty, False)
 
 -- Wrapper to fix the type of refactorSyntax to deal with statements
 refactorStatements :: FPM.FortranVersion -> SourceText
