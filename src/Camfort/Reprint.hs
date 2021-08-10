@@ -31,6 +31,7 @@ import Data.Data
 import Control.Monad.Trans.State.Lazy
 import Control.Monad.Trans.Class (lift)
 import qualified Language.Fortran.Util.Position as FU
+import Debug.Trace
 
 {-
 Reminder:
@@ -99,7 +100,7 @@ enter refactoring z = do
           -- cut out the portion of source text consumed by the refactoring
           (_, inp') <- return $ takeBounds (cursor, cursor') inp
           put (cursor', inp')
-          return B.empty
+          trace "found a refactored node" $ return B.empty
         else do
           -- If a refactoring was not output,
           -- enter the children of the current context

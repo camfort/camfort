@@ -54,6 +54,7 @@ module Camfort.Functionality
   , common
   , dead
   , equivalences
+  , labeledDo
   , ddtRefactor
   , ddtInfer
   , ddtCheck
@@ -86,6 +87,7 @@ import           Camfort.Specification.Units.MonadTypes (LiteralsOpt, UnitAnalys
 import           Camfort.Transformation.CommonBlockElim
 import           Camfort.Transformation.DeadCode
 import           Camfort.Transformation.EquivalenceElim
+import           Camfort.Transformation.LabeledDo
 import           Control.DeepSeq
 import           Control.Monad
 import           Control.Monad.IO.Class
@@ -236,6 +238,13 @@ dead =
   (doRefactor "dead code elimination")
   simpleCompiler ()
 
+labeledDo :: FileOrDir -> CamfortEnv -> IO Int
+labeledDo =
+  runWithOutput
+  "Rewriting labeled DOs to DO blocks in"
+  (fmap generalizePureAnalysis . perFileRefactoring $ labeledDoAway)
+  (doRefactor "labeled DO to DO block refactoring")
+  simpleCompiler ()
 
 common :: FileOrDir -> CamfortEnv -> IO Int
 common outSrc =
@@ -245,7 +254,6 @@ common outSrc =
   (doRefactorAndCreate "common block refactoring")
   simpleCompiler ()
   outSrc
-
 
 equivalences :: FileOrDir -> CamfortEnv -> IO Int
 equivalences =

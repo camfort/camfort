@@ -126,6 +126,7 @@ realMain = do
     runCommand (CmdRefactCommon rfo)      = runRFO rfo common
     runCommand (CmdRefactDead rfo)        = runRFO rfo dead
     runCommand (CmdRefactEquivalence rfo) = runRFO rfo equivalences
+    runCommand (CmdRefactLabeledDo rfo)   = runRFO rfo labeledDo
     runCommand (CmdInferDDT ro lo)        = runRO ro lo ddtInfer
     runCommand (CmdSynthDDT dso)          = runDSO dso ddtSynth
     runCommand (CmdCheckDDT ro lo)        = runRO ro lo ddtCheck
@@ -159,6 +160,7 @@ data Command = CmdCount ReadOptions LogOptions
              | CmdRefactCommon RefactOptions
              | CmdRefactDead RefactOptions
              | CmdRefactEquivalence RefactOptions
+             | CmdRefactLabeledDo RefactOptions
              | CmdInferDDT ReadOptions LogOptions
              | CmdSynthDDT DDTSynthOptions
              | CmdCheckDDT ReadOptions LogOptions
@@ -438,10 +440,11 @@ cmdUseCheck        = fmap CmdUseCheck readOptions <*> logOptions
 cmdArrayCheck      = fmap CmdArrayCheck readOptions <*> logOptions
 cmdBasicChecks     = fmap CmdBasicChecks readOptions <*> logOptions
 
-cmdRefactCommon, cmdRefactDead, cmdRefactEquivalence :: Parser Command
+cmdRefactCommon, cmdRefactDead, cmdRefactEquivalence, cmdRefactLabeledDo :: Parser Command
 cmdRefactCommon      = fmap CmdRefactCommon refactOptions
 cmdRefactDead        = fmap CmdRefactDead refactOptions
 cmdRefactEquivalence = fmap CmdRefactEquivalence refactOptions
+cmdRefactLabeledDo   = fmap CmdRefactLabeledDo refactOptions
 
 cmdInferDDT, cmdSynthDDT, cmdCheckDDT, cmdRefactDDT, cmdCompileDDT :: Parser Command
 cmdInferDDT = fmap CmdInferDDT readOptions <*> logOptions
@@ -539,6 +542,7 @@ refactoringsParser = commandsParser "Refactoring Commands" refactoringsCommands
     refactoringsCommands =
       [ ("common",            [],      cmdRefactCommon,      "common block elimination")
       , ("equivalence",       [],      cmdRefactEquivalence, "equivalence elimination")
+      , ("labeleddo",         [],      cmdRefactLabeledDo,   "labeled do to block do")
       , ("dead",              [],      cmdRefactDead,        "dead-code elimination") ]
 
 derivedDatatypeParser :: Parser Command

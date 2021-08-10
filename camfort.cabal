@@ -151,6 +151,7 @@ library
       Camfort.Transformation.CommonBlockElim
       Camfort.Transformation.DeadCode
       Camfort.Transformation.EquivalenceElim
+      Camfort.Transformation.LabeledDo
       Camfort.Helpers
       Camfort.Helpers.Syntax
       Camfort.Helpers.Vec

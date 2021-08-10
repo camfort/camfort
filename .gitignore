@@ -1,12 +1,12 @@
+## sandbox files
+/.cabal-sandbox
+/cabal.sandbox.config
+
 *.o
 *.p_o
 *.hi
 *~
 /fixman_fixtures
-
-# sandbox files
-/.cabal-sandbox
-/cabal.sandbox.config
 
 # vim backup files
 .*.swp
@@ -18,7 +18,8 @@
 # build files files
 /camfort
 /dist
-/.stack-work
+/.stack-work/
+/dist-newstyle/
 /camfort.project.freeze
 
 # test files
