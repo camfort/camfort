@@ -51,8 +51,6 @@ import Control.Monad
 import Control.Monad.Trans.Class
 import Control.Monad.Trans.State.Lazy
 
-import Debug.Trace
-
 -- Custom 'Show' which on strings is the identity
 class Show' s where
       show' :: s -> String

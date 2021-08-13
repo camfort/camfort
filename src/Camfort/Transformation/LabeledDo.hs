@@ -20,19 +20,26 @@ import Control.Monad.Trans.Writer (WriterT, runWriterT, tell)
 import Data.Monoid (Any(..), (<>))
 import Data.Void (Void)
 
-import Debug.Trace
-
 type LabeledDoAway = PureAnalysis Void Void
 
 labeledDoAway :: F.ProgramFile A -> LabeledDoAway (F.ProgramFile A)
-labeledDoAway = return . transformBi go
+labeledDoAway = return . transformBi rewriteLabeledDoToBlockDo
   where
-    go :: F.Block A -> F.Block A
-    go = \case
-      F.BlDo   a            ss@(FU.SrcSpan s1 s2) mLabel mName (Just tl) mDoSpec body mEndLabel ->
-        trace "found a matching BlDo" $ F.BlDo (aMark s1 a) ss                    mLabel mName Nothing      mDoSpec body Nothing
-      x -> x
-    --aMark :: FU.Position -> FA.Analysis A -> FA.Analysis A
-    --aMark s = onPrev $ \ap -> ap { refactored = Just s }
-    aMark :: FU.Position -> A -> A
-    aMark s a = a { refactored = Just s }
+
+-- | Rewrite labeled DOs to block DOs.
+--
+-- This relies on the grouping transformation being run. Grouping places all DO
+-- constructs into one constructor with very few differences. All we do to
+-- "rewrite" labeled DOs to block DOs is remove the target and end labels, and
+-- indicate that they must be reprinted.
+--
+-- TODO: Unsure on soundness, especially for complex labeled DOs like shared DO
+-- termination labels. (One shared termination label worked, but I wonder what
+-- other weirdness may be possible.)
+rewriteLabeledDoToBlockDo :: F.Block A -> F.Block A
+rewriteLabeledDoToBlockDo = \case
+  F.BlDo   a            ss@(FU.SrcSpan s1 s2) mLabel mName (Just tl) mDoSpec body mEndLabel ->
+    F.BlDo (aMark s1 a) ss                    mLabel mName Nothing   mDoSpec body Nothing
+  x -> x
+aMark :: FU.Position -> A -> A
+aMark s a = a { refactored = Just s }
