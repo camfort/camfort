@@ -192,9 +192,14 @@ groupSortCommonBlock :: [TLCommon A] -> [[[TLCommon A]]]
 groupSortCommonBlock commons = gccs
   where
     -- Group by names of the common blocks
-    gcs = groupBy (\x y -> cmpEq $ cmpTLConBNames x y) commons
+    gcs = groupCommonBlocksByName commons
     -- Group within by the different common block variable-type fields
     gccs = map (sortBy (\y x -> length x `compare` length y) . group . sortBy cmpVarName) gcs
+
+groupCommonBlocksByName :: [TLCommon A] -> [[TLCommon A]]
+groupCommonBlocksByName commons =
+    groupBy (\x y -> cmpEq $ cmpTLConBNames x y) commons
+  where
     cmpEq = (== EQ)
 
 mkTLCommonRenamers :: [TLCommon A] -> [(TLCommon A, RenamerCoercer)]
@@ -407,23 +412,30 @@ mkRenamerCoercer (name1, vtys1) (name2, vtys2)
              typR = if ty1  ==  ty2 then Nothing else Just (ty1, ty2)
         generate _ _ _ = error "Common blocks of different field length\n"
 
+-- Checks whether all commons of the same name (i.e., across program units)
+-- are coherent with regards their types, returning a string of errors (if there are any)
+-- and a boolean to indicate coherence or not
 allCoherentCommons :: [TLCommon A] -> (String, Bool)
-allCoherentCommons commons =
-   foldM (\p (c1, c2) -> coherentCommons c1 c2 >>= \p' -> return $ p && p')
-     True (pairs commons)
+allCoherentCommons commons = do
+    ps <- mapM checkCoherence (groupCommonBlocksByName commons)
+    return (and ps)
    where
-    -- Computes all pairwise combinations
-    pairs :: [a] -> [(a, a)]
-    pairs []     = []
-    pairs (x:xs) = zip (repeat x) xs ++ pairs xs
+      checkCoherence :: [TLCommon A] -> (String, Bool)
+      checkCoherence cs =
+        foldM (\p (c1, c2) -> coherentCommons c1 c2 >>= \p' -> return $ p && p') True (pairs cs)
 
+      -- Computes all pairwise combinations
+      pairs :: [a] -> [(a, a)]
+      pairs []     = []
+      pairs (x:xs) = zip (repeat x) xs ++ pairs xs
 
 coherentCommons :: TLCommon A -> TLCommon A -> (String, Bool)
 coherentCommons (_, (_, (n1, vtys1))) (_, (_, (n2, vtys2))) =
     if n1 == n2
-    then coherentCommons' vtys1 vtys2
-    else error $ "Trying to compare differently named common blocks: "
-               ++ show n1 ++ " and " ++ show n2 ++ "\n"
+      then
+        coherentCommons' vtys1 vtys2
+      else error $ "Trying to compare differently named common blocks: "
+                 ++ show n1 ++ " and " ++ show n2 ++ "\n"
 
 coherentCommons' ::  [(F.Name, TypeInfo)] -> [(F.Name, TypeInfo)] -> (String, Bool)
 coherentCommons' []               []                = ("", True)
