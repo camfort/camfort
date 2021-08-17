@@ -25,7 +25,6 @@ module Camfort.Specification.Hoare.CheckBackend
 import           Control.Exception                      (Exception (..))
 import           Control.Lens
 import           Control.Monad.Reader
-import           Control.Monad.Fail
 import           Control.Monad.State.Strict
 import           Control.Monad.Writer.Lazy
 import           Control.Monad.Trans.Maybe
@@ -38,7 +37,7 @@ import qualified Data.Map                               as Map
 import           Data.Maybe                             (isJust, maybeToList)
 import           Data.Void                              (Void)
 
-import           Data.SBV                               (SBool, defaultSMTCfg)
+import           Data.SBV                               (SBool)
 
 import qualified Language.Fortran.Analysis              as F
 import qualified Language.Fortran.AST                   as F

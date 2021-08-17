@@ -98,7 +98,6 @@ import           Control.Lens                         hiding (Const (..),
                                                        indices, op, rmap, (.>))
 import           Control.Monad.Except
 import           Control.Monad.Reader
-import           Control.Monad.Fail hiding            (fail)
 import           Data.Map                             (Map)
 
 import           Data.Singletons

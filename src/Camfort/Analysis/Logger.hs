@@ -91,7 +91,6 @@ import           Control.Monad.RWS
 import qualified Control.Monad.State            as Lazy
 import           Control.Monad.State.Strict
 import           Control.Monad.Writer
-import           Control.Monad.Fail
 
 import           Data.Text                      (Text)
 import qualified Data.Text.IO                   as Text

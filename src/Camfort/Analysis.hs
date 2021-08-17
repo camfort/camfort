@@ -95,7 +95,6 @@ import           Control.Monad.RWS
 import qualified Control.Monad.State            as Lazy
 import           Control.Monad.State.Strict
 import           Control.Monad.Writer
-import           Control.Monad.Fail
 import           Control.DeepSeq
 import           GHC.Generics                   (Generic)
 
