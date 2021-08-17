@@ -8,6 +8,8 @@
 {-# LANGUAGE OverloadedStrings          #-}
 {-# LANGUAGE RankNTypes                 #-}
 {-# LANGUAGE TemplateHaskell            #-}
+{-# LANGUAGE CPP                        #-}
+
 {-# OPTIONS_GHC -Wall #-}
 
 module Camfort.Specification.Hoare.CheckBackend
@@ -61,6 +63,11 @@ import           Language.Expression.Pretty
 import           Language.Expression.Prop
 import           Language.Verification
 import           Language.Verification.Conditions
+
+#if !MIN_VERSION_base(4,13,0)
+-- Control.Monad.Fail import is redundant since GHC 8.8.1
+import           Control.Monad.Fail
+#endif
 
 --------------------------------------------------------------------------------
 --  Data types

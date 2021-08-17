@@ -13,6 +13,7 @@
 {-# LANGUAGE TemplateHaskell            #-}
 {-# LANGUAGE TypeFamilies               #-}
 {-# LANGUAGE UndecidableInstances       #-}
+{-# LANGUAGE CPP                        #-}
 
 {-# OPTIONS_GHC -Wall            #-}
 
@@ -102,6 +103,11 @@ import           GHC.Generics
 
 import           Text.Read                      (readMaybe)
 import qualified Language.Fortran.Util.Position as F
+
+#if !MIN_VERSION_base(4,13,0)
+-- Control.Monad.Fail import is redundant since GHC 8.8.1
+import           Control.Monad.Fail
+#endif
 
 --------------------------------------------------------------------------------
 --  'Describe' class
