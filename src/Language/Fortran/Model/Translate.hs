@@ -17,6 +17,7 @@
 {-# LANGUAGE TypeFamilies               #-}
 {-# LANGUAGE TypeOperators              #-}
 {-# LANGUAGE PolyKinds                  #-}
+{-# LANGUAGE CPP                        #-}
 
 -- TODO: Implement translation for more unsupported language parts
 
@@ -125,6 +126,11 @@ import           Language.Fortran.Model.Singletons
 import           Language.Fortran.Model.Types
 import           Language.Fortran.Model.Types.Match
 import           Language.Fortran.Model.Vars
+
+#if !MIN_VERSION_base(4,13,0)
+-- Control.Monad.Fail import is redundant since GHC 8.8.1
+import           Control.Monad.Fail                   hiding (fail)
+#endif
 
 --------------------------------------------------------------------------------
 --  General types

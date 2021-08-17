@@ -9,6 +9,7 @@
 {-# LANGUAGE TemplateHaskell            #-}
 {-# LANGUAGE TypeFamilies               #-}
 {-# LANGUAGE UndecidableInstances       #-}
+{-# LANGUAGE CPP                        #-}
 
 {-# OPTIONS_GHC -Wall            #-}
 
@@ -110,6 +111,11 @@ import qualified Language.Fortran.Util.ModFile  as F
 import qualified Language.Fortran.Util.Position as F
 
 import           Camfort.Analysis.Logger
+
+#if !MIN_VERSION_base(4,13,0)
+-- Control.Monad.Fail import is redundant since GHC 8.8.1
+import           Control.Monad.Fail
+#endif
 
 --------------------------------------------------------------------------------
 --  Analysis Monad
