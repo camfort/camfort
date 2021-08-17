@@ -25,6 +25,8 @@ spec =
     context "common.f90 into common.expect.f90 and foo.f90" $ do
       expected    <- runIO $ readSample "common.expected.f90"
       expectedMod <- runIO $ readSample "cmn.expected.f90"
+      expectedMod2 <- runIO $ readSample "cmnnext.expected.f90"
+
 
       let outFile = samplesBase </> "common.f90.out"
           commonFile = samplesBase </> "common.f90"
@@ -42,9 +44,15 @@ spec =
 
       actual    <- runIO $ readSample "common.f90.out"
       actualMod <- runIO $ readSample "cmn.f90"
+      actualMod2 <- runIO $ readSample "cmnnext.f90"
+
       runIO $ removeSample "common.f90.out"
       runIO $ removeSample "cmn.f90"
+      runIO $ removeSample "cmnnext.f90"
+
       it "it eliminates common statement" $
-         actual `shouldBe` expected
+        actual `shouldBe` expected
       it "it produces a correct module file" $
-         actualMod `shouldBe` expectedMod
+        actualMod `shouldBe` expectedMod
+      it "it produces a correct module file (2)" $
+        actualMod2 `shouldBe` expectedMod2

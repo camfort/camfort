@@ -84,6 +84,7 @@ extra-source-files:
     tests/fixtures/Specification/Units/squarePoly1.f90
     tests/fixtures/Specification/Units/transfer.f90
     tests/fixtures/Transformation/cmn.expected.f90
+    tests/fixtures/Transformation/cmnnext.expected.f90
     tests/fixtures/Transformation/common.expected.f90
     tests/fixtures/Transformation/common.f90
     tests/fixtures/Transformation/equiv.expected.f90
