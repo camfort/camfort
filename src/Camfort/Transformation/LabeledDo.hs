@@ -38,8 +38,8 @@ labeledDoAway = return . transformBi rewriteLabeledDoToBlockDo
 -- other weirdness may be possible.)
 rewriteLabeledDoToBlockDo :: F.Block A -> F.Block A
 rewriteLabeledDoToBlockDo = \case
-  F.BlDo   a            ss@(FU.SrcSpan s1 s2) mLabel mName (Just tl) mDoSpec body mEndLabel ->
-    F.BlDo (aMark s1 a) ss                    mLabel mName Nothing   mDoSpec body Nothing
+  F.BlDo   a            ss@(FU.SrcSpan s1 s2) x (Just tl) mDoSpec body mEndLabel ->
+    F.BlDo (aMark s1 a) ss                    x Nothing   mDoSpec body Nothing
   x -> x
 aMark :: FU.Position -> A -> A
 aMark s a = a { refactored = Just s }

@@ -205,13 +205,25 @@ refactorBlocks v inp (F.BlStatement _ _ _ s@F.StCommon{}) =
 -- get good indenting)
 refactorBlocks v inp b@F.BlStatement {} = refactorSyntax v inp b
 
--- remaining blocks
+-- TODO: awkward override: header/footer reprint for DO constructs
+refactorBlocks v inp b@(F.BlDo a ss bs@(F.BlockConstructStart a' ss' ml mn) mtl mds body mel) = do
+    let u = F.getAnnotation b
+    case refactored u of
+      Just (FU.Position _ rCol _ _ _) -> do
+        cursor <- get
+        let FU.SrcSpan lb ub   = ss'
+            lb' | deleteNode a = lb { FU.posColumn = 0 }
+                | otherwise    = lb
+            (p0, _)            = takeBounds (cursor, lb') inp
+        put ub
+        return (B.concat [p0, B.pack (pprintDoStartStmt b)], True)
+      Nothing -> return (B.empty, False)
+
+-- remaining blocks: bleh just have a go (indentation will probably mess up)
 refactorBlocks v inp b = refactorSyntax v inp b
 
---    let u = F.getAnnotation bl
---    case refactored u of
---      Just (FU.Position _ rCol _ _ _) -> do
---      Nothing -> return (B.empty, False)
+pprintDoStartStmt b@(F.BlDo a ss bs@(F.BlockConstructStart a' ss' ml mn) mtl mds body mel) =
+    "do " <> "bla"
 
 -- Wrapper to fix the type of refactorSyntax to deal with statements
 refactorStatements :: FPM.FortranVersion -> SourceText
