@@ -312,10 +312,10 @@ perBlockInfer' inDo b@(F.BlStatement ann span@(FU.SrcSpan lp _) _ stmnt) = do
         -- Not an assign we are interested in
         _ -> pure []
 
-perBlockInfer' _ (F.BlDo ann span lab cname lab' mDoSpec body tlab) = do
+perBlockInfer' _ (F.BlDo ann span x lab' mDoSpec body tlab) = do
   -- descend into the body of the do-statement (in reverse order)
   body' <- mapM (descendBiReverseM (perBlockInfer' True)) (reverse body)
-  return $ F.BlDo ann span lab cname lab' mDoSpec (reverse body') tlab
+  return $ F.BlDo ann span x lab' mDoSpec (reverse body') tlab
 
 perBlockInfer' inDo b =
   -- Go inside child blocks

@@ -366,7 +366,7 @@ checkArrayUse pf = do
           -- nested do-loops.
           getNestedIdx :: [F.Name] -> [F.Block (F.Analysis a)] -> [([String], F.SrcSpan)]
           getNestedIdx _ [] = []
-          getNestedIdx vs (b@(F.BlDo _ _ _ _ _ _ body _):bs)
+          getNestedIdx vs (b@(F.BlDo _ _ _ _ _ body _):bs)
             | v:_ <- F.blockVarDefs b = getNestedIdx (v:vs) body ++ getNestedIdx vs bs
             | otherwise               = getNestedIdx vs bs
           getNestedIdx vs (b:bs) = bad ++ getNestedIdx vs bs
@@ -392,8 +392,8 @@ checkArrayUse pf = do
           -- control-flow depends on it instead of needing it to be
           -- directly used by a subscript expression.
           getMissingUse :: forall a'. Data a' => [String] -> F.Block (F.Analysis a') -> [([String], F.SrcSpan)]
-          getMissingUse excls (F.BlDo _ _ _ _ _ _ bs _)      = concatMap (getMissingUse excls) bs
-          getMissingUse excls (F.BlDoWhile _ _ _ _ _ _ bs _) = concatMap (getMissingUse excls) bs
+          getMissingUse excls (F.BlDo _ _ _ _ _ bs _)      = concatMap (getMissingUse excls) bs
+          getMissingUse excls (F.BlDoWhile _ _ _ _ _ bs _) = concatMap (getMissingUse excls) bs
           getMissingUse excls (F.BlForall _ _ _ _ _ bs _)    = concatMap (getMissingUse excls) bs
           getMissingUse excls b@(F.BlIf F.Analysis{F.insLabel = Just i} _ _ _ mes bss _)
             -- check If statement conditions

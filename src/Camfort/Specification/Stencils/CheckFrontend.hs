@@ -391,7 +391,7 @@ perBlockCheck b@(F.BlComment ann span _) = do
           _ -> return b'
         _ -> return b'
 
-perBlockCheck b@(F.BlDo _ _ _ _ _ _ body _) = do
+perBlockCheck b@(F.BlDo _ _ _ _ _ body _) = do
    -- descend into the body of the do-statement
    mapM_ (descendBiM perBlockCheck) body
    -- Remove any induction variable from the state
