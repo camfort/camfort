@@ -123,20 +123,26 @@ collectAndRmCommons tenv fname pname = transformBiM commons
       let info = (fname, (punitName pname, (commonNameFromAST cname, tcommon)))
       modify (\(r, infos) -> (r ++ r', info : infos))
 
-    typeCommonExprs :: F.Expression A1 -> (F.Name, TypeInfo)
-    typeCommonExprs e@(F.ExpValue _ sp (F.ValVariable _)) =
-      case M.lookup var tenv of
-        Just (FA.IDType (Just t) (Just ct@FA.CTVariable)) -> (src, (t, ct))
-        Just (FA.IDType (Just t) (Just ct@FA.CTArray{}))  -> (src, (t, ct))
-        _ -> error $ "Variable '" ++ src
-                  ++ "' is of an unknown or higher-order type at: " ++ show sp ++ " "
-                  ++ show (M.lookup var tenv)
-      where
-        var = FA.varName e
-        src = FA.srcName e
-    typeCommonExprs e = error $ "Not expecting a non-variable expression \
-                                \in expression at: " ++ show (FU.getSpan e)
-
+    typeCommonExprs :: F.Declarator A1 -> (F.Name, TypeInfo)
+    typeCommonExprs = \case
+      F.DeclVariable _ sp nameExpr _ _ ->
+        let var = FA.varName nameExpr
+            src = FA.srcName nameExpr
+         in case M.lookup var tenv of
+              Just (FA.IDType (Just t) (Just ct@FA.CTVariable)) -> (src, (t, ct))
+              Just (FA.IDType (Just t) (Just ct@FA.CTArray{}))  -> (src, (t, ct))
+              _ -> error $ "Variable '" ++ src
+                        ++ "' is of an unknown or higher-order type at: "
+                        ++ show sp ++ " " ++ show (M.lookup var tenv)
+      F.DeclArray _ sp nameExpr _ _ _ ->
+        let var = FA.varName nameExpr
+            src = FA.srcName nameExpr
+         in case M.lookup var tenv of
+              Just (FA.IDType (Just t) (Just ct@FA.CTVariable)) -> (src, (t, ct))
+              Just (FA.IDType (Just t) (Just ct@FA.CTArray{}))  -> (src, (t, ct))
+              _ -> error $ "Variable '" ++ src
+                        ++ "' is of an unknown or higher-order type at: "
+                        ++ show sp ++ " " ++ show (M.lookup var tenv)
 
 {- Comparison functions for common block names and variables -}
 cmpTLConFName :: TLCommon a -> TLCommon a -> Ordering
