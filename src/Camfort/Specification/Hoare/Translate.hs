@@ -6,6 +6,7 @@
 {-# LANGUAGE OverloadedStrings     #-}
 {-# LANGUAGE RankNTypes            #-}
 {-# LANGUAGE TypeFamilies          #-}
+{-# LANGUAGE CPP                   #-}
 
 {-# OPTIONS_GHC -Wall #-}
 
@@ -35,7 +36,11 @@ import           Prelude                            hiding (span)
 
 import           Control.Lens
 import           Control.Monad.Except               (MonadError (..))
+
+#if !MIN_VERSION_base(4,13,0)
+-- Control.Monad.Fail import is redundant since GHC 8.8.1
 import           Control.Monad.Fail
+#endif
 
 import qualified Language.Fortran.Analysis          as F
 import qualified Language.Fortran.AST               as F
