@@ -14,13 +14,10 @@
    limitations under the License.
 -}
 
-{-
-  Units of measure extension to Fortran: backend
--}
-
-{-# LANGUAGE TupleSections #-}
-{-# LANGUAGE ScopedTypeVariables #-}
-{-# LANGUAGE ForeignFunctionInterface #-}
+{-# LANGUAGE ForeignFunctionInterface   #-}
+{-# LANGUAGE TupleSections              #-}
+{-# LANGUAGE ScopedTypeVariables        #-}
+{-# LANGUAGE GeneralizedNewtypeDeriving #-}
 
 module Camfort.Specification.Units.InferenceBackendFlint where
 
@@ -33,11 +30,75 @@ import           Numeric.LinearAlgebra (atIndex, rows, cols)
 import qualified Numeric.LinearAlgebra as H
 import           System.IO.Unsafe (unsafePerformIO)
 
-foreign import ccall unsafe "flint/fmpz_mat.h fmpz_mat_init" fmpz_mat_init :: Ptr FMPZMat -> CLong -> CLong -> IO ()
+-- | Units of measure extension to Fortran: Flint backend components
+--
+-- Some notes on the Flint library to aid comprehension of the original C and
+-- this interface:
+--
+--   * They use a @typedef TYPE TYPE_t[1]@ convention to do call-by-reference
+--     without an explicit pointer. It appears to be an unmentioned convention
+--     borrowed from related library & depedency GMP, explained in a GMP doc
+--     page: https://gmplib.org/manual/Parameter-Conventions . Any time one of
+--     these is a function parameter, it is correct to use 'Ptr a' in Haskell.
+--   * Flint extensively uses two typedefs @ulong@ and @slong@, which are "long
+--     integers" in unsigned and signed representations respectively. However,
+--     the story is more complicated in cross-platform contexts, because 64-bit
+--     Linux's @long@s are 64 bits (8 bytes), while 64-bit Windows kept them at
+--     32 bits (4 bytes). That type is 'CLong' in Haskell, and it doesn't match
+--     up with Flint's @slong@, so we roll our own newtypes instead. (See the
+--     definition for further explanation.)
+
+-- | @typedef slong fmpz@
+--
+-- GHC's generalized newtype deriving handles deriving all the instances we
+-- require for us.
+newtype FMPZ = FMPZ { unFMPZ :: SLong }
+  deriving (Storable, Eq, Ord, Num, Real, Enum, Integral)
+
+-- | Flint's long signed integer type @slong@ (= GMP's @mp_limb_signed_t@).
+--
+-- As described in their Portability doc page
+-- https://flintlib.org/doc/portability.html , this replaces @long@ (long signed
+-- integer). Importantly, it is *always* 64-bits, regardless of platform. @long@
+-- on Windows is usually 32-bits (whether on a 32-bit or 64-bit install), and
+-- you're meant to use @long long@ instead.
+--
+-- We tie the typedef to Haskell's 'Int64', since that should be the appropriate
+-- size for any regular platform. Better would be to do some CPP or hsc2hs magic
+-- to check the size of an @slong@ and use the appropriate Haskell signed
+-- integer type.
+--
+-- GHC's generalized newtype deriving handles deriving all the instances we
+-- require for us.
+newtype SLong = SLong { unSLong :: Int64 }
+  deriving (Storable, Eq, Ord, Num, Real, Enum, Integral)
+
+{-
+    typedef struct
+    {
+        fmpz * entries;
+        slong r;
+        slong c;
+        fmpz ** rows;
+    } fmpz_mat_struct;
+-}
+data FMPZMat
+
+instance Storable FMPZMat where
+  sizeOf _ =
+        sizeOf nullPtr
+      + sizeOf (undefined :: SLong)
+      + sizeOf (undefined :: SLong)
+      + sizeOf nullPtr
+  alignment _ = alignment (undefined :: SLong) -- TODO: ??
+  peek _ = undefined
+  poke _ = undefined
+
+foreign import ccall unsafe "flint/fmpz_mat.h fmpz_mat_init" fmpz_mat_init :: Ptr FMPZMat -> SLong -> SLong -> IO ()
 foreign import ccall unsafe "flint/fmpz_mat.h fmpz_mat_set" fmpz_mat_set :: Ptr FMPZMat -> Ptr FMPZMat -> IO ()
-foreign import ccall unsafe "flint/fmpz_mat.h fmpz_mat_entry" fmpz_mat_entry :: Ptr FMPZMat -> CLong -> CLong -> IO (Ptr CLong)
-foreign import ccall unsafe "flint/fmpz.h fmpz_set_si" fmpz_set_si :: Ptr CLong -> CLong -> IO ()
-foreign import ccall unsafe "flint/fmpz.h fmpz_get_si" fmpz_get_si :: Ptr CLong -> IO CLong
+foreign import ccall unsafe "flint/fmpz_mat.h fmpz_mat_entry" fmpz_mat_entry :: Ptr FMPZMat -> SLong -> SLong -> IO (Ptr FMPZ)
+foreign import ccall unsafe "flint/fmpz.h fmpz_set_si" fmpz_set_si :: Ptr FMPZ -> SLong -> IO ()
+foreign import ccall unsafe "flint/fmpz.h fmpz_get_si" fmpz_get_si :: Ptr FMPZ -> IO SLong
 foreign import ccall unsafe "flint/fmpz_mat.h fmpz_mat_clear" fmpz_mat_clear :: Ptr FMPZMat -> IO ()
 foreign import ccall unsafe "flint/fmpz_mat.h fmpz_mat_print_pretty" fmpz_mat_print_pretty :: Ptr FMPZMat -> IO ()
 foreign import ccall unsafe "flint/fmpz_mat.h fmpz_mat_mul" fmpz_mat_mul :: Ptr FMPZMat -> Ptr FMPZMat -> Ptr FMPZMat -> IO ()
@@ -47,7 +108,7 @@ foreign import ccall unsafe "flint/fmpz_mat.h fmpz_mat_mul" fmpz_mat_mul :: Ptr 
 -- Initializes the matrix window to be an r2 - r1 by c2 - c1 submatrix
 -- of mat whose (0,0) entry is the (r1, c1) entry of mat. The memory
 -- for the elements of window is shared with mat.
-foreign import ccall unsafe "flint/fmpz_mat.h fmpz_mat_window_init" fmpz_mat_window_init :: Ptr FMPZMat -> Ptr FMPZMat -> CLong -> CLong -> CLong -> CLong -> IO ()
+foreign import ccall unsafe "flint/fmpz_mat.h fmpz_mat_window_init" fmpz_mat_window_init :: Ptr FMPZMat -> Ptr FMPZMat -> SLong -> SLong -> SLong -> SLong -> IO ()
 
 -- Frees the window (leaving underlying matrix alone).
 foreign import ccall unsafe "flint/fmpz_mat.h fmpz_mat_window_clear" fmpz_mat_window_clear :: Ptr FMPZMat -> IO ()
@@ -57,51 +118,19 @@ foreign import ccall unsafe "flint/fmpz_mat.h fmpz_mat_window_clear" fmpz_mat_wi
 -- Uses fraction-free Gauss-Jordan elimination to set (B, den) to the
 -- reduced row echelon form of A and returns the rank of A. Aliasing
 -- of A and B is allowed. r is rank of A.
-foreign import ccall unsafe "flint/fmpz_mat.h fmpz_mat_rref" fmpz_mat_rref :: Ptr FMPZMat -> Ptr CLong -> Ptr FMPZMat -> IO CLong
+foreign import ccall unsafe "flint/fmpz_mat.h fmpz_mat_rref" fmpz_mat_rref :: Ptr FMPZMat -> Ptr FMPZ -> Ptr FMPZMat -> IO SLong
 
 -- r <- fmp_mat_inv B den A
 --
-foreign import ccall unsafe "flint/fmpz_mat.h fmpz_mat_inv" fmpz_mat_inv :: Ptr FMPZMat -> Ptr CLong -> Ptr FMPZMat -> IO CLong
+-- Returns 1 if @A@ is nonsingular and 0 if @A@ is singular.
+foreign import ccall unsafe "flint/fmpz_mat.h fmpz_mat_inv" fmpz_mat_inv :: Ptr FMPZMat -> Ptr FMPZ -> Ptr FMPZMat -> IO CInt
 
 -- fmpz_mat_hnf H A
 --
 -- H is the Hermite Normal Form of A.
 foreign import ccall unsafe "flint/fmpz_mat.h fmpz_mat_hnf" fmpz_mat_hnf :: Ptr FMPZMat -> Ptr FMPZMat -> IO ()
 
-foreign import ccall unsafe "flint/fmpz_mat.h fmpz_mat_rank" fmpz_mat_rank :: Ptr FMPZMat -> IO CLong
-
-data FMPZMat
-
-instance Storable FMPZMat where
-  sizeOf _ = 4 * sizeOf (undefined :: CLong)
-  alignment _ = alignment (undefined :: CLong)
-  peek _ = undefined
-  poke _ = undefined
-
--- testFlint :: IO ()
--- testFlint = do
---   traceM "***********************8 testFlint 8***********************"
---   alloca $ \ a -> do
---     alloca $ \ b -> do
---       alloca $ \ den -> do
---         let n = 10
---         fmpz_mat_init a n n
---         fmpz_mat_init b n n
---         forM_ [0..n-1] $ \ i -> do
---           forM_ [0..n-1] $ \ j -> do
---             e <- fmpz_mat_entry a i j
---             fmpz_set_si e (2 * i + j)
-
---         -- fmpz_mat_mul b a a
---         r <- fmpz_mat_rref b den a
---         fmpz_mat_print_pretty a
---         fmpz_mat_print_pretty b
---         d <- peek den
---         traceM $ "r = " ++ show r ++ " den = " ++ show d
---         fmpz_mat_hnf b a
---         fmpz_mat_print_pretty b
---         fmpz_mat_clear a
---         fmpz_mat_clear b
+foreign import ccall unsafe "flint/fmpz_mat.h fmpz_mat_rank" fmpz_mat_rank :: Ptr FMPZMat -> IO SLong
 
 rref :: H.Matrix Double -> (H.Matrix Double, Int, Int)
 rref m = unsafePerformIO $ do
@@ -195,7 +224,7 @@ inv m = unsafePerformIO $ do
         else
           return Nothing
 
-withMatrix :: H.Matrix Double -> ((CLong, CLong, Ptr FMPZMat) -> IO b) -> IO b
+withMatrix :: H.Matrix Double -> ((SLong, SLong, Ptr FMPZMat) -> IO b) -> IO b
 withMatrix m f = do
   alloca $ \ outputM -> do
     let numRows = fromIntegral $ rows m
@@ -204,12 +233,12 @@ withMatrix m f = do
     forM_ [0 .. numRows - 1] $ \ i ->
       forM_ [0 .. numCols - 1] $ \ j -> do
         e <- fmpz_mat_entry outputM i j
-        fmpz_set_si e (floor (m `atIndex` (fromIntegral i, fromIntegral j)) :: CLong)
+        fmpz_set_si e (floor (m `atIndex` (fromIntegral i, fromIntegral j)) :: SLong)
     x <- f (numRows, numCols, outputM)
     fmpz_mat_clear outputM
     return x
 
-withBlankMatrix :: CLong -> CLong -> (Ptr FMPZMat -> IO b) -> IO b
+withBlankMatrix :: SLong -> SLong -> (Ptr FMPZMat -> IO b) -> IO b
 withBlankMatrix numRows numCols f = do
   alloca $ \ outputM -> do
     fmpz_mat_init outputM (fromIntegral numRows) (fromIntegral numCols)
@@ -217,7 +246,7 @@ withBlankMatrix numRows numCols f = do
     fmpz_mat_clear outputM
     return x
 
-withWindow :: Ptr FMPZMat -> CLong -> CLong -> CLong -> CLong -> (Ptr FMPZMat -> IO b) -> IO b
+withWindow :: Ptr FMPZMat -> SLong -> SLong -> SLong -> SLong -> (Ptr FMPZMat -> IO b) -> IO b
 withWindow underM r1 c1 r2 c2 f = do
   alloca $ \ window -> do
     fmpz_mat_window_init window underM r1 c1 r2 c2
@@ -225,7 +254,7 @@ withWindow underM r1 c1 r2 c2 f = do
     fmpz_mat_window_clear window
     return x
 
-flintToHMatrix :: CLong -> CLong -> Ptr FMPZMat -> IO (H.Matrix Double)
+flintToHMatrix :: SLong -> SLong -> Ptr FMPZMat -> IO (H.Matrix Double)
 flintToHMatrix numRows numCols flintM = do
   lists <- forM [0..numRows-1] $ \ i -> do
     forM [0..numCols-1] $ \ j -> do
@@ -233,17 +262,17 @@ flintToHMatrix numRows numCols flintM = do
       fromIntegral `fmap` fmpz_get_si e
   return $ H.fromLists lists
 
-pokeM :: Ptr FMPZMat -> CLong -> CLong -> CLong -> IO ()
+pokeM :: Ptr FMPZMat -> SLong -> SLong -> SLong -> IO ()
 pokeM flintM i j v = do
   e <- fmpz_mat_entry flintM i j
   fmpz_set_si e v
 
-peekM :: Ptr FMPZMat -> CLong -> CLong -> IO CLong
+peekM :: Ptr FMPZMat -> SLong -> SLong -> IO SLong
 peekM flintM i j = do
   e <- fmpz_mat_entry flintM i j
   fmpz_get_si e
 
-copyMatrix :: Ptr FMPZMat -> Ptr FMPZMat -> CLong -> CLong -> CLong -> CLong -> IO ()
+copyMatrix :: Ptr FMPZMat -> Ptr FMPZMat -> SLong -> SLong -> SLong -> SLong -> IO ()
 copyMatrix m1 m2 r1 c1 r2 c2 =
   forM_ [r1 .. r2-1] $ \ i ->
     forM_ [c1 .. c2-1] $ \ j ->
@@ -315,7 +344,7 @@ normHNF m
 normHNF' :: H.Matrix Double -> (H.Matrix Double, [Int])
 normHNF' m = fmap (map fromIntegral) . unsafePerformIO $ withMatrix m normhnf
 
-normhnf :: (CLong, CLong, Ptr FMPZMat) -> IO (H.Matrix Double, [CLong])
+normhnf :: (SLong, SLong, Ptr FMPZMat) -> IO (H.Matrix Double, [SLong])
 normhnf (numRows, numCols, inputM) = do
   withBlankMatrix numRows numCols $ \ outputM -> do
     fmpz_mat_hnf outputM inputM
@@ -393,7 +422,7 @@ normhnf (numRows, numCols, inputM) = do
 -- rows accordingly to reach RREF
 --
 -- precondition: matrix outputM is in HNF
-elemrowscale :: Ptr FMPZMat -> CLong -> CLong -> IO [(CLong, CLong)]
+elemrowscale :: Ptr FMPZMat -> SLong -> SLong -> IO [(SLong, SLong)]
 elemrowscale outputM rank numCols = do
   -- column indices of leading co-efficients > 1
   lcoefs <- filter ((> 1) . head . snd) <$> forM [0 .. rank-1] (\ i -> do
@@ -417,7 +446,7 @@ elemrowscale outputM rank numCols = do
 -- just scaled the leading-coefficient to 1 and now we must look to
 -- see if there are any non-zeroes in the column above the
 -- leading-coefficient, because that is allowed by HNF.
-elemrowadds :: Ptr FMPZMat -> CLong -> CLong -> [(CLong, CLong)] -> IO ()
+elemrowadds :: Ptr FMPZMat -> SLong -> SLong -> [(SLong, SLong)] -> IO ()
 elemrowadds outputM _ numCols indices = do
   -- look for non-zero members of the columns above the
   -- leading-coefficient and wipe them out.
@@ -440,7 +469,34 @@ elemrowadds outputM _ numCols indices = do
           -- add lower row scaled by sf to upper row
           pokeM outputM i j' (x1 - x2 * sf)
 
---------------------------------------------------
+--------------------------------------------------------------------------------
+
+-- testFlint :: IO ()
+-- testFlint = do
+--   traceM "***********************8 testFlint 8***********************"
+--   alloca $ \ a -> do
+--     alloca $ \ b -> do
+--       alloca $ \ den -> do
+--         let n = 10
+--         fmpz_mat_init a n n
+--         fmpz_mat_init b n n
+--         forM_ [0..n-1] $ \ i -> do
+--           forM_ [0..n-1] $ \ j -> do
+--             e <- fmpz_mat_entry a i j
+--             fmpz_set_si e (2 * i + j)
+
+--         -- fmpz_mat_mul b a a
+--         r <- fmpz_mat_rref b den a
+--         fmpz_mat_print_pretty a
+--         fmpz_mat_print_pretty b
+--         d <- peek den
+--         traceM $ "r = " ++ show r ++ " den = " ++ show d
+--         fmpz_mat_hnf b a
+--         fmpz_mat_print_pretty b
+--         fmpz_mat_clear a
+--         fmpz_mat_clear b
+
+--------------------------------------------------------------------------------
 
 -- m1 :: H.Matrix Double
 -- m1 = (8><6)
