@@ -1,0 +1,74 @@
+#  Windows building via MSYS2, Stack.
+
+name: Windows / Stack / build only
+
+on:
+  push:
+    branches:
+    - master
+  pull_request:
+    types:
+    - opened
+    - synchronize
+
+jobs:
+  build:
+    runs-on: windows-latest
+    defaults:
+      run:
+        shell: msys2 {0}
+
+    env:
+      tmp_extra_build_loc_flags: --extra-lib-dirs=/mingw64/lib --extra-lib-dirs=flint-2.8.0 --extra-include-dirs=flint-2.8.0 --extra-include-dirs=flint-2.8.0/flintxx
+      flint_ver: 2.8.0
+      EXE_NAME: camfort
+
+    steps:
+
+    - uses: msys2/setup-msys2@v2
+      with:
+        update: true
+        install: >-
+          base-devel
+          git
+          p7zip
+    - uses: actions/checkout@v2
+
+    - name: Install available build dependencies
+      run: >-
+        pacman -S --noconfirm
+        mingw-w64-x86_64-openblas
+        mingw-w64-x86_64-lapack
+        mingw-w64-x86_64-gcc
+    - name: Build flint library
+      run: |
+        curl -sL https://www.flintlib.org/flint-${flint_ver}.tar.gz -o flint-${flint_ver}.tar.gz
+        tar xf flint-${flint_ver}.tar.gz
+        cd flint-${flint_ver}
+        ./configure --with-gmp=/mingw64 --with-mpfr=/mingw64 --disable-static
+        make
+        cd ..
+    - name: Install stack
+      run: |
+        curl -sL https://get.haskellstack.org/stable/windows-x86_64.zip -o stack.zip
+        7z x stack.zip stack.exe
+        which ./stack
+        ./stack --version
+    - name: Install GHC
+      run: |
+        ./stack --no-terminal setup --install-ghc $tmp_extra_build_loc_flags
+    - name: Install project Haskell deps
+      run: |
+        ./stack --no-terminal build --only-dependencies $tmp_extra_build_loc_flags
+    - name: Build
+      run: ./stack --no-terminal build $tmp_extra_build_loc_flags
+
+    - name: Install (to place executable at a known location)
+      run: ./stack --no-terminal install $tmp_extra_build_loc_flags
+
+    - name: Upload executable
+      uses: actions/upload-artifact@v2
+      with:
+        name: ${{ env.EXE_NAME }}-linux-x64-stack-${{ github.sha }}
+        path: ~/.local/bin/${{ env.EXE_NAME }}
+

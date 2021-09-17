@@ -9,15 +9,21 @@ on:
     - opened
     - synchronize
 
+env:
+  EXE_NAME: camfort
+
+# Note for Ubuntu jobs that we require a new-ish release (>= 20.04?) in order to
+# get a recent-enough version of z3.
 jobs:
-  build-test-ubuntu-stack:
-    # ubuntu-20.04 required for a recent version of z3 (probably need >4.5)
-    runs-on: ubuntu-20.04
-    name: Ubuntu 20.04 / Stack
+  ubuntu-stack-test:
+    runs-on: ubuntu-latest
+    name: Ubuntu / Stack / test
     steps:
-    # note that we require static libs (in Ubuntu, *-dev)
-    - name: Install required libraries
-      run: sudo apt install libflint-dev liblapack-dev z3
+    - name: Install build dependencies
+      run: sudo apt install libflint-dev liblapack-dev
+
+    - name: Install runtime dependencies
+      run: sudo apt install z3
 
     - uses: actions/checkout@v2
 
@@ -39,9 +45,18 @@ jobs:
     - name: Build and run tests
       run: stack --no-terminal haddock --test --no-haddock-deps
 
-  build-test-ubuntu-cabal:
-    runs-on: ubuntu-20.04
-    name: Ubuntu 20.04 / GHC ${{ matrix.ghc }}, Cabal ${{ matrix.cabal }}
+    - name: Install (to place executable at a known location)
+      run: stack --no-terminal install
+
+    - name: Upload executable
+      uses: actions/upload-artifact@v2
+      with:
+        name: ${{ env.EXE_NAME }}-linux-x64-stack-${{ github.sha }}
+        path: ~/.local/bin/${{ env.EXE_NAME }}
+
+  ubuntu-cabal-test:
+    runs-on: ubuntu-latest
+    name: Ubuntu / GHC ${{ matrix.ghc }}, Cabal ${{ matrix.cabal }} / test
     strategy:
       fail-fast: false    # don't stop if one job (= GHC version) fails
       matrix:
@@ -53,9 +68,11 @@ jobs:
         #- "9.0" # 2021-06-16: singletons 3.0 requires GHC 9.0 but changes too
                  # effectively support older versions
     steps:
-    # note that we require static libs (in Ubuntu, *-dev)
-    - name: Install required libraries
-      run: sudo apt install libflint-dev liblapack-dev z3
+    - name: Install build dependencies
+      run: sudo apt install libflint-dev liblapack-dev
+
+    - name: Install runtime dependencies
+      run: sudo apt install z3
 
     # TODO: GHC decides to recompile based on timestamp, so cache isn't used
     # Preferably GHC would work via hashes instead. Stack had this feature
