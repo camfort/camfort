@@ -23,7 +23,7 @@ license:        Apache-2.0
 license-file:   LICENSE
 build-type:     Simple
 tested-with:
-    GHC >= 8.6
+    GHC >= 8.4
 extra-source-files:
     tests/fixtures/Specification/Stencils/example10.expected.f
     tests/fixtures/Specification/Stencils/example10.f
