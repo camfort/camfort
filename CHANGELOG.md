@@ -1,3 +1,9 @@
+## 1.1.1 (Sept 24, 2021)
+
+* Fix Flint interface for Windows
+* Update to fortran-src 0.6.0
+* Improve COMMON block elimination (array type support)
+
 ## 1.1.0 (July 06, 2021)
 
 * Update fortran-src
