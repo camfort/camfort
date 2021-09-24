@@ -12,8 +12,12 @@ category:       Language
 stability:      experimental
 homepage:       https://camfort.github.io
 bug-reports:    https://github.com/camfort/camfort/issues
-author:         Matthew Danish, Mistral Contrastin, Andrew Rice, Dominic Orchard
-maintainer:     Matthew Danish
+author:         Matthew Danish,
+                Mistral Contrastin,
+                Andrew Rice,
+                Dominic Orchard
+maintainer:     Matthew Danish,
+                Ben Orchard
 copyright:      2012-2019 University of Cambridge
 license:        Apache-2.0
 license-file:   LICENSE
