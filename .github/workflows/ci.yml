@@ -124,6 +124,64 @@ jobs:
       env:
         HSPEC_OPTIONS: --color
 
+  mac-cabal-test:
+    runs-on: macos-latest
+    name: Mac / GHC ${{ matrix.ghc }}, Cabal / test
+    strategy:
+      fail-fast: false  # don't stop if one job (= GHC version) fails
+      matrix:
+        cabal: ["3.4"]  # ghcup recommended as of 2021-09-26
+        ghc: ["8.10"]
+    steps:
+
+    # TODO figure out timestamp fixer on Mac (no Mac available to test)
+    - uses: actions/checkout@v2
+
+    - name: Setup Haskell build environment
+      id: setup-haskell-build-env
+      uses: haskell/actions/setup@v1
+      with:
+        ghc-version: ${{ matrix.ghc }}
+        cabal-version: ${{ matrix.cabal }}
+
+    - name: Install required libraries
+      run: >-
+        brew install
+        openblas
+        lapack
+        flint
+        z3
+
+    - run: cabal freeze
+
+    - name: Cache Cabal build artifacts
+      uses: actions/cache@v2
+      with:
+        path: |
+          ${{ steps.setup-haskell-build-env.outputs.cabal-store }}
+          dist-newstyle
+        key: ${{ runner.os }}-cabal-${{ matrix.ghc }}-${{ hashFiles('cabal.project.freeze') }}
+        restore-keys: |
+          ${{ runner.os }}-cabal-${{ matrix.ghc }}
+
+    - name: Build
+      run: cabal install
+
+    - name: Test
+      run: cabal test --test-show-details=streaming
+      env:
+        HSPEC_OPTIONS: --color
+
+    # note that Cabal uses symlinks -- actions/upload-artifact@v2 apparently
+    # dereferences for us
+    - name: Upload executable
+      uses: actions/upload-artifact@v2
+      with:
+        path: ~/.cabal/bin/${{ env.EXE_NAME }}
+        name: ${{ env.EXE_NAME }}-macos-ghc-${{ matrix.ghc }}-cabal-${{ github.sha }}
+        if-no-files-found: error
+
+
   windows-cabal-build:
     runs-on: windows-latest
     name: Windows (MSYS2, ${{ matrix.msystem }}) / GHC ${{ matrix.ghc }}, Cabal / build only
