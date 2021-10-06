@@ -193,6 +193,8 @@ jobs:
     defaults:
       run:
         shell: msys2 {0}
+    env:
+      _exe_desc_part: windows-msys2-${{ matrix.msystem }}-ghc-${{ matrix.ghc }}-cabal-${{ github.sha }}
 
     steps:
 
@@ -206,12 +208,17 @@ jobs:
         msystem: ${{ matrix.msystem }}
         update: true
 
-    - name: Install build dependencies
+    - name: Set up environment variables
+      run: echo "_bundle_dir=${{ env.EXE_NAME }}-bundle-${{ env._exe_desc_part }}" >> $GITHUB_ENV
+
+    - name: Install required libraries
       run: >-
         pacman -S --noconfirm
         ${MINGW_PACKAGE_PREFIX}-openblas
         ${MINGW_PACKAGE_PREFIX}-lapack
         ${MINGW_PACKAGE_PREFIX}-flint
+        ${MINGW_PACKAGE_PREFIX}-z3
+        zip
 
     # note that on Windows, minimal install still installs Cabal temporarily for
     # Reasons(TM) (just a fun tidbit)
@@ -219,7 +226,7 @@ jobs:
       run: curl --proto '=https' --tlsv1.2 -sSf https://get-ghcup.haskell.org | BOOTSTRAP_HASKELL_NONINTERACTIVE=1 BOOTSTRAP_HASKELL_MINIMAL=1 sh
 
     # TODO: This should probably work, but doesn't. MSYS2 isn't updating its
-    # envvars. I don't know why, porbably also to do with how GitHub Actions
+    # envvars. I don't know why, probably also to do with how GitHub Actions
     # runs commands.
     - run: echo "PATH=$HOME/.cabal/bin:/c/ghcup/bin:$PATH" >> $GITHUB_ENV
     - run: echo $PATH
@@ -235,7 +242,7 @@ jobs:
         BASH_ENV: /c/ghcup/env
 
     # `cygpath /` gets the absolute path of the MSYS2 installation
-    # `-m` is mixed-mode paths `C:/x/y`, which work & I prefer over backslash
+    # `-m` is mixed-mode paths `C:/x/y`, which works & I prefer over backslash
     - name: Fix ghcup Cabal paths
       run: 'echo "extra-lib-dirs: $(cygpath -m /)/${{ matrix.msystem }}/lib" >> $APPDATA/cabal/config'
 
@@ -277,4 +284,26 @@ jobs:
       with:
         path: "C:/Users/runneradmin/AppData/Roaming/cabal/bin/${{ env.EXE_NAME }}.exe"
         name: ${{ env.EXE_NAME }}-windows-msys2-${{ matrix.msystem }}-ghc-${{ matrix.ghc }}-cabal-${{ github.sha }}.exe
+        if-no-files-found: error
+
+    # We copy the built executable plus its runtime dependencies into a
+    # directory. For dynamically linked libraries, we inspect the file and copy
+    # only the libraries managed by MSYS2. The rest are assumed to be Windows
+    # system libraries that all users should have.
+    - name: Prepare self-contained bundle
+      run: |
+        mkdir bundle
+        cp "C:/Users/runneradmin/AppData/Roaming/cabal/bin/${{ env.EXE_NAME }}.exe" bundle
+        ldd bundle/${{ env.EXE_NAME }}.exe | cut --delimiter=' ' --fields=3 - | grep '^'$MINGW_PREFIX/bin/lib.*'\'.dll | xargs -I '{}' cp '{}' bundle
+        cp $(which z3.exe) bundle
+        mv bundle ${{ env._bundle_dir }}
+        zip -r ${{ env._bundle_dir }}.zip ${{ env._bundle_dir }}
+
+    # Note that the resulting artifact will be double-zipped. That's a
+    # limitation of either the action or GitHub, it's non-configurable.
+    - name: Upload self-contained bundle
+      uses: actions/upload-artifact@v2
+      with:
+        path: ${{ env._bundle_dir }}.zip
+        name: ${{ env._bundle_dir }}.zip
         if-no-files-found: error
