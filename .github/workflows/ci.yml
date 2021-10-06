@@ -208,8 +208,11 @@ jobs:
         msystem: ${{ matrix.msystem }}
         update: true
 
+    # x=$x essentially exports the envvar to GitHub Actions' scope.
     - name: Set up environment variables
-      run: echo "_bundle_dir=${{ env.EXE_NAME }}-bundle-${{ env._exe_desc_part }}" >> $GITHUB_ENV
+      run: |
+        echo "_bundle_dir=${{ env.EXE_NAME }}-bundle-${{ env._exe_desc_part }}" >> $GITHUB_ENV
+        echo "APPDATA=$APPDATA" >> $GITHUB_ENV
 
     - name: Install required libraries
       run: >-
@@ -243,6 +246,7 @@ jobs:
 
     # `cygpath /` gets the absolute path of the MSYS2 installation
     # `-m` is mixed-mode paths `C:/x/y`, which works & I prefer over backslash
+    # careful, YAML syntax gets funky here for some reason
     - name: Fix ghcup Cabal paths
       run: 'echo "extra-lib-dirs: $(cygpath -m /)/${{ matrix.msystem }}/lib" >> $APPDATA/cabal/config'
 
@@ -268,7 +272,7 @@ jobs:
       uses: actions/cache@v2
       with:
         path: |
-          ${{ steps.setup-haskell-build-env.outputs.cabal-store }}
+          ${{ env.APPDATA }}/cabal/store
           dist-newstyle
         key: ${{ runner.os }}-cabal-${{ matrix.ghc }}-${{ hashFiles('cabal.project.freeze') }}
         restore-keys: |
@@ -282,7 +286,7 @@ jobs:
     - name: Upload executable
       uses: actions/upload-artifact@v2
       with:
-        path: "C:/Users/runneradmin/AppData/Roaming/cabal/bin/${{ env.EXE_NAME }}.exe"
+        path: ${{ env.APPDATA }}/cabal/bin/${{ env.EXE_NAME }}.exe
         name: ${{ env.EXE_NAME }}-windows-msys2-${{ matrix.msystem }}-ghc-${{ matrix.ghc }}-cabal-${{ github.sha }}.exe
         if-no-files-found: error
 
@@ -293,11 +297,11 @@ jobs:
     - name: Prepare self-contained bundle
       run: |
         mkdir bundle
-        cp "C:/Users/runneradmin/AppData/Roaming/cabal/bin/${{ env.EXE_NAME }}.exe" bundle
-        ldd bundle/${{ env.EXE_NAME }}.exe | cut --delimiter=' ' --fields=3 - | grep '^'$MINGW_PREFIX/bin/lib.*'\'.dll | xargs -I '{}' cp '{}' bundle
+        cp "$APPDATA"/cabal/bin/"${{ env.EXE_NAME }}".exe bundle
+        ldd bundle/"${{ env.EXE_NAME }}".exe | cut --delimiter=' ' --fields=3 - | grep '^'$MINGW_PREFIX/bin/lib.*'\'.dll | xargs -I '{}' cp '{}' bundle
         cp $(which z3.exe) bundle
-        mv bundle ${{ env._bundle_dir }}
-        zip -r ${{ env._bundle_dir }}.zip ${{ env._bundle_dir }}
+        mv bundle "${{ env._bundle_dir }}"
+        zip -r "${{ env._bundle_dir }}".zip "${{ env._bundle_dir }}"
 
     # Note that the resulting artifact will be double-zipped. That's a
     # limitation of either the action or GitHub, it's non-configurable.
