@@ -1,3 +1,9 @@
+## 1.1.2 (Oct 09, 2021)
+
+Meta update to provide a release to tie new platform builds to.
+
+* Update internal version string (had been left at 1.0)
+
 ## 1.1.1 (Sept 24, 2021)
 
 * Fix Flint interface for Windows
