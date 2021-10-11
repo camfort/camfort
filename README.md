@@ -6,7 +6,7 @@ legacy extensions.
 It is a research project developed in University of Cambridge and University of
 Kent.
 
-## Installation
+## Obtaining
 We provide [prebuilt binaries](https://github.com/camfort/camfort/releases) for
 Windows, Mac and Linux. For Windows, we also provide archives that bundle the
 CamFort executable together with all of its dependencies.
@@ -16,9 +16,8 @@ CamFort is also available through Homebrew
 
     brew install camfort/camfort/camfort
 
-See the [installation
-guide](https://github.com/camfort/camfort/wiki/Installation-Guide) on the wiki
-for further information.
+An older (~2019) version of CamFort is available on Docker at
+[camfort/camfort](https://cloud.docker.com/u/camfort/repository/docker/camfort/camfort).
 
 ## Usage
 CamFort is a command-line tool, so invoke it from your favourite shell or
@@ -30,6 +29,9 @@ information](https://github.com/camfort/camfort/wiki) is available on the wiki.
 process, you may wish to instead check the
 [Actions](https://github.com/camfort/camfort/actions) tab and download the
 relevant build for your system from a recent workflow run.)*
+
+This section only covers building briefly. See [Wiki:
+Building](https://github.com/camfort/camfort/wiki/Building) for full details.
 
 CamFort supports **GHC 8.4 through GHC 8.10**, and builds with both Stack and
 Cabal. We regularly test at least the minimum and maximum supported GHCs.
@@ -44,7 +46,7 @@ CamFort depends on the following foreign libraries:
   * [FLINT](https://www.flintlib.org/) >= 2.5
   * LAPACK
   * BLAS
-  * Z3 solver (executable)
+  * [Z3](https://github.com/Z3Prover/z3) >= 4.5 (executable)
 
 These should be built for your system, but installation method varies.
 System-specific guides are provided on the wiki. *(Alternatively, you could
@@ -52,17 +54,7 @@ check the GitHub Actions workflows.)* On Ubuntu:
 
     apt install libflint-dev liblapack-dev libopenblas-dev z3
 
-Then for Stack:
-
-    stack build
-
-Or Cabal:
-
-    cabal build
-
-## Usage
-For detailed information please check [the
-wiki](https://github.com/camfort/camfort/wiki).
+Then `stack build` for Stack, or `cabal build` for Cabal.
 
 ### Tab Completion (Bash)
 To enable Bash autocompletion for camfort, add the following to your
