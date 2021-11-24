@@ -79,9 +79,8 @@ instance Show InferenceReport where
           puInfo   = M.fromList [ (eiVName ei, ei) | ei <- declVariableNamesPU ]
       declVariableNamesDecl :: [ExpInfo]
       declVariableNamesDecl = flip mapMaybe (universeBi pf :: [F.Declarator UA]) $ \ d -> case d of
-        F.DeclVariable _ ss v@(F.ExpValue _ _ (F.ValVariable _)) _ _   -> Just (ExpInfo ss (FA.varName v) (FA.srcName v))
-        F.DeclArray    _ ss v@(F.ExpValue _ _ (F.ValVariable _)) _ _ _ -> Just (ExpInfo ss (FA.varName v) (FA.srcName v))
-        _                                                             -> Nothing
+        F.Declarator _ ss v@(F.ExpValue _ _ (F.ValVariable _)) _ _ _ -> Just (ExpInfo ss (FA.varName v) (FA.srcName v))
+        _                                                            -> Nothing
       declVariableNamesPU :: [ExpInfo]
       declVariableNamesPU = flip mapMaybe (universeBi pf :: [F.ProgramUnit UA]) $ \ pu -> case pu of
         F.PUFunction _ ss _ _ _ _ (Just v@(F.ExpValue _ _ (F.ValVariable _))) _ _ -> Just (ExpInfo ss (FA.varName v) (FA.srcName v))

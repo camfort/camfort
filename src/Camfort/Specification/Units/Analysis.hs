@@ -58,7 +58,7 @@ import qualified Language.Fortran.Analysis as FA
 import qualified Language.Fortran.Analysis.SemanticTypes as FAS
 import qualified Language.Fortran.Analysis.BBlocks as FAB
 import qualified Language.Fortran.Analysis.DataFlow as FAD
-import           Language.Fortran.Parser.Utils (readReal, readInteger)
+import           Language.Fortran.AST.RealLit  (readRealLit, parseRealLit)
 import           Language.Fortran.Util.ModFile
 import qualified Numeric.LinearAlgebra as H -- for debugging
 import           Prelude hiding (mod)
@@ -327,10 +327,12 @@ annotateLiteralsPU pu = do
   where
     -- Follow the LitMixed rules.
     expMixed e = case e of
-      F.ExpValue _ _ (F.ValInteger i) | readInteger i == Just 0 -> withLiterals genParamLit e
-                                      | otherwise               -> withLiterals genUnitLiteral e
-      F.ExpValue _ _ (F.ValReal i) | readReal i == Just 0       -> withLiterals genParamLit e
-                                   | otherwise                  -> withLiterals genUnitLiteral e
+      F.ExpValue _ _ (F.ValInteger i _)
+        | read i == 0 -> withLiterals genParamLit e
+        | otherwise   -> withLiterals genUnitLiteral e
+      F.ExpValue _ _ (F.ValReal i _)
+        | readRealLit i == 0.0 -> withLiterals genParamLit e
+        | otherwise            -> withLiterals genUnitLiteral e
 
       F.ExpBinary a s op e1 e2
         | op `elem` [F.Multiplication, F.Division] -> case () of
@@ -373,20 +375,20 @@ annotateLiteralsPU pu = do
 
 -- | Is it a literal, literally?
 isLiteral :: F.Expression UA -> Bool
-isLiteral (F.ExpValue _ _ (F.ValReal _))    = True
-isLiteral (F.ExpValue _ _ (F.ValInteger _)) = True
+isLiteral (F.ExpValue _ _ F.ValReal{})    = True
+isLiteral (F.ExpValue _ _ F.ValInteger{}) = True
 -- allow propagated constants to be interpreted as literals
 isLiteral e                                 = isJust (constExp (F.getAnnotation e))
 
 -- | Is expression a literal and is it non-zero?
 isLiteralNonZero :: F.Expression UA -> Bool
-isLiteralNonZero (F.ExpValue _ _ (F.ValInteger i)) = readInteger i /= Just 0
-isLiteralNonZero (F.ExpValue _ _ (F.ValReal i))    = readReal i    /= Just 0
+isLiteralNonZero (F.ExpValue _ _ (F.ValInteger i _)) = read        i /= 0
+isLiteralNonZero (F.ExpValue _ _ (F.ValReal i _))    = readRealLit i /= 0.0
 -- allow propagated constants to be interpreted as literals
 isLiteralNonZero e = case constExp (F.getAnnotation e) of
   Just (FA.ConstInt i)          -> i /= 0
-  Just (FA.ConstUninterpInt s)  -> readInteger s /= Just 0
-  Just (FA.ConstUninterpReal s) -> readReal s /= Just 0
+  Just (FA.ConstUninterpInt s)  -> read s /= 0
+  Just (FA.ConstUninterpReal s) -> readRealLit (parseRealLit s) /= 0.0
   _                             -> False
 
 isLiteralZero :: F.Expression UA -> Bool
@@ -649,8 +651,7 @@ propagateStatement stmt = case stmt of
 
 propagateDeclarator :: F.Declarator UA -> UnitSolver (F.Declarator UA)
 propagateDeclarator decl = case decl of
-  F.DeclVariable _ _ e1 _ (Just e2) -> literalAssignmentSpecialCase e1 e2 decl
-  F.DeclArray _ _ e1 _ _ (Just e2)  -> literalAssignmentSpecialCase e1 e2 decl
+  F.Declarator _ _ e1 _ _ (Just e2) -> literalAssignmentSpecialCase e1 e2 decl
   _                                 -> pure decl
 
 -- Allow literal assignment to overload the non-polymorphic
@@ -810,8 +811,8 @@ constantExpression :: F.Expression a -> Maybe Double
 constantExpression expr = fnumToDouble <$> ce expr
   where
     ce e = case e of
-      (F.ExpValue _ _ (F.ValInteger i))        -> FInt <$> readInteger i
-      (F.ExpValue _ _ (F.ValReal r))           -> FReal <$> readReal r
+      (F.ExpValue _ _ (F.ValInteger i _))      -> Just $ FInt $ read i
+      (F.ExpValue _ _ (F.ValReal r _))         -> Just $ FReal $ readRealLit r
       (F.ExpBinary _ _ F.Addition e1 e2)       -> liftM2 fAdd (ce e1) (ce e2)
       (F.ExpBinary _ _ F.Subtraction e1 e2)    -> liftM2 fSub (ce e1) (ce e2)
       (F.ExpBinary _ _ F.Multiplication e1 e2) -> liftM2 fMul (ce e1) (ce e2)

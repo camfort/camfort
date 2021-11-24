@@ -75,14 +75,14 @@ formatSpecNoComment (span, Left specs) =
 offsetToIx :: F.Name -> Int -> F.Index (FA.Analysis A)
 offsetToIx v o
   | o == absoluteRep
-              = F.IxSingle a s Nothing (F.ExpValue a s (F.ValInteger "0"))
+              = F.IxSingle a s Nothing (F.ExpValue a s (F.ValInteger "0" Nothing))
   | o == 0    = F.IxSingle a s Nothing (F.ExpValue a s (F.ValVariable v))
   | o  > 0    = F.IxSingle a s Nothing (F.ExpBinary a s F.Addition
                                  (F.ExpValue a s (F.ValVariable v))
-                                 (F.ExpValue a s (F.ValInteger $ show o)))
+                                 (F.ExpValue a s (F.ValInteger (show o) Nothing)))
   | otherwise = F.IxSingle a s Nothing (F.ExpBinary a s F.Subtraction
                                  (F.ExpValue a s (F.ValVariable v))
-                                 (F.ExpValue a s (F.ValInteger $ show (abs o))))
+                                 (F.ExpValue a s (F.ValInteger (show (abs o)) Nothing)))
   where
     a = (head $ FA.initAnalysis [unitAnnotation]) { FA.insLabel = Just 0 }
     s = SrcSpan (Position 0 0 0 "" Nothing) (Position 0 0 0 "" Nothing)

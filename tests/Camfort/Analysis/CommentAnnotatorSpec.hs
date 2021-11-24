@@ -61,7 +61,7 @@ instance Linkable A where
 varGen :: Name -> Expression A
 varGen x = ExpValue ea p (ValVariable x)
 intGen :: Integer -> Expression A
-intGen i = ExpValue ea p (ValInteger (show i))
+intGen i = ExpValue ea p (ValInteger (show i) Nothing)
 wrapBlocks :: [Block A] -> ProgramFile A
 wrapBlocks bs' = ProgramFile (MetaInfo { miVersion = Fortran90, miFilename = "<unknown>" }) [ pu ]
   where

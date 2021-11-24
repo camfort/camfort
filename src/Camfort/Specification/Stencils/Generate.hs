@@ -243,7 +243,7 @@ extractRelevantIVS ivmap f = ivsList
 convIxToNeighbour :: (Data a) => [Variable] -> F.Index (FA.Analysis a) -> Neighbour
 convIxToNeighbour _ (F.IxRange _ _ Nothing Nothing Nothing)     = Neighbour "" 0
 convIxToNeighbour _ (F.IxRange _ _ Nothing Nothing
-                  (Just (F.ExpValue _ _ (F.ValInteger "1")))) = Neighbour "" 0
+                  (Just (F.ExpValue _ _ (F.ValInteger "1" _)))) = Neighbour "" 0
 
 convIxToNeighbour ivs (F.IxSingle _ _ _ expr)  = expToNeighbour ivs expr
 convIxToNeighbour _ _ = NonNeighbour -- indexing expression is a range
@@ -315,7 +315,7 @@ expToNeighbour ivs (F.ExpBinary _ _ F.Addition
 
 expToNeighbour ivs (F.ExpBinary _ _ F.Addition
                  e@(F.ExpValue _ _ (F.ValVariable _))
-                   (F.ExpValue _ _ (F.ValInteger offs)))
+                   (F.ExpValue _ _ (F.ValInteger offs _)))
     | FA.varName e `elem` ivs = Neighbour (FA.varName e) (read offs)
 
 -- use constant-expression analysis if available
@@ -326,7 +326,7 @@ expToNeighbour ivs (F.ExpBinary _ _ F.Addition
     , Just (FAD.ConstInt offs) <- FA.constExp (F.getAnnotation e2) = Neighbour (FA.varName e1) (fromIntegral offs)
 
 expToNeighbour ivs (F.ExpBinary _ _ F.Addition
-                  (F.ExpValue _ _ (F.ValInteger offs))
+                  (F.ExpValue _ _ (F.ValInteger offs _))
                 e@(F.ExpValue _ _ (F.ValVariable _)))
     | FA.varName e `elem` ivs = Neighbour (FA.varName e) (read offs)
 
@@ -340,7 +340,7 @@ expToNeighbour ivs (F.ExpBinary _ _ F.Subtraction
 
 expToNeighbour ivs (F.ExpBinary _ _ F.Subtraction
                  e@(F.ExpValue _ _ (F.ValVariable _))
-                   (F.ExpValue _ _ (F.ValInteger offs)))
+                   (F.ExpValue _ _ (F.ValInteger offs _)))
    | FA.varName e `elem` ivs =
          Neighbour (FA.varName e) (if x < 0 then abs x else (- x))
              where x = read offs
@@ -348,7 +348,7 @@ expToNeighbour ivs (F.ExpBinary _ _ F.Subtraction
 expToNeighbour ivs expr =
   -- Record when there is some kind of relative index on an inducion variable
   -- but that is not a neighbourhood index by our definitions
-  if null ivs' then Constant (F.ValInteger "0") else NonNeighbour
+  if null ivs' then Constant (F.ValInteger "0" Nothing) else NonNeighbour
   where
     -- set of all induction variables involved in this expression
     ivs' = [i | e@(F.ExpValue _ _ F.ValVariable{})
@@ -443,7 +443,7 @@ consistentIVSuse lhs rhses =
       cmp (Constant _) n@Neighbour{}  = Just n
       cmp NonNeighbour{} Neighbour{}  = Nothing
       cmp Neighbour{} NonNeighbour{}  = Nothing
-      cmp _ _                         = Just $ Constant (F.ValInteger "")
+      cmp _ _                         = Just $ Constant (F.ValInteger "" Nothing)
       rhsBasis = foldrM (zipWithM cmp) (head rhses) (tail rhses)
       -- If there is an induction variable on the RHS, then it also occurs on
       -- the LHS

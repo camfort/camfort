@@ -428,13 +428,13 @@ readInitialBlocks = runWriterT . dropWhileM readInitialBlock
 
             -- Each variable may have extra information that modifies its type info
             declVarsTis <- forM (F.aStrip decls) $ \case
-              F.DeclVariable _ _ nameExp declLength mInitialValue -> do
+              F.Declarator _ _ nameExp F.ScalarDecl declLength mInitialValue -> do
                 return (nameExp,
                         topTypeInfo
                         & tiDeclaratorLength .~ declLength,
                         mInitialValue)
 
-              F.DeclArray _ _ nameExp declDims declLength mInitialValue ->
+              F.Declarator _ _ nameExp (F.ArrayDecl declDims) declLength mInitialValue -> do
                 return (nameExp,
                         topTypeInfo
                         & tiDeclaratorLength .~ declLength
