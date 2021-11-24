@@ -5,12 +5,12 @@
 
 packages:
 - completed:
-    hackage: fortran-src-0.6.0@sha256:63f0cae9fb14466026caad7f1e7adfbda4f53496cdc7a74b5f2783ff472731a7,5408
+    hackage: fortran-src-0.8.0@sha256:9ab6d1f26452139d44860790d340c900253154b8b4b1bb695d8140be686d6aa1,7811
     pantry-tree:
-      size: 5344
-      sha256: 06a7299de27edef4841edf003f740cbf12e0abcab0ffa5a32adbb7be89e5c28e
+      size: 8809
+      sha256: 2d93aa453f01092d454f0cde100b481ed61057ecf0dc6ecb147aa88e0c02c012
   original:
-    hackage: fortran-src-0.6.0@sha256:63f0cae9fb14466026caad7f1e7adfbda4f53496cdc7a74b5f2783ff472731a7,5408
+    hackage: fortran-src-0.8.0@sha256:9ab6d1f26452139d44860790d340c900253154b8b4b1bb695d8140be686d6aa1,7811
 - completed:
     hackage: verifiable-expressions-0.6.2@sha256:cefdc5d3d9a4cff4ce0bfaa27ccdf83ff46bcd17340ac0c5cf6fcbe88ce05a61,1739
     pantry-tree:

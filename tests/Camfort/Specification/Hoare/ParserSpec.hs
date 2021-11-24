@@ -53,7 +53,7 @@ spec = describe "Hoare - Parser" $ do
         y = fvar "y"
         z = fvar "z"
 
-        num n = F.ExpValue () defSpan (F.ValInteger (show n))
+        num n = F.ExpValue () defSpan (F.ValInteger (show n) Nothing)
 
         bin o e1 e2 = F.ExpBinary () defSpan o e1 e2
         add = bin F.Addition

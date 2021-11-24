@@ -175,7 +175,7 @@ spec =
       it "consistent (2) a(i,c,j) = b(i,j+1) + b(i,j) \
                         \:: forward(depth=1,dim=2)*pointed(dim=1)" $
         indicesToSpec' ["i", "j"]
-               [Neighbour "i" 0, Constant (F.ValInteger "0"), Neighbour "j" 0]
+               [Neighbour "i" 0, Constant (F.ValInteger "0" Nothing), Neighbour "j" 0]
                [[offsetToIx "i" 0, offsetToIx "j" 1],
                  [offsetToIx "i" 0, offsetToIx "j" 0]]
           `shouldBe` (Just $ Specification (Once $ Exact
@@ -185,7 +185,7 @@ spec =
       it "consistent (3) a(i+1,c,j) = b(j,i+1) + b(j,i) \
                         \:: backward(depth=1,dim=2)*pointed(dim=1)" $
         indicesToSpec' ["i", "j"]
-               [Neighbour "i" 1, Constant (F.ValInteger "0"), Neighbour "j" 0]
+               [Neighbour "i" 1, Constant (F.ValInteger "0" Nothing), Neighbour "j" 0]
                [[offsetToIx "j" 0, offsetToIx "i" 1],
                  [offsetToIx "j" 0, offsetToIx "i" 0]]
           `shouldBe` (Just $ Specification (Once $ Exact
@@ -558,7 +558,7 @@ variations =
 variationsRel :: [(Neighbour, Neighbour, [[Int]], Multiplicity (Approximation Spatial))]
 variationsRel =
   [   -- Stencil which has non-relative indices in one dimension
-    (Neighbour "i" 0, Constant (F.ValInteger "0"), [ [0, absoluteRep], [1, absoluteRep] ]
+    (Neighbour "i" 0, Constant (F.ValInteger "0" Nothing), [ [0, absoluteRep], [1, absoluteRep] ]
     , Once $ Exact $ Spatial (Sum [Product [Forward 1 1 True]])
     )
   , (Neighbour "i" 1, Neighbour "j" 0, [ [0,0] ]
@@ -582,7 +582,7 @@ variationsRel =
                    (Just (Spatial (Sum [Product [ Backward 3 1 False
                                                 , Centered 0 2 True ]]))))
 
-  , (Constant (F.ValInteger "0"), Neighbour "j" 0, [ [absoluteRep,1], [absoluteRep,0], [absoluteRep,-1] ]
+  , (Constant (F.ValInteger "0" Nothing), Neighbour "j" 0, [ [absoluteRep,1], [absoluteRep,0], [absoluteRep,-1] ]
     , Once $ Exact $ Spatial (Sum [Product [Centered 1 2 True]])
     )
   ]

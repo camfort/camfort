@@ -124,17 +124,7 @@ collectAndRmCommons tenv fname pname = transformBiM commons
       modify (\(r, infos) -> (r ++ r', info : infos))
 
     typeCommonExprs :: F.Declarator A1 -> (F.Name, TypeInfo)
-    typeCommonExprs = \case
-      F.DeclVariable _ sp nameExpr _ _ ->
-        let var = FA.varName nameExpr
-            src = FA.srcName nameExpr
-         in case M.lookup var tenv of
-              Just (FA.IDType (Just t) (Just ct@FA.CTVariable)) -> (src, (t, ct))
-              Just (FA.IDType (Just t) (Just ct@FA.CTArray{}))  -> (src, (t, ct))
-              _ -> error $ "Variable '" ++ src
-                        ++ "' is of an unknown or higher-order type at: "
-                        ++ show sp ++ " " ++ show (M.lookup var tenv)
-      F.DeclArray _ sp nameExpr _ _ _ ->
+    typeCommonExprs (F.Declarator _ sp nameExpr _ _ _) =
         let var = FA.varName nameExpr
             src = FA.srcName nameExpr
          in case M.lookup var tenv of
@@ -321,10 +311,9 @@ updateUseDecls fps tcs = map perPF fps
 
         matchVar :: ([F.Statement A], [F.Declarator A]) -> F.Declarator A
                  -> ([F.Statement A], [F.Declarator A])
-        -- match on variable or array declaration
+        -- match on declaration (care not whether scalar or array)
         matchVar (assgnsNew, declsNew) dec = case dec of
-          F.DeclVariable _ _ lvar@(F.ExpValue _ _ (F.ValVariable v)) _ init -> doMatchVar lvar v init
-          F.DeclArray _ _ lvar@(F.ExpValue _ _ (F.ValVariable v)) _ _ init  -> doMatchVar lvar v init
+          F.Declarator _ _ lvar@(F.ExpValue _ _ (F.ValVariable v)) _ _ init  -> doMatchVar lvar v init
           _                                                                 -> (assgnsNew, declsNew)
           where
             doMatchVar lvar v init
@@ -488,13 +477,13 @@ mkModule v name vtys fname =
     attrs = Just $ F.AList a sp [F.AttrSave a sp]
     typespec = FAS.recoverSemTypeTypeSpec a sp v
     toDeclarator (v, FA.CTVariable) = F.AList a sp
-       [F.DeclVariable a sp
-          (F.ExpValue a sp (F.ValVariable (caml name ++ "_" ++ v))) Nothing Nothing]
+       [F.Declarator a sp
+          (F.ExpValue a sp (F.ValVariable (caml name ++ "_" ++ v))) F.ScalarDecl Nothing Nothing]
     toDeclarator (v, FA.CTArray dims) = F.AList a sp
-       [F.DeclArray a sp
-          (F.ExpValue a sp (F.ValVariable (caml name ++ "_" ++ v))) dimDecls Nothing Nothing]
+       [F.Declarator a sp
+          (F.ExpValue a sp (F.ValVariable (caml name ++ "_" ++ v))) (F.ArrayDecl dimDecls) Nothing Nothing]
        where
          dimDecls = F.AList a sp . flip map dims $ \ (lb, ub) -> F.DimensionDeclarator a sp (fmap expr lb) (fmap expr ub)
-         expr = F.ExpValue a sp . F.ValInteger . show
+         expr x = F.ExpValue a sp $ F.ValInteger (show x) Nothing
     toDeclarator (_, ct) = error $ "mkModule: toDeclarator: bad construct type: " ++ show ct
     decls = map toDeclBlock vtys

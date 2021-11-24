@@ -10,7 +10,7 @@ extra-package-dbs: []
 #   - git: https://github.com/camfort/fortran-src
 #     commit: <commit hash>
 extra-deps:
-- fortran-src-0.6.0@sha256:63f0cae9fb14466026caad7f1e7adfbda4f53496cdc7a74b5f2783ff472731a7,5408
+- fortran-src-0.8.0@sha256:9ab6d1f26452139d44860790d340c900253154b8b4b1bb695d8140be686d6aa1,7811
 - verifiable-expressions-0.6.2@sha256:cefdc5d3d9a4cff4ce0bfaa27ccdf83ff46bcd17340ac0c5cf6fcbe88ce05a61,1739
 - sbv-8.15@sha256:bc0ea4e3564626030ac2cb21905b97cd9bd25fddcd6d6010834e8cc2ebf79067,29016
 - libBF-0.6.2@sha256:7bffc0e4dbc9bd9e851ba5c29255b62fd2c288dbc9a401cd3761b740f013775e,1770

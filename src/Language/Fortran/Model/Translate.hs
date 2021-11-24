@@ -112,6 +112,7 @@ import qualified Data.Vinyl.Recursive                 as VinylRec
 
 import qualified Language.Fortran.Analysis            as F
 import qualified Language.Fortran.AST                 as F
+import           Language.Fortran.AST.RealLit         (readRealLit)
 import qualified Language.Fortran.Util.Position       as F
 
 import           Language.Expression
@@ -423,10 +424,7 @@ translateBaseType bt mkind = do
 
   kindInt <- case mkind of
     Nothing -> return 0
-    Just (F.ExpValue _ _ (F.ValInteger s)) ->
-      case readLitInteger s of
-        Just k  -> return k
-        Nothing -> throwError ErrBadLiteral
+    Just (F.ExpValue _ _ (F.ValInteger s _)) -> return $ read s
     _ -> unsupported "kind which isn't an integer literal"
 
   let getKindPrec btName ksl = do
@@ -541,11 +539,14 @@ translateSubscript _ _ =
 -- annotations of its own.
 --
 -- Do not call on an expression that you don't know to be an 'F.ExpValue'!
+--
+-- Note that we ignore potential type information in the form of the optional
+-- kind parameter for some values.
 translateValue :: (Monad m, MonadFail m) => F.Expression (F.Analysis ann) -> TranslateT m SomeExpr
 translateValue e = case e of
   F.ExpValue _ _ v -> case v of
-    F.ValInteger s -> translateLiteral v PInt64 (fmap fromIntegral . readLitInteger) s
-    F.ValReal    s -> translateLiteral v PFloat (fmap realToFrac . readLitReal) s
+    F.ValInteger s _ -> translateLiteral v PInt64 (Just . read) s
+    F.ValReal    s _ -> translateLiteral v PFloat (Just . readRealLit) s
 
     -- TODO: Auxiliary variables
     F.ValVariable nm -> do
@@ -555,9 +556,9 @@ translateValue e = case e of
         Just (Some v'@(FortranVar d _)) -> return (SomePair d (HPure v'))
         _                               -> throwError $ ErrVarNotInScope nm
 
-    F.ValLogical s ->
-      let intoBool = fmap (\b -> if b then Bool8 1 else Bool8 0) . readLitBool
-      in translateLiteral v PBool8 intoBool s
+    F.ValLogical s _ ->
+      let intoBool b = if b then Bool8 1 else Bool8 0
+      in translateLiteral v PBool8 (Just . intoBool) s
 
     F.ValComplex r c  -> unsupported "complex literal"
     F.ValString s     -> unsupported "string literal"
@@ -670,19 +671,3 @@ translateOp1App e uop = do
     Just x  -> return x
     Nothing -> unsupported "unary operator"
   translateOpApp operator (Const e :& RNil)
-
---------------------------------------------------------------------------------
---  Readers for things that are strings in the AST
---------------------------------------------------------------------------------
-
-readLitInteger :: String -> Maybe Integer
-readLitInteger = readMaybe
-
-readLitReal :: String -> Maybe Double
-readLitReal = readMaybe
-
-readLitBool :: String -> Maybe Bool
-readLitBool l = case map toLower l of
-  ".true."  -> Just True
-  ".false." -> Just False
-  _         -> Nothing

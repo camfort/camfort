@@ -352,15 +352,11 @@ genProgramFileReport mfs (pf@(F.ProgramFile F.MetaInfo{ F.miFilename = srcFile }
   where
     (amap, pf', tenv) = analysis mfs pf
     vars = S.fromList $ M.keys amap
-    vls1 = [ (v, S.singleton $ VInfo (FA.srcName e) srcFile ss)
-           | F.DeclArray _ ss e _ _ _ <- universeBi pf' :: [F.Declarator DA]
+    vls  = [ (v, S.singleton $ VInfo (FA.srcName e) srcFile ss)
+           | F.Declarator _ ss e _ _ _ <- universeBi pf' :: [F.Declarator DA]
            , let v = FA.varName e
            , v `S.member` vars ]
-    vls2 = [ (v, S.singleton $ VInfo (FA.srcName e) srcFile ss)
-           | F.DeclVariable _ ss e _ _ <- universeBi pf' :: [F.Declarator DA]
-           , let v = FA.varName e
-           , v `S.member` vars ]
-    vmap = M.fromListWith S.union $ vls1 ++ vls2
+    vmap = M.fromListWith S.union vls
 
     specs = [ (spec, b) | DDTAnnotation { ddtSpec = Just spec, ddtBlock = Just b } <- universeBi pf' ]
 
@@ -535,8 +531,8 @@ refactorBlock b = ask >>= \ DerivedDataTypeReport{..} -> case b of
             -- FIXME: character length, what to do
             decl' ddAList
               | dds <- F.aStrip ddAList
-              , null dds  = F.DeclVariable (F.getAnnotation decl) (FU.getSpan decl) (declExp decl) Nothing Nothing
-              | otherwise = F.DeclArray (F.getAnnotation decl) (FU.getSpan decl) (declExp decl) ddAList Nothing Nothing
+              , null dds  = F.Declarator (F.getAnnotation decl) (FU.getSpan decl) (declExp decl) F.ScalarDecl Nothing Nothing
+              | otherwise = F.Declarator (F.getAnnotation decl) (FU.getSpan decl) (declExp decl) (F.ArrayDecl ddAList) Nothing Nothing
 
             -- The list of attributes minus any dimension attributes.
             attrs' = descendBi (List.filter (not . isAttrDimension)) attrs
@@ -557,8 +553,8 @@ refactorBlock b = ask >>= \ DerivedDataTypeReport{..} -> case b of
                   dimDeclAList = F.AList a ss $ drop dim dimList'
                   eachLabel (_, lab')
                     | maxDim' == dim &&
-                      dim < length dimList' = F.DeclArray a ss (FA.genVar a ss lab') dimDeclAList Nothing mInit
-                    | otherwise             = F.DeclVariable a ss (FA.genVar a ss lab') Nothing mInit
+                      dim < length dimList' = F.Declarator a ss (FA.genVar a ss lab') (F.ArrayDecl dimDeclAList) Nothing mInit
+                    | otherwise             = F.Declarator a ss (FA.genVar a ss lab') F.ScalarDecl Nothing mInit
                   labelDecls = map eachLabel . sort $ IM.toList essLabelMap
                   in [ F.BlStatement a'' ss' Nothing (F.StType stA stSS Nothing tyName)
                      , F.BlStatement a'' ss' Nothing (F.StDeclaration stA stSS nextTy attrs'' (F.AList alA alSS labelDecls))
@@ -638,8 +634,7 @@ synthBlock (mi, marker) r@DerivedDataTypeReport { ddtrAMap = amap } b = case b o
   F.BlStatement a ss _ F.StDeclaration{} | vars <- ofInterest b -> genComment vars ++ [b]
     where
       ofInterest b' = filter (flip M.member amap . fst) $
-        [ (FA.varName e, FA.srcName e) | F.DeclVariable _ _ e _ _ <- universeBi b' :: [F.Declarator DA] ] ++
-        [ (FA.varName e, FA.srcName e) | F.DeclArray _ _ e _ _ _ <- universeBi b' :: [F.Declarator DA] ]
+        [ (FA.varName e, FA.srcName e) | F.Declarator _ _ e _ _ _ <- universeBi b' :: [F.Declarator DA] ]
 
       genComment = map $ \ var ->
         F.BlComment newA newSS . F.Comment . buildCommentText mi space $ marker:genCommentText r var
@@ -698,13 +693,11 @@ declaredExps x = [ e | d <- universeBi x :: [F.Declarator DA]
 
 -- | Pattern matches the expression from the declarator
 declExp :: F.Declarator a -> F.Expression a
-declExp (F.DeclVariable _ _ e _ _) = e
-declExp (F.DeclArray _ _ e _ _ _)  = e
+declExp (F.Declarator _ _ e _ _ _) = e
 
 -- | Pattern matches the initialiser from the declarator
 declInitialiser :: F.Declarator a -> Maybe (F.Expression a)
-declInitialiser (F.DeclVariable _ _ _ _ me) = me
-declInitialiser (F.DeclArray _ _ _ _ _ me)  = me
+declInitialiser (F.Declarator _ _ _ _ _ me) = me
 
 -- | Given a parsed specification and variable information, attempts
 -- to 'distil' the essence of the specification. If there is a problem
