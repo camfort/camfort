@@ -7,6 +7,17 @@ It is a research project developed in University of Cambridge and University of
 Kent.
 
 ## Obtaining
+**Recommended install method by OS:**
+
+  * **Windows:** prebuilt bundles (includes dependencies) at
+    [Releases](https://github.com/camfort/camfort/releases): download
+    ones beginning `camfort-bundle-windows`
+  * **Mac:** via Homebrew: `brew install camfort/camfort/camfort`
+  * **Linux:** prebuilt binaries at
+    [Releases](https://github.com/camfort/camfort/releases). See
+    [Wiki: Building](https://github.com/camfort/camfort/wiki/Building#system-specific-guides)
+    for how to install library dependencies for your OS.
+
 We provide [prebuilt binaries](https://github.com/camfort/camfort/releases) for
 Windows, Mac and Linux. For Windows, we also provide archives that bundle the
 CamFort executable together with all of its dependencies.
