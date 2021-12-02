@@ -43,7 +43,7 @@ main = catch realMain stacktrace
 realMain :: IO ()
 realMain = do
   currentDir <- getCurrentDirectory
-  cmd <- execParser (info (commandParser currentDir) idm)
+  cmd <- customExecParser (prefs showHelpOnEmpty) (info (commandParser currentDir) idm)
   code <- runCommand cmd
   if code == 0
     then exitWith ExitSuccess
@@ -551,13 +551,11 @@ derivedDatatypeParser = commandsParser "Derived Datatype Commands" derivedDataty
       , ("ddt-refactor", ["refactor-ddt"], cmdRefactDDT,  "refactor marked derived datatypes from comments")
       , ("ddt-compile",  ["compile-ddt"],  cmdCompileDDT, "compile derived datatypes info")]
 
-topLevelCommands :: Parser Command
-topLevelCommands = versionOption
-  where versionOption = pure CmdTopVersion <* switch
-                        (  long "version"
-                        <> short 'v'
-                        <> short '?'
-                        <> help "show version number")
+showVersionParser :: Parser Command
+showVersionParser = flag' CmdTopVersion $  long "version"
+                                        <> short 'v'
+                                        <> short '?'
+                                        <> help "show version number"
 
 cmdInit :: FilePath -> Parser Command
 cmdInit currDir = fmap CmdInit . directoryArgument $
@@ -576,7 +574,7 @@ commandParser currDir =
               <|> analysesParser
               <|> refactoringsParser
               <|> derivedDatatypeParser
-              <|> topLevelCommands)
+              <|> showVersionParser )
 
 
 -- | Current CamFort version.
