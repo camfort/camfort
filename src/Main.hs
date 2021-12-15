@@ -457,9 +457,9 @@ commandAlias :: String -> Parser Command -> Mod CommandFields Command
 commandAlias alias cmdParser = command alias . info cmdParser $ mempty
 
 -- | Helper for building a parser for a group of commands.
-commandsParser :: String -> [(String, [String], Parser Command, String)] -> Parser Command
-commandsParser groupName commands =
-  hsubparser (mconcat (fmap
+commandsParser :: String -> String -> [(String, [String], Parser Command, String)] -> Parser Command
+commandsParser mv groupName commands =
+  hsubparser (metavar mv <> mconcat (fmap
                         (\(name, _, cmdParser, description) ->
                            (command name . info cmdParser . progDesc $ description))
                         commands)
@@ -473,7 +473,7 @@ commandsParser groupName commands =
           <> internal
 
 analysesParser :: Parser Command
-analysesParser = commandsParser "Analysis Commands" analysesCommands
+analysesParser = commandsParser "ANALYSIS_COMMAND" "Analysis Commands" analysesCommands
   where
     analysesCommands =
       [ ("count",
@@ -534,7 +534,7 @@ analysesParser = commandsParser "Analysis Commands" analysesCommands
 
 
 refactoringsParser :: Parser Command
-refactoringsParser = commandsParser "Refactoring Commands" refactoringsCommands
+refactoringsParser = commandsParser "REFACTORING_COMMAND" "Refactoring Commands" refactoringsCommands
   where
     refactoringsCommands =
       [ ("common",            [],      cmdRefactCommon,      "common block elimination")
@@ -542,7 +542,7 @@ refactoringsParser = commandsParser "Refactoring Commands" refactoringsCommands
       , ("dead",              [],      cmdRefactDead,        "dead-code elimination") ]
 
 derivedDatatypeParser :: Parser Command
-derivedDatatypeParser = commandsParser "Derived Datatype Commands" derivedDatatypeCommands
+derivedDatatypeParser = commandsParser "DDT_COMMAND" "Derived Datatype Commands" derivedDatatypeCommands
   where
     derivedDatatypeCommands =
       [ ("ddt-infer",    ["infer-ddt"],    cmdInferDDT,   "infer derived datatypes")
@@ -562,7 +562,7 @@ cmdInit currDir = fmap CmdInit . directoryArgument $
   help "project directory" <> value currDir
 
 projectParser :: FilePath -> Parser Command
-projectParser currDir = commandsParser "Project Commands" projectCommands
+projectParser currDir = commandsParser "PROJECT_COMMAND" "Project Commands" projectCommands
   where
     projectCommands =
       [ ("init", [], cmdInit currDir, "initialize CamFort for the project") ]
