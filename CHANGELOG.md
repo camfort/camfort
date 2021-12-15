@@ -1,3 +1,7 @@
+## Unreleased
+
+* Improve CLI help behaviour
+
 ## 1.1.2 (Oct 09, 2021)
 
 Meta update to provide a release to tie new platform builds to.
