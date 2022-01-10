@@ -1,6 +1,7 @@
 ## Unreleased
 
 * Improve CLI help behaviour
+* Update to fortran-src 0.8.0
 
 ## 1.1.2 (Oct 09, 2021)
 
