@@ -6,7 +6,7 @@ name: Hackage artifacts
 on:
   push:
     branches:
-    - main
+    - master
 
 env:
   # ghcup needs full version string (e.g. 9.0.1, not 9.0)
