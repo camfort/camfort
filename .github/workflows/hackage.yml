@@ -56,6 +56,14 @@ jobs:
 
     - run: cabal update
 
+    # note that we require static libs (in Ubuntu, *-dev)
+    - name: Install required libraries
+      run: >-
+        sudo apt install
+        libopenblas-dev
+        liblapack-dev
+        libflint-dev
+
     - run: cabal freeze
 
     - name: Cache Cabal build artifacts
