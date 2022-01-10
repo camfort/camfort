@@ -61,23 +61,15 @@ jobs:
   ubuntu-cabal-test:
     runs-on: ubuntu-latest
     name: Ubuntu / GHC ${{ matrix.ghc }}, Cabal / test
-
     strategy:
       fail-fast: false  # don't stop if one job (= GHC version) fails
       matrix:
-        cabal: ["3.4"]  # ghcup recommended as of 2021-09-26
+        cabal: ["3.6"]  # ghcup recommended as of 2021-12-02
         ghc:
         - "8.4"
         - "8.10"
         #- "9.0"  # 2021-09-26: GHC 9.0 needs singletons 3.0, which splits the
                   # package, so it's entirely unsupportable
-
-    # Match this with one of the GHC versions selected to produce an sdist and
-    # Hackage Haddock docs. You should use the main/newest supported version.
-    # I need to do this on a Cabal build because Haddock requires building, and
-    # Stack doesn't support Hackage-style Haddocks.
-    env:
-      hackage_build: "8.10"
 
     steps:
 
@@ -94,6 +86,7 @@ jobs:
     - name: Set all tracked file modification times to the time of their last commit
       run: |
         rev=HEAD
+        IFS=$'\n'
         for f in $(git ls-tree -r -t --full-name --name-only "$rev") ; do
             touch -d $(git log --pretty=format:%cI -1 "$rev" -- "$f") "$f";
         done
@@ -126,34 +119,10 @@ jobs:
         restore-keys: |
           ${{ runner.os }}-cabal-${{ matrix.ghc }}
 
-    - run: cabal build
-
     - name: Test
       run: cabal test --test-show-details=streaming
       env:
         HSPEC_OPTIONS: --color
-
-    - if: matrix.ghc == env.hackage_build
-      name: Prepare Hackage artifacts
-      run: |
-        cabal sdist   --builddir=tmp-ga-hackage
-        cabal haddock --builddir=tmp-ga-hackage --haddock-for-hackage
-
-    - if: matrix.ghc == env.hackage_build
-      name: Upload Hackage sdist
-      uses: actions/upload-artifact@v2
-      with:
-        path: tmp-ga-hackage/sdist/${{ env.EXE_NAME }}-*.tar.gz
-        name: ${{ env.EXE_NAME }}-sdist-${{ github.sha }}.tar.gz
-        if-no-files-found: error
-
-    - if: matrix.ghc == env.hackage_build
-      name: Upload Hackage Haddock docs
-      uses: actions/upload-artifact@v2
-      with:
-        path: tmp-ga-hackage/${{ env.EXE_NAME }}-*-docs.tar.gz
-        name: ${{ env.EXE_NAME }}-hackage-haddocks-${{ github.sha }}.tar.gz
-        if-no-files-found: error
 
   mac-cabal-test:
     runs-on: macos-latest
@@ -161,8 +130,9 @@ jobs:
     strategy:
       fail-fast: false  # don't stop if one job (= GHC version) fails
       matrix:
-        cabal: ["3.4"]  # ghcup recommended as of 2021-09-26
+        cabal: ["3.6"]  # ghcup recommended as of 2021-12-02
         ghc: ["8.10"]
+
     steps:
 
     # TODO figure out timestamp fixer on Mac (no Mac available to test)
@@ -212,13 +182,12 @@ jobs:
         name: ${{ env.EXE_NAME }}-macos-ghc-${{ matrix.ghc }}-cabal-${{ github.sha }}
         if-no-files-found: error
 
-
   windows-cabal-build:
     runs-on: windows-latest
     name: Windows (MSYS2, ${{ matrix.msystem }}) / GHC ${{ matrix.ghc }}, Cabal / build only
     strategy:
       matrix:
-        cabal: ["3.4.0.0"]
+        cabal: ["3.6.2.0"]
         ghc: ["8.10"]
         msystem: [MINGW64]
     defaults:
@@ -279,7 +248,7 @@ jobs:
     # `-m` is mixed-mode paths `C:/x/y`, which works & I prefer over backslash
     # careful, YAML syntax gets funky here for some reason
     - name: Fix ghcup Cabal paths
-      run: 'echo "extra-lib-dirs: $(cygpath -m /)/${{ matrix.msystem }}/lib" >> $APPDATA/cabal/config'
+      run: 'echo "extra-lib-dirs: $(cygpath -m /)/${{ matrix.msystem }}/lib" >> C:/cabal/config'
 
     # unsure if it works but we can at least attempt the timestamp trick easy
     # since we have Git + GNU binutils :)
@@ -287,6 +256,7 @@ jobs:
     - name: Set all tracked file modification times to the time of their last commit
       run: |
         rev=HEAD
+        IFS=$'\n'
         for f in $(git ls-tree -r -t --full-name --name-only "$rev") ; do
             touch -d $(git log --pretty=format:%cI -1 "$rev" -- "$f") "$f";
         done
@@ -303,7 +273,7 @@ jobs:
       uses: actions/cache@v2
       with:
         path: |
-          ${{ env.APPDATA }}/cabal/store
+          C:/cabal/store
           dist-newstyle
         key: ${{ runner.os }}-cabal-${{ matrix.ghc }}-${{ hashFiles('cabal.project.freeze') }}
         restore-keys: |
@@ -317,7 +287,7 @@ jobs:
     - name: Upload executable
       uses: actions/upload-artifact@v2
       with:
-        path: ${{ env.APPDATA }}/cabal/bin/${{ env.EXE_NAME }}.exe
+        path: C:/cabal/bin/${{ env.EXE_NAME }}.exe
         name: ${{ env.EXE_NAME }}-windows-msys2-${{ matrix.msystem }}-ghc-${{ matrix.ghc }}-cabal-${{ github.sha }}.exe
         if-no-files-found: error
 
@@ -328,7 +298,7 @@ jobs:
     - name: Prepare self-contained bundle
       run: |
         mkdir bundle
-        cp "$APPDATA"/cabal/bin/"${{ env.EXE_NAME }}".exe bundle
+        cp C:/cabal/bin/"${{ env.EXE_NAME }}".exe bundle
         ldd bundle/"${{ env.EXE_NAME }}".exe | cut --delimiter=' ' --fields=3 - | grep '^'$MINGW_PREFIX/bin/lib.*'\'.dll | xargs -I '{}' cp '{}' bundle
         cp $(which z3.exe) bundle
         mv bundle "${{ env._bundle_dir }}"

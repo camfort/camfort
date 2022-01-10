@@ -1,0 +1,90 @@
+# This workflow is based on the expectation that GitHub's runners install GHC
+# using ghcup with default settings (installs GHCs to `~/.ghcup/ghc/$VERSION`).
+
+name: Hackage artifacts
+
+on:
+  push:
+    branches:
+    - main
+
+env:
+  # ghcup needs full version string (e.g. 9.0.1, not 9.0)
+  ghc: "8.10.7"
+  EXE_NAME: camfort
+
+jobs:
+  hackage:
+    runs-on: ubuntu-latest
+    name: Hackage artifacts
+
+    steps:
+
+    # TODO: GHC decides to recompile based on timestamp, so cache isn't used
+    # Preferably GHC would work via hashes instead. Stack had this feature
+    # merged in Aug 2020.
+    # Upstream GHC issue: https://gitlab.haskell.org/ghc/ghc/-/issues/16495
+    # My issue on haskell/actions: https://github.com/haskell/actions/issues/41
+    # This also requires us to do a deep fetch, else we don't get the Git commit
+    # history we need to rewrite mod times.
+    - uses: actions/checkout@v2
+      with:
+        fetch-depth: 0
+    - name: Set all tracked file modification times to the time of their last commit
+      run: |
+        rev=HEAD
+        for f in $(git ls-tree -r -t --full-name --name-only "$rev") ; do
+            touch -d $(git log --pretty=format:%cI -1 "$rev" -- "$f") "$f";
+        done
+
+    - name: Delete preinstalled docs-stripped GHC ${{ env.ghc }}
+      run: rm -rf $HOME/.ghcup/ghc/${{ env.ghc }}
+
+    - name: Cache GHC ${{ env.ghc }}
+      uses: actions/cache@v2
+      with:
+        path: ~/.ghcup/ghc/${{ env.ghc }}
+        key: haddock-${{ env.ghc }}-ghc
+
+    - name: Install GHC ${{ env.ghc }} if not present from cache
+      run: |
+        if [ ! -d $HOME/.ghcup/ghc/${{ env.ghc }} ]; then
+            ghcup install ghc --force ${{ env.ghc }}
+        fi
+
+    - run: ghcup set ghc ${{ env.ghc }}
+
+    - run: cabal update
+
+    - run: cabal freeze
+
+    - name: Cache Cabal build artifacts
+      uses: actions/cache@v2
+      with:
+        path: |
+          ~/.cabal/store
+          dist-newstyle
+        key:          haddock-${{ env.ghc }}-cabal-${{ hashFiles('cabal.project.freeze') }}
+        restore-keys: haddock-${{ env.ghc }}-cabal
+
+    - run: cabal haddock --haddock-for-hackage --enable-documentation
+    - run: cabal sdist
+
+    - name: Upload Hackage sdist
+      uses: actions/upload-artifact@v2
+      with:
+        path: dist-newstyle/sdist/${{ env.EXE_NAME }}-*.tar.gz
+        name: ${{ env.EXE_NAME }}-sdist-${{ github.sha }}.tar.gz
+        if-no-files-found: error
+
+    - name: Upload Hackage Haddock docs
+      uses: actions/upload-artifact@v2
+      with:
+        path: dist-newstyle/${{ env.EXE_NAME }}-*-docs.tar.gz
+        name: ${{ env.EXE_NAME }}-hackage-haddocks-${{ github.sha }}.tar.gz
+        if-no-files-found: error
+
+    - name: Delete prepared tarballs (else can't extract just newest next time)
+      run: |
+        rm dist-newstyle/${{ env.EXE_NAME }}-*-docs.tar.gz
+        rm dist-newstyle/sdist/${{ env.EXE_NAME }}-*.tar.gz
