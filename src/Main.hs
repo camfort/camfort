@@ -579,7 +579,7 @@ commandParser currDir =
 
 -- | Current CamFort version.
 version :: String
-version = "1.1.2"
+version = "1.2.0"
 
 
 -- | Full CamFort version string.

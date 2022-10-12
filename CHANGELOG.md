@@ -1,7 +1,9 @@
-## Unreleased
+## 1.2.0 (Oct 12, 2022)
 
 * Improve CLI help behaviour
-* Update to fortran-src 0.8.0
+* Update to fortran-src 0.11.0
+* Support GHC 9.0, 9.2, 9.4
+* Dropped support for GHC 8.10 and older
 
 ## 1.1.2 (Oct 09, 2021)
 

@@ -10,7 +10,7 @@ on:
 
 env:
   # ghcup needs full version string (e.g. 9.0.1, not 9.0)
-  ghc: "8.10.7"
+  ghc: "9.2.4"
   EXE_NAME: camfort
 
 jobs:
