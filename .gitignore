@@ -18,6 +18,7 @@
 # build files files
 /camfort
 /dist
+/dist-newstyle
 /.stack-work
 /camfort.project.freeze
 
@@ -26,3 +27,5 @@
 
 # Mac OS
 .DS_Store
+
+/tmp

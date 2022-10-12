@@ -46,7 +46,7 @@ import           Control.Arrow (first, second)
 import           Data.Binary
 import           Data.Char
 import           Data.Data
-import           Data.Generics.Uniplate.Operations (rewrite)
+import           Data.Generics.Uniplate.Data (rewrite)
 import           Data.List
 import qualified Data.Map.Strict as M
 import           Data.Ratio

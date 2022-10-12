@@ -17,7 +17,7 @@ import qualified Data.ByteString.Internal as BS
 import qualified Language.Fortran.Analysis as FA
 import qualified Language.Fortran.Analysis.BBlocks as FAB
 import qualified Language.Fortran.Analysis.Renaming as FAR
-import           Language.Fortran.Parser.Any (fortranParser)
+import           Language.Fortran.Parser as FP
 import           Language.Fortran.Util.ModFile (emptyModFiles)
 import           Test.Hspec
 
@@ -123,7 +123,7 @@ spec =
 
 checkText :: BS.ByteString -> IO CheckResult
 checkText text = do
-  case fortranParser text "example" of
+  case FP.f90 "example" text of
     Left x -> fail "received test input with invalid syntax"
     Right pf ->
       let pf' = getBlocks . fmap (const unitAnnotation) $ pf

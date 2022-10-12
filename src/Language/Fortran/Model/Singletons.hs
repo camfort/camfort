@@ -18,7 +18,7 @@
 {-# LANGUAGE CPP                       #-}
 
 -- singletons-2.7 onwards requires StandaloneKindSignatures for TH functions
-#if MIN_VERSION_base(4,14,0)
+#if MIN_VERSION_singletons(2,7,0)
 {-# LANGUAGE StandaloneKindSignatures  #-}
 #endif
 
@@ -56,7 +56,13 @@ the result in that case is unspecified. Use 'BasicTypeMax' at the type level and
 -}
 module Language.Fortran.Model.Singletons where
 
+#if MIN_VERSION_singletons(3,0,0)
+import Prelude.Singletons
+import Data.Ord.Singletons
+#else
 import Data.Singletons.Prelude
+#endif
+
 import Data.Singletons.TH
 
 $(singletons

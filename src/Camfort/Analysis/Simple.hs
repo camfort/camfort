@@ -50,6 +50,7 @@ import qualified Data.Text.Lazy.Builder as Builder
 import Data.Text (unlines, intercalate, pack)
 import Data.List (sort, nub, nubBy, tails)
 import GHC.Generics
+import qualified Data.List.NonEmpty as NE
 
 import Data.Graph.Inductive
 
@@ -395,15 +396,17 @@ checkArrayUse pf = do
           getMissingUse excls (F.BlDo _ _ _ _ _ _ bs _)      = concatMap (getMissingUse excls) bs
           getMissingUse excls (F.BlDoWhile _ _ _ _ _ _ bs _) = concatMap (getMissingUse excls) bs
           getMissingUse excls (F.BlForall _ _ _ _ _ bs _)    = concatMap (getMissingUse excls) bs
-          getMissingUse excls b@(F.BlIf F.Analysis{F.insLabel = Just i} _ _ _ mes bss _)
+          getMissingUse excls b@(F.BlIf F.Analysis{F.insLabel = Just i} _ss _l _nm clauses mBlockElse _ml)
             -- check If statement conditions
-            | any (eligible i (length excls)) es = bads ++ rest
-            | otherwise                          = rest
+            | any (eligible i (length excls)) conds = bads ++ rest
+            | otherwise                             = rest
             where
-              es = catMaybes mes
+              clauses' = NE.toList clauses
+              conds  = map fst clauses'
+              blocks = mcons mBlockElse $ map snd clauses'
               -- find any induction variables that are referenced by If-Elseif expressions
               excl' = getExcludes b
-              rest = concatMap (getMissingUse (excls ++ excl')) $ concat bss
+              rest = concatMap (getMissingUse (excls ++ excl')) $ concat blocks
               bads = getMissingUse' excls b
           getMissingUse excls b@(F.BlCase F.Analysis{F.insLabel = Just i} _ _ _ e _ bss _)
             -- check Case statement scrutinee
@@ -478,6 +481,11 @@ checkArrayUse pf = do
   let reports = map checkPU (universeBi pf'')
 
   return $!! mconcat reports
+
+-- | /O(1)/. Maybe cons. Borrowed from Agda.
+--   @mcons ma as = maybeToList ma ++ as@
+mcons :: Maybe a -> [a] -> [a]
+mcons ma as = maybe as (:as) ma
 
 -- Look through a piece of AST for the source name of a given var name.
 findSrcName :: forall a. Data a => F.Name -> F.Block (F.Analysis a) -> Maybe F.Name

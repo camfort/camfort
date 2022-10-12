@@ -58,7 +58,7 @@ import qualified Language.Fortran.Analysis as FA
 import qualified Language.Fortran.Analysis.SemanticTypes as FAS
 import qualified Language.Fortran.Analysis.BBlocks as FAB
 import qualified Language.Fortran.Analysis.DataFlow as FAD
-import           Language.Fortran.AST.RealLit  (readRealLit, parseRealLit)
+import           Language.Fortran.AST.Literal.Real (readRealLit, parseRealLit)
 import           Language.Fortran.Util.ModFile
 import qualified Numeric.LinearAlgebra as H -- for debugging
 import           Prelude hiding (mod)
@@ -608,14 +608,10 @@ propagateExp e = case e of
     setF2C f u1 u2 = pure . UA.maybeSetUnitInfo u1 $ UA.maybeSetUnitConstraintF2 f u1 u2 e
 
 propagateFunctionCall :: F.Expression UA -> UnitSolver (F.Expression UA)
-propagateFunctionCall (F.ExpFunctionCall a s f Nothing)                     = do
-  (info, _) <- callHelper f []
-  let cons = intrinsicHelper info f []
-  pure . UA.setConstraint (ConConj cons) . UA.setUnitInfo info $ F.ExpFunctionCall a s f Nothing
-propagateFunctionCall (F.ExpFunctionCall a s f (Just (F.AList a' s' args))) = do
+propagateFunctionCall (F.ExpFunctionCall a s f (F.AList a' s' args)) = do
   (info, args') <- callHelper f args
   let cons = intrinsicHelper info f args'
-  pure . UA.setConstraint (ConConj cons) . UA.setUnitInfo info $ F.ExpFunctionCall a s f (Just (F.AList a' s' args'))
+  pure . UA.setConstraint (ConConj cons) . UA.setUnitInfo info $ F.ExpFunctionCall a s f (F.AList a' s' args')
 propagateFunctionCall _ = error "received non-function-call in propagateFunctionCall"
 
 propagateDoSpec :: F.DoSpecification UA -> UnitSolver (F.DoSpecification UA)
@@ -642,10 +638,10 @@ propagateDoSpec _ = error "propagateDoSpec: called on invalid DoSpec"
 propagateStatement :: F.Statement UA -> UnitSolver (F.Statement UA)
 propagateStatement stmt = case stmt of
   F.StExpressionAssign _ _ e1 e2               -> literalAssignmentSpecialCase e1 e2 stmt
-  F.StCall a s sub (Just (F.AList a' s' args)) -> do
+  F.StCall a s sub (F.AList a' s' args) -> do
     (info, args') <- callHelper sub args
     let cons = intrinsicHelper info sub args'
-    pure . UA.setConstraint (ConConj cons) $ F.StCall a s sub (Just (F.AList a' s' args'))
+    pure . UA.setConstraint (ConConj cons) $ F.StCall a s sub (F.AList a' s' args')
   F.StDeclaration {}                           -> transformBiM propagateDeclarator stmt
   _                                            -> pure stmt
 

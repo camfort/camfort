@@ -8,6 +8,7 @@
 {-# LANGUAGE PolyKinds             #-}
 {-# LANGUAGE RankNTypes            #-}
 {-# LANGUAGE UndecidableInstances  #-}
+{-# LANGUAGE CPP                   #-}
 
 {-# OPTIONS_GHC -Wall #-}
 
@@ -28,7 +29,12 @@ import           Data.Vinyl                          (Rec, RMap, RApply, rmap, (
 import           Data.Vinyl.Functor                  (Lift (..))
 import           Data.Vinyl.Lens                     (RElem, rput)
 
+
+#if MIN_VERSION_singletons(3,0,0)
+import           GHC.TypeLits.Singletons
+#else
 import           Data.Singletons.TypeLits
+#endif
 
 import qualified Data.SBV.Dynamic                    as SBV
 

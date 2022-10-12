@@ -204,8 +204,9 @@ class HasPrimReprHandlers r where
   primReprHandlers :: r -> PrimReprHandlers
   primReprHandlers env = PrimReprHandlers (primReprHandler env)
 
+  -- note that we must eta expand due to GHC 9.0 simplified subsumption
   primReprHandler :: r -> Prim p k a -> PrimReprHandler a
-  primReprHandler = unPrimReprHandlers . primReprHandlers
+  primReprHandler r p = unPrimReprHandlers (primReprHandlers r) p
 
 newtype PrimReprHandlers =
   PrimReprHandlers { unPrimReprHandlers :: forall p k a. Prim p k a -> PrimReprHandler a }

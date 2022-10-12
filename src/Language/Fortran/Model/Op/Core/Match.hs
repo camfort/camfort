@@ -10,6 +10,7 @@
 {-# LANGUAGE RankNTypes                 #-}
 {-# LANGUAGE ScopedTypeVariables        #-}
 {-# LANGUAGE TypeOperators              #-}
+{-# LANGUAGE CPP                        #-}
 
 {-# OPTIONS_GHC -Wall #-}
 
@@ -22,8 +23,12 @@ import           Data.Typeable
 
 import           Control.Lens
 
+#if MIN_VERSION_singletons(3,0,0)
+import           Data.List.Singletons
+#else
 import           Data.Singletons
 import           Data.Singletons.Prelude.List
+#endif
 
 import           Data.Vinyl                          hiding ((:~:), Field)
 

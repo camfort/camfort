@@ -5,57 +5,29 @@
 
 packages:
 - completed:
-    hackage: fortran-src-0.8.0@sha256:9ab6d1f26452139d44860790d340c900253154b8b4b1bb695d8140be686d6aa1,7811
+    hackage: fortran-src-0.11.0@sha256:83c71885938a0fc3294904c12d9ba4412cac62fb7731906ebdca6d03fc8f2b0e,12207
     pantry-tree:
-      size: 8809
-      sha256: 2d93aa453f01092d454f0cde100b481ed61057ecf0dc6ecb147aa88e0c02c012
+      sha256: 3503d656d01fd321e9e3a1ee562b070e05c3aa05e41ce42773b4260074f7dfb2
+      size: 12167
   original:
-    hackage: fortran-src-0.8.0@sha256:9ab6d1f26452139d44860790d340c900253154b8b4b1bb695d8140be686d6aa1,7811
+    hackage: fortran-src-0.11.0
 - completed:
     hackage: verifiable-expressions-0.6.2@sha256:cefdc5d3d9a4cff4ce0bfaa27ccdf83ff46bcd17340ac0c5cf6fcbe88ce05a61,1739
     pantry-tree:
-      size: 1316
       sha256: 4dd7c83273f550737d955f605010d63fb88026b5c84fe3ab404906125b779b9f
+      size: 1316
   original:
     hackage: verifiable-expressions-0.6.2@sha256:cefdc5d3d9a4cff4ce0bfaa27ccdf83ff46bcd17340ac0c5cf6fcbe88ce05a61,1739
 - completed:
-    hackage: sbv-8.15@sha256:bc0ea4e3564626030ac2cb21905b97cd9bd25fddcd6d6010834e8cc2ebf79067,29016
-    pantry-tree:
-      size: 63924
-      sha256: 9b71ca2696ef73cac9246696d64f5b3d46c5b0443eca48e7a888fb738d00db3a
-  original:
-    hackage: sbv-8.15@sha256:bc0ea4e3564626030ac2cb21905b97cd9bd25fddcd6d6010834e8cc2ebf79067,29016
-- completed:
-    hackage: libBF-0.6.2@sha256:7bffc0e4dbc9bd9e851ba5c29255b62fd2c288dbc9a401cd3761b740f013775e,1770
-    pantry-tree:
-      size: 760
-      sha256: ca11e64003b53b2586cf0015038587e1dc85f96aed22cce7480ff76568402370
-  original:
-    hackage: libBF-0.6.2@sha256:7bffc0e4dbc9bd9e851ba5c29255b62fd2c288dbc9a401cd3761b740f013775e,1770
-- completed:
     hackage: syz-0.2.0.0@sha256:7307acb8f6ae7720e7e235c974281ecee912703c1394ebcac19caf83d70bb492,2345
     pantry-tree:
-      size: 256
       sha256: a5438cf5c8f701d8e2aa6543ca3d591224b83dcc379063da5ed68727da0bb1ad
+      size: 256
   original:
     hackage: syz-0.2.0.0@sha256:7307acb8f6ae7720e7e235c974281ecee912703c1394ebcac19caf83d70bb492,2345
-- completed:
-    hackage: vinyl-0.13.3@sha256:4031f1cb791185fccd2237bf412fa831363812b95987b433159520d1a511fcac,4046
-    pantry-tree:
-      size: 1811
-      sha256: cff722cef25fce568f3e6bb9320e0a43f3b14b52b47418407d3b88ad9dde6810
-  original:
-    hackage: vinyl-0.13.3@sha256:4031f1cb791185fccd2237bf412fa831363812b95987b433159520d1a511fcac,4046
-- completed:
-    hackage: union-0.1.2@sha256:9f0f143ba2cf168c795339e1187001e96427bdcf9fe9af14b34a4f1ca5b531d8,2130
-    pantry-tree:
-      size: 330
-      sha256: f1bc092a50de9cb9555747e1d3d3b4e30f494904aa168cbcc9b38103af90eee2
-  original:
-    hackage: union-0.1.2@rev:6
 snapshots:
 - completed:
-    size: 533053
-    url: https://raw.githubusercontent.com/commercialhaskell/stackage-snapshots/master/lts/16/28.yaml
-    sha256: a9c01d860ac8dfb3a1b6f7ec4a36dd9504a95392b89c99b0877da63fa36a8e97
-  original: lts-16.28
+    sha256: be747117bed6d462806c883352c3206325b23480825103f5c87884e97e52819a
+    size: 619173
+    url: https://raw.githubusercontent.com/commercialhaskell/stackage-snapshots/master/lts/19/20.yaml
+  original: lts-19.20

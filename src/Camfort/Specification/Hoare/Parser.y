@@ -5,6 +5,7 @@ module Camfort.Specification.Hoare.Parser (hoareParser) where
 import           Control.Monad.Except
 
 import qualified Language.Fortran.AST as F
+import qualified Language.Fortran.Version as F
 
 import           Language.Verification
 import           Language.Expression.Prop
@@ -60,7 +61,7 @@ DECL :: { AuxDecl () }
 : decl_aux '(' TYPESPEC '::' tname ')' { AuxDecl $5 $3 }
 
 TYPESPEC :: { F.TypeSpec () }
-: tquoted {% parseTypeSpec $1 }
+: tquoted {% parseTypeSpec F.Fortran90 $1 }
 
 
 HOARE :: { PrimSpec () }
@@ -90,7 +91,7 @@ FORMULA :: { PrimFormula () }
 | EXPR                  { PFExpr $1 }
 
 EXPR :: { F.Expression () }
-: tquoted {% parseExpression $1 }
+: tquoted {% parseExpression F.Fortran90 $1 }
 
 {
 

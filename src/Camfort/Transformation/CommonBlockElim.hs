@@ -43,7 +43,7 @@ import qualified Language.Fortran.Analysis as FA
 import qualified Language.Fortran.Analysis.SemanticTypes as FAS
 import qualified Language.Fortran.Analysis.Renaming as FAR
 import qualified Language.Fortran.Analysis.Types as FAT
-import qualified Language.Fortran.ParserMonad as PM
+import qualified Language.Fortran.Version as F
 import qualified Language.Fortran.PrettyPrint as PP
 import qualified Language.Fortran.Util.Position as FU
 import           Prelude hiding (mod, init)
@@ -83,7 +83,7 @@ commonElimToModules d pfs = do
   logDebug' pfs $ describe $ r ++ r'
   pure (pfs'', pfM)
   where
-    meta = F.MetaInfo PM.Fortran90 ""
+    meta = F.MetaInfo F.Fortran90 ""
 
 analyseAndRmCommons :: [F.ProgramFile A]
                -> CommonState [F.ProgramFile A]
@@ -246,7 +246,7 @@ updateUseDecls fps tcs = map perPF fps
     inames (F.StInclude _ _ (F.ExpValue _ _ (F.ValString fname)) _) = Just fname
     inames _ = Nothing
 
-    importIncludeCommons :: PM.FortranVersion -> F.ProgramUnit A -> F.ProgramUnit A
+    importIncludeCommons :: F.FortranVersion -> F.ProgramUnit A -> F.ProgramUnit A
     importIncludeCommons v p =
         foldl' (flip (matchPUnit v)) p (reduceCollect inames p)
 
@@ -263,7 +263,7 @@ updateUseDecls fps tcs = map perPF fps
       where insertUses' :: [F.Block A] -> [F.Block A]
             insertUses' bs = uses ++ bs
 
-    matchPUnit :: PM.FortranVersion -> Filename -> F.ProgramUnit A -> F.ProgramUnit A
+    matchPUnit :: F.FortranVersion -> Filename -> F.ProgramUnit A -> F.ProgramUnit A
     matchPUnit v fname p =
         removeDecls v (map snd tcrs') p'
       where
@@ -284,7 +284,7 @@ updateUseDecls fps tcs = map perPF fps
 
     -- Given the list of renamed/coercerd variables form common blocks,
     -- remove any declaration sites
-    removeDecls :: PM.FortranVersion -> [RenamerCoercer] -> F.ProgramUnit A -> F.ProgramUnit A
+    removeDecls :: F.FortranVersion -> [RenamerCoercer] -> F.ProgramUnit A -> F.ProgramUnit A
     removeDecls v rcs p = addToProgramUnit v p' remainingAssignments
         where
      (p', remainingAssignments) = runState (transformBiM (removeDecl rcs) p) []
@@ -330,7 +330,7 @@ updateUseDecls fps tcs = map perPF fps
 
 -- Adds additional statements to the start of the statement block in a program unit
 addToProgramUnit ::
-   PM.FortranVersion -> F.ProgramUnit A -> [F.Statement A] -> F.ProgramUnit A
+   F.FortranVersion -> F.ProgramUnit A -> [F.Statement A] -> F.ProgramUnit A
 addToProgramUnit v pu stmnts = descendBi (addAfterDecls (map toBlock stmnts)) pu
   where
     -- Find the point where blocks are non-executable statements
@@ -438,10 +438,10 @@ coherentCommons' ((var1, ty1):xs) ((var2, ty2):ys)
       | af ty1 == af ty2 = let (r', c) = coherentCommons' xs ys
                                            in (r', c && True)
       | otherwise = let r = var1 ++ ":"
-                          ++ PP.pprintAndRender PM.Fortran90 (fst ty1) Nothing
+                          ++ PP.pprintAndRender F.Fortran90 (fst ty1) Nothing
                           ++ "(" ++ show (af ty1) ++ ")"
                           ++ " differs from " ++ var2
-                          ++ ":" ++ PP.pprintAndRender PM.Fortran90 (fst ty2) Nothing
+                          ++ ":" ++ PP.pprintAndRender F.Fortran90 (fst ty2) Nothing
                           ++ "(" ++ show (af ty2) ++ ")" ++ "\n"
                         (r', _) = coherentCommons' xs ys
                     in (r ++ r', False)
@@ -465,7 +465,7 @@ mkModuleFile meta dir (_, (_, (name, varTys))) =
     r = "Creating module " ++ modname ++ " at " ++ path ++ "\n"
     mod = mkModule (F.miVersion meta) modname varTys modname
 
-mkModule :: PM.FortranVersion -> String -> [(F.Name, TypeInfo)] -> String -> F.ProgramUnit A
+mkModule :: F.FortranVersion -> String -> [(F.Name, TypeInfo)] -> String -> F.ProgramUnit A
 mkModule v name vtys fname =
     F.PUModule a sp (caml fname) decls Nothing
   where

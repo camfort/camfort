@@ -6,13 +6,18 @@
 {-# LANGUAGE MultiParamTypeClasses #-}
 {-# LANGUAGE PolyKinds             #-}
 {-# LANGUAGE ScopedTypeVariables   #-}
+{-# LANGUAGE CPP                   #-}
 
 {-# OPTIONS_GHC -Wall      #-}
 
 -- TODO: Function calls
 module Language.Fortran.Model.Op.Core.Core where
 
+#if MIN_VERSION_singletons(3,0,0)
+import           GHC.TypeLits.Singletons
+#else
 import           Data.Singletons.TypeLits
+#endif
 
 import           Data.Vinyl
 

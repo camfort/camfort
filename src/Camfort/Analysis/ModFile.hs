@@ -45,10 +45,11 @@ import qualified Language.Fortran.Analysis          as FA
 import qualified Language.Fortran.Analysis.Renaming as FAR
 import qualified Language.Fortran.Analysis.Types    as FAT
 import qualified Language.Fortran.AST               as F
-import qualified Language.Fortran.Parser.Any        as FP
+import qualified Language.Fortran.Parser            as FP
 import qualified Language.Fortran.Util.ModFile      as FM
 import           Language.Fortran.Util.Files        (flexReadFile)
-import           Language.Fortran.ParserMonad       (FortranVersion(..))
+import           Language.Fortran.Version           (FortranVersion(..)
+                                                    ,deduceFortranVersion)
 
 import           Camfort.Analysis.Annotations       (A, unitAnnotation)
 import           Camfort.Helpers
@@ -221,12 +222,12 @@ readParseSrcFile :: Maybe FortranVersion -> FM.ModFiles -> Filename -> IO (Maybe
 readParseSrcFile mv mods f = do
   -- get file as ByteString, replacing non UTF-8 with space
   inp <- flexReadFile f
-  let result = case mv of
-        Nothing -> FP.fortranParserWithModFiles mods inp f
-        Just v  -> FP.fortranParserWithModFilesAndVersion v mods inp f
-  case result of
+  case FP.byVerWithMods mods v f inp of
     Right ast -> pure $ Just (fmap (const unitAnnotation) ast, inp)
     Left  err -> print err >> pure Nothing
+  where
+    v = case mv of Just v' -> v'
+                   Nothing -> deduceFortranVersion f
 
 getFortranFiles :: FileOrDir -> IO [String]
 getFortranFiles dir =
