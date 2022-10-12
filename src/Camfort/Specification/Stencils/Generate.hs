@@ -285,7 +285,7 @@ genRHSsubscripts block = genRHSsubscripts' (transformBi replaceModulo block)
         | iname `elem` ["modulo", "mod", "amod", "dmod"]
         -- We expect that the first parameter to modulo is being treated
         -- as an IxSingle element
-        , Just (F.Argument _ _ _ e':_) <- fmap F.aStrip subs = e'
+        , arg@F.Argument{} : _ <- F.aStrip subs = F.argExprNormalize (F.argumentExpr arg)
     replaceModulo e = e
 
     genRHSsubscripts' b =

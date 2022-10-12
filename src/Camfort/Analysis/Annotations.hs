@@ -39,7 +39,7 @@ import Data.Maybe (isJust)
 
 import qualified Language.Fortran.AST as F
 import qualified Language.Fortran.Analysis as FA
-import Language.Fortran.ParserMonad (FortranVersion(Fortran90))
+import Language.Fortran.Version (FortranVersion(Fortran90))
 import qualified Language.Fortran.Util.Position as FU
 
 type A = Annotation

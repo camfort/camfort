@@ -25,7 +25,7 @@ import Control.Exception
 import Data.Maybe (fromMaybe)
 import Data.Monoid ((<>))
 import GHC.Stack
-import Language.Fortran.ParserMonad (FortranVersion(..), selectFortranVersion)
+import Language.Fortran.Version (FortranVersion(..), selectFortranVersion)
 import Options.Applicative
 import System.Directory (getCurrentDirectory)
 import System.Exit

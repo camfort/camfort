@@ -36,6 +36,8 @@ import qualified Language.Fortran.Analysis.Renaming as FAR
 import qualified Language.Fortran.Analysis.Types as FAT (analyseTypes, TypeEnv)
 import qualified Language.Fortran.Util.Position as FU
 
+import qualified Debug.Trace
+
 type EquivalenceRefactoring = PureAnalysis Void Void
 
 type A1 = FA.Analysis Annotation
@@ -81,33 +83,34 @@ addCopysPerBlock tenv b@(F.BlStatement _ _ _
     -- Find all variables/cells that are equivalent to the target
     -- of this assignment
     eqs <- equivalentsToExpr dstE
-    -- If there is only one, then it must refer to itself, so do nothing
-    if length eqs <= 1
-      then return [b]
-    -- If there are more than one, copy statements must be generated
-      else do
-        (equivs, n) <- get
+    Debug.Trace.trace (show (length eqs)) $
+        -- If there is only one, then it must refer to itself, so do nothing
+        if length eqs <= 1
+          then return [b]
+        -- If there are more than one, copy statements must be generated
+          else do
+            (equivs, n) <- get
 
-        -- Remove the destination from the equivalents
-        let eqs' = deleteBy (\ x y -> af x == af y) dstE eqs
+            -- Remove the destination from the equivalents
+            let eqs' = deleteBy (\ x y -> af x == af y) dstE eqs
 
-        -- Make copy statements
-        let pos = afterAligned sp
-        let copies = map (mkCopy tenv pos dstE) eqs'
+            -- Make copy statements
+            let pos = afterAligned sp
+            let copies = map (mkCopy tenv pos dstE) eqs'
 
-        let (FU.Position ao c l f p) = s1
-            reportSpan i =
-              let pos' = FU.Position (ao + i) c (l + i) f p
-              in (FU.SrcSpan pos' pos')
+            let (FU.Position ao c l f p) = s1
+                reportSpan i =
+                  let pos' = FU.Position (ao + i) c (l + i) f p
+                  in (FU.SrcSpan pos' pos')
 
-        forM_ [n..(n + length copies - 1)] $ \i -> do
-          origin <- atSpanned (reportSpan i)
-          logInfo origin $ "added copy due to refactored equivalence"
+            forM_ [n..(n + length copies - 1)] $ \i -> do
+              origin <- atSpanned (reportSpan i)
+              logInfo origin $ "added copy due to refactored equivalence"
 
-        -- Update refactoring state
-        put (equivs, n + length eqs')
-        -- Sequence original assignment with new assignments
-        return $ b : copies
+            -- Update refactoring state
+            put (equivs, n + length eqs')
+            -- Sequence original assignment with new assignments
+            return $ b : copies
 
 addCopysPerBlock tenv x = do
    x' <- descendBiM (addCopysPerBlockGroup tenv) x
@@ -139,8 +142,8 @@ mkCopy tenv pos srcE dstE = FA.initAnalysis $
                     where
                      call = F.ExpFunctionCall a sp transf argst
                      transf = F.ExpValue a sp (F.ValVariable "transfer")
-                     argst  = Just (F.AList a sp args)
-                     args   = map (F.Argument a sp Nothing) [srcE', dstE']
+                     argst  = F.AList a sp args
+                     args   = map (F.Argument a sp Nothing . F.ArgExpr) [srcE', dstE']
        -- Types are equal, simple a assignment
        Just _ -> F.StExpressionAssign a sp dstE' srcE'
   where

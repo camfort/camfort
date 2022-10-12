@@ -7,15 +7,21 @@ module Camfort.Specification.Hoare.Parser.Types where
 import           Control.Monad.Except
 import           Data.Data
 import           Control.Exception
-import           Data.List                         (intercalate)
+import           Data.List               ( intercalate )
 
-import qualified Data.ByteString.Char8             as B
+import qualified Data.ByteString.Char8    as B
 
-import qualified Language.Fortran.AST              as F
-import qualified Language.Fortran.Lexer.FreeForm   as F
-import qualified Language.Fortran.Parser.Fortran90 as F
-import qualified Language.Fortran.ParserMonad      as F
+import qualified Language.Fortran.AST     as F
+import           Language.Fortran.Version ( FortranVersion(..) )
 
+-- for temporary definition defined in new fortran-src version, copied here
+import           Language.Fortran.AST ( A0, Statement )
+import           Language.Fortran.Parser ( Parser, makeParserFixed, makeParserFree )
+import qualified Language.Fortran.Parser.Fixed.Fortran66  as F66
+import qualified Language.Fortran.Parser.Fixed.Fortran77  as F77
+import qualified Language.Fortran.Parser.Free.Fortran90   as F90
+import qualified Language.Fortran.Parser.Free.Fortran95   as F95
+import qualified Language.Fortran.Parser.Free.Fortran2003 as F2003
 
 data HoareParseError
   = UnmatchedQuote
@@ -89,22 +95,46 @@ data Token =
   deriving (Show, Eq, Ord, Typeable, Data)
 
 -- TODO: Make this report errors and deal with source position better
-parseExpression :: String -> HoareSpecParser (F.Expression ())
-parseExpression expr =
-  case F.runParse F.statementParser parseState of
-    F.ParseOk (F.StExpressionAssign _ _ _ e) _ -> return e
-    _ -> throwError (MalformedExpression expr)
+parseExpression :: FortranVersion -> String -> HoareSpecParser (F.Expression ())
+parseExpression v strExpr =
+  case byVerStmt v "<unknown>" paddedBsExpr of
+    Right (F.StExpressionAssign _ _ _ e) -> return e
+    _ -> throwError (MalformedExpression strExpr)
   where
-    paddedExpr = B.pack $ "      a = " ++ expr
-    parseState = F.initParseState paddedExpr F.Fortran90 "<unknown>"
+    paddedBsExpr = B.pack $ "      a = " ++ strExpr
 
 
 -- TODO: Make this report errors and deal with source position better
-parseTypeSpec :: String -> HoareSpecParser (F.TypeSpec ())
-parseTypeSpec ts =
-  case F.runParse F.statementParser parseState of
-    F.ParseOk (F.StDeclaration _ _ s _ _) _ -> return s
-    _ -> throwError (MalformedTypeSpec ts)
+parseTypeSpec :: FortranVersion -> String -> HoareSpecParser (F.TypeSpec ())
+parseTypeSpec v strTs =
+  case byVerStmt v "<unknown>" paddedBsTs of
+    Right (F.StDeclaration _ _ s _ _) -> return s
+    _ -> throwError (MalformedTypeSpec strTs)
   where
-    paddedTS = B.pack $ ts ++ " :: dummy"
-    parseState = F.initParseState paddedTS F.Fortran90 "<unknown>"
+    paddedBsTs = B.pack $ strTs ++ " :: dummy"
+
+--------------------------------------------------------------------------------
+
+f66StmtNoTransform, f77StmtNoTransform, f77eStmtNoTransform, f77lStmtNoTransform,
+  f90StmtNoTransform, f95StmtNoTransform, f2003StmtNoTransform
+    :: Parser (Statement A0)
+f66StmtNoTransform   = makeParserFixed F66.statementParser   Fortran66
+f77StmtNoTransform   = makeParserFixed F77.statementParser   Fortran77
+f77eStmtNoTransform  = makeParserFixed F77.statementParser   Fortran77Extended
+f77lStmtNoTransform  = makeParserFixed F77.statementParser   Fortran77Legacy
+f90StmtNoTransform   = makeParserFree  F90.statementParser   Fortran90
+f95StmtNoTransform   = makeParserFree  F95.statementParser   Fortran95
+f2003StmtNoTransform = makeParserFree  F2003.statementParser Fortran2003
+
+byVerStmt :: FortranVersion -> Parser (Statement A0)
+byVerStmt = \case
+  Fortran66         -> f66StmtNoTransform
+  Fortran77         -> f77StmtNoTransform
+  Fortran77Extended -> f77eStmtNoTransform
+  Fortran77Legacy   -> f77lStmtNoTransform
+  Fortran90         -> f90StmtNoTransform
+  Fortran95         -> f95StmtNoTransform
+  Fortran2003       -> f2003StmtNoTransform
+  v                 -> error $  "Language.Fortran.Parser.byVerStmt: "
+                             <> "no parser available for requested version: "
+                             <> show v

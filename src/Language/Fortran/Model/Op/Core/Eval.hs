@@ -12,6 +12,7 @@
 {-# LANGUAGE ScopedTypeVariables    #-}
 {-# LANGUAGE UndecidableInstances   #-}
 {-# LANGUAGE TypeApplications       #-}
+{-# LANGUAGE CPP                    #-}
 
 {-# OPTIONS_GHC -Wall #-}
 
@@ -25,9 +26,14 @@ import           Control.Applicative                  (liftA2)
 import           Data.SBV.Dynamic                     (SVal)
 import qualified Data.SBV.Dynamic                     as SBV
 
+#if MIN_VERSION_singletons(3,0,0)
+import           Data.List.Singletons
+import           GHC.TypeLits.Singletons
+#else
 import           Data.Singletons
 import           Data.Singletons.Prelude.List
 import           Data.Singletons.TypeLits
+#endif
 
 import           Data.Vinyl                           hiding (Field)
 import           Data.Vinyl.Curry

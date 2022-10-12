@@ -11,7 +11,7 @@ import Control.Monad.Identity (runIdentity)
 import Control.Monad.Writer.Strict
 import Data.Data
 import Language.Fortran.AST
-import Language.Fortran.ParserMonad
+import Language.Fortran.Version
 import Language.Fortran.Util.Position
 import Test.Hspec
 

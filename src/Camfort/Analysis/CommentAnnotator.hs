@@ -16,6 +16,7 @@
 
 {-# LANGUAGE ScopedTypeVariables #-}
 {-# LANGUAGE MultiParamTypeClasses #-}
+{-# LANGUAGE TypeApplications #-}
 
 module Camfort.Analysis.CommentAnnotator
   ( annotateComments
@@ -26,7 +27,7 @@ module Camfort.Analysis.CommentAnnotator
 
 
 import Data.Data (Data)
-import Data.Generics.Uniplate.Operations
+import Data.Generics.Uniplate.Data
 
 import Language.Fortran.AST
 import Language.Fortran.Util.Position
@@ -63,26 +64,6 @@ annotateComments parser handleErr pf = do
       writeAST a b srcSpan comment
     writeASTBlocks b = pure b
 
-    -- | Link all comments to first non-comment in the list.
-    joinComments [ ] = [ ]
-    joinComments dss@(d:ds)
-      | isComment d =
-        let (comments, rest) = span isComment dss
-            -- Given a list of comments and a list of non-comment blocks which occur
-            -- afterward in the code, then link them together (either forward or backward)
-            -- returning a pair of processed blocks and unprocessed blocks
-
-            -- pre-condition: first parameter is a list of comments
-
-            -- default uses 'link' to associate every comment to the first following block
-            linkMulti = (map (fmap $ flip linker (head rest)) comments, rest)
-        in if null rest -- Does the group end with comments
-             then comments
-             else let (procs, unprocs) = linkMulti
-                  in procs ++ joinComments unprocs
-      | otherwise = descendBi joinComments d
-                    : joinComments ds
-
     {-| Link all comment blocks to first non-comment block in the list. |-}
     linkBlocks :: (Data a, Linkable a) => [ Block a ] -> [ Block a ]
     linkBlocks = joinComments
@@ -90,6 +71,28 @@ annotateComments parser handleErr pf = do
     {-| Link all comment 'program units' to first non-comment program unit in the list. |-}
     linkProgramUnits :: (Data a, Linkable a) => [ ProgramUnit a ] -> [ ProgramUnit a ]
     linkProgramUnits = joinComments
+
+-- | Link all comments to first non-comment in the list.
+joinComments
+    :: forall f a. (HasComment (f a), Linked f, Linkable a, Functor f, Data (f a))
+    => [f a] -> [f a]
+joinComments [ ] = [ ]
+joinComments dss@(d:ds)
+  | isComment d =
+    let (comments, rest) = span isComment dss
+        -- Given a list of comments and a list of non-comment blocks which occur
+        -- afterward in the code, then link them together (either forward or backward)
+        -- returning a pair of processed blocks and unprocessed blocks
+
+        -- pre-condition: first parameter is a list of comments
+
+        -- default uses 'link' to associate every comment to the first following block
+        linkMulti = (map (fmap $ flip linker (head rest)) comments, rest)
+    in if null rest -- Does the group end with comments
+         then comments
+         else let (procs, unprocs) = linkMulti
+              in procs ++ joinComments unprocs
+  | otherwise = descendBi @(f a) @[f a] joinComments d : joinComments ds
 
 class ASTEmbeddable a ast where
   annotateWithAST :: a -> ast -> a

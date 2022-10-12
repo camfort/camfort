@@ -8,6 +8,7 @@
 {-# LANGUAGE PolyKinds             #-}
 {-# LANGUAGE ScopedTypeVariables   #-}
 {-# LANGUAGE UndecidableInstances  #-}
+{-# LANGUAGE CPP                   #-}
 
 {-# OPTIONS_GHC -Wall #-}
 
@@ -27,8 +28,13 @@ module Language.Fortran.Model.Op.Core
 
 import           Data.Functor.Compose
 
+#if MIN_VERSION_singletons(3,0,0)
+import           Data.List.Singletons
+import           GHC.TypeLits.Singletons
+#else
 import           Data.Singletons.Prelude.List
 import           Data.Singletons.TypeLits
+#endif
 
 import           Data.Vinyl
 import           Data.Vinyl.Curry

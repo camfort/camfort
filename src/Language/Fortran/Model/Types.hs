@@ -9,6 +9,7 @@
 {-# LANGUAGE PolyKinds                  #-}
 {-# LANGUAGE RankNTypes                 #-}
 {-# LANGUAGE ScopedTypeVariables        #-}
+{-# LANGUAGE CPP                        #-}
 
 {-# OPTIONS_GHC -Wall #-}
 
@@ -40,7 +41,11 @@ import           Data.Monoid                           (Endo (..))
 import           Data.Typeable                         (Typeable)
 import           Data.Word                             (Word8)
 
+#if MIN_VERSION_singletons(3,0,0)
+import           GHC.TypeLits.Singletons
+#else
 import           Data.Singletons.TypeLits
+#endif
 
 import           Data.Vinyl                            hiding (Field)
 import           Data.Vinyl.Functor                    hiding (Field)

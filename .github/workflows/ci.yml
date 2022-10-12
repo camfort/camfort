@@ -64,12 +64,11 @@ jobs:
     strategy:
       fail-fast: false  # don't stop if one job (= GHC version) fails
       matrix:
-        cabal: ["3.6"]  # ghcup recommended as of 2021-12-02
+        cabal: ["3.6.2.0"]  # ghcup recommended as of 2022-10-12
         ghc:
-        - "8.4"
-        - "8.10"
-        #- "9.0"  # 2021-09-26: GHC 9.0 needs singletons 3.0, which splits the
-                  # package, so it's entirely unsupportable
+        - "9.0.2"
+        - "9.2.4"
+        - "9.4.2"
 
     steps:
 
@@ -130,8 +129,8 @@ jobs:
     strategy:
       fail-fast: false  # don't stop if one job (= GHC version) fails
       matrix:
-        cabal: ["3.6"]  # ghcup recommended as of 2021-12-02
-        ghc: ["8.10"]
+        cabal: ["3.6.2.0"]  # ghcup recommended as of 2022-10-12
+        ghc: ["9.2.4"]
 
     steps:
 
@@ -187,8 +186,8 @@ jobs:
     name: Windows (MSYS2, ${{ matrix.msystem }}) / GHC ${{ matrix.ghc }}, Cabal / build only
     strategy:
       matrix:
-        cabal: ["3.6.2.0"]
-        ghc: ["8.10"]
+        cabal: ["3.6.2.0"]  # ghcup recommended as of 2022-10-12
+        ghc: ["9.2.4"]
         msystem: [MINGW64]
     defaults:
       run:

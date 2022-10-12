@@ -96,7 +96,7 @@ import           Data.Maybe (fromMaybe)
 import qualified Language.Fortran.Analysis as FA
 import qualified Language.Fortran.Analysis.ModGraph as FM
 import qualified Language.Fortran.Analysis.Renaming as FA
-import           Language.Fortran.ParserMonad (FortranVersion(..))
+import           Language.Fortran.Version (FortranVersion(..))
 import qualified Language.Fortran.Util.ModFile as FM
 import           Pipes
 import qualified Pipes.Prelude as P

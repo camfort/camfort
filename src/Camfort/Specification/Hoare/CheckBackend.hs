@@ -46,6 +46,8 @@ import qualified Language.Fortran.AST                   as F
 import qualified Language.Fortran.LValue                as F
 import qualified Language.Fortran.Util.Position         as F
 
+import qualified Data.List.NonEmpty                     as NE
+
 import           Camfort.Analysis
 import           Camfort.Analysis.Logger                (Builder, Text)
 import           Camfort.Helpers.TypeLevel
@@ -530,9 +532,15 @@ genBody = genBody' []
 genBlock :: FortranTriplet (F.Block HA) -> GenM ()
 genBlock (precond, postcond, bl) = do
   case bl of
-    F.BlIf _ _ _ _ conds bodies _ -> do
-      condsExprs <- traverse (traverse tryTranslateBoolExpr) conds
-      multiIfVCs genBody expr (precond, postcond, (zip condsExprs bodies))
+    F.BlIf _ _ _ _ clauses mElseBlock _ -> do
+      clauses' <- flip traverse clauses $ \(cond, block) ->
+          tryTranslateBoolExpr cond >>= \cond' -> pure (Just cond', block)
+      let clauses'' = case mElseBlock of
+                        Nothing ->
+                          NE.toList clauses'
+                        Just elseBlock ->
+                          NE.toList clauses' ++ [(Nothing, elseBlock)]
+      multiIfVCs genBody expr (precond, postcond, clauses'')
 
     F.BlDoWhile _ _ _ _ _ cond body _ -> do
       primInvariant <-

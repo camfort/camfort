@@ -34,7 +34,7 @@ import Prelude hiding (span)
 import qualified Language.Fortran.AST as F
 import qualified Language.Fortran.PrettyPrint as PP
 import qualified Language.Fortran.Util.Position as FU
-import qualified Language.Fortran.ParserMonad as FPM
+import Language.Fortran.Version ( FortranVersion )
 
 import Camfort.Analysis.Annotations
 import Camfort.Reprint
@@ -125,21 +125,21 @@ instance OutputFiles (F.ProgramFile Annotation, SourceText) where
   (uses generic query extension - remember extQ is non-symmetric) -}
 
 refactoring :: Typeable a
-            => FPM.FortranVersion
+            => FortranVersion
             -> a -> SourceText -> StateT FU.Position Identity (SourceText, Bool)
 refactoring v z inp = ((catchAll inp `extQ` refactoringsForProgramUnits v inp) `extQ` refactoringsForBlocks v inp) $ z
   where
     catchAll :: SourceText -> a -> StateT FU.Position Identity (SourceText, Bool)
     catchAll _ _ = return (B.empty, False)
 
-refactoringsForProgramUnits :: FPM.FortranVersion
+refactoringsForProgramUnits :: FortranVersion
                             -> SourceText
                             -> F.ProgramUnit Annotation
                             -> StateT FU.Position Identity (SourceText, Bool)
 refactoringsForProgramUnits v inp z =
    mapStateT (\n -> Identity $ n `evalState` 0) (refactorProgramUnits v inp z)
 
-refactorProgramUnits :: FPM.FortranVersion
+refactorProgramUnits :: FortranVersion
                      -> SourceText
                      -> F.ProgramUnit Annotation
                      -> StateT FU.Position (State Int) (SourceText, Bool)
@@ -155,14 +155,14 @@ refactorProgramUnits _ inp (F.PUComment ann span (F.Comment comment)) = do
 
 refactorProgramUnits _ _ _ = return (B.empty, False)
 
-refactoringsForBlocks :: FPM.FortranVersion
+refactoringsForBlocks :: FortranVersion
                       -> SourceText
                       -> F.Block Annotation
                       -> StateT FU.Position Identity (SourceText, Bool)
 refactoringsForBlocks v inp z =
    mapStateT (\n -> Identity $ n `evalState` 0) (refactorBlocks v inp z)
 
-refactorBlocks :: FPM.FortranVersion
+refactorBlocks :: FortranVersion
                -> SourceText
                -> F.Block Annotation
                -> StateT FU.Position (State Int) (SourceText, Bool)
@@ -207,13 +207,13 @@ refactorBlocks v inp b@F.BlStatement {} = refactorSyntax v inp b
 refactorBlocks _ _ _ = return (B.empty, False)
 
 -- Wrapper to fix the type of refactorSyntax to deal with statements
-refactorStatements :: FPM.FortranVersion -> SourceText
+refactorStatements :: FortranVersion -> SourceText
                    -> F.Statement A -> StateT FU.Position (State Int) (SourceText, Bool)
 refactorStatements = refactorSyntax
 
 refactorSyntax ::
    (Typeable s, F.Annotated s, FU.Spanned (s A), PP.IndentablePretty (s A))
-   => FPM.FortranVersion -> SourceText
+   => FortranVersion -> SourceText
    -> s A -> StateT FU.Position (State Int) (SourceText, Bool)
 refactorSyntax v inp e = do
     cursor <- get

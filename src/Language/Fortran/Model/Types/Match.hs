@@ -10,6 +10,7 @@
 {-# LANGUAGE RankNTypes                 #-}
 {-# LANGUAGE ScopedTypeVariables        #-}
 {-# LANGUAGE TypeOperators              #-}
+{-# LANGUAGE CPP                        #-}
 
 {-# OPTIONS_GHC -Wall #-}
 
@@ -20,8 +21,13 @@ module Language.Fortran.Model.Types.Match where
 import           Data.Typeable
 
 import           Data.Singletons
-import           Data.Singletons.TypeLits
 import           GHC.TypeLits
+
+#if MIN_VERSION_singletons(3,0,0)
+import           GHC.TypeLits.Singletons
+#else
+import           Data.Singletons.TypeLits
+#endif
 
 import           Data.Vinyl                        hiding ((:~:), Field)
 

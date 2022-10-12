@@ -41,7 +41,7 @@ import           Control.DeepSeq
 
 import qualified Language.Fortran.AST          as F
 import           Language.Fortran.Util.ModFile (ModFiles, emptyModFiles)
-import           Language.Fortran.ParserMonad  (FortranVersion(..))
+import           Language.Fortran.Version      (FortranVersion(..))
 
 import           Camfort.Analysis
 import           Camfort.Analysis.Annotations

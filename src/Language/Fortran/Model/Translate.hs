@@ -101,8 +101,13 @@ import           Control.Monad.Except
 import           Control.Monad.Reader
 import           Data.Map                             (Map)
 
+#if MIN_VERSION_singletons(3,0,0)
+import           Data.Singletons
+import           Data.List.Singletons                 (Length)
+#else
 import           Data.Singletons
 import           Data.Singletons.Prelude.List         (Length)
+#endif
 
 import           Data.Vinyl
 import           Data.Vinyl.Functor                   (Const (..))
@@ -112,7 +117,7 @@ import qualified Data.Vinyl.Recursive                 as VinylRec
 
 import qualified Language.Fortran.Analysis            as F
 import qualified Language.Fortran.AST                 as F
-import           Language.Fortran.AST.RealLit         (readRealLit)
+import           Language.Fortran.AST.Literal.Real    (readRealLit)
 import qualified Language.Fortran.Util.Position       as F
 
 import           Language.Expression
@@ -560,15 +565,15 @@ translateValue e = case e of
       let intoBool b = if b then Bool8 1 else Bool8 0
       in translateLiteral v PBool8 (Just . intoBool) s
 
-    F.ValComplex r c  -> unsupported "complex literal"
-    F.ValString s     -> unsupported "string literal"
-    F.ValHollerith s  -> unsupported "hollerith literal"
-    F.ValIntrinsic nm -> unsupported $ "intrinsic " <> describe nm
-    F.ValOperator s   -> unsupported "user-defined operator"
-    F.ValAssignment   -> unsupported "interface assignment"
-    F.ValType s       -> unsupported "type value"
-    F.ValStar         -> unsupported "star value"
-    F.ValColon        -> unsupported "colon value"
+    F.ValComplex{}     -> unsupported "complex literal"
+    F.ValString{}      -> unsupported "string literal"
+    F.ValHollerith{}   -> unsupported "hollerith literal"
+    F.ValIntrinsic nm  -> unsupported $ "intrinsic " <> describe nm
+    F.ValOperator{}    -> unsupported "user-defined operator"
+    F.ValAssignment{}  -> unsupported "interface assignment"
+    F.ValType{}        -> unsupported "type value"
+    F.ValStar{}        -> unsupported "star value"
+    F.ValColon{}       -> unsupported "colon value"
   _ -> fail "impossible: translateValue called on a non-value"
 
 
