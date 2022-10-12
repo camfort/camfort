@@ -10,7 +10,7 @@ on:
     - synchronize
 
 env:
-  EXE_NAME: camfort
+  exe: camfort
 
 jobs:
   ubuntu-stack-test:
@@ -54,8 +54,8 @@ jobs:
     - name: Upload executable
       uses: actions/upload-artifact@v2
       with:
-        path: ~/.local/bin/${{ env.EXE_NAME }}
-        name: ${{ env.EXE_NAME }}-ubuntu-stack-${{ github.sha }}
+        path: ~/.local/bin/${{ env.exe }}
+        name: ${{ env.exe }}-ubuntu-stack-${{ github.sha }}
         if-no-files-found: error
 
   ubuntu-cabal-test:
@@ -177,137 +177,121 @@ jobs:
     - name: Upload executable
       uses: actions/upload-artifact@v2
       with:
-        path: ~/.cabal/bin/${{ env.EXE_NAME }}
-        name: ${{ env.EXE_NAME }}-macos-ghc-${{ matrix.ghc }}-cabal-${{ github.sha }}
+        path: ~/.cabal/bin/${{ env.exe }}
+        name: ${{ env.exe }}-macos-ghc-${{ matrix.ghc }}-cabal-${{ github.sha }}
         if-no-files-found: error
 
-  windows-cabal-build:
-    runs-on: windows-latest
-    name: Windows (MSYS2, ${{ matrix.msystem }}) / GHC ${{ matrix.ghc }}, Cabal / build only
+  windows-cabal-test:
+    runs-on: ${{ matrix.os }}
+    name: ${{ matrix.os }} (MSYS2, ${{ matrix.msystem }})) / build / GHC ${{ matrix.ghc }}, Cabal
     strategy:
+      fail-fast: false
       matrix:
-        cabal: ["3.6.2.0"]  # ghcup recommended as of 2022-10-12
-        ghc: ["9.2.4"]
+        os: [windows-latest]
+        cabal: [latest]
+        ghc:
+        - 9.2.4
         msystem: [MINGW64]
-    defaults:
-      run:
-        shell: msys2 {0}
-    env:
-      _exe_desc_part: windows-msys2-${{ matrix.msystem }}-ghc-${{ matrix.ghc }}-cabal-${{ github.sha }}
+        include:
+        - ghc: 9.2.4
+          build: release
 
     steps:
 
-    # apparently this needs to happen before setup-msys2 ???
     - uses: actions/checkout@v2
-      with:
-        fetch-depth: 0
 
     - uses: msys2/setup-msys2@v2
       with:
         msystem: ${{ matrix.msystem }}
-        update: true
+        pacboy: >-
+          openblas:p
+          lapack:p
+          flint:p
+          z3:p
+        location: D:\
 
-    # x=$x essentially exports the envvar to GitHub Actions' scope.
-    - name: Set up environment variables
-      run: |
-        echo "_bundle_dir=${{ env.EXE_NAME }}-bundle-${{ env._exe_desc_part }}" >> $GITHUB_ENV
-        echo "APPDATA=$APPDATA" >> $GITHUB_ENV
-
-    - name: Install required libraries
-      run: >-
-        pacman -S --noconfirm
-        ${MINGW_PACKAGE_PREFIX}-openblas
-        ${MINGW_PACKAGE_PREFIX}-lapack
-        ${MINGW_PACKAGE_PREFIX}-flint
-        ${MINGW_PACKAGE_PREFIX}-z3
-        zip
-
-    # note that on Windows, minimal install still installs Cabal temporarily for
-    # Reasons(TM) (just a fun tidbit)
+    # TODO 2022-10-12 has a new command, not tried
     - name: Install ghcup
-      run: curl --proto '=https' --tlsv1.2 -sSf https://get-ghcup.haskell.org | BOOTSTRAP_HASKELL_NONINTERACTIVE=1 BOOTSTRAP_HASKELL_MINIMAL=1 sh
+      run: 'Set-ExecutionPolicy Bypass -Scope Process -Force;[System.Net.ServicePointManager]::SecurityProtocol = [System.Net.ServicePointManager]::SecurityProtocol -bor 3072;Invoke-Command -ScriptBlock ([ScriptBlock]::Create((Invoke-WebRequest https://www.haskell.org/ghcup/sh/bootstrap-haskell.ps1 -UseBasicParsing))) -ArgumentList $false,$true,$true,$false,$false,$false,$false,"C:\","https://gitlab.haskell.org/haskell/ghcup-hs/-/raw/v0.1.17.5/scripts/bootstrap/bootstrap-haskell","D:\msys64","C:\cabal"'
 
-    # TODO: This should probably work, but doesn't. MSYS2 isn't updating its
-    # envvars. I don't know why, probably also to do with how GitHub Actions
-    # runs commands.
-    - run: echo "PATH=$HOME/.cabal/bin:/c/ghcup/bin:$PATH" >> $GITHUB_ENV
-    - run: echo $PATH
+    # TODO idk why this doesn't work
+    - run: echo "source /c/ghcup/env" >> ~/.bashrc
+      shell: msys2 {0}
 
-    # Instead, for now, we have to add a BASH_ENV envvar to *every command* that
-    # uses ghcup, so it knows where to find it. If present, it's sourced as a
-    # file in non-interactive shells (what we need!)
-    - run: ghcup install ghc ${{ matrix.ghc }} --set
-      env:
-        BASH_ENV: /c/ghcup/env
+    - run: >-
+        sed --in-place
+        's/extra-lib-dirs: /extra-lib-dirs: C:\\ghcup\\ghc\\${{ matrix.ghc }}\\x86_64-w64-mingw32\\lib, /g'
+        /c/cabal/config
+      shell: msys2 {0}
+
     - run: ghcup install cabal ${{ matrix.cabal }} --set
-      env:
-        BASH_ENV: /c/ghcup/env
+    - run: ghcup install ghc ${{ matrix.ghc }} --set
 
-    # `cygpath /` gets the absolute path of the MSYS2 installation
-    # `-m` is mixed-mode paths `C:/x/y`, which works & I prefer over backslash
-    # careful, YAML syntax gets funky here for some reason
-    - name: Fix ghcup Cabal paths
-      run: 'echo "extra-lib-dirs: $(cygpath -m /)/${{ matrix.msystem }}/lib" >> C:/cabal/config'
-
-    # unsure if it works but we can at least attempt the timestamp trick easy
-    # since we have Git + GNU binutils :)
-    - run: pacman -S --noconfirm git
-    - name: Set all tracked file modification times to the time of their last commit
-      run: |
-        rev=HEAD
-        IFS=$'\n'
-        for f in $(git ls-tree -r -t --full-name --name-only "$rev") ; do
-            touch -d $(git log --pretty=format:%cI -1 "$rev" -- "$f") "$f";
-        done
-
-    - run: cabal update
-      env:
-        BASH_ENV: /c/ghcup/env
-
-    - run: cabal freeze
-      env:
-        BASH_ENV: /c/ghcup/env
-
-    - name: Cache Cabal build artifacts
+    - name: Cache global Cabal store
       uses: actions/cache@v2
       with:
-        path: |
-          C:/cabal/store
-          dist-newstyle
-        key: ${{ runner.os }}-cabal-${{ matrix.ghc }}-${{ hashFiles('cabal.project.freeze') }}
-        restore-keys: |
-          ${{ runner.os }}-cabal-${{ matrix.ghc }}
+        path: C:/cabal/store
+        key: build-cabal-global-store-${{ runner.os }}-ghc_${{ matrix.ghc }}
 
-    - name: Build
-      run: cabal install
+    - run: cabal update
+
+    - run: cabal freeze
+      shell: msys2 {0}
       env:
         BASH_ENV: /c/ghcup/env
 
-    - name: Upload executable
+    - name: (camfort) Cache project Cabal store
+      uses: actions/cache@v2
+      with:
+        path: dist-newstyle
+        key:          build-cabal-project-camfort-${{ runner.os }}-ghc_${{ matrix.ghc }}-${{ hashFiles('cabal.project.freeze') }}
+        restore-keys: build-cabal-project-camfort-${{ runner.os }}-ghc_${{ matrix.ghc }}
+
+    - name: (camfort) Build (exe)
+      if: "matrix.build == 'release'"
+      run: cabal build -O2
+      shell: msys2 {0}
+      env:
+        BASH_ENV: /c/ghcup/env
+    - name: (camfort) Build (skip exe)
+      if: "matrix.build != 'release'"
+      run: cabal build -O0
+      shell: msys2 {0}
+      env:
+        BASH_ENV: /c/ghcup/env
+
+    - name: (camfort) Install
+      if: "matrix.build == 'release'"
+      run: cabal install
+      shell: msys2 {0}
+      env:
+        BASH_ENV: /c/ghcup/env
+
+    # note that Cabal uses symlinks -- actions/upload-artifact@v2 apparently
+    # dereferences for us
+    - name: (camfort) Upload executable
+      if: "matrix.build == 'release'"
       uses: actions/upload-artifact@v2
       with:
-        path: C:/cabal/bin/${{ env.EXE_NAME }}.exe
-        name: ${{ env.EXE_NAME }}-windows-msys2-${{ matrix.msystem }}-ghc-${{ matrix.ghc }}-cabal-${{ github.sha }}.exe
+        path: C:/cabal/bin/camfort.exe
+        name: camfort-${{ runner.os }}-ghc_${{ matrix.ghc }}-cabal-${{ github.sha }}.exe
         if-no-files-found: error
 
     # We copy the built executable plus its runtime dependencies into a
     # directory. For dynamically linked libraries, we inspect the file and copy
     # only the libraries managed by MSYS2. The rest are assumed to be Windows
     # system libraries that all users should have.
-    - name: Prepare self-contained bundle
+    - name: (camfort) Prepare self-contained bundle
+      shell: msys2 {0}
       run: |
         mkdir bundle
-        cp C:/cabal/bin/"${{ env.EXE_NAME }}".exe bundle
-        ldd bundle/"${{ env.EXE_NAME }}".exe | cut --delimiter=' ' --fields=3 - | grep '^'$MINGW_PREFIX/bin/lib.*'\'.dll | xargs -I '{}' cp '{}' bundle
-        cp $(which z3.exe) bundle
-        mv bundle "${{ env._bundle_dir }}"
-        zip -r "${{ env._bundle_dir }}".zip "${{ env._bundle_dir }}"
+        cp C:/cabal/bin/"${{ env.exe }}".exe bundle
+        ldd bundle/"${{ env.exe }}".exe | cut --delimiter=' ' --fields=3 - | grep '^'$MINGW_PREFIX/bin/lib.*'\'.dll | xargs -I '{}' cp '{}' bundle
+        mv bundle "${{ env.exe }}-bundle-windows-msys2-${{ matrix.msystem }}-ghc-${{ matrix.ghc }}-cabal-${{ github.sha }}"
 
-    # Note that the resulting artifact will be double-zipped. That's a
-    # limitation of either the action or GitHub, it's non-configurable.
     - name: Upload self-contained bundle
       uses: actions/upload-artifact@v2
       with:
-        path: ${{ env._bundle_dir }}.zip
-        name: ${{ env._bundle_dir }}.zip
+        path: "${{ env.exe }}-bundle-windows-msys2-${{ matrix.msystem }}-ghc-${{ matrix.ghc }}-cabal-${{ github.sha }}"
+        name: "${{ env.exe }}-bundle-windows-msys2-${{ matrix.msystem }}-ghc-${{ matrix.ghc }}-cabal-${{ github.sha }}"
         if-no-files-found: error
