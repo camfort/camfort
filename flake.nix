@@ -1,3 +1,10 @@
+# cabal repl doesn't work due to not linking to libflint. I don't know why it
+# doesn't -- perhaps something missing in cabal2nix or haskell-flake. Building
+# and running works fine.
+#
+# A crude fix is `LD_LIBRARY_PATH=/nix/store/...-flint-x.y.z/lib cabal repl`.
+# Get the correct path from `echo $NIX_LDFLAGS`.
+
 {
   inputs = {
     nixpkgs.url = "github:nixos/nixpkgs/nixpkgs-unstable";
