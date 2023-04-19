@@ -37,7 +37,17 @@
             sbv = dontCheck (unmarkBroken super.sbv);
           };
 
-          # devShell = {
+          devShell = {
+            # libflint doesn't get configured properly for `cabal repl` -- fix
+            # it here
+            # curiously, `cabal build` works... maybe $NIX_LDFLAGS etc. get used
+            # by the GHC invocation involved there.
+            # I don't have to do this for pkg-config libraries (of which
+            # libflint is not one). interesting!
+            mkShellArgs.shellHook = ''
+              export LD_LIBRARY_PATH='${pkgs.flint}/lib'
+            '';
+
           #  # Enabled by default
           #  enable = true;  
           #
@@ -46,7 +56,7 @@
           #  tools = hp: { fourmolu = hp.fourmolu; ghcid = null; };
           #
           #  hlsCheck.enable = true;
-          # };
+          };
         };
 
         # haskell-flake doesn't set the default package, but you can do it here.
