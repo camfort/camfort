@@ -25,9 +25,16 @@ packages:
       size: 256
   original:
     hackage: syz-0.2.0.0@sha256:7307acb8f6ae7720e7e235c974281ecee912703c1394ebcac19caf83d70bb492,2345
+- completed:
+    hackage: union-0.1.2@sha256:856669b7084f992ab7c369e64fefe3833814b35409ff67f1aad4657548b5a466,2134
+    pantry-tree:
+      sha256: 9c4d03a246ad23b8b066b000532b84a9b710395084a8bced697908750da689e6
+      size: 330
+  original:
+    hackage: union-0.1.2@sha256:856669b7084f992ab7c369e64fefe3833814b35409ff67f1aad4657548b5a466,2134
 snapshots:
 - completed:
-    sha256: be747117bed6d462806c883352c3206325b23480825103f5c87884e97e52819a
-    size: 619173
-    url: https://raw.githubusercontent.com/commercialhaskell/stackage-snapshots/master/lts/19/20.yaml
-  original: lts-19.20
+    sha256: b73b2b116143aea728c70e65c3239188998bac5bc3be56465813dacd74215dc5
+    size: 648424
+    url: https://raw.githubusercontent.com/commercialhaskell/stackage-snapshots/master/lts/20/1.yaml
+  original: lts-20.1
