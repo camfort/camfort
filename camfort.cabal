@@ -25,6 +25,31 @@ build-type:     Simple
 tested-with:
     GHC == 9.0, GHC == 9.2, GHC == 9.4
 extra-source-files:
+    tests/fixtures/implicitnone1.f90
+    tests/fixtures/implicitnone2.f90
+    tests/fixtures/implicitnone3.f90
+    tests/fixtures/simple.expected.f90
+    tests/fixtures/simple.f90
+    tests/fixtures/Specification/DerivedDataType/badDim1.f90
+    tests/fixtures/Specification/DerivedDataType/badDim2.f90
+    tests/fixtures/Specification/DerivedDataType/badLabel1.f90
+    tests/fixtures/Specification/DerivedDataType/consistSpec1a.f90
+    tests/fixtures/Specification/DerivedDataType/consistSpec1b.f90
+    tests/fixtures/Specification/DerivedDataType/consistSpec2a.f90
+    tests/fixtures/Specification/DerivedDataType/consistSpec2b.f90
+    tests/fixtures/Specification/DerivedDataType/dupIndex1.f90
+    tests/fixtures/Specification/DerivedDataType/inconsistSpec1a.f90
+    tests/fixtures/Specification/DerivedDataType/inconsistSpec1b.f90
+    tests/fixtures/Specification/DerivedDataType/inconsistSpec2a.f90
+    tests/fixtures/Specification/DerivedDataType/inconsistSpec2b.f90
+    tests/fixtures/Specification/DerivedDataType/inconsistSpec3a.f90
+    tests/fixtures/Specification/DerivedDataType/inconsistSpec3b.f90
+    tests/fixtures/Specification/DerivedDataType/inconsistSpec4a.f90
+    tests/fixtures/Specification/DerivedDataType/inconsistSpec4b.f90
+    tests/fixtures/Specification/DerivedDataType/oobIndex1.f90
+    tests/fixtures/Specification/Stencils/cross-module-a/provider.f90
+    tests/fixtures/Specification/Stencils/cross-module-a/user.f90
+    tests/fixtures/Specification/Stencils/example-no-specs-simple.f90
     tests/fixtures/Specification/Stencils/example10.expected.f
     tests/fixtures/Specification/Stencils/example10.f
     tests/fixtures/Specification/Stencils/example11.expected.f
@@ -42,9 +67,13 @@ extra-source-files:
     tests/fixtures/Specification/Stencils/example3.f
     tests/fixtures/Specification/Stencils/example4.f
     tests/fixtures/Specification/Stencils/example5.expected.f
+    tests/fixtures/Specification/Stencils/example5.expected.f90
     tests/fixtures/Specification/Stencils/example5.f
+    tests/fixtures/Specification/Stencils/example5.f90
     tests/fixtures/Specification/Stencils/example5a.expected.f
+    tests/fixtures/Specification/Stencils/example5a.expected.f90
     tests/fixtures/Specification/Stencils/example5a.f
+    tests/fixtures/Specification/Stencils/example5a.f90
     tests/fixtures/Specification/Stencils/example6.expected.f
     tests/fixtures/Specification/Stencils/example6.f
     tests/fixtures/Specification/Stencils/example7.expected.f
@@ -53,6 +82,12 @@ extra-source-files:
     tests/fixtures/Specification/Stencils/example8.f
     tests/fixtures/Specification/Stencils/example9.expected.f
     tests/fixtures/Specification/Stencils/example9.f
+    tests/fixtures/Specification/Stencils/nestedLoops.expected.f90
+    tests/fixtures/Specification/Stencils/nestedLoops.f90
+    tests/fixtures/Specification/Units/cross-module-a/crossmoduleprovider.f90
+    tests/fixtures/Specification/Units/cross-module-a/crossmoduleuser.f90
+    tests/fixtures/Specification/Units/cross-module-b/cross-module-b1.f90
+    tests/fixtures/Specification/Units/cross-module-b/cross-module-b2.f90
     tests/fixtures/Specification/Units/do-loop1.f90
     tests/fixtures/Specification/Units/do-loop2.f90
     tests/fixtures/Specification/Units/eapVarApp.f90
@@ -93,6 +128,128 @@ extra-source-files:
     tests/fixtures/Transformation/common.f90
     tests/fixtures/Transformation/equiv.expected.f90
     tests/fixtures/Transformation/equiv.f90
+    samples/arrays/dodgy-colons.f90
+    samples/common/example1/ex1a.f90
+    samples/common/example1/ex1b.f90
+    samples/common/example1/Makefile
+    samples/common/example2/ex2a.f90
+    samples/common/example2/ex2b.f90
+    samples/common/example2/Makefile
+    samples/common/foo/foo.f90
+    samples/common/foo/foo2.f90
+    samples/common/foo/Makefile
+    samples/ddt/error1/error1a.f90
+    samples/ddt/error1/error1b.f90
+    samples/ddt/error2/error2a.f90
+    samples/ddt/error2/error2b.f90
+    samples/ddt/error3/error3a.f90
+    samples/ddt/error3/error3b.f90
+    samples/ddt/error4/error4a.f90
+    samples/ddt/error4/error4b.f90
+    samples/ddt/error5/error5.f90
+    samples/ddt/example1a.f90
+    samples/ddt/example1b.f90
+    samples/ddt/example3.f90
+    samples/ddt/example4.f90
+    samples/equivalence/example1.f90
+    samples/equivalence/wrt.f90
+    samples/implicit-none/example1.f90
+    samples/implicit-none/example2.f90
+    samples/invariants/angle.f90
+    samples/invariants/arrays.f90
+    samples/invariants/invariants.f90
+    samples/mem/sample.f90
+    samples/stencils/access.f90
+    samples/stencils/approx.f90
+    samples/stencils/centered.f
+    samples/stencils/centered.f90
+    samples/stencils/combined-region.f90
+    samples/stencils/conflict.f90
+    samples/stencils/dataRefExample.f90
+    samples/stencils/dataRefExample2.f90
+    samples/stencils/decomposed-three-point.f90
+    samples/stencils/expected/access.f90
+    samples/stencils/expected/approx.f90
+    samples/stencils/expected/centered.f
+    samples/stencils/expected/centered.f90
+    samples/stencils/expected/combined-region.f90
+    samples/stencils/expected/conflict.f90
+    samples/stencils/expected/dataRefExample.f90
+    samples/stencils/expected/dataRefExample2.f90
+    samples/stencils/expected/decomposed-three-point.f90
+    samples/stencils/expected/function.f90
+    samples/stencils/expected/intrinsic.f90
+    samples/stencils/expected/laplace.f90
+    samples/stencils/expected/module.f90
+    samples/stencils/expected/nested.f90
+    samples/stencils/expected/non-neighbour.f90
+    samples/stencils/expected/one-check.f90
+    samples/stencils/expected/one.f
+    samples/stencils/expected/one.f90
+    samples/stencils/expected/parabolic2.f90
+    samples/stencils/expected/procs.f
+    samples/stencils/expected/programContains.f90
+    samples/stencils/expected/range.f90
+    samples/stencils/expected/rec.f90
+    samples/stencils/expected/reduction.f90
+    samples/stencils/expected/relativisation.f90
+    samples/stencils/expected/scatter.f90
+    samples/stencils/expected/simple.f90
+    samples/stencils/expected/single-region.f90
+    samples/stencils/expected/sobel.f90
+    samples/stencils/expected/subsup.f90
+    samples/stencils/expected/two.f
+    samples/stencils/expected/two.f90
+    samples/stencils/expected/wave.f
+    samples/stencils/expected/web.f90
+    samples/stencils/intrinsic.f90
+    samples/stencils/laplace.f90
+    samples/stencils/module.f90
+    samples/stencils/nested.f90
+    samples/stencils/non-neighbour.f90
+    samples/stencils/one-check.f90
+    samples/stencils/one.f
+    samples/stencils/one.f90
+    samples/stencils/parabolic2.f90
+    samples/stencils/procs.f
+    samples/stencils/programContains.f90
+    samples/stencils/range.f90
+    samples/stencils/rec.f90
+    samples/stencils/reduction.f90
+    samples/stencils/region-declaration.f90
+    samples/stencils/relativisation.f90
+    samples/stencils/scatter.f90
+    samples/stencils/simple.f90
+    samples/stencils/single-region.f90
+    samples/stencils/sobel.f90
+    samples/stencils/subsup.f90
+    samples/stencils/two.f
+    samples/stencils/two.f90
+    samples/stencils/wave.f
+    samples/stencils/web.f90
+    samples/units/badPoly2.f90
+    samples/units/bug32.f90
+    samples/units/bug32b.f90
+    samples/units/dst-example/ex1.f90
+    samples/units/dst-example/ex2.f90
+    samples/units/eapVarApp.f90
+    samples/units/eapVarScope.f90
+    samples/units/fahrenheit.f90
+    samples/units/func-annot.f90
+    samples/units/global/file1.f90
+    samples/units/global/file2.f90
+    samples/units/higherorder_error.f90
+    samples/units/insideOutside.f90
+    samples/units/poly-scale.f90
+    samples/units/poly1.f90
+    samples/units/squarePoly.f90
+    samples/units/src-example/ex1.f90
+    samples/units/src-example/ex2.f90
+    samples/units/stuck1.f
+    samples/worksheet/example1.f90
+    samples/worksheet/example1a.f90
+    samples/worksheet/example2.f90
+    samples/worksheet/example3.f90
     CHANGELOG.md
 
 source-repository head
