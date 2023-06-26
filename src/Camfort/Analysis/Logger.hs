@@ -131,6 +131,7 @@ class Describe a where
   describeBuilder = Builder.fromString . show
 
 instance Describe F.SrcSpan
+instance Describe F.Position
 instance Describe Text where
   describeBuilder = Builder.fromText
 instance Describe [Char] where
@@ -175,8 +176,14 @@ instance NFData Origin
 
 instance Describe Origin where
   describeBuilder origin =
+    -- Present the file and span in a standard format for
+    -- editor integration (link to source)
     "at [" <> Builder.fromString (origin ^. oFile) <>
-    ", " <> describeBuilder (origin ^. oSpan) <> "]"
+    ":" <> describeBuilder startSpan <>
+    " - " <> describeBuilder endSpan <> "]"
+    where
+      startSpan = F.ssFrom (origin ^. oSpan)
+      endSpan   = F.ssFrom (origin ^. oSpan)
 
 data ParsedOrigin = ParsedOrigin FilePath (Int, Int) (Int, Int)
   deriving (Show, Eq, Ord)
