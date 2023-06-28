@@ -50,6 +50,17 @@
             };
           };
         };
+
+        packages.dockerImage = pkgs.dockerTools.buildLayeredImage {
+          name = "camfort";
+          # equivalent to `git rev-parse --short HEAD`
+          # only works on clean working tree, else set to "dev"
+          tag = builtins.substring 0 9 (self.rev or "dev");
+          config = {
+            Cmd = [ "${pkgs.lib.getExe self'.packages.camfort}" ];
+          };
+          # TODO should need to add Z3 and add it to the path or so.
+        };
       };
     };
 }
