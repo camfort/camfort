@@ -57,9 +57,12 @@
           # only works on clean working tree, else set to "dev"
           tag = builtins.substring 0 9 (self.rev or "dev");
           config = {
-            Cmd = [ "${pkgs.lib.getExe self'.packages.camfort}" ];
+            Entrypoint = [ "${pkgs.lib.getExe self'.packages.camfort}" ];
           };
-          # TODO should need to add Z3 and add it to the path or so.
+          maxLayers = 120; # less than Docker max layers to allow extending
+          # Note that Z3 is configured using the C bindings, which then access
+          # the executable. So no need to add Z3 in ourselves, it's added by the
+          # main camfort derivation.
         };
       };
     };

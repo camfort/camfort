@@ -30,6 +30,12 @@ CamFort is also available through Homebrew
 An older (~2019) version of CamFort is available on Docker at
 [camfort/camfort](https://cloud.docker.com/u/camfort/repository/docker/camfort/camfort).
 
+A new Docker image for developers (still work-in-progress) is available at
+`ghcr.io/camfort/camfort:dev`. Suggested invocation is:
+
+  * podman: `podman run --volume $(pwd):/host --workdir /host
+    ghcr.io/camfort/camfort:dev <CamFort arguments>`
+
 ## Usage
 CamFort is a command-line tool, so invoke it from your favourite shell or
 command prompt. [Detailed usage
