@@ -53,9 +53,9 @@
 
         packages.dockerImage = pkgs.dockerTools.buildLayeredImage {
           name = "camfort";
-          # equivalent to `git rev-parse --short HEAD`
-          # only works on clean working tree, else set to "dev"
-          tag = builtins.substring 0 9 (self.rev or "dev");
+          # equivalent to `git rev-parse HEAD`
+          # only exists on clean working tree, else set to "dev"
+          tag = self.rev or "dev";
           config = {
             Entrypoint = [ "${pkgs.lib.getExe self'.packages.camfort}" ];
           };
