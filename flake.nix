@@ -51,7 +51,7 @@
           };
         };
 
-        packages.dockerImage = pkgs.dockerTools.buildLayeredImage {
+        packages.image = pkgs.dockerTools.buildLayeredImage {
           name = "camfort";
           # equivalent to `git rev-parse HEAD`
           # only exists on clean working tree, else set to "dev"
