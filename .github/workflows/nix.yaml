@@ -1,11 +1,9 @@
-name: nix build .#image
+name: nix
 
 on:
-  # run after successful Nix builds (lower priority, nice caching)
-  workflow_run:
-    workflows: [nix build]
-    types:
-    - completed
+  # run on every push to every branch (visibility doesn't matter)
+  push:
+  # don't want pull_request config, since it would run twice
 
 env:
   REGISTRY_USER: ${{ github.actor }}
@@ -13,9 +11,8 @@ env:
   IMAGE_REGISTRY: ghcr.io/${{ github.repository_owner }}
 
 jobs:
-  nix-build-image:
-    name: nix build .#image
-    if: ${{ github.event.workflow_run.conclusion == 'success' }}
+  build:
+    name: build, build .#image
     runs-on: ubuntu-latest
     steps:
     - uses: actions/checkout@v3
@@ -27,7 +24,16 @@ jobs:
         name: camfort
         authToken: '${{ secrets.CACHIX_AUTH_TOKEN }}'
 
-    # configured to tag the image with git commit (= `git rev-parse HEAD`)
+    - run: nix build
+
+    # image building below
+    # this could happen in a separate workflow, but it depends on the above
+    # command. we *could* schedule it after and get decent caching via Cachix...
+    # but it feels silly, so let's just add it in after.
+
+    # configure this output in flake.nix
+    # make sure you know how it's tagged to then reference when pushing (don't
+    # know a better method)
     - run: nix build .#image
 
     - run: podman load < ./result
@@ -41,4 +47,5 @@ jobs:
     # 2023-06-28: redhat-actions/push-to-registry doesn't let you qualify your
     # target image, so it's pretty much useless. lmao
     # https://github.com/redhat-actions/push-to-registry/issues/66
-    - run: podman push localhost/camfort:$(git rev-parse HEAD) ${{ env.IMAGE_REGISTRY }}/camfort
+    # TODO had problems using `${{ env.IMAGE_REGISTRY }}` here. idk y. hardcode.
+    - run: podman push localhost/camfort:$(git rev-parse HEAD) ghcr.io/camfort/camfort
