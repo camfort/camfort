@@ -47,5 +47,4 @@ jobs:
     # 2023-06-28: redhat-actions/push-to-registry doesn't let you qualify your
     # target image, so it's pretty much useless. lmao
     # https://github.com/redhat-actions/push-to-registry/issues/66
-    # TODO had problems using `${{ env.IMAGE_REGISTRY }}` here. idk y. hardcode.
-    - run: podman push localhost/camfort:$(git rev-parse HEAD) ghcr.io/camfort/camfort
+    - run: podman push localhost/camfort:$(git rev-parse HEAD) ${{ env.IMAGE_REGISTRY }}/camfort
