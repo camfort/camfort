@@ -36,7 +36,7 @@ jobs:
     # know a better method)
     - run: nix build .#image
 
-    - run: podman load < ./result
+    - run: ./result | podman load
 
     - uses: redhat-actions/podman-login@v1
       with:

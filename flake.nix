@@ -51,7 +51,8 @@
           };
         };
 
-        packages.image = pkgs.dockerTools.buildLayeredImage {
+        # use streamLayeredImage so as to not place the image in the Nix store
+        packages.image = pkgs.dockerTools.streamLayeredImage {
           name = "camfort";
           # equivalent to `git rev-parse HEAD`
           # only exists on clean working tree, else set to "dev"
