@@ -1,4 +1,4 @@
-name: nix
+name: nix build
 
 on:
   # run on every push to every branch (visibility doesn't matter)
@@ -6,9 +6,9 @@ on:
   # don't want pull_request config, since it would run twice
 
 jobs:
-  nix-flake-build:
+  nix-build:
+    name: nix build
     runs-on: ubuntu-latest
-    name: build (flake)
     steps:
     - uses: actions/checkout@v3
     - uses: cachix/install-nix-action@v20
