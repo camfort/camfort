@@ -47,4 +47,7 @@ jobs:
     # 2023-06-28: redhat-actions/push-to-registry doesn't let you qualify your
     # target image, so it's pretty much useless. lmao
     # https://github.com/redhat-actions/push-to-registry/issues/66
+
+    # your repo needs write permission to push to the registry for this to work!
+    # configured in Packages (tab at user/org level)
     - run: podman push localhost/camfort:${{ github.sha }} ${{ env.IMAGE_REGISTRY }}/camfort:${{ github.sha }}
