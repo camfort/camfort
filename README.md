@@ -89,3 +89,7 @@ substantial change. Make sure to run the test suite before you submit.
 If you have scientific code that you would like us to analyse, we would be happy
 to add it to CamFort corpus. This helps us finding useful ways to extend CamFort
 as well as ensuring it is robust.
+
+## Support
+### For maintainers
+See `doc/maintainers.md`.
