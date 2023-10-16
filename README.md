@@ -3,7 +3,7 @@ CamFort is a refactoring and verification tool for scientific Fortran programs.
 It currently supports Fortran 66, 77, 90, 95 and 2003 (somewhat) with various
 legacy extensions.
 
-It is a research project developed in University of Cambridge and University of
+It is a research project developed in the University of Cambridge and University of
 Kent.
 
 ## Obtaining
@@ -66,7 +66,7 @@ CamFort depends on the following foreign libraries:
   * [Z3](https://github.com/Z3Prover/z3) >= 4.5 (executable)
 
 These should be built for your system, but installation method varies.
-System-specific guides are provided on the wiki. *(Alternatively, you could
+System-specific guides are provided on the [wiki](https://github.com/camfort/camfort/wiki). *(Alternatively, you could
 check the GitHub Actions workflows.)* On Ubuntu:
 
     apt install libflint-dev liblapack-dev libopenblas-dev z3
