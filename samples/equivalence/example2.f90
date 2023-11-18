@@ -1,0 +1,8 @@
+PROGRAM example3
+   IMPLICIT NONE
+   INTEGER m1(29) , mconst(220)
+   EQUIVALENCE (m1(27),mconst(1))
+   DATA m1/200 , 4100 , 871 , 1042 , 1028 , 1028 , 1028 , 1028 , 1028 , 1028 , 1028 , 2052 , 1028 , 2052 , 2052 , 1028 ,&
+      & 1028 , 1028 , 1028 , 1028 , 1028 , 1028 , 506 , 506 , 506 , 506 , 506 , 506 , 506/
+   PRINT *, mconst(1)/100
+END PROGRAM
