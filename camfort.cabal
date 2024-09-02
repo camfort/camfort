@@ -60,6 +60,7 @@ extra-source-files:
     tests/fixtures/Specification/Units/ex1.f90
     tests/fixtures/Specification/Units/ex2.f90
     tests/fixtures/Specification/Units/ex3.f90
+    tests/fixtures/Specification/Units/ex4.f90
     tests/fixtures/Specification/Units/example-criticals-1.f90
     tests/fixtures/Specification/Units/example-criticals-2.f90
     tests/fixtures/Specification/Units/example-inconsist-1.f90

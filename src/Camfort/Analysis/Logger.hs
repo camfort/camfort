@@ -77,6 +77,8 @@ module Camfort.Analysis.Logger
   , logOutputStd
   , logOutputNone
   , runLoggerT
+  , formatError
+  , formatSuccess
   ) where
 
 import qualified Data.Semigroup                 as SG
@@ -600,3 +602,31 @@ logSomeMessage msg = do
   logLevel <- LoggerT $ use lsLogLevel
 
   lift $ logFunc repeatedOrigin logLevel msgLevel originText msgText
+
+formatError :: String -> String
+formatError msg = bold (red msg)
+
+formatSuccess :: String -> String
+formatSuccess msg = bold (green msg)
+
+bold :: String -> String
+bold = txtColor "1"
+
+-- black, red, green, yellow, blue, magenta, cyan, white :: String -> String
+black, red, green :: String -> String
+black = txtColor "30"
+red = txtColor "31"
+green = txtColor "32"
+-- yellow = txtColor "33"
+-- blue = txtColor "34"
+-- magenta = txtColor "35"
+-- cyan = txtColor "36"
+-- white = txtColor "37"
+
+txtColor :: String -> String -> String
+txtColor colorCode message =
+    -- if noColors
+    --  then message
+    "\ESC[" <> colorCode <> ";1m" <> message <> reset
+  where
+    reset = "\ESC[0m"

@@ -17,6 +17,7 @@ module Camfort.Specification.Units.Analysis.Consistent
   ) where
 
 import           Camfort.Analysis (ExitCodeOfReport(..), Describe(..))
+import           Camfort.Analysis.Logger (formatSuccess,formatError)
 import           Camfort.Specification.Units.Analysis (UnitAnalysis, runInference)
 import qualified Camfort.Specification.Units.Annotation as UA
 import qualified Camfort.Specification.Units.BackendTypes as B
@@ -42,9 +43,9 @@ data ConsistencyReport
 instance NFData ConsistencyReport where
   rnf _ = ()
 instance Show ConsistencyReport where
-  show (Consistent pf nVars) = concat ["\n", fname, ": Consistent ", show nVars, " variables checked."]
+  show (Consistent pf nVars) = concat ["\n", fname, ":" <> formatSuccess " Consistent ", show nVars, " variables checked."]
     where fname = F.pfGetFilename pf
-  show (Inconsistent e) = show e
+  show (Inconsistent e) = formatError $ show e
 
 instance ExitCodeOfReport ConsistencyReport where
   exitCodeOf (Consistent {}) = 0
