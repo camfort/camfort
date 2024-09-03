@@ -509,7 +509,7 @@ unitsCompile opts env = do
 
   paths' <- expandDirs $ [ceInputSources env]
   -- Build the graph of module dependencies
-  mg0 <- FM.genModGraph (ceFortranVersion env) [incDir] paths'
+  mg0 <- FM.genModGraph (ceFortranVersion env) [incDir] Nothing paths'
 
   let compileFileToMod mods pf = do
         mod <- compileUnits uo mods pf

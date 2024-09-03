@@ -35,6 +35,7 @@ import qualified Language.Fortran.Analysis as FA
 import           Language.Fortran.Util.ModFile
 import qualified Language.Fortran.Util.Position as FU
 
+
 -- | An inference of variables that must be provided with
 -- unit annotations before units for all variables can be
 -- resolved.

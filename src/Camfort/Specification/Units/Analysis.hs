@@ -62,6 +62,7 @@ import           Language.Fortran.AST.Literal.Real (readRealLit, parseRealLit)
 import           Language.Fortran.Util.ModFile
 import qualified Numeric.LinearAlgebra as H -- for debugging
 import           Prelude hiding (mod)
+import           Language.Fortran.Repr (fromConstReal, fromConstInt)
 
 -- | Prepare to run an inference function.
 initInference :: UnitSolver ()
@@ -386,9 +387,9 @@ isLiteralNonZero (F.ExpValue _ _ (F.ValInteger i _)) = read        i /= 0
 isLiteralNonZero (F.ExpValue _ _ (F.ValReal i _))    = readRealLit i /= 0.0
 -- allow propagated constants to be interpreted as literals
 isLiteralNonZero e = case constExp (F.getAnnotation e) of
-  Just (FA.ConstInt i)          -> i /= 0
-  Just (FA.ConstUninterpInt s)  -> read s /= 0
-  Just (FA.ConstUninterpReal s) -> readRealLit (parseRealLit s) /= 0.0
+  Just c | Just i <- fromConstInt c -> i /= 0
+--  Just (FA.ConstUninterpInt s)  -> read s /= 0
+  Just c | Just r <- fromConstReal c -> r /= 0.0
   _                             -> False
 
 isLiteralZero :: F.Expression UA -> Bool
