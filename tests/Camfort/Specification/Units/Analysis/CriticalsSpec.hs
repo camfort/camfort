@@ -19,7 +19,7 @@ spec = do
     it "reports when no additional variables need to be annotated" $
        "example-criticals-2.f90" `unitsCriticalsReportIs` exampleCriticals2CriticalsReport
     it "reports correct locales across modules" $ do
-       ("cross-module" </> "cross-module-c3.f90") `unitsCriticalsReportIs` exampleCriticals3CriticalsReport
+       ("cross-module-c" </> "cross-module-c3.f90") `unitsCriticalsReportIs` exampleCriticals3CriticalsReport
 
 
 fixturesDir :: String

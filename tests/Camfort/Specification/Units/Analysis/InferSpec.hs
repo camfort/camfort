@@ -209,6 +209,7 @@ literalNonZero2Report = inferReport "literal-nonzero2.f90"
   \  3:14 unit m :: b\n\
   \  3:17 unit m :: c\n\
   \  3:20 unit m :: d\n\
+  \  4:22 unit m :: n\n\
   \  10:3 unit m :: f\n\
   \  11:13 unit m :: x\n"
 
