@@ -17,6 +17,9 @@ spec = do
        "example-criticals-1.f90" `unitsCriticalsReportIs` exampleCriticals1CriticalsReport
     it "reports when no additional variables need to be annotated" $
        "example-criticals-2.f90" `unitsCriticalsReportIs` exampleCriticals2CriticalsReport
+    it "reports correct locales across modules" $ do
+       ("cross-module" </> "cross-module-c3.f90") `unitsCriticalsReportIs` exampleCriticals3CriticalsReport
+
 
 fixturesDir :: String
 fixturesDir = "tests" </> "fixtures" </> "Specification" </> "Units"
@@ -46,3 +49,10 @@ exampleCriticals1CriticalsReport =
 exampleCriticals2CriticalsReport :: String
 exampleCriticals2CriticalsReport =
   "\ntests/fixtures/Specification/Units/example-criticals-2.f90: No additional annotations are necessary.\n"
+
+exampleCriticals3CriticalsReport :: String
+exampleCriticals3CriticalsReport =
+ "\ntests/fixtures/Specification/Units/cross-module-c3.f90: 3 variable declarations suggested to be given a specification:\
+ \    tests/fixtures/Specification/Units/cross-module-c1.f90 (7:11)    b\
+ \    tests/fixtures/Specification/Units/cross-module-c3.f90 (5:11)    a3\
+ \    tests/fixtures/Specification/Units/cross-module-c3.f90 (9:11)    b3"
