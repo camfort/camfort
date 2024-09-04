@@ -276,6 +276,7 @@ test-suite spec
       Camfort.Specification.Units.Analysis.InferSpec
       Camfort.Specification.Units.InferenceBackendSpec
       Camfort.Specification.Units.ParserSpec
+      Camfort.TestUtils
       Camfort.Transformation.CommonSpec
       Camfort.Transformation.EquivalenceElimSpec
       Paths_camfort
