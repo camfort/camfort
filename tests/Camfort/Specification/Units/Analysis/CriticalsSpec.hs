@@ -49,17 +49,17 @@ mkTestModFile file = head <$> genModFiles Nothing emptyModFiles compileUnits uni
 
 exampleCriticals1CriticalsReport :: String
 exampleCriticals1CriticalsReport =
-  "\ntests/fixtures/Specification/Units/example-criticals-1.f90: 2 variable declarations suggested to be given a specification:\n\
-  \    tests/fixtures/Specification/Units/example-criticals-1.f90 (3:17)    b\n\
-  \    tests/fixtures/Specification/Units/example-criticals-1.f90 (3:20)    c\n"
+  "\ntests" </> "fixtures" </> "Specification" </> "Units" </> "example-criticals-1.f90: 2 variable declarations suggested to be given a specification:\n\
+  \    tests" </> "fixtures" </> "Specification" </> "Units" </> "example-criticals-1.f90 (3:17)    b\n\
+  \    tests" </> "fixtures" </> "Specification" </> "Units" </> "example-criticals-1.f90 (3:20)    c\n"
 
 exampleCriticals2CriticalsReport :: String
 exampleCriticals2CriticalsReport =
-  "\ntests/fixtures/Specification/Units/example-criticals-2.f90: No additional annotations are necessary.\n"
+  "\ntests" </> "fixtures" </> "Specification" </> "Units" </> "example-criticals-2.f90: No additional annotations are necessary.\n"
 
 exampleCriticals3CriticalsReport :: String
 exampleCriticals3CriticalsReport =
- "\ntests/fixtures/Specification/Units/cross-module-c/cross-module-c3.f90: 3 variable declarations suggested to be given a specification:\n\
- \    tests/fixtures/Specification/Units/cross-module-c/cross-module-c1.f90 (7:11)    b\n\
- \    tests/fixtures/Specification/Units/cross-module-c/cross-module-c3.f90 (5:11)    a3\n\
- \    tests/fixtures/Specification/Units/cross-module-c/cross-module-c3.f90 (9:11)    b3\n"
+ "\ntests" </> "fixtures" </> "Specification" </> "Units" </> "cross-module-c" </> "cross-module-c3.f90: 3 variable declarations suggested to be given a specification:\n\
+ \    tests" </> "fixtures" </> "Specification" </> "Units" </> "cross-module-c" </> "cross-module-c1.f90 (7:11)    b\n\
+ \    tests" </> "fixtures" </> "Specification" </> "Units" </> "cross-module-c" </> "cross-module-c3.f90 (5:11)    a3\n\
+ \    tests" </> "fixtures" </> "Specification" </> "Units" </> "cross-module-c" </> "cross-module-c3.f90 (9:11)    b3\n"

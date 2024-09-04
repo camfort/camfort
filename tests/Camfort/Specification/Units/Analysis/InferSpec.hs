@@ -94,7 +94,7 @@ mkTestModFile file = head <$> genModFiles Nothing emptyModFiles compileUnits uni
 
 exampleInferSimple1Report :: String
 exampleInferSimple1Report =
-  "\ntests/fixtures/Specification/Units/example-simple-1.f90:\n\
+  "\ntests" </> "fixtures" </> "Specification" </> "Units" </> "example-simple-1.f90:\n\
   \  3:14 unit s :: x\n\
   \  3:17 unit s :: y\n"
 
@@ -243,7 +243,7 @@ doLoop2Report = inferReport "do-loop2.f90"
 
 crossModuleBReport :: String
 crossModuleBReport =
-  "\ntests/fixtures/Specification/Units/cross-module-b/cross-module-b2.f90:\n\
+  "\ntests" </> "fixtures" </> "Specification" </> "Units" </> "cross-module-b" </> "cross-module-b2.f90:\n\
   \  6:24 unit c :: foo\n\
   \  9:13 unit c :: tc\n\
   \  9:17 unit k :: t\n"

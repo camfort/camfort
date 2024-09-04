@@ -83,54 +83,54 @@ mkTestModFile file = head <$> genModFiles Nothing emptyModFiles compileUnits uni
 
 exampleInconsist1CheckReport :: String
 exampleInconsist1CheckReport =
-  "\ntests/fixtures/Specification/Units/example-inconsist-1.f90: Inconsistent:\n\
+  "\ntests" </> "fixtures" </> "Specification" </> "Units" </> "example-inconsist-1.f90: Inconsistent:\n\
   \ - at 7:7: Units 's' and 'm' should be equal\n"
 
 inconsist3LitMixedReport :: String
 inconsist3LitMixedReport =
-  "\ntests/fixtures/Specification/Units/inconsist3.f90: Inconsistent:\n\
+  "\ntests" </> "fixtures" </> "Specification" </> "Units" </> "inconsist3.f90: Inconsistent:\n\
   \ - at 6:3: 'j**2' should have the same units as 'k'\n"
 
 inconsist3LitPolyReport :: String
 inconsist3LitPolyReport =
-  "\ntests/fixtures/Specification/Units/inconsist3.f90: Inconsistent:\n\
+  "\ntests" </> "fixtures" </> "Specification" </> "Units" </> "inconsist3.f90: Inconsistent:\n\
    \ - at 6:3: 'j**2' should have the same units as 'k'\n"
 
 inconsist3LitUnitlessReport :: String
 inconsist3LitUnitlessReport =
-  "\ntests/fixtures/Specification/Units/inconsist3.f90: Inconsistent:\n\
+  "\ntests" </> "fixtures" </> "Specification" </> "Units" </> "inconsist3.f90: Inconsistent:\n\
   \ - at 6:3: 'j**2' should have the same units as 'k'\n"
 
 inconsistLitInPolyFunReport :: String
 inconsistLitInPolyFunReport =
-  "\ntests/fixtures/Specification/Units/inconsistLitInPolyFun.f90: Inconsistent:\n\
+  "\ntests" </> "fixtures" </> "Specification" </> "Units" </> "inconsistLitInPolyFun.f90: Inconsistent:\n\
   \ - at 10:3: 'a' should have the same units as 'result of sqr'\n\
   \ - at 10:11: 'parameter 1 to sqr' should have unit 'm'\n"
 
 inconsistRecMultReport :: String
 inconsistRecMultReport =
-  "\ntests/fixtures/Specification/Units/inconsistRecMult.f90: Inconsistent:\n\
+  "\ntests" </> "fixtures" </> "Specification" </> "Units" </> "inconsistRecMult.f90: Inconsistent:\n\
   \ - at 4:15: 'parameter 2 to recur' should have unit 'm'\n"
 
 crossModuleInconsistBasicReport :: String
 crossModuleInconsistBasicReport =
-  "\ntests/fixtures/Specification/Units/cross-module-a/crossmoduleuser.f90: Inconsistent:\n\
+  "\ntests" </> "fixtures" </> "Specification" </> "Units" </> "cross-module-a" </> "crossmoduleuser.f90: Inconsistent:\n\
   \ - at 9:11: 'parameter 1 to add' should have unit 'm'\n"
 
 literalNonZeroInconsist1Report :: String
 literalNonZeroInconsist1Report =
-  "\ntests/fixtures/Specification/Units/literal-nonzero-inconsist1.f90: Inconsistent:\n\
+  "\ntests" </> "fixtures" </> "Specification" </> "Units" </> "literal-nonzero-inconsist1.f90: Inconsistent:\n\
   \'literal number' should have unit '1'\n"
 
 literalNonZeroInconsist2Report :: String
 literalNonZeroInconsist2Report =
-  "\ntests/fixtures/Specification/Units/literal-nonzero-inconsist2.f90: Inconsistent:\n\
+  "\ntests" </> "fixtures" </> "Specification" </> "Units" </> "literal-nonzero-inconsist2.f90: Inconsistent:\n\
   \ - at 6:3: 'b' should have the same units as 'result of f'\n\
   \ - at 6:9: 'parameter 1 to f' should have unit 'm'\n"
 
 literalNonZeroInconsist3Report :: String
 literalNonZeroInconsist3Report =
-  "\ntests/fixtures/Specification/Units/literal-nonzero-inconsist3.f90: Inconsistent:\n\
+  "\ntests" </> "fixtures" </> "Specification" </> "Units" </> "literal-nonzero-inconsist3.f90: Inconsistent:\n\
   \ - at 6:3: 'result of sqr' should have unit 'm'\n\
   \ - at 6:11: 'parameter 1 to sqr' should have unit 'm'\n\
   \ - at 7:3: 'result of sqr' should have unit 's'\n\
@@ -138,13 +138,13 @@ literalNonZeroInconsist3Report =
 
 -- literalNonZeroInconsist4Report :: String -- fixme
 -- literalNonZeroInconsist4Report =
---   "\ntests/fixtures/Specification/Units/literal-nonzero-inconsist5.f90: Inconsistent:\n\
+--   "\ntests" </> "fixtures" </> "Specification" </> "Units" </> "literal-nonzero-inconsist5.f90: Inconsistent:\n\
 --   \- at 7:11: 'parameter 1 to sqr' should have unit 's'\n\
 --   \- at 15:9: 'i' should have the same units as 'parameter 1 to sqr'\n\
 --   \- at 17:12: 'i' should have unit '1'\n"
 
 literalNonZeroInconsist5Report :: String
 literalNonZeroInconsist5Report =
-  "\ntests/fixtures/Specification/Units/literal-nonzero-inconsist5.f90: Inconsistent:\n\
+  "\ntests" </> "fixtures" </> "Specification" </> "Units" </> "literal-nonzero-inconsist5.f90: Inconsistent:\n\
   \ - at 6:3: 'result of sqr' should have unit 'm'\n\
   \ - at 6:11: 'parameter 1 to sqr' should have unit 'm'\n"
