@@ -1,7 +1,8 @@
 module Camfort.Specification.Units.Analysis.CriticalsSpec (spec) where
 
 import           Camfort.Analysis hiding (describe)
-import           Camfort.Analysis.ModFile (readParseSrcDir)
+import           Camfort.Analysis.ModFile (readParseSrcDir, genModFiles)
+import           Camfort.Specification.Units.Analysis (compileUnits)
 import           Camfort.Specification.Units.Analysis.Criticals (inferCriticalVariables)
 import           Camfort.Specification.Units.Monad (LiteralsOpt(..), unitOpts0, uoLiterals, UnitEnv(..), runUnitAnalysis)
 import           Control.Lens
@@ -10,26 +11,28 @@ import           System.FilePath ((</>))
 import qualified Test.Hspec as Test
 import           Test.Hspec hiding (Spec)
 import           Camfort.TestUtils
+import           Language.Fortran.Util.ModFile
 
 spec :: Test.Spec
 spec = do
   describe "critical-units analysis" $ do
     it "reports critical variables" $
-       "example-criticals-1.f90" `unitsCriticalsReportIs` exampleCriticals1CriticalsReport
+       unitsCriticalsReportIs LitMixed [] "example-criticals-1.f90" exampleCriticals1CriticalsReport
     it "reports when no additional variables need to be annotated" $
-       "example-criticals-2.f90" `unitsCriticalsReportIs` exampleCriticals2CriticalsReport
+       unitsCriticalsReportIs LitMixed [] "example-criticals-2.f90" exampleCriticals2CriticalsReport
     it "reports correct locales across modules" $ do
-       ("cross-module-c" </> "cross-module-c3.f90") `unitsCriticalsReportIs` exampleCriticals3CriticalsReport
-
+       unitsCriticalsReportIs LitPoly ["cross-module-c" </> "cross-module-c1.f90"]
+            ("cross-module-c" </> "cross-module-c3.f90") exampleCriticals3CriticalsReport
 
 fixturesDir :: String
 fixturesDir = "tests" </> "fixtures" </> "Specification" </> "Units"
 
 -- | Assert that the report of performing units inference on a file is as expected.
-unitsCriticalsReportIs :: String -> String -> Expectation
-unitsCriticalsReportIs fileName expectedReport = do
+unitsCriticalsReportIs :: LiteralsOpt -> [String] -> String -> String -> Expectation
+unitsCriticalsReportIs litmode modNames fileName expectedReport = do
   let file = fixturesDir </> fileName
-      modFiles = emptyModFiles
+      modPaths = fmap (fixturesDir </>) modNames
+  modFiles <- mapM mkTestModFile modPaths
   [(pf,_)] <- readParseSrcDir Nothing modFiles file []
 
   let uEnv = UnitEnv { unitOpts = uOpts, unitProgramFile = pf }
@@ -38,8 +41,11 @@ unitsCriticalsReportIs fileName expectedReport = do
   let res = report ^?! arResult . _ARSuccess
 
   hideFormatting (show res) `shouldBe` expectedReport
-  where uOpts = unitOpts0 { uoLiterals = LitMixed }
+  where uOpts = unitOpts0 { uoLiterals = litmode }
 
+-- | Helper for producing a basic ModFile from a (terminal) module file.
+mkTestModFile :: String -> IO ModFile
+mkTestModFile file = head <$> genModFiles Nothing emptyModFiles compileUnits unitOpts0 file []
 
 exampleCriticals1CriticalsReport :: String
 exampleCriticals1CriticalsReport =
@@ -53,7 +59,7 @@ exampleCriticals2CriticalsReport =
 
 exampleCriticals3CriticalsReport :: String
 exampleCriticals3CriticalsReport =
- "\ntests/fixtures/Specification/Units/cross-module-c3.f90: 3 variable declarations suggested to be given a specification:\
- \    tests/fixtures/Specification/Units/cross-module-c1.f90 (7:11)    b\
- \    tests/fixtures/Specification/Units/cross-module-c3.f90 (5:11)    a3\
- \    tests/fixtures/Specification/Units/cross-module-c3.f90 (9:11)    b3"
+ "\ntests/fixtures/Specification/Units/cross-module-c/cross-module-c3.f90: 3 variable declarations suggested to be given a specification:\n\
+ \    tests/fixtures/Specification/Units/cross-module-c/cross-module-c1.f90 (7:11)    b\n\
+ \    tests/fixtures/Specification/Units/cross-module-c/cross-module-c3.f90 (5:11)    a3\n\
+ \    tests/fixtures/Specification/Units/cross-module-c/cross-module-c3.f90 (9:11)    b3\n"
