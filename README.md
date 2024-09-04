@@ -3,7 +3,7 @@ CamFort is a refactoring and verification tool for scientific Fortran programs.
 It currently supports Fortran 66, 77, 90, 95 and 2003 (somewhat) with various
 legacy extensions.
 
-It is a research project developed in University of Cambridge and University of
+It is a research project developed in the University of Cambridge and University of
 Kent.
 
 ## Obtaining
@@ -29,6 +29,12 @@ CamFort is also available through Homebrew
 
 An older (~2019) version of CamFort is available on Docker at
 [camfort/camfort](https://cloud.docker.com/u/camfort/repository/docker/camfort/camfort).
+
+A new Docker image for developers (still work-in-progress) is available at
+`ghcr.io/camfort/camfort:dev`. Suggested invocation is:
+
+  * podman: `podman run --volume $(pwd):/host --workdir /host
+    ghcr.io/camfort/camfort:dev <CamFort arguments>`
 
 ## Usage
 CamFort is a command-line tool, so invoke it from your favourite shell or
@@ -60,7 +66,7 @@ CamFort depends on the following foreign libraries:
   * [Z3](https://github.com/Z3Prover/z3) >= 4.5 (executable)
 
 These should be built for your system, but installation method varies.
-System-specific guides are provided on the wiki. *(Alternatively, you could
+System-specific guides are provided on the [wiki](https://github.com/camfort/camfort/wiki). *(Alternatively, you could
 check the GitHub Actions workflows.)* On Ubuntu:
 
     apt install libflint-dev liblapack-dev libopenblas-dev z3
@@ -83,3 +89,7 @@ substantial change. Make sure to run the test suite before you submit.
 If you have scientific code that you would like us to analyse, we would be happy
 to add it to CamFort corpus. This helps us finding useful ways to extend CamFort
 as well as ensuring it is robust.
+
+## Support
+### For maintainers
+See `doc/maintainers.md`.

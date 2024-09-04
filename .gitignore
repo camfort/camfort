@@ -29,3 +29,6 @@
 .DS_Store
 
 /tmp
+
+# Nix
+/result
