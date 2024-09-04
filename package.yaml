@@ -16,9 +16,9 @@ tested-with:            GHC == 9.0, GHC == 9.2, GHC == 9.4
 github:                 camfort/camfort
 
 extra-source-files:
-  - tests/fixtures/Specification/Stencils/*.f
-  - tests/fixtures/Specification/Units/*.f90
-  - tests/fixtures/Transformation/*.f90
+  # Note that all files used in tests should be included in the sdist.
+  - tests/fixtures/**/**
+  - samples/**/**
   - CHANGELOG.md
 
 dependencies:

@@ -7,10 +7,10 @@ packages:
 - completed:
     hackage: verifiable-expressions-0.6.2@sha256:cefdc5d3d9a4cff4ce0bfaa27ccdf83ff46bcd17340ac0c5cf6fcbe88ce05a61,1739
     pantry-tree:
-      sha256: 4dd7c83273f550737d955f605010d63fb88026b5c84fe3ab404906125b779b9f
+      sha256: 8c471b000a76f417db86d616a18c96abc5fbfebb7dc37b351a67ea619c167ee2
       size: 1316
   original:
-    hackage: verifiable-expressions-0.6.2@sha256:cefdc5d3d9a4cff4ce0bfaa27ccdf83ff46bcd17340ac0c5cf6fcbe88ce05a61,1739
+    hackage: verifiable-expressions-0.6.2@sha256:c96edaaece6f8d5bd0f915adb2a361f3a6c3a5d3e1fae2012270ba8d7ffb0696,1820
 - completed:
     hackage: syz-0.2.0.0@sha256:7307acb8f6ae7720e7e235c974281ecee912703c1394ebcac19caf83d70bb492,2345
     pantry-tree:
