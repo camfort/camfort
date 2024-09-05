@@ -7,6 +7,8 @@ packages:
 flags: {}
 extra-package-dbs: []
 
+allow-newer: true
+
 # reminder: you can use a Git repo (e.g. on public GitHub) directly via:
 #   - git: https://github.com/camfort/fortran-src
 #     commit: <commit hash>
