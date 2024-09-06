@@ -78,7 +78,7 @@ instance Show Criticals where
         varNames  = map unitVarName vars
         dmapSlice = M.filterWithKey (\ k _ -> k `elem` varNames) dmap
         numVars   = M.size dmapSlice
-        declReport (v, (_, ss)) = vfilename ++ " (" ++ showSpanStart ss ++ ")    " ++ fromMaybe v (M.lookup v uniqnameMap)
+        declReport (v, (_, ss)) = vfilename ++ ":" ++ showSpanStart ss ++ "    " ++ fromMaybe v (M.lookup v uniqnameMap)
           where vfilename = fromMaybe fname $ M.lookup v fromWhereMap
                 showSpanStart (FU.SrcSpan l _) = show l
 
