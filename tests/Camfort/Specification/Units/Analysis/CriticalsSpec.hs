@@ -23,6 +23,9 @@ spec = do
     it "reports correct locales across modules" $ do
        unitsCriticalsReportIs LitPoly ["cross-module-c" </> "cross-module-c1.f90"]
             ("cross-module-c" </> "cross-module-c3.f90") exampleCriticals3CriticalsReport
+    it "reports correct locales across modules and in functions" $ do
+       unitsCriticalsReportIs LitPoly ["cross-module-c" </> "cross-module-c1.f90"]
+            ("cross-module-c" </> "cross-module-c1.f90") exampleCriticals4CriticalsReport
 
 fixturesDir :: String
 fixturesDir = "tests" </> "fixtures" </> "Specification" </> "Units"
@@ -63,3 +66,12 @@ exampleCriticals3CriticalsReport =
  \    tests" </> "fixtures" </> "Specification" </> "Units" </> "cross-module-c" </> "cross-module-c1.f90:7:11    b\n\
  \    tests" </> "fixtures" </> "Specification" </> "Units" </> "cross-module-c" </> "cross-module-c3.f90:5:11    a3\n\
  \    tests" </> "fixtures" </> "Specification" </> "Units" </> "cross-module-c" </> "cross-module-c3.f90:9:11    b3\n"
+
+exampleCriticals4CriticalsReport :: String
+exampleCriticals4CriticalsReport =
+ "\ntests" </> "fixtures" </> "Specification" </> "Units" </> "cross-module-c" </> "cross-module-c1.f90: 5 variable declarations suggested to be given a specification:\n\
+ \    tests" </> "fixtures" </> "Specification" </> "Units" </> "cross-module-c" </> "cross-module-c1.f90:5:17    a\n\
+ \    tests" </> "fixtures" </> "Specification" </> "Units" </> "cross-module-c" </> "cross-module-c1.f90:7:11    b\n\
+ \    tests" </> "fixtures" </> "Specification" </> "Units" </> "cross-module-c" </> "cross-module-c1.f90:11:13    foo_out\n\
+ \    tests" </> "fixtures" </> "Specification" </> "Units" </> "cross-module-c" </> "cross-module-c1.f90:18:13    foo3\n\
+ \    tests" </> "fixtures" </> "Specification" </> "Units" </> "cross-module-c" </> "cross-module-c1.f90:24:15    x\n"
