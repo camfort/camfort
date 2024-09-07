@@ -92,8 +92,8 @@ runCriticalVariables = do
   return $ criticalVariables cons
 
 -- | Infer one possible set of critical variables for a program.
-inferCriticalVariables :: UnitAnalysis Criticals
-inferCriticalVariables = do
+inferCriticalVariables :: FilePath -> UnitAnalysis Criticals
+inferCriticalVariables localPath = do
   pf <- asks unitProgramFile
   mfs <- lift analysisModFiles
   (eVars, _) <- runInference runCriticalVariables
@@ -109,7 +109,7 @@ inferCriticalVariables = do
                 e@(F.ExpValue _ _ F.ValVariable{}) <- universeBi pfRenamed :: [F.Expression UA]
                 -- going to ignore intrinsics here
               ] `M.union` (M.unions . map (M.fromList . map (\ (a, (b, _)) -> (b, a)) . M.toList) $ M.elems mmap)
-    fromWhereMap = genUniqNameToFilenameMap mfs
+    fromWhereMap = genUniqNameToFilenameMap localPath mfs
   pure $!! Criticals { criticalsPf           = pf
                      , criticalsVariables    = eVars
                      , criticalsDeclarations = dmap

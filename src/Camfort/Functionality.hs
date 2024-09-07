@@ -562,12 +562,13 @@ unitsSynth annType outSrc opts env =
   where uo = optsToUnitOpts opts
 
 unitsCriticals :: LiteralsOpt -> CamfortEnv -> IO Int
-unitsCriticals =
+unitsCriticals opts env =
   runUnitsFunctionalityP
   "Suggesting variables to annotate with unit specifications in"
-  (singlePfUnits inferCriticalVariables)
-  (describePerFileAnalysisP "unit critical variable analysis")
-
+  (singlePfUnits (inferCriticalVariables localPath))
+  (describePerFileAnalysisP "unit critical variable analysis") opts env
+  where
+    localPath = takeDirectory (ceInputSources env)
 
 {- Stencils feature -}
 
