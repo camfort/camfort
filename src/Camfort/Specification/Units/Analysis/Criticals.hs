@@ -25,11 +25,11 @@ import           Camfort.Specification.Units.Environment
 import           Camfort.Specification.Units.InferenceBackendSBV (criticalVariables)
 import           Camfort.Specification.Units.Monad
 import           Control.DeepSeq
-import           Control.Monad.Reader (asks, lift)
+import           Control.Monad.Reader (asks, lift, liftIO)
 import           Control.Monad.State (get)
 import           Data.Generics.Uniplate.Operations
 import qualified Data.Map.Strict as M
-import           Data.Maybe (fromMaybe)
+import           Data.Maybe (fromMaybe, mapMaybe)
 import qualified Language.Fortran.AST as F
 import qualified Language.Fortran.Analysis as FA
 import           Language.Fortran.Util.ModFile
@@ -49,7 +49,7 @@ data Criticals = Criticals
   , criticalsDeclarations :: M.Map F.Name (DeclContext, FU.SrcSpan)
     -- | Map of unique names.
   , criticalsUniqMap      :: M.Map F.Name F.Name
-    -- | Location of criticals.
+    -- | Filename location of the declared variables
   , criticalsFromWhere    :: M.Map F.Name FilePath
   }
 
@@ -60,24 +60,37 @@ instance ExitCodeOfReport Criticals where
   exitCodeOf _ = 0
 
 instance Show Criticals where
+  -- Key routine for showing the critical variables information
   show crits =
-    case vars of
+    case criticalVars of
       []   -> concat ["\n", fname, ": No additional annotations are necessary.\n"]
       _    -> concat ["\n", fname, ": ", show numVars
                      , " variable declarations suggested to be given a specification:\n"
-                     , unlines [ "    " ++ declReport d | d <- M.toList dmapSlice ]]
+                     , unlines [ "    " ++ declReport d | d <- M.toList dmapSubset ]]
       where
+        -- Deconstructed components
         fname        = F.pfGetFilename . criticalsPf $ crits
         dmap         = criticalsDeclarations           crits
         uniqnameMap  = criticalsUniqMap                crits
         fromWhereMap = criticalsFromWhere              crits
-        vars         = criticalsVariables              crits
-        unitVarName (UnitVar (v, _))                 = v
-        unitVarName (UnitParamVarUse (_, (v, _), _)) = v
-        unitVarName _                                = "<bad>"
-        varNames  = map unitVarName vars
-        dmapSlice = M.filterWithKey (\ k _ -> k `elem` varNames) dmap
-        numVars   = M.size dmapSlice
+        criticalVars  = criticalsVariables             crits
+
+        -- Extract the variable source name for those constraints we want to see
+        unitVarName (UnitVar (uniqName, _))                 = Just uniqName
+        unitVarName (UnitParamVarUse (_, (uniqName, _), _)) = Just uniqName
+        unitVarName (UnitParamPosAbs (_, (uniqName, _), _)) = Just uniqName
+        unitVarName _                                       = Nothing
+
+        -- Just the variable names asociated to constraint variables we are interested in
+        criticalVarNames  = mapMaybe unitVarName criticalVars
+
+        -- Filter out the declaration map for all those variable names we are interested in
+        dmapSubset = M.filterWithKey (\k _ -> k `elem` criticalVarNames) dmap
+
+        -- Size of the critical set
+        numVars   = M.size dmapSubset -- should be same as M.size criticalVarNames
+
+        -- Generate report
         declReport (v, (_, ss)) = vfilename ++ ":" ++ showSpanStart ss ++ "    " ++ fromMaybe v (M.lookup v uniqnameMap)
           where vfilename = fromMaybe fname $ M.lookup v fromWhereMap
                 showSpanStart (FU.SrcSpan l _) = show l
