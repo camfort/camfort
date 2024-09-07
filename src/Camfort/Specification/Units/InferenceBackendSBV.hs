@@ -231,9 +231,10 @@ engine cons = unsafePerformIO $ do
               -- relationships between variables, much like we would
               -- do for polymorphic vars.
               let suggests = [ v | v@(UnitVar {}) <- criticals ] ++
-                             [ v | v@(UnitParamVarUse {}) <- criticals ]
+                             [ v | v@(UnitParamVarUse {}) <- criticals ] ++
+                             [ v | v@(UnitParamPosAbs {}) <- criticals ]
 
-              return . Right . (,suggests) $ composeSubs polySubs assignSubs
+              (return . Right . (,suggests) $ composeSubs polySubs assignSubs)
 
   runSMTWith z3 { transcript = Just "backend-sbv.smt2" } -- SMT-LIB dump
              pred

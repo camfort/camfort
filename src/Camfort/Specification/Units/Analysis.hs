@@ -152,7 +152,7 @@ insertParametricUnits = getProgramFile >>= (mapM_ paramPU . universeBi)
     paramPU pu =
       forM_ (indexedParams pu) $ \ (i, param) ->
         -- Insert a parametric unit if the variable does not already have a unit.
-        modifyVarUnitMap $ M.insertWith (curry snd) param (UnitParamPosAbs (fname, i))
+        modifyVarUnitMap $ M.insertWith (curry snd) param (UnitParamPosAbs (fname, param, i))
       where
         fname = (puName pu, puSrcName pu)
 
@@ -537,7 +537,7 @@ callIdRemap info = modifyCallIdRemapM $ \ idMap -> case info of
 -- | Convert a parametric template into a particular use.
 instantiate :: Data a => Int -> a -> a
 instantiate callId = transformBi $ \ info -> case info of
-  UnitParamPosAbs (name, position) -> UnitParamPosUse (name, position, callId)
+  UnitParamPosAbs (puname, _argname, position) -> UnitParamPosUse (puname, position, callId)
   UnitParamLitAbs litId            -> UnitParamLitUse (litId, callId)
   UnitParamVarAbs (fname, vname)   -> UnitParamVarUse (fname, vname, callId)
   UnitParamEAPAbs vname            -> UnitParamEAPUse (vname, callId)
@@ -697,9 +697,9 @@ propagatePU pu = do
   -- the explicit unit annotation as well.
   givenCons <- forM (indexedParams pu) $ \ (i, param) ->
     case M.lookup param varMap of
-      Just UnitParamPosAbs{}    -> pure . ConEq (UnitParamVarAbs (nn, param)) $ UnitParamPosAbs (nn, i)
-      Just u                    -> pure . ConEq u $ UnitParamPosAbs (nn, i)
-      _                         -> pure . ConEq (UnitParamVarAbs (nn, param)) $ UnitParamPosAbs (nn, i)
+      Just (UnitParamPosAbs (_, vname, _)) -> pure . ConEq (UnitParamVarAbs (nn, param)) $ UnitParamPosAbs (nn, param, i)
+      Just u                    -> pure . ConEq u $ UnitParamPosAbs (nn, param, i)
+      _                         -> pure . ConEq (UnitParamVarAbs (nn, param)) $ UnitParamPosAbs (nn, param, i)
 
   let cons = givenCons ++ bodyCons
   case pu of F.PUFunction {}   -> modifyTemplateMap (M.insert name cons)
@@ -709,7 +709,7 @@ propagatePU pu = do
   -- Set the unitInfo field of a function program unit to be the same
   -- as the unitInfo of its result.
   let pu' = case (pu, indexedParams pu) of
-              (F.PUFunction {}, (0, res):_) -> UA.setUnitInfo (UnitParamPosAbs (nn, 0) `fromMaybe` M.lookup res varMap) pu
+              (F.PUFunction {}, (0, res):_) -> UA.setUnitInfo (UnitParamPosAbs (nn, res, 0) `fromMaybe` M.lookup res varMap) pu
               _                             -> pu
 
   pure (UA.setConstraint (ConConj cons) pu')
