@@ -9,7 +9,7 @@ program degrees
 
   rad = toRad(deg)
   print *, rad
-  
+
 contains
 
   != static_assert pre("deg >= 0" & "deg <= 360")

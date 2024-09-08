@@ -12,6 +12,7 @@ import           Language.Fortran.Util.ModFile (ModFile, emptyModFiles)
 import           System.FilePath ((</>))
 import qualified Test.Hspec as Test
 import           Test.Hspec hiding (Spec)
+import           Camfort.TestUtils
 
 spec :: Test.Spec
 spec =
@@ -62,8 +63,9 @@ unitsCheckReport lo modNames fileName expectedReport = do
   report <- runAnalysisT file (logOutputNone True) LogError modFiles $ runUnitAnalysis uEnv $ checkUnits
   let res = report ^?! arResult . _ARSuccess
 
-  show res `shouldBe` expectedReport
+  hideFormatting (show res) `shouldBe` expectedReport
   where uOpts = unitOpts0 { uoLiterals = lo }
+
 
 unitsCheckReportWithMod :: [String] -> String -> String -> Expectation
 unitsCheckReportWithMod = unitsCheckReport LitMixed
