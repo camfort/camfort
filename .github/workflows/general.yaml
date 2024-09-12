@@ -52,7 +52,7 @@ jobs:
       run: stack --no-terminal install
 
     - name: Upload executable
-      uses: actions/upload-artifact@v2
+      uses: actions/upload-artifact@v4
       with:
         path: ~/.local/bin/${{ env.exe }}
         name: ${{ env.exe }}-ubuntu-stack-${{ github.sha }}
@@ -172,10 +172,10 @@ jobs:
       env:
         HSPEC_OPTIONS: --color
 
-    # note that Cabal uses symlinks -- actions/upload-artifact@v2 apparently
+    # note that Cabal uses symlinks -- actions/upload-artifact@v4 apparently
     # dereferences for us
     - name: Upload executable
-      uses: actions/upload-artifact@v2
+      uses: actions/upload-artifact@v4
       with:
         path: ~/.cabal/bin/${{ env.exe }}
         name: ${{ env.exe }}-macos-ghc-${{ matrix.ghc }}-cabal-${{ github.sha }}
@@ -267,11 +267,11 @@ jobs:
       env:
         BASH_ENV: /c/ghcup/env
 
-    # note that Cabal uses symlinks -- actions/upload-artifact@v2 apparently
+    # note that Cabal uses symlinks -- actions/upload-artifact@v4 apparently
     # dereferences for us
     - name: (camfort) Upload executable
       if: "matrix.build == 'release'"
-      uses: actions/upload-artifact@v2
+      uses: actions/upload-artifact@v4
       with:
         path: C:/cabal/bin/camfort.exe
         name: camfort-${{ runner.os }}-ghc_${{ matrix.ghc }}-cabal-${{ github.sha }}.exe
@@ -290,7 +290,7 @@ jobs:
         mv bundle "${{ env.exe }}-bundle-windows-msys2-${{ matrix.msystem }}-ghc-${{ matrix.ghc }}-cabal-${{ github.sha }}"
 
     - name: Upload self-contained bundle
-      uses: actions/upload-artifact@v2
+      uses: actions/upload-artifact@v4
       with:
         path: "${{ env.exe }}-bundle-windows-msys2-${{ matrix.msystem }}-ghc-${{ matrix.ghc }}-cabal-${{ github.sha }}"
         name: "${{ env.exe }}-bundle-windows-msys2-${{ matrix.msystem }}-ghc-${{ matrix.ghc }}-cabal-${{ github.sha }}"
