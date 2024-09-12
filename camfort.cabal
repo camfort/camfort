@@ -367,7 +367,7 @@ library
     , parallel ==3.2.*
     , pipes ==4.3.*
     , pretty >=1.1 && <2
-    , sbv >=8.0 && <10
+    , sbv >=8.0 && <11
     , singletons >=3.0 && <3.2
     , singletons-base >=3.0 && <3.2
     , singletons-th >=3.0 && <3.2
@@ -402,7 +402,7 @@ executable camfort
     , lens >=4.15.1 && <6
     , mtl >=2.1 && <2.3
     , optparse-applicative >=0.14 && <0.18
-    , sbv >=8.0 && <10
+    , sbv >=8.0 && <11
     , text >=0.11.2.3 && <2.1
     , uniplate >=1.6.10 && <1.7
     , verifiable-expressions >=0.6.2 && <0.8.0
@@ -458,7 +458,7 @@ test-suite spec
     , lattices >=2.0.0 && <2.1
     , lens >=4.15.1 && <6
     , mtl >=2.1 && <2.3
-    , sbv >=8.0 && <10
+    , sbv >=8.0 && <11
     , silently ==1.2.*
     , temporary >=1.2.0.4 && <1.4
     , text >=0.11.2.3 && <2.1
