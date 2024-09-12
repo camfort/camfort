@@ -25,5 +25,10 @@ module c1
     real :: c = 4.0
     x = c
   end subroutine foo4
-
+  ! function whose parameter needs to get constraint somewhere else
+  function foo5(x)
+    real :: foo5
+    real :: x
+    foo5 = 1.0
+  end function foo5
 end module c1

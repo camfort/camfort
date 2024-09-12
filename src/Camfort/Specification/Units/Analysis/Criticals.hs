@@ -91,7 +91,8 @@ instance Show Criticals where
         numVars   = M.size dmapSubset -- should be same as M.size criticalVarNames
 
         -- Generate report
-        declReport (v, (_, ss)) = vfilename ++ ":" ++ showSpanStart ss ++ "    " ++ fromMaybe v (M.lookup v uniqnameMap)
+        declReport (v, (_, ss)) =
+          vfilename ++ ":" ++ showSpanStart ss ++ "    " ++ fromMaybe v (M.lookup v uniqnameMap)
           where vfilename = fromMaybe fname $ M.lookup v fromWhereMap
                 showSpanStart (FU.SrcSpan l _) = show l
 

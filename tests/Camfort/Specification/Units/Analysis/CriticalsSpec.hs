@@ -62,16 +62,20 @@ exampleCriticals2CriticalsReport =
 
 exampleCriticals3CriticalsReport :: String
 exampleCriticals3CriticalsReport =
- "\ntests" </> "fixtures" </> "Specification" </> "Units" </> "cross-module-c" </> "cross-module-c3.f90: 3 variable declarations suggested to be given a specification:\n\
+ "\ntests" </> "fixtures" </> "Specification" </> "Units" </> "cross-module-c" </> "cross-module-c3.f90: 5 variable declarations suggested to be given a specification:\n\
  \    tests" </> "fixtures" </> "Specification" </> "Units" </> "cross-module-c" </> "cross-module-c1.f90:7:11    b\n\
  \    tests" </> "fixtures" </> "Specification" </> "Units" </> "cross-module-c" </> "cross-module-c3.f90:5:11    a3\n\
- \    tests" </> "fixtures" </> "Specification" </> "Units" </> "cross-module-c" </> "cross-module-c3.f90:9:11    b3\n"
+ \    tests" </> "fixtures" </> "Specification" </> "Units" </> "cross-module-c" </> "cross-module-c3.f90:9:11    b3\n\
+ \    tests" </> "fixtures" </> "Specification" </> "Units" </> "cross-module-c" </> "cross-module-c3.f90:11:11    x0\n\
+ \    tests" </> "fixtures" </> "Specification" </> "Units" </> "cross-module-c" </> "cross-module-c3.f90:12:13    x1\n"
 
 exampleCriticals4CriticalsReport :: String
 exampleCriticals4CriticalsReport =
- "\ntests" </> "fixtures" </> "Specification" </> "Units" </> "cross-module-c" </> "cross-module-c1.f90: 5 variable declarations suggested to be given a specification:\n\
+ "\ntests" </> "fixtures" </> "Specification" </> "Units" </> "cross-module-c" </> "cross-module-c1.f90: 7 variable declarations suggested to be given a specification:\n\
  \    tests" </> "fixtures" </> "Specification" </> "Units" </> "cross-module-c" </> "cross-module-c1.f90:5:17    a\n\
  \    tests" </> "fixtures" </> "Specification" </> "Units" </> "cross-module-c" </> "cross-module-c1.f90:7:11    b\n\
  \    tests" </> "fixtures" </> "Specification" </> "Units" </> "cross-module-c" </> "cross-module-c1.f90:11:13    foo_out\n\
  \    tests" </> "fixtures" </> "Specification" </> "Units" </> "cross-module-c" </> "cross-module-c1.f90:18:13    foo3\n\
- \    tests" </> "fixtures" </> "Specification" </> "Units" </> "cross-module-c" </> "cross-module-c1.f90:24:15    x\n"
+ \    tests" </> "fixtures" </> "Specification" </> "Units" </> "cross-module-c" </> "cross-module-c1.f90:24:15    x\n\
+ \    tests" </> "fixtures" </> "Specification" </> "Units" </> "cross-module-c" </> "cross-module-c1.f90:30:13    foo5\n\
+ \    tests" </> "fixtures" </> "Specification" </> "Units" </> "cross-module-c" </> "cross-module-c1.f90:31:13    x\n"

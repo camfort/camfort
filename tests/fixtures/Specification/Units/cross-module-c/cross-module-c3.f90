@@ -7,8 +7,12 @@ module c3
   !
   ! another constant
   real :: b3 = 2.0
+  ! another global
+  real :: x0
+    real :: x1
   contains
   subroutine foo()
+    x0 = foo5(x1)
     b3 = a / b
   end subroutine foo
 end module c3

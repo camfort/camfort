@@ -70,6 +70,7 @@ import           Camfort.Specification.Stencils.Syntax
   , Specification(..)
   , Variable)
 import           Language.Fortran.Repr
+
 type Indices a = [[F.Index (FA.Analysis a)]]
 
 type EvalLog = [(String, Variable)]
