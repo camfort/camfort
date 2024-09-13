@@ -12,7 +12,7 @@ env:
 
 jobs:
   build:
-    name: build, build .#image
+    name: build, build .#camfort-image-ghc92
     runs-on: ubuntu-latest
     steps:
     - uses: actions/checkout@v3
@@ -34,7 +34,7 @@ jobs:
     # configure this output in flake.nix
     # make sure you know how it's tagged to then reference when pushing (don't
     # know a better method)
-    - run: nix build .#image
+    - run: nix build .#camfort-image-ghc92
 
     - run: ./result | podman load
 
@@ -50,4 +50,4 @@ jobs:
 
     # your repo needs write permission to push to the registry for this to work!
     # configured in Packages (tab at user/org level)
-    - run: podman push localhost/camfort:${{ github.sha }} ${{ env.IMAGE_REGISTRY }}/camfort:${{ github.sha }}
+    - run: 'podman push localhost/camfort:${{ github.sha }} ${{ env.IMAGE_REGISTRY }}/camfort:${{ github.sha }}'
