@@ -13,6 +13,6 @@ module c3
   contains
   subroutine foo()
     x0 = foo5(x1)
-    b3 = a / b
+    b3 = a / b + foo2()
   end subroutine foo
 end module c3

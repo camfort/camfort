@@ -199,10 +199,11 @@ insertUndeterminedUnitVar _ e = pure e
 toUnitVar :: DeclMap -> VV -> UnitInfo
 toUnitVar dmap (vname, sname) = unit
   where
-    unit = case fst <$> M.lookup vname dmap of
+    unit = case fst3 <$> M.lookup vname dmap of
       Just (DCFunction (F.Named fvname, F.Named fsname))   -> UnitParamVarAbs ((fvname, fsname), (vname, sname))
       Just (DCSubroutine (F.Named fvname, F.Named fsname)) -> UnitParamVarAbs ((fvname, fsname), (vname, sname))
       _                                                    -> UnitVar (vname, sname)
+    fst3 (a, _, _) = a
 
 -- Insert undetermined units annotations on the following types of variables.
 isAcceptableType :: FAS.SemType -> Bool
