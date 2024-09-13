@@ -103,6 +103,52 @@
           };
         };
 
+        haskellProjects.ghc96 = import ./haskell-flake-ghc96.nix pkgs;
+        haskellProjects.camfort-ghc96 = {
+          basePackages = config.haskellProjects.ghc96.outputs.finalPackages;
+          packages = {
+            fortran-src.source = "0.11.0";
+          };
+
+          settings = {
+            sbv = {
+              # TODO just try to build
+              check = false;
+              broken = false;
+
+              # if we override the nixpkgs sbv derivation, we need to set this
+              extraLibraries = [pkgs.z3];
+            };
+            # this might not be needed if we don't override the nixpkgs sbv
+            # derivation? but it defo is if we do & seems a sensible default
+            camfort.extraLibraries = [pkgs.z3];
+
+            # 2024-09-12 raehik: temp TODO
+            union = {
+              broken = false;
+              jailbreak = true;
+            };
+
+            # 10 tests fail :O
+            singletons-base.check = false;
+
+            # looks like we've not upgraded fortran-src to GHC 9.6... try anyway
+            fortran-src.jailbreak = true;
+          };
+
+          devShell = {
+            tools = hp: {
+              # use nixpkgs cabal-install
+              #cabal-install = pkgs.cabal-install;
+
+              # disable these while unused (often slow/annoying to build)
+              haskell-language-server = null;
+              ghcid = null;
+              hlint = null;
+            };
+          };
+        };
+
         packages.camfort-image-ghc92 =
           mkCamfortImage "camfort" self'.packages.camfort-ghc92-camfort;
       };
