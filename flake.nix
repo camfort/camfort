@@ -21,7 +21,7 @@
         haskellProjects.default = {
           #basePackages = config.haskellProjects.ghc96.outputs.finalPackages;
           packages = {
-            fortran-src.source = "0.11.0";
+            fortran-src.source = "0.16.2";
           };
 
           settings = {
