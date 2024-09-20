@@ -97,13 +97,6 @@ instance Show Criticals where
 
 instance Describe Criticals
 
--- | Return a list of critical variables as UnitInfo list (most likely
--- to be of the UnitVar constructor).
-runCriticalVariables :: UnitSolver [UnitInfo]
-runCriticalVariables = do
-  cons <- usConstraints `fmap` get
-  return $ criticalVariables cons
-
 -- | Infer one possible set of critical variables for a program.
 -- \ (depends on first doing inference)
 inferCriticalVariables :: FilePath -> UnitAnalysis Criticals
@@ -141,3 +134,11 @@ inferCriticalVariables localPath = do
                      , criticalsUniqMap      = uniqnameMap `M.union` uniqnameMap'
                      , criticalsFromWhere    = fromWhereMap
                      }
+
+-- (not used)
+-- | Return a list of critical variables as UnitInfo list (most likely
+-- to be of the UnitVar constructor).
+runCriticalVariables :: UnitSolver [UnitInfo]
+runCriticalVariables = do
+  cons <- usConstraints `fmap` get
+  return $ criticalVariables cons
