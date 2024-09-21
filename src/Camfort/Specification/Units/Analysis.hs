@@ -135,7 +135,7 @@ runInference solver = do
 
   let (pf', _, _) = withCombinedEnvironment mfs . fmap UA.mkUnitAnnotation $ pf
   let pvm = combinedParamVarMap mfs
-  let pf'' = FAD.analyseConstExps . FAD.analyseParameterVars pvm . FAB.analyseBBlocks $ pf'
+  let pf'' = FAD.analyseParameterVars pvm . FAB.analyseBBlocks $ pf'
   runUnitSolver pf'' $ do
     initializeModFiles
     initInference
