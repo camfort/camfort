@@ -86,7 +86,7 @@ realMain = do
     runUO uo f =
       let ro = uoReadOptions uo
           lo = uoLogOptions uo
-      in runRO ro lo (f (literals uo))
+      in runRO ro lo (f (literals uo) (includeUninitialized uo))
     runUWO uwo f =
       let uo     = uwoUnitsOptions uwo
           ro     = uoReadOptions uo
@@ -205,6 +205,7 @@ data UnitsOptions = UnitsOptions
   , literals      :: LiteralsOpt
   , uoDumpMode    :: Bool
   , uoShowAST     :: Bool
+  , includeUninitialized :: Bool
   }
 
 
@@ -354,6 +355,7 @@ unitsOptions = fmap UnitsOptions
   <*> literalsOption
   <*> dumpModFileOption
   <*> showASTOption
+  <*> uninitOption
   where
     literalsOption = option parseLiterals $
                      long "units-literals"
@@ -364,6 +366,8 @@ unitsOptions = fmap UnitsOptions
                      <> help "units-of-measure literals mode. ID = Unitless, Poly, or Mixed"
     dumpModFileOption = switch (long "dump-mod-file" <> help "show contents of fsmod file")
     showASTOption = switch (long "show-ast" <> help "show units at each AST node")
+    uninitOption = switch (long "include-uninit" <> help "include suggestions for uninitialized variables")
+
     parseLiterals = fmap read str
 
 
