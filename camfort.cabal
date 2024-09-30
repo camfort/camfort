@@ -156,7 +156,6 @@ extra-source-files:
     samples/ddt/example4.f90
     samples/equivalence/example1.f90
     samples/equivalence/wrt.f90
-    samples/fp-check/intconv.f90
     samples/implicit-none/example1.f90
     samples/implicit-none/example2.f90
     samples/invariants/angle.f90
