@@ -35,7 +35,7 @@ unitsCriticalsReportIs :: LiteralsOpt -> [String] -> String -> String -> Expecta
 unitsCriticalsReportIs litmode modNames fileName expectedReport = do
   let file = fixturesDir </> fileName
       modPaths = fmap (fixturesDir </>) modNames
-  modFiles <- mapM mkTestModFile modPaths
+  modFiles <- mapM (mkTestModFile litmode) modPaths
   [(pf,_)] <- readParseSrcDir Nothing modFiles file []
 
   let uEnv = UnitEnv { unitOpts = uOpts, unitProgramFile = pf }
@@ -47,8 +47,8 @@ unitsCriticalsReportIs litmode modNames fileName expectedReport = do
   where uOpts = unitOpts0 { uoLiterals = litmode }
 
 -- | Helper for producing a basic ModFile from a (terminal) module file.
-mkTestModFile :: String -> IO ModFile
-mkTestModFile file = head <$> genModFiles Nothing emptyModFiles compileUnits unitOpts0 file []
+mkTestModFile :: LiteralsOpt -> String -> IO ModFile
+mkTestModFile litmode file = head <$> genModFiles Nothing emptyModFiles compileUnits (unitOpts0 { uoLiterals = litmode }) file []
 
 exampleCriticals1CriticalsReport :: String
 exampleCriticals1CriticalsReport =
