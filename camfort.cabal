@@ -243,7 +243,6 @@ extra-source-files:
     samples/units/global/file2.f90
     samples/units/higherorder_error.f90
     samples/units/insideOutside.f90
-    samples/units/multi.f90
     samples/units/poly-scale.f90
     samples/units/poly1.f90
     samples/units/squarePoly.f90
