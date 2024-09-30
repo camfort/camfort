@@ -55,6 +55,7 @@ unitsCriticalsReportIs litmode uninitmode modNames fileName expectedReport = do
   where uOpts = unitOpts0 { uoLiterals = litmode, uninitializeds = uninitmode }
 
 -- | Helper for producing a basic ModFile from a (terminal) module file.
+
 mkTestModFile :: UnitOpts -> String -> IO ModFile
 mkTestModFile uopts file =
   head <$> genModFiles Nothing emptyModFiles compileUnits uopts file []
