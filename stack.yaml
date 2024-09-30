@@ -13,6 +13,7 @@ allow-newer: true
 #   - git: https://github.com/camfort/fortran-src
 #     commit: <commit hash>
 extra-deps:
+# fortran-src latest
 - fortran-src-0.16.3
 - verifiable-expressions-0.6.2@sha256:cefdc5d3d9a4cff4ce0bfaa27ccdf83ff46bcd17340ac0c5cf6fcbe88ce05a61,1739
   #- sbv-8.15@sha256:bc0ea4e3564626030ac2cb21905b97cd9bd25fddcd6d6010834e8cc2ebf79067,29016
