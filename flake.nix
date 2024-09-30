@@ -1,70 +1,110 @@
-# cabal repl doesn't work due to not linking to libflint. I don't know why it
-# doesn't -- perhaps something missing in cabal2nix or haskell-flake. Building
-# and running works fine.
-#
-# A crude fix is `LD_LIBRARY_PATH=/nix/store/...-flint-x.y.z/lib cabal repl`.
-# Get the correct path from `echo $NIX_LDFLAGS`.
-
 {
   inputs = {
     nixpkgs.url = "github:nixos/nixpkgs/nixpkgs-unstable";
     flake-parts.url = "github:hercules-ci/flake-parts";
     haskell-flake.url = "github:srid/haskell-flake";
   };
-  outputs = inputs@{ self, nixpkgs, flake-parts, ... }:
-    flake-parts.lib.mkFlake { inherit inputs; } {
-      systems = nixpkgs.lib.systems.flakeExposed;
+  outputs = inputs:
+    inputs.flake-parts.lib.mkFlake { inherit inputs; } {
+      systems = inputs.nixpkgs.lib.systems.flakeExposed;
       imports = [ inputs.haskell-flake.flakeModule ];
-      perSystem = { self', pkgs, config, ... }: {
-        packages.default = self'.packages.camfort;
-        #haskellProjects.ghc96 = import ./haskell-flake-ghc96.nix pkgs;
-        haskellProjects.default = {
-          #basePackages = config.haskellProjects.ghc96.outputs.finalPackages;
+      perSystem = { self', pkgs, config, ... }:
+      let
+        # use streamLayeredImage so as to not place the image in the Nix store
+        mkCamfortImage = imageName: camfortPkg: pkgs.dockerTools.streamLayeredImage {
+          name = imageName;
+          # equivalent to `git rev-parse HEAD`
+          # only exists on clean working tree, else set to "dev"
+          tag = inputs.self.rev or "dev";
+          config.Entrypoint = [ "${pkgs.lib.getExe camfortPkg}" ];
+          maxLayers = 120; # less than Docker max layers to allow extending
+        };
+      in {
+        packages.default  = self'.packages.camfort-ghc92-camfort;
+        devShells.default = self'.devShells.camfort-ghc92;
+
+        haskellProjects.ghc92 = import ./haskell-flake-ghc92.nix pkgs;
+        haskellProjects.camfort-ghc92 = {
+          basePackages = config.haskellProjects.ghc92.outputs.finalPackages;
           packages = {
+            # 2024-09-13 raehik: CamFort's sbv ver range no longer in nixpkgs
+            sbv.source = "9.2";
+
             fortran-src.source = "0.11.0";
           };
 
           settings = {
             sbv = {
-              # 2023-04-18 raehik: sbv-9.0 broken; seems tests fail. try ignoring
+              # 2024-09-13 raehik: huge tests, some fail, seems complex. disable
+              # and just assume it's working
               check = false;
-              broken = false;
+
+              # if we override the nixpkgs sbv derivation, we need to set this
+              extraLibraries = [pkgs.z3];
             };
+            # this might not be needed if we don't override the nixpkgs sbv
+            # derivation? but it defo is if we do & seems a sensible default
+            camfort.extraLibraries = [pkgs.z3];
+
+            # 2024-09-12 raehik: temp TODO
+            union.broken = false;
           };
 
           devShell = {
-            # libflint doesn't get configured properly for `cabal repl` -- fix
-            # it here
-            # curiously, `cabal build` works... maybe $NIX_LDFLAGS etc. get used
-            # by the GHC invocation involved there.
-            # I don't have to do this for pkg-config libraries (of which
-            # libflint is not one). interesting!
-            mkShellArgs.shellHook = ''
-              export LD_LIBRARY_PATH='${pkgs.flint}/lib'
-            '';
-
             tools = hp: {
-              ghcid = null; # broken on GHC 9.6? old fsnotify
-              hlint = null; # broken on GHC 9.6? old
-              haskell-language-server = null; # TAKES AGES TO BUILD FFS
+              # use nixpkgs cabal-install
+              cabal-install = pkgs.cabal-install;
+
+              # disable these while unused (often slow/annoying to build)
+              haskell-language-server = null;
+              ghcid = null;
+              hlint = null;
             };
           };
         };
 
-        # use streamLayeredImage so as to not place the image in the Nix store
-        packages.image = pkgs.dockerTools.streamLayeredImage {
-          name = "camfort";
-          # equivalent to `git rev-parse HEAD`
-          # only exists on clean working tree, else set to "dev"
-          tag = self.rev or "dev";
-          config = {
-            Entrypoint = [ "${pkgs.lib.getExe self'.packages.camfort}" ];
+        haskellProjects.ghc94 = import ./haskell-flake-ghc94.nix pkgs;
+        haskellProjects.camfort-ghc94 = {
+          basePackages = config.haskellProjects.ghc94.outputs.finalPackages;
+          packages = {
+            # 2024-09-13 raehik: CamFort's sbv ver range no longer in nixpkgs
+            sbv.source = "9.2";
+
+            fortran-src.source = "0.11.0";
           };
-          maxLayers = 120; # less than Docker max layers to allow extending
-          # Note that Z3 is configured using the C bindings, which then access
-          # the executable. So no need to add Z3 in ourselves, it's added by the
-          # main camfort derivation.
+
+          settings = {
+            sbv = {
+              # 2024-09-13 raehik: huge tests, some fail, seems complex. disable
+              # and just assume it's working
+              check = false;
+
+              # if we override the nixpkgs sbv derivation, we need to set this
+              extraLibraries = [pkgs.z3];
+            };
+            # this might not be needed if we don't override the nixpkgs sbv
+            # derivation? but it defo is if we do & seems a sensible default
+            camfort.extraLibraries = [pkgs.z3];
+
+            # 2024-09-12 raehik: temp TODO
+            union.broken = false;
+          };
+
+          devShell = {
+            tools = hp: {
+              # use nixpkgs cabal-install
+              cabal-install = pkgs.cabal-install;
+
+              # disable these while unused (often slow/annoying to build)
+              haskell-language-server = null;
+              ghcid = null;
+              hlint = null;
+            };
+          };
         };
+
+        packages.camfort-image-ghc92 =
+          mkCamfortImage "camfort" self'.packages.camfort-ghc92-camfort;
       };
     };
 }
