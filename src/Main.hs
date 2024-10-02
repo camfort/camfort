@@ -355,7 +355,7 @@ unitsOptions = fmap UnitsOptions
   <*> literalsOption
   <*> dumpModFileOption
   <*> showASTOption
-  <*> uninitOption
+  <*> pure False
   where
     literalsOption = option parseLiterals $
                      long "units-literals"
@@ -366,10 +366,13 @@ unitsOptions = fmap UnitsOptions
                      <> help "units-of-measure literals mode. ID = Unitless, Poly, or Mixed"
     dumpModFileOption = switch (long "dump-mod-file" <> help "show contents of fsmod file")
     showASTOption = switch (long "show-ast" <> help "show units at each AST node")
-    uninitOption = switch (long "include-uninit" <> help "include suggestions for uninitialized variables")
-
     parseLiterals = fmap read str
 
+unitsSuggestOptions :: Parser UnitsOptions
+unitsSuggestOptions =
+    (fmap (\f b -> f { includeUninitialized = b }) unitsOptions) <*> uninitOption
+  where
+    uninitOption = switch (long "include-uninit" <> help "include suggestions for uninitialized variables")
 
 invariantsOptions :: Parser InvariantsOptions
 invariantsOptions = fmap InvariantsOptions
@@ -424,7 +427,7 @@ cmdStencilsSynth = fmap CmdStencilsSynth stencilsSynthOptions
 
 
 cmdUnitsSuggest, cmdUnitsCheck, cmdUnitsInfer, cmdUnitsCompile, cmdUnitsSynth :: Parser Command
-cmdUnitsSuggest = fmap CmdUnitsSuggest unitsOptions
+cmdUnitsSuggest = fmap CmdUnitsSuggest unitsSuggestOptions
 cmdUnitsCheck   = fmap CmdUnitsCheck   unitsOptions
 cmdUnitsInfer   = fmap CmdUnitsInfer   unitsOptions
 cmdUnitsCompile = fmap CmdUnitsCompile unitsOptions
