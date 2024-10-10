@@ -358,7 +358,7 @@ library
     , directory >=1.2 && <2
     , fgl >=5.6 && <5.9
     , filepath ==1.4.*
-    , fortran-src >=0.16.2 && <0.17
+    , fortran-src ==0.16.1
     , ghc-prim >=0.3.1.0 && <0.10
     , hmatrix ==0.20.*
     , lattices >=2.0.0 && <2.3
