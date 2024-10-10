@@ -398,7 +398,7 @@ executable camfort
     , directory >=1.2 && <2
     , fgl >=5.6 && <5.9
     , filepath ==1.4.*
-    , fortran-src >=0.16.2 && <0.17
+    , fortran-src == 0.16.1
     , hmatrix ==0.20.*
     , lattices >=2.0.0 && <2.3
     , lens >=4.15.1 && <6
@@ -454,7 +454,7 @@ test-suite spec
     , directory >=1.2 && <2
     , fgl >=5.6 && <5.9
     , filepath ==1.4.*
-    , fortran-src >=0.16.2 && <0.17
+    , fortran-src == 0.16.1
     , hmatrix ==0.20.*
     , hspec >=2.2 && <3
     , lattices >=2.0.0 && <2.3
