@@ -353,15 +353,17 @@ runUnitsFunctionalityP
   -> (UnitOpts -> AnalysisProgram e w IO a b)
   -> AnalysisRunnerP e w IO a b (AnalysisReport e w b)
   -> LiteralsOpt
+  -> Bool
   -> CamfortEnv
   -> IO Int
-runUnitsFunctionalityP description unitsProgram runner opts =
-  let uo = optsToUnitOpts opts
+runUnitsFunctionalityP description unitsProgram runner opts uninits =
+  let uo = optsToUnitOpts opts uninits
   in runFunctionalityP description (unitsProgram uo) runner compileUnits uo
 
-optsToUnitOpts :: LiteralsOpt -> UnitOpts
-optsToUnitOpts m = o1
+optsToUnitOpts :: LiteralsOpt -> Bool -> UnitOpts
+optsToUnitOpts m uninits = o1
   where o1 = unitOpts0 { uoLiterals = m
+                       , uninitializeds = uninits
                        }
 
 singlePfUnits
@@ -405,8 +407,8 @@ multiPfUnits unitAnalysis opts pfs = do
 
   return (rs', ps)
 
-unitsDump :: LiteralsOpt -> CamfortEnv -> IO Int
-unitsDump _ env = do
+unitsDump :: LiteralsOpt -> Bool -> CamfortEnv -> IO Int
+unitsDump _ uninits env = do
   let modFileName = ceInputSources env
   modData <- LB.readFile modFileName
   let eResult = FM.decodeModFile modData
@@ -420,7 +422,7 @@ unitsDump _ env = do
         putStrLn . fromMaybe "unable to find units info" $ dumpModFileCompiledUnits modFile
       pure 0
 
-unitsCheck :: LiteralsOpt -> CamfortEnv -> IO Int
+unitsCheck :: LiteralsOpt -> Bool -> CamfortEnv -> IO Int
 unitsCheck =
   runUnitsFunctionalityP
   "Checking units for"
@@ -428,7 +430,7 @@ unitsCheck =
   (describePerFileAnalysisP "unit checking")
 
 
-unitsInfer :: Bool -> LiteralsOpt -> CamfortEnv -> IO Int
+unitsInfer :: Bool -> LiteralsOpt -> Bool -> CamfortEnv -> IO Int
 unitsInfer showAST =
   runUnitsFunctionalityP
   "Inferring units for"
@@ -496,9 +498,9 @@ decodeOneModFile path = do
       hPutStrLn stderr $ path ++ ": successfully parsed summary file."
       return modFiles
 
-unitsCompile :: LiteralsOpt -> CamfortEnv -> IO Int
-unitsCompile opts env = do
-  let uo = optsToUnitOpts opts
+unitsCompile :: LiteralsOpt -> Bool -> CamfortEnv -> IO Int
+unitsCompile opts uninits env = do
+  let uo = optsToUnitOpts opts uninits
   let description = "Compiling units for"
   putStrLn $ description ++ " '" ++ ceInputSources env ++ "'"
   incDir' <- maybe getCurrentDirectory pure (ceIncludeDir env)
@@ -551,23 +553,24 @@ unitsCompile opts env = do
   _allMods <- loop mg0 []
   return 0
 
-unitsSynth :: AnnotationType -> FileOrDir -> LiteralsOpt -> CamfortEnv -> IO Int
-unitsSynth annType outSrc opts env =
+unitsSynth :: AnnotationType -> FileOrDir -> LiteralsOpt -> Bool -> CamfortEnv -> IO Int
+unitsSynth annType outSrc opts uninits env =
   runFunctionality "Synthesising units for"
                    (multiPfUnits (LU.synthesiseUnits (markerChar annType)) uo)
                    (doRefactor "unit synthesis" (ceInputSources env) outSrc)
                    compileUnits
                    uo
                    env
-  where uo = optsToUnitOpts opts
+  where uo = optsToUnitOpts opts uninits
 
-unitsCriticals :: LiteralsOpt -> CamfortEnv -> IO Int
-unitsCriticals =
+unitsCriticals :: LiteralsOpt -> Bool -> CamfortEnv -> IO Int
+unitsCriticals opts uninits env =
   runUnitsFunctionalityP
   "Suggesting variables to annotate with unit specifications in"
-  (singlePfUnits inferCriticalVariables)
-  (describePerFileAnalysisP "unit critical variable analysis")
-
+  (singlePfUnits (inferCriticalVariables localPath))
+  (describePerFileAnalysisP "unit critical variable analysis") opts uninits env
+  where
+    localPath = takeDirectory (ceInputSources env)
 
 {- Stencils feature -}
 

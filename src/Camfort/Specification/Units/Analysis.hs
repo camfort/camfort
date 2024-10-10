@@ -135,7 +135,11 @@ runInference solver = do
 
   let (pf', _, _) = withCombinedEnvironment mfs . fmap UA.mkUnitAnnotation $ pf
   let pvm = combinedParamVarMap mfs
-  let pf'' = FAD.analyseConstExps . FAD.analyseParameterVars pvm . FAB.analyseBBlocks $ pf'
+    -- Previously we did
+  --  FAD.analyseConstExps . FAD.analyseParameterVars pvm
+  -- but we do not want to cause constant expression evaluation to 'squeeze out'
+  -- constant expressions from the analysis
+  let pf'' = FAB.analyseBBlocks $ pf'
   runUnitSolver pf'' $ do
     initializeModFiles
     initInference
@@ -152,7 +156,7 @@ insertParametricUnits = getProgramFile >>= (mapM_ paramPU . universeBi)
     paramPU pu =
       forM_ (indexedParams pu) $ \ (i, param) ->
         -- Insert a parametric unit if the variable does not already have a unit.
-        modifyVarUnitMap $ M.insertWith (curry snd) param (UnitParamPosAbs (fname, i))
+        modifyVarUnitMap $ M.insertWith (curry snd) param (UnitParamPosAbs (fname, param, i))
       where
         fname = (puName pu, puSrcName pu)
 
@@ -199,10 +203,11 @@ insertUndeterminedUnitVar _ e = pure e
 toUnitVar :: DeclMap -> VV -> UnitInfo
 toUnitVar dmap (vname, sname) = unit
   where
-    unit = case fst <$> M.lookup vname dmap of
+    unit = case fst3 <$> M.lookup vname dmap of
       Just (DCFunction (F.Named fvname, F.Named fsname))   -> UnitParamVarAbs ((fvname, fsname), (vname, sname))
       Just (DCSubroutine (F.Named fvname, F.Named fsname)) -> UnitParamVarAbs ((fvname, fsname), (vname, sname))
       _                                                    -> UnitVar (vname, sname)
+    fst3 (a, _, _) = a
 
 -- Insert undetermined units annotations on the following types of variables.
 isAcceptableType :: FAS.SemType -> Bool
@@ -537,7 +542,7 @@ callIdRemap info = modifyCallIdRemapM $ \ idMap -> case info of
 -- | Convert a parametric template into a particular use.
 instantiate :: Data a => Int -> a -> a
 instantiate callId = transformBi $ \ info -> case info of
-  UnitParamPosAbs (name, position) -> UnitParamPosUse (name, position, callId)
+  UnitParamPosAbs (puname, _argname, position) -> UnitParamPosUse (puname, position, callId)
   UnitParamLitAbs litId            -> UnitParamLitUse (litId, callId)
   UnitParamVarAbs (fname, vname)   -> UnitParamVarUse (fname, vname, callId)
   UnitParamEAPAbs vname            -> UnitParamEAPUse (vname, callId)
@@ -649,7 +654,43 @@ propagateStatement stmt = case stmt of
 propagateDeclarator :: F.Declarator UA -> UnitSolver (F.Declarator UA)
 propagateDeclarator decl = case decl of
   F.Declarator _ _ e1 _ _ (Just e2) -> literalAssignmentSpecialCase e1 e2 decl
-  _                                 -> pure decl
+  F.Declarator _ _ e1 _ _ Nothing   -> do
+    -- Handle uninitialized variables
+    opts <- ask
+    if uninitializeds . unitOpts $ opts
+      then do
+        -- Find the enclosing program unit
+        punames <- lookupEnclosingPUname (FA.varName e1)
+        pure $
+          -- Set up a param var abstract constraint
+          UA.maybeSetUnitConstraintF2
+             ConEq
+               (UA.getUnitInfo e1)
+               (Just $ UnitParamVarAbs (punames, (FA.varName e1, FA.srcName e1)))
+               decl
+      else pure decl
+
+-- Helper to lookup the name of the enclosing program unit
+lookupEnclosingPUname :: F.Name -> UnitSolver (F.Name, F.Name)
+lookupEnclosingPUname internalName = do
+    st <- get
+    return . aux $ (F.programFileProgramUnits . usProgramFile $ st)
+  where
+    aux :: [ F.ProgramUnit UA ] -> (F.Name, F.Name)
+    -- Note this is partial but the declaration should exist
+    aux (pu : pus) =
+      case hits of
+        [] -> aux pus
+        (hit:_) -> hit
+      where
+        -- Find matching decls - zero or more
+        hits =
+          [ (puName pu, puSrcName pu) |
+            -- Find all decls
+            decl'@F.Declarator{} <- universeBi pu :: [F.Declarator UA]
+            -- Filter by those matching the internal name of the declaration
+          , internalName == (FA.varName $ F.declaratorVariable decl') ]
+
 
 -- Allow literal assignment to overload the non-polymorphic
 -- unit-assignment of the non-zero literal.
@@ -697,9 +738,9 @@ propagatePU pu = do
   -- the explicit unit annotation as well.
   givenCons <- forM (indexedParams pu) $ \ (i, param) ->
     case M.lookup param varMap of
-      Just UnitParamPosAbs{}    -> pure . ConEq (UnitParamVarAbs (nn, param)) $ UnitParamPosAbs (nn, i)
-      Just u                    -> pure . ConEq u $ UnitParamPosAbs (nn, i)
-      _                         -> pure . ConEq (UnitParamVarAbs (nn, param)) $ UnitParamPosAbs (nn, i)
+      Just (UnitParamPosAbs (_, vname, _)) -> pure . ConEq (UnitParamVarAbs (nn, param)) $ UnitParamPosAbs (nn, param, i)
+      Just u                    -> pure . ConEq u $ UnitParamPosAbs (nn, param, i)
+      _                         -> pure . ConEq (UnitParamVarAbs (nn, param)) $ UnitParamPosAbs (nn, param, i)
 
   let cons = givenCons ++ bodyCons
   case pu of F.PUFunction {}   -> modifyTemplateMap (M.insert name cons)
@@ -709,7 +750,7 @@ propagatePU pu = do
   -- Set the unitInfo field of a function program unit to be the same
   -- as the unitInfo of its result.
   let pu' = case (pu, indexedParams pu) of
-              (F.PUFunction {}, (0, res):_) -> UA.setUnitInfo (UnitParamPosAbs (nn, 0) `fromMaybe` M.lookup res varMap) pu
+              (F.PUFunction {}, (0, res):_) -> UA.setUnitInfo (UnitParamPosAbs (nn, res, 0) `fromMaybe` M.lookup res varMap) pu
               _                             -> pu
 
   pure (UA.setConstraint (ConConj cons) pu')
