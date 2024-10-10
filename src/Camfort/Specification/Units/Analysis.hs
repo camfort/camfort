@@ -654,7 +654,43 @@ propagateStatement stmt = case stmt of
 propagateDeclarator :: F.Declarator UA -> UnitSolver (F.Declarator UA)
 propagateDeclarator decl = case decl of
   F.Declarator _ _ e1 _ _ (Just e2) -> literalAssignmentSpecialCase e1 e2 decl
-  _                                 -> pure decl
+  F.Declarator _ _ e1 _ _ Nothing   -> do
+    -- Handle uninitialized variables
+    opts <- ask
+    if uninitializeds . unitOpts $ opts
+      then do
+        -- Find the enclosing program unit
+        punames <- lookupEnclosingPUname (FA.varName e1)
+        pure $
+          -- Set up a param var abstract constraint
+          UA.maybeSetUnitConstraintF2
+             ConEq
+               (UA.getUnitInfo e1)
+               (Just $ UnitParamVarAbs (punames, (FA.varName e1, FA.srcName e1)))
+               decl
+      else pure decl
+
+-- Helper to lookup the name of the enclosing program unit
+lookupEnclosingPUname :: F.Name -> UnitSolver (F.Name, F.Name)
+lookupEnclosingPUname internalName = do
+    st <- get
+    return . aux $ (F.programFileProgramUnits . usProgramFile $ st)
+  where
+    aux :: [ F.ProgramUnit UA ] -> (F.Name, F.Name)
+    -- Note this is partial but the declaration should exist
+    aux (pu : pus) =
+      case hits of
+        [] -> aux pus
+        (hit:_) -> hit
+      where
+        -- Find matching decls - zero or more
+        hits =
+          [ (puName pu, puSrcName pu) |
+            -- Find all decls
+            decl'@F.Declarator{} <- universeBi pu :: [F.Declarator UA]
+            -- Filter by those matching the internal name of the declaration
+          , internalName == (FA.varName $ F.declaratorVariable decl') ]
+
 
 -- Allow literal assignment to overload the non-polymorphic
 -- unit-assignment of the non-zero literal.
