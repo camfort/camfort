@@ -86,7 +86,7 @@ realMain = do
     runUO uo f =
       let ro = uoReadOptions uo
           lo = uoLogOptions uo
-      in runRO ro lo (f (literals uo))
+      in runRO ro lo (f (literals uo) (includeUninitialized uo))
     runUWO uwo f =
       let uo     = uwoUnitsOptions uwo
           ro     = uoReadOptions uo
@@ -205,6 +205,7 @@ data UnitsOptions = UnitsOptions
   , literals      :: LiteralsOpt
   , uoDumpMode    :: Bool
   , uoShowAST     :: Bool
+  , includeUninitialized :: Bool
   }
 
 
@@ -354,6 +355,7 @@ unitsOptions = fmap UnitsOptions
   <*> literalsOption
   <*> dumpModFileOption
   <*> showASTOption
+  <*> pure False
   where
     literalsOption = option parseLiterals $
                      long "units-literals"
@@ -366,6 +368,11 @@ unitsOptions = fmap UnitsOptions
     showASTOption = switch (long "show-ast" <> help "show units at each AST node")
     parseLiterals = fmap read str
 
+unitsSuggestOptions :: Parser UnitsOptions
+unitsSuggestOptions =
+    (fmap (\f b -> f { includeUninitialized = b }) unitsOptions) <*> uninitOption
+  where
+    uninitOption = switch (long "include-uninit" <> help "include suggestions for uninitialized variables")
 
 invariantsOptions :: Parser InvariantsOptions
 invariantsOptions = fmap InvariantsOptions
@@ -420,7 +427,7 @@ cmdStencilsSynth = fmap CmdStencilsSynth stencilsSynthOptions
 
 
 cmdUnitsSuggest, cmdUnitsCheck, cmdUnitsInfer, cmdUnitsCompile, cmdUnitsSynth :: Parser Command
-cmdUnitsSuggest = fmap CmdUnitsSuggest unitsOptions
+cmdUnitsSuggest = fmap CmdUnitsSuggest unitsSuggestOptions
 cmdUnitsCheck   = fmap CmdUnitsCheck   unitsOptions
 cmdUnitsInfer   = fmap CmdUnitsInfer   unitsOptions
 cmdUnitsCompile = fmap CmdUnitsCompile unitsOptions

@@ -35,7 +35,6 @@ import qualified Language.Fortran.Analysis as FA
 import           Language.Fortran.Util.ModFile
 import qualified Language.Fortran.Util.Position as FU
 
-
 -- | An inference of variables that must be provided with
 -- unit annotations before units for all variables can be
 -- resolved.
@@ -91,20 +90,15 @@ instance Show Criticals where
         numVars   = M.size dmapSubset -- should be same as M.size criticalVarNames
 
         -- Generate report
-        declReport (v, (_, ss)) = vfilename ++ ":" ++ showSpanStart ss ++ "    " ++ fromMaybe v (M.lookup v uniqnameMap)
+        declReport (v, (_, ss)) =
+          vfilename ++ ":" ++ showSpanStart ss ++ "    " ++ fromMaybe v (M.lookup v uniqnameMap)
           where vfilename = fromMaybe fname $ M.lookup v fromWhereMap
                 showSpanStart (FU.SrcSpan l _) = show l
 
 instance Describe Criticals
 
--- | Return a list of critical variables as UnitInfo list (most likely
--- to be of the UnitVar constructor).
-runCriticalVariables :: UnitSolver [UnitInfo]
-runCriticalVariables = do
-  cons <- usConstraints `fmap` get
-  return $ criticalVariables cons
-
 -- | Infer one possible set of critical variables for a program.
+-- \ (depends on first doing inference)
 inferCriticalVariables :: FilePath -> UnitAnalysis Criticals
 inferCriticalVariables localPath = do
   pf <- asks unitProgramFile
@@ -116,16 +110,35 @@ inferCriticalVariables localPath = do
     -- unique name -> src name across modules
 
     -- Map of all declarations
-    dmap = extractDeclMap pfRenamed `M.union` combinedDeclMap mfs
+    dmap = M.map project $ extractDeclMap pfRenamed `M.union` combinedDeclMap mfs
+    project (dc, _, srcSpan) = (dc, srcSpan)
+
+    -- renaming map
     uniqnameMap = M.fromList [
                 (FA.varName e, FA.srcName e) |
                 e@(F.ExpValue _ _ F.ValVariable{}) <- universeBi pfRenamed :: [F.Expression UA]
                 -- going to ignore intrinsics here
               ] `M.union` (M.unions . map (M.fromList . map (\ (a, (b, _)) -> (b, a)) . M.toList) $ M.elems mmap)
-    fromWhereMap = genUniqNameToFilenameMap localPath mfs
+    -- get unique map of names from the filenameMap too
+    uniqnameMap' = M.fromList $ mapMaybe extractSrcName (M.toList filenameMap)
+    extractSrcName (n, (_, Nothing))      = Nothing
+    extractSrcName (n, (_, Just srcName)) = Just (n, srcName)
+
+    -- filenameMap
+    fromWhereMap = M.map fst filenameMap
+    filenameMap = genUniqNameToFilenameMap localPath mfs
+--  (show eVars) `trace`
   pure $!! Criticals { criticalsPf           = pf
                      , criticalsVariables    = eVars
                      , criticalsDeclarations = dmap
-                     , criticalsUniqMap      = uniqnameMap
+                     , criticalsUniqMap      = uniqnameMap `M.union` uniqnameMap'
                      , criticalsFromWhere    = fromWhereMap
                      }
+
+-- (not used)
+-- | Return a list of critical variables as UnitInfo list (most likely
+-- to be of the UnitVar constructor).
+runCriticalVariables :: UnitSolver [UnitInfo]
+runCriticalVariables = do
+  cons <- usConstraints `fmap` get
+  return $ criticalVariables cons

@@ -216,6 +216,8 @@ engine cons = unsafePerformIO $ do
               -- convert to Constraint format
               let polyCons = map dimToConstraint dims'
 
+              let criticals = MatrixBackend.criticalVariables polyCons
+
               -- feed back into old solver to figure out polymorphic equations
               let polyAssigns = MatrixBackend.genUnitAssignments polyCons
 
@@ -224,7 +226,6 @@ engine cons = unsafePerformIO $ do
                                          | ([UnitPow u@(UnitParamVarAbs _) k], units) <- polyAssigns
                                          , k `approxEq` 1 ]
 
-              let criticals = MatrixBackend.criticalVariables polyCons
 
               -- for now we'll suggest all underdetermined units but
               -- this should be cut down by considering the
