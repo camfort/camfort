@@ -448,7 +448,7 @@ describePerFileAnalysisShowASTUnitInfoP program logOutput logLevel snippets modF
   runPerFileAnalysisP program logOutput logLevel snippets modFiles >->
     (P.mapM $ \ r -> do
         case r of
-          AnalysisReport _ _ (ARSuccess (Inferred (InferenceReport pfUA _))) ->
+          AnalysisReport _ _ (ARSuccess (Inferred (InferenceReport pfUA _))) -> do
             liftIO . pp . fmap (unitInfo . FA.prevAnnotation) . FA.rename $ pfUA
           _ -> pure ()
         putDescribeReport "unit inference" (Just logLevel) snippets r

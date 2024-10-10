@@ -156,7 +156,6 @@ extra-source-files:
     samples/ddt/example4.f90
     samples/equivalence/example1.f90
     samples/equivalence/wrt.f90
-    samples/fp-check/intconv.f90
     samples/implicit-none/example1.f90
     samples/implicit-none/example2.f90
     samples/invariants/angle.f90
@@ -244,7 +243,6 @@ extra-source-files:
     samples/units/global/file2.f90
     samples/units/higherorder_error.f90
     samples/units/insideOutside.f90
-    samples/units/multi.f90
     samples/units/poly-scale.f90
     samples/units/poly1.f90
     samples/units/squarePoly.f90
@@ -363,7 +361,7 @@ library
     , fortran-src >=0.16.3 && <0.17
     , ghc-prim >=0.3.1.0 && <0.10
     , hmatrix ==0.20.*
-    , lattices >=2.0.0 && <2.1
+    , lattices >=2.0.0 && <2.3
     , lens >=4.15.1 && <6
     , matrix >=0.2.2 && <0.4
     , mmorph >=1.0.9 && <2
@@ -372,9 +370,9 @@ library
     , pipes ==4.3.*
     , pretty >=1.1 && <2
     , sbv >=8.0 && <10
-    , singletons >=3.0 && <3.2
-    , singletons-base >=3.0 && <3.2
-    , singletons-th >=3.0 && <3.2
+    , singletons ==3.0.*
+    , singletons-base >=3.0 && <3.3
+    , singletons-th >=3.0 && <3.3
     , strict >=0.3.2 && <1
     , syb >=0.4 && <0.8
     , syz ==0.2.*
@@ -382,7 +380,7 @@ library
     , text >=0.11.2.3 && <2.1
     , transformers >=0.5.5.0 && <0.6
     , uniplate >=1.6.10 && <1.7
-    , vector >=0.1 && <0.13
+    , vector >=0.1 && <0.14
     , verifiable-expressions >=0.6.2 && <0.8.0
     , vinyl >=0.9 && <1.0
   default-language: Haskell2010
@@ -402,10 +400,10 @@ executable camfort
     , filepath ==1.4.*
     , fortran-src >=0.16.3 && <0.17
     , hmatrix ==0.20.*
-    , lattices >=2.0.0 && <2.1
+    , lattices >=2.0.0 && <2.3
     , lens >=4.15.1 && <6
     , mtl >=2.1 && <2.3
-    , optparse-applicative >=0.14 && <0.18
+    , optparse-applicative >=0.14 && <0.19
     , sbv >=8.0 && <10
     , text >=0.11.2.3 && <2.1
     , uniplate >=1.6.10 && <1.7
@@ -459,7 +457,7 @@ test-suite spec
     , fortran-src >=0.16.3 && <0.17
     , hmatrix ==0.20.*
     , hspec >=2.2 && <3
-    , lattices >=2.0.0 && <2.1
+    , lattices >=2.0.0 && <2.3
     , lens >=4.15.1 && <6
     , mtl >=2.1 && <2.3
     , sbv >=8.0 && <10
