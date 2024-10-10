@@ -255,7 +255,7 @@ withCombinedModuleMap mfs pf =
     -- Use the module map derived from all of the included Camfort Mod files.
     mmap = FM.combinedModuleMap mfs
     pfRenamed = FAR.analyseRenamesWithModuleMap mmap $ pf
-  in (pfRenamed, mmap `Map.union` FM.extractModuleMap pfRenamed)
+  in (pfRenamed, FM.localisedModuleMap $ mmap `Map.union` FM.extractModuleMap pfRenamed)
 
 -- | Normalize the 'ProgramFile' to include environment information from
 -- the 'ModFiles'. Also return the module map and type environment.

@@ -613,10 +613,13 @@ bold :: String -> String
 bold = txtColor "1"
 
 -- black, red, green, yellow, blue, magenta, cyan, white :: String -> String
-black, red, green :: String -> String
-black = txtColor "30"
+red, green :: String -> String
 red = txtColor "31"
 green = txtColor "32"
+
+-- Not used currently but left here as a comment in case useful later
+
+-- black = txtColor "30"
 -- yellow = txtColor "33"
 -- blue = txtColor "34"
 -- magenta = txtColor "35"

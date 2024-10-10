@@ -44,6 +44,8 @@ import qualified Data.ByteString.Char8 as B
 import System.Directory
 import qualified Data.Map.Lazy as Map hiding (map, (\\))
 import Control.Monad.Writer
+import Language.Fortran.Repr.Value.Scalar.Int.Machine (withFInt)
+import qualified Language.Fortran.Repr as FRepr
 
 -- collect: from an association list to a map with list-based bins for matching keys
 collect :: (Eq a, Ord k) => [(k, a)] -> Map.Map k [a]

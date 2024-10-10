@@ -65,7 +65,7 @@ import           Control.Monad.State.Strict
 import qualified Language.Fortran.AST as F
 
 unitOpts0 :: UnitOpts
-unitOpts0 = UnitOpts LitMixed
+unitOpts0 = UnitOpts LitMixed False
 
 --------------------------------------------------
 

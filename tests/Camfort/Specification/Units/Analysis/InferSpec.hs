@@ -94,155 +94,143 @@ mkTestModFile file = head <$> genModFiles Nothing emptyModFiles compileUnits uni
 
 exampleInferSimple1Report :: String
 exampleInferSimple1Report =
-  "\ntests/fixtures/Specification/Units/example-simple-1.f90:\n\
-  \  3:14 unit s :: x\n\
-  \  3:17 unit s :: y\n"
+  "\ntests" </> "fixtures" </> "Specification" </> "Units" </> "example-simple-1.f90:3:14 unit s :: x\n\
+\tests" </> "fixtures" </> "Specification" </> "Units" </> "example-simple-1.f90:3:17 unit s :: y\n"
 
 inferReport :: String -> String -> String
 inferReport fname res = concat ["\n", fixturesDir </> fname, ":\n", res]
 
 squarePoly1Report :: String
-squarePoly1Report = inferReport "squarePoly1.f90"
-  "  4:11 unit m**2 :: x\n\
-  \  5:11 unit s**2 :: y\n\
-  \  7:11 unit m :: a\n\
-  \  9:11 unit s :: b\n\
-  \  13:3 unit ('b)**2 :: square\n\
-  \  14:13 unit 'b :: n\n\
-  \  17:3 unit ('a)**2 :: squarep\n\
-  \  18:13 unit 'a :: m\n"
+squarePoly1Report = "\ntests" </> "fixtures" </> "Specification" </> "Units" </> "squarePoly1.f90:4:11 unit m**2 :: x\n\
+  \tests" </> "fixtures" </> "Specification" </> "Units" </> "squarePoly1.f90:5:11 unit s**2 :: y\n\
+  \tests" </> "fixtures" </> "Specification" </> "Units" </> "squarePoly1.f90:7:11 unit m :: a\n\
+  \tests" </> "fixtures" </> "Specification" </> "Units" </> "squarePoly1.f90:9:11 unit s :: b\n\
+  \tests" </> "fixtures" </> "Specification" </> "Units" </> "squarePoly1.f90:13:3 unit ('b)**2 :: square\n\
+  \tests" </> "fixtures" </> "Specification" </> "Units" </> "squarePoly1.f90:14:13 unit 'b :: n\n\
+  \tests" </> "fixtures" </> "Specification" </> "Units" </> "squarePoly1.f90:17:3 unit ('a)**2 :: squarep\n\
+  \tests" </> "fixtures" </> "Specification" </> "Units" </> "squarePoly1.f90:18:13 unit 'a :: m\n"
 
 recursive1Report :: String
-recursive1Report = inferReport "recursive1.f90"
-  "  3:14 unit 1 :: x\n\
-  \  3:21 unit m :: y\n\
-  \  3:28 unit m :: z\n\
-  \  7:3 unit 'a :: r\n\
-  \  8:16 unit 1 :: n\n\
-  \  8:19 unit 'a :: b\n"
+recursive1Report = "\ntests" </> "fixtures" </> "Specification" </> "Units" </> "recursive1.f90:3:14 unit 1 :: x\n\
+  \tests" </> "fixtures" </> "Specification" </> "Units" </> "recursive1.f90:3:21 unit m :: y\n\
+  \tests" </> "fixtures" </> "Specification" </> "Units" </> "recursive1.f90:3:28 unit m :: z\n\
+  \tests" </> "fixtures" </> "Specification" </> "Units" </> "recursive1.f90:7:3 unit 'a :: r\n\
+  \tests" </> "fixtures" </> "Specification" </> "Units" </> "recursive1.f90:8:16 unit 1 :: n\n\
+  \tests" </> "fixtures" </> "Specification" </> "Units" </> "recursive1.f90:8:19 unit 'a :: b\n"
 
 insideOutsideReport :: String
-insideOutsideReport = inferReport "insideOutside.f90"
-  "  5:13 unit 'a :: x\n\
-  \  5:16 unit 'a :: k\n\
-  \  5:19 unit ('a)**2 :: m\n\
-  \  5:22 unit ('a)**2 :: outside\n\
-  \  12:15 unit 'a :: y\n\
-  \  12:18 unit ('a)**2 :: inside\n"
+insideOutsideReport = "\ntests" </> "fixtures" </> "Specification" </> "Units" </> "insideOutside.f90:5:13 unit 'a :: x\n\
+  \tests" </> "fixtures" </> "Specification" </> "Units" </> "insideOutside.f90:5:16 unit 'a :: k\n\
+  \tests" </> "fixtures" </> "Specification" </> "Units" </> "insideOutside.f90:5:19 unit ('a)**2 :: m\n\
+  \tests" </> "fixtures" </> "Specification" </> "Units" </> "insideOutside.f90:5:22 unit ('a)**2 :: outside\n\
+  \tests" </> "fixtures" </> "Specification" </> "Units" </> "insideOutside.f90:12:15 unit 'a :: y\n\
+  \tests" </> "fixtures" </> "Specification" </> "Units" </> "insideOutside.f90:12:18 unit ('a)**2 :: inside\n"
 
 eapVarScopeReport :: String
-eapVarScopeReport = inferReport "eapVarScope.f90"
-  "  5:13 unit 'a :: x\n\
-  \  5:16 unit ('a)**3 :: k\n\
-  \  5:19 unit ('a)**3 :: f\n\
-  \  11:13 unit 'a :: y\n\
-  \  11:16 unit 'a :: j\n\
-  \  11:19 unit 'a :: g\n"
+eapVarScopeReport = "\ntests" </> "fixtures" </> "Specification" </> "Units" </> "eapVarScope.f90:5:13 unit 'a :: x\n\
+  \tests" </> "fixtures" </> "Specification" </> "Units" </> "eapVarScope.f90:5:16 unit ('a)**3 :: k\n\
+  \tests" </> "fixtures" </> "Specification" </> "Units" </> "eapVarScope.f90:5:19 unit ('a)**3 :: f\n\
+  \tests" </> "fixtures" </> "Specification" </> "Units" </> "eapVarScope.f90:11:13 unit 'a :: y\n\
+  \tests" </> "fixtures" </> "Specification" </> "Units" </> "eapVarScope.f90:11:16 unit 'a :: j\n\
+  \tests" </> "fixtures" </> "Specification" </> "Units" </> "eapVarScope.f90:11:19 unit 'a :: g\n"
 
 eapVarAppReport :: String
-eapVarAppReport = inferReport "eapVarApp.f90"
-  "  5:13 unit 'a :: fx\n\
-  \  5:17 unit 'a :: fj\n\
-  \  5:21 unit ('a)**2 :: fk\n\
-  \  5:25 unit ('a)**4 :: fl\n\
-  \  5:29 unit ('a)**2 :: f\n\
-  \  13:13 unit 'b :: gx\n\
-  \  13:17 unit 'b :: gn\n\
-  \  13:21 unit 'b :: gm\n\
-  \  13:25 unit 'b :: g\n\
-  \  20:13 unit m :: hx\n\
-  \  20:17 unit m**2 :: h\n\
-  \  20:20 unit m**2 :: hy\n"
+eapVarAppReport = "\ntests" </> "fixtures" </> "Specification" </> "Units" </> "eapVarApp.f90:5:13 unit 'a :: fx\n\
+  \tests" </> "fixtures" </> "Specification" </> "Units" </> "eapVarApp.f90:5:17 unit 'a :: fj\n\
+  \tests" </> "fixtures" </> "Specification" </> "Units" </> "eapVarApp.f90:5:21 unit ('a)**2 :: fk\n\
+  \tests" </> "fixtures" </> "Specification" </> "Units" </> "eapVarApp.f90:5:25 unit ('a)**4 :: fl\n\
+  \tests" </> "fixtures" </> "Specification" </> "Units" </> "eapVarApp.f90:5:29 unit ('a)**2 :: f\n\
+  \tests" </> "fixtures" </> "Specification" </> "Units" </> "eapVarApp.f90:13:13 unit 'b :: gx\n\
+  \tests" </> "fixtures" </> "Specification" </> "Units" </> "eapVarApp.f90:13:17 unit 'b :: gn\n\
+  \tests" </> "fixtures" </> "Specification" </> "Units" </> "eapVarApp.f90:13:21 unit 'b :: gm\n\
+  \tests" </> "fixtures" </> "Specification" </> "Units" </> "eapVarApp.f90:13:25 unit 'b :: g\n\
+  \tests" </> "fixtures" </> "Specification" </> "Units" </> "eapVarApp.f90:20:13 unit m :: hx\n\
+  \tests" </> "fixtures" </> "Specification" </> "Units" </> "eapVarApp.f90:20:17 unit m**2 :: h\n\
+  \tests" </> "fixtures" </> "Specification" </> "Units" </> "eapVarApp.f90:20:20 unit m**2 :: hy\n"
 
 inferPoly1Report :: String
-inferPoly1Report = inferReport "inferPoly1.f90"
-  "  4:13 unit 'c :: x1\n\
-  \  4:17 unit 'c :: id\n\
-  \  8:13 unit 'f :: x2\n\
-  \  8:17 unit ('f)**2 :: sqr\n\
-  \  12:13 unit 'a :: x3\n\
-  \  12:17 unit 'b :: y3\n\
-  \  12:21 unit 'a :: fst\n\
-  \  16:13 unit 'e :: x4\n\
-  \  16:17 unit 'd :: y4\n\
-  \  16:21 unit 'd :: snd\n"
+inferPoly1Report = "\ntests" </> "fixtures" </> "Specification" </> "Units" </> "inferPoly1.f90:4:13 unit 'c :: x1\n\
+  \tests" </> "fixtures" </> "Specification" </> "Units" </> "inferPoly1.f90:4:17 unit 'c :: id\n\
+  \tests" </> "fixtures" </> "Specification" </> "Units" </> "inferPoly1.f90:8:13 unit 'f :: x2\n\
+  \tests" </> "fixtures" </> "Specification" </> "Units" </> "inferPoly1.f90:8:17 unit ('f)**2 :: sqr\n\
+  \tests" </> "fixtures" </> "Specification" </> "Units" </> "inferPoly1.f90:12:13 unit 'a :: x3\n\
+  \tests" </> "fixtures" </> "Specification" </> "Units" </> "inferPoly1.f90:12:17 unit 'b :: y3\n\
+  \tests" </> "fixtures" </> "Specification" </> "Units" </> "inferPoly1.f90:12:21 unit 'a :: fst\n\
+  \tests" </> "fixtures" </> "Specification" </> "Units" </> "inferPoly1.f90:16:13 unit 'e :: x4\n\
+  \tests" </> "fixtures" </> "Specification" </> "Units" </> "inferPoly1.f90:16:17 unit 'd :: y4\n\
+  \tests" </> "fixtures" </> "Specification" </> "Units" </> "inferPoly1.f90:16:21 unit 'd :: snd\n"
 
 sqrtPolyReport :: String
-sqrtPolyReport = inferReport "sqrtPoly.f90"
-  "  4:11 unit m :: x\n\
-  \  6:11 unit s :: y\n\
-  \  8:11 unit j :: z\n\
-  \  9:14 unit m**2 :: a\n\
-  \  10:14 unit s**4 :: b\n\
-  \  11:14 unit j**2 :: c\n\
-  \  16:3 unit ('a)**2 :: square\n\
-  \  17:13 unit 'a :: n\n"
+sqrtPolyReport =
+  "\ntests" </> "fixtures" </> "Specification" </> "Units" </> "sqrtPoly.f90:4:11 unit m :: x\n\
+  \tests" </> "fixtures" </> "Specification" </> "Units" </> "sqrtPoly.f90:6:11 unit s :: y\n\
+  \tests" </> "fixtures" </> "Specification" </> "Units" </> "sqrtPoly.f90:8:11 unit j :: z\n\
+  \tests" </> "fixtures" </> "Specification" </> "Units" </> "sqrtPoly.f90:9:14 unit m**2 :: a\n\
+  \tests" </> "fixtures" </> "Specification" </> "Units" </> "sqrtPoly.f90:10:14 unit s**4 :: b\n\
+  \tests" </> "fixtures" </> "Specification" </> "Units" </> "sqrtPoly.f90:11:14 unit j**2 :: c\n\
+  \tests" </> "fixtures" </> "Specification" </> "Units" </> "sqrtPoly.f90:16:3 unit ('a)**2 :: square\n\
+  \tests" </> "fixtures" </> "Specification" </> "Units" </> "sqrtPoly.f90:17:13 unit 'a :: n\n"
 
 transferReport :: String
-transferReport = inferReport "transfer.f90"
-  "  4:11 unit m :: x\n\
-  \  6:11 unit s :: y\n"
+transferReport =
+  "\ntests" </> "fixtures" </> "Specification" </> "Units" </> "transfer.f90:4:11 unit m :: x\n\
+\tests" </> "fixtures" </> "Specification" </> "Units" </> "transfer.f90:6:11 unit s :: y\n"
 
 gcd1Report :: String
-gcd1Report = inferReport "gcd1.f90"
-  "  3:3 unit ('a)**12 :: g\n\
-  \  4:13 unit ('a)**2 :: x\n\
-  \  4:16 unit ('a)**3 :: y\n"
+gcd1Report =
+  "\ntests" </> "fixtures" </> "Specification" </> "Units" </> "gcd1.f90:3:3 unit ('a)**12 :: g\n\
+\tests" </> "fixtures" </> "Specification" </> "Units" </> "gcd1.f90:4:13 unit ('a)**2 :: x\n\
+\tests" </> "fixtures" </> "Specification" </> "Units" </> "gcd1.f90:4:16 unit ('a)**3 :: y\n"
 
 literalZeroReport :: String
-literalZeroReport = inferReport "literal-zero.f90"
-  "  3:11 unit m :: a\n\
-  \  3:14 unit m :: b\n\
-  \  9:3 unit 'a :: f\n\
-  \  11:13 unit 'a :: x\n"
+literalZeroReport = "\ntests" </> "fixtures" </> "Specification" </> "Units" </> "literal-zero.f90:3:11 unit m :: a\n\
+\tests" </> "fixtures" </> "Specification" </> "Units" </> "literal-zero.f90:3:14 unit m :: b\n\
+\tests" </> "fixtures" </> "Specification" </> "Units" </> "literal-zero.f90:9:3 unit 'a :: f\n\
+\tests" </> "fixtures" </> "Specification" </> "Units" </> "literal-zero.f90:11:13 unit 'a :: x\n"
 
 literalNonZeroReport :: String
-literalNonZeroReport = inferReport "literal-nonzero.f90"
-  "  2:11 unit m s :: a\n\
-  \  2:14 unit m s :: b\n\
-  \  8:3 unit m s :: f\n\
-  \  10:13 unit m s :: x\n"
+literalNonZeroReport = "\ntests" </> "fixtures" </> "Specification" </> "Units" </> "literal-nonzero.f90:2:11 unit m s :: a\n\
+\tests" </> "fixtures" </> "Specification" </> "Units" </> "literal-nonzero.f90:2:14 unit m s :: b\n\
+\tests" </> "fixtures" </> "Specification" </> "Units" </> "literal-nonzero.f90:8:3 unit m s :: f\n\
+\tests" </> "fixtures" </> "Specification" </> "Units" </> "literal-nonzero.f90:10:13 unit m s :: x\n"
 
 literalNonZero2Report :: String
-literalNonZero2Report = inferReport "literal-nonzero2.f90"
-  "  3:11 unit m :: a\n\
-  \  3:14 unit m :: b\n\
-  \  3:17 unit m :: c\n\
-  \  3:20 unit m :: d\n\
-  \  10:3 unit m :: f\n\
-  \  11:13 unit m :: x\n"
+literalNonZero2Report = "\ntests" </> "fixtures" </> "Specification" </> "Units" </> "literal-nonzero2.f90:3:11 unit m :: a\n\
+\tests" </> "fixtures" </> "Specification" </> "Units" </> "literal-nonzero2.f90:3:14 unit m :: b\n\
+\tests" </> "fixtures" </> "Specification" </> "Units" </> "literal-nonzero2.f90:3:17 unit m :: c\n\
+\tests" </> "fixtures" </> "Specification" </> "Units" </> "literal-nonzero2.f90:3:20 unit m :: d\n\
+\tests" </> "fixtures" </> "Specification" </> "Units" </> "literal-nonzero2.f90:4:22 unit m :: n\n\
+\tests" </> "fixtures" </> "Specification" </> "Units" </> "literal-nonzero2.f90:10:3 unit m :: f\n\
+\tests" </> "fixtures" </> "Specification" </> "Units" </> "literal-nonzero2.f90:11:13 unit m :: x\n"
 
 doLoop1Report :: String
-doLoop1Report = inferReport "do-loop1.f90"
-  "  3:11 unit m :: x\n\
-  \  3:14 unit m :: y\n\
-  \  4:14 unit m :: i\n\
-  \  10:3 unit 1 :: f\n\
-  \  11:13 unit 1 :: x\n\
-  \  11:16 unit 1 :: y\n\
-  \  12:16 unit 1 :: i\n"
+doLoop1Report = "\ntests" </> "fixtures" </> "Specification" </> "Units" </> "do-loop1.f90:3:11 unit m :: x\n\
+\tests" </> "fixtures" </> "Specification" </> "Units" </> "do-loop1.f90:3:14 unit m :: y\n\
+\tests" </> "fixtures" </> "Specification" </> "Units" </> "do-loop1.f90:4:14 unit m :: i\n\
+\tests" </> "fixtures" </> "Specification" </> "Units" </> "do-loop1.f90:10:3 unit 1 :: f\n\
+\tests" </> "fixtures" </> "Specification" </> "Units" </> "do-loop1.f90:11:13 unit 1 :: x\n\
+\tests" </> "fixtures" </> "Specification" </> "Units" </> "do-loop1.f90:11:16 unit 1 :: y\n\
+\tests" </> "fixtures" </> "Specification" </> "Units" </> "do-loop1.f90:12:16 unit 1 :: i\n"
 
 doLoop2Report :: String
-doLoop2Report = inferReport "do-loop2.f90"
-  "  3:11 unit m :: x\n\
-  \  3:14 unit m :: y\n\
-  \  4:14 unit m :: i\n\
-  \  10:3 unit 1 :: f\n\
-  \  11:13 unit 1 :: x\n\
-  \  11:16 unit 1 :: y\n\
-  \  12:16 unit 1 :: i\n\
-  \  19:3 unit 1 :: g\n\
-  \  20:13 unit 1 :: x\n\
-  \  20:16 unit 1 :: y\n\
-  \  21:16 unit 1 :: i\n\
-  \  28:3 unit 'a :: h\n\
-  \  29:13 unit 'a :: x\n\
-  \  29:16 unit 'a :: y\n\
-  \  30:16 unit 'a :: i\n"
+doLoop2Report = "\ntests" </> "fixtures" </> "Specification" </> "Units" </> "do-loop2.f90:3:11 unit m :: x\n\
+\tests" </> "fixtures" </> "Specification" </> "Units" </> "do-loop2.f90:3:14 unit m :: y\n\
+\tests" </> "fixtures" </> "Specification" </> "Units" </> "do-loop2.f90:4:14 unit m :: i\n\
+\tests" </> "fixtures" </> "Specification" </> "Units" </> "do-loop2.f90:10:3 unit 1 :: f\n\
+\tests" </> "fixtures" </> "Specification" </> "Units" </> "do-loop2.f90:11:13 unit 1 :: x\n\
+\tests" </> "fixtures" </> "Specification" </> "Units" </> "do-loop2.f90:11:16 unit 1 :: y\n\
+\tests" </> "fixtures" </> "Specification" </> "Units" </> "do-loop2.f90:12:16 unit 1 :: i\n\
+\tests" </> "fixtures" </> "Specification" </> "Units" </> "do-loop2.f90:19:3 unit 1 :: g\n\
+\tests" </> "fixtures" </> "Specification" </> "Units" </> "do-loop2.f90:20:13 unit 1 :: x\n\
+\tests" </> "fixtures" </> "Specification" </> "Units" </> "do-loop2.f90:20:16 unit 1 :: y\n\
+\tests" </> "fixtures" </> "Specification" </> "Units" </> "do-loop2.f90:21:16 unit 1 :: i\n\
+\tests" </> "fixtures" </> "Specification" </> "Units" </> "do-loop2.f90:28:3 unit 'a :: h\n\
+\tests" </> "fixtures" </> "Specification" </> "Units" </> "do-loop2.f90:29:13 unit 'a :: x\n\
+\tests" </> "fixtures" </> "Specification" </> "Units" </> "do-loop2.f90:29:16 unit 'a :: y\n\
+\tests" </> "fixtures" </> "Specification" </> "Units" </> "do-loop2.f90:30:16 unit 'a :: i\n"
 
 crossModuleBReport :: String
 crossModuleBReport =
-  "\ntests/fixtures/Specification/Units/cross-module-b/cross-module-b2.f90:\n\
-  \  6:24 unit c :: foo\n\
-  \  9:13 unit c :: tc\n\
-  \  9:17 unit k :: t\n"
+  "\ntests" </> "fixtures" </> "Specification" </> "Units" </> "cross-module-b" </> "cross-module-b2.f90:6:24 unit c :: foo\n\
+\tests" </> "fixtures" </> "Specification" </> "Units" </> "cross-module-b" </> "cross-module-b2.f90:9:13 unit c :: tc\n\
+\tests" </> "fixtures" </> "Specification" </> "Units" </> "cross-module-b" </> "cross-module-b2.f90:9:17 unit k :: t\n"

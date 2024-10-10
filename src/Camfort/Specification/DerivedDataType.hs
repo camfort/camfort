@@ -65,6 +65,7 @@ import qualified Language.Fortran.Analysis.Types as FAT
 import           Language.Fortran.Util.ModFile
 import qualified Language.Fortran.Util.Position as FU
 import           Prelude hiding (unlines, minBound, maxBound)
+import           Language.Fortran.Repr (fromConstInt)
 
 ddtShort :: String
 ddtShort = "ddt"
@@ -455,7 +456,7 @@ analysis mfs pf = (amap', linkedPF, tenv)
      -- Attempt to gather any constant-expression information from indices.
      perArray :: [F.Index DA] -> [(Int, Maybe Int)]
      perArray is = [ (n, do F.IxSingle _ _ Nothing e <- Just ix
-                            FAD.ConstInt i           <- FA.constExp (F.getAnnotation e)
+                            i                        <- FA.constExp (F.getAnnotation e) >>= fromConstInt
                             return (fromIntegral i))
                    | (n, ix) <- zip [1..] is ]
 
@@ -609,7 +610,7 @@ refactorExp e = do
       , e'    <- foldl' rewrite e1 list'             -> put True >> return e'
         where
           ixLookup dim (F.IxSingle ixA ixS Nothing eIdx)
-            | Just (FAD.ConstInt i) <- FA.constExp (F.getAnnotation eIdx)
+            | Just i <- FA.constExp (F.getAnnotation eIdx) >>= fromConstInt
             , Just (Essence{..}:_)  <- fmap S.toList $ M.lookup (FA.varName e1, dim) smap
             , Just label            <- IM.lookup (fromIntegral i) essLabelMap = SE.Right (ixA, ixS, label)
           ixLookup _ ix = SE.Left ix

@@ -44,6 +44,7 @@ instance Read LiteralsOpt where
 -- | Options for the unit solver
 data UnitOpts = UnitOpts
   { uoLiterals :: LiteralsOpt               -- ^ how to handle literals
+  , uninitializeds :: Bool                   -- ^ whether to suggest for uninitialized variables
   }
   deriving (Show, Data, Eq, Ord)
 

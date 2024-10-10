@@ -66,7 +66,7 @@ type UniqueId = Int
 
 -- | Description of the unit of an expression.
 data UnitInfo
-  = UnitParamPosAbs (PP, Int)             -- an abstract parameter identified by PU name and argument position
+  = UnitParamPosAbs (PP, VV, Int)         -- an abstract parameter identified by PU name, its name, and argument position
   | UnitParamPosUse (PP, Int, Int)        -- identify particular instantiation of parameters
   | UnitParamVarAbs (PP, VV)              -- an abstract parameter identified by PU name and variable name
   | UnitParamVarUse (PP, VV, Int)         -- a particular instantiation of above
@@ -111,7 +111,8 @@ colSort :: UnitInfo -> UnitInfo -> Ordering
 colSort (UnitLiteral i) (UnitLiteral j)         = compare i j
 colSort (UnitLiteral _) _                       = LT
 colSort _ (UnitLiteral _)                       = GT
-colSort (UnitParamPosAbs x) (UnitParamPosAbs y) = compare x y
+-- Don't compare on the names stored in `ParamPosAbs`
+colSort (UnitParamPosAbs (x, _v, i)) (UnitParamPosAbs (y, _w, j)) = compare (x, i) (y, j)
 colSort (UnitParamPosAbs _) _                   = GT
 colSort _ (UnitParamPosAbs _)                   = LT
 colSort x y                                     = compare x y
@@ -160,7 +161,7 @@ instance Binary UnitInfo
 
 instance Show UnitInfo where
   show unitinfo = case unitinfo of
-    UnitParamPosAbs ((f, _), i)         -> printf "#<ParamPosAbs %s[%d]>" f i
+    UnitParamPosAbs ((f, _), (v, _), i)         -> printf "#<ParamPosAbs %s.%s[%d]>" f v i
     UnitParamPosUse ((f, _), i, j)      -> printf "#<ParamPosUse %s[%d] callId=%d>" f i j
     UnitParamVarAbs ((f, _), (v, _))    -> printf "#<ParamVarAbs %s.%s>" f v
     UnitParamVarUse ((f, _), (v, _), j) -> printf "#<ParamVarUse %s.%s callId=%d>" f v j
@@ -338,8 +339,8 @@ unitParamEq (UnitParamLitAbs i)           (UnitParamLitUse (i', _))     = i == i
 unitParamEq (UnitParamLitUse (i', _))     (UnitParamLitAbs i)           = i == i'
 unitParamEq (UnitParamVarAbs (f, i))      (UnitParamVarUse (f', i', _)) = (f, i) == (f', i')
 unitParamEq (UnitParamVarUse (f', i', _)) (UnitParamVarAbs (f, i))      = (f, i) == (f', i')
-unitParamEq (UnitParamPosAbs (f, i))      (UnitParamPosUse (f', i', _)) = (f, i) == (f', i')
-unitParamEq (UnitParamPosUse (f', i', _)) (UnitParamPosAbs (f, i))      = (f, i) == (f', i')
+unitParamEq (UnitParamPosAbs (f, _, i))   (UnitParamPosUse (f', i', _)) = (f, i) == (f', i')
+unitParamEq (UnitParamPosUse (f', i', _)) (UnitParamPosAbs (f, _, i))   = (f, i) == (f', i')
 unitParamEq (UnitParamImpAbs v)           (UnitParamImpAbs v')          = v == v'
 unitParamEq (UnitParamEAPAbs v)           (UnitParamEAPUse (v', _))     = v == v'
 unitParamEq (UnitParamEAPUse (v', _))     (UnitParamEAPAbs v)           = v == v'

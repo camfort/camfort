@@ -72,7 +72,6 @@ import           Numeric.LinearAlgebra.Devel
   )
 import           Prelude hiding ((<>))
 
-
 -- | Returns list of formerly-undetermined variables and their units.
 inferVariables :: Constraints -> [(VV, UnitInfo)]
 inferVariables cons = unitVarAssignments
@@ -194,16 +193,16 @@ genUnitAssignments' sortfn cons
     -- moved ParamPosAbs units are negated, because they are
     -- effectively being shifted across the equal-sign:
     isUnitRHS' (UnitPow (UnitParamImpAbs _) _) = True
-    isUnitRHS' (UnitPow (UnitParamPosAbs (_, 0)) _) = False
+    isUnitRHS' (UnitPow (UnitParamPosAbs (_, _, 0)) _) = False
     isUnitRHS' (UnitPow (UnitParamPosAbs _) _) = True
     isUnitRHS' _                               = False
 
 checkSanity :: ([UnitInfo], [UnitInfo]) -> ([UnitInfo], [UnitInfo])
 checkSanity (u1@[UnitPow (UnitVar _) _], u2)
-  | or $ [ True | UnitParamPosAbs (_, _) <- universeBi u2 ]
-      ++ [ True | UnitParamImpAbs _      <- universeBi u2 ] = (u1++u2,[])
+  | or $ [ True | UnitParamPosAbs (_, _, _) <- universeBi u2 ]
+      ++ [ True | UnitParamImpAbs _         <- universeBi u2 ] = (u1++u2,[])
 checkSanity (u1@[UnitPow (UnitParamVarAbs (f, _)) _], u2)
-  | or [ True | UnitParamPosAbs (f', _) <- universeBi u2, f' /= f ] = (u1++u2,[])
+  | or [ True | UnitParamPosAbs (f', _, _) <- universeBi u2, f' /= f ] = (u1++u2,[])
 checkSanity c = c
 
 --------------------------------------------------

@@ -63,9 +63,9 @@ instance ExitCodeOfReport InferenceResult where
 
 instance Show InferenceReport where
   show (InferenceReport pf vars) =
-    concat ["\n", fname, ":\n", unlines [ expReport ei | ei <- expInfo ]]
+    concat ["\n", unlines [ expReport ei | ei <- expInfo ]]
     where
-      expReport (ei, u) = "  " ++ showSrcSpan (eiSrcSpan ei) ++ " unit " ++ show u ++ " :: " ++ eiSName ei
+      expReport (ei, u) = fname ++ ":" ++ showSrcSpan (eiSrcSpan ei) ++ " unit " ++ show u ++ " :: " ++ eiSName ei
       showSrcSpan :: FU.SrcSpan -> String
       showSrcSpan (FU.SrcSpan l _) = show l
       fname = F.pfGetFilename pf
