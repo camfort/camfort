@@ -526,9 +526,12 @@ unitsCompile opts uninits env = do
             let fnPaths = [ fn | (_, Just fn) <- nxt ]
             newMods <- fmap concat . forM fnPaths $ \ modFn -> do
               case modFn of
+                -- If there is mod file already, load it in
                 FM.MOFSMod modFilePath -> do
                   putStrLn $ "Loading mod file " ++ modFilePath ++ "."
                   decodeOneModFile modFilePath
+
+                -- Otherwise, compile the source file
                 FM.MOFile fnPath -> do
                   tsStatus <- FM.checkTimestamps fnPath
                   case tsStatus of
