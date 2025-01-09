@@ -1,3 +1,8 @@
+## 1.3.0 (WIP)
+ * Fixed various bugs with cross-module behaviour for units-of-measure features
+ * All reports from camfort now produce location information in the form `filename:line:col` for better IDE integration.
+ * Updated to work with latest fortran-src
+
 ## 1.2.0 (Oct 12, 2022)
 
 * Improve CLI help behaviour
