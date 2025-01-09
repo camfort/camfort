@@ -523,27 +523,35 @@ unitsCompile opts uninits env = do
   let loop mg mods
         | nxt <- FM.takeNextMods mg
         , not (null nxt) = do
-            let fnPaths = [ fn | (_, Just (FM.MOFile fn)) <- nxt ]
-            newMods <- fmap concat . forM fnPaths $ \ fnPath -> do
-              tsStatus <- FM.checkTimestamps fnPath
-              case tsStatus of
-                FM.NoSuchFile -> do
-                  putStr $ "Does not exist: " ++ fnPath
-                  pure [FM.emptyModFile]
-                FM.ModFileExists modPath -> do
-                  putStrLn $ "Loading mod file " ++ modPath ++ "."
-                  decodeOneModFile modPath
-                FM.CompileFile -> do
-                  putStr $ "Summarising " ++ fnPath ++ "..."
-                  m_pf <- readParseSrcFile (ceFortranVersion env) mods fnPath
-                  case m_pf of
-                    Just (pf, _) -> do
-                      mod <- compileFileToMod mods pf
-                      putStrLn "done"
-                      pure [mod]
-                    Nothing -> do
-                      putStrLn "failed"
-                      pure []
+            let fnPaths = [ fn | (_, Just fn) <- nxt ]
+            newMods <- fmap concat . forM fnPaths $ \ modFn -> do
+              case modFn of
+                -- If there is mod file already, load it in
+                FM.MOFSMod modFilePath -> do
+                  putStrLn $ "Loading mod file " ++ modFilePath ++ "."
+                  decodeOneModFile modFilePath
+
+                -- Otherwise, compile the source file
+                FM.MOFile fnPath -> do
+                  tsStatus <- FM.checkTimestamps fnPath
+                  case tsStatus of
+                    FM.NoSuchFile -> do
+                      putStr $ "Does not exist: " ++ fnPath
+                      pure [FM.emptyModFile]
+                    FM.ModFileExists modPath -> do
+                      putStrLn $ "Loading mod file " ++ modPath ++ "."
+                      decodeOneModFile modPath
+                    FM.CompileFile -> do
+                      putStr $ "Summarising " ++ fnPath ++ "..."
+                      m_pf <- readParseSrcFile (ceFortranVersion env) mods fnPath
+                      case m_pf of
+                        Just (pf, _) -> do
+                          mod <- compileFileToMod mods pf
+                          putStrLn "done"
+                          pure [mod]
+                        Nothing -> do
+                          putStrLn "failed"
+                          pure []
 
             let ns  = map fst nxt
             let mg' = FM.delModNodes ns mg
