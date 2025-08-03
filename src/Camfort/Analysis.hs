@@ -89,6 +89,7 @@ module Camfort.Analysis
   , ExitCodeOfReport(..)
   ) where
 
+import           Control.Monad
 import           Control.Monad.Except
 import           Control.Monad.Morph
 import           Control.Monad.Reader

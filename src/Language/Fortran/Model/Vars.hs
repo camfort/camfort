@@ -1,3 +1,4 @@
+{-# LANGUAGE CPP                   #-}
 {-# LANGUAGE DataKinds             #-}
 {-# LANGUAGE FlexibleContexts      #-}
 {-# LANGUAGE FlexibleInstances     #-}
@@ -143,4 +144,8 @@ arraySymbolicPrim ixPrim valPrim nm env = do
   k1 <- lift . return $ primSBVKind ixPrim env
   k2 <- lift . return $ primSBVKind valPrim env
   state <- symbolicEnv
+#if MIN_VERSION_sbv(10,0,0)
+  lift $ newSArr state (k1, k2) (\i -> nm ++ "_" ++ show i) (Right "")
+#else
   lift $ newSArr state (k1, k2) (\i -> nm ++ "_" ++ show i) Nothing
+#endif

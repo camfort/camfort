@@ -26,6 +26,7 @@ import           Camfort.Specification.Units.Annotation (UA)
 import qualified Camfort.Specification.Units.Annotation as UA
 import           Camfort.Specification.Units.Environment
 import           Camfort.Specification.Units.Monad
+import           Control.Monad (foldM, forM, (<=<))
 import           Control.Monad.State.Strict hiding (gets)
 import           Data.Generics.Uniplate.Operations
 import           Data.Maybe

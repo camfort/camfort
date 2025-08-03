@@ -23,7 +23,7 @@ license:        Apache-2.0
 license-file:   LICENSE
 build-type:     Simple
 tested-with:
-    GHC == 9.0, GHC == 9.2, GHC == 9.4
+    GHC == 9.0, GHC == 9.2, GHC == 9.4, GHC == 9.6
 extra-source-files:
     tests/fixtures/implicitnone1.f90
     tests/fixtures/implicitnone2.f90
@@ -362,17 +362,17 @@ library
     , fgl >=5.6 && <5.9
     , filepath ==1.4.*
     , fortran-src >=0.16.3 && <0.17
-    , ghc-prim >=0.3.1.0 && <0.10
+    , ghc-prim >=0.3.1.0 && <0.11
     , hmatrix ==0.20.*
     , lattices >=2.0.0 && <2.3
     , lens >=4.15.1 && <6
     , matrix >=0.2.2 && <0.4
     , mmorph >=1.0.9 && <2
-    , mtl >=2.1 && <2.3
+    , mtl >=2.1 && <2.4
     , parallel ==3.2.*
     , pipes ==4.3.*
     , pretty >=1.1 && <2
-    , sbv >=8.0 && <10
+    , sbv >=8.0 && <13
     , singletons ==3.0.*
     , singletons-base >=3.0 && <3.3
     , singletons-th >=3.0 && <3.3
@@ -381,7 +381,7 @@ library
     , syz ==0.2.*
     , template-haskell >=2.11 && <3
     , text >=0.11.2.3 && <2.1
-    , transformers >=0.5.5.0 && <0.6
+    , transformers >=0.5.5.0 && <0.7
     , uniplate >=1.6.10 && <1.7
     , vector >=0.1 && <0.14
     , verifiable-expressions >=0.6.2 && <0.8.0
@@ -405,9 +405,9 @@ executable camfort
     , hmatrix ==0.20.*
     , lattices >=2.0.0 && <2.3
     , lens >=4.15.1 && <6
-    , mtl >=2.1 && <2.3
+    , mtl >=2.1 && <2.4
     , optparse-applicative >=0.14 && <0.19
-    , sbv >=8.0 && <10
+    , sbv >=8.0 && <13
     , text >=0.11.2.3 && <2.1
     , uniplate >=1.6.10 && <1.7
     , verifiable-expressions >=0.6.2 && <0.8.0
@@ -462,8 +462,8 @@ test-suite spec
     , hspec >=2.2 && <3
     , lattices >=2.0.0 && <2.3
     , lens >=4.15.1 && <6
-    , mtl >=2.1 && <2.3
-    , sbv >=8.0 && <10
+    , mtl >=2.1 && <2.4
+    , sbv >=8.0 && <13
     , silently ==1.2.*
     , temporary >=1.2.0.4 && <1.4
     , text >=0.11.2.3 && <2.1
