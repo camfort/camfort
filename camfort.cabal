@@ -23,7 +23,7 @@ license:        Apache-2.0
 license-file:   LICENSE
 build-type:     Simple
 tested-with:
-    GHC == 9.0, GHC == 9.2, GHC == 9.4, GHC == 9.6
+    GHC == 9.0, GHC == 9.2, GHC == 9.4, GHC == 9.6, GHC == 9.8
 extra-source-files:
     tests/fixtures/implicitnone1.f90
     tests/fixtures/implicitnone2.f90
@@ -357,12 +357,12 @@ library
     , binary >=0.8.3.0 && <0.11
     , bytestring >=0.10 && <0.12
     , containers >=0.5.0.0 && <0.7
-    , deepseq ==1.4.*
+    , deepseq >=1.4 && <1.6
     , directory >=1.2 && <2
     , fgl >=5.6 && <5.9
     , filepath ==1.4.*
     , fortran-src >=0.16.3 && <0.17
-    , ghc-prim >=0.3.1.0 && <0.11
+    , ghc-prim >=0.3.1.0 && <0.12
     , hmatrix ==0.20.*
     , lattices >=2.0.0 && <2.3
     , lens >=4.15.1 && <6
@@ -374,8 +374,8 @@ library
     , pretty >=1.1 && <2
     , sbv >=8.0 && <13
     , singletons ==3.0.*
-    , singletons-base >=3.0 && <3.3
-    , singletons-th >=3.0 && <3.3
+    , singletons-base >=3.0 && <3.6
+    , singletons-th >=3.0 && <3.6
     , strict >=0.3.2 && <1
     , syb >=0.4 && <0.8
     , syz ==0.2.*
