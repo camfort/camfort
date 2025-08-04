@@ -361,9 +361,8 @@ library
     , directory >=1.2 && <2
     , fgl >=5.6 && <5.9
     , filepath ==1.4.*
-    , fortran-src >=0.16.3 && <0.17
-    , ghc-prim >=0.3.1.0 && <0.12
-    , hmatrix ==0.20.*
+    , fortran-src >=0.16.3
+      , ghc-prim >=0.3.1.0 && <0.13    , hmatrix ==0.20.*
     , lattices >=2.0.0 && <2.3
     , lens >=4.15.1 && <6
     , matrix >=0.2.2 && <0.4
@@ -373,10 +372,8 @@ library
     , pipes ==4.3.*
     , pretty >=1.1 && <2
     , sbv >=8.0 && <13
-    , singletons ==3.0.*
-    , singletons-base >=3.0 && <3.6
-    , singletons-th >=3.0 && <3.6
-    , strict >=0.3.2 && <1
+      , singletons >=3.0          , singletons-base >=3.0
+      , singletons-th >=3.0    , strict >=0.3.2 && <1
     , syb >=0.4 && <0.8
     , syz ==0.2.*
     , template-haskell >=2.11 && <3
@@ -401,7 +398,7 @@ executable camfort
     , directory >=1.2 && <2
     , fgl >=5.6 && <5.9
     , filepath ==1.4.*
-    , fortran-src >=0.16.3 && <0.17
+    , fortran-src >=0.16.3
     , hmatrix ==0.20.*
     , lattices >=2.0.0 && <2.3
     , lens >=4.15.1 && <6
@@ -457,7 +454,7 @@ test-suite spec
     , directory >=1.2 && <2
     , fgl >=5.6 && <5.9
     , filepath ==1.4.*
-    , fortran-src >=0.16.3 && <0.17
+    , fortran-src >=0.16.3
     , hmatrix ==0.20.*
     , hspec >=2.2 && <3
     , lattices >=2.0.0 && <2.3
