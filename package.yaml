@@ -24,7 +24,7 @@ extra-source-files:
 dependencies:
   - base >= 4.6 && < 5
   - bytestring >= 0.10 && < 0.12
-  - text >= 0.11.2.3 && < 2.1
+  - text >= 0.11.2.3 && < 2.2
   - mtl >= 2.1 && < 2.4
   - containers >= 0.5.0.0 && < 0.7
   - fortran-src >= 0.16.3
@@ -135,7 +135,7 @@ library:
     - Language.Fortran.Model.Util
 
   dependencies:
-    - ghc-prim >= 0.3.1.0 && < 0.13
+    - ghc-prim >= 0.3.1.0 && < 0.14
     - syz ==0.2.*
     - syb >= 0.4 && < 0.8
     - matrix >= 0.2.2 && < 0.4
@@ -151,7 +151,7 @@ library:
     - singletons-th   >= 3.0
     - singletons-base >= 3.0
 
-    - template-haskell >= 2.11 && < 3
+    - template-haskell >= 2.11 && < 2.24
     - vinyl >= 0.9 && < 1.0
     - strict >= 0.3.2 && < 1
     - deepseq >= 1.4 && < 1.6
