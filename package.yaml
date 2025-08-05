@@ -12,7 +12,7 @@ license-file:           LICENSE
 stability:              experimental
 build-type:             Simple
 category:               Language
-tested-with:            GHC == 9.0, GHC == 9.2, GHC == 9.4, GHC == 9.6, GHC == 9.8, GHC == 9.10
+tested-with:            GHC == 9.0, GHC == 9.2, GHC == 9.4, GHC == 9.6, GHC == 9.8, GHC == 9.10, GHC == 9.12
 github:                 camfort/camfort
 
 extra-source-files:

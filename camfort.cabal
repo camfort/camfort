@@ -23,7 +23,7 @@ license:        Apache-2.0
 license-file:   LICENSE
 build-type:     Simple
 tested-with:
-    GHC == 9.0, GHC == 9.2, GHC == 9.4, GHC == 9.6, GHC == 9.8, GHC == 9.10
+    GHC == 9.0, GHC == 9.2, GHC == 9.4, GHC == 9.6, GHC == 9.8, GHC == 9.10, GHC == 9.12
 extra-source-files:
     tests/fixtures/implicitnone1.f90
     tests/fixtures/implicitnone2.f90
