@@ -210,6 +210,12 @@ jobs:
           z3:p
         location: D:\
 
+    - name: Add MSYS2 library paths to environment
+      shell: msys2 {0}
+      run: |
+	export PATH="/mingw64/bin:$PATH"
+	export LIBRARY_PATH="/mingw64/lib:$LIBRARY_PATH"
+
     # TODO 2022-10-12 has a new command, not tried
     - name: Install ghcup
       run: 'Set-ExecutionPolicy Bypass -Scope Process -Force;[System.Net.ServicePointManager]::SecurityProtocol = [System.Net.ServicePointManager]::SecurityProtocol -bor 3072;Invoke-Command -ScriptBlock ([ScriptBlock]::Create((Invoke-WebRequest https://www.haskell.org/ghcup/sh/bootstrap-haskell.ps1 -UseBasicParsing))) -ArgumentList $false,$true,$true,$false,$false,$false,$false,"C:\","https://gitlab.haskell.org/haskell/ghcup-hs/-/raw/v0.1.17.5/scripts/bootstrap/bootstrap-haskell","D:\msys64","C:\cabal"'
