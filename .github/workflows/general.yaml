@@ -255,6 +255,9 @@ jobs:
       env:
         BASH_ENV: /c/ghcup/env
 
+    - name: Add MSYS2 mingw64/bin to Windows PATH
+      run: echo "D:\\msys64\\mingw64\\bin" | Out-File -Append -FilePath $env:GITHUB_PATH
+
     - name: (camfort) Cache project Cabal store
       uses: actions/cache@v4
       with:
