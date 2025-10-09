@@ -92,7 +92,7 @@ jobs:
 
     - name: Setup Haskell build environment
       id: setup-haskell-build-env
-      uses: haskell/actions/setup@v1
+      uses: haskell-actions/setup@v2
       with:
         ghc-version: ${{ matrix.ghc }}
         cabal-version: ${{ matrix.cabal }}
@@ -139,7 +139,7 @@ jobs:
 
     - name: Setup Haskell build environment
       id: setup-haskell-build-env
-      uses: haskell/actions/setup@v1
+      uses: haskell-actions/setup@v2
       with:
         ghc-version: ${{ matrix.ghc }}
         cabal-version: ${{ matrix.cabal }}
