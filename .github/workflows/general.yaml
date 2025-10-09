@@ -164,8 +164,17 @@ jobs:
         restore-keys: |
           ${{ runner.os }}-cabal-${{ matrix.ghc }}
 
+    - name: Detect architecture
+      id: arch
+      run: echo "arch=$(uname -m)" >> $GITHUB_OUTPUT
+
     - name: Build
-      run: cabal install
+      run: |
+	if [ "${{ steps.arch.outputs.arch }}" = "arm64" ]; then
+	  cabal install -v3 --extra-include-dirs=/opt/homebrew/include --extra-lib-dirs=/opt/homebrew/lib
+	else
+	  cabal install -v3 --extra-include-dirs=/usr/local/include --extra-lib-dirs=/usr/local/lib
+	fi
 
     - name: Test
       run: cabal test --test-show-details=streaming
