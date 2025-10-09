@@ -219,6 +219,16 @@ jobs:
           z3:p
         location: D:\
 
+    - name: Find Flint libraries
+      shell: msys2 {0}
+      run: |
+        pacman -Ql mingw-w64-x86_64-flint
+        # Or search for the actual files
+        find /mingw64 -name "*flint*" -o -name "libflint*"
+        ls -la /mingw64/include/*flint* || echo "No headers found"
+        ls -la /mingw64/lib/*flint* || echo "No libraries found"
+        pkg-config --cflags --libs flint || echo "pkg-config not available"
+
     - name: Add MSYS2 library paths to environment
       shell: msys2 {0}
       run: |
