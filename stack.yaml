@@ -13,7 +13,5 @@ extra-deps:
 - bytestring-0.11.5.4@sha256:896810b10dc600f435606c1e87821a5ae0963eeca2ded88276f4841727209516,7595
 - vinyl-0.14.3@sha256:08565c5d9ed8a5ba69915bffe8960f048587478155d5915a56d2e93b8ba3466f,4267
 - union-0.1.2
-- git: https://github.com/mrd/verifiable-expressions
-  commit: f38f237eaed84619193e04ffa6914c7b1f36a662
 - git: https://github.com/mrd/fortran-src
   commit: b384824e2437098a3235b0affa48a6e4ee015bf6
