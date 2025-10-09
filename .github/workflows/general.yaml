@@ -144,6 +144,11 @@ jobs:
         ghc-version: ${{ matrix.ghc }}
         cabal-version: ${{ matrix.cabal }}
 
+    - name: Ensure GHC and Cabal are installed and set
+      run: |
+        ghcup install ghc 9.2.4 --set
+        ghcup install cabal 3.6.2.0 --set
+
     - name: Install required libraries
       run: >-
         brew install
