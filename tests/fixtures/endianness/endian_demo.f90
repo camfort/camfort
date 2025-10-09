@@ -32,8 +32,8 @@ contains
 
   subroutine print_raw_bytes(file)
     character(len=*), intent(in) :: file
-    integer :: unit, ios, n
-  integer(c_int8_t), allocatable :: buf(:)
+    integer :: ios, n
+    integer(c_int8_t), allocatable :: buf(:)
     integer :: pos
 
     open(unit=20, file=file, access='stream', form='unformatted', status='old', iostat=ios)
