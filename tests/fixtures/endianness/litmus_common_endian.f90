@@ -1,12 +1,11 @@
 program litmus_common_endian
-  use iso_c_binding, only: c_int32_t, c_int8_t
   implicit none
 
   ! Define a COMMON block that holds 4 raw bytes (chunked view).
-  integer(c_int8_t) :: raw_bytes(4)
+  integer(kind = 1) :: raw_bytes(4)
   common /overlay_raw/ raw_bytes
 
-  integer(c_int32_t) :: iv
+  integer(kind = 4) :: iv
 
   ! We'll transfer between iv and raw_bytes to demonstrate byte layout.
   iv = 123456789    ! 0x075BCD15
@@ -15,14 +14,14 @@ program litmus_common_endian
   raw_bytes = transfer(iv, raw_bytes)
 
   write(*,*) 'Integer value set to:', iv
-  write(*,*) 'Bytes (decimal) in COMMON /overlay_raw/ (chunked view):'
-  write(*,'(4(I3,1X))') raw_bytes(1), raw_bytes(2), raw_bytes(3), raw_bytes(4)
+  write(*,*) 'Bytes in COMMON /overlay_raw/ (chunked view):'
+  write(*,'(4(1X,Z2))') raw_bytes(1), raw_bytes(2), raw_bytes(3), raw_bytes(4)
 
   write(*,*) 'Bytes (hex):'
   call print_hex(raw_bytes)
 
   ! Now show the reverse: set the bytes and transfer back to an integer
-  raw_bytes = (/ int(21, c_int8_t), int(-51, c_int8_t), int(91, c_int8_t), int(7, c_int8_t) /)
+  raw_bytes = (/ int(21, kind=1), int(-51, kind=1), int(91, kind=1), int(7, kind=1) /)
   iv = transfer(raw_bytes, iv)
   write(*,*) 'After setting raw bytes explicitly, integer interpreted as:', iv
 
@@ -35,7 +34,7 @@ program litmus_common_endian
 contains
 
   subroutine print_hex(arr)
-    integer(c_int8_t), intent(in) :: arr(:)
+    integer(kind=1), intent(in) :: arr(:)
     integer :: k
     do k = 1, size(arr)
       write(*,'(1X,Z2)', advance='no') arr(k)
