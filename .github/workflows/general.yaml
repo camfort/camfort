@@ -170,11 +170,11 @@ jobs:
 
     - name: Build
       run: |
-	if [ "${{ steps.arch.outputs.arch }}" = "arm64" ]; then
-	  cabal install -v3 --extra-include-dirs=/opt/homebrew/include --extra-lib-dirs=/opt/homebrew/lib
-	else
-	  cabal install -v3 --extra-include-dirs=/usr/local/include --extra-lib-dirs=/usr/local/lib
-	fi
+        if [ "${{ steps.arch.outputs.arch }}" = "arm64" ]; then
+          cabal install -v3 --extra-include-dirs=/opt/homebrew/include --extra-lib-dirs=/opt/homebrew/lib
+        else
+          cabal install -v3 --extra-include-dirs=/usr/local/include --extra-lib-dirs=/usr/local/lib
+        fi
 
     - name: Test
       run: cabal test --test-show-details=streaming
