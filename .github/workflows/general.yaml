@@ -169,15 +169,10 @@ jobs:
       run: echo "arch=$(uname -m)" >> $GITHUB_OUTPUT
 
     - name: Build
-      run: |
-        if [ "${{ steps.arch.outputs.arch }}" = "arm64" ]; then
-          cabal install -v3 --extra-include-dirs=/opt/homebrew/include --extra-lib-dirs=/opt/homebrew/lib
-        else
-          cabal install -v3 --extra-include-dirs=/usr/local/include --extra-lib-dirs=/usr/local/lib
-        fi
+      run: cabal install --extra-lib-dirs=$(brew --prefix flint)/lib --extra-include-dirs=$(brew --prefix flint)/include
 
     - name: Test
-      run: cabal test --test-show-details=streaming
+      run: cabal test --test-show-details=streaming --extra-lib-dirs=$(brew --prefix flint)/lib --extra-include-dirs=$(brew --prefix flint)/include
       env:
         HSPEC_OPTIONS: --color
 
