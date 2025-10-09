@@ -1,11 +1,13 @@
 program endian_demo
   use iso_c_binding, only: c_int32_t, c_double, c_int8_t
-  implicit none
+  implicit none(type, external)
 
   integer(c_int32_t) :: i32
   real(c_double)     :: r64
-  integer :: ios
+  integer :: ios, n
   character(len=16) :: fname = 'data_native.bin'
+  integer(c_int8_t), allocatable :: buf(:)
+  integer :: pos
 
   ! Prepare values with well-known bit patterns
   i32 = 123456789    ! 0x075BCD15
@@ -16,30 +18,18 @@ program endian_demo
   open(unit=10, file=fname, access='stream', form='unformatted', status='replace', iostat=ios)
   if (ios /= 0) then
      write(*,*) 'Failed to open file for writing, IOSTAT=', ios
-     stop 1
-  end if
+  else
+    write(10) i32
+    write(10) r64
+    close(10)
 
-  write(10) i32
-  write(10) r64
-  close(10)
+    write(*,*) 'Wrote native-endian binary to "', trim(fname), '".'
 
-  write(*,*) 'Wrote native-endian binary to "', trim(fname), '".'
-
-  ! Now read back raw bytes and print them so output depends on endianness.
-  call print_raw_bytes(fname)
-
-contains
-
-  subroutine print_raw_bytes(file)
-    character(len=*), intent(in) :: file
-    integer :: ios, n
-    integer(c_int8_t), allocatable :: buf(:)
-    integer :: pos
-
-    open(unit=20, file=file, access='stream', form='unformatted', status='old', iostat=ios)
+    ! Now read back raw bytes and print them so output depends on endianness.
+    open(unit=20, file=fname, access='stream', form='unformatted', status='old', iostat=ios)
     if (ios /= 0) then
-       write(*,*) 'Failed to open file for reading, IOSTAT=', ios
-       return
+        write(*,*) 'Failed to open file for reading, IOSTAT=', ios
+        return
     end if
 
     ! Determine file size
@@ -59,7 +49,9 @@ contains
 
     close(20)
     deallocate(buf)
-  end subroutine print_raw_bytes
+  end if
+
+contains
 
   subroutine interpret_and_print(buf)
     integer(c_int8_t), intent(in) :: buf(:)
