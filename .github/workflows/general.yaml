@@ -129,8 +129,8 @@ jobs:
     strategy:
       fail-fast: false  # don't stop if one job (= GHC version) fails
       matrix:
-        cabal: ["3.6.2.0"]  # ghcup recommended as of 2022-10-12
-        ghc: ["9.2.4"]
+        cabal: ["3.10.1.0"]
+        ghc: ["9.2.8"]
 
     steps:
 
@@ -143,11 +143,6 @@ jobs:
       with:
         ghc-version: ${{ matrix.ghc }}
         cabal-version: ${{ matrix.cabal }}
-
-    - name: Ensure GHC and Cabal are installed and set
-      run: |
-        ghcup install ghc 9.2.4 --set
-        ghcup install cabal 3.6.2.0 --set
 
     - name: Install required libraries
       run: >-
