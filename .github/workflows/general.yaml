@@ -152,6 +152,16 @@ jobs:
         flint
         z3
 
+    - name: Debug Flint installation
+      run: |
+        echo "Architecture: $(uname -m)"
+        echo "Flint prefix: $(brew --prefix flint)"
+        echo "Homebrew prefix: $(brew --prefix)"
+        ls -la "$(brew --prefix flint)/lib" | grep flint || echo "No flint libs found"
+        ls -la "$(brew --prefix flint)/include" | grep flint || echo "No flint headers found"
+        pkg-config --exists flint && echo "pkg-config found flint" || echo "pkg-config cannot find flint"
+        pkg-config --cflags --libs flint || echo "pkg-config flint failed"
+
     - run: cabal freeze
 
 #   - name: Cache Cabal build artifacts
