@@ -272,13 +272,17 @@ jobs:
 
     - name: (camfort) Build (exe)
       if: "matrix.build == 'release'"
-      run: cabal build -O2
+      run: |
+        export PATH="/mingw64/bin:$PATH"
+        cabal build -O2 --extra-lib-dirs=/mingw64/lib --extra-include-dirs=/mingw64/include
       shell: msys2 {0}
       env:
         BASH_ENV: /c/ghcup/env
     - name: (camfort) Build (skip exe)
       if: "matrix.build != 'release'"
-      run: cabal build -O0
+      run: |
+        export PATH="/mingw64/bin:$PATH"
+        cabal build -O0 --extra-lib-dirs=/mingw64/lib --extra-include-dirs=/mingw64/include
       shell: msys2 {0}
       env:
         BASH_ENV: /c/ghcup/env
