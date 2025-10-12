@@ -26,23 +26,19 @@ packages:
   original:
     hackage: vinyl-0.14.3@sha256:08565c5d9ed8a5ba69915bffe8960f048587478155d5915a56d2e93b8ba3466f,4267
 - completed:
+    hackage: verifiable-expressions-0.6.3@sha256:f0a8221e57356c4675500d1e499c38994b69e7ffb0270e69e78d35b0de29636c,1960
+    pantry-tree:
+      sha256: dca120a85ed1b9368d2b9a1357de75d197707bf76d68d299d1da75c7f876816d
+      size: 1832
+  original:
+    hackage: verifiable-expressions-0.6.3@sha256:f0a8221e57356c4675500d1e499c38994b69e7ffb0270e69e78d35b0de29636c,1960
+- completed:
     hackage: union-0.1.2@sha256:04e5fe3a3a2b1235cf5d2fc193e6d6d2624ee762d7b2145fce975afbc8c40686,2134
     pantry-tree:
       sha256: 4b313bcf19a558f0e2f915aa4b37c22623db89ae34d5441d1041fff4a148d2cd
       size: 330
   original:
     hackage: union-0.1.2
-- completed:
-    commit: f38f237eaed84619193e04ffa6914c7b1f36a662
-    git: https://github.com/mrd/verifiable-expressions
-    name: verifiable-expressions
-    pantry-tree:
-      sha256: 8fc60677e9dcd2f5bc3571d62286abfa6b8e38ad71d462bb21d37039c294df37
-      size: 1832
-    version: 0.6.2
-  original:
-    commit: f38f237eaed84619193e04ffa6914c7b1f36a662
-    git: https://github.com/mrd/verifiable-expressions
 - completed:
     commit: b384824e2437098a3235b0affa48a6e4ee015bf6
     git: https://github.com/mrd/fortran-src
