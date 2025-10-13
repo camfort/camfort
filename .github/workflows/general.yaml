@@ -162,7 +162,7 @@ jobs:
         pkg-config --variable=prefix flint
         ls -laR "$(pkg-config --variable=prefix flint)"
 
-    - run: cabal freeze
+#   - run: cabal freeze
 
 #   - name: Cache Cabal build artifacts
 #     uses: actions/cache@v4
