@@ -64,11 +64,9 @@ jobs:
     strategy:
       fail-fast: false  # don't stop if one job (= GHC version) fails
       matrix:
-        cabal: ["3.6.2.0"]  # ghcup recommended as of 2022-10-12
+        cabal: ["3.16.0.0"]
         ghc:
-        - "9.0.2"
-        - "9.2.4"
-        - "9.4.2"
+        - "9.12.2"
 
     steps:
 
@@ -208,12 +206,12 @@ jobs:
       fail-fast: false
       matrix:
         os: [windows-latest]
-        cabal: [latest]
+        cabal: ["3.16.0.0"]
         ghc:
-        - 9.2.4
+        - 9.12.2
         msystem: [MINGW64]
         include:
-        - ghc: 9.2.4
+        - ghc: 9.12.2
           build: release
 
     steps:
