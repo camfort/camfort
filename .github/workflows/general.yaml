@@ -181,10 +181,14 @@ jobs:
       run: echo "arch=$(uname -m)" >> $GITHUB_OUTPUT
 
     - name: Build
-      run: cabal install -v3 --extra-lib-dirs=$(brew --prefix flint)/lib --extra-include-dirs=$(brew --prefix flint)/include --extra-lib-dirs=$(pkg-config --variable=prefix flint)/lib --extra-include-dirs=$(pkg-config --variable=prefix flint)/include
+      run: |
+        echo "running: cabal install -v3 --extra-lib-dirs=$(brew --prefix flint)/lib --extra-include-dirs=$(brew --prefix flint)/include --extra-lib-dirs=$(pkg-config --variable=prefix flint)/lib --extra-include-dirs=$(pkg-config --variable=prefix flint)/include"
+        cabal install -v3 --extra-lib-dirs=$(brew --prefix flint)/lib --extra-include-dirs=$(brew --prefix flint)/include --extra-lib-dirs=$(pkg-config --variable=prefix flint)/lib --extra-include-dirs=$(pkg-config --variable=prefix flint)/include
 
     - name: Test
-      run: cabal test --test-show-details=streaming --extra-lib-dirs=$(brew --prefix flint)/lib --extra-include-dirs=$(brew --prefix flint)/include
+      run: |
+        echo "running: cabal test --test-show-details=streaming --extra-lib-dirs=$(brew --prefix flint)/lib --extra-include-dirs=$(brew --prefix flint)/include --extra-lib-dirs=$(pkg-config --variable=prefix flint)/lib --extra-include-dirs=$(pkg-config --variable=prefix flint)/include"
+        cabal test --test-show-details=streaming --extra-lib-dirs=$(brew --prefix flint)/lib --extra-include-dirs=$(brew --prefix flint)/include --extra-lib-dirs=$(pkg-config --variable=prefix flint)/lib --extra-include-dirs=$(pkg-config --variable=prefix flint)/include
       env:
         HSPEC_OPTIONS: --color
 
