@@ -158,9 +158,11 @@ jobs:
         echo "Flint prefix: $(brew --prefix flint)"
         echo "Homebrew prefix: $(brew --prefix)"
         ls -la "$(brew --prefix flint)/lib" | grep flint || echo "No flint libs found"
-        ls -la "$(brew --prefix flint)/include" | grep flint || echo "No flint headers found"
+        ls -laR "$(brew --prefix flint)/include" | grep flint || echo "No flint headers found"
         pkg-config --exists flint && echo "pkg-config found flint" || echo "pkg-config cannot find flint"
         pkg-config --cflags --libs flint || echo "pkg-config flint failed"
+        pkg-config --variable=prefix flint
+        ls -laR "$(pkg-config --variable=prefix flint)"
 
     - run: cabal freeze
 
