@@ -294,6 +294,12 @@ jobs:
       if: "matrix.build == 'release'"
       run: |
         export PATH="/mingw64/bin:$PATH"
+        echo 'packages: .' > cabal.project
+        echo 'source-repository-package' >> cabal.project
+        echo '  type: git' >> cabal.project
+        echo '  location: https://github.com/camfort/fortran-src' >> cabal.project
+        echo '  tag: main' >> cabal.project
+        echo 'tests: True' > cabal.project.local
         cabal build -O2 --extra-lib-dirs=/mingw64/lib --extra-include-dirs=/mingw64/include
       shell: msys2 {0}
       env:
