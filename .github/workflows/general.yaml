@@ -181,12 +181,11 @@ jobs:
     - name: Build
       run: |
         echo "running: cabal install -v3 --extra-lib-dirs=$(brew --prefix flint)/lib --extra-include-dirs=$(brew --prefix flint)/include --extra-lib-dirs=$(pkg-config --variable=prefix flint)/lib --extra-include-dirs=$(pkg-config --variable=prefix flint)/include"
-
-	echo 'packages: .' > cabal.project
-	echo 'source-repository-package' >> cabal.project
-	echo '  type: git' >> cabal.project
-	echo '    location: https://github.com/camfort/fortran-src' >> cabal.project
-	echo '    tag: main' >> cabal.project
+        echo 'packages: .' > cabal.project
+        echo 'source-repository-package' >> cabal.project
+        echo '  type: git' >> cabal.project
+        echo '    location: https://github.com/camfort/fortran-src' >> cabal.project
+        echo '    tag: main' >> cabal.project
         cabal install -v3 --extra-lib-dirs=$(brew --prefix flint)/lib --extra-include-dirs=$(brew --prefix flint)/include --extra-lib-dirs=$(pkg-config --variable=prefix flint)/lib --extra-include-dirs=$(pkg-config --variable=prefix flint)/include
 
     - name: Test
