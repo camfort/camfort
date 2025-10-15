@@ -275,20 +275,20 @@ jobs:
 
     - run: cabal update
 
-    - run: cabal freeze
-      shell: msys2 {0}
-      env:
-        BASH_ENV: /c/ghcup/env
+#   - run: cabal freeze
+#     shell: msys2 {0}
+#     env:
+#       BASH_ENV: /c/ghcup/env
 
     - name: Add MSYS2 mingw64/bin to Windows PATH
       run: echo "D:\\msys64\\mingw64\\bin" | Out-File -Append -FilePath $env:GITHUB_PATH
 
-    - name: (camfort) Cache project Cabal store
-      uses: actions/cache@v4
-      with:
-        path: dist-newstyle
-        key:          build-cabal-project-camfort-v2-${{ runner.os }}-ghc_${{ matrix.ghc }}-${{ hashFiles('cabal.project.freeze') }}
-        restore-keys: build-cabal-project-camfort-v2-${{ runner.os }}-ghc_${{ matrix.ghc }}
+#   - name: (camfort) Cache project Cabal store
+#     uses: actions/cache@v4
+#     with:
+#       path: dist-newstyle
+#       key:          build-cabal-project-camfort-v2-${{ runner.os }}-ghc_${{ matrix.ghc }}-${{ hashFiles('cabal.project.freeze') }}
+#       restore-keys: build-cabal-project-camfort-v2-${{ runner.os }}-ghc_${{ matrix.ghc }}
 
     - name: (camfort) Build (exe)
       if: "matrix.build == 'release'"
