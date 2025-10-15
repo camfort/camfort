@@ -232,6 +232,7 @@ jobs:
           lapack:p
           flint:p
           z3:p
+          git:p
         location: D:\
 
     - name: Find Flint libraries
