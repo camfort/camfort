@@ -227,12 +227,13 @@ jobs:
     - uses: msys2/setup-msys2@v2
       with:
         msystem: ${{ matrix.msystem }}
+        install: >-
+          git
         pacboy: >-
           openblas:p
           lapack:p
           flint:p
           z3:p
-          git:p
         location: D:\
 
     - name: Find Flint libraries
