@@ -60,7 +60,7 @@ jobs:
 
   ubuntu-cabal-test:
     runs-on: ubuntu-latest
-    name: Ubuntu / GHC ${{ matrix.ghc }}, Cabal / test
+    name: Ubuntu / GHC ${{ matrix.ghc }}, Cabal ${{ matrix.cabal }} / test
     strategy:
       fail-fast: false  # don't stop if one job (= GHC version) fails
       matrix:
@@ -136,7 +136,7 @@ jobs:
 
   mac-cabal-test:
     runs-on: macos-latest
-    name: Mac / GHC ${{ matrix.ghc }}, Cabal / test
+    name: Mac / GHC ${{ matrix.ghc }}, Cabal ${{ matrix.cabal }} / test
     strategy:
       fail-fast: false  # don't stop if one job (= GHC version) fails
       matrix:
@@ -223,7 +223,7 @@ jobs:
 
   windows-cabal-test:
     runs-on: ${{ matrix.os }}
-    name: ${{ matrix.os }} (MSYS2, ${{ matrix.msystem }})) / build / GHC ${{ matrix.ghc }}, Cabal
+    name: ${{ matrix.os }} (MSYS2, ${{ matrix.msystem }})) / build / GHC ${{ matrix.ghc }}, Cabal ${{ matrix.cabal }}
     strategy:
       fail-fast: false
       matrix:
