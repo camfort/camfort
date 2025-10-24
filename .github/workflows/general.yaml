@@ -338,6 +338,7 @@ jobs:
       run: |
         export PATH="/mingw64/bin:$PATH"
         cabal test --test-show-details=streaming --extra-lib-dirs=/mingw64/lib --extra-include-dirs=/mingw64/include
+      shell: msys2 {0}
       env:
         HSPEC_OPTIONS: --color
         BASH_ENV: /c/ghcup/env
