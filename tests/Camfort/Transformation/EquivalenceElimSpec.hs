@@ -29,6 +29,7 @@ import           Control.Monad (forM_)
 import qualified Language.Fortran.Util.Position as FU
 import           System.Directory
 import           System.FilePath
+import qualified System.IO.Strict as Strict
 import           Test.Hspec
 
 samplesBase :: FilePath
@@ -37,7 +38,7 @@ samplesBase = "tests" </> "fixtures" </> "Transformation"
 readExpected :: FilePath -> IO String
 readExpected filename = do
   let path = samplesBase </> filename
-  readFile path
+  Strict.readFile path
 
 readActual :: FilePath -> IO String
 readActual argumentFilename = do
@@ -54,7 +55,7 @@ readActual argumentFilename = do
         }
 
   _ <- equivalences outFile env
-  actual <- readFile outFile
+  actual <- Strict.readFile outFile
   removeFile outFile
   return actual
 

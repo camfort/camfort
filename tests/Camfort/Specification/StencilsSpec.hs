@@ -29,6 +29,7 @@ import           Camfort.Specification.Stencils.Model
 import           Camfort.Specification.Stencils.Syntax
 import           Camfort.Specification.Stencils.Synthesis
 import           Control.Lens
+import qualified System.IO.Strict as Strict
 import qualified Data.ByteString.Char8 as B
 import           Data.Data (Data)
 import qualified Data.Graph.Inductive.Graph as Gr
@@ -406,7 +407,7 @@ spec =
               version      = deduceFortranVersion (dir </> fileName)
               expectedFile = expected dir fileName
           in do
-            synthExpectedSrc <- runIO $ readFile expectedFile
+            synthExpectedSrc <- runIO $ Strict.readFile expectedFile
             it testComment $
               testMultiFileAnalysisWithSrc input (generalizePureAnalysis . synth '=') $ \sources report -> do
                 let res = report ^?! arResult . _ARSuccess
