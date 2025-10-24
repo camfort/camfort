@@ -2,6 +2,7 @@ module Camfort.Transformation.CommonSpec (spec) where
 
 import           System.Directory
 import           System.FilePath
+import qualified System.IO.Strict as Strict
 import           Test.Hspec
 import           Camfort.Analysis.Logger (LogLevel (..))
 import           Camfort.Functionality
@@ -12,7 +13,7 @@ samplesBase = "tests" </> "fixtures" </> "Transformation"
 readSample :: FilePath -> IO String
 readSample filename = do
   let path = samplesBase </> filename
-  readFile path
+  Strict.readFile path
 
 removeSample :: [Char] -> IO ()
 removeSample filename = do
