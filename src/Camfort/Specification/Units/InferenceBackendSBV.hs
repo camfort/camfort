@@ -30,7 +30,7 @@ import           Data.List (partition, sortBy, groupBy, nub)
 import qualified Data.Map.Strict as M
 import           Data.Maybe (catMaybes, fromMaybe)
 import           Data.Ord (comparing)
-import           Data.SBV hiding (engine, name)
+import           Data.SBV hiding (engine, name, partition)
 import           Data.SBV.Control
 import           Prelude hiding (pred)
 import           System.IO.Unsafe (unsafePerformIO)

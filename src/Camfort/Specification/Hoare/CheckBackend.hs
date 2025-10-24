@@ -27,6 +27,7 @@ module Camfort.Specification.Hoare.CheckBackend
 import           Control.Exception                      (Exception (..))
 import           Control.Lens
 import           Control.Monad.Reader
+import           Control.Monad                          (forM, forM_, unless, void, when, zipWithM_, msum)
 import           Control.Monad.State.Strict
 import           Control.Monad.Writer.Lazy
 import           Control.Monad.Trans.Maybe

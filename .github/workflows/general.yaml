@@ -23,15 +23,15 @@ jobs:
 
     # relative paths are relative to the project directory
     - name: Cache Stack build artifacts (user + project)
-      uses: actions/cache@v2
+      uses: actions/cache@v4
       with:
         path: |
           ~/.stack
           .stack-work
         # best effort for cache: tie it to Stack resolver and package config
-        key: ${{ runner.os }}-stack-${{ hashFiles('stack.yaml.lock', 'package.yaml') }}
+        key: ${{ runner.os }}-stack-v2-${{ hashFiles('stack.yaml.lock', 'package.yaml') }}
         restore-keys: |
-          ${{ runner.os }}-stack
+          ${{ runner.os }}-stack-v2
 
     # note that we require static libs (in Ubuntu, *-dev)
     - name: Install required libraries
@@ -64,11 +64,9 @@ jobs:
     strategy:
       fail-fast: false  # don't stop if one job (= GHC version) fails
       matrix:
-        cabal: ["3.6.2.0"]  # ghcup recommended as of 2022-10-12
+        cabal: ["3.16.0.0"]
         ghc:
-        - "9.0.2"
-        - "9.2.4"
-        - "9.4.2"
+        - "9.12.2"
 
     steps:
 
@@ -92,7 +90,7 @@ jobs:
 
     - name: Setup Haskell build environment
       id: setup-haskell-build-env
-      uses: haskell/actions/setup@v1
+      uses: haskell-actions/setup@v2
       with:
         ghc-version: ${{ matrix.ghc }}
         cabal-version: ${{ matrix.cabal }}
@@ -106,17 +104,26 @@ jobs:
         libflint-dev
         z3
 
+    - name: Configure cabal.project / cabal.project.local
+      run: |
+        echo 'packages: .' > cabal.project
+        echo 'source-repository-package' >> cabal.project
+        echo '  type: git' >> cabal.project
+        echo '  location: https://github.com/camfort/fortran-src' >> cabal.project
+        echo '  tag: main' >> cabal.project
+        echo 'tests: True' > cabal.project.local
+
     - run: cabal freeze
 
     - name: Cache Cabal build artifacts
-      uses: actions/cache@v2
+      uses: actions/cache@v4
       with:
         path: |
           ${{ steps.setup-haskell-build-env.outputs.cabal-store }}
           dist-newstyle
-        key: ${{ runner.os }}-cabal-${{ matrix.ghc }}-${{ hashFiles('cabal.project.freeze') }}
+        key: ${{ runner.os }}-cabal-v2-${{ matrix.ghc }}-${{ hashFiles('cabal.project.freeze') }}
         restore-keys: |
-          ${{ runner.os }}-cabal-${{ matrix.ghc }}
+          ${{ runner.os }}-cabal-v2-${{ matrix.ghc }}
 
     - name: Test
       run: cabal test --test-show-details=streaming
@@ -129,8 +136,8 @@ jobs:
     strategy:
       fail-fast: false  # don't stop if one job (= GHC version) fails
       matrix:
-        cabal: ["3.6.2.0"]  # ghcup recommended as of 2022-10-12
-        ghc: ["9.2.4"]
+        cabal: ["3.16.0.0"]
+        ghc: ["9.12.2"]
 
     steps:
 
@@ -139,7 +146,7 @@ jobs:
 
     - name: Setup Haskell build environment
       id: setup-haskell-build-env
-      uses: haskell/actions/setup@v1
+      uses: haskell-actions/setup@v2
       with:
         ghc-version: ${{ matrix.ghc }}
         cabal-version: ${{ matrix.cabal }}
@@ -152,23 +159,52 @@ jobs:
         flint
         z3
 
+    - name: Debug Flint installation
+      run: |
+        echo "Architecture: $(uname -m)"
+        echo "Flint prefix: $(brew --prefix flint)"
+        echo "Homebrew prefix: $(brew --prefix)"
+        ls -la "$(brew --prefix flint)/lib" | grep flint || echo "No flint libs found"
+        ls -laR "$(brew --prefix flint)/include" | grep flint || echo "No flint headers found"
+        pkg-config --exists flint && echo "pkg-config found flint" || echo "pkg-config cannot find flint"
+        pkg-config --cflags --libs flint || echo "pkg-config flint failed"
+        pkg-config --variable=prefix flint
+        ls -laR "$(pkg-config --variable=prefix flint)"
+
+    - name: Configure cabal.project / cabal.project.local
+      run: |
+        echo 'packages: .' > cabal.project
+        echo 'source-repository-package' >> cabal.project
+        echo '  type: git' >> cabal.project
+        echo '  location: https://github.com/camfort/fortran-src' >> cabal.project
+        echo '  tag: main' >> cabal.project
+        echo 'tests: True' > cabal.project.local
+
     - run: cabal freeze
 
-    - name: Cache Cabal build artifacts
-      uses: actions/cache@v2
-      with:
-        path: |
-          ${{ steps.setup-haskell-build-env.outputs.cabal-store }}
-          dist-newstyle
-        key: ${{ runner.os }}-cabal-${{ matrix.ghc }}-${{ hashFiles('cabal.project.freeze') }}
-        restore-keys: |
-          ${{ runner.os }}-cabal-${{ matrix.ghc }}
+#   - name: Cache Cabal build artifacts
+#     uses: actions/cache@v4
+#     with:
+#       path: |
+#         ${{ steps.setup-haskell-build-env.outputs.cabal-store }}
+#         dist-newstyle
+#       key: ${{ runner.os }}-cabal-${{ matrix.ghc }}-${{ hashFiles('cabal.project.freeze') }}
+#       restore-keys: |
+#         ${{ runner.os }}-cabal-${{ matrix.ghc }}
+
+    - name: Detect architecture
+      id: arch
+      run: echo "arch=$(uname -m)" >> $GITHUB_OUTPUT
 
     - name: Build
-      run: cabal install
+      run: |
+        echo "running: cabal install -v3 --extra-lib-dirs=$(brew --prefix flint)/lib --extra-include-dirs=$(brew --prefix flint)/include --extra-lib-dirs=$(pkg-config --variable=prefix flint)/lib --extra-include-dirs=$(pkg-config --variable=prefix flint)/include"
+        cabal install --extra-lib-dirs=$(brew --prefix flint)/lib --extra-include-dirs=$(brew --prefix flint)/include --extra-lib-dirs=$(pkg-config --variable=prefix flint)/lib --extra-include-dirs=$(pkg-config --variable=prefix flint)/include
 
     - name: Test
-      run: cabal test --test-show-details=streaming
+      run: |
+        echo "running: cabal test --test-show-details=streaming --extra-lib-dirs=$(brew --prefix flint)/lib --extra-include-dirs=$(brew --prefix flint)/include --extra-lib-dirs=$(pkg-config --variable=prefix flint)/lib --extra-include-dirs=$(pkg-config --variable=prefix flint)/include"
+        cabal test --test-show-details=streaming --extra-lib-dirs=$(brew --prefix flint)/lib --extra-include-dirs=$(brew --prefix flint)/include --extra-lib-dirs=$(pkg-config --variable=prefix flint)/lib --extra-include-dirs=$(pkg-config --variable=prefix flint)/include
       env:
         HSPEC_OPTIONS: --color
 
@@ -188,12 +224,12 @@ jobs:
       fail-fast: false
       matrix:
         os: [windows-latest]
-        cabal: [latest]
+        cabal: ["3.16.0.0"]
         ghc:
-        - 9.2.4
+        - 9.12.2
         msystem: [MINGW64]
         include:
-        - ghc: 9.2.4
+        - ghc: 9.12.2
           build: release
 
     steps:
@@ -203,12 +239,30 @@ jobs:
     - uses: msys2/setup-msys2@v2
       with:
         msystem: ${{ matrix.msystem }}
+        install: >-
+          git
         pacboy: >-
           openblas:p
           lapack:p
           flint:p
           z3:p
         location: D:\
+
+    - name: Find Flint libraries
+      shell: msys2 {0}
+      run: |
+        pacman -Ql mingw-w64-x86_64-flint
+        # Or search for the actual files
+        find /mingw64 -name "*flint*" -o -name "libflint*"
+        ls -la /mingw64/include/*flint* || echo "No headers found"
+        ls -la /mingw64/lib/*flint* || echo "No libraries found"
+        pkg-config --cflags --libs flint || echo "pkg-config not available"
+
+    - name: Add MSYS2 library paths to environment
+      shell: msys2 {0}
+      run: |
+        export PATH="/mingw64/bin:$PATH"
+        export LIBRARY_PATH="/mingw64/lib:$LIBRARY_PATH"
 
     # TODO 2022-10-12 has a new command, not tried
     - name: Install ghcup
@@ -228,34 +282,50 @@ jobs:
     - run: ghcup install ghc ${{ matrix.ghc }} --set
 
     - name: Cache global Cabal store
-      uses: actions/cache@v2
+      uses: actions/cache@v4
       with:
         path: C:/cabal/store
-        key: build-cabal-global-store-${{ runner.os }}-ghc_${{ matrix.ghc }}
+        key: build-cabal-global-store-v2-${{ runner.os }}-ghc_${{ matrix.ghc }}
 
     - run: cabal update
+
+    - name: Configure cabal.project / cabal.project.local
+      run: |
+        echo 'packages: .' > cabal.project
+        echo 'source-repository-package' >> cabal.project
+        echo '  type: git' >> cabal.project
+        echo '  location: https://github.com/camfort/fortran-src' >> cabal.project
+        echo '  tag: main' >> cabal.project
+        echo 'tests: True' > cabal.project.local
 
     - run: cabal freeze
       shell: msys2 {0}
       env:
         BASH_ENV: /c/ghcup/env
 
-    - name: (camfort) Cache project Cabal store
-      uses: actions/cache@v2
-      with:
-        path: dist-newstyle
-        key:          build-cabal-project-camfort-${{ runner.os }}-ghc_${{ matrix.ghc }}-${{ hashFiles('cabal.project.freeze') }}
-        restore-keys: build-cabal-project-camfort-${{ runner.os }}-ghc_${{ matrix.ghc }}
+    - name: Add MSYS2 mingw64/bin to Windows PATH
+      run: echo "D:\\msys64\\mingw64\\bin" | Out-File -Append -FilePath $env:GITHUB_PATH
+
+#   - name: (camfort) Cache project Cabal store
+#     uses: actions/cache@v4
+#     with:
+#       path: dist-newstyle
+#       key:          build-cabal-project-camfort-v2-${{ runner.os }}-ghc_${{ matrix.ghc }}-${{ hashFiles('cabal.project.freeze') }}
+#       restore-keys: build-cabal-project-camfort-v2-${{ runner.os }}-ghc_${{ matrix.ghc }}
 
     - name: (camfort) Build (exe)
       if: "matrix.build == 'release'"
-      run: cabal build -O2
+      run: |
+        export PATH="/mingw64/bin:$PATH"
+        cabal build -O2 --extra-lib-dirs=/mingw64/lib --extra-include-dirs=/mingw64/include
       shell: msys2 {0}
       env:
         BASH_ENV: /c/ghcup/env
     - name: (camfort) Build (skip exe)
       if: "matrix.build != 'release'"
-      run: cabal build -O0
+      run: |
+        export PATH="/mingw64/bin:$PATH"
+        cabal build -O0 --extra-lib-dirs=/mingw64/lib --extra-include-dirs=/mingw64/include
       shell: msys2 {0}
       env:
         BASH_ENV: /c/ghcup/env

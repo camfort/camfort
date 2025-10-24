@@ -25,6 +25,7 @@ import           Camfort.Analysis
 import           Camfort.Analysis.Annotations
 import           Camfort.Helpers.Syntax
 import           Camfort.Transformation.DeadCode
+import           Control.Monad (forM_)
 import           Control.Monad.State.Lazy hiding (ap)
 import           Data.Generics.Uniplate.Operations
 import           Data.List
