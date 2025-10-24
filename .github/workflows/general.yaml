@@ -330,6 +330,14 @@ jobs:
       env:
         BASH_ENV: /c/ghcup/env
 
+    - name: (camfort) Test
+      run: |
+        export PATH="/mingw64/bin:$PATH"
+        cabal test --test-show-details=streaming --extra-lib-dirs=/mingw64/lib --extra-include-dirs=/mingw64/include
+      env:
+        HSPEC_OPTIONS: --color
+        BASH_ENV: /c/ghcup/env
+
     - name: (camfort) Install
       if: "matrix.build == 'release'"
       run: cabal install
