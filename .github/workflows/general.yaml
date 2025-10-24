@@ -64,9 +64,13 @@ jobs:
     strategy:
       fail-fast: false  # don't stop if one job (= GHC version) fails
       matrix:
-        cabal: ["3.16.0.0"]
+        cabal:
+        - "3.16.0.0"
+        - "3.14.2.0"
         ghc:
         - "9.12.2"
+        - "9.10.3"
+        - "9.8.4"
 
     steps:
 
