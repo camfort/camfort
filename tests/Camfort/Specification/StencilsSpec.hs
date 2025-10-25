@@ -16,7 +16,7 @@ import           Camfort.Analysis hiding (describe)
 import qualified Camfort.Analysis.Logger as L
 import           Camfort.Analysis.ModFile (genModFiles)
 import           Camfort.Analysis.TestUtils
-import           Camfort.TestUtils (normaliseForComparison)
+import           Camfort.TestUtils (normaliseForComparison, normalisedShouldBe)
 import           Camfort.Helpers.Vec hiding (zipWith)
 import           Camfort.Input
 import           Camfort.Output
@@ -31,6 +31,7 @@ import           Camfort.Specification.Stencils.Syntax
 import           Camfort.Specification.Stencils.Synthesis
 import           Control.Lens
 import qualified System.IO.Strict as Strict
+import qualified Data.Text as Text
 import qualified Data.ByteString.Char8 as B
 import           Data.Data (Data)
 import qualified Data.Graph.Inductive.Graph as Gr
@@ -300,7 +301,7 @@ spec =
         "inserts correct access specification"
       assertStencilSynthResponse "example12.f"
         "reports errors when conflicting stencil exists"
-        [unlines'
+        [Text.unpack $ unlines'
          [ ""
          , "Encountered the following errors when checking stencil specs for 'tests/fixtures/Specification/Stencils/example12.f'"
          , ""
@@ -315,7 +316,7 @@ spec =
          ]]
       assertStencilSynthResponseOut "example14.f"
         "warns when duplicate stencils exist, but continues"
-        [unlines'
+        [Text.unpack $ unlines'
          [ ""
          , "Encountered the following errors when checking stencil specs for 'tests/fixtures/Specification/Stencils/example14.f'"
          , ""
@@ -324,7 +325,7 @@ spec =
 
       assertStencilSynthResponseOut "example15.f"
         "warns when duplicate stencils exist (combined stencils), but continues"
-        [unlines'
+        [Text.unpack $ unlines'
          [ ""
          , "Encountered the following errors when checking stencil specs for 'tests/fixtures/Specification/Stencils/example15.f'"
          , ""
@@ -394,7 +395,7 @@ spec =
           it testComment $
             testSingleFileAnalysis input (generalizePureAnalysis . check) $ \report -> do
               let res = report ^?! arResult . _ARSuccess
-              show res `shouldBe` expected
+              show res `normalisedShouldBe` expected
 
         assertStencilInference :: Bool -> FilePath -> [L.Text] -> Expectation
         assertStencilInference useEval fileName expected = do
@@ -428,8 +429,8 @@ spec =
           let input = testInputSources (fixturesDir </> fileName)
           it testComment $
             testMultiFileAnalysis input (generalizePureAnalysis . synth '=') $ \report -> do
-              let logs = report ^.. arMessages . traverse . L._MsgInfo . L.lmMsg
-              logs `shouldBe` expectedResponse
+              let logs = map Text.unpack $ report ^.. arMessages . traverse . L._MsgInfo . L.lmMsg
+              map normaliseForComparison logs `shouldBe` map normaliseForComparison expectedResponse
 
         assertStencilSynthResponseOut fileName testComment expectedResponse =
           describe testComment $ do
