@@ -29,9 +29,9 @@ jobs:
           ~/.stack
           .stack-work
         # best effort for cache: tie it to Stack resolver and package config
-        key: ${{ runner.os }}-stack-v2-${{ hashFiles('stack.yaml.lock', 'package.yaml') }}
+        key: ${{ runner.os }}-stack-${{ hashFiles('stack.yaml.lock', 'package.yaml') }}
         restore-keys: |
-          ${{ runner.os }}-stack-v2
+          ${{ runner.os }}-stack
 
     # note that we require static libs (in Ubuntu, *-dev)
     - name: Install required libraries
@@ -124,9 +124,9 @@ jobs:
         path: |
           ${{ steps.setup-haskell-build-env.outputs.cabal-store }}
           dist-newstyle
-        key: ${{ runner.os }}-cabal-v2-${{ matrix.ghc }}-${{ hashFiles('cabal.project.freeze') }}
+        key: ${{ runner.os }}-cabal-${{ matrix.ghc }}-${{ hashFiles('cabal.project.freeze') }}
         restore-keys: |
-          ${{ runner.os }}-cabal-v2-${{ matrix.ghc }}
+          ${{ runner.os }}-cabal-${{ matrix.ghc }}
 
     - name: Test
       run: cabal test --test-show-details=streaming
@@ -288,7 +288,7 @@ jobs:
       uses: actions/cache@v4
       with:
         path: C:/cabal/store
-        key: build-cabal-global-store-v2-${{ runner.os }}-ghc_${{ matrix.ghc }}
+        key: build-cabal-global-store-${{ runner.os }}-ghc_${{ matrix.ghc }}
 
     - run: cabal update
 
@@ -313,8 +313,8 @@ jobs:
       uses: actions/cache@v4
       with:
         path: dist-newstyle
-        key:          build-cabal-project-camfort-v2-${{ runner.os }}-ghc_${{ matrix.ghc }}-${{ hashFiles('cabal.project.freeze') }}
-        restore-keys: build-cabal-project-camfort-v2-${{ runner.os }}-ghc_${{ matrix.ghc }}
+        key:          build-cabal-project-camfort-${{ runner.os }}-ghc_${{ matrix.ghc }}-${{ hashFiles('cabal.project.freeze') }}
+        restore-keys: build-cabal-project-camfort-${{ runner.os }}-ghc_${{ matrix.ghc }}
 
     - name: (camfort) Build (exe)
       if: "matrix.build == 'release'"
