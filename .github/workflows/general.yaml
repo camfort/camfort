@@ -185,15 +185,15 @@ jobs:
 
     - run: cabal freeze
 
-#   - name: Cache Cabal build artifacts
-#     uses: actions/cache@v4
-#     with:
-#       path: |
-#         ${{ steps.setup-haskell-build-env.outputs.cabal-store }}
-#         dist-newstyle
-#       key: ${{ runner.os }}-cabal-${{ matrix.ghc }}-${{ hashFiles('cabal.project.freeze') }}
-#       restore-keys: |
-#         ${{ runner.os }}-cabal-${{ matrix.ghc }}
+    - name: Cache Cabal build artifacts
+      uses: actions/cache@v4
+      with:
+        path: |
+          ${{ steps.setup-haskell-build-env.outputs.cabal-store }}
+          dist-newstyle
+        key: ${{ runner.os }}-cabal-${{ matrix.ghc }}-${{ hashFiles('cabal.project.freeze') }}
+        restore-keys: |
+          ${{ runner.os }}-cabal-${{ matrix.ghc }}
 
     - name: Detect architecture
       id: arch
@@ -309,12 +309,12 @@ jobs:
     - name: Add MSYS2 mingw64/bin to Windows PATH
       run: echo "D:\\msys64\\mingw64\\bin" | Out-File -Append -FilePath $env:GITHUB_PATH
 
-#   - name: (camfort) Cache project Cabal store
-#     uses: actions/cache@v4
-#     with:
-#       path: dist-newstyle
-#       key:          build-cabal-project-camfort-v2-${{ runner.os }}-ghc_${{ matrix.ghc }}-${{ hashFiles('cabal.project.freeze') }}
-#       restore-keys: build-cabal-project-camfort-v2-${{ runner.os }}-ghc_${{ matrix.ghc }}
+    - name: (camfort) Cache project Cabal store
+      uses: actions/cache@v4
+      with:
+        path: dist-newstyle
+        key:          build-cabal-project-camfort-v2-${{ runner.os }}-ghc_${{ matrix.ghc }}-${{ hashFiles('cabal.project.freeze') }}
+        restore-keys: build-cabal-project-camfort-v2-${{ runner.os }}-ghc_${{ matrix.ghc }}
 
     - name: (camfort) Build (exe)
       if: "matrix.build == 'release'"
