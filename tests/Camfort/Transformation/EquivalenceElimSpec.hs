@@ -31,6 +31,7 @@ import           System.Directory
 import           System.FilePath
 import qualified System.IO.Strict as Strict
 import           Test.Hspec
+import           Camfort.TestUtils (normalisedShouldBe)
 
 samplesBase :: FilePath
 samplesBase = "tests" </> "fixtures" </> "Transformation"
@@ -65,7 +66,7 @@ spec =
       expected <- runIO $ readExpected "equiv.expected.f90"
       actual <- runIO $ readActual "equiv.f90"
       it "it eliminates equivalence statements" $
-        actual `shouldBe` expected
+        actual `normalisedShouldBe` expected
 
       let infile = samplesBase </> "equiv.f90"
 

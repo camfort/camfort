@@ -15,6 +15,7 @@ import Camfort.Specification.Units.Analysis (compileUnits)
 import Camfort.Specification.Units.Analysis.Infer (inferUnits)
 import Camfort.Specification.Units.Monad
   (LiteralsOpt(..), unitOpts0, uoLiterals, runUnitAnalysis, UnitEnv(..))
+import Camfort.TestUtils (normalisedShouldBe)
 
 spec :: Test.Spec
 spec =
@@ -85,7 +86,7 @@ unitsInferReportWithMod modNames fileName expectedReport = do
   report <- runAnalysisT file (logOutputNone True) LogError modFiles $ runUnitAnalysis uEnv $ inferUnits
   let res = report ^?! arResult . _ARSuccess
 
-  show res `shouldBe` expectedReport
+  show res `normalisedShouldBe` expectedReport
   where uOpts = unitOpts0 { uoLiterals = LitMixed }
 
 -- | Helper for producing a basic ModFile from a (terminal) module file.

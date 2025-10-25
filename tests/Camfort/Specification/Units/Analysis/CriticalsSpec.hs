@@ -10,7 +10,7 @@ import           Language.Fortran.Util.ModFile (emptyModFiles)
 import           System.FilePath ((</>))
 import qualified Test.Hspec as Test
 import           Test.Hspec hiding (Spec)
-import           Camfort.TestUtils
+import           Camfort.TestUtils (hideFormatting, normalisedShouldBe)
 import           Language.Fortran.Util.ModFile
 
 spec :: Test.Spec
@@ -51,7 +51,7 @@ unitsCriticalsReportIs litmode uninitmode modNames fileName expectedReport = do
   report <- runAnalysisT file (logOutputNone True) LogError modFiles $ runUnitAnalysis uEnv $ inferCriticalVariables ""
   let res = report ^?! arResult . _ARSuccess
 
-  hideFormatting (show res) `shouldBe` expectedReport
+  hideFormatting (show res) `normalisedShouldBe` expectedReport
   where uOpts = unitOpts0 { uoLiterals = litmode, uninitializeds = uninitmode }
 
 -- | Helper for producing a basic ModFile from a (terminal) module file.

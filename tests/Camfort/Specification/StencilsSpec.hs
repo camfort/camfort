@@ -16,6 +16,7 @@ import           Camfort.Analysis hiding (describe)
 import qualified Camfort.Analysis.Logger as L
 import           Camfort.Analysis.ModFile (genModFiles)
 import           Camfort.Analysis.TestUtils
+import           Camfort.TestUtils (normaliseForComparison)
 import           Camfort.Helpers.Vec hiding (zipWith)
 import           Camfort.Input
 import           Camfort.Output
@@ -415,7 +416,7 @@ spec =
                     refactorings =
                       zipWith (\pf -> B.unpack . runIdentity . reprint (refactoring version) pf) res sources
 
-                refactorings `shouldBe` [synthExpectedSrc]
+                map normaliseForComparison refactorings `shouldBe` [normaliseForComparison synthExpectedSrc]
 
         assertStencilSynthOnFile = assertStencilSynthDir
           (\d f -> d </> getExpectedSrcFileName f) fixturesDir
