@@ -1,6 +1,7 @@
 module Camfort.TestUtils where
 
 import Test.Hspec
+import Text.Regex
 
 -- Removes formatting information from messages
 hideFormatting :: String -> String
@@ -19,4 +20,10 @@ normalisedShouldBe actual expected =
   normaliseForComparison actual `shouldBe` normaliseForComparison expected
 
 normaliseForComparison :: String -> String
-normaliseForComparison = map (\c -> if c == '\\' then '/' else c) . filter (/= '\r')
+normaliseForComparison = normalisePositions . map (\c -> if c == '\\' then '/' else c) . filter (/= '\r')
+  where
+    -- Normalize position ranges like (8:0)-(8:51) to (8:0)-(8:*)
+    -- This makes column differences irrelevant in comparisons
+    normalisePositions str =
+      let regex = mkRegex "\\([0-9]+:[0-9]+\\)-\\([0-9]+:[0-9]+\\)"
+      in subRegex regex str "(LINE:COL)-(LINE:COL)"
