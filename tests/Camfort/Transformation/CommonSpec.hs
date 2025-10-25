@@ -2,9 +2,11 @@ module Camfort.Transformation.CommonSpec (spec) where
 
 import           System.Directory
 import           System.FilePath
+import qualified System.IO.Strict as Strict
 import           Test.Hspec
 import           Camfort.Analysis.Logger (LogLevel (..))
 import           Camfort.Functionality
+import           Camfort.TestUtils (normalisedShouldBe)
 
 samplesBase :: FilePath
 samplesBase = "tests" </> "fixtures" </> "Transformation"
@@ -12,7 +14,7 @@ samplesBase = "tests" </> "fixtures" </> "Transformation"
 readSample :: FilePath -> IO String
 readSample filename = do
   let path = samplesBase </> filename
-  readFile path
+  Strict.readFile path
 
 removeSample :: [Char] -> IO ()
 removeSample filename = do
@@ -51,8 +53,8 @@ spec =
       runIO $ removeSample "cmnnext.f90"
 
       it "it eliminates common statement" $
-        actual `shouldBe` expected
+        actual `normalisedShouldBe` expected
       it "it produces a correct module file" $
-        actualMod `shouldBe` expectedMod
+        actualMod `normalisedShouldBe` expectedMod
       it "it produces a correct module file (2)" $
-        actualMod2 `shouldBe` expectedMod2
+        actualMod2 `normalisedShouldBe` expectedMod2

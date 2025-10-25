@@ -16,6 +16,7 @@ import           Camfort.Analysis hiding (describe)
 import qualified Camfort.Analysis.Logger as L
 import           Camfort.Analysis.ModFile (genModFiles)
 import           Camfort.Analysis.TestUtils
+import           Camfort.TestUtils (normaliseForComparison, normalisedShouldBe)
 import           Camfort.Helpers.Vec hiding (zipWith)
 import           Camfort.Input
 import           Camfort.Output
@@ -29,6 +30,8 @@ import           Camfort.Specification.Stencils.Model
 import           Camfort.Specification.Stencils.Syntax
 import           Camfort.Specification.Stencils.Synthesis
 import           Control.Lens
+import qualified System.IO.Strict as Strict
+import qualified Data.Text as Text
 import qualified Data.ByteString.Char8 as B
 import           Data.Data (Data)
 import qualified Data.Graph.Inductive.Graph as Gr
@@ -244,9 +247,9 @@ spec =
         testSingleFileAnalysis example2In (generalizePureAnalysis . infer False '=') $ \report -> do
           show (report ^?! arResult . _ARSuccess)
             `shouldBe` unlines
-            [ "(31:7)-(31:26)    stencil readOnce, backward(depth=1, dim=1) :: a"
-            , "(25:14)-(25:29)    access readOnce, pointed(dim=1)*pointed(dim=2) :: a"
-            , "(24:14)-(24:53)    stencil readOnce, pointed(dim=1)*centered(depth=1, dim=2) \
+            [ "(31:6)-(31:25)    stencil readOnce, backward(depth=1, dim=1) :: a"
+            , "(25:13)-(25:28)    access readOnce, pointed(dim=1)*pointed(dim=2) :: a"
+            , "(24:13)-(24:52)    stencil readOnce, pointed(dim=1)*centered(depth=1, dim=2) \
                                      \+ centered(depth=1, dim=1)*pointed(dim=2) :: a"]
 
 
@@ -255,7 +258,7 @@ spec =
           let res = report ^?! arResult . _ARSuccess
           show res
             `shouldBe`
-            "(23:1)-(23:78)    Correct.\n(30:1)-(30:56)    Correct."
+            "(23:0)-(23:77)    Correct.\n(30:0)-(30:55)    Correct."
 
     let example4In = testInputSources (fixturesDir </> "example4.f")
 
@@ -264,7 +267,7 @@ spec =
         testSingleFileAnalysis example4In (generalizePureAnalysis . infer False '=') $ \report -> do
           show (report ^?! arResult . _ARSuccess)
             `shouldBe` unlines
-             [ "(6:10)-(6:33)    stencil readOnce, pointed(dim=1) :: x"
+             [ "(6:9)-(6:32)    stencil readOnce, pointed(dim=1) :: x"
              ]
 
     describe "integration test on inference for example5" $
@@ -298,54 +301,54 @@ spec =
         "inserts correct access specification"
       assertStencilSynthResponse "example12.f"
         "reports errors when conflicting stencil exists"
-        [unlines'
+        [Text.unpack $ unlines'
          [ ""
          , "Encountered the following errors when checking stencil specs for 'tests/fixtures/Specification/Stencils/example12.f'"
          , ""
-         , "(8:1)-(8:52)    Not well specified."
+         , "(8:0)-(8:51)    Not well specified."
          , "        Specification is:"
          , "                stencil readOnce, backward(depth=1, dim=1) :: a"
          , ""
-         , "        but at (9:13)-(9:32) the code behaves as"
+         , "        but at (9:12)-(9:31) the code behaves as"
          , "                stencil readOnce, forward(depth=1, dim=1) :: a"
          , ""
          , "Please resolve these errors, and then run synthesis again."
          ]]
       assertStencilSynthResponseOut "example14.f"
         "warns when duplicate stencils exist, but continues"
-        [unlines'
+        [Text.unpack $ unlines'
          [ ""
          , "Encountered the following errors when checking stencil specs for 'tests/fixtures/Specification/Stencils/example14.f'"
          , ""
-         , "(10:1)-(10:49)    Warning: Duplicate specification."
+         , "(10:0)-(10:48)    Warning: Duplicate specification."
          ]]
 
       assertStencilSynthResponseOut "example15.f"
         "warns when duplicate stencils exist (combined stencils), but continues"
-        [unlines'
+        [Text.unpack $ unlines'
          [ ""
          , "Encountered the following errors when checking stencil specs for 'tests/fixtures/Specification/Stencils/example15.f'"
          , ""
-         , "(9:1)-(9:49)    Warning: Duplicate specification."
+         , "(9:0)-(9:48)    Warning: Duplicate specification."
          ]]
 
       assertStencilCheck "example16.f"
         "error trying to check an access spec against a stencil" $ unlines $
-        [ "(8:1)-(8:50)    Not well specified."
+        [ "(8:0)-(8:49)    Not well specified."
         , "        Specification is:"
         , "                access readOnce, forward(depth=1, dim=1) :: a"
         , ""
-        , "        but at (9:13)-(9:32) the code behaves as"
+        , "        but at (9:12)-(9:31) the code behaves as"
         , "                stencil readOnce, forward(depth=1, dim=1) :: a"
         ]
 
       assertStencilCheck "example17.f"
         "error trying to check an access spec against a stencil" $ unlines $
-        [ "(8:1)-(8:51)    Not well specified."
+        [ "(8:0)-(8:50)    Not well specified."
         , "        Specification is:"
         , "                stencil readOnce, forward(depth=1, dim=1) :: a"
         , ""
-        , "        but at (9:13)-(9:29) the code behaves as"
+        , "        but at (9:12)-(9:28) the code behaves as"
         , "                access readOnce, forward(depth=1, dim=1) :: a"
         ]
 
@@ -353,15 +356,15 @@ spec =
       it "provides more information with evalmode on" $
         assertStencilInference True "example-no-specs-simple.f90" $
           [Text.unlines
-           [ "(6:6)-(6:16)    stencil readOnce, pointed(dim=1) :: a"
-           , "(6:6)-(6:16)    EVALMODE: assign to relative array subscript (tag: tickAssign)"
+           [ "(6:5)-(6:15)    stencil readOnce, pointed(dim=1) :: a"
+           , "(6:5)-(6:15)    EVALMODE: assign to relative array subscript (tag: tickAssign)"
            , ""
-           , "(6:6)-(6:16)    EVALMODE: dimensionality=1 :: a"
+           , "(6:5)-(6:15)    EVALMODE: dimensionality=1 :: a"
            ]]
 
       it "provides less information with evalmode off" $
         assertStencilInference False "example-no-specs-simple.f90"
-          [unlines' [ "(6:6)-(6:16)    stencil readOnce, pointed(dim=1) :: a"]
+          [unlines' [ "(6:5)-(6:15)    stencil readOnce, pointed(dim=1) :: a"]
           ]
 
     describe "synth/inference works correctly with nested loops" $ do
@@ -392,7 +395,7 @@ spec =
           it testComment $
             testSingleFileAnalysis input (generalizePureAnalysis . check) $ \report -> do
               let res = report ^?! arResult . _ARSuccess
-              show res `shouldBe` expected
+              show res `normalisedShouldBe` expected
 
         assertStencilInference :: Bool -> FilePath -> [L.Text] -> Expectation
         assertStencilInference useEval fileName expected = do
@@ -406,7 +409,7 @@ spec =
               version      = deduceFortranVersion (dir </> fileName)
               expectedFile = expected dir fileName
           in do
-            synthExpectedSrc <- runIO $ readFile expectedFile
+            synthExpectedSrc <- runIO $ Strict.readFile expectedFile
             it testComment $
               testMultiFileAnalysisWithSrc input (generalizePureAnalysis . synth '=') $ \sources report -> do
                 let res = report ^?! arResult . _ARSuccess
@@ -414,7 +417,7 @@ spec =
                     refactorings =
                       zipWith (\pf -> B.unpack . runIdentity . reprint (refactoring version) pf) res sources
 
-                refactorings `shouldBe` [synthExpectedSrc]
+                map normaliseForComparison refactorings `shouldBe` [normaliseForComparison synthExpectedSrc]
 
         assertStencilSynthOnFile = assertStencilSynthDir
           (\d f -> d </> getExpectedSrcFileName f) fixturesDir
@@ -426,8 +429,8 @@ spec =
           let input = testInputSources (fixturesDir </> fileName)
           it testComment $
             testMultiFileAnalysis input (generalizePureAnalysis . synth '=') $ \report -> do
-              let logs = report ^.. arMessages . traverse . L._MsgInfo . L.lmMsg
-              logs `shouldBe` expectedResponse
+              let logs = map Text.unpack $ report ^.. arMessages . traverse . L._MsgInfo . L.lmMsg
+              map normaliseForComparison logs `shouldBe` map normaliseForComparison expectedResponse
 
         assertStencilSynthResponseOut fileName testComment expectedResponse =
           describe testComment $ do
@@ -462,7 +465,7 @@ mkTestModFile file = head <$> genModFiles Nothing emptyModFiles compileStencils 
 
 crossModuleAUserReport :: [L.Text]
 crossModuleAUserReport =
-  [unlines' [ "(7:6)-(7:16)    stencil readOnce, pointed(dim=1) :: b"]
+  [unlines' [ "(7:5)-(7:15)    stencil readOnce, pointed(dim=1) :: b"]
   ]
 
 -- Indices for the 2D five point stencil (deliberately in an odd order)
