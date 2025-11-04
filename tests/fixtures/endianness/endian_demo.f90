@@ -44,7 +44,6 @@ program endian_demo
     end do
     if (mod(n,16) /= 0) write(*,*)
 
-    ! Interpret first 4 bytes as 32-bit int and next 8 bytes as 64-bit real
     call interpret_and_print(buf)
 
     close(20)
@@ -54,6 +53,7 @@ program endian_demo
 contains
 
   subroutine interpret_and_print(buf)
+    ! Interpret first 4 bytes as 32-bit int and next 8 bytes as 64-bit real
     integer(c_int8_t), intent(in) :: buf(:)
     integer(c_int32_t) :: i32_local
     real(c_double) :: r64_local
