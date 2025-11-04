@@ -30,7 +30,8 @@ module Camfort.Analysis.Simple
  , checkAllocateStatements
  , checkFloatingPointUse
  , checkModuleUse
- , checkArrayUse )
+ , checkArrayUse
+ , FE.checkEndianSensitive )
 where
 
 import Prelude hiding (unlines)
@@ -66,6 +67,7 @@ import Camfort.Analysis (analysisModFiles,  ExitCodeOfReport(..), atSpanned, atS
                         , logError, describe, describeBuilder
                         , PureAnalysis, Describe )
 import Camfort.Analysis.ModFile (withCombinedEnvironment)
+import qualified Camfort.Analysis.Endianness as FE
 
 {-| Counts the number of declarations (of variables) in a whole program -}
 
@@ -506,3 +508,4 @@ instance ExitCodeOfReport CheckArrayReport where
   exitCodeOf (CheckArrayReport {..})
     | null nestedIdx = 0
     | otherwise = 1
+
