@@ -14,5 +14,4 @@ extra-deps:
 - vinyl-0.14.3@sha256:08565c5d9ed8a5ba69915bffe8960f048587478155d5915a56d2e93b8ba3466f,4267
 - verifiable-expressions-0.6.3@sha256:f0a8221e57356c4675500d1e499c38994b69e7ffb0270e69e78d35b0de29636c,1960
 - union-0.1.2
-- git: https://github.com/mrd/fortran-src
-  commit: b384824e2437098a3235b0affa48a6e4ee015bf6
+- fortran-src-0.16.8@sha256:6587c88ca0c98dfa52b18d0f4c0336db245a4adb5bd9415b88f2267ebb470a71,12906

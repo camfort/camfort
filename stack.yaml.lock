@@ -40,16 +40,12 @@ packages:
   original:
     hackage: union-0.1.2
 - completed:
-    commit: b384824e2437098a3235b0affa48a6e4ee015bf6
-    git: https://github.com/mrd/fortran-src
-    name: fortran-src
+    hackage: fortran-src-0.16.8@sha256:6587c88ca0c98dfa52b18d0f4c0336db245a4adb5bd9415b88f2267ebb470a71,12906
     pantry-tree:
-      sha256: c40a69e5e06f0454896a2f1c6812bce3b37ba2d3e89f90c6ab9001b6a86efe37
-      size: 13838
-    version: 0.16.7
+      sha256: 41f97f0c9b0c8ef304c8acd1e2a9103abfd0c6d8b8fba35d590aa27a969a850c
+      size: 13333
   original:
-    commit: b384824e2437098a3235b0affa48a6e4ee015bf6
-    git: https://github.com/mrd/fortran-src
+    hackage: fortran-src-0.16.8@sha256:6587c88ca0c98dfa52b18d0f4c0336db245a4adb5bd9415b88f2267ebb470a71,12906
 snapshots:
 - completed:
     sha256: 238fa745b64f91184f9aa518fe04bdde6552533d169b0da5256670df83a0f1a9
