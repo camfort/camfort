@@ -113,11 +113,6 @@ jobs:
 
     - name: Configure cabal.project / cabal.project.local
       run: |
-        echo 'packages: .' > cabal.project
-        echo 'source-repository-package' >> cabal.project
-        echo '  type: git' >> cabal.project
-        echo '  location: https://github.com/camfort/fortran-src' >> cabal.project
-        echo '  tag: main' >> cabal.project
         echo 'tests: True' > cabal.project.local
 
     - run: cabal freeze
@@ -180,11 +175,6 @@ jobs:
 
     - name: Configure cabal.project / cabal.project.local
       run: |
-        echo 'packages: .' > cabal.project
-        echo 'source-repository-package' >> cabal.project
-        echo '  type: git' >> cabal.project
-        echo '  location: https://github.com/camfort/fortran-src' >> cabal.project
-        echo '  tag: main' >> cabal.project
         echo 'tests: True' > cabal.project.local
 
     - run: cabal freeze
@@ -298,11 +288,6 @@ jobs:
 
     - name: Configure cabal.project / cabal.project.local
       run: |
-        echo 'packages: .' > cabal.project
-        echo 'source-repository-package' >> cabal.project
-        echo '  type: git' >> cabal.project
-        echo '  location: https://github.com/camfort/fortran-src' >> cabal.project
-        echo '  tag: main' >> cabal.project
         echo 'tests: True' > cabal.project.local
 
     - run: cabal freeze

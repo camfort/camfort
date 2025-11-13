@@ -27,7 +27,7 @@ dependencies:
   - text >= 0.11.2.3 && < 2.2
   - mtl >= 2.1 && < 2.4
   - containers >= 0.5.0.0 && < 0.7
-  - fortran-src >= 0.16.3
+  - fortran-src >= 0.16.8
   - filepath ==1.4.*
   - fgl >= 5.6 && < 5.9
   - lattices >= 2.0.0 && < 2.3
