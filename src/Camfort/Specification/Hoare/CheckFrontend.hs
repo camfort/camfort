@@ -28,7 +28,6 @@ import           Control.Applicative                      (liftA2)
 import           Control.Exception
 import           Control.Lens
 import           Control.Monad                            (unless)
-import           Control.Monad.Writer.Lazy                hiding (Product)
 import           Data.Generics.Uniplate.Operations
 import           Data.Map                                 (Map)
 import qualified Data.Map                                 as Map

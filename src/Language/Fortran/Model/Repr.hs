@@ -29,9 +29,6 @@ that facilitate reasoning. There is more information about this distinction in
 -}
 module Language.Fortran.Model.Repr where
 
-import           Data.Int                        (Int16, Int32, Int64, Int8)
-import           Data.Word                       (Word8)
-
 import           Data.Functor.Compose
 
 import           Data.SBV

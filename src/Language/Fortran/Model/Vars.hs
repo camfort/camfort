@@ -33,8 +33,6 @@ module Language.Fortran.Model.Vars
   , UniqueName(..)
   ) where
 
-import           Data.Typeable                      ((:~:) (..))
-
 import           Control.Lens                       hiding (Index, op)
 
 import           Data.SBV.Dynamic
