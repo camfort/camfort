@@ -4,6 +4,7 @@
 {-# LANGUAGE NamedFieldPuns             #-}
 {-# LANGUAGE OverloadedStrings          #-}
 {-# LANGUAGE RankNTypes                 #-}
+{-# LANGUAGE CPP                        #-}
 
 {-# OPTIONS_GHC -Wall #-}
 
@@ -24,7 +25,10 @@ module Camfort.Specification.Hoare.CheckFrontend
   , HoareFrontendWarning(..)
   ) where
 
+#if !MIN_VERSION_base(4,18,0)
 import           Control.Applicative                      (liftA2)
+#endif
+
 import           Control.Exception
 import           Control.Lens
 import           Control.Monad                            (unless)
