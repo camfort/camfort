@@ -21,7 +21,9 @@ module Language.Fortran.Model.Op.Core.Eval
   , evalCoreOp
   ) where
 
-import           Control.Applicative                  (liftA2)
+#if !MIN_VERSION_base(4,18,0)
+import          Control.Applicative                   (liftA2)
+#endif
 
 import           Data.SBV.Dynamic                     (SVal)
 import qualified Data.SBV.Dynamic                     as SBV

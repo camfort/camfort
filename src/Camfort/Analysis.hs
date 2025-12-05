@@ -8,6 +8,7 @@
 {-# LANGUAGE OverloadedStrings          #-}
 {-# LANGUAGE TemplateHaskell            #-}
 {-# LANGUAGE TypeFamilies               #-}
+{-# LANGUAGE TypeOperators              #-}
 {-# LANGUAGE UndecidableInstances       #-}
 {-# LANGUAGE CPP                        #-}
 
@@ -207,9 +208,9 @@ instance (MonadAnalysis e w m, Monoid w') => MonadAnalysis e w (RWST r w' s m)
 -- | Change the error and warning types in an analysis. To change the
 -- underlying monad use 'hoist'.
 mapAnalysisT :: (Monad m) => (e -> e') -> (w -> w') -> AnalysisT e w m a -> AnalysisT e' w' m a
-mapAnalysisT mapError mapWarn =
+mapAnalysisT mapErr mapWarn =
   AnalysisT .
-  (hoist (hoist (mapLoggerT mapError mapWarn)) . withExceptT (over lmMsg mapError)) .
+  (hoist (hoist (mapLoggerT mapErr mapWarn)) . withExceptT (over lmMsg mapErr)) .
   getAnalysisT
 
 -- | Given a pure analysis action, it can be generalized to run in any 'Monad'.

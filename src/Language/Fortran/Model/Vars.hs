@@ -10,6 +10,7 @@
 {-# LANGUAGE ScopedTypeVariables   #-}
 {-# LANGUAGE TemplateHaskell       #-}
 {-# LANGUAGE TypeFamilies          #-}
+{-# LANGUAGE TypeOperators         #-}
 
 {-# OPTIONS_GHC -Wall #-}
 
@@ -31,8 +32,6 @@ module Language.Fortran.Model.Vars
   , SourceName(..)
   , UniqueName(..)
   ) where
-
-import           Data.Typeable                      ((:~:) (..))
 
 import           Control.Lens                       hiding (Index, op)
 
