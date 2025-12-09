@@ -30,7 +30,7 @@
             # 2024-09-13 raehik: CamFort's sbv ver range no longer in nixpkgs
             sbv.source = "9.2";
 
-            fortran-src.source = "0.11.0";
+            fortran-src.source = "0.16.8";
           };
 
           settings = {
@@ -47,7 +47,7 @@
             camfort.extraLibraries = [pkgs.z3];
 
             # 2024-09-12 raehik: temp TODO
-            union.broken = false;
+            #union.broken = false;
           };
 
           devShell = {
@@ -106,10 +106,35 @@
         haskellProjects.ghc96 = import ./haskell-flake-ghc96.nix pkgs;
         haskellProjects.camfort-ghc96 = {
           basePackages = config.haskellProjects.ghc96.outputs.finalPackages;
-          packages = {
-            # Use whatever sbv version is available in nixpkgs for GHC 9.6
-            # sbv.source = "10.12"; # removed - causes version conflicts
 
+          # this might not be needed if we don't override the nixpkgs sbv
+          # derivation? but it defo is if we do & seems a sensible default
+          settings.camfort.extraLibraries = [pkgs.z3];
+
+          # sbv: match Stackage pin (lts-22.44)
+          # ignore tests, lots of deps
+          packages.sbv.source = "10.2";
+          settings.sbv.check = false;
+          settings.sbv.extraLibraries = [pkgs.z3]; # required when overriding
+
+          # union: old version
+          packages.union.source = "0.1.2";
+
+          # !! singletons-base-3.2 has test failures. no clue
+          settings.singletons-base.check = false;
+
+          # TODO fortran-src tests fail due to old QuickCheck bounds.
+          # but jailbreak doesn't work?? so disable tests... fix!!
+          settings.fortran-src.check = false;
+
+          packages.fortran-src.source = pkgs.fetchFromGitHub {
+            owner = "camfort";
+            repo = "fortran-src";
+            rev = "a5c580d66c07919838fe88f450a20aa380753f4f";
+            sha256 = "sha256-47TJfIo9bBFwHxkU8W5i1SDJH/WgOnelrXCn14O/abU=";
+          };
+
+          packages = {
             # Use verifiable-expressions from GitHub
             verifiable-expressions.source = pkgs.fetchFromGitHub {
               owner = "camfort";
@@ -117,38 +142,6 @@
               rev = "v0.6.3";
               sha256 = "sha256-OqtTnmQhtODcbOQHaokSAi5h2rQS9Rj43YfqXAfOzLw=";
             };
-
-            # Use fortran-src from GitHub for latest GHC compatibility
-            fortran-src.source = pkgs.fetchFromGitHub {
-              owner = "camfort";
-              repo = "fortran-src";
-              rev = "f5141b8ea86506690cd88de1884c1b97193cd477";
-              sha256 = "sha256-DpY+Yl9lDRhLTLLx5SYcr6lF+8i9TbdAVtPecWGSUAI=";
-            };
-          };
-
-          settings = {
-            sbv = {
-              # 2024-09-13 raehik: huge tests, some fail, seems complex. disable
-              # and just assume it's working
-              check = false;
-              
-              # sbv is marked as broken in nixpkgs, but we need it
-              broken = false;
-              
-              # sbv-10.2 violates <10 bounds in some dependencies
-              jailbreak = true;
-
-              # if we override the nixpkgs sbv derivation, we need to set this
-              extraLibraries = [pkgs.z3];
-            };
-            # this might not be needed if we don't override the nixpkgs sbv
-            # derivation? but it defo is if we do & seems a sensible default
-            camfort.extraLibraries = [pkgs.z3];
-
-            # 2024-09-12 raehik: temp TODO
-            union.broken = false;
-            union.jailbreak = true;
           };
 
           devShell = {
