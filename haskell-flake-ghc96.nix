@@ -6,8 +6,12 @@ pkgs: {
 
   basePackages = pkgs.haskell.packages.ghc96;
   packages = {
-    # Let nixpkgs choose compatible versions for GHC 9.6
-    # CamFort only requires singletons* >= 3.0 according to package.yaml
+    # GHC 9.6 libraries
+    singletons-th.source   = "3.2";
+    singletons-base.source = "3.2";
+    #singletons.source = "3.0.1";
+    th-desugar.source = "1.15";
+    th-abstraction.source = "0.6.0.0";
   };
 
   # (note this is actually unused/we have to duplicate because it doesn't get
