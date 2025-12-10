@@ -67,11 +67,28 @@ CamFort depends on the following foreign libraries:
 
 These should be built for your system, but installation method varies.
 System-specific guides are provided on the [wiki](https://github.com/camfort/camfort/wiki). *(Alternatively, you could
-check the GitHub Actions workflows.)* On Ubuntu:
+check the GitHub Actions workflows.)*
+
+**On Ubuntu:**
 
     apt install libflint-dev liblapack-dev libopenblas-dev z3
 
 Then `stack build` for Stack, or `cabal build` for Cabal.
+
+**On macOS:**
+
+The relevant dependencies can be installed via [Homebrew](https://brew.sh/), e.g.,
+
+    brew install flint lapack openblas z3
+
+Then build with library paths:
+
+    stack build \
+      --extra-include-dirs=/opt/homebrew/include \
+      --extra-lib-dirs=/opt/homebrew/lib \
+      --extra-lib-dirs=/Library/Developer/CommandLineTools/SDKs/MacOSX.sdk/usr/lib
+
+Some paths may need updating for your system (e.g., replace `/opt/homebrew` with `/usr/local`).
 
 ### Tab Completion (Bash)
 To enable Bash autocompletion for camfort, add the following to your
