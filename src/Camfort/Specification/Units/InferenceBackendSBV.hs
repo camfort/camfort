@@ -233,7 +233,8 @@ engine cons = unsafePerformIO $ do
               -- do for polymorphic vars.
               let suggests = [ v | v@(UnitVar {}) <- criticals ] ++
                              [ v | v@(UnitParamVarUse {}) <- criticals ] ++
-                             [ v | v@(UnitParamPosAbs {}) <- criticals ]
+                             [ v | v@(UnitParamPosAbs {}) <- criticals ] ++
+                             [ v | v@(UnitParamVarAbs {}) <- criticals ]
 
               (return . Right . (,suggests) $ composeSubs polySubs assignSubs)
 

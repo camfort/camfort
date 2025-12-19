@@ -78,6 +78,7 @@ instance Show Criticals where
         unitVarName (UnitVar (uniqName, _))                 = Just uniqName
         unitVarName (UnitParamVarUse (_, (uniqName, _), _)) = Just uniqName
         unitVarName (UnitParamPosAbs (_, (uniqName, _), _)) = Just uniqName
+        unitVarName (UnitParamVarAbs (_, (uniqName, _)))    = Just uniqName
         unitVarName _                                       = Nothing
 
         -- Just the variable names asociated to constraint variables we are interested in
