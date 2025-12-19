@@ -21,7 +21,7 @@ module Camfort.Specification.Units.Synthesis
 where
 
 import           Camfort.Analysis.Annotations
-import           Camfort.Specification.Units.Analysis (puName, puSrcName)
+import           Camfort.Specification.Units.Analysis (puName, puSrcName, getImportedVariables)
 import           Camfort.Specification.Units.Annotation (UA)
 import qualified Camfort.Specification.Units.Annotation as UA
 import           Camfort.Specification.Units.Environment
@@ -29,6 +29,7 @@ import           Camfort.Specification.Units.Monad
 import           Control.Monad (foldM, forM, (<=<))
 import           Control.Monad.State.Strict hiding (gets)
 import           Data.Generics.Uniplate.Operations
+import qualified Data.Map.Strict as M
 import           Data.Maybe
 import qualified Data.Set as S
 import qualified Language.Fortran.AST as F
@@ -55,9 +56,13 @@ synthBlock :: Char -> [(VV, UnitInfo)] -> [F.Block UA] -> F.Block UA -> UnitSolv
 synthBlock marker vars bs b@(F.BlStatement a (FU.SrcSpan lp _) _ (F.StDeclaration _ _ _ _ decls)) = do
   pf    <- usProgramFile `fmap` get
   gvSet <- usGivenVarSet `fmap` get
+  -- Include imported variables from modfiles in the given set
+  importedVars <- getImportedVariables
+  let importedVarNames = S.fromList . map fst . M.keys $ importedVars
+  let gvSet' = gvSet `S.union` importedVarNames
   newBs <- fmap catMaybes . forM (universeBi decls) $ \ e -> case e of
     (F.ExpValue _ _ (F.ValVariable _))
-      | vname `S.notMember` gvSet                     -- not a member of the already-given variables
+      | vname `S.notMember` gvSet'                    -- not a member of the already-given variables
       , Just u <- lookup (vname, sname) vars -> do    -- and a unit has been inferred
         -- Create new annotation which labels this as a refactored node.
         let newA  = a { FA.prevAnnotation    = (FA.prevAnnotation a) {
@@ -91,11 +96,15 @@ synthProgramUnit :: Char -> [(VV, UnitInfo)] -> [F.ProgramUnit UA] -> F.ProgramU
 synthProgramUnit marker vars pus pu@(F.PUFunction a (FU.SrcSpan lp _) _ _ _ _ mret _ _) = do
   pf    <- usProgramFile `fmap` get
   gvSet <- usGivenVarSet `fmap` get
+  -- Include imported variables from modfiles in the given set
+  importedVars <- getImportedVariables
+  let importedVarNames = S.fromList . map fst . M.keys $ importedVars
+  let gvSet' = gvSet `S.union` importedVarNames
   let (vname, sname) = case mret of Just e  -> (FA.varName e, FA.srcName e)
                                     Nothing -> (puName pu, puSrcName pu)
   case lookup (vname, sname) vars of
     -- if return var has a unit & not a member of the already-given variables
-    Just u | vname `S.notMember` gvSet -> do
+    Just u | vname `S.notMember` gvSet' -> do
       let newA  = a { FA.prevAnnotation = (FA.prevAnnotation a) {
                          UA.prevAnnotation = (UA.prevAnnotation (FA.prevAnnotation a)) {
                              refactored = Just lp } } }
