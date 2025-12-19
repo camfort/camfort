@@ -54,9 +54,9 @@ unitsSynthReportWithMod modNames fileName expectedOutput = do
 mkTestModFile :: String -> IO ModFile
 mkTestModFile file = head <$> genModFiles Nothing emptyModFiles compileUnits unitOpts0 file []
 
--- | Normalise output by trimming trailing whitespace from lines
+-- | Normalise output by trimming trailing whitespace from lines and handling CRLF
 normaliseOutput :: String -> String
-normaliseOutput = unlines . map (reverse . dropWhile (== ' ') . reverse) . lines
+normaliseOutput = unlines . map (reverse . dropWhile (== ' ') . reverse) . lines . filter (/= '\r')
 
 expectedArrayProgOutput :: String
 expectedArrayProgOutput = unlines
