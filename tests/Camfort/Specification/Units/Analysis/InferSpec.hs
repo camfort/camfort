@@ -9,6 +9,7 @@ import           Test.Hspec hiding (Spec)
 import qualified Test.Hspec as Test
 
 import Language.Fortran.Util.ModFile (ModFile, emptyModFiles)
+import Language.Fortran.Version (FortranVersion(Fortran90))
 
 import Camfort.Functionality (CamfortEnv(..),unitsCompile)
 import Camfort.Analysis hiding (describe)
@@ -95,8 +96,7 @@ unitsInferReportWithMod :: [String] -> String -> String -> Expectation
 unitsInferReportWithMod modNames fileName expectedReport = do
   let modPaths = fmap (fixturesDir </>) modNames
   res <- unitsInferReportWithModAux LitMixed modPaths (fixturesDir </> fileName)
-  show res `normalisedShouldBe` expectedReport
-  where uOpts = unitOpts0 { uoLiterals = LitMixed }
+  res `normalisedShouldBe` expectedReport
 
 -- | Helper for producing a basic ModFile from a (terminal) module file.
 mkTestModFile :: String -> IO ModFile
