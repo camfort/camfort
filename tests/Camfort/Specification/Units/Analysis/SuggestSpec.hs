@@ -15,9 +15,11 @@ import           Language.Fortran.Util.ModFile
 
 spec :: Test.Spec
 spec = do
-  describe "units-suggest (poly literals mode)" $ do
+  describe "units-suggest" $ do
     it "suggests get_lightspeed for internals.f90" $
        unitsSuggestReportIs LitPoly False [] "internals.f90" expectedInternalsPolyReport
+    it "suggests all three variables for simple_function_internal.f90" $
+       unitsSuggestReportIs LitMixed False [] "simple_function_internal.f90" expectedSimpleInternalReport
 
 fixturesDir :: String
 fixturesDir = "tests" </> "fixtures" </> "Specification" </> "Units"
@@ -47,3 +49,10 @@ expectedInternalsPolyReport :: String
 expectedInternalsPolyReport =
   "\ntests" </> "fixtures" </> "Specification" </> "Units" </> "internals.f90: 1 variable declarations suggested to be given a specification:\n\
   \    tests" </> "fixtures" </> "Specification" </> "Units" </> "internals.f90:9:19    get_lightspeed\n"
+
+expectedSimpleInternalReport :: String
+expectedSimpleInternalReport =
+  "\ntests" </> "fixtures" </> "Specification" </> "Units" </> "simple_function_internal.f90: 3 variable declarations suggested to be given a specification:\n\
+  \    tests" </> "fixtures" </> "Specification" </> "Units" </> "simple_function_internal.f90:10:21    print_lightspeed\n\
+  \    tests" </> "fixtures" </> "Specification" </> "Units" </> "simple_function_internal.f90:12:21    lightspeed\n\
+  \    tests" </> "fixtures" </> "Specification" </> "Units" </> "simple_function_internal.f90:13:18    lightspeed_converted\n"
