@@ -369,10 +369,17 @@ unitsOptions = fmap UnitsOptions
     parseLiterals = fmap read str
 
 unitsSuggestOptions :: Parser UnitsOptions
-unitsSuggestOptions =
-    (fmap (\f b -> f { includeUninitialized = b }) unitsOptions) <*> uninitOption
+unitsSuggestOptions = fmap UnitsOptions
+      readOptions
+  <*> logOptions
+  <*> pure LitMixed
+  <*> dumpModFileOption
+  <*> showASTOption
+  <*> uninitOption
   where
     uninitOption = switch (long "include-uninit" <> help "include suggestions for uninitialized variables")
+    dumpModFileOption = switch (long "dump-mod-file" <> help "show contents of fsmod file")
+    showASTOption = switch (long "show-ast" <> help "show units at each AST node")
 
 invariantsOptions :: Parser InvariantsOptions
 invariantsOptions = fmap InvariantsOptions
