@@ -112,6 +112,7 @@ extra-source-files:
     tests/fixtures/Specification/Units/inconsistRecMult.f90
     tests/fixtures/Specification/Units/inferPoly1.f90
     tests/fixtures/Specification/Units/insideOutside.f90
+    tests/fixtures/Specification/Units/internals.f90
     tests/fixtures/Specification/Units/literal-nonzero-inconsist1.f90
     tests/fixtures/Specification/Units/literal-nonzero-inconsist2.f90
     tests/fixtures/Specification/Units/literal-nonzero-inconsist3.f90
@@ -122,6 +123,7 @@ extra-source-files:
     tests/fixtures/Specification/Units/literal-zero.f90
     tests/fixtures/Specification/Units/param.f90
     tests/fixtures/Specification/Units/recursive1.f90
+    tests/fixtures/Specification/Units/simple_function_internal.f90
     tests/fixtures/Specification/Units/sqrtPoly.f90
     tests/fixtures/Specification/Units/squarePoly1.f90
     tests/fixtures/Specification/Units/transfer.f90
@@ -436,6 +438,7 @@ test-suite spec
       Camfort.Specification.Units.Analysis.ConsistentSpec
       Camfort.Specification.Units.Analysis.CriticalsSpec
       Camfort.Specification.Units.Analysis.InferSpec
+      Camfort.Specification.Units.Analysis.SuggestSpec
       Camfort.Specification.Units.InferenceBackendSpec
       Camfort.Specification.Units.ParserSpec
       Camfort.TestUtils
