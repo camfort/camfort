@@ -126,6 +126,9 @@ extra-source-files:
     tests/fixtures/Specification/Units/simple_function_internal.f90
     tests/fixtures/Specification/Units/sqrtPoly.f90
     tests/fixtures/Specification/Units/squarePoly1.f90
+    tests/fixtures/Specification/Units/synth/array_func.f90
+    tests/fixtures/Specification/Units/synth/array_prog.f90
+    tests/fixtures/Specification/Units/synth/array_spec.f90
     tests/fixtures/Specification/Units/transfer.f90
     tests/fixtures/Specification/Units/uninitialised.f90
     tests/fixtures/Transformation/cmn.expected.f90
@@ -439,6 +442,7 @@ test-suite spec
       Camfort.Specification.Units.Analysis.CriticalsSpec
       Camfort.Specification.Units.Analysis.InferSpec
       Camfort.Specification.Units.Analysis.SuggestSpec
+      Camfort.Specification.Units.Analysis.SynthSpec
       Camfort.Specification.Units.InferenceBackendSpec
       Camfort.Specification.Units.ParserSpec
       Camfort.TestUtils

@@ -40,7 +40,7 @@ import qualified Language.Fortran.Util.Position as FU
 runSynthesis :: Char -> [(VV, UnitInfo)] -> UnitSolver [(VV, UnitInfo)]
 runSynthesis marker vars = do
   -- descendBiM finds the head of lists
-  modifyProgramFileM $ descendBiM (synthProgramUnits marker vars) <=< descendBiM (synthBlocks marker vars)
+  modifyProgramFileM $ descendBiM (synthBlocks marker vars) <=< descendBiM (synthProgramUnits marker vars)
   return vars
 
 -- Should be invoked on the beginning of a list of blocks
@@ -116,6 +116,7 @@ synthProgramUnit marker vars pus pu@(F.PUFunction a (FU.SrcSpan lp _) _ _ _ _ mr
           (F.ProgramFile mi _) = pf
           newPU = F.PUComment newA newSS . F.Comment $ buildCommentText mi space txt
 
+      modify (\s -> s { usGivenVarSet = S.insert vname (usGivenVarSet s) })
       -- recursively descend to find program units inside of current one
       fmap (:newPU:pus) $ descendBiM (synthProgramUnits marker vars) pu
 
