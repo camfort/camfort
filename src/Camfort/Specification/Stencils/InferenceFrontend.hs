@@ -43,6 +43,7 @@ import qualified Camfort.Specification.Stencils.Parser as Parser
 import           Camfort.Specification.Stencils.Syntax
 import qualified Camfort.Specification.Stencils.Synthesis as Synth
 import           Control.DeepSeq
+import           Control.Monad (when)
 import           Control.Monad.RWS.Lazy hiding (state)
 import           Control.Monad.Writer.Lazy
 import           Data.Foldable

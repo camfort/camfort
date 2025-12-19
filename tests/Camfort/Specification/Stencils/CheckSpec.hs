@@ -92,33 +92,33 @@ spec =
       describe "stencils check" $ do
         checkTestShow exampleUnusedRegion
           "warns about unused regions"
-          "(2:3)-(2:34)    Warning: Unused region 'r1'"
+          "(2:2)-(2:33)    Warning: Unused region 'r1'"
         checkTestShow exampleRedefinedRegion
           "warns about redefined"
-          "(4:3)-(4:34)    Region 'r1' already defined\n\
-          \(6:5)-(6:32)    Correct."
+          "(4:2)-(4:33)    Region 'r1' already defined\n\
+          \(6:4)-(6:31)    Correct."
         checkTestShow exampleSimpleInvalidSyntax
           "warns about specification parse errors"
-          "(2:3)-(2:16)    Could not parse specification at: \"... \"\n"
+          "(2:2)-(2:15)    Could not parse specification at: \"... \"\n"
         checkTestShow exampleSimpleCorrect
           "recognises correct stencils"
-          "(4:5)-(4:63)    Correct."
+          "(4:4)-(4:62)    Correct."
         checkTestShow exampleUnusedRegionWithOtherSpecs
           "provides reports in correct order"
-          "(3:3)-(3:34)    Warning: Unused region 'r1'\n\
-          \(5:5)-(5:63)    Correct.\n\
-          \(9:5)-(9:52)    Not well specified.\n\
+          "(3:2)-(3:33)    Warning: Unused region 'r1'\n\
+          \(5:4)-(5:62)    Correct.\n\
+          \(9:4)-(9:51)    Not well specified.\n\
           \        Specification is:\n\
           \                stencil readOnce, forward(depth=1, dim=1) :: a\n\n\
-          \        but at (10:5)-(10:17) the code behaves as\n\
+          \        but at (10:4)-(10:16) the code behaves as\n\
           \                stencil readOnce, forward(depth=1, dim=1, nonpointed) :: a\n\n\
-          \(12:3)-(12:16)    Could not parse specification at: \"... \"\n"
+          \(12:2)-(12:15)    Could not parse specification at: \"... \"\n"
         checkTestShow exampleSpecWrongVar
           "validates that a specification is applied to the correct variables"
-          "(4:5)-(4:44)    Not well specified.\n\
+          "(4:4)-(4:43)    Not well specified.\n\
           \        Specification is:\n\
           \                stencil readOnce, pointed(dim=1) :: b\n\n\
-          \        but at (5:5)-(5:15) the code behaves as\n\
+          \        but at (5:4)-(5:14) the code behaves as\n\
           \                stencil readOnce, pointed(dim=1) :: a\n"
 
 checkText :: BS.ByteString -> IO CheckResult

@@ -89,11 +89,9 @@ module Language.Fortran.Model.Translate
 import           Prelude                              hiding (span)
 
 import           Control.Applicative                  ((<|>))
-import           Data.Char                            (toLower)
 import           Data.List                            (intersperse)
 import           Data.Maybe                           (catMaybes)
 import           Data.Typeable                        (Typeable)
-import           Text.Read                            (readMaybe)
 
 import           Control.Lens                         hiding (Const (..),
                                                        indices, op, rmap, (.>))

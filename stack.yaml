@@ -1,24 +1,17 @@
-resolver: lts-20.01
+resolver: lts-22.44
 
 packages:
 - '.'
-# - '../fortran-src'
 
 flags: {}
 extra-package-dbs: []
 
-allow-newer: true
+# allow-newer: true
 
-# reminder: you can use a Git repo (e.g. on public GitHub) directly via:
-#   - git: https://github.com/camfort/fortran-src
-#     commit: <commit hash>
 extra-deps:
-# fortran-src latest
-- fortran-src-0.16.3
-- verifiable-expressions-0.6.2@sha256:cefdc5d3d9a4cff4ce0bfaa27ccdf83ff46bcd17340ac0c5cf6fcbe88ce05a61,1739
-  #- sbv-8.15@sha256:bc0ea4e3564626030ac2cb21905b97cd9bd25fddcd6d6010834e8cc2ebf79067,29016
-  #- libBF-0.6.2@sha256:7bffc0e4dbc9bd9e851ba5c29255b62fd2c288dbc9a401cd3761b740f013775e,1770
 - syz-0.2.0.0@sha256:7307acb8f6ae7720e7e235c974281ecee912703c1394ebcac19caf83d70bb492,2345
-  #- vinyl-0.13.3@sha256:4031f1cb791185fccd2237bf412fa831363812b95987b433159520d1a511fcac,4046
-  #- union-0.1.2@rev:6
-- union-0.1.2@sha256:856669b7084f992ab7c369e64fefe3833814b35409ff67f1aad4657548b5a466,2134
+- bytestring-0.11.5.4@sha256:896810b10dc600f435606c1e87821a5ae0963eeca2ded88276f4841727209516,7595
+- vinyl-0.14.3@sha256:08565c5d9ed8a5ba69915bffe8960f048587478155d5915a56d2e93b8ba3466f,4267
+- verifiable-expressions-0.6.3@sha256:f0a8221e57356c4675500d1e499c38994b69e7ffb0270e69e78d35b0de29636c,1960
+- union-0.1.2
+- fortran-src-0.16.8@sha256:6587c88ca0c98dfa52b18d0f4c0336db245a4adb5bd9415b88f2267ebb470a71,12906

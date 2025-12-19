@@ -43,6 +43,7 @@ import Data.List (elemIndices, union)
 import qualified Data.ByteString.Char8 as B
 import System.Directory
 import qualified Data.Map.Lazy as Map hiding (map, (\\))
+import Control.Monad (liftM)
 import Control.Monad.Writer
 import Language.Fortran.Repr.Value.Scalar.Int.Machine (withFInt)
 import qualified Language.Fortran.Repr as FRepr

@@ -1,3 +1,4 @@
+{-# LANGUAGE CPP                   #-}
 {-# LANGUAGE DataKinds             #-}
 {-# LANGUAGE FlexibleContexts      #-}
 {-# LANGUAGE FlexibleInstances     #-}
@@ -9,6 +10,7 @@
 {-# LANGUAGE ScopedTypeVariables   #-}
 {-# LANGUAGE TemplateHaskell       #-}
 {-# LANGUAGE TypeFamilies          #-}
+{-# LANGUAGE TypeOperators         #-}
 
 {-# OPTIONS_GHC -Wall #-}
 
@@ -30,8 +32,6 @@ module Language.Fortran.Model.Vars
   , SourceName(..)
   , UniqueName(..)
   ) where
-
-import           Data.Typeable                      ((:~:) (..))
 
 import           Control.Lens                       hiding (Index, op)
 
@@ -143,4 +143,8 @@ arraySymbolicPrim ixPrim valPrim nm env = do
   k1 <- lift . return $ primSBVKind ixPrim env
   k2 <- lift . return $ primSBVKind valPrim env
   state <- symbolicEnv
+#if MIN_VERSION_sbv(10,0,0)
+  lift $ newSArr state (k1, k2) (\i -> nm ++ "_" ++ show i) (Right "")
+#else
   lift $ newSArr state (k1, k2) (\i -> nm ++ "_" ++ show i) Nothing
+#endif

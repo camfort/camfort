@@ -265,7 +265,7 @@ withCombinedEnvironment
 withCombinedEnvironment mfs pf =
   let (pfRenamed, mmap) = withCombinedModuleMap mfs (FA.initAnalysis pf)
       moduleTEnv        = FM.combinedTypeEnv mfs
-      (pf', tenv)       = FAT.analyseTypesWithEnv moduleTEnv $ pfRenamed
+      (pf', tenv)       = FAT.analyseTypesWithEnv (FAT.stripExtended moduleTEnv) $ pfRenamed
   in (pf', mmap, tenv)
 
 -- | From a module map, look up the unique name associated with a given source
