@@ -17,7 +17,7 @@ spec :: Test.Spec
 spec = do
   describe "units-suggest" $ do
     it "suggests get_lightspeed for internals.f90" $
-       unitsSuggestReportIs LitPoly False [] "internals.f90" expectedInternalsPolyReport
+       unitsSuggestReportIs LitMixed False [] "internals.f90" expectedInternalsPolyReport
     it "suggests all three variables for simple_function_internal.f90" $
        unitsSuggestReportIs LitMixed False [] "simple_function_internal.f90" expectedSimpleInternalReport
 
