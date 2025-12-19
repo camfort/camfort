@@ -363,7 +363,7 @@ unitsOptions = fmap UnitsOptions
                      <> metavar "ID"
                      <> completeWith ["Unitless", "Poly", "Mixed"]
                      <> value LitMixed
-                     <> help "units-of-measure literals mode. ID = Unitless, Poly, or Mixed"
+                     <> help "units-of-measure literals mode. ID = Unitless, Poly, or Mixed (Default: Mixed)"
     dumpModFileOption = switch (long "dump-mod-file" <> help "show contents of fsmod file")
     showASTOption = switch (long "show-ast" <> help "show units at each AST node")
     parseLiterals = fmap read str
