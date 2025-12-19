@@ -20,6 +20,7 @@ module Camfort.Specification.Units.Analysis
     -- ** Helpers
   , puName
   , puSrcName
+  , getImportedVariables
   ) where
 
 import           Camfort.Analysis
