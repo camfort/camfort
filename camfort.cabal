@@ -25,6 +25,35 @@ build-type:     Simple
 tested-with:
     GHC == 9.0, GHC == 9.2, GHC == 9.4, GHC == 9.6, GHC == 9.8, GHC == 9.10, GHC == 9.12
 extra-source-files:
+    tests/fixtures/Specification/Stencils/example10.expected.f
+    tests/fixtures/Specification/Stencils/example10.f
+    tests/fixtures/Specification/Stencils/example11.expected.f
+    tests/fixtures/Specification/Stencils/example11.f
+    tests/fixtures/Specification/Stencils/example12.f
+    tests/fixtures/Specification/Stencils/example13.expected.f
+    tests/fixtures/Specification/Stencils/example13.f
+    tests/fixtures/Specification/Stencils/example14.expected.f
+    tests/fixtures/Specification/Stencils/example14.f
+    tests/fixtures/Specification/Stencils/example15.expected.f
+    tests/fixtures/Specification/Stencils/example15.f
+    tests/fixtures/Specification/Stencils/example16.f
+    tests/fixtures/Specification/Stencils/example17.f
+    tests/fixtures/Specification/Stencils/example2.f
+    tests/fixtures/Specification/Stencils/example3.f
+    tests/fixtures/Specification/Stencils/example4.f
+    tests/fixtures/Specification/Stencils/example5.expected.f
+    tests/fixtures/Specification/Stencils/example5.f
+    tests/fixtures/Specification/Stencils/example5a.expected.f
+    tests/fixtures/Specification/Stencils/example5a.f
+    tests/fixtures/Specification/Stencils/example6.expected.f
+    tests/fixtures/Specification/Stencils/example6.f
+    tests/fixtures/Specification/Stencils/example7.expected.f
+    tests/fixtures/Specification/Stencils/example7.f
+    tests/fixtures/Specification/Stencils/example8.expected.f
+    tests/fixtures/Specification/Stencils/example8.f
+    tests/fixtures/Specification/Stencils/example9.expected.f
+    tests/fixtures/Specification/Stencils/example9.f
+    tests/fixtures/endianness/equivalence_test.f90
     tests/fixtures/implicit-none/implicitnone1.f90
     tests/fixtures/implicit-none/implicitnone2.f90
     tests/fixtures/implicit-none/implicitnone3.f90
@@ -50,38 +79,10 @@ extra-source-files:
     tests/fixtures/Specification/Stencils/cross-module-a/provider.f90
     tests/fixtures/Specification/Stencils/cross-module-a/user.f90
     tests/fixtures/Specification/Stencils/example-no-specs-simple.f90
-    tests/fixtures/Specification/Stencils/example10.expected.f
-    tests/fixtures/Specification/Stencils/example10.f
-    tests/fixtures/Specification/Stencils/example11.expected.f
-    tests/fixtures/Specification/Stencils/example11.f
-    tests/fixtures/Specification/Stencils/example12.f
-    tests/fixtures/Specification/Stencils/example13.expected.f
-    tests/fixtures/Specification/Stencils/example13.f
-    tests/fixtures/Specification/Stencils/example14.expected.f
-    tests/fixtures/Specification/Stencils/example14.f
-    tests/fixtures/Specification/Stencils/example15.expected.f
-    tests/fixtures/Specification/Stencils/example15.f
-    tests/fixtures/Specification/Stencils/example16.f
-    tests/fixtures/Specification/Stencils/example17.f
-    tests/fixtures/Specification/Stencils/example2.f
-    tests/fixtures/Specification/Stencils/example3.f
-    tests/fixtures/Specification/Stencils/example4.f
-    tests/fixtures/Specification/Stencils/example5.expected.f
     tests/fixtures/Specification/Stencils/example5.expected.f90
-    tests/fixtures/Specification/Stencils/example5.f
     tests/fixtures/Specification/Stencils/example5.f90
-    tests/fixtures/Specification/Stencils/example5a.expected.f
     tests/fixtures/Specification/Stencils/example5a.expected.f90
-    tests/fixtures/Specification/Stencils/example5a.f
     tests/fixtures/Specification/Stencils/example5a.f90
-    tests/fixtures/Specification/Stencils/example6.expected.f
-    tests/fixtures/Specification/Stencils/example6.f
-    tests/fixtures/Specification/Stencils/example7.expected.f
-    tests/fixtures/Specification/Stencils/example7.f
-    tests/fixtures/Specification/Stencils/example8.expected.f
-    tests/fixtures/Specification/Stencils/example8.f
-    tests/fixtures/Specification/Stencils/example9.expected.f
-    tests/fixtures/Specification/Stencils/example9.f
     tests/fixtures/Specification/Stencils/nestedLoops.expected.f90
     tests/fixtures/Specification/Stencils/nestedLoops.f90
     tests/fixtures/Specification/Units/cross-module-a/crossmoduleprovider.f90
@@ -135,16 +136,24 @@ extra-source-files:
     tests/fixtures/Transformation/common.f90
     tests/fixtures/Transformation/equiv.expected.f90
     tests/fixtures/Transformation/equiv.f90
+    samples/stencils/centered.f
+    samples/stencils/expected/centered.f
+    samples/stencils/expected/one.f
+    samples/stencils/expected/procs.f
+    samples/stencils/expected/two.f
+    samples/stencils/expected/wave.f
+    samples/stencils/one.f
+    samples/stencils/procs.f
+    samples/stencils/two.f
+    samples/stencils/wave.f
+    samples/units/stuck1.f
     samples/arrays/dodgy-colons.f90
     samples/common/example1/ex1a.f90
     samples/common/example1/ex1b.f90
-    samples/common/example1/Makefile
     samples/common/example2/ex2a.f90
     samples/common/example2/ex2b.f90
-    samples/common/example2/Makefile
     samples/common/foo/foo.f90
     samples/common/foo/foo2.f90
-    samples/common/foo/Makefile
     samples/ddt/error1/error1a.f90
     samples/ddt/error1/error1b.f90
     samples/ddt/error2/error2a.f90
@@ -169,7 +178,6 @@ extra-source-files:
     samples/mem/sample.f90
     samples/stencils/access.f90
     samples/stencils/approx.f90
-    samples/stencils/centered.f
     samples/stencils/centered.f90
     samples/stencils/combined-region.f90
     samples/stencils/conflict.f90
@@ -178,7 +186,6 @@ extra-source-files:
     samples/stencils/decomposed-three-point.f90
     samples/stencils/expected/access.f90
     samples/stencils/expected/approx.f90
-    samples/stencils/expected/centered.f
     samples/stencils/expected/centered.f90
     samples/stencils/expected/combined-region.f90
     samples/stencils/expected/conflict.f90
@@ -192,10 +199,8 @@ extra-source-files:
     samples/stencils/expected/nested.f90
     samples/stencils/expected/non-neighbour.f90
     samples/stencils/expected/one-check.f90
-    samples/stencils/expected/one.f
     samples/stencils/expected/one.f90
     samples/stencils/expected/parabolic2.f90
-    samples/stencils/expected/procs.f
     samples/stencils/expected/programContains.f90
     samples/stencils/expected/range.f90
     samples/stencils/expected/rec.f90
@@ -206,9 +211,7 @@ extra-source-files:
     samples/stencils/expected/single-region.f90
     samples/stencils/expected/sobel.f90
     samples/stencils/expected/subsup.f90
-    samples/stencils/expected/two.f
     samples/stencils/expected/two.f90
-    samples/stencils/expected/wave.f
     samples/stencils/expected/web.f90
     samples/stencils/intrinsic.f90
     samples/stencils/laplace.f90
@@ -216,10 +219,8 @@ extra-source-files:
     samples/stencils/nested.f90
     samples/stencils/non-neighbour.f90
     samples/stencils/one-check.f90
-    samples/stencils/one.f
     samples/stencils/one.f90
     samples/stencils/parabolic2.f90
-    samples/stencils/procs.f
     samples/stencils/programContains.f90
     samples/stencils/range.f90
     samples/stencils/rec.f90
@@ -231,9 +232,7 @@ extra-source-files:
     samples/stencils/single-region.f90
     samples/stencils/sobel.f90
     samples/stencils/subsup.f90
-    samples/stencils/two.f
     samples/stencils/two.f90
-    samples/stencils/wave.f
     samples/stencils/web.f90
     samples/units/badPoly2.f90
     samples/units/bug32.f90
@@ -254,7 +253,6 @@ extra-source-files:
     samples/units/squarePoly.f90
     samples/units/src-example/ex1.f90
     samples/units/src-example/ex2.f90
-    samples/units/stuck1.f
     samples/worksheet/example1.f90
     samples/worksheet/example1a.f90
     samples/worksheet/example2.f90

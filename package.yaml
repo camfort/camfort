@@ -17,8 +17,10 @@ github:                 camfort/camfort
 
 extra-source-files:
   # Note that all files used in tests should be included in the sdist.
-  - tests/fixtures/**/**
-  - samples/**/**
+  - tests/fixtures/**/*.f
+  - tests/fixtures/**/*.f90
+  - samples/**/*.f
+  - samples/**/*.f90
   - CHANGELOG.md
 
 dependencies:
