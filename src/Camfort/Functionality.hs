@@ -37,6 +37,7 @@ module Camfort.Functionality
   , fpCheck
   , useCheck
   , arrayCheck
+  , endianCheck
   -- ** Stencil Analysis
   , stencilsCheck
   , stencilsInfer
@@ -293,6 +294,14 @@ arrayCheck =
   "Checking array usage"
   (generalizePureAnalysis . checkArrayUse)
   (describePerFileAnalysisP "check array usage")
+  simpleCompiler ()
+
+endianCheck :: CamfortEnv -> IO Int
+endianCheck =
+  runFunctionalityP
+  "Checking for endian-sensitive operations"
+  (generalizePureAnalysis . checkEndianSensitive)
+  (describePerFileAnalysisP "check endian-sensitive operations")
   simpleCompiler ()
 
 ddtRefactor :: FileOrDir -> CamfortEnv -> IO Int
