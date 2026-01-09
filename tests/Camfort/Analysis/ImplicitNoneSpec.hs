@@ -13,7 +13,7 @@ import qualified Test.Hspec as Test
 
 spec :: Test.Spec
 spec = do
-  let f n = testInputSources $ fixturesDir </> n
+  let f n = testInputSources $ fixturesDir </> "implicit-none" </> n
   let g a = (generalizePureAnalysis . checkImplicitNone a)
   describe "implicitNone" $ do
     it "basic" $ do

@@ -1,14 +1,18 @@
 module Camfort.Specification.Units.Analysis.InferSpec (spec) where
 
 import System.FilePath ((</>))
+import System.Directory (removeFile, doesFileExist)
 
 import Control.Lens
+import Control.Monad (when)
 
 import           Test.Hspec hiding (Spec)
 import qualified Test.Hspec as Test
 
 import Language.Fortran.Util.ModFile (ModFile, emptyModFiles)
+import Language.Fortran.Version (FortranVersion(Fortran90))
 
+import Camfort.Functionality (CamfortEnv(..),unitsCompile)
 import Camfort.Analysis hiding (describe)
 import Camfort.Analysis.ModFile (genModFiles, readParseSrcDir)
 import Camfort.Specification.Units.Analysis (compileUnits)
@@ -62,8 +66,7 @@ spec =
       it "with literals" $
         unitsInferReportWithMod ["cross-module-b/cross-module-b1.f90"] "cross-module-b/cross-module-b2.f90"
           crossModuleBReport
-
-
+      it "units-suggest per file vs whole directory" singleFileVsDirectory
 
 fixturesDir :: String
 fixturesDir = "tests" </> "fixtures" </> "Specification" </> "Units"
@@ -74,19 +77,27 @@ unitsInferReportIs fileName expectedReport = do
   unitsInferReportWithMod [] fileName expectedReport
 
 -- | Assert that the report of performing units inference on a file is as expected (with mod files).
-unitsInferReportWithMod :: [String] -> String -> String -> Expectation
-unitsInferReportWithMod modNames fileName expectedReport = do
-  let file = fixturesDir </> fileName
-      modPaths = fmap (fixturesDir </>) modNames
+unitsInferReportWithModAux :: LiteralsOpt -> [String] -> String -> IO String
+unitsInferReportWithModAux litmod modPaths file = do      
   modFiles <- mapM mkTestModFile modPaths
-  [(pf,_)] <- readParseSrcDir Nothing modFiles file []
+  out <- readParseSrcDir Nothing modFiles file []
+  putStrLn $ show out
+
+  let [(pf,_)] = out
 
   let uEnv = UnitEnv { unitOpts = uOpts, unitProgramFile = pf }
 
   report <- runAnalysisT file (logOutputNone True) LogError modFiles $ runUnitAnalysis uEnv $ inferUnits
   let res = report ^?! arResult . _ARSuccess
+  return $ show res
+  where uOpts = unitOpts0 { uoLiterals = litmod }
 
-  show res `normalisedShouldBe` expectedReport
+-- | Assert that the report of performing units inference on a file is as expected (with mod files).
+unitsInferReportWithMod :: [String] -> String -> String -> Expectation
+unitsInferReportWithMod modNames fileName expectedReport = do
+  let modPaths = fmap (fixturesDir </>) modNames
+  res <- unitsInferReportWithModAux LitMixed modPaths (fixturesDir </> fileName)
+  res `normalisedShouldBe` expectedReport
   where uOpts = unitOpts0 { uoLiterals = LitMixed }
 
 -- | Helper for producing a basic ModFile from a (terminal) module file.
@@ -100,6 +111,45 @@ exampleInferSimple1Report =
 
 inferReport :: String -> String -> String
 inferReport fname res = concat ["\n", fixturesDir </> fname, ":\n", res]
+
+
+singleFileVsDirectory :: Expectation
+singleFileVsDirectory = do
+  -- Top-level directory
+  let fixturesDir1 = fixturesDir </> "cross-module-d"
+  -- Main file
+  let mainFile = fixturesDir1 </> "main.f90"
+  -- and its dependencies
+  let dependencies = [ fixturesDir1 </> "constants.f90", fixturesDir1 </> "functions.f90" ]
+  let dependenciesMods = [ fixturesDir1 </> "constants.fsmod", fixturesDir1 </> "functions.fsmod" ]
+  -- Clean up any stale .fsmod files from previous runs
+  mapM_ (\f -> doesFileExist f >>= \exists -> when exists (removeFile f)) dependenciesMods
+  -- Setup the environment
+  let literalsOpt = LitPoly
+  let camFortEnv file = CamfortEnv { ceInputSources = file
+                                    , ceIncludeDir = Nothing
+                                    , ceExcludeFiles = []
+                                    , ceLogLevel = LogError
+                                    , ceSourceSnippets = False
+                                    , ceFortranVersion = Just Fortran90 }
+  -- Compile the dependencies
+  mapM_ (\file -> unitsCompile literalsOpt False (camFortEnv file)) dependencies
+  -- Infer for the main file
+  singeFileOutput <- unitsInferReportWithModAux LitPoly dependenciesMods mainFile
+
+  -- Infer for the whole directory
+  -- Remove the existing dependencies' mod files
+  mapM_ removeFile dependenciesMods
+  -- Compile the whole directory
+  unitsCompile literalsOpt False (camFortEnv fixturesDir1)
+  -- Now do inference
+  multipeFileOutput <- unitsInferReportWithModAux LitPoly dependenciesMods mainFile
+
+  -- Clean up .fsmod files to avoid polluting other tests
+  mapM_ (\f -> doesFileExist f >>= \exists -> when exists (removeFile f)) dependenciesMods
+
+  -- Compare the results
+  singeFileOutput `shouldBe` multipeFileOutput
 
 squarePoly1Report :: String
 squarePoly1Report = "\ntests" </> "fixtures" </> "Specification" </> "Units" </> "squarePoly1.f90:4:10 unit m**2 :: x\n\

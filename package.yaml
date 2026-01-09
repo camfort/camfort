@@ -1,5 +1,5 @@
 name:                   camfort
-version:                1.2.0
+version:                1.3.0
 synopsis:               CamFort - Cambridge Fortran infrastructure
 description:            CamFort is a tool for the analysis, transformation, verification of Fortran code.
 homepage:               https://camfort.github.io
@@ -17,8 +17,10 @@ github:                 camfort/camfort
 
 extra-source-files:
   # Note that all files used in tests should be included in the sdist.
-  - tests/fixtures/**/**
-  - samples/**/**
+  - tests/fixtures/**/*.f
+  - tests/fixtures/**/*.f90
+  - samples/**/*.f
+  - samples/**/*.f90
   - CHANGELOG.md
 
 dependencies:
