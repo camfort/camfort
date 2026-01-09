@@ -1,9 +1,10 @@
 module Camfort.Specification.Units.Analysis.InferSpec (spec) where
 
 import System.FilePath ((</>))
-import System.Directory (removeFile)
+import System.Directory (removeFile, doesFileExist)
 
 import Control.Lens
+import Control.Monad (when)
 
 import           Test.Hspec hiding (Spec)
 import qualified Test.Hspec as Test
@@ -97,6 +98,7 @@ unitsInferReportWithMod modNames fileName expectedReport = do
   let modPaths = fmap (fixturesDir </>) modNames
   res <- unitsInferReportWithModAux LitMixed modPaths (fixturesDir </> fileName)
   res `normalisedShouldBe` expectedReport
+  where uOpts = unitOpts0 { uoLiterals = LitMixed }
 
 -- | Helper for producing a basic ModFile from a (terminal) module file.
 mkTestModFile :: String -> IO ModFile
@@ -120,6 +122,8 @@ singleFileVsDirectory = do
   -- and its dependencies
   let dependencies = [ fixturesDir1 </> "constants.f90", fixturesDir1 </> "functions.f90" ]
   let dependenciesMods = [ fixturesDir1 </> "constants.fsmod", fixturesDir1 </> "functions.fsmod" ]
+  -- Clean up any stale .fsmod files from previous runs
+  mapM_ (\f -> doesFileExist f >>= \exists -> when exists (removeFile f)) dependenciesMods
   -- Setup the environment
   let literalsOpt = LitPoly
   let camFortEnv file = CamfortEnv { ceInputSources = file
@@ -140,6 +144,9 @@ singleFileVsDirectory = do
   unitsCompile literalsOpt False (camFortEnv fixturesDir1)
   -- Now do inference
   multipeFileOutput <- unitsInferReportWithModAux LitPoly dependenciesMods mainFile
+
+  -- Clean up .fsmod files to avoid polluting other tests
+  mapM_ (\f -> doesFileExist f >>= \exists -> when exists (removeFile f)) dependenciesMods
 
   -- Compare the results
   singeFileOutput `shouldBe` multipeFileOutput

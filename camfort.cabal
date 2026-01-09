@@ -25,9 +25,9 @@ build-type:     Simple
 tested-with:
     GHC == 9.0, GHC == 9.2, GHC == 9.4, GHC == 9.6, GHC == 9.8, GHC == 9.10, GHC == 9.12
 extra-source-files:
-    tests/fixtures/implicitnone1.f90
-    tests/fixtures/implicitnone2.f90
-    tests/fixtures/implicitnone3.f90
+    tests/fixtures/implicit-none/implicitnone1.f90
+    tests/fixtures/implicit-none/implicitnone2.f90
+    tests/fixtures/implicit-none/implicitnone3.f90
     tests/fixtures/simple.expected.f90
     tests/fixtures/simple.f90
     tests/fixtures/Specification/DerivedDataType/badDim1.f90
@@ -90,6 +90,9 @@ extra-source-files:
     tests/fixtures/Specification/Units/cross-module-b/cross-module-b2.f90
     tests/fixtures/Specification/Units/cross-module-c/cross-module-c1.f90
     tests/fixtures/Specification/Units/cross-module-c/cross-module-c3.f90
+    tests/fixtures/Specification/Units/cross-module-d/constants.f90
+    tests/fixtures/Specification/Units/cross-module-d/functions.f90
+    tests/fixtures/Specification/Units/cross-module-d/main.f90
     tests/fixtures/Specification/Units/do-loop1.f90
     tests/fixtures/Specification/Units/do-loop2.f90
     tests/fixtures/Specification/Units/eapVarApp.f90
