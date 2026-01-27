@@ -4,6 +4,8 @@
 
 module Camfort.Analysis.Equivalence where
 
+import Prelude hiding (unlines)
+
 import Camfort.Analysis
 import Camfort.Analysis.Annotations
 import Camfort.Helpers.Syntax
@@ -26,6 +28,7 @@ import qualified Language.Fortran.PrettyPrint as FAP
 import Language.Fortran.Version
 
 import qualified Data.Text.Lazy.Builder as Builder
+import Data.Text (unlines, intercalate, pack)
 
 import Data.Generics.Uniplate.Operations
 
@@ -33,7 +36,7 @@ import Debug.Trace
 
 type PULoc = (F.ProgramUnitName, Origin)
 
-data EquivalenceReport = EquivalenceReport [(F.ProgramUnitName, Origin)]
+data EquivalenceReport = EquivalenceReport [(F.Name, Origin)]
     deriving Generic
 
 instance NFData EquivalenceReport
@@ -52,12 +55,12 @@ instance Show EquivalenceReport where
 checkEquivalence :: forall a. Data a => F.ProgramFile a -> PureAnalysis String () EquivalenceReport
 checkEquivalence pf = do
     let F.ProgramFile F.MetaInfo { F.miFilename = file } _ = pf
-    let checkPU :: FAT.TypeEnv -> F.ProgramUnit a -> EquivalenceReport
+    let checkPU :: FAT.TypeEnv -> F.ProgramUnit (FA.Analysis a) -> EquivalenceReport
         checkPU env pu = 
-            EquivalenceReport [ (F.getName pu, atSpannedInFile file pair)
-                    | (F.StEquivalence _ span es) <- universeBi (F.programUnitBody pu) :: [F.Statement a]
-                    , pair@[F.ExpValue _ _ (F.ValVariable s1), F.ExpValue _ _ (F.ValVariable s2) ] <- map AList.aStrip $ AList.aStrip es
-                    , type_equiv s1 s2
+            EquivalenceReport [ ("(" ++ s1 ++ ", " ++ s2 ++ ")", atSpannedInFile file pair)
+                    | (F.StEquivalence _ span es) <- universeBi (F.programUnitBody pu) :: [F.Statement (FA.Analysis a)]
+                    , pair@[e1@(F.ExpValue _ _ (F.ValVariable s1)), e2@(F.ExpValue _ _ (F.ValVariable s2)) ] <- map AList.aStrip $ AList.aStrip es
+                    , not $ type_equiv (FA.varName e1) (FA.varName e2)
                     ]
             where
                 type_equiv s1 s2 =
@@ -74,8 +77,11 @@ checkEquivalence pf = do
 
 instance Describe EquivalenceReport where
     describeBuilder (EquivalenceReport results)
-        | null results = "no equivalences detected"
-        | otherwise = Builder.fromText $ describe (length results) <> " equivalences detected"
+        | null results = "no equivalence problems detected"
+        | otherwise = Builder.fromText . unlines $
+            [ describe orig <> " possible endianness portability problem between variables: " <> pack name
+            | (name, orig) <- results ]
+            
 
 instance ExitCodeOfReport EquivalenceReport where
     exitCodeOf (EquivalenceReport []) = 0
