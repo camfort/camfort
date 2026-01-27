@@ -33,6 +33,7 @@ module Camfort.Functionality
   , ast
   , countVarDecls
   , implicitNone
+  , equivCheck
   , allocCheck
   , fpCheck
   , useCheck
@@ -68,6 +69,7 @@ import           Camfort.Analysis.Logger
 import           Camfort.Analysis.ModFile (readParseSrcFile,  MFCompiler, getModFiles, genModFiles
                                           , readParseSrcDir, readParseSrcDirP, simpleCompiler)
 import           Camfort.Analysis.Simple
+import           Camfort.Analysis.Equivalence
 import           Camfort.Helpers (FileOrDir, Filename)
 import           Camfort.Input
 import qualified Camfort.Specification.DerivedDataType as DDT
@@ -261,6 +263,14 @@ implicitNone allPU =
   "Checking 'implicit none' completeness"
   (generalizePureAnalysis . (checkImplicitNone allPU))
   (describePerFileAnalysisP "check 'implicit none'")
+  simpleCompiler ()
+
+equivCheck :: CamfortEnv -> IO Int
+equivCheck =
+  runFunctionalityP
+  "Checking endian portability of equivalence statements"
+  (generalizePureAnalysis . checkEquivalence)
+  (describePerFileAnalysisP "check endian portability")
   simpleCompiler ()
 
 allocCheck :: CamfortEnv -> IO Int
