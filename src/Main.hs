@@ -133,7 +133,7 @@ realMain = do
     runCommand (CmdCompileDDT ro lo)      = runRO ro lo ddtCompile
     runCommand (CmdImplicitNone ro lo)    = runRO ro lo (implicitNone False)
     runCommand (CmdImplicitNoneAll ro lo) = runRO ro lo (implicitNone True)
-    runCommand (CmdEquivCheck ro lo)      = runRO ro lo equivCheck
+    runCommand (CmdEndianCheck ro lo)      = runRO ro lo endianCheck
     runCommand (CmdAllocCheck ro lo)      = runRO ro lo allocCheck
     runCommand (CmdFPCheck ro lo)         = runRO ro lo fpCheck
     runCommand (CmdUseCheck ro lo)        = runRO ro lo useCheck
@@ -168,7 +168,7 @@ data Command = CmdCount ReadOptions LogOptions
              | CmdCompileDDT ReadOptions LogOptions
              | CmdImplicitNone ReadOptions LogOptions
              | CmdImplicitNoneAll ReadOptions LogOptions
-             | CmdEquivCheck ReadOptions LogOptions
+             | CmdEndianCheck ReadOptions LogOptions
              | CmdAllocCheck ReadOptions LogOptions
              | CmdFPCheck ReadOptions LogOptions
              | CmdUseCheck ReadOptions LogOptions
@@ -443,7 +443,7 @@ cmdArrayCheck, cmdUseCheck, cmdEndianCheck, cmdBasicChecks :: Parser Command
 cmdInvariantsCheck = fmap CmdInvariantsCheck invariantsOptions
 cmdImplicitNone    = fmap CmdImplicitNone readOptions <*> logOptions
 cmdImplicitNoneAll = fmap CmdImplicitNoneAll readOptions <*> logOptions
-cmdEquivCheck      = fmap CmdEquivCheck readOptions <*> logOptions
+cmdEndianCheck      = fmap CmdEndianCheck readOptions <*> logOptions
 cmdAllocCheck      = fmap CmdAllocCheck readOptions <*> logOptions
 cmdFPCheck         = fmap CmdFPCheck readOptions <*> logOptions
 cmdUseCheck        = fmap CmdUseCheck readOptions <*> logOptions
@@ -498,9 +498,9 @@ analysesParser = commandsParser "ANALYSIS_COMMAND" "Analysis Commands" analysesC
       , ("implicit-none-all",
           [],
           cmdImplicitNoneAll,  "check 'implicit none' completeness (all program units)")
-      , ("equiv-endian",
+      , ("endian-check",
           [],
-          cmdEquivCheck, "check for endian portability in the presence of equivalences")
+          cmdEndianCheck, "check for endian portability")
       , ("ast",
           [],
           cmdAST,           "print the raw AST -- for development purposes")

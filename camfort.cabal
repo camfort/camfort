@@ -271,6 +271,7 @@ library
       Camfort.Analysis.Endianness
       Camfort.Analysis.ModFile
       Camfort.Analysis.Simple
+      Camfort.Analysis.Endianness
       Camfort.Specification.Parser
       Camfort.Specification.DerivedDataType
       Camfort.Specification.DerivedDataType.Parser
