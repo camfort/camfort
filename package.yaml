@@ -54,7 +54,7 @@ library:
     - Camfort.Analysis.CommentAnnotator
     - Camfort.Analysis.ModFile
     - Camfort.Analysis.Simple
-    - Camfort.Analysis.Equivalence
+    - Camfort.Analysis.Endianness
     - Camfort.Specification.Parser
 
     - Camfort.Specification.DerivedDataType
