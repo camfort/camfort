@@ -12,6 +12,7 @@ import Camfort.Helpers.Syntax
 
 import Data.Data
 import Control.DeepSeq
+import Control.Monad (void)
 import GHC.Generics
 import qualified Data.Semigroup as SG
 
@@ -63,25 +64,39 @@ checkEquivalence pf = do
     let F.ProgramFile (F.MetaInfo v file) _ = pf
     let checkPU :: FAT.TypeEnv -> F.ProgramUnit (FA.Analysis a) -> EndianReport
         checkPU env pu = 
-            let equiv_list = [(e1, e2)
-                    | F.StEquivalence _ span es <- universeBi (F.programUnitBody pu) :: [F.Statement (FA.Analysis a)]
+            mconcat [checkPair e1 e2 (atSpannedInFile file eq)
+                    | eq@(F.StEquivalence _ span es) <- universeBi (F.programUnitBody pu) :: [F.Statement (FA.Analysis a)]
                     , [e1, e2] <- map AList.aStrip $ AList.aStrip es]
-            in mconcat $ map checkPair equiv_list
             where
-                checkPair :: (F.Expression (FA.Analysis a), F.Expression (FA.Analysis a)) -> EndianReport
-                checkPair (e1@(F.ExpValue _ span1 (F.ValVariable s1)), e2@(F.ExpValue _ span2 (F.ValVariable s2))) = 
-                    let t1 = Map.lookup (FA.varName e1) env 
+                checkPair :: F.Expression (FA.Analysis a) -> F.Expression (FA.Analysis a) -> Origin -> EndianReport
+                -- equivalence (a, b) 
+                -- this is safe in case a and b have the same size
+                checkPair e1@F.ExpValue{} e2@F.ExpValue{} s = 
+                    if sameSize e1 e2 then EndianReport [] else EndianReport [(void e1, void e2, s, v)]
+
+                -- equivalence (a, b(..))
+                -- this is safe in case a and base-type of b have the same size
+                checkPair e1@F.ExpValue{} e2@(F.ExpSubscript _ _ e2' _) s = 
+                    if sameSize e1 e2' then EndianReport [] else EndianReport [(void e1, void e2, s, v)]
+                checkPair e1@(F.ExpSubscript _ _ e1' _) e2@F.ExpValue{} s = 
+                    if sameSize e1' e2 then EndianReport [] else EndianReport [(void e1, void e2, s, v)]
+
+                -- equivalence (a(..), b(..))
+                -- this is safe in case the basetypes have the same size
+                checkPair e1@(F.ExpSubscript _ _ e1' _) e2@(F.ExpSubscript _ _ e2' _) s = 
+                    if sameSize e1' e2' then EndianReport [] else EndianReport [(void e1, void e2, s, v)]
+
+                checkPair e1 e2 _ = error $ "[error] checkPair: " ++ render (pprint' v e1) ++ ", " ++ render (pprint' v e2)
+
+                sameSize :: F.Expression (FA.Analysis a) -> F.Expression (FA.Analysis a) -> Bool
+                sameSize e1 e2 =
+                    let t1 = Map.lookup (FA.varName e1) env
                         t2 = Map.lookup (FA.varName e2) env
                     in case (t1, t2) of
                         (Just (FA.IDType (Just ty1) _), Just (FA.IDType (Just ty2) _)) ->
-                            if ST.getTypeSize ty1 == ST.getTypeSize ty2 then
-                                EndianReport []
-                            else
-                                let e1' = F.ExpValue () span1 (F.ValVariable s1)
-                                    e2' = F.ExpValue () span2 (F.ValVariable s2)
-                                in EndianReport [(e1', e2', atSpannedInFile file [e1, e2], v)]
-                        _ -> EndianReport []
-                checkPair (_, _) = EndianReport []
+                            ST.getTypeSize ty1 == ST.getTypeSize ty2
+                        _ -> False
+                                
         -- make names unique by renaming
     let pf' = FAR.analyseRenames . FA.initAnalysis $ pf
     let (pf'', typeEnv) = FAT.analyseTypes pf'
