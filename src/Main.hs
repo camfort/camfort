@@ -173,7 +173,6 @@ data Command = CmdCount ReadOptions LogOptions
              | CmdFPCheck ReadOptions LogOptions
              | CmdUseCheck ReadOptions LogOptions
              | CmdArrayCheck ReadOptions LogOptions
-             | CmdEndianCheck ReadOptions LogOptions
              | CmdBasicChecks ReadOptions LogOptions
              | CmdInit FilePath
              | CmdTopVersion
@@ -443,7 +442,6 @@ cmdArrayCheck, cmdUseCheck, cmdEndianCheck, cmdBasicChecks :: Parser Command
 cmdInvariantsCheck = fmap CmdInvariantsCheck invariantsOptions
 cmdImplicitNone    = fmap CmdImplicitNone readOptions <*> logOptions
 cmdImplicitNoneAll = fmap CmdImplicitNoneAll readOptions <*> logOptions
-cmdEndianCheck      = fmap CmdEndianCheck readOptions <*> logOptions
 cmdAllocCheck      = fmap CmdAllocCheck readOptions <*> logOptions
 cmdFPCheck         = fmap CmdFPCheck readOptions <*> logOptions
 cmdUseCheck        = fmap CmdUseCheck readOptions <*> logOptions

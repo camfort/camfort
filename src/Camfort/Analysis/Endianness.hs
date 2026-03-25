@@ -59,8 +59,8 @@ instance Monoid EndianReport where
 instance Show EndianReport where
     show (EndianReport reports) = show reports
 
-checkEquivalence :: forall a. Data a => F.ProgramFile a -> PureAnalysis String () EndianReport
-checkEquivalence pf = do
+checkEndianSensitive :: forall a. Data a => F.ProgramFile a -> PureAnalysis String () EndianReport
+checkEndianSensitive pf = do
     let F.ProgramFile (F.MetaInfo v file) _ = pf
     let checkPU :: FAT.TypeEnv -> F.ProgramUnit (FA.Analysis a) -> EndianReport
         checkPU env pu = 

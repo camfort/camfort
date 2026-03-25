@@ -13,7 +13,3 @@ program example
     equivalence (a, x)        ! not safe
     equivalence (r1, r2)      ! not safe
 end program example
-
-! "use-site" analysis
-! views, permutations, etc.
-! maybe the way expressions are used mitigate
