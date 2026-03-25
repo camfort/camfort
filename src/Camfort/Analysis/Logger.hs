@@ -186,7 +186,7 @@ instance Describe Origin where
     " - " <> describeBuilder endSpan <> "]"
     where
       startSpan = F.ssFrom (origin ^. oSpan)
-      endSpan   = F.ssFrom (origin ^. oSpan)
+      endSpan   = F.ssTo (origin ^. oSpan)
 
 data ParsedOrigin = ParsedOrigin FilePath (Int, Int) (Int, Int)
   deriving (Show, Eq, Ord)
