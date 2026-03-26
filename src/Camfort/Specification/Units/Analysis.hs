@@ -28,6 +28,7 @@ import           Camfort.Analysis.Annotations (Annotation)
 import           Camfort.Analysis.CommentAnnotator (annotateComments)
 import           Camfort.Analysis.Logger (LogLevel(..))
 import           Camfort.Analysis.ModFile (withCombinedEnvironment)
+import           Camfort.Helpers (SourceText)
 import qualified Camfort.Specification.Units.Annotation as UA
 import           Camfort.Specification.Units.Environment
 import           Camfort.Specification.Units.InferenceBackend
@@ -1093,8 +1094,8 @@ intrinsicUnits =
 -- Others: reshape, merge need special handling
 
 -- | Compile a program to a 'ModFile' containing units information.
-compileUnits :: UnitOpts -> ModFiles -> F.ProgramFile Annotation -> IO ModFile
-compileUnits uo mfs pf = do
+compileUnits :: UnitOpts -> ModFiles -> SourceText -> F.ProgramFile Annotation -> IO ModFile
+compileUnits uo mfs src pf = do
   let (pf', _, _) = withCombinedEnvironment mfs . fmap UA.mkUnitAnnotation $ pf
 
   let analysis = runReaderT (runInference runCompileUnits) $
@@ -1106,5 +1107,5 @@ compileUnits uo mfs pf = do
   report <- runAnalysisT (F.pfGetFilename pf) (logOutputNone True) LogError mfs analysis
 
   case report ^? arResult . _ARSuccess . _1 of
-    Just cu -> return (genUnitsModFile pf' cu)
+    Just cu -> return (genUnitsModFile src pf' cu)
     Nothing -> fail "compileUnits: units analysis failed"

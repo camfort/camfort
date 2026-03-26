@@ -277,6 +277,7 @@ loadModAndProgramFiles
   -> m (ModFiles, [(ProgramFile, SourceText)])
 loadModAndProgramFiles mv mfc env inSrc incDir excludes = do
   liftIO $ printExcludes inSrc excludes
-  modFiles <- genModFiles mv emptyModFiles mfc env incDir excludes
+  modFilesWithPaths <- genModFiles mv emptyModFiles mfc env incDir excludes
+  let modFiles = map snd modFilesWithPaths
   ps <- liftIO $ readParseSrcDir mv modFiles inSrc excludes
   pure (modFiles, ps)

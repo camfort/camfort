@@ -43,7 +43,7 @@ unitsSuggestReportIs litmode uninitmode modNames fileName expectedReport = do
 -- | Helper for producing a basic ModFile from a (terminal) module file.
 mkTestModFile :: UnitOpts -> String -> IO ModFile
 mkTestModFile uopts file =
-  head <$> genModFiles Nothing emptyModFiles compileUnits uopts file []
+  snd . head <$> genModFiles Nothing emptyModFiles compileUnits uopts file []
 
 expectedInternalsPolyReport :: String
 expectedInternalsPolyReport =

@@ -38,6 +38,7 @@ import           GHC.Generics (Generic)
 import qualified Language.Fortran.AST as F
 import qualified Language.Fortran.Analysis as FA
 import           Language.Fortran.Util.ModFile
+import           Camfort.Helpers (SourceText)
 import           Prelude hiding (mod)
 
 -- | The data-structure stored in 'fortran-src mod files'
@@ -145,8 +146,8 @@ optimiseTemplate cons = map (\ (l, r) -> ConEq (foldUnits l) r) optimised
     compileColSort = flip colSort
 
 -- | Generate a new ModFile containing Units information.
-genUnitsModFile :: F.ProgramFile UA -> CompiledUnits -> ModFile
-genUnitsModFile pf cu = alterModFileData f unitsCompiledDataLabel $ genModFile pf
+genUnitsModFile :: SourceText -> F.ProgramFile UA -> CompiledUnits -> ModFile
+genUnitsModFile src pf cu = alterModFileData f unitsCompiledDataLabel $ genModFile (computeSourceHash src) pf
   where
     f _ = Just $ encode cu
 
