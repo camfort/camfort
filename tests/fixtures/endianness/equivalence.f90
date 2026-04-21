@@ -1,5 +1,5 @@
 program litmus_equivalence_endian
-    implicit none(type, external)
+    implicit none
 
     ! Declares a single 32-bit integer and a 4-byte character array that are aliased
     integer(kind=4) :: integer_bytes
