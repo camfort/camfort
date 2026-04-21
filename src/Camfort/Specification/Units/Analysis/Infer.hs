@@ -18,6 +18,7 @@ module Camfort.Specification.Units.Analysis.Infer
   , inferUnits
   ) where
 
+import           Camfort.Analysis.Logger (formatSuccess,formatError)
 import           Camfort.Analysis (ExitCodeOfReport(..), Describe(..))
 import           Camfort.Specification.Units.Analysis
   (UnitAnalysis, puName, puSrcName, runInference)
@@ -89,7 +90,7 @@ instance Show InferenceReport where
 
 instance Show InferenceResult where
   show (Inferred report) = show report
-  show (InfInconsistent err) = show err
+  show (InfInconsistent err) = formatError $ show err
 
 instance Describe InferenceReport
 instance Describe InferenceResult
