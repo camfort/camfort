@@ -162,16 +162,29 @@ perBlockRmEquiv = transformBiM perStatementRmEquiv
 perStatementRmEquiv
   :: F.Statement A1
   -> StateT RmEqState EquivalenceRefactoring (F.Statement A1)
-perStatementRmEquiv (F.StEquivalence a sp@(FU.SrcSpan spL _) equivs) = do
-    (ess, n) <- get
+perStatementRmEquiv t@(F.StEquivalence a sp@(FU.SrcSpan spL _) equivs) =
+    if isScalarEquivs equivs
+       then do
+          (ess, n) <- get
 
-    let spL' = FU.SrcSpan spL spL
-    logInfo' spL' $ "removed equivalence"
+          let spL' = FU.SrcSpan spL spL
+          logInfo' spL' $ "removed equivalence"
 
-    put (((map F.aStrip) . F.aStrip $ equivs) ++ ess, n - 1)
-    let a' = onPrev (\ap -> ap {refactored = Just spL, deleteNode = True}) a
-    return (F.StEquivalence a' (deleteLine sp) equivs)
+          put (((map F.aStrip) . F.aStrip $ equivs) ++ ess, n - 1)
+          let a' = onPrev (\ap -> ap {refactored = Just spL, deleteNode = True}) a
+          return (F.StEquivalence a' (deleteLine sp) equivs)
+       else return t
 perStatementRmEquiv f = return f
+
+isScalarEquivs :: F.AList (F.AList F.Expression) (FA.Analysis a) -> Bool
+isScalarEquivs equivs =
+  any go $ concat $ F.alistList <$> F.alistList equivs
+    where go (F.ExpValue an _ _) = case FA.idType an of
+                                     Just t -> case FA.idCType t of
+                                                  Just FA.CTVariable -> True
+                                                  _ -> False
+                                     _ -> False
+          go _ = False
 
 -- 'equivalents e' returns a list of variables/memory cells
 -- that have been equivalenced with "e".
