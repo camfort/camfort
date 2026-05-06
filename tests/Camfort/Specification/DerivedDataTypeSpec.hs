@@ -27,7 +27,7 @@ ddtInferReport modNames fileName = do
 
 -- | Helper for producing a basic ModFile from a (terminal) module file.
 mkTestModFile :: String -> IO ModFile
-mkTestModFile file = head <$> genModFiles Nothing emptyModFiles compile () file []
+mkTestModFile file = snd . head <$> genModFiles Nothing emptyModFiles compile () file []
 
 spec :: Test.Spec
 spec = do

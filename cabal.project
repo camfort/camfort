@@ -1,0 +1,7 @@
+packages:
+  .
+
+source-repository-package
+  type: git
+  location: https://github.com/camfort/fortran-src.git
+  tag: storeBaseNames

@@ -338,10 +338,10 @@ ddtCompile env = do
   modFileNames <- getModFiles incDir
 
   -- Run the gen mod file routine directly on the input source
-  modFiles <- genModFiles (ceFortranVersion env) modFileNames DDT.compile () (ceInputSources env) (ceExcludeFiles env)
+  modFilesWithPaths <- genModFiles (ceFortranVersion env) modFileNames DDT.compile () (ceInputSources env) (ceExcludeFiles env)
   -- Write the mod files out
-  forM_ modFiles $ \ modFile -> do
-     let mfname = replaceExtension (FM.moduleFilename modFile) FM.modFileSuffix
+  forM_ modFilesWithPaths $ \ (sourcePath, modFile) -> do
+     let mfname = replaceExtension sourcePath FM.modFileSuffix
      LB.writeFile mfname (FM.encodeModFile [modFile])
   return 0
 
@@ -513,9 +513,10 @@ unitsCompile opts uninits env = do
   -- Build the graph of module dependencies
   mg0 <- FM.genModGraph (ceFortranVersion env) [incDir] Nothing paths'
 
-  let compileFileToMod mods pf = do
-        mod <- compileUnits uo mods pf
-        let mfname = replaceExtension (FM.moduleFilename mod) FM.modFileSuffix
+  let compileFileToMod mods src pf sourcePath = do
+        mod <- compileUnits uo mods src pf
+        -- Use the original source path to determine where to write the .fsmod file
+        let mfname = replaceExtension sourcePath FM.modFileSuffix
         LB.writeFile mfname (FM.encodeModFile [mod])
         pure mod
 
@@ -523,27 +524,35 @@ unitsCompile opts uninits env = do
   let loop mg mods
         | nxt <- FM.takeNextMods mg
         , not (null nxt) = do
-            let fnPaths = [ fn | (_, Just (FM.MOFile fn)) <- nxt ]
-            newMods <- fmap concat . forM fnPaths $ \ fnPath -> do
-              tsStatus <- FM.checkTimestamps fnPath
-              case tsStatus of
-                FM.NoSuchFile -> do
-                  putStr $ "Does not exist: " ++ fnPath
-                  pure [FM.emptyModFile]
-                FM.ModFileExists modPath -> do
-                  putStrLn $ "Loading mod file " ++ modPath ++ "."
-                  decodeOneModFile modPath
-                FM.CompileFile -> do
-                  putStr $ "Summarising " ++ fnPath ++ "..."
-                  m_pf <- readParseSrcFile (ceFortranVersion env) mods fnPath
-                  case m_pf of
-                    Just (pf, _) -> do
-                      mod <- compileFileToMod mods pf
-                      putStrLn "done"
-                      pure [mod]
-                    Nothing -> do
-                      putStrLn "failed"
-                      pure []
+            let fnPaths = [ fn | (_, Just fn) <- nxt ]
+            newMods <- fmap concat . forM fnPaths $ \ modFn -> do
+              case modFn of
+                -- If there is mod file already, load it in
+                FM.MOFSMod modFilePath -> do
+                  putStrLn $ "Loading mod file " ++ modFilePath ++ "."
+                  decodeOneModFile modFilePath
+
+                -- Otherwise, compile the source file
+                FM.MOFile fnPath -> do
+                  hashStatus <- FM.checkModFileHash fnPath
+                  case hashStatus of
+                    FM.NoSuchFile -> do
+                      putStr $ "Does not exist: " ++ fnPath
+                      pure [FM.emptyModFile]
+                    FM.ModFileExists modPath -> do
+                      putStrLn $ "Loading mod file " ++ modPath ++ "."
+                      decodeOneModFile modPath
+                    FM.CompileFile -> do
+                      putStr $ "Summarising " ++ fnPath ++ "..."
+                      m_pf <- readParseSrcFile (ceFortranVersion env) mods fnPath
+                      case m_pf of
+                        Just (pf, src) -> do
+                          mod <- compileFileToMod mods src pf fnPath
+                          putStrLn "done"
+                          pure [mod]
+                        Nothing -> do
+                          putStrLn "failed"
+                          pure []
 
             let ns  = map fst nxt
             let mg' = FM.delModNodes ns mg

@@ -65,23 +65,26 @@ import           Prelude                            hiding (mod)
 
 -- | Compiler for ModFile information, parameterised over an underlying monad
 -- and the input to the compiler.
-type MFCompiler r m = r -> FM.ModFiles -> F.ProgramFile A -> m FM.ModFile
+type MFCompiler r m = r -> FM.ModFiles -> SourceText -> F.ProgramFile A -> m FM.ModFile
 
 -- | Compile the Modfile with only basic information.
 simpleCompiler :: (Monad m) => MFCompiler () m
-simpleCompiler () mfs = return . FM.genModFile . fst' . withCombinedEnvironment mfs
+simpleCompiler () mfs src = return . FM.genModFile (FM.computeSourceHash src) . fst' . withCombinedEnvironment mfs
   where fst' (x, _, _) = x
 
-genCModFile :: MFCompiler r m -> r -> FM.ModFiles -> F.ProgramFile A -> m FM.ModFile
+genCModFile :: MFCompiler r m -> r -> FM.ModFiles -> SourceText -> F.ProgramFile A -> m FM.ModFile
 genCModFile = id
 
 -- | Generate mod files based on the given mod file compiler
+-- Returns pairs of (source file path, ModFile) to preserve path information
 genModFiles
   :: (MonadIO m)
-  => Maybe FortranVersion -> FM.ModFiles -> MFCompiler r m -> r -> FilePath -> [Filename] -> m FM.ModFiles
+  => Maybe FortranVersion -> FM.ModFiles -> MFCompiler r m -> r -> FilePath -> [Filename] -> m [(FilePath, FM.ModFile)]
 genModFiles mv mfs mfc opts fp excludes = do
-  fortranFiles <- liftIO $ fmap fst <$> readParseSrcDir mv mfs fp excludes
-  traverse (genCModFile mfc opts mfs) fortranFiles
+  fortranFiles <- liftIO $ readParseSrcDir mv mfs fp excludes
+  traverse (\(pf, src) -> do
+    modFile <- genCModFile mfc opts mfs src pf
+    return (F.pfGetFilename pf, modFile)) fortranFiles
 
 -- | Generate mod files based on the given mod file compiler (Pipes version)
 genModFilesP
@@ -89,11 +92,11 @@ genModFilesP
   => Maybe FortranVersion -> FM.ModFiles -> MFCompiler r m -> r -> [FilePath] -> Producer' FM.ModFile m ()
 genModFilesP mv mfs mfc opts files = parse >-> compile
   where
-    compile = P.mapM (genCModFile mfc opts mfs)
+    compile = P.mapM (\(pf, src) -> genCModFile mfc opts mfs src pf)
     parse = for (each files) $ \ file -> do
       mProgSrc <- liftIO $ readParseSrcFile mv mfs file
       case mProgSrc of
-        Just (pf, _) -> yield pf
+        Just progSrc -> yield progSrc
         Nothing -> pure ()
 
 

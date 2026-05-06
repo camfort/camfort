@@ -54,7 +54,7 @@ unitsSynthReportWithMod modNames fileName expectedOutput = do
 
 -- | Helper for producing a basic ModFile from a (terminal) module file.
 mkTestModFile :: String -> IO ModFile
-mkTestModFile file = head <$> genModFiles Nothing emptyModFiles compileUnits unitOpts0 file []
+mkTestModFile file = snd . head <$> genModFiles Nothing emptyModFiles compileUnits unitOpts0 file []
 
 -- | Normalise output by trimming trailing whitespace from lines and handling CRLF
 normaliseOutput :: String -> String

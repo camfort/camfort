@@ -58,7 +58,7 @@ unitsCriticalsReportIs litmode uninitmode modNames fileName expectedReport = do
 
 mkTestModFile :: UnitOpts -> String -> IO ModFile
 mkTestModFile uopts file =
-  head <$> genModFiles Nothing emptyModFiles compileUnits uopts file []
+  snd . head <$> genModFiles Nothing emptyModFiles compileUnits uopts file []
 
 exampleCriticals1CriticalsReport :: String
 exampleCriticals1CriticalsReport =
@@ -73,8 +73,8 @@ exampleCriticals2CriticalsReport =
 exampleCriticals3CriticalsReport :: String
 exampleCriticals3CriticalsReport =
  "\ntests" </> "fixtures" </> "Specification" </> "Units" </> "cross-module-c" </> "cross-module-c3.f90: 6 variable declarations suggested to be given a specification:\n\
- \    tests" </> "fixtures" </> "Specification" </> "Units" </> "cross-module-c" </> "cross-module-c1.f90:7:10    b\n\
- \    tests" </> "fixtures" </> "Specification" </> "Units" </> "cross-module-c" </> "cross-module-c1.f90:13:12    d\n\
+ \    cross-module-c1.f90:7:10    b\n\
+ \    cross-module-c1.f90:13:12    d\n\
  \    tests" </> "fixtures" </> "Specification" </> "Units" </> "cross-module-c" </> "cross-module-c3.f90:5:10    a3\n\
  \    tests" </> "fixtures" </> "Specification" </> "Units" </> "cross-module-c" </> "cross-module-c3.f90:9:10    b3\n\
  \    tests" </> "fixtures" </> "Specification" </> "Units" </> "cross-module-c" </> "cross-module-c3.f90:11:10    x0\n\
@@ -83,13 +83,13 @@ exampleCriticals3CriticalsReport =
 exampleCriticals4CriticalsReport :: String
 exampleCriticals4CriticalsReport =
  "\ntests" </> "fixtures" </> "Specification" </> "Units" </> "cross-module-c" </> "cross-module-c1.f90: 7 variable declarations suggested to be given a specification:\n\
- \    tests" </> "fixtures" </> "Specification" </> "Units" </> "cross-module-c" </> "cross-module-c1.f90:5:16    a\n\
- \    tests" </> "fixtures" </> "Specification" </> "Units" </> "cross-module-c" </> "cross-module-c1.f90:7:10    b\n\
- \    tests" </> "fixtures" </> "Specification" </> "Units" </> "cross-module-c" </> "cross-module-c1.f90:11:12    foo_out\n\
- \    tests" </> "fixtures" </> "Specification" </> "Units" </> "cross-module-c" </> "cross-module-c1.f90:18:12    foo3\n\
- \    tests" </> "fixtures" </> "Specification" </> "Units" </> "cross-module-c" </> "cross-module-c1.f90:24:14    x\n\
- \    tests" </> "fixtures" </> "Specification" </> "Units" </> "cross-module-c" </> "cross-module-c1.f90:30:12    foo5\n\
- \    tests" </> "fixtures" </> "Specification" </> "Units" </> "cross-module-c" </> "cross-module-c1.f90:31:12    x\n"
+ \    cross-module-c1.f90:5:16    a\n\
+ \    cross-module-c1.f90:7:10    b\n\
+ \    cross-module-c1.f90:11:12    foo_out\n\
+ \    cross-module-c1.f90:18:12    foo3\n\
+ \    cross-module-c1.f90:24:14    x\n\
+ \    cross-module-c1.f90:30:12    foo5\n\
+ \    cross-module-c1.f90:31:12    x\n"
 
 exampleCriticalUninitMixed :: String
 exampleCriticalUninitMixed =

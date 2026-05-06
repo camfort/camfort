@@ -64,6 +64,7 @@ import qualified Language.Fortran.Analysis.DataFlow as FAD
 import qualified Language.Fortran.Analysis.Types as FAT
 import           Language.Fortran.Util.ModFile
 import qualified Language.Fortran.Util.Position as FU
+import           Camfort.Helpers (SourceText)
 import           Prelude hiding (unlines, minBound, maxBound)
 import           Language.Fortran.Repr (fromConstInt)
 
@@ -329,10 +330,10 @@ refactor pfs = do
       else return (report', Right . stripAnnotations $ refactorPF report' pf')
 
 -- | Compile a program to a 'ModFile' containing derived datatype information.
-compile :: () -> ModFiles -> F.ProgramFile A -> IO ModFile
-compile _ mfs pf = do
+compile :: () -> ModFiles -> SourceText -> F.ProgramFile A -> IO ModFile
+compile _ mfs src pf = do
   let (report, pf') = genProgramFileReport mfs pf
-  return $ genDDTModFile pf' report
+  return $ genDDTModFile src pf' report
 
 --------------------------------------------------
 -- Analysis helpers
@@ -746,8 +747,8 @@ mstrength (x, my) = fmap (x,) my
 -- Compilation helpers
 
 -- | Generate a new ModFile containing derived datatype information.
-genDDTModFile :: Data a => F.ProgramFile (FA.Analysis a) -> DerivedDataTypeReport -> ModFile
-genDDTModFile pf ddtr = alterModFileData f ddtCompiledDataLabel $ genModFile pf
+genDDTModFile :: Data a => SourceText -> F.ProgramFile (FA.Analysis a) -> DerivedDataTypeReport -> ModFile
+genDDTModFile src pf ddtr = alterModFileData f ddtCompiledDataLabel $ genModFile (computeSourceHash src) pf
   where
     f _ = Just $ encode ddtr
 
