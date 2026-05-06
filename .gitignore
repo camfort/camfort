@@ -7,6 +7,7 @@
 # sandbox files
 /.cabal-sandbox
 /cabal.sandbox.config
+/cabal.project.local
 
 # vim backup files
 .*.swp
