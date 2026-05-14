@@ -33,10 +33,12 @@ module Camfort.Functionality
   , ast
   , countVarDecls
   , implicitNone
+  , endianCheck
   , allocCheck
   , fpCheck
   , useCheck
   , arrayCheck
+  , endianCheck
   -- ** Stencil Analysis
   , stencilsCheck
   , stencilsInfer
@@ -68,6 +70,7 @@ import           Camfort.Analysis.Logger
 import           Camfort.Analysis.ModFile (readParseSrcFile,  MFCompiler, getModFiles, genModFiles
                                           , readParseSrcDir, readParseSrcDirP, simpleCompiler)
 import           Camfort.Analysis.Simple
+import           Camfort.Analysis.Endianness
 import           Camfort.Helpers (FileOrDir, Filename)
 import           Camfort.Input
 import qualified Camfort.Specification.DerivedDataType as DDT
@@ -261,6 +264,14 @@ implicitNone allPU =
   "Checking 'implicit none' completeness"
   (generalizePureAnalysis . (checkImplicitNone allPU))
   (describePerFileAnalysisP "check 'implicit none'")
+  simpleCompiler ()
+
+endianCheck :: CamfortEnv -> IO Int
+endianCheck =
+  runFunctionalityP
+  "Checking endian portability"
+  (generalizePureAnalysis . checkEndianSensitive)
+  (describePerFileAnalysisP "check endian portability")
   simpleCompiler ()
 
 allocCheck :: CamfortEnv -> IO Int
